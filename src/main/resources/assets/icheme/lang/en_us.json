@@ -1,4 +1,8 @@
 {
+  "tooltip.icheme.liquid_level_gauge.remove": "Shift + right-click with the accessory wrench to recover.",
+  "item.icheme.liquid_level_gauge": "Liquid Level Gauge",
+  "tooltip.icheme.liquid_level_gauge": "Right-click the highlighted mount on a floating-roof tank.",
+
   "gui.icheme.fluid.power_on": "Power: On",
   "gui.icheme.fluid.power_off": "Power: Off",
   "gui.icheme.fluid.power_state": "Power state",

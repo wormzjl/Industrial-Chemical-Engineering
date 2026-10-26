@@ -29,6 +29,21 @@ public final class TankGaugeGeometry {
 
     private TankGaugeGeometry() {}
 
+    /** Bounds in the equipment's box frame, available on a dedicated server without building any surfaces. */
+    public static double[] bounds(EquipmentShape shape){
+        if(shape.kind()!=EquipmentShape.Kind.TANK)throw new IllegalArgumentException("A level gauge requires a floating-roof tank");
+        var plan=TankDesign.Plan.of(shape.diameter(),(int)shape.tangentLength());var gauge=plan.gauge();
+        double offset=gauge.x()-plan.a(),shell=plan.a()-Math.sqrt(plan.r()*plan.r()-offset*offset);
+        double[] min={gauge.x()-SCALE_HALF,0,gauge.z()-CHAMBER_RADIUS-.03},max={gauge.x()+SCALE_HALF,plan.fill()+.6,shell+.04};
+        double[] bounds={Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY,Double.NEGATIVE_INFINITY,Double.NEGATIVE_INFINITY,Double.NEGATIVE_INFINITY};
+        var transform=shape.transform();
+        for(int bits=0;bits<8;bits++){
+            var point=transform.point(new double[]{(bits&1)==0?min[0]:max[0],(bits&2)==0?min[1]:max[1],(bits&4)==0?min[2]:max[2]});
+            for(int axis=0;axis<3;axis++){bounds[axis]=Math.min(bounds[axis],point[axis]);bounds[axis+3]=Math.max(bounds[axis+3],point[axis]);}
+        }
+        return bounds;
+    }
+
     /** Four continuous panes, with one full sprite per face rather than metre-tiled glass borders. */
     static void sleeve(Mesh mesh, double x, double z, double low, double high) {
         double[] lo = {x - GLASS_HALF, low, z - GLASS_HALF}, hi = {x + GLASS_HALF, high, z + GLASS_HALF};

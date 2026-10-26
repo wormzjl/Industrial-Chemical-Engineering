@@ -71,6 +71,7 @@ CLAUDE.md
 
 # Local working material (owner decision 2026-10-14): documents, tools and research are not tracked. examples/ stays tracked (AGENTS.md).
 /documentation/
+/tmp/
 /tools/
 /research/
 /examples/cold-flow/

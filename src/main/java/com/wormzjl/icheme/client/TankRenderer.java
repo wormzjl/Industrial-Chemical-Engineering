@@ -79,7 +79,8 @@ public final class TankRenderer {
     private static @Nullable TextureAtlasSprite builtWith;
     private static int age;
 
-    private record Key(EquipmentShape shape, boolean roof, Paint paint, int light) {
+    private enum Part { ROOF, LADDER, GAUGE }
+    private record Key(EquipmentShape shape, Part part, Paint paint, int light) {
     }
 
     private TankRenderer() {
@@ -146,14 +147,20 @@ public final class TankRenderer {
             // The roof: lifted from where it lies landed, lit at its deck's middle.
             int roofLight = LevelRenderer.getLightColor(level, BlockPos.containing(origin.getX() + shape.sizeX() / 2.0, origin.getY() + f.underside(liquid) + f.deck() + .5, origin.getZ() + shape.sizeZ() / 2.0));
             var pose = new Matrix4f(event.getModelViewMatrix()).translate((float) ox, (float) (oy + lift), (float) oz);
-            bound = draw(shader, buffer(new Key(shape, true, cell.paint(), roofLight), f), pose, bound);
+            bound = draw(shader, buffer(new Key(shape, Part.ROOF, cell.paint(), roofLight), f), pose, bound);
+            if(cell.instruments().levelGauge()){
+                var fixedPose=new Matrix4f(event.getModelViewMatrix()).translate((float)ox,(float)oy,(float)oz);
+                int gaugeLight=LevelRenderer.getLightColor(level,BlockPos.containing(origin.getX()+f.glass()[0],origin.getY()+(f.glassLow()+f.glassHigh())/2,origin.getZ()+f.glass()[1]));
+                bound=draw(shader,buffer(new Key(shape,Part.GAUGE,cell.paint(),gaugeLight),f),fixedPose,bound);
+            }
+
             // The ladder: turned down about its axis at its pivot, its foot towards the axis going down.
             double[] p = f.pivot(), a = f.axis(), along = f.along();
             double down = a[2] * along[0] - a[0] * along[2] > 0 ? -1 : 1;
             int ladderLight = LevelRenderer.getLightColor(level, BlockPos.containing(origin.getX() + p[0], origin.getY() + p[1], origin.getZ() + p[2]));
             pose = new Matrix4f(event.getModelViewMatrix()).translate((float) (ox + p[0]), (float) (oy + p[1]), (float) (oz + p[2]))
                     .rotate((float) (down * pitch), (float) a[0], (float) a[1], (float) a[2]);
-            bound = draw(shader, buffer(new Key(shape, false, cell.paint(), ladderLight), f), pose, bound);
+            bound = draw(shader, buffer(new Key(shape, Part.LADDER, cell.paint(), ladderLight), f), pose, bound);
         }
         if (shader != null) {
             shader.clear();
@@ -183,7 +190,7 @@ public final class TankRenderer {
             var shape = cell.shape();
             var origin = cell.origin();
             var display = get(cell.getBlockPos(), ticks);
-            if (display == null || cell.isRemoved() || cell.getLevel() != level || shape == null || origin == null) continue;
+            if (!cell.instruments().levelGauge() || display == null || cell.isRemoved() || cell.getLevel() != level || shape == null || origin == null) continue;
             if (cell.getBlockPos().distToCenterSqr(camera) > DRAW_RANGE * DRAW_RANGE) continue;
             var f = ShapeRasterizer.floating(shape);
             if (f == null) continue;
@@ -205,6 +212,29 @@ public final class TankRenderer {
             pose.popPose();
         }
         if (consumer != null) buffers.endBatch(BANDS);
+    }
+
+    /** The removable sleeve remains visible without a live liquid sample. Draw after the column it encloses. */
+    @SubscribeEvent public static void renderGaugeCovers(RenderLevelStageEvent event){
+        if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES)return;
+        var mc=Minecraft.getInstance();if(mc.level==null)return;
+        var camera=event.getCamera().getPosition();var pose=event.getPoseStack();var buffers=mc.renderBuffers().bufferSource();VertexConsumer consumer=null;
+        for(var cell:EquipmentShellBlockEntity.clientTankCells()){
+            if(!cell.instruments().levelGauge()||cell.isRemoved()||cell.getLevel()!=mc.level||cell.shape()==null||cell.origin()==null||cell.getBlockPos().distToCenterSqr(camera)>DRAW_RANGE*DRAW_RANGE)continue;
+            var origin=cell.origin();var shape=cell.shape();
+            if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ())))continue;
+            int light=LevelRenderer.getLightColor(mc.level,cell.getBlockPos());
+            if(consumer==null)consumer=buffers.getBuffer(BANDS);
+            pose.pushPose();pose.translate(origin.getX()-camera.x,origin.getY()-camera.y,origin.getZ()-camera.z);
+            var sprite=EquipmentShellModel.sprite(Mesh.Material.GLASS);if(sprite==null){pose.popPose();continue;}
+            for(var face:ShapeRasterizer.tankGauge(shape))if(face.material()==Mesh.Material.GLASS){
+                var p=face.positions();var n=face.normals();var uv=face.uvs();
+                for(int first=1;first+1<face.size();first+=2)for(int c:new int[]{0,first,first+1,Math.min(first+2,face.size()-1)})
+                    vertex(consumer,pose.last(),(float)p[3*c],(float)p[3*c+1],(float)p[3*c+2],255,255,255,255,sprite.getU((float)uv[2*c]),sprite.getV((float)uv[2*c+1]),light,(float)n[3*c],(float)n[3*c+1],(float)n[3*c+2]);
+            }
+            pose.popPose();
+        }
+        if(consumer!=null)buffers.endBatch(BANDS);
     }
 
     /** The liquid's depth over the tank's floor at game time {@code ticks}, m, where the level's roofs stand ({@link FloatingRoofs}): the tank's glide, or the level its node cell saved before the first one. */
@@ -249,7 +279,7 @@ public final class TankRenderer {
         var buffer = BUFFERS.get(key);
         if (buffer != null) return buffer;
         if (BUFFERS.size() >= MAX_BUFFERS) release();
-        buffer = build(key.roof() ? f.roof() : f.ladder(), key.paint(), key.light());
+        buffer = build(switch(key.part()){case ROOF->f.roof();case LADDER->f.ladder();case GAUGE->ShapeRasterizer.tankGauge(key.shape()).stream().filter(p->p.material()!=Mesh.Material.GLASS).toList();}, key.paint(), key.light());
         if (buffer != null) BUFFERS.put(key, buffer);
         return buffer;
     }

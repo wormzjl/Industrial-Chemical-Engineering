@@ -295,6 +295,7 @@ public final class IChemE {
             event.accept(ModItems.COLUMN_CALCULATOR_V3.get());
             event.accept(ModItems.PRESSURE_GAUGE.get());
             event.accept(ModItems.TEMPERATURE_GAUGE.get());
+            event.accept(ModItems.LIQUID_LEVEL_GAUGE.get());
             event.accept(ModItems.ACCESSORY_WRENCH.get());
             event.accept(ModItems.PIPELINE_TOOL.get());
             event.accept(ModItems.PIPELINE_SIGHT_GLASS.get());

@@ -48,6 +48,7 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.GaugeItem> PRESSURE_GAUGE = ITEMS.registerItem("pressure_gauge", p -> new com.wormzjl.icheme.world.item.GaugeItem(p, GaugeSettings.PRESSURE));
     public static final DeferredItem<com.wormzjl.icheme.world.item.GaugeItem> TEMPERATURE_GAUGE = ITEMS.registerItem("temperature_gauge", p -> new com.wormzjl.icheme.world.item.GaugeItem(p, GaugeSettings.TEMPERATURE));
     public static final DeferredItem<com.wormzjl.icheme.world.item.AccessoryWrenchItem> ACCESSORY_WRENCH = ITEMS.registerItem("accessory_wrench", com.wormzjl.icheme.world.item.AccessoryWrenchItem::new);
+    public static final DeferredItem<com.wormzjl.icheme.world.item.LiquidLevelGaugeItem> LIQUID_LEVEL_GAUGE = ITEMS.registerItem("liquid_level_gauge", com.wormzjl.icheme.world.item.LiquidLevelGaugeItem::new);
 
     private ModItems() {
     }

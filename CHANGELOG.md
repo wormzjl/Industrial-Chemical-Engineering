@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- Convert the floating-roof tank's integral liquid indicator into the `liquid_level_gauge` accessory: full-height custom-glass assembly, placement preview, published level readout, survival installation and shared wrench/dismantling recovery; batch `2026-10-26-liquid-level-gauge-accessory`.
+
 ## [0.13.2] - 2026-10-26
 
 ### Fixed

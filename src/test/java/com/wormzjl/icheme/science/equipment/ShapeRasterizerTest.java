@@ -1029,23 +1029,20 @@ class ShapeRasterizerTest {
             // The dynamic liquid stops at fill height; the fixed sleeve extends .3 m above it into the vent space.
             double low = gauge.glassLow(), high = gauge.glassHigh() + .3, glassArea = 0, lowest = Double.POSITIVE_INFINITY, highest = Double.NEGATIVE_INFINITY;
             var normals = new HashSet<String>();
-            for (var cell : ShapeRasterizer.layout(shape).shell()) {
-                if (Math.abs(cell.x() + .5 - gauge.glass()[0]) > 1 || Math.abs(cell.z() + .5 - gauge.glass()[1]) > 1) continue;
-                for (var face : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z()))) if (face.material() == Material.GLASS) {
+            for (var face : ShapeRasterizer.tankGauge(shape)) if (face.material() == Material.GLASS) {
                     double[] positions = face.positions(), normal = newell(face), light = face.normals();
-                    double dx = positions[0] + cell.x() - gauge.glass()[0], dz = positions[2] + cell.z() - gauge.glass()[1];
+                    double dx = positions[0] - gauge.glass()[0], dz = positions[2] - gauge.glass()[1];
                     assertTrue(normal[0] * dx + normal[2] * dz > 0, "clipped glass faces outwards: " + shape);
                     assertTrue(normal[0] * light[0] + normal[1] * light[1] + normal[2] * light[2] > 0, "winding agrees with lighting");
                     assertEquals(0, normal[1], 1e-12, "glass end faces stay buried in opaque caps");
                     normals.add(light[0] + "," + light[1] + "," + light[2]);
                     for (int v = 0; v < positions.length; v += 3) {
-                        double x = Math.abs(positions[v] + cell.x() - gauge.glass()[0]), z = Math.abs(positions[v + 2] + cell.z() - gauge.glass()[1]);
+                        double x = Math.abs(positions[v] - gauge.glass()[0]), z = Math.abs(positions[v + 2] - gauge.glass()[1]);
                         assertEquals(TankGaugeGeometry.GLASS_HALF, Math.max(x, z), 1e-9, "the sleeve encloses the liquid without crossing its collar");
-                        lowest = Math.min(lowest, positions[v + 1] + cell.y());highest = Math.max(highest, positions[v + 1] + cell.y());
+                        lowest = Math.min(lowest, positions[v + 1]);highest = Math.max(highest, positions[v + 1]);
                     }
                     glassArea += area(face);
                 }
-            }
             assertEquals(4, normals.size(), "all four lateral views have glass");
             assertEquals(low, lowest, 1e-9);assertEquals(high, highest, 1e-9);
             assertEquals(8 * TankGaugeGeometry.GLASS_HALF * (high - low), glassArea, 1e-8, "cell clipping leaves no missing or overlapping glass");
@@ -1055,7 +1052,7 @@ class ShapeRasterizerTest {
             for (double y : new double[]{low - TankGaugeGeometry.END_HEIGHT / 2, high + TankGaugeGeometry.END_HEIGHT / 2})
                 for (double fraction : new double[]{.2, .5, .8}) {
                     double capBack = local.z() + TankGaugeGeometry.CHAMBER_RADIUS + .03, z = shellZ + fraction * (capBack - shellZ);
-                    assertTrue(crossings(shape, new double[]{local.x() - .09, y, z}, new double[]{local.x() + .09, y, z}) >= 2,
+                    assertTrue(gaugeCrossings(shape, new double[]{local.x() - .09, y, z}, new double[]{local.x() + .09, y, z}) >= 2,
                             "a continuous round equalizing pipe joins each end to the shell: " + shape + " y=" + y + " fraction=" + fraction);
                 }
         }
@@ -1183,6 +1180,37 @@ class ShapeRasterizerTest {
                     n[2] += (pos[3 * i] - pos[3 * j]) * (pos[3 * i + 1] + pos[3 * j + 1]);
                 }
                 double[] o = {p[0] - cell.x(), p[1] - cell.y(), p[2] - cell.z()};
+                double denominator = n[0] * d[0] + n[1] * d[1] + n[2] * d[2];
+                if (Math.abs(denominator) < 1e-12) continue;
+                double t = (n[0] * (pos[0] - o[0]) + n[1] * (pos[1] - o[1]) + n[2] * (pos[2] - o[2])) / denominator;
+                if (t < 0 || t > 1) continue;
+                double[] x = {o[0] + t * d[0], o[1] + t * d[1], o[2] + t * d[2]};
+                // Even-odd test in the plane of the normal's two smaller components.
+                int drop = Math.abs(n[0]) >= Math.abs(n[1]) && Math.abs(n[0]) >= Math.abs(n[2]) ? 0 : Math.abs(n[1]) >= Math.abs(n[2]) ? 1 : 2, u = (drop + 1) % 3, v = (drop + 2) % 3;
+                boolean in = false;
+                for (int i = 0, j = size - 1; i < size; j = i++) {
+                    double ui = pos[3 * i + u], vi = pos[3 * i + v], uj = pos[3 * j + u], vj = pos[3 * j + v];
+                    if ((vi > x[v]) != (vj > x[v]) && x[u] < (uj - ui) * (x[v] - vi) / (vj - vi) + ui) in = !in;
+                }
+                if (in) count++;
+            }
+        return count;
+    }
+
+    private static int gaugeCrossings(EquipmentShape shape, double[] from, double[] to) {
+        double[] p = shape.transform().point(from), q = shape.transform().point(to), d = {q[0] - p[0], q[1] - p[1], q[2] - p[2]};
+        int count = 0;
+        for (var polygon : ShapeRasterizer.tankGauge(shape)) {
+                // Newell's normal, the plane through the first vertex, and the crossing point in cell coordinates.
+                double[] pos = polygon.positions(), n = new double[3];
+                int size = polygon.size();
+                for (int i = 0; i < size; i++) {
+                    int j = (i + 1) % size;
+                    n[0] += (pos[3 * i + 1] - pos[3 * j + 1]) * (pos[3 * i + 2] + pos[3 * j + 2]);
+                    n[1] += (pos[3 * i + 2] - pos[3 * j + 2]) * (pos[3 * i] + pos[3 * j]);
+                    n[2] += (pos[3 * i] - pos[3 * j]) * (pos[3 * i + 1] + pos[3 * j + 1]);
+                }
+                double[] o = {p[0], p[1], p[2]};
                 double denominator = n[0] * d[0] + n[1] * d[1] + n[2] * d[2];
                 if (Math.abs(denominator) < 1e-12) continue;
                 double t = (n[0] * (pos[0] - o[0]) + n[1] * (pos[1] - o[1]) + n[2] * (pos[2] - o[2])) / denominator;
