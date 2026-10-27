@@ -112,19 +112,26 @@ The plan also touches:
   - Formats: facts schema 5 (the channel count and the pair record appended) with its corpus image `compat/fluid/schema-5`; checkpoint state format 23; certificate graph identity tag -3.
   - Screen: the side's title and the "Other side" button; a side's edit refused until W4. The one in-game check moves to W5.
   - Gates: `HeatSidesTest` 3, `HeatSideTopologyTest` 2, `FluidFactsCompatTest` 7 (five images); quick suite 1663 (four failures fixed, their classes re-run: an archived capture read through the live geometry record, the line-piece sweep and the rasterizer's node test meeting the new kind).
-- 2026-10-27, W5 the air cooler, in the W5 commit.
+- 2026-10-27, W5 the air cooler, commit `4840441d`.
   - One PROCESS side per bank; its heat law a flat wall of air at 25 °C under the effective films UA_eff / A of plan section 4 (no new kernel). The fans are the control's manual share (natural draught when still); `Mode.BYPASS` removed as a duplicate.
   - The screen: inlet and outlet temperature, duty, fans and fan power. Fan power is a datasheet and screen line, not a fluid energy term (it heats the air).
   - State format 24: the checkpoint carries a connection's heat side; format 23 dropped it, so a restored island would have lost its air cooler's heat.
   - Measured: the outlet junction holds half the tubes' liquid, a lag of about the tubes' residence time (14 s for a 3 × 6 m bay at 13.5 kg/s of water). The gate runs 300 s.
   - Fixed in passing: the menu edit dropped a rack lane's width and face points, so a rack pipe's diameter edit was refused. The edit now goes through withers.
   - Gates: `HeatSidesTest` 5 (the effective films per phase at fans on and off, the bay's side and passage), `HeatSideTopologyTest` 3 (85 °C water through a 3 × 6 m bay settles within 0.1 K of 25 °C + 60 K × exp(−hA/ṁc_p), fans on and off), `FluidCheckpointCodecTest` 11 (a heat side round trip); quick suite 1667, no failures.
+  - In-game check (the task's one, moved from W2; an opus subagent on the runMcpClient lane and the bridge, screenshots in the worktree's `tmp/w5-ingame/`). Passed:
+    - the exchanger's tube and shell side titles and the Other side round trip;
+    - the air cooler on 28.4 kg/s of water at 85 °C: outlet 73.1 °C, duty 1416 kW, fan power 12.2 kW;
+    - fans off: outlet 81.3 °C, 447 kW, 0 kW; fans on again: the first readings back.
+  - Two layout defects it found, fixed in the follow-up commit:
+    - the rail buttons covered the readings: `railControls` now counts the fans and partner buttons;
+    - the one-sided air cooler showed a dead Other side button: `FluidView.Heat.paired` hides it.
+    The fix was judged by the rail's row count and the affected tests, not by a second in-game check.
 
 ## Notes
 
 - Open: after W3a, the coupling's timing form. Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
 - Open from W1:
-  - the in-game check (moved from W2 to W5): the exchanger's two side screens and the air cooler's readings and fans;
   - Q15: the curve-span extrapolation notice, recommended dropped (plan section 12);
   - a pipe gauge downstream of a side reads the outlet junction; a gauge on the unit itself still reads its inlet node;
   - the step accepts a junction laid out without a phase its enthalpy holds; only the seeds guard it (W1 saw liquid 22 K superheated when the seeds missed the heat). To be put to the owner;

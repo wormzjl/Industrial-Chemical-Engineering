@@ -667,7 +667,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             for(var boundary:snapshot.lastResult().map(PassiveIntervalSolver.Result::boundaries).orElse(List.of()))
                 if(boundary.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==own)joule+=boundary.totalEnergyJoule();
             double share=heat.control().share();
-            view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),snapshot.graph().reservoirs().get(pipe.second()).state().temperature(),seconds>0?joule/seconds:0,
+            view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),heat.partner()!=0,snapshot.graph().reservoirs().get(pipe.second()).state().temperature(),seconds>0?joule/seconds:0,
                     heat.fans()?share:null,heat.fans()?com.wormzjl.icheme.science.equipment.HeatSides.fanPower(heat.area(),share):null));
         }
         if(registration.device().kind()==TopologyCompiler.Kind.VOID) {

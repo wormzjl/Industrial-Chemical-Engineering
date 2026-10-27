@@ -146,11 +146,15 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** A field of the scrolled rail: its label is clipped with the rail, the box shows only when it lies wholly inside. */
     private void railField(String key,String label,int y){field(key,label,12,y,rail()-4).visible=inRail(y+12,18);}
-    /** Rail controls above the values: the fields a device's page edits, or a filter's recover button. */
+    /** Rail controls above the values: the fields a device's page edits, a filter's recover button, an air cooler's fans,
+     * and a paired heat side's button to its partner (which a reader has too). */
     private int railControls(){
-        var data=menu.clientData();if(data==null||!canEdit())return 0;
-        return switch(data.kind()){case PUMP,COMPRESSOR->constructedMover()?3:2;case GENERATOR->3;case VALVE->data.valve()!=null&&!data.valve().configured()?0:valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW||valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?2:1;case VOID,PIPE,FILTER->1;default->0;};
+        var data=menu.clientData();if(data==null)return 0;
+        int partner=paired()?1:0;if(!canEdit())return partner;
+        return partner+switch(data.kind()){case PUMP,COMPRESSOR->constructedMover()?3:2;case GENERATOR->3;case VALVE->data.valve()!=null&&!data.valve().configured()?0:valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW||valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?2:1;case VOID,PIPE,FILTER->1;case HEAT_SIDE->fans()?1:0;default->0;};
     }
+    /** A heat side with a partner (an exchanger's): it opens the partner's screen (batch 2026-10-27-heat-exchanger-design). */
+    private boolean paired(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().paired();}
     private void changePage(int target){page=target;templates=false;scroll.reset();rebuild();}
     private void toggleBasis(){
         try{if(composition!=null){composition.toggleBasis();mass=composition.mass();}else mass=!mass;preferredMass=mass;rebuild();}
@@ -229,7 +233,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             recover.active=data.view().filter()!=null&&!data.view().filter().captured().empty();recover.visible=inRail(y,18);
         }
         // A unit's heat side opens its partner side's menu (batch 2026-10-27-heat-exchanger-design).
-        if(data.kind()==TopologyCompiler.Kind.HEAT_SIDE)action("partner_side",12,y,rail()-4,()->FluidNetwork.openPartner(menu)).visible=inRail(y,20);
+        if(paired())action("partner_side",12,y,rail()-4,()->FluidNetwork.openPartner(menu)).visible=inRail(y,20);
         if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
         else if(page==4)configureScroll(data.view().outlets().size());else if(page==5)configureScroll(datasheet.size());
         else configureScroll(data.view().pipeInfo().connections().size());

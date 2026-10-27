@@ -89,11 +89,11 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
     public record PipeRoute(long pipeId,String first,String second) {}
     /**
      * A unit's heat side over the last completed interval (batch 2026-10-27-heat-exchanger-design): which unit and side it
-     * is, the temperature at its outlet nozzle's junction (K), the heat its stream took up (W, negative where it was
-     * cooled, from the interval's {@code HEAT} boundaries), and an air cooler's fans: their share of full speed and their
-     * power (W), null for a side without fans.
+     * is, whether it has a partner side (whose screen it opens), the temperature at its outlet nozzle's junction (K), the
+     * heat its stream took up (W, negative where it was cooled, from the interval's {@code HEAT} boundaries), and an air
+     * cooler's fans: their share of full speed and their power (W), null for a side without fans.
      */
-    public record Heat(String unit,String side,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt) {
+    public record Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt) {
         public Heat {
             Objects.requireNonNull(unit);Objects.requireNonNull(side);
             if(!(outletTemperature>0)||!Double.isFinite(outletTemperature)||!Double.isFinite(heatWatt)||(fans==null)!=(fanPowerWatt==null)
