@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-10-27-heat-exchanger-design/](2026-10-27-heat-exchanger-design/README.md) | Heat exchanger system: UA from size, coupling of the two sides, built-in control | Planned |
 | [2026-10-26-multi-machine-framework/](2026-10-26-multi-machine-framework/README.md) | Multi-machine assemblies, first stage: the distillation column structure | Implemented 2026-10-27 |
 | [2026-10-26-process-control/](2026-10-26-process-control/README.md) | Process sensors and local regulation | Implemented 2026-10-27 |
 | [2026-10-26-liquid-level-gauge-accessory](2026-10-26-liquid-level-gauge-accessory/README.md) | Attachable full-height floating-roof tank level indicator | In progress since 2026-10-26; delivered b1477c09; rebase on current main600549d9 confirmed2026-10-26, main merge pending |

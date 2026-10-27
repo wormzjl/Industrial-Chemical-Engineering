@@ -1,0 +1,24 @@
+PART 4b at 1/1 s slices, CAPPED: hot island held from 100 s to 700 s, outlets against the reference (both flowing), case A
+   680 s   hot   179.97  ref   102.46   cold    30.00  ref   107.54
+   690 s   hot   179.98  ref   102.46   cold    30.00  ref   107.54
+   700 s   hot   179.10  ref   102.46   cold    69.65  ref   107.54
+   710 s   hot   150.32  ref   102.46   cold   134.18  ref   107.54
+   720 s   hot   129.61  ref   102.46   cold   113.79  ref   107.54
+   730 s   hot   123.98  ref   102.46   cold    91.12  ref   107.54
+   740 s   hot   126.57  ref   102.46   cold    73.06  ref   107.54
+   750 s   hot   132.65  ref   102.46   cold    59.54  ref   107.54
+   760 s   hot   140.02  ref   102.46   cold    49.83  ref   107.54
+   770 s   hot   147.43  ref   102.46   cold    43.06  ref   107.54
+   780 s   hot   146.26  ref   102.46   cold   112.95  ref   107.54
+   790 s   hot   124.44  ref   102.46   cold   126.16  ref   107.54
+   800 s   hot   113.20  ref   102.46   cold   117.37  ref   107.54
+   810 s   hot   107.82  ref   102.46   cold   112.65  ref   107.54
+   820 s   hot   105.16  ref   102.46   cold   110.17  ref   107.54
+   830 s   hot   103.83  ref   102.46   cold   108.89  ref   107.54
+   840 s   hot   103.16  ref   102.46   cold   108.23  ref   107.54
+   850 s   hot   102.82  ref   102.46   cold   107.89  ref   107.54
+   860 s   hot   102.64  ref   102.46   cold   107.72  ref   107.54
+   870 s   hot   102.55  ref   102.46   cold   107.63  ref   107.54
+   880 s   hot   102.51  ref   102.46   cold   107.59  ref   107.54
+   890 s   hot   102.48  ref   102.46   cold   107.56  ref   107.54
+   900 s   hot   102.47  ref   102.46   cold   107.55  ref   107.54
