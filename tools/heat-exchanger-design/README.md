@@ -5,7 +5,8 @@ Purpose: offline study harnesses behind the heat exchanger design (batch [`2026-
 - how the two sides of an exchanger couple when they sit in different fluid islands;
 - how many wall cells the heat law needs;
 - how a TEMA E shell with two tube passes compares with counterflow;
-- how a film coefficient per phase changes the lag and the coupling's stability.
+- how a film coefficient per phase changes the lag and the coupling's stability;
+- how the sides couple when the wall holds no heat (a relay of the heat in transit).
 
 No game code, no Gradle.
 
@@ -42,6 +43,10 @@ The default run takes about 4 s, each mode about a second. The stored `results-*
   - Reported: max error, tail, settle to 1 K and to 0.1 K, energy.
   - 5b: the holds again. 5c: the wall's heat capacity at 1, ½ and ¼ against the physical lag, and both forms at a quarter wall.
 - **Part 6**: a stability map, `INFLIGHT` against `JOINT`. Liquid/liquid at 10 to 200 kg/s with the wall at 1 to ½, and a condensing mixture with a glide (film 5000, 100 to 2000 kW/K) against water, at 20/20, 5/20 and 20/5 s.
+- **Part 7** (revision 3, owner Q10: no wall heat): the relay. Each slice, planned at its dispatch from the record history (`Rec`, `Plan`, `RelaySide`), heads for the quasi-steady wall; the account holds only the heat in transit, which each side gives back within its slice, clamped between the inlet temperatures; a side lagging more than one slice counts as stopped (no heat for either side over those spans). Against the quasi-steady exchanger (`truthQuasi`); the part 2, 5 and 6 cases.
+  - Reported: max error, tail, settle to 1 K, the largest give-back shift, the heat in transit at the end.
+  - 7b: the holds. 7c: the dead-beat controller. 7d: three give-back splits (`Split`: conductance, capacity rate, slice heat; `SPLIT` picks the one parts 7 to 7c run).
+  - Parts 2 to 6 plan a slice at its commit, from the other side's latest record, so their equal-slice results are optimistic. Part 7 corrects that.
 - **`hold1s`** (argument): Part 4b's 1 s `CAPPED` run, both outlets every 10 s from 680 s. The harness clock ticks once a simulated second, and a held island catches up 8 slices a tick. At 1 s slices the 600 s backlog therefore takes about 86 s, and the 10 K tail of that row is this recovery (0.4 K at 850 s, 0.01 K at 900 s).
 - **`lowflow`** (argument): liquid/liquid at 10 kg/s (NTU 10.8), 20/20 s slices, to 3000 s. JOINT's only part 6 rows above 0.05 K are a slow tail, not a cycle.
 
@@ -51,3 +56,4 @@ The default run takes about 4 s, each mode about a second. The stored `results-*
 
 - 2026-10-27: written for the design batch; results summarised in `documentation/2026-10-27-heat-exchanger-design/HX_COUPLING_STUDY_REVIEW.md`. The one-off probe that explained Part 4b's 1 s tail became the `hold1s` mode (default output unchanged, byte for byte).
 - 2026-10-27, revision 2 (owner answers): per-side films (`Case.uaHot`, `uaCold`; parts 1 to 4 byte-identical), parts 5 to 6, the `PREDICTED`, `INFLIGHT` and `JOINT` schemes, and the `lowflow` mode (from a one-off probe). Summary: `documentation/2026-10-27-heat-exchanger-design/HX_FILMS_STUDY_REVIEW.md`.
+- 2026-10-27, revision 3 (owner Q10 to Q13): part 7 (the relay, planned at dispatch, three give-back splits, holds, controller; the controller's give-back offset was measured and removed). Parts 1 to 6 and both modes byte-identical. Summary: `documentation/2026-10-27-heat-exchanger-design/HX_ZERO_WALL_STUDY_REVIEW.md`.

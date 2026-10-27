@@ -467,3 +467,127 @@ PART 6  stability map, INFLIGHT against JOINT: x = (G_hot + G_cold) * longer sli
   glide 5000/2000, hot 2000 kW/K, wall x 0.50 slices 20/20 x  20.7   INFLIGHT  tail    25.93    31.22 FAILS   JOINT     tail     0.00     0.00 ok   
   glide 5000/2000, hot 2000 kW/K, wall x 0.50 slices  5/20 x  20.7   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
   glide 5000/2000, hot 2000 kW/K, wall x 0.50 slices 20/5  x  20.7   INFLIGHT  tail    13.50    16.53 FAILS   JOINT     tail     0.00     0.00 ok   
+
+PART 7  revision 3: the wall holds no heat (owner Q10); against the quasi-steady exchanger, inlet step at 60 s
+  give-back split by slice_heat (Part 7d compares the three splits)
+  columns: max |error| hot, cold from the step on (K); over the last 100 s (K); settles (1 K) hot, cold (s after the step);
+           largest give-back shift of an outlet (K); heat still in transit at the end (J)
+A hot inlet 150->180 C, water 50 kg/s each side, steel only: steady outlets 102.46 / 107.54 C
+  slices    1/1    s max     7.75    15.51   tail     0.00     0.00   settles (1 K)    1    1 s   give-back   7.75 K, in transit 2.8e-09 J
+  slices    5/5    s max     7.75    15.51   tail     0.00     0.00   settles (1 K)    9    9 s   give-back   7.75 K, in transit 1.5e-08 J
+  slices   20/20   s max     7.75    15.51   tail     0.00     0.00   settles (1 K)   39   39 s   give-back   7.75 K, in transit 2.2e-08 J
+  slices    5/20   s max     9.16    15.51   tail     0.00     0.00   settles (1 K)   44   59 s   give-back   9.16 K, in transit 3.0e-08 J
+  slices   20/5    s max     9.16    15.51   tail     0.00     0.00   settles (1 K)   59   44 s   give-back   9.16 K, in transit 2.6e-08 J
+B cold flow 50->10 kg/s, steel only: steady outlets 126.32 / 148.38 C
+  slices    1/1    s max    38.36     1.62   tail     0.00     0.00   settles (1 K)    6    6 s   give-back  23.68 K, in transit 2.2e-07 J
+  slices    5/5    s max    38.36     1.62   tail     0.00     0.00   settles (1 K)   34   34 s   give-back  23.68 K, in transit 1.1e-06 J
+  slices   20/20   s max    38.36     1.62   tail     0.00     0.00   settles (1 K)  139  139 s   give-back  23.68 K, in transit 4.3e-06 J
+  slices    5/20   s max    38.36     1.62   tail     0.00     0.00   settles (1 K)   94   99 s   give-back  23.68 K, in transit 1.6e-06 J
+  slices   20/5    s max    38.36     1.62   tail     0.00     0.00   settles (1 K)   59   59 s   give-back  23.68 K, in transit 3.8e-06 J
+C high flow 1.5 MW/K each side (stiff), steel only: steady outlets 160.44 / 49.56 C
+  slices    1/1    s max     1.96     3.91   tail     0.00     0.00   settles (1 K)    1    1 s   give-back   1.96 K, in transit 1.9e-08 J
+  slices    5/5    s max     1.96     3.91   tail     0.00     0.00   settles (1 K)    9    9 s   give-back   1.96 K, in transit 1.3e-07 J
+  slices   20/20   s max     1.96     3.91   tail     0.00     0.00   settles (1 K)   39   39 s   give-back   1.96 K, in transit 5.2e-07 J
+  slices    5/20   s max     2.31     3.91   tail     0.00     0.00   settles (1 K)   29   39 s   give-back   2.31 K, in transit 2.8e-07 J
+  slices   20/5    s max     2.31     3.91   tail     0.00     0.00   settles (1 K)   39   29 s   give-back   2.31 K, in transit 4.3e-07 J
+L/L liquid 2000 / liquid 2000 W/m2K, water 50 kg/s each side: steady outlets 78.35 / 131.65 C
+  slices    1/1    s max    10.17    20.33   tail     0.00     0.00   settles (1 K)    1    1 s   give-back  10.17 K, in transit 9.3e-10 J
+  slices    5/5    s max    10.17    20.33   tail     0.00     0.00   settles (1 K)    9    9 s   give-back  10.17 K, in transit 9.3e-09 J
+  slices   20/20   s max    10.17    20.33   tail     0.00     0.00   settles (1 K)   39   39 s   give-back  10.17 K, in transit 7.5e-08 J
+  slices    5/20   s max    12.00    20.33   tail     0.00     0.00   settles (1 K)   49   59 s   give-back  12.00 K, in transit 4.5e-08 J
+  slices   20/5    s max    12.00    20.33   tail     0.00     0.00   settles (1 K)   59   49 s   give-back  12.00 K, in transit 5.6e-09 J
+G/L gas 100 / liquid 2000, gas 20 kg/s, water 10 kg/s: steady outlets 66.94 / 89.50 C
+  slices    1/1    s max     7.80    11.90   tail     0.00     0.00   settles (1 K)    1    1 s   give-back   7.80 K, in transit 9.0e-08 J
+  slices    5/5    s max     7.80    11.90   tail     0.00     0.00   settles (1 K)    9    9 s   give-back   7.80 K, in transit 4.5e-07 J
+  slices   20/20   s max     7.80    11.90   tail     0.00     0.00   settles (1 K)   39   39 s   give-back   7.80 K, in transit 1.8e-06 J
+  slices    5/20   s max     8.82    11.90   tail     0.00     0.00   settles (1 K)   44   59 s   give-back   8.82 K, in transit 1.3e-06 J
+  slices   20/5    s max     9.39    11.90   tail     0.00     0.00   settles (1 K)   59   44 s   give-back   9.39 K, in transit 9.1e-07 J
+G/G gas 100 / gas 100, gas 20 kg/s each side: steady outlets 104.36 / 105.64 C
+  slices    1/1    s max     7.56    15.13   tail     0.00     0.00   settles (1 K)    1    1 s   give-back   7.56 K, in transit 4.7e-10 J
+  slices    5/5    s max     7.56    15.13   tail     0.00     0.00   settles (1 K)    9    9 s   give-back   7.56 K, in transit 2.4e-09 J
+  slices   20/20   s max     7.56    15.13   tail     0.00     0.00   settles (1 K)   39   39 s   give-back   7.56 K, in transit 9.8e-09 J
+  slices    5/20   s max     8.93    15.13   tail     0.00     0.00   settles (1 K)   44   59 s   give-back   8.93 K, in transit 9.3e-10 J
+  slices   20/5    s max     8.93    15.13   tail     0.00     0.00   settles (1 K)   59   44 s   give-back   8.93 K, in transit 2.7e-09 J
+C/L condensing 5000 (150 -> 180 C) / liquid 2000, water 50 kg/s: steady outlets 180.00 / 172.97 C
+  slices    1/1    s max     0.00    28.59   tail     0.00     0.00   settles (1 K)    0    0 s   give-back   0.00 K, in transit 1.5e-08 J
+  slices    5/5    s max     0.00    28.59   tail     0.00     0.00   settles (1 K)    0    4 s   give-back   0.00 K, in transit 7.4e-08 J
+  slices   20/20   s max     0.00    28.59   tail     0.00     0.00   settles (1 K)    0   19 s   give-back   0.00 K, in transit 2.9e-07 J
+  slices    5/20   s max     0.00    28.59   tail     0.00     0.00   settles (1 K)    0   19 s   give-back   0.00 K, in transit 9.7e-08 J
+  slices   20/5    s max     0.00    28.59   tail     0.00     0.00   settles (1 K)    0   19 s   give-back   0.00 K, in transit 3.0e-07 J
+glide 5000/2000, hot  400 kW/K: steady outlets 111.84 / 160.44 C
+  slices    1/1    s max     8.95    26.09   tail     0.00     0.00   settles (1 K)    1    1 s   give-back   8.95 K, in transit 9.7e-07 J
+  slices    5/5    s max     8.95    26.09   tail     0.00     0.00   settles (1 K)    9    9 s   give-back   8.95 K, in transit 4.8e-06 J
+  slices   20/20   s max     8.95    26.09   tail     0.00     0.00   settles (1 K)   39   39 s   give-back   8.95 K, in transit 1.9e-05 J
+  slices    5/20   s max    10.78    26.09   tail     0.00     0.00   settles (1 K)   49   59 s   give-back  10.78 K, in transit 9.8e-06 J
+  slices   20/5    s max    10.12    26.09   tail     0.00     0.00   settles (1 K)   59   44 s   give-back  10.12 K, in transit 1.4e-05 J
+glide 5000/2000, hot 2000 kW/K: steady outlets 165.24 / 171.21 C
+  slices    1/1    s max     2.67    28.24   tail     0.00     0.00   settles (1 K)    1    1 s   give-back   2.67 K, in transit 4.8e-07 J
+  slices    5/5    s max     2.67    28.24   tail     0.00     0.00   settles (1 K)    9    9 s   give-back   2.67 K, in transit 2.4e-06 J
+  slices   20/20   s max     2.67    28.24   tail     0.00     0.00   settles (1 K)   39   39 s   give-back   2.67 K, in transit 9.7e-06 J
+  slices    5/20   s max     2.93    28.24   tail     0.00     0.00   settles (1 K)   24   39 s   give-back   2.93 K, in transit 3.1e-06 J
+  slices   20/5    s max     2.77    28.24   tail     0.00     0.00   settles (1 K)   39   34 s   give-back   2.77 K, in transit 9.0e-06 J
+L/L   10 kg/s: steady outlets 48.79 / 161.21 C
+  slices    1/1    s max    13.12    26.24   tail     0.00     0.00   settles (1 K)    1    1 s   give-back  13.12 K, in transit 9.3e-10 J
+  slices    5/5    s max    13.12    26.24   tail     0.00     0.00   settles (1 K)    9    9 s   give-back  13.12 K, in transit 5.1e-09 J
+  slices   20/20   s max    13.12    26.24   tail     0.00     0.00   settles (1 K)   39   39 s   give-back  13.12 K, in transit 2.8e-08 J
+  slices    5/20   s max    15.49    26.24   tail     0.00     0.00   settles (1 K)   49   59 s   give-back  15.49 K, in transit 2.0e-08 J
+  slices   20/5    s max    15.49    26.24   tail     0.00     0.00   settles (1 K)   59   49 s   give-back  15.49 K, in transit 1.0e-08 J
+L/L   25 kg/s: steady outlets 60.40 / 149.60 C
+  slices    1/1    s max    11.96    23.92   tail     0.00     0.00   settles (1 K)    1    1 s   give-back  11.96 K, in transit 4.4e-09 J
+  slices    5/5    s max    11.96    23.92   tail     0.00     0.00   settles (1 K)    9    9 s   give-back  11.96 K, in transit 2.0e-08 J
+  slices   20/20   s max    11.96    23.92   tail     0.00     0.00   settles (1 K)   39   39 s   give-back  11.96 K, in transit 8.6e-08 J
+  slices    5/20   s max    14.12    23.92   tail     0.00     0.00   settles (1 K)   49   59 s   give-back  14.12 K, in transit 3.7e-08 J
+  slices   20/5    s max    14.12    23.92   tail     0.00     0.00   settles (1 K)   59   49 s   give-back  14.12 K, in transit 4.6e-08 J
+L/L  200 kg/s: steady outlets 127.56 / 82.44 C
+  slices    1/1    s max     5.24    10.49   tail     0.00     0.00   settles (1 K)    1    1 s   give-back   5.24 K, in transit 2.5e-08 J
+  slices    5/5    s max     5.24    10.49   tail     0.00     0.00   settles (1 K)    9    9 s   give-back   5.24 K, in transit 1.1e-07 J
+  slices   20/20   s max     5.24    10.49   tail     0.00     0.00   settles (1 K)   39   39 s   give-back   5.24 K, in transit 4.3e-07 J
+  slices    5/20   s max     6.19    10.49   tail     0.00     0.00   settles (1 K)   44   59 s   give-back   6.19 K, in transit 2.8e-07 J
+  slices   20/5    s max     6.19    10.49   tail     0.00     0.00   settles (1 K)   59   44 s   give-back   6.19 K, in transit 2.3e-07 J
+
+PART 7b holds, case A without wall heat: hot island held 100 to 160 s and 100 to 700 s
+  held to 160 s, slices    1/1    s max    77.54    77.54   tail     0.00     0.00   give-back  38.77 K, in transit 3.7e-09 J
+  held to 160 s, slices    5/5    s max    77.54    77.54   tail     0.00     0.00   give-back  38.77 K, in transit 1.5e-08 J
+  held to 160 s, slices   20/20   s max    77.54    77.54   tail     0.00     0.00   give-back  77.54 K, in transit 3.7e-08 J
+  held to 160 s, slices    5/20   s max    77.54    77.54   tail     0.00     0.00   give-back  40.61 K, in transit 4.5e-08 J
+  held to 160 s, slices   20/5    s max    58.45    77.54   tail     0.00     0.00   give-back  30.78 K, in transit 3.4e-08 J
+  held to 700 s, slices    1/1    s max    77.54    77.54   tail     0.00     0.00   give-back  38.77 K, in transit 3.7e-09 J
+  held to 700 s, slices    5/5    s max    77.54    77.54   tail     0.00     0.00   give-back  38.77 K, in transit 1.5e-08 J
+  held to 700 s, slices   20/20   s max    77.54    77.54   tail     0.00     0.00   give-back  38.77 K, in transit 4.5e-08 J
+  held to 700 s, slices    5/20   s max    77.54    77.54   tail     0.05     0.05   give-back  45.73 K, in transit 4.9e+01 J
+  held to 700 s, slices   20/5    s max    77.54    77.54   tail     0.01     0.01   give-back  15.51 K, in transit 8.6e+00 J
+
+PART 7c cold outlet target by a cold-side bypass without wall heat, dead-beat, hot inlet 150->180 C at 60 s
+  A h target 90 C slices    1/1    s: worst |T-target|  12.72 K, last outside 0.1 K at +   7 s, end 90.0000 C
+  A h target 90 C slices    5/5    s: worst |T-target|  12.72 K, last outside 0.1 K at +  39 s, end 90.0000 C
+  A h target 90 C slices   20/20   s: worst |T-target|  12.91 K, last outside 0.1 K at + 159 s, end 90.0000 C
+  A h target 90 C slices    5/20   s: worst |T-target|  14.74 K, last outside 0.1 K at + 139 s, end 90.0000 C
+  A h target 90 C slices   20/5    s: worst |T-target|  13.16 K, last outside 0.1 K at +  69 s, end 90.0000 C
+  C h target 40 C slices    1/1    s: worst |T-target|   0.90 K, last outside 0.1 K at +   3 s, end 40.0000 C
+  C h target 40 C slices    5/5    s: worst |T-target|   0.90 K, last outside 0.1 K at +  19 s, end 40.0000 C
+  C h target 40 C slices   20/20   s: worst |T-target|   0.94 K, last outside 0.1 K at +  79 s, end 40.0000 C
+  C h target 40 C slices    5/20   s: worst |T-target|   0.96 K, last outside 0.1 K at +  59 s, end 40.0000 C
+  C h target 40 C slices   20/5    s: worst |T-target|   0.90 K, last outside 0.1 K at +  49 s, end 40.0000 C
+  L/L target 100 C slices    1/1    s: worst |T-target|  11.42 K, last outside 0.1 K at +   5 s, end 100.0000 C
+  L/L target 100 C slices    5/5    s: worst |T-target|  11.42 K, last outside 0.1 K at +  29 s, end 100.0000 C
+  L/L target 100 C slices   20/20   s: worst |T-target|  11.90 K, last outside 0.1 K at + 119 s, end 100.0000 C
+  L/L target 100 C slices    5/20   s: worst |T-target|  13.22 K, last outside 0.1 K at +  99 s, end 100.0000 C
+  L/L target 100 C slices   20/5    s: worst |T-target|  11.96 K, last outside 0.1 K at +  74 s, end 100.0000 C
+
+PART 7d the give-back split: by conductance (the heat law), by capacity rate (equal shift at equal slices), by slice heat W len (equal shift at any slices)
+  worst over the five slicings: max |error| (K), settle 1 K (s), give-back shift (K); controller: worst |T-target| (K), last outside 0.1 K (s)
+  A hot inlet 150->180 C, water 50 kg/s each  conductance  15.51 K   44 s  14.54 K  | capacity  15.51 K   44 s  14.54 K  | slice_heat  15.51 K   59 s   9.16 K
+  B cold flow 50->10 kg/s, steel only         conductance  38.36 K  239 s  35.96 K  | capacity  38.36 K  139 s  35.96 K  | slice_heat  38.36 K  139 s  23.68 K
+  C high flow 1.5 MW/K each side (stiff), st  conductance   3.91 K   39 s   3.67 K  | capacity   3.91 K   39 s   3.67 K  | slice_heat   3.91 K   39 s   2.31 K
+  L/L liquid 2000 / liquid 2000 W/m2K, water  conductance  20.33 K   49 s  19.06 K  | capacity  20.33 K   49 s  19.06 K  | slice_heat  20.33 K   59 s  12.00 K
+  G/L gas 100 / liquid 2000, gas 20 kg/s, wa  conductance  11.90 K   59 s  11.90 K  | capacity  18.45 K   49 s  18.45 K  | slice_heat  11.90 K   59 s   9.39 K
+  G/G gas 100 / gas 100, gas 20 kg/s each si  conductance  15.13 K   44 s  14.18 K  | capacity  15.13 K   44 s  14.18 K  | slice_heat  15.13 K   59 s   8.93 K
+  C/L condensing 5000 (150 -> 180 C) / liqui  conductance  28.59 K   44 s   7.03 K  | capacity  28.59 K   19 s   0.00 K  | slice_heat  28.59 K   19 s   0.00 K
+  glide 5000/2000, hot  400 kW/K              conductance  26.09 K   59 s  19.56 K  | capacity  26.09 K   49 s  19.56 K  | slice_heat  26.09 K   59 s  10.78 K
+  glide 5000/2000, hot 2000 kW/K              conductance  28.24 K   39 s   8.79 K  | capacity  28.24 K   39 s   8.79 K  | slice_heat  28.24 K   39 s   2.93 K
+  L/L   10 kg/s                               conductance  26.24 K   59 s  24.60 K  | capacity  26.24 K   59 s  24.60 K  | slice_heat  26.24 K   59 s  15.49 K
+  L/L   25 kg/s                               conductance  23.92 K   49 s  22.42 K  | capacity  23.92 K   49 s  22.42 K  | slice_heat  23.92 K   59 s  14.12 K
+  L/L  200 kg/s                               conductance  10.49 K   44 s   9.83 K  | capacity  10.49 K   44 s   9.83 K  | slice_heat  10.49 K   59 s   6.19 K
+  A h target  90 C                             conductance  20.50 K  159 s           | capacity  18.35 K  159 s           | slice_heat  14.74 K  159 s         
+  C h target  40 C                             conductance   2.94 K   99 s           | capacity   1.39 K   79 s           | slice_heat   0.96 K   79 s         
+  L/L target 100 C                             conductance  14.98 K  139 s           | capacity  14.00 K  119 s           | slice_heat  13.22 K  119 s         

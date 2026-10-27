@@ -2,6 +2,8 @@
 
 Date 2026-10-27. Batch `2026-10-27-heat-exchanger-design`, revision 2 (owner answers Q2, Q3, Q4). Harness and full output: [`tools/heat-exchanger-design/`](../../tools/heat-exchanger-design/README.md) (parts 5, 5b, 5c, 6; modes `lowflow`, `hold1s`). Offline only; no game code. The first study: [HX_COUPLING_STUDY_REVIEW.md](HX_COUPLING_STUDY_REVIEW.md).
 
+Revision 3 (owner Q10: no wall heat) supersedes the coupling conclusion and the wall lag below; the films stand. See [HX_ZERO_WALL_STUDY_REVIEW.md](HX_ZERO_WALL_STUDY_REVIEW.md).
+
 **Question.** The owner chose a film coefficient per phase (Q2), counterflow (Q3) and the steel-only wall (Q4), and asked that the films add no lag. Do the coupling's results still hold when films range from 100 to 5000 W/m²K, and where is the lag?
 
 **Model.** As the first study, counterflow, 8 cells, the 450 m² exchanger, steel 12 kJ/K per m². Films: liquid 2000, condensing 5000, gas 100 W/m²K; 1/U = 1/h_hot + 1/h_cold. Cases: liquid/liquid (U 1000, water 50 kg/s each side), gas/liquid (U 95, gas 20 kg/s, water 10 kg/s), gas/gas (U 50, gas 20 kg/s each side), condensing/liquid (U 1430, isothermal hot side). Hot inlet +30 K at 60 s. Settle: the last time an outlet was more than 1 K off its new steady state.

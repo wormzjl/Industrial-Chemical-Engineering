@@ -31,6 +31,12 @@ import java.util.Locale;
  * Part 5 (owner answer Q2, revision 2): a film coefficient per phase (liquid 2000, condensing 5000, gas 100 W/m2K) on
  * each side, counterflow; the four schemes from CAPPED on; 5b the holds again; 5c the wall's heat capacity.
  * Part 6: a stability map (liquid/liquid across flows and walls, a condensing mixture with a glide), INFLIGHT and JOINT.
+ * Note: Parts 2 to 6 plan a slice when it commits, from the other side's latest record; at equal slices that is the other
+ * side's end-of-slice state, which a real island does not have at dispatch, so they are optimistic. Part 7 plans at dispatch.
+ * Part 7 (owner answer Q10, revision 3): the wall holds no heat. Each slice heads for the quasi-steady wall (both streams
+ * marched, the other side as of the dispatch); the account holds only the heat in transit (what the two sides booked
+ * differently), and each side gives back its share, clamped so its outlet stays between the two inlets. Against the
+ * quasi-steady exchanger; 7b the holds; 7c the controller; 7d three give-back splits (conductance, capacity rate, slice heat).
  *
  * Run: java HxCouplingSim.java
  *      java HxCouplingSim.java hold1s    (Part 4b's 1 s CAPPED run, outlets through the catch-up)
@@ -538,6 +544,328 @@ public class HxCouplingSim {
             }
         }
         stabilityMap(n, area);
+        zeroWall(equal, films, n, area, slicing);
+    }
+
+    // ---------------------------------------------------------------- revision 3: a wall that holds no heat
+
+    /** Quasi-steady reference: at every second the exchanger stands at its steady state for that second's inlets. */
+    static double[][] truthQuasi(Case c) {
+        int n = c.n(), steps = (int) c.tEnd();
+        double[][] out = new double[steps + 1][2];
+        double[] th = new double[n], q = new double[n];
+        for (int i = 0; i <= steps; i++) {
+            double[] wall = steadyWall(n, c.g(0), c.g(1), c.hot().w(i), c.hot().tin(i), c.cold().w(i), c.cold().tin(i));
+            out[i][0] = march(c.hot().w(i), c.hot().tin(i), c.g(0), wall, true, th, q);
+            out[i][1] = march(c.cold().w(i), c.cold().tin(i), c.g(1), wall, false, th, q);
+        }
+        return out;
+    }
+
+    /** A side's state at a commit, for the other side's reads as of a time. */
+    record Rec(double t, double tin, double w, double[] g) {}
+
+    /** What a slice fixes when it is dispatched: the wall, the heat in transit due, the other side as read, its stop. */
+    record Plan(double[] wall, double[] due, double[] gOther, double wOther, double lenOther, double tinOther, boolean otherStopped, double off) {}
+
+    /** How the two sides split the heat in transit between them (Part 7d compares the three). */
+    enum Split { CONDUCTANCE, CAPACITY, SLICE_HEAT }
+
+    /** One side of a wall without heat. Part 7 plans every slice at its dispatch, from what both sides had committed then. */
+    static final class RelaySide {
+        final int s;
+        final double len;
+        Split split = Split.SLICE_HEAT;
+        double tau, beta;
+        final List<Booked> booked = new ArrayList<>();
+        final List<Rec> recs = new ArrayList<>();
+        final List<double[]> sawStopped = new ArrayList<>();   // spans in which this side counted the other as stopped
+        final double[] rate;                                   // heat rate per cell of the open slice, fixed at its dispatch
+        Plan plan;
+        RelaySide(int s, double len, int n) {
+            this.s = s;
+            this.len = len;
+            rate = new double[n];
+        }
+        Rec asOf(double t) {
+            Rec r = recs.get(0);
+            for (Rec x : recs) if (x.t() <= t + 1e-9) r = x;
+            return r;
+        }
+    }
+
+    static double[] wallFor(Case c, RelaySide is, double t, double[] gs, double tinOther, double wOther) {
+        Side side = c.side(is.s);
+        double w = (1 - is.beta) * side.w(t);
+        double[] wall = new double[c.n()];
+        if (wOther <= 0 || w <= 0) {                          // one stream stopped: the wall stands at the other, no heat
+            Arrays.fill(wall, wOther <= 0 ? side.tin(t) : tinOther);
+            return wall;
+        }
+        return is.s == 0 ? steadyWall(c.n(), gs[0], gs[1], w, side.tin(t), wOther, tinOther)
+                : steadyWall(c.n(), gs[0], gs[1], wOther, tinOther, w, side.tin(t));
+    }
+
+    /** Heat in transit as of t: the other side's heat booked past t taken out, its open slice's rate added for at most one slice. */
+    static double[] dueAsOf(double[] transit, double t, RelaySide other) {
+        int n = transit.length;
+        double[] d = transit.clone();
+        for (Booked b : other.booked) {
+            if (b.t1() <= t + 1e-9) continue;
+            double beyond = (b.t1() - Math.max(b.t0(), t)) / (b.t1() - b.t0());
+            for (int k = 0; k < n; k++) d[k] -= beyond * b.e()[k];
+        }
+        if (other.tau < t - 1e-9) {
+            double span = Math.min(t - other.tau, other.len);
+            for (int k = 0; k < n; k++) d[k] += span * other.rate[k];
+        }
+        return d;
+    }
+
+    static double overlap(List<double[]> spans, double a, double b) {
+        double sum = 0;
+        for (double[] sp : spans) sum += Math.max(0, Math.min(b, sp[1]) - Math.max(a, sp[0]));
+        return sum;
+    }
+
+    /**
+     * Dispatch: the wall the slice heads for (both streams marched, the other side as of t, stopped when it lags more than
+     * one of its slices), the heat in transit due as of t, and the share of the slice the other side spent counting this
+     * one as stopped (no heat moved there, for either side).
+     */
+    static Plan plan(Case c, RelaySide is, RelaySide other, double t, double[] gs, double[] transit, Control control) {
+        Side side = c.side(is.s);
+        boolean stopped = other.tau < t - other.len - 1e-9;
+        Rec o = other.asOf(t);
+        double wOther = stopped ? 0 : o.w();
+        double off = Math.min(1, overlap(other.sawStopped, t, t + is.len) / is.len);
+        double[] due = dueAsOf(transit, t, other), gOther = stopped ? new double[c.n()] : o.g();
+        double[] wall = wallFor(c, is, t, gs, o.tin(), wOther);
+        if (control != null && is.s == 1) {
+            // Measured: taking the planned give-back into the target closes a loop through the transit (each move of beta
+            // books new transit at the lagging side's next commit) and settles four to five times slower at 20/5 s slices.
+            double target = solveBeta(side.w(t), side.tin(t), gs[1], wall, control.target());
+            is.beta += control.damping() * (target - is.beta);
+            wall = wallFor(c, is, t, gs, o.tin(), wOther);
+        }
+        return new Plan(wall, due, gOther, wOther, other.len, o.tin(), stopped, off);
+    }
+
+    /**
+     * The side's share of the heat in transit. By conductance, the split the cell's heat law would give. By capacity rate,
+     * both streams shift by the same temperature at equal slices, and a condensing or boiling side (no temperature change)
+     * takes it all. By slice heat (capacity rate times slice length), both outlets shift by the same temperature at any
+     * slices. A side without flow takes none: the heat waits in transit.
+     */
+    static double share(RelaySide is, double wOwn, double gOwn, Plan p, int k) {
+        if (wOwn <= 0) return 0;
+        if (is.split == Split.CONDUCTANCE) return gOwn + p.gOther()[k] > 0 ? gOwn / (gOwn + p.gOther()[k]) : 1;
+        if (p.wOther() <= 0) return 1;
+        if (wOwn >= 1e300) return p.wOther() >= 1e300 ? .5 : 1;
+        if (p.wOther() >= 1e300) return 0;
+        boolean slice = is.split == Split.SLICE_HEAT;
+        double own = wOwn * (slice ? is.len : 1), other = p.wOther() * (slice ? p.lenOther() : 1);
+        return own / (own + other);
+    }
+
+    /**
+     * Commit: the heat the side gave each cell over its slice (J). Its own inlet and flow as they were, against the planned
+     * wall, none while the other side counted it stopped; then it gives back its share of the heat in transit (share above),
+     * as far as its outlet stays between the two inlet temperatures (the rest stays in transit). shift[0] gets the give-back's
+     * effect on its outlet (K).
+     */
+    static double[] commitHeat(Case c, RelaySide is, double t0, double t1, double[] gs, double[] shift) {
+        Side side = c.side(is.s);
+        Plan p = is.plan;
+        int n = c.n();
+        double g = gs[is.s], len = t1 - t0;
+        double[] e = new double[n], th = new double[n], q = new double[n], shareDue = new double[n];
+        double[] cuts = side.tStep() > t0 && side.tStep() < t1 ? new double[]{t0, side.tStep(), t1} : new double[]{t0, t1};
+        for (int i = 0; i + 1 < cuts.length; i++) {
+            double mid = (cuts[i] + cuts[i + 1]) / 2;
+            march((1 - is.beta) * side.w(mid), side.tin(mid), g, p.wall(), is.s == 0, th, q);
+            for (int k = 0; k < n; k++) e[k] += q[k] * (cuts[i + 1] - cuts[i]) * (1 - p.off());
+        }
+        double w = (1 - is.beta) * side.w(t1 - 1e-9), gOwn = conductance(w, g), back = 0;
+        for (int k = 0; k < n; k++) {
+            shareDue[k] = share(is, w, gOwn, p, k) * p.due()[k];
+            back += shareDue[k];
+        }
+        double scale = 1;
+        shift[0] = 0;
+        if (w > 0 && w < 1e300 && back != 0) {
+            double tin = side.tin(t1 - 1e-9), through = tin - sum(e) / (w * len);
+            double lo = Math.min(tin, p.tinOther()), hi = Math.max(tin, p.tinOther());
+            double allowed = Math.max(lo, Math.min(hi, through + back / (w * len)));
+            scale = Math.max(0, Math.min(1, (allowed - through) * w * len / back));
+            shift[0] = scale * back / (w * len);
+        }
+        for (int k = 0; k < n; k++) e[k] -= scale * shareDue[k];
+        return e;
+    }
+
+    /**
+     * Part 7 (revision 3, owner Q10: the wall holds no heat). Each side's slice heads straight for the quasi-steady wall.
+     * The two sides' heats then differ only while their views of each other differ; the account holds that difference,
+     * heat in transit between the islands, and each side gives it back (above). Slices are planned at their dispatch.
+     * Run.maxWallExcursion carries the largest give-back shift of an outlet (K), Run.energyError the heat still in transit
+     * at the end (J); energy is exact by construction (every joule booked is in a stream or in transit).
+     */
+    static Run relay(Case c, double lenH, double lenC, Control control, double holdFrom, double holdTo, Split split) {
+        int n = c.n(), steps = (int) c.tEnd();
+        double[] gs = {c.g(0), c.g(1)}, transit = new double[n];
+        double[] wall0 = steadyWall(n, gs[0], gs[1], c.hot().w(0), c.hot().tin(0), c.cold().w(0), c.cold().tin(0));
+        RelaySide[] sd = {new RelaySide(0, lenH, n), new RelaySide(1, lenC, n)};
+        for (RelaySide r : sd) r.split = split;
+        if (control != null) sd[1].beta = solveBeta(c.cold().w(0), c.cold().tin(0), gs[1], wall0, control.target());
+        for (RelaySide r : sd) {
+            Side side = c.side(r.s);
+            double w = (1 - r.beta) * side.w(0), gc[] = new double[n];
+            Arrays.fill(gc, conductance(w, gs[r.s]));
+            r.recs.add(new Rec(0, side.tin(0), w, gc));
+            march(w, side.tin(0), gs[r.s], wall0, r.s == 0, new double[n], r.rate);
+        }
+        for (RelaySide r : sd) r.plan = plan(c, r, sd[1 - r.s], 0, gs, transit, control);
+        double[][] out = new double[steps + 1][2];
+        for (double[] row : out) Arrays.fill(row, Double.NaN);
+        double maxShift = 0;
+        double[] th = new double[n], q = new double[n], shift = new double[1];
+        for (int clock = 1; clock <= steps; clock++) {
+            for (RelaySide r : sd) {
+                boolean held = r.s == 0 && clock > holdFrom && clock < holdTo;
+                for (int burst = 0; !held && burst < 8 && r.tau + r.len <= clock + 1e-9 && r.tau + r.len <= steps + 1e-9; burst++) {
+                    RelaySide other = sd[1 - r.s];
+                    Side side = c.side(r.s);
+                    double g = gs[r.s], t0 = r.tau, t1 = t0 + r.len;
+                    double[] e = commitHeat(c, r, t0, t1, gs, shift);
+                    maxShift = Math.max(maxShift, Math.abs(shift[0]));
+                    for (int k = 0; k < n; k++) transit[k] += e[k];
+                    r.booked.add(new Booked(t0, t1, e));
+                    if (r.plan.otherStopped()) r.sawStopped.add(new double[]{t0, t1});
+                    for (int i = (int) Math.ceil(t0); i <= Math.min(steps, (int) Math.floor(t1)); i++) {
+                        double wi = (1 - r.beta) * side.w(i), through = march(wi, side.tin(i), g, r.plan.wall(), r.s == 0, th, q);
+                        through = side.tin(i) + (through - side.tin(i)) * (1 - r.plan.off()) + shift[0];
+                        out[i][r.s] = r.beta * side.tin(i) + (1 - r.beta) * through;
+                    }
+                    double w = (1 - r.beta) * side.w(t1 - 1e-9), gc[] = new double[n];
+                    Arrays.fill(gc, conductance(w, g));
+                    r.recs.add(new Rec(t1, side.tin(t1 - 1e-9), w, gc));
+                    r.tau = t1;
+                    r.plan = plan(c, r, other, t1, gs, transit, control);   // dispatch the next slice
+                    march((1 - r.beta) * side.w(t1), side.tin(t1), g, r.plan.wall(), r.s == 0, th, r.rate);
+                    double wNext = (1 - r.beta) * side.w(t1), gNext = conductance(wNext, g);
+                    for (int k = 0; k < n; k++)
+                        r.rate[k] = r.rate[k] * (1 - r.plan.off()) - share(r, wNext, gNext, r.plan, k) * r.plan.due()[k] / r.len;
+                }
+            }
+        }
+        return new Run(out, maxShift, Math.abs(sum(transit)));
+    }
+
+    /** The give-back split Parts 7 to 7c run (Part 7d compares the three). */
+    static final Split SPLIT = Split.SLICE_HEAT;
+
+    static void zeroWall(List<Case> equal, List<Case> films, int n, double area, double[][] slicing) {
+        System.out.println();
+        System.out.println("PART 7  revision 3: the wall holds no heat (owner Q10); against the quasi-steady exchanger, inlet step at 60 s");
+        System.out.println("  give-back split by " + SPLIT.name().toLowerCase(Locale.ROOT) + " (Part 7d compares the three splits)");
+        System.out.println("  columns: max |error| hot, cold from the step on (K); over the last 100 s (K); settles (1 K) hot, cold (s after the step);");
+        System.out.println("           largest give-back shift of an outlet (K); heat still in transit at the end (J)");
+        double water50 = 50 * 4180;
+        List<Case> cases = new ArrayList<>(equal.subList(0, 3));
+        cases.addAll(films);
+        for (double wh : new double[]{400e3, 2000e3})
+            cases.add(new Case(String.format(Locale.ROOT, "glide 5000/2000, hot %4.0f kW/K", wh / 1e3), n, 5000 * area, 2000 * area, 0,
+                    new Side(wh, 150, wh, 180, 60), new Side(water50, 30, water50, 30, 1e9), 900));
+        for (double kgs : new double[]{10, 25, 200}) {
+            double w = kgs * 4180;
+            cases.add(new Case(String.format(Locale.ROOT, "L/L %4.0f kg/s", kgs), n, 2000 * area, 2000 * area, 0,
+                    new Side(w, 150, w, 180, 60), new Side(w, 30, w, 30, 1e9), 900));
+        }
+        for (Case c : cases) {
+            double[][] ref = truthQuasi(c);
+            int last = (int) c.tEnd();
+            System.out.println(String.format(Locale.ROOT, "%s: steady outlets %.2f / %.2f C", c.name(), ref[last][0], ref[last][1]));
+            for (double[] sl : slicing) {
+                Run run = relay(c, sl[0], sl[1], null, -1, -1, SPLIT);
+                double[] e = errors(run.outlets(), ref, 60, last), o[] = run.outlets();
+                System.out.println(String.format(Locale.ROOT, "  slices %4.0f/%-4.0f s max %s %s   tail %s %s   settles (1 K) %4.0f %4.0f s   give-back %6.2f K, in transit %.1e J",
+                        sl[0], sl[1], fmt(e[0]), fmt(e[1]), fmt(e[2]), fmt(e[3]), settle(o, ref[last], 0, 60, last, 1), settle(o, ref[last], 1, 60, last, 1),
+                        run.maxWallExcursion(), run.energyError()));
+            }
+        }
+        System.out.println();
+        System.out.println("PART 7b holds, case A without wall heat: hot island held 100 to 160 s and 100 to 700 s");
+        Case a = equal.get(0);
+        double[][] refQ = truthQuasi(a);
+        for (int holdTo : new int[]{160, 700}) {
+            for (double[] sl : slicing) {
+                Run run = relay(a, sl[0], sl[1], null, 100, holdTo, SPLIT);
+                double[] e = errors(run.outlets(), refQ, 60, 900);
+                System.out.println(String.format(Locale.ROOT, "  held to %3d s, slices %4.0f/%-4.0f s max %s %s   tail %s %s   give-back %6.2f K, in transit %.1e J",
+                        holdTo, sl[0], sl[1], fmt(e[0]), fmt(e[1]), fmt(e[2]), fmt(e[3]), run.maxWallExcursion(), run.energyError()));
+            }
+        }
+        System.out.println();
+        System.out.println("PART 7c cold outlet target by a cold-side bypass without wall heat, dead-beat, hot inlet 150->180 C at 60 s");
+        Object[][] controlled = {{a, 90.0}, {equal.get(2), 40.0}, {films.get(0), 100.0}};
+        for (Object[] pair : controlled) {
+            Case c = (Case) pair[0];
+            double target = (Double) pair[1];
+            for (double[] sl : slicing) {
+                Run run = relay(c, sl[0], sl[1], new Control(target, 1), -1, -1, SPLIT);
+                double[] w = controlWorst(run, c, target);
+                System.out.println(String.format(Locale.ROOT, "  %-3s target %.0f C slices %4.0f/%-4.0f s: worst |T-target| %6.2f K, last outside 0.1 K at +%4.0f s, end %.4f C",
+                        c.name().substring(0, 3), target, sl[0], sl[1], w[0], w[1], run.outlets()[(int) c.tEnd()][1]));
+            }
+        }
+        System.out.println();
+        System.out.println("PART 7d the give-back split: by conductance (the heat law), by capacity rate (equal shift at equal slices), by slice heat W len (equal shift at any slices)");
+        System.out.println("  worst over the five slicings: max |error| (K), settle 1 K (s), give-back shift (K); controller: worst |T-target| (K), last outside 0.1 K (s)");
+        for (Case c : cases) {
+            double[][] ref = truthQuasi(c);
+            int last = (int) c.tEnd();
+            StringBuilder line = new StringBuilder(String.format(Locale.ROOT, "  %-42s", c.name().length() > 42 ? c.name().substring(0, 42) : c.name()));
+            for (Split split : Split.values()) {
+                double err = 0, settle = 0, back = 0;
+                for (double[] sl : slicing) {
+                    Run run = relay(c, sl[0], sl[1], null, -1, -1, split);
+                    double[] e = errors(run.outlets(), ref, 60, last);
+                    err = Math.max(err, Math.max(e[0], e[1]));
+                    settle = Math.max(settle, Math.max(settle(run.outlets(), ref[last], 0, 60, last, 1), settle(run.outlets(), ref[last], 1, 60, last, 1)));
+                    back = Math.max(back, run.maxWallExcursion());
+                }
+                line.append(String.format(Locale.ROOT, "  %s %6.2f K %4.0f s %6.2f K", (split == Split.CONDUCTANCE ? "" : "| ") + split.name().toLowerCase(Locale.ROOT), err, settle, back));
+            }
+            System.out.println(line);
+        }
+        for (Object[] pair : controlled) {
+            Case c = (Case) pair[0];
+            double target = (Double) pair[1];
+            StringBuilder line = new StringBuilder(String.format(Locale.ROOT, "  %-3s target %3.0f C%-27s", c.name().substring(0, 3), target, ""));
+            for (Split split : Split.values()) {
+                double worst = 0, late = 0;
+                for (double[] sl : slicing) {
+                    double[] w = controlWorst(relay(c, sl[0], sl[1], new Control(target, 1), -1, -1, split), c, target);
+                    worst = Math.max(worst, w[0]);
+                    late = Math.max(late, w[1]);
+                }
+                line.append(String.format(Locale.ROOT, "  %s %6.2f K %4.0f s %8s", (split == Split.CONDUCTANCE ? "" : "| ") + split.name().toLowerCase(Locale.ROOT), worst, late, ""));
+            }
+            System.out.println(line);
+        }
+    }
+
+    /** The controlled cold outlet's worst |T - target| from the step on, and the last second it is outside 0.1 K. */
+    static double[] controlWorst(Run run, Case c, double target) {
+        double worst = 0, late = 0;
+        for (int i = 60; i <= (int) c.tEnd(); i++) {
+            double v = run.outlets()[i][1];
+            if (Double.isNaN(v)) continue;
+            worst = Math.max(worst, Math.abs(v - target));
+            if (Math.abs(v - target) > .1) late = i - 60;
+        }
+        return new double[]{worst, late};
     }
 
     /**
