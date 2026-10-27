@@ -96,8 +96,11 @@ final class AirCoolerDesign extends UnitDesign {
     public List<Line> datasheet(EquipmentShape shape) {
         double d = shape.diameter(), length = shape.tangentLength();
         var fans = ProcessUnit.fans(d, length);
+        // The process side's bare tube surface and the fans' power at full speed (batch 2026-10-27-heat-exchanger-design).
+        double surface = HeatSides.of(shape).getFirst().area();
         return List.of(new Line("bank", shape.bank().parallel(), shape.bank().series()), new Line("bay", size(d), number(length), number(ProcessUnit.bundleFace(d, length))),
-                new Line("fans", fans.count(), size(fans.diameter()), Math.round(100 * ProcessUnit.coverage(d, length))));
+                new Line("fans", fans.count(), size(fans.diameter()), Math.round(100 * ProcessUnit.coverage(d, length))),
+                new Line("air_side", number(surface), number(HeatSides.fanPower(surface, 1) / 1000)));
     }
 
     @Override

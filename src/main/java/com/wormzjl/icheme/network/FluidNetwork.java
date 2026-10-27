@@ -84,7 +84,8 @@ public final class FluidNetwork {
             double pressure=d.control() instanceof FlowControl.Valve v?v.targetPressure():record.spec().pressure();
             var valve=d.control() instanceof FlowControl.ControlValve v?v:null;
             if(valve!=null)flow=valve.volumeTarget();
-            var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()?Power.OFF:Power.ON;
+            // An air cooler's fans are its power (batch 2026-10-27-heat-exchanger-design): on while they turn at all.
+            var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()||d.heat()!=null&&d.heat().fans()&&d.heat().control().share()==0?Power.OFF:Power.ON;
             return new Controls(record.spec().temperature(),pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget());
         }
     }
@@ -297,7 +298,7 @@ public final class FluidNetwork {
                 var controls=Objects.requireNonNull(JSON.fromJson(payload.json,Controls.class));
                 if(controls.composition().length!=world.components().size())throw new IllegalArgumentException("Composition differs from the server network axis");
                 var old=Objects.requireNonNull(world.registrations().get(payload.identity));var d=old.device();
-                var geometry=d.geometry();var control=d.control();var spec=old.spec();
+                var geometry=d.geometry();var control=d.control();var spec=old.spec();var heat=d.heat();
                 switch(d.hydraulicKind()) {
                     case PIPE,FILTER->geometry=new PipeResistance.Geometry(geometry.length(),controls.diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,geometry.minorLoss());
                     case PUMP->control=new FlowControl.Pump(controls.volumeFlow,controls.maximumAddedPressure,controls.power==Power.ON);
@@ -316,7 +317,11 @@ public final class FluidNetwork {
                     case GENERATOR->spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);
                     case VOID->spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());
                     case RESERVOIR->throw new IllegalArgumentException("Reservoir initialization is fixed; existing fluid is conserved.");
-                    case HEAT_SIDE->throw new IllegalArgumentException("A heat side's passage is its unit's datasheet.");
+                    // A heat side's passage is its unit's datasheet; an air cooler's fans switch (batch 2026-10-27-heat-exchanger-design).
+                    case HEAT_SIDE->{
+                        if(!heat.fans())throw new IllegalArgumentException("A heat side's passage is its unit's datasheet.");
+                        heat=heat.withControl(heat.control().withShare(controls.power==Power.ON?1:0));
+                    }
                 }
                 // Refused here, before anything is queued, outside the package envelope (the input box, plan decision 9):
                 // the reply with the next bucket reads "Not applied: ..." with the envelope named.
@@ -326,7 +331,8 @@ public final class FluidNetwork {
                     default->{}
                 }
                 boolean generatorEnabled=d.kind()==TopologyCompiler.Kind.GENERATOR?controls.power==Power.ON:d.generatorEnabled();
-                event=world.edit(d.id(),payload.revision,new PhysicalFluidTopology.Device(d.id(),d.position(),d.kind(),d.facing(),geometry,control,d.ports(),generatorEnabled,d.cutoff(),d.inlineFilter(),d.joints()),spec);
+                // The edit changes what the menu edits and keeps every other field (a rack lane's width and face points, a side's unit).
+                event=world.edit(d.id(),payload.revision,d.withGeometry(geometry).withControl(control).withGeneratorEnabled(generatorEnabled).withHeat(heat),spec);
             }catch(RuntimeException rejected){refusal=reason(rejected);}
             world.input(menu,event,refusal);
         });

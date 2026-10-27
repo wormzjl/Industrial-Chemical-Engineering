@@ -52,6 +52,44 @@ class HeatSideTopologyTest {
         var end=result.graph().reservoirs();
         assertTrue(end.get(own.first()).state().pressure()>end.get(own.second()).state().pressure());
     }
+    private FluidThermodynamics.State water(double temperature,double pressure) {
+        double[] n=new double[model.componentCount()];n[n.length-1]=1;
+        n[n.length-1]/=model.flashTP(temperature,pressure,n,()->{}).volume();
+        return model.flashTP(temperature,pressure,n,()->{});
+    }
+    /**
+     * W5's gate (plan section 10): water at 85 °C from a 1.3 bar generator through one 3 × 6 m air cooler bay into a 1 atm
+     * void. The side compiles with its heat law, a flat wall of air at 25 °C behind the liquid's effective film. The outlet
+     * junction holds half the tubes' water (about 180 kg, a lag of about 14 s at 13.5 kg/s), so after 300 s it stands on the
+     * exponential approach to the air for the flow the line carries:
+     * T_out = 25 °C + 60 K × exp(−h A / (ṁ c_p)). Still fans cool by natural draught, less.
+     */
+    @Test void anAirCoolersOutletApproachesItsAirWithTheFansOnAndOff() {
+        var shape=com.wormzjl.icheme.science.equipment.EquipmentShape.unit(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.AIR_COOLER,3,6,
+                com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.SOUTH,4);
+        var definition=HeatSides.of(shape).getFirst();
+        double inlet=358.15,air=HeatSides.AIR_TEMPERATURE;double[] outlets=new double[2];
+        for(int fans=1;fans>=0;fans--) {
+            var unit=new HeatUnit(HeatSides.Unit.AIR_COOLER,HeatSides.Side.PROCESS,definition.area(),0).withControl(HeatUnit.Control.OFF.withShare(fans));
+            var ports=List.of(port(at(10,0,10),WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(at(0,0,0),EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));
+            var devices=List.of(plain(1,8,0,10,Kind.GENERATOR),plain(20,9,0,10,Kind.PIPE),side(10,ports,definition.passage(),unit),plain(30,1,0,0,Kind.PIPE),plain(2,2,0,0,Kind.VOID));
+            var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,new PassiveNetwork.Reservoir(1,0,water(inlet,130_000),PassiveNetwork.NodeKind.GENERATOR),
+                    2L,new PassiveNetwork.Reservoir(2,0,water(300,101_325),PassiveNetwork.NodeKind.VOID)));
+            var graph=compiled.islands().getFirst().graph();
+            var own=graph.pipes().stream().filter(p->p.id()==PhysicalFluidTopology.sideIdentity(10)).findFirst().orElseThrow();
+            assertEquals(unit.heatSide(),own.heat(),"the side compiles with its unit's heat law");
+            var result=new PassiveIntervalSolver(model).solve(graph,300,PassiveIntervalSolver.Settings.defaults(),()->{});
+            var end=result.graph();var after=end.pipes().stream().filter(p->p.id()==own.id()).findFirst().orElseThrow();int index=end.pipes().indexOf(after);
+            double flow=result.averageMassFlows()[index];assertTrue(flow>0);
+            double outlet=end.reservoirs().get(after.second()).state().temperature();
+            var curve=HeatCurve.sample(model,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(water(inlet,130_000)),130_000,air-10,inlet+10,HeatCurve.Films.DEFAULT,()->{});
+            double cp=(curve.enthalpy(curve.knots()-1)-curve.enthalpy(0))/(curve.temperature(curve.knots()-1)-curve.temperature(0));
+            double film=HeatSides.airFilms(fans).liquid();
+            assertEquals(air+(inlet-air)*Math.exp(-film*definition.area()/(flow*cp)),outlet,.1,"fans "+fans+" at "+flow+" kg/s");
+            outlets[fans]=outlet;
+        }
+        assertTrue(outlets[1]<outlets[0]-1,"the fans cool more than natural draught");
+    }
     @Test void onlyASideCarriesAUnitAndInletAndOutletPorts() {
         var ports=List.of(port(at(0,0,0),WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(at(2,0,0),EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));
         assertDoesNotThrow(()->side(5,ports,STUB,TUBE));

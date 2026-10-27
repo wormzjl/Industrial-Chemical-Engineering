@@ -62,10 +62,15 @@ import java.util.function.Function;
  * unit 5, vessel ports and level heights with the drums of batch 2026-10-15-custom-equipment-rendering; 11 dropped the
  * velocity-limit modes among the endpoint modes, 2026-10-18, and unit format 4 states their eight ordinals, 2026-10-19;
  * 10, unit 3, dropped the movers' efficiency, the approximate fallback and the saved interval's acceptance.</p>
+ *
+ * <p>24 (batch 2026-10-27-heat-exchanger-design, W5): a pipe's heat side (its surface, films, wall, bypass and give-back)
+ * after its actuator area.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=23;
+    public static final int VERSION=24;
+    /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
+    private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
     public static final int ENVELOPE=1;
     /** The {@code Base} of an awake island: it carries no certificate. */
@@ -291,6 +296,10 @@ public final class FluidCheckpointCodec {
             }
             // Format 6: the port of each end (PassiveNetwork.PhasePort ordinal), after the control.
             w.u8(p.firstPort().ordinal());w.u8(p.secondPort().ordinal());w.varint(p.forbiddenDirections());w.f64(p.actuatorArea());
+            // Format 24: the heat side, facts and slice inputs alike, so a restored island moves the heat its graph did.
+            var heat=p.heat();w.bool(heat!=null);
+            if(heat!=null){var films=heat.films();var wall=heat.wall();w.f64(heat.area());w.f64(films.liquid());w.f64(films.twoPhase());w.f64(films.gas());
+                w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());}
         }
     }
     private static void state(Writer w,PassiveNetwork graph) {
@@ -324,7 +333,14 @@ public final class FluidCheckpointCodec {
     /** Where a unit lies: its pack, offset, length and SHA-256. */
     record UnitRef(long pack,long offset,int length,byte[] sha256) {}
     private record Topology(long[] ids,double[] elevations,PassiveNetwork.NodeKind[] kinds,double[] volumes,double[] heights,boolean[] opens,com.wormzjl.icheme.science.fluid.network.VesselGeometry[] geometries,long[] pipeIds,int[] first,int[] second,
-                            List<List<PipeResistance.Geometry>> sections,List<FlowControl> controls,PassiveNetwork.PhasePort[] firstPorts,PassiveNetwork.PhasePort[] secondPorts,int[] forbiddenDirections,double[] actuatorAreas) {}
+                            List<List<PipeResistance.Geometry>> sections,List<FlowControl> controls,PassiveNetwork.PhasePort[] firstPorts,PassiveNetwork.PhasePort[] secondPorts,int[] forbiddenDirections,double[] actuatorAreas,
+                            com.wormzjl.icheme.science.fluid.network.HeatSide[] heats) {}
+    private static com.wormzjl.icheme.science.fluid.network.HeatSide heat(Reader r) {
+        if(!r.bool())return null;
+        double area=r.f64();var films=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());
+        var wall=new double[r.varint(MAXIMUM_WALL_CELLS)];for(int k=0;k<wall.length;k++)wall[k]=r.f64();
+        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,r.f64(),r.f64());
+    }
     private static PassiveNetwork.PhasePort port(Reader r){int port=r.u8();if(port>=PHASE_PORTS.length)throw r.invalid("unknown pipe port "+port);return PHASE_PORTS[port];}
 
     /** The sections of an island's unit, its header checked against its index row. */
@@ -435,16 +451,16 @@ public final class FluidCheckpointCodec {
         int pipes=r.varint(MAXIMUM_PIPES);var pipeIds=new long[pipes];var first=new int[pipes];var second=new int[pipes];
         var sections=new ArrayList<List<PipeResistance.Geometry>>(pipes);var controls=new ArrayList<FlowControl>(pipes);
         var firstPorts=new PassiveNetwork.PhasePort[pipes];var secondPorts=new PassiveNetwork.PhasePort[pipes];
-        var forbiddenDirections=new int[pipes];var actuatorAreas=new double[pipes];
+        var forbiddenDirections=new int[pipes];var actuatorAreas=new double[pipes];var heats=new com.wormzjl.icheme.science.fluid.network.HeatSide[pipes];
         for(int p=0;p<pipes;p++) {
             pipeIds[p]=r.i64();first[p]=r.varint(nodes);second[p]=r.varint(nodes);int count=r.varint(MAXIMUM_SECTIONS);
             var list=new ArrayList<PipeResistance.Geometry>(count);for(int s=0;s<count;s++)list.add(new PipeResistance.Geometry(r.f64(),r.f64(),r.f64(),r.f64(),r.varint(1<<20)));
             sections.add(List.copyOf(list));
             controls.add(switch(r.u8()){case 0->new FlowControl.Passive();case 1->new FlowControl.Pump(r.f64(),r.f64(),r.bool());case 2->new FlowControl.PressureValve(r.f64());
                 case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
-            firstPorts[p]=port(r);secondPorts[p]=port(r);forbiddenDirections[p]=r.varint(3);actuatorAreas[p]=r.f64();
+            firstPorts[p]=port(r);secondPorts[p]=port(r);forbiddenDirections[p]=r.varint(3);actuatorAreas[p]=r.f64();heats[p]=heat(r);
         }
-        return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas);
+        return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas,heats);
     }
     private static PassiveNetwork state(Reader r,Topology t,FluidThermodynamics model) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(t.ids.length);
@@ -459,7 +475,7 @@ public final class FluidCheckpointCodec {
         for(int p=0;p<t.pipeIds.length;p++) {
             int blocked=r.varint(3);InlineFilter filter=null;
             if(r.bool()){double capacity=r.f64();var captured=solids(r,model);double energy=r.f64();boolean stopped=r.bool();filter=currentFilter(capacity,captured,energy,stopped,model);}
-            pipes.add(new PassiveNetwork.Pipe(t.pipeIds[p],t.first[p],t.second[p],t.sections.get(p),t.controls.get(p),blocked,filter,t.firstPorts[p],t.secondPorts[p],t.forbiddenDirections[p]).withActuatorArea(t.actuatorAreas[p]));
+            pipes.add(new PassiveNetwork.Pipe(t.pipeIds[p],t.first[p],t.second[p],t.sections.get(p),t.controls.get(p),blocked,filter,t.firstPorts[p],t.secondPorts[p],t.forbiddenDirections[p]).withActuatorArea(t.actuatorAreas[p]).withHeat(t.heats[p]));
         }
         return new PassiveNetwork(nodes,pipes);
     }

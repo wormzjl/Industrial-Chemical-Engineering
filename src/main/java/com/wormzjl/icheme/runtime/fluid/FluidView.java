@@ -10,24 +10,24 @@ import com.wormzjl.icheme.science.fluid.network.InlineFilter;
 public record FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,
                         double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                         double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,
-                        List<Outlet> outlets,Tank tank) {
+                        List<Outlet> outlets,Tank tank,Heat heat) {
     /** A tank has six faces and each face one neighbour, so it has at most six connections. */
     public static final int MAXIMUM_OUTLETS=6;
     /** Source-side convenience for devices without pipe inspection, not a wire-format fallback. */
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter){
-        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,null,List.of(),null);
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,null,List.of(),null,null);
     }
     public FluidView withPipeInfo(PipeInfo info){
         return withPipeInfo(info,intervalSeconds);
     }
     public FluidView withPipeInfo(PipeInfo info,double seconds){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank,heat);
     }
     public FluidView withOutlets(List<Outlet> list){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank,heat);
     }
     public FluidView withTank(Tank value){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value,heat);
     }
     /**
      * A vessel's own geometry and what it gave the atmosphere over the last completed interval (batch
@@ -87,6 +87,27 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         }
     }
     public record PipeRoute(long pipeId,String first,String second) {}
+    /**
+     * A unit's heat side over the last completed interval (batch 2026-10-27-heat-exchanger-design): which unit and side it
+     * is, the temperature at its outlet nozzle's junction (K), the heat its stream took up (W, negative where it was
+     * cooled, from the interval's {@code HEAT} boundaries), and an air cooler's fans: their share of full speed and their
+     * power (W), null for a side without fans.
+     */
+    public record Heat(String unit,String side,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt) {
+        public Heat {
+            Objects.requireNonNull(unit);Objects.requireNonNull(side);
+            if(!(outletTemperature>0)||!Double.isFinite(outletTemperature)||!Double.isFinite(heatWatt)||(fans==null)!=(fanPowerWatt==null)
+                    ||fans!=null&&!(fans>=0&&fans<=1&&fanPowerWatt>=0&&Double.isFinite(fanPowerWatt)))throw new IllegalArgumentException("Invalid heat side presentation");
+        }
+    }
+    /** Every field but the heat side's: a view of a device that is not one. */
+    public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
+                     double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank) {
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,null);
+    }
+    public FluidView withHeat(Heat value){
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,value);
+    }
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory) {
         this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,null,0,List.of(),null);
     }

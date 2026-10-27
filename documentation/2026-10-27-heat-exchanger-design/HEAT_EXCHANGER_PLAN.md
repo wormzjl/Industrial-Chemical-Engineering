@@ -364,6 +364,16 @@ W2 as built (2026-10-27), as designed after mapping the device code:
 - **Old builds.** An exchanger placed before W2 registers its sides when it next loads whole, as a new build does (owner Q9).
 - **Moved to W5.** The one in-game check of the screen, the extrapolation notice and the outlet temperature: W5's air cooler is the first side that moves heat, so one check judges them together.
 
+W5 as built (2026-10-27):
+
+- **Side.** An air cooler bank registers one side, PROCESS, between its process nozzles, over 5 m² of bare tube per m² of face and bay. Its passage: each bay's tubes in one pass (5 (w − 0.22) / (π 0.0254) tubes of 21.2 mm bore), the trains in parallel, the bays of a train in series, 1.5 velocity heads per bay. A 3 × 6 m bay has 174 tubes and loses about 10 kPa of water at 1.5 m/s.
+- **Heat law.** The side's `HeatSide` is a flat wall of air at 25 °C (one cell) under the effective films of section 4: UA_eff / A per phase, from the process film on the bare tube in series with the air film on the fins and the air's capacity rate. This needs no new kernel and no new unknown: the W1 march is exact against a flat wall. The compile attaches it to the side's passage (`HeatUnit.heatSide`). An exchanger's side gets none until W3.
+- **Fans.** The control record's `share` is the manual setting of the side's actuator: an exchanger side's bypass, an air cooler's fans (1 running, 0 standing still: natural draught, a quarter of the air and its film). `Mode.BYPASS` duplicated "no controller with a manual share" and is removed (no save held it). A new air cooler's fans run. The screen switches them like a mover's power, then Apply. Fan power, 1 kW per m² of face at full speed and the cube of the speed below it, is a datasheet and screen line only. It heats the air, not the stream, so it is not a fluid energy term.
+- **Screen.** A side shows its inlet and outlet temperature, the duty from the interval's `HEAT` boundaries, and an air cooler's fans and fan power (`FluidView.Heat`).
+- **State format 24.** The checkpoint carries a connection's `HeatSide`, so a restored island moves the heat its graph did (format 23 dropped it).
+- **Holdup lag.** The outlet junction holds half the tubes' liquid, so the outlet settles over about the tubes' residence time (a 3 × 6 m bay of water at 13.5 kg/s: 180 kg, a lag of 14 s). That is the physics of the tube contents.
+- **Found in passing.** The menu edit rebuilt the device without a rack lane's width and face points, so a pipe laid on a rack could not change its diameter from its menu ("Invalid rack lane"). The edit now changes only what the menu edits (withers).
+
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
 
 ## 11. Simplifications and what they change
@@ -387,6 +397,7 @@ Answered on 2026-10-27: Q1 to Q14 (section 3).
 Decided in revision 3 without a question (reversible; the review gives the numbers): the give-back split by slice heat, chosen among three forms; the controller without the give-back in its target.
 
 - **Q14 Order after the review** (answered 2026-10-27: yes). The air cooler (W5) and the fired heater (W6) have one side and a known partner, so they need no partner read. Order: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
+- **Q15 The curve's extrapolation notice** (W5, open). Section 4 asks for a status-line notice when a side's march leaves its curve's span. The span is a sampling window (the side's inlet and wall temperatures, 10 K beyond each) that the next step samples again around the new state. The property model's own data-range notices still report every node state that leaves a data range. An air cooler's march approaches its flat wall and never leaves the span. Recommended: no notice for the curve's span; W3 measures how often a two-sided wall leaves it.
 - **After W3a**: the coupling's timing form, A, B or C (section 5.2), with the study's numbers.
 
 ## 13. Risks

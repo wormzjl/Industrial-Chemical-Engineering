@@ -1,7 +1,9 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.equipment.HeatSides;
+import com.wormzjl.icheme.science.fluid.network.HeatSide;
 import java.util.Objects;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * The facts of one side of a heat-exchanging unit (batch 2026-10-27-heat-exchanger-design, plan sections 5.1, 6 and 9),
@@ -17,28 +19,36 @@ import java.util.Objects;
  * @param transitJoule the heat this side's unit holds in transit between its two sides (plan section 5.2), J
  */
 public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long partner,Control control,double transitJoule) {
-    /** The control modes of plan section 6. {@code OFF}: no bypass, no target. */
-    public enum Mode { OFF, BYPASS, OUTLET_TEMPERATURE, DUTY, FAN, FIRING }
+    /** The control modes of plan section 6. {@code OFF}: no controller, so the manual {@link Control#share} holds. */
+    public enum Mode { OFF, OUTLET_TEMPERATURE, DUTY, FAN, FIRING }
     /**
      * @param mode     what the controller holds
-     * @param target   the held value: K for an outlet or set temperature, W for a duty, the share for a manual bypass
+     * @param target   the held value: K for an outlet or set temperature, W for a duty
      * @param lowLimit the cooled outlet's lowest temperature, K, or 0 for none (plan section 6, the freeze guard)
-     * @param share    the manual bypass share, 0 to 1
+     * @param share    the manual setting of the side's actuator, 0 to 1, which holds while no controller acts: an
+     *                 exchanger side's bypass share, an air cooler's fans (0 standing still, 1 at full speed)
      */
     public record Control(Mode mode,double target,double lowLimit,double share) {
+        /** No controller, no bypass, no fans. */
         public static final Control OFF=new Control(Mode.OFF,0,0,0);
         public Control {
             Objects.requireNonNull(mode);
             if(!Double.isFinite(target)||!Double.isFinite(lowLimit)||lowLimit<0||!Double.isFinite(share)||share<0||share>1)throw new IllegalArgumentException("Invalid heat unit control");
         }
+        public Control withShare(double value){return new Control(mode,target,lowLimit,value);}
     }
     public HeatUnit {
         Objects.requireNonNull(unit);Objects.requireNonNull(side);Objects.requireNonNull(control);
         if(!Double.isFinite(area)||area<=0||partner<0||!Double.isFinite(transitJoule))throw new IllegalArgumentException("Invalid heat unit side");
     }
-    /** A newly built side: control off, nothing in transit. */
-    public HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long partner){this(unit,side,area,partner,Control.OFF,0);}
+    /** A newly built side: control off, an air cooler's fans running, nothing in transit. */
+    public HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long partner){this(unit,side,area,partner,unit==HeatSides.Unit.AIR_COOLER?Control.OFF.withShare(1):Control.OFF,0);}
     public HeatUnit withPartner(long id){return new HeatUnit(unit,side,area,id,control,transitJoule);}
     /** The same side over {@code value} m²: a datasheet whose surface law changed. */
     public HeatUnit withArea(double value){return new HeatUnit(unit,side,value,partner,control,transitJoule);}
+    public HeatUnit withControl(Control value){return new HeatUnit(unit,side,area,partner,value,transitJoule);}
+    /** Whether the side has fans the player switches (an air cooler's process side). */
+    public boolean fans(){return unit==HeatSides.Unit.AIR_COOLER;}
+    /** The heat law this side moves heat through on its own ({@link HeatSides#heatSide}), or null where it waits for its partner. */
+    public @Nullable HeatSide heatSide(){return HeatSides.heatSide(unit,area,control.share());}
 }

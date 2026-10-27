@@ -50,6 +50,21 @@ class FluidCheckpointCodecTest {
         assertEquals(4,inventory.levelHeight());assertEquals(full.graph().reservoirs().getFirst().inventory(),inventory);
         assertSameImage(image,FluidCheckpointCodec.encode(loaded,key->model),"a reloaded checkpoint re-encodes to the same bytes");
     }
+    /** Format 24: a connection's heat side (batch 2026-10-27-heat-exchanger-design, W5) comes back with its facts and its
+     * slice inputs, so a restored island moves the heat its graph did; a plain connection comes back without one. */
+    @Test void aHeatSideRoundTrips() {
+        var charge=model.initialNitrogenCharge(1,298.15,101325,()->{});
+        var side=new HeatSide(57,new HeatCurve.Films(430,487,85),new double[]{298.15,300.5},.25,-12.5);
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,charge),new PassiveNetwork.Reservoir(2,0,charge),new PassiveNetwork.Reservoir(3,0,charge)),
+                List.of(new PassiveNetwork.Pipe(9,0,1,new PipeResistance.Geometry(12,.0212,1.5e-6,1.5,174)).withHeat(side),new PassiveNetwork.Pipe(10,1,2,new PipeResistance.Geometry(1,.05,4.5e-5,0))));
+        var full=new PassiveIntervalSolver(model).solve(graph,5,PassiveIntervalSolver.Settings.defaults(),()->{});
+        var state=new IslandCoordinator.Snapshot(1,4,full.graph(),new IslandClock.Snapshot(350,200,400,100),Optional.of(full),"FULL");
+        var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state))),key->model);
+        var loaded=FluidCheckpointCodec.decode(image,key->model);var pipes=loaded.islands().getFirst().snapshot().graph().pipes();
+        assertEquals(side,pipes.getFirst().heat());assertNull(pipes.getLast().heat());
+        assertEquals(174,pipes.getFirst().sections().getFirst().channels());
+        assertSameImage(image,FluidCheckpointCodec.encode(loaded,key->model),"a reloaded checkpoint re-encodes to the same bytes");
+    }
     @Test void missingClocksMistypedStampsCorruptionUnknownVersionsAndChangedPropertiesAreRejected() {
         var image=FluidCheckpointCodec.encode(fixture(),key->model);
         var missing=copy(image);islands(missing.core()).remove("Committed");

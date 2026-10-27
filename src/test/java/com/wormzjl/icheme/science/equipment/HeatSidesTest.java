@@ -47,4 +47,37 @@ class HeatSidesTest {
         assertEquals(2,cells.size());assertNotEquals(cells.get(0),cells.get(1));assertEquals(cells.getFirst(),ShapeRasterizer.fluidCell(shape));
         assertTrue(HeatSides.of(EquipmentShape.unit(EquipmentShape.Kind.KETTLE,1,6,EquipmentShape.Heading.SOUTH,2)).isEmpty(),"the kettle's sides come with W7");
     }
+    /**
+     * Plan section 4: an air cooler's process stream sees air at 25 °C through UA_eff = C (1 − e^(−UA/C)) per m² of bundle
+     * face: 2.15 (liquid), 2.44 (condensing) and 0.43 (gas) kW/K with the fans running; natural draught, a quarter of the
+     * air and its film, leaves 0.63, 0.65 and 0.29.
+     */
+    @Test void anAirCoolersFilmsAreTheAirsEffectiveConductancePerPhase() {
+        double[][] perFace={{2149.6,2435.7,426.3},{629.2,650.5,293.3}};
+        for(int fans=1;fans>=0;fans--) {
+            var films=HeatSides.airFilms(fans);double[] expected=perFace[1-fans];
+            assertEquals(expected[0],5*films.liquid(),.5);assertEquals(expected[1],5*films.twoPhase(),.5);assertEquals(expected[2],5*films.gas(),.5);
+        }
+        assertThrows(IllegalArgumentException.class,()->HeatSides.airFilms(1.5));
+        // The largest bay, liquid at 85 °C in 25 °C air with every tube meeting fresh air: about 1.6 MW (plan section 4).
+        assertEquals(1.6e6,HeatSides.airFilms(1).liquid()*5*12.2*60,.05e6);
+    }
+    /** An air cooler bank has one process side over 5 m² of bare tube per m² of face, the bays' tubes in one pass each. */
+    @Test void anAirCoolerHasOneProcessSideOverItsBaysTubes() {
+        var bay=EquipmentShape.unit(EquipmentShape.Kind.AIR_COOLER,3,6,EquipmentShape.Heading.SOUTH,4);
+        var sides=HeatSides.of(bay);
+        assertEquals(1,sides.size());var side=sides.getFirst();
+        assertEquals(HeatSides.Side.PROCESS,side.side());assertEquals(EquipmentShape.Role.PROCESS_INLET,side.inlet());assertEquals(EquipmentShape.Role.PROCESS_OUTLET,side.outlet());
+        double face=ProcessUnit.bundleFace(3,6);
+        assertEquals(5*face,side.area(),1e-9);
+        // 174 tubes of 21.2 mm bore, 6 m, two header turns: water at 1.5 m/s loses about 10 kPa.
+        assertEquals(174,side.passage().channels());assertEquals(6,side.passage().length());
+        double design=1.5*WATER_DENSITY*side.passage().area();
+        assertEquals(10000,PipeResistance.evaluate(side.passage(),design,WATER_DENSITY,WATER_VISCOSITY).pressureDrop(),2000);
+        assertEquals(1,ShapeRasterizer.fluidCells(bay).size());assertTrue(bay.fluidDevice());
+        // Fan power at full speed, 1 kW per m² of face, and by the fan laws an eighth of it at half speed.
+        assertEquals(1000*face,HeatSides.fanPower(side.area(),1),1e-6);assertEquals(125*face,HeatSides.fanPower(side.area(),.5),1e-6);
+        assertEquals(0,HeatSides.fanPower(side.area(),0));
+        assertNotNull(HeatSides.heatSide(HeatSides.Unit.AIR_COOLER,side.area(),1));assertNull(HeatSides.heatSide(HeatSides.Unit.EXCHANGER,450,0),"an exchanger's side waits for its partner (W3)");
+    }
 }

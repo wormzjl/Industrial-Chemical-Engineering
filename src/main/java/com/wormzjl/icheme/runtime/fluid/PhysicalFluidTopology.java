@@ -151,6 +151,7 @@ public final class PhysicalFluidTopology {
         public Device withPlacement(Position value,List<Port> nozzles){return new Device(id,value,kind,facing,geometry,control,nozzles,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat);}
         /** The same pipe with another joint set: a line laid to one of its faces (a tee or an extension). */
         public Device withJoints(int value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,value,slots,points,heat);}
+        public Device withGeneratorEnabled(boolean value){return new Device(id,position,kind,facing,geometry,control,ports,value,cutoff,inlineFilter,joints,slots,points,heat);}
         /** The same heat side with {@code value}: a control or transit edit, or a partner found (batch 2026-10-27-heat-exchanger-design). */
         public Device withHeat(HeatUnit value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,value);}
         /** Whether a pipe may connect through {@code direction} at all, whatever its fitting or switch. */
@@ -401,7 +402,8 @@ public final class PhysicalFluidTopology {
                 var positiveEdges=positiveFilterEdges.getOrDefault(id,Set.of());
                 for(int i=0;i<pipes.size();i++){var p=pipes.get(i);if(positiveEdges.contains(p.id()))pipes.set(i,new PassiveNetwork.Pipe(p.id(),p.first()==negative?positive:p.first(),p.second()==negative?positive:p.second(),p.sections(),p.control(),p.blockedDirections(),p.filter(),p.firstPort(),p.secondPort(),p.forbiddenDirections()));}
                 long identity=side?sideIdentity(id):filterIdentity(id);
-                pipes.add(side?new PassiveNetwork.Pipe(identity,negative,positive,device.geometry):new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withFilter(filterStock.getOrDefault(id,InlineFilter.empty())));
+                // The side's heat law (W5: an air cooler against its air) rides on its passage; a side waiting for its partner has none.
+                pipes.add(side?new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withHeat(device.heat.heatSide()):new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withFilter(filterStock.getOrDefault(id,InlineFilter.empty())));
                 views.put(id,List.of(new View(islandIndex,identity,true)));
             }
             var ids=new TreeSet<Long>();for(long id:members)if(physical.containsKey(id))ids.add(id);

@@ -659,6 +659,17 @@ public final class FluidWorldAuthority implements AutoCloseable {
             view=view.withPipeInfo(PipePresentation.withBulkSpeed(
                 PipePresentation.inspect(registration.device(),snapshot.graph(),mappings,history,seconds,componentNames.size()),
                 runtime.coordinator().bulkVolumeRates(owner),registration.device().geometry().area()));
+        // A heat side (batch 2026-10-27-heat-exchanger-design): its outlet junction's temperature, the heat its HEAT boundaries
+        // booked over the interval, an air cooler's fans.
+        var heat=registration.device().heat();
+        if(heat!=null)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own) {
+            double joule=0;
+            for(var boundary:snapshot.lastResult().map(PassiveIntervalSolver.Result::boundaries).orElse(List.of()))
+                if(boundary.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==own)joule+=boundary.totalEnergyJoule();
+            double share=heat.control().share();
+            view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),snapshot.graph().reservoirs().get(pipe.second()).state().temperature(),seconds>0?joule/seconds:0,
+                    heat.fans()?share:null,heat.fans()?com.wormzjl.icheme.science.equipment.HeatSides.fanPower(heat.area(),share):null));
+        }
         if(registration.device().kind()==TopologyCompiler.Kind.VOID) {
             var sources=new ArrayList<IslandCoordinator.Snapshot>();
             for(long island:registry.islands(id))sources.add(islands.computeIfAbsent(island,runtime.coordinator()::presentation));

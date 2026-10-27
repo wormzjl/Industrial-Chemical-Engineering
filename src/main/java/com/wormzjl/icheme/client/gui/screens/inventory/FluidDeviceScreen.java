@@ -73,7 +73,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE;
     private boolean canEdit(){return !menu.debug()&&menu.clientData()!=null;}
     private boolean constructedMover(){var data=menu.clientData();return data!=null&&!datasheet.isEmpty()&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
-    private boolean switchable(){return generator()||constructedMover();}
+    /** An air cooler's side: its fans switch as a mover does (batch 2026-10-27-heat-exchanger-design). */
+    private boolean fans(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().fans()!=null;}
+    private boolean switchable(){return generator()||constructedMover()||fans();}
     private String flowUnit(){return flowRateUnit.unit(mass?"kg":"kmol");}
     private int rail(){return Math.min(210,imageWidth/3);}
     // The rail below "Operating conditions" (its fields, the filter's button and the values) is one column clipped to
@@ -199,10 +201,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             phaseBasis=preferredPhaseBasis=phaseBasis.next();phaseBasisButton.setMessage(Component.literal(tr("phase_ratio."+phaseBasis.key()+"_basis")));
         });
         phaseBasisButton.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.phase_ratio.basis_hint")));layoutPhaseBasisButton();
-        if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER&&data.kind()!=TopologyCompiler.Kind.HEAT_SIDE){var apply=footer.get(1);action("apply",apply.x(),by,apply.width(),this::apply);}
+        if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||fans())){var apply=footer.get(1);action("apply",apply.x(),by,apply.width(),this::apply);}
         railBuiltOffset=railOffset();int y=railTop()-railBuiltOffset;
         if(canEdit()&&switchable()) {
-            var power=action(powerOn?"power_on":"power_off",12,y,rail()-4,()->{powerOn=!powerOn;rebuild();});
+            var power=action(fans()?(powerOn?"fans_on":"fans_off"):(powerOn?"power_on":"power_off"),12,y,rail()-4,()->{powerOn=!powerOn;rebuild();});
             power.visible=inRail(y,20);y+=RAIL_CONTROL;
         }
         if(canEdit())switch(data.kind()){
@@ -448,7 +450,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** One row plan drives both drawing and the phase selector's scroll position for every equipment kind. */
     private List<Reading> readings(){
         var data=menu.clientData();var view=data.view();var state=view.state();var rows=new ArrayList<Reading>();
-        if(switchable())rows.add(new Reading("power_state",tr(data.controls().power()==FluidNetwork.Power.ON?"state_on":"state_off")));
+        if(switchable())rows.add(new Reading(fans()?"fans_state":"power_state",tr(data.controls().power()==FluidNetwork.Power.ON?"state_on":"state_off")));
         if(tank()){
             var vessel=view.tank();boolean empty=vessel!=null&&state==null;
             rows.add(new Reading("temperature",state==null?"—":quantity(temperatureUnit.display(state.temperature()),temperatureUnit.symbol())));
@@ -460,8 +462,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             rows.add(new Reading("fill",quantity(state!=null?state.fill()*100:empty?0:Double.NaN,"%")));
             rows.add(new Reading("mass",quantity(state!=null?state.mass():empty?0:Double.NaN,"kg")));
         }else if(!pipe()&&data.kind()!=TopologyCompiler.Kind.FILTER){
-            if(data.kind()!=TopologyCompiler.Kind.VOID)rows.add(new Reading("temperature",state==null?"—":quantity(temperatureUnit.display(state.temperature()),temperatureUnit.symbol())));
-            String key=data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR?"suction_pressure":data.kind()==TopologyCompiler.Kind.VALVE?"inlet_pressure":"pressure";
+            boolean side=data.kind()==TopologyCompiler.Kind.HEAT_SIDE;
+            if(data.kind()!=TopologyCompiler.Kind.VOID)rows.add(new Reading(side?"inlet_temperature":"temperature",state==null?"—":quantity(temperatureUnit.display(state.temperature()),temperatureUnit.symbol())));
+            String key=data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR?"suction_pressure":data.kind()==TopologyCompiler.Kind.VALVE||side?"inlet_pressure":"pressure";
             rows.add(new Reading(key,displayPressure(state==null?null:state.pressure())));
         }
         rows.add(new Reading(tank()?"net_flow":"throughput",quantity(displayedFlow(),flowUnit()),tr(tank()?"net_flow.hint":"throughput.hint")));
@@ -475,6 +478,11 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             rows.add(new Reading("captured",quantity(filter==null?Double.NaN:filter.captured().massKg(),"kg")));
         }
         if(view.devicePressureChange()!=null)rows.add(new Reading("pressure_change",displayPressure(view.devicePressureChange())));
+        if(view.heat()!=null){var heat=view.heat();
+            rows.add(new Reading("outlet_temperature",quantity(temperatureUnit.display(heat.outletTemperature()),temperatureUnit.symbol())));
+            rows.add(new Reading("duty",quantity(Math.abs(heat.heatWatt())/1000,"kW"),tr(heat.heatWatt()<0?"duty.cooled":"duty.heated")));
+            if(heat.fanPowerWatt()!=null)rows.add(new Reading("fan_power",quantity(heat.fanPowerWatt()/1000,"kW"),tr("fan_power.hint")));
+        }
         if(data.kind()==TopologyCompiler.Kind.COMPRESSOR&&view.devicePressureChange()!=null&&state!=null&&state.pressure()>0)
             rows.add(new Reading("pressure_ratio",number((state.pressure()+view.devicePressureChange())/state.pressure())));
         if(data.valve()!=null){rows.add(new Reading("controller",data.valve().status()));rows.add(new Reading("valve_opening",quantity(100*data.valve().opening(),"%")));}
