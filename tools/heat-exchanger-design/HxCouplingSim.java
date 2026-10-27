@@ -20,11 +20,21 @@ import java.util.Locale;
  *                time is taken out, and its heat not yet booked up to it is added at its last rate
  *   CAPPED       ASOF, with the other side's unbooked heat added for at most one of its slices (a lagging side then
  *                counts as stopped)
+ *   PREDICTED    CAPPED, the lagging side's unbooked heat predicted as G (theta - T) on the account (rejected: an
+ *                explicit step over a whole slice, unstable)
+ *   INFLIGHT     CAPPED, the lagging side's unbooked heat read at the rate of its open slice, fixed when that slice was
+ *                dispatched (its profile is fixed then)
+ *   JOINT        INFLIGHT, and the wall the cells head for is the exchanger's steady wall with both streams marched
+ *                (the other side's inlet and flow from its last commit), not the cell-local mean of the two streams
  * Part 3: a cold-outlet temperature controller (a bypass share set at each slice start, ASOF).
  * Part 4b: one side held 600 s (a parked hold); Part 4: held 60 s; each then catches up while the other runs on.
+ * Part 5 (owner answer Q2, revision 2): a film coefficient per phase (liquid 2000, condensing 5000, gas 100 W/m2K) on
+ * each side, counterflow; the four schemes from CAPPED on; 5b the holds again; 5c the wall's heat capacity.
+ * Part 6: a stability map (liquid/liquid across flows and walls, a condensing mixture with a glide), INFLIGHT and JOINT.
  *
  * Run: java HxCouplingSim.java
- *      java HxCouplingSim.java hold1s   (Part 4b's 1 s CAPPED run, outlets through the catch-up)
+ *      java HxCouplingSim.java hold1s    (Part 4b's 1 s CAPPED run, outlets through the catch-up)
+ *      java HxCouplingSim.java lowflow   (liquid/liquid at 10 kg/s, 20/20 s slices, to 3000 s: JOINT's slow tail)
  */
 public class HxCouplingSim {
 
@@ -34,11 +44,17 @@ public class HxCouplingSim {
         double tin(double t) { return t < tStep ? tin0 : tin1; }
     }
 
-    record Case(String name, int n, double ua, double c, Side hot, Side cold, double tEnd) {
+    /** uaHot, uaCold: each side's film conductance h A (W/K); equal films are 2 UA each. */
+    record Case(String name, int n, double uaHot, double uaCold, double c, Side hot, Side cold, double tEnd) {
+        static Case equalFilms(String name, int n, double ua, double c, Side hot, Side cold, double tEnd) {
+            return new Case(name, n, 2 * ua, 2 * ua, c, hot, cold, tEnd);
+        }
         Side side(int s) { return s == 0 ? hot : cold; }
+        /** One cell's share of side s's film conductance. */
+        double g(int s) { return (s == 0 ? uaHot : uaCold) / n; }
     }
 
-    enum Scheme { FROZEN, AVERAGED, ASOF, CAPPED }
+    enum Scheme { FROZEN, AVERAGED, ASOF, CAPPED, PREDICTED, INFLIGHT, JOINT }
 
     /** The share of a cell's driving difference a stream of capacity rate w gives up: 1 - exp(-g/w), stable for large w. */
     static double share(double w, double g) {
@@ -65,13 +81,13 @@ public class HxCouplingSim {
     }
 
     /** Steady wall profile: each cell at the conductance-weighted mean of the two streams entering it. */
-    static double[] steadyWall(int n, double g, double wh, double th, double wc, double tc) {
+    static double[] steadyWall(int n, double gHot, double gCold, double wh, double th, double wc, double tc) {
         double[] wall = new double[n], thh = new double[n], thc = new double[n], q = new double[n];
         Arrays.fill(wall, (th + tc) / 2);
-        double gh = conductance(wh, g), gc = conductance(wc, g);
+        double gh = conductance(wh, gHot), gc = conductance(wc, gCold);
         for (int it = 0; it < 200000; it++) {
-            march(wh, th, g, wall, true, thh, q);
-            march(wc, tc, g, wall, false, thc, q);
+            march(wh, th, gHot, wall, true, thh, q);
+            march(wc, tc, gCold, wall, false, thc, q);
             double change = 0;
             for (int k = 0; k < n; k++) {
                 double next = (gh * thh[k] + gc * thc[k]) / (gh + gc);
@@ -102,7 +118,7 @@ public class HxCouplingSim {
                 double e4 = 0, e8 = 0;
                 for (int n : new int[]{1, 2, 4, 8, 16}) {
                     double g = 2 * ua / n;
-                    double[] wall = steadyWall(n, g, wmin, 100, wmax, 0);
+                    double[] wall = steadyWall(n, g, g, wmin, 100, wmax, 0);
                     double[] th = new double[n], q = new double[n];
                     double eps = (100 - march(wmin, 100, g, wall, true, th, q)) / 100;
                     if (n == 4) e4 = eps;
@@ -121,28 +137,28 @@ public class HxCouplingSim {
     /** Fine-step coupled reference: wall cells integrated by RK4 with both streams quasi-steady; outlets at whole seconds. */
     static double[][] truth(Case c) {
         int n = c.n(), steps = (int) c.tEnd();
-        double g = 2 * c.ua() / n, ck = c.c() / n, dt = .01;
-        double[] wall = steadyWall(n, g, c.hot().w(0), c.hot().tin(0), c.cold().w(0), c.cold().tin(0));
+        double gh = c.g(0), gc = c.g(1), ck = c.c() / n, dt = .01;
+        double[] wall = steadyWall(n, gh, gc, c.hot().w(0), c.hot().tin(0), c.cold().w(0), c.cold().tin(0));
         double[][] out = new double[steps + 1][2];
         double[] th = new double[n], q = new double[n];
         for (int i = 0; i <= steps; i++) {
             double t = i;
-            out[i][0] = march(c.hot().w(t), c.hot().tin(t), g, wall, true, th, q);
-            out[i][1] = march(c.cold().w(t), c.cold().tin(t), g, wall, false, th, q);
+            out[i][0] = march(c.hot().w(t), c.hot().tin(t), gh, wall, true, th, q);
+            out[i][1] = march(c.cold().w(t), c.cold().tin(t), gc, wall, false, th, q);
             for (int j = 0; j < 100; j++, t += dt) {
-                double[] k1 = rate(c, g, ck, wall, t), k2 = rate(c, g, ck, add(wall, k1, dt / 2), t + dt / 2);
-                double[] k3 = rate(c, g, ck, add(wall, k2, dt / 2), t + dt / 2), k4 = rate(c, g, ck, add(wall, k3, dt), t + dt);
+                double[] k1 = rate(c, ck, wall, t), k2 = rate(c, ck, add(wall, k1, dt / 2), t + dt / 2);
+                double[] k3 = rate(c, ck, add(wall, k2, dt / 2), t + dt / 2), k4 = rate(c, ck, add(wall, k3, dt), t + dt);
                 for (int k = 0; k < n; k++) wall[k] += dt / 6 * (k1[k] + 2 * k2[k] + 2 * k3[k] + k4[k]);
             }
         }
         return out;
     }
 
-    static double[] rate(Case c, double g, double ck, double[] wall, double t) {
+    static double[] rate(Case c, double ck, double[] wall, double t) {
         int n = wall.length;
         double[] th = new double[n], qh = new double[n], qc = new double[n], d = new double[n];
-        march(c.hot().w(t), c.hot().tin(t), g, wall, true, th, qh);
-        march(c.cold().w(t), c.cold().tin(t), g, wall, false, th, qc);
+        march(c.hot().w(t), c.hot().tin(t), c.g(0), wall, true, th, qh);
+        march(c.cold().w(t), c.cold().tin(t), c.g(1), wall, false, th, qc);
         for (int k = 0; k < n; k++) d[k] = (qh[k] + qc[k]) / ck;
         return d;
     }
@@ -167,12 +183,14 @@ public class HxCouplingSim {
         double tau, beta;                       // committed sim time; current bypass share
         final List<Booked> booked = new ArrayList<>();
         double[] g, theta, tinRecord;           // last committed conductance and stream temperatures per cell
+        double[] rate;                          // INFLIGHT: heat rate per cell of the open slice, fixed at its dispatch
         Island(int s, double len, int n) {
             this.s = s;
             this.len = len;
             g = new double[n];
             theta = new double[n];
-            tinRecord = new double[1];
+            tinRecord = new double[2];          // last inlet temperature and capacity rate
+            rate = new double[n];
         }
     }
 
@@ -184,20 +202,22 @@ public class HxCouplingSim {
      */
     static Run partitioned(Case c, Scheme scheme, double lenH, double lenC, Control control, double holdFrom, double holdTo) {
         int n = c.n(), steps = (int) c.tEnd();
-        double g = 2 * c.ua() / n, ck = c.c() / n;
-        double[] wall0 = steadyWall(n, g, c.hot().w(0), c.hot().tin(0), c.cold().w(0), c.cold().tin(0));
+        double ck = c.c() / n;
+        double[] gs = {c.g(0), c.g(1)};
+        double[] wall0 = steadyWall(n, gs[0], gs[1], c.hot().w(0), c.hot().tin(0), c.cold().w(0), c.cold().tin(0));
         double[] u = new double[n];
         for (int k = 0; k < n; k++) u[k] = ck * wall0[k];
         double initialEnergy = sum(u), bookedTotal = 0;
         Island[] isl = {new Island(0, lenH, n), new Island(1, lenC, n)};
         double[] q = new double[n];
-        if (control != null) isl[1].beta = solveBeta(c.cold().w(0), c.cold().tin(0), g, wall0, control.target());
+        if (control != null) isl[1].beta = solveBeta(c.cold().w(0), c.cold().tin(0), gs[1], wall0, control.target());
         for (Island is : isl) {
             Side side = c.side(is.s);
-            double w = (1 - is.beta) * side.w(0);
-            march(w, side.tin(0), g, wall0, is.s == 0, is.theta, q);
+            double g = gs[is.s], w = (1 - is.beta) * side.w(0);
+            march(w, side.tin(0), g, wall0, is.s == 0, is.theta, is.rate);
             Arrays.fill(is.g, conductance(w, g));
             is.tinRecord[0] = side.tin(0);
+            is.tinRecord[1] = w;
         }
         double[][] out = new double[steps + 1][2];
         for (double[] row : out) Arrays.fill(row, Double.NaN);
@@ -209,7 +229,7 @@ public class HxCouplingSim {
                 boolean held = is.s == 0 && clock > holdFrom && clock < holdTo;
                 for (int burst = 0; !held && burst < 8 && is.tau + is.len <= clock + 1e-9 && is.tau + is.len <= steps + 1e-9; burst++) {
                     Island other = isl[1 - is.s];
-                    double t0 = is.tau, t1 = t0 + is.len;
+                    double g = gs[is.s], t0 = is.tau, t1 = t0 + is.len;
                     double[] account = read(scheme, u, ck, t0, other);
                     double[] wall = profile(scheme, c, is, other, t0, is.len, account, ck, g, is.beta, tLo, tHi);
                     if (control != null && is.s == 1) {
@@ -228,12 +248,17 @@ public class HxCouplingSim {
                     march(w, side.tin(t1 - 1e-9), g, wall, is.s == 0, is.theta, q);
                     Arrays.fill(is.g, conductance(w, g));
                     is.tinRecord[0] = side.tin(t1 - 1e-9);
+                    is.tinRecord[1] = w;
                     for (int i = (int) Math.ceil(t0); i <= Math.min(steps, (int) Math.floor(t1)); i++) {
                         double[] th = new double[n];
                         double wi = (1 - is.beta) * side.w(i), through = march(wi, side.tin(i), g, wall, is.s == 0, th, q);
                         out[i][is.s] = is.beta * side.tin(i) + (1 - is.beta) * through;
                     }
                     is.tau = t1;
+                    if (scheme == Scheme.INFLIGHT || scheme == Scheme.JOINT) { // dispatch the next slice: its profile, hence its heat rate, is fixed now
+                        double[] next = profile(scheme, c, is, other, t1, is.len, read(scheme, u, ck, t1, other), ck, g, is.beta, tLo, tHi);
+                        march((1 - is.beta) * side.w(t1), side.tin(t1), g, next, is.s == 0, new double[n], is.rate);
+                    }
                 }
             }
             for (int k = 0; k < n; k++) excursion = Math.max(excursion, Math.max(u[k] / ck - tHi, tLo - u[k] / ck));
@@ -241,11 +266,15 @@ public class HxCouplingSim {
         return new Run(out, excursion, Math.abs(sum(u) - initialEnergy - bookedTotal));
     }
 
-    /** The account a slice starting at t reads: as booked (FROZEN, AVERAGED) or as of t (ASOF). */
+    /**
+     * The account a slice starting at t reads: as booked (FROZEN, AVERAGED) or as of t (ASOF, CAPPED, PREDICTED).
+     * PREDICTED adds a lagging side's unbooked heat as its last conductance against the account as read,
+     * G (theta - T_k), instead of its last booked rate, so a side that books seldom still answers the wall as it is.
+     */
     static double[] read(Scheme scheme, double[] u, double ck, double t, Island other) {
         int n = u.length;
         double[] e = u.clone();
-        if (scheme == Scheme.ASOF || scheme == Scheme.CAPPED) {
+        if (scheme == Scheme.ASOF || scheme == Scheme.CAPPED || scheme == Scheme.PREDICTED || scheme == Scheme.INFLIGHT || scheme == Scheme.JOINT) {
             for (Booked b : other.booked) {
                 if (b.t1() <= t + 1e-9) continue;
                 double beyond = (b.t1() - Math.max(b.t0(), t)) / (b.t1() - b.t0());
@@ -253,9 +282,15 @@ public class HxCouplingSim {
             }
             if (other.tau < t - 1e-9 && !other.booked.isEmpty()) {
                 Booked last = other.booked.get(other.booked.size() - 1);
-                double span = scheme == Scheme.CAPPED ? Math.min(t - other.tau, other.len) : t - other.tau;
-                double gap = span / (last.t1() - last.t0());
-                for (int k = 0; k < n; k++) e[k] += gap * last.e()[k];
+                double span = scheme == Scheme.ASOF ? t - other.tau : Math.min(t - other.tau, other.len);
+                if (scheme == Scheme.PREDICTED) {
+                    for (int k = 0; k < n; k++) e[k] += span * other.g[k] * (other.theta[k] - e[k] / ck);
+                } else if (scheme == Scheme.INFLIGHT || scheme == Scheme.JOINT) {
+                    for (int k = 0; k < n; k++) e[k] += span * other.rate[k];
+                } else {
+                    double gap = span / (last.t1() - last.t0());
+                    for (int k = 0; k < n; k++) e[k] += gap * last.e()[k];
+                }
             }
         }
         for (int k = 0; k < n; k++) e[k] /= ck;
@@ -272,9 +307,14 @@ public class HxCouplingSim {
         march(w, side.tin(t), g, account, is.s == 0, own, q);
         double gs = conductance(w, g);
         double lo = Math.min(side.tin(t), other.tinRecord[0]), hi = Math.max(side.tin(t), other.tinRecord[0]);
+        // JOINT: the wall the cells head for is the exchanger's steady wall with both streams marched (own inlet and flow
+        // now, the other side's from its last commit), so only the other side's inlet and flow lag, not its profile
+        double[] joint = scheme != Scheme.JOINT ? null : is.s == 0
+                ? steadyWall(n, g, c.g(1), w, side.tin(t), other.tinRecord[1], other.tinRecord[0])
+                : steadyWall(n, c.g(0), g, other.tinRecord[1], other.tinRecord[0], w, side.tin(t));
         for (int k = 0; k < n; k++) {
             double go = other.g[k], sumG = gs + go;
-            double teq = sumG > 0 ? (gs * own[k] + go * other.theta[k]) / sumG : account[k];
+            double teq = joint != null ? joint[k] : sumG > 0 ? (gs * own[k] + go * other.theta[k]) / sumG : account[k];
             double x = sumG * len / ck, phi = x < 1e-9 ? 1 - x / 2 : -Math.expm1(-x) / x;
             wall[k] = Math.max(lo, Math.min(hi, teq + (account[k] - teq) * phi));
         }
@@ -329,16 +369,20 @@ public class HxCouplingSim {
         int n = 8;
         double water50 = 50 * 4180;                                // 50 kg/s of water, W/K
         List<Case> cases = List.of(
-                new Case("A hot inlet 150->180 C, water 50 kg/s each side, steel only", n, ua, steel,
+                Case.equalFilms("A hot inlet 150->180 C, water 50 kg/s each side, steel only", n, ua, steel,
                         new Side(water50, 150, water50, 180, 60), new Side(water50, 30, water50, 30, 1e9), 900),
-                new Case("B cold flow 50->10 kg/s, steel only", n, ua, steel,
+                Case.equalFilms("B cold flow 50->10 kg/s, steel only", n, ua, steel,
                         new Side(water50, 150, water50, 150, 1e9), new Side(water50, 30, water50 / 5, 30, 60), 900),
-                new Case("C high flow 1.5 MW/K each side (stiff), steel only", n, ua, steel,
+                Case.equalFilms("C high flow 1.5 MW/K each side (stiff), steel only", n, ua, steel,
                         new Side(1.5e6, 150, 1.5e6, 180, 60), new Side(1.5e6, 30, 1.5e6, 30, 1e9), 900),
-                new Case("D as C with the water holdup's heat capacity", n, ua, wet,
+                Case.equalFilms("D as C with the water holdup's heat capacity", n, ua, wet,
                         new Side(1.5e6, 150, 1.5e6, 180, 60), new Side(1.5e6, 30, 1.5e6, 30, 1e9), 900));
         if (args.length > 0 && args[0].equals("hold1s")) {
             hold1s(cases.get(0));
+            return;
+        }
+        if (args.length > 0 && args[0].equals("lowflow")) {
+            lowFlow(n, area, steel);
             return;
         }
         effectivenessTable();
@@ -354,7 +398,7 @@ public class HxCouplingSim {
             System.out.println();
             System.out.println(c.name() + String.format(Locale.ROOT, "   (steady outlets %.2f / %.2f C)", ref[last][0], ref[last][1]));
             for (double[] sl : slicing) {
-                for (Scheme scheme : Scheme.values()) {
+                for (Scheme scheme : new Scheme[]{Scheme.FROZEN, Scheme.AVERAGED, Scheme.ASOF, Scheme.CAPPED}) {
                     Run run = partitioned(c, scheme, sl[0], sl[1], null, -1, -1);
                     double[] e = errors(run.outlets(), ref, 60, last);
                     System.out.println(String.format(Locale.ROOT, "  slices %4.0f/%-4.0f s %-9s max %s %s   tail %s %s   excursion %s   energy %.1e",
@@ -404,6 +448,137 @@ public class HxCouplingSim {
                         sl[0], sl[1], scheme, fmt(e[0]), fmt(e[1]), fmt(e[2]), fmt(e[3]), fmt(Math.max(0, run.maxWallExcursion())), run.energyError()));
             }
         }
+        perPhaseFilms(cases, n, area, steel, water50, slicing);
+    }
+
+    /**
+     * Part 5: a film coefficient per side by its phase (liquid 2000, condensing 5000, gas 100 W/m2K; 1/U = 1/h_hot +
+     * 1/h_cold), counterflow, the same 450 m2 exchanger and steel-only wall, CAPPED, hot inlet +30 K at 60 s.
+     */
+    static void perPhaseFilms(List<Case> equal, int n, double area, double steel, double water50, double[][] slicing) {
+        System.out.println();
+        System.out.println("PART 5  a film coefficient per phase (counterflow, 8 cells, 450 m2, steel only), inlet step at 60 s; CAPPED against PREDICTED, INFLIGHT and JOINT");
+        System.out.println("  columns: max |error| hot, cold from the step on (K); over the last 100 s (K); the last time each outlet was more than");
+        System.out.println("           1 K and 0.1 K off its new steady state (s after the step); account energy error (J)");
+        double gas20 = 20 * 1100;                                  // 20 kg/s of gas at 1.1 kJ/kgK, W/K
+        List<Case> films = List.of(
+                new Case("L/L liquid 2000 / liquid 2000 W/m2K, water 50 kg/s each side", n, 2000 * area, 2000 * area, steel,
+                        new Side(water50, 150, water50, 180, 60), new Side(water50, 30, water50, 30, 1e9), 900),
+                new Case("G/L gas 100 / liquid 2000, gas 20 kg/s, water 10 kg/s", n, 100 * area, 2000 * area, steel,
+                        new Side(gas20, 150, gas20, 180, 60), new Side(10 * 4180, 30, 10 * 4180, 30, 1e9), 900),
+                new Case("G/G gas 100 / gas 100, gas 20 kg/s each side", n, 100 * area, 100 * area, steel,
+                        new Side(gas20, 150, gas20, 180, 60), new Side(gas20, 30, gas20, 30, 1e9), 900),
+                new Case("C/L condensing 5000 (150 -> 180 C) / liquid 2000, water 50 kg/s", n, 5000 * area, 2000 * area, steel,
+                        new Side(Double.MAX_VALUE, 150, Double.MAX_VALUE, 180, 60), new Side(water50, 30, water50, 30, 1e9), 900));
+        List<Case> all = new ArrayList<>(equal);
+        all.addAll(films);
+        for (Case c : all) {
+            double[][] ref = truth(c);
+            int last = (int) c.tEnd();
+            double u = 1 / (area / c.uaHot() + area / c.uaCold()), wmin = Math.min(c.hot().w1(), c.cold().w1());
+            System.out.println();
+            System.out.println(String.format(Locale.ROOT, "%s: U %.0f W/m2K, UA %.1f kW/K, NTU %.2f, wall C/(hA_hot + hA_cold) %.1f s",
+                    c.name(), u, u * area / 1e3, u * area / wmin, c.c() / (c.uaHot() + c.uaCold())));
+            System.out.println(String.format(Locale.ROOT, "  reference: steady outlets %.2f / %.2f C; settles (1 K) %.0f %.0f s, (0.1 K) %.0f %.0f s",
+                    ref[last][0], ref[last][1], settle(ref, ref[last], 0, 60, last, 1), settle(ref, ref[last], 1, 60, last, 1),
+                    settle(ref, ref[last], 0, 60, last, .1), settle(ref, ref[last], 1, 60, last, .1)));
+            for (double[] sl : slicing) {
+                for (Scheme scheme : new Scheme[]{Scheme.CAPPED, Scheme.PREDICTED, Scheme.INFLIGHT, Scheme.JOINT}) {
+                    Run run = partitioned(c, scheme, sl[0], sl[1], null, -1, -1);
+                    double[] e = errors(run.outlets(), ref, 60, last), o[] = run.outlets();
+                    System.out.println(String.format(Locale.ROOT, "  slices %4.0f/%-4.0f s %-9s max %s %s   tail %s %s   settles (1 K) %4.0f %4.0f s, (0.1 K) %4.0f %4.0f s   energy %.1e",
+                            sl[0], sl[1], scheme, fmt(e[0]), fmt(e[1]), fmt(e[2]), fmt(e[3]),
+                            settle(o, ref[last], 0, 60, last, 1), settle(o, ref[last], 1, 60, last, 1),
+                            settle(o, ref[last], 0, 60, last, .1), settle(o, ref[last], 1, 60, last, .1), run.energyError()));
+                }
+            }
+        }
+        System.out.println();
+        System.out.println("PART 5b holds, case A: hot island held 100 to 160 s and 100 to 700 s, CAPPED against PREDICTED, INFLIGHT and JOINT (as parts 4 and 4b)");
+        Case a = equal.get(0);
+        for (int holdTo : new int[]{160, 700}) {
+            for (double[] sl : slicing) {
+                for (Scheme scheme : new Scheme[]{Scheme.CAPPED, Scheme.PREDICTED, Scheme.INFLIGHT, Scheme.JOINT}) {
+                    Run run = partitioned(a, scheme, sl[0], sl[1], null, 100, holdTo);
+                    double[] e = errors(run.outlets(), refA(a), 60, 900);
+                    System.out.println(String.format(Locale.ROOT, "  held to %3d s, slices %4.0f/%-4.0f s %-9s max %s %s   tail %s %s   excursion %s   energy %.1e",
+                            holdTo, sl[0], sl[1], scheme, fmt(e[0]), fmt(e[1]), fmt(e[2]), fmt(e[3]), fmt(Math.max(0, run.maxWallExcursion())), run.energyError()));
+                }
+            }
+        }
+        System.out.println();
+        System.out.println("PART 5c the wall's heat capacity against the physical lag (reference only): settles (1 K) hot, cold s after the step");
+        for (Case c : List.of(films.get(0), films.get(1), films.get(2))) {
+            StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "  %-4s", c.name().substring(0, 3)));
+            for (double share : new double[]{1, .5, .25}) {
+                Case lighter = new Case(c.name(), c.n(), c.uaHot(), c.uaCold(), c.c() * share, c.hot(), c.cold(), c.tEnd());
+                double[][] ref = truth(lighter);
+                int last = (int) c.tEnd();
+                row.append(String.format(Locale.ROOT, "   wall x %.2f (%4.1f kJ/K per m2): %4.0f %4.0f s", share, 12 * share,
+                        settle(ref, ref[last], 0, 60, last, 1), settle(ref, ref[last], 1, 60, last, 1)));
+            }
+            System.out.println(row);
+        }
+        System.out.println("  at a quarter of the wall, worst over the five slicings: max |error| hot, cold (K); settles (1 K) hot, cold (s); tail; energy");
+        for (Case c : films) {
+            Case lighter = new Case(c.name(), c.n(), c.uaHot(), c.uaCold(), c.c() / 4, c.hot(), c.cold(), c.tEnd());
+            double[][] ref = truth(lighter);
+            int last = (int) c.tEnd();
+            for (Scheme scheme : new Scheme[]{Scheme.INFLIGHT, Scheme.JOINT}) {
+                double[] worst = new double[7];
+                for (double[] sl : slicing) {
+                    Run run = partitioned(lighter, scheme, sl[0], sl[1], null, -1, -1);
+                    double[] e = errors(run.outlets(), ref, 60, last), o = {e[0], e[1], settle(run.outlets(), ref[last], 0, 60, last, 1),
+                            settle(run.outlets(), ref[last], 1, 60, last, 1), e[2], e[3], run.energyError()};
+                    for (int i = 0; i < 7; i++) worst[i] = Math.max(worst[i], o[i]);
+                }
+                System.out.println(String.format(Locale.ROOT, "  %-4s %-9s reference settles %3.0f %3.0f s; max %s %s   settles %4.0f %4.0f s   tail %s %s   energy %.1e",
+                        c.name().substring(0, 3), scheme, settle(ref, ref[last], 0, 60, last, 1), settle(ref, ref[last], 1, 60, last, 1),
+                        fmt(worst[0]), fmt(worst[1]), worst[2], worst[3], fmt(worst[4]), fmt(worst[5]), worst[6]));
+            }
+        }
+        stabilityMap(n, area);
+    }
+
+    /**
+     * Part 6: where the coupling stays stable. Two finite streams with strong films are the hard case: liquid/liquid
+     * across flows and wall weights, and a condensing mixture with a temperature glide (film 5000, finite capacity rate)
+     * against water. A row FAILS when an outlet is more than 0.05 K off the steady state over the last 100 s.
+     */
+    static void stabilityMap(int n, double area) {
+        System.out.println();
+        System.out.println("PART 6  stability map, INFLIGHT against JOINT: x = (G_hot + G_cold) * longer slice / C_cell; tail hot, cold (K)");
+        double steel = 12e3 * area, water50 = 50 * 4180;
+        List<Case> cases = new ArrayList<>();
+        for (double kgs : new double[]{10, 25, 50, 200}) {
+            double w = kgs * 4180;
+            for (double share : new double[]{1, .8, .65, .5})
+                cases.add(new Case(String.format(Locale.ROOT, "L/L %4.0f kg/s, wall x %.2f", kgs, share), n, 2000 * area, 2000 * area, steel * share,
+                        new Side(w, 150, w, 180, 60), new Side(w, 30, w, 30, 1e9), 900));
+        }
+        for (double wh : new double[]{100e3, 400e3, 2000e3})
+            for (double share : new double[]{1, .5})
+                cases.add(new Case(String.format(Locale.ROOT, "glide 5000/2000, hot %4.0f kW/K, wall x %.2f", wh / 1e3, share), n, 5000 * area, 2000 * area,
+                        steel * share, new Side(wh, 150, wh, 180, 60), new Side(water50, 30, water50, 30, 1e9), 900));
+        for (Case c : cases) {
+            double[][] ref = truth(c);
+            for (double[] sl : new double[][]{{20, 20}, {5, 20}, {20, 5}}) {
+                double x = (conductance(c.hot().w1(), c.g(0)) + conductance(c.cold().w1(), c.g(1))) * Math.max(sl[0], sl[1]) / (c.c() / n);
+                StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "  %-40s slices %2.0f/%-2.0f x %5.1f", c.name(), sl[0], sl[1], x));
+                for (Scheme scheme : new Scheme[]{Scheme.INFLIGHT, Scheme.JOINT}) {
+                    double[] e = errors(partitioned(c, scheme, sl[0], sl[1], null, -1, -1).outlets(), ref, 60, 900);
+                    row.append(String.format(Locale.ROOT, "   %-9s tail %s %s %-5s", scheme, fmt(e[2]), fmt(e[3]), Math.max(e[2], e[3]) > .05 ? "FAILS" : "ok"));
+                }
+                System.out.println(row);
+            }
+        }
+    }
+
+    /** Seconds after {@code from} at which outlet s was last more than {@code band} K off {@code target[s]}. */
+    static double settle(double[][] out, double[] target, int s, int from, int last, double band) {
+        int at = from;
+        for (int i = from; i <= last; i++) if (Double.isNaN(out[i][s]) || Math.abs(out[i][s] - target[s]) > band) at = i;
+        return at - from;
     }
 
     /**
@@ -417,6 +592,23 @@ public class HxCouplingSim {
         for (int i = 680; i <= 900; i += 10)
             System.out.println(String.format(Locale.ROOT, "  %4d s   hot %s  ref %s   cold %s  ref %s",
                     i, fmt(run.outlets()[i][0]), fmt(ref[i][0]), fmt(run.outlets()[i][1]), fmt(ref[i][1])));
+    }
+
+    /**
+     * Part 6's one JOINT row off by more than 0.05 K: liquid/liquid at 10 kg/s (NTU 10.8), 20/20 s slices, run to 3000 s.
+     * The hot outlet's error against the reference every 300 s: a slow tail, not a cycle.
+     */
+    static void lowFlow(int n, double area, double steel) {
+        double w = 10 * 4180;
+        Case c = new Case("L/L 10 kg/s", n, 2000 * area, 2000 * area, steel, new Side(w, 150, w, 180, 60), new Side(w, 30, w, 30, 1e9), 3000);
+        double[][] ref = truth(c);
+        System.out.println("liquid/liquid 10 kg/s each side, 2000/2000 W/m2K, steel only, 20/20 s slices: hot outlet minus reference (K)");
+        for (Scheme scheme : new Scheme[]{Scheme.INFLIGHT, Scheme.JOINT}) {
+            Run run = partitioned(c, scheme, 20, 20, null, -1, -1);
+            StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "  %-9s", scheme));
+            for (int i = 100; i <= 3000; i += 300) row.append(String.format(Locale.ROOT, "  %4d s %+7.3f", i, run.outlets()[i][0] - ref[i][0]));
+            System.out.println(row);
+        }
     }
 
     static double[][] refACache;

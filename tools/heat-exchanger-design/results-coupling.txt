@@ -155,3 +155,315 @@ PART 4  hot island held from 100 s to 160 s (then catches up, 8 slices a tick), 
   slices   20/5    s AVERAGED  max    42.43    60.08   tail    13.31    33.66   excursion    90.97   energy 2.1e-07
   slices   20/5    s ASOF      max     4.61     9.99   tail     0.00     0.00   excursion   125.24   energy 6.0e-08
   slices   20/5    s CAPPED    max    17.28    47.90   tail     0.00     0.00   excursion    70.38   energy 6.0e-08
+
+PART 5  a film coefficient per phase (counterflow, 8 cells, 450 m2, steel only), inlet step at 60 s; CAPPED against PREDICTED, INFLIGHT and JOINT
+  columns: max |error| hot, cold from the step on (K); over the last 100 s (K); the last time each outlet was more than
+           1 K and 0.1 K off its new steady state (s after the step); account energy error (J)
+
+A hot inlet 150->180 C, water 50 kg/s each side, steel only: U 500 W/m2K, UA 225.0 kW/K, NTU 1.08, wall C/(hA_hot + hA_cold) 6.0 s
+  reference: steady outlets 102.46 / 107.54 C; settles (1 K) 37 38 s, (0.1 K) 72 72 s
+  slices    1/1    s CAPPED    max     0.30     0.59   tail     0.00     0.00   settles (1 K)   37   37 s, (0.1 K)   71   71 s   energy 1.1e-05
+  slices    1/1    s PREDICTED max     0.30     0.59   tail     0.00     0.00   settles (1 K)   37   37 s, (0.1 K)   71   71 s   energy 1.1e-05
+  slices    1/1    s INFLIGHT  max     0.30     0.59   tail     0.00     0.00   settles (1 K)   37   37 s, (0.1 K)   71   71 s   energy 1.1e-05
+  slices    1/1    s JOINT     max     0.77     1.08   tail     0.00     0.00   settles (1 K)   38   38 s, (0.1 K)   74   74 s   energy 1.0e-05
+  slices    5/5    s CAPPED    max     1.25     2.58   tail     0.00     0.00   settles (1 K)   39   34 s, (0.1 K)   69   69 s   energy 2.1e-07
+  slices    5/5    s PREDICTED max     1.25     2.58   tail     0.00     0.00   settles (1 K)   39   34 s, (0.1 K)   69   69 s   energy 2.1e-07
+  slices    5/5    s INFLIGHT  max     1.25     2.58   tail     0.00     0.00   settles (1 K)   39   34 s, (0.1 K)   69   69 s   energy 2.1e-07
+  slices    5/5    s JOINT     max     3.20     4.50   tail     0.00     0.00   settles (1 K)   44   44 s, (0.1 K)   84   84 s   energy 1.2e-07
+  slices   20/20   s CAPPED    max     4.68     6.44   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   59   79 s   energy 3.0e-08
+  slices   20/20   s PREDICTED max     4.68     6.44   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   59   79 s   energy 3.0e-08
+  slices   20/20   s INFLIGHT  max     4.68     6.44   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   59   79 s   energy 3.0e-08
+  slices   20/20   s JOINT     max     7.44    10.49   tail     0.00     0.00   settles (1 K)   59   59 s, (0.1 K)  139  139 s   energy 0.0e+00
+  slices    5/20   s CAPPED    max     2.34     7.17   tail     0.00     0.00   settles (1 K)   44   39 s, (0.1 K)   89   79 s   energy 4.2e-07
+  slices    5/20   s PREDICTED max    38.70     9.64   tail    35.63     6.10   settles (1 K)  840  840 s, (0.1 K)  840  840 s   energy 1.6e-06
+  slices    5/20   s INFLIGHT  max     2.45     7.32   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   64   59 s   energy 7.3e-06
+  slices    5/20   s JOINT     max     2.56    10.13   tail     0.00     0.00   settles (1 K)   59   39 s, (0.1 K)  114   99 s   energy 2.4e-07
+  slices   20/5    s CAPPED    max     4.61     9.99   tail     0.00     0.00   settles (1 K)   19   34 s, (0.1 K)   19   54 s   energy 4.2e-07
+  slices   20/5    s PREDICTED max     5.34    15.38   tail     1.17    14.58   settles (1 K)  840  840 s, (0.1 K)  840  840 s   energy 9.8e-07
+  slices   20/5    s INFLIGHT  max     4.09     3.97   tail     0.00     0.00   settles (1 K)   19   29 s, (0.1 K)   39   49 s   energy 7.5e-07
+  slices   20/5    s JOINT     max     7.62     4.75   tail     0.00     0.00   settles (1 K)   19   39 s, (0.1 K)   79   94 s   energy 3.0e-08
+
+B cold flow 50->10 kg/s, steel only: U 500 W/m2K, UA 225.0 kW/K, NTU 5.38, wall C/(hA_hot + hA_cold) 6.0 s
+  reference: steady outlets 126.32 / 148.38 C; settles (1 K) 91 77 s, (0.1 K) 146 132 s
+  slices    1/1    s CAPPED    max     0.65     0.93   tail     0.00     0.00   settles (1 K)   90   76 s, (0.1 K)  146  132 s   energy 1.6e-06
+  slices    1/1    s PREDICTED max     0.65     0.93   tail     0.00     0.00   settles (1 K)   90   76 s, (0.1 K)  146  132 s   energy 1.6e-06
+  slices    1/1    s INFLIGHT  max     0.65     0.93   tail     0.00     0.00   settles (1 K)   90   76 s, (0.1 K)  146  132 s   energy 1.6e-06
+  slices    1/1    s JOINT     max     2.10     1.94   tail     0.00     0.00   settles (1 K)   93   78 s, (0.1 K)  151  136 s   energy 1.0e-06
+  slices    5/5    s CAPPED    max     5.25     4.08   tail     0.00     0.00   settles (1 K)   89   74 s, (0.1 K)  144  129 s   energy 3.9e-07
+  slices    5/5    s PREDICTED max     5.25     4.08   tail     0.00     0.00   settles (1 K)   89   74 s, (0.1 K)  144  129 s   energy 3.9e-07
+  slices    5/5    s INFLIGHT  max     5.25     4.08   tail     0.00     0.00   settles (1 K)   89   74 s, (0.1 K)  144  129 s   energy 3.9e-07
+  slices    5/5    s JOINT     max     7.70     8.36   tail     0.00     0.00   settles (1 K)  104   84 s, (0.1 K)  169  154 s   energy 1.8e-07
+  slices   20/20   s CAPPED    max    19.73    12.01   tail     0.00     0.00   settles (1 K)   59   79 s, (0.1 K)  139  139 s   energy 1.5e-07
+  slices   20/20   s PREDICTED max    19.73    12.01   tail     0.00     0.00   settles (1 K)   59   79 s, (0.1 K)  139  139 s   energy 1.5e-07
+  slices   20/20   s INFLIGHT  max    19.73    12.01   tail     0.00     0.00   settles (1 K)   59   79 s, (0.1 K)  139  139 s   energy 1.5e-07
+  slices   20/20   s JOINT     max    19.73    21.01   tail     0.00     0.00   settles (1 K)   99   39 s, (0.1 K)  199  179 s   energy 2.1e-07
+  slices    5/20   s CAPPED    max    20.26    11.98   tail     0.00     0.00   settles (1 K)   74   19 s, (0.1 K)  124   79 s   energy 8.9e-08
+  slices    5/20   s PREDICTED max    50.72    18.86   tail     7.64     0.72   settles (1 K)  840  619 s, (0.1 K)  840  840 s   energy 3.9e-07
+  slices    5/20   s INFLIGHT  max     5.88    10.66   tail     0.00     0.00   settles (1 K)   79   59 s, (0.1 K)  124   99 s   energy 2.1e-07
+  slices    5/20   s JOINT     max     9.19    20.64   tail     0.00     0.00   settles (1 K)   94   59 s, (0.1 K)  159  119 s   energy 0.0e+00
+  slices   20/5    s CAPPED    max    10.29     6.85   tail     0.00     0.00   settles (1 K)   79   84 s, (0.1 K)  139  139 s   energy 1.5e-07
+  slices   20/5    s PREDICTED max    12.00     8.27   tail     0.05     0.67   settles (1 K)   79   99 s, (0.1 K)  119  840 s   energy 8.9e-07
+  slices   20/5    s INFLIGHT  max    10.24     6.17   tail     0.00     0.00   settles (1 K)   79   79 s, (0.1 K)  139  129 s   energy 3.9e-07
+  slices   20/5    s JOINT     max    23.93     9.82   tail     0.00     0.00   settles (1 K)  139  164 s, (0.1 K)  259  279 s   energy 3.0e-08
+
+C high flow 1.5 MW/K each side (stiff), steel only: U 500 W/m2K, UA 225.0 kW/K, NTU 0.15, wall C/(hA_hot + hA_cold) 6.0 s
+  reference: steady outlets 160.44 / 49.56 C; settles (1 K) 9 9 s, (0.1 K) 25 25 s
+  slices    1/1    s CAPPED    max     0.26     0.27   tail     0.00     0.00   settles (1 K)    8    8 s, (0.1 K)   24   24 s   energy 1.9e-05
+  slices    1/1    s PREDICTED max     0.26     0.27   tail     0.00     0.00   settles (1 K)    8    8 s, (0.1 K)   24   24 s   energy 1.9e-05
+  slices    1/1    s INFLIGHT  max     0.26     0.27   tail     0.00     0.00   settles (1 K)    8    8 s, (0.1 K)   24   24 s   energy 1.9e-05
+  slices    1/1    s JOINT     max     0.30     0.30   tail     0.00     0.00   settles (1 K)    8    8 s, (0.1 K)   25   25 s   energy 1.8e-05
+  slices    5/5    s CAPPED    max     1.08     1.11   tail     0.00     0.00   settles (1 K)    9    9 s, (0.1 K)   24   24 s   energy 6.0e-08
+  slices    5/5    s PREDICTED max     1.08     1.11   tail     0.00     0.00   settles (1 K)    9    9 s, (0.1 K)   24   24 s   energy 6.0e-08
+  slices    5/5    s INFLIGHT  max     1.08     1.11   tail     0.00     0.00   settles (1 K)    9    9 s, (0.1 K)   24   24 s   energy 6.0e-08
+  slices    5/5    s JOINT     max     1.22     1.24   tail     0.00     0.00   settles (1 K)    9    9 s, (0.1 K)   24   24 s   energy 1.1e-05
+  slices   20/20   s CAPPED    max     2.40     2.54   tail     0.00     0.00   settles (1 K)   19   19 s, (0.1 K)   19   19 s   energy 6.7e-07
+  slices   20/20   s PREDICTED max     2.40     2.54   tail     0.00     0.00   settles (1 K)   19   19 s, (0.1 K)   19   19 s   energy 6.7e-07
+  slices   20/20   s INFLIGHT  max     2.40     2.54   tail     0.00     0.00   settles (1 K)   19   19 s, (0.1 K)   19   19 s   energy 6.7e-07
+  slices   20/20   s JOINT     max     2.73     2.76   tail     0.00     0.00   settles (1 K)   19   19 s, (0.1 K)   39   39 s   energy 3.1e-07
+  slices    5/20   s CAPPED    max     1.73     2.06   tail     0.00     0.00   settles (1 K)    9   19 s, (0.1 K)   84   59 s   energy 7.6e-07
+  slices    5/20   s PREDICTED max    18.73     5.34   tail    18.55     3.55   settles (1 K)  840  840 s, (0.1 K)  840  840 s   energy 3.0e-06
+  slices    5/20   s INFLIGHT  max     1.56     2.65   tail     0.00     0.00   settles (1 K)   19   19 s, (0.1 K)   39   39 s   energy 8.2e-06
+  slices    5/20   s JOINT     max     1.54     2.76   tail     0.00     0.00   settles (1 K)   19   19 s, (0.1 K)   39   39 s   energy 1.2e-05
+  slices   20/5    s CAPPED    max     2.49     3.22   tail     0.00     0.00   settles (1 K)   19   34 s, (0.1 K)   59   74 s   energy 3.0e-08
+  slices   20/5    s PREDICTED max     1.86     7.84   tail     0.78     7.69   settles (1 K)   19  840 s, (0.1 K)  840  840 s   energy 7.3e-08
+  slices   20/5    s INFLIGHT  max     2.49     1.71   tail     0.00     0.00   settles (1 K)   19   14 s, (0.1 K)   39   39 s   energy 3.2e-06
+  slices   20/5    s JOINT     max     2.74     1.70   tail     0.00     0.00   settles (1 K)   19   14 s, (0.1 K)   39   39 s   energy 6.7e-07
+
+D as C with the water holdup's heat capacity: U 500 W/m2K, UA 225.0 kW/K, NTU 0.15, wall C/(hA_hot + hA_cold) 24.0 s
+  reference: steady outlets 160.44 / 49.56 C; settles (1 K) 37 37 s, (0.1 K) 101 101 s
+  slices    1/1    s CAPPED    max     0.07     0.07   tail     0.00     0.00   settles (1 K)   37   37 s, (0.1 K)  101  101 s   energy 2.4e-07
+  slices    1/1    s PREDICTED max     0.07     0.07   tail     0.00     0.00   settles (1 K)   37   37 s, (0.1 K)  101  101 s   energy 2.4e-07
+  slices    1/1    s INFLIGHT  max     0.07     0.07   tail     0.00     0.00   settles (1 K)   37   37 s, (0.1 K)  101  101 s   energy 2.4e-07
+  slices    1/1    s JOINT     max     0.08     0.08   tail     0.00     0.00   settles (1 K)   37   37 s, (0.1 K)  101  101 s   energy 4.8e-07
+  slices    5/5    s CAPPED    max     0.32     0.33   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   99   99 s   energy 7.2e-07
+  slices    5/5    s PREDICTED max     0.32     0.33   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   99   99 s   energy 7.2e-07
+  slices    5/5    s INFLIGHT  max     0.32     0.33   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   99   99 s   energy 7.2e-07
+  slices    5/5    s JOINT     max     0.37     0.37   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)  104  104 s   energy 1.7e-06
+  slices   20/20   s CAPPED    max     1.08     1.11   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   99   99 s   energy 1.2e-07
+  slices   20/20   s PREDICTED max     1.08     1.11   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   99   99 s   energy 1.2e-07
+  slices   20/20   s INFLIGHT  max     1.08     1.11   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   99   99 s   energy 1.2e-07
+  slices   20/20   s JOINT     max     1.22     1.24   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   99   99 s   energy 1.2e-07
+  slices    5/20   s CAPPED    max     0.34     1.02   tail     0.00     0.00   settles (1 K)   34   39 s, (0.1 K)  104   99 s   energy 3.6e-07
+  slices    5/20   s PREDICTED max     1.51     1.16   tail     1.21     0.27   settles (1 K)  840   39 s, (0.1 K)  840  840 s   energy 2.4e-06
+  slices    5/20   s INFLIGHT  max     0.34     1.02   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   99   99 s   energy 1.7e-06
+  slices    5/20   s JOINT     max     0.33     1.13   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)  104   99 s   energy 3.3e-06
+  slices   20/5    s CAPPED    max     1.13     1.51   tail     0.00     0.00   settles (1 K)   39   29 s, (0.1 K)   99   99 s   energy 6.0e-07
+  slices   20/5    s PREDICTED max     1.08     1.04   tail     0.09     0.56   settles (1 K)   39   39 s, (0.1 K)  159  840 s   energy 8.3e-07
+  slices   20/5    s INFLIGHT  max     1.15     0.47   tail     0.00     0.00   settles (1 K)   39   34 s, (0.1 K)   99   99 s   energy 5.4e-07
+  slices   20/5    s JOINT     max     1.28     0.49   tail     0.00     0.00   settles (1 K)   39   34 s, (0.1 K)   99   99 s   energy 2.4e-07
+
+L/L liquid 2000 / liquid 2000 W/m2K, water 50 kg/s each side: U 1000 W/m2K, UA 450.0 kW/K, NTU 2.15, wall C/(hA_hot + hA_cold) 3.0 s
+  reference: steady outlets 78.35 / 131.65 C; settles (1 K) 36 36 s, (0.1 K) 69 69 s
+  slices    1/1    s CAPPED    max     0.16     1.15   tail     0.00     0.00   settles (1 K)   36   36 s, (0.1 K)   69   69 s   energy 2.2e-05
+  slices    1/1    s PREDICTED max     0.16     1.15   tail     0.00     0.00   settles (1 K)   36   36 s, (0.1 K)   69   69 s   energy 2.2e-05
+  slices    1/1    s INFLIGHT  max     0.16     1.15   tail     0.00     0.00   settles (1 K)   36   36 s, (0.1 K)   69   69 s   energy 2.2e-05
+  slices    1/1    s JOINT     max     1.10     2.41   tail     0.00     0.00   settles (1 K)   38   38 s, (0.1 K)   74   74 s   energy 1.0e-05
+  slices    5/5    s CAPPED    max     0.91     4.48   tail     0.00     0.00   settles (1 K)   34   34 s, (0.1 K)   69   64 s   energy 1.6e-07
+  slices    5/5    s PREDICTED max     0.91     4.48   tail     0.00     0.00   settles (1 K)   34   34 s, (0.1 K)   69   64 s   energy 1.6e-07
+  slices    5/5    s INFLIGHT  max     0.91     4.48   tail     0.00     0.00   settles (1 K)   34   34 s, (0.1 K)   69   64 s   energy 1.6e-07
+  slices    5/5    s JOINT     max     4.06     8.90   tail     0.00     0.00   settles (1 K)   49   49 s, (0.1 K)   99   99 s   energy 1.2e-07
+  slices   20/20   s CAPPED    max     5.01     8.78   tail     0.00     0.00   settles (1 K)   39   19 s, (0.1 K)   79   79 s   energy 7.9e-07
+  slices   20/20   s PREDICTED max     5.01     8.78   tail     0.00     0.00   settles (1 K)   39   19 s, (0.1 K)   79   79 s   energy 7.9e-07
+  slices   20/20   s INFLIGHT  max     5.01     8.78   tail     0.00     0.00   settles (1 K)   39   19 s, (0.1 K)   79   79 s   energy 7.9e-07
+  slices   20/20   s JOINT     max     7.48    16.41   tail     0.00     0.00   settles (1 K)   59   79 s, (0.1 K)  219  219 s   energy 0.0e+00
+  slices    5/20   s CAPPED    max     8.29    13.70   tail     0.00     0.00   settles (1 K)   84  119 s, (0.1 K)  189  219 s   energy 4.2e-07
+  slices    5/20   s PREDICTED max    46.16    17.04   tail    45.90    14.20   settles (1 K)  840  840 s, (0.1 K)  840  840 s   energy 1.6e-06
+  slices    5/20   s INFLIGHT  max     3.92    11.93   tail     0.00     0.00   settles (1 K)   39   39 s, (0.1 K)   79   79 s   energy 2.1e-06
+  slices    5/20   s JOINT     max     3.93    16.06   tail     0.00     0.00   settles (1 K)   79   39 s, (0.1 K)  144   99 s   energy 5.8e-07
+  slices   20/5    s CAPPED    max     5.83    14.93   tail     0.00     0.00   settles (1 K)   59   59 s, (0.1 K)  119   99 s   energy 3.9e-07
+  slices   20/5    s PREDICTED max     5.49    38.89   tail     2.22    38.40   settles (1 K)  840  840 s, (0.1 K)  840  840 s   energy 3.2e-07
+  slices   20/5    s INFLIGHT  max     4.89     7.16   tail     0.00     0.00   settles (1 K)   39   19 s, (0.1 K)   59   59 s   energy 5.2e-07
+  slices   20/5    s JOINT     max     7.65     8.53   tail     0.00     0.00   settles (1 K)   19   34 s, (0.1 K)   59   99 s   energy 4.2e-07
+
+G/L gas 100 / liquid 2000, gas 20 kg/s, water 10 kg/s: U 95 W/m2K, UA 42.9 kW/K, NTU 1.95, wall C/(hA_hot + hA_cold) 5.7 s
+  reference: steady outlets 66.94 / 89.50 C; settles (1 K) 66 138 s, (0.1 K) 186 258 s
+  slices    1/1    s CAPPED    max     0.03     0.11   tail     0.00     0.00   settles (1 K)   65  138 s, (0.1 K)  185  257 s   energy 2.6e-07
+  slices    1/1    s PREDICTED max     0.03     0.11   tail     0.00     0.00   settles (1 K)   65  138 s, (0.1 K)  185  257 s   energy 2.6e-07
+  slices    1/1    s INFLIGHT  max     0.03     0.11   tail     0.00     0.00   settles (1 K)   65  138 s, (0.1 K)  185  257 s   energy 2.6e-07
+  slices    1/1    s JOINT     max     0.11     0.38   tail     0.00     0.00   settles (1 K)   66  140 s, (0.1 K)  188  262 s   energy 4.8e-07
+  slices    5/5    s CAPPED    max     0.15     0.49   tail     0.00     0.00   settles (1 K)   64  139 s, (0.1 K)  184  259 s   energy 6.0e-08
+  slices    5/5    s PREDICTED max     0.15     0.49   tail     0.00     0.00   settles (1 K)   64  139 s, (0.1 K)  184  259 s   energy 6.0e-08
+  slices    5/5    s INFLIGHT  max     0.15     0.49   tail     0.00     0.00   settles (1 K)   64  139 s, (0.1 K)  184  259 s   energy 6.0e-08
+  slices    5/5    s JOINT     max     0.51     1.74   tail     0.00     0.00   settles (1 K)   69  149 s, (0.1 K)  199  284 s   energy 5.2e-08
+  slices   20/20   s CAPPED    max     0.61     1.95   tail     0.00     0.00   settles (1 K)   79  139 s, (0.1 K)  179  239 s   energy 7.1e-08
+  slices   20/20   s PREDICTED max     0.61     1.95   tail     0.00     0.00   settles (1 K)   79  139 s, (0.1 K)  179  239 s   energy 7.1e-08
+  slices   20/20   s INFLIGHT  max     0.61     1.95   tail     0.00     0.00   settles (1 K)   79  139 s, (0.1 K)  179  239 s   energy 7.1e-08
+  slices   20/20   s JOINT     max     1.55     5.25   tail     0.00     0.00   settles (1 K)   59  179 s, (0.1 K)  259  379 s   energy 4.1e-08
+  slices    5/20   s CAPPED    max     0.22     2.05   tail     0.00     0.00   settles (1 K)   64  139 s, (0.1 K)  174  259 s   energy 2.6e-08
+  slices    5/20   s PREDICTED max     4.31     1.73   tail     3.84     0.72   settles (1 K)  840   99 s, (0.1 K)  840  840 s   energy 1.5e-07
+  slices    5/20   s INFLIGHT  max     0.16     2.05   tail     0.00     0.00   settles (1 K)   64  139 s, (0.1 K)  179  259 s   energy 4.1e-08
+  slices    5/20   s JOINT     max     0.49     5.13   tail     0.00     0.00   settles (1 K)   99  179 s, (0.1 K)  299  379 s   energy 1.0e-07
+  slices   20/5    s CAPPED    max     0.61     2.44   tail     0.00     0.00   settles (1 K)   59  134 s, (0.1 K)  179  249 s   energy 1.1e-07
+  slices   20/5    s PREDICTED max     0.62     2.10   tail     0.00     0.33   settles (1 K)   59  139 s, (0.1 K)  179  840 s   energy 1.0e-07
+  slices   20/5    s INFLIGHT  max     0.73     0.61   tail     0.00     0.00   settles (1 K)   59  134 s, (0.1 K)  179  249 s   energy 6.3e-08
+  slices   20/5    s JOINT     max     1.63     1.25   tail     0.00     0.00   settles (1 K)   39  144 s, (0.1 K)  179  269 s   energy 3.7e-08
+
+G/G gas 100 / gas 100, gas 20 kg/s each side: U 50 W/m2K, UA 22.5 kW/K, NTU 1.02, wall C/(hA_hot + hA_cold) 60.0 s
+  reference: steady outlets 104.32 / 105.60 C; settles (1 K) 356 361 s, (0.1 K) 649 649 s
+  slices    1/1    s CAPPED    max     0.03     0.06   tail     0.00     0.00   settles (1 K)  356  360 s, (0.1 K)  648  649 s   energy 1.2e-06
+  slices    1/1    s PREDICTED max     0.03     0.06   tail     0.00     0.00   settles (1 K)  356  360 s, (0.1 K)  648  649 s   energy 1.2e-06
+  slices    1/1    s INFLIGHT  max     0.03     0.06   tail     0.00     0.00   settles (1 K)  356  360 s, (0.1 K)  648  649 s   energy 1.2e-06
+  slices    1/1    s JOINT     max     0.08     0.11   tail     0.00     0.00   settles (1 K)  356  361 s, (0.1 K)  650  651 s   energy 8.3e-07
+  slices    5/5    s CAPPED    max     0.16     0.30   tail     0.00     0.00   settles (1 K)  354  359 s, (0.1 K)  649  649 s   energy 1.5e-08
+  slices    5/5    s PREDICTED max     0.16     0.30   tail     0.00     0.00   settles (1 K)  354  359 s, (0.1 K)  649  649 s   energy 1.5e-08
+  slices    5/5    s INFLIGHT  max     0.16     0.30   tail     0.00     0.00   settles (1 K)  354  359 s, (0.1 K)  649  649 s   energy 1.5e-08
+  slices    5/5    s JOINT     max     0.39     0.54   tail     0.01     0.01   settles (1 K)  359  364 s, (0.1 K)  659  659 s   energy 1.5e-08
+  slices   20/20   s CAPPED    max     0.60     1.14   tail     0.01     0.01   settles (1 K)  359  359 s, (0.1 K)  639  639 s   energy 1.0e-07
+  slices   20/20   s PREDICTED max     0.60     1.14   tail     0.01     0.01   settles (1 K)  359  359 s, (0.1 K)  639  639 s   energy 1.0e-07
+  slices   20/20   s INFLIGHT  max     0.60     1.14   tail     0.01     0.01   settles (1 K)  359  359 s, (0.1 K)  639  639 s   energy 1.0e-07
+  slices   20/20   s JOINT     max     1.47     2.02   tail     0.03     0.03   settles (1 K)  379  379 s, (0.1 K)  699  699 s   energy 1.3e-07
+  slices    5/20   s CAPPED    max     0.17     1.07   tail     0.00     0.00   settles (1 K)  354  359 s, (0.1 K)  649  659 s   energy 1.6e-07
+  slices    5/20   s PREDICTED max     0.57     1.08   tail     0.36     0.09   settles (1 K)  419  359 s, (0.1 K)  840  579 s   energy 1.5e-07
+  slices    5/20   s INFLIGHT  max     0.17     1.07   tail     0.00     0.00   settles (1 K)  359  359 s, (0.1 K)  649  659 s   energy 2.8e-07
+  slices    5/20   s JOINT     max     0.33     1.93   tail     0.02     0.02   settles (1 K)  374  359 s, (0.1 K)  679  659 s   energy 2.5e-07
+  slices   20/5    s CAPPED    max     0.65     1.58   tail     0.00     0.00   settles (1 K)  359  359 s, (0.1 K)  639  649 s   energy 4.5e-08
+  slices   20/5    s PREDICTED max     0.65     1.43   tail     0.03     0.17   settles (1 K)  359  364 s, (0.1 K)  679  834 s   energy 1.5e-07
+  slices   20/5    s INFLIGHT  max     0.66     0.45   tail     0.01     0.00   settles (1 K)  359  359 s, (0.1 K)  639  649 s   energy 2.2e-07
+  slices   20/5    s JOINT     max     1.51     0.50   tail     0.01     0.02   settles (1 K)  359  374 s, (0.1 K)  659  679 s   energy 1.5e-08
+
+C/L condensing 5000 (150 -> 180 C) / liquid 2000, water 50 kg/s: U 1429 W/m2K, UA 642.9 kW/K, NTU 3.08, wall C/(hA_hot + hA_cold) 1.7 s
+  reference: steady outlets 180.00 / 172.97 C; settles (1 K) 0 7 s, (0.1 K) 0 12 s
+  slices    1/1    s CAPPED    max     0.00     5.18   tail     0.00     0.00   settles (1 K)    0    7 s, (0.1 K)    0   12 s   energy 7.5e-07
+  slices    1/1    s PREDICTED max     0.00     5.18   tail     0.00     0.00   settles (1 K)    0    7 s, (0.1 K)    0   12 s   energy 7.5e-07
+  slices    1/1    s INFLIGHT  max     0.00     5.18   tail     0.00     0.00   settles (1 K)    0    7 s, (0.1 K)    0   12 s   energy 7.5e-07
+  slices    1/1    s JOINT     max     0.00     6.56   tail     0.00     0.00   settles (1 K)    0    7 s, (0.1 K)    0   12 s   energy 3.0e-07
+  slices    5/5    s CAPPED    max     0.00    14.86   tail     0.00     0.00   settles (1 K)    0   14 s, (0.1 K)    0   24 s   energy 6.8e-06
+  slices    5/5    s PREDICTED max     0.00    14.86   tail     0.00     0.00   settles (1 K)    0   14 s, (0.1 K)    0   24 s   energy 6.8e-06
+  slices    5/5    s INFLIGHT  max     0.00    14.86   tail     0.00     0.00   settles (1 K)    0   14 s, (0.1 K)    0   24 s   energy 6.8e-06
+  slices    5/5    s JOINT     max     0.00    18.80   tail     0.00     0.00   settles (1 K)    0    9 s, (0.1 K)    0   19 s   energy 6.7e-06
+  slices   20/20   s CAPPED    max     0.00    20.53   tail     0.00     0.00   settles (1 K)    0   79 s, (0.1 K)    0  119 s   energy 2.5e-06
+  slices   20/20   s PREDICTED max     0.00    20.53   tail     0.00     0.00   settles (1 K)    0   79 s, (0.1 K)    0  119 s   energy 2.5e-06
+  slices   20/20   s INFLIGHT  max     0.00    20.53   tail     0.00     0.00   settles (1 K)    0   79 s, (0.1 K)    0  119 s   energy 2.5e-06
+  slices   20/20   s JOINT     max     0.00    25.97   tail     0.00     0.00   settles (1 K)    0   19 s, (0.1 K)    0   39 s   energy 5.6e-06
+  slices    5/20   s CAPPED    max     0.00    24.11   tail     0.00     0.00   settles (1 K)    0   99 s, (0.1 K)    0  219 s   energy 7.2e-07
+  slices    5/20   s PREDICTED max     0.00    33.60   tail     0.00     5.01   settles (1 K)    0  840 s, (0.1 K)    0  840 s   energy 4.9e-04
+  slices    5/20   s INFLIGHT  max     0.00    22.67   tail     0.00     0.00   settles (1 K)    0   39 s, (0.1 K)    0   79 s   energy 6.3e-06
+  slices    5/20   s JOINT     max     0.00    25.98   tail     0.00     0.00   settles (1 K)    0   19 s, (0.1 K)    0   39 s   energy 6.2e-06
+  slices   20/5    s CAPPED    max     0.00    25.19   tail     0.00     0.00   settles (1 K)    0  254 s, (0.1 K)    0  354 s   energy 3.0e-07
+  slices   20/5    s PREDICTED max     0.00    57.43   tail     0.00    57.43   settles (1 K)    0  840 s, (0.1 K)    0  840 s   energy 1.0e-05
+  slices   20/5    s INFLIGHT  max     0.00    24.77   tail     0.00     0.00   settles (1 K)    0   59 s, (0.1 K)    0  104 s   energy 4.2e-07
+  slices   20/5    s JOINT     max     0.00    25.59   tail     0.00     0.00   settles (1 K)    0   39 s, (0.1 K)    0   59 s   energy 1.1e-06
+
+PART 5b holds, case A: hot island held 100 to 160 s and 100 to 700 s, CAPPED against PREDICTED, INFLIGHT and JOINT (as parts 4 and 4b)
+  held to 160 s, slices    1/1    s CAPPED    max    50.32    69.64   tail     0.00     0.00   excursion     5.30   energy 7.5e-07
+  held to 160 s, slices    1/1    s PREDICTED max    48.60    67.97   tail     0.00     0.00   excursion     8.60   energy 5.4e-07
+  held to 160 s, slices    1/1    s INFLIGHT  max    50.32    69.64   tail     0.00     0.00   excursion     5.30   energy 5.7e-07
+  held to 160 s, slices    1/1    s JOINT     max    49.08    69.34   tail     0.00     0.00   excursion     5.34   energy 3.0e-08
+  held to 160 s, slices    5/5    s CAPPED    max    38.74    60.41   tail     0.00     0.00   excursion    28.74   energy 1.2e-07
+  held to 160 s, slices    5/5    s PREDICTED max    26.42    44.08   tail     0.00     0.00   excursion    56.54   energy 0.0e+00
+  held to 160 s, slices    5/5    s INFLIGHT  max    38.73    60.42   tail     0.00     0.00   excursion    28.73   energy 6.6e-07
+  held to 160 s, slices    5/5    s JOINT     max    32.04    57.58   tail     0.00     0.00   excursion    30.16   energy 5.4e-07
+  held to 160 s, slices   20/20   s CAPPED    max     4.68     6.44   tail     0.00     0.00   excursion    77.61   energy 3.0e-08
+  held to 160 s, slices   20/20   s PREDICTED max    13.12    39.02   tail     0.00     0.00   excursion   117.83   energy 3.3e-07
+  held to 160 s, slices   20/20   s INFLIGHT  max     4.68     6.44   tail     0.00     0.00   excursion    76.72   energy 5.7e-07
+  held to 160 s, slices   20/20   s JOINT     max     7.44    10.49   tail     0.00     0.00   excursion    79.91   energy 1.2e-07
+  held to 160 s, slices    5/20   s CAPPED    max    11.82    22.45   tail     0.00     0.00   excursion    58.78   energy 7.2e-07
+  held to 160 s, slices    5/20   s PREDICTED max    38.70    14.98   tail    35.63     6.10   excursion    26.72   energy 1.0e-06
+  held to 160 s, slices    5/20   s INFLIGHT  max    11.92    22.17   tail     0.00     0.00   excursion    57.04   energy 5.5e-06
+  held to 160 s, slices    5/20   s JOINT     max     6.48    13.45   tail     0.00     0.00   excursion    58.66   energy 1.2e-07
+  held to 160 s, slices   20/5    s CAPPED    max    17.28    47.90   tail     0.00     0.00   excursion    70.38   energy 6.0e-08
+  held to 160 s, slices   20/5    s PREDICTED max    30.87    55.13   tail     1.17    14.58   excursion   393.22   energy 2.7e-07
+  held to 160 s, slices   20/5    s INFLIGHT  max    16.80    48.02   tail     0.00     0.00   excursion    68.63   energy 3.0e-08
+  held to 160 s, slices   20/5    s JOINT     max     8.77    44.78   tail     0.00     0.00   excursion    69.65   energy 1.5e-08
+  held to 700 s, slices    1/1    s CAPPED    max    77.52    77.54   tail    10.01     9.22   excursion     8.54   energy 2.9e-06
+  held to 700 s, slices    1/1    s PREDICTED max    77.51    77.54   tail     9.53     8.74   excursion    17.73   energy 1.0e-06
+  held to 700 s, slices    1/1    s INFLIGHT  max    77.52    77.54   tail    10.01     9.22   excursion     8.53   energy 2.4e-06
+  held to 700 s, slices    1/1    s JOINT     max    77.54    77.54   tail    10.32     9.53   excursion    11.22   energy 2.8e-06
+  held to 700 s, slices    5/5    s CAPPED    max    77.54    77.54   tail     0.06     0.06   excursion    42.22   energy 7.6e-07
+  held to 700 s, slices    5/5    s PREDICTED max    77.54    77.54   tail     0.07     0.06   excursion   128.64   energy 5.2e-07
+  held to 700 s, slices    5/5    s INFLIGHT  max    77.54    77.54   tail     0.06     0.06   excursion    42.13   energy 1.2e-06
+  held to 700 s, slices    5/5    s JOINT     max    77.54    77.54   tail     0.24     0.24   excursion    59.96   energy 3.0e-08
+  held to 700 s, slices   20/20   s CAPPED    max    77.54    77.54   tail     0.02     0.01   excursion   152.25   energy 5.1e-07
+  held to 700 s, slices   20/20   s PREDICTED max    30.64    75.86   tail     5.38    44.61   excursion  5825.08   energy 2.0e-05
+  held to 700 s, slices   20/20   s INFLIGHT  max    77.54    77.54   tail     0.02     0.01   excursion   151.79   energy 3.6e-07
+  held to 700 s, slices   20/20   s JOINT     max    77.48    77.54   tail     2.39     2.39   excursion   289.40   energy 9.1e-07
+  held to 700 s, slices    5/20   s CAPPED    max    77.54    77.54   tail     0.17     0.22   excursion   101.99   energy 4.9e-07
+  held to 700 s, slices    5/20   s PREDICTED max    77.52    77.53   tail    35.74     6.13   excursion   238.73   energy 1.3e-06
+  held to 700 s, slices    5/20   s INFLIGHT  max    77.54    77.54   tail     0.01     0.01   excursion   103.39   energy 4.5e-08
+  held to 700 s, slices    5/20   s JOINT     max    77.54    77.54   tail     0.44     0.17   excursion   243.05   energy 7.0e-07
+  held to 700 s, slices   20/5    s CAPPED    max    77.54    77.54   tail     0.08     0.23   excursion   135.07   energy 1.6e-06
+  held to 700 s, slices   20/5    s PREDICTED max    36.66    57.77   tail    17.13    38.95   excursion  6311.17   energy 5.1e-05
+  held to 700 s, slices   20/5    s INFLIGHT  max    77.54    77.54   tail     0.02     0.01   excursion   135.01   energy 8.9e-08
+  held to 700 s, slices   20/5    s JOINT     max    77.54    77.54   tail     0.87     2.26   excursion   172.69   energy 1.5e-07
+
+PART 5c the wall's heat capacity against the physical lag (reference only): settles (1 K) hot, cold s after the step
+  L/L    wall x 1.00 (12.0 kJ/K per m2):   36   36 s   wall x 0.50 ( 6.0 kJ/K per m2):   18   18 s   wall x 0.25 ( 3.0 kJ/K per m2):    9    9 s
+  G/L    wall x 1.00 (12.0 kJ/K per m2):   66  138 s   wall x 0.50 ( 6.0 kJ/K per m2):   33   69 s   wall x 0.25 ( 3.0 kJ/K per m2):   16   34 s
+  G/G    wall x 1.00 (12.0 kJ/K per m2):  356  361 s   wall x 0.50 ( 6.0 kJ/K per m2):  180  183 s   wall x 0.25 ( 3.0 kJ/K per m2):   90   91 s
+  at a quarter of the wall, worst over the five slicings: max |error| hot, cold (K); settles (1 K) hot, cold (s); tail; energy
+  L/L  INFLIGHT  reference settles   9   9 s; max    84.59    61.64   settles  840  840 s   tail    62.08    61.64   energy 9.5e-07
+  L/L  JOINT     reference settles   9   9 s; max     8.94    19.34   settles   54   59 s   tail     0.00     0.00   energy 5.5e-06
+  G/L  INFLIGHT  reference settles  16  34 s; max    22.83    85.26   settles  840  840 s   tail    22.83    82.79   energy 7.2e-07
+  G/L  JOINT     reference settles  16  34 s; max     2.92     9.63   settles   49   59 s   tail     0.00     0.00   energy 1.3e-06
+  G/G  INFLIGHT  reference settles  90  91 s; max     2.29     3.71   settles   94   99 s   tail     0.00     0.00   energy 1.0e-07
+  G/G  JOINT     reference settles  90  91 s; max     4.71     6.23   settles  119  119 s   tail     0.00     0.00   energy 1.6e-07
+  C/L  INFLIGHT  reference settles   0   1 s; max     0.00    31.70   settles    0   99 s   tail     0.00     0.00   energy 8.3e-06
+  C/L  JOINT     reference settles   0   1 s; max     0.00    28.46   settles    0   44 s   tail     0.00     0.00   energy 8.2e-06
+
+PART 6  stability map, INFLIGHT against JOINT: x = (G_hot + G_cold) * longer slice / C_cell; tail hot, cold (K)
+  L/L   10 kg/s, wall x 1.00               slices 20/20 x   2.3   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.23     0.23 FAILS
+  L/L   10 kg/s, wall x 1.00               slices  5/20 x   2.3   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.05     0.01 ok   
+  L/L   10 kg/s, wall x 1.00               slices 20/5  x   2.3   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.01     0.02 ok   
+  L/L   10 kg/s, wall x 0.80               slices 20/20 x   2.9   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.18     0.18 FAILS
+  L/L   10 kg/s, wall x 0.80               slices  5/20 x   2.9   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.01     0.00 ok   
+  L/L   10 kg/s, wall x 0.80               slices 20/5  x   2.9   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.01 ok   
+  L/L   10 kg/s, wall x 0.65               slices 20/20 x   3.6   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.14     0.14 FAILS
+  L/L   10 kg/s, wall x 0.65               slices  5/20 x   3.6   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   10 kg/s, wall x 0.65               slices 20/5  x   3.6   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   10 kg/s, wall x 0.50               slices 20/20 x   4.6   INFLIGHT  tail     9.26     9.26 FAILS   JOINT     tail     0.10     0.10 FAILS
+  L/L   10 kg/s, wall x 0.50               slices  5/20 x   4.6   INFLIGHT  tail     0.00     0.01 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   10 kg/s, wall x 0.50               slices 20/5  x   4.6   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   25 kg/s, wall x 1.00               slices 20/20 x   4.1   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.01     0.01 ok   
+  L/L   25 kg/s, wall x 1.00               slices  5/20 x   4.1   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   25 kg/s, wall x 1.00               slices 20/5  x   4.1   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   25 kg/s, wall x 0.80               slices 20/20 x   5.1   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.01     0.01 ok   
+  L/L   25 kg/s, wall x 0.80               slices  5/20 x   5.1   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   25 kg/s, wall x 0.80               slices 20/5  x   5.1   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   25 kg/s, wall x 0.65               slices 20/20 x   6.3   INFLIGHT  tail    81.89    81.88 FAILS   JOINT     tail     0.01     0.01 ok   
+  L/L   25 kg/s, wall x 0.65               slices  5/20 x   6.3   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   25 kg/s, wall x 0.65               slices 20/5  x   6.3   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   25 kg/s, wall x 0.50               slices 20/20 x   8.2   INFLIGHT  tail    81.76    81.76 FAILS   JOINT     tail     0.00     0.00 ok   
+  L/L   25 kg/s, wall x 0.50               slices  5/20 x   8.2   INFLIGHT  tail     2.89    10.71 FAILS   JOINT     tail     0.00     0.00 ok   
+  L/L   25 kg/s, wall x 0.50               slices 20/5  x   8.2   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 1.00               slices 20/20 x   5.2   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 1.00               slices  5/20 x   5.2   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 1.00               slices 20/5  x   5.2   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 0.80               slices 20/20 x   6.4   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 0.80               slices  5/20 x   6.4   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 0.80               slices 20/5  x   6.4   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 0.65               slices 20/20 x   7.9   INFLIGHT  tail     1.52     5.96 FAILS   JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 0.65               slices  5/20 x   7.9   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 0.65               slices 20/5  x   7.9   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 0.50               slices 20/20 x  10.3   INFLIGHT  tail    47.47    39.71 FAILS   JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 0.50               slices  5/20 x  10.3   INFLIGHT  tail     0.02     0.03 ok      JOINT     tail     0.00     0.00 ok   
+  L/L   50 kg/s, wall x 0.50               slices 20/5  x  10.3   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 1.00               slices 20/20 x   6.2   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 1.00               slices  5/20 x   6.2   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 1.00               slices 20/5  x   6.2   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 0.80               slices 20/20 x   7.8   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 0.80               slices  5/20 x   7.8   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 0.80               slices 20/5  x   7.8   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 0.65               slices 20/20 x   9.6   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 0.65               slices  5/20 x   9.6   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 0.65               slices 20/5  x   9.6   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 0.50               slices 20/20 x  12.5   INFLIGHT  tail    28.35    41.75 FAILS   JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 0.50               slices  5/20 x  12.5   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  L/L  200 kg/s, wall x 0.50               slices 20/5  x  12.5   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  100 kW/K, wall x 1.00 slices 20/20 x   5.4   INFLIGHT  tail     0.01     0.01 ok      JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  100 kW/K, wall x 1.00 slices  5/20 x   5.4   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  100 kW/K, wall x 1.00 slices 20/5  x   5.4   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  100 kW/K, wall x 0.50 slices 20/20 x  10.7   INFLIGHT  tail     3.89     5.62 FAILS   JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  100 kW/K, wall x 0.50 slices  5/20 x  10.7   INFLIGHT  tail    16.60    18.16 FAILS   JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  100 kW/K, wall x 0.50 slices 20/5  x  10.7   INFLIGHT  tail     1.99     1.42 FAILS   JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  400 kW/K, wall x 1.00 slices 20/20 x   8.6   INFLIGHT  tail    55.59    11.95 FAILS   JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  400 kW/K, wall x 1.00 slices  5/20 x   8.6   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  400 kW/K, wall x 1.00 slices 20/5  x   8.6   INFLIGHT  tail     0.60     0.10 FAILS   JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  400 kW/K, wall x 0.50 slices 20/20 x  17.1   INFLIGHT  tail    10.49     6.05 FAILS   JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  400 kW/K, wall x 0.50 slices  5/20 x  17.1   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot  400 kW/K, wall x 0.50 slices 20/5  x  17.1   INFLIGHT  tail    62.70    50.79 FAILS   JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot 2000 kW/K, wall x 1.00 slices 20/20 x  10.4   INFLIGHT  tail    12.97    11.88 FAILS   JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot 2000 kW/K, wall x 1.00 slices  5/20 x  10.4   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot 2000 kW/K, wall x 1.00 slices 20/5  x  10.4   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot 2000 kW/K, wall x 0.50 slices 20/20 x  20.7   INFLIGHT  tail    25.93    31.22 FAILS   JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot 2000 kW/K, wall x 0.50 slices  5/20 x  20.7   INFLIGHT  tail     0.00     0.00 ok      JOINT     tail     0.00     0.00 ok   
+  glide 5000/2000, hot 2000 kW/K, wall x 0.50 slices 20/5  x  20.7   INFLIGHT  tail    13.50    16.53 FAILS   JOINT     tail     0.00     0.00 ok   

@@ -2,6 +2,11 @@
 
 Date 2026-10-27. Batch `2026-10-27-heat-exchanger-design`. Harnesses and full output: [`tools/heat-exchanger-design/`](../../tools/heat-exchanger-design/README.md). Offline only; no game code.
 
+Revision 2 (the same day) supersedes two conclusions below:
+
+- The owner chose counterflow over the 1-2 arrangement (Q3).
+- With films per phase, the coupling reads a lagging side's open slice and heads for the joint steady wall. The as-of read with the slice mean alone fails at strong films. See [HX_FILMS_STUDY_REVIEW.md](HX_FILMS_STUDY_REVIEW.md).
+
 **Question.** The two sides of an exchanger usually sit in different islands, which advance in slices of their own cadence (1 to 20 s). Can they exchange heat through the exchanger's wall, with exact energy, without merging the islands or a joint Newton?
 
 **Model.** N wall cells between two zero-inventory streams; each stream relaxes towards each cell's wall over `g = 2 UA / N` (equal films). The 1 m x 6 m exchanger: 450 m², U 500 W/m²K, UA 225 kW/K. Wall: steel only, 12 kJ/K per m² (C/(4 UA) = 6 s), or steel plus water holdup, 48 kJ/K per m² (24 s). Each slice keeps one wall profile and books its heat into the wall account at its end. Reference: both streams and the wall integrated together (RK4, 0.01 s).
