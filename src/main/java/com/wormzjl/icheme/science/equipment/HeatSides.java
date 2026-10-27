@@ -1,6 +1,8 @@
 package com.wormzjl.icheme.science.equipment;
 
+import com.wormzjl.icheme.science.fluid.network.FiredCoil;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
+import com.wormzjl.icheme.science.fluid.network.HeatLaw;
 import com.wormzjl.icheme.science.fluid.network.HeatSide;
 import com.wormzjl.icheme.science.fluid.network.PipeResistance;
 import com.wormzjl.icheme.science.math.DeterministicMath;
@@ -34,10 +36,20 @@ public final class HeatSides {
     static final double AIR_COOLER_TUBE=.0254,AIR_COOLER_BORE=.0212;
     /** Natural draught through a bay whose fans stand still: the air's capacity and film of full fans times this. */
     static final double NATURAL_DRAUGHT=.25;
+    /**
+     * A fired heater's convection coil's mean flux, kW/m² of bare tube (API 560 practice: 10 to 20 for finned and shock
+     * tubes), against the radiant coil's {@link ProcessUnit#RADIANT_FLUX}: the coils take 30 % and 70 % of the duty
+     * ({@link ProcessUnit#RADIANT_SHARE}).
+     */
+    static final double CONVECTION_FLUX=15;
+    /** A fired heater's coil tubes, m: 6" schedule 80, the tubes {@link ProcessUnit#heaterDuty} counts. */
+    static final double HEATER_TUBE=.168,HEATER_BORE=.146;
+    /** A coil's duty per parallel pass, MW (about 2 m/s of oil per pass), its straight tube between return bends, m, and a bend's velocity heads. */
+    static final double PASS_DUTY=8,HEATER_STRAIGHT=10,RETURN_BEND=.5;
 
     /** The unit a shape kind's sides belong to, or null for a kind without heat sides. */
     public static @Nullable Unit unit(EquipmentShape.Kind kind) {
-        return switch(kind){case EXCHANGER->Unit.EXCHANGER;case AIR_COOLER->Unit.AIR_COOLER;default->null;};
+        return switch(kind){case EXCHANGER->Unit.EXCHANGER;case AIR_COOLER->Unit.AIR_COOLER;case VERTICAL_HEATER,CABIN_HEATER->Unit.FIRED_HEATER;default->null;};
     }
     /** {@code shape}'s sides in registration order (the first one's node is the structure's fluid cell); none for other kinds. */
     public static List<Definition> of(EquipmentShape shape) {
@@ -49,8 +61,29 @@ public final class HeatSides {
                         new Definition(Side.SHELL,EquipmentShape.Role.SHELL_INLET,EquipmentShape.Role.SHELL_OUTLET,area,shellPassage(d,l)));}
             case AIR_COOLER->List.of(new Definition(Side.PROCESS,EquipmentShape.Role.PROCESS_INLET,EquipmentShape.Role.PROCESS_OUTLET,
                     BARE_PER_FACE*shape.bank().bays()*ProcessUnit.bundleFace(d,l),airCoolerPassage(d,l,shape.bank())));
+            case FIRED_HEATER->{double duty=ProcessUnit.heaterDuty(shape.kind(),d,l);
+                double convection=coilArea(Side.CONVECTION,duty),radiant=coilArea(Side.RADIANT,duty);
+                yield List.of(new Definition(Side.CONVECTION,EquipmentShape.Role.CONVECTION_INLET,EquipmentShape.Role.CONVECTION_OUTLET,convection,heaterPassage(convection,duty)),
+                        new Definition(Side.RADIANT,EquipmentShape.Role.RADIANT_INLET,EquipmentShape.Role.RADIANT_OUTLET,radiant,heaterPassage(radiant,duty)));}
             default->List.of();
         };
+    }
+    /** A fired heater coil's bare tube, m², for the heater's duty {@code duty} (MW): its share of the duty at its mean flux. */
+    static double coilArea(Side coil,double duty) {
+        return coil==Side.RADIANT?ProcessUnit.RADIANT_SHARE*duty*1000/ProcessUnit.RADIANT_FLUX:(1-ProcessUnit.RADIANT_SHARE)*duty*1000/CONVECTION_FLUX;
+    }
+    /** A coil's most heat, W, over its bare tube {@code area} (m²) at its mean flux, with the burners at {@code burners} of full firing. */
+    public static double coilDuty(Side coil,double area,double burners) {
+        return burners*area*1000*(coil==Side.RADIANT?ProcessUnit.RADIANT_FLUX:CONVECTION_FLUX);
+    }
+    /**
+     * A fired heater coil's passage, over bare tube {@code area} m² of a heater of duty {@code duty} MW: 6" tubes in
+     * parallel passes of {@link #PASS_DUTY} each, a return bend every {@link #HEATER_STRAIGHT} m of a pass. A 10 MW
+     * heater's radiant coil, one pass of 380 m, loses about 1 bar of oil at 2 m/s.
+     */
+    public static PipeResistance.Geometry heaterPassage(double area,double duty) {
+        int passes=channels(duty/PASS_DUTY);double length=area/(Math.PI*HEATER_TUBE)/passes;
+        return new PipeResistance.Geometry(length,HEATER_BORE,PipeResistance.DEFAULT_ROUGHNESS_METRES,RETURN_BEND*Math.floor(length/HEATER_STRAIGHT),passes);
     }
     /**
      * An exchanger's tube side, shell {@code shell} and tubes {@code tubes} m: 630 D² tubes per pass of 14.8 mm bore (the
@@ -79,12 +112,19 @@ public final class HeatSides {
     private static int channels(double count){return (int)Math.max(1,Math.round(count));}
 
     /**
-     * The heat law a side moves heat through on its own, or null where it waits for its partner (W3) or its package (W6,
-     * W7): an air cooler's process side against air at {@link #AIR_TEMPERATURE} over its bare tube surface {@code area}
-     * (m²), with its fans at {@code fans} of full speed ({@link #airFilms}).
+     * The heat law a side moves heat through on its own, or null where it waits for its partner (W3) or its package (W7),
+     * with its actuator at {@code share} and its set point {@code target} (K):
+     * <ul><li>an air cooler's process side against air at {@link #AIR_TEMPERATURE} over its bare tube surface {@code area}
+     * (m²), with its fans at {@code share} of full speed ({@link #airFilms});</li>
+     * <li>a fired heater's coil towards the set point {@code target}, the radiant coil all the way and the convection coil
+     * its 30 % share of it, at most its {@link #coilDuty} with the burners at {@code share}.</li></ul>
      */
-    public static @Nullable HeatSide heatSide(Unit unit,double area,double fans) {
-        return unit==Unit.AIR_COOLER?new HeatSide(area,airFilms(fans),new double[]{AIR_TEMPERATURE},0,0):null;
+    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target) {
+        return switch(unit) {
+            case AIR_COOLER->new HeatSide(area,airFilms(share),new double[]{AIR_TEMPERATURE},0,0);
+            case FIRED_HEATER->new FiredCoil(target,side==Side.RADIANT?1:1-ProcessUnit.RADIANT_SHARE,coilDuty(side,area,share),1);
+            default->null;
+        };
     }
     /**
      * An air cooler's films on its bare tube surface, per phase (plan section 4), with its fans at {@code fans} of full

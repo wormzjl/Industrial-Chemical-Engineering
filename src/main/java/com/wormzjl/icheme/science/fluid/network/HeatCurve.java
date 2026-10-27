@@ -78,6 +78,18 @@ public final class HeatCurve {
     }
     public double temperatureAt(double value){return temperatureOn(segment(value),value);}
     public double filmAt(double value){return filmOn(segment(value),value);}
+    /**
+     * The enthalpy (J/kg) at {@code temperature} K: the largest on the curve, so a plateau's temperature names its vapour
+     * end (a fired coil set to a pure stream's saturation temperature boils it). Beyond the end knots the end lines extend,
+     * as {@link #temperatureAt} does; an end segment without slope holds its end knot.
+     */
+    public double enthalpyAt(double temperature) {
+        int last=h.length-1;
+        if(temperature>=t[last]){double s=slope(last);return s>0?h[last]+(temperature-t[last])/s:h[last];}
+        if(temperature<t[0]){double s=slope(-1);return s>0?h[0]+(temperature-t[0])/s:h[0];}
+        int i=last;while(t[i]>temperature)i--;
+        return t[i]==temperature?h[i]:h[i]+(temperature-t[i])*(h[i+1]-h[i])/(t[i+1]-t[i]);
+    }
 
     /**
      * The outlet enthalpy after {@code area} m2 of wall at {@code wall} K: dh/dA = -film(h) (T(h) - wall) / |massFlow|,

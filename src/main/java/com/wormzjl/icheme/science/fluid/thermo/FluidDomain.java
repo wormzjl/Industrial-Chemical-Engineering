@@ -40,10 +40,15 @@ public final class FluidDomain {
      */
     public void requireInput(double t,double p) {
         if(!Double.isFinite(t)||!Double.isFinite(p))throw new IllegalArgumentException("Temperature and pressure must be finite");
+        requireInputTemperature(t);
+        requireInputPressure(p);
+    }
+    /** A temperature a device holds a fluid at (a fired heater's set point): the envelope's temperature range, as {@link #requireInput}. */
+    public void requireInputTemperature(double t) {
+        if(!Double.isFinite(t))throw new IllegalArgumentException("Temperature is not finite");
         if(t<envelope.minimumTemperature()||t>envelope.maximumTemperature())
             throw new IllegalArgumentException("Temperature "+t+" K outside the package envelope "+envelope.minimumTemperature()+".."
                     +envelope.maximumTemperature()+" K (package "+packageId+")");
-        requireInputPressure(p);
     }
     /** A pressure a device holds a fluid at (a valve's regulated inlet): the envelope's pressure range, as {@link #requireInput}. */
     public void requireInputPressure(double p) {

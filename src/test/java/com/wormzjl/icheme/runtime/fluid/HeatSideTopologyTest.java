@@ -90,6 +90,94 @@ class HeatSideTopologyTest {
         }
         assertTrue(outlets[1]<outlets[0]-1,"the fans cool more than natural draught");
     }
+    /** A fired heater's coil over {@code area} m² firing to {@code setPoint} K with its burners at {@code burners}. */
+    private static HeatUnit coil(HeatSides.Side side,double area,double setPoint,double burners) {
+        return new HeatUnit(HeatSides.Unit.FIRED_HEATER,side,area,0).withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING,setPoint,0,burners));
+    }
+    /** A short coil passage, 19 m of 6" tube (its outlet junction holds 160 kg of water: a lag of about 20 s), and a wide outlet run. */
+    private static final PipeResistance.Geometry COIL=HeatSides.heaterPassage(10,1),OUTLET=new PipeResistance.Geometry(1,.2,.000045,0);
+    /** The coils' heat in the last interval, W, in their order, and the network after it. */
+    private record Fired(PassiveNetwork graph,PassiveIntervalSolver.Result last,double[] heat,double flow) {
+        PassiveNetwork.Pipe coil(long id){return graph.pipes().stream().filter(p->p.id()==PhysicalFluidTopology.sideIdentity(id)).findFirst().orElseThrow();}
+        FluidThermodynamics.State outlet(long id){return graph.reservoirs().get(coil(id).second()).state();}
+    }
+    /**
+     * Water at {@code inlet} K from a 10 bar generator through {@code coils} in series into a 9.9 bar void, settled for 300 s
+     * (about 15 lags of a coil's outlet junction), then measured over 30 s more.
+     */
+    private Fired fire(double inlet,HeatUnit... coils) {
+        var devices=new ArrayList<PhysicalFluidTopology.Device>(List.of(plain(1,8,0,10,Kind.GENERATOR),plain(20,9,0,10,Kind.PIPE)));
+        var from=at(10,0,10);
+        for(int c=0;c<coils.length;c++) {
+            var to=at(c*5,0,0);
+            devices.add(side(10+c,List.of(port(from,WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(to,EAST,PhysicalFluidTopology.ConnectionRole.OUTLET)),COIL,coils[c]));
+            devices.add(new PhysicalFluidTopology.Device(30+c,at(c*5+1,0,0),Kind.PIPE,EAST,OUTLET,new FlowControl.Passive()));
+            from=at(c*5+2,0,0);
+        }
+        devices.add(plain(2,from.x(),0,0,Kind.VOID));
+        var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,new PassiveNetwork.Reservoir(1,0,water(inlet,1_000_000),PassiveNetwork.NodeKind.GENERATOR),
+                2L,new PassiveNetwork.Reservoir(2,0,water(300,990_000),PassiveNetwork.NodeKind.VOID)));
+        assertEquals(1,compiled.islands().size());
+        var solver=new PassiveIntervalSolver(model);
+        var settled=solver.solve(compiled.islands().getFirst().graph(),300,PassiveIntervalSolver.Settings.defaults(),()->{});
+        var last=solver.solve(settled.graph(),30,PassiveIntervalSolver.Settings.defaults(),()->{});
+        var heat=new double[coils.length];
+        for(var boundary:last.boundaries())for(int c=0;c<coils.length;c++)
+            if(boundary.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==PhysicalFluidTopology.sideIdentity(10+c))heat[c]+=boundary.totalEnergyJoule()/last.advancedSeconds();
+        int index=-1;for(int i=0;i<last.graph().pipes().size();i++)if(last.graph().pipes().get(i).id()==PhysicalFluidTopology.sideIdentity(10))index=i;
+        return new Fired(last.graph(),last,heat,last.averageMassFlows()[index]);
+    }
+    /** Water's curve at 10 bar from 290 to 490 K, its liquid end and its steam. */
+    private HeatCurve waterCurve(double inlet){return HeatCurve.sample(model,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(water(inlet,1_000_000)),1_000_000,290,490,HeatCurve.Films.DEFAULT,()->{});}
+
+    /**
+     * W6's gates (plan section 10). A radiant coil of 7 MW (200 m² at 35 kW/m²) takes water at 50 °C to its 120 °C set point
+     * exactly; its outlet never passes it.
+     */
+    @Test void aFiredCoilWithinItsDutyBringsItsOutletToTheSetPoint() {
+        var run=fire(323.15,coil(HeatSides.Side.RADIANT,200,393.15,1));
+        assertTrue(run.flow()>1,"the line flows: "+run.flow());
+        assertEquals(1,((FiredCoil)run.coil(10).heat()).firing(),"within its duty it fires as the set point needs");
+        assertEquals(393.15,run.outlet(10).temperature(),.1);
+        var curve=waterCurve(323.15);
+        assertEquals(run.flow()*(curve.enthalpyAt(393.15)-curve.enthalpyAt(323.15)),run.heat()[0],.01*run.heat()[0]);
+        assertTrue(run.heat()[0]<7e6);
+    }
+    /** With its burners at a tenth, the coil fires at its 700 kW and shows the shortfall: h_out = h_in + Q_max / ṁ. */
+    @Test void aFiredCoilShortOfDutyFiresAtItsMaximum() {
+        var run=fire(323.15,coil(HeatSides.Side.RADIANT,200,393.15,.1));
+        var fired=(FiredCoil)run.coil(10).heat();
+        assertEquals(7e5,fired.duty(),1e-6);assertTrue(fired.firing()>0&&fired.firing()<1,"at its maximum: "+fired.firing());
+        assertEquals(7e5,run.heat()[0],.01*7e5);
+        var curve=waterCurve(323.15);
+        double outlet=run.outlet(10).temperature();
+        assertEquals(curve.temperatureAt(curve.enthalpyAt(323.15)+7e5/run.flow()),outlet,.1);
+        assertTrue(outlet<393.15-10,"short of the set point: "+outlet);
+    }
+    /** Water arriving at 130 °C, above the 120 °C set point: the coil does not fire, and the stream passes unheated and uncooled. */
+    @Test void aFiredCoilDoesNotFireAStreamAboveItsSetPoint() {
+        var run=fire(403.15,coil(HeatSides.Side.RADIANT,200,393.15,1));
+        assertEquals(0,((FiredCoil)run.coil(10).heat()).firing());
+        assertEquals(0,run.heat()[0]);
+        assertEquals(403.15,run.outlet(10).temperature(),.05);
+    }
+    /** A set point above saturation boils: water at 50 °C and 10 bar leaves a 70 MW coil as steam at 200 °C. */
+    @Test void aFiredCoilRaisesSteamAboveSaturation() {
+        var run=fire(323.15,coil(HeatSides.Side.RADIANT,2000,473.15,1));
+        assertEquals(1,((FiredCoil)run.coil(10).heat()).firing(),"within its duty: "+run.flow()+" kg/s");
+        var steam=run.outlet(10);
+        assertFalse(FluidThermodynamics.holdsLiquid(steam),"all vapour");
+        assertEquals(473.15,steam.temperature(),1);
+    }
+    /** A heater's convection coil and radiant coil in series: 30 % and 70 % of the heat, the outlet at the set point. */
+    @Test void aHeatersTwoCoilsInSeriesShareTheHeatThirtySeventy() {
+        var run=fire(323.15,coil(HeatSides.Side.CONVECTION,200,393.15,1),coil(HeatSides.Side.RADIANT,200,393.15,1));
+        double total=run.heat()[0]+run.heat()[1];
+        assertEquals(.3,run.heat()[0]/total,.005);
+        assertEquals(393.15,run.outlet(11).temperature(),.1);
+        var curve=waterCurve(323.15);
+        assertEquals(run.flow()*(curve.enthalpyAt(393.15)-curve.enthalpyAt(323.15)),total,.01*total);
+    }
     @Test void onlyASideCarriesAUnitAndInletAndOutletPorts() {
         var ports=List.of(port(at(0,0,0),WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(at(2,0,0),EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));
         assertDoesNotThrow(()->side(5,ports,STUB,TUBE));

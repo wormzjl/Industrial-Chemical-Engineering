@@ -65,10 +65,13 @@ import java.util.function.Function;
  *
  * <p>24 (batch 2026-10-27-heat-exchanger-design, W5): a pipe's heat side (its surface, films, wall, bypass and give-back)
  * after its actuator area.</p>
+ *
+ * <p>25 (batch 2026-10-27-heat-exchanger-design, W6): the heat law is tagged (0 none, 1 heat side, 2 fired coil: its set
+ * temperature, reach, duty and firing).</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=24;
+    public static final int VERSION=25;
     /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -297,9 +300,14 @@ public final class FluidCheckpointCodec {
             // Format 6: the port of each end (PassiveNetwork.PhasePort ordinal), after the control.
             w.u8(p.firstPort().ordinal());w.u8(p.secondPort().ordinal());w.varint(p.forbiddenDirections());w.f64(p.actuatorArea());
             // Format 24: the heat side, facts and slice inputs alike, so a restored island moves the heat its graph did.
-            var heat=p.heat();w.bool(heat!=null);
-            if(heat!=null){var films=heat.films();var wall=heat.wall();w.f64(heat.area());w.f64(films.liquid());w.f64(films.twoPhase());w.f64(films.gas());
-                w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());}
+            // Format 25: a tag for the heat law (0 none, 1 heat side, 2 fired coil).
+            switch(p.heat()){
+                case null->w.u8(0);
+                case com.wormzjl.icheme.science.fluid.network.HeatSide heat->{var films=heat.films();var wall=heat.wall();w.u8(1);
+                    w.f64(heat.area());w.f64(films.liquid());w.f64(films.twoPhase());w.f64(films.gas());
+                    w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());}
+                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.reach());w.f64(coil.duty());w.f64(coil.firing());}
+            }
         }
     }
     private static void state(Writer w,PassiveNetwork graph) {
@@ -334,9 +342,12 @@ public final class FluidCheckpointCodec {
     record UnitRef(long pack,long offset,int length,byte[] sha256) {}
     private record Topology(long[] ids,double[] elevations,PassiveNetwork.NodeKind[] kinds,double[] volumes,double[] heights,boolean[] opens,com.wormzjl.icheme.science.fluid.network.VesselGeometry[] geometries,long[] pipeIds,int[] first,int[] second,
                             List<List<PipeResistance.Geometry>> sections,List<FlowControl> controls,PassiveNetwork.PhasePort[] firstPorts,PassiveNetwork.PhasePort[] secondPorts,int[] forbiddenDirections,double[] actuatorAreas,
-                            com.wormzjl.icheme.science.fluid.network.HeatSide[] heats) {}
-    private static com.wormzjl.icheme.science.fluid.network.HeatSide heat(Reader r) {
-        if(!r.bool())return null;
+                            com.wormzjl.icheme.science.fluid.network.HeatLaw[] heats) {}
+    private static com.wormzjl.icheme.science.fluid.network.HeatLaw heat(Reader r) {
+        int tag=r.u8();
+        if(tag==0)return null;
+        if(tag==2)return new com.wormzjl.icheme.science.fluid.network.FiredCoil(r.f64(),r.f64(),r.f64(),r.f64());
+        if(tag!=1)throw r.invalid("unknown heat law "+tag);
         double area=r.f64();var films=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());
         var wall=new double[r.varint(MAXIMUM_WALL_CELLS)];for(int k=0;k<wall.length;k++)wall[k]=r.f64();
         return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,r.f64(),r.f64());
@@ -451,7 +462,7 @@ public final class FluidCheckpointCodec {
         int pipes=r.varint(MAXIMUM_PIPES);var pipeIds=new long[pipes];var first=new int[pipes];var second=new int[pipes];
         var sections=new ArrayList<List<PipeResistance.Geometry>>(pipes);var controls=new ArrayList<FlowControl>(pipes);
         var firstPorts=new PassiveNetwork.PhasePort[pipes];var secondPorts=new PassiveNetwork.PhasePort[pipes];
-        var forbiddenDirections=new int[pipes];var actuatorAreas=new double[pipes];var heats=new com.wormzjl.icheme.science.fluid.network.HeatSide[pipes];
+        var forbiddenDirections=new int[pipes];var actuatorAreas=new double[pipes];var heats=new com.wormzjl.icheme.science.fluid.network.HeatLaw[pipes];
         for(int p=0;p<pipes;p++) {
             pipeIds[p]=r.i64();first[p]=r.varint(nodes);second[p]=r.varint(nodes);int count=r.varint(MAXIMUM_SECTIONS);
             var list=new ArrayList<PipeResistance.Geometry>(count);for(int s=0;s<count;s++)list.add(new PipeResistance.Geometry(r.f64(),r.f64(),r.f64(),r.f64(),r.varint(1<<20)));

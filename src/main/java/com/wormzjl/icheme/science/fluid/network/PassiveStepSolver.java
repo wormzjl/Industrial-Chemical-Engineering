@@ -209,10 +209,11 @@ public final class PassiveStepSolver {
     }
     private final FluidThermodynamics model;
     private final SolverOwnership ownership;
-    /** Each heat-exchanging connection's curve per end ({@link #sideCurve}), kept while its side, the end's port and the
-     * donor's state are the ones it was built for: the start balance, the seeds and every pass and retry of a step read one
-     * curve (batch 2026-10-27-heat-exchanger-design). */
-    private record SideCurve(HeatSide side,PassiveNetwork.PhasePort port,double volume,FluidThermodynamics.State start,HeatCurve curve) {}
+    /** Each heat-exchanging connection's curve per end ({@link #sideCurve}), kept while its law's span and films, the end's
+     * port and the donor's state are the ones it was built for: the start balance, the seeds and every pass and retry of a
+     * step read one curve, and a slice input (a fired coil's firing share, a wall side's bypass) does not resample it
+     * (batch 2026-10-27-heat-exchanger-design). */
+    private record SideCurve(double coldest,double hottest,HeatCurve.Films films,PassiveNetwork.PhasePort port,double volume,FluidThermodynamics.State start,HeatCurve curve) {}
     private final Map<Long,SideCurve[]> sideCurves=new HashMap<>();
     private final Map<WorkspaceKey,SparseNewton.Workspace> workspaces=new LinkedHashMap<>();
     private final Map<WorkspaceKey,SparseNewton.Workspace> structures=new LinkedHashMap<>();
@@ -1739,18 +1740,36 @@ public final class PassiveStepSolver {
      */
     private HeatCurve sideCurve(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node,Runnable checkpoint) {
         var start=graph.reservoirs().get(node).state();int end=node==pipe.first()?0:1;var port=pipe.portAt(node);double volume=pipe.volume();
-        var kept=sideCurves.computeIfAbsent(pipe.id(),id->new SideCurve[2]);var old=kept[end];
-        if(old!=null&&old.start()==start&&old.port()==port&&old.volume()==volume&&old.side().equals(pipe.heat()))return old.curve();
+        var kept=sideCurves.computeIfAbsent(pipe.id(),id->new SideCurve[2]);var old=kept[end];var law=pipe.heat();
+        if(old!=null&&old.start()==start&&old.port()==port&&old.volume()==volume&&old.coldest()==law.coldest()&&old.hottest()==law.hottest()&&old.films().equals(law.films()))return old.curve();
         double[] amounts=endMoles(start,port,volume);double total=0;for(double n:amounts)total+=n;
         HeatCurve curve=null;
         if(total>0&&endMass(start,port,volume)>0) {
-            var side=pipe.heat();
-            double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(start.temperature(),side.coldestWall())-10);
-            double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(start.temperature(),side.hottestWall())+10);
-            curve=HeatCurve.sample(model,amounts,start.pressure(),low,high,side.films(),checkpoint);
+            double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(start.temperature(),law.coldest())-10);
+            double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(start.temperature(),law.hottest())+10);
+            curve=HeatCurve.sample(model,amounts,start.pressure(),low,high,law.films(),checkpoint);
         }
-        kept[end]=new SideCurve(pipe.heat(),port,volume,start,curve);
+        kept[end]=new SideCurve(law.coldest(),law.hottest(),law.films(),port,volume,start,curve);
         return curve;
+    }
+    /**
+     * {@code graph} with each fired coil's firing share planned for a step that starts with {@code flows} (kg/s per
+     * connection, in {@code graph}'s order; null where none is known: a coil then fires fully for the step), on its donor's
+     * curve ({@link FiredCoil#planned}; batch 2026-10-27-heat-exchanger-design, W6). The share stays fixed inside the
+     * step's Newton; the next step plans it again from where this one ended. {@code graph} itself where nothing changes.
+     */
+    public PassiveNetwork fire(PassiveNetwork graph,double[] flows,Runnable checkpoint) {
+        List<PassiveNetwork.Pipe> pipes=null;
+        for(int e=0;e<graph.pipes().size();e++) {
+            var pipe=graph.pipes().get(e);if(!(pipe.heat() instanceof FiredCoil coil))continue;
+            double flow=flows!=null&&flows.length==graph.pipes().size()?flows[e]:0;
+            int donor=flow>=0?pipe.first():pipe.second();var curve=sideCurve(graph,pipe,donor,checkpoint);
+            var planned=curve==null?coil.withFiring(1):coil.planned(curve,endSpecificEnthalpy(graph.reservoirs().get(donor).state(),pipe.portAt(donor),pipe.volume()),flow);
+            if(planned.equals(coil))continue;
+            if(pipes==null)pipes=new ArrayList<>(graph.pipes());
+            pipes.set(e,pipe.withHeat(planned));
+        }
+        return pipes==null?graph:new PassiveNetwork(graph.reservoirs(),pipes,graph.scheduledTransfers());
     }
     /** The share of the node's solids a stream of {@code phase} draws: all of them at a BULK end ({@code phase < 0}). */
     private static double solidShare(FluidThermodynamics.State s,int phase){return phase<0?1:FluidThermodynamics.phaseSolidShare(s,phase);}

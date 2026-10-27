@@ -16,7 +16,7 @@ import java.util.Objects;
  * (J/kg), an enthalpy shift on the whole flow that returns heat in transit (plan section 5.2). Only the facts are the
  * connection's identity ({@link #shape}).
  */
-public record HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack) {
+public record HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack) implements HeatLaw {
     public HeatSide {
         Objects.requireNonNull(films);
         if(!(area>0)||!Double.isFinite(area)||wall.length<1||!(bypass>=0&&bypass<=1)||!Double.isFinite(giveBack))throw new IllegalArgumentException("Invalid heat side");
@@ -25,12 +25,14 @@ public record HeatSide(double area,HeatCurve.Films films,double[] wall,double by
     }
     /** The facts that shape the side's equations, without the slice inputs. */
     public record Shape(double area,HeatCurve.Films films,int cells) {}
-    public Shape shape(){return new Shape(area,films,wall.length);}
+    @Override public Shape shape(){return new Shape(area,films,wall.length);}
     @Override public double[] wall(){return wall.clone();}
     public int cells(){return wall.length;}
     public double wallTemperature(int cell){return wall[cell];}
     public double coldestWall(){double t=wall[0];for(double w:wall)t=Math.min(t,w);return t;}
     public double hottestWall(){double t=wall[0];for(double w:wall)t=Math.max(t,w);return t;}
+    @Override public double coldest(){return coldestWall();}
+    @Override public double hottest(){return hottestWall();}
     /** This side with other slice inputs. */
     public HeatSide withInputs(double[] wall,double bypass,double giveBack){return new HeatSide(area,films,wall,bypass,giveBack);}
 
@@ -40,7 +42,7 @@ public record HeatSide(double area,HeatCurve.Films films,double[] wall,double by
      * specific enthalpy {@code inlet}, plus the give-back on the whole flow. {@code massFlow}'s sign picks the order the
      * cells are met in.
      */
-    public double heat(HeatCurve curve,double inlet,double massFlow) {
+    @Override public double heat(HeatCurve curve,double inlet,double massFlow) {
         double mass=Math.abs(massFlow);
         if(mass==0)return 0;
         double through=(1-bypass)*mass,value=inlet,cell=area/wall.length;

@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
+import com.wormzjl.icheme.science.fluid.network.FiredCoil;
+import com.wormzjl.icheme.science.fluid.network.HeatSide;
 import com.wormzjl.icheme.science.fluid.network.PipeResistance;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -78,6 +80,35 @@ class HeatSidesTest {
         // Fan power at full speed, 1 kW per m² of face, and by the fan laws an eighth of it at half speed.
         assertEquals(1000*face,HeatSides.fanPower(side.area(),1),1e-6);assertEquals(125*face,HeatSides.fanPower(side.area(),.5),1e-6);
         assertEquals(0,HeatSides.fanPower(side.area(),0));
-        assertNotNull(HeatSides.heatSide(HeatSides.Unit.AIR_COOLER,side.area(),1));assertNull(HeatSides.heatSide(HeatSides.Unit.EXCHANGER,450,0),"an exchanger's side waits for its partner (W3)");
+        assertInstanceOf(HeatSide.class,HeatSides.heatSide(HeatSides.Unit.AIR_COOLER,HeatSides.Side.PROCESS,side.area(),1,0));
+        assertNull(HeatSides.heatSide(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,450,0,0),"an exchanger's side waits for its partner (W3)");
+    }
+    /**
+     * A fired heater (W6, plan section 4): a convection and a radiant coil, 30 % and 70 % of the datasheet duty at 15 and
+     * 35 kW/m² of bare tube, each firing towards the set point (the convection coil 30 % of the way) up to its share.
+     */
+    @Test void aFiredHeatersCoilsShareItsDatasheetDuty() {
+        for(var shape:new EquipmentShape[]{EquipmentShape.unit(EquipmentShape.Kind.VERTICAL_HEATER,4,8,EquipmentShape.Heading.NORTH,3),
+                EquipmentShape.unit(EquipmentShape.Kind.CABIN_HEATER,6,12,EquipmentShape.Heading.WEST,3)}) {
+            var sides=HeatSides.of(shape);double duty=1e6*ProcessUnit.heaterDuty(shape.kind(),shape.diameter(),shape.tangentLength());
+            assertEquals(2,sides.size());assertTrue(shape.fluidDevice());
+            var convection=sides.get(0);var radiant=sides.get(1);
+            assertEquals(HeatSides.Side.CONVECTION,convection.side());assertEquals(EquipmentShape.Role.CONVECTION_INLET,convection.inlet());assertEquals(EquipmentShape.Role.CONVECTION_OUTLET,convection.outlet());
+            assertEquals(HeatSides.Side.RADIANT,radiant.side());assertEquals(EquipmentShape.Role.RADIANT_INLET,radiant.inlet());assertEquals(EquipmentShape.Role.RADIANT_OUTLET,radiant.outlet());
+            assertEquals(.3*duty,HeatSides.coilDuty(HeatSides.Side.CONVECTION,convection.area(),1),1e-9*duty);
+            assertEquals(.7*duty,HeatSides.coilDuty(HeatSides.Side.RADIANT,radiant.area(),1),1e-9*duty);
+            var cells=ShapeRasterizer.fluidCells(shape);assertEquals(2,cells.size());assertNotEquals(cells.get(0),cells.get(1));
+            var radiantCoil=assertInstanceOf(FiredCoil.class,HeatSides.heatSide(HeatSides.Unit.FIRED_HEATER,HeatSides.Side.RADIANT,radiant.area(),1,573.15));
+            assertEquals(573.15,radiantCoil.setTemperature());assertEquals(1,radiantCoil.reach());assertEquals(.7*duty,radiantCoil.duty(),1e-9*duty);
+            var convectionCoil=assertInstanceOf(FiredCoil.class,HeatSides.heatSide(HeatSides.Unit.FIRED_HEATER,HeatSides.Side.CONVECTION,convection.area(),0,573.15));
+            assertEquals(.3,convectionCoil.reach(),1e-12);assertEquals(0,convectionCoil.duty(),"burners out");
+        }
+        assertEquals(6.29e6,1e6*ProcessUnit.heaterDuty(EquipmentShape.Kind.VERTICAL_HEATER,4,8),1e4);
+        // A 10 MW heater's radiant coil: one pass of 380 m, about 1 bar of oil at 2 m/s; 40 MW takes five passes.
+        var coil=HeatSides.heaterPassage(200,10);
+        assertEquals(1,coil.channels());assertEquals(379,coil.length(),1);
+        double oil=750;
+        assertEquals(1e5,PipeResistance.evaluate(coil,2*oil*coil.area(),oil,1e-3).pressureDrop(),2e4);
+        assertEquals(5,HeatSides.heaterPassage(800,40).channels());
     }
 }

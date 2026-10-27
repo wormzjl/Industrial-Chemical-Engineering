@@ -91,13 +91,18 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      * A unit's heat side over the last completed interval (batch 2026-10-27-heat-exchanger-design): which unit and side it
      * is, whether it has a partner side (whose screen it opens), the temperature at its outlet nozzle's junction (K), the
      * heat its stream took up (W, negative where it was cooled, from the interval's {@code HEAT} boundaries), and an air
-     * cooler's fans: their share of full speed and their power (W), null for a side without fans.
+     * cooler's fans: their share of full speed and their power (W), null for a side without fans; a fired heater's coil:
+     * its burners' share of full firing, the set point (K) and the coil's most heat (W) with the burners as they are, null for
+     * a side without burners.
      */
-    public record Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt) {
+    public record Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,
+                       Double burners,Double setPoint,Double maximumWatt) {
         public Heat {
             Objects.requireNonNull(unit);Objects.requireNonNull(side);
             if(!(outletTemperature>0)||!Double.isFinite(outletTemperature)||!Double.isFinite(heatWatt)||(fans==null)!=(fanPowerWatt==null)
-                    ||fans!=null&&!(fans>=0&&fans<=1&&fanPowerWatt>=0&&Double.isFinite(fanPowerWatt)))throw new IllegalArgumentException("Invalid heat side presentation");
+                    ||fans!=null&&!(fans>=0&&fans<=1&&fanPowerWatt>=0&&Double.isFinite(fanPowerWatt))
+                    ||(burners==null)!=(setPoint==null)||burners!=null&&!(burners>=0&&burners<=1&&setPoint>0&&Double.isFinite(setPoint))
+                    ||maximumWatt!=null&&!(maximumWatt>=0&&Double.isFinite(maximumWatt)))throw new IllegalArgumentException("Invalid heat side presentation");
         }
     }
     /** Every field but the heat side's: a view of a device that is not one. */

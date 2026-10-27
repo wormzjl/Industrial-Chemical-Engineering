@@ -75,7 +75,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean constructedMover(){var data=menu.clientData();return data!=null&&!datasheet.isEmpty()&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
     /** An air cooler's side: its fans switch as a mover does (batch 2026-10-27-heat-exchanger-design). */
     private boolean fans(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().fans()!=null;}
-    private boolean switchable(){return generator()||constructedMover()||fans();}
+    /** A fired heater's coil: its burners switch and its set point is a field, both coils at once (W6). */
+    private boolean burners(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().burners()!=null;}
+    private boolean switchable(){return generator()||constructedMover()||fans()||burners();}
     private String flowUnit(){return flowRateUnit.unit(mass?"kg":"kmol");}
     private int rail(){return Math.min(210,imageWidth/3);}
     // The rail below "Operating conditions" (its fields, the filter's button and the values) is one column clipped to
@@ -151,7 +153,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private int railControls(){
         var data=menu.clientData();if(data==null)return 0;
         int partner=paired()?1:0;if(!canEdit())return partner;
-        return partner+switch(data.kind()){case PUMP,COMPRESSOR->constructedMover()?3:2;case GENERATOR->3;case VALVE->data.valve()!=null&&!data.valve().configured()?0:valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW||valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?2:1;case VOID,PIPE,FILTER->1;case HEAT_SIDE->fans()?1:0;default->0;};
+        return partner+switch(data.kind()){case PUMP,COMPRESSOR->constructedMover()?3:2;case GENERATOR->3;case VALVE->data.valve()!=null&&!data.valve().configured()?0:valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW||valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?2:1;case VOID,PIPE,FILTER->1;case HEAT_SIDE->fans()?1:burners()?2:0;default->0;};
     }
     /** A heat side with a partner (an exchanger's): it opens the partner's screen (batch 2026-10-27-heat-exchanger-design). */
     private boolean paired(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().paired();}
@@ -205,10 +207,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             phaseBasis=preferredPhaseBasis=phaseBasis.next();phaseBasisButton.setMessage(Component.literal(tr("phase_ratio."+phaseBasis.key()+"_basis")));
         });
         phaseBasisButton.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.phase_ratio.basis_hint")));layoutPhaseBasisButton();
-        if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||fans())){var apply=footer.get(1);action("apply",apply.x(),by,apply.width(),this::apply);}
+        if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||fans()||burners())){var apply=footer.get(1);action("apply",apply.x(),by,apply.width(),this::apply);}
         railBuiltOffset=railOffset();int y=railTop()-railBuiltOffset;
         if(canEdit()&&switchable()) {
-            var power=action(fans()?(powerOn?"fans_on":"fans_off"):(powerOn?"power_on":"power_off"),12,y,rail()-4,()->{powerOn=!powerOn;rebuild();});
+            var power=action(fans()?(powerOn?"fans_on":"fans_off"):burners()?(powerOn?"burners_on":"burners_off"):(powerOn?"power_on":"power_off"),12,y,rail()-4,()->{powerOn=!powerOn;rebuild();});
             power.visible=inRail(y,20);y+=RAIL_CONTROL;
         }
         if(canEdit())switch(data.kind()){
@@ -226,6 +228,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 }
             }
             case PIPE->railField("diameter",tr("diameter_input"),y);
+            case HEAT_SIDE->{if(burners())railField("temperature",tr("set_temperature_input",temperatureUnit.symbol()),y);}
             default->{}
         }
         if(data.kind()==TopologyCompiler.Kind.FILTER&&canEdit()){
@@ -454,7 +457,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** One row plan drives both drawing and the phase selector's scroll position for every equipment kind. */
     private List<Reading> readings(){
         var data=menu.clientData();var view=data.view();var state=view.state();var rows=new ArrayList<Reading>();
-        if(switchable())rows.add(new Reading(fans()?"fans_state":"power_state",tr(data.controls().power()==FluidNetwork.Power.ON?"state_on":"state_off")));
+        if(switchable())rows.add(new Reading(fans()?"fans_state":burners()?"burners_state":"power_state",tr(data.controls().power()==FluidNetwork.Power.ON?"state_on":"state_off")));
         if(tank()){
             var vessel=view.tank();boolean empty=vessel!=null&&state==null;
             rows.add(new Reading("temperature",state==null?"—":quantity(temperatureUnit.display(state.temperature()),temperatureUnit.symbol())));
@@ -484,8 +487,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(view.devicePressureChange()!=null)rows.add(new Reading("pressure_change",displayPressure(view.devicePressureChange())));
         if(view.heat()!=null){var heat=view.heat();
             rows.add(new Reading("outlet_temperature",quantity(temperatureUnit.display(heat.outletTemperature()),temperatureUnit.symbol())));
-            rows.add(new Reading("duty",quantity(Math.abs(heat.heatWatt())/1000,"kW"),tr(heat.heatWatt()<0?"duty.cooled":"duty.heated")));
+            rows.add(new Reading("duty",quantity(Math.abs(heat.heatWatt())/1000,"kW"),tr(heat.burners()!=null?"duty.fired":heat.heatWatt()<0?"duty.cooled":"duty.heated")));
             if(heat.fanPowerWatt()!=null)rows.add(new Reading("fan_power",quantity(heat.fanPowerWatt()/1000,"kW"),tr("fan_power.hint")));
+            if(heat.setPoint()!=null)rows.add(new Reading("set_temperature",quantity(temperatureUnit.display(heat.setPoint()),temperatureUnit.symbol())));
+            if(heat.maximumWatt()!=null)rows.add(new Reading("duty_available",quantity(heat.maximumWatt()/1000,"kW"),tr("duty_available.hint")));
         }
         if(data.kind()==TopologyCompiler.Kind.COMPRESSOR&&view.devicePressureChange()!=null&&state!=null&&state.pressure()>0)
             rows.add(new Reading("pressure_ratio",number((state.pressure()+view.devicePressureChange())/state.pressure())));

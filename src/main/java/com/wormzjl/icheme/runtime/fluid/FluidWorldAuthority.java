@@ -307,11 +307,19 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var record=new WorldTopologyLedger.Registration(device,spec,0);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
-    /** Queues a configuration change as a ledger event and returns it, or null when nothing would change. */
+    /**
+     * Queues a configuration change as a ledger event and returns it, or null when nothing would change. A fired heater's
+     * coils share their burners and set point (batch 2026-10-27-heat-exchanger-design): a coil's new control moves its
+     * partner coil in the same event.
+     */
     public WorldTopologyLedger.Event edit(long id,long expectedRevision,PhysicalFluidTopology.Device device,FluidDeviceSpec spec) {
         owned();var old=registrations().get(id);if(old==null||old.revision()!=expectedRevision||device.id()!=id)throw new IllegalStateException("Stale fluid controls");
         if(old.device().equals(device)&&old.spec().equals(spec))return null;
-        return submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,Math.addExact(expectedRevision,1)))),topology.nextIdentity());
+        var edits=new ArrayList<WorldTopologyLedger.Edit>();edits.add(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,Math.addExact(expectedRevision,1))));
+        var heat=device.heat();var partner=heat!=null&&heat.burners()?registrations().get(heat.partner()):null;
+        if(partner!=null&&partner.device().heat()!=null&&!partner.device().heat().control().equals(heat.control()))
+            edits.add(new WorldTopologyLedger.Edit(partner.device().id(),new WorldTopologyLedger.Registration(partner.device().withHeat(partner.device().heat().withControl(heat.control())),partner.spec(),Math.addExact(partner.revision(),1))));
+        return submit(edits,topology.nextIdentity());
     }
     /** The most pipes one line resize changes; a longer line is refused whole. */
     public static final int LINE_LIMIT=4096;
@@ -640,6 +648,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // A filter's and a heat side's own pipe (batch 2026-10-27-heat-exchanger-design): the drop across the cake or the passage.
         long own=filter!=null?PhysicalFluidTopology.filterIdentity(id):registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE?PhysicalFluidTopology.sideIdentity(id):0;
         if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own)devicePressureChange=snapshot.graph().reservoirs().get(pipe.first()).state().pressure()-snapshot.graph().reservoirs().get(pipe.second()).state().pressure();
+        // A fired heater's coil firing at its maximum short of what it should do (batch 2026-10-27-heat-exchanger-design, owner
+        // Q11): the radiant coil names its outlet's shortfall from the set point; the convection coil heats only part of the way.
+        if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own&&pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil coil&&coil.firing()>0&&coil.firing()<1) {
+            double shortfall=coil.setTemperature()-snapshot.graph().reservoirs().get(pipe.second()).state().temperature();
+            status=(coil.reach()<1?"DUTY INSUFFICIENT: the coil fires at its maximum / ":shortfall>0?String.format(java.util.Locale.ROOT,"DUTY INSUFFICIENT: outlet %.1f K below the set point / ",shortfall):"")+status;
+        }
         if(filter!=null&&filter.clogged())status="filter clogged / "+status;
         var closures=snapshot.lastResult().map(PassiveIntervalSolver.Result::rejectionReasons).orElse(Map.of());
         for(var mapping:mappings)for(var pipe:snapshot.graph().pipes())if(pipe.id()==mapping.pipeId()&&pipe.blockedDirections()!=0&&pipe.filter()==null)status=solidClosure(mapping.pipeId(),closures)+" / "+status;
@@ -660,15 +674,17 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 PipePresentation.inspect(registration.device(),snapshot.graph(),mappings,history,seconds,componentNames.size()),
                 runtime.coordinator().bulkVolumeRates(owner),registration.device().geometry().area()));
         // A heat side (batch 2026-10-27-heat-exchanger-design): its outlet junction's temperature, the heat its HEAT boundaries
-        // booked over the interval, an air cooler's fans.
+        // booked over the interval, an air cooler's fans, a fired heater's burners, set point and most heat.
         var heat=registration.device().heat();
         if(heat!=null)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own) {
             double joule=0;
             for(var boundary:snapshot.lastResult().map(PassiveIntervalSolver.Result::boundaries).orElse(List.of()))
                 if(boundary.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==own)joule+=boundary.totalEnergyJoule();
-            double share=heat.control().share();
-            view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),heat.partner()!=0,snapshot.graph().reservoirs().get(pipe.second()).state().temperature(),seconds>0?joule/seconds:0,
-                    heat.fans()?share:null,heat.fans()?com.wormzjl.icheme.science.equipment.HeatSides.fanPower(heat.area(),share):null));
+            double share=heat.control().share(),outlet=snapshot.graph().reservoirs().get(pipe.second()).state().temperature();
+            var coil=pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil fired?fired:null;
+            view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),heat.partner()!=0,outlet,seconds>0?joule/seconds:0,
+                    heat.fans()?share:null,heat.fans()?com.wormzjl.icheme.science.equipment.HeatSides.fanPower(heat.area(),share):null,
+                    heat.burners()?share:null,heat.burners()?heat.control().target():null,coil!=null?coil.duty():null));
         }
         if(registration.device().kind()==TopologyCompiler.Kind.VOID) {
             var sources=new ArrayList<IslandCoordinator.Snapshot>();

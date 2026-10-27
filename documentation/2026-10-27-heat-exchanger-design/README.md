@@ -6,11 +6,11 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device) and W5 (the air cooler) are built; W6 (the fired heaters) is next; the owner answered Q1 to Q14, Q15 is open. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler) and W6 (the fired heaters) are built; W3a (the timing study) is next; the owner answered Q1 to Q14, Q15 is open. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2 and W5 as built (section 10). It covers:
+- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5 and W6 as built (section 10). It covers:
   - the physics in numbers and the owner's decisions;
   - UA from size with a film per phase and the approximations that keep it free of lag;
   - the air cooler (air at 25 °C) and the fired heater (heat to a set temperature, capped at its duty);
@@ -47,6 +47,13 @@ Changed by W5:
 - `HeatUnit`: the manual share (bypass or fans), `Mode.BYPASS` removed, `heatSide`; `PhysicalFluidTopology` (the side's pipe carries it; `Device.withGeneratorEnabled`);
 - `FluidCheckpointCodec` (state format 24: a connection's heat side);
 - `FluidView.Heat` and the authority's view; `FluidNetwork` (the fans as power, the edit through withers); `FluidDeviceScreen` (fans button, heat readings).
+
+Changed by W6:
+
+- `science/fluid/network`: `HeatLaw` (new, sealed: `HeatSide` or `FiredCoil`), `FiredCoil` (new: the set-point law and its planned firing share), `HeatCurve.enthalpyAt`; `PassiveNetwork.Pipe.heat` typed `HeatLaw`; `PassiveStepSolver` (`sideCurve` keyed on the law's span and films, `fire`); `PassiveIntervalSolver.run` (plans the firing at each step's start);
+- `HeatSides`: the heaters' coils, areas, passages, `coilDuty` and their heat law; `HeatUnit` (`FIRING` default, `burners`, a heater coil needs a set point); `FluidDomain.requireInputTemperature`;
+- `FluidCheckpointCodec` (state format 25: the tagged heat law), `IslandCertificate` (graph identity tag -4);
+- `FluidWorldAuthority` (an edit moves the partner coil; the DUTY INSUFFICIENT status; the coil's view), `FluidView.Heat` (burners, set point, most duty), `FluidNetwork` (the burners as power, the set point as temperature), `FluidDeviceScreen` and `en_us.json`.
 
 The plan also touches:
 
@@ -127,6 +134,13 @@ The plan also touches:
     - the rail buttons covered the readings: `railControls` now counts the fans and partner buttons;
     - the one-sided air cooler showed a dead Other side button: `FluidView.Heat.paired` hides it.
     The fix was judged by the rail's row count and the affected tests, not by a second in-game check.
+- 2026-10-27, W6 the fired heaters, in the W6 commit.
+  - A heater registers its convection and radiant coils as partner sides, 30 % and 70 % of the datasheet duty at 15 and 35 kW/m². The coil law is β · reach · |ṁ| · (h_set − h_in), with h_set at the plateau's vapour end, so a set point above saturation raises steam.
+  - β is planned at each step's start, not each slice's: a change to plan section 4, and it shortens the in-slice overshoot of section 13 to one step (reversible; the as-built notes say why).
+  - Burners and set point are `Mode.FIRING` on W2's control fields, edited for both coils in one event; no facts change. "DUTY INSUFFICIENT" on the status line when a coil fires at its maximum.
+  - Formats: state format 25 (tagged heat law), certificate graph identity tag -4.
+  - Gates: `FiredCoilTest` 4 (the law, the planned share, `enthalpyAt` on a plateau), `HeatSidesTest` 6 (the coils' duty split and passage), `HeatSideTopologyTest` 8 (five W6 gates: the set point exactly within the duty; h_in + Q/ṁ at the maximum; no firing above the set point; steam at 200 °C from 50 °C water at 10 bar; 30/70 in series, numbers in plan section 10); quick suite 1677, no failures (the layout table did not move: a coil's node is its inlet nozzle's cell, already a shell cell).
+  - No in-game check (the task's one went to W5). The screen's new rows and buttons follow W5's rail rule: the burners button and set point field count two rail rows.
 
 ## Notes
 
@@ -137,5 +151,6 @@ The plan also touches:
   - the step accepts a junction laid out without a phase its enthalpy holds; only the seeds guard it (W1 saw liquid 22 K superheated when the seeds missed the heat). To be put to the owner;
   - the curve is fluid only: a stream carrying crystals reads its enthalpy on the fluid's curve.
 - Open from W5: the drawn fans keep turning when switched off (the motion switch is the client's own).
+- Open from W6: the heaters' FUEL nozzle stays unconnected (fuel is another scope, Q11); the datasheet does not list the coils' surfaces yet.
 - Measured in W1: a junction boils from heat inside the Newton. Not measured yet: the quasi-steady wall on phase-change curves and the solver cost (W3 and its campaign).
 - Code guide: not updated yet; the fluid network chapter is updated before the merge.

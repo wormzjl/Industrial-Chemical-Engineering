@@ -84,9 +84,12 @@ public final class FluidNetwork {
             double pressure=d.control() instanceof FlowControl.Valve v?v.targetPressure():record.spec().pressure();
             var valve=d.control() instanceof FlowControl.ControlValve v?v:null;
             if(valve!=null)flow=valve.volumeTarget();
-            // An air cooler's fans are its power (batch 2026-10-27-heat-exchanger-design): on while they turn at all.
-            var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()||d.heat()!=null&&d.heat().fans()&&d.heat().control().share()==0?Power.OFF:Power.ON;
-            return new Controls(record.spec().temperature(),pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget());
+            // An air cooler's fans and a fired heater's burners are its power (batch 2026-10-27-heat-exchanger-design): on while
+            // they turn or fire at all; a heater's set point is its temperature.
+            var heat=d.heat();
+            var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()||heat!=null&&(heat.fans()||heat.burners())&&heat.control().share()==0?Power.OFF:Power.ON;
+            double temperature=heat!=null&&heat.burners()?heat.control().target():record.spec().temperature();
+            return new Controls(temperature,pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget());
         }
     }
     /**
@@ -317,10 +320,13 @@ public final class FluidNetwork {
                     case GENERATOR->spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);
                     case VOID->spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());
                     case RESERVOIR->throw new IllegalArgumentException("Reservoir initialization is fixed; existing fluid is conserved.");
-                    // A heat side's passage is its unit's datasheet; an air cooler's fans switch (batch 2026-10-27-heat-exchanger-design).
+                    // A heat side's passage is its unit's datasheet; an air cooler's fans switch, a fired heater's burners switch
+                    // and fire to its set point (batch 2026-10-27-heat-exchanger-design; the edit moves both coils, FluidWorldAuthority.edit).
                     case HEAT_SIDE->{
-                        if(!heat.fans())throw new IllegalArgumentException("A heat side's passage is its unit's datasheet.");
-                        heat=heat.withControl(heat.control().withShare(controls.power==Power.ON?1:0));
+                        double share=controls.power==Power.ON?1:0;
+                        if(heat.fans())heat=heat.withControl(heat.control().withShare(share));
+                        else if(heat.burners()){world.model().domain().requireInputTemperature(controls.temperature);heat=heat.withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING,controls.temperature,0,share));}
+                        else throw new IllegalArgumentException("A heat side's passage is its unit's datasheet.");
                     }
                 }
                 // Refused here, before anything is queued, outside the package envelope (the input box, plan decision 9):

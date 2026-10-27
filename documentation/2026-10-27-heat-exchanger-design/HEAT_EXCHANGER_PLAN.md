@@ -374,6 +374,37 @@ W5 as built (2026-10-27):
 - **Holdup lag.** The outlet junction holds half the tubes' liquid, so the outlet settles over about the tubes' residence time (a 3 × 6 m bay of water at 13.5 kg/s: 180 kg, a lag of 14 s). That is the physics of the tube contents.
 - **Found in passing.** The menu edit rebuilt the device without a rack lane's width and face points, so a pipe laid on a rack could not change its diameter from its menu ("Invalid rack lane"). The edit now changes only what the menu edits (withers).
 
+W6 as built (2026-10-27):
+
+- **Coils.** A vertical or cabin heater registers two sides, CONVECTION then RADIANT, between their coil nozzles. They are partners, so the Other side button opens the other coil. The player pipes the crossover. Each coil takes its share of the datasheet duty Q (`heaterDuty`) at its mean flux:
+  - radiant 70 % at 35 kW/m²; convection 30 % at 15 kW/m²;
+  - both come to 0.02 m² per kW of Q;
+  - the most heat a coil fires is its flux × area × the burners' share.
+- **Passage.** Each coil is 6" tubes (146 mm bore) in max(1, round(Q / 8 MW)) parallel passes, with half a velocity head per return bend every 10 m. A 10 MW heater's radiant coil is one pass of 380 m and loses about 1 bar of oil at 2 m/s.
+- **Heat law.** `HeatLaw` is the sealed form of a connection's heat (W1's `HeatSide`, and the new `FiredCoil`). The coil's heat is β · reach · |ṁ| · (h_set − h_in):
+  - reach is 1 for the radiant coil and 0.3 for the convection coil, so the radiant coil finishes what the convection coil starts;
+  - h_set is `HeatCurve.enthalpyAt(T_set)` on the donor's curve: the largest enthalpy at that temperature, so a plateau names its vapour end;
+  - the curve is sampled at the donor's pressure, not the outlet's (section 4); the difference is 0.001 K on 10 kPa of liquid water.
+- **β per step, not per slice (a change from section 4).** The interval solver plans each coil's firing share at the start of every step, from the last accepted step's flows (`PassiveStepSolver.fire`):
+  - 1 within the duty;
+  - the duty over the demand beyond it;
+  - 0 at or above the set point, or with the burners out.
+
+  A slice spans many steps, so section 13's in-slice overshoot shrinks to one step.
+- **Control.** `Mode.FIRING` holds the set point; the share is the burners. A new heater fires to 300 °C with its burners lit. A coil's edit carries the set point (inside the package's temperature envelope) and the burners. `FluidWorldAuthority.edit` moves the partner coil in the same event.
+- **Alert.** A coil firing at its maximum (0 < β < 1) puts "DUTY INSUFFICIENT" on its status line. The radiant coil names its outlet's shortfall from the set point in kelvin.
+- **Screen.** The burners button, a set point field, and the readings set point, duty and most duty. The constructor's heater hints no longer say "Drawn only".
+- **Formats.** State format 25 tags the heat law (0 none, 1 heat side, 2 fired coil). The certificate graph identity tag is -4. The facts are unchanged: the coil's set point and burners are W2's control fields, and `HeatUnit` now refuses a heater coil without a FIRING set point.
+- **Gates.** Water at 10 bar through a 19 m coil into a 9.9 bar void, measured over 30 s after 300 s:
+
+| Case | Flow | Heat | Outlet |
+|---|---|---|---|
+| 50 → 120 °C within a 7 MW coil | 10.94 kg/s | 3.22 MW | 120.001 °C, β = 1 |
+| burners at a tenth (700 kW) | 10.94 kg/s | 700.0 kW | 65.3 °C = h_in + Q/ṁ, β = 0.217 |
+| arriving at 130 °C | 10.77 kg/s | 0 | 130.002 °C, β = 0 |
+| set point 200 °C (saturation 180 °C) | 10.21 kg/s | 27.6 MW | 200.000 °C, all steam |
+| convection then radiant | 10.61 kg/s | 0.94 + 2.19 MW | 120.001 °C; split 0.300 |
+
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
 
 ## 11. Simplifications and what they change
@@ -404,7 +435,7 @@ Decided in revision 3 without a question (reversible; the review gives the numbe
 
 - **Phase change at the outlet.** Heat that boils or condenses a stream does it at the side's outlet junction, as a letdown valve's flash does. It goes through the same arriving-phase and flash seeds that held islands in the past (OD4, the cold and bundled seeds). W1 adds a junction-boil gate, and the campaign counts holds in worlds with exchangers.
 - **The give-back slice.** For one slice after a change, an outlet moves by up to 15.5 K (24 K after a 5× flow cut, 77.5 K after a hold), within the inlet temperatures. A stream near its bubble point can flash for that slice; it goes through the outlet seeds above, and W3's gates watch it.
-- **The fired heater inside a slice.** Its outlet never passes the set point (h_in + β (h_set − h_in)). A duty-limited heater exceeds its duty in proportion when its flow rises inside a slice, and a stream that comes to arrive above the set point inside a slice is cooled towards it. Both last until the next slice sets β again; the ledger books what happened.
+- **The fired heater inside a step.** Its outlet never passes the set point (h_in + β (h_set − h_in)). A duty-limited heater exceeds its duty in proportion when its flow rises inside a step, and a stream that comes to arrive above the set point inside a step is cooled towards it. Both last until the next step sets β again (W6 plans β per step, not per slice); the ledger books what happened.
 - **The quasi-steady wall on curves.** The study marched streams of constant capacity; W3 solves the 8-cell steady wall on two phase-change curves, a fixed point with a root per cell inside each sweep. Its convergence needs a gate (a condensing mixture against water), a tolerance (0.01 K) and a sweep cap. Where the iteration stops short, the profile is still a valid wall: energy stays exact, and only the transient changes.
 - **Determinism.** Forms A and B of section 5.2 make a side's result depend on how far its partner had committed at the dispatch, which depends on job times, within one partner slice. Form C does not. W3a measures the size of that dependence.
 - **A missed wake** leaves a certified island at a stale duty until its certificate horizon.

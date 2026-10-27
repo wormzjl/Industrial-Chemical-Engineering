@@ -226,6 +226,9 @@ public final class PassiveIntervalSolver {
                 }
                 // The cold rate seed (owner decision of 2026-10-19, the plan's fallback): a structure no step has been accepted on
                 // starts from one rate solve's converged point, itself started from the balance; see {@link #coldRateSeed}.
+                // Each fired coil's firing share for this step, planned from its start (batch 2026-10-27-heat-exchanger-design,
+                // W6): the previous accepted step's flows, else the endpoint carried from the last interval.
+                accepted=implicit.fire(accepted,last!=null?last.massFlows():carriedFlows(accepted),checkpoint);
                 PassiveNetwork start=accepted;
                 if(implicit.backwardEulerCold(accepted)) {
                     if(coldSeedFor!=accepted){coldSeed=coldRateSeed(accepted,checkpoint);coldSeedFor=accepted;}

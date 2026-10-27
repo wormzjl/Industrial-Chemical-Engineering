@@ -340,7 +340,7 @@ public final class IslandCertificate {
     }
     /** The digest of what replay takes to be fixed about an island: everything but its finite inventories and states. */
     static String graphIdentity(PassiveNetwork graph) {
-        var d=new Digest();d.text("icheme-certificate-graph-identity-3");d.integer(graph.reservoirs().size());
+        var d=new Digest();d.text("icheme-certificate-graph-identity-4");d.integer(graph.reservoirs().size());
         for(var node:graph.reservoirs()) {
             d.number(node.id());d.text(node.kind().name());d.real(node.elevation());
             // A junction's volume is a numerical placeholder that a solve may move; a vessel's is its identity.
@@ -362,9 +362,13 @@ public final class IslandCertificate {
                 case FlowControl.ControlValve valve->{d.text("control_valve");d.text(valve.source().name());d.real(valve.target());d.text(String.valueOf(valve.sensor()));d.number(valve.revision());d.real(valve.targetPressure());d.real(valve.massTarget());d.real(valve.volumeTarget());}
             }
             d.integer(pipe.blockedDirections());d.integer(pipe.forbiddenDirections());d.real(pipe.actuatorArea());
-            // A heat side's surface, films and slice inputs (batch 2026-10-27-heat-exchanger-design): a replay holds them fixed.
-            var side=pipe.heat();d.integer(side==null?0:1);
-            if(side!=null){d.real(side.area());d.real(side.films().liquid());d.real(side.films().twoPhase());d.real(side.films().gas());d.integer(side.wall().length);for(double t:side.wall())d.real(t);d.real(side.bypass());d.real(side.giveBack());}
+            // A heat side's or fired coil's facts and slice inputs (batch 2026-10-27-heat-exchanger-design): a replay holds them fixed.
+            switch(pipe.heat()){
+                case null->d.integer(0);
+                case com.wormzjl.icheme.science.fluid.network.HeatSide side->{d.integer(1);d.real(side.area());d.real(side.films().liquid());d.real(side.films().twoPhase());d.real(side.films().gas());
+                    d.integer(side.wall().length);for(double t:side.wall())d.real(t);d.real(side.bypass());d.real(side.giveBack());}
+                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.real(coil.reach());d.real(coil.duty());d.real(coil.firing());}
+            }
             // What each end draws (PassiveNetwork.PhasePort): it changes the equations, so a replay holds only under it.
             d.integer(pipe.firstPort().ordinal());d.integer(pipe.secondPort().ordinal());
             var filter=pipe.filter();

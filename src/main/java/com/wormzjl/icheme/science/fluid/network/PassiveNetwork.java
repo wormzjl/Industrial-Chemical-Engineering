@@ -217,7 +217,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
      * clears only {@code blockedDirections}. Both masks participate in the physical direction rule and solver identity.
      */
     public record Pipe(long id,int first,int second,List<PipeResistance.Geometry> sections,FlowControl control,int blockedDirections,InlineFilter filter,
-                       PhasePort firstPort,PhasePort secondPort,int forbiddenDirections,List<ObservationPoint> observationPoints,double actuatorArea,HeatSide heat) {
+                       PhasePort firstPort,PhasePort secondPort,int forbiddenDirections,List<ObservationPoint> observationPoints,double actuatorArea,HeatLaw heat) {
         public record ObservationPoint(long host,double fraction,double elevation,boolean reversed){public ObservationPoint{if(host<=0||!Double.isFinite(fraction)||fraction<0||fraction>1||!Double.isFinite(elevation))throw new IllegalArgumentException("Invalid observation point");}}
         public Pipe(long id,int first,int second,List<PipeResistance.Geometry> sections,FlowControl control,int blockedDirections,InlineFilter filter,PhasePort firstPort,PhasePort secondPort,int forbiddenDirections,List<ObservationPoint> points){this(id,first,second,sections,control,blockedDirections,filter,firstPort,secondPort,forbiddenDirections,points,0,null);}
         public Pipe(long id,int first,int second,List<PipeResistance.Geometry> sections,FlowControl control,int blockedDirections,InlineFilter filter,PhasePort firstPort,PhasePort secondPort,int forbiddenDirections,List<ObservationPoint> points,double actuatorArea){this(id,first,second,sections,control,blockedDirections,filter,firstPort,secondPort,forbiddenDirections,points,actuatorArea,null);}
@@ -236,7 +236,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
          */
         public record Identity(long id,int first,int second,List<PipeResistance.Geometry> sections,FlowControl control,
                                int blockedDirections,FilterSettings filter,PhasePort firstPort,PhasePort secondPort,int forbiddenDirections,double actuatorArea,
-                               HeatSide.Shape heat) {}
+                               Record heat) {}
         /** The immutable half of an {@link InlineFilter}; the cake and its energy are the mutable half. */
         public record FilterSettings(double capacity,double cleanResistance) {}
         public Identity identity() {
@@ -267,8 +267,8 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
         public Pipe withObservationPoints(List<ObservationPoint> points){return new Pipe(id,first,second,sections,control,blockedDirections,filter,firstPort,secondPort,forbiddenDirections,points,actuatorArea,heat);}
         /** Registered actuator bore area, independent of narrower sections elsewhere in this hydraulic run. */
         public Pipe withActuatorArea(double area){return new Pipe(id,first,second,sections,control,blockedDirections,filter,firstPort,secondPort,forbiddenDirections,observationPoints,area,heat);}
-        /** This connection as a heat-exchanging side ({@link HeatSide}), or as a plain run with null. */
-        public Pipe withHeat(HeatSide side){return new Pipe(id,first,second,sections,control,blockedDirections,filter,firstPort,secondPort,forbiddenDirections,observationPoints,actuatorArea,side);}
+        /** This connection with heat law {@code side} (a wall side or a fired coil, {@link HeatLaw}), or as a plain run with null. */
+        public Pipe withHeat(HeatLaw side){return new Pipe(id,first,second,sections,control,blockedDirections,filter,firstPort,secondPort,forbiddenDirections,observationPoints,actuatorArea,side);}
         public double controlArea(){return actuatorArea>0?actuatorArea:minimumArea();}
         public Pipe {if(!Double.isFinite(actuatorArea)||actuatorArea<0)throw new IllegalArgumentException("Invalid actuator area");observationPoints=List.copyOf(observationPoints);Objects.requireNonNull(firstPort);Objects.requireNonNull(secondPort);if(filter!=null&&!(control instanceof FlowControl.Passive))throw new IllegalArgumentException("Filter must be passive");if(heat!=null&&(filter!=null||!(control instanceof FlowControl.Passive)))throw new IllegalArgumentException("A heat-exchanging side is a passive run without a filter");if(blockedDirections<0||blockedDirections>3)throw new IllegalArgumentException("Invalid pipe closure");if(forbiddenDirections<0||forbiddenDirections>3)throw new IllegalArgumentException("Invalid permanent pipe direction restriction");sections=coalesce(sections);Objects.requireNonNull(control);if(sections.isEmpty())throw new IllegalArgumentException("Empty hydraulic run");}
         private record SectionShape(double diameter,double roughness,int channels) {}
