@@ -42,10 +42,12 @@ class ExchangerCouplingTest {
         return List.of(plain(from,0,0,z,Kind.GENERATOR),plain(100+id,1,0,z,Kind.PIPE),side(id,at(2,0,z),at(4,0,z),passage,heat),plain(200+id,5,0,z,Kind.PIPE),plain(to,6,0,z,Kind.VOID));
     }
     /** The exchanger's tube side (hot) and shell side (cold), each in its own line: two islands. */
-    private List<PhysicalFluidTopology.Device> exchanger() {
+    private List<PhysicalFluidTopology.Device> exchanger(){return exchanger(HeatUnit.Control.OFF);}
+    /** The same with the cold side under {@code cold} (W4). */
+    private List<PhysicalFluidTopology.Device> exchanger(HeatUnit.Control cold) {
         var devices=new ArrayList<PhysicalFluidTopology.Device>();
         devices.addAll(line(1,HOT,2,0,HeatSides.tubePassage(SHELL,TUBES),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,AREA,COLD)));
-        devices.addAll(line(3,COLD,4,5,HeatSides.shellPassage(SHELL,TUBES),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,AREA,HOT)));
+        devices.addAll(line(3,COLD,4,5,HeatSides.shellPassage(SHELL,TUBES),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,AREA,HOT).withControl(cold)));
         return devices;
     }
 
@@ -106,6 +108,16 @@ class ExchangerCouplingTest {
         }
         void run(double seconds){long ticks=Math.round(seconds*20);for(long i=0;i<ticks;i++){epoch[0]++;coordinator.tick();drain();}}
         double seconds(){return epoch[0]/20.0;}
+        /** An inlet step (W4): island {@code id} replaced at its committed tick, through a topology event, by its own graph
+         * with generator {@code node} delivering {@code state}. */
+        void step(long id,long node,FluidThermodynamics.State state) {
+            var island=coordinator.snapshot(id);var event=UUID.randomUUID();long tick=island.clock().committedTick();
+            coordinator.fence(event,tick,Set.of(id));
+            var nodes=new ArrayList<>(island.graph().reservoirs());
+            for(int i=0;i<nodes.size();i++)if(nodes.get(i).id()==node)nodes.set(i,new PassiveNetwork.Reservoir(node,nodes.get(i).elevation(),state,PassiveNetwork.NodeKind.GENERATOR));
+            var graph=new PassiveNetwork(nodes,island.graph().pipes(),island.graph().scheduledTransfers());
+            coordinator.topology(Set.of(event),Set.of(id),List.of(new IslandCoordinator.Replacement(id,graph)),model,tick,island.clock().onlineTick(),Map.of(),Set.of(),Map.of(),()->{});
+        }
         IslandCoordinator.Snapshot island(long id){return coordinator.observe(id);}
         /** The heat in transit as of the side further behind (what the give-backs return). */
         double transit(){return coordinator.settledTransit(PhysicalFluidTopology.sideIdentity(Math.min(HOT,COLD)));}
@@ -140,8 +152,9 @@ class ExchangerCouplingTest {
     private HeatCurve curve(FluidThermodynamics.State s,double low,double high){return HeatCurve.sample(model,PhaseLayout.totalAmounts(s),s.pressure(),low,high,HeatCurve.Films.DEFAULT,()->{});}
 
     /** Hot water at 90 °C from 2 bar and cold water at 20 °C from 1.5 bar, each through its side into a 1 atm void. */
-    private Rig waterPair(int hotCadence,int coldCadence,CertificatePolicy policy) {
-        var compiled=PhysicalFluidTopology.compile(exchanger(),Map.of(1L,source(1,water(363.15,200_000)),2L,sink(2,101_325),3L,source(3,water(293.15,150_000)),4L,sink(4,101_325)));
+    private Rig waterPair(int hotCadence,int coldCadence,CertificatePolicy policy){return waterPair(hotCadence,coldCadence,policy,HeatUnit.Control.OFF);}
+    private Rig waterPair(int hotCadence,int coldCadence,CertificatePolicy policy,HeatUnit.Control cold) {
+        var compiled=PhysicalFluidTopology.compile(exchanger(cold),Map.of(1L,source(1,water(363.15,200_000)),2L,sink(2,101_325),3L,source(3,water(293.15,150_000)),4L,sink(4,101_325)));
         assertEquals(2,compiled.islands().size(),"each side in its own island");
         var rig=new Rig(policy);rig.hotIsland=islandOf(compiled,HOT);rig.coldIsland=islandOf(compiled,COLD);
         rig.register(rig.hotIsland,compiled.islands().get((int)rig.hotIsland-1).graph(),hotCadence);
@@ -286,6 +299,37 @@ class ExchangerCouplingTest {
      * Certificates (plan section 5.2, the wake): two steady sides certify; heat put in transit wakes the certified other
      * side at the first side's next booking, and both settle back.
      */
+    /**
+     * W4's gate (plan section 6 and its evidence): the cold side's bypass holds its outlet at 45 °C, where the exchanger
+     * without it heats the water to 52.8 °C; then the hot inlet steps from 90 to 105 °C. The controller plans the bypass with
+     * the quasi-steady wall at each cold slice start, from the hot side as read, so the step reaches the cold outlet one
+     * slice late (nothing damps it) and is taken out over the next slices as the hot side's new record arrives. A set point
+     * the exchanger cannot reach closes the bypass and the status says so. Energy stays exact throughout.
+     */
+    @Test void aBypassHoldsTheColdOutletAfterAHotInletStep() {
+        double target=318.15;
+        var rig=waterPair(100,100,CertificatePolicy.disabled(),new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,target,0,0));
+        rig.run(300);
+        var cold=seen(rig.island(rig.coldIsland),COLD);
+        assertEquals(target,cold.out.temperature(),.1,"the bypass holds 45 °C");
+        assertTrue(cold.law.bypass()>0&&cold.law.bypass()<1,"bypass "+cold.law.bypass());assertEquals(HeatControl.Limit.NONE,cold.law.limit());
+        double before=cold.law.bypass();
+        rig.step(rig.hotIsland,1,water(378.15,200_000));
+        double worst=0,last=0;
+        for(int i=1;i<=300;i++){rig.run(1);double error=Math.abs(seen(rig.island(rig.coldIsland),COLD).out.temperature()-target);worst=Math.max(worst,error);if(error>.1)last=i;}
+        cold=seen(rig.island(rig.coldIsland),COLD);
+        System.out.printf(Locale.ROOT,"hot inlet +15 K at 5 s slices: cold outlet off by at most %.2f K, within 0.1 K from %.0f s; bypass %.3f -> %.3f; transit %.3g J%n",worst,last,before,cold.law.bypass(),rig.transit());
+        assertEquals(target,cold.out.temperature(),.1,"held again after the step");
+        assertTrue(cold.law.bypass()>before,"the bypass opens to the hotter inlet");
+        assertTrue(last<=120,"within 0.1 K after "+last+" s");
+        assertLedger(rig,0,"under control");
+        var short_=waterPair(100,100,CertificatePolicy.disabled(),new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,353.15,0,.2));
+        short_.run(120);
+        var closed=seen(short_.island(short_.coldIsland),COLD);
+        assertEquals(0,closed.law.bypass());assertEquals(HeatControl.Limit.HIGHEST,closed.law.limit());
+        assertEquals("LIMITED: the bypass is closed / ",FluidWorldAuthority.controlStatus(closed.law,null));
+        assertSteady(short_,.05,"80 °C out of reach");
+    }
     @Test void certifiedSidesWakeWhenTheTransitMoves() {
         var rig=waterPair(100,100,CertificatePolicy.defaults());
         for(int i=0;i<240&&!(rig.island(rig.hotIsland).certificate().isPresent()&&rig.island(rig.coldIsland).certificate().isPresent());i++)rig.run(5);

@@ -29,6 +29,27 @@ class ExchangerRelayTest {
         for(int k=1;k<8;k++)assertTrue(wall.temperatures()[k]<wall.temperatures()[k-1],"the wall falls along the hot stream");
         assertEquals(1,ExchangerRelay.wall(hot,cold,wall.temperatures()).sweeps(),"a converged wall is kept as it is");
     }
+    /**
+     * W4 (plan section 6): a controlled side's bypass and wall are solved together at the slice start, so the quasi-steady
+     * exchanger as planned meets the set point: the cold stream of the counterflow case held at 315 K, where it reaches
+     * 331 K without a bypass (NTU 1.2, Cr 0.5). The plan's cost is printed.
+     */
+    @Test void theBypassAndTheWallMeetTheSetPointTogether() {
+        var control=new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,315,0,1);
+        var own=new HeatSide(10,new HeatCurve.Films(2000,2000,2000),side(10,2000).wall(),0,0,1,1,control,HeatControl.Limit.NONE);
+        var cold=new ExchangerRelay.Stream(liquid(2000),h(300),4,own,true);
+        var hot=new ExchangerRelay.Stream(liquid(2000),h(400),2,side(10,2000),false);
+        var read=new ExchangerRelay.Read(null,false,0,5,0);
+        var planned=ExchangerRelay.plan(own,cold,hot,read,5);
+        assertTrue(planned.bypass()>0&&planned.bypass()<1,"bypass "+planned.bypass());assertEquals(HeatControl.Limit.NONE,planned.limit());
+        var through=new ExchangerRelay.Stream(cold.curve(),cold.inlet(),cold.massFlow(),planned,true);
+        var wall=ExchangerRelay.wall(through,hot,null);
+        double mixed=h(300)+planned.withInputs(wall.temperatures(),planned.bypass(),0,1).heat(cold.curve(),cold.inlet(),4)/4;
+        assertEquals(h(315),mixed,.02*4180,"the quasi-steady exchanger at the planned bypass meets 315 K within the wall's tolerance");
+        long start=System.nanoTime();int runs=50;for(int i=0;i<runs;i++)ExchangerRelay.plan(own,cold,hot,read,5);
+        System.out.printf(java.util.Locale.ROOT,"controlled plan from a cold wall: %.3f ms; again from its own wall: same bypass %b%n",(System.nanoTime()-start)/1e6/runs,
+                ExchangerRelay.plan(planned,cold,hot,read,5).bypass()==planned.bypass());
+    }
     /** Plan section 5.2: a side without flow takes no give-back; a side whose partner is still moves no heat in its cells,
      * takes the whole due and keeps its outlet between the two inlet temperatures. */
     @Test void thePlanMovesNothingWithoutFlowAndGivesBackWithinTheInlets() {

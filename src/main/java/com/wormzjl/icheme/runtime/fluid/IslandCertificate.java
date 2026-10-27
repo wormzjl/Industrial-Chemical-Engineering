@@ -338,9 +338,14 @@ public final class IslandCertificate {
                 +";inventoryBudget="+Double.toHexString(policy.inventoryBudget())+";maximumIntervals="+policy.maximumIntervals()
                 +";confirmIntervals="+policy.confirmIntervals()+";recheckSeconds="+policy.recheckSeconds();
     }
+    /** A heat side's controller (W4): absent, or its target, value, low limit and manual effort. */
+    private static void control(Digest d,com.wormzjl.icheme.science.fluid.network.HeatControl control) {
+        if(control==null){d.integer(0);return;}
+        d.integer(1);d.text(control.target().name());d.real(control.value());d.real(control.lowLimit());d.real(control.manual());
+    }
     /** The digest of what replay takes to be fixed about an island: everything but its finite inventories and states. */
     static String graphIdentity(PassiveNetwork graph) {
-        var d=new Digest();d.text("icheme-certificate-graph-identity-5");d.integer(graph.reservoirs().size());
+        var d=new Digest();d.text("icheme-certificate-graph-identity-6");d.integer(graph.reservoirs().size());
         for(var node:graph.reservoirs()) {
             d.number(node.id());d.text(node.kind().name());d.real(node.elevation());
             // A junction's volume is a numerical placeholder that a solve may move; a vessel's is its identity.
@@ -366,7 +371,10 @@ public final class IslandCertificate {
             switch(pipe.heat()){
                 case null->d.integer(0);
                 case com.wormzjl.icheme.science.fluid.network.HeatSide side->{d.integer(1);d.real(side.area());d.real(side.films().liquid());d.real(side.films().twoPhase());d.real(side.films().gas());
-                    d.integer(side.wall().length);for(double t:side.wall())d.real(t);d.real(side.bypass());d.real(side.giveBack());d.number(side.partner());d.real(side.active());}
+                    d.integer(side.wall().length);for(double t:side.wall())d.real(t);d.real(side.bypass());d.real(side.giveBack());d.number(side.partner());d.real(side.active());
+                    control(d,side.control());d.integer(side.limit().ordinal());}
+                case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();d.integer(3);d.real(cooled.area());d.real(air.temperature());d.real(air.barePerFace());d.real(air.film());d.real(air.capacity());d.real(air.natural());
+                    d.real(cooled.fans());control(d,cooled.control());d.integer(cooled.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.real(coil.reach());d.real(coil.duty());d.real(coil.firing());}
             }
             // What each end draws (PassiveNetwork.PhasePort): it changes the equations, so a replay holds only under it.

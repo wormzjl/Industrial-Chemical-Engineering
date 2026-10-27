@@ -90,6 +90,57 @@ class HeatSideTopologyTest {
         }
         assertTrue(outlets[1]<outlets[0]-1,"the fans cool more than natural draught");
     }
+    /** One 3 × 6 m air cooler bay under {@code control}, fed water at {@code inlet} K from a 1.3 bar generator into a 1 atm void. */
+    private PassiveNetwork controlledBay(HeatUnit.Control control,double inlet) {
+        var shape=com.wormzjl.icheme.science.equipment.EquipmentShape.unit(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.AIR_COOLER,3,6,
+                com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.SOUTH,4);
+        var definition=HeatSides.of(shape).getFirst();
+        var unit=new HeatUnit(HeatSides.Unit.AIR_COOLER,HeatSides.Side.PROCESS,definition.area(),0).withControl(control);
+        var ports=List.of(port(at(10,0,10),WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(at(0,0,0),EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));
+        var devices=List.of(plain(1,8,0,10,Kind.GENERATOR),plain(20,9,0,10,Kind.PIPE),side(10,ports,definition.passage(),unit),plain(30,1,0,0,Kind.PIPE),plain(2,2,0,0,Kind.VOID));
+        return PhysicalFluidTopology.compile(devices,Map.of(1L,new PassiveNetwork.Reservoir(1,0,water(inlet,130_000),PassiveNetwork.NodeKind.GENERATOR),
+                2L,new PassiveNetwork.Reservoir(2,0,water(300,101_325),PassiveNetwork.NodeKind.VOID))).islands().getFirst().graph();
+    }
+    /** {@code graph} with its generator {@code id} delivering water at {@code inlet} K instead: an inlet step. */
+    private PassiveNetwork withInlet(PassiveNetwork graph,long id,double inlet) {
+        var nodes=new ArrayList<>(graph.reservoirs());
+        for(int i=0;i<nodes.size();i++)if(nodes.get(i).id()==id)nodes.set(i,new PassiveNetwork.Reservoir(id,nodes.get(i).elevation(),water(inlet,130_000),PassiveNetwork.NodeKind.GENERATOR));
+        return new PassiveNetwork(nodes,graph.pipes(),graph.scheduledTransfers());
+    }
+    /** The bay's side after {@code seconds} s of {@code graph}: its outlet temperature (K) and its law as last planned. */
+    private record Cooled(PassiveNetwork graph,double outlet,AirCooled law) {}
+    private Cooled run(PassiveNetwork graph,double seconds) {
+        var end=new PassiveIntervalSolver(model).solve(graph,seconds,PassiveIntervalSolver.Settings.defaults(),()->{}).graph();
+        var side=end.pipes().stream().filter(p->p.id()==PhysicalFluidTopology.sideIdentity(10)).findFirst().orElseThrow();
+        return new Cooled(end,end.reservoirs().get(side.second()).state().temperature(),(AirCooled)side.heat());
+    }
+    /**
+     * W4's air cooler gate (plan section 6): the fans hold the outlet of 85 °C water at 65 °C, between natural draught
+     * (77.4 °C) and full fans (62.7 °C) on this bay's 61 m² of bare tube, and again after the inlet steps to 75 °C. The controller plans the fans at each step
+     * from its start (as a fired coil's firing), so after 300 s, the outlet junction's 14 s lag spent, the outlet stands at
+     * its set point. A set point below what full fans reach stops at full fans, LIMITED; the low limit holds above one; a
+     * set point above what still fans reach stops at natural draught.
+     */
+    @Test void anAirCoolersFansHoldItsOutletAfterAnInletStep() {
+        var held=run(controlledBay(new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,338.15,0,1),358.15),300);
+        assertEquals(338.15,held.outlet(),.1,"the fans hold 65 °C");
+        assertEquals(HeatControl.Limit.NONE,held.law().limit());assertTrue(held.law().fans()>0&&held.law().fans()<1,"fans at "+held.law().fans());
+        var stepped=run(withInlet(held.graph(),1,348.15),300);
+        assertEquals(338.15,stepped.outlet(),.1,"and again after the inlet falls to 75 °C");
+        assertTrue(stepped.law().fans()<held.law().fans(),"with slower fans: "+stepped.law().fans()+" against "+held.law().fans());
+        System.out.printf(Locale.ROOT,"air cooler at 65 °C: fans %.3f from 85 °C, %.3f from 75 °C%n",held.law().fans(),stepped.law().fans());
+        var cold=run(controlledBay(new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,318.15,0,1),358.15),300);
+        assertEquals(1,cold.law().fans());assertEquals(HeatControl.Limit.HIGHEST,cold.law().limit());
+        assertTrue(cold.outlet()>318.15+5,"45 °C is out of reach: "+cold.outlet());
+        assertEquals("LIMITED: the fans run at full speed / ",FluidWorldAuthority.controlStatus(cold.law(),null));
+        var guarded=run(controlledBay(new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,318.15,340.15,1),358.15),300);
+        assertEquals(340.15,guarded.outlet(),.1,"the low limit holds 67 °C");
+        assertEquals(HeatControl.Limit.LOW_LIMIT,guarded.law().limit());
+        var warm=run(controlledBay(new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,353.15,0,1),358.15),300);
+        assertEquals(0,warm.law().fans());assertEquals(HeatControl.Limit.LOWEST,warm.law().limit());
+        assertTrue(warm.outlet()<353.15-1,"natural draught alone cools below 80 °C: "+warm.outlet());
+        System.out.printf(Locale.ROOT,"air cooler from 85 °C: full fans %.2f K, natural draught %.2f K, low limit %.2f K%n",cold.outlet(),warm.outlet(),guarded.outlet());
+    }
     /** A fired heater's coil over {@code area} m² firing to {@code setPoint} K with its burners at {@code burners}. */
     private static HeatUnit coil(HeatSides.Side side,double area,double setPoint,double burners) {
         return new HeatUnit(HeatSides.Unit.FIRED_HEATER,side,area,0).withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING,setPoint,0,burners));

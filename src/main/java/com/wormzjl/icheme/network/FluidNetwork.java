@@ -62,7 +62,12 @@ public final class FluidNetwork {
     private static String plainNumber(double value){return java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();}
     /** Required on the wire; a missing or unknown value is rejected by Controls validation. */
     public enum Power {ON,OFF}
-    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow) {
+    /**
+     * A menu's edit form. {@code heat} is a controllable heat side's control (batch 2026-10-27-heat-exchanger-design, W4: an
+     * exchanger side's or an air cooler's mode, set point, low limit and manual share), null for any other device.
+     */
+    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat) {
+        public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,null);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,FlowControl.ValveSource.NONE,1);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,Power.ON);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,DEFAULT_PRESSURE_RATIO);}
@@ -89,7 +94,8 @@ public final class FluidNetwork {
             var heat=d.heat();
             var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()||heat!=null&&(heat.fans()||heat.burners())&&heat.control().share()==0?Power.OFF:Power.ON;
             double temperature=heat!=null&&heat.burners()?heat.control().target():record.spec().temperature();
-            return new Controls(temperature,pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget());
+            return new Controls(temperature,pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget(),
+                    heat!=null&&heat.controllable()?heat.control():null);
         }
     }
     /**
@@ -320,12 +326,21 @@ public final class FluidNetwork {
                     case GENERATOR->spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);
                     case VOID->spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());
                     case RESERVOIR->throw new IllegalArgumentException("Reservoir initialization is fixed; existing fluid is conserved.");
-                    // A heat side's passage is its unit's datasheet; an air cooler's fans switch, a fired heater's burners switch
-                    // and fire to its set point (batch 2026-10-27-heat-exchanger-design; the edit moves both coils, FluidWorldAuthority.edit).
+                    // A heat side's passage is its unit's datasheet; a fired heater's burners switch and fire to its set point
+                    // (batch 2026-10-27-heat-exchanger-design; the edit moves both coils, FluidWorldAuthority.edit). An
+                    // exchanger side and an air cooler take a control (W4): a mode, its set point inside the package's
+                    // envelope, a low limit and the manual share (an air cooler's fans switch as its power).
                     case HEAT_SIDE->{
                         double share=controls.power==Power.ON?1:0;
-                        if(heat.fans())heat=heat.withControl(heat.control().withShare(share));
-                        else if(heat.burners()){world.model().domain().requireInputTemperature(controls.temperature);heat=heat.withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING,controls.temperature,0,share));}
+                        if(heat.burners()){world.model().domain().requireInputTemperature(controls.temperature);heat=heat.withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING,controls.temperature,0,share));}
+                        else if(heat.controllable()&&controls.heat!=null) {
+                            var c=controls.heat;
+                            if(c.mode()==HeatUnit.Mode.FIRING)throw new IllegalArgumentException("Only a fired heater's coil fires to a set point.");
+                            if(c.mode()==HeatUnit.Mode.OUTLET_TEMPERATURE)world.model().domain().requireInputTemperature(c.target());
+                            if(c.lowLimit()>0)world.model().domain().requireInputTemperature(c.lowLimit());
+                            heat=heat.withControl(heat.fans()?c.withShare(share):c);
+                        }
+                        else if(heat.fans())heat=heat.withControl(heat.control().withShare(share));
                         else throw new IllegalArgumentException("A heat side's passage is its unit's datasheet.");
                     }
                 }

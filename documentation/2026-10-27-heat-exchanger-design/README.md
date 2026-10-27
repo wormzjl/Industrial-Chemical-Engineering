@@ -6,11 +6,11 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters) and W3 (the two-sided coupling, form C) are built; study W3a is done. W4 (control) is next. The owner answered Q1 to Q14 and Q16 (form C); Q15 is open. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C) and W4 (the built-in control) are built; study W3a is done. W7 (the kettle) is next. The owner answered Q1 to Q14 and Q16 (form C); Q15 is open. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5, W6, W3a and W3 as built (section 10). It covers:
+- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5, W6, W3a, W3 and W4 as built (section 10). It covers:
   - the physics in numbers and the owner's decisions;
   - UA from size with a film per phase and the approximations that keep it free of lag;
   - the air cooler (air at 25 °C) and the fired heater (heat to a set temperature, capped at its duty);
@@ -61,6 +61,13 @@ Changed by W3:
 - `science/fluid/network`: `ExchangerRelay` (new: the 8-cell quasi-steady wall on two curves, the capacity-rate share and the plan of a side's wall, give-back and active share); `HeatSide` (the partner's connection id and the active share); `HeatCurve.temperatureSlope`; `PassiveStepSolver.couple`; `PassiveIntervalSolver.solve` and `RetainedSolver.solve` (the reads);
 - `science/equipment/HeatSides`: an exchanger's side law, 8 cells with its partner's identity;
 - `runtime/fluid`: `IslandCoordinator` (the fence in `reconsider`, `verify` and the pump; the reads at dispatch; the booking at commit and replay; the records, transits and wake queue), `ProcessSolveServices.FluidIslandCommand` (the reads), `HeatUnit.withTransit`, `WorldTopologyLedger` (`heatTransits`, `withHeatTransits`, `removedHeat`), `FluidWorldAuthority` (the transit loaded, captured and booked at removal), `FluidCheckpointCodec` (state format 26), `IslandCertificate` (graph identity tag -5), `FluidRuntimeDiagnostics.couplingWakes`.
+
+Changed by W4:
+
+- `science/fluid/network`: `HeatControl` (new: the controller's targets, low limit, manual effort and its setting), `AirCooled` (new: the air cooler's law, its fans the actuator, its air's films), `HeatSide` (the controller and its planned limit), `HeatLaw` (permits `AirCooled`), `HeatCurve` (the knots' vapour fractions, `withFilms`, `lowestEnthalpyAt`), `ExchangerRelay.plan` (the bypass and the wall in turn), `PassiveStepSolver.plan` (W6's `fire`: firing and fans per step; the curve cache re-films);
+- `science/equipment/HeatSides` (`AIR`; `airFilms` reads it; `heatSide` takes the controller);
+- `runtime/fluid`: `HeatUnit` (`Mode.FAN` removed, `controller`, `controllable`), `FluidCheckpointCodec` (state format 27), `IslandCertificate` (graph identity 6), `IslandCoordinator` (a moved bypass wakes), `FluidView.Heat.bypass`, `FluidWorldAuthority` (`controlStatus`, the planned fans and bypass in the view);
+- `network/FluidNetwork` (`Controls.heat`, the side's edit), `FluidDeviceScreen` (the control's rail and readings), `en_us.json`.
 
 The plan also touches:
 
@@ -161,6 +168,14 @@ The plan also touches:
   - Gates: `ExchangerCouplingTest` 7 (steady state at three cadence pairs within 0.002 K; a 60 s hold; a feed/effluent loop; steam in methane against water at 20 s slices; a side without flow books 0 J; a load while the sides stand apart; certify and wake), `ExchangerRelayTest` 2, `FluidFactsCompatTest` +1 (the transit fact); quick suite 1687, no failures. The wall: 7 sweeps, 0.10 ms.
   - No in-game check: the screen did not change.
 
+- 2026-10-27, W4 the built-in control, in the W4 commit.
+  - One controller per side (`HeatControl`: manual, outlet temperature or duty, a low limit) on the unit's own actuator: an exchanger side's bypass, planned with the wall at each slice start; an air cooler's fans, planned at each step as W6's firing. Its root is dead-beat on the side's own law, the give-back not counted; at an end short of the target the status says LIMITED, and a held low limit says LOW LIMIT.
+  - Decisions (reversible, plan section 10): `Mode.FAN` removed (no save held it); the air cooler gets its own law, `AirCooled`, since its fans set its films; the bypass and the wall solved in turn, not once; the low limit in every mode on a cooled side's own outlet; the planned limit kept in the law for the status line.
+  - Fixed in passing: a fired heater coil's "Other side" button sat on its set point field's row (W6).
+  - Formats: state format 27, certificate graph identity 6. Facts unchanged.
+  - Gates: `HeatControlTest` 5, `ExchangerRelayTest` +1, `ExchangerCouplingTest` +1 (45 °C held through a +15 K hot inlet step: at most 0.70 K off, within 0.1 K from 44 s), `HeatSideTopologyTest` +1 (65 °C held by the fans through an inlet step, the LIMITED ends, a 67 °C low limit), the codec round trip; quick suite 1695, no failures.
+  - In-game check: the owner stopped it ("that's enough client testing") after the air cooler's manual screen (an opus subagent on the bridge lane; screenshots in the worktree's `tmp/w4-ingame/`). The rail showed the fans, the mode button and the low limit in order. The low limit's label was cut at the rail's width at GUI scale 2; it now reads "Low limit (C) or blank". The rest of the screen is judged by the gates, the compile and the rail's row count, not in the client.
+
 ## Notes
 
 - Q16 answered 2026-10-27: form C, the coupling fence (W3a). Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
@@ -172,6 +187,7 @@ The plan also touches:
 - Open from W5: the drawn fans keep turning when switched off (the motion switch is the client's own).
 - Open from W6: the heaters' FUEL nozzle stays unconnected (fuel is another scope, Q11); the datasheet does not list the coils' surfaces yet.
 - Measured in W1: a junction boils from heat inside the Newton. Measured in W3: the quasi-steady wall on a condensing curve (7 sweeps, 0.10 ms). Not measured yet: the campaign's cost and holds in worlds with exchangers (it has none).
+- Open from W4: the target vapour fraction (plan section 6) is not built; a controller on both sides of one exchanger is allowed and untested; the kettle's steam valve waits for W7 and the assembly's real valves for W8.
 - Open from W3:
   - the authority's live load, capture and removal of the transit are gated through the ledger's snapshot methods, not by a GameTest;
   - after a load only the current record exists, so a side whose partner is a slice ahead reads it (D1);

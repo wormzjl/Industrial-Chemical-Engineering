@@ -1,11 +1,12 @@
 package com.wormzjl.icheme.science.equipment;
 
+import com.wormzjl.icheme.science.fluid.network.AirCooled;
 import com.wormzjl.icheme.science.fluid.network.FiredCoil;
+import com.wormzjl.icheme.science.fluid.network.HeatControl;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.network.HeatLaw;
 import com.wormzjl.icheme.science.fluid.network.HeatSide;
 import com.wormzjl.icheme.science.fluid.network.PipeResistance;
-import com.wormzjl.icheme.science.math.DeterministicMath;
 import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,6 +37,8 @@ public final class HeatSides {
     static final double AIR_COOLER_TUBE=.0254,AIR_COOLER_BORE=.0212;
     /** Natural draught through a bay whose fans stand still: the air's capacity and film of full fans times this. */
     static final double NATURAL_DRAUGHT=.25;
+    /** An air cooler's air per m² of bundle face, as its process side's law reads it ({@link AirCooled}). */
+    public static final AirCooled.Air AIR=new AirCooled.Air(AIR_TEMPERATURE,BARE_PER_FACE,AIR_FILM*FINNED_PER_FACE,AIR_CAPACITY,NATURAL_DRAUGHT);
     /**
      * A fired heater's convection coil's mean flux, kW/m² of bare tube (API 560 practice: 10 to 20 for finned and shock
      * tubes), against the radiant coil's {@link ProcessUnit#RADIANT_FLUX}: the coils take 30 % and 70 % of the duty
@@ -113,25 +116,27 @@ public final class HeatSides {
 
     /** An exchanger's wall cells in counterflow (plan section 5.1: within 0.9 % of exact counterflow up to NTU 5 at Cr 0.5). */
     public static final int EXCHANGER_CELLS=8;
-    /** {@link #heatSide(Unit,Side,double,double,double,long)} of a side without a partner. */
-    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target){return heatSide(unit,side,area,share,target,0);}
+    /** {@link #heatSide(Unit,Side,double,double,double,long,HeatControl)} of a side without a partner or controller. */
+    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target){return heatSide(unit,side,area,share,target,0,null);}
     /**
      * The heat law a side moves heat through, or null where it has none yet (a kettle waits for its package, W7, and an
-     * exchanger side without a partner), with its actuator at {@code share} and its set point {@code target} (K):
+     * exchanger side without a partner), with its actuator at {@code share}, its set point {@code target} (K) and its
+     * built-in {@code control} (W4, plan section 6; null for none), which sets an exchanger side's bypass and an air cooler's
+     * fans:
      * <ul><li>an exchanger's side over its tube surface {@code area} (m²) in {@link #EXCHANGER_CELLS} cells, with the films
      * per phase of plan section 4 and its bypass at {@code share}, against the wall its other side's stream makes:
      * {@code partner} is that side's connection id, and each slice plans the wall from it (plan section 5.2; the cells' 25 °C
      * here is never moved against);</li>
      * <li>an air cooler's process side against air at {@link #AIR_TEMPERATURE} over its bare tube surface {@code area}
-     * (m²), with its fans at {@code share} of full speed ({@link #airFilms});</li>
+     * (m²), with its fans at {@code share} of full speed ({@link #AIR});</li>
      * <li>a fired heater's coil towards the set point {@code target}, the radiant coil all the way and the convection coil
      * its 30 % share of it, at most its {@link #coilDuty} with the burners at {@code share}.</li></ul>
      */
-    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner) {
+    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner,@Nullable HeatControl control) {
         return switch(unit) {
             case EXCHANGER->{if(partner==0)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
-                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1);}
-            case AIR_COOLER->new HeatSide(area,airFilms(share),new double[]{AIR_TEMPERATURE},0,0);
+                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE);}
+            case AIR_COOLER->new AirCooled(area,AIR,share,control,HeatControl.Limit.NONE);
             case FIRED_HEATER->new FiredCoil(target,side==Side.RADIANT?1:1-ProcessUnit.RADIANT_SHARE,coilDuty(side,area,share),1);
             default->null;
         };
@@ -144,16 +149,7 @@ public final class HeatSides {
      * natural draught. At full fans 2.15 (liquid), 2.44 (condensing) and 0.43 (gas) kW/K per m² of face; with the fans
      * still, 0.63, 0.65 and 0.29.
      */
-    public static HeatCurve.Films airFilms(double fans) {
-        if(!(fans>=0&&fans<=1))throw new IllegalArgumentException("Invalid fan share "+fans);
-        double draught=NATURAL_DRAUGHT+(1-NATURAL_DRAUGHT)*fans,air=AIR_FILM*FINNED_PER_FACE*draught,capacity=AIR_CAPACITY*draught;
-        var process=HeatCurve.Films.DEFAULT;
-        return new HeatCurve.Films(airFilm(process.liquid(),air,capacity),airFilm(process.twoPhase(),air,capacity),airFilm(process.gas(),air,capacity));
-    }
-    private static double airFilm(double process,double air,double capacity) {
-        double conductance=1/(1/(BARE_PER_FACE*process)+1/air);
-        return -capacity*DeterministicMath.expm1(-conductance/capacity)/BARE_PER_FACE;
-    }
+    public static HeatCurve.Films airFilms(double fans){return AIR.films(fans);}
     /** An air cooler's fan power, W, over bare tube surface {@code area} (m²) with its fans at {@code fans} of full speed (the fan laws: the cube of the speed). */
     public static double fanPower(double area,double fans){return FAN_POWER*area/BARE_PER_FACE*fans*fans*fans;}
 }

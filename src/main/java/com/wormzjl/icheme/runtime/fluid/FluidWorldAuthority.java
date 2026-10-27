@@ -608,6 +608,17 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
         return new FluidSavedData.Capture(new FluidCheckpointCodec.Checkpoint(islands),world);
     }
+    /** The status a side's controller adds (W4, plan section 6), ending in " / ", or nothing while it meets its target. */
+    static String controlStatus(com.wormzjl.icheme.science.fluid.network.HeatLaw law,HeatUnit unit) {
+        var why=law instanceof com.wormzjl.icheme.science.fluid.network.HeatSide side?side.limit():law instanceof com.wormzjl.icheme.science.fluid.network.AirCooled cooled?cooled.limit():com.wormzjl.icheme.science.fluid.network.HeatControl.Limit.NONE;
+        boolean fans=law instanceof com.wormzjl.icheme.science.fluid.network.AirCooled;
+        return switch(why) {
+            case NONE->"";
+            case LOWEST->fans?"LIMITED: the fans stand still, natural draught moves more / ":"LIMITED: the bypass is fully open / ";
+            case HIGHEST->fans?"LIMITED: the fans run at full speed / ":"LIMITED: the bypass is closed / ";
+            case LOW_LIMIT->String.format(java.util.Locale.ROOT,"LOW LIMIT: the outlet is held at %.1f K / ",unit==null?0:unit.control().lowLimit());
+        };
+    }
     /** A device's view, as a presentation read: queued events are not applied (they apply on the engine's tick), and a
      * certified island is materialised to now but never woken by it. */
     public FluidView view(long id){owned();return view(id,new HashMap<>());}
@@ -658,6 +669,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             double shortfall=coil.setTemperature()-snapshot.graph().reservoirs().get(pipe.second()).state().temperature();
             status=(coil.reach()<1?"DUTY INSUFFICIENT: the coil fires at its maximum / ":shortfall>0?String.format(java.util.Locale.ROOT,"DUTY INSUFFICIENT: outlet %.1f K below the set point / ",shortfall):"")+status;
         }
+        // A side's controller short of its target (W4, plan section 6): its actuator at an end, or held back by its low limit.
+        if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own)status=controlStatus(pipe.heat(),registration.device().heat())+status;
         if(filter!=null&&filter.clogged())status="filter clogged / "+status;
         var closures=snapshot.lastResult().map(PassiveIntervalSolver.Result::rejectionReasons).orElse(Map.of());
         for(var mapping:mappings)for(var pipe:snapshot.graph().pipes())if(pipe.id()==mapping.pipeId()&&pipe.blockedDirections()!=0&&pipe.filter()==null)status=solidClosure(mapping.pipeId(),closures)+" / "+status;
@@ -678,7 +691,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 PipePresentation.inspect(registration.device(),snapshot.graph(),mappings,history,seconds,componentNames.size()),
                 runtime.coordinator().bulkVolumeRates(owner),registration.device().geometry().area()));
         // A heat side (batch 2026-10-27-heat-exchanger-design): its outlet junction's temperature, the heat its HEAT boundaries
-        // booked over the interval, an air cooler's fans, a fired heater's burners, set point and most heat.
+        // booked over the interval, an air cooler's fans and an exchanger side's bypass as planned, a fired heater's burners,
+        // set point and most heat.
         var heat=registration.device().heat();
         if(heat!=null)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own) {
             double joule=0;
@@ -686,9 +700,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 if(boundary.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==own)joule+=boundary.totalEnergyJoule();
             double share=heat.control().share(),outlet=snapshot.graph().reservoirs().get(pipe.second()).state().temperature();
             var coil=pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil fired?fired:null;
+            if(pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.AirCooled cooled)share=cooled.fans();
+            Double bypass=pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.HeatSide side?side.bypass():null;
             view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),heat.partner()!=0,outlet,seconds>0?joule/seconds:0,
                     heat.fans()?share:null,heat.fans()?com.wormzjl.icheme.science.equipment.HeatSides.fanPower(heat.area(),share):null,
-                    heat.burners()?share:null,heat.burners()?heat.control().target():null,coil!=null?coil.duty():null));
+                    heat.burners()?share:null,heat.burners()?heat.control().target():null,coil!=null?coil.duty():null,bypass));
         }
         if(registration.device().kind()==TopologyCompiler.Kind.VOID) {
             var sources=new ArrayList<IslandCoordinator.Snapshot>();

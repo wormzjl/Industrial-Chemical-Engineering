@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.equipment.HeatSides;
+import com.wormzjl.icheme.science.fluid.network.HeatControl;
 import com.wormzjl.icheme.science.fluid.network.HeatLaw;
 import java.util.Objects;
 import org.jetbrains.annotations.Nullable;
@@ -20,8 +21,12 @@ import org.jetbrains.annotations.Nullable;
  * @param transitJoule the heat this side's unit holds in transit between its two sides (plan section 5.2), J
  */
 public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long partner,Control control,double transitJoule) {
-    /** The control modes of plan section 6. {@code OFF}: no controller, so the manual {@link Control#share} holds. */
-    public enum Mode { OFF, OUTLET_TEMPERATURE, DUTY, FAN, FIRING }
+    /**
+     * The control modes of plan section 6. {@code OFF}: no controller, so the manual {@link Control#share} holds.
+     * {@code OUTLET_TEMPERATURE} and {@code DUTY} act on the unit's own actuator (W4): an exchanger side's bypass, an air
+     * cooler's fans. {@code FIRING} is a fired heater's coil, firing to its set point (W6).
+     */
+    public enum Mode { OFF, OUTLET_TEMPERATURE, DUTY, FIRING }
     /**
      * @param mode     what the controller holds
      * @param target   the held value: K for an outlet or set temperature, W for a duty
@@ -35,7 +40,8 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
         public static final Control OFF=new Control(Mode.OFF,0,0,0);
         public Control {
             Objects.requireNonNull(mode);
-            if(!Double.isFinite(target)||!Double.isFinite(lowLimit)||lowLimit<0||!Double.isFinite(share)||share<0||share>1)throw new IllegalArgumentException("Invalid heat unit control");
+            if(!Double.isFinite(target)||!Double.isFinite(lowLimit)||lowLimit<0||!Double.isFinite(share)||share<0||share>1
+                    ||mode==Mode.OUTLET_TEMPERATURE&&!(target>0)||mode==Mode.DUTY&&target<0)throw new IllegalArgumentException("Invalid heat unit control");
         }
         public Control withShare(double value){return new Control(mode,target,lowLimit,value);}
     }
@@ -44,6 +50,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
         if(!Double.isFinite(area)||area<=0||partner<0||!Double.isFinite(transitJoule))throw new IllegalArgumentException("Invalid heat unit side");
         // A fired heater's coil fires towards its set point (owner Q11): its law needs one.
         if(unit==HeatSides.Unit.FIRED_HEATER&&(control.mode()!=Mode.FIRING||!(control.target()>0)))throw new IllegalArgumentException("A fired heater's coil fires to a set point");
+        if(unit!=HeatSides.Unit.FIRED_HEATER&&control.mode()==Mode.FIRING)throw new IllegalArgumentException("Only a fired heater's coil fires");
     }
     /** A fired heater's set point when built, K: 300 °C, its burners lit. */
     public static final Control FIRING=new Control(Mode.FIRING,573.15,0,1);
@@ -59,5 +66,22 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
     /** Whether the side is a fired heater's coil, whose burners and set point the player sets for both coils at once. */
     public boolean burners(){return unit==HeatSides.Unit.FIRED_HEATER;}
     /** The heat law this side moves heat through ({@link HeatSides#heatSide}; an exchanger's against its partner's connection), or null where it has none. */
-    public @Nullable HeatLaw heatSide(){return HeatSides.heatSide(unit,side,area,control.share(),control.target(),partner==0?0:PhysicalFluidTopology.sideIdentity(partner));}
+    public @Nullable HeatLaw heatSide(){return HeatSides.heatSide(unit,side,area,control.share(),control.target(),partner==0?0:PhysicalFluidTopology.sideIdentity(partner),controller());}
+    /**
+     * The side's built-in controller as its heat law reads it (W4, plan section 6), or null for none: an exchanger side's or
+     * an air cooler's control with a target or a low limit. Its effort is the air cooler's fans, or an exchanger side's
+     * share through its cells (1 − the bypass share).
+     */
+    public @Nullable HeatControl controller() {
+        if(unit!=HeatSides.Unit.EXCHANGER&&unit!=HeatSides.Unit.AIR_COOLER)return null;
+        double manual=unit==HeatSides.Unit.AIR_COOLER?control.share():1-control.share();
+        return switch(control.mode()) {
+            case OFF->control.lowLimit()>0?new HeatControl(HeatControl.Target.MANUAL,0,control.lowLimit(),manual):null;
+            case OUTLET_TEMPERATURE->new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,control.target(),control.lowLimit(),manual);
+            case DUTY->new HeatControl(HeatControl.Target.DUTY,control.target(),control.lowLimit(),manual);
+            case FIRING->null;
+        };
+    }
+    /** Whether the player sets this side's control (W4): an exchanger side's and an air cooler's. */
+    public boolean controllable(){return unit==HeatSides.Unit.EXCHANGER||unit==HeatSides.Unit.AIR_COOLER;}
 }

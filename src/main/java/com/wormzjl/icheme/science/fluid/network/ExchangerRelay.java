@@ -20,6 +20,10 @@ public final class ExchangerRelay {
     public static final double TOLERANCE=.01;
     /** The most sweeps of the wall solve; a wall stopped short is still a valid wall (energy stays exact, only the transient changes). */
     public static final int MAXIMUM_SWEEPS=200;
+    /** A controlled side's bypass and wall are solved in turn until the bypass moves by less than this (W4, plan section 6)... */
+    public static final double BYPASS_TOLERANCE=1e-6;
+    /** ...or for at most this many rounds; the next slice goes on from where they stop. */
+    public static final int MAXIMUM_ROUNDS=8;
 
     /**
      * The other side as read at the slice start: the state of the node its stream is drawn from ({@code donor}) with the
@@ -53,6 +57,8 @@ public final class ExchangerRelay {
         boolean ascending(){return forward==(massFlow>=0);}
         double cell(){return law.area()/law.cells();}
         double temperature(){return curve.temperatureAt(inlet);}
+        /** The same stream through {@code side}'s cells (another bypass). */
+        Stream through(HeatSide side){return new Stream(curve,inlet,massFlow,side,forward);}
     }
     /** A solved wall, in the planning side's forward order, the sweeps it took and whether it reached the tolerance. */
     public record Wall(double[] temperatures,int sweeps,boolean converged) {}
@@ -164,26 +170,38 @@ public final class ExchangerRelay {
      * is known), {@code other} the other side's as read (null where none is known). With both streams flowing the wall is
      * the quasi-steady wall. With the other stopped or still the wall, which holds no heat, stands at the side's own stream:
      * its cells move nothing for the slice, and it keeps its last wall to start from when the other moves again. With the
-     * side's own flow unknown or still the wall stands at the other's inlet. The give-back is the side's share of
-     * {@code read}'s transit due, an enthalpy shift on its whole flow, scaled down so that its outlet at the slice start
-     * stays between the two inlet temperatures (the rest stays in transit); none without flow or without a read of the
-     * other side.
+     * side's own flow unknown or still the wall stands at the other's inlet. A side's controller (W4, plan section 6) sets its
+     * bypass against the wall: the two are solved in turn, the wall at the bypass and the bypass on the wall
+     * ({@link HeatControl#setting}, the give-back not counted), until the bypass settles, so the quasi-steady exchanger as
+     * planned meets the target at the other side as read. With the other side not moving, the bypass stands. The give-back
+     * is the side's share of {@code read}'s transit due, an enthalpy shift on its whole flow, scaled down so that its outlet
+     * at the slice start stays between the two inlet temperatures (the rest stays in transit); none without flow or without
+     * a read of the other side.
      */
     public static HeatSide plan(HeatSide own,Stream stream,@Nullable Stream other,Read read,double seconds) {
-        int n=own.cells();double[] wall=new double[n];double active=1-read.sitOut();
+        int n=own.cells();double[] wall=own.wall();double active=1-read.sitOut(),bypass=own.bypass(),mass=Math.abs(stream.massFlow());
+        var limit=HeatControl.Limit.NONE;
         boolean moving=other!=null&&!read.stopped()&&other.through()>0;
-        if(!moving){wall=own.wall();active=0;}
-        else if(stream.through()==0)Arrays.fill(wall,other.temperature());
-        else {var solved=wall(stream,other,own.wall());wall=solved.temperatures();}
-        var planned=own.withInputs(wall,own.bypass(),0,active);
-        double mass=Math.abs(stream.massFlow());
+        if(!moving)active=0;
+        else for(int round=1;;round++) {
+            var at=stream.through(own.withInputs(wall,bypass,0,1));
+            if(at.through()==0){wall=new double[n];Arrays.fill(wall,other.temperature());}
+            else wall=wall(at,other,wall).temperatures();
+            if(own.control()==null||round>MAXIMUM_ROUNDS)break;
+            double[] fixed=wall;
+            var setting=own.control().setting(u->own.withInputs(fixed,1-u,0,1).heat(stream.curve,stream.inlet,stream.massFlow),stream.curve,stream.inlet,mass,1-bypass);
+            double next=1-setting.effort();limit=setting.limit();
+            boolean settled=Math.abs(next-bypass)<BYPASS_TOLERANCE;bypass=next;
+            if(settled)break;
+        }
+        var planned=own.withInputs(wall,bypass,0,active,limit);var at=stream.through(planned);
         if(other==null||mass==0||read.transitDue()==0)return planned;
-        double share=share(capacityRate(stream,wall),seconds,moving?capacityRate(other,wall):0,read.partnerSeconds());
+        double share=share(capacityRate(at,wall),seconds,moving?capacityRate(other,wall):0,read.partnerSeconds());
         if(share==0)return planned;
         double shift=share*read.transitDue()/(mass*seconds);
         double mixed=stream.inlet+planned.heat(stream.curve,stream.inlet,stream.massFlow)/mass;
         double bound=stream.curve.enthalpyAt(other.temperature()),lo=Math.min(stream.inlet,bound),hi=Math.max(stream.inlet,bound);
         double allowed=Math.clamp(mixed+shift,lo,hi),scale=Math.clamp((allowed-mixed)/shift,0,1);
-        return own.withInputs(wall,own.bypass(),scale*shift,active);
+        return own.withInputs(wall,bypass,scale*shift,active,limit);
     }
 }

@@ -1736,12 +1736,16 @@ public final class PassiveStepSolver {
      * end's port draws at the node's state ({@link #endMoles}; a drum's liquid draw has its own bubble point, not the
      * drum's whole mixture's), at the node's pressure, over the node's temperature and the side's wall temperatures, 10 K
      * beyond each, inside the numerical box. Past that span the curve extends its end lines (AGENTS.md "Thermo validity").
-     * Null where the end draws nothing.
+     * Null where the end draws nothing. A curve kept for the same stream and span takes new films without a flash (an air
+     * cooler's planned fans, W4).
      */
     private HeatCurve sideCurve(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node,Runnable checkpoint) {
         var start=graph.reservoirs().get(node).state();int end=node==pipe.first()?0:1;var port=pipe.portAt(node);double volume=pipe.volume();
         var kept=sideCurves.computeIfAbsent(pipe.id(),id->new SideCurve[2]);var old=kept[end];var law=pipe.heat();
-        if(old!=null&&old.start()==start&&old.port()==port&&old.volume()==volume&&old.coldest()==law.coldest()&&old.hottest()==law.hottest()&&old.films().equals(law.films()))return old.curve();
+        if(old!=null&&old.start()==start&&old.port()==port&&old.volume()==volume&&old.coldest()==law.coldest()&&old.hottest()==law.hottest()) {
+            if(old.films().equals(law.films())||old.curve()==null)return old.curve();
+            var curve=old.curve().withFilms(law.films());kept[end]=new SideCurve(old.coldest(),old.hottest(),law.films(),port,volume,start,curve);return curve;
+        }
         double[] amounts=endMoles(start,port,volume);double total=0;for(double n:amounts)total+=n;
         HeatCurve curve=null;
         if(total>0&&endMass(start,port,volume)>0) {
@@ -1753,19 +1757,27 @@ public final class PassiveStepSolver {
         return curve;
     }
     /**
-     * {@code graph} with each fired coil's firing share planned for a step that starts with {@code flows} (kg/s per
-     * connection, in {@code graph}'s order; null where none is known: a coil then fires fully for the step), on its donor's
-     * curve ({@link FiredCoil#planned}; batch 2026-10-27-heat-exchanger-design, W6). The share stays fixed inside the
-     * step's Newton; the next step plans it again from where this one ended. {@code graph} itself where nothing changes.
+     * {@code graph} with each local heat actuator planned for a step that starts with {@code flows} (kg/s per connection, in
+     * {@code graph}'s order; null where none is known) on its donor's curve (batch 2026-10-27-heat-exchanger-design): a fired
+     * coil's firing share ({@link FiredCoil#planned}, W6; it fires fully where its end draws nothing) and a controlled air
+     * cooler's fans ({@link AirCooled#planned}, W4). Each stays fixed inside the step's Newton; the next step plans it again
+     * from where this one ended. An exchanger side's bypass needs its partner and is planned per slice ({@link #couple}).
+     * {@code graph} itself where nothing changes.
      */
-    public PassiveNetwork fire(PassiveNetwork graph,double[] flows,Runnable checkpoint) {
+    public PassiveNetwork plan(PassiveNetwork graph,double[] flows,Runnable checkpoint) {
         List<PassiveNetwork.Pipe> pipes=null;
         for(int e=0;e<graph.pipes().size();e++) {
-            var pipe=graph.pipes().get(e);if(!(pipe.heat() instanceof FiredCoil coil))continue;
+            var pipe=graph.pipes().get(e);
+            if(!(pipe.heat() instanceof FiredCoil)&&!(pipe.heat() instanceof AirCooled cooled&&cooled.control()!=null))continue;
             double flow=flows!=null&&flows.length==graph.pipes().size()?flows[e]:0;
             int donor=flow>=0?pipe.first():pipe.second();var curve=sideCurve(graph,pipe,donor,checkpoint);
-            var planned=curve==null?coil.withFiring(1):coil.planned(curve,endSpecificEnthalpy(graph.reservoirs().get(donor).state(),pipe.portAt(donor),pipe.volume()),flow);
-            if(planned.equals(coil))continue;
+            double inlet=curve==null?0:endSpecificEnthalpy(graph.reservoirs().get(donor).state(),pipe.portAt(donor),pipe.volume());
+            HeatLaw planned=switch(pipe.heat()) {
+                case FiredCoil coil->curve==null?coil.withFiring(1):coil.planned(curve,inlet,flow);
+                case AirCooled cooled->curve==null?cooled:cooled.planned(curve,inlet,flow);
+                default->pipe.heat();
+            };
+            if(planned.equals(pipe.heat()))continue;
             if(pipes==null)pipes=new ArrayList<>(graph.pipes());
             pipes.set(e,pipe.withHeat(planned));
         }

@@ -990,6 +990,8 @@ public final class IslandCoordinator {
         double slice=Math.min(other.clock.snapshot().cadenceTicks(),other.maximumSliceTicks)/20.0;
         return Math.abs(now.donor().temperature()-used.donor().temperature())>WAKE_TEMPERATURE
                 ||Math.abs(now.massFlow()-used.massFlow())>WAKE_FLOW*Math.abs(used.massFlow())
+                // A controller's bypass moves the flow through the cells as a flow change does (W4).
+                ||Math.abs(now.law().bypass()-used.law().bypass())>WAKE_FLOW
                 ||Math.abs(transits.getOrDefault(side.pair(),0.))>WAKE_TRANSIT*Math.abs(otherSide.heatRate)*slice+1;
     }
     /** The certified islands woken by an exchanger partner's commit (decision D4) end their certificates here, at the engine's

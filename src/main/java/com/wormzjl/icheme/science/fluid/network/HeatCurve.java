@@ -27,13 +27,24 @@ public final class HeatCurve {
      * and the plateau the boiling or condensing film holds. */
     public static final double LIQUID_UNTIL=.05,GAS_FROM=.95;
     private final double[] h,t,film;
+    /** Each knot's vapour mass fraction where the curve was sampled ({@link #sample}), so {@link #withFilms} can give it
+     * other films without a flash; null for a curve given its films directly. */
+    private final double[] vapour;
 
-    public HeatCurve(double[] h,double[] t,double[] film) {
-        if(h.length<2||h.length!=t.length||h.length!=film.length)throw new IllegalArgumentException("At least two matching knots required");
-        this.h=h.clone();this.t=t.clone();this.film=film.clone();
+    public HeatCurve(double[] h,double[] t,double[] film){this(h,t,film,null);}
+    private HeatCurve(double[] h,double[] t,double[] film,double[] vapour) {
+        if(h.length<2||h.length!=t.length||h.length!=film.length||vapour!=null&&vapour.length!=h.length)throw new IllegalArgumentException("At least two matching knots required");
+        this.h=h.clone();this.t=t.clone();this.film=film.clone();this.vapour=vapour==null?null:vapour.clone();
         for(int i=0;i<h.length;i++)if(!Double.isFinite(this.h[i])||!Double.isFinite(this.t[i])||this.t[i]<=0||!Double.isFinite(this.film[i])||this.film[i]<=0
                 ||i>0&&(this.h[i]<=this.h[i-1]||this.t[i]<this.t[i-1]))
             throw new IllegalArgumentException("A heat curve needs increasing enthalpy, nondecreasing temperature and positive films");
+    }
+    /** The same stream with {@code films} on its knots, by their vapour fractions (batch 2026-10-27-heat-exchanger-design,
+     * W4: an air cooler's fans change its films from step to step). Only a sampled curve knows its vapour fractions. */
+    public HeatCurve withFilms(Films films) {
+        if(vapour==null)throw new IllegalStateException("A heat curve given its films directly has no vapour fractions");
+        double[] value=new double[h.length];for(int i=0;i<h.length;i++)value[i]=films.at(vapour[i]);
+        return new HeatCurve(h,t,value,vapour);
     }
 
     /** The films of the three phase regimes (W/m2K), each with its share of the wall and fouling (plan section 4). */
@@ -91,6 +102,16 @@ public final class HeatCurve {
         if(temperature<t[0]){double s=slope(-1);return s>0?h[0]+(temperature-t[0])/s:h[0];}
         int i=last;while(t[i]>temperature)i--;
         return t[i]==temperature?h[i]:h[i]+(temperature-t[i])*(h[i+1]-h[i])/(t[i+1]-t[i]);
+    }
+    /**
+     * The smallest enthalpy (J/kg) at {@code temperature} K: a plateau's temperature names its liquid end (a stream cooled to
+     * its saturation temperature is all condensed there; W4, plan section 6). Elsewhere as {@link #enthalpyAt}.
+     */
+    public double lowestEnthalpyAt(double temperature) {
+        if(temperature>t[h.length-1]||temperature<t[0])return enthalpyAt(temperature);
+        if(temperature==t[0])return h[0];
+        int i=0;while(t[i+1]<temperature)i++;
+        return t[i+1]==temperature?h[i+1]:h[i]+(temperature-t[i])*(h[i+1]-h[i])/(t[i+1]-t[i]);
     }
 
     /**
@@ -170,10 +191,10 @@ public final class HeatCurve {
         knots.sort((a,c)->Double.compare(a.h,c.h));
         var kept=new ArrayList<Point>();
         for(var point:knots)if(kept.isEmpty()||point.h>kept.getLast().h)kept.add(point);
-        double[] hs=new double[kept.size()],ts=new double[kept.size()],fs=new double[kept.size()];
+        double[] hs=new double[kept.size()],ts=new double[kept.size()],fs=new double[kept.size()],xs=new double[kept.size()];
         double floor=0;
-        for(int i=0;i<kept.size();i++){var point=kept.get(i);hs[i]=point.h;ts[i]=floor=Math.max(floor,point.t);fs[i]=films.at(point.vapour);}
-        return new HeatCurve(hs,ts,fs);
+        for(int i=0;i<kept.size();i++){var point=kept.get(i);hs[i]=point.h;ts[i]=floor=Math.max(floor,point.t);xs[i]=point.vapour;fs[i]=films.at(point.vapour);}
+        return new HeatCurve(hs,ts,fs,xs);
     }
     private static final int DIVISIONS=16,MAXIMUM_KNOTS=512;
     private record Point(double t,double h,double vapour) {}

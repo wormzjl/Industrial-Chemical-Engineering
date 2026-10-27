@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.fluid.network.FiredCoil;
-import com.wormzjl.icheme.science.fluid.network.HeatSide;
 import com.wormzjl.icheme.science.fluid.network.PipeResistance;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -80,7 +79,7 @@ class HeatSidesTest {
         // Fan power at full speed, 1 kW per m² of face, and by the fan laws an eighth of it at half speed.
         assertEquals(1000*face,HeatSides.fanPower(side.area(),1),1e-6);assertEquals(125*face,HeatSides.fanPower(side.area(),.5),1e-6);
         assertEquals(0,HeatSides.fanPower(side.area(),0));
-        assertInstanceOf(HeatSide.class,HeatSides.heatSide(HeatSides.Unit.AIR_COOLER,HeatSides.Side.PROCESS,side.area(),1,0));
+        assertInstanceOf(com.wormzjl.icheme.science.fluid.network.AirCooled.class,HeatSides.heatSide(HeatSides.Unit.AIR_COOLER,HeatSides.Side.PROCESS,side.area(),1,0),"an air cooler's side has its own law, its fans the actuator (W4)");
         assertNull(HeatSides.heatSide(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,450,0,0),"an exchanger's side waits for its partner (W3)");
     }
     /**

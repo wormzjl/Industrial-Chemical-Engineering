@@ -71,10 +71,14 @@ import java.util.function.Function;
  *
  * <p>26 (batch 2026-10-27-heat-exchanger-design, W3): a heat side also carries its partner's connection id and its active
  * share (the sit-out), after its give-back.</p>
+ *
+ * <p>27 (batch 2026-10-27-heat-exchanger-design, W4): a heat side also carries its controller (a presence flag, then its
+ * target by ordinal, value, low limit and manual effort) and its planned limit by ordinal; tag 3 is an air cooler's side
+ * (its area, its air's temperature, bare tube, film, capacity and natural draught, its fans, controller and limit).</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=26;
+    public static final int VERSION=27;
     /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -303,16 +307,32 @@ public final class FluidCheckpointCodec {
             // Format 6: the port of each end (PassiveNetwork.PhasePort ordinal), after the control.
             w.u8(p.firstPort().ordinal());w.u8(p.secondPort().ordinal());w.varint(p.forbiddenDirections());w.f64(p.actuatorArea());
             // Format 24: the heat side, facts and slice inputs alike, so a restored island moves the heat its graph did.
-            // Format 25: a tag for the heat law (0 none, 1 heat side, 2 fired coil).
+            // Format 25: a tag for the heat law (0 none, 1 heat side, 2 fired coil); format 27: 3 an air cooler's side.
             switch(p.heat()){
                 case null->w.u8(0);
                 case com.wormzjl.icheme.science.fluid.network.HeatSide heat->{var films=heat.films();var wall=heat.wall();w.u8(1);
                     w.f64(heat.area());w.f64(films.liquid());w.f64(films.twoPhase());w.f64(films.gas());
-                    w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());w.i64(heat.partner());w.f64(heat.active());}
+                    w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());w.i64(heat.partner());w.f64(heat.active());
+                    control(w,heat.control());w.u8(heat.limit().ordinal());}
+                case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();w.u8(3);w.f64(cooled.area());
+                    w.f64(air.temperature());w.f64(air.barePerFace());w.f64(air.film());w.f64(air.capacity());w.f64(air.natural());
+                    w.f64(cooled.fans());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.reach());w.f64(coil.duty());w.f64(coil.firing());}
             }
         }
     }
+    private static void control(Writer w,com.wormzjl.icheme.science.fluid.network.HeatControl control) {
+        w.bool(control!=null);if(control==null)return;
+        w.u8(control.target().ordinal());w.f64(control.value());w.f64(control.lowLimit());w.f64(control.manual());
+    }
+    private static com.wormzjl.icheme.science.fluid.network.HeatControl control(Reader r) {
+        if(!r.bool())return null;
+        int target=r.u8();if(target>=HEAT_TARGETS.length)throw r.invalid("unknown heat control target "+target);
+        return new com.wormzjl.icheme.science.fluid.network.HeatControl(HEAT_TARGETS[target],r.f64(),r.f64(),r.f64());
+    }
+    private static com.wormzjl.icheme.science.fluid.network.HeatControl.Limit limit(Reader r){int limit=r.u8();if(limit>=HEAT_LIMITS.length)throw r.invalid("unknown heat control limit "+limit);return HEAT_LIMITS[limit];}
+    private static final com.wormzjl.icheme.science.fluid.network.HeatControl.Target[] HEAT_TARGETS=com.wormzjl.icheme.science.fluid.network.HeatControl.Target.values();
+    private static final com.wormzjl.icheme.science.fluid.network.HeatControl.Limit[] HEAT_LIMITS=com.wormzjl.icheme.science.fluid.network.HeatControl.Limit.values();
     private static void state(Writer w,PassiveNetwork graph) {
         for(var n:graph.reservoirs()) {
             var inventory=n.inventory();var s=n.state();
@@ -350,11 +370,15 @@ public final class FluidCheckpointCodec {
         int tag=r.u8();
         if(tag==0)return null;
         if(tag==2)return new com.wormzjl.icheme.science.fluid.network.FiredCoil(r.f64(),r.f64(),r.f64(),r.f64());
+        if(tag==3) {
+            double area=r.f64();var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(r.f64(),r.f64(),r.f64(),r.f64(),r.f64());double fans=r.f64();
+            var control=control(r);return new com.wormzjl.icheme.science.fluid.network.AirCooled(area,air,fans,control,limit(r));
+        }
         if(tag!=1)throw r.invalid("unknown heat law "+tag);
         double area=r.f64();var films=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());
         var wall=new double[r.varint(MAXIMUM_WALL_CELLS)];for(int k=0;k<wall.length;k++)wall[k]=r.f64();
-        double bypass=r.f64(),giveBack=r.f64();
-        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,r.i64(),r.f64());
+        double bypass=r.f64(),giveBack=r.f64();long partner=r.i64();double active=r.f64();var control=control(r);
+        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,partner,active,control,limit(r));
     }
     private static PassiveNetwork.PhasePort port(Reader r){int port=r.u8();if(port>=PHASE_PORTS.length)throw r.invalid("unknown pipe port "+port);return PHASE_PORTS[port];}
 

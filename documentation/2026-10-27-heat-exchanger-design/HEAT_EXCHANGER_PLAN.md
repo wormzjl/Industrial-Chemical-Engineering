@@ -1,6 +1,6 @@
 # Heat exchanger system: plan
 
-Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: In progress since 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. W1, W2, W5, W6, W3a and W3 are built; section 10 records each as built.
+Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: In progress since 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. W1, W2, W5, W6, W3a, W3 and W4 are built; section 10 records each as built.
 
 Evidence:
 
@@ -453,6 +453,33 @@ W3 as built (2026-10-27), as designed, with these additions:
 
 - **Q15 evidence.** A two-sided march cannot leave its curve's span. The planned wall lies between the two inlets: each cell's root is bracketed by the entering temperatures. The step's curve spans the inlet and the wall 10 K beyond each, and the give-back is added after the march. No gate reached the notice (`HeatCurve.extrapolated` has no caller on the status line).
 - **Open.** The authority's live load, capture and removal paths are gated through the ledger snapshot methods only, not by a GameTest. The campaign has no exchanger worlds, so the wall's cost is gated in the condensing test, not in the campaign's wall-time class. D6 (a budget hold counts as stopped) is untested.
+
+W4 as built (2026-10-27), as section 6 describes, with these decisions (each reversible):
+
+- **One controller, the unit's own actuator.** `HeatControl` (`science/fluid/network`) holds a target (manual, outlet temperature or duty), its value, the low limit and the manual effort. Its effort runs from 0 (the bypass fully open, the fans still) to 1 (no bypass, full fans). `HeatControl.setting` finds the effort with an Illinois root on the side's own heat law, the give-back not counted. It stops at an end short of the target (`Limit.LOWEST`, `HIGHEST`).
+- **`Mode.FAN` removed.** The actuator follows from the unit: an exchanger side's bypass, an air cooler's fans. `OUTLET_TEMPERATURE` and `DUTY` act on it, so "fan" named no mode of its own. No save held it: the schema-5 corpus holds `OUTLET_TEMPERATURE` and `OFF`, and schema 5 has not reached `main`. `FIRING` is now refused outside a fired heater.
+- **The air cooler has its own law, `AirCooled`.** Its fans set its films (`AirCooled.Air`, the W5 physics moved from `HeatSides.airFilms`), so they cannot be a fact of a `HeatSide`. `HeatCurve` keeps each knot's vapour fraction, so `withFilms` gives a sampled curve new films without a flash; the step's curve cache re-films a kept curve the same way.
+- **When each plans.** An exchanger side's bypass is planned per slice, in `ExchangerRelay.plan`, because it needs the partner's read. The bypass and the wall are solved in turn until the bypass moves by less than 1e-6 (at most 8 rounds): the quasi-steady exchanger as planned meets the target at the partner as read. The study harness re-solved the wall once. An air cooler's fans are planned per step, in `PassiveStepSolver.plan` (W6's `fire`, renamed), as a fired coil's firing is.
+- **The low limit acts in every mode, manual included,** on a cooled side's own outlet. To protect a cooled stream, the player puts the controller on that stream's side.
+- **A set point on a plateau** names its liquid end on a cooled side and its vapour end on a heated side (`HeatCurve.lowestEnthalpyAt`, `enthalpyAt`). The target vapour fraction of section 6 is not built.
+- **The planned limit is a slice input of the law** (`HeatSide.limit`, `AirCooled.limit`), so the status line reads it exactly: "LIMITED: the bypass is closed / fully open", "LIMITED: the fans run at full speed / stand still, natural draught moves more", "LOW LIMIT: the outlet is held at X K".
+- **The wake.** A partner's bypass that moves by more than 0.001 counts as its record moving (D4).
+- **Formats.** State format 27 (a heat side's controller and limit; tag 3, the air cooler's law); certificate graph identity 6. The facts are unchanged: W2's control fields carry the mode, set point, low limit and manual share.
+- **Screen.** A controllable side shows a mode button, the set point (temperature, or duty in kW), an exchanger side's bypass in manual, an air cooler's fans button in manual, and the low limit (blank for none). The readings add the control, the low limit, the bypass and the fans as planned (`FluidView.Heat.bypass`; the wire's `Controls.heat`).
+- **Fixed in passing.** A fired heater coil's "Other side" button was drawn on its set point field's row (W6): the rail did not advance past the field. Each heat side field now takes its own row.
+- **Gates** (`HeatControlTest` 5, `ExchangerRelayTest` +1, `ExchangerCouplingTest` +1, `HeatSideTopologyTest` +1, `FluidCheckpointCodecTest` round trip extended):
+
+| Gate | Result |
+|---|---|
+| the controller on a known law | outlet and duty met to 1e-6; HIGHEST past full effort, LOWEST past the inlet or below natural draught; the low limit in manual and controlled modes; plateau ends |
+| exchanger cold side held at 45 °C (52.8 °C without), then the hot inlet +15 K, 5 s slices | outlet within 0.1 K; at most 0.70 K off after the step, within 0.1 K from 44 s; bypass 0.521 → 0.657; energy exact |
+| exchanger set point out of reach (80 °C) | bypass closed, LIMITED, the outlets at the steady state |
+| a controlled plan from a cold wall | 0.43 ms; the next slice from its own wall plans the same bypass |
+| air cooler held at 65 °C, then the inlet 85 → 75 °C | outlet within 0.1 K; fans 0.792 → 0.234 |
+| air cooler ends | full fans 62.7 °C (LIMITED at a 45 °C set point); natural draught 77.4 °C (LIMITED at 80 °C); a 67 °C low limit held |
+
+- **In-game.** The owner stopped the check after the air cooler's manual screen. It showed the rail in order and a low limit label cut at the rail's width, now shortened. The rest of the screen is judged by the gates and the rail's row count.
+- **Measured against section 6's evidence.** The step reaches the cold outlet through the hot side's inlet holdup. The cold side reads it as it arrives and plans its bypass on the same read, so its outlet moves 0.70 K at most, not the uncontrolled response the study's instant step gave.
 
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
 
