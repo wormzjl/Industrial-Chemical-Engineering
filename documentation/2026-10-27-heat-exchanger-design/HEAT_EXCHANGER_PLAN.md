@@ -10,7 +10,7 @@ Evidence:
 - [HEAT_EXCHANGER_PLAN_REVIEW.md](HEAT_EXCHANGER_PLAN_REVIEW.md): the review of revision 3 against the code (22 findings, taken into revision 4).
 - Harnesses: `tools/heat-exchanger-design/`.
 
-Open: owner question Q14 (section 12), and the form of the coupling's timing after study W3a (section 5.2).
+Open: the form of the coupling's timing after study W3a (section 5.2). The owner answered Q14 on 2026-10-27: the one-sided units go before W3a.
 
 Owner request 2026-10-27:
 
@@ -98,6 +98,7 @@ A shell-and-tube exchanger passes two streams that never mix. Each side is a flo
 | Q11 air and fuel | The air cooler's air enters at a constant 25 °C, for now. A fired heater heats to a set temperature; when its duty falls short it fires at the maximum and shows an alert. Fuel is another scope | sections 4, 6 |
 | Q12 order | W1 heat law, W2 device, W3 coupling, W4 control, W5 air cooler, W6 fired heaters, W7 kettle, W8 assembly, W9 column hook | section 10 |
 | Q13 two bypasses | Keep the internal bypass for exchangers without an assembly; a complete assembly's valves take over | sections 6, 7 |
+| Q14 order after the review | The one-sided air cooler (W5) and fired heater (W6) before the timing study and the coupling: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9 | section 10 |
 
 ## 4. UA from size, a film per phase
 
@@ -329,7 +330,7 @@ Physics: in a plant an exchanger's control is piping. A bypass line runs around 
 
 ## 10. Work packages and gates
 
-The owner's order (Q8) put the utility exchangers first because they need no coupling. Real fluid on both sides (Q5) removes them, so the two-sided coupling moves up next to the device. The air cooler and the fired heater, the plant's heat sink and source without utilities, come before the kettle. The owner agreed this order (Q12). Revision 4 adds W3a, the timing study W3 waits for, and asks whether the one-sided units go before it (Q14).
+The owner's order (Q8) put the utility exchangers first because they need no coupling. Real fluid on both sides (Q5) removes them, so the two-sided coupling moves up next to the device. The air cooler and the fired heater, the plant's heat sink and source without utilities, come before the kettle. The owner agreed this order (Q12). Revision 4 adds W3a, the timing study W3 waits for. The owner put the one-sided units before it (Q14): W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
 
 | Package | Content | Gates |
 |---|---|---|
@@ -370,11 +371,11 @@ Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests,
 
 ## 12. Owner questions
 
-Answered on 2026-10-27: Q1 to Q13 (section 3).
+Answered on 2026-10-27: Q1 to Q14 (section 3).
 
 Decided in revision 3 without a question (reversible; the review gives the numbers): the give-back split by slice heat, chosen among three forms; the controller without the give-back in its target.
 
-- **Q14 Order after the review.** The two-sided coupling now waits for the timing study (W3a) and your choice of its form. The air cooler (W5) and the fired heater (W6) have one side and a known partner (25 °C air, a set temperature), so they need no partner read. Recommended order: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9. This gives the plant a heat sink and a heat source before the coupling, while W3a runs. Or keep Q12's order?
+- **Q14 Order after the review** (answered 2026-10-27: yes). The air cooler (W5) and the fired heater (W6) have one side and a known partner, so they need no partner read. Order: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
 - **After W3a**: the coupling's timing form, A, B or C (section 5.2), with the study's numbers.
 
 ## 13. Risks

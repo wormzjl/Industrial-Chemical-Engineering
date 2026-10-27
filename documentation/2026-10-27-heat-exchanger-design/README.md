@@ -6,7 +6,7 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law) is built; the owner answered Q1 to Q13, and Q14 (the order after the plan review) is open. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law) is built and W2 (the device) is in progress; the owner answered Q1 to Q14. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -93,7 +93,7 @@ The plan also touches:
 
 ## Notes
 
-- Open: owner question Q14 (order), and after W3a the coupling's timing form.
+- Open: after W3a, the coupling's timing form. Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
 - Open from W1:
   - for W2's screen: the extrapolation notice on the status line and the gauges' outlet temperature;
   - the step accepts a junction laid out without a phase its enthalpy holds; only the seeds guard it (W1 saw liquid 22 K superheated when the seeds missed the heat). To be put to the owner;
