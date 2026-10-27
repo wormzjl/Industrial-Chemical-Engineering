@@ -74,7 +74,7 @@ public final class PhysicalFluidTopology {
      */
     public record Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,
                          PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points,HeatUnit heat) {
-        /** A device without a heat unit: every kind but {@link TopologyCompiler.Kind#HEAT_SIDE}. */
+        /** A device without a heat unit: every kind but {@link TopologyCompiler.Kind#HEAT_SIDE} and a kettle's shell. */
         public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,null);}
         public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,0,0);}
         public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,ALL_FACES);}
@@ -104,7 +104,13 @@ public final class PhysicalFluidTopology {
             if(ports.size()>MAXIMUM_PORTS)throw new IllegalArgumentException("Too many device ports: "+ports.size());
             var seen=new HashSet<Contact>();
             int suction=0,discharge=0;
-            if((kind==TopologyCompiler.Kind.HEAT_SIDE)!=(heat!=null))throw new IllegalArgumentException("A heat side, and only a heat side, carries a heat unit");
+            // A kettle's shell is a reservoir whose heat unit names its tube side (batch 2026-10-27-heat-exchanger-design, W7).
+            boolean pool=kind==TopologyCompiler.Kind.RESERVOIR&&heat!=null;
+            if(pool&&(heat.unit()!=com.wormzjl.icheme.science.equipment.HeatSides.Unit.KETTLE||heat.side()!=com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL||heat.partner()==0||heat.partner()==id))
+                throw new IllegalArgumentException("A reservoir's heat unit is a kettle's shell, partnered with its tubes");
+            if(!pool&&(kind==TopologyCompiler.Kind.HEAT_SIDE)!=(heat!=null))throw new IllegalArgumentException("A heat side, and only a heat side or a kettle's shell, carries a heat unit");
+            if(kind==TopologyCompiler.Kind.HEAT_SIDE&&heat.unit()==com.wormzjl.icheme.science.equipment.HeatSides.Unit.KETTLE&&heat.side()!=com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE)
+                throw new IllegalArgumentException("A kettle's heat side is its tubes");
             if(kind==TopologyCompiler.Kind.HEAT_SIDE) {
                 // A side's node is its first inlet's cell, as a mover's is its suction cell (batch 2026-10-27-heat-exchanger-design).
                 int inlets=0,outlets=0;
@@ -278,6 +284,22 @@ public final class PhysicalFluidTopology {
     }
     private record Point(double x,double y,double z) {}
     public static long filterIdentity(long physicalId){return Long.MIN_VALUE+physicalId;}
+    /**
+     * {@code node} as its device compiles it: a kettle's shell (W7) carries its pool, keyed as a side would be
+     * ({@link #sideIdentity}), partnered with its tubes' connection, over the bundle's surface. A pool the stock already
+     * carries with the same facts keeps its slice inputs; any other is compiled idle, at the contents' temperature, and its
+     * first slice plans it. Every other node as it is, a pool it carries dropped.
+     */
+    private static PassiveNetwork.Reservoir pooled(Device device,PassiveNetwork.Reservoir node) {
+        var held=node.inventory().pool();
+        if(device==null||device.heat==null||device.kind!=TopologyCompiler.Kind.RESERVOIR)
+            return held==null?node:new PassiveNetwork.Reservoir(node.id(),node.elevation(),node.state(),node.kind(),node.inventory().withPool(null));
+        double shell=node.inventory().geometry().diameter(),bundle=com.wormzjl.icheme.science.equipment.HeatSides.kettleBundle(shell);
+        var pool=com.wormzjl.icheme.science.fluid.network.Pool.idle(sideIdentity(device.id),sideIdentity(device.heat.partner()),device.heat.area(),(shell-bundle)/2,bundle,
+                com.wormzjl.icheme.science.equipment.HeatSides.EXCHANGER_CELLS,node.state().temperature());
+        if(held!=null&&held.shape().equals(pool.shape()))return node;
+        return new PassiveNetwork.Reservoir(node.id(),node.elevation(),node.state(),node.kind(),node.inventory().withPool(pool));
+    }
     /** The compiled pipe of heat side {@code physicalId}: its passage between its inlet node and its outlet junction. */
     public static long sideIdentity(long physicalId){return Long.MIN_VALUE/2+physicalId;}
     public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates) {
@@ -357,7 +379,7 @@ public final class PhysicalFluidTopology {
             var reservoirs=new ArrayList<PassiveNetwork.Reservoir>();var indices=new HashMap<Long,Integer>();
             for(long id:new TreeSet<>(members))if(retained.containsKey(id)) {
                 indices.put(id,reservoirs.size());var node=retained.get(id);var boundary=boundaryStates.get(id);
-                reservoirs.add(boundary!=null?boundary:new PassiveNetwork.Reservoir(id,node.elevation(),seed,PassiveNetwork.NodeKind.JUNCTION));
+                reservoirs.add(boundary!=null?pooled(physical.get(id),boundary):new PassiveNetwork.Reservoir(id,node.elevation(),seed,PassiveNetwork.NodeKind.JUNCTION));
             }
             var pipes=new ArrayList<PassiveNetwork.Pipe>();int islandIndex=islands.size();var positiveFilterEdges=new HashMap<Long,Set<Long>>();
             for(var run:runsOf.get(group)) {

@@ -15,16 +15,16 @@ import org.jetbrains.annotations.Nullable;
  * @param unit         what the side belongs to
  * @param side         which passage of the unit it is
  * @param area         its heat-transfer surface, m² (the unit's tube surface; the drawn datasheet's)
- * @param partner      the other side's registration (an exchanger's other side, a fired heater's other coil), or 0 for a
- *                     one-sided unit (an air cooler)
+ * @param partner      the other side's registration (an exchanger's other side, a fired heater's other coil, a kettle's
+ *                     tubes and shell, W7), or 0 for a one-sided unit (an air cooler)
  * @param control      the side's built-in control (plan section 6)
  * @param transitJoule the heat this side's unit holds in transit between its two sides (plan section 5.2), J
  */
 public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long partner,Control control,double transitJoule) {
     /**
      * The control modes of plan section 6. {@code OFF}: no controller, so the manual {@link Control#share} holds.
-     * {@code OUTLET_TEMPERATURE} and {@code DUTY} act on the unit's own actuator (W4): an exchanger side's bypass, an air
-     * cooler's fans. {@code FIRING} is a fired heater's coil, firing to its set point (W6).
+     * {@code OUTLET_TEMPERATURE} and {@code DUTY} act on the unit's own actuator (W4): an exchanger side's or a kettle's tubes'
+     * bypass (steam that leaves uncondensed), an air cooler's fans. {@code FIRING} is a fired heater's coil, firing to its set point (W6).
      */
     public enum Mode { OFF, OUTLET_TEMPERATURE, DUTY, FIRING }
     /**
@@ -73,7 +73,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
      * share through its cells (1 − the bypass share).
      */
     public @Nullable HeatControl controller() {
-        if(unit!=HeatSides.Unit.EXCHANGER&&unit!=HeatSides.Unit.AIR_COOLER)return null;
+        if(!controllable())return null;
         double manual=unit==HeatSides.Unit.AIR_COOLER?control.share():1-control.share();
         return switch(control.mode()) {
             case OFF->control.lowLimit()>0?new HeatControl(HeatControl.Target.MANUAL,0,control.lowLimit(),manual):null;
@@ -82,6 +82,8 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
             case FIRING->null;
         };
     }
-    /** Whether the player sets this side's control (W4): an exchanger side's and an air cooler's. */
-    public boolean controllable(){return unit==HeatSides.Unit.EXCHANGER||unit==HeatSides.Unit.AIR_COOLER;}
+    /** Whether the player sets this side's control (W4): an exchanger side's, an air cooler's and a kettle's tubes' (W7). */
+    public boolean controllable(){return unit==HeatSides.Unit.EXCHANGER||unit==HeatSides.Unit.AIR_COOLER||unit==HeatSides.Unit.KETTLE&&side==HeatSides.Side.TUBE;}
+    /** Whether this is a kettle's shell (W7): a vessel whose pool is its tubes' other side, no passage of its own. */
+    public boolean pool(){return unit==HeatSides.Unit.KETTLE&&side==HeatSides.Side.SHELL;}
 }

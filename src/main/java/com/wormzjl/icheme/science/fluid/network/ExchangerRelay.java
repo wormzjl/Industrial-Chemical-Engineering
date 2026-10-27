@@ -28,10 +28,28 @@ public final class ExchangerRelay {
     /**
      * The other side as read at the slice start: the state of the node its stream is drawn from ({@code donor}) with the
      * port and connection volume it is drawn through, its mass flow (kg/s, its sign in that side's own forward direction) and
-     * its heat side, whose surface, films and bypass it passes the cells with.
+     * its heat side, whose surface, films and bypass it passes the cells with. A kettle's pool (W7) is read as its vessel's
+     * contents alone ({@link #pool(PassiveNetwork.Reservoir)}): no stream, no heat side.
      */
-    public record Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,HeatSide law) {
-        public Partner {Objects.requireNonNull(donor);Objects.requireNonNull(port);Objects.requireNonNull(law);if(!Double.isFinite(massFlow)||!(volume>=0))throw new IllegalArgumentException("Invalid partner read");}
+    public record Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,@Nullable HeatSide law,@Nullable Bath bath) {
+        public Partner {Objects.requireNonNull(donor);Objects.requireNonNull(port);if(!Double.isFinite(massFlow)||!(volume>=0)||(law==null)==(bath==null)||bath!=null&&massFlow!=0)throw new IllegalArgumentException("Invalid partner read");}
+        public Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,HeatSide law){this(donor,port,volume,massFlow,law,null);}
+        /** A kettle's pool as its tube side reads it: vessel {@code node}'s contents at its temperature and film ({@link Pool#film}),
+         * or null where it holds no fluid (it then takes no heat). */
+        public static @Nullable Partner pool(PassiveNetwork.Reservoir node) {
+            if(PassiveStepSolver.holdsNoFluid(node))return null;
+            var bath=new Bath(node.state().temperature(),node.inventory().pool().film(node.state(),node.inventory().geometry()));
+            return new Partner(node.state(),PassiveNetwork.PhasePort.BULK,0,0,null,bath);
+        }
+        /** Whether this is a kettle's pool (W7). */
+        public boolean pool(){return bath!=null;}
+    }
+    /**
+     * A kettle's pool as the other side of its tube bundle (W7, plan section 8): isothermal at {@code temperature} K, its film
+     * {@code film} W/m²K on the tubes ({@link Pool#film}), its capacity unbounded.
+     */
+    public record Bath(double temperature,double film) {
+        public Bath {if(!(temperature>0)||!(film>0)||!Double.isFinite(temperature+film))throw new IllegalArgumentException("Invalid bath");}
     }
     /**
      * One coupled side's slice inputs, read on the server at its dispatch: the other side as read ({@code partner}, null
@@ -108,22 +126,28 @@ public final class ExchangerRelay {
     }
     /** One cell's steady wall: an Illinois root of {@link #balance}, bracketed by the two entering temperatures, from {@code guess}. */
     private static double cell(Stream s,Stream o,double hs,double ho,double guess) {
-        double ts=s.curve.temperatureAt(hs),to=o.curve.temperatureAt(ho);
-        double lo=Math.min(ts,to),hi=Math.max(ts,to),tolerance=TOLERANCE/10;
+        return root(s.curve.temperatureAt(hs),o.curve.temperatureAt(ho),guess,wall->balance(s,o,hs,ho,wall));
+    }
+    /**
+     * The wall temperature between {@code a} and {@code b} (K) at which {@code balance}, rising with the wall, is zero, to a
+     * tenth of {@link #TOLERANCE}: an Illinois root from {@code guess}, an end where the balance does not change sign.
+     */
+    private static double root(double a,double b,double guess,java.util.function.DoubleUnaryOperator balance) {
+        double lo=Math.min(a,b),hi=Math.max(a,b),tolerance=TOLERANCE/10;
         if(hi-lo<=tolerance)return (lo+hi)/2;
-        // The balance rises with the wall: below both streams both are cooled, above both both are heated.
-        double flo=balance(s,o,hs,ho,lo),fhi=balance(s,o,hs,ho,hi);
+        // The balance rises with the wall: below both sides both are cooled, above both both are heated.
+        double flo=balance.applyAsDouble(lo),fhi=balance.applyAsDouble(hi);
         if(flo>=0)return lo;
         if(fhi<=0)return hi;
         if(guess>lo&&guess<hi) {
-            double f=balance(s,o,hs,ho,guess);if(f==0)return guess;
+            double f=balance.applyAsDouble(guess);if(f==0)return guess;
             if(f<0){lo=guess;flo=f;}else{hi=guess;fhi=f;}
         }
         int side=0;
         for(int iteration=0;iteration<64&&hi-lo>tolerance;iteration++) {
             double x=(lo*fhi-hi*flo)/(fhi-flo);
             if(!(x>lo&&x<hi))x=(lo+hi)/2;
-            double f=balance(s,o,hs,ho,x);
+            double f=balance.applyAsDouble(x);
             if(f==0)return x;
             if(f<0){lo=x;flo=f;if(side==-1)fhi/=2;side=-1;}
             else{hi=x;fhi=f;if(side==1)flo/=2;side=1;}
@@ -131,6 +155,21 @@ public final class ExchangerRelay {
         return (lo*fhi-hi*flo)/(fhi-flo);
     }
 
+    /**
+     * A tube bundle's wall in a kettle's pool (W7): {@code s} marched through its cells in its own order, each cell's wall
+     * where the heat the stream gives up is what the pool takes through its film, h_pool A_cell (T_wall - T_pool). One pass:
+     * the pool is the same at every cell. In the wall's order, as {@link #wall} returns it.
+     */
+    public static double[] bathWall(Stream s,Bath bath) {
+        int n=s.law.cells();double[] t=new double[n];double h=s.inlet,through=s.through(),cell=s.cell();
+        for(int i=0;i<n;i++) {
+            int k=s.ascending()?i:n-1-i;double entering=h;
+            t[k]=root(s.curve.temperatureAt(entering),bath.temperature(),bath.temperature(),
+                    wall->through*(s.curve.march(entering,through,cell,wall)-entering)+bath.film()*cell*(wall-bath.temperature()));
+            h=s.curve.march(h,through,cell,t[k]);
+        }
+        return t;
+    }
     /** The specific enthalpy {@code s} leaves its cells with against {@code wall} (in the wall's order), J/kg. */
     public static double outlet(Stream s,double[] wall) {
         int n=wall.length;double h=s.inlet,through=s.through();
@@ -179,22 +218,9 @@ public final class ExchangerRelay {
      * a read of the other side.
      */
     public static HeatSide plan(HeatSide own,Stream stream,@Nullable Stream other,Read read,double seconds) {
-        int n=own.cells();double[] wall=own.wall();double active=1-read.sitOut(),bypass=own.bypass(),mass=Math.abs(stream.massFlow());
-        var limit=HeatControl.Limit.NONE;
         boolean moving=other!=null&&!read.stopped()&&other.through()>0;
-        if(!moving)active=0;
-        else for(int round=1;;round++) {
-            var at=stream.through(own.withInputs(wall,bypass,0,1));
-            if(at.through()==0){wall=new double[n];Arrays.fill(wall,other.temperature());}
-            else wall=wall(at,other,wall).temperatures();
-            if(own.control()==null||round>MAXIMUM_ROUNDS)break;
-            double[] fixed=wall;
-            var setting=own.control().setting(u->own.withInputs(fixed,1-u,0,1).heat(stream.curve,stream.inlet,stream.massFlow),stream.curve,stream.inlet,mass,1-bypass);
-            double next=1-setting.effort();limit=setting.limit();
-            boolean settled=Math.abs(next-bypass)<BYPASS_TOLERANCE;bypass=next;
-            if(settled)break;
-        }
-        var planned=own.withInputs(wall,bypass,0,active,limit);var at=stream.through(planned);
+        var planned=controlled(own,stream,moving?(at,last)->wall(at,other,last).temperatures():null,moving?other.temperature():0,read);
+        double[] wall=planned.wall();double bypass=planned.bypass(),mass=Math.abs(stream.massFlow());var limit=planned.limit();var at=stream.through(planned);
         if(other==null||mass==0||read.transitDue()==0)return planned;
         double share=share(capacityRate(at,wall),seconds,moving?capacityRate(other,wall):0,read.partnerSeconds());
         if(share==0)return planned;
@@ -202,6 +228,52 @@ public final class ExchangerRelay {
         double mixed=stream.inlet+planned.heat(stream.curve,stream.inlet,stream.massFlow)/mass;
         double bound=stream.curve.enthalpyAt(other.temperature()),lo=Math.min(stream.inlet,bound),hi=Math.max(stream.inlet,bound);
         double allowed=Math.clamp(mixed+shift,lo,hi),scale=Math.clamp((allowed-mixed)/shift,0,1);
-        return own.withInputs(wall,bypass,scale*shift,active,limit);
+        return own.withInputs(wall,bypass,scale*shift,planned.active(),limit);
+    }
+    /**
+     * A kettle's tube side planned for a slice (W7, plan section 8): as {@link #plan} against a pool at {@code bath} (null
+     * where none is known: the pool holds nothing), the wall from {@link #bathWall}. It takes none of the heat in transit: the
+     * pool's capacity is unbounded, so the pool takes it all ({@link #planPool}).
+     */
+    public static HeatSide plan(HeatSide own,Stream stream,@Nullable Bath bath,Read read) {
+        boolean moving=bath!=null&&!read.stopped();
+        return controlled(own,stream,moving?(at,last)->bathWall(at,bath):null,moving?bath.temperature():0,read);
+    }
+    /**
+     * {@code own}'s wall, bypass and active share for a slice: with {@code wallAt} (null where the other side does not move,
+     * so the cells move nothing and keep their last wall) the wall at a bypass, from the last wall, and the bypass on the wall
+     * by the side's controller ({@link HeatControl#setting}, the give-back not counted), in turn until the bypass settles; a
+     * flow that passes no cells gets a flat wall at {@code still} K. Its give-back is 0.
+     */
+    private static HeatSide controlled(HeatSide own,Stream stream,@Nullable java.util.function.BiFunction<Stream,double[],double[]> wallAt,double still,Read read) {
+        int n=own.cells();double[] wall=own.wall();double active=1-read.sitOut(),bypass=own.bypass(),mass=Math.abs(stream.massFlow());
+        var limit=HeatControl.Limit.NONE;
+        if(wallAt==null)active=0;
+        else for(int round=1;;round++) {
+            var at=stream.through(own.withInputs(wall,bypass,0,1));
+            if(at.through()==0){wall=new double[n];Arrays.fill(wall,still);}
+            else wall=wallAt.apply(at,wall);
+            if(own.control()==null||round>MAXIMUM_ROUNDS)break;
+            double[] fixed=wall;
+            var setting=own.control().setting(u->own.withInputs(fixed,1-u,0,1).heat(stream.curve,stream.inlet,stream.massFlow),stream.curve,stream.inlet,mass,1-bypass);
+            double next=1-setting.effort();limit=setting.limit();
+            boolean settled=Math.abs(next-bypass)<BYPASS_TOLERANCE;bypass=next;
+            if(settled)break;
+        }
+        return own.withInputs(wall,bypass,0,active,limit);
+    }
+    /**
+     * A kettle's pool planned for a slice of {@code seconds} s (W7, plan section 8): the wall its tube side's stream as read
+     * ({@code tube}, null where none is known) makes against the pool at {@code bath} ({@link #bathWall}), active but for the
+     * sit-out, and the give-back: all the heat in transit due, over the slice (plan section 5.2's share: the pool's capacity is
+     * unbounded). With the tubes stopped or still the wall stands at the pool and moves nothing; the transit still returns.
+     */
+    public static Pool planPool(Pool own,Bath bath,@Nullable Stream tube,Read read,double seconds) {
+        boolean moving=tube!=null&&!read.stopped()&&tube.through()>0;
+        if(moving&&tube.law.cells()!=own.cells())throw new IllegalArgumentException("A pool and its tubes need the same cells");
+        double[] wall;
+        if(moving)wall=bathWall(tube,bath);
+        else{wall=new double[own.cells()];Arrays.fill(wall,bath.temperature());}
+        return own.withInputs(wall,seconds>0?read.transitDue()/seconds:0,moving?1-read.sitOut():0);
     }
 }

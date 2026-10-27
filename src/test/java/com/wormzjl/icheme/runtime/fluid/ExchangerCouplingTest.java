@@ -178,6 +178,107 @@ class ExchangerCouplingTest {
         assertEquals(0,hot+cold+rig.booked()-start,1e-9*Math.abs(hot),label+": the sides' heat and the transit balance");
     }
 
+    // ---- the kettle (W7, plan section 8) ----
+
+    private static final long KETTLE_TUBES=20,KETTLE_SHELL=21;
+    /**
+     * A kettle of bundle 0.5 m over 3 m tubes (the exchanger's 56 m² of tube): hot water at 150 °C from 6 bar through its
+     * tubes into 5 bar, its shell (a lying drum of 0.8 m over 2.4 m, 1.34 m³) holding {@code fill} of its volume of water
+     * just below 100 °C (none: an empty vessel), its vapour out to 1 atm through a 0.3 m line. The tubes and the shell are
+     * two islands; the tubes under {@code control}.
+     */
+    private Rig kettle(double fill,HeatUnit.Control control) {
+        var geometry=HeatSides.kettleShell(SHELL,TUBES);double capacity=geometry.capacity();
+        var devices=new ArrayList<PhysicalFluidTopology.Device>(line(1,KETTLE_TUBES,2,0,HeatSides.tubePassage(SHELL,TUBES),
+                new HeatUnit(HeatSides.Unit.KETTLE,HeatSides.Side.TUBE,AREA,KETTLE_SHELL).withControl(control)));
+        var node=at(10,0,10);
+        devices.add(new PhysicalFluidTopology.Device(KETTLE_SHELL,node,Kind.RESERVOIR,NORTH,STUB,new FlowControl.Passive(),
+                List.of(new PhysicalFluidTopology.Port(node,EAST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,
+                PhysicalFluidTopology.ALL_FACES,0,0,new HeatUnit(HeatSides.Unit.KETTLE,HeatSides.Side.SHELL,AREA,KETTLE_TUBES)));
+        devices.add(new PhysicalFluidTopology.Device(300,at(11,0,10),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.3,.000045,0),new FlowControl.Passive()));
+        devices.add(plain(4,12,0,10,Kind.VOID));
+        PassiveNetwork.Reservoir pool;
+        if(fill>0) {
+            var liquid=water(372.15,150_000);double[] n=PhaseLayout.totalAmounts(liquid);for(int c=0;c<n.length;c++)n[c]*=fill*capacity;
+            var inventory=new PassiveNetwork.Inventory(capacity,n,liquid.internalEnergy()*fill*capacity,com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY,geometry.height(),false,geometry);
+            pool=new PassiveNetwork.Reservoir(KETTLE_SHELL,0,FluidTestSupport.inventoryState(model,liquid,inventory),PassiveNetwork.NodeKind.RESERVOIR,inventory);
+        } else {
+            var empty=PassiveNetwork.emptyVessel(KETTLE_SHELL,0,capacity,geometry.height(),false,model);
+            pool=new PassiveNetwork.Reservoir(KETTLE_SHELL,0,empty.state(),empty.kind(),new PassiveNetwork.Inventory(capacity,empty.inventory().moles(),0,empty.inventory().solids(),geometry.height(),false,geometry));
+        }
+        var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,source(1,water(423.15,600_000)),2L,sink(2,500_000),KETTLE_SHELL,pool,4L,sink(4,101_325)));
+        assertEquals(2,compiled.islands().size(),"the tubes and the shell in their own islands");
+        var rig=new Rig(CertificatePolicy.disabled());rig.hotIsland=islandOf(compiled,KETTLE_TUBES);rig.coldIsland=3-rig.hotIsland;
+        var shellGraph=compiled.islands().get((int)rig.coldIsland-1).graph();
+        assertNotNull(shellGraph.reservoirs().stream().filter(r->r.id()==KETTLE_SHELL).findFirst().orElseThrow().inventory().pool(),"the shell carries its pool");
+        rig.register(rig.hotIsland,compiled.islands().get((int)rig.hotIsland-1).graph(),100);
+        rig.register(rig.coldIsland,shellGraph,100);
+        return rig;
+    }
+    /** The kettle's shell as it stands: its contents, its vapour line's mean flow (kg/s) and its pool's heat (W) over the last interval. */
+    private record Boiling(FluidThermodynamics.State contents,double vapour,double heat,Pool pool) {}
+    private static Boiling boiling(IslandCoordinator.Snapshot island) {
+        var graph=island.graph();var result=island.lastResult().orElseThrow();
+        var node=graph.reservoirs().stream().filter(r->r.id()==KETTLE_SHELL).findFirst().orElseThrow();int index=graph.reservoirs().indexOf(node);
+        double vapour=0;for(int e=0;e<graph.pipes().size();e++){var p=graph.pipes().get(e);if(p.first()==index)vapour+=result.averageMassFlows()[e];if(p.second()==index)vapour-=result.averageMassFlows()[e];}
+        double joule=0;for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT&&b.nodeId()==PhysicalFluidTopology.sideIdentity(KETTLE_SHELL))joule+=b.totalEnergyJoule();
+        return new Boiling(node.state(),vapour,joule/result.advancedSeconds(),node.inventory().pool());
+    }
+    /** Water's latent heat at {@code pressure} and its saturation temperature {@code temperature}, J/kg. */
+    private double latent(double temperature,double pressure) {
+        var vapour=water(temperature+.05,pressure);var liquid=water(temperature-.05,pressure);
+        return vapour.enthalpy()/vapour.mass()-liquid.enthalpy()/liquid.mass();
+    }
+    /** The kettle's tubes' heat, its pool's and the heat in transit balance, J. */
+    private static void assertKettleLedger(Rig rig,String label) {
+        double tubes=rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(KETTLE_TUBES),0.),pool=rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(KETTLE_SHELL),0.);
+        double transit=rig.coordinator.transits().getOrDefault(PhysicalFluidTopology.sideIdentity(Math.min(KETTLE_TUBES,KETTLE_SHELL)),0.);
+        assertTrue(tubes<0&&pool>0,label+": the tubes gave heat, the pool took it");
+        assertEquals(0,tubes+pool+transit,1e-9*Math.abs(tubes),label+": the tubes' heat, the pool's and the transit balance");
+    }
+    /**
+     * W7's gate (plan section 10): the tube bundle boils the pool at its boiling point, and the boil-up is the duty over the
+     * latent heat at the pool's pressure. The pool sits at water's saturation temperature at its pressure, the vapour leaves
+     * at Q / λ, the tubes' duty is the pool's, and energy is exact across the two islands.
+     */
+    @Test void aKettlesBoilUpIsItsDutyOverTheLatentHeat() {
+        var rig=kettle(.9,HeatUnit.Control.OFF);
+        rig.run(60);
+        var shell=boiling(rig.island(rig.coldIsland));var tubes=seen(rig.island(rig.hotIsland),KETTLE_TUBES);
+        double lambda=latent(shell.contents.temperature(),shell.contents.pressure()),expected=shell.heat/lambda;
+        System.out.printf(Locale.ROOT,"kettle: pool %.2f K at %.0f Pa, tubes %.2f kg/s %.2f -> %.2f K (%.1f kW), pool %.1f kW, boil-up %.4f kg/s, Q/lambda %.4f kg/s (lambda %.0f kJ/kg)%n",
+                shell.contents.temperature(),shell.contents.pressure(),tubes.flow,tubes.in.temperature(),tubes.out.temperature(),duty(tubes)/1e3,shell.heat/1e3,shell.vapour,expected,lambda/1e3);
+        assertTrue(shell.heat>1e5,"the bundle heats the pool: "+shell.heat+" W");
+        assertEquals(expected,shell.vapour,.02*expected,"the boil-up is the duty over the latent heat");
+        assertEquals(duty(tubes),shell.heat,.02*shell.heat,"the tubes' duty is the pool's");
+        var saturated=water(shell.contents.temperature()+.2,shell.contents.pressure());var subcooled=water(shell.contents.temperature()-.2,shell.contents.pressure());
+        assertTrue(FluidThermodynamics.holdsVapor(saturated)&&!FluidThermodynamics.holdsLiquid(saturated)&&FluidThermodynamics.holdsLiquid(subcooled)&&!FluidThermodynamics.holdsVapor(subcooled),
+                "the pool boils at its saturation temperature");
+        assertKettleLedger(rig,"boiling");
+    }
+    /**
+     * The kettle's natural mode (plan section 6): a duty set point on its tubes, held by their bypass (the heating medium that
+     * leaves without crossing the bundle); the boil-up follows the duty. An empty shell takes no heat: the tubes pass their
+     * water through unchanged.
+     */
+    @Test void aKettlesDutyIsHeldByItsTubesBypassAndAnEmptyShellTakesNone() {
+        var rig=kettle(.9,new HeatUnit.Control(HeatUnit.Mode.DUTY,1e6,0,0));
+        rig.run(60);
+        var shell=boiling(rig.island(rig.coldIsland));var tubes=seen(rig.island(rig.hotIsland),KETTLE_TUBES);
+        double lambda=latent(shell.contents.temperature(),shell.contents.pressure());
+        System.out.printf(Locale.ROOT,"kettle at 1 MW: bypass %.3f, tubes %.1f kW, pool %.1f kW, boil-up %.4f kg/s (Q/lambda %.4f)%n",tubes.law.bypass(),duty(tubes)/1e3,shell.heat/1e3,shell.vapour,1e6/lambda);
+        assertTrue(tubes.law.bypass()>0&&tubes.law.bypass()<1,"the bypass holds the duty: "+tubes.law.bypass());
+        assertEquals(1e6,duty(tubes),.01e6,"the tubes give 1 MW");
+        assertEquals(1e6,shell.heat,.02e6,"the pool takes 1 MW");
+        assertEquals(1e6/lambda,shell.vapour,.02*1e6/lambda,"the boil-up follows the duty");
+        assertKettleLedger(rig,"at 1 MW");
+        var dry=kettle(0,HeatUnit.Control.OFF);
+        dry.run(20);
+        var still=seen(dry.island(dry.hotIsland),KETTLE_TUBES);
+        assertEquals(still.in.temperature(),still.out.temperature(),.01,"an empty shell takes no heat");
+        assertEquals(0,dry.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(KETTLE_SHELL),0.),"the empty pool books nothing");
+    }
+
     @Test void twoIslandsReachTheCountercurrentSteadyStateAtEqualAndUnequalCadences() {
         for(int[] cadences:new int[][]{{100,100},{20,400},{400,20}}) {
             var rig=waterPair(cadences[0],cadences[1],CertificatePolicy.disabled());String label="cadences "+cadences[0]+"/"+cadences[1]+" ticks";

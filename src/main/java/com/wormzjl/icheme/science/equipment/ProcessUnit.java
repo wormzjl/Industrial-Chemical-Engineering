@@ -893,6 +893,8 @@ public final class ProcessUnit {
         volumes.add(Solid.rod(axis, 2, s0 + .02, s1, .94 * rk, .9 * dk / 4));
         round(a, y, c0, ch1 + .1, rb);
         round(a, y, s0, s1, rk);
+        // The shell's pool node (W7): its lowest inside cell, under the back of its cylinder, clear of the feed.
+        fluidPoint = new double[]{a, y - rk + .01, s1 - .25};
 
         double tube = Math.min(PipeSizes.MAX_OUTSIDE, .4 * db), liquid = Math.min(PipeSizes.MAX_OUTSIDE, db / 2), vapour = Math.min(PipeSizes.MAX_OUTSIDE, dk / 2), flange = PipeSizes.flange(liquid);
         nozzles.add(radial(Role.TUBE_INLET, a, y, rb, nb, zn, 1, ColumnStructure.size(.25 * db, tube)));

@@ -351,7 +351,7 @@ public final class PassiveStepSolver {
         for(int e=conflicts.nextSetBit(0);e>=0;e=conflicts.nextSetBit(e+1))heldOpenings[e]=acceptedOpenings.getOrDefault(graph.pipes().get(e).identity(),1.0);
         // An island of unconnected nodes changes nothing in a step, unless an open vessel in it gives the atmosphere its gas
         // or its spill (OpenVessel).
-        if(graph.pipes().isEmpty()&&graph.scheduledTransfers().isEmpty()&&(rateOnly||graph.reservoirs().stream().noneMatch(OpenVessel::releasing)))return new Result(graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),new double[0],dt,
+        if(graph.pipes().isEmpty()&&graph.scheduledTransfers().isEmpty()&&(rateOnly||graph.reservoirs().stream().noneMatch(node->OpenVessel.releasing(node)||poolHeat(node)!=0)))return new Result(graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),new double[0],dt,
                 new SparseNewton.Result(new double[0],0,0,0,0,0),List.of(),new double[0],0,new double[model.hydrocarbon.componentCount()+1],0,
                 graph.reservoirs().stream().map(PassiveNetwork.Reservoir::inventory).toList(),List.of(),List.of());
         var modes=new ArrayList<FlowControl.Mode>();
@@ -1792,6 +1792,7 @@ public final class PassiveStepSolver {
      * gets a flat wall at its own temperature and moves no heat. {@code graph} itself where no side is coupled.
      */
     public PassiveNetwork couple(PassiveNetwork graph,Map<Long,ExchangerRelay.Read> reads,double[] flows,double seconds,Runnable checkpoint) {
+        graph=pools(graph,reads,seconds,checkpoint);
         List<PassiveNetwork.Pipe> pipes=null;
         for(int e=0;e<graph.pipes().size();e++) {
             var pipe=graph.pipes().get(e);if(!(pipe.heat() instanceof HeatSide side)||!side.coupled())continue;
@@ -1802,12 +1803,16 @@ public final class PassiveStepSolver {
             var planned=side.withInputs(flat,side.bypass(),0,1);
             if(endMass(start,port,pipe.volume())>0) {
                 double own=endSpecificEnthalpy(start,port,pipe.volume()),low=start.temperature(),high=low;
-                boolean drawn=partner!=null&&endMass(partner.donor(),partner.port(),partner.volume())>0;
+                // A kettle's tube side reads its pool (W7): the vessel's contents, isothermal, no stream.
+                boolean pool=partner!=null&&partner.pool();
+                boolean drawn=partner!=null&&(pool||endMass(partner.donor(),partner.port(),partner.volume())>0);
                 if(drawn){low=Math.min(low,partner.donor().temperature());high=Math.max(high,partner.donor().temperature());}
                 low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,low-10);high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,high+10);
                 var curve=spanned(start,port,pipe.volume(),low,high,side.films(),checkpoint);
-                var other=!drawn?null:spanned(partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint);
-                if(curve!=null)planned=ExchangerRelay.plan(side,new ExchangerRelay.Stream(curve,own,flow,side,true),
+                var other=!drawn||pool?null:spanned(partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint);
+                var stream=curve==null?null:new ExchangerRelay.Stream(curve,own,flow,side,true);
+                if(stream!=null&&pool)planned=ExchangerRelay.plan(side,stream,partner.bath(),read);
+                else if(stream!=null)planned=ExchangerRelay.plan(side,stream,
                         other==null?null:new ExchangerRelay.Stream(other,endSpecificEnthalpy(partner.donor(),partner.port(),partner.volume()),partner.massFlow(),partner.law(),false),read,seconds);
             }
             if(planned.equals(side))continue;
@@ -1815,6 +1820,37 @@ public final class PassiveStepSolver {
             pipes.set(e,pipe.withHeat(planned));
         }
         return pipes==null?graph:new PassiveNetwork(graph.reservoirs(),pipes,graph.scheduledTransfers());
+    }
+    /**
+     * {@code graph} with each kettle's pool planned for a slice of {@code seconds} s (W7, plan section 8;
+     * {@link ExchangerRelay#planPool}) from its read in {@code reads} (by its key): the wall the tube side's stream as read
+     * makes against the pool as it stands, the give-back and the sit-out. A pool that holds no fluid, or whose tubes draw
+     * nothing, moves no heat. {@code graph} itself where it has no pool.
+     */
+    private PassiveNetwork pools(PassiveNetwork graph,Map<Long,ExchangerRelay.Read> reads,double seconds,Runnable checkpoint) {
+        List<PassiveNetwork.Reservoir> nodes=null;
+        for(int i=0;i<graph.reservoirs().size();i++) {
+            var node=graph.reservoirs().get(i);var pool=node.inventory().pool();if(pool==null)continue;
+            var read=reads.getOrDefault(pool.id(),ExchangerRelay.Read.NONE);var tube=read.partner();
+            var contents=node.state();
+            Pool planned;
+            if(node.kind()!=PassiveNetwork.NodeKind.RESERVOIR||holdsNoFluid(node))planned=Pool.idle(pool.id(),pool.partner(),pool.area(),pool.bottom(),pool.bundle(),pool.cells(),contents.temperature());
+            else {
+                var bath=new ExchangerRelay.Bath(contents.temperature(),pool.film(contents,node.inventory().geometry()));
+                ExchangerRelay.Stream stream=null;
+                if(tube!=null&&!tube.pool()&&endMass(tube.donor(),tube.port(),tube.volume())>0) {
+                    double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(contents.temperature(),tube.donor().temperature())-10);
+                    double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(contents.temperature(),tube.donor().temperature())+10);
+                    var curve=spanned(tube.donor(),tube.port(),tube.volume(),low,high,tube.law().films(),checkpoint);
+                    if(curve!=null)stream=new ExchangerRelay.Stream(curve,endSpecificEnthalpy(tube.donor(),tube.port(),tube.volume()),tube.massFlow(),tube.law(),true);
+                }
+                planned=ExchangerRelay.planPool(pool,bath,stream,read,seconds);
+            }
+            if(planned.equals(pool))continue;
+            if(nodes==null)nodes=new ArrayList<>(graph.reservoirs());
+            nodes.set(i,new PassiveNetwork.Reservoir(node.id(),node.elevation(),contents,node.kind(),node.inventory().withPool(planned)));
+        }
+        return nodes==null?graph:new PassiveNetwork(nodes,graph.pipes(),graph.scheduledTransfers());
     }
     /** The heat curve of the stream drawn through {@code port} from state {@code s} over {@code [low, high]} K, or null where it draws nothing. */
     private HeatCurve spanned(FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume,double low,double high,HeatCurve.Films films,Runnable checkpoint) {
@@ -3118,6 +3154,32 @@ public final class PassiveStepSolver {
      * with no closure ({@link InventoryEquilibrium#solve}). The residue stays booked in its inventory (the ledger is exact,
      * D46). A mover's dry suction keeps its port band ({@link InletPhase}).
      */
+    /**
+     * The heat (W) a kettle's pool takes into vessel {@code node} over a step, on the step's start state ({@link Pool#heat},
+     * batch 2026-10-27-heat-exchanger-design, W7): 0 for every node without a pool, for one standing as a junction (an
+     * emptying vessel, decision D54) and for a vessel that holds no fluid. The step's energy rows, the reconstruction's
+     * booking ({@code ConservativeTransport}) and the rest test all read it.
+     */
+    public static double poolHeat(PassiveNetwork.Reservoir node) {
+        var pool=node.inventory().pool();
+        return pool==null||node.kind()!=PassiveNetwork.NodeKind.RESERVOIR||holdsNoFluid(node)?0:pool.heat(node.state(),node.inventory().geometry());
+    }
+    /**
+     * The vapour (kg/s) a kettle's pool boils in vessel {@code node} over a step (W7): its heat ({@link #poolHeat}) over the
+     * latent heat of the start state's liquid into its gas; 0 unless the vessel holds gas over its liquid and the pool heats
+     * it. The phase draw counts it as gas the vessel holds within the step ({@code capacities}), as it counts an open vessel's
+     * release out: a vapour port draws the pool's boil-up, not its liquid.
+     */
+    double boilUp(PassiveNetwork.Reservoir node) {
+        double heat=poolHeat(node);var s=node.state();
+        if(!(heat>0)||!FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS))return 0;
+        double liquid=0,enthalpy=0;
+        for(int phase:new int[]{FluidThermodynamics.OIL,FluidThermodynamics.WATER})if(FluidThermodynamics.holdsPhase(s,phase)){
+            double mass=model.phaseMass(s,phase);liquid+=mass;enthalpy+=mass*model.phaseSpecificEnthalpy(s,phase,null);}
+        if(!(liquid>0))return 0;
+        double latent=model.phaseSpecificEnthalpy(s,FluidThermodynamics.GAS,null)-enthalpy/liquid;
+        return latent>0?heat/latent:0;
+    }
     static boolean holdsNoFluid(PassiveNetwork.Reservoir node) {
         if(node.kind()!=PassiveNetwork.NodeKind.RESERVOIR&&node.kind()!=PassiveNetwork.NodeKind.PORT)return false;
         return holdsNoFluid(node.inventory(),node.state());
@@ -3658,7 +3720,8 @@ public final class PassiveStepSolver {
             return ends;
         }
         /** {@link #capacities} of {@code graph} (its states are the step's start states). An open vessel's leave out what it
-         * releases over the step ({@link #releases}): its vented gas and its spilled liquid. */
+         * releases over the step ({@link #releases}): its vented gas and its spilled liquid; a kettle's add its pool's
+         * boil-up to its gas ({@link #boilUp}). */
         private double[][] capacities(PassiveNetwork graph,double dt) {
             int nodes=graph.reservoirs().size();int[] ends=drawingEnds(graph,null);
             double[][] result=new double[nodes][];
@@ -3668,6 +3731,8 @@ public final class PassiveStepSolver {
                 for(int phase=0;phase<3;phase++)result[node][phase]=rateOnly?Double.POSITIVE_INFINITY
                         :FluidThermodynamics.holdsPhase(start,phase)?model.phaseMass(start,phase)/(ends[node]*dt):0;
                 if(releases!=null&&releases[node]!=null)released(node,start,result[node],ends[node]*dt);
+                // A kettle's pool boils vapour within the step (W7): its boil-up is gas the ports may draw.
+                if(!rateOnly)result[node][FluidThermodynamics.GAS]+=boilUp(graph.reservoirs().get(node))/ends[node];
             }
             return result;
         }
@@ -4228,6 +4293,8 @@ public final class PassiveStepSolver {
                 var moments=released.moments().values();for(int c=0;c<3;c++)solidTargets[node][c]-=moments[c];
                 stored-=released.energyJoule();
             }
+            // A kettle's pool (W7): the bundle's heat into the vessel over the step, on its start state.
+            double pooled=poolHeat(graph.reservoirs().get(node));stored+=dt*pooled;heat+=pooled;
             for(int edge:nodeEdges[node]) {
                 var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flow(edge,x[edgeOffset+edge],tr);
                 // The donor terms read the stream of the end the flow leaves: the donor's bulk at a BULK end (the same

@@ -75,10 +75,13 @@ import java.util.function.Function;
  * <p>27 (batch 2026-10-27-heat-exchanger-design, W4): a heat side also carries its controller (a presence flag, then its
  * target by ordinal, value, low limit and manual effort) and its planned limit by ordinal; tag 3 is an air cooler's side
  * (its area, its air's temperature, bare tube, film, capacity and natural draught, its fans, controller and limit).</p>
+ *
+ * <p>28 (batch 2026-10-27-heat-exchanger-design, W7): a node also carries its kettle's pool after its geometry (a presence
+ * flag, then its key, partner, bundle surface, its bundle's bottom and diameter, wall cells, give-back and active share).</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=27;
+    public static final int VERSION=28;
     /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -289,10 +292,22 @@ public final class FluidCheckpointCodec {
         var state=new Writer();state.append(w,stateStart,end);w.truncate(flag);w.u8(2);w.append(state,0,state.size());
     }
     private static void geometry(Writer w,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){w.text(g.form().name());w.f64(g.capacity());w.f64(g.height());w.f64(g.diameter());w.f64(g.length());w.f64(g.bootDiameter());w.f64(g.bootLength());}
+    /** A kettle's pool (format 28, W7): absent, or its facts and slice inputs. */
+    private static void pool(Writer w,com.wormzjl.icheme.science.fluid.network.Pool pool) {
+        w.bool(pool!=null);if(pool==null)return;
+        w.i64(pool.id());w.i64(pool.partner());w.f64(pool.area());w.f64(pool.bottom());w.f64(pool.bundle());w.varint(pool.cells());for(double t:pool.wall())w.f64(t);w.f64(pool.giveBack());w.f64(pool.active());
+    }
+    private static com.wormzjl.icheme.science.fluid.network.Pool pool(Reader r) {
+        if(!r.bool())return null;
+        long id=r.i64(),partner=r.i64();double area=r.f64(),bottom=r.f64(),bundle=r.f64();int cells=r.varint(MAXIMUM_WALL_CELLS);if(cells<1)throw r.invalid("a pool without wall cells");
+        double[] wall=new double[cells];for(int k=0;k<cells;k++)wall[k]=r.f64();double giveBack=r.f64(),active=r.f64();
+        try{return new com.wormzjl.icheme.science.fluid.network.Pool(id,partner,area,bottom,bundle,wall,giveBack,active);}
+        catch(IllegalArgumentException e){throw r.invalid("invalid pool: "+e.getMessage());}
+    }
     private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Reader r){return new com.wormzjl.icheme.science.fluid.network.VesselGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64());}
     private static void topology(Writer w,PassiveNetwork graph) {
         w.varint(graph.reservoirs().size());
-        for(var n:graph.reservoirs()){w.i64(n.id());w.f64(n.elevation());w.u8(n.kind().ordinal());w.f64(n.inventory().volume());w.f64(n.inventory().levelHeight());w.bool(n.inventory().open());geometry(w,n.inventory().geometry());}
+        for(var n:graph.reservoirs()){w.i64(n.id());w.f64(n.elevation());w.u8(n.kind().ordinal());w.f64(n.inventory().volume());w.f64(n.inventory().levelHeight());w.bool(n.inventory().open());geometry(w,n.inventory().geometry());pool(w,n.inventory().pool());}
         w.varint(graph.pipes().size());
         for(var p:graph.pipes()) {
             w.i64(p.id());w.varint(p.first());w.varint(p.second());w.varint(p.sections().size());
@@ -363,7 +378,8 @@ public final class FluidCheckpointCodec {
     record IndexRow(long id,long revision,long generation,long online,long committed,long retry,int cadence,long base,long since,long start,long horizon,UnitRef unit) {}
     /** Where a unit lies: its pack, offset, length and SHA-256. */
     record UnitRef(long pack,long offset,int length,byte[] sha256) {}
-    private record Topology(long[] ids,double[] elevations,PassiveNetwork.NodeKind[] kinds,double[] volumes,double[] heights,boolean[] opens,com.wormzjl.icheme.science.fluid.network.VesselGeometry[] geometries,long[] pipeIds,int[] first,int[] second,
+    private record Topology(long[] ids,double[] elevations,PassiveNetwork.NodeKind[] kinds,double[] volumes,double[] heights,boolean[] opens,com.wormzjl.icheme.science.fluid.network.VesselGeometry[] geometries,
+                            com.wormzjl.icheme.science.fluid.network.Pool[] pools,long[] pipeIds,int[] first,int[] second,
                             List<List<PipeResistance.Geometry>> sections,List<FlowControl> controls,PassiveNetwork.PhasePort[] firstPorts,PassiveNetwork.PhasePort[] secondPorts,int[] forbiddenDirections,double[] actuatorAreas,
                             com.wormzjl.icheme.science.fluid.network.HeatLaw[] heats) {}
     private static com.wormzjl.icheme.science.fluid.network.HeatLaw heat(Reader r) {
@@ -483,9 +499,10 @@ public final class FluidCheckpointCodec {
     private static Topology topology(Reader r) {
         int nodes=r.varint(MAXIMUM_NODES);if(nodes==0)throw new IllegalArgumentException("Invalid saved graph size");
         var ids=new long[nodes];var elevations=new double[nodes];var kinds=new PassiveNetwork.NodeKind[nodes];var volumes=new double[nodes];var heights=new double[nodes];var opens=new boolean[nodes];var geometries=new com.wormzjl.icheme.science.fluid.network.VesselGeometry[nodes];
+        var pools=new com.wormzjl.icheme.science.fluid.network.Pool[nodes];
         for(int n=0;n<nodes;n++) {
             ids[n]=r.i64();elevations[n]=r.f64();int kind=r.u8();if(kind>=NODE_KINDS.length)throw r.invalid("unknown node kind "+kind);
-            kinds[n]=NODE_KINDS[kind];if(kinds[n]==PassiveNetwork.NodeKind.PORT)throw new IllegalArgumentException("Internal port cannot be persisted");volumes[n]=r.f64();heights[n]=r.f64();opens[n]=r.bool();geometries[n]=geometry(r);
+            kinds[n]=NODE_KINDS[kind];if(kinds[n]==PassiveNetwork.NodeKind.PORT)throw new IllegalArgumentException("Internal port cannot be persisted");volumes[n]=r.f64();heights[n]=r.f64();opens[n]=r.bool();geometries[n]=geometry(r);pools[n]=pool(r);
         }
         int pipes=r.varint(MAXIMUM_PIPES);var pipeIds=new long[pipes];var first=new int[pipes];var second=new int[pipes];
         var sections=new ArrayList<List<PipeResistance.Geometry>>(pipes);var controls=new ArrayList<FlowControl>(pipes);
@@ -499,14 +516,14 @@ public final class FluidCheckpointCodec {
                 case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
             firstPorts[p]=port(r);secondPorts[p]=port(r);forbiddenDirections[p]=r.varint(3);actuatorAreas[p]=r.f64();heats[p]=heat(r);
         }
-        return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas,heats);
+        return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pools,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas,heats);
     }
     private static PassiveNetwork state(Reader r,Topology t,FluidThermodynamics model) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(t.ids.length);
         for(int n=0;n<t.ids.length;n++) {
             var moles=r.sparse(MAXIMUM_ARRAY);double energy=r.f64();var solids=solids(r,model);
             double temperature=r.f64(),pressure=r.f64();var liquid=r.sparse(MAXIMUM_ARRAY);var vapor=r.sparse(MAXIMUM_ARRAY);double waterLiquid=r.f64(),waterVapor=r.f64(),hydrocarbonPressure=r.f64();
-            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n]);
+            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n]);
             var state=Arrays.stream(moles).sum()==0&&!solids.empty()?model.solidState(temperature,pressure,solids):model.state(temperature,pressure,liquid,vapor,waterLiquid,waterVapor,hydrocarbonPressure).withSolids(solids);
             nodes.add(new PassiveNetwork.Reservoir(t.ids[n],t.elevations[n],state,t.kinds[n],inventory));
         }

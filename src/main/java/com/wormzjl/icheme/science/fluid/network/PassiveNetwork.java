@@ -177,8 +177,13 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
      * {@code volume} is then its volume at the fill height {@code levelHeight}, the overflow nozzle's; the shell rises
      * {@link OpenVessel#FREEBOARD} above it. Its gas leaves to the atmosphere and the liquid above the shell spills
      * ({@link OpenVessel}).</p>
+     *
+     * <p>{@code pool} (batch 2026-10-27-heat-exchanger-design, W7): a kettle's tube bundle submerged in the vessel's
+     * contents, whose heat enters the vessel's energy row ({@link Pool#heat}); null for every other vessel and node. Like the
+     * opening it is the vessel's, so {@link #with} keeps it.</p>
      */
-    public record Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry) {
+    public record Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool) {
+        public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry){this(volume,moles,internalEnergy,solids,levelHeight,open,geometry,null);}
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open){this(volume,moles,internalEnergy,solids,levelHeight,open,VesselGeometry.prism(volume,levelHeight));}
         public Inventory(double volume,double[] moles,double internalEnergy){this(volume,moles,internalEnergy,SolidInventory.EMPTY);}
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids){this(volume,moles,internalEnergy,solids,PassiveStepSolver.LEVEL_HEAD_HEIGHT);}
@@ -189,8 +194,10 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
             double total=0;for(double n:moles){if(!Double.isFinite(n)||n<0)throw new IllegalArgumentException("Negative/nonfinite inventory");total+=n;}
             if(moles.length==0||!Double.isFinite(total)||(total==0&&solids.empty()&&internalEnergy!=0))throw new IllegalArgumentException("Invalid empty/overflowed inventory");
         }
-        /** The same vessel (volume, level height and opening) holding these contents. */
-        public Inventory with(double[] moles,double internalEnergy,SolidInventory solids){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry);}
+        /** The same vessel (volume, level height, opening and pool) holding these contents. */
+        public Inventory with(double[] moles,double internalEnergy,SolidInventory solids){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool);}
+        /** The same vessel and contents with {@code value} as its pool (W7: a kettle's, planned or compiled). */
+        public Inventory withPool(@org.jetbrains.annotations.Nullable Pool value){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,value);}
         /** Whether {@code other} holds the same contents, bit for bit: its moles, energy and solids, whatever the vessel's
          * geometry. A topology event conserves these; a layout refresh may rebuild the vessel around them (batch
          * 2026-10-26-backward-compat). */
@@ -203,8 +210,8 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
          */
         public double wallCapacity(){return open?Double.POSITIVE_INFINITY:volume;}
         @Override public double[] moles(){return moles.clone();}
-        @Override public boolean equals(Object other){return other instanceof Inventory value&&geometry.equals(value.geometry)&&open==value.open&&Double.doubleToLongBits(volume)==Double.doubleToLongBits(value.volume)&&Double.doubleToLongBits(levelHeight)==Double.doubleToLongBits(value.levelHeight)&&Double.doubleToLongBits(internalEnergy)==Double.doubleToLongBits(value.internalEnergy)&&Arrays.equals(moles,value.moles)&&solids.equals(value.solids);}
-        @Override public int hashCode(){return 31*Objects.hash(volume,levelHeight,internalEnergy,solids,open,geometry)+Arrays.hashCode(moles);}
+        @Override public boolean equals(Object other){return other instanceof Inventory value&&geometry.equals(value.geometry)&&open==value.open&&Objects.equals(pool,value.pool)&&Double.doubleToLongBits(volume)==Double.doubleToLongBits(value.volume)&&Double.doubleToLongBits(levelHeight)==Double.doubleToLongBits(value.levelHeight)&&Double.doubleToLongBits(internalEnergy)==Double.doubleToLongBits(value.internalEnergy)&&Arrays.equals(moles,value.moles)&&solids.equals(value.solids);}
+        @Override public int hashCode(){return 31*Objects.hash(volume,levelHeight,internalEnergy,solids,open,geometry,pool)+Arrays.hashCode(moles);}
     }
     /**
      * {@code blockedDirections} is a two-bit mask (1 forbids flow from {@link #first} to {@link #second}, 2 the reverse),

@@ -1,6 +1,6 @@
 # Heat exchanger system: plan
 
-Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: In progress since 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. W1, W2, W5, W6, W3a, W3 and W4 are built; section 10 records each as built.
+Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: In progress since 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. W1, W2, W5, W6, W3a, W3, W4 and W7 are built; section 10 records each as built.
 
 Evidence:
 
@@ -480,6 +480,25 @@ W4 as built (2026-10-27), as section 6 describes, with these decisions (each rev
 
 - **In-game.** The owner stopped the check after the air cooler's manual screen. It showed the rail in order and a low limit label cut at the rail's width, now shortened. The rest of the screen is judged by the gates and the rail's row count.
 - **Measured against section 6's evidence.** The step reaches the cold outlet through the hot side's inlet holdup. The cold side reads it as it arrives and plans its bypass on the same read, so its outlet moves 0.70 K at most, not the uncontrolled response the study's instant step gave.
+
+W7 as built (2026-10-28), as section 8 describes, with these decisions (each reversible):
+
+- **The shell is a vessel with a pool.** The kettle registers its tubes (a side, `HeatSides.Unit.KETTLE`, `TUBE`) and its shell, a closed RESERVOIR whose `HeatUnit` is `KETTLE`, `SHELL`, partnered with the tubes. The shell's geometry is a lying drum 1.6 bundles across over 0.9 L + 0.3 m (`HeatSides.kettleShell`, the drawn shell); its node is a shell cell under the bundle. The pool (`Pool`, new) rides on the vessel's `Inventory`: its facts (key, partner, surface, the bundle's bottom and diameter) and its slice inputs (wall per cell, give-back, active share).
+- **The pool's heat is explicit on a step's start state**, as a side's is on its donor's: Σ film · cell · (wall − T) · active + give-back into the vessel's energy row, booked as a `HEAT` boundary at the pool's key. No unknown, no mode. The wall is planned at the slice start from the tube side as read (`ExchangerRelay.planPool`): each cell's root balances the tube march against the pool as an isothermal bath.
+- **The film follows the level.** The wetted share of the bundle is the circle segment under the liquid level (`VesselGeometry.heightAt`); wet tubes take the boiling film (5000 W/m²K) over vapour, the liquid film (2000) without it; dry tubes take the gas film (100). The duty falls as the level uncovers the bundle, so a kettle that boils dry stops heating instead of superheating a small holdup.
+- **The boil-up counts in the phase draw** (extends D11). A vapour port's capacity is the gas the vessel holds at the step's start over the step; the pool's boil-up (heat / latent heat at the start state) is added to it, as an open vessel's release is subtracted. Without it the vapour port drew liquid once the boil-up per step exceeded the vapour held (the uncontrolled probe lost 750 kg in 5 s).
+- **The pool takes all the heat in transit** (its capacity is unbounded); the tubes' give-back is 0. A still pool (empty or no tube flow) has an active share of 0.
+- **The tubes are controllable**: outlet temperature or duty by their bypass (the medium that leaves without crossing the bundle), the kettle's natural mode.
+- **Formats.** State format 28 (a vessel's pool); certificate graph identity 7, its digest covering the pool. Facts unchanged: schema 5 already carries a heat unit on any registration.
+- **Gates** (`ExchangerCouplingTest` +2, `HeatSidesTest` kettle case, `ShapeRasterizerTest`, the codec round trip):
+
+| Gate | Result |
+|---|---|
+| 150 °C water at 24 kg/s through 56 m², shell at 1 atm, uncontrolled | pool 373.13 K at 101338 Pa; tubes 2785.8 kW, pool 2784.7 kW; boil-up 1.2095 kg/s against Q/λ 1.2101; energy exact |
+| a 1 MW duty on the tubes | bypass 0.800; tubes 1000.1 kW, pool 1000.0 kW; boil-up 0.4343 against 0.4345 kg/s |
+| an empty shell | the tubes pass unchanged; the pool books nothing |
+
+- **Noted.** The model's λ for water at 1 atm is 2301 kJ/kg (steam tables 2257); the gate uses the model's own. In the first slice the tubes move heat while the pool is still idle; the transit returns it, and the two settle in about two slices.
 
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
 

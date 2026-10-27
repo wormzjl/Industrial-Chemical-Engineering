@@ -230,22 +230,37 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** One side of a heat-exchanging unit to place: its node (its first inlet's cell), its inlet and outlet ports, its
      * passage and its unit's facts ({@link #placeUnit} names the partners). */
     public record UnitSide(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,PipeResistance.Geometry passage,HeatUnit heat){}
+    /** A kettle's shell to place with its tubes (W7): a closed vessel at its pool's node, with its phase ports, its volume,
+     * level height and geometry, and its heat unit ({@link HeatUnit#pool}; {@link #placeUnit} names the partner). */
+    public record UnitVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,HeatUnit heat){}
+    /** {@link #placeUnit(List,UnitVessel)} of a unit without a vessel. */
+    public List<WorldTopologyLedger.Registration> placeUnit(List<UnitSide> sides){return placeUnit(sides,null);}
     /**
      * Registers a heat-exchanging unit's sides as one ledger event (batch 2026-10-27-heat-exchanger-design): each a heat
      * side at its node with its ports and passage, passive; two sides name each other as partners, so the pair is whole
-     * from its first event. Returns the registrations in the order of {@code sides}.
+     * from its first event. A kettle's tubes are partnered with its shell instead, a vessel placed empty in the same event
+     * after them ({@code vessel}, W7). Returns the registrations in the order of {@code sides}, then the vessel's.
      */
-    public List<WorldTopologyLedger.Registration> placeUnit(List<UnitSide> sides) {
+    public List<WorldTopologyLedger.Registration> placeUnit(List<UnitSide> sides,@org.jetbrains.annotations.Nullable UnitVessel vessel) {
         owned();
-        if(sides.isEmpty()||sides.size()>2)throw new IllegalArgumentException("A heat unit has one or two sides");
+        if(sides.isEmpty()||sides.size()>2||vessel!=null&&sides.size()!=1)throw new IllegalArgumentException("A heat unit has one or two sides, a kettle one and its shell");
         long first=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
+        int count=sides.size()+(vessel==null?0:1);
         for(int i=0;i<sides.size();i++) {
-            var side=sides.get(i);long partner=sides.size()==2?first+1-i:0;
+            var side=sides.get(i);long partner=count==2?first+1-i:0;
             var device=new PhysicalFluidTopology.Device(first+i,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive(),
                     side.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,side.heat().withPartner(partner));
             var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(first+i,record));
         }
-        submit(edits,Math.addExact(first,sides.size()));return placed;
+        if(vessel!=null) {
+            long id=first+1;
+            var device=new PhysicalFluidTopology.Device(id,vessel.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
+                    new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),vessel.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,
+                    PhysicalFluidTopology.ALL_FACES,0,0,vessel.heat().withPartner(first));
+            var spec=new FluidDeviceSpec(vessel.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,vessel.levelHeight(),false,vessel.geometry());
+            var record=new WorldTopologyLedger.Registration(device,spec,0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(id,record));
+        }
+        submit(edits,Math.addExact(first,count));return placed;
     }
     /** Removes a heat-exchanging unit's sides as one ledger event, so no event leaves half a pair. */
     public void removeUnit(List<Long> ids) {
@@ -705,6 +720,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
             view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),heat.partner()!=0,outlet,seconds>0?joule/seconds:0,
                     heat.fans()?share:null,heat.fans()?com.wormzjl.icheme.science.equipment.HeatSides.fanPower(heat.area(),share):null,
                     heat.burners()?share:null,heat.burners()?heat.control().target():null,coil!=null?coil.duty():null,bypass));
+        }
+        // A kettle's shell (W7): the heat its pool took over the interval, booked at its key, at the pool's temperature.
+        if(heat!=null&&heat.pool()&&nodeIndex>=0) {
+            long key=PhysicalFluidTopology.sideIdentity(id);double joule=0;
+            for(var boundary:snapshot.lastResult().map(PassiveIntervalSolver.Result::boundaries).orElse(List.of()))
+                if(boundary.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==key)joule+=boundary.totalEnergyJoule();
+            view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),true,snapshot.graph().reservoirs().get(nodeIndex).state().temperature(),seconds>0?joule/seconds:0,
+                    null,null,null,null,null,null));
         }
         if(registration.device().kind()==TopologyCompiler.Kind.VOID) {
             var sources=new ArrayList<IslandCoordinator.Snapshot>();

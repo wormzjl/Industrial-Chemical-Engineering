@@ -13,7 +13,8 @@ import org.jetbrains.annotations.Nullable;
 /**
  * The heat-exchanging sides of a unit (batch 2026-10-27-heat-exchanger-design, plan sections 4, 5.1 and 10): each a
  * passage between its inlet and outlet nozzles, registered as one fluid device of its own. An exchanger has a tube and a
- * shell side, an air cooler its process side; the fired heaters (W6) and the kettle (W7) add theirs.
+ * shell side, an air cooler its process side, a fired heater its two coils (W6), a kettle its tubes (W7). A kettle's shell is
+ * no passage: it registers as a vessel after the sides ({@link #pool}), its pool the tubes' other side.
  */
 public final class HeatSides {
     private HeatSides() {}
@@ -52,7 +53,26 @@ public final class HeatSides {
 
     /** The unit a shape kind's sides belong to, or null for a kind without heat sides. */
     public static @Nullable Unit unit(EquipmentShape.Kind kind) {
-        return switch(kind){case EXCHANGER->Unit.EXCHANGER;case AIR_COOLER->Unit.AIR_COOLER;case VERTICAL_HEATER,CABIN_HEATER->Unit.FIRED_HEATER;default->null;};
+        return switch(kind){case EXCHANGER->Unit.EXCHANGER;case KETTLE->Unit.KETTLE;case AIR_COOLER->Unit.AIR_COOLER;case VERTICAL_HEATER,CABIN_HEATER->Unit.FIRED_HEATER;default->null;};
+    }
+    /**
+     * Whether {@code kind}'s unit also registers a vessel, after its sides (W7, plan section 8): a kettle's shell, a reservoir
+     * whose FEED, VAPOUR_OUTLET and LIQUID_OUTLET nozzles are its ports, as a drum's are, and whose pool is its tubes' other side.
+     */
+    public static boolean pool(EquipmentShape.Kind kind){return kind==EquipmentShape.Kind.KETTLE;}
+    /**
+     * A kettle's bundle across, m, in its shell of diameter {@code shell} (W7): the drawn bundle, centred on the shell's axis,
+     * 1/1.6 of it ({@link ProcessUnit#kettleShell}, within the shell's rounding to 0.25 m). Its lowest tubes stand half the
+     * difference over the shell's bottom; the pool's level wets it from there ({@link com.wormzjl.icheme.science.fluid.network.Pool#wetted}).
+     */
+    public static double kettleBundle(double shell){return shell/1.6;}
+    /**
+     * A kettle's shell as a vessel (W7): a lying drum of the kettle's diameter ({@link ProcessUnit#kettleShell}, 1.6 bundles)
+     * over the drawn shell's cylinder, 0.9 L + 0.3 m ({@link ProcessUnit#kettle}), with two heads' volume for its back head
+     * and front cone.
+     */
+    public static com.wormzjl.icheme.science.fluid.network.VesselGeometry kettleShell(double bundle,double tubes) {
+        return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.HORIZONTAL_DRUM,ProcessUnit.kettleShell(bundle),.9*tubes+.3,0,0);
     }
     /** {@code shape}'s sides in registration order (the first one's node is the structure's fluid cell); none for other kinds. */
     public static List<Definition> of(EquipmentShape shape) {
@@ -62,6 +82,8 @@ public final class HeatSides {
             case EXCHANGER->{double area=ProcessUnit.tubeSurface(d,l);
                 yield List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,area,tubePassage(d,l)),
                         new Definition(Side.SHELL,EquipmentShape.Role.SHELL_INLET,EquipmentShape.Role.SHELL_OUTLET,area,shellPassage(d,l)));}
+            // A kettle's bundle (TEMA AKT): two tube passes as an exchanger's; its shell is a vessel ({@link #pool}).
+            case KETTLE->List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,ProcessUnit.tubeSurface(d,l),tubePassage(d,l)));
             case AIR_COOLER->List.of(new Definition(Side.PROCESS,EquipmentShape.Role.PROCESS_INLET,EquipmentShape.Role.PROCESS_OUTLET,
                     BARE_PER_FACE*shape.bank().bays()*ProcessUnit.bundleFace(d,l),airCoolerPassage(d,l,shape.bank())));
             case FIRED_HEATER->{double duty=ProcessUnit.heaterDuty(shape.kind(),d,l);
@@ -119,14 +141,14 @@ public final class HeatSides {
     /** {@link #heatSide(Unit,Side,double,double,double,long,HeatControl)} of a side without a partner or controller. */
     public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target){return heatSide(unit,side,area,share,target,0,null);}
     /**
-     * The heat law a side moves heat through, or null where it has none yet (a kettle waits for its package, W7, and an
-     * exchanger side without a partner), with its actuator at {@code share}, its set point {@code target} (K) and its
+     * The heat law a side moves heat through, or null where it has none (an exchanger side without a partner, a kettle's
+     * shell, whose pool rides on its vessel), with its actuator at {@code share}, its set point {@code target} (K) and its
      * built-in {@code control} (W4, plan section 6; null for none), which sets an exchanger side's bypass and an air cooler's
      * fans:
      * <ul><li>an exchanger's side over its tube surface {@code area} (m²) in {@link #EXCHANGER_CELLS} cells, with the films
      * per phase of plan section 4 and its bypass at {@code share}, against the wall its other side's stream makes:
      * {@code partner} is that side's connection id, and each slice plans the wall from it (plan section 5.2; the cells' 25 °C
-     * here is never moved against);</li>
+     * here is never moved against); a kettle's tubes the same against the wall their pool makes (W7);</li>
      * <li>an air cooler's process side against air at {@link #AIR_TEMPERATURE} over its bare tube surface {@code area}
      * (m²), with its fans at {@code share} of full speed ({@link #AIR});</li>
      * <li>a fired heater's coil towards the set point {@code target}, the radiant coil all the way and the convection coil
@@ -134,7 +156,7 @@ public final class HeatSides {
      */
     public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner,@Nullable HeatControl control) {
         return switch(unit) {
-            case EXCHANGER->{if(partner==0)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
+            case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
                 yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE);}
             case AIR_COOLER->new AirCooled(area,AIR,share,control,HeatControl.Limit.NONE);
             case FIRED_HEATER->new FiredCoil(target,side==Side.RADIANT?1:1-ProcessUnit.RADIANT_SHARE,coilDuty(side,area,share),1);

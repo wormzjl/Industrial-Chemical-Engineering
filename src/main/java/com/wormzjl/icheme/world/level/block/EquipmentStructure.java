@@ -196,7 +196,7 @@ public final class EquipmentStructure {
         var world=FluidWorldAuthority.find(level.getServer()).orElse(null);if(world==null)return false;
         boolean unit=HeatSides.unit(vessel.shape().kind())!=null;
         var heldIds=unit?heldAtNodes(world,level,vessel):List.<Long>of();
-        if(unit&&unitRecords(world,heldIds).size()==HeatSides.of(vessel.shape()).size()) {
+        if(unit&&unitRecords(world,heldIds).size()==registrations(vessel.shape())) {
             // A whole pair binds where its cells are loaded; none or half of a pair registers afresh below, once complete.
             boolean loaded=true;
             for(var at:nodes(vessel))loaded&=level.hasChunkAt(at)&&level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell&&ours(shell,vessel.origin(),vessel.shape());
@@ -241,8 +241,11 @@ public final class EquipmentStructure {
             var side = sides.get(i);
             placing.add(new FluidWorldAuthority.UnitSide(position(level, nodes.get(i)), sidePorts(level, vessel, side), side.passage(), new HeatUnit(unit, side.side(), side.area(), 0)));
         }
+        // A kettle's shell (W7): a closed vessel at its pool's node, its phase ports the drum's, its surface its tubes'.
+        var pool = HeatSides.pool(shape.kind()) ? new FluidWorldAuthority.UnitVessel(position(level, nodes.get(sides.size())), ports(level, vessel), shape.volume(), shape.levelHeight(),
+                shape.fluidGeometry(), new HeatUnit(unit, HeatSides.Side.SHELL, sides.getFirst().area(), 0)) : null;
         FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
-            var records = world.placeUnit(placing);
+            var records = world.placeUnit(placing, pool);
             for (int i = 0; i < records.size(); i++)
                 if (level.getBlockEntity(nodes.get(i)) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(records.get(i).device().id());
         });
@@ -261,6 +264,11 @@ public final class EquipmentStructure {
             ports.add(new PhysicalFluidTopology.Port(position(level, cell), face, PassiveNetwork.PhasePort.BULK, connection));
         }
         return ports;
+    }
+
+    /** A heat unit's registrations: one per side, and a kettle's shell (W7). */
+    private static int registrations(EquipmentShape shape) {
+        return HeatSides.of(shape).size() + (HeatSides.pool(shape.kind()) ? 1 : 0);
     }
 
     /** The registrations of a unit's sides, by side: those held at {@code ids} and their partners. */
@@ -294,7 +302,7 @@ public final class EquipmentStructure {
     private static void restateUnit(ServerLevel level, Vessel vessel, FluidWorldAuthority world, java.util.Collection<Long> held) {
         var sides = HeatSides.of(vessel.shape());
         var records = unitRecords(world, held);
-        if (records.size() != sides.size()) {
+        if (records.size() != registrations(vessel.shape())) {
             if (!records.isEmpty()) world.removeUnit(records.values().stream().map(r -> r.device().id()).toList());
             registerUnit(level, vessel);
             return;
@@ -313,6 +321,22 @@ public final class EquipmentStructure {
                 if (entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
                 else world.deviceLoaded(device.id());
             }
+        }
+        if (!HeatSides.pool(vessel.shape().kind())) return;
+        // A kettle's shell (W7) moves to its pool's node with its ports, its vessel follows the datasheet, it keeps what it holds.
+        var record = records.get(HeatSides.Side.SHELL);
+        var node = nodes.get(sides.size());
+        var device = record.device();
+        var shape = vessel.shape();
+        var moved = device.withPlacement(position(level, node), ports(level, vessel)).withHeat(device.heat().withArea(sides.getFirst().area()));
+        var spec = record.spec();
+        var respec = new FluidDeviceSpec(shape.volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), shape.levelHeight(), false, shape.fluidGeometry());
+        if (!moved.equals(device) || !respec.equals(spec)) world.edit(device.id(), record.revision(), moved, respec);
+        for (var other : nodes)
+            if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();
+        if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) {
+            if (entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
+            else world.deviceLoaded(device.id());
         }
     }
 
@@ -338,11 +362,15 @@ public final class EquipmentStructure {
         return new PhysicalFluidTopology.Position(level.dimension().location().toString(), at.getX(), at.getY(), at.getZ());
     }
 
-    /** Reservoir nozzles keep their phase classes; movers register only their explicitly directed process pair. */
+    /** Reservoir nozzles keep their phase classes; movers register only their explicitly directed process pair; a kettle's
+     * shell (W7) its own nozzles, its tubes' left to their side. */
     private static List<PhysicalFluidTopology.Port> ports(Level level, Vessel vessel) {
         var ports = new ArrayList<PhysicalFluidTopology.Port>();
         var nozzles = vessel.shape().nozzles();
+        var passages = new java.util.HashSet<EquipmentShape.Role>();
+        for (var side : HeatSides.of(vessel.shape())) { passages.add(side.inlet()); passages.add(side.outlet()); }
         for (var port : ShapeRasterizer.ports(vessel.shape())) {
+            if (passages.contains(nozzles.get(port.nozzle()).role())) continue;
             var role = PhysicalFluidTopology.ConnectionRole.VESSEL;
             if (vessel.shape().kind().mover()) {
                 role = switch (nozzles.get(port.nozzle()).role()) {

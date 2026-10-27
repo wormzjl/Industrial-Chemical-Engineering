@@ -895,15 +895,21 @@ public final class IslandCoordinator {
             while(!sawStopped.isEmpty()&&sawStopped.peekFirst()[1]<=tick)sawStopped.removeFirst();
         }
     }
+    /** The island's coupled sides: each coupled heat side's connection id, and each kettle's pool's key (W7). */
     private static long[] coupledSides(PassiveNetwork graph) {
-        return graph.pipes().stream().filter(p->p.heat() instanceof HeatSide side&&side.coupled()).mapToLong(PassiveNetwork.Pipe::id).toArray();
+        var sides=graph.pipes().stream().filter(p->p.heat() instanceof HeatSide side&&side.coupled()).mapToLong(PassiveNetwork.Pipe::id);
+        var pools=graph.reservoirs().stream().filter(n->n.inventory().pool()!=null).mapToLong(n->n.inventory().pool().id());
+        return java.util.stream.LongStream.concat(sides,pools).toArray();
     }
     private static long partnerOf(PassiveNetwork graph,long pipe) {
         for(var p:graph.pipes())if(p.id()==pipe&&p.heat() instanceof HeatSide side)return side.partner();
+        for(var n:graph.reservoirs())if(n.inventory().pool()!=null&&n.inventory().pool().id()==pipe)return n.inventory().pool().partner();
         throw new IllegalArgumentException("No coupled side "+pipe);
     }
-    /** {@code pipe}'s stream in {@code graph}, drawn at {@code flows} (kg/s per connection; null where none is known: no flow). */
+    /** {@code pipe}'s stream in {@code graph}, drawn at {@code flows} (kg/s per connection; null where none is known: no flow);
+     * a kettle's pool's contents for a pool's key (W7), null where it holds no fluid. */
     private static ExchangerRelay.Partner stream(PassiveNetwork graph,double[] flows,long pipe) {
+        for(var n:graph.reservoirs())if(n.inventory().pool()!=null&&n.inventory().pool().id()==pipe)return ExchangerRelay.Partner.pool(n);
         var pipes=graph.pipes();
         for(int e=0;e<pipes.size();e++) {
             var p=pipes.get(e);if(p.id()!=pipe||!(p.heat() instanceof HeatSide law))continue;
@@ -991,7 +997,9 @@ public final class IslandCoordinator {
         return Math.abs(now.donor().temperature()-used.donor().temperature())>WAKE_TEMPERATURE
                 ||Math.abs(now.massFlow()-used.massFlow())>WAKE_FLOW*Math.abs(used.massFlow())
                 // A controller's bypass moves the flow through the cells as a flow change does (W4).
-                ||Math.abs(now.law().bypass()-used.law().bypass())>WAKE_FLOW
+                ||now.law()!=null&&used.law()!=null&&Math.abs(now.law().bypass()-used.law().bypass())>WAKE_FLOW
+                // A kettle's pool that boils dry or floods changes its film (W7).
+                ||now.pool()!=used.pool()||now.pool()&&Math.abs(now.bath().film()-used.bath().film())>WAKE_FLOW*used.bath().film()
                 ||Math.abs(transits.getOrDefault(side.pair(),0.))>WAKE_TRANSIT*Math.abs(otherSide.heatRate)*slice+1;
     }
     /** The certified islands woken by an exchanger partner's commit (decision D4) end their certificates here, at the engine's

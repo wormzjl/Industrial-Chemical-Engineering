@@ -52,13 +52,17 @@ class FluidCheckpointCodecTest {
     }
     /** Format 24: a connection's heat side (batch 2026-10-27-heat-exchanger-design, W5) comes back with its facts and its
      * slice inputs, so a restored island moves the heat its graph did; a plain connection comes back without one. Format 27
-     * (W4): with its controller and planned limit, and an air cooler's side with its air, fans and controller. */
+     * (W4): with its controller and planned limit, and an air cooler's side with its air, fans and controller. Format 28
+     * (W7): a vessel's kettle pool with its facts and slice inputs (here as the slice planned it without a read of its tubes:
+     * idle at the vessel's temperature). */
     @Test void aHeatSideRoundTrips() {
         var charge=model.initialNitrogenCharge(1,298.15,101325,()->{});
         var side=new HeatSide(57,new HeatCurve.Films(430,487,85),new double[]{298.15,300.5},.25,-12.5,0,1,
                 new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,320,280,.75),HeatControl.Limit.HIGHEST);
         var cooled=new AirCooled(90,com.wormzjl.icheme.science.equipment.HeatSides.AIR,.4,new HeatControl(HeatControl.Target.DUTY,5e5,0,1),HeatControl.Limit.LOWEST);
-        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,charge),new PassiveNetwork.Reservoir(2,0,charge),new PassiveNetwork.Reservoir(3,0,charge),new PassiveNetwork.Reservoir(4,0,charge)),
+        var pool=new Pool(PhysicalFluidTopology.sideIdentity(21),PhysicalFluidTopology.sideIdentity(20),56,.15,.5,new double[]{340,338,336,334,332,330,328,326},12.5,.5);
+        var heated=new PassiveNetwork.Reservoir(4,0,charge,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Reservoir(4,0,charge).inventory().withPool(pool));
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,charge),new PassiveNetwork.Reservoir(2,0,charge),new PassiveNetwork.Reservoir(3,0,charge),heated),
                 List.of(new PassiveNetwork.Pipe(9,0,1,new PipeResistance.Geometry(12,.0212,1.5e-6,1.5,174)).withHeat(side),new PassiveNetwork.Pipe(10,1,2,new PipeResistance.Geometry(1,.05,4.5e-5,0)),
                         new PassiveNetwork.Pipe(11,2,3,new PipeResistance.Geometry(6,.0212,1.5e-6,1.5,174)).withHeat(cooled)));
         var full=new PassiveIntervalSolver(model).solve(graph,5,PassiveIntervalSolver.Settings.defaults(),()->{});
@@ -68,6 +72,10 @@ class FluidCheckpointCodecTest {
         assertEquals(side,pipes.getFirst().heat());assertNull(pipes.get(1).heat());
         assertEquals(full.graph().pipes().getLast().heat(),pipes.getLast().heat());assertEquals(.4,((AirCooled)pipes.getLast().heat()).fans(),"no flow, the fans stand");
         assertEquals(174,pipes.getFirst().sections().getFirst().channels());
+        var planned=full.graph().reservoirs().getLast().inventory().pool();
+        assertEquals(pool.shape(),planned.shape());assertEquals(0,planned.active(),"no read of its tubes: the pool moves no heat");
+        assertEquals(planned,loaded.islands().getFirst().snapshot().graph().reservoirs().getLast().inventory().pool(),"the pool comes back");
+        assertNull(loaded.islands().getFirst().snapshot().graph().reservoirs().getFirst().inventory().pool());
         assertSameImage(image,FluidCheckpointCodec.encode(loaded,key->model),"a reloaded checkpoint re-encodes to the same bytes");
     }
     @Test void missingClocksMistypedStampsCorruptionUnknownVersionsAndChangedPropertiesAreRejected() {

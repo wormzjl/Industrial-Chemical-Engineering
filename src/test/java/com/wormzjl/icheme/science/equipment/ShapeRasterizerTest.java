@@ -251,7 +251,9 @@ class ShapeRasterizerTest {
             // A heat-exchanging unit has a node per side, at its first inlet's port cell (batch 2026-10-27-heat-exchanger-design).
             else if (HeatSides.unit(shape.kind()) != null) {
                 var sides = HeatSides.of(shape);var cells = ShapeRasterizer.fluidCells(shape);
-                assertEquals(sides.size(), cells.size(), shape.toString());
+                // A kettle's shell registers after its sides, at a shell cell (W7).
+                assertEquals(sides.size() + (HeatSides.pool(shape.kind()) ? 1 : 0), cells.size(), shape.toString());
+                if (HeatSides.pool(shape.kind())) assertTrue(ShapeRasterizer.layout(shape).shell().contains(cells.getLast()), shape.toString());
                 for (int i = 0; i < sides.size(); i++) {
                     var inlet = sides.get(i).inlet();
                     var first = ShapeRasterizer.ports(shape).stream().filter(p -> shape.nozzles().get(p.nozzle()).role() == inlet).findFirst().orElseThrow();

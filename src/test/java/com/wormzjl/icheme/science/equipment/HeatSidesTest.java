@@ -46,7 +46,28 @@ class HeatSidesTest {
         // One node per side, each at its first inlet's cell; the first is the structure's fluid cell.
         var cells=ShapeRasterizer.fluidCells(shape);
         assertEquals(2,cells.size());assertNotEquals(cells.get(0),cells.get(1));assertEquals(cells.getFirst(),ShapeRasterizer.fluidCell(shape));
-        assertTrue(HeatSides.of(EquipmentShape.unit(EquipmentShape.Kind.KETTLE,1,6,EquipmentShape.Heading.SOUTH,2)).isEmpty(),"the kettle's sides come with W7");
+    }
+    /**
+     * A kettle (W7, plan section 8): one heat side, its tubes over the bundle's surface, and its shell a vessel, a lying drum
+     * 1.6 bundles across over its 0.9 L + 0.3 m cylinder, registered after the tubes at its lowest inside cell.
+     */
+    @Test void aKettleHasItsTubesAndItsShellIsAVessel() {
+        for(var shape:new EquipmentShape[]{EquipmentShape.unit(EquipmentShape.Kind.KETTLE,1,6,EquipmentShape.Heading.SOUTH,2),EquipmentShape.unit(EquipmentShape.Kind.KETTLE,.5,2,EquipmentShape.Heading.EAST,2),
+                EquipmentShape.unit(EquipmentShape.Kind.KETTLE,2,10,EquipmentShape.Heading.NORTH,2)}) {
+            var sides=HeatSides.of(shape);
+            assertEquals(1,sides.size(),shape.toString());assertEquals(HeatSides.Side.TUBE,sides.getFirst().side());
+            assertEquals(ProcessUnit.tubeSurface(shape.diameter(),shape.tangentLength()),sides.getFirst().area(),1e-9);
+            assertTrue(HeatSides.pool(shape.kind())&&shape.fluidDevice());
+            double dk=ProcessUnit.kettleShell(shape.diameter()),length=.9*shape.tangentLength()+.3;
+            assertEquals(Math.PI*dk*dk*length/4+Math.PI*dk*dk*dk/12,shape.volume(),1e-9,shape.toString());assertEquals(dk,shape.levelHeight(),1e-12);
+            var cells=ShapeRasterizer.fluidCells(shape);
+            assertEquals(2,cells.size());assertNotEquals(cells.get(0),cells.get(1));
+            assertTrue(ShapeRasterizer.layout(shape).shell().contains(cells.get(1)),"the pool's node is a shell cell: "+shape);
+            for(var port:ShapeRasterizer.ports(shape))if(shape.nozzles().get(port.nozzle()).role().name().startsWith("TUBE_"))
+                assertNotEquals(cells.get(1),port.cell(),"the pool's node is none of its tubes' cells: "+shape);
+        }
+        assertNull(HeatSides.heatSide(HeatSides.Unit.KETTLE,HeatSides.Side.SHELL,56,0,0,5,null),"a kettle's shell has no passage law: its pool rides on its vessel");
+        assertNotNull(HeatSides.heatSide(HeatSides.Unit.KETTLE,HeatSides.Side.TUBE,56,0,0,5,null));
     }
     /**
      * Plan section 4: an air cooler's process stream sees air at 25 °C through UA_eff = C (1 − e^(−UA/C)) per m² of bundle

@@ -345,11 +345,15 @@ public final class IslandCertificate {
     }
     /** The digest of what replay takes to be fixed about an island: everything but its finite inventories and states. */
     static String graphIdentity(PassiveNetwork graph) {
-        var d=new Digest();d.text("icheme-certificate-graph-identity-6");d.integer(graph.reservoirs().size());
+        var d=new Digest();d.text("icheme-certificate-graph-identity-7");d.integer(graph.reservoirs().size());
         for(var node:graph.reservoirs()) {
             d.number(node.id());d.text(node.kind().name());d.real(node.elevation());
             // A junction's volume is a numerical placeholder that a solve may move; a vessel's is its identity.
             if(!node.junction()){d.real(node.inventory().volume());d.text(node.inventory().geometry().toString());d.integer(node.inventory().open()?1:0);}
+            // A kettle's pool's facts and slice inputs (W7): a replay holds them fixed.
+            var pool=node.inventory().pool();
+            if(pool==null)d.integer(0);
+            else{d.integer(1);d.number(pool.id());d.number(pool.partner());d.real(pool.area());d.real(pool.bottom());d.real(pool.bundle());d.integer(pool.cells());for(double t:pool.wall())d.real(t);d.real(pool.giveBack());d.real(pool.active());}
             if(node.fixed()) {
                 var inventory=node.inventory();d.integer(inventory.moles().length);for(double n:inventory.moles())d.real(n);
                 d.real(inventory.internalEnergy());d.solids(inventory.solids());d.real(node.state().temperature());d.real(node.state().pressure());

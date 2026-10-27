@@ -6,11 +6,11 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C) and W4 (the built-in control) are built; study W3a is done. W7 (the kettle) is next. The owner answered Q1 to Q14 and Q16 (form C); Q15 is open. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C), W4 (the built-in control) and W7 (the kettle) are built; study W3a is done. W8 (the exchanger assembly) is next. The owner answered Q1 to Q14 and Q16 (form C); Q15 is open. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5, W6, W3a, W3 and W4 as built (section 10). It covers:
+- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5, W6, W3a, W3, W4 and W7 as built (section 10). It covers:
   - the physics in numbers and the owner's decisions;
   - UA from size with a film per phase and the approximations that keep it free of lag;
   - the air cooler (air at 25 °C) and the fired heater (heat to a set temperature, capped at its duty);
@@ -68,6 +68,13 @@ Changed by W4:
 - `science/equipment/HeatSides` (`AIR`; `airFilms` reads it; `heatSide` takes the controller);
 - `runtime/fluid`: `HeatUnit` (`Mode.FAN` removed, `controller`, `controllable`), `FluidCheckpointCodec` (state format 27), `IslandCertificate` (graph identity 6), `IslandCoordinator` (a moved bypass wakes), `FluidView.Heat.bypass`, `FluidWorldAuthority` (`controlStatus`, the planned fans and bypass in the view);
 - `network/FluidNetwork` (`Controls.heat`, the side's edit), `FluidDeviceScreen` (the control's rail and readings), `en_us.json`.
+
+Changed by W7:
+
+- `science/fluid/network`: `Pool` (new: the kettle's pool on its vessel's inventory, its wetted share, film and heat), `PassiveNetwork.Inventory.pool`, `ExchangerRelay` (`Partner.pool`, `Bath`, `planPool`, the wall against a bath), `PassiveStepSolver` (`poolHeat`, `boilUp` in the phase draw, the pool's plan), `ConservativeTransport` (the pool's `HEAT` boundary), `NetworkReduction.atRest`, `VesselGeometry.segmentArea`;
+- `science/equipment`: `HeatSides` (the kettle's tubes, `kettleShell`, `kettleBundle`, `pool`), `EquipmentShape` (the kettle's volume and geometry), `ProcessUnit.kettle` (the pool's node), `ShapeRasterizer` (the pool's cell);
+- `runtime/fluid`: `HeatUnit` (`KETTLE`, `pool`), `PhysicalFluidTopology` (the shell's pool compiled), `IslandCoordinator` (the pool as a coupled side), `FluidCheckpointCodec` (state format 28), `IslandCertificate` (graph identity 7), `FluidWorldAuthority` (`UnitVessel`, the shell's view);
+- `world/level/block/EquipmentStructure` (the shell registered, restored and restated with the tubes).
 
 The plan also touches:
 
@@ -176,6 +183,13 @@ The plan also touches:
   - Gates: `HeatControlTest` 5, `ExchangerRelayTest` +1, `ExchangerCouplingTest` +1 (45 °C held through a +15 K hot inlet step: at most 0.70 K off, within 0.1 K from 44 s), `HeatSideTopologyTest` +1 (65 °C held by the fans through an inlet step, the LIMITED ends, a 67 °C low limit), the codec round trip; quick suite 1695, no failures.
   - In-game check: the owner stopped it ("that's enough client testing") after the air cooler's manual screen (an opus subagent on the bridge lane; screenshots in the worktree's `tmp/w4-ingame/`). The rail showed the fans, the mode button and the low limit in order. The low limit's label was cut at the rail's width at GUI scale 2; it now reads "Low limit (C) or blank". The rest of the screen is judged by the gates, the compile and the rail's row count, not in the client.
 
+- 2026-10-28, W7 the kettle, in the W7 commit.
+  - The kettle registers its tubes as a side and its shell as a closed vessel whose inventory carries the pool (`Pool`): the bundle's surface and where it lies, and the wall, give-back and active share planned at each slice start from the tubes as read. The pool's heat enters the vessel's energy row explicitly on each step's start state and is booked as a `HEAT` boundary at its key. It takes all the heat in transit.
+  - Found in the build: the uncontrolled first probe lost 750 kg of liquid through the vapour port in 5 s, because the phase draw capped the port at the vapour held while the pool boiled more per step. The boil-up now counts in the gas capacity (D11 extended, as an open vessel's release is). The same probe ran dry and superheated its last holdup to 583 K; the film now follows the wetted share of the bundle under the level.
+  - Formats: state format 28, certificate graph identity 7; facts unchanged.
+  - Gates: `ExchangerCouplingTest` +2 (boil-up 1.2095 kg/s against Q/λ 1.2101 at 2.79 MW, the pool at 373.13 K at 1 atm; a 1 MW duty held by the tubes' bypass 0.800, boil-up within 0.05 %; an empty shell takes nothing), `HeatSidesTest` (the kettle's tubes and shell), `ShapeRasterizerTest`, the codec round trip; quick suite 1698, no failures.
+  - No in-game check (owner, W4: "that's enough client testing").
+
 ## Notes
 
 - Q16 answered 2026-10-27: form C, the coupling fence (W3a). Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
@@ -192,4 +206,5 @@ The plan also touches:
   - the authority's live load, capture and removal of the transit are gated through the ledger's snapshot methods, not by a GameTest;
   - after a load only the current record exists, so a side whose partner is a slice ahead reads it (D1);
   - D6, a budget hold counted as stopped, has no gate.
+- 2026-10-28 (W7 open): the kettle's LIQUID_OUTLET is a plain vessel port, so the level is the player's (no weir); the pool's film follows the level, not a level controller.
 - Code guide: not updated yet; the fluid network chapter is updated before the merge.

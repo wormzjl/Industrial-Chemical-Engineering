@@ -67,7 +67,8 @@ public final class ConservativeTransport {
      */
     public record BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule,SolidInventory solids,int solidDirection,Kind kind) {
         /** {@code HEAT}: the heat a heat-exchanging connection ({@link HeatSide}) took up over the step, energy alone,
-         * booked at the connection's id: what crossed its wall (batch 2026-10-27-heat-exchanger-design). */
+         * booked at the connection's id: what crossed its wall (batch 2026-10-27-heat-exchanger-design); and a kettle's pool's
+         * ({@link Pool}), booked at its key (W7). */
         public enum Kind { EXCHANGE, FLUSH, VENT, SPILL, HEAT }
         public BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule){this(nodeId,moles,totalEnergyJoule,SolidInventory.EMPTY,0);}
         public BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule,SolidInventory solids,int solidDirection){this(nodeId,moles,totalEnergyJoule,solids,solidDirection,Kind.EXCHANGE);}
@@ -496,6 +497,13 @@ public final class ConservativeTransport {
             energy[node]+=movedEnergy;
             for(int c=0;c<components;c++)external[c]+=moved[c];externalEnergy+=movedEnergy;
             boundaries.add(new BoundaryTransfer(transfer.id(),moved,movedEnergy,movedSolids,solidDirection));
+        }
+        // A kettle's pool (batch 2026-10-27-heat-exchanger-design, W7): the bundle's heat into the vessel over the step, on its
+        // start state as the Newton's rows read it (PassiveStepSolver.poolHeat), out of the island at the pool's key.
+        for(int node=0;node<nodes;node++) {
+            double pooled=dt*PassiveStepSolver.poolHeat(graph.reservoirs().get(node));if(pooled==0)continue;
+            energy[node]+=pooled;externalEnergy+=pooled;
+            boundaries.add(new BoundaryTransfer(graph.reservoirs().get(node).inventory().pool().id(),new double[components],pooled,SolidInventory.EMPTY,0,BoundaryTransfer.Kind.HEAT));
         }
         if(releases!=null)for(int node=0;node<nodes;node++)if(releases[node]!=null)for(var kind:new BoundaryTransfer.Kind[]{BoundaryTransfer.Kind.VENT,BoundaryTransfer.Kind.SPILL}) {
             var released=kind==BoundaryTransfer.Kind.VENT?releases[node].vent():releases[node].spill();if(released==null)continue;

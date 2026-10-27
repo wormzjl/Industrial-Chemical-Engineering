@@ -373,7 +373,7 @@ public final class ShapeRasterizer {
         return geometry(shape).fluidCell;
     }
 
-    /** Every node cell of {@code shape}, one per registration: a heat unit's in its sides' order ({@link HeatSides#of}). */
+    /** Every node cell of {@code shape}, one per registration: a heat unit's in its sides' order ({@link HeatSides#of}), then a kettle's pool's. */
     public static List<Cell> fluidCells(EquipmentShape shape) {
         return geometry(shape).fluidCells;
     }
@@ -612,6 +612,12 @@ public final class ShapeRasterizer {
                 // A heat unit's sides each register at their first inlet's cell; the first side's is the fluid cell.
                 sides = HeatSides.of(shape).stream().map(definition -> ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == definition.inlet())
                         .findFirst().orElseThrow(() -> new IllegalStateException("A heat side needs an inlet nozzle: " + definition.side())).cell()).toList();
+                // A kettle's shell registers after its sides, at its pool's node (W7).
+                if (HeatSides.pool(shape.kind())) {
+                    if (unit == null || unit.fluidPoint == null) throw new IllegalStateException("A kettle needs its pool's node");
+                    var low = transform.point(unit.fluidPoint);
+                    var all = new ArrayList<>(sides);all.add(new Cell(floor(low[0]), floor(low[1]), floor(low[2])));sides = List.copyOf(all);
+                }
                 node = sides.getFirst();
             } else if (shape.drum()) {
                 var low = shape.orientation().horizontal()

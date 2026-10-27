@@ -790,11 +790,13 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * cylinder up to its fill height, π D²/4 · H, and a sphere's π D³/6. Supports and nozzles hold no volume.
      */
     public com.wormzjl.icheme.science.fluid.network.VesselGeometry fluidGeometry() {
+        if(kind==Kind.KETTLE)return HeatSides.kettleShell(diameter,tangentLength);
         var form=kind==Kind.TANK?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.CYLINDER:kind==Kind.SPHERE?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.SPHERE:orientation.horizontal()?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.HORIZONTAL_DRUM:com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.VERTICAL_DRUM;
         var b=bootPlace();return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(form,diameter,kind==Kind.TANK?fillHeight():kind==Kind.SPHERE?0:tangentLength,b==null?0:b.diameter(),b==null?0:b.length());
     }
 
     public double volume() {
+        if (kind == Kind.KETTLE) return fluidGeometry().capacity();
         if (kind == Kind.TANK) return Math.PI * diameter * diameter / 4 * fillHeight();
         if (kind == Kind.SPHERE) return Math.PI * diameter * diameter * diameter / 6;
         var b = bootPlace();
@@ -819,6 +821,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * drum's).
      */
     public double levelHeight() {
+        if (kind == Kind.KETTLE) return fluidGeometry().height();
         if (kind == Kind.TANK) return fillHeight();
         if (kind == Kind.SPHERE) return diameter;
         return orientation.horizontal() ? diameter : overallLength();

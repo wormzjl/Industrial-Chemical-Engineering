@@ -56,7 +56,7 @@ public record VesselGeometry(Form form,double capacity,double height,double diam
             default->throw new IllegalStateException();};
         return bootCapacity()+body;
     }
-    private static double segmentArea(double r,double h){
+    static double segmentArea(double r,double h){
         if(h>r)return Math.PI*r*r-segmentArea(r,2*r-h);
         double angle=2*DeterministicMath.asin(Math.sqrt(Math.max(0,h/(2*r))));
         if(angle<.01){double a2=angle*angle;return r*r*angle*a2*(2.0/3-a2*(2.0/15-a2*(4.0/315-a2*2.0/2835)));}

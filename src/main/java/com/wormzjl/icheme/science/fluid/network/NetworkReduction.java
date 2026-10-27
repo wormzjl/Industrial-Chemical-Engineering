@@ -146,6 +146,8 @@ public final class NetworkReduction {
             if(!node.fixed()&&flushable(node))return false;
             // An open vessel holding gas or liquid above its fill height gives it to the atmosphere (OpenVessel).
             if(OpenVessel.releasing(node))return false;
+            // A kettle's pool heated by its bundle (W7) moves heat whatever the hydraulics do.
+            if(PassiveStepSolver.poolHeat(node)!=0)return false;
             if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!PassiveStepSolver.holdsNoFluid(node)&&Math.abs(PhaseLayout.wallRow(node.state(),node.inventory().wallCapacity()))>WALL_RESOLUTION)return false;
         }
         // Nothing to move: no generator, no vessel holding fluid (solids alone do not move, D33: they ride the liquid; voids
