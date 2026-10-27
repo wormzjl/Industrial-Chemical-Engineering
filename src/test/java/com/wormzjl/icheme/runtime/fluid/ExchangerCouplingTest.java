@@ -431,6 +431,101 @@ class ExchangerCouplingTest {
         assertEquals("LIMITED: the bypass is closed / ",FluidWorldAuthority.controlStatus(closed.law,null));
         assertSteady(short_,.05,"80 °C out of reach");
     }
+    // ---- the exchanger's real lines (W8, plan section 7) ----
+
+    private static final long BYPASS_VALVE=30,FEED_VALVE=31,INLET_TEE=120,OUTLET_TEE=121;
+    /** The bypass line's pipe: 0.1 m, so its valve can pass most of the stream. */
+    private static final PipeResistance.Geometry WIDE=new PipeResistance.Geometry(1,.1,.000045,0);
+    /**
+     * The water pair with the cold side's real lines on its row: with {@code bypass}, an inlet tee before the side, a
+     * bypass line through a control valve (at 1 kg/s to start) on the next row, and an outlet tee after it; else a control
+     * valve on the cold feed (1 kg/s to start). Each valve carries its flowmeter: a bare valve stands open. The hot side as
+     * in {@link #waterPair}.
+     */
+    private Rig lined(boolean bypass,HeatUnit.Control cold) {
+        var devices=new ArrayList<PhysicalFluidTopology.Device>(line(1,HOT,2,0,HeatSides.tubePassage(SHELL,TUBES),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,AREA,COLD)));
+        var valve=new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,1,new UUID(8,8),0);
+        var shell=new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,AREA,HOT).withControl(cold);
+        devices.add(plain(3,0,0,5,Kind.GENERATOR));devices.add(plain(111,1,0,5,Kind.PIPE));
+        if(bypass) {
+            devices.add(plain(INLET_TEE,2,0,5,Kind.PIPE));devices.add(plain(112,3,0,5,Kind.PIPE));
+            devices.add(side(COLD,at(4,0,5),at(6,0,5),HeatSides.shellPassage(SHELL,TUBES),shell));
+            devices.add(plain(113,7,0,5,Kind.PIPE));devices.add(plain(OUTLET_TEE,8,0,5,Kind.PIPE));devices.add(plain(114,9,0,5,Kind.PIPE));devices.add(plain(4,10,0,5,Kind.VOID));
+            devices.add(new PhysicalFluidTopology.Device(115,at(2,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()));
+            devices.add(new PhysicalFluidTopology.Device(BYPASS_VALVE,at(3,0,6),Kind.VALVE,EAST,WIDE,valve));
+            for(int x=4;x<=8;x++)devices.add(new PhysicalFluidTopology.Device(130+x,at(x,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()));
+        } else {
+            devices.add(new PhysicalFluidTopology.Device(FEED_VALVE,at(2,0,5),Kind.VALVE,EAST,STUB,valve));devices.add(plain(112,3,0,5,Kind.PIPE));
+            devices.add(side(COLD,at(4,0,5),at(6,0,5),HeatSides.shellPassage(SHELL,TUBES),shell));
+            devices.add(plain(113,7,0,5,Kind.PIPE));devices.add(plain(4,8,0,5,Kind.VOID));
+        }
+        var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,source(1,water(363.15,200_000)),2L,sink(2,101_325),3L,source(3,water(293.15,150_000)),4L,sink(4,101_325)));
+        assertEquals(2,compiled.islands().size(),"each side with its lines in its own island");
+        var rig=new Rig(CertificatePolicy.disabled());rig.hotIsland=islandOf(compiled,HOT);rig.coldIsland=islandOf(compiled,COLD);
+        rig.register(rig.hotIsland,compiled.islands().get((int)rig.hotIsland-1).graph(),100);
+        rig.register(rig.coldIsland,compiled.islands().get((int)rig.coldIsland-1).graph(),100);
+        return rig;
+    }
+    /** The control valve at node {@code valve} as its island stands: its mass flow target and its connection's last flow, kg/s. */
+    private static double[] valve(IslandCoordinator.Snapshot island,long valve) {
+        var graph=island.graph();
+        for(int e=0;e<graph.pipes().size();e++){var p=graph.pipes().get(e);
+            if(p.control() instanceof FlowControl.ControlValve law&&graph.reservoirs().get(p.first()).id()==valve)return new double[]{law.massTarget(),island.lastResult().orElseThrow().endpointFlows()[e]};}
+        throw new AssertionError("no valve "+valve);
+    }
+    private static double temperatureAt(IslandCoordinator.Snapshot island,long node) {
+        return island.graph().reservoirs().stream().filter(r->r.id()==node).findFirst().orElseThrow().state().temperature();
+    }
+    /**
+     * W8's gate (plan section 7): with the lines complete, the cold side's controller works the real bypass valve. The
+     * outlet tee, where the bypass rejoins, holds 45 °C; the side's own bypass stays shut; the valve passes what its
+     * target asks. The hot inlet then steps from 90 to 105 °C and the valve opens to hold it again. Without the operation
+     * the same lines hold nothing: the valve keeps its 1 kg/s and the internal bypass controls the side's own outlet.
+     */
+    @Test void theRealBypassValveHoldsTheMixedOutlet() {
+        double target=318.15;
+        var rig=lined(true,new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,target,0,0));
+        rig.coordinator.operations(Map.of(PhysicalFluidTopology.sideIdentity(COLD),ExchangerRelay.Operation.bypass(BYPASS_VALVE)));
+        rig.run(300);
+        var island=rig.island(rig.coldIsland);var cold=seen(island,COLD);var bypass=valve(island,BYPASS_VALVE);
+        System.out.printf(Locale.ROOT,"real bypass: mixed %.2f K, side out %.2f K, side %.3f kg/s, valve target %.3f flow %.3f kg/s%n",temperatureAt(island,OUTLET_TEE),cold.out.temperature(),cold.flow,bypass[0],bypass[1]);
+        assertEquals(target,temperatureAt(island,OUTLET_TEE),.2,"the outlet tee holds 45 °C");
+        assertEquals(0,cold.law.bypass(),"the internal bypass stays shut");
+        assertTrue(bypass[0]>0&&Math.abs(bypass[1]-bypass[0])<.02*bypass[0]+1e-3,"the valve passes its target: "+bypass[0]+" / "+bypass[1]);
+        double before=bypass[0];
+        rig.step(rig.hotIsland,1,water(378.15,200_000));
+        double worst=0;
+        for(int i=1;i<=300;i++){rig.run(1);worst=Math.max(worst,Math.abs(temperatureAt(rig.island(rig.coldIsland),OUTLET_TEE)-target));}
+        island=rig.island(rig.coldIsland);bypass=valve(island,BYPASS_VALVE);
+        System.out.printf(Locale.ROOT,"real bypass after +15 K: mixed %.2f K, at most %.2f K off; valve %.3f -> %.3f kg/s%n",temperatureAt(island,OUTLET_TEE),worst,before,bypass[0]);
+        assertEquals(target,temperatureAt(island,OUTLET_TEE),.2,"held again after the step");
+        assertTrue(bypass[0]>before,"the bypass valve opens to the hotter inlet");
+        assertLedger(rig,0,"through the real bypass");
+        var internal=lined(true,new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,target,0,0));
+        internal.run(120);
+        var held=valve(internal.island(internal.coldIsland),BYPASS_VALVE);
+        assertEquals(1,held[0],1e-12,"without the lines complete the valve keeps its setting");
+        assertTrue(seen(internal.island(internal.coldIsland),COLD).law.bypass()>0,"and the internal bypass controls");
+    }
+    /**
+     * W8's ratio (plan section 7): a valve on the cold feed holds it at 0.5 times the hot side's flow as read, one slice late
+     * across the two islands. The hot side's flow then steps down (its source from 2 to 1.6 bar) and the cold feed follows.
+     * (Stepped up, the feed would ask for more than its own source pushes through the open valve: the ratio saturates.)
+     */
+    @Test void aFeedValveHoldsTheRatioToTheOtherSide() {
+        var rig=lined(false,new HeatUnit.Control(HeatUnit.Mode.RATIO,.5,0,0));
+        rig.coordinator.operations(Map.of(PhysicalFluidTopology.sideIdentity(COLD),ExchangerRelay.Operation.feed(FEED_VALVE,.5)));
+        rig.run(120);
+        double hot=seen(rig.island(rig.hotIsland),HOT).flow,cold=seen(rig.island(rig.coldIsland),COLD).flow;
+        System.out.printf(Locale.ROOT,"ratio: hot %.3f kg/s, cold %.3f kg/s (%.4f)%n",hot,cold,cold/hot);
+        assertEquals(.5*hot,cold,.01*hot,"the cold feed is half the hot flow");
+        rig.step(rig.hotIsland,1,water(363.15,160_000));
+        rig.run(120);
+        double hot2=seen(rig.island(rig.hotIsland),HOT).flow,cold2=seen(rig.island(rig.coldIsland),COLD).flow;
+        System.out.printf(Locale.ROOT,"ratio after the step: hot %.3f kg/s, cold %.3f kg/s (%.4f)%n",hot2,cold2,cold2/hot2);
+        assertTrue(hot2<.95*hot,"the hot flow stepped down");
+        assertEquals(.5*hot2,cold2,.01*hot2,"the cold feed follows");
+    }
     @Test void certifiedSidesWakeWhenTheTransitMoves() {
         var rig=waterPair(100,100,CertificatePolicy.defaults());
         for(int i=0;i<240&&!(rig.island(rig.hotIsland).certificate().isPresent()&&rig.island(rig.coldIsland).certificate().isPresent());i++)rig.run(5);

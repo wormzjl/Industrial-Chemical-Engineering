@@ -48,6 +48,18 @@ public final class ExchangerRelay {
      * A kettle's pool as the other side of its tube bundle (W7, plan section 8): isothermal at {@code temperature} K, its film
      * {@code film} W/m²K on the tubes ({@link Pool#film}), its capacity unbounded.
      */
+    /**
+     * The real valve a side's control works once its exchanger's lines are complete (batch 2026-10-27-heat-exchanger-design,
+     * W8, plan section 7): the control valve whose node is {@code valve} (its registration), regulating the mass flow of the
+     * connection it drives. A bypass valve ({@code feed} false) takes the share of the side's stream its controller plans
+     * for the internal bypass, which then stays shut; a feed valve ({@code feed} true) holds the side's feed at {@code ratio}
+     * times the other side's flow as read.
+     */
+    public record Operation(long valve,boolean feed,double ratio) {
+        public Operation {if(feed&&!(ratio>0&&Double.isFinite(ratio))||!feed&&ratio!=0)throw new IllegalArgumentException("Invalid exchanger operation");}
+        public static Operation bypass(long valve){return new Operation(valve,false,0);}
+        public static Operation feed(long valve,double ratio){return new Operation(valve,true,ratio);}
+    }
     public record Bath(double temperature,double film) {
         public Bath {if(!(temperature>0)||!(film>0)||!Double.isFinite(temperature+film))throw new IllegalArgumentException("Invalid bath");}
     }
@@ -56,10 +68,12 @@ public final class ExchangerRelay {
      * where none is known), whether it counts as {@code stopped} (no island, held, phase-parked: it then moves no heat and
      * the read only bounds the give-back), the heat in transit due as of the slice start ({@code transitDue}, J, the energy
      * the exchanger holds: positive is owed to the streams), the other side's slice length ({@code partnerSeconds}, s, for
-     * the share) and the share of this slice the other side spent counting this one stopped ({@code sitOut}, 0 to 1).
+     * the share) and the share of this slice the other side spent counting this one stopped ({@code sitOut}, 0 to 1). With
+     * the exchanger's lines complete (W8, plan section 7), {@code operation} names the valve the side's control works.
      */
-    public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut) {
+    public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation) {
         public Read {if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1))throw new IllegalArgumentException("Invalid side read");}
+        public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut){this(partner,stopped,transitDue,partnerSeconds,sitOut,null);}
         /** No partner known, nothing in transit: the side moves no heat. */
         public static final Read NONE=new Read(null,true,0,0,0);
     }

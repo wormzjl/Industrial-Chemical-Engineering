@@ -32,7 +32,7 @@ final class LevelGround implements AssemblyWalker.Ground {
     @Override
     public AssemblyWalker.@Nullable Piece piece(BlockPos position) {
         return world.at(new PhysicalFluidTopology.Position(dimension, position.getX(), position.getY(), position.getZ()))
-                .map(r -> piece(r.device())).orElse(null);
+                .map(r -> piece(r.device(), world.flowmeterOn(r.device().id()))).orElse(null);
     }
 
     @Override
@@ -47,9 +47,14 @@ final class LevelGround implements AssemblyWalker.Ground {
      * the pipe compiles through ({@link PhysicalFluidTopology.Device#hydraulicKind}), whatever module or setting the
      * valve carries: the structure stage counts the valve body. Another accessory (a shutoff or check valve, a strainer)
      * or a one-block filter passes the line on. A one-block pump or compressor is an in-line mover. A one-block tank, a
-     * generator and a void are outside.
+     * generator and a void are outside. A plain pipe with a flowmeter ({@code metered}) is a flowmeter (W8), which a step
+     * may ask for and a walk otherwise passes over.
      */
     static AssemblyWalker.@Nullable Piece piece(PhysicalFluidTopology.Device device) {
+        return piece(device, false);
+    }
+
+    static AssemblyWalker.@Nullable Piece piece(PhysicalFluidTopology.Device device, boolean metered) {
         if (!device.ports().isEmpty()) return null;
         var facing = Direction.valueOf(device.facing().name());
         int faces = 0;
@@ -59,7 +64,7 @@ final class LevelGround implements AssemblyWalker.Ground {
                 Fitting fitting = switch (device.hydraulicKind()) {
                     case VALVE -> Fitting.CONTROL_VALVE;
                     case PUMP, COMPRESSOR -> Fitting.INLINE_PUMP;
-                    default -> device.cutoff() != PhysicalFluidTopology.Cutoff.NONE || device.inlineFilter() ? Fitting.OTHER : null;
+                    default -> device.cutoff() != PhysicalFluidTopology.Cutoff.NONE || device.inlineFilter() ? Fitting.OTHER : metered ? Fitting.FLOWMETER : null;
                 };
                 yield new AssemblyWalker.Piece(true, false, fitting, facing, faces);
             }

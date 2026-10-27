@@ -404,6 +404,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     private void tick() {
         owned();if(closed)return;refreshProperties();topology.tick();
+        holdValves();
         runtime.tick();
         if(topology.hasPendingEvents()){applyPending();runtime.coordinator().pumpIfUseful();}
         instruments.tick(topology.onlineTick());
@@ -433,7 +434,80 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(propertyHold!=null)return;
         // A newly queued recovery is attempted at once, as the old per-tick attempt after applying events did.
         if(registry.applyPending())deliverRecoveries();
+        operate();
         data.setDirty();
+    }
+    /**
+     * A side's exchanger lines as its assembly last reported them (batch 2026-10-27-heat-exchanger-design, W8, plan section 7):
+     * not validated, checked with {@code missing} parts not in place, complete but for the flowmeter its valve regulates by
+     * ({@code UNMETERED}: a bare control valve stands open), or complete; {@code valve} is the registration of the valve the
+     * side's control works (0 for none). State: the assembly store holds the report, and a validation sets it again.
+     */
+    public record Lines(Status status,int missing,long valve) {
+        public enum Status { NOT_VALIDATED, CHECKED, UNMETERED, COMPLETE }
+        public Lines {Objects.requireNonNull(status);if(missing<0||valve<0||status==Status.COMPLETE&&valve==0)throw new IllegalArgumentException("Invalid exchanger lines");}
+    }
+    private final Map<Long,Lines> lines=new HashMap<>();
+    /** The valves whose lines reverted, with the target each holds, applied as their settings at the next tick. */
+    private final Map<Long,Double> holds=new java.util.LinkedHashMap<>();
+    /**
+     * Sets heat side {@code side}'s lines ({@code value} null: none) and the real valves the coordinator's sides work. Lines
+     * that were complete and are no longer leave their valve holding its last target (plan section 7): the target its island
+     * planned last becomes the valve's mass flow setting at the next tick.
+     */
+    public void lines(long side,@org.jetbrains.annotations.Nullable Lines value) {
+        owned();
+        var before=value==null?lines.remove(side):lines.put(side,value);
+        if(before!=null&&before.status()==Lines.Status.COMPLETE&&(value==null||value.status()!=Lines.Status.COMPLETE||value.valve()!=before.valve())) {
+            Double target=plannedTarget(before.valve());if(target!=null)holds.put(before.valve(),target);
+        }
+        operate();
+    }
+    /** Heat side {@code side}'s lines as last reported, or null for none. */
+    public @org.jetbrains.annotations.Nullable Lines lines(long side){owned();return lines.get(side);}
+    /** The mass flow target the valve at node {@code valve} drives its connection at in its island as last committed, or null. */
+    private @org.jetbrains.annotations.Nullable Double plannedTarget(long valve) {
+        Long owner=registry.owner(valve);if(owner==null)return null;
+        var graph=runtime.coordinator().presentation(owner).graph();
+        for(var pipe:graph.pipes())if(pipe.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve law&&graph.reservoirs().get(pipe.first()).id()==valve)
+            return law.source()==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW?law.massTarget():null;
+        return null;
+    }
+    /** Applies the held valve targets: each valve's setting becomes a mass flow regulation at the target it held. */
+    private void holdValves() {
+        if(holds.isEmpty())return;
+        var pending=new java.util.LinkedHashMap<>(holds);holds.clear();
+        pending.forEach((valve,target)->{
+            var r=registrations().get(valve);
+            if(r==null||!(r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve law))return;
+            var held=new com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve(com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW,
+                    law.targetPressure(),Math.max(0,target),law.volumeTarget(),law.sensor(),Math.addExact(law.revision(),1));
+            edit(valve,r.revision(),r.device().withControl(held),r.spec());
+        });
+    }
+    /** The coordinator's operations: each complete side's valve, as its control registered asks for it. */
+    private void operate() {
+        var next=new HashMap<Long,com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation>();
+        lines.forEach((side,l)->{
+            if(l.status()!=Lines.Status.COMPLETE)return;
+            var r=registrations().get(side);var heat=r==null?null:r.device().heat();if(heat==null)return;
+            switch(heat.lines()) {
+                case BYPASS->next.put(PhysicalFluidTopology.sideIdentity(side),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.bypass(l.valve()));
+                case RATIO->next.put(PhysicalFluidTopology.sideIdentity(side),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.feed(l.valve(),heat.control().target()));
+                case NONE->{}
+            }
+        });
+        runtime.coordinator().operations(next);
+    }
+    /** The status a side's lines add (W8), ending in " / ", or nothing for a side without lines. */
+    private String linesStatus(long id,HeatUnit heat) {
+        var asked=heat.lines();if(asked==com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE)return "";
+        var l=lines.get(id);boolean ratio=asked==com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.RATIO;
+        String fallback=ratio?"the ratio holds nothing":"the internal bypass controls";
+        if(l==null||l.status()==Lines.Status.NOT_VALIDATED)return "LINES NOT CHECKED: "+fallback+" / ";
+        if(l.status()==Lines.Status.CHECKED)return "LINES NOT COMPLETE: "+l.missing()+" part"+(l.missing()==1?"":"s")+" not in place; "+fallback+" / ";
+        if(l.status()==Lines.Status.UNMETERED)return "LINES NOT COMPLETE: the "+(ratio?"feed":"bypass")+" valve needs its flowmeter to regulate; "+fallback+" / ";
+        return ratio?"LINES COMPLETE: the feed valve holds the ratio / ":"LINES COMPLETE: the bypass valve controls / ";
     }
     /**
      * Rebind placed devices, queue missing registrations, then mark their presentation buckets. This also rebuilds an
@@ -581,6 +655,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public com.wormzjl.icheme.runtime.instrument.InstrumentHosts.Host instrumentHost(long id){owned();var r=registrations().get(id);if(r==null)return null;var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));if(level==null)return null;var h=com.wormzjl.icheme.runtime.instrument.InstrumentHosts.at(level,new BlockPos(p.x(),p.y(),p.z()));return h!=null&&h.identity()==id?h:null;}
     public void instrumentObservationChanged(long id){owned();refreshObserved(id);}
     public void forgetFlowmeter(long id){owned();registry.forgetFlowmeter(id);}
+    /** Whether a flowmeter is installed on device {@code id} (W8). */
+    public boolean flowmeterOn(long id){owned();return registry.flowmeterOn(id);}
     public void flowmeter(long id,boolean installed){owned();registry.flowmeter(id,installed);}
     public boolean removePipeAccessory(long id){owned();return registry.removePipeAccessory(id);}
     public record InstrumentReading(double pressure,double temperature,boolean flowing,double massFlow,Double volumeFlow){public InstrumentReading(double pressure,double temperature,boolean flowing){this(pressure,temperature,flowing,0,0.0);}}
@@ -686,6 +762,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
         // A side's controller short of its target (W4, plan section 6): its actuator at an end, or held back by its low limit.
         if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own)status=controlStatus(pipe.heat(),registration.device().heat())+status;
+        // A side's lines (W8): whether its control works the real valves.
+        if(registration.device().heat()!=null)status=linesStatus(id,registration.device().heat())+status;
         if(filter!=null&&filter.clogged())status="filter clogged / "+status;
         var closures=snapshot.lastResult().map(PassiveIntervalSolver.Result::rejectionReasons).orElse(Map.of());
         for(var mapping:mappings)for(var pipe:snapshot.graph().pipes())if(pipe.id()==mapping.pipeId()&&pipe.blockedDirections()!=0&&pipe.filter()==null)status=solidClosure(mapping.pipeId(),closures)+" / "+status;

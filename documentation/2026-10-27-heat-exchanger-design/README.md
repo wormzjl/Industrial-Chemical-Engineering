@@ -6,11 +6,11 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C), W4 (the built-in control) and W7 (the kettle) are built; study W3a is done. W8 (the exchanger assembly) is next. The owner answered Q1 to Q14 and Q16 (form C); Q15 is open. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C), W4 (the built-in control), W7 (the kettle) and W8 (the exchanger assembly) are built; study W3a is done. W9 (the column hook) is deferred until the column's operation stage exists. The owner answered Q1 to Q14 and Q16 (form C); Q15 is open. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5, W6, W3a, W3, W4 and W7 as built (section 10). It covers:
+- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5, W6, W3a, W3, W4, W7 and W8 as built and W9 deferred (section 10). It covers:
   - the physics in numbers and the owner's decisions;
   - UA from size with a film per phase and the approximations that keep it free of lag;
   - the air cooler (air at 25 °C) and the fired heater (heat to a set temperature, capped at its duty);
@@ -75,6 +75,14 @@ Changed by W7:
 - `science/equipment`: `HeatSides` (the kettle's tubes, `kettleShell`, `kettleBundle`, `pool`), `EquipmentShape` (the kettle's volume and geometry), `ProcessUnit.kettle` (the pool's node), `ShapeRasterizer` (the pool's cell);
 - `runtime/fluid`: `HeatUnit` (`KETTLE`, `pool`), `PhysicalFluidTopology` (the shell's pool compiled), `IslandCoordinator` (the pool as a coupled side), `FluidCheckpointCodec` (state format 28), `IslandCertificate` (graph identity 7), `FluidWorldAuthority` (`UnitVessel`, the shell's view);
 - `world/level/block/EquipmentStructure` (the shell registered, restored and restated with the tubes).
+
+Changed by W8:
+
+- `science/assembly`: `ExchangerBlueprint` (new: the design per side, the slots and links), `PortGraph.Fitting.FLOWMETER`, `AssemblyMatcher` (flowmeters passed over, the tee scoring of a nested tee);
+- `runtime/assembly`: `ExchangerLines` (new: the design from the sides' controls, the report published as each side's lines), `AssemblyService` (validate an exchanger, `metered`, `redesigned`, publish on revert, removal and chunk load), `LevelGround` (a metered pipe);
+- `science/fluid/network`: `ExchangerRelay.Operation` and `Read.operation`, `PassiveStepSolver.couple` (the valve's planned target, `VALVE_DEADBAND`), `PassiveNetwork.Pipe.withControl`;
+- `runtime/fluid`: `HeatUnit` (`Mode.RATIO`, `lines`), `IslandCoordinator` (`operations`, `sameControl`), `FluidWorldAuthority` (`Lines`, the held valves, `operate`, the lines' status), `PhysicalRegistry.flowmeterOn`; `runtime/instrument/InstrumentService` (a flowmeter installed or removed);
+- `world/level/block/EquipmentStructure.sideIdentities`; `network/FluidNetwork` (`LinesPayload`), `FluidDeviceScreen` (the ratio mode and field, Check lines), `en_us.json`.
 
 The plan also touches:
 
@@ -190,6 +198,13 @@ The plan also touches:
   - Gates: `ExchangerCouplingTest` +2 (boil-up 1.2095 kg/s against Q/λ 1.2101 at 2.79 MW, the pool at 373.13 K at 1 atm; a 1 MW duty held by the tubes' bypass 0.800, boil-up within 0.05 %; an empty shell takes nothing), `HeatSidesTest` (the kettle's tubes and shell), `ShapeRasterizerTest`, the codec round trip; quick suite 1698, no failures.
   - No in-game check (owner, W4: "that's enough client testing").
 
+- 2026-10-28, W8 the exchanger assembly, in the W8 commit.
+  - The sides' controls are the design: an outlet temperature or a duty asks for a bypass (inlet tee, control valve, outlet tee), the new `RATIO` mode for a feed valve and a flowmeter on the other side's feed. Check lines on a side's screen validates the exchanger as an assembly; the side's status line reports it. A FLOWMETER element joins the walk.
+  - Operation is a slice input the island plans with the side (the controller's bypass share, or the ratio times the other side's flow as read), not section 7's override kept out of the digest; a 1e-3 deadband keeps a steady plant certifiable. Found in the build: a control valve without its flowmeter stands open in the solver, so a bare valve reports UNMETERED and does not operate. The candidate check now accepts a planned valve target.
+  - No format change: `RATIO` is an enum constant saved by name; the read is not saved.
+  - Gates: `ExchangerBlueprintTest` 4, `ExchangerCouplingTest` +2 (45 °C held at the outlet tee through the real valve, within 2.85 K through a +15 K step; a ratio of 0.5000 after the hot flow steps), fluid GameTest +1 (all 35 pass); quick suite 1704, no failures.
+  - W9 deferred: the column's operation stage, its prerequisite, does not exist (plan section 10).
+
 ## Notes
 
 - Q16 answered 2026-10-27: form C, the coupling fence (W3a). Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
@@ -201,6 +216,7 @@ The plan also touches:
 - Open from W5: the drawn fans keep turning when switched off (the motion switch is the client's own).
 - Open from W6: the heaters' FUEL nozzle stays unconnected (fuel is another scope, Q11); the datasheet does not list the coils' surfaces yet.
 - Measured in W1: a junction boils from heat inside the Newton. Measured in W3: the quasi-steady wall on a condensing curve (7 sweeps, 0.10 ms). Not measured yet: the campaign's cost and holds in worlds with exchangers (it has none).
+- Open from W8: the split-range pass valve; a LIMITED status for a saturated real valve; the hold after a revert has no gate; a valve outside the side's island is not operated.
 - Open from W4: the target vapour fraction (plan section 6) is not built; a controller on both sides of one exchanger is allowed and untested; the kettle's steam valve waits for W7 and the assembly's real valves for W8.
 - Open from W3:
   - the authority's live load, capture and removal of the transit are gated through the ledger's snapshot methods, not by a GameTest;

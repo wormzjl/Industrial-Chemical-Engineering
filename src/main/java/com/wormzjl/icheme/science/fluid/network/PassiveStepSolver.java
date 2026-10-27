@@ -1790,15 +1790,30 @@ public final class PassiveStepSolver {
      * per connection in {@code graph}'s order; null where none is known, which plans with no flow). Both streams' curves
      * span both inlets, 10 K beyond, at each stream's own pressure. A side without a read, or whose end draws nothing,
      * gets a flat wall at its own temperature and moves no heat. {@code graph} itself where no side is coupled.
+     *
+     * <p>A side whose read names an operation (W8, plan section 7) works a real valve. A bypass valve: the side is planned on
+     * its stream and the bypass's together, its controller's bypass share goes to the valve as a mass flow target, and the
+     * side's own bypass stays shut (its give-back on the flow that crosses it). A feed valve: its target is the operation's
+     * ratio times the other side's flow as read. A target within {@link #VALVE_DEADBAND} of the valve's stands, so a steady
+     * plant keeps its graph.
      */
     public PassiveNetwork couple(PassiveNetwork graph,Map<Long,ExchangerRelay.Read> reads,double[] flows,double seconds,Runnable checkpoint) {
         graph=pools(graph,reads,seconds,checkpoint);
         List<PassiveNetwork.Pipe> pipes=null;
+        boolean known=flows!=null&&flows.length==graph.pipes().size();
         for(int e=0;e<graph.pipes().size();e++) {
-            var pipe=graph.pipes().get(e);if(!(pipe.heat() instanceof HeatSide side)||!side.coupled())continue;
-            double flow=flows!=null&&flows.length==graph.pipes().size()?flows[e]:0;
+            var pipe=graph.pipes().get(e);if(!(pipe.heat() instanceof HeatSide law)||!law.coupled())continue;
+            var side=law;
+            double flow=known?flows[e]:0;
             int donor=flow>=0?pipe.first():pipe.second();var start=graph.reservoirs().get(donor).state();var port=pipe.portAt(donor);
             var read=reads.getOrDefault(pipe.id(),ExchangerRelay.Read.NONE);var partner=read.partner();
+            var operation=read.operation();int valve=operation==null?-1:valvePipe(graph,operation.valve());
+            boolean bypassed=valve>=0&&!operation.feed()&&flow>=0;
+            if(bypassed) {
+                // The side's stream as its controller sees it: what crosses it and what the bypass valve passes.
+                double around=known?Math.max(0,flows[valve]):0;flow+=around;
+                side=side.withInputs(side.wall(),flow>0?around/flow:0,side.giveBack(),side.active(),side.limit());
+            }
             double[] flat=new double[side.cells()];Arrays.fill(flat,start.temperature());
             var planned=side.withInputs(flat,side.bypass(),0,1);
             if(endMass(start,port,pipe.volume())>0) {
@@ -1815,11 +1830,33 @@ public final class PassiveStepSolver {
                 else if(stream!=null)planned=ExchangerRelay.plan(side,stream,
                         other==null?null:new ExchangerRelay.Stream(other,endSpecificEnthalpy(partner.donor(),partner.port(),partner.volume()),partner.massFlow(),partner.law(),false),read,seconds);
             }
-            if(planned.equals(side))continue;
+            double target=Double.NaN;
+            if(bypassed) {
+                double share=planned.bypass();target=share*flow;
+                planned=planned.withInputs(planned.wall(),0,share<.99?planned.giveBack()/(1-share):planned.giveBack(),planned.active(),planned.limit());
+            } else if(valve>=0&&operation.feed()&&partner!=null)target=operation.ratio()*Math.abs(partner.massFlow());
+            if(!Double.isNaN(target)) {
+                var driven=pipes==null?graph.pipes().get(valve):pipes.get(valve);var valveLaw=(FlowControl.ControlValve)driven.control();
+                if(valveLaw.source()!=FlowControl.ValveSource.MASS_FLOW||Math.abs(target-valveLaw.massTarget())>VALVE_DEADBAND*Math.max(valveLaw.massTarget(),target)+1e-6) {
+                    if(pipes==null)pipes=new ArrayList<>(graph.pipes());
+                    pipes.set(valve,driven.withControl(new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,valveLaw.targetPressure(),Math.max(0,target),valveLaw.volumeTarget(),valveLaw.sensor(),valveLaw.revision())));
+                }
+            }
+            if(planned.equals(law))continue;
             if(pipes==null)pipes=new ArrayList<>(graph.pipes());
             pipes.set(e,pipe.withHeat(planned));
         }
         return pipes==null?graph:new PassiveNetwork(graph.reservoirs(),pipes,graph.scheduledTransfers());
+    }
+    /** A planned valve target within this share of the valve's stands (W8): a steady plant keeps its graph, so it certifies. */
+    public static final double VALVE_DEADBAND=1e-3;
+    /** The index of the connection the control valve at node {@code valve} drives, or -1 where the island has none. */
+    private static int valvePipe(PassiveNetwork graph,long valve) {
+        for(int e=0;e<graph.pipes().size();e++) {
+            var pipe=graph.pipes().get(e);
+            if(pipe.control() instanceof FlowControl.ControlValve&&graph.reservoirs().get(pipe.first()).id()==valve)return e;
+        }
+        return -1;
     }
     /**
      * {@code graph} with each kettle's pool planned for a slice of {@code seconds} s (W7, plan section 8;

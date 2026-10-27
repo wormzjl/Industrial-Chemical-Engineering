@@ -1,6 +1,6 @@
 # Heat exchanger system: plan
 
-Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: In progress since 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. W1, W2, W5, W6, W3a, W3, W4 and W7 are built; section 10 records each as built.
+Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: In progress since 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. W1, W2, W5, W6, W3a, W3, W4, W7 and W8 are built and W9 is deferred; section 10 records each as built.
 
 Evidence:
 
@@ -499,6 +499,30 @@ W7 as built (2026-10-28), as section 8 describes, with these decisions (each rev
 | an empty shell | the tubes pass unchanged; the pool books nothing |
 
 - **Noted.** The model's λ for water at 1 atm is 2301 kJ/kg (steam tables 2257); the gate uses the model's own. In the first slice the tubes move heat while the pool is still idle; the transit returns it, and the two settle in about two slices.
+
+W8 as built (2026-10-28), section 7 with these decisions (each reversible):
+
+- **The design is the sides' controls.** An exchanger side held at an outlet temperature or a duty asks for a bypass; a new mode, `RATIO` (its target the ratio), asks for a ratio station. No new fact field: the mode is saved by name, and the ratio rides on the target. `ExchangerBlueprint` builds the slots per side: inlet tee, bypass valve, outlet tee; or feed valve, and a flowmeter on the other side's feed.
+- **A FLOWMETER element.** The walk reads a plain pipe carrying a flowmeter as a flowmeter, which a step may ask for and the walk otherwise passes over. Installing or removing one reverts a report that read that pipe. The matcher's tee scoring adds two terms for a branch that splits again (the bypass): a run ending at a junction, a run with a valve for a branch with a valve step. The column's matching is unchanged (its tee has no nested tee).
+- **Check lines.** An exchanger side's screen has a Check lines button (the column's Validate: one walk, the report stored as state). The report shows on the side's status line ("LINES NOT CHECKED / NOT COMPLETE / COMPLETE"), not in the column's assembly screen.
+- **The valve needs its flowmeter.** A control valve without its sensor stands open in the solver (`bare`). A complete report whose valve is bare says so ("needs its flowmeter to regulate") and does not operate.
+- **Operation as a planned slice input, not a command override.** The side's read carries the operation (its valve). At each slice start the island plans the valve's mass flow target with the side, as it plans the side's own bypass: for a bypass, the controller's bypass share of the side's and the bypass's flows together, the side's own bypass then shut (its give-back on the flow that crosses it); for a ratio, the ratio times the other side's flow as read. The candidate check accepts the planned target; the certificate digest keeps it, and a target within 1e-3 of the valve's stands, so a steady plant keeps its graph and certifies. This replaces section 7's override map kept out of the digest: nothing new reaches the command or the digest.
+- **Not complete.** A bypass control works the internal bypass (Q13), and a ratio holds nothing. A complete report that reverts leaves the valve at its last planned target: that becomes its mass flow setting at the next tick.
+- **State.** The authority holds each side's lines while the server runs; a chunk load's check of a stored report publishes them again.
+- **Not built.** The split-range pass valve (optional in section 7): a valve between the inlet tee and the nozzle is an extra valve. A saturated real valve (fully open short of its target) has no LIMITED status. The operation acts only on a valve in the side's own island.
+- **Gates** (`ExchangerBlueprintTest` 4, `ExchangerCouplingTest` +2, fluid GameTest `anExchangersBypassValidatesAndARemovedPipeReverts`):
+
+| Gate | Result |
+|---|---|
+| matcher: a built bypass (both tee orders), faults (no valve, reversed, a valve before the tee, no tee), a ratio station with and without its meter, a bypass and a ratio sharing a line | each named on its slot |
+| real bypass valve, the mixed outlet held at 45 °C (5 s slices) | 318.16 K; valve target 8.702 kg/s, its flow 8.702; the side's own bypass 0 |
+| then the hot inlet +15 K | at most 2.85 K off; held again; valve 8.70 → 10.81 kg/s; energy exact |
+| feed valve at a ratio of 0.5 | 0.5001; after the hot flow steps down (24.3 → 18.7 kg/s) 0.5000 |
+| in the world: a built bypass, the shell side at 45 °C | complete; its lines name the bypass valve (bare: not operating); the tube side has none; a removed bypass pipe reverts the report and the lines |
+
+- **Section 7's GameTests** for the held outlet and the ratio are solver gates on the coordinator (`ExchangerCouplingTest`); the world gate covers the walk, the report and the lines. The hold after a revert has no gate.
+
+W9 (the column operation hook), deferred 2026-10-28: its prerequisite, the column's operation stage, does not exist. A complete column's Operation tab is a placeholder ("Column operation comes in the next stage"), so the column has no computed duties to give its condenser, reboiler and pumparound coolers. The duty mode (W4) and the lines (W8) stay the hook for that stage.
 
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
 

@@ -340,6 +340,18 @@ public final class EquipmentStructure {
         }
     }
 
+    /**
+     * The registration bound at each of {@code vessel}'s nodes, in {@link ShapeRasterizer#fluidCells}' order (a unit's sides,
+     * then a kettle's shell), 0 where a node is not loaded or not bound (batch 2026-10-27-heat-exchanger-design, W8).
+     */
+    public static long[] sideIdentities(Level level, Vessel vessel) {
+        var nodes = nodes(vessel);
+        var ids = new long[nodes.size()];
+        for (int i = 0; i < ids.length; i++)
+            if (level.isLoaded(nodes.get(i)) && level.getBlockEntity(nodes.get(i)) instanceof EquipmentShellBlockEntity shell) ids[i] = shell.fluidIdentity();
+        return ids;
+    }
+
     /** Each node of {@code vessel}, one per registration ({@link ShapeRasterizer#fluidCells}). */
     private static List<BlockPos> nodes(Vessel vessel) {
         var nodes = new ArrayList<BlockPos>();

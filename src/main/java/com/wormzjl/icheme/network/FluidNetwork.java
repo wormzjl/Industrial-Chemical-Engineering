@@ -181,6 +181,15 @@ public final class FluidNetwork {
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
     /** Client to server: a heat side's menu asks to open its partner side's (batch 2026-10-27-heat-exchanger-design). */
+    /** Client to server: check the lines of the exchanger whose side the menu shows (W8). */
+    public record LinesPayload(int menuId,BlockPos position,long identity) implements CustomPacketPayload {
+        public static final Type<LinesPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"fluid_check_lines"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,LinesPayload> STREAM_CODEC=new StreamCodec<>() {
+            public LinesPayload decode(RegistryFriendlyByteBuf b){return new LinesPayload(b.readVarInt(),b.readBlockPos(),b.readLong());}
+            public void encode(RegistryFriendlyByteBuf b,LinesPayload p){b.writeVarInt(p.menuId);b.writeBlockPos(p.position);b.writeLong(p.identity);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
     public record PartnerPayload(int menuId,BlockPos position,long identity) implements CustomPacketPayload {
         public static final Type<PartnerPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"fluid_open_partner"));
         public static final StreamCodec<RegistryFriendlyByteBuf,PartnerPayload> STREAM_CODEC=new StreamCodec<>() {
@@ -212,6 +221,7 @@ public final class FluidNetwork {
         registrar.playToServer(EditPayload.TYPE,EditPayload.STREAM_CODEC,FluidNetwork::edit);
         registrar.playToServer(RecoverPayload.TYPE,RecoverPayload.STREAM_CODEC,FluidNetwork::recover);
         registrar.playToServer(PartnerPayload.TYPE,PartnerPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)openPartner(payload,player);});
+        registrar.playToServer(LinesPayload.TYPE,LinesPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)checkLines(payload,player);});
         registerDisplays(event,registrar);
         registrar.playToClient(StaticPayload.TYPE,StaticPayload.STREAM_CODEC,(payload,context)->{
             if(context.player().containerMenu instanceof FluidDeviceMenu menu&&menu.containerId==payload.menuId&&menu.identity()==payload.identity)menu.acceptStatic(decodeStatic(payload.json));
@@ -274,6 +284,20 @@ public final class FluidNetwork {
         });
     }
     public static void openPartner(FluidDeviceMenu menu){PacketDistributor.sendToServer(new PartnerPayload(menu.containerId,menu.position(),menu.identity()));}
+    public static void checkLines(FluidDeviceMenu menu){PacketDistributor.sendToServer(new LinesPayload(menu.containerId,menu.position(),menu.identity()));}
+    /**
+     * Queues a check of the lines of the exchanger whose side the menu shows (W8, plan section 7): its assembly is validated
+     * at the next server tick, as a column's Validate is, and the side's status line reports it at the next bucket.
+     */
+    public static void checkLines(LinesPayload payload,ServerPlayer player) {
+        if(!(player.containerMenu instanceof FluidDeviceMenu menu))return;
+        if(menu.containerId!=payload.menuId||menu.identity()!=payload.identity||!menu.position().equals(payload.position)||!menu.stillValid(player)||player.isSpectator())return;
+        FluidWorldAuthority.find(player.server).ifPresent(world->{
+            var own=world.registrations().get(payload.identity);if(own==null||own.device().heat()==null)return;
+            var at=own.device().position();var level=player.serverLevel();
+            if(at.dimension().equals(level.dimension().location().toString()))com.wormzjl.icheme.runtime.assembly.AssemblyService.request(level,new BlockPos(at.x(),at.y(),at.z()));
+        });
+    }
     /**
      * Opens a heat side's partner: the partner's own cell opens its menu, which replays the partner's last snapshot as
      * any opening does. Nothing is queued. A partner whose cell is not loaded, or in another dimension, opens nothing.

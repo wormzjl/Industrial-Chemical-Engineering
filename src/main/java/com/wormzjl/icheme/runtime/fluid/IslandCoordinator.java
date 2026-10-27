@@ -226,6 +226,8 @@ public final class IslandCoordinator {
     private final Map<Long,Long> sideOwners=new HashMap<>();
     private final Map<Long,Double> transits=new HashMap<>();
     private final Set<Long> toWake=new LinkedHashSet<>();
+    /** The real valve each coupled side's control works (W8), by the side's connection id: the exchangers whose lines are complete. */
+    private Map<Long,ExchangerRelay.Operation> operations=Map.of();
     private boolean reconsideringPartners,waking;
     private record Round(long id,List<Pending> entries,long startedNanos) {}
     private final List<Round> rounds=new ArrayList<>();
@@ -646,10 +648,19 @@ public final class IslandCoordinator {
     private static boolean sameConnections(List<PassiveNetwork.Pipe> before,List<PassiveNetwork.Pipe> after){
         if(before.size()!=after.size())return false;
         for(int i=0;i<before.size();i++){var a=before.get(i);var b=after.get(i);
-            if(a.id()!=b.id()||a.first()!=b.first()||a.second()!=b.second()||!a.sections().equals(b.sections())||!a.control().equals(b.control())||(a.filter()==null)!=(b.filter()==null))return false;
+            if(a.id()!=b.id()||a.first()!=b.first()||a.second()!=b.second()||!a.sections().equals(b.sections())||!sameControl(a.control(),b.control())||(a.filter()==null)!=(b.filter()==null))return false;
             if(a.filter()!=null){if(a.filter().capacity()!=b.filter().capacity()||a.filter().cleanResistance()!=b.filter().cleanResistance()||a.filter().stoppedAtCapacity()&&!b.filter().stoppedAtCapacity())return false;
                 for(var p:a.filter().captured().populations())if(b.filter().captured().mass(p.key())+1e-12<p.massKg())return false;}
         }return true;
+    }
+    /**
+     * Whether a solved connection's control is the dispatched one's: the same, or the same control valve with the mass flow
+     * target its exchanger side's control planned for the slice (W8, plan section 7: a slice input, like the side's bypass).
+     */
+    private static boolean sameControl(FlowControl a,FlowControl b) {
+        if(a.equals(b))return true;
+        return a instanceof FlowControl.ControlValve x&&b instanceof FlowControl.ControlValve y&&y.source()==FlowControl.ValveSource.MASS_FLOW
+                &&x.targetPressure()==y.targetPressure()&&x.volumeTarget()==y.volumeTarget()&&java.util.Objects.equals(x.sensor(),y.sensor())&&x.revision()==y.revision();
     }
     private static boolean validCandidate(Island island,Attempt attempt,PassiveIntervalSolver.Result result) {
         if(result.advancedSeconds()!=attempt.slice.seconds()||!sameConnections(island.graph.pipes(),result.graph().pipes())||!result.graph().scheduledTransfers().isEmpty())return false;
@@ -960,7 +971,7 @@ public final class IslandCoordinator {
             boolean stoppedOther=other==null||other!=island&&stoppedSide(other);
             double due=transits.getOrDefault(side.pair(),0.)+(otherSide==null?0:otherSide.bookedPast(start));
             double seconds=other==null?0:other==island?slice.seconds():Math.min(other.clock.snapshot().cadenceTicks(),other.maximumSliceTicks)/20.0;
-            reads.put(pipe,new ExchangerRelay.Read(otherSide==null?null:otherSide.asOf(start),stoppedOther,due,seconds,otherSide==null?0:otherSide.stoppedWithin(start,end)));
+            reads.put(pipe,new ExchangerRelay.Read(otherSide==null?null:otherSide.asOf(start),stoppedOther,due,seconds,otherSide==null?0:otherSide.stoppedWithin(start,end),operations.get(pipe)));
         }
         return reads;
     }
@@ -1017,6 +1028,18 @@ public final class IslandCoordinator {
                 FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.couplingWakes);reconsider(island);
             }
         } finally{waking=false;}
+    }
+    /**
+     * Sets the real valves the coupled sides' controls work (W8, plan section 7), by side connection id. A side whose
+     * operation changed wakes its island: a certified island's certificate ends at the next decision point, and every
+     * island reads its operation at its next dispatch.
+     */
+    public void operations(Map<Long,ExchangerRelay.Operation> next) {
+        owned();
+        var changed=new HashSet<Long>(operations.keySet());changed.addAll(next.keySet());
+        changed.removeIf(id->java.util.Objects.equals(operations.get(id),next.get(id)));
+        operations=Map.copyOf(next);
+        for(long id:changed){Long owner=sideOwners.get(id);if(owner!=null)toWake.add(owner);}
     }
     /** The heat each exchanger holds in transit, J (the energy owed to its streams), by pair key: the lower of its two sides' connection ids. */
     public Map<Long,Double> transits(){owned();return Map.copyOf(transits);}

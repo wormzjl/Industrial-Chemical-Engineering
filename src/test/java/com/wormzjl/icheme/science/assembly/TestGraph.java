@@ -45,6 +45,10 @@ final class TestGraph implements PortGraph {
         return new F(Fitting.OTHER, 1);
     }
 
+    static F meter() {
+        return new F(Fitting.FLOWMETER, 1);
+    }
+
     static Port port(Unit unit, Role role) {
         return new Port(unit, role, 0);
     }
@@ -112,6 +116,24 @@ final class TestGraph implements PortGraph {
         }
         branches.put(at, list);
         return at;
+    }
+
+    /**
+     * A bypass around a unit's side, as walked from its inlet {@code in}: a line through {@code inlet} to an inlet tee,
+     * whose branches are the feed (through {@code feed}, to a tank outside) and the bypass (through {@code bypass}) to an
+     * outlet tee, whose branches are the line to {@code out} and the product (to a tank outside). {@code feedFirst}: the
+     * inlet tee lists the feed before the bypass. Returns the inlet and the outlet tee's positions.
+     */
+    long[] bypass(Port in, Port out, List<F> inlet, List<F> feed, List<F> bypass, boolean feedFirst) {
+        long inletTee = nextPosition++, outletTee = nextPosition++;
+        runs.put(Key.of(in), line(inlet.toArray(F[]::new), new Junction(inletTee, 3), 3 + 3 * inlet.size()));
+        var feedRun = line(feed.toArray(F[]::new), new Terminal(nextPosition++), 3 + 3 * feed.size());
+        var bypassRun = line(bypass.toArray(F[]::new), new Junction(outletTee, 3), 3 + 3 * bypass.size());
+        branches.put(inletTee, feedFirst ? List.of(feedRun, bypassRun) : List.of(bypassRun, feedRun));
+        var toOutlet = line(new F[0], new AtPort(out), 3);
+        runs.put(Key.of(out), reverse(toOutlet, new Junction(outletTee, 3)));
+        branches.put(outletTee, List.of(line(new F[0], new Terminal(nextPosition++), 3), toOutlet));
+        return new long[]{inletTee, outletTee};
     }
 
     /** No pipe at {@code port}. */

@@ -25,11 +25,13 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
      * The control modes of plan section 6. {@code OFF}: no controller, so the manual {@link Control#share} holds.
      * {@code OUTLET_TEMPERATURE} and {@code DUTY} act on the unit's own actuator (W4): an exchanger side's or a kettle's tubes'
      * bypass (steam that leaves uncondensed), an air cooler's fans. {@code FIRING} is a fired heater's coil, firing to its set point (W6).
+     * {@code RATIO} is an exchanger side's feed held at its target times the other side's feed, by a valve on its feed (W8):
+     * it needs the exchanger's lines ({@link #lines}), and holds nothing until they are complete.
      */
-    public enum Mode { OFF, OUTLET_TEMPERATURE, DUTY, FIRING }
+    public enum Mode { OFF, OUTLET_TEMPERATURE, DUTY, FIRING, RATIO }
     /**
      * @param mode     what the controller holds
-     * @param target   the held value: K for an outlet or set temperature, W for a duty
+     * @param target   the held value: K for an outlet or set temperature, W for a duty, the feed's share of the other side's for a ratio
      * @param lowLimit the cooled outlet's lowest temperature, K, or 0 for none (plan section 6, the freeze guard)
      * @param share    the manual setting of the side's actuator, 0 to 1, which holds while no controller acts: an
      *                 exchanger side's bypass share, an air cooler's fans (0 standing still, 1 at full speed), a fired
@@ -41,7 +43,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
         public Control {
             Objects.requireNonNull(mode);
             if(!Double.isFinite(target)||!Double.isFinite(lowLimit)||lowLimit<0||!Double.isFinite(share)||share<0||share>1
-                    ||mode==Mode.OUTLET_TEMPERATURE&&!(target>0)||mode==Mode.DUTY&&target<0)throw new IllegalArgumentException("Invalid heat unit control");
+                    ||mode==Mode.OUTLET_TEMPERATURE&&!(target>0)||mode==Mode.DUTY&&target<0||mode==Mode.RATIO&&!(target>0))throw new IllegalArgumentException("Invalid heat unit control");
         }
         public Control withShare(double value){return new Control(mode,target,lowLimit,value);}
     }
@@ -51,6 +53,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
         // A fired heater's coil fires towards its set point (owner Q11): its law needs one.
         if(unit==HeatSides.Unit.FIRED_HEATER&&(control.mode()!=Mode.FIRING||!(control.target()>0)))throw new IllegalArgumentException("A fired heater's coil fires to a set point");
         if(unit!=HeatSides.Unit.FIRED_HEATER&&control.mode()==Mode.FIRING)throw new IllegalArgumentException("Only a fired heater's coil fires");
+        if(unit!=HeatSides.Unit.EXCHANGER&&control.mode()==Mode.RATIO)throw new IllegalArgumentException("Only an exchanger's side holds a ratio");
     }
     /** A fired heater's set point when built, K: 300 °C, its burners lit. */
     public static final Control FIRING=new Control(Mode.FIRING,573.15,0,1);
@@ -76,7 +79,8 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
         if(!controllable())return null;
         double manual=unit==HeatSides.Unit.AIR_COOLER?control.share():1-control.share();
         return switch(control.mode()) {
-            case OFF->control.lowLimit()>0?new HeatControl(HeatControl.Target.MANUAL,0,control.lowLimit(),manual):null;
+            // A ratio works the feed valve, not the heat: the side's bypass holds its manual share.
+            case OFF,RATIO->control.lowLimit()>0?new HeatControl(HeatControl.Target.MANUAL,0,control.lowLimit(),manual):null;
             case OUTLET_TEMPERATURE->new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,control.target(),control.lowLimit(),manual);
             case DUTY->new HeatControl(HeatControl.Target.DUTY,control.target(),control.lowLimit(),manual);
             case FIRING->null;
@@ -84,6 +88,19 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
     }
     /** Whether the player sets this side's control (W4): an exchanger side's, an air cooler's and a kettle's tubes' (W7). */
     public boolean controllable(){return unit==HeatSides.Unit.EXCHANGER||unit==HeatSides.Unit.AIR_COOLER||unit==HeatSides.Unit.KETTLE&&side==HeatSides.Side.TUBE;}
+    /**
+     * The real lines this side's control asks for (W8, plan section 7): an exchanger side held at an outlet temperature or
+     * a duty has a bypass, one held at a ratio a valve on its feed; every other side none. Its exchanger validates them as
+     * an assembly; until they are complete, a bypass control works the side's internal bypass and a ratio holds nothing.
+     */
+    public com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines lines() {
+        if(unit!=HeatSides.Unit.EXCHANGER)return com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE;
+        return switch(control.mode()) {
+            case OUTLET_TEMPERATURE,DUTY->com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.BYPASS;
+            case RATIO->com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.RATIO;
+            default->com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE;
+        };
+    }
     /** Whether this is a kettle's shell (W7): a vessel whose pool is its tubes' other side, no passage of its own. */
     public boolean pool(){return unit==HeatSides.Unit.KETTLE&&side==HeatSides.Side.SHELL;}
 }

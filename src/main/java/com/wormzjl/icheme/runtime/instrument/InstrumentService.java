@@ -98,7 +98,7 @@ public final class InstrumentService {
                     editSensorValve(record,next);
                 }
             }
-            if(op.kind()==Sensor.Kind.FLOW)world.flowmeter(host.identity(),!op.remove());
+            if(op.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),!op.remove());metered(host);}
             sync(host);world.markViewDirty(host.identity());player.inventoryMenu.broadcastChanges();
         }
     }
@@ -109,11 +109,13 @@ public final class InstrumentService {
     private void recoverInvalidSensors(){for(var sensor:store.allSensors()){
         var host=world.instrumentHost(sensor.key().host());if(host==null)continue;
         if(Sensor.mounts(host,sensor.kind()).stream().anyMatch(m->m.id().equals(sensor.key().mount())))continue;
-        if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW)world.flowmeter(host.identity(),false);refund(null,host.entity().getLevel(),host.entity().getBlockPos(),sensorItem(sensor.kind()));sync(host);world.markViewDirty(host.identity());}
+        if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),false);metered(host);}refund(null,host.entity().getLevel(),host.entity().getBlockPos(),sensorItem(sensor.kind()));sync(host);world.markViewDirty(host.identity());}
     }}
     public static ItemStack sensorItem(Sensor.Kind kind){return new ItemStack(switch(kind){case PRESSURE->ModItems.PRESSURE_PROBE.get();case TEMPERATURE->ModItems.TEMPERATURE_PROBE.get();case FLOW->ModItems.FLOWMETER.get();case LEVEL->ModItems.DIGITAL_LEVEL_METER.get();});}
     public List<Sensor.Reading> sensorReadings(long host,FluidView view){var pipe=world.instrumentPipeReading(host);return store.sensors(host).stream().map(s->{var reading=Sensor.read(s,view,pipe,sensorSamples.get(s.instance()));sensorSamples.put(s.instance(),reading);return reading;}).toList();}
     private ServerLevel level(String name){return server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,ResourceLocation.parse(name)));}
+    /** A flowmeter installed or removed (W8): an assembly whose walk read that pipe reverts, as for a fitting. */
+    private static void metered(InstrumentHosts.Host host){if(host.entity().getLevel() instanceof net.minecraft.server.level.ServerLevel level)com.wormzjl.icheme.runtime.assembly.AssemblyService.metered(level,host.entity().getBlockPos());}
     private void sync(InstrumentHosts.Host host){host.metadata().sensors(store.sensors(host.identity()));host.metadata().set(store.host(host.identity()),store.revision(host.identity()));host.entity().setChanged();InstrumentHosts.loaded(host.entity());var l=host.entity().getLevel();var pos=host.entity().getBlockPos();l.sendBlockUpdated(pos,host.entity().getBlockState(),host.entity().getBlockState(),Block.UPDATE_CLIENTS);}
     /** Saved registrations include unloaded valves; reconciliation queues edits without touching their chunks. */
     public void reconcileLegacyValves(){for(var record:List.copyOf(world.registrations().values()))if(record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.PressureValve legacy)editSensorValve(record,store.convertLegacyValve(record.device().id(),legacy));}

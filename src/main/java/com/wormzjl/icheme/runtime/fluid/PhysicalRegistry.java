@@ -71,6 +71,8 @@ public final class PhysicalRegistry {
         var record=registrations().get(host);
         if(record!=null)submit(List.of(new WorldTopologyLedger.Edit(host,new WorldTopologyLedger.Registration(record.device(),record.spec(),Math.addExact(record.revision(),1)))),topology.nextIdentity(),null);
     }
+    /** Whether a flowmeter is installed on {@code host} (W8: the assembly walk reads a metered pipe as a flowmeter). */
+    public boolean flowmeterOn(long host){return flowmeters.contains(host);}
     /** A flowmeter whose host is going: forgotten without a recompile, as the host's own removal recompiles its island. */
     public void forgetFlowmeter(long host){flowmeters.remove(host);}
     /** {@code emptyFilter} is a new filter's cake: the configured capacity and resistance, nothing captured. */

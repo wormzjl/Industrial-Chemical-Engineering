@@ -133,6 +133,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var heat=c.heat();heatMode=heat==null?HeatUnit.Mode.OFF:heat.mode();
         fields.put("heatTemperature",new NumericDraft(heat!=null&&heat.mode()==HeatUnit.Mode.OUTLET_TEMPERATURE?heat.target():313.15,temperatureUnit));
         fields.put("heatDuty",new NumericDraft(heat!=null&&heat.mode()==HeatUnit.Mode.DUTY?heat.target()/1000:0));
+        fields.put("heatRatio",new NumericDraft(heat!=null&&heat.mode()==HeatUnit.Mode.RATIO?heat.target():1));
         var low=new NumericDraft(heat!=null&&heat.lowLimit()>0?heat.lowLimit():0,temperatureUnit);if(heat==null||heat.lowLimit()==0)low.text("");fields.put("lowLimit",low);
         fields.put("bypass",new NumericDraft(heat==null?0:heat.share()*100));
         composition=new RelativeComposition(data.components(),data.molecularWeights(),c.composition());
@@ -166,8 +167,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var data=menu.clientData();if(data==null)return 0;
         int partner=paired()?1:0;if(!canEdit())return partner;
         // A controllable side: its mode, the set point (or an exchanger side's bypass, or an air cooler's fans), the low limit.
-        return partner+switch(data.kind()){case PUMP,COMPRESSOR->constructedMover()?3:2;case GENERATOR->3;case VALVE->data.valve()!=null&&!data.valve().configured()?0:valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW||valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?2:1;case VOID,PIPE,FILTER->1;case HEAT_SIDE->burners()?2:controllable()?3:fans()?1:0;default->0;};
+        return partner+switch(data.kind()){case PUMP,COMPRESSOR->constructedMover()?3:2;case GENERATOR->3;case VALVE->data.valve()!=null&&!data.valve().configured()?0:valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW||valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?2:1;case VOID,PIPE,FILTER->1;case HEAT_SIDE->burners()?2:controllable()?3+(lined()?1:0):fans()?1:0;default->0;};
     }
+    /** An exchanger's side (W8): it may hold a ratio, and its control may ask for real lines. */
+    private boolean exchangerSide(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().unit().equals(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER.name());}
+    /** An exchanger side whose control as edited asks for real lines (W8, plan section 7): a bypass or a ratio station. */
+    private boolean lined(){return exchangerSide()&&(heatMode==HeatUnit.Mode.OUTLET_TEMPERATURE||heatMode==HeatUnit.Mode.DUTY||heatMode==HeatUnit.Mode.RATIO);}
     /** A heat side with a partner (an exchanger's): it opens the partner's screen (batch 2026-10-27-heat-exchanger-design). */
     private boolean paired(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().paired();}
     private void changePage(int target){page=target;templates=false;scroll.reset();rebuild();}
@@ -247,11 +252,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 if(burners()){railField("temperature",tr("set_temperature_input",temperatureUnit.symbol()),y);y+=RAIL_CONTROL;}
                 if(controllable()) {
                     var mode=action("heat_mode."+heatMode.name().toLowerCase(Locale.ROOT),12,y,rail()-4,()->{
-                        heatMode=switch(heatMode){case OFF->HeatUnit.Mode.OUTLET_TEMPERATURE;case OUTLET_TEMPERATURE->HeatUnit.Mode.DUTY;default->HeatUnit.Mode.OFF;};rebuild();});
+                        heatMode=switch(heatMode){case OFF->HeatUnit.Mode.OUTLET_TEMPERATURE;case OUTLET_TEMPERATURE->HeatUnit.Mode.DUTY;case DUTY->exchangerSide()?HeatUnit.Mode.RATIO:HeatUnit.Mode.OFF;default->HeatUnit.Mode.OFF;};rebuild();});
                     mode.visible=inRail(y,20);y+=RAIL_CONTROL;
                     switch(heatMode) {
                         case OUTLET_TEMPERATURE->{railField("heatTemperature",tr("outlet_set_point_input",temperatureUnit.symbol()),y);y+=RAIL_CONTROL;}
                         case DUTY->{railField("heatDuty",tr("duty_set_point_input"),y);y+=RAIL_CONTROL;}
+                        case RATIO->{railField("heatRatio",tr("ratio_input"),y);y+=RAIL_CONTROL;}
                         default->{if(!fans()){railField("bypass",tr("bypass_input"),y);y+=RAIL_CONTROL;}}
                     }
                     railField("lowLimit",tr("low_limit_input",temperatureUnit.symbol()),y);y+=RAIL_CONTROL;
@@ -264,7 +270,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             recover.active=data.view().filter()!=null&&!data.view().filter().captured().empty();recover.visible=inRail(y,18);
         }
         // A unit's heat side opens its partner side's menu (batch 2026-10-27-heat-exchanger-design).
-        if(paired())action("partner_side",12,y,rail()-4,()->FluidNetwork.openPartner(menu)).visible=inRail(y,20);
+        if(paired()){action("partner_side",12,y,rail()-4,()->FluidNetwork.openPartner(menu)).visible=inRail(y,20);y+=RAIL_CONTROL;}
+        // An exchanger side whose control asks for lines checks them as its exchanger's assembly (W8).
+        if(canEdit()&&lined())action("check_lines",12,y,rail()-4,()->{FluidNetwork.checkLines(menu);message=tr("waiting");}).visible=inRail(y,20);
         if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
         else if(page==4)configureScroll(data.view().outlets().size());else if(page==5)configureScroll(datasheet.size());
         else configureScroll(data.view().pipeInfo().connections().size());
@@ -376,7 +384,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      * cooler's fans as its power). An invalid draft throws, which the caller reports. */
     private HeatUnit.Control heatControl(){
         if(!controllable())return null;
-        double target=switch(heatMode){case OUTLET_TEMPERATURE->fields.get("heatTemperature").si();case DUTY->fields.get("heatDuty").value()*1000;default->0;};
+        double target=switch(heatMode){case OUTLET_TEMPERATURE->fields.get("heatTemperature").si();case DUTY->fields.get("heatDuty").value()*1000;case RATIO->fields.get("heatRatio").value();default->0;};
         var low=fields.get("lowLimit");double lowLimit=low.text().isBlank()?0:low.si();
         double share=fans()?(powerOn?1:0):heatMode==HeatUnit.Mode.OFF?fields.get("bypass").value()/100:menu.clientData().controls().heat().share();
         return new HeatUnit.Control(heatMode,target,lowLimit,share);
@@ -532,6 +540,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             if(control!=null)rows.add(new Reading("heat_control",switch(control.mode()){
                 case OUTLET_TEMPERATURE->tr("heat_control.outlet",number(temperatureUnit.display(control.target())),temperatureUnit.symbol());
                 case DUTY->tr("heat_control.duty",number(control.target()/1000));
+                case RATIO->tr("heat_control.ratio",number(control.target()));
                 default->tr("heat_control.manual");},tr("heat_control.hint")));
             if(control!=null&&control.lowLimit()>0)rows.add(new Reading("low_limit",quantity(temperatureUnit.display(control.lowLimit()),temperatureUnit.symbol()),tr("low_limit.hint")));
             if(heat.bypass()!=null)rows.add(new Reading("bypass",quantity(heat.bypass()*100,"%"),tr("bypass.hint")));

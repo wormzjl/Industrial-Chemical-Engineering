@@ -11,6 +11,8 @@ import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
+import com.wormzjl.icheme.science.equipment.HeatSides;
+import com.wormzjl.icheme.runtime.fluid.HeatUnit;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
@@ -62,6 +64,8 @@ public final class AssemblyGameTests {
         final Map<BlockPos, Direction> valves = new LinkedHashMap<>();
         Vessel column, drum;
         BlockPos offgasEnd;
+        /** An exchanger plant's bypass valve and the bypass pipe before it (W8). */
+        BlockPos bypassValve, bypassPipe;
 
         Plant(GameTestHelper helper) {
             this(helper, helper.absolutePos(new BlockPos(8, 4, 18)), new BlockPos(-8, -3, -18), new BlockPos(32, 22, 14));
@@ -114,6 +118,72 @@ public final class AssemblyGameTests {
             route(front(drum, Role.LIQUID_OUTLET), front(pump, Role.SUCTION));
             tee(route(front(pump, Role.DISCHARGE), front(column, Role.REFLUX)));
             for (var valve : valves.entrySet()) install(valve.getKey(), valve.getValue());
+        }
+
+        /**
+         * An exchanger with a bypass around its shell side (batch 2026-10-27-heat-exchanger-design, W8): a line routed from
+         * the shell inlet's pipe block to the outlet's, with a control valve on it along its stream, then the feed and the
+         * product branching off those two blocks (each a tee) to tanks. The exchanger is the master.
+         */
+        void buildBypass() {
+            hold();
+            var exchanger = place(unit(EquipmentShape.Kind.EXCHANGER), 0, 4, 0);
+            column = exchanger;
+            buildBypass(exchanger, Role.SHELL_INLET, Role.SHELL_OUTLET);
+            for (var valve : valves.entrySet()) install(valve.getKey(), valve.getValue());
+        }
+
+        /** A bypass around {@code vessel}'s side from {@code in} to {@code out}, its feed and product to tanks; valves not yet installed. */
+        void buildBypass(Vessel vessel, Role in, Role out) {
+            var tank = ModBlocks.FLUID_RESERVOIR.get().defaultBlockState();
+            buildBypass(vessel, in, out, tank, tank);
+        }
+
+        /**
+         * {@link #buildBypass(Vessel, Role, Role)} with the feed's end block {@code feedEnd} and the product's
+         * {@code productEnd}; returns the two ends' positions, feed first.
+         */
+        BlockPos[] buildBypass(Vessel vessel, Role in, Role out, net.minecraft.world.level.block.state.BlockState feedEnd,
+                               net.minecraft.world.level.block.state.BlockState productEnd) {
+            var path = route(front(vessel, in), front(vessel, out));
+            for (int i = 2; i < path.size() - 2 && bypassValve == null; i++) {
+                if (!straight(path, i)) continue;
+                bypassValve = path.get(i);
+                bypassPipe = path.get(i - 1);
+                var next = path.get(i + 1);
+                valves.put(bypassValve, Direction.fromDelta(next.getX() - bypassValve.getX(), next.getY() - bypassValve.getY(), next.getZ() - bypassValve.getZ()));
+            }
+            if (bypassValve == null) throw new IllegalStateException("No straight run for the bypass valve");
+            return new BlockPos[]{branch(front(vessel, in), out(vessel, in), false, feedEnd), branch(front(vessel, out), out(vessel, out), true, productEnd)};
+        }
+
+        /**
+         * A boundary line off the pipe block {@code at}, the nozzle's own direction {@code d} first, else square to it: three
+         * pipes, a valve on the second (along the line, or back at {@code at}), and {@code end} (a tank, a generator, a void).
+         * Returns the end block's position.
+         */
+        BlockPos branch(BlockPos at, Direction d, boolean outward, net.minecraft.world.level.block.state.BlockState end) {
+            var tries = new ArrayList<Direction>(List.of(d));
+            for (var q : Direction.values()) if (q.getAxis() != d.getAxis()) tries.add(q);
+            for (var q : tries) {
+                boolean clear = true;
+                for (int k = 1; k <= 4 && clear; k++) clear = free(at.relative(q, k), around(at.relative(q, k - 1), at.relative(q, k + 1)));
+                if (!clear) continue;
+                for (int k = 1; k <= 3; k++) pipe(at.relative(q, k));
+                level.setBlock(at.relative(q, 4), end, Block.UPDATE_ALL);
+                devices.add(at.relative(q, 4));
+                valves.put(at.relative(q, 2), outward ? q : q.getOpposite());
+                return at.relative(q, 4);
+            }
+            throw new IllegalStateException("No room for a line off " + at.toShortString());
+        }
+
+        /** The registration of the master exchanger's {@code side}. */
+        long side(HeatSides.Side side) {
+            var ids = EquipmentStructure.sideIdentities(level, column);
+            var sides = HeatSides.of(column.shape());
+            for (int i = 0; i < sides.size(); i++) if (sides.get(i).side() == side) return ids[i];
+            throw new IllegalStateException("No " + side + " side");
         }
 
         Vessel place(EquipmentShape shape, int dx, int dy, int dz) {
@@ -322,11 +392,16 @@ public final class AssemblyGameTests {
      * the plant and waits for it to leave; only then does the test pass or fail.
      */
     private static void withPlant(GameTestHelper helper, boolean offgasTank, Step... steps) {
+        withPlant(helper, plant -> plant.build(offgasTank), steps);
+    }
+
+    /** {@link #withPlant} with the plant built by {@code build}. */
+    private static void withPlant(GameTestHelper helper, java.util.function.Consumer<Plant> build, Step... steps) {
         var plant = new Plant(helper);
         String[] failure = {null};
         var sequence = helper.startSequence();
         try {
-            plant.build(offgasTank);
+            build.accept(plant);
             sequence = sequence.thenWaitUntil(() -> helper.assertTrue(plant.valvesInstalled(), "Waiting for the valves"));
             for (int i = 0; i < steps.length; i++) {
                 var step = steps[i];
@@ -402,6 +477,35 @@ public final class AssemblyGameTests {
         }, (plant, failure) -> {
             var after = plant.entry();
             if (after == null || after.status() != AssemblyStore.Status.NOT_VALIDATED) failure[0] = "not reverted: " + (after == null ? null : after.status());
+        });
+    }
+
+    /**
+     * W8 (batch 2026-10-27-heat-exchanger-design, plan section 7): an exchanger whose shell side holds an outlet temperature
+     * asks for a bypass. Its built bypass validates complete; its side's lines name the bypass valve, which, bare (no
+     * flowmeter), cannot regulate yet; the tube side has none. A removed bypass pipe reverts the report and the lines.
+     */
+    @GameTest(template = "empty", timeoutTicks = 800, batch = "assembly-exchanger")
+    public static void anExchangersBypassValidatesAndARemovedPipeReverts(GameTestHelper helper) {
+        withPlant(helper, Plant::buildBypass, (plant, failure) -> {
+            long shell = plant.side(HeatSides.Side.SHELL);
+            var r = plant.world.registrations().get(shell);
+            plant.world.edit(shell, r.revision(), r.device().withHeat(r.device().heat().withControl(new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE, 318.15, 0, 0))), r.spec());
+        }, (plant, failure) -> {
+            complete(plant, failure);
+            if (failure[0] != null) return;
+            var lines = plant.world.lines(plant.side(HeatSides.Side.SHELL));
+            long valve = plant.world.at(plant.position(plant.bypassValve)).orElseThrow().device().id();
+            if (lines == null || lines.status() != FluidWorldAuthority.Lines.Status.UNMETERED || lines.valve() != valve) failure[0] = "shell lines: " + lines + ", the valve " + valve;
+            else if (plant.world.lines(plant.side(HeatSides.Side.TUBE)) != null) failure[0] = "the tube side has lines: " + plant.world.lines(plant.side(HeatSides.Side.TUBE));
+        }, (plant, failure) -> {
+            plant.level.removeBlock(plant.bypassPipe, false);
+            plant.devices.remove(plant.bypassPipe);
+        }, (plant, failure) -> {
+            var after = plant.entry();
+            var lines = plant.world.lines(plant.side(HeatSides.Side.SHELL));
+            if (after == null || after.status() != AssemblyStore.Status.NOT_VALIDATED) failure[0] = "not reverted: " + (after == null ? null : after.status());
+            else if (lines == null || lines.status() != FluidWorldAuthority.Lines.Status.NOT_VALIDATED) failure[0] = "lines not reverted: " + lines;
         });
     }
 

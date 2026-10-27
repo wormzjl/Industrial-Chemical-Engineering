@@ -40,11 +40,13 @@ public interface PortGraph {
     }
 
     /**
-     * A pipe fitting as an assembly reads it: a control valve (with or without its module), an In-line Pump, or another
-     * accessory (a shutoff or check valve, a strainer, an instrument), which the structure stage passes over.
+     * A pipe fitting as an assembly reads it: a control valve (with or without its module), an In-line Pump, another
+     * accessory (a shutoff or check valve, a strainer, an instrument), which the structure stage passes over, or a
+     * flowmeter on a pipe with no other fitting (batch 2026-10-27-heat-exchanger-design, W8), which a step may ask for and
+     * the walk otherwise passes over. Codes are by ordinal: a new kind goes last.
      */
     enum Fitting {
-        CONTROL_VALVE, INLINE_PUMP, OTHER
+        CONTROL_VALVE, INLINE_PUMP, OTHER, FLOWMETER
     }
 
     /**

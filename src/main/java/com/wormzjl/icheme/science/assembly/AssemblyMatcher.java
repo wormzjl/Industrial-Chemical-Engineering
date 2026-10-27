@@ -109,8 +109,9 @@ public final class AssemblyMatcher {
             while (true) {
                 footprint.addAll(run.positions());
                 for (var e : run.elements()) {
-                    // Fittings beyond the boundary valve are outside the assembly.
+                    // Fittings beyond the boundary valve are outside the assembly; a flowmeter no step asks for is passed over.
                     if (e.kind() == Fitting.OTHER || rest.isEmpty() && finish instanceof Outside) continue;
+                    if (e.kind() == Fitting.FLOWMETER && rest.stream().noneMatch(s -> form(s, form -> form instanceof FittingForm f && f.kind() == Fitting.FLOWMETER) != null)) continue;
                     var hit = take(rest, form -> form instanceof FittingForm f && f.kind() == e.kind(), false);
                     if (hit == null) {
                         fault(rest.isEmpty() ? owner : rest.getFirst().slot(), State.EXTRA_VALVE, e.position(), e.kind().name());
@@ -119,8 +120,8 @@ public final class AssemblyMatcher {
                     bind(hit.step().slot(), new Binding(null, e.position(), null, hit.form()));
                     var state = hit.state();
                     String detail = state == State.WRONG_KIND ? e.kind().name() : "";
-                    // The arrow follows the stream: along the walk downstream, back along it upstream.
-                    if ((upstream ? -e.direction() : e.direction()) < 0) {
+                    // The arrow follows the stream: along the walk downstream, back along it upstream. A flowmeter reads either way.
+                    if (e.kind() != Fitting.FLOWMETER && (upstream ? -e.direction() : e.direction()) < 0) {
                         state = worse(state, e.kind() == Fitting.CONTROL_VALVE ? State.VALVE_REVERSED : State.WRONG_PORT);
                         detail = "backwards";
                     }
@@ -261,8 +262,19 @@ public final class AssemblyMatcher {
             }
         }
 
+        /**
+         * How well {@code run} fits {@code branch}: a valve on it; its end at the branch's port (4); a branch outside not
+         * returning to the assembly (2). A branch that splits again on its way (a bypass, batch 2026-10-27-heat-exchanger-design,
+         * W8) fits a run that ends at a junction (2), and one with a valve step a run with a valve (1): the feed and the
+         * bypass leaving an inlet tee both end outside the tee's own walk.
+         */
         private int score(Branch branch, Run run) {
-            int score = run.elements().stream().anyMatch(e -> e.kind() == Fitting.CONTROL_VALVE) ? 1 : 0;
+            boolean valve = run.elements().stream().anyMatch(e -> e.kind() == Fitting.CONTROL_VALVE);
+            int score = valve ? 1 : 0;
+            if (branch.steps().stream().anyMatch(s -> s.form() instanceof TeeForm)) {
+                if (run.end() instanceof Junction) score += 2;
+                if (valve && branch.steps().stream().anyMatch(s -> s.form() instanceof FittingForm f && f.kind() == Fitting.CONTROL_VALVE)) score += 1;
+            }
             if (branch.finish() instanceof ToPort target) {
                 var holder = bound.get(target.port().slot());
                 if (run.end() instanceof PortGraph.AtPort at && holder != null && holder.unit() != null && at.port().unit().origin() == holder.unit().origin()

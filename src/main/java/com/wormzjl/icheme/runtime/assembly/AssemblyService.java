@@ -7,7 +7,9 @@ import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.science.assembly.AssemblyMatcher;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
+import com.wormzjl.icheme.science.assembly.Blueprint;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
+import com.wormzjl.icheme.science.assembly.ExchangerBlueprint;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
@@ -148,20 +150,33 @@ public final class AssemblyService {
     }
 
     /**
-     * Validates the column holding {@code cell} now: walks its pipes, matches its blueprint and stores the report. Null for
-     * a structure that is not a designed column.
+     * Validates the column, or the exchanger with control lines (batch 2026-10-27-heat-exchanger-design, W8), holding
+     * {@code cell} now: walks its pipes, matches its blueprint and stores the report; an exchanger's sides then take its
+     * lines. Null for a structure with no assembly (an exchanger whose controls ask for no lines drops a stored report).
      */
     public static @Nullable Entry validate(ServerLevel level, BlockPos cell) {
         var vessel = EquipmentStructure.find(level, cell);
-        if (vessel == null || !designed(vessel.shape())) return null;
+        if (vessel == null) return null;
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         if (world == null) return null;
         var store = AssemblyStore.of(level);
-        var walker = new AssemblyWalker(new LevelGround(level, world));
         long master = vessel.origin().asLong();
-        var report = AssemblyMatcher.match(ColumnBlueprint.of(vessel.shape().trays()), walker, walker.unit(vessel.origin(), vessel.shape()), store.taken(master));
+        Blueprint blueprint;
+        if (designed(vessel.shape())) blueprint = ColumnBlueprint.of(vessel.shape().trays());
+        else {
+            var design = ExchangerLines.design(level, world, vessel);
+            if (!design.any()) {
+                if (store.entry(master) != null) store.forget(master);
+                ExchangerLines.publish(level, world, vessel, null);
+                return null;
+            }
+            blueprint = ExchangerBlueprint.of(design);
+        }
+        var walker = new AssemblyWalker(new LevelGround(level, world));
+        var report = AssemblyMatcher.match(blueprint, walker, walker.unit(vessel.origin(), vessel.shape()), store.taken(master));
         var entry = Entry.of(report, walker.codes());
         store.put(master, entry);
+        ExchangerLines.publish(level, world, vessel, entry);
         queue(level.getServer()).walks++;
         if (walker.exhausted())
             IChemE.LOGGER.warn("assembly status=WALK_LIMIT master={} visited={} detail=the walk stopped at {} blocks; lines beyond read as not checked",
@@ -205,6 +220,15 @@ public final class AssemblyService {
         queue(level.getServer()).requests.putIfAbsent(cell.immutable(), new Request(level.dimension(), cell.immutable(), true));
     }
 
+    /**
+     * A flowmeter installed on or removed from the pipe at {@code at} (W8): a report whose walk read that block reverts, as
+     * for a fitting; the walk reads a metered pipe as a flowmeter.
+     */
+    public static void metered(ServerLevel level, BlockPos at) {
+        var store = AssemblyStore.of(level);
+        for (long master : coded(store, at.asLong())) revert(level, store, master, at, "flowmeter");
+    }
+
     /** A chunk loaded: its blocks are compared with the codes of the reports that rely on them, at the next tick. */
     public static void chunkLoaded(ServerLevel level, ChunkPos chunk) {
         if (AssemblyStore.of(level).mastersInChunk(chunk.toLong()).isEmpty()) return;
@@ -220,10 +244,14 @@ public final class AssemblyService {
             var p = change.position();
             var level = server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, net.minecraft.resources.ResourceLocation.parse(p.dimension())));
             if (level == null) continue;
-            Integer before = code(change.before()), after = code(change.after());
-            if (Objects.equals(before, after)) continue;
             var store = AssemblyStore.of(level);
             var at = new BlockPos(p.x(), p.y(), p.z());
+            // An exchanger side whose control now asks for other lines (W8): its exchanger's report was for another design.
+            var was = change.before() == null ? null : change.before().heat();
+            var now = change.after() == null ? null : change.after().heat();
+            if (was != null && now != null && was.lines() != now.lines()) redesigned(level, at);
+            Integer before = code(change.before()), after = code(change.after());
+            if (Objects.equals(before, after)) continue;
             for (long master : coded(store, at.asLong())) revert(level, store, master, at, "changed");
             if (before == null)
                 for (var d : Direction.values())
@@ -252,6 +280,7 @@ public final class AssemblyService {
         var store = AssemblyStore.of(level);
         long origin = vessel.origin().asLong();
         store.forget(origin);
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> ExchangerLines.publish(level, world, vessel, null));
         for (long master : store.mastersAt(origin))
             if (store.entry(master) != null && store.entry(master).holds(origin)) revert(level, store, master, vessel.origin(), "removed");
         for (var position : around(vessel)) for (long master : coded(store, position)) revert(level, store, master, BlockPos.of(position), "removed");
@@ -272,10 +301,40 @@ public final class AssemblyService {
         return entry == null ? null : entry.status();
     }
 
+    /**
+     * The exchanger whose side registers at {@code at} changed the lines its controls ask for (W8): its stored report, for
+     * the old design, leaves, and its sides' lines with it. A check validates the new design.
+     */
+    private static void redesigned(ServerLevel level, BlockPos at) {
+        var vessel = EquipmentStructure.find(level, at);
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        if (vessel == null || world == null || vessel.shape().kind() != EquipmentShape.Kind.EXCHANGER) return;
+        var store = AssemblyStore.of(level);
+        if (store.entry(vessel.origin().asLong()) != null) store.forget(vessel.origin().asLong());
+        ExchangerLines.publish(level, world, vessel, null);
+        IChemE.LOGGER.info("assembly status=REDESIGNED master={} detail=an exchanger side's control asks for other lines", vessel.origin().toShortString());
+    }
+
+    /** {@code master}'s stored entry as its exchanger's sides' lines (W8), where its exchanger is loaded; nothing for a column. */
+    private static void published(ServerLevel level, long master) {
+        published(level, master, cellOf(level, master, master));
+    }
+
+    /** {@link #published(ServerLevel, long)} with the exchanger found from {@code cell}, one of its loaded cells (null: none). */
+    private static void published(ServerLevel level, long master, @Nullable BlockPos cell) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        var vessel = cell == null ? null : EquipmentStructure.find(level, cell);
+        if (world == null || vessel == null || vessel.shape().kind() != EquipmentShape.Kind.EXCHANGER) return;
+        ExchangerLines.publish(level, world, vessel, AssemblyStore.of(level).entry(master));
+    }
+
     private static void revert(ServerLevel level, AssemblyStore store, long master, BlockPos at, String why) {
         var status = status(store, master);
         if (status == null || status == Status.NOT_VALIDATED) return;
+        // Its cell first: a reverted entry codes nothing to find it by.
+        var cell = cellOf(level, master, master);
         store.revert(master, at.asLong());
+        published(level, master, cell);
         IChemE.LOGGER.info("assembly status=REVERTED master={} was={} at={} reason={}", BlockPos.of(master).toShortString(), status, at.toShortString(), why);
     }
 
@@ -315,6 +374,8 @@ public final class AssemblyService {
                     break;
                 }
             }
+            // An exchanger's sides take its lines again (W8): the fluid world keeps them only while the server runs.
+            published(level, master);
         }
     }
 
