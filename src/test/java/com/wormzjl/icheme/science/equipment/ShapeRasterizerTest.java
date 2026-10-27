@@ -248,6 +248,16 @@ class ShapeRasterizerTest {
             if (shape.reservoir()) assertTrue(ShapeRasterizer.layout(shape).shell().contains(ShapeRasterizer.fluidCell(shape)), shape.toString());
             // A mover's node is its suction nozzle's port cell (batch 2026-10-23-functional-pumps-compressors).
             else if (shape.kind().mover()) assertTrue(ShapeRasterizer.ports(shape).stream().anyMatch(p -> p.cell().equals(ShapeRasterizer.fluidCell(shape))), shape.toString());
+            // A heat-exchanging unit has a node per side, at its first inlet's port cell (batch 2026-10-27-heat-exchanger-design).
+            else if (HeatSides.unit(shape.kind()) != null) {
+                var sides = HeatSides.of(shape);var cells = ShapeRasterizer.fluidCells(shape);
+                assertEquals(sides.size(), cells.size(), shape.toString());
+                for (int i = 0; i < sides.size(); i++) {
+                    var inlet = sides.get(i).inlet();
+                    var first = ShapeRasterizer.ports(shape).stream().filter(p -> shape.nozzles().get(p.nozzle()).role() == inlet).findFirst().orElseThrow();
+                    assertEquals(first.cell(), cells.get(i), shape.toString());
+                }
+            }
             else assertNull(ShapeRasterizer.fluidCell(shape), shape.toString());
     }
 

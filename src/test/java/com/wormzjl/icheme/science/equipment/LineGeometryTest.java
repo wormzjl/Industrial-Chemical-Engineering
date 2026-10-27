@@ -37,7 +37,8 @@ class LineGeometryTest {
                 }
         for (double od : SIZES) keys.add(key(Kind.PIPE, EAST, od, new int[]{WEST, EAST}, 0, 0, true));
         for (var kind : Kind.values()) {
-            if (kind == Kind.PIPE) continue;
+            // A heat side is a unit's passage (batch 2026-10-27-heat-exchanger-design), never a line block.
+            if (kind == Kind.PIPE || kind == Kind.HEAT_SIDE) continue;
             for (int facing : new int[]{NORTH, EAST, UP})
                 for (double od : SIZES) {
                     int a = facing & ~1;

@@ -726,7 +726,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** Registers with the fluid engine when the whole structure has been built. */
     public boolean fluidDevice() {
-        return reservoir() || kind.mover();
+        return reservoir() || kind.mover() || HeatSides.unit(kind) != null;
     }
 
     /** A vessel's skirt; a designed shape's supports are its own parts. */

@@ -373,6 +373,11 @@ public final class ShapeRasterizer {
         return geometry(shape).fluidCell;
     }
 
+    /** Every node cell of {@code shape}, one per registration: a heat unit's in its sides' order ({@link HeatSides#of}). */
+    public static List<Cell> fluidCells(EquipmentShape shape) {
+        return geometry(shape).fluidCells;
+    }
+
     /** Surface polygons of the cell at its actual position, without key normalization; {@code codes} as {@link #cellCodes}. */
     static List<Polygon> surface(EquipmentShape shape, int x, int y, int z, long codes) {
         return surface(shape, x, y, z, codes, true);
@@ -495,6 +500,8 @@ public final class ShapeRasterizer {
         private final List<Port> ports = new ArrayList<>();
         private final Layout layout;
         private final Cell fluidCell;
+        /** One node cell per registration: the fluid cell, or each heat side's first inlet cell (batch 2026-10-27-heat-exchanger-design). */
+        private final List<Cell> fluidCells;
         /** The layout's {@link #stamp}, 0 until first asked. */
         private volatile long stamp;
 
@@ -599,18 +606,27 @@ public final class ShapeRasterizer {
                 reaching.put(entry.getKey(), entry.getValue().stream().mapToInt(Integer::intValue).toArray());
             }
             classify();
-            if (shape.drum()) {
+            Cell node;
+            List<Cell> sides = null;
+            if (HeatSides.unit(shape.kind()) != null) {
+                // A heat unit's sides each register at their first inlet's cell; the first side's is the fluid cell.
+                sides = HeatSides.of(shape).stream().map(definition -> ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == definition.inlet())
+                        .findFirst().orElseThrow(() -> new IllegalStateException("A heat side needs an inlet nozzle: " + definition.side())).cell()).toList();
+                node = sides.getFirst();
+            } else if (shape.drum()) {
                 var low = shape.orientation().horizontal()
                         ? transform.point(new double[]{axis - radius + .01, (shape.bottomTangent() + shape.topTangent()) / 2, axis})
                         : transform.point(new double[]{axis, shape.bottomTangent() - shape.headDepth() + .01, axis});
-                fluidCell = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));
+                node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));
             } else if (shape.kind().mover()) {
-                fluidCell = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.SUCTION)
+                node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.SUCTION)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A mover needs a suction nozzle")).cell();
             } else if (unit != null && unit.fluidPoint != null) {
                 var low = transform.point(unit.fluidPoint);
-                fluidCell = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));
-            } else fluidCell = null;
+                node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));
+            } else node = null;
+            fluidCell = node;
+            fluidCells = sides != null ? sides : node == null ? List.of() : List.of(node);
             layout = buildLayout();
             if (!drawing) {
                 mesh.facets().clear();

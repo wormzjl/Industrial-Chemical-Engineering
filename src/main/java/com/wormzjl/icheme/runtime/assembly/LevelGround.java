@@ -67,6 +67,8 @@ final class LevelGround implements AssemblyWalker.Ground {
             case PUMP, COMPRESSOR -> new AssemblyWalker.Piece(false, false, Fitting.INLINE_PUMP, facing, faces);
             case VALVE -> new AssemblyWalker.Piece(false, false, Fitting.CONTROL_VALVE, facing, faces);
             case RESERVOIR, GENERATOR, VOID -> new AssemblyWalker.Piece(false, true, null, facing, faces);
+            // A unit's heat side always has ports: the check above returned.
+            case HEAT_SIDE -> null;
         };
     }
 }

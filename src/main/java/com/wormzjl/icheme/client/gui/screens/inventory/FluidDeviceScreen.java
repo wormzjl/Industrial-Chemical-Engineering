@@ -199,7 +199,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             phaseBasis=preferredPhaseBasis=phaseBasis.next();phaseBasisButton.setMessage(Component.literal(tr("phase_ratio."+phaseBasis.key()+"_basis")));
         });
         phaseBasisButton.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.phase_ratio.basis_hint")));layoutPhaseBasisButton();
-        if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER){var apply=footer.get(1);action("apply",apply.x(),by,apply.width(),this::apply);}
+        if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER&&data.kind()!=TopologyCompiler.Kind.HEAT_SIDE){var apply=footer.get(1);action("apply",apply.x(),by,apply.width(),this::apply);}
         railBuiltOffset=railOffset();int y=railTop()-railBuiltOffset;
         if(canEdit()&&switchable()) {
             var power=action(powerOn?"power_on":"power_off",12,y,rail()-4,()->{powerOn=!powerOn;rebuild();});
@@ -226,6 +226,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             var recover=action("recover",12,y,rail()-4,()->{FluidNetwork.recoverSolids(menu,revision);message=tr("waiting");});
             recover.active=data.view().filter()!=null&&!data.view().filter().captured().empty();recover.visible=inRail(y,18);
         }
+        // A unit's heat side opens its partner side's menu (batch 2026-10-27-heat-exchanger-design).
+        if(data.kind()==TopologyCompiler.Kind.HEAT_SIDE)action("partner_side",12,y,rail()-4,()->FluidNetwork.openPartner(menu)).visible=inRail(y,20);
         if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
         else if(page==4)configureScroll(data.view().outlets().size());else if(page==5)configureScroll(datasheet.size());
         else configureScroll(data.view().pipeInfo().connections().size());

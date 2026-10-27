@@ -170,6 +170,15 @@ public final class FluidNetwork {
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
+    /** Client to server: a heat side's menu asks to open its partner side's (batch 2026-10-27-heat-exchanger-design). */
+    public record PartnerPayload(int menuId,BlockPos position,long identity) implements CustomPacketPayload {
+        public static final Type<PartnerPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"fluid_open_partner"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,PartnerPayload> STREAM_CODEC=new StreamCodec<>() {
+            public PartnerPayload decode(RegistryFriendlyByteBuf b){return new PartnerPayload(b.readVarInt(),b.readBlockPos(),b.readLong());}
+            public void encode(RegistryFriendlyByteBuf b,PartnerPayload p){b.writeVarInt(p.menuId);b.writeBlockPos(p.position);b.writeLong(p.identity);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
     /** Server to client, at a bucket: the static part of a menu's state, as JSON of {@link StaticData}. */
     public record StaticPayload(int menuId,long identity,String json) implements CustomPacketPayload {
         public static final Type<StaticPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"fluid_static"));
@@ -192,6 +201,7 @@ public final class FluidNetwork {
         var registrar=event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
         registrar.playToServer(EditPayload.TYPE,EditPayload.STREAM_CODEC,FluidNetwork::edit);
         registrar.playToServer(RecoverPayload.TYPE,RecoverPayload.STREAM_CODEC,FluidNetwork::recover);
+        registrar.playToServer(PartnerPayload.TYPE,PartnerPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)openPartner(payload,player);});
         registerDisplays(event,registrar);
         registrar.playToClient(StaticPayload.TYPE,StaticPayload.STREAM_CODEC,(payload,context)->{
             if(context.player().containerMenu instanceof FluidDeviceMenu menu&&menu.containerId==payload.menuId&&menu.identity()==payload.identity)menu.acceptStatic(decodeStatic(payload.json));
@@ -253,6 +263,23 @@ public final class FluidNetwork {
             world.input(menu,event,refusal);
         });
     }
+    public static void openPartner(FluidDeviceMenu menu){PacketDistributor.sendToServer(new PartnerPayload(menu.containerId,menu.position(),menu.identity()));}
+    /**
+     * Opens a heat side's partner: the partner's own cell opens its menu, which replays the partner's last snapshot as
+     * any opening does. Nothing is queued. A partner whose cell is not loaded, or in another dimension, opens nothing.
+     */
+    public static void openPartner(PartnerPayload payload,ServerPlayer player) {
+        if(!(player.containerMenu instanceof FluidDeviceMenu menu))return;
+        if(menu.containerId!=payload.menuId||menu.identity()!=payload.identity||!menu.position().equals(payload.position)||!menu.stillValid(player)||player.isSpectator())return;
+        FluidWorldAuthority.find(player.server).ifPresent(world->{
+            var own=world.registrations().get(payload.identity);var heat=own==null?null:own.device().heat();
+            var partner=heat==null?null:world.registrations().get(heat.partner());if(partner==null)return;
+            var at=partner.device().position();var level=player.serverLevel();var cell=new BlockPos(at.x(),at.y(),at.z());
+            if(at.dimension().equals(level.dimension().location().toString())&&level.isLoaded(cell)
+                    &&level.getBlockEntity(cell) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell&&shell.fluidIdentity()==partner.device().id())
+                shell.open(player,menu.debug());
+        });
+    }
     public static void sendEdit(FluidDeviceMenu menu,long revision,Controls controls){PacketDistributor.sendToServer(new EditPayload(menu.containerId,menu.position(),menu.identity(),revision,JSON.toJson(controls)));}
     private static void edit(EditPayload payload,IPayloadContext context){if(context.player() instanceof ServerPlayer player)edit(payload,player);}
     /**
@@ -289,6 +316,7 @@ public final class FluidNetwork {
                     case GENERATOR->spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);
                     case VOID->spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());
                     case RESERVOIR->throw new IllegalArgumentException("Reservoir initialization is fixed; existing fluid is conserved.");
+                    case HEAT_SIDE->throw new IllegalArgumentException("A heat side's passage is its unit's datasheet.");
                 }
                 // Refused here, before anything is queued, outside the package envelope (the input box, plan decision 9):
                 // the reply with the next bucket reads "Not applied: ..." with the envelope named.

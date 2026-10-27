@@ -9,13 +9,22 @@ public final class PipeResistance {
     /** ln 10, the same double the loss used to recompute on every call. */
     private static final double LN_10=DeterministicMath.log(10);
     private PipeResistance() {}
-    public record Geometry(double length,double diameter,double roughness,double minorLoss) {
+    /**
+     * A run of {@code channels} equal channels in parallel, each of this length, bore, roughness and minor loss: a pipe is
+     * one channel, an exchanger side's passage its tubes (batch 2026-10-27-heat-exchanger-design). The flow divides
+     * evenly, so the run loses what one channel loses at the flow over the count; its area and volume are all channels'.
+     */
+    public record Geometry(double length,double diameter,double roughness,double minorLoss,int channels) {
+        public Geometry(double length,double diameter,double roughness,double minorLoss){this(length,diameter,roughness,minorLoss,1);}
         public Geometry {
             if(!Double.isFinite(length)||length<=0||!Double.isFinite(diameter)||diameter<=0
                     ||!Double.isFinite(roughness)||roughness<0||roughness>=diameter
-                    ||!Double.isFinite(minorLoss)||minorLoss<0)throw new IllegalArgumentException("Invalid SI pipe geometry");
+                    ||!Double.isFinite(minorLoss)||minorLoss<0||channels<1)throw new IllegalArgumentException("Invalid SI pipe geometry");
         }
-        public double area(){return Math.PI*diameter*diameter/4;}
+        /** The flow area of every channel. */
+        public double area(){return channels*Math.PI*diameter*diameter/4;}
+        /** This run with {@code value} channels. */
+        public Geometry withChannels(int value){return new Geometry(length,diameter,roughness,minorLoss,value);}
     }
     public record Loss(double pressureDrop,double massFlowDerivative,double reynolds) {}
     public static Loss evaluate(Geometry pipe,double massFlow,double density,double viscosity) {
@@ -32,8 +41,9 @@ public final class PipeResistance {
         if(!Double.isFinite(massFlow)||!Double.isFinite(density)||density<=0||!Double.isFinite(viscosity)||viscosity<=0) {
             throw new IllegalArgumentException("Invalid pipe transport properties");
         }
-        double q=Math.abs(massFlow),reSlope=4/(Math.PI*viscosity*pipe.diameter),re=q*reSlope;
-        double area=pipe.area(),coefficient=1/(2*density*area*area);
+        // One channel's flow: the loss is one channel's, its derivative per kg/s of the whole run's flow.
+        double q=Math.abs(massFlow)/pipe.channels,reSlope=4/(Math.PI*viscosity*pipe.diameter),re=q*reSlope;
+        double area=Math.PI*pipe.diameter*pipe.diameter/4,coefficient=1/(2*density*area*area);
         // Integer powers as products, and re^1.9 as re^0.9 re (batch 2026-09-27-jdk-determinism, pow cost).
         double diameterSquared=pipe.diameter*pipe.diameter;
         double laminarSlope=128*viscosity*pipe.length/(Math.PI*density*(diameterSquared*diameterSquared));
@@ -48,7 +58,7 @@ public final class PipeResistance {
             derivative=derivative*(1-weight)+turbulentSlope*weight+(turbulent-loss)*weightSlope;
             loss=loss*(1-weight)+turbulent*weight;
         }
-        loss+=pipe.minorLoss*coefficient*q*q;derivative+=2*pipe.minorLoss*coefficient*q;
+        loss+=pipe.minorLoss*coefficient*q*q;derivative+=2*pipe.minorLoss*coefficient*q;derivative/=pipe.channels;
         if(!Double.isFinite(loss)||!Double.isFinite(derivative)||derivative<=0)throw new IllegalArgumentException("Nonfinite pipe pressure loss");
         if(rest!=null){rest[0]=derivative;rest[1]=re;}
         return Math.copySign(loss,massFlow);

@@ -263,9 +263,13 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
             return;
         }
         double reach = FluidDeviceMenu.REACH + Math.max(shape.sizeX(), Math.max(shape.sizeY(), shape.sizeZ()));
+        Component unit = Component.translatable("gui.icheme.vessel.title." + shape.kind().name().toLowerCase(Locale.ROOT));
+        // A unit's heat side names its side (batch 2026-10-27-heat-exchanger-design).
+        var heat = FluidWorldAuthority.find(player.server).map(world -> world.registrations().get(identity)).map(record -> record.device().heat()).orElse(null);
+        Component title = heat == null ? unit : Component.translatable("gui.icheme.heat_side.title", unit, Component.translatable("gui.icheme.heat_side." + heat.side().name().toLowerCase(Locale.ROOT)));
         player.openMenu(new MenuProvider() {
             public Component getDisplayName() {
-                return Component.translatable("gui.icheme.vessel.title." + shape.kind().name().toLowerCase(Locale.ROOT));
+                return title;
             }
 
             public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {

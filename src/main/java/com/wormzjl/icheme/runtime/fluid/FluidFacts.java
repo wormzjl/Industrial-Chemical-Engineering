@@ -40,11 +40,12 @@ final class FluidFacts {
     /** 1: the 0.13.0 records. 2 (batch 2026-10-26-pipe-laying-system): a registration's {@code joints}, a rack lane's width and face points, a position's rack lane.
      *  3 (batch 2026-10-26-process-control): a device spec's vessel geometry, the {@code control_valve} control.
      *  4 (batch 2026-10-26-multi-machine-framework): the world's basis retires its hash of the package data (written empty)
-     *  and appends the data's identity, the declared revision of every record it reads (owner decisions 2026-10-26). */
-    static final int SCHEMA=4;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 4. */
+     *  and appends the data's identity, the declared revision of every record it reads (owner decisions 2026-10-26).
+     *  5 (batch 2026-10-27-heat-exchanger-design): a geometry's channel count, a heat side's unit on its registration. */
+    static final int SCHEMA=5;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 5. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
-    private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096;
+    private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
     static final int REBUILT_CADENCE=20;
     private FluidFacts() {}
@@ -216,18 +217,22 @@ final class FluidFacts {
     private static void registration(Fields f,WorldTopologyLedger.Registration r) {
         var d=r.device();var g=d.geometry();var s=r.spec();
         f.count(d.id());position(f,d.position());f.name(d.kind()).name(d.facing())
-                .record(q->q.f64(g.length()).f64(g.diameter()).f64(g.roughness()).f64(g.minorLoss()))
+                .record(q->q.f64(g.length()).f64(g.diameter()).f64(g.roughness()).f64(g.minorLoss()).count(g.channels()))
                 .record(q->control(q,d.control())).bool(d.generatorEnabled()).name(d.cutoff()).bool(d.inlineFilter())
                 .list(d.ports(),(q,p)->{position(q,p.cell());q.name(p.face()).name(p.port()).name(p.role());})
                 .record(q->q.f64(s.volume()).f64(s.temperature()).f64(s.pressure()).doubles(s.composition())
                         .record(feed->feed.f64(s.solids().volumeFraction()).list(s.solids().grades(),(e,grade)->e.text(grade.material()).text(grade.size().metres()).f64(grade.massShare())))
                         .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())))
-                .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points());
+                .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points())
+                .list(d.heat()==null?List.<HeatUnit>of():List.of(d.heat()),FluidFacts::heatUnit);
     }
     private static WorldTopologyLedger.Registration registration(Record f) {
         long id=f.count(0);var position=position(f);
         var kind=f.name(TopologyCompiler.Kind.class,null);var facing=f.name(PhysicalFluidTopology.Direction.class,null);
-        var geometry=f.record(null,q->{double length=q.f64(0),diameter=q.f64(0),roughness=q.f64(0),minorLoss=q.f64(0);return valid(q,"geometry",()->new PipeResistance.Geometry(length,diameter,roughness,minorLoss));});
+        var geometry=f.record(null,q->{double length=q.f64(0),diameter=q.f64(0),roughness=q.f64(0),minorLoss=q.f64(0);
+            // Schema 5: a geometry written before channels existed is one channel, as every run was then.
+            long channels=q.count(1);if(channels<1||channels>MAXIMUM_CHANNELS)throw q.invalid("channels "+channels);
+            return valid(q,"geometry",()->new PipeResistance.Geometry(length,diameter,roughness,minorLoss,(int)channels));});
         var control=f.record((FlowControl)new FlowControl.Passive(),FluidFacts::control);
         boolean generatorEnabled=f.bool(true);var cutoff=f.name(PhysicalFluidTopology.Cutoff.class,PhysicalFluidTopology.Cutoff.NONE);boolean filter=f.bool(false);
         var ports=f.list(List.of(),q->{var cell=required(position(q),q,"port cell");var face=q.name(PhysicalFluidTopology.Direction.class,null);
@@ -244,8 +249,23 @@ final class FluidFacts {
         long joints=f.count(PhysicalFluidTopology.ALL_FACES);if(joints>PhysicalFluidTopology.ALL_FACES)throw f.invalid("joints "+joints);
         long slots=f.count(0);if(slots>PhysicalFluidTopology.RACK_WIDTH)throw f.invalid("lane width "+slots);
         long points=f.count(0);if(points>>>60!=0)throw f.invalid("lane points "+points);
+        // Schema 5: a heat side's unit, an optional value; a record written before it has none.
+        var heat=f.list(List.<HeatUnit>of(),FluidFacts::heatUnit);if(heat.size()>1)throw f.invalid("heat units "+heat.size());
         required(position,f,"device position");required(kind,f,"device kind");required(facing,f,"device facing");required(geometry,f,"device geometry");required(spec,f,"device spec");
-        return valid(f,"registration "+id,()->new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,filter,(int)joints,(int)slots,points),spec,revision));
+        return valid(f,"registration "+id,()->new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,filter,(int)joints,(int)slots,points,heat.isEmpty()?null:heat.getFirst()),spec,revision));
+    }
+    /** A heat side's unit (schema 5): its unit and side by name, area, partner, control and heat in transit. */
+    private static void heatUnit(Fields f,HeatUnit h) {
+        var c=h.control();
+        f.name(h.unit()).name(h.side()).f64(h.area()).count(h.partner()).record(q->q.name(c.mode()).f64(c.target()).f64(c.lowLimit()).f64(c.share())).f64(h.transitJoule());
+    }
+    private static HeatUnit heatUnit(Record f) {
+        var unit=f.name(com.wormzjl.icheme.science.equipment.HeatSides.Unit.class,null);var side=f.name(com.wormzjl.icheme.science.equipment.HeatSides.Side.class,null);double area=f.f64(0);long partner=f.count(0);
+        var control=f.record(HeatUnit.Control.OFF,q->{var mode=q.name(HeatUnit.Mode.class,HeatUnit.Mode.OFF);double target=q.f64(0),lowLimit=q.f64(0),share=q.f64(0);
+            return valid(q,"heat unit control",()->new HeatUnit.Control(mode,target,lowLimit,share));});
+        double transit=f.f64(0);
+        required(unit,f,"heat unit");required(side,f,"heat unit side");
+        return valid(f,"heat unit",()->new HeatUnit(unit,side,area,partner,control,transit));
     }
     private static void geometry(Fields f,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){f.name(g.form()).f64(g.capacity()).f64(g.height()).f64(g.diameter()).f64(g.length()).f64(g.bootDiameter()).f64(g.bootLength());}
     private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Record f){var form=f.name(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.class,null);double capacity=f.f64(0),height=f.f64(0),d=f.f64(0),l=f.f64(0),bd=f.f64(0),bl=f.f64(0);return valid(f,"vessel geometry",()->new com.wormzjl.icheme.science.fluid.network.VesselGeometry(form,capacity,height,d,l,bd,bl));}

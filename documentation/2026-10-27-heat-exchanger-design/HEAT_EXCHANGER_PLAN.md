@@ -353,6 +353,17 @@ W1 as built (2026-10-27), three changes from the plan of revision 4, each revers
 
 Left open by W1, for W2's screen: the extrapolation notice on the island's status line (the kernel reports it, `HeatCurve.extrapolated`) and the gauges' outlet temperature.
 
+W2 as built (2026-10-27), as designed after mapping the device code:
+
+- **Device.** A new device kind `HEAT_SIDE` (by name) with ports of two new roles, `INLET` and `OUTLET`: at least one of each (an air cooler has several inlets). Its node is its first inlet's cell, as a mover's is its suction cell.
+- **Compile.** As an inline filter: the inlet runs end at the device's node, the outlet runs move to a new junction at the outlet port, and a passive pipe of the side's passage joins the two. That pipe carries the `HeatSide` once a package supplies a wall (W5, W6, W3); after W2 it carries none and moves no heat.
+- **Passage law.** `PipeResistance.Geometry` gains a channel count (default 1): the drop of one channel at the flow divided by the count, the area and volume of all channels. Exchanger tube side 630 D² channels per pass of 14.8 mm, 2 L, K 8 (two passes); shell side 0.1 D² / (π 0.018² / 4) channels of 18 mm, 2.5 L. The count reaches the facts' geometry record, the checkpoint state (format 22 → 23), the certificate's graph identity and the sections' merge key.
+- **Pair record.** Not a separate list: each side's registration carries one appended record: the unit kind, the side's role, its area, its partner's id (0 for a one-sided unit), its control (mode by name, target, low limit, manual share) and its heat in transit. Registrations are the topology unit's facts, world-wide, and a unit's sides are placed, edited and removed in one ledger event, so the pair stays whole. Facts schema 4 → 5, one corpus image.
+- **Structure.** A unit registers one node per side (each side's first inlet cell). `register`, `restoreFluidBinding`, `unregister` and the refresh loop over the nodes; a shell cell binds the registration at its own cell, as now. W2 registers the exchanger (tube and shell sides); the air cooler (W5), the fired heaters (W6, two coils in series) and the kettle (W7) add theirs.
+- **Screen.** A side opens the fluid device screen of its own registration, titled with its side ("Heat exchanger: tube side"), with an "Other side" button that opens the partner's. The structure opens its first side. A side has no player edit until W4: the server refuses one, as a reservoir's.
+- **Old builds.** An exchanger placed before W2 registers its sides when it next loads whole, as a new build does (owner Q9).
+- **Moved to W5.** The one in-game check of the screen, the extrapolation notice and the outlet temperature: W5's air cooler is the first side that moves heat, so one check judges them together.
+
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
 
 ## 11. Simplifications and what they change

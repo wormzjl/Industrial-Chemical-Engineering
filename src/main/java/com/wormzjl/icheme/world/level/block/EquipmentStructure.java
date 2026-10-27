@@ -7,12 +7,15 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
+import com.wormzjl.icheme.runtime.fluid.HeatUnit;
+import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentRefresh;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
@@ -43,6 +46,8 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.TreeMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -157,6 +162,10 @@ public final class EquipmentStructure {
      * design volume, and its liquid height for the static head {@code g·m·H/V}. It is placed empty, as a tank is.
      */
     private static void register(ServerLevel level, Vessel vessel) {
+        if (HeatSides.unit(vessel.shape().kind()) != null) {
+            registerUnit(level, vessel);
+            return;
+        }
         var node = node(vessel);
         if (vessel.shape().kind().mover()) {
             var kind = vessel.shape().kind() == EquipmentShape.Kind.PUMP ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
@@ -185,12 +194,21 @@ public final class EquipmentStructure {
     public static boolean restoreFluidBinding(ServerLevel level,Vessel vessel) {
         if(!vessel.shape().fluidDevice())return true;
         var world=FluidWorldAuthority.find(level.getServer()).orElse(null);if(world==null)return false;
+        boolean unit=HeatSides.unit(vessel.shape().kind())!=null;
+        var heldIds=unit?heldAtNodes(world,level,vessel):List.<Long>of();
+        if(unit&&unitRecords(world,heldIds).size()==HeatSides.of(vessel.shape()).size()) {
+            // A whole pair binds where its cells are loaded; none or half of a pair registers afresh below, once complete.
+            boolean loaded=true;
+            for(var at:nodes(vessel))loaded&=level.hasChunkAt(at)&&level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell&&ours(shell,vessel.origin(),vessel.shape());
+            if(loaded)restateUnit(level,vessel,world,heldIds);
+            return true;
+        }
         var node=node(vessel);var held=position(level,node);
-        var record=world.at(held).orElse(null);
+        var record=unit?null:world.at(held).orElse(null);
         if(record!=null) {
             if(level.hasChunkAt(node)&&record.device().position().equals(held)&&!record.device().ports().isEmpty()
                     &&level.getBlockEntity(node) instanceof EquipmentShellBlockEntity shell&&ours(shell,vessel.origin(),vessel.shape())) {
-                if(vessel.shape().reservoir()&&!record.spec().geometry().equals(vessel.shape().fluidGeometry()))reregister(level,vessel,node);
+                if(vessel.shape().reservoir()&&!record.spec().geometry().equals(vessel.shape().fluidGeometry()))reregister(level,vessel,node,List.of());
                 if(shell.fluidIdentity()!=record.device().id())shell.bindIdentity(record.device().id());else world.deviceLoaded(record.device().id());
             }
             return true;
@@ -204,7 +222,105 @@ public final class EquipmentStructure {
             if(!(level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell)||!ours(shell,origin,shape)||shell.stale())return true;
         }
         for(var cell:layout.interior())if(!level.getBlockState(origin.offset(cell.x(),cell.y(),cell.z())).is(ModBlocks.EQUIPMENT_INTERIOR.get()))return true;
-        register(level,vessel);return true;
+        if(unit)restateUnit(level,vessel,world,heldIds);else register(level,vessel);
+        return true;
+    }
+
+    /**
+     * A whole heat-exchanging unit joins the fluid network as one heat side per passage (batch
+     * 2026-10-27-heat-exchanger-design, {@link HeatSides}): each at its first inlet's cell, its inlet and outlet nozzles
+     * its ports, its passage and surface the datasheet's. Its sides are placed in one event, as partners.
+     */
+    private static void registerUnit(ServerLevel level, Vessel vessel) {
+        var shape = vessel.shape();
+        var unit = HeatSides.unit(shape.kind());
+        var sides = HeatSides.of(shape);
+        var nodes = nodes(vessel);
+        var placing = new ArrayList<FluidWorldAuthority.UnitSide>();
+        for (int i = 0; i < sides.size(); i++) {
+            var side = sides.get(i);
+            placing.add(new FluidWorldAuthority.UnitSide(position(level, nodes.get(i)), sidePorts(level, vessel, side), side.passage(), new HeatUnit(unit, side.side(), side.area(), 0)));
+        }
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+            var records = world.placeUnit(placing);
+            for (int i = 0; i < records.size(); i++)
+                if (level.getBlockEntity(nodes.get(i)) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(records.get(i).device().id());
+        });
+    }
+
+    /** A heat side's nozzles: its inlets and outlets in nozzle order, so its first inlet is its node ({@link ShapeRasterizer#fluidCells}). */
+    private static List<PhysicalFluidTopology.Port> sidePorts(Level level, Vessel vessel, HeatSides.Definition side) {
+        var ports = new ArrayList<PhysicalFluidTopology.Port>();
+        var nozzles = vessel.shape().nozzles();
+        for (var port : ShapeRasterizer.ports(vessel.shape())) {
+            var role = nozzles.get(port.nozzle()).role();
+            var connection = role == side.inlet() ? PhysicalFluidTopology.ConnectionRole.INLET : role == side.outlet() ? PhysicalFluidTopology.ConnectionRole.OUTLET : null;
+            if (connection == null) continue;
+            var cell = vessel.origin().offset(port.cell().x(), port.cell().y(), port.cell().z());
+            var face = PhysicalFluidTopology.Direction.valueOf(Direction.fromDelta(port.dx(), port.dy(), port.dz()).name());
+            ports.add(new PhysicalFluidTopology.Port(position(level, cell), face, PassiveNetwork.PhasePort.BULK, connection));
+        }
+        return ports;
+    }
+
+    /** The registrations of a unit's sides, by side: those held at {@code ids} and their partners. */
+    private static Map<HeatSides.Side, WorldTopologyLedger.Registration> unitRecords(FluidWorldAuthority world, java.util.Collection<Long> ids) {
+        var found = new EnumMap<HeatSides.Side, WorldTopologyLedger.Registration>(HeatSides.Side.class);
+        for (long id : ids) {
+            var record = world.registrations().get(id);
+            if (record == null || record.device().heat() == null) continue;
+            found.put(record.device().heat().side(), record);
+            var partner = world.registrations().get(record.device().heat().partner());
+            if (partner != null && partner.device().heat() != null) found.putIfAbsent(partner.device().heat().side(), partner);
+        }
+        return found;
+    }
+
+    /** The identities registered at {@code vessel}'s nodes. */
+    private static List<Long> heldAtNodes(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+        var ids = new ArrayList<Long>();
+        for (var node : nodes(vessel)) {
+            var held = position(level, node);
+            world.at(held).filter(r -> r.device().position().equals(held) && !r.device().ports().isEmpty()).ifPresent(r -> ids.add(r.device().id()));
+        }
+        return ids;
+    }
+
+    /**
+     * Moves or restates a unit's sides onto {@code vessel}'s layout (decision D7: each keeps its identity, partner, control
+     * and heat in transit), or registers the unit afresh when its sides are not all there. {@code held} are the identities
+     * its cells held. A side's passage and surface follow the datasheet.
+     */
+    private static void restateUnit(ServerLevel level, Vessel vessel, FluidWorldAuthority world, java.util.Collection<Long> held) {
+        var sides = HeatSides.of(vessel.shape());
+        var records = unitRecords(world, held);
+        if (records.size() != sides.size()) {
+            if (!records.isEmpty()) world.removeUnit(records.values().stream().map(r -> r.device().id()).toList());
+            registerUnit(level, vessel);
+            return;
+        }
+        var nodes = nodes(vessel);
+        for (int i = 0; i < sides.size(); i++) {
+            var side = sides.get(i);
+            var record = records.get(side.side());
+            var node = nodes.get(i);
+            var device = record.device();
+            var moved = device.withPlacement(position(level, node), sidePorts(level, vessel, side)).withGeometry(side.passage()).withHeat(device.heat().withArea(side.area()));
+            if (!moved.equals(device)) world.edit(device.id(), record.revision(), moved, record.spec());
+            for (var other : nodes)
+                if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();
+            if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) {
+                if (entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
+                else world.deviceLoaded(device.id());
+            }
+        }
+    }
+
+    /** Each node of {@code vessel}, one per registration ({@link ShapeRasterizer#fluidCells}). */
+    private static List<BlockPos> nodes(Vessel vessel) {
+        var nodes = new ArrayList<BlockPos>();
+        for (var cell : ShapeRasterizer.fluidCells(vessel.shape())) nodes.add(vessel.origin().offset(cell.x(), cell.y(), cell.z()));
+        return nodes;
     }
 
     /** A floating-roof tank registers open to the atmosphere (batch 2026-10-21-floating-roof-tanks); a drum and a sphere closed. */
@@ -252,6 +368,12 @@ public final class EquipmentStructure {
 
     /** The equipment's registration leaves with its structure (a reservoir's contents go with it). */
     private static void unregister(ServerLevel level, Vessel vessel) {
+        if (HeatSides.unit(vessel.shape().kind()) != null) {
+            // A unit's sides leave together: no event leaves half a pair.
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.removeUnit(
+                    unitRecords(world, heldAtNodes(world, level, vessel)).values().stream().map(r -> r.device().id()).toList()));
+            return;
+        }
         var position = position(level, node(vessel));
         FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.at(position)
                 .filter(record -> record.device().position().equals(position) && !record.device().ports().isEmpty())
@@ -501,13 +623,17 @@ public final class EquipmentStructure {
         var world = new HashMap<ShapeRasterizer.Cell, EquipmentRefresh.Holding>();
         Paint paint = null;
         BlockPos oldNode = null;
+        var held = new ArrayList<Long>();
         for (var at : BlockPos.betweenClosed(low, high)) {
             var cell = new ShapeRasterizer.Cell(at.getX() - origin.getX(), at.getY() - origin.getY(), at.getZ() - origin.getZ());
             var state = level.getBlockState(at);
             if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && ours(shell, origin, shape)) {
                 world.put(cell, EquipmentRefresh.Holding.SHELL);
                 if (paint == null) paint = shell.paint();
-                if (shell.fluidIdentity() != 0) oldNode = at.immutable();
+                if (shell.fluidIdentity() != 0) {
+                    oldNode = at.immutable();
+                    held.add(shell.fluidIdentity());
+                }
             } else if (state.is(ModBlocks.EQUIPMENT_INTERIOR.get())) {
                 var shell = shellReached(level, at);
                 world.put(cell, shell != null && ours(shell, origin, shape) ? EquipmentRefresh.Holding.INTERIOR : EquipmentRefresh.Holding.OTHER);
@@ -560,7 +686,7 @@ public final class EquipmentStructure {
         for (int x = low.getX() >> 4; x <= high.getX() >> 4; x++)
             for (int z = low.getZ() >> 4; z <= high.getZ() >> 4; z++) level.getChunkSource().chunkMap.waitForLightBeforeSending(new ChunkPos(x, z), 0);
         var vessel = new Vessel(placed, shape);
-        if (shape.fluidDevice()) reregister(level, vessel, oldNode);
+        if (shape.fluidDevice()) reregister(level, vessel, oldNode, held);
         // Pipes beside a dropped, added or redrawn cell take up or drop their connection (old nozzles included).
         for (var at : touched)
             for (var direction : Direction.values()) {
@@ -590,7 +716,11 @@ public final class EquipmentStructure {
      * what it holds ({@code PhysicalRegistry}: a vessel's moles, energy and solids in its new geometry), so nothing the
      * network or a gauge knows of it changes but where it stands. {@code oldNode} held the identity.
      */
-    private static void reregister(ServerLevel level, Vessel vessel, @Nullable BlockPos oldNode) {
+    private static void reregister(ServerLevel level, Vessel vessel, @Nullable BlockPos oldNode, List<Long> heldIds) {
+        if (HeatSides.unit(vessel.shape().kind()) != null) {
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> restateUnit(level, vessel, world, heldIds));
+            return;
+        }
         var node = node(vessel);
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         if (world == null) return;

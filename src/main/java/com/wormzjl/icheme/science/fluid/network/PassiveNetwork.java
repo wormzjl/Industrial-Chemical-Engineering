@@ -271,15 +271,15 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
         public Pipe withHeat(HeatSide side){return new Pipe(id,first,second,sections,control,blockedDirections,filter,firstPort,secondPort,forbiddenDirections,observationPoints,actuatorArea,side);}
         public double controlArea(){return actuatorArea>0?actuatorArea:minimumArea();}
         public Pipe {if(!Double.isFinite(actuatorArea)||actuatorArea<0)throw new IllegalArgumentException("Invalid actuator area");observationPoints=List.copyOf(observationPoints);Objects.requireNonNull(firstPort);Objects.requireNonNull(secondPort);if(filter!=null&&!(control instanceof FlowControl.Passive))throw new IllegalArgumentException("Filter must be passive");if(heat!=null&&(filter!=null||!(control instanceof FlowControl.Passive)))throw new IllegalArgumentException("A heat-exchanging side is a passive run without a filter");if(blockedDirections<0||blockedDirections>3)throw new IllegalArgumentException("Invalid pipe closure");if(forbiddenDirections<0||forbiddenDirections>3)throw new IllegalArgumentException("Invalid permanent pipe direction restriction");sections=coalesce(sections);Objects.requireNonNull(control);if(sections.isEmpty())throw new IllegalArgumentException("Empty hydraulic run");}
-        private record SectionShape(double diameter,double roughness) {}
+        private record SectionShape(double diameter,double roughness,int channels) {}
         private static List<PipeResistance.Geometry> coalesce(List<PipeResistance.Geometry> sections) {
             sections=List.copyOf(sections);if(sections.size()<2)return sections;
             // In this homogeneous run every section uses the same upstream density/viscosity.
             // Darcy/Poiseuille loss is linear in length and fitting K, so identical cross-sections
             // can share one friction evaluation without changing the physical run or debug map.
             var sums=new java.util.LinkedHashMap<SectionShape,double[]>();
-            for(var section:sections){var total=sums.computeIfAbsent(new SectionShape(section.diameter(),section.roughness()),key->new double[2]);total[0]+=section.length();total[1]+=section.minorLoss();}
-            var compact=new java.util.ArrayList<PipeResistance.Geometry>();sums.forEach((shape,total)->compact.add(new PipeResistance.Geometry(total[0],shape.diameter(),shape.roughness(),total[1])));return List.copyOf(compact);
+            for(var section:sections){var total=sums.computeIfAbsent(new SectionShape(section.diameter(),section.roughness(),section.channels()),key->new double[2]);total[0]+=section.length();total[1]+=section.minorLoss();}
+            var compact=new java.util.ArrayList<PipeResistance.Geometry>();sums.forEach((shape,total)->compact.add(new PipeResistance.Geometry(total[0],shape.diameter(),shape.roughness(),total[1],shape.channels())));return List.copyOf(compact);
         }
         /** All serial sections carry the same homogeneous bulk flow and use the run's upwind properties. */
         public PipeResistance.Loss loss(double flow,double density,double viscosity) {

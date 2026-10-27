@@ -28,13 +28,13 @@ public final class PhysicalFluidTopology {
     public static final int RACK_PLACES=14,RACK_WIDTH=4;
     /** Whether a rack lane of number lane (option + 1) may be slots positions wide: a tier lane within its four positions, a crossing one wide. */
     public static boolean laneFits(int lane,int slots){return lane>=1&&lane<=RACK_PLACES&&slots>=1&&slots<=RACK_WIDTH&&(lane<=12?(lane-1)%4+slots<=4:slots==1);}
-    /** A reservoir's phase outlet, or a mover's explicitly directed process connection. Stable checkpoint codes. */
+    /** A reservoir's phase outlet, a mover's explicitly directed process connection, or a heat side's inlet or outlet. Stable checkpoint codes. */
     public enum ConnectionRole {
-        VESSEL(0),SUCTION(1),DISCHARGE(2);
+        VESSEL(0),SUCTION(1),DISCHARGE(2),INLET(3),OUTLET(4);
         private final int code;
         ConnectionRole(int code){this.code=code;}
         public int code(){return code;}
-        public static ConnectionRole fromCode(int code){return switch(code){case 0->VESSEL;case 1->SUCTION;case 2->DISCHARGE;default->throw new IllegalArgumentException("Unknown connection role "+code);};}
+        public static ConnectionRole fromCode(int code){return switch(code){case 0->VESSEL;case 1->SUCTION;case 2->DISCHARGE;case 3->INLET;case 4->OUTLET;default->throw new IllegalArgumentException("Unknown connection role "+code);};}
     }
     /** A multi-cell device's nozzle: the face of {@code cell} where a pipe meets it, its phase class and connection role. */
     public record Port(Position cell,Direction face,PassiveNetwork.PhasePort port,ConnectionRole role) {
@@ -73,7 +73,9 @@ public final class PhysicalFluidTopology {
      * shared face coincide (RACK_LAYERS_PLAN I2), whatever their racks' facings.</p>
      */
     public record Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,
-                         PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points) {
+                         PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points,HeatUnit heat) {
+        /** A device without a heat unit: every kind but {@link TopologyCompiler.Kind#HEAT_SIDE}. */
+        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,null);}
         public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,0,0);}
         public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,ALL_FACES);}
         public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,false);}
@@ -102,8 +104,19 @@ public final class PhysicalFluidTopology {
             if(ports.size()>MAXIMUM_PORTS)throw new IllegalArgumentException("Too many device ports: "+ports.size());
             var seen=new HashSet<Contact>();
             int suction=0,discharge=0;
-            for(var port:ports) {
+            if((kind==TopologyCompiler.Kind.HEAT_SIDE)!=(heat!=null))throw new IllegalArgumentException("A heat side, and only a heat side, carries a heat unit");
+            if(kind==TopologyCompiler.Kind.HEAT_SIDE) {
+                // A side's node is its first inlet's cell, as a mover's is its suction cell (batch 2026-10-27-heat-exchanger-design).
+                int inlets=0,outlets=0;
+                for(var port:ports) {
+                    if(!port.cell.dimension().equals(position.dimension())||!seen.add(new Contact(port.cell,port.face))||port.port!=PassiveNetwork.PhasePort.BULK)throw new IllegalArgumentException("Invalid heat side port");
+                    switch(port.role){case INLET->{if(inlets++==0&&!port.cell.equals(position))throw new IllegalArgumentException("A heat side's node must be its first inlet's cell");}case OUTLET->outlets++;default->throw new IllegalArgumentException("A heat side needs inlet and outlet ports");}
+                }
+                if(inlets==0||outlets==0)throw new IllegalArgumentException("A heat side needs an inlet and an outlet");
+                if(heat.partner()==id)throw new IllegalArgumentException("A heat side cannot be its own partner");
+            } else for(var port:ports) {
                 if(!port.cell.dimension().equals(position.dimension())||!seen.add(new Contact(port.cell,port.face)))throw new IllegalArgumentException("Invalid device port");
+                if(port.role==ConnectionRole.INLET||port.role==ConnectionRole.OUTLET)throw new IllegalArgumentException("Only a heat side has inlet and outlet ports");
                 if(kind==TopologyCompiler.Kind.RESERVOIR) {
                     if(port.role!=ConnectionRole.VESSEL)throw new IllegalArgumentException("A reservoir needs vessel ports");
                 } else if(kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR) {
@@ -113,9 +126,9 @@ public final class PhysicalFluidTopology {
                         case DISCHARGE->discharge++;
                         case VESSEL->throw new IllegalArgumentException("A mover needs suction and discharge ports");
                     }
-                } else throw new IllegalArgumentException("Only reservoirs, pumps and compressors have ports");
+                } else throw new IllegalArgumentException("Only reservoirs, pumps, compressors and heat sides have ports");
             }
-            if(!ports.isEmpty()&&kind!=TopologyCompiler.Kind.RESERVOIR&&(ports.size()!=2||suction!=1||discharge!=1))
+            if(!ports.isEmpty()&&kind!=TopologyCompiler.Kind.RESERVOIR&&kind!=TopologyCompiler.Kind.HEAT_SIDE&&(ports.size()!=2||suction!=1||discharge!=1))
                 throw new IllegalArgumentException("A mover needs exactly one suction and one discharge port");
         }
         boolean boundary(){return kind==TopologyCompiler.Kind.RESERVOIR||kind==TopologyCompiler.Kind.GENERATOR||kind==TopologyCompiler.Kind.VOID;}
@@ -129,15 +142,17 @@ public final class PhysicalFluidTopology {
         }
         boolean actuator(){var hydraulic=hydraulicKind();return hydraulic==TopologyCompiler.Kind.PUMP||hydraulic==TopologyCompiler.Kind.COMPRESSOR||hydraulic==TopologyCompiler.Kind.VALVE;}
         /** Copy edits preserve accessories, ports and the independent generator switch. */
-        public Device withGeometry(PipeResistance.Geometry value){return new Device(id,position,kind,facing,value,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points);}
-        public Device withFacing(Direction value){return new Device(id,position,kind,value,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points);}
-        public Device withControl(FlowControl value){return new Device(id,position,kind,facing,geometry,value,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points);}
-        public Device withCutoff(Direction axis,Cutoff value){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,value,inlineFilter,joints,slots,points);}
-        public Device withInlineFilter(Direction axis,boolean installed){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,cutoff,installed,joints,slots,points);}
+        public Device withGeometry(PipeResistance.Geometry value){return new Device(id,position,kind,facing,value,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat);}
+        public Device withFacing(Direction value){return new Device(id,position,kind,value,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat);}
+        public Device withControl(FlowControl value){return new Device(id,position,kind,facing,geometry,value,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat);}
+        public Device withCutoff(Direction axis,Cutoff value){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,value,inlineFilter,joints,slots,points,heat);}
+        public Device withInlineFilter(Direction axis,boolean installed){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,cutoff,installed,joints,slots,points,heat);}
         /** The same device standing at {@code value} with {@code nozzles}: a layout refresh rebuilding a vessel or a machine (decision D7). */
-        public Device withPlacement(Position value,List<Port> nozzles){return new Device(id,value,kind,facing,geometry,control,nozzles,generatorEnabled,cutoff,inlineFilter,joints,slots,points);}
+        public Device withPlacement(Position value,List<Port> nozzles){return new Device(id,value,kind,facing,geometry,control,nozzles,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat);}
         /** The same pipe with another joint set: a line laid to one of its faces (a tee or an extension). */
-        public Device withJoints(int value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,value,slots,points);}
+        public Device withJoints(int value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,value,slots,points,heat);}
+        /** The same heat side with {@code value}: a control or transit edit, or a partner found (batch 2026-10-27-heat-exchanger-design). */
+        public Device withHeat(HeatUnit value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,value);}
         /** Whether a pipe may connect through {@code direction} at all, whatever its fitting or switch. */
         public boolean jointAt(Direction direction){return (joints>>direction.ordinal()&1)!=0;}
         /** A lane's point on face direction (see points). */
@@ -201,6 +216,7 @@ public final class PhysicalFluidTopology {
         public boolean mechanicallyConnects(Direction direction){return jointAt(direction)&&(!actuator()&&!filter()&&cutoff==Cutoff.NONE||direction.x*facing.x+direction.y*facing.y+direction.z*facing.z!=0);}
         /** The driven side is the actual discharge nozzle, independent of the node's position and the model's heading. */
         boolean outletAt(Position cell,Direction face) {
+            if(kind==TopologyCompiler.Kind.HEAT_SIDE){for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.OUTLET;return false;}
             if(!actuator())return false;
             if(ports.isEmpty())return cell.equals(position)&&face==facing;
             for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.DISCHARGE;
@@ -261,6 +277,8 @@ public final class PhysicalFluidTopology {
     }
     private record Point(double x,double y,double z) {}
     public static long filterIdentity(long physicalId){return Long.MIN_VALUE+physicalId;}
+    /** The compiled pipe of heat side {@code physicalId}: its passage between its inlet node and its outlet junction. */
+    public static long sideIdentity(long physicalId){return Long.MIN_VALUE/2+physicalId;}
     public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates) {
         return compile(devices,boundaryStates,Map.of(),boundaryStates.values().stream().findFirst().map(PassiveNetwork.Reservoir::state).orElse(null));
     }
@@ -368,14 +386,22 @@ public final class PhysicalFluidTopology {
                     if(end!=null&&end.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(end.id,k->new HashMap<>()).put(pipeId,tankFaces.get(endLink.id()));
                     if(start!=null&&start.filter()&&positiveSide(start,points.get(other(startLink,run.first()))))positiveFilterEdges.computeIfAbsent(start.id,k->new HashSet<>()).add(pipeId);
                     if(end!=null&&end.filter()&&positiveSide(end,points.get(other(endLink,run.second()))))positiveFilterEdges.computeIfAbsent(end.id,k->new HashSet<>()).add(pipeId);
+                    // A heat side's outlet runs leave from its outlet junction, as a filter's positive side does.
+                    if(start!=null&&start.kind==TopologyCompiler.Kind.HEAT_SIDE&&outletLinks.contains(startLink.id()))positiveFilterEdges.computeIfAbsent(start.id,k->new HashSet<>()).add(pipeId);
+                    if(end!=null&&end.kind==TopologyCompiler.Kind.HEAT_SIDE&&outletLinks.contains(endLink.id()))positiveFilterEdges.computeIfAbsent(end.id,k->new HashSet<>()).add(pipeId);
                 }
             }
-            for(long id:new TreeSet<>(members))if(physical.containsKey(id)&&physical.get(id).filter()){
+            // A filter's cake and a heat side's passage each own a pipe between the device's node and a junction of their own
+            // (batch 2026-10-27-heat-exchanger-design: the side's junction stands at its outlet).
+            for(long id:new TreeSet<>(members))if(physical.containsKey(id)&&(physical.get(id).filter()||physical.get(id).kind==TopologyCompiler.Kind.HEAT_SIDE)){
                 int negative=indices.get(id),positive=reservoirs.size();var device=physical.get(id);
-                reservoirs.add(new PassiveNetwork.Reservoir(virtual--,device.position.y,seed,PassiveNetwork.NodeKind.JUNCTION));
+                boolean side=device.kind==TopologyCompiler.Kind.HEAT_SIDE;
+                double elevation=side?device.ports.stream().filter(p->p.role==ConnectionRole.OUTLET).findFirst().orElseThrow().cell.y:device.position.y;
+                reservoirs.add(new PassiveNetwork.Reservoir(virtual--,elevation,seed,PassiveNetwork.NodeKind.JUNCTION));
                 var positiveEdges=positiveFilterEdges.getOrDefault(id,Set.of());
                 for(int i=0;i<pipes.size();i++){var p=pipes.get(i);if(positiveEdges.contains(p.id()))pipes.set(i,new PassiveNetwork.Pipe(p.id(),p.first()==negative?positive:p.first(),p.second()==negative?positive:p.second(),p.sections(),p.control(),p.blockedDirections(),p.filter(),p.firstPort(),p.secondPort(),p.forbiddenDirections()));}
-                long identity=filterIdentity(id);pipes.add(new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withFilter(filterStock.getOrDefault(id,InlineFilter.empty())));
+                long identity=side?sideIdentity(id):filterIdentity(id);
+                pipes.add(side?new PassiveNetwork.Pipe(identity,negative,positive,device.geometry):new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withFilter(filterStock.getOrDefault(id,InlineFilter.empty())));
                 views.put(id,List.of(new View(islandIndex,identity,true)));
             }
             var ids=new TreeSet<Long>();for(long id:members)if(physical.containsKey(id))ids.add(id);
@@ -489,10 +515,13 @@ public final class PhysicalFluidTopology {
      */
     private static PipeResistance.Geometry half(Device device,Device line) {
         var g=device.geometry;
+        // A heat side's geometry is its passage, which its own pipe carries ({@link #sideIdentity}); its nozzles are 1 m stubs
+        // at the line's bore, as an actuator's are.
+        if(device.kind==TopologyCompiler.Kind.HEAT_SIDE)g=new PipeResistance.Geometry(1,line.geometry.diameter(),line.geometry.roughness(),0);
         if(device.kind!=TopologyCompiler.Kind.PIPE&&device.actuator()&&line.kind==TopologyCompiler.Kind.PIPE)g=new PipeResistance.Geometry(g.length(),line.geometry.diameter(),line.geometry.roughness(),g.minorLoss());
         return scaled(g,.5);
     }
-    private static PipeResistance.Geometry scaled(PipeResistance.Geometry g,double fraction){return new PipeResistance.Geometry(g.length()*fraction,g.diameter(),g.roughness(),g.minorLoss()*fraction);}
+    private static PipeResistance.Geometry scaled(PipeResistance.Geometry g,double fraction){return new PipeResistance.Geometry(g.length()*fraction,g.diameter(),g.roughness(),g.minorLoss()*fraction,g.channels());}
     private static void mapViews(Map<Long,List<View>> views,TopologyCompiler.Run run,Map<Long,Long> owners,Map<Long,Direction> linkDirections,Map<Long,Device> physical,int island,long pipe,boolean forward) {mapViews(views,run,owners,linkDirections,physical,island,pipe,forward,false);}
     private static void mapViews(Map<Long,List<View>> views,TopologyCompiler.Run run,Map<Long,Long> owners,Map<Long,Direction> linkDirections,Map<Long,Device> physical,int island,long pipe,boolean forward,boolean split) {
         double total=run.segments().stream().mapToDouble(s->s.geometry().length()).sum(),cursor=0;var spans=new LinkedHashMap<Long,double[]>();

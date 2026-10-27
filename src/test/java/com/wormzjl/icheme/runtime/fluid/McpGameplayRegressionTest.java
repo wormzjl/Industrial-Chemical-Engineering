@@ -24,7 +24,11 @@ class McpGameplayRegressionTest {
     private record Inventory(double volume,double[] moles,double internalEnergy) {}
     private record Node(long id,double elevation,String kind,Inventory inventory,Phase phase) {}
     private record Control(String kind,double target,double limit) {}
-    private record Pipe(long id,int first,int second,List<PipeResistance.Geometry> sections,Control control) {}
+    /** A section as the capture saved it: it predates channel counts (state format 23), so each is one channel. */
+    private record Section(double length,double diameter,double roughness,double minorLoss) {
+        PipeResistance.Geometry geometry(){return new PipeResistance.Geometry(length,diameter,roughness,minorLoss);}
+    }
+    private record Pipe(long id,int first,int second,List<Section> sections,Control control) {}
     private record Graph(List<Node> nodes,List<Pipe> pipes) {}
     /** The graph of a capture in its format-3 payload JSON shape. The capture predates solids, blocked masks, filters and
      * phase ports (checkpoint format 6) and holds none of them, so they are empty here and every pipe end is a BULK end. */
@@ -39,7 +43,7 @@ class McpGameplayRegressionTest {
             nodes.add(new PassiveNetwork.Reservoir(n.id(),n.elevation(),model.state(p.temperature(),p.pressure(),p.liquid(),p.vapor(),p.waterLiquid(),p.waterVapor(),p.hydrocarbonPressure()).withSolids(inventory.solids()),
                     PassiveNetwork.NodeKind.valueOf(n.kind()),inventory));
         }
-        return new PassiveNetwork(nodes,saved.pipes().stream().map(p->new PassiveNetwork.Pipe(p.id(),p.first(),p.second(),p.sections(),switch(p.control().kind()) {
+        return new PassiveNetwork(nodes,saved.pipes().stream().map(p->new PassiveNetwork.Pipe(p.id(),p.first(),p.second(),p.sections().stream().map(Section::geometry).toList(),switch(p.control().kind()) {
             case "passive"->new FlowControl.Passive();case "pump"->new FlowControl.Pump(p.control().target(),p.control().limit());
             case "valve"->new FlowControl.PressureValve(p.control().target());default->throw new IllegalArgumentException("Unknown saved control");
         },0,null,PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.BULK)).toList());

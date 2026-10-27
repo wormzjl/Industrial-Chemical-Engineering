@@ -51,7 +51,7 @@ import java.util.function.Function;
  * saved constants that are not the record's (the facts path then reads the current record). An exact load reads both
  * sections and checks that they agree ({@link FluidFacts#disagreement}).</p>
  *
- * <p>State formats: 20 (batch 2026-10-26-backward-compat) put the envelope and the facts around state format 19's
+ * <p>State formats: 23 (batch 2026-10-27-heat-exchanger-design) gives each pipe section its channel count. 20 (batch 2026-10-26-backward-compat) put the envelope and the facts around state format 19's
  * units; the registry and the topology unit's totals left its state for its facts. Format 19, unit format 12, added
  * validated pipe-filter registrations (active and pending), batch 2026-10-25-accessory-refinements; 18, unit 11, CHECK
  * cutoff registrations and permanent per-connection direction masks, batch 2026-10-24-pipeline-check-valve; 17, unit 10,
@@ -65,7 +65,7 @@ import java.util.function.Function;
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=22;
+    public static final int VERSION=23;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
     public static final int ENVELOPE=1;
     /** The {@code Base} of an awake island: it carries no certificate. */
@@ -281,7 +281,7 @@ public final class FluidCheckpointCodec {
         w.varint(graph.pipes().size());
         for(var p:graph.pipes()) {
             w.i64(p.id());w.varint(p.first());w.varint(p.second());w.varint(p.sections().size());
-            for(var g:p.sections()){w.f64(g.length());w.f64(g.diameter());w.f64(g.roughness());w.f64(g.minorLoss());}
+            for(var g:p.sections()){w.f64(g.length());w.f64(g.diameter());w.f64(g.roughness());w.f64(g.minorLoss());w.varint(g.channels());}
             switch(p.control()) {
                 case FlowControl.Passive ignored->w.u8(0);
                 case FlowControl.Pump pump->{w.u8(1);w.f64(pump.requestedVolumeFlow());w.f64(pump.maximumAddedPressure());w.bool(pump.enabled());}
@@ -438,7 +438,7 @@ public final class FluidCheckpointCodec {
         var forbiddenDirections=new int[pipes];var actuatorAreas=new double[pipes];
         for(int p=0;p<pipes;p++) {
             pipeIds[p]=r.i64();first[p]=r.varint(nodes);second[p]=r.varint(nodes);int count=r.varint(MAXIMUM_SECTIONS);
-            var list=new ArrayList<PipeResistance.Geometry>(count);for(int s=0;s<count;s++)list.add(new PipeResistance.Geometry(r.f64(),r.f64(),r.f64(),r.f64()));
+            var list=new ArrayList<PipeResistance.Geometry>(count);for(int s=0;s<count;s++)list.add(new PipeResistance.Geometry(r.f64(),r.f64(),r.f64(),r.f64(),r.varint(1<<20)));
             sections.add(List.copyOf(list));
             controls.add(switch(r.u8()){case 0->new FlowControl.Passive();case 1->new FlowControl.Pump(r.f64(),r.f64(),r.bool());case 2->new FlowControl.PressureValve(r.f64());
                 case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
