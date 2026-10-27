@@ -6,11 +6,11 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: Planned 2026-10-27 (design only). The owner answered Q1 to Q13; no question is open. Index: [../INDEX.md](../INDEX.md).
+Status: Planned 2026-10-27 (design only). The owner answered Q1 to Q13; Q14 (the order after the plan review) is open. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 3. It covers:
+- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4. It covers:
   - the physics in numbers and the owner's decisions;
   - UA from size with a film per phase and the approximations that keep it free of lag;
   - the air cooler (air at 25 °C) and the fired heater (heat to a set temperature, capped at its duty);
@@ -20,6 +20,7 @@ Status: Planned 2026-10-27 (design only). The owner answered Q1 to Q13; no quest
 - [HX_COUPLING_STUDY_REVIEW.md](HX_COUPLING_STUDY_REVIEW.md): the first offline study: cell count, the drawn 1-2 shell against counterflow, four coupling schemes across equal and unequal slices, holds, and the controller.
 - [HX_FILMS_STUDY_REVIEW.md](HX_FILMS_STUDY_REVIEW.md): the revision 2 study: films per phase, the physical and the coupling lag, three coupling forms, and the stability map behind the joint steady wall.
 - [HX_ZERO_WALL_STUDY_REVIEW.md](HX_ZERO_WALL_STUDY_REVIEW.md): the revision 3 study: the wall without heat, the relay planned at dispatch, three give-back splits, holds, and the controller.
+- [HEAT_EXCHANGER_PLAN_REVIEW.md](HEAT_EXCHANGER_PLAN_REVIEW.md): the review of revision 3 against the code (a Fable subagent, read-only; 22 findings, taken into revision 4).
 
 ## Code areas
 
@@ -63,9 +64,21 @@ None changed. The plan touches:
     - The controller's give-back offset was measured and rejected: 4 to 5 times slower at 20/5 s.
   - Plan revised to revision 3: wall state, slice mean and wall clamp removed; the heat in transit becomes the saved fact; the fired heater's set-temperature law; W3, W5 and W6 gates.
 
+- 2026-10-27, revision 4: plan review by a Fable subagent before W1; the code claims checked by the author.
+  - Blocker: the game dispatches a slice after its end tick and solves it without callbacks. So the relay's open-slice rate and dispatch wait do not exist. W3 now waits for a timing study (W3a, forms A, B, C) and an owner choice.
+  - Into the plan:
+    - the curve's span with C1 extrapolation;
+    - film knots at a vapour fraction of 0.05 and 0.95 (pure plateaus);
+    - the give-back as an enthalpy shift on the flow;
+    - a side device per side and a pair record in the topology unit's facts;
+    - a new certificate discard entry;
+    - the interval result's heat and checkpoint state format 23;
+    - minor numbers and wording.
+  - New owner question Q14: the one-sided air cooler and fired heater before the coupling.
+
 ## Notes
 
-- No owner question is open.
+- Open: owner question Q14 (order), and after W3a the coupling's timing form.
 - Not measured yet:
   - phase change from heat inside an island's Newton;
   - the quasi-steady wall solved on phase-change curves;

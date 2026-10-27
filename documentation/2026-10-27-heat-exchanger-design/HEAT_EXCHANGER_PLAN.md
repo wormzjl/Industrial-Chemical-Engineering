@@ -1,15 +1,16 @@
 # Heat exchanger system: plan
 
-Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: Planned 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3). Nothing is implemented.
+Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: Planned 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. Nothing is implemented.
 
 Evidence:
 
 - [HX_COUPLING_STUDY_REVIEW.md](HX_COUPLING_STUDY_REVIEW.md): the first study (cell count, coupling schemes, holds, controller).
 - [HX_FILMS_STUDY_REVIEW.md](HX_FILMS_STUDY_REVIEW.md): the per-phase film study of revision 2 (lag, coupling forms, stability map).
 - [HX_ZERO_WALL_STUDY_REVIEW.md](HX_ZERO_WALL_STUDY_REVIEW.md): revision 3, the wall without heat (the relay of heat in transit, the give-back split, holds, controller).
+- [HEAT_EXCHANGER_PLAN_REVIEW.md](HEAT_EXCHANGER_PLAN_REVIEW.md): the review of revision 3 against the code (22 findings, taken into revision 4).
 - Harnesses: `tools/heat-exchanger-design/`.
 
-No owner question is open (section 12).
+Open: owner question Q14 (section 12), and the form of the coupling's timing after study W3a (section 5.2).
 
 Owner request 2026-10-27:
 
@@ -69,13 +70,15 @@ A shell-and-tube exchanger passes two streams that never mix. Each side is a flo
   - `ConservativeTransport` books it (`pumpWork`);
   - `checkConservation` audits it.
 
-  Exchanger heat goes the same three ways.
+  From there the work reaches `PassiveIntervalSolver.Result.pumpWorkJoule`: the certificate summary and its replay (`IslandCertificate`) and the checkpoint state (`FluidCheckpointCodec`, state format 22). Exchanger heat goes the same ways.
+- **Devices.** A registered device belongs to one island. Only reservoirs and movers carry ports today (`PhysicalFluidTopology.Device`), and an equipment structure binds one fluid identity (`EquipmentStructure`).
 - **The heat law exists as a study.** The pipe thermal-loss study (batch `2026-09-24-pipe-thermal-loss`, concluded, not merged) built it: a stream relaxing towards a wall temperature along its enthalpy-temperature curve (`PipeHeatExchange`, patch in `tools/pipe-thermal-loss/`).
   - Exactly zero heat at zero flow; latent heat exact.
   - A fixed 17-point curve stayed within 7.1 % of a 513-knot reference over 561 cases, condensation included. An adaptive 9 to 30-point curve stayed within 0.05 %.
   - Re-solving the pressure drop with the cooled properties was not reliable, so the hydraulics keep the inlet stream's properties.
+  - The patch predates the rename (`com.wormzjl.createcheme`), throws for an enthalpy or a wall outside its curve, and holds the kernel only; the curve builder is in the study harness (`PipeThermalStudy.Sampler`). It places knots in T and bisects a phase change to 1e-5 K, so no knot lies inside a pure component's plateau.
 - **Buffers were tried and removed.** Equipment as island separators with built-in buffers was the 2026-09-15 engine design. It was built as the causal module system (buffered transfers, pending deliveries, time fences) and removed on 2026-10-15 (`944a79f6e`, consolidation item F1), because nothing in the game produced a module.
-- **Islands advance in slices** of their own adaptive cadence (20 to 400 ticks). They commit on the server thread, and certify STEADY when their intervals repeat.
+- **Islands advance in slices** of their own adaptive cadence (20 to 400 ticks). A slice `[committed, due]` is offered only once online time reaches `due` (`IslandClock.nextSlice`). A worker solves it from a command with no live world and no callback, and the server thread commits it, up to the 2 s hard budget later. An island certifies STEADY when its intervals repeat; a certificate ends at a topology replacement, a property reload or its horizon (`revalidate`). `inputsChanged` retries a held island and does not end a certificate.
 - **Valves and assemblies exist.** Process control (0.14.1) gives control valves with a pressure or a flow module, regulated ideally in the Newton, and flowmeters on pipes. The multi-machine framework (0.15.0) gives assemblies: a master's blueprint of slots and links, Validate structure, reports as state, and reverts without polling (code guide `machine-assemblies.md`).
 
 ## 3. Owner decisions (2026-10-27)
@@ -124,9 +127,11 @@ The pairs land inside or near the design ranges. Two are high: organic condenser
 2. **On the curve, not at the slice start.** Each point of the side's enthalpy-temperature curve also carries its film, from the vapour fraction there, linear between points.
    - The curve is the one the heat law already builds (17 to 30 points, at the side's composition and pressure).
    - The blend: liquid to boiling or condensing over a vapour fraction of 0 to 0.05, and to gas over 0.95 to 1.
-   - The kernel integrates dh/dA = −h_film(h) (T(h) − T_wall) / ṁ exactly per segment, as it integrates T(h) today.
+   - Knots at a vapour fraction of 0.05 and 0.95 are placed along h between the bubble and dew knots (h is linear in the vapour fraction there). Without them a pure component's plateau, which has no inner knot, would take a film running from 2000 to 100 across its latent heat (mean about 1050) instead of 5000.
+   - The kernel integrates dh/dA = −h_film(h) (T(h) − T_wall) / ṁ exactly per segment. With both factors linear in h on a segment this is a partial-fraction integral, with its degenerate branches (a constant film, a constant temperature, a common root).
    - A stream that starts to condense halfway through the exchanger gets the condensing film there, in the same Newton.
    - The film is continuous along the curve: no new unknown, no switch, no mode.
+   - **The curve's span**: from the side's inlet to the other side's inlet temperature as of the slice start, with a margin of 10 K each way. Beyond it the curve extrapolates with continuous value and slope, and the island's status line carries a data-range notice (AGENTS.md "Thermo validity"). No enthalpy or wall temperature raises an exception inside a residual.
 3. **The other side's film** reaches a side only through the coupling record (section 5), never through its Newton.
 4. **No wall heat** (Q10). With steel, weak films charge the wall slowly (gas/gas 6 minutes); without it a gas exchanger answers as fast as a water one, one slice late. No steady state moves.
 
@@ -138,11 +143,12 @@ The pairs land inside or near the design ranges. Two are high: organic condenser
 - The fans move air at 3 m/s, 3.5 kW/K per m² of face. Every tube cell meets fresh air, so the process stream sees ambient air through UA_eff = C_air (1 − e^(−UA/C_air)): 2.15 (liquid), 2.44 (condensing) or 0.42 (gas) kW/K per m² of face.
 - The largest bay, process at 85 °C in 25 °C air: 1.6 MW liquid, 1.8 MW condensing, 0.3 MW gas.
 - Fans off: natural draught, the air's capacity and film to a quarter.
+- Fan power is a datasheet and ledger line only: the network has no electricity to draw it from.
 - The air is the unit's own (no nozzles), not a utility. It enters at a constant 25 °C (Q11), for now: no weather, biome or altitude. The heat it carries away leaves the network and is booked in the ledger as the cooler's duty.
 
 **Fired heaters** (Q11): heat the process stream to a set temperature, at most the datasheet duty (`heaterDuty`).
 
-- The law, per slice: heat = β ṁ (h_set − h_in). h_set is the set temperature's enthalpy at the outlet pressure and the slice start's composition; h_in is the arriving enthalpy. β is fixed for the slice:
+- The law, per slice: heat = β ṁ (h_set − h_in). h_set is the set temperature's enthalpy at the outlet pressure and the slice start's composition (a set temperature at a pure component's saturation temperature names saturated vapour: a heater boils); h_in is the arriving enthalpy. β is fixed for the slice:
   - 1 when the duty suffices: the outlet reaches the set temperature exactly;
   - Q_max / (ṁ (h_set − h_in)) at the slice start when it does not: the heater fires at its maximum, and the status shows the alert "duty insufficient: outlet X °C below the set point";
   - 0 when the stream arrives at or above the set point: the heater does not fire.
@@ -153,7 +159,7 @@ The pairs land inside or near the design ranges. Two are high: organic condenser
 
 - Gas coolers are no longer 2 to 25 times too strong.
 - Water/water is about right.
-- Condensers and kettles move 1.4 to 2.5 times more heat for a given size.
+- Condensers have 2.9 times the U and kettles 5 times. The duty grows less where the approach limits it: 1.45 times for a condenser on the example's 50 kg/s of water (NTU 1.1 at U 500), and the full 5 times for a kettle (both sides isothermal).
 
 ## 5. Coupling the two sides (owner Q1: B)
 
@@ -161,21 +167,23 @@ Physics: the hot fluid heats the tube wall, and the wall heats the cold fluid. W
 
 ### 5.1 Each side is a connection in its own island
 
-Each side runs between its inlet and outlet nozzles (`PortMarkings` already marks them IN and OUT).
+Each side runs between its inlet and outlet nozzles (`PortMarkings` already marks them IN and OUT, and pairs them). Each side is its own device: a new device kind with an IN and an OUT port, owned by the island its pipes join. The two sides are tied by one pair record (section 9).
 
 - **Hydraulics**: a passage law like a pipe's, for parallel channels, on the inlet stream's properties. Pressure is not relayed: the island's own solve passes it through the side, as through a pipe.
-  - Tube side: 630 D² tubes per pass of 14.8 mm bore, length 2 L, plus 4 velocity heads per pass for entry, return and exit. Water at 1.5 m/s in the example: about 35 kPa.
+  - Tube side: 630 D² tubes per pass of 14.8 mm bore, length 2 L, plus 4 velocity heads per pass for entry, return and exit. The example's 50 kg/s of water runs at 0.46 m/s and loses about 4 kPa; at the design velocity of 1.5 m/s (163 kg/s) about 35 kPa.
   - Shell side: an equivalent passage of 18 mm hydraulic diameter and 0.1 D² crossflow area, one shell diameter per baffle crossing, with baffles 0.4 D apart (length 2.5 L).
 - **Heat**: the exchanger has 8 wall cells in counterflow (Q3). The hot side passes cells 1 to 8, the cold side 8 to 1.
   - Each stream relaxes towards each cell's temperature T_k over the cell's eighth of the surface, on its curve with its film (section 4).
   - N = 8 is within 0.9 % of exact counterflow up to NTU 5 at Cr 0.5, and within 2.1 % at Cr 1.
-- **Fixed for the slice**: the curve (built on the worker at the slice start from the donor's composition and pressure, at both ends for a reversal), the wall profile T_1 to T_8 (section 5.2), the give-back (section 5.2), and the bypass share β (section 6).
+- **Fixed for the slice**: the curve (built on the worker at the slice start from the donor's composition and pressure, at both ends for a reversal), the wall profile T_1 to T_8 (section 5.2), the give-back's enthalpy shift (section 5.2), and the bypass share β (section 6).
   - Inside the Newton the heat is a pure function of the connection's flow and the donor's enthalpy: no new unknown, no new mode, no switch inside a residual.
   - It is C1 in the flow, exactly 0 at no flow, and bounded by the approach to the wall.
+  - A reversed side passes the cells in the other order against the same profile: parallel flow for that slice, the profile having been computed for the dispatch direction.
 - **Where it enters**: as a mover's shaft work does:
   - the receiving node's energy row;
   - the reconstruction (a heat term per side, beside `pumpWork`);
-  - the audit.
+  - the audit;
+  - the interval result (a heat beside `pumpWorkJoule`), and through it the certificate summary and replay and the checkpoint state (state format 22 → 23).
 
   Every reader of a delivered enthalpy takes it too: the balanced start (`BalanceNet.seeded`, `mixed`), the arriving-phase seeds (`arrivingPhases`), the rate solve and the gauges' pipe observation.
 
@@ -183,34 +191,44 @@ Both sides always carry real fluid (Q5). A side with no pipe takes no heat.
 
 ### 5.2 The heat in transit between the two sides (the relay)
 
-The wall holds no heat (Q10), so its profile is not a state: it is the quasi-steady wall of the moment. What the two sides book differently, while each still sees the other as it was, is the exchanger's one piece of state, the **heat in transit**: one energy per exchanger. Each side books its slice's heat into it, so energy is exact by construction. Each side's slice is planned at its dispatch:
+The wall holds no heat (Q10), so its profile is not a state: it is the quasi-steady wall of the moment. What the two sides book differently, while each still sees the other as it was, is the exchanger's one fact beyond its registration, the **heat in transit**: one energy per exchanger. Each side books its slice's heat into it, so energy is exact by construction.
 
-1. **The other side as of the dispatch tick.** Its inlet state, flow, curve and conductances from its record at that tick.
-   - If it lags more than one of its slices, it counts as stopped. Over the spans in which either side counted the other as stopped, neither side moves heat; the other side reads those spans from the record and sits them out too.
+**Timing in the game.** A slice `[t0, t1]` is offered only once online time reaches t1, solved on a worker without callbacks, and committed up to the 2 s hard budget later (section 2). The harness's part 7 planned each slice at t0 and read a lagging partner at the rate of its open slice, fixed when that slice was dispatched, with a dispatch wait. In the game a long-cadence partner has no open slice for up to a whole cadence, and a wait would be process work on the server thread. So how a side reads its partner is decided by a timing study first (W3a: harness part 8 with dispatch at the slice end and a job latency of 0 to 40 ticks). It compares three forms, and the owner chooses:
+
+- **A, as of the slice start**: the partner's record at t0; a partner not yet committed through t0 is extrapolated at the heat rate of its last committed slice (carried in its commit record), for at most one of its slices.
+- **B, the partner's history within the slice**: a slice is dispatched after t1, so the partner's records committed within `[t0, t1]` exist and are used piece by piece; A covers the rest.
+- **C, a coupling fence**: a slice waits until its partner has committed through t0 (a readiness condition on the server, no worker wait; a certified partner is materialised). This is deterministic, and the fast side runs up to one partner cadence behind online time. The side furthest behind can always go, so the fence cannot deadlock.
+
+The steps that do not depend on the choice:
+
+1. **The other side as read**: its inlet state, flow, curve and conductances.
+   - It counts as **stopped** only in an explicit state: no island, held, phase-parked or suspended (`IslandCoordinator`), never from lag, since job latency alone delays every commit of a long-cadence partner. Over the spans in which either side counted the other as stopped, neither side moves heat; the other side reads those spans from the record and sits them out too.
    - A certified other side is first materialised to the tick (its replay books its certified heat).
-2. **Towards the quasi-steady wall.** The profile T_1 to T_8 is the exchanger's steady wall with both streams marched through the 8 cells, on their curves with their films: the own side at its inlet state and flow now, the other side as read. The slice heads straight for it; no mean over the slice, no clamp.
-3. **The transit as of the dispatch tick.** The other side's heat booked past the tick is taken out. A lagging side's heat not yet booked up to the tick is added at the rate of its open slice, fixed when that slice was dispatched, for at most one of its slices.
-4. **The give-back.** The side takes its share of the transit within its slice. The share is its slice's heat capacity against the two: W_own Δt_own / (W_own Δt_own + W_other Δt_other), with W the capacity rate through the cells. Both outlets then shift by the same temperature, whatever the slices; a condensing or boiling side (W unbounded) takes all of it at its constant temperature. The give-back is clamped so the side's outlet stays between the two inlet temperatures; the rest stays in transit. A side without flow takes none.
+2. **Towards the quasi-steady wall.** The profile T_1 to T_8 is the exchanger's steady wall with both streams marched through the 8 cells, on their curves with their films: the own side at its inlet state and flow now, the other side as read. The slice heads straight for it; no mean over the slice, no clamp. On curves each cell's temperature is a root (the two sides' heats equal) inside each sweep: tolerance 0.01 K, a sweep cap, and a profile stopped short is still a valid wall (energy stays exact).
+3. **The transit as read**: the other side's heat booked past the read tick taken out, a lagging side's heat added as the chosen form says.
+4. **The give-back.** The side takes its share of the transit within its slice. The share is its slice's heat capacity against the two: W_own Δt_own / (W_own Δt_own + W_other Δt_other), with W the capacity rate through the cells. Both outlets then shift by the same temperature, whatever the slices; a condensing or boiling side (W unbounded) takes all of it at its constant temperature.
+   - **In the Newton** it is an enthalpy shift Δh on the side's flow, fixed for the slice: the heat is ṁ Δh, linear in the flow and 0 at no flow. Δh = share / (ṁ₀ Δt) with ṁ₀ the flow at dispatch, clamped there so the outlet at the dispatch state stays between the two inlet temperatures.
+   - The commit books what the flow actually carried; the rest stays in transit. A side without flow takes none.
 
-**Why these steps** (review of revision 3):
+**Why these steps** (reviews of revision 3):
 
-- **The as-of read and the open-slice rate** (from revision 2). Without them the outlets settle off the steady state, and unequal slices overshoot.
-- **Planned at dispatch.** The harness's earlier parts planned each slice at its commit and so read the partner's end-of-slice state, which an island does not have; those results were optimistic at equal slices.
+- **The as-of read and a lagging side's extrapolation** (from revision 2). Without them the outlets settle off the steady state, and unequal slices overshoot. Part 7 measured the open-slice rate, which the game does not have; W3a measures the forms above.
+- **Planned before the slice's own result.** The harness's earlier parts planned each slice at its commit and so read the partner's end-of-slice state; those results were optimistic at equal slices.
 - **The slice-heat split**, against conductance and capacity rate: the smallest give-back in every case (liquid/liquid 50 kg/s 12 K against 19 K) and the best controller. The cost: some unequal-slice rows settle in 59 s instead of 44 s.
 - **The clamp and the stopped rule.** They keep a give-back into a small stream, and the catch-up after a hold, between the inlet temperatures.
-- **The results**: the exact 8-cell steady state everywhere; heat left in transit 2e-5 J or less (49 J after a 600 s hold). Within 1 K in two slices at equal slices (1, 9, 39 s at 1, 5, 20 s), 24 to 59 s at unequal ones, 139 s at worst after a 5× flow cut. The give-back moves an outlet by 0 (condensing) to 15.5 K for one slice.
+- **The results** (part 7, dispatch at the slice start, no latency; W3a repeats them with the game's timing): the exact 8-cell steady state everywhere; heat left in transit 2e-5 J or less (49 J after a 600 s hold). Within 1 K in two slices at equal slices (1, 9, 39 s at 1, 5, 20 s), 24 to 59 s at unequal ones, 139 s at worst after a 5× flow cut. The give-back moves an outlet by 0 (condensing) to 15.5 K for one slice, and up to 77.5 K after a hold.
 - **What Q10 deleted**: the wall state, its stability limit (x = G Δt / C), the slice mean, the wall clamp, the cell-local against joint choice, the initial wall.
 
 The same rule serves an exchanger whose sides share one island, such as a feed/effluent loop: the loop closes across slices, not inside the Newton.
 
-**Wake.** A commit can move the record the other side would read (inlet temperature by more than 0.05 K, flow by more than 0.1 %), or leave it a give-back that would move its outlet by more than 0.05 K. Then the other side's certificate is discarded (`inputsChanged`). A side with no flow takes no heat and needs no wake.
+**Wake.** A commit can move the record the other side's certificate holds (inlet temperature by more than 0.05 K, flow by more than 0.1 %; thresholds W3 measures), or leave it a give-back that would move its outlet by more than 0.05 K. Then the other side's certificate is discarded through a new coordinator entry: a `revalidate`-like discard without a horizon, then `reconsider` (`inputsChanged` does not end a certificate). A side with no flow takes no heat and needs no wake.
 
 **Threads and determinism.**
 
-- The command carries the as-of transit and the other side's record: its inlet state, flow and curve; its conductances; its open slice's rate; its stopped spans (arithmetic, server thread).
-- The worker first builds the curve and the quasi-steady wall, then runs the controller and the Newton.
-- The first output of a side's job is its open slice's rate. A partner's dispatch that needs it waits for it (microseconds after the job starts), so no result depends on thread timing.
+- The command carries the transit as read and the other side's record: its inlet state, flow and curve; its conductances; its last committed heat rate; its stopped spans (arithmetic, server thread).
+- The worker first builds the curve and the quasi-steady wall, then runs the controller and the Newton. It never waits on another job.
 - The commit books the heats (arithmetic, server thread). No process calculation runs on the tick.
+- With forms A and B a side's result depends on how far its partner had committed when it was dispatched, which depends on job times, within one partner slice. Form C removes that dependence at the cost of lag. The runtime already lets wall time shape slices (a failed budget retries a shorter slice).
 
 ### 5.3 The rejected options (owner Q1)
 
@@ -249,7 +267,7 @@ Where the convergence risk is, and what removes it:
 - On a kettle's heating side, the bypass means steam that leaves uncondensed. A real steam valve is the assembly's (section 7).
 - The internal bypass serves every exchanger without a complete assembly (Q13), so a simple build still controls. A complete assembly's real valves take over (section 7).
 
-**A target temperature becomes a target enthalpy** at the outlet pressure and the composition of the slice start, so a target on a boiling or condensing plateau stays well posed.
+**A target temperature becomes a target enthalpy** at the outlet pressure and the composition of the slice start. A temperature at a pure component's saturation temperature names a range of enthalpies. It is read as saturated liquid when the controlled side is cooled, and as saturated vapour when it is heated. A target vapour fraction names any other point on the plateau.
 
 **Evidence** (revision 3, the wall without heat): cold outlet held at 90 °C by the bypass, hot inlet +30 K. The first slice after the step shows the uncontrolled response, 12.7 to 14.7 K: nothing damps a step, and the controller is one slice late. The outlet is within 0.1 K after 7 to 8 slices (7, 39 and 159 s at 1, 5 and 20 s slices; 69 to 139 s at unequal slices), exact at the end. The stiff pair stays within 0.96 K.
 
@@ -276,16 +294,16 @@ Physics: in a plant an exchanger's control is piping. A bypass line runs around 
   - The exchanger's controller works the real valves instead of its internal bypass, whose β then stays 0 on that side.
   - The outer loop runs between slices, dead-beat as in section 6. For temperature and duty it turns the target into a bypass mass flow. For ratio, the controlled flow is r × the reference flowmeter's accepted reading: one slice late across islands, at the next slice inside one island.
   - The inner loop is the valve's existing flow regulation in the Newton (`ControlValve` flow module, its active set).
-  - **The target is a slice input**, carried in the island's command like β, not a registry edit: a registry edit per slice would recompile the island.
+  - **The target is a slice input**, carried in the island's command like β, not a registry edit: a registry edit per slice would recompile the island. On the worker it overrides the valve's `massTarget` in a command map. The valve's target is part of the graph identity in the certificate digest (`IslandCertificate.graphIdentity`), so the digest leaves the override out, and a moved target wakes a certified island through the wake entry of section 5.2.
 - **Not complete** (a part missing, or reverted after an edit): the valves hold their last accepted targets, as the data-system contract holds a broken signal's last opening. The screen says so.
 - **Convergence**: each controlled side adds two junctions and a regulating valve, elements the solver already handles. The temperature loop stays outside the Newton.
-- **Saves**: the per-side control (mode by name, side, target, ratio) is a fact on the exchanger's registration (fluid facts schema 5). The report is state.
+- **Saves**: the per-side control (mode by name, side, target, ratio) is a fact on the pair record (fluid facts schema 5, section 9). The report is state.
 
 ## 8. Player view
 
-- **Build**: the constructor, as today. A complete exchanger, kettle or air cooler registers one fluid device per side, as a constructed mover does: an inlet and an outlet port at the side's nozzles (W2).
+- **Build**: the constructor, as today. A complete exchanger, kettle, air cooler or fired heater registers one fluid device per side, as a constructed mover registers its device: an inlet and an outlet port at the side's nozzles, plus the pair record that ties the sides (W2). An air cooler and a fired heater have one side.
 - **Real fluid on both sides** (Q5): a side heats or cools only what flows through it. There is no utility picker. Cooling water is water from a tank, pumped through the exchanger and back through an air cooler (the sink). Steam is water boiled in a fired heater (the source). A generator block serves as either in testing.
-- **Kettle**: its shell is a vessel (a reservoir with FEED, VAPOUR_OUTLET and LIQUID_OUTLET ports, like a drum). The heat enters the vessel's energy row (W7). The heating medium in the tubes is a side.
+- **Kettle**: its shell is a vessel (a reservoir with FEED, VAPOUR_OUTLET and LIQUID_OUTLET ports, like a drum). The heating medium in the tubes is a side. The pool is the side's partner: its record is the pool's temperature (isothermal, W unbounded in the give-back split), and its heat, give-back included, enters the vessel's energy row in the vessel's island (W7).
 - **Screen** (engine-owned: replay on open, updates at the island's bucket):
   - each side's inlet and outlet temperature, pressure, flow, phase and film;
   - duty, U, UA, NTU, effectiveness, approach;
@@ -297,29 +315,33 @@ Physics: in a plant an exchanger's control is piping. A bypass line runs around 
 ## 9. Saves (AGENTS.md "Saves and data formats")
 
 - **Facts** (append-only; fluid facts schema 4 → 5):
-  - the exchanger's registration: kind by name, sides and ports;
-  - the control per side: mode and side by name, target, ratio; a fired heater's set temperature;
-  - the heat in transit (one energy per exchanger), which is energy the world holds.
+  - each side's registration: a side device of a new kind by name, its IN and OUT ports;
+  - one pair record per unit in the topology unit's facts (not in either island's, since the two sides may sit in two islands):
+    - the side ids;
+    - the control per side: mode and side by name, target, ratio;
+    - a fired heater's set temperature;
+    - the heat in transit (one energy per unit), which is energy the world holds.
 
-  A missing field reads its old behaviour: control off, no heat in transit. Corpus image under `src/test/resources/compat/fluid/schema-5/`.
-- **State** (rebuilt freely): the per-side records for the as-of read (inlet state, flow, curve, conductances, open slice's rate, stopped spans), β, the curves, the assembly report.
-- A removed exchanger takes its heat in transit with it, booked in the ledger as a removed vessel's contents are.
+  A missing field reads its old behaviour: control off, no heat in transit. W2 writes every field the later packages read (control, set temperature, transit), so the schema changes once and one corpus image covers it: `src/test/resources/compat/fluid/schema-5/`, captured in W2. A package that still has to add a field adds its own image.
+- **State** (rebuilt freely): the per-side records for the partner read (inlet state, flow, curve, conductances, last committed heat rate, stopped spans), β, the curves, the assembly report. The interval result's heat raises the checkpoint state format from 22 to 23.
+- A removed unit takes its heat in transit with it, booked in the ledger as a removed vessel's contents are. A side removed while the other runs: the transit is booked at the removal, and a running slice whose plan still names it books none of it.
 - **Old builds** (Q9): an exchanger built before this batch registers when its chunk loads, with control off. A side with pipes at both nozzles takes part at once; a side without them takes no heat.
 
 ## 10. Work packages and gates
 
-The owner's order (Q8) put the utility exchangers first because they need no coupling. Real fluid on both sides (Q5) removes them, so the two-sided coupling moves up next to the device. The air cooler and the fired heater, the plant's heat sink and source without utilities, come before the kettle. The owner agreed this order (Q12).
+The owner's order (Q8) put the utility exchangers first because they need no coupling. Real fluid on both sides (Q5) removes them, so the two-sided coupling moves up next to the device. The air cooler and the fired heater, the plant's heat sink and source without utilities, come before the kettle. The owner agreed this order (Q12). Revision 4 adds W3a, the timing study W3 waits for, and asks whether the one-sided units go before it (Q14).
 
 | Package | Content | Gates |
 |---|---|---|
-| W1 Heat law | `PipeHeatExchange` back from `tools/pipe-thermal-loss/prototype.patch`; the film column on the curve and its blend; the side kernel (8 counterflow cells, β); the passage law; the heat in rows, reconstruction, audit, balanced start, seeds, rate solve | kernel vs the analytic exponential and latent knots, with a film step along the curve; zero and reversed flow; the audit with heat; a junction that boils from heat (water at 5 bar heated past 152 °C); nothing moves without exchangers: chain-100 exact, the 33 junction lines |
-| W2 Device | registration of both sides as connections; facts schema 5 and its corpus; the screen; old builds | facts round trip, corpus gate; one in-game check of the screen |
-| W3 Two-sided coupling | the transit store, the as-of read with the open slice's rate and the stopped spans, the quasi-steady wall on curves, the give-back (slice-heat split, clamp), the one-slice cap, wake, certificate signature, the dispatch wait | GameTests: two islands reach the 8-cell steady state at equal and unequal cadences; a held partner; a shared-island feed/effluent loop; a condensing mixture against water at 20 s slices; the transit returns to 0; energy ledger exact |
+| W1 Heat law | port and extend the kernel of `tools/pipe-thermal-loss/prototype.patch` (renamed package; the curve builder from the study harness); the film on the curve with knots at a vapour fraction of 0.05 and 0.95 and the exact per-segment integral (partial fractions, degenerate branches); the curve's span and C1 extrapolation beyond it with a notice; the side kernel (8 counterflow cells against a wall profile fixed for the slice, β, reversed flow); the passage law; the side as a `FlowControl` kind on `PassiveNetwork.Pipe`; the heat in rows, reconstruction, audit, balanced start, seeds, rate solve; the heat in `PassiveIntervalSolver.Result`, the certificate summary and replay, the checkpoint state (format 23) | kernel vs the analytic exponential and latent knots, with a film step along the curve; a pure condensing stream against water gives U 1430 within 1 %; a donor enthalpy that leaves the span converges; zero and reversed flow; the audit with heat; a junction that boils from heat (water at 5 bar heated past 152 °C); nothing moves without exchangers: chain-100 exact, the 33 junction lines |
+| W2 Device | the side device kind (IN and OUT ports), the pair record in the topology unit's facts with every later field, the structure binding both sides and its refresh; facts schema 5 and its corpus; the screen; old builds. After W2 alone a two-sided exchanger moves no heat (no partner read) | facts round trip, corpus gate; one in-game check of the screen |
+| W3a Timing study | harness part 8: dispatch at the slice end, job latency 0 to 40 ticks, adaptive cadence; forms A, B and C of section 5.2 on the part 7 cases and holds; owner choice | a review of at most 50 lines |
+| W3 Two-sided coupling | the transit store, the partner read in the chosen form, stopped from explicit states, the quasi-steady wall on curves (tolerance, sweep cap), the give-back as an enthalpy shift (slice-heat split, clamp at dispatch), wake through a new discard entry, certificate signature | GameTests: two islands reach the 8-cell steady state at equal and unequal cadences; a held partner; a shared-island feed/effluent loop; a condensing mixture against water at 20 s slices; the give-back at zero flow books 0 J; the transit returns to 0; energy ledger exact; the wall solve's cost in the campaign's wall-time class |
 | W4 Control | the controller between slices, its modes, the low limit, statuses | an outlet held after an inlet step on a test rig |
-| W5 Air cooler | fans, the finned air side, UA_eff, air at a constant 25 °C, fan power | outlet vs 25 °C air at fans on and off |
-| W6 Fired heaters | the set-temperature law (β per slice), the duty cap, the alert; no fuel | outlet at the set temperature; outlet and alert when the duty falls short; no firing above the set point; steam raised from water |
-| W7 Kettle | the pool as a vessel side, the heating medium a side | boil-up = duty / latent heat at the pool's pressure |
-| W8 Exchanger assembly | blueprint per control mode, FLOWMETER in the walk, Validate structure, Operation through the real valves, targets as slice inputs | matcher cases on `TestGraph`; GameTests: a built bypass validates complete; an outlet held through the real bypass valve after an inlet step; a ratio held after the reference flow steps; a removed bypass pipe reverts the report and the valves hold |
+| W5 Air cooler | fans, the finned air side, UA_eff, air at a constant 25 °C; fan power as a datasheet and ledger line | outlet vs 25 °C air at fans on and off |
+| W6 Fired heaters | the set-temperature law (β per slice), the duty cap, the alert; no fuel | outlet at the set temperature; outlet and alert when the duty falls short; no firing above the set point; steam raised from water (set point above saturation) |
+| W7 Kettle | the pool as the side's vessel partner (its record, the give-back into the vessel's energy row), the heating medium a side | boil-up = duty / latent heat at the pool's pressure |
+| W8 Exchanger assembly | blueprint per control mode, FLOWMETER in the walk, Validate structure, Operation through the real valves, targets as slice inputs (command override, kept out of the certificate digest) | matcher cases on `TestGraph`; GameTests: a built bypass validates complete; an outlet held through the real bypass valve after an inlet step; a ratio held after the reference flow steps; a removed bypass pipe reverts the report and the valves hold |
 | W9 Column operation hook | a validated column assembly sets its condenser's, reboiler's and pumparound coolers' duty targets | with the column's operation stage |
 
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
@@ -340,21 +362,24 @@ Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests,
 
 ## 12. Owner questions
 
-Answered on 2026-10-27: Q1 to Q13 (section 3). None is open.
+Answered on 2026-10-27: Q1 to Q13 (section 3).
 
 Decided in revision 3 without a question (reversible; the review gives the numbers): the give-back split by slice heat, chosen among three forms; the controller without the give-back in its target.
+
+- **Q14 Order after the review.** The two-sided coupling now waits for the timing study (W3a) and your choice of its form. The air cooler (W5) and the fired heater (W6) have one side and a known partner (25 °C air, a set temperature), so they need no partner read. Recommended order: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9. This gives the plant a heat sink and a heat source before the coupling, while W3a runs. Or keep Q12's order?
+- **After W3a**: the coupling's timing form, A, B or C (section 5.2), with the study's numbers.
 
 ## 13. Risks
 
 - **Phase change at the outlet.** Heat that boils or condenses a stream does it at the side's outlet junction, as a letdown valve's flash does. It goes through the same arriving-phase and flash seeds that held islands in the past (OD4, the cold and bundled seeds). W1 adds a junction-boil gate, and the campaign counts holds in worlds with exchangers.
-- **The give-back slice.** For one slice after a change, an outlet moves by up to 15.5 K (24 K after a 5× flow cut), within the inlet temperatures. A stream near its bubble point can flash for that slice; it goes through the outlet seeds above, and W3's gates watch it.
+- **The give-back slice.** For one slice after a change, an outlet moves by up to 15.5 K (24 K after a 5× flow cut, 77.5 K after a hold), within the inlet temperatures. A stream near its bubble point can flash for that slice; it goes through the outlet seeds above, and W3's gates watch it.
 - **The fired heater inside a slice.** Its outlet never passes the set point (h_in + β (h_set − h_in)). A duty-limited heater exceeds its duty in proportion when its flow rises inside a slice, and a stream that comes to arrive above the set point inside a slice is cooled towards it. Both last until the next slice sets β again; the ledger books what happened.
-- **The quasi-steady wall on curves.** The study marched streams of constant capacity; W3 solves the 8-cell steady wall on two phase-change curves, a fixed point. Its convergence needs a gate (a condensing mixture against water) and a bounded iteration count. Where the iteration stops short, the profile is still a valid wall: energy stays exact, and only the transient changes.
-- **Determinism.** The as-of read depends on simulated time only while both islands keep up. A side that is behind (debt or a hold) is extrapolated, so its partner's result depends on when it caught up, within the one-slice cap. The open slice's rate is fixed by the slice's own inputs, and the dispatch wait keeps thread timing out.
+- **The quasi-steady wall on curves.** The study marched streams of constant capacity; W3 solves the 8-cell steady wall on two phase-change curves, a fixed point with a root per cell inside each sweep. Its convergence needs a gate (a condensing mixture against water), a tolerance (0.01 K) and a sweep cap. Where the iteration stops short, the profile is still a valid wall: energy stays exact, and only the transient changes.
+- **Determinism.** Forms A and B of section 5.2 make a side's result depend on how far its partner had committed at the dispatch, which depends on job times, within one partner slice. Form C does not. W3a measures the size of that dependence.
 - **A missed wake** leaves a certified island at a stale duty until its certificate horizon.
 - **Cost.**
   - One curve per side per slice (17 to 30 flashes, of the order of milliseconds).
-  - The quasi-steady wall: tens to hundreds of 16-cell marches, microseconds each.
+  - The quasi-steady wall: tens to hundreds of sweeps, each with a root per cell (about 40 kernel calls): from milliseconds to tens of milliseconds per side per slice, not measured. W3 adds a cost gate.
   - The kernel costs microseconds per residual.
   - The assembly adds two junctions and a regulating valve per controlled side.
 - **The column's operation** (next stage of the multi-machine framework) may want the column's computed duties to drive these exchangers, or the exchangers to bound the column. W9 keeps the duty mode as the hook; the choice belongs to that stage.
