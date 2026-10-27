@@ -1,0 +1,310 @@
+PART 8  W3a: the relay on the game's clock (20 ticks/s). A slice is offered once online time reaches its end and is
+  dispatched then; its job commits 0 to 40 ticks later; one job per side in flight. Stopped only while held (explicit).
+  Forms: A as of the slice start (a lagging partner extrapolated at its last committed rate for one of its slices);
+  B the partner's commits inside the slice piece by piece, A for the rest; C a fence: wait until the partner is through t0.
+  columns: latency 0: max |error| hot, cold (K), settles (1 K) hot, cold (s); then worst over latency 0, 40 and five
+  seeds of 0-40 ticks: max |error|, tail (last 100 s), settle (s); spread hot, cold over the five seeds (K);
+  give-back (K); heat in transit at the end (J); largest debt hot, cold (s, online minus committed)
+A hot inlet 150->180 C, water 50 kg/s each side, steel only: steady outlets 102.46 / 107.54 C
+     1/1     A  lat0 max     7.75    15.51 settles    1    1 | worst max    15.51 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   7.75 K, transit 2.8e-09 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max     7.75    15.51 settles    1    1 | worst max    15.51 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   7.75 K, transit 2.8e-09 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max     7.75    15.51 settles    1    1 | worst max    15.51 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   7.75 K, transit 2.8e-09 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max     7.75    15.51 settles    9    9 | worst max    15.51 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   7.75 K, transit 1.5e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max     7.75    15.51 settles    9    9 | worst max    15.51 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   7.75 K, transit 1.5e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max     7.75    15.51 settles    9    9 | worst max    15.51 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   7.75 K, transit 1.5e-08 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max     7.75    15.51 settles   39   39 | worst max    15.51 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.75 K, transit 3.7e-08 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max     7.75    15.51 settles   39   39 | worst max    15.51 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.75 K, transit 3.7e-08 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max     7.75    15.51 settles   39   39 | worst max    15.51 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.75 K, transit 3.7e-08 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max    12.26    15.51 settles  159  159 | worst max    15.51 tail     0.00 settle  159 | spread   0.000   0.000 | give-back  12.26 K, transit 1.5e+01 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max     7.57    15.51 settles   39    4 | worst max    15.51 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.57 K, transit 1.1e+00 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max     9.16    15.51 settles   44   59 | worst max    15.51 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   9.16 K, transit 3.7e-08 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max    12.41    15.51 settles  139  159 | worst max    15.51 tail     0.00 settle  159 | spread   0.000   0.000 | give-back  12.41 K, transit 1.3e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max    12.41    15.51 settles  139  159 | worst max    15.51 tail     0.00 settle  159 | spread   0.000   0.000 | give-back  12.41 K, transit 1.3e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max     9.16    15.51 settles   59   44 | worst max    15.51 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   9.16 K, transit 1.5e-08 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max    11.01    13.68 settles   89   74 | worst max    13.71 tail     0.00 settle  113 | spread   4.137   0.732 | give-back   9.92 K, transit 1.2e-04 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max     7.26    14.44 settles   56   39 | worst max    14.46 tail     0.00 settle   56 | spread   0.457   0.080 | give-back   7.26 K, transit 1.5e-05 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max    11.01    13.83 settles   51   57 | worst max    13.83 tail     0.00 settle   57 | spread   0.000   0.000 | give-back   8.76 K, transit 2.1e-08 J, debt  23.9  22.0 s, behind 0
+B cold flow 50->10 kg/s, steel only: steady outlets 126.32 / 148.38 C
+     1/1     A  lat0 max    38.36     1.62 settles    3    3 | worst max    38.36 tail     0.00 settle    3 | spread   0.000   0.000 | give-back  23.68 K, transit 2.2e-07 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max    38.36     1.62 settles    3    3 | worst max    38.36 tail     0.00 settle    3 | spread   0.000   0.000 | give-back  23.68 K, transit 2.2e-07 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max    38.36     1.62 settles    3    3 | worst max    38.36 tail     0.00 settle    3 | spread   0.000   0.000 | give-back  23.68 K, transit 2.2e-07 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max    38.36     1.62 settles   19   19 | worst max    38.36 tail     0.00 settle   19 | spread   0.000   0.000 | give-back  23.68 K, transit 1.1e-06 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max    38.36     1.62 settles   19   19 | worst max    38.36 tail     0.00 settle   19 | spread   0.000   0.000 | give-back  23.68 K, transit 1.1e-06 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max    38.36     1.62 settles   19   19 | worst max    38.36 tail     0.00 settle   19 | spread   0.000   0.000 | give-back  23.68 K, transit 1.1e-06 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max    38.36     1.62 settles   79   79 | worst max    38.36 tail     0.00 settle   79 | spread   0.000   0.000 | give-back  23.68 K, transit 4.3e-06 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max    38.36     1.62 settles   79   79 | worst max    38.36 tail     0.00 settle   79 | spread   0.000   0.000 | give-back  23.68 K, transit 4.3e-06 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max    38.36     1.62 settles   79   79 | worst max    38.36 tail     0.00 settle   79 | spread   0.000   0.000 | give-back  23.68 K, transit 4.3e-06 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max    38.36     1.62 settles   64   79 | worst max    38.36 tail     0.00 settle   79 | spread   0.000   0.000 | give-back  23.68 K, transit 1.0e+01 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max    38.36     1.62 settles   64   79 | worst max    38.36 tail     0.00 settle   79 | spread   0.000   0.000 | give-back  23.68 K, transit 1.0e+01 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max    38.36     1.62 settles   54   59 | worst max    38.36 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  23.68 K, transit 1.6e-06 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max    38.36     8.64 settles   59   79 | worst max    38.36 tail     0.00 settle   79 | spread   0.000   0.000 | give-back  23.68 K, transit 3.8e-06 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max    38.36     5.96 settles   39   59 | worst max    38.36 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   8.90 K, transit 3.8e-06 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max    38.36     1.62 settles   59   59 | worst max    38.36 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  23.68 K, transit 3.8e-06 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max    38.36     1.62 settles   65   74 | worst max    38.36 tail     0.00 settle   74 | spread   0.129   0.036 | give-back  28.95 K, transit 1.8e-05 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max    41.20     1.62 settles   61   57 | worst max    41.20 tail     0.00 settle   61 | spread   0.240   0.101 | give-back  41.20 K, transit 2.0e-06 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max    38.36     1.62 settles   56   57 | worst max    38.36 tail     0.00 settle   57 | spread   0.000   0.000 | give-back  23.68 K, transit 1.4e-06 J, debt  23.9  22.0 s, behind 0
+C high flow 1.5 MW/K each side (stiff), steel only: steady outlets 160.44 / 49.56 C
+     1/1     A  lat0 max     1.96     3.91 settles    1    1 | worst max     3.91 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   1.96 K, transit 1.9e-08 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max     1.96     3.91 settles    1    1 | worst max     3.91 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   1.96 K, transit 1.9e-08 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max     1.96     3.91 settles    1    1 | worst max     3.91 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   1.96 K, transit 1.9e-08 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max     1.96     3.91 settles    9    9 | worst max     3.91 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   1.96 K, transit 8.6e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max     1.96     3.91 settles    9    9 | worst max     3.91 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   1.96 K, transit 8.6e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max     1.96     3.91 settles    9    9 | worst max     3.91 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   1.96 K, transit 8.6e-08 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max     1.96     3.91 settles   39   39 | worst max     3.91 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   1.96 K, transit 4.0e-07 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max     1.96     3.91 settles   39   39 | worst max     3.91 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   1.96 K, transit 4.0e-07 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max     1.96     3.91 settles   39   39 | worst max     3.91 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   1.96 K, transit 4.0e-07 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max     3.09     3.91 settles   79   79 | worst max     3.91 tail     0.00 settle   79 | spread   0.000   0.000 | give-back   3.09 K, transit 2.7e+01 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max     1.91     3.91 settles   19    4 | worst max     3.91 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   1.91 K, transit 2.0e+00 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max     2.31     3.91 settles   29   39 | worst max     3.91 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   2.31 K, transit 2.8e-07 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max     3.13     3.91 settles   79   79 | worst max     3.91 tail     0.00 settle   79 | spread   0.000   0.000 | give-back   3.13 K, transit 2.4e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max     3.13     3.91 settles   79   79 | worst max     3.91 tail     0.00 settle   79 | spread   0.000   0.000 | give-back   3.13 K, transit 2.4e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max     2.31     3.91 settles   39   29 | worst max     3.91 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   2.31 K, transit 2.3e-07 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max     3.86     3.38 settles   56   57 | worst max     3.86 tail     0.00 settle   57 | spread   1.032   0.183 | give-back   2.47 K, transit 2.2e-04 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max     1.83     3.64 settles   18    2 | worst max     3.65 tail     0.00 settle   18 | spread   0.115   0.020 | give-back   1.83 K, transit 2.7e-05 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max     3.86     3.42 settles   31   39 | worst max     3.86 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   2.22 K, transit 1.8e-07 J, debt  23.9  22.0 s, behind 0
+L/L liquid 2000 / liquid 2000 W/m2K, water 50 kg/s each side: steady outlets 78.35 / 131.65 C
+     1/1     A  lat0 max    10.17    20.33 settles    1    1 | worst max    20.33 tail     0.00 settle    1 | spread   0.000   0.000 | give-back  10.17 K, transit 0.0e+00 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max    10.17    20.33 settles    1    1 | worst max    20.33 tail     0.00 settle    1 | spread   0.000   0.000 | give-back  10.17 K, transit 0.0e+00 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max    10.17    20.33 settles    1    1 | worst max    20.33 tail     0.00 settle    1 | spread   0.000   0.000 | give-back  10.17 K, transit 0.0e+00 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max    10.17    20.33 settles    9    9 | worst max    20.33 tail     0.00 settle    9 | spread   0.000   0.000 | give-back  10.17 K, transit 1.5e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max    10.17    20.33 settles    9    9 | worst max    20.33 tail     0.00 settle    9 | spread   0.000   0.000 | give-back  10.17 K, transit 1.5e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max    10.17    20.33 settles    9    9 | worst max    20.33 tail     0.00 settle    9 | spread   0.000   0.000 | give-back  10.17 K, transit 1.5e-08 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max    10.17    20.33 settles   39   39 | worst max    20.33 tail     0.00 settle   39 | spread   0.000   0.000 | give-back  10.17 K, transit 6.0e-08 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max    10.17    20.33 settles   39   39 | worst max    20.33 tail     0.00 settle   39 | spread   0.000   0.000 | give-back  10.17 K, transit 6.0e-08 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max    10.17    20.33 settles   39   39 | worst max    20.33 tail     0.00 settle   39 | spread   0.000   0.000 | give-back  10.17 K, transit 6.0e-08 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max    16.07    20.33 settles  179  159 | worst max    20.33 tail     0.00 settle  179 | spread   0.000   0.000 | give-back  16.07 K, transit 1.9e+01 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max     9.92    20.33 settles   39    4 | worst max    20.33 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   9.92 K, transit 1.4e+00 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max    12.00    20.33 settles   49   59 | worst max    20.33 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  12.00 K, transit 2.6e-08 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max    16.26    20.33 settles  159  179 | worst max    20.33 tail     0.00 settle  179 | spread   0.000   0.000 | give-back  16.26 K, transit 1.7e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max    16.26    20.33 settles  159  179 | worst max    20.33 tail     0.00 settle  179 | spread   0.000   0.000 | give-back  16.26 K, transit 1.7e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max    12.00    20.33 settles   59   49 | worst max    20.33 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  12.00 K, transit 2.6e-08 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max    13.12    18.29 settles   89   92 | worst max    18.32 tail     0.00 settle  113 | spread   5.479   0.969 | give-back  13.15 K, transit 1.6e-04 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max     9.51    18.93 settles   56   39 | worst max    18.95 tail     0.00 settle   56 | spread   0.600   0.105 | give-back   9.51 K, transit 2.0e-05 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max    11.10    18.46 settles   51   57 | worst max    18.46 tail     0.00 settle   57 | spread   0.000   0.000 | give-back  11.45 K, transit 1.9e-08 J, debt  23.9  22.0 s, behind 0
+G/L gas 100 / liquid 2000, gas 20 kg/s, water 10 kg/s: steady outlets 66.94 / 89.50 C
+     1/1     A  lat0 max     7.80    11.90 settles    1    1 | worst max    11.90 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   7.80 K, transit 9.0e-08 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max     7.80    11.90 settles    1    1 | worst max    11.90 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   7.80 K, transit 9.0e-08 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max     7.80    11.90 settles    1    1 | worst max    11.90 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   7.80 K, transit 9.0e-08 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max     7.80    11.90 settles    9    9 | worst max    11.90 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   7.80 K, transit 4.5e-07 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max     7.80    11.90 settles    9    9 | worst max    11.90 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   7.80 K, transit 4.5e-07 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max     7.80    11.90 settles    9    9 | worst max    11.90 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   7.80 K, transit 4.5e-07 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max     7.80    11.90 settles   39   39 | worst max    11.90 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.80 K, transit 1.8e-06 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max     7.80    11.90 settles   39   39 | worst max    11.90 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.80 K, transit 1.8e-06 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max     7.80    11.90 settles   39   39 | worst max    11.90 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.80 K, transit 1.8e-06 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max    13.09    11.90 settles  119   99 | worst max    13.09 tail     0.00 settle  119 | spread   0.000   0.000 | give-back  13.09 K, transit 7.4e-05 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max     7.01    11.90 settles   59    4 | worst max    11.90 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   7.01 K, transit 1.2e-05 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max     8.82    11.90 settles   44   59 | worst max    11.90 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   8.82 K, transit 1.3e-06 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max    15.33    15.33 settles  239  224 | worst max    15.33 tail     0.00 settle  239 | spread   0.000   0.000 | give-back  15.33 K, transit 6.3e+02 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max    15.33    15.33 settles  239  224 | worst max    15.33 tail     0.00 settle  239 | spread   0.000   0.000 | give-back  15.33 K, transit 6.3e+02 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max     9.39    11.90 settles   59   44 | worst max    11.90 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   9.39 K, transit 9.1e-07 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max    10.87    10.87 settles   70   74 | worst max    10.88 tail     0.00 settle   89 | spread   2.836   0.298 | give-back  10.88 K, transit 6.6e-07 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max     6.57    11.01 settles   18    2 | worst max    11.02 tail     0.00 settle   18 | spread   0.148   0.015 | give-back   6.57 K, transit 6.6e-07 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max     7.80    10.92 settles   37   57 | worst max    10.92 tail     0.00 settle   57 | spread   0.000   0.000 | give-back   8.28 K, transit 6.9e-07 J, debt  23.9  22.0 s, behind 0
+G/G gas 100 / gas 100, gas 20 kg/s each side: steady outlets 104.36 / 105.64 C
+     1/1     A  lat0 max     7.56    15.13 settles    1    1 | worst max    15.13 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   7.56 K, transit 4.4e-10 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max     7.56    15.13 settles    1    1 | worst max    15.13 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   7.56 K, transit 4.4e-10 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max     7.56    15.13 settles    1    1 | worst max    15.13 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   7.56 K, transit 4.4e-10 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max     7.56    15.13 settles    9    9 | worst max    15.13 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   7.56 K, transit 1.5e-09 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max     7.56    15.13 settles    9    9 | worst max    15.13 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   7.56 K, transit 1.5e-09 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max     7.56    15.13 settles    9    9 | worst max    15.13 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   7.56 K, transit 1.5e-09 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max     7.56    15.13 settles   39   39 | worst max    15.13 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.56 K, transit 5.1e-09 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max     7.56    15.13 settles   39   39 | worst max    15.13 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.56 K, transit 5.1e-09 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max     7.56    15.13 settles   39   39 | worst max    15.13 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.56 K, transit 5.1e-09 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max    11.96    15.13 settles  159  159 | worst max    15.13 tail     0.00 settle  159 | spread   0.000   0.000 | give-back  11.96 K, transit 1.5e+00 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max     7.38    15.13 settles   39    4 | worst max    15.13 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   7.38 K, transit 1.1e-01 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max     8.93    15.13 settles   44   59 | worst max    15.13 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   8.93 K, transit 3.3e-09 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max    12.10    15.13 settles  139  159 | worst max    15.13 tail     0.00 settle  159 | spread   0.000   0.000 | give-back  12.10 K, transit 1.4e+00 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max    12.10    15.13 settles  139  159 | worst max    15.13 tail     0.00 settle  159 | spread   0.000   0.000 | give-back  12.10 K, transit 1.4e+00 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max     8.93    15.13 settles   59   44 | worst max    15.13 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   8.93 K, transit 3.5e-09 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max    10.99    13.32 settles   89   74 | worst max    13.36 tail     0.00 settle  113 | spread   4.033   0.713 | give-back   9.67 K, transit 1.2e-05 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max     7.08    14.08 settles   31   39 | worst max    14.10 tail     0.00 settle   39 | spread   0.446   0.078 | give-back   7.08 K, transit 1.5e-06 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max    10.99    13.47 settles   51   57 | worst max    13.47 tail     0.00 settle   57 | spread   0.000   0.000 | give-back   8.55 K, transit 2.8e-09 J, debt  23.9  22.0 s, behind 0
+C/L condensing 5000 (150 -> 180 C) / liquid 2000, water 50 kg/s: steady outlets 180.00 / 172.97 C
+     1/1     A  lat0 max     0.00    28.59 settles    0    0 | worst max    28.59 tail     0.00 settle    0 | spread   0.000   0.000 | give-back   0.00 K, transit 1.5e-08 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max     0.00    28.59 settles    0    0 | worst max    28.59 tail     0.00 settle    0 | spread   0.000   0.000 | give-back   0.00 K, transit 1.5e-08 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max     0.00    28.59 settles    0    0 | worst max    28.59 tail     0.00 settle    0 | spread   0.000   0.000 | give-back   0.00 K, transit 1.5e-08 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max     0.00    28.59 settles    0    4 | worst max    28.59 tail     0.00 settle    4 | spread   0.000   0.000 | give-back   0.00 K, transit 7.4e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max     0.00    28.59 settles    0    4 | worst max    28.59 tail     0.00 settle    4 | spread   0.000   0.000 | give-back   0.00 K, transit 7.4e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max     0.00    28.59 settles    0    4 | worst max    28.59 tail     0.00 settle    4 | spread   0.000   0.000 | give-back   0.00 K, transit 7.4e-08 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 2.9e-07 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 2.9e-07 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 2.9e-07 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 9.7e-08 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max     0.00    28.59 settles    0    4 | worst max    28.59 tail     0.00 settle    4 | spread   0.000   0.000 | give-back   0.00 K, transit 9.7e-08 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 7.4e-08 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 3.0e-07 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 3.0e-07 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 2.6e-07 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 4.7e-08 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max     0.00    28.59 settles    0    2 | worst max    28.59 tail     0.00 settle    2 | spread   0.000   0.000 | give-back   0.00 K, transit 4.8e-08 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max     0.00    28.59 settles    0   19 | worst max    28.59 tail     0.00 settle   19 | spread   0.000   0.000 | give-back   0.00 K, transit 5.0e-08 J, debt  23.9  22.0 s, behind 0
+glide 5000/2000, hot  400 kW/K: steady outlets 111.84 / 160.44 C
+     1/1     A  lat0 max     8.95    26.09 settles    1    1 | worst max    26.09 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   8.95 K, transit 9.7e-07 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max     8.95    26.09 settles    1    1 | worst max    26.09 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   8.95 K, transit 9.7e-07 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max     8.95    26.09 settles    1    1 | worst max    26.09 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   8.95 K, transit 9.7e-07 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max     8.95    26.09 settles    9    9 | worst max    26.09 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   8.95 K, transit 4.8e-06 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max     8.95    26.09 settles    9    9 | worst max    26.09 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   8.95 K, transit 4.8e-06 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max     8.95    26.09 settles    9    9 | worst max    26.09 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   8.95 K, transit 4.8e-06 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max     8.95    26.09 settles   39   39 | worst max    26.09 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   8.95 K, transit 1.9e-05 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max     8.95    26.09 settles   39   39 | worst max    26.09 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   8.95 K, transit 1.9e-05 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max     8.95    26.09 settles   39   39 | worst max    26.09 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   8.95 K, transit 1.9e-05 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max    12.75    26.09 settles  249  259 | worst max    26.09 tail     0.00 settle  259 | spread   0.000   0.000 | give-back  12.75 K, transit 7.8e+03 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max     9.41    26.09 settles   39   39 | worst max    26.09 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   9.41 K, transit 1.2e+02 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max    10.78    26.09 settles   49   59 | worst max    26.09 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  10.78 K, transit 9.8e-06 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max    12.06    26.09 settles   99  119 | worst max    26.09 tail     0.00 settle  119 | spread   0.000   0.000 | give-back  12.06 K, transit 5.9e-04 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max    12.06    26.09 settles   99  119 | worst max    26.09 tail     0.00 settle  119 | spread   0.000   0.000 | give-back  12.06 K, transit 5.9e-04 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max    10.12    26.09 settles   59   44 | worst max    26.09 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  10.12 K, transit 1.4e-05 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max    16.26    22.66 settles   89   92 | worst max    22.77 tail     0.00 settle  132 | spread   5.538   1.527 | give-back  10.44 K, transit 4.6e-02 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max     9.34    24.53 settles   61   74 | worst max    24.57 tail     0.00 settle   74 | spread   0.969   0.265 | give-back   9.34 K, transit 9.1e-03 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max    16.26    23.11 settles   51   57 | worst max    23.11 tail     0.00 settle   57 | spread   0.000   0.000 | give-back  10.51 K, transit 7.7e-06 J, debt  23.9  22.0 s, behind 0
+glide 5000/2000, hot 2000 kW/K: steady outlets 165.24 / 171.21 C
+     1/1     A  lat0 max     2.67    28.24 settles    1    1 | worst max    28.24 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   2.67 K, transit 4.8e-07 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max     2.67    28.24 settles    1    1 | worst max    28.24 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   2.67 K, transit 4.8e-07 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max     2.67    28.24 settles    1    1 | worst max    28.24 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   2.67 K, transit 4.8e-07 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max     2.67    28.24 settles    9    9 | worst max    28.24 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   2.67 K, transit 2.4e-06 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max     2.67    28.24 settles    9    9 | worst max    28.24 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   2.67 K, transit 2.4e-06 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max     2.67    28.24 settles    9    9 | worst max    28.24 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   2.67 K, transit 2.4e-06 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max     2.67    28.24 settles   39   39 | worst max    28.24 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   2.67 K, transit 9.7e-06 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max     2.67    28.24 settles   39   39 | worst max    28.24 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   2.67 K, transit 9.7e-06 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max     2.67    28.24 settles   39   39 | worst max    28.24 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   2.67 K, transit 9.7e-06 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max     6.24    28.24 settles   84   99 | worst max    28.24 tail     0.00 settle   99 | spread   0.000   0.000 | give-back   6.24 K, transit 1.1e-01 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max     3.31    28.24 settles   24   39 | worst max    28.24 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   3.31 K, transit 1.0e-02 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max     2.93    28.24 settles   24   39 | worst max    28.24 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   2.93 K, transit 3.1e-06 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max     2.88    28.24 settles   39   59 | worst max    28.24 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   2.88 K, transit 9.0e-06 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max     2.88    28.24 settles   39   59 | worst max    28.24 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   2.88 K, transit 9.0e-06 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max     2.77    28.24 settles   39   34 | worst max    28.24 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   2.77 K, transit 9.0e-06 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max    17.31    22.76 settles   61   57 | worst max    23.13 tail     0.00 settle   61 | spread   0.765   0.404 | give-back   5.83 K, transit 2.4e-06 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max     4.69    27.44 settles   26   39 | worst max    27.50 tail     0.00 settle   39 | spread   0.084   0.043 | give-back   4.69 K, transit 2.4e-06 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max    17.31    24.20 settles   26   39 | worst max    24.20 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   5.71 K, transit 2.5e-06 J, debt  23.9  22.0 s, behind 0
+L/L   10 kg/s: steady outlets 48.79 / 161.21 C
+     1/1     A  lat0 max    13.12    26.24 settles    1    1 | worst max    26.24 tail     0.00 settle    1 | spread   0.000   0.000 | give-back  13.12 K, transit 9.3e-10 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max    13.12    26.24 settles    1    1 | worst max    26.24 tail     0.00 settle    1 | spread   0.000   0.000 | give-back  13.12 K, transit 9.3e-10 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max    13.12    26.24 settles    1    1 | worst max    26.24 tail     0.00 settle    1 | spread   0.000   0.000 | give-back  13.12 K, transit 9.3e-10 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max    13.12    26.24 settles    9    9 | worst max    26.24 tail     0.00 settle    9 | spread   0.000   0.000 | give-back  13.12 K, transit 4.7e-09 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max    13.12    26.24 settles    9    9 | worst max    26.24 tail     0.00 settle    9 | spread   0.000   0.000 | give-back  13.12 K, transit 4.7e-09 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max    13.12    26.24 settles    9    9 | worst max    26.24 tail     0.00 settle    9 | spread   0.000   0.000 | give-back  13.12 K, transit 4.7e-09 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max    13.12    26.24 settles   39   39 | worst max    26.24 tail     0.00 settle   39 | spread   0.000   0.000 | give-back  13.12 K, transit 1.9e-08 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max    13.12    26.24 settles   39   39 | worst max    26.24 tail     0.00 settle   39 | spread   0.000   0.000 | give-back  13.12 K, transit 1.9e-08 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max    13.12    26.24 settles   39   39 | worst max    26.24 tail     0.00 settle   39 | spread   0.000   0.000 | give-back  13.12 K, transit 1.9e-08 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max    20.74    26.24 settles  199  179 | worst max    26.24 tail     0.00 settle  199 | spread   0.000   0.000 | give-back  20.74 K, transit 5.0e+00 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max    12.81    26.24 settles   44   59 | worst max    26.24 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  12.81 K, transit 3.7e-01 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max    15.49    26.24 settles   49   59 | worst max    26.24 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  15.49 K, transit 1.6e-08 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max    20.99    26.24 settles  179  179 | worst max    26.24 tail     0.00 settle  179 | spread   0.000   0.000 | give-back  20.99 K, transit 4.4e+00 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max    20.99    26.24 settles  179  179 | worst max    26.24 tail     0.00 settle  179 | spread   0.000   0.000 | give-back  20.99 K, transit 4.4e+00 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max    15.49    26.24 settles   59   49 | worst max    26.24 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  15.49 K, transit 1.5e-08 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max    17.19    24.17 settles  108   92 | worst max    24.21 tail     0.00 settle  124 | spread   7.161   1.267 | give-back  17.22 K, transit 4.1e-05 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max    12.28    24.43 settles   56   39 | worst max    24.46 tail     0.00 settle   56 | spread   0.774   0.136 | give-back  12.28 K, transit 5.1e-06 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max    14.21    24.34 settles   51   57 | worst max    24.34 tail     0.00 settle   57 | spread   0.000   0.000 | give-back  14.72 K, transit 8.1e-09 J, debt  23.9  22.0 s, behind 0
+L/L   25 kg/s: steady outlets 60.40 / 149.60 C
+     1/1     A  lat0 max    11.96    23.92 settles    1    1 | worst max    23.92 tail     0.00 settle    1 | spread   0.000   0.000 | give-back  11.96 K, transit 2.6e-09 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max    11.96    23.92 settles    1    1 | worst max    23.92 tail     0.00 settle    1 | spread   0.000   0.000 | give-back  11.96 K, transit 2.6e-09 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max    11.96    23.92 settles    1    1 | worst max    23.92 tail     0.00 settle    1 | spread   0.000   0.000 | give-back  11.96 K, transit 2.6e-09 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max    11.96    23.92 settles    9    9 | worst max    23.92 tail     0.00 settle    9 | spread   0.000   0.000 | give-back  11.96 K, transit 2.1e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max    11.96    23.92 settles    9    9 | worst max    23.92 tail     0.00 settle    9 | spread   0.000   0.000 | give-back  11.96 K, transit 2.1e-08 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max    11.96    23.92 settles    9    9 | worst max    23.92 tail     0.00 settle    9 | spread   0.000   0.000 | give-back  11.96 K, transit 2.1e-08 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max    11.96    23.92 settles   39   39 | worst max    23.92 tail     0.00 settle   39 | spread   0.000   0.000 | give-back  11.96 K, transit 8.6e-08 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max    11.96    23.92 settles   39   39 | worst max    23.92 tail     0.00 settle   39 | spread   0.000   0.000 | give-back  11.96 K, transit 8.6e-08 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max    11.96    23.92 settles   39   39 | worst max    23.92 tail     0.00 settle   39 | spread   0.000   0.000 | give-back  11.96 K, transit 8.6e-08 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max    18.90    23.92 settles  179  179 | worst max    23.92 tail     0.00 settle  179 | spread   0.000   0.000 | give-back  18.90 K, transit 1.1e+01 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max    11.67    23.92 settles   44   59 | worst max    23.92 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  11.67 K, transit 8.4e-01 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max    14.12    23.92 settles   49   59 | worst max    23.92 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  14.12 K, transit 6.1e-08 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max    19.14    23.92 settles  179  179 | worst max    23.92 tail     0.00 settle  179 | spread   0.000   0.000 | give-back  19.14 K, transit 1.0e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max    19.14    23.92 settles  179  179 | worst max    23.92 tail     0.00 settle  179 | spread   0.000   0.000 | give-back  19.14 K, transit 1.0e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max    14.12    23.92 settles   59   49 | worst max    23.92 tail     0.00 settle   59 | spread   0.000   0.000 | give-back  14.12 K, transit 3.9e-08 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max    15.59    21.85 settles  108   92 | worst max    21.88 tail     0.00 settle  113 | spread   6.498   1.149 | give-back  15.62 K, transit 9.4e-05 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max    11.19    22.27 settles   56   39 | worst max    22.30 tail     0.00 settle   56 | spread   0.705   0.124 | give-back  11.19 K, transit 1.2e-05 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max    12.99    22.02 settles   51   57 | worst max    22.02 tail     0.00 settle   57 | spread   0.000   0.000 | give-back  13.43 K, transit 2.7e-08 J, debt  23.9  22.0 s, behind 0
+L/L  200 kg/s: steady outlets 127.56 / 82.44 C
+     1/1     A  lat0 max     5.24    10.49 settles    1    1 | worst max    10.49 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   5.24 K, transit 2.6e-08 J, debt   1.5   1.5 s, behind 0
+     1/1     B  lat0 max     5.24    10.49 settles    1    1 | worst max    10.49 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   5.24 K, transit 2.6e-08 J, debt   1.5   1.5 s, behind 0
+     1/1     C  lat0 max     5.24    10.49 settles    1    1 | worst max    10.49 tail     0.00 settle    1 | spread   0.000   0.000 | give-back   5.24 K, transit 2.6e-08 J, debt   1.5   1.5 s, behind 0
+     5/5     A  lat0 max     5.24    10.49 settles    9    9 | worst max    10.49 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   5.24 K, transit 1.1e-07 J, debt   7.0   7.0 s, behind 0
+     5/5     B  lat0 max     5.24    10.49 settles    9    9 | worst max    10.49 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   5.24 K, transit 1.1e-07 J, debt   7.0   7.0 s, behind 0
+     5/5     C  lat0 max     5.24    10.49 settles    9    9 | worst max    10.49 tail     0.00 settle    9 | spread   0.000   0.000 | give-back   5.24 K, transit 1.1e-07 J, debt   7.0   7.0 s, behind 0
+    20/20    A  lat0 max     5.24    10.49 settles   39   39 | worst max    10.49 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   5.24 K, transit 4.5e-07 J, debt  22.0  22.0 s, behind 0
+    20/20    B  lat0 max     5.24    10.49 settles   39   39 | worst max    10.49 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   5.24 K, transit 4.5e-07 J, debt  22.0  22.0 s, behind 0
+    20/20    C  lat0 max     5.24    10.49 settles   39   39 | worst max    10.49 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   5.24 K, transit 4.5e-07 J, debt  22.0  22.0 s, behind 0
+     5/20    A  lat0 max     8.29    10.49 settles  139  139 | worst max    10.49 tail     0.00 settle  139 | spread   0.000   0.000 | give-back   8.29 K, transit 4.0e+01 J, debt   7.0  22.0 s, behind 0
+     5/20    B  lat0 max     5.12    10.49 settles   39    4 | worst max    10.49 tail     0.00 settle   39 | spread   0.000   0.000 | give-back   5.12 K, transit 3.0e+00 J, debt   7.0  22.0 s, behind 0
+     5/20    C  lat0 max     6.19    10.49 settles   44   59 | worst max    10.49 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   6.19 K, transit 2.7e-07 J, debt  19.0  22.0 s, behind 0
+    20/5     A  lat0 max     8.39    10.49 settles  119  139 | worst max    10.49 tail     0.00 settle  139 | spread   0.000   0.000 | give-back   8.39 K, transit 3.6e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     B  lat0 max     8.39    10.49 settles  119  139 | worst max    10.49 tail     0.00 settle  139 | spread   0.000   0.000 | give-back   8.39 K, transit 3.6e+01 J, debt  22.0   7.0 s, behind 0
+    20/5     C  lat0 max     6.19    10.49 settles   59   44 | worst max    10.49 tail     0.00 settle   59 | spread   0.000   0.000 | give-back   6.19 K, transit 2.5e-07 J, debt  22.0  19.0 s, behind 0
+     5/20  ~ A  lat0 max     9.29     9.12 settles   70   74 | worst max     9.29 tail     0.00 settle   92 | spread   2.778   0.491 | give-back   6.65 K, transit 3.2e-04 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ B  lat0 max     4.91     9.76 settles   26   39 | worst max     9.78 tail     0.00 settle   39 | spread   0.309   0.054 | give-back   4.91 K, transit 4.0e-05 J, debt   9.8  22.0 s, behind 0
+     5/20  ~ C  lat0 max     9.29     9.24 settles   37   57 | worst max     9.29 tail     0.00 settle   57 | spread   0.000   0.000 | give-back   5.94 K, transit 1.8e-07 J, debt  23.9  22.0 s, behind 0
+
+PART 8b holds, case A to 1500 s: hot island held 100 to 160 s and 100 to 700 s (its job dropped; stopped while held)
+  worst over the 7 latency runs: tail (last 100 s, K); recovered: online s after the hold until both committed outlets stay
+  within 1 K; heat in transit at the end (J); largest debt hot, cold (s); behind (slices that counted the partner stopped)
+  held to 160,    1/1     A  tail     0.00   recovered    60 s   transit 3.7e-09 J   debt  61.5   1.5 s   behind 274
+  held to 160,    1/1     B  tail     0.00   recovered    60 s   transit 3.7e-09 J   debt  61.5   1.5 s   behind 274
+  held to 160,    1/1     C  tail     0.00   recovered    30 s   transit 3.7e-09 J   debt  61.5  31.5 s   behind 0
+  held to 160,    5/5     A  tail     0.00   recovered    40 s   transit 1.5e-08 J   debt  67.0   7.0 s   behind 23
+  held to 160,    5/5     B  tail     0.00   recovered    40 s   transit 1.5e-08 J   debt  67.0   7.0 s   behind 23
+  held to 160,    5/5     C  tail     0.00   recovered    24 s   transit 3.7e-09 J   debt  67.0  31.0 s   behind 0
+  held to 160,   20/20    A  tail     0.00   recovered    20 s   transit 6.7e-08 J   debt  82.0  22.0 s   behind 7
+  held to 160,   20/20    B  tail     0.00   recovered    20 s   transit 6.7e-08 J   debt  82.0  22.0 s   behind 7
+  held to 160,   20/20    C  tail     0.00   recovered     6 s   transit 6.0e-08 J   debt  82.0  28.0 s   behind 0
+  held to 160,    5/20    A  tail     0.00   recovered   202 s   transit 2.6e-03 J   debt  67.0  22.0 s   behind 8
+  held to 160,    5/20    B  tail     0.00   recovered   202 s   transit 2.6e-03 J   debt  67.0  22.0 s   behind 8
+  held to 160,    5/20    C  tail     0.00   recovered    22 s   transit 3.4e-08 J   debt  77.0  44.0 s   behind 0
+  held to 160,   20/5     A  tail     0.00   recovered   182 s   transit 1.8e-03 J   debt  82.0   7.0 s   behind 8
+  held to 160,   20/5     B  tail     0.00   recovered   182 s   transit 1.8e-03 J   debt  82.0   7.0 s   behind 8
+  held to 160,   20/5     C  tail     0.00   recovered    24 s   transit 3.4e-08 J   debt  82.0  19.0 s   behind 0
+  held to 160,    5/20  ~ A  tail     0.00   recovered   128 s   transit 3.8e-08 J   debt  64.0  22.0 s   behind 1
+  held to 160,    5/20  ~ B  tail     0.00   recovered   128 s   transit 3.1e-08 J   debt  64.0  22.0 s   behind 1
+  held to 160,    5/20  ~ C  tail     0.00   recovered    42 s   transit 3.3e-08 J   debt  79.8  35.8 s   behind 0
+  held to 700,    1/1     A  tail     0.00   recovered   600 s   transit 2.8e-09 J   debt 601.5   1.5 s   behind 2888
+  held to 700,    1/1     B  tail     0.00   recovered   600 s   transit 2.8e-09 J   debt 601.5   1.5 s   behind 2888
+  held to 700,    1/1     C  tail     0.00   recovered   300 s   transit 3.7e-09 J   debt 601.5 301.5 s   behind 0
+  held to 700,    5/5     A  tail     0.00   recovered   400 s   transit 1.7e-08 J   debt 607.0   7.0 s   behind 231
+  held to 700,    5/5     B  tail     0.00   recovered   400 s   transit 1.7e-08 J   debt 607.0   7.0 s   behind 231
+  held to 700,    5/5     C  tail     0.00   recovered   240 s   transit 3.7e-09 J   debt 607.0 247.0 s   behind 0
+  held to 700,   20/20    A  tail     0.00   recovered    68 s   transit 6.0e-08 J   debt 622.0  22.0 s   behind 15
+  held to 700,   20/20    B  tail     0.00   recovered    68 s   transit 6.0e-08 J   debt 622.0  22.0 s   behind 15
+  held to 700,   20/20    C  tail     0.00   recovered    60 s   transit 5.2e-08 J   debt 622.0  82.0 s   behind 0
+  held to 700,    5/20    A  tail     0.06   recovered   562 s   transit 3.8e+04 J   debt 607.0  22.0 s   behind 59
+  held to 700,    5/20    B  tail     0.06   recovered   562 s   transit 3.8e+04 J   debt 607.0  22.0 s   behind 59
+  held to 700,    5/20    C  tail     0.00   recovered   238 s   transit 1.9e-08 J   debt 617.0 260.0 s   behind 0
+  held to 700,   20/5     A  tail     0.00   recovered   202 s   transit 5.2e+01 J   debt 622.0   7.0 s   behind 45
+  held to 700,   20/5     B  tail     0.00   recovered   202 s   transit 5.2e+01 J   debt 622.0   7.0 s   behind 45
+  held to 700,   20/5     C  tail     0.00   recovered    68 s   transit 3.4e-08 J   debt 622.0  69.0 s   behind 0
+  held to 700,    5/20  ~ A  tail     0.00   recovered   448 s   transit 2.7e+01 J   debt 604.0  22.0 s   behind 52
+  held to 700,    5/20  ~ B  tail     0.00   recovered   448 s   transit 2.7e+01 J   debt 604.0  22.0 s   behind 52
+  held to 700,    5/20  ~ C  tail     0.00   recovered   224 s   transit 2.7e-08 J   debt 619.8 237.2 s   behind 0
+  the plan's rule for A and B (stopped only while held; a lagging partner extrapolated for one of its slices):
+  held to 160,    1/1     A  tail     0.00   recovered    61 s   transit 3.3e-09 J   debt  61.5   1.5 s   behind 0
+  held to 160,    1/1     B  tail     0.00   recovered    61 s   transit 3.3e-09 J   debt  61.5   1.5 s   behind 0
+  held to 160,    5/20    A  tail     0.00   recovered   202 s   transit 2.7e-03 J   debt  67.0  22.0 s   behind 0
+  held to 160,    5/20    B  tail     0.00   recovered   202 s   transit 3.0e-03 J   debt  67.0  22.0 s   behind 0
+  held to 700,    1/1     A  tail     0.00   recovered   601 s   transit 3.7e-09 J   debt 601.5   1.5 s   behind 0
+  held to 700,    1/1     B  tail     0.00   recovered   601 s   transit 3.7e-09 J   debt 601.5   1.5 s   behind 0
+  held to 700,    5/20    A  tail     0.05   recovered   542 s   transit 3.6e+04 J   debt 607.0  22.0 s   behind 0
+  held to 700,    5/20    B  tail     0.05   recovered   542 s   transit 3.6e+04 J   debt 607.0  22.0 s   behind 0
+
+PART 8c cold outlet target by a cold-side bypass, dead-beat: worst |T - target| from the step (K), over the 7 latency runs
+  A h target  90 C slices    1/1       A  12.72 K, last outside 0.1 K +   6 s   B  12.72 K, last outside 0.1 K +   6 s   C  12.72 K, last outside 0.1 K +   6 s
+  A h target  90 C slices    5/5       A  12.72 K, last outside 0.1 K +  34 s   B  12.72 K, last outside 0.1 K +  34 s   C  12.72 K, last outside 0.1 K +  34 s
+  A h target  90 C slices   20/20      A  12.84 K, last outside 0.1 K + 139 s   B  12.84 K, last outside 0.1 K + 139 s   C  12.84 K, last outside 0.1 K + 139 s
+  A h target  90 C slices    5/20      A  14.75 K, last outside 0.1 K + 359 s   B  15.21 K, last outside 0.1 K + 299 s   C  14.73 K, last outside 0.1 K + 139 s
+  A h target  90 C slices   20/5       A  15.08 K, last outside 0.1 K + 159 s   B  15.15 K, last outside 0.1 K + 159 s   C  13.15 K, last outside 0.1 K +  74 s
+  A h target  90 C slices    5/20  ~   A  12.98 K, last outside 0.1 K + 152 s   B  16.22 K, last outside 0.1 K + 172 s   C  14.46 K, last outside 0.1 K + 132 s
+  C h target  40 C slices    1/1       A   0.90 K, last outside 0.1 K +   2 s   B   0.90 K, last outside 0.1 K +   2 s   C   0.90 K, last outside 0.1 K +   2 s
+  C h target  40 C slices    5/5       A   0.90 K, last outside 0.1 K +  14 s   B   0.90 K, last outside 0.1 K +  14 s   C   0.90 K, last outside 0.1 K +  14 s
+  C h target  40 C slices   20/20      A   0.92 K, last outside 0.1 K +  59 s   B   0.92 K, last outside 0.1 K +  59 s   C   0.92 K, last outside 0.1 K +  59 s
+  C h target  40 C slices    5/20      A   1.00 K, last outside 0.1 K +  79 s   B   2.57 K, last outside 0.1 K +  99 s   C   0.96 K, last outside 0.1 K +  59 s
+  C h target  40 C slices   20/5       A   0.91 K, last outside 0.1 K +  79 s   B   0.91 K, last outside 0.1 K +  39 s   C   0.90 K, last outside 0.1 K +  49 s
+  C h target  40 C slices    5/20  ~   A   0.85 K, last outside 0.1 K +  74 s   B   2.66 K, last outside 0.1 K +  57 s   C   0.95 K, last outside 0.1 K +  57 s
+  L/L target 100 C slices    1/1       A  11.42 K, last outside 0.1 K +   4 s   B  11.42 K, last outside 0.1 K +   4 s   C  11.42 K, last outside 0.1 K +   4 s
+  L/L target 100 C slices    5/5       A  11.42 K, last outside 0.1 K +  24 s   B  11.42 K, last outside 0.1 K +  24 s   C  11.42 K, last outside 0.1 K +  24 s
+  L/L target 100 C slices   20/20      A  11.63 K, last outside 0.1 K +  99 s   B  11.63 K, last outside 0.1 K +  99 s   C  11.63 K, last outside 0.1 K +  99 s
+  L/L target 100 C slices    5/20      A  13.22 K, last outside 0.1 K + 339 s   B  18.15 K, last outside 0.1 K + 319 s   C  13.22 K, last outside 0.1 K +  99 s
+  L/L target 100 C slices   20/5       A  13.10 K, last outside 0.1 K + 179 s   B  13.10 K, last outside 0.1 K + 139 s   C  11.95 K, last outside 0.1 K +  74 s
+  L/L target 100 C slices    5/20  ~   A  11.57 K, last outside 0.1 K + 152 s   B  19.21 K, last outside 0.1 K + 172 s   C  13.22 K, last outside 0.1 K +  92 s
+
+PART 8d summary over the Part 8 cases and slicings (not the holds): worst max |error| (K), tail (K), settle (s), spread (K), give-back (K), debt (s);
+  behind: slices that counted their partner stopped for lagging (A, B), over every run
+  A  error   38.36  tail  0.004  settle   259  spread   7.161  give-back  28.95  debt  22.0  behind 0
+  B  error   41.20  tail  0.003  settle   239  spread   0.969  give-back  41.20  debt  22.0  behind 0
+  C  error   38.36  tail  0.000  settle    79  spread   0.000  give-back  23.68  debt  23.9  behind 0

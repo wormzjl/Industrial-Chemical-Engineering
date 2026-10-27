@@ -10,7 +10,7 @@ Evidence:
 - [HEAT_EXCHANGER_PLAN_REVIEW.md](HEAT_EXCHANGER_PLAN_REVIEW.md): the review of revision 3 against the code (22 findings, taken into revision 4).
 - Harnesses: `tools/heat-exchanger-design/`.
 
-Open: the form of the coupling's timing after study W3a (section 5.2). The owner answered Q14 on 2026-10-27: the one-sided units go before W3a.
+Open: Q16, the form of the coupling's timing. Study W3a measured it ([HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md)) and recommends C, the fence (section 12). The owner answered Q14 on 2026-10-27: the one-sided units go before W3a.
 
 Owner request 2026-10-27:
 
@@ -199,6 +199,8 @@ The wall holds no heat (Q10), so its profile is not a state: it is the quasi-ste
 - **A, as of the slice start**: the partner's record at t0; a partner not yet committed through t0 is extrapolated at the heat rate of its last committed slice (carried in its commit record), for at most one of its slices.
 - **B, the partner's history within the slice**: a slice is dispatched after t1, so the partner's records committed within `[t0, t1]` exist and are used piece by piece; A covers the rest.
 - **C, a coupling fence**: a slice waits until its partner has committed through t0 (a readiness condition on the server, no worker wait; a certified partner is materialised). This is deterministic, and the fast side runs up to one partner cadence behind online time. The side furthest behind can always go, so the fence cannot deadlock.
+
+W3a measured the three forms (harness part 8, [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md)). C settles fastest (mean 34 s against 45 s for B and 69 s for A; worst 79 s against 239 and 259 s). It recovers from a hold 1.1 to 9 times sooner, is the same in every run (A varies by up to 7.2 K with job times, B by 1.0 K), and keeps the transit under 2e-5 J. A stopped-by-lag rule is not needed by any form. The choice is Q16.
 
 The steps that do not depend on the choice:
 
@@ -405,6 +407,13 @@ W6 as built (2026-10-27):
 | set point 200 °C (saturation 180 °C) | 10.21 kg/s | 27.6 MW | 200.000 °C, all steam |
 | convection then radiant | 10.61 kg/s | 0.94 + 2.19 MW | 120.001 °C; split 0.300 |
 
+W3a as built (2026-10-27): harness part 8 (`HxCouplingSim.java timing`), part 7's relay on the game's clock.
+
+- **Clock.** 20 ticks a second. A slice is dispatched once online time reaches its end. It commits 0 to 40 ticks later, capped at half the cadence. One job per side is in flight. Cadences are fixed (1 to 20 s) or wobble with load (×1.25, ×0.9). A side is stopped only while held, and a held side drops its job.
+- **Measured.** The three forms of section 5.2 on part 7's cases, slicings, holds (run to 1500 s, recovery in online time) and controller. Each runs at latency 0, at 40 and at five seeds. The spread between seeds measures the dependence on job times.
+- **Found.** A side whose jobs take as long as its cadence never works off a hold's debt, in any form; the game's adaptive cadence removes this. A rule counting a lagging partner as stopped never fired in normal running and did not speed recovery, so the plan keeps "stopped only from explicit states".
+- **Parts 1 to 7 and both older modes are byte-identical.**
+
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
 
 ## 11. Simplifications and what they change
@@ -429,7 +438,7 @@ Decided in revision 3 without a question (reversible; the review gives the numbe
 
 - **Q14 Order after the review** (answered 2026-10-27: yes). The air cooler (W5) and the fired heater (W6) have one side and a known partner, so they need no partner read. Order: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
 - **Q15 The curve's extrapolation notice** (W5, open). Section 4 asks for a status-line notice when a side's march leaves its curve's span. The span is a sampling window (the side's inlet and wall temperatures, 10 K beyond each) that the next step samples again around the new state. The property model's own data-range notices still report every node state that leaves a data range. An air cooler's march approaches its flat wall and never leaves the span. Recommended: no notice for the curve's span; W3 measures how often a two-sided wall leaves it.
-- **After W3a**: the coupling's timing form, A, B or C (section 5.2), with the study's numbers.
+- **Q16 The coupling's timing form** (W3a, open). Recommended: C, the fence. It is deterministic, energy-exact, the fastest to settle, control and recover, and the simplest (no extrapolation). Its cost: a fast side runs up to one partner cadence behind online time (19 s against 7 s for a 5 s side with a 20 s partner), and after a partner's hold the waiting side's readings hold until the partner catches up. The alternative is B, if screens must never wait: about 30 % slower to settle on average, and up to 1 K of dependence on job times. Numbers: [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md).
 
 ## 13. Risks
 

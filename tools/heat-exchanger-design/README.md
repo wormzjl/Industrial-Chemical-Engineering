@@ -6,7 +6,8 @@ Purpose: offline study harnesses behind the heat exchanger design (batch [`2026-
 - how many wall cells the heat law needs;
 - how a TEMA E shell with two tube passes compares with counterflow;
 - how a film coefficient per phase changes the lag and the coupling's stability;
-- how the sides couple when the wall holds no heat (a relay of the heat in transit).
+- how the sides couple when the wall holds no heat (a relay of the heat in transit);
+- how a side reads its partner on the game's clock (dispatch after the slice end, job latency, adaptive cadence).
 
 No game code, no Gradle.
 
@@ -18,10 +19,11 @@ Java 21 or later, from this folder:
 java HxCouplingSim.java > results-coupling.txt
 java HxCouplingSim.java hold1s > results-hold-1s.txt
 java HxCouplingSim.java lowflow > results-low-flow.txt
+java HxCouplingSim.java timing > results-timing.txt
 java OneTwoShell.java > results-one-two-shell.txt
 ```
 
-The default run takes about 4 s, each mode about a second. The stored `results-*.txt` came from these exact sources on 2026-10-27, on JDK 21.0.11 and the same bytes on Zulu 25.0.4.
+The default run takes about 4 s, `timing` about 5 s, the other modes about a second each. The stored `results-*.txt` came from these exact sources on 2026-10-27, on JDK 21.0.11 and the same bytes on Zulu 25.0.4.
 
 ## Entry points
 
@@ -47,6 +49,10 @@ The default run takes about 4 s, each mode about a second. The stored `results-*
   - Reported: max error, tail, settle to 1 K, the largest give-back shift, the heat in transit at the end.
   - 7b: the holds. 7c: the dead-beat controller. 7d: three give-back splits (`Split`: conductance, capacity rate, slice heat; `SPLIT` picks the one parts 7 to 7c run).
   - Parts 2 to 6 plan a slice at its commit, from the other side's latest record, so their equal-slice results are optimistic. Part 7 corrects that.
+- **Part 8, `timing`** (argument; revision 4, study W3a): part 7's relay on the game's clock (`GameSide`, `game`). A slice is offered once online time reaches its end (20 ticks a second) and dispatched then. Its job commits 0 to 40 ticks later, capped at half the cadence. One job per side is in flight. Cadences are fixed or wobble with load (`WOBBLE`). A side is stopped only while held (it drops its job).
+  - Forms (`Form`): A reads the partner as of the slice start, extrapolating a lagging partner at its last committed slice's rate. B cuts the slice at the partner's commits inside it. C waits until the partner has committed through the slice start.
+  - Each row runs at latency 0, at 40 and at five seeds; it reports the spread between seeds (the dependence on job times) and the debt (online minus committed time).
+  - 8b: the holds to 1500 s, with recovery in online time; `LAG_STOPS` compares a stopped-by-lag rule with the plan's rule. 8c: the controller. 8d: a summary per form.
 - **`hold1s`** (argument): Part 4b's 1 s `CAPPED` run, both outlets every 10 s from 680 s. The harness clock ticks once a simulated second, and a held island catches up 8 slices a tick. At 1 s slices the 600 s backlog therefore takes about 86 s, and the 10 K tail of that row is this recovery (0.4 K at 850 s, 0.01 K at 900 s).
 - **`lowflow`** (argument): liquid/liquid at 10 kg/s (NTU 10.8), 20/20 s slices, to 3000 s. JOINT's only part 6 rows above 0.05 K are a slow tail, not a cycle.
 
@@ -57,3 +63,4 @@ The default run takes about 4 s, each mode about a second. The stored `results-*
 - 2026-10-27: written for the design batch; results summarised in `documentation/2026-10-27-heat-exchanger-design/HX_COUPLING_STUDY_REVIEW.md`. The one-off probe that explained Part 4b's 1 s tail became the `hold1s` mode (default output unchanged, byte for byte).
 - 2026-10-27, revision 2 (owner answers): per-side films (`Case.uaHot`, `uaCold`; parts 1 to 4 byte-identical), parts 5 to 6, the `PREDICTED`, `INFLIGHT` and `JOINT` schemes, and the `lowflow` mode (from a one-off probe). Summary: `documentation/2026-10-27-heat-exchanger-design/HX_FILMS_STUDY_REVIEW.md`.
 - 2026-10-27, revision 3 (owner Q10 to Q13): part 7 (the relay, planned at dispatch, three give-back splits, holds, controller; the controller's give-back offset was measured and removed). Parts 1 to 6 and both modes byte-identical. Summary: `documentation/2026-10-27-heat-exchanger-design/HX_ZERO_WALL_STUDY_REVIEW.md`.
+- 2026-10-27, revision 4 (study W3a): part 8 and the `timing` mode. Parts 1 to 7 and both older modes are byte-identical. Summary: `documentation/2026-10-27-heat-exchanger-design/HX_TIMING_STUDY_REVIEW.md`.

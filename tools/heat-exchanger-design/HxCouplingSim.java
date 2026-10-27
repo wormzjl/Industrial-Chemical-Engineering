@@ -2,6 +2,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.SplittableRandom;
 
 /**
  * Heat exchanger coupling study (batch 2026-10-27-heat-exchanger-design).
@@ -37,10 +38,13 @@ import java.util.Locale;
  * marched, the other side as of the dispatch); the account holds only the heat in transit (what the two sides booked
  * differently), and each side gives back its share, clamped so its outlet stays between the two inlets. Against the
  * quasi-steady exchanger; 7b the holds; 7c the controller; 7d three give-back splits (conductance, capacity rate, slice heat).
+ * Part 8 (revision 4, W3a; the timing argument): Part 7 on the game's clock. A slice is dispatched once online time reaches
+ * its end and commits 0 to 40 ticks later; stopped only while held; three forms of reading the partner (section 5.2).
  *
  * Run: java HxCouplingSim.java
  *      java HxCouplingSim.java hold1s    (Part 4b's 1 s CAPPED run, outlets through the catch-up)
  *      java HxCouplingSim.java lowflow   (liquid/liquid at 10 kg/s, 20/20 s slices, to 3000 s: JOINT's slow tail)
+ *      java HxCouplingSim.java timing    (Part 8, W3a: the relay on the game's clock, forms A, B and C)
  */
 public class HxCouplingSim {
 
@@ -389,6 +393,10 @@ public class HxCouplingSim {
         }
         if (args.length > 0 && args[0].equals("lowflow")) {
             lowFlow(n, area, steel);
+            return;
+        }
+        if (args.length > 0 && args[0].equals("timing")) {
+            gameTiming(cases, n, area, steel, water50);
             return;
         }
         effectivenessTable();
@@ -937,6 +945,431 @@ public class HxCouplingSim {
             for (int i = 100; i <= 3000; i += 300) row.append(String.format(Locale.ROOT, "  %4d s %+7.3f", i, run.outlets()[i][0] - ref[i][0]));
             System.out.println(row);
         }
+    }
+
+    // ---------------------------------------------------------------- revision 4: the game's timing (W3a, part 8)
+
+    /** Ticks per second, and the longest job: the 2 s hard budget. */
+    static final int TICKS = 20, MAX_LATENCY = 40;
+
+    /**
+     * How a side reads its partner when its slice is dispatched (plan section 5.2). A: as of the slice start, a partner
+     * not committed that far extrapolated at its last committed slice's rate for at most one of its slices. B: the
+     * partner's records committed inside the slice, piece by piece; A for the rest. C: a coupling fence, the slice waits
+     * until its partner has committed through the slice start, then reads as A without extrapolating.
+     */
+    enum Form { A, B, C }
+
+    /**
+     * The jobs' latency, ticks from dispatch to commit: fixed, or uniform 0 to 40 from a seed; at most half the side's
+     * cadence, so a side behind (after a hold) catches up at least twice as fast as online time runs. A side whose jobs take
+     * as long as its slices only keeps pace, and stays behind for good until the clock lengthens its cadence.
+     */
+    record Latency(int fixed, long seed) {
+        int next(SplittableRandom random, int cadence) { return Math.min(cadence / 2, fixed >= 0 ? fixed : random.nextInt(MAX_LATENCY + 1)); }
+    }
+
+    /**
+     * Forms A and B: a running partner more than one of its slices and the 2 s job budget behind the slice start counts as
+     * stopped (it is catching up after a hold). In normal running a partner is never that far behind. false: the plan's
+     * rule, stopped only while held.
+     */
+    static boolean LAG_STOPS = true;
+
+    /** An adaptive cadence's load wobble (IslandClock.performanceSample: x1.25 under load, x0.9 when light), cycled per slice. */
+    static final double[] WOBBLE = {1, 1.25, 1.5625, 1.25, 1, .9, .81, .9};
+
+    /** A part of a slice with one wall: B cuts a slice at the partner's commits inside it. */
+    record Piece(double a, double b, double[] wall, double off) {}
+
+    /** What a dispatched slice fixes: its pieces, the heat in transit due as of its start, the partner as last read. */
+    record GamePlan(List<Piece> pieces, double[] due, double wOther, double lenOther, double tinOther, boolean otherStopped) {}
+
+    /** A slice in flight: what the worker computed from its command, committed at commitTick. */
+    record Job(int t0, int t1, int commitTick, GamePlan plan, double[] e, double shift) {}
+
+    /** One side on the game's clock. Time in ticks; records and booked heat in seconds. */
+    static final class GameSide {
+        final int s, base;
+        final boolean adaptive;
+        final Latency latency;
+        final SplittableRandom random;
+        int tau, count, lastLen, lagStops;
+        double beta;
+        boolean held;
+        final List<Booked> booked = new ArrayList<>();
+        final List<Rec> recs = new ArrayList<>();
+        final List<double[]> sawStopped = new ArrayList<>();
+        double[] lastRate;
+        Job job;
+        GameSide(int s, double seconds, boolean adaptive, Latency latency) {
+            this.s = s;
+            base = (int) Math.round(seconds * TICKS);
+            this.adaptive = adaptive;
+            this.latency = latency;
+            random = new SplittableRandom(latency.seed() * 2 + s);
+        }
+        int cadence() {
+            return adaptive ? Math.max(20, Math.min(400, (int) Math.round(base * WOBBLE[count % WOBBLE.length]))) : base;
+        }
+        Rec asOf(double t) {
+            Rec r = recs.get(0);
+            for (Rec x : recs) if (x.t() <= t + 1e-9) r = x;
+            return r;
+        }
+    }
+
+    /** seen[i][s]: the online time (s) at which side s committed its outlet for second i. */
+    record GameRun(double[][] outlets, double[][] seen, double maxShift, double transit, double[] lag, int lagStops) {}
+
+    static double[] gameWall(Case c, int s, double beta, double t, double[] gs, double tinOther, double wOther) {
+        Side side = c.side(s);
+        double w = (1 - beta) * side.w(t);
+        double[] wall = new double[c.n()];
+        if (wOther <= 0 || w <= 0) {
+            Arrays.fill(wall, wOther <= 0 ? side.tin(t) : tinOther);
+            return wall;
+        }
+        return s == 0 ? steadyWall(c.n(), gs[0], gs[1], w, side.tin(t), wOther, tinOther)
+                : steadyWall(c.n(), gs[0], gs[1], wOther, tinOther, w, side.tin(t));
+    }
+
+    /**
+     * The heat in transit due as of t: the partner's heat booked past t taken out; a partner running (not held) but not
+     * committed through t added at its last committed slice's rate, for at most one of its slices.
+     */
+    static double[] gameDue(double[] transit, double t, GameSide other, boolean stopped) {
+        int n = transit.length;
+        double[] d = transit.clone();
+        for (Booked b : other.booked) {
+            if (b.t1() <= t + 1e-9) continue;
+            double beyond = (b.t1() - Math.max(b.t0(), t)) / (b.t1() - b.t0());
+            for (int k = 0; k < n; k++) d[k] -= beyond * b.e()[k];
+        }
+        double tauOther = other.tau / (double) TICKS;
+        if (!stopped && tauOther < t - 1e-9) {
+            double span = Math.min(t - tauOther, other.cadence() / (double) TICKS);
+            for (int k = 0; k < n; k++) d[k] += span * other.lastRate[k];
+        }
+        return d;
+    }
+
+    /** Dispatch: the slice's pieces and walls, read as the form says; the controller sets beta at the slice start. */
+    static GamePlan gamePlan(Case c, Form form, GameSide is, GameSide other, double t0, double t1, double[] gs, double[] transit, Control control) {
+        Side side = c.side(is.s);
+        boolean behind = form != Form.C && LAG_STOPS && !other.held
+                && t0 - other.tau / (double) TICKS > (Math.max(other.cadence(), other.lastLen) + MAX_LATENCY) / (double) TICKS + 1e-9;
+        if (behind) is.lagStops++;
+        boolean stopped = other.held || behind;
+        List<Double> cuts = new ArrayList<>(List.of(t0));
+        if (form == Form.B && !stopped) for (Rec r : other.recs) if (r.t() > t0 + 1e-9 && r.t() < t1 - 1e-9) cuts.add(r.t());
+        cuts.add(t1);
+        Rec first = other.asOf(t0);
+        if (control != null && is.s == 1) {
+            double[] wall = gameWall(c, is.s, is.beta, t0, gs, first.tin(), stopped ? 0 : first.w());
+            double target = solveBeta(side.w(t0), side.tin(t0), gs[1], wall, control.target());
+            is.beta += control.damping() * (target - is.beta);
+        }
+        List<Piece> pieces = new ArrayList<>();
+        Rec last = first;
+        for (int i = 0; i + 1 < cuts.size(); i++) {
+            double a = cuts.get(i), b = cuts.get(i + 1);
+            last = other.asOf(a);
+            double off = Math.min(1, overlap(other.sawStopped, a, b) / (b - a));
+            pieces.add(new Piece(a, b, gameWall(c, is.s, is.beta, a, gs, last.tin(), stopped ? 0 : last.w()), off));
+        }
+        return new GamePlan(pieces, gameDue(transit, t0, other, stopped), stopped ? 0 : last.w(), other.cadence() / (double) TICKS, last.tin(), stopped);
+    }
+
+    /** The worker: the side's heat over its slice, piece by piece, then its share of the transit given back (as Part 7, by slice heat). */
+    static Job gameSolve(Case c, GameSide is, int t0Tick, int t1Tick, GamePlan p, double[] gs, int commitTick) {
+        Side side = c.side(is.s);
+        int n = c.n();
+        double g = gs[is.s], t0 = t0Tick / (double) TICKS, t1 = t1Tick / (double) TICKS, len = t1 - t0;
+        double[] e = new double[n], th = new double[n], q = new double[n];
+        for (Piece pc : p.pieces()) {
+            double[] cuts = side.tStep() > pc.a() && side.tStep() < pc.b() ? new double[]{pc.a(), side.tStep(), pc.b()} : new double[]{pc.a(), pc.b()};
+            for (int i = 0; i + 1 < cuts.length; i++) {
+                double mid = (cuts[i] + cuts[i + 1]) / 2;
+                march((1 - is.beta) * side.w(mid), side.tin(mid), g, pc.wall(), is.s == 0, th, q);
+                for (int k = 0; k < n; k++) e[k] += q[k] * (cuts[i + 1] - cuts[i]) * (1 - pc.off());
+            }
+        }
+        double w = (1 - is.beta) * side.w(t1 - 1e-9), share, back = 0;
+        if (w <= 0) share = 0;
+        else if (p.wOther() <= 0) share = 1;
+        else if (w >= 1e300) share = p.wOther() >= 1e300 ? .5 : 1;
+        else if (p.wOther() >= 1e300) share = 0;
+        else share = w * len / (w * len + p.wOther() * p.lenOther());
+        for (int k = 0; k < n; k++) back += share * p.due()[k];
+        double scale = 1, shift = 0;
+        if (w > 0 && w < 1e300 && back != 0) {
+            double tin = side.tin(t1 - 1e-9), through = tin - sum(e) / (w * len);
+            double lo = Math.min(tin, p.tinOther()), hi = Math.max(tin, p.tinOther());
+            double allowed = Math.max(lo, Math.min(hi, through + back / (w * len)));
+            scale = Math.max(0, Math.min(1, (allowed - through) * w * len / back));
+            shift = scale * back / (w * len);
+        }
+        for (int k = 0; k < n; k++) e[k] -= scale * share * p.due()[k];
+        return new Job(t0Tick, t1Tick, commitTick, p, e, shift);
+    }
+
+    /** The server thread commits a finished job: books its heat, records the side, writes its outlets. */
+    static void gameCommit(Case c, GameSide is, double[] transit, double[] gs, double[][] out, double[][] seen) {
+        Job job = is.job;
+        Side side = c.side(is.s);
+        int n = c.n(), steps = (int) c.tEnd();
+        double g = gs[is.s], t0 = job.t0() / (double) TICKS, t1 = job.t1() / (double) TICKS;
+        for (int k = 0; k < n; k++) transit[k] += job.e()[k];
+        is.booked.add(new Booked(t0, t1, job.e()));
+        if (job.plan().otherStopped()) is.sawStopped.add(new double[]{t0, t1});
+        double[] th = new double[n], q = new double[n];
+        for (int i = (int) Math.ceil(t0 - 1e-9); i <= Math.min(steps, (int) Math.floor(t1 + 1e-9)); i++) {
+            Piece pc = job.plan().pieces().get(job.plan().pieces().size() - 1);
+            for (Piece x : job.plan().pieces()) if (i >= x.a() - 1e-9 && i < x.b() - 1e-9) { pc = x; break; }
+            double wi = (1 - is.beta) * side.w(i), through = march(wi, side.tin(i), g, pc.wall(), is.s == 0, th, q);
+            through = side.tin(i) + (through - side.tin(i)) * (1 - pc.off()) + job.shift();
+            out[i][is.s] = is.beta * side.tin(i) + (1 - is.beta) * through;
+            seen[i][is.s] = job.commitTick() / (double) TICKS;
+        }
+        double w = (1 - is.beta) * side.w(t1 - 1e-9), gc[] = new double[n];
+        Arrays.fill(gc, conductance(w, g));
+        is.recs.add(new Rec(t1, side.tin(t1 - 1e-9), w, gc));
+        is.lastRate = job.e().clone();
+        for (int k = 0; k < n; k++) is.lastRate[k] /= t1 - t0;
+        is.lastLen = job.t1() - job.t0();
+        is.tau = job.t1();
+        is.count++;
+        is.job = null;
+    }
+
+    /**
+     * Part 8: the relay of Part 7 on the game's clock. A slice is offered once online time reaches its end, dispatched
+     * then (form C: once its partner has committed through its start, or is held), solved by a worker from its command,
+     * and committed latency ticks later; one slice in flight per side, up to 16 dispatches and commits a tick. A held side
+     * drops its job and is stopped (an explicit state) for its partner; lag alone never stops a side. lag[] is each
+     * running side's largest debt, online minus committed time (s), up to the end; after it both sides drain to the end
+     * (the last slice shortened to it), so the outlets and the transit are read at one time.
+     */
+    static GameRun game(Case c, Form form, double lenH, double lenC, boolean adaptive, Latency latency, Control control, double holdFrom, double holdTo) {
+        int n = c.n(), steps = (int) c.tEnd(), end = steps * TICKS;
+        double[] gs = {c.g(0), c.g(1)}, transit = new double[n], lag = new double[2];
+        double[] wall0 = steadyWall(n, gs[0], gs[1], c.hot().w(0), c.hot().tin(0), c.cold().w(0), c.cold().tin(0));
+        GameSide[] sd = {new GameSide(0, lenH, adaptive, latency), new GameSide(1, lenC, adaptive, latency)};
+        if (control != null) sd[1].beta = solveBeta(c.cold().w(0), c.cold().tin(0), gs[1], wall0, control.target());
+        for (GameSide r : sd) {
+            Side side = c.side(r.s);
+            double w = (1 - r.beta) * side.w(0), gc[] = new double[n];
+            Arrays.fill(gc, conductance(w, gs[r.s]));
+            r.recs.add(new Rec(0, side.tin(0), w, gc));
+            r.lastRate = new double[n];
+            march(w, side.tin(0), gs[r.s], wall0, r.s == 0, new double[n], r.lastRate);
+        }
+        double[][] out = new double[steps + 1][2], seen = new double[steps + 1][2];
+        for (double[] row : out) Arrays.fill(row, Double.NaN);
+        double maxShift = 0;
+        for (int tick = 1; tick <= end || sd[0].tau < end || sd[1].tau < end; tick++) {
+            if (tick > end + 1_000_000) throw new IllegalStateException("the sides do not drain");
+            double now = tick / (double) TICKS;
+            sd[0].held = now > holdFrom && now < holdTo;
+            if (sd[0].held) sd[0].job = null;                      // a held result commits nothing
+            for (int round = 0; round < 16; round++) {
+                boolean any = false;
+                for (GameSide r : sd)
+                    if (r.job != null && r.job.commitTick() <= tick) {
+                        gameCommit(c, r, transit, gs, out, seen);
+                        any = true;
+                    }
+                for (GameSide r : sd) {
+                    int t1 = Math.min(end, r.tau + r.cadence());
+                    if (r.job != null || r.held || r.tau >= end || t1 > tick) continue;
+                    GameSide other = sd[1 - r.s];
+                    if (form == Form.C && !other.held && other.tau < r.tau) continue;   // the coupling fence
+                    GamePlan p = gamePlan(c, form, r, other, r.tau / (double) TICKS, t1 / (double) TICKS, gs, transit, control);
+                    r.job = gameSolve(c, r, r.tau, t1, p, gs, tick + r.latency.next(r.random, r.cadence()));
+                    maxShift = Math.max(maxShift, Math.abs(r.job.shift()));
+                    any = true;
+                }
+                if (!any) break;
+            }
+            if (tick <= end) for (GameSide r : sd) if (!r.held) lag[r.s] = Math.max(lag[r.s], (tick - r.tau) / (double) TICKS);
+        }
+        return new GameRun(out, seen, maxShift, Math.abs(sum(transit)), lag, sd[0].lagStops + sd[1].lagStops);
+    }
+
+    /** The largest difference of each outlet between runs that differ only in their jobs' latencies, from {@code from} on. */
+    static double[] spread(List<GameRun> runs, int from, int last) {
+        double[] d = new double[2];
+        for (int i = from; i <= last; i++)
+            for (int s = 0; s < 2; s++) {
+                double lo = Double.MAX_VALUE, hi = -Double.MAX_VALUE;
+                for (GameRun r : runs) {
+                    double v = r.outlets()[i][s];
+                    if (Double.isNaN(v)) continue;
+                    lo = Math.min(lo, v);
+                    hi = Math.max(hi, v);
+                }
+                if (hi >= lo) d[s] = Math.max(d[s], hi - lo);
+            }
+        return d;
+    }
+
+    /**
+     * After a hold ending at holdTo: the online time (s after holdTo) by which both outlets, as committed, are back within
+     * 1 K of the reference for good: the commit time of the last second off by more, or 0.
+     */
+    static double recovery(GameRun r, double[][] ref, double holdTo) {
+        double at = holdTo;
+        for (int i = 0; i < ref.length; i++)
+            for (int s = 0; s < 2; s++)
+                if (Double.isNaN(r.outlets()[i][s]) || Math.abs(r.outlets()[i][s] - ref[i][s]) > 1) at = Math.max(at, r.seen()[i][s]);
+        return at - holdTo;
+    }
+
+    /** One timing row's measure over the latencies 0, 40 and five seeds of 0 to 40 ticks. */
+    record Timing(double[] err0, double settle0h, double settle0c, double errWorst, double tailWorst, double settleWorst, double[] spread, double shift, double transit, double[] lag, int lagStops) {}
+
+    static Timing timing(Case c, double[][] ref, Form form, double lenH, double lenC, boolean adaptive, Control control, double holdFrom, double holdTo) {
+        int last = (int) c.tEnd();
+        GameRun zero = game(c, form, lenH, lenC, adaptive, new Latency(0, 0), control, holdFrom, holdTo);
+        List<GameRun> runs = new ArrayList<>(List.of(zero, game(c, form, lenH, lenC, adaptive, new Latency(MAX_LATENCY, 0), control, holdFrom, holdTo)));
+        List<GameRun> seeded = new ArrayList<>();
+        for (long seed = 1; seed <= 5; seed++) seeded.add(game(c, form, lenH, lenC, adaptive, new Latency(-1, seed), control, holdFrom, holdTo));
+        runs.addAll(seeded);
+        double errWorst = 0, tailWorst = 0, settleWorst = 0, shift = 0, transit = 0;
+        double[] lag = new double[2];
+        int lagStops = 0;
+        for (GameRun r : runs) {
+            lagStops += r.lagStops();
+            double[] e = errors(r.outlets(), ref, 60, last);
+            errWorst = Math.max(errWorst, Math.max(e[0], e[1]));
+            tailWorst = Math.max(tailWorst, Math.max(e[2], e[3]));
+            if (control == null) settleWorst = Math.max(settleWorst, Math.max(settle(r.outlets(), ref[last], 0, 60, last, 1), settle(r.outlets(), ref[last], 1, 60, last, 1)));
+            shift = Math.max(shift, r.maxShift());
+            transit = Math.max(transit, r.transit());
+            for (int s = 0; s < 2; s++) lag[s] = Math.max(lag[s], r.lag()[s]);
+        }
+        double[] e0 = errors(zero.outlets(), ref, 60, last);
+        return new Timing(e0, settle(zero.outlets(), ref[last], 0, 60, last, 1), settle(zero.outlets(), ref[last], 1, 60, last, 1),
+                errWorst, tailWorst, settleWorst, spread(seeded, 60, last), shift, transit, lag, lagStops);
+    }
+
+    static void gameTiming(List<Case> equal, int n, double area, double steel, double water50) {
+        System.out.println("PART 8  W3a: the relay on the game's clock (20 ticks/s). A slice is offered once online time reaches its end and is");
+        System.out.println("  dispatched then; its job commits 0 to 40 ticks later; one job per side in flight. Stopped only while held (explicit).");
+        System.out.println("  Forms: A as of the slice start (a lagging partner extrapolated at its last committed rate for one of its slices);");
+        System.out.println("  B the partner's commits inside the slice piece by piece, A for the rest; C a fence: wait until the partner is through t0.");
+        System.out.println("  columns: latency 0: max |error| hot, cold (K), settles (1 K) hot, cold (s); then worst over latency 0, 40 and five");
+        System.out.println("  seeds of 0-40 ticks: max |error|, tail (last 100 s), settle (s); spread hot, cold over the five seeds (K);");
+        System.out.println("  give-back (K); heat in transit at the end (J); largest debt hot, cold (s, online minus committed)");
+        double gas20 = 20 * 1100;
+        List<Case> cases = new ArrayList<>(equal.subList(0, 3));
+        cases.add(new Case("L/L liquid 2000 / liquid 2000 W/m2K, water 50 kg/s each side", n, 2000 * area, 2000 * area, steel,
+                new Side(water50, 150, water50, 180, 60), new Side(water50, 30, water50, 30, 1e9), 900));
+        cases.add(new Case("G/L gas 100 / liquid 2000, gas 20 kg/s, water 10 kg/s", n, 100 * area, 2000 * area, steel,
+                new Side(gas20, 150, gas20, 180, 60), new Side(10 * 4180, 30, 10 * 4180, 30, 1e9), 900));
+        cases.add(new Case("G/G gas 100 / gas 100, gas 20 kg/s each side", n, 100 * area, 100 * area, steel,
+                new Side(gas20, 150, gas20, 180, 60), new Side(gas20, 30, gas20, 30, 1e9), 900));
+        cases.add(new Case("C/L condensing 5000 (150 -> 180 C) / liquid 2000, water 50 kg/s", n, 5000 * area, 2000 * area, steel,
+                new Side(Double.MAX_VALUE, 150, Double.MAX_VALUE, 180, 60), new Side(water50, 30, water50, 30, 1e9), 900));
+        for (double wh : new double[]{400e3, 2000e3})
+            cases.add(new Case(String.format(Locale.ROOT, "glide 5000/2000, hot %4.0f kW/K", wh / 1e3), n, 5000 * area, 2000 * area, 0,
+                    new Side(wh, 150, wh, 180, 60), new Side(water50, 30, water50, 30, 1e9), 900));
+        for (double kgs : new double[]{10, 25, 200}) {
+            double w = kgs * 4180;
+            cases.add(new Case(String.format(Locale.ROOT, "L/L %4.0f kg/s", kgs), n, 2000 * area, 2000 * area, 0,
+                    new Side(w, 150, w, 180, 60), new Side(w, 30, w, 30, 1e9), 900));
+        }
+        Object[][] slicing = {{1.0, 1.0, false}, {5.0, 5.0, false}, {20.0, 20.0, false}, {5.0, 20.0, false}, {20.0, 5.0, false}, {5.0, 20.0, true}};
+        double[][] worst = new double[Form.values().length][7];   // error, tail, settle, spread, shift, debt, behind
+        for (Case c : cases) {
+            double[][] ref = truthQuasi(c);
+            int last = (int) c.tEnd();
+            System.out.println(String.format(Locale.ROOT, "%s: steady outlets %.2f / %.2f C", c.name(), ref[last][0], ref[last][1]));
+            for (Object[] sl : slicing)
+                for (Form form : Form.values()) {
+                    Timing t = timing(c, ref, form, (Double) sl[0], (Double) sl[1], (Boolean) sl[2], null, -1, -1);
+                    System.out.println(row(String.format(Locale.ROOT, "%4.0f/%-4.0f%s", (Double) sl[0], (Double) sl[1], (Boolean) sl[2] ? "~" : " "), form, t, true));
+                    double[] w = worst[form.ordinal()];
+                    w[0] = Math.max(w[0], t.errWorst());
+                    w[1] = Math.max(w[1], t.tailWorst());
+                    w[2] = Math.max(w[2], t.settleWorst());
+                    w[3] = Math.max(w[3], Math.max(t.spread()[0], t.spread()[1]));
+                    w[4] = Math.max(w[4], t.shift());
+                    w[5] = Math.max(w[5], Math.max(t.lag()[0], t.lag()[1]));
+                    w[6] += t.lagStops();
+                }
+        }
+        System.out.println();
+        System.out.println("PART 8b holds, case A to 1500 s: hot island held 100 to 160 s and 100 to 700 s (its job dropped; stopped while held)");
+        System.out.println("  worst over the 7 latency runs: tail (last 100 s, K); recovered: online s after the hold until both committed outlets stay");
+        System.out.println("  within 1 K; heat in transit at the end (J); largest debt hot, cold (s); behind (slices that counted the partner stopped)");
+        Case a = equal.get(0);
+        Case longA = new Case(a.name(), a.n(), a.uaHot(), a.uaCold(), a.c(), a.hot(), a.cold(), 1500);
+        double[][] refQ = truthQuasi(longA);
+        for (boolean lagStops : new boolean[]{true, false}) {
+            LAG_STOPS = lagStops;
+            if (!lagStops) System.out.println("  the plan's rule for A and B (stopped only while held; a lagging partner extrapolated for one of its slices):");
+            for (int holdTo : new int[]{160, 700})
+                for (Object[] sl : lagStops ? slicing : new Object[][]{{1.0, 1.0, false}, {5.0, 20.0, false}})
+                    for (Form form : lagStops ? Form.values() : new Form[]{Form.A, Form.B}) {
+                        double tail = 0, recovered = 0, transit = 0;
+                        double[] lag = new double[2];
+                        int behind = 0;
+                        List<Latency> lats = new ArrayList<>(List.of(new Latency(0, 0), new Latency(MAX_LATENCY, 0)));
+                        for (long seed = 1; seed <= 5; seed++) lats.add(new Latency(-1, seed));
+                        for (Latency l : lats) {
+                            GameRun r = game(longA, form, (Double) sl[0], (Double) sl[1], (Boolean) sl[2], l, null, 100, holdTo);
+                            double[] e = errors(r.outlets(), refQ, 60, 1500);
+                            tail = Math.max(tail, Math.max(e[2], e[3]));
+                            recovered = Math.max(recovered, recovery(r, refQ, holdTo));
+                            transit = Math.max(transit, r.transit());
+                            for (int s = 0; s < 2; s++) lag[s] = Math.max(lag[s], r.lag()[s]);
+                            behind += r.lagStops();
+                        }
+                        System.out.println(String.format(Locale.ROOT, "  held to %3d, %4.0f/%-4.0f%s %s  tail %s   recovered %5.0f s   transit %.1e J   debt %5.1f %5.1f s   behind %d",
+                                holdTo, (Double) sl[0], (Double) sl[1], (Boolean) sl[2] ? "~" : " ", form, fmt(tail), recovered, transit, lag[0], lag[1], behind));
+                    }
+        }
+        LAG_STOPS = true;
+        System.out.println();
+        System.out.println("PART 8c cold outlet target by a cold-side bypass, dead-beat: worst |T - target| from the step (K), over the 7 latency runs");
+        Object[][] controlled = {{a, 90.0}, {equal.get(2), 40.0}, {cases.get(3), 100.0}};
+        for (Object[] pair : controlled) {
+            Case c = (Case) pair[0];
+            double target = (Double) pair[1];
+            for (Object[] sl : slicing) {
+                StringBuilder line = new StringBuilder(String.format(Locale.ROOT, "  %-3s target %3.0f C slices %4.0f/%-4.0f%s", c.name().substring(0, 3), target, (Double) sl[0], (Double) sl[1], (Boolean) sl[2] ? "~" : " "));
+                for (Form form : Form.values()) {
+                    double worstT = 0, late = 0;
+                    List<Latency> lats = new ArrayList<>(List.of(new Latency(0, 0), new Latency(MAX_LATENCY, 0)));
+                    for (long seed = 1; seed <= 5; seed++) lats.add(new Latency(-1, seed));
+                    for (Latency l : lats) {
+                        GameRun r = game(c, form, (Double) sl[0], (Double) sl[1], (Boolean) sl[2], l, new Control(target, 1), -1, -1);
+                        double[] w = controlWorst(new Run(r.outlets(), 0, 0), c, target);
+                        worstT = Math.max(worstT, w[0]);
+                        late = Math.max(late, w[1]);
+                    }
+                    line.append(String.format(Locale.ROOT, "   %s %6.2f K, last outside 0.1 K +%4.0f s", form, worstT, late));
+                }
+                System.out.println(line);
+            }
+        }
+        System.out.println();
+        System.out.println("PART 8d summary over the Part 8 cases and slicings (not the holds): worst max |error| (K), tail (K), settle (s), spread (K), give-back (K), debt (s);");
+        System.out.println("  behind: slices that counted their partner stopped for lagging (A, B), over every run");
+        for (Form form : Form.values()) {
+            double[] w = worst[form.ordinal()];
+            System.out.println(String.format(Locale.ROOT, "  %s  error %7.2f  tail %6.3f  settle %5.0f  spread %7.3f  give-back %6.2f  debt %5.1f  behind %.0f", form, w[0], w[1], w[2], w[3], w[4], w[5], w[6]));
+        }
+    }
+
+    static String row(String label, Form form, Timing t, boolean settles) {
+        return String.format(Locale.ROOT, "  %s %s  lat0 max %s %s%s | worst max %s tail %s%s | spread %7.3f %7.3f | give-back %6.2f K, transit %.1e J, debt %5.1f %5.1f s, behind %d",
+                label, form, fmt(t.err0()[0]), fmt(t.err0()[1]),
+                settles ? String.format(Locale.ROOT, " settles %4.0f %4.0f", t.settle0h(), t.settle0c()) : "",
+                fmt(t.errWorst()), fmt(t.tailWorst()), settles ? String.format(Locale.ROOT, " settle %4.0f", t.settleWorst()) : "",
+                t.spread()[0], t.spread()[1], t.shift(), t.transit(), t.lag()[0], t.lag()[1], t.lagStops());
     }
 
     static double[][] refACache;

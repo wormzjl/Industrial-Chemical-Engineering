@@ -6,7 +6,7 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler) and W6 (the fired heaters) are built; W3a (the timing study) is next; the owner answered Q1 to Q14, Q15 is open. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler) and W6 (the fired heaters) are built; study W3a is done; W3 (the coupling) waits for the owner's Q16. The owner answered Q1 to Q14; Q15 and Q16 are open. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -20,6 +20,7 @@ Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (th
 - [HX_COUPLING_STUDY_REVIEW.md](HX_COUPLING_STUDY_REVIEW.md): the first offline study: cell count, the drawn 1-2 shell against counterflow, four coupling schemes across equal and unequal slices, holds, and the controller.
 - [HX_FILMS_STUDY_REVIEW.md](HX_FILMS_STUDY_REVIEW.md): the revision 2 study: films per phase, the physical and the coupling lag, three coupling forms, and the stability map behind the joint steady wall.
 - [HX_ZERO_WALL_STUDY_REVIEW.md](HX_ZERO_WALL_STUDY_REVIEW.md): the revision 3 study: the wall without heat, the relay planned at dispatch, three give-back splits, holds, and the controller.
+- [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md): study W3a, how a side reads its partner on the game's clock: forms A, B and C (harness part 8); recommends C, the fence (Q16).
 - [HEAT_EXCHANGER_PLAN_REVIEW.md](HEAT_EXCHANGER_PLAN_REVIEW.md): the review of revision 3 against the code (a Fable subagent, read-only; 22 findings, taken into revision 4).
 
 ## Code areas
@@ -141,10 +142,15 @@ The plan also touches:
   - Formats: state format 25 (tagged heat law), certificate graph identity tag -4.
   - Gates: `FiredCoilTest` 4 (the law, the planned share, `enthalpyAt` on a plateau), `HeatSidesTest` 6 (the coils' duty split and passage), `HeatSideTopologyTest` 8 (five W6 gates: the set point exactly within the duty; h_in + Q/ṁ at the maximum; no firing above the set point; steam at 200 °C from 50 °C water at 10 bar; 30/70 in series, numbers in plan section 10); quick suite 1677, no failures (the layout table did not move: a coil's node is its inlet nozzle's cell, already a shell cell).
   - No in-game check (the task's one went to W5). The screen's new rows and buttons follow W5's rail rule: the burners button and set point field count two rail rows.
+- 2026-10-27, W3a the timing study, in the W3a commit.
+  - Harness part 8 (`HxCouplingSim.java timing`, about 5 s): part 7's relay on the game's clock. A slice is dispatched when online time reaches its end and commits 0 to 40 ticks later; cadences are fixed or adaptive; a side is stopped only while held. It measures the three forms on part 7's cases, holds and controller, at latency 0, at 40 and at five seeds (1512 runs). Parts 1 to 7 are byte-identical.
+  - Result: C, the fence, is deterministic, keeps the transit under 2e-5 J, and settles fastest (mean 34 s against 45 s for B and 69 s for A; worst 79 s against 239 and 259 s). It recovers from holds 1.1 to 9 times sooner and controls fastest. A varies by up to 7.2 K with job times alone, B by 1.0 K.
+  - Found: a stopped-by-lag rule is not needed (0 firings in normal running, no faster recovery). A side whose jobs take as long as its cadence never works off a hold's debt; the harness caps latency at half the cadence.
+  - Q16 put to the owner: C recommended, B the alternative if screens must never wait.
 
 ## Notes
 
-- Open: after W3a, the coupling's timing form. Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
+- Open: Q16, the coupling's timing form, recommended C (W3a). Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
 - Open from W1:
   - Q15: the curve-span extrapolation notice, recommended dropped (plan section 12);
   - a pipe gauge downstream of a side reads the outlet junction; a gauge on the unit itself still reads its inlet node;
