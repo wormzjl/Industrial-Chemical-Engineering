@@ -1,6 +1,6 @@
 # Heat exchanger system: plan
 
-Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: Planned 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. Nothing is implemented.
+Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: In progress since 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. W1 (the heat law) is built, with three changes recorded in section 10.
 
 Evidence:
 
@@ -70,7 +70,7 @@ A shell-and-tube exchanger passes two streams that never mix. Each side is a flo
   - `ConservativeTransport` books it (`pumpWork`);
   - `checkConservation` audits it.
 
-  From there the work reaches `PassiveIntervalSolver.Result.pumpWorkJoule`: the certificate summary and its replay (`IslandCertificate`) and the checkpoint state (`FluidCheckpointCodec`, state format 22). Exchanger heat goes the same ways.
+  From there the work reaches `PassiveIntervalSolver.Result.pumpWorkJoule`: the certificate summary and its replay (`IslandCertificate`) and the checkpoint state (`FluidCheckpointCodec`, state format 22). Exchanger heat rides the boundary transfers instead, as a new kind (section 5.1).
 - **Devices.** A registered device belongs to one island. Only reservoirs and movers carry ports today (`PhysicalFluidTopology.Device`), and an equipment structure binds one fluid identity (`EquipmentStructure`).
 - **The heat law exists as a study.** The pipe thermal-loss study (batch `2026-09-24-pipe-thermal-loss`, concluded, not merged) built it: a stream relaxing towards a wall temperature along its enthalpy-temperature curve (`PipeHeatExchange`, patch in `tools/pipe-thermal-loss/`).
   - Exactly zero heat at zero flow; latent heat exact.
@@ -175,17 +175,17 @@ Each side runs between its inlet and outlet nozzles (`PortMarkings` already mark
 - **Heat**: the exchanger has 8 wall cells in counterflow (Q3). The hot side passes cells 1 to 8, the cold side 8 to 1.
   - Each stream relaxes towards each cell's temperature T_k over the cell's eighth of the surface, on its curve with its film (section 4).
   - N = 8 is within 0.9 % of exact counterflow up to NTU 5 at Cr 0.5, and within 2.1 % at Cr 1.
-- **Fixed for the slice**: the curve (built on the worker at the slice start from the donor's composition and pressure, at both ends for a reversal), the wall profile T_1 to T_8 (section 5.2), the give-back's enthalpy shift (section 5.2), and the bypass share β (section 6).
+- **Fixed for the slice**: the curve (built on the worker at the slice start from the stream the donor end's port draws and the donor's pressure, at both ends for a reversal; a drum's liquid draw has its own bubble point, not the drum's whole mixture's), the wall profile T_1 to T_8 (section 5.2), the give-back's enthalpy shift (section 5.2), and the bypass share β (section 6).
   - Inside the Newton the heat is a pure function of the connection's flow and the donor's enthalpy: no new unknown, no new mode, no switch inside a residual.
   - It is C1 in the flow, exactly 0 at no flow, and bounded by the approach to the wall.
   - A reversed side passes the cells in the other order against the same profile: parallel flow for that slice, the profile having been computed for the dispatch direction.
 - **Where it enters**: as a mover's shaft work does:
   - the receiving node's energy row;
-  - the reconstruction (a heat term per side, beside `pumpWork`);
-  - the audit;
-  - the interval result (a heat beside `pumpWorkJoule`), and through it the certificate summary and replay and the checkpoint state (state format 22 → 23).
+  - the reconstruction: a boundary transfer of a new kind `HEAT` at the connection's id, energy only, in the step's external energy;
+  - the audit, through that external energy;
+  - the interval result's boundaries, and through them the certificate summary and replay and the checkpoint state. The codec writes the kind as a checked ordinal, so the appended kind leaves state format 22 as it is.
 
-  Every reader of a delivered enthalpy takes it too: the balanced start (`BalanceNet.seeded`, `mixed`), the arriving-phase seeds (`arrivingPhases`), the rate solve and the gauges' pipe observation.
+  Every reader of a delivered enthalpy takes it too: the balanced start (`BalanceNet.seeded`, `mixed`), the junction start mix and the arriving-phase seeds (`arrivingPhases`), each with the temperature off the same curve; the rate solve reads the same rows. The gauges' pipe observation keeps the donor's temperature until W2 gives the side a screen.
 
 Both sides always carry real fluid (Q5). A side with no pipe takes no heat.
 
@@ -323,7 +323,7 @@ Physics: in a plant an exchanger's control is piping. A bypass line runs around 
     - the heat in transit (one energy per unit), which is energy the world holds.
 
   A missing field reads its old behaviour: control off, no heat in transit. W2 writes every field the later packages read (control, set temperature, transit), so the schema changes once and one corpus image covers it: `src/test/resources/compat/fluid/schema-5/`, captured in W2. A package that still has to add a field adds its own image.
-- **State** (rebuilt freely): the per-side records for the partner read (inlet state, flow, curve, conductances, last committed heat rate, stopped spans), β, the curves, the assembly report. The interval result's heat raises the checkpoint state format from 22 to 23.
+- **State** (rebuilt freely): the per-side records for the partner read (inlet state, flow, curve, conductances, last committed heat rate, stopped spans), β, the curves, the assembly report. The interval result carries the heat as `HEAT` boundary transfers; checkpoint state format 22 stays (section 5.1).
 - A removed unit takes its heat in transit with it, booked in the ledger as a removed vessel's contents are. A side removed while the other runs: the transit is booked at the removal, and a running slice whose plan still names it books none of it.
 - **Old builds** (Q9): an exchanger built before this batch registers when its chunk loads, with control off. A side with pipes at both nozzles takes part at once; a side without them takes no heat.
 
@@ -333,8 +333,8 @@ The owner's order (Q8) put the utility exchangers first because they need no cou
 
 | Package | Content | Gates |
 |---|---|---|
-| W1 Heat law | port and extend the kernel of `tools/pipe-thermal-loss/prototype.patch` (renamed package; the curve builder from the study harness); the film on the curve with knots at a vapour fraction of 0.05 and 0.95 and the exact per-segment integral (partial fractions, degenerate branches); the curve's span and C1 extrapolation beyond it with a notice; the side kernel (8 counterflow cells against a wall profile fixed for the slice, β, reversed flow); the passage law; the side as a `FlowControl` kind on `PassiveNetwork.Pipe`; the heat in rows, reconstruction, audit, balanced start, seeds, rate solve; the heat in `PassiveIntervalSolver.Result`, the certificate summary and replay, the checkpoint state (format 23) | kernel vs the analytic exponential and latent knots, with a film step along the curve; a pure condensing stream against water gives U 1430 within 1 %; a donor enthalpy that leaves the span converges; zero and reversed flow; the audit with heat; a junction that boils from heat (water at 5 bar heated past 152 °C); nothing moves without exchangers: chain-100 exact, the 33 junction lines |
-| W2 Device | the side device kind (IN and OUT ports), the pair record in the topology unit's facts with every later field, the structure binding both sides and its refresh; facts schema 5 and its corpus; the screen; old builds. After W2 alone a two-sided exchanger moves no heat (no partner read) | facts round trip, corpus gate; one in-game check of the screen |
+| W1 Heat law | port and extend the kernel of `tools/pipe-thermal-loss/prototype.patch` (renamed package; the curve builder from the study harness); the film on the curve with knots at a vapour fraction of 0.05 and 0.95 and the exact per-segment integral (partial fractions, degenerate branches); the curve's span and C1 extrapolation beyond it with a notice; the side kernel (8 counterflow cells against a wall profile fixed for the slice, β, reversed flow); the side as a component of `PassiveNetwork.Pipe` beside a passive control; the heat in rows, reconstruction, audit, balanced start, seeds, rate solve; the heat as `HEAT` boundary transfers through the interval result, the certificate summary and replay and the checkpoint state (format 22 kept) | kernel vs the analytic exponential and latent knots, with a film step along the curve; a pure condensing stream against water gives U 1430 within 1 %; a donor enthalpy that leaves the span converges; zero and reversed flow; the audit with heat; a junction that boils from heat (water at 10 bar heated past 180 °C); nothing moves without exchangers: chain-100 exact, the 33 junction lines |
+| W2 Device | the side device kind (IN and OUT ports), the pair record in the topology unit's facts with every later field, the structure binding both sides and its refresh; the passage law (a channel count on the section geometry, read by the codec and the certificate signature); facts schema 5 and its corpus; the screen; old builds. After W2 alone a two-sided exchanger moves no heat (no partner read) | facts round trip, corpus gate; one in-game check of the screen |
 | W3a Timing study | harness part 8: dispatch at the slice end, job latency 0 to 40 ticks, adaptive cadence; forms A, B and C of section 5.2 on the part 7 cases and holds; owner choice | a review of at most 50 lines |
 | W3 Two-sided coupling | the transit store, the partner read in the chosen form, stopped from explicit states, the quasi-steady wall on curves (tolerance, sweep cap), the give-back as an enthalpy shift (slice-heat split, clamp at dispatch), wake through a new discard entry, certificate signature | GameTests: two islands reach the 8-cell steady state at equal and unequal cadences; a held partner; a shared-island feed/effluent loop; a condensing mixture against water at 20 s slices; the give-back at zero flow books 0 J; the transit returns to 0; energy ledger exact; the wall solve's cost in the campaign's wall-time class |
 | W4 Control | the controller between slices, its modes, the low limit, statuses | an outlet held after an inlet step on a test rig |
@@ -343,6 +343,14 @@ The owner's order (Q8) put the utility exchangers first because they need no cou
 | W7 Kettle | the pool as the side's vessel partner (its record, the give-back into the vessel's energy row), the heating medium a side | boil-up = duty / latent heat at the pool's pressure |
 | W8 Exchanger assembly | blueprint per control mode, FLOWMETER in the walk, Validate structure, Operation through the real valves, targets as slice inputs (command override, kept out of the certificate digest) | matcher cases on `TestGraph`; GameTests: a built bypass validates complete; an outlet held through the real bypass valve after an inlet step; a ratio held after the reference flow steps; a removed bypass pipe reverts the report and the valves hold |
 | W9 Column operation hook | a validated column assembly sets its condenser's, reboiler's and pumparound coolers' duty targets | with the column's operation stage |
+
+W1 as built (2026-10-27), three changes from the plan of revision 4, each reversible:
+
+- The side is a component of `PassiveNetwork.Pipe` (`HeatSide`) beside a passive control, not a `FlowControl` kind, so every mode rule stays as it is.
+- The heat is booked as `HEAT` boundary transfers (section 5.1), not as a new interval-result field. The audit, the certificate replay and the codec read it with no format change.
+- The passage law moves to W2. A channel count on the section geometry reaches the codec and the certificate signature, and the device states the side's geometry.
+
+Left open by W1, for W2's screen: the extrapolation notice on the island's status line (the kernel reports it, `HeatCurve.extrapolated`) and the gauges' outlet temperature.
 
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
 

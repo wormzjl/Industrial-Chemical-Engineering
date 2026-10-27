@@ -209,6 +209,11 @@ public final class PassiveStepSolver {
     }
     private final FluidThermodynamics model;
     private final SolverOwnership ownership;
+    /** Each heat-exchanging connection's curve per end ({@link #sideCurve}), kept while its side, the end's port and the
+     * donor's state are the ones it was built for: the start balance, the seeds and every pass and retry of a step read one
+     * curve (batch 2026-10-27-heat-exchanger-design). */
+    private record SideCurve(HeatSide side,PassiveNetwork.PhasePort port,double volume,FluidThermodynamics.State start,HeatCurve curve) {}
+    private final Map<Long,SideCurve[]> sideCurves=new HashMap<>();
     private final Map<WorkspaceKey,SparseNewton.Workspace> workspaces=new LinkedHashMap<>();
     private final Map<WorkspaceKey,SparseNewton.Workspace> structures=new LinkedHashMap<>();
     private List<PassiveNetwork.Pipe.Identity> previousPipes=List.of();
@@ -600,7 +605,7 @@ public final class PassiveStepSolver {
             // What each phase-port outflow drew, phase by phase, at these flows on this candidate: the reconstruction books it
             // and the transfer samples it (decision D11).
             var draws=equations.draws(flows,states);
-            var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases);
+            var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::sideHeat);
             // Decision D54: a dry vessel this pass's flows reached holds what they delivered (booked at the ambient, closed
             // at its wall); the pass is solved again with it laid out from that state, so its end is the step's implicit
             // end like every vessel's.
@@ -727,7 +732,7 @@ public final class PassiveStepSolver {
         }
         if(equations.segmentsMoved(flows))return null;
         var draws=equations.draws(flows,states);
-        var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases);
+        var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::sideHeat);
         if(phaseAppeared(graph,states,projection.states())||phaseFolded(graph,states,projection.states())
                 ||phaseCorrection(graph,projection.states(),checkpoint,equations.cachedPrepared,foldedPhases.clone())!=null)return null;
         var reconstructed=variables.clone();
@@ -1180,10 +1185,11 @@ public final class PassiveStepSolver {
                     var pipe=graph.pipes().get(edge);double flow=flows[edge];
                     if(!(Math.abs(flow)>0)||(flow>=0?pipe.second():pipe.first())!=j||!boundaryAllowed(graph,pipe,flow))continue;
                     int donor=flow>=0?pipe.first():pipe.second();var stream=current.get(donor);var port=pipe.drawPort(flow);
-                    double delivered=dt*Math.abs(transported(graph,pipe,flow)),streamMass=endMass(stream,port,pipe.volume());double[] moles=endMoles(stream,port,pipe.volume());
+                    double rate=Math.abs(transported(graph,pipe,flow)),delivered=dt*rate,streamMass=endMass(stream,port,pipe.volume());double[] moles=endMoles(stream,port,pipe.volume());
                     for(int c=0;c<n.length;c++)n[c]+=delivered*moles[c]/streamMass;
-                    mass+=delivered;weighted+=delivered*stream.temperature();arrives=true;
-                    heat+=delivered*endSpecificEnthalpy(stream,port,pipe.volume());
+                    var through=delivered(graph,pipe,endSpecificEnthalpy(stream,port,pipe.volume()),stream.temperature(),Math.copySign(rate,flow),checkpoint);
+                    mass+=delivered;weighted+=delivered*through[1];arrives=true;
+                    heat+=delivered*through[0];
                 }
                 if(empty) {
                     if(!arrives||!(mass>0))continue;
@@ -1702,6 +1708,49 @@ public final class PassiveStepSolver {
         double mass=phase<0?s.mass():model.phaseMass(s,phase),fluid=mass-solidShare(s,phase)*solids;
         if(!(fluid>0))return whole;
         return (whole*mass-solidShare(s,phase)*s.solidMoments().enthalpy(s.temperature(),s.pressure()))/fluid;
+    }
+    /**
+     * The heat (W, into the stream) heat-exchanging connection {@code pipe} takes up when it carries {@code flow} drawn at
+     * {@code specificEnthalpy} from {@code graph}'s end the flow leaves: its side's march ({@link HeatSide#heat}) on that
+     * end's curve ({@link #sideCurve}). Zero for a plain connection, at no flow, and from an end that draws nothing. The
+     * step's rows and reconstruction, the start balance and the junction seeds all read it (batch
+     * 2026-10-27-heat-exchanger-design).
+     */
+    private double sideHeat(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double specificEnthalpy,double flow,Runnable checkpoint) {
+        if(pipe.heat()==null||flow==0)return 0;
+        var curve=sideCurve(graph,pipe,flow>0?pipe.first():pipe.second(),checkpoint);
+        return curve==null?0:pipe.heat().heat(curve,specificEnthalpy,flow);
+    }
+    /** What a stream drawn at {@code specificEnthalpy} (J/kg) and {@code temperature} arrives as through {@code pipe} at
+     * {@code flow}: its specific enthalpy and temperature after the side ({@link #sideHeat}, the temperature off the same
+     * curve); unchanged through a plain connection. A seed's reading: a junction a heater boils is seeded with its vapour. */
+    private double[] delivered(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double specificEnthalpy,double temperature,double flow,Runnable checkpoint) {
+        var curve=pipe.heat()==null||flow==0?null:sideCurve(graph,pipe,flow>0?pipe.first():pipe.second(),checkpoint);
+        if(curve==null)return new double[]{specificEnthalpy,temperature};
+        double out=specificEnthalpy+pipe.heat().heat(curve,specificEnthalpy,flow)/Math.abs(flow);
+        return new double[]{out,curve.temperatureAt(out)};
+    }
+    /**
+     * The heat curve (plan section 5.1) of the stream {@code pipe} draws from {@code node} in {@code graph}: the amounts its
+     * end's port draws at the node's state ({@link #endMoles}; a drum's liquid draw has its own bubble point, not the
+     * drum's whole mixture's), at the node's pressure, over the node's temperature and the side's wall temperatures, 10 K
+     * beyond each, inside the numerical box. Past that span the curve extends its end lines (AGENTS.md "Thermo validity").
+     * Null where the end draws nothing.
+     */
+    private HeatCurve sideCurve(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node,Runnable checkpoint) {
+        var start=graph.reservoirs().get(node).state();int end=node==pipe.first()?0:1;var port=pipe.portAt(node);double volume=pipe.volume();
+        var kept=sideCurves.computeIfAbsent(pipe.id(),id->new SideCurve[2]);var old=kept[end];
+        if(old!=null&&old.start()==start&&old.port()==port&&old.volume()==volume&&old.side().equals(pipe.heat()))return old.curve();
+        double[] amounts=endMoles(start,port,volume);double total=0;for(double n:amounts)total+=n;
+        HeatCurve curve=null;
+        if(total>0&&endMass(start,port,volume)>0) {
+            var side=pipe.heat();
+            double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(start.temperature(),side.coldestWall())-10);
+            double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(start.temperature(),side.hottestWall())+10);
+            curve=HeatCurve.sample(model,amounts,start.pressure(),low,high,side.films(),checkpoint);
+        }
+        kept[end]=new SideCurve(pipe.heat(),port,volume,start,curve);
+        return curve;
     }
     /** The share of the node's solids a stream of {@code phase} draws: all of them at a BULK end ({@code phase < 0}). */
     private static double solidShare(FluidThermodynamics.State s,int phase){return phase<0?1:FluidThermodynamics.phaseSolidShare(s,phase);}
@@ -2303,8 +2352,9 @@ public final class PassiveStepSolver {
                 if(!(q>0))continue;
                 var port=pipe.portAt(supplier);double[] n=endMoles(s.state(),port,pipe.volume());double m=endMass(s.state(),port,pipe.volume());
                 for(int c=0;c<count;c++)amounts[junction][c]+=q*n[c]/m;
-                heat[junction]+=q*endSpecificEnthalpy(s.state(),port,pipe.volume());pressureSum[junction]+=q*endPressure(s,port,s.state());
-                mass[junction]+=q;tLow[junction]=Math.min(tLow[junction],s.state().temperature());tHigh[junction]=Math.max(tHigh[junction],s.state().temperature());
+                var through=delivered(graph,pipe,endSpecificEnthalpy(s.state(),port,pipe.volume()),s.state().temperature(),end==0?q:-q,checkpoint);
+                heat[junction]+=q*through[0];pressureSum[junction]+=q*endPressure(s,port,s.state());
+                mass[junction]+=q;tLow[junction]=Math.min(tLow[junction],through[1]);tHigh[junction]=Math.max(tHigh[junction],through[1]);
             }
             // Flashed at the flow-weighted pressure of what reaches it (a liquid CO2 let-down's junction stands above the triple
             // point, not at the ambient); the balance then solves the pressure and restates the mixture there.
@@ -2803,8 +2853,9 @@ public final class PassiveStepSolver {
                         double rate=Math.abs(flow),streamMass=endMass(stream,port,pipe.volume());double[] moles=endMoles(stream,port,pipe.volume());
                         if(!(streamMass>0))continue;
                         for(int c=0;c<count;c++)amounts[c]+=rate*moles[c]/streamMass;
-                        mass+=rate;heat+=rate*endSpecificEnthalpy(stream,port,pipe.volume());weighted+=rate*stream.temperature();
-                        tLow=Math.min(tLow,stream.temperature());tHigh=Math.max(tHigh,stream.temperature());
+                        var through=delivered(graph,pipe,endSpecificEnthalpy(stream,port,pipe.volume()),stream.temperature(),flow,checkpoint);
+                        mass+=rate;heat+=rate*through[0];weighted+=rate*through[1];
+                        tLow=Math.min(tLow,through[1]);tHigh=Math.max(tHigh,through[1]);
                     }
                     var old=states.get(j);FluidThermodynamics.State next;
                     try {
@@ -4156,10 +4207,20 @@ public final class PassiveStepSolver {
                     double power=mover.power(flow,head,drawn(edge,0,tr[a],flow).density,st[a].pressure());
                     stored+=dt*power;heat+=power;
                 }
+                // A heat-exchanging side delivers its donor's stream with the heat it took up crossing the wall, booked like
+                // a mover's work into the receiver's energy and its inflow (batch 2026-10-27-heat-exchanger-design).
+                if(receiver&&pipe.heat()!=null){double taken=sideHeat(edge,transport.specificEnthalpy,flow);stored+=dt*taken;heat+=taken;}
             }
             // An emptying vessel standing as a junction (decision D54, emptyingGraph) passes its stock as well as what arrives.
             energy[node]=stored;incomingMass[node]=mass;incomingEnergy[node]=heat;netMass[node]=emptyings!=null&&emptyings[node]!=null?net+emptyings[node].drain():net;
         }
+        /**
+         * The heat (W, into the stream) heat-exchanging connection {@code edge} takes up when it carries {@code flow} drawn at
+         * {@code specificEnthalpy} from the end the flow leaves ({@link PassiveStepSolver#sideHeat}, on this step's graph).
+         * The residual, the block Jacobian and the reconstruction ({@link ConservativeTransport.EdgeHeat}) all read this one
+         * function.
+         */
+        double sideHeat(int edge,double specificEnthalpy,double flow){return PassiveStepSolver.this.sideHeat(graph,graph.pipes().get(edge),specificEnthalpy,flow,()->{});}
         /**
          * The cap flow (kg/s) of an inline filter's connection: the drawn stream's velocity cap {@code limit}
          * ({@link #capLimit}) and, in a step that may fill the cake, the room the cake has left over the step's own

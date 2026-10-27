@@ -6,11 +6,11 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: Planned 2026-10-27 (design only). The owner answered Q1 to Q13; Q14 (the order after the plan review) is open. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law) is built; the owner answered Q1 to Q13, and Q14 (the order after the plan review) is open. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4. It covers:
+- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1 as built (section 10). It covers:
   - the physics in numbers and the owner's decisions;
   - UA from size with a film per phase and the approximations that keep it free of lag;
   - the air cooler (air at 25 °C) and the fired heater (heat to a set temperature, capped at its duty);
@@ -24,7 +24,15 @@ Status: Planned 2026-10-27 (design only). The owner answered Q1 to Q13; Q14 (the
 
 ## Code areas
 
-None changed. The plan touches:
+Changed by W1 (`science/fluid/network/`):
+
+- `HeatCurve` (new): a stream's enthalpy-temperature curve with a film per knot, sampled from the engine, and the exact march along it;
+- `HeatSide` (new): a side's area, films and 8-cell wall, bypass and give-back, and its heat;
+- `PassiveNetwork.Pipe.heat` and its identity's shape;
+- `PassiveStepSolver`: the heat in `Equations.nodeAccumulate`, the curves per connection end (`sideCurve`), and the delivered stream in `BalanceNet.seeded`, the junction start mix and `arrivingPhases`;
+- `ConservativeTransport`: the `HEAT` boundary kind and the `EdgeHeat` hook of the reconstruction.
+
+The plan also touches:
 
 - `science/fluid/network/PassiveStepSolver` (`Equations.nodeAccumulate`, `BalanceNet`, `arrivingPhases`);
 - `ConservativeTransport` (beside `pumpWork`);
@@ -75,14 +83,20 @@ None changed. The plan touches:
     - the interval result's heat and checkpoint state format 23;
     - minor numbers and wording.
   - New owner question Q14: the one-sided air cooler and fired heater before the coupling.
+- 2026-10-27, W1 the heat law, started after the Fable review on the owner's instruction. Commits `5281f53e` (curve and side kernel, 11 tests) and the W1 part 2 commit (solver wiring).
+  - The heat enters the receiver's energy row like a mover's work. The reconstruction books it as a `HEAT` boundary at the connection, so the audit, the certificate replay and the checkpoint codec carry it with state format 22 kept.
+  - The curve is the stream the donor end's port draws, not the donor's whole mixture.
+  - The seeds read the heated stream. Without that, a junction heated past saturation (water, 10 bar, 20 m² at 520 K, 2 s step) converged as liquid 22 K superheated; with it, two-phase at saturation.
+  - Changes from the plan (section 10): the side is a `Pipe` component, not a `FlowControl` kind; the heat is a boundary kind, not a result field; the passage law moves to W2.
+  - The kernel uses `DeterministicMath` (`log1p`, `expm1`), as the determinism gate asks.
+  - Gates: `HeatCurveTest` 11 and `HeatSideNetworkTest` 4 (ledger, boiling junction, reversal, zero flow and bypass); quick suite 1657 (the one failure, the determinism gate, fixed and its classes re-run); chain-100 exact (zero deviation).
 
 ## Notes
 
 - Open: owner question Q14 (order), and after W3a the coupling's timing form.
-- Not measured yet:
-  - phase change from heat inside an island's Newton;
-  - the quasi-steady wall solved on phase-change curves;
-  - the solver cost.
-
-  W1 and W3 measure them.
-- Code guide: no change (no code changed).
+- Open from W1:
+  - for W2's screen: the extrapolation notice on the status line and the gauges' outlet temperature;
+  - the step accepts a junction laid out without a phase its enthalpy holds; only the seeds guard it (W1 saw liquid 22 K superheated when the seeds missed the heat). To be put to the owner;
+  - the curve is fluid only: a stream carrying crystals reads its enthalpy on the fluid's curve.
+- Measured in W1: a junction boils from heat inside the Newton. Not measured yet: the quasi-steady wall on phase-change curves and the solver cost (W3 and its campaign).
+- Code guide: not updated yet; the fluid network chapter is updated before the merge.

@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.fluid.network;
 
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -111,7 +112,7 @@ public final class HeatCurve {
         throw new IllegalStateException("Heat curve march did not end");
     }
     /** {@code log1p(r)/r}, 1 at 0. */
-    private static double logRatio(double r){return r==0?1:Math.log1p(r)/r;}
+    private static double logRatio(double r){return r==0?1:DeterministicMath.log1p(r)/r;}
     /**
      * The enthalpy change inside one segment after {@code exposure} = area / mass (m2 s/kg), with the film {@code f0 + b s}
      * and the temperature difference {@code d0 + d s} at the step {@code s}: s = g f0 d0 / (1 - g d f0) with
@@ -121,7 +122,7 @@ public final class HeatCurve {
     private static double within(double f0,double d0,double d,double b,double exposure) {
         double z=-(b*d0-d*f0)*exposure;
         if(z>600)return d!=0?-d0/d:Double.isFinite(f0/b)?-f0/b:0;
-        double ratio=z==0?1:Math.expm1(z)/z,g=-exposure*ratio;
+        double ratio=z==0?1:DeterministicMath.expm1(z)/z,g=-exposure*ratio;
         return g*f0*d0/(1-g*d*f0);
     }
 

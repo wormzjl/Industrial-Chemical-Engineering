@@ -66,7 +66,9 @@ public final class ConservativeTransport {
      * rates a steady island repeats.
      */
     public record BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule,SolidInventory solids,int solidDirection,Kind kind) {
-        public enum Kind { EXCHANGE, FLUSH, VENT, SPILL }
+        /** {@code HEAT}: the heat a heat-exchanging connection ({@link HeatSide}) took up over the step, energy alone,
+         * booked at the connection's id: what crossed its wall (batch 2026-10-27-heat-exchanger-design). */
+        public enum Kind { EXCHANGE, FLUSH, VENT, SPILL, HEAT }
         public BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule){this(nodeId,moles,totalEnergyJoule,SolidInventory.EMPTY,0);}
         public BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule,SolidInventory solids,int solidDirection){this(nodeId,moles,totalEnergyJoule,solids,solidDirection,Kind.EXCHANGE);}
         public BoundaryTransfer{moles=moles.clone();Objects.requireNonNull(solids);Objects.requireNonNull(kind);if(solidDirection < -1||solidDirection > 1||!solids.empty()&&solidDirection==0)throw new IllegalArgumentException("Invalid solid boundary direction");}
@@ -109,6 +111,10 @@ public final class ConservativeTransport {
     }
     /** A vessel that runs dry within the step (decision D54): its stock's mass {@code drain} and the ambient's {@code work}. */
     public record Emptying(double drain,double work) {}
+    /** The heat (W, into the stream) heat-exchanging connection {@code edge} takes up at the donor specific enthalpy it
+     * books and its flow: the Newton's own function ({@code PassiveStepSolver.Equations}), so the booking and the equation
+     * gate read one number, as a mover's work does. */
+    @FunctionalInterface public interface EdgeHeat {double heat(int edge,double specificEnthalpy,double massFlow);}
     /**
      * {@code frozenJunctions} (rate evaluations only): every junction is held at its buffer's composition, as the
      * rate-only rows of {@code PassiveStepSolver.Equations.junctionInflow} hold it, and its accumulation over dt is held
@@ -128,11 +134,18 @@ public final class ConservativeTransport {
     public static Projection reconstruct(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,double[] heads,
                                          double dt,FluidThermodynamics model,Runnable checkpoint,Workspace workspace,boolean frozenJunctions,double[][] draws,
                                          PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases) {
+        return reconstruct(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,null);
+    }
+    /** As above, with the heat the heat-exchanging connections take up ({@link EdgeHeat}; null where the graph has none),
+     * booked into each receiver and as a {@link BoundaryTransfer.Kind#HEAT} boundary at the connection. */
+    public static Projection reconstruct(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,double[] heads,
+                                         double dt,FluidThermodynamics model,Runnable checkpoint,Workspace workspace,boolean frozenJunctions,double[][] draws,
+                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat) {
         if(draws!=null&&draws.length!=flows.length)throw new IllegalArgumentException("Invalid phase draws");
         if(releases!=null&&releases.length!=graph.reservoirs().size())throw new IllegalArgumentException("Invalid open-vessel releases");
-        if(!SolverDiagnostics.ENABLED)return reconstruct0(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases);
+        if(!SolverDiagnostics.ENABLED)return reconstruct0(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,heat);
         long started=System.nanoTime();boolean previous=SolverDiagnostics.enterReconstruct();
-        try{return reconstruct0(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases);}
+        try{return reconstruct0(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,heat);}
         finally {
             SolverDiagnostics.leaveReconstruct(previous);
             SolverDiagnostics.reconstructNanos.add(System.nanoTime()-started);SolverDiagnostics.reconstructCalls.increment();
@@ -222,7 +235,7 @@ public final class ConservativeTransport {
     }
     private static Projection reconstruct0(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] solvedFlows,double[] heads,
                                          double dt,FluidThermodynamics model,Runnable checkpoint,Workspace workspace,boolean frozen,double[][] draws,
-                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases) {
+                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat) {
         int nodes=graph.reservoirs().size(),components=model.hydrocarbon.componentCount()+1;
         if(candidate.size()!=nodes||solvedFlows.length!=graph.pipes().size()||heads.length!=solvedFlows.length)throw new IllegalArgumentException("Invalid transport reconstruction");
         for(double q:solvedFlows)if(!Double.isFinite(q))throw new IllegalArgumentException("Nonfinite candidate flow/head");
@@ -541,6 +554,14 @@ public final class ConservativeTransport {
                     case FlowControl.Compressor compressor->dt*compressor.power(flows[edge],heads[edge],1/specificVolume,suction.pressure());
                 };
                 energy[receiver]+=work;pumpWork+=work;}
+            // A heat-exchanging side: the heat its stream took up crossing the wall, on the donor enthalpy booked above, into
+            // the receiver, and out of the island at the connection (batch 2026-10-27-heat-exchanger-design).
+            double heated=0;
+            if(heat!=null&&pipe.heat()!=null&&flows[edge]!=0) {
+                heated=dt*heat.heat(edge,specificEnthalpy,flows[edge]);
+                energy[receiver]+=heated;externalEnergy+=heated;
+                boundaries.add(new BoundaryTransfer(pipe.id(),new double[components],heated,SolidInventory.EMPTY,0,BoundaryTransfer.Kind.HEAT));
+            }
             if(frozen) {
                 var species=new double[components];for(int c=0;c<components;c++)species[c]=moved*w[c]/molecularWeight[c];
                 var delivered=pipe.filter()==null?movedSolids:SolidInventory.EMPTY;
@@ -550,7 +571,7 @@ public final class ConservativeTransport {
             if(graph.reservoirs().get(donor).fixed()||graph.reservoirs().get(receiver).fixed()) {
                 var transferred=new double[components];for(int c=0;c<components;c++)transferred[c]=moved*w[c]/molecularWeight[c];
                 if(graph.reservoirs().get(donor).fixed()){boundaries.add(new BoundaryTransfer(graph.reservoirs().get(donor).id(),transferred,movedEnergy,drawn[edge]==null?upstream.solids().scale(moved/upstream.mass()):movedSolids,1));for(int c=0;c<components;c++)external[c]+=transferred[c];externalEnergy+=movedEnergy;}
-                if(graph.reservoirs().get(receiver).fixed()){var removed=transferred.clone();for(int c=0;c<components;c++){removed[c]=-removed[c];external[c]+=removed[c];}boundaries.add(new BoundaryTransfer(graph.reservoirs().get(receiver).id(),removed,-deliveredEnergy-work,pipe.filter()==null?movedSolids:SolidInventory.EMPTY,-1));externalEnergy-=deliveredEnergy+work;}
+                if(graph.reservoirs().get(receiver).fixed()){var removed=transferred.clone();for(int c=0;c<components;c++){removed[c]=-removed[c];external[c]+=removed[c];}boundaries.add(new BoundaryTransfer(graph.reservoirs().get(receiver).id(),removed,-deliveredEnergy-work-heated,pipe.filter()==null?movedSolids:SolidInventory.EMPTY,-1));externalEnergy-=deliveredEnergy+work+heated;}
             }
         }
         // An emptying vessel (decision D54) held its stock and the ambient's work on its bag, W = P_ambient V_bag (its energy
