@@ -95,6 +95,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         runtime.coordinator().onPhaseHold(this::phaseHeld);runtime.coordinator().nodeNames(this::deviceLabel);
         registry=new PhysicalRegistry(topology,model,new InlineFilter(options.solids().filterCapacity(),options.solids().filterResistance(),com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY,0),new RegistryHost());
         for(var entry:data.checkpoint().islands())runtime.register(dimension(entry.dimension()),entry.snapshot(),model(entry.key()));
+        // Each exchanger's heat in transit is a fact of its sides (plan section 5.2).
+        savedTopology.heatTransits().forEach(runtime.coordinator()::transit);
         logLoad();
         registry.flowmeters(accessories.allSensors().stream().filter(s->s.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).map(s->s.key().host()).toList());
         registry.load();data.bindCapture(this::capture);
@@ -596,8 +598,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private long bucketKey(long device){Long owner=registry.owner(device);return owner!=null?owner:device;}
     public boolean viewDirty(long device){owned();return presentation.dirty(device);}
     public FluidSavedData.Capture capture() {
-        owned();flush();var islands=new ArrayList<FluidCheckpointCodec.IslandEntry>();var world=topology.snapshot();
-        for(var snapshot:runtime.coordinator().snapshots()) {
+        owned();flush();var islands=new ArrayList<FluidCheckpointCodec.IslandEntry>();
+        // Materialised first: a certified side's replay books its heat in transit, which the facts then carry.
+        var snapshots=runtime.coordinator().snapshots();var world=topology.snapshot().withHeatTransits(runtime.coordinator().transits());
+        for(var snapshot:snapshots) {
             if(registry.members(snapshot.id()).isEmpty())throw new IllegalStateException("Fluid island "+snapshot.id()+" holds no device; refusing to save it");
             String dimension=world.active().get(registry.members(snapshot.id()).getFirst()).device().position().dimension();
             islands.add(new FluidCheckpointCodec.IslandEntry(dimension,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),snapshot));
@@ -824,6 +828,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         public boolean acceptsRecovery(UUID player){var online=server.getPlayerList().getPlayer(player);return online!=null&&online.getInventory().getFreeSlot()>=0;}
         public void refused(UUID event,String reason){refuseEvent(event,reason);}
         public void committed(Set<Long> removed,Set<Long> recompiled) {
+            // A removed exchanger takes its heat in transit along (plan section 5.2): its sides leave in one event, keyed by the lower.
+            for(long device:removed)topology.removedHeat(runtime.coordinator().removeTransit(PhysicalFluidTopology.sideIdentity(device)));
             unboundBindings.removeAll(removed);publishedMenuData.keySet().removeAll(removed);publishedGlides.keySet().removeAll(removed);for(long device:removed){tankWatchers.remove(device);forgetSightGlass(device);forgetMover(device);}
             // Every recompiled device's cached snapshot predates the change, and one left in no island (a pipe whose only
             // tank was broken) gets no publication that would mark it: each is marked for its next bucket, which presents

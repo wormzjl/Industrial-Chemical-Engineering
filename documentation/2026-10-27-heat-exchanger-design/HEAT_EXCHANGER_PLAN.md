@@ -1,6 +1,6 @@
 # Heat exchanger system: plan
 
-Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: In progress since 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. W1 (the heat law) is built, with three changes recorded in section 10.
+Batch `2026-10-27-heat-exchanger-design`. Base `995dbd9c` (main, 0.15.0). Status: In progress since 2026-10-27. Revision 2 (the same day) takes in the owner's answers to Q1 to Q9; revision 3 (the same day) the answers to Q10 to Q13 (section 3); revision 4 (the same day) the plan review. W1, W2, W5, W6, W3a and W3 are built; section 10 records each as built.
 
 Evidence:
 
@@ -10,7 +10,7 @@ Evidence:
 - [HEAT_EXCHANGER_PLAN_REVIEW.md](HEAT_EXCHANGER_PLAN_REVIEW.md): the review of revision 3 against the code (22 findings, taken into revision 4).
 - Harnesses: `tools/heat-exchanger-design/`.
 
-Open: Q16, the form of the coupling's timing. Study W3a measured it ([HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md)) and recommends C, the fence (section 12). The owner answered Q14 on 2026-10-27: the one-sided units go before W3a.
+The coupling's timing is form C, the fence (owner Q16, 2026-10-27, after study W3a: [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md)). The owner answered Q14 on 2026-10-27: the one-sided units go before W3a.
 
 Owner request 2026-10-27:
 
@@ -200,7 +200,7 @@ The wall holds no heat (Q10), so its profile is not a state: it is the quasi-ste
 - **B, the partner's history within the slice**: a slice is dispatched after t1, so the partner's records committed within `[t0, t1]` exist and are used piece by piece; A covers the rest.
 - **C, a coupling fence**: a slice waits until its partner has committed through t0 (a readiness condition on the server, no worker wait; a certified partner is materialised). This is deterministic, and the fast side runs up to one partner cadence behind online time. The side furthest behind can always go, so the fence cannot deadlock.
 
-W3a measured the three forms (harness part 8, [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md)). C settles fastest (mean 34 s against 45 s for B and 69 s for A; worst 79 s against 239 and 259 s). It recovers from a hold 1.1 to 9 times sooner, is the same in every run (A varies by up to 7.2 K with job times, B by 1.0 K), and keeps the transit under 2e-5 J. A stopped-by-lag rule is not needed by any form. The choice is Q16.
+W3a measured the three forms (harness part 8, [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md)). C settles fastest (mean 34 s against 45 s for B and 69 s for A; worst 79 s against 239 and 259 s). It recovers from a hold 1.1 to 9 times sooner, is the same in every run (A varies by up to 7.2 K with job times, B by 1.0 K), and keeps the transit under 2e-5 J. A stopped-by-lag rule is not needed by any form. The owner chose C (Q16, 2026-10-27).
 
 The steps that do not depend on the choice:
 
@@ -414,6 +414,46 @@ W3a as built (2026-10-27): harness part 8 (`HxCouplingSim.java timing`), part 7'
 - **Found.** A side whose jobs take as long as its cadence never works off a hold's debt, in any form; the game's adaptive cadence removes this. A rule counting a lagging partner as stopped never fired in normal running and did not speed recovery, so the plan keeps "stopped only from explicit states".
 - **Parts 1 to 7 and both older modes are byte-identical.**
 
+W3 design (2026-10-27, form C; the decisions marked D are reversible and logged here):
+
+1. **Science.** `HeatSide` gains the partner's connection id (0 for none) and an active share (the sit-out). `ExchangerRelay` solves the 8-cell quasi-steady wall on two curves. `PassiveStepSolver.couple` plans each coupled side once at the slice start: its wall, its give-back and its active share. A coupled side without a read gets a flat wall at its own inlet, so it moves no heat, as after W2.
+2. **Worker.** `FluidIslandCommand` carries one read per coupled side: the partner as read, the transit due, the partner's slice length and the sit-out. `RetainedSolver` and `PassiveIntervalSolver.solve` pass the reads to the plan.
+3. **Coordinator.** The fence is a readiness condition in `reconsider`, in the pump's predicate and in `verify`. A partner's change re-derives the side's readiness. At dispatch, a certified partner is materialised and the reads are built (arithmetic). At a commit or a replay, each side's heat is booked into the transit, with its slice and its record. A record that moved wakes the partner's certificate.
+4. **Saves.** The transit is the fact `HeatUnit.transitJoule`. It is loaded into the coordinator and written back at `capture()`: the side with the lower id holds it, the other 0. A removed unit books its transit in the destruction total. The state format goes to 26 (partner and active share) and the certificate tag to -5.
+
+- **D1. The record is not a curve.** It is the partner's donor state, port, flow and law at a commit, read on the server from the committed graph. The reading side's worker builds the partner's curve from it. Behind the fence, a partner is at most one slice past t0, so each side keeps two records, the current and the previous. After a load only the current one exists. A side whose partner is ahead then reads it, and takes none of the partner's booked heat out. This is the one read that is not as of t0.
+- **D2. The capacity rate of the share** is ṁ Δh / ΔT across the planned cells. Where ΔT is about 0 it is the curve's slope at the inlet, which is unbounded on a plateau.
+- **D3. The wall solve.** Alternating sweeps, in each stream's order. Each cell's temperature is an Illinois root bracketed by the two entering temperatures, to 0.01 K. The sweep cap is measured by the gates. The solve starts from the side's last planned wall.
+- **D4. The transit wake.** A side's commit wakes a certified partner when its record moved (inlet 0.05 K, flow 0.1 %), or when the transit exceeds 0.1 % of the partner's last slice heat plus 1 J (about 0.05 K at a 50 K change).
+- **D5. A side without a known flow** (a fresh island) plans with flow 0: its wall stands at the partner's inlet temperature, and it takes no give-back (part 7's rule). A topology change's first slice is 1 tick long.
+- **D6. Any held attempt counts as stopped** (plan section 5.2), a budget hold included.
+
+W3 as built (2026-10-27), as designed, with these additions:
+
+- **Code.** `ExchangerRelay` (new) holds the wall solve and the plan. `HeatCurve.temperatureSlope` gives D2's plateau case. `PassiveStepSolver.couple` plans each coupled side once at the slice start, on both streams' curves sampled 10 K beyond the two inlets. The coordinator's "exchanger coupling" section holds the records, the booked spans, the transit by pair and the wake queue.
+- **The wall.** Tolerance 0.01 K, each cell's root to 0.001 K, a cap of 200 sweeps. A condensing mixture against water takes 7 sweeps from the mean, 0.10 ms a solve; a warm start takes 1. Two liquids at NTU 1.2 come within the 8 cells' 0.9 % of exact counterflow.
+- **A steady side keeps its wall.** A warm start that the first sweep moves by less than the tolerance is kept unchanged. Without this, the wall moved by up to 0.01 K from slice to slice, and coupled islands never certified (stationary tolerance 1e-7).
+- **A still or stopped partner gives an active share of 0.** The side's cells move nothing, and it keeps its wall. Without this, the drift of its own inlet moved about 70 W against a flat wall.
+- **Two readings of the transit.** The booked transit is what the coordinator and the facts hold. It includes the heat the side ahead booked past the other's committed tick: about 1 MJ for a 5 s side one slice ahead of a 20 s side. The settled transit adds both sides' heat booked past the lower committed tick. The energy ledger balances on the booked transit. The steady state and "returns to 0" read the settled one: 1.5 to 3.8 kJ at steady state.
+- **D1 at a load.** A side indexed without a record gets one from its graph and last result. Its last span is rebuilt from the interval's `HEAT` boundaries, so the side behind still reads the span the side ahead booked.
+- **The wake after a load.** A certified partner's first record seen is adopted as its baseline, so a load wakes nothing. `flushWakes` runs at a round's close, in `runDue` and in the pump, never inside a presentation read. A new counter, `couplingWakes`.
+- **Formats.** State format 26 (a heat side's partner and active share); certificate graph identity tag -5. The facts are unchanged: the transit is W2's `HeatUnit.transitJoule`. A removed unit books its transit as destroyed energy (`WorldTopologyLedger.removedHeat`).
+- **Gates.** `ExchangerCouplingTest` and `ExchangerRelayTest` run the real coordinator, solver and codec on a test rig, not as GameTests. `FluidFactsCompatTest` gates the transit fact. Water is 24.3 kg/s at 363.16 K against 17.2 kg/s at 293.16 K unless a row says otherwise:
+
+| Gate | Result |
+|---|---|
+| two islands at cadences 5/5, 1/20 and 20/1 s | outlets 340.086 to 340.087 K and 325.933 K against the 8-cell steady state 340.085 and 325.932 K |
+| the cold side held 60 s | the hot side moves nothing during the hold (outlet 363.156 K), recovers to 0.003 K; energy exact |
+| a feed/effluent loop in one island, 22.7 kg/s | outlets 337.174 and 319.234 K against 337.174 and 319.231 K |
+| 70 % steam in methane at 3 bar and 413 K against water, 20 s slices | outlets 293.141 and 301.587 K against 293.156 and 301.587 K |
+| a side without flow, 1 MJ owed | the still side books 0 J; the flowing side gives the transit back to within 1 kJ |
+| a save and load at 290 s, the sides one slice apart | outlets equal to the run without the load (0.0000 K) over 60 s |
+| certificates | both sides certify at 125 s and wake when the transit moves |
+| facts | the transit round-trips; the lower side holds it; a removed unit books it destroyed |
+
+- **Q15 evidence.** A two-sided march cannot leave its curve's span. The planned wall lies between the two inlets: each cell's root is bracketed by the entering temperatures. The step's curve spans the inlet and the wall 10 K beyond each, and the give-back is added after the march. No gate reached the notice (`HeatCurve.extrapolated` has no caller on the status line).
+- **Open.** The authority's live load, capture and removal paths are gated through the ledger snapshot methods only, not by a GameTest. The campaign has no exchanger worlds, so the wall's cost is gated in the condensing test, not in the campaign's wall-time class. D6 (a budget hold counts as stopped) is untested.
+
 Final lane before the merge: `test slowGates`, chain-100 exact, fluid GameTests, the campaign. Worlds without exchangers must not move.
 
 ## 11. Simplifications and what they change
@@ -437,20 +477,20 @@ Answered on 2026-10-27: Q1 to Q14 (section 3).
 Decided in revision 3 without a question (reversible; the review gives the numbers): the give-back split by slice heat, chosen among three forms; the controller without the give-back in its target.
 
 - **Q14 Order after the review** (answered 2026-10-27: yes). The air cooler (W5) and the fired heater (W6) have one side and a known partner, so they need no partner read. Order: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
-- **Q15 The curve's extrapolation notice** (W5, open). Section 4 asks for a status-line notice when a side's march leaves its curve's span. The span is a sampling window (the side's inlet and wall temperatures, 10 K beyond each) that the next step samples again around the new state. The property model's own data-range notices still report every node state that leaves a data range. An air cooler's march approaches its flat wall and never leaves the span. Recommended: no notice for the curve's span; W3 measures how often a two-sided wall leaves it.
-- **Q16 The coupling's timing form** (W3a, open). Recommended: C, the fence. It is deterministic, energy-exact, the fastest to settle, control and recover, and the simplest (no extrapolation). Its cost: a fast side runs up to one partner cadence behind online time (19 s against 7 s for a 5 s side with a 20 s partner), and after a partner's hold the waiting side's readings hold until the partner catches up. The alternative is B, if screens must never wait: about 30 % slower to settle on average, and up to 1 K of dependence on job times. Numbers: [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md).
+- **Q15 The curve's extrapolation notice** (W5, open). Section 4 asks for a status-line notice when a side's march leaves its curve's span. The span is a sampling window (the side's inlet and wall temperatures, 10 K beyond each) that the next step samples again around the new state. The property model's own data-range notices still report every node state that leaves a data range. An air cooler's march approaches its flat wall and never leaves the span. W3: a two-sided march cannot leave it either (section 10, W3 as built). Recommended: no notice for the curve's span.
+- **Q16 The coupling's timing form** (answered 2026-10-27: C, the fence). Recommended: C, the fence. It is deterministic, energy-exact, the fastest to settle, control and recover, and the simplest (no extrapolation). Its cost: a fast side runs up to one partner cadence behind online time (19 s against 7 s for a 5 s side with a 20 s partner), and after a partner's hold the waiting side's readings hold until the partner catches up. The alternative is B, if screens must never wait: about 30 % slower to settle on average, and up to 1 K of dependence on job times. Numbers: [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md).
 
 ## 13. Risks
 
 - **Phase change at the outlet.** Heat that boils or condenses a stream does it at the side's outlet junction, as a letdown valve's flash does. It goes through the same arriving-phase and flash seeds that held islands in the past (OD4, the cold and bundled seeds). W1 adds a junction-boil gate, and the campaign counts holds in worlds with exchangers.
 - **The give-back slice.** For one slice after a change, an outlet moves by up to 15.5 K (24 K after a 5× flow cut, 77.5 K after a hold), within the inlet temperatures. A stream near its bubble point can flash for that slice; it goes through the outlet seeds above, and W3's gates watch it.
 - **The fired heater inside a step.** Its outlet never passes the set point (h_in + β (h_set − h_in)). A duty-limited heater exceeds its duty in proportion when its flow rises inside a step, and a stream that comes to arrive above the set point inside a step is cooled towards it. Both last until the next step sets β again (W6 plans β per step, not per slice); the ledger books what happened.
-- **The quasi-steady wall on curves.** The study marched streams of constant capacity; W3 solves the 8-cell steady wall on two phase-change curves, a fixed point with a root per cell inside each sweep. Its convergence needs a gate (a condensing mixture against water), a tolerance (0.01 K) and a sweep cap. Where the iteration stops short, the profile is still a valid wall: energy stays exact, and only the transient changes.
+- **The quasi-steady wall on curves.** The study marched streams of constant capacity; W3 solves the 8-cell steady wall on two phase-change curves, a fixed point with a root per cell inside each sweep. W3 gates it on a condensing mixture against water: 7 sweeps to 0.01 K, under a cap of 200. Where the iteration stops short, the profile is still a valid wall: energy stays exact, and only the transient changes.
 - **Determinism.** Forms A and B of section 5.2 make a side's result depend on how far its partner had committed at the dispatch, which depends on job times, within one partner slice. Form C does not. W3a measures the size of that dependence.
 - **A missed wake** leaves a certified island at a stale duty until its certificate horizon.
 - **Cost.**
   - One curve per side per slice (17 to 30 flashes, of the order of milliseconds).
-  - The quasi-steady wall: tens to hundreds of sweeps, each with a root per cell (about 40 kernel calls): from milliseconds to tens of milliseconds per side per slice, not measured. W3 adds a cost gate.
+  - The quasi-steady wall: measured by W3 at 7 sweeps and 0.10 ms per side per slice from a cold start, 1 sweep from the last wall. Each coupled side samples two more curves per slice (its own and its partner's).
   - The kernel costs microseconds per residual.
   - The assembly adds two junctions and a regulating valve per controlled side.
 - **The column's operation** (next stage of the multi-machine framework) may want the column's computed duties to drive these exchangers, or the exchangers to bound the column. W9 keeps the duty mode as the hook; the choice belongs to that stage.

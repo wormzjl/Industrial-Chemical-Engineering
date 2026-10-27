@@ -1771,6 +1771,44 @@ public final class PassiveStepSolver {
         }
         return pipes==null?graph:new PassiveNetwork(graph.reservoirs(),pipes,graph.scheduledTransfers());
     }
+    /**
+     * {@code graph} with each coupled exchanger side planned for a slice of {@code seconds} s (batch
+     * 2026-10-27-heat-exchanger-design, plan section 5.2, W3; {@link ExchangerRelay#plan}): its wall, give-back and sit-out,
+     * from its read in {@code reads} (by connection id) and its own stream at the slice start, drawn at {@code flows} (kg/s
+     * per connection in {@code graph}'s order; null where none is known, which plans with no flow). Both streams' curves
+     * span both inlets, 10 K beyond, at each stream's own pressure. A side without a read, or whose end draws nothing,
+     * gets a flat wall at its own temperature and moves no heat. {@code graph} itself where no side is coupled.
+     */
+    public PassiveNetwork couple(PassiveNetwork graph,Map<Long,ExchangerRelay.Read> reads,double[] flows,double seconds,Runnable checkpoint) {
+        List<PassiveNetwork.Pipe> pipes=null;
+        for(int e=0;e<graph.pipes().size();e++) {
+            var pipe=graph.pipes().get(e);if(!(pipe.heat() instanceof HeatSide side)||!side.coupled())continue;
+            double flow=flows!=null&&flows.length==graph.pipes().size()?flows[e]:0;
+            int donor=flow>=0?pipe.first():pipe.second();var start=graph.reservoirs().get(donor).state();var port=pipe.portAt(donor);
+            var read=reads.getOrDefault(pipe.id(),ExchangerRelay.Read.NONE);var partner=read.partner();
+            double[] flat=new double[side.cells()];Arrays.fill(flat,start.temperature());
+            var planned=side.withInputs(flat,side.bypass(),0,1);
+            if(endMass(start,port,pipe.volume())>0) {
+                double own=endSpecificEnthalpy(start,port,pipe.volume()),low=start.temperature(),high=low;
+                boolean drawn=partner!=null&&endMass(partner.donor(),partner.port(),partner.volume())>0;
+                if(drawn){low=Math.min(low,partner.donor().temperature());high=Math.max(high,partner.donor().temperature());}
+                low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,low-10);high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,high+10);
+                var curve=spanned(start,port,pipe.volume(),low,high,side.films(),checkpoint);
+                var other=!drawn?null:spanned(partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint);
+                if(curve!=null)planned=ExchangerRelay.plan(side,new ExchangerRelay.Stream(curve,own,flow,side,true),
+                        other==null?null:new ExchangerRelay.Stream(other,endSpecificEnthalpy(partner.donor(),partner.port(),partner.volume()),partner.massFlow(),partner.law(),false),read,seconds);
+            }
+            if(planned.equals(side))continue;
+            if(pipes==null)pipes=new ArrayList<>(graph.pipes());
+            pipes.set(e,pipe.withHeat(planned));
+        }
+        return pipes==null?graph:new PassiveNetwork(graph.reservoirs(),pipes,graph.scheduledTransfers());
+    }
+    /** The heat curve of the stream drawn through {@code port} from state {@code s} over {@code [low, high]} K, or null where it draws nothing. */
+    private HeatCurve spanned(FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume,double low,double high,HeatCurve.Films films,Runnable checkpoint) {
+        double[] amounts=endMoles(s,port,volume);double total=0;for(double n:amounts)total+=n;
+        return total>0&&endMass(s,port,volume)>0?HeatCurve.sample(model,amounts,s.pressure(),low,high,films,checkpoint):null;
+    }
     /** The share of the node's solids a stream of {@code phase} draws: all of them at a BULK end ({@code phase < 0}). */
     private static double solidShare(FluidThermodynamics.State s,int phase){return phase<0?1:FluidThermodynamics.phaseSolidShare(s,phase);}
     /**

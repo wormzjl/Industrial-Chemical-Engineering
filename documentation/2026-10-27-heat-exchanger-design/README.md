@@ -6,11 +6,11 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler) and W6 (the fired heaters) are built; study W3a is done; W3 (the coupling) waits for the owner's Q16. The owner answered Q1 to Q14; Q15 and Q16 are open. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters) and W3 (the two-sided coupling, form C) are built; study W3a is done. W4 (control) is next. The owner answered Q1 to Q14 and Q16 (form C); Q15 is open. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5 and W6 as built (section 10). It covers:
+- [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5, W6, W3a and W3 as built (section 10). It covers:
   - the physics in numbers and the owner's decisions;
   - UA from size with a film per phase and the approximations that keep it free of lag;
   - the air cooler (air at 25 °C) and the fired heater (heat to a set temperature, capped at its duty);
@@ -55,6 +55,12 @@ Changed by W6:
 - `HeatSides`: the heaters' coils, areas, passages, `coilDuty` and their heat law; `HeatUnit` (`FIRING` default, `burners`, a heater coil needs a set point); `FluidDomain.requireInputTemperature`;
 - `FluidCheckpointCodec` (state format 25: the tagged heat law), `IslandCertificate` (graph identity tag -4);
 - `FluidWorldAuthority` (an edit moves the partner coil; the DUTY INSUFFICIENT status; the coil's view), `FluidView.Heat` (burners, set point, most duty), `FluidNetwork` (the burners as power, the set point as temperature), `FluidDeviceScreen` and `en_us.json`.
+
+Changed by W3:
+
+- `science/fluid/network`: `ExchangerRelay` (new: the 8-cell quasi-steady wall on two curves, the capacity-rate share and the plan of a side's wall, give-back and active share); `HeatSide` (the partner's connection id and the active share); `HeatCurve.temperatureSlope`; `PassiveStepSolver.couple`; `PassiveIntervalSolver.solve` and `RetainedSolver.solve` (the reads);
+- `science/equipment/HeatSides`: an exchanger's side law, 8 cells with its partner's identity;
+- `runtime/fluid`: `IslandCoordinator` (the fence in `reconsider`, `verify` and the pump; the reads at dispatch; the booking at commit and replay; the records, transits and wake queue), `ProcessSolveServices.FluidIslandCommand` (the reads), `HeatUnit.withTransit`, `WorldTopologyLedger` (`heatTransits`, `withHeatTransits`, `removedHeat`), `FluidWorldAuthority` (the transit loaded, captured and booked at removal), `FluidCheckpointCodec` (state format 26), `IslandCertificate` (graph identity tag -5), `FluidRuntimeDiagnostics.couplingWakes`.
 
 The plan also touches:
 
@@ -148,15 +154,26 @@ The plan also touches:
   - Found: a stopped-by-lag rule is not needed (0 firings in normal running, no faster recovery). A side whose jobs take as long as its cadence never works off a hold's debt; the harness caps latency at half the cadence.
   - Q16 put to the owner: C recommended, B the alternative if screens must never wait.
 
+- 2026-10-27, W3 the two-sided coupling (form C, owner Q16), in the W3 commit.
+  - Each side plans at its slice start from its partner's record as of the slice start: the quasi-steady 8-cell wall (alternating sweeps, an Illinois root per cell, 0.01 K), its share of the heat in transit by capacity rate times slice length, and the give-back as an enthalpy shift held between the inlets. A side's slice waits until its partner has committed through it, is certified there, or is stopped.
+  - Three decisions found in the build (reversible, plan section 10): a steady side keeps its wall (otherwise coupled islands never certify); a still or stopped partner gives an active share of 0 (otherwise 70 W leaks against a flat wall); the booked and the settled transit are distinct readings. Two more for loads: a side's last span is rebuilt from its saved interval, and a certified partner's first record is adopted as its baseline.
+  - Formats: state format 26, certificate graph identity tag -5. Facts unchanged.
+  - Gates: `ExchangerCouplingTest` 7 (steady state at three cadence pairs within 0.002 K; a 60 s hold; a feed/effluent loop; steam in methane against water at 20 s slices; a side without flow books 0 J; a load while the sides stand apart; certify and wake), `ExchangerRelayTest` 2, `FluidFactsCompatTest` +1 (the transit fact); quick suite 1687, no failures. The wall: 7 sweeps, 0.10 ms.
+  - No in-game check: the screen did not change.
+
 ## Notes
 
-- Open: Q16, the coupling's timing form, recommended C (W3a). Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
+- Q16 answered 2026-10-27: form C, the coupling fence (W3a). Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
 - Open from W1:
-  - Q15: the curve-span extrapolation notice, recommended dropped (plan section 12);
+  - Q15: the curve-span extrapolation notice, recommended dropped (plan section 12). W3 found that a two-sided march cannot leave its span;
   - a pipe gauge downstream of a side reads the outlet junction; a gauge on the unit itself still reads its inlet node;
   - the step accepts a junction laid out without a phase its enthalpy holds; only the seeds guard it (W1 saw liquid 22 K superheated when the seeds missed the heat). To be put to the owner;
   - the curve is fluid only: a stream carrying crystals reads its enthalpy on the fluid's curve.
 - Open from W5: the drawn fans keep turning when switched off (the motion switch is the client's own).
 - Open from W6: the heaters' FUEL nozzle stays unconnected (fuel is another scope, Q11); the datasheet does not list the coils' surfaces yet.
-- Measured in W1: a junction boils from heat inside the Newton. Not measured yet: the quasi-steady wall on phase-change curves and the solver cost (W3 and its campaign).
+- Measured in W1: a junction boils from heat inside the Newton. Measured in W3: the quasi-steady wall on a condensing curve (7 sweeps, 0.10 ms). Not measured yet: the campaign's cost and holds in worlds with exchangers (it has none).
+- Open from W3:
+  - the authority's live load, capture and removal of the transit are gated through the ledger's snapshot methods, not by a GameTest;
+  - after a load only the current record exists, so a side whose partner is a slice ahead reads it (D1);
+  - D6, a budget hold counted as stopped, has no gate.
 - Code guide: not updated yet; the fluid network chapter is updated before the merge.

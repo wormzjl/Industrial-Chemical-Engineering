@@ -65,7 +65,17 @@ public final class PassiveIntervalSolver {
      * of the interval alone, so that a certified replay is bitwise (see {@link #replayStart}).
      */
     public Result solve(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep) {
+        return solve(initial,duration,settings,checkpoint,startingStep,Map.of());
+    }
+    /**
+     * {@link #solve(PassiveNetwork,double,Settings,Runnable,double)} with each coupled exchanger side planned at the
+     * interval's start from its read in {@code reads} (by connection id; batch 2026-10-27-heat-exchanger-design, plan
+     * section 5.2): its wall and give-back stay fixed for the interval ({@link PassiveStepSolver#couple}). A coupled side
+     * without a read moves no heat.
+     */
+    public Result solve(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads) {
         var committed=PassiveNetwork.sizeJunctionHoldups(initial,model);
+        committed=implicit.couple(committed,reads,carriedFlows(committed),duration,checkpoint);
         // Owner decision D33, amended by D62: a transport closure is reconsidered at each interval start, so the interval
         // starts with every one read open, and every path reads that start: the rest test, the slice's inlet decision, the
         // refresh, the solid events and the plain integrate of an island with no filter, solids or liquid, where nothing decides

@@ -68,10 +68,13 @@ import java.util.function.Function;
  *
  * <p>25 (batch 2026-10-27-heat-exchanger-design, W6): the heat law is tagged (0 none, 1 heat side, 2 fired coil: its set
  * temperature, reach, duty and firing).</p>
+ *
+ * <p>26 (batch 2026-10-27-heat-exchanger-design, W3): a heat side also carries its partner's connection id and its active
+ * share (the sit-out), after its give-back.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=25;
+    public static final int VERSION=26;
     /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -305,7 +308,7 @@ public final class FluidCheckpointCodec {
                 case null->w.u8(0);
                 case com.wormzjl.icheme.science.fluid.network.HeatSide heat->{var films=heat.films();var wall=heat.wall();w.u8(1);
                     w.f64(heat.area());w.f64(films.liquid());w.f64(films.twoPhase());w.f64(films.gas());
-                    w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());}
+                    w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());w.i64(heat.partner());w.f64(heat.active());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.reach());w.f64(coil.duty());w.f64(coil.firing());}
             }
         }
@@ -350,7 +353,8 @@ public final class FluidCheckpointCodec {
         if(tag!=1)throw r.invalid("unknown heat law "+tag);
         double area=r.f64();var films=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());
         var wall=new double[r.varint(MAXIMUM_WALL_CELLS)];for(int k=0;k<wall.length;k++)wall[k]=r.f64();
-        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,r.f64(),r.f64());
+        double bypass=r.f64(),giveBack=r.f64();
+        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,r.i64(),r.f64());
     }
     private static PassiveNetwork.PhasePort port(Reader r){int port=r.u8();if(port>=PHASE_PORTS.length)throw r.invalid("unknown pipe port "+port);return PHASE_PORTS[port];}
 

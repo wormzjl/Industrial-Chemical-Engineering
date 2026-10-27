@@ -44,10 +44,16 @@ public final class RetainedSolver {
      * ({@link PassiveIntervalSolver#replayStart}). */
     public PassiveIntervalSolver.Result solve(FluidThermodynamics model,PassiveNetwork snapshot,double duration,
                                               PassiveIntervalSolver.Settings settings,Runnable checkpoint) {
+        return solve(model,snapshot,duration,settings,checkpoint,java.util.Map.of());
+    }
+    /** {@code reads}: each coupled exchanger side's read of its other side, by connection id (plan section 5.2). */
+    public PassiveIntervalSolver.Result solve(FluidThermodynamics model,PassiveNetwork snapshot,double duration,
+                                              PassiveIntervalSolver.Settings settings,Runnable checkpoint,
+                                              java.util.Map<Long,com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read> reads) {
         var solver=acquire(model);
         try {
             solver.replayStart(snapshot,committed);
-            return solver.solve(snapshot,duration,settings,checkpoint,Math.min(settings.initialStep(),duration));
+            return solver.solve(snapshot,duration,settings,checkpoint,Math.min(settings.initialStep(),duration),reads);
         }
         finally{ownership.release();}
     }

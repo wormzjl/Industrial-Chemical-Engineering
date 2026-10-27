@@ -53,10 +53,11 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
     /** The same side over {@code value} m²: a datasheet whose surface law changed. */
     public HeatUnit withArea(double value){return new HeatUnit(unit,side,value,partner,control,transitJoule);}
     public HeatUnit withControl(Control value){return new HeatUnit(unit,side,area,partner,value,transitJoule);}
+    public HeatUnit withTransit(double joule){return new HeatUnit(unit,side,area,partner,control,joule);}
     /** Whether the side has fans the player switches (an air cooler's process side). */
     public boolean fans(){return unit==HeatSides.Unit.AIR_COOLER;}
     /** Whether the side is a fired heater's coil, whose burners and set point the player sets for both coils at once. */
     public boolean burners(){return unit==HeatSides.Unit.FIRED_HEATER;}
-    /** The heat law this side moves heat through on its own ({@link HeatSides#heatSide}), or null where it waits for its partner. */
-    public @Nullable HeatLaw heatSide(){return HeatSides.heatSide(unit,side,area,control.share(),control.target());}
+    /** The heat law this side moves heat through ({@link HeatSides#heatSide}; an exchanger's against its partner's connection), or null where it has none. */
+    public @Nullable HeatLaw heatSide(){return HeatSides.heatSide(unit,side,area,control.share(),control.target(),partner==0?0:PhysicalFluidTopology.sideIdentity(partner));}
 }

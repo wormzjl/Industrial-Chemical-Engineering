@@ -111,16 +111,26 @@ public final class HeatSides {
     }
     private static int channels(double count){return (int)Math.max(1,Math.round(count));}
 
+    /** An exchanger's wall cells in counterflow (plan section 5.1: within 0.9 % of exact counterflow up to NTU 5 at Cr 0.5). */
+    public static final int EXCHANGER_CELLS=8;
+    /** {@link #heatSide(Unit,Side,double,double,double,long)} of a side without a partner. */
+    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target){return heatSide(unit,side,area,share,target,0);}
     /**
-     * The heat law a side moves heat through on its own, or null where it waits for its partner (W3) or its package (W7),
-     * with its actuator at {@code share} and its set point {@code target} (K):
-     * <ul><li>an air cooler's process side against air at {@link #AIR_TEMPERATURE} over its bare tube surface {@code area}
+     * The heat law a side moves heat through, or null where it has none yet (a kettle waits for its package, W7, and an
+     * exchanger side without a partner), with its actuator at {@code share} and its set point {@code target} (K):
+     * <ul><li>an exchanger's side over its tube surface {@code area} (m²) in {@link #EXCHANGER_CELLS} cells, with the films
+     * per phase of plan section 4 and its bypass at {@code share}, against the wall its other side's stream makes:
+     * {@code partner} is that side's connection id, and each slice plans the wall from it (plan section 5.2; the cells' 25 °C
+     * here is never moved against);</li>
+     * <li>an air cooler's process side against air at {@link #AIR_TEMPERATURE} over its bare tube surface {@code area}
      * (m²), with its fans at {@code share} of full speed ({@link #airFilms});</li>
      * <li>a fired heater's coil towards the set point {@code target}, the radiant coil all the way and the convection coil
      * its 30 % share of it, at most its {@link #coilDuty} with the burners at {@code share}.</li></ul>
      */
-    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target) {
+    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner) {
         return switch(unit) {
+            case EXCHANGER->{if(partner==0)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
+                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1);}
             case AIR_COOLER->new HeatSide(area,airFilms(share),new double[]{AIR_TEMPERATURE},0,0);
             case FIRED_HEATER->new FiredCoil(target,side==Side.RADIANT?1:1-ProcessUnit.RADIANT_SHARE,coilDuty(side,area,share),1);
             default->null;

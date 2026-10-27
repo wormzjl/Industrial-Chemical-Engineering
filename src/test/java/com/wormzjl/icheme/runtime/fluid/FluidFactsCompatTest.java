@@ -187,6 +187,25 @@ class FluidFactsCompatTest {
     }
 
     /** A facts section is read by every later build: one this build cannot read refuses the world, its files kept. */
+    /**
+     * W3 (plan section 5.2): the heat an exchanger holds in transit is a fact of its sides. A save writes the coordinator's
+     * value into the side with the lower identity and 0 into the other; a load reads the two back as their sum; the facts
+     * round-trip it. A removed unit books it as destroyed energy.
+     */
+    @Test void anExchangersHeatInTransitIsAFactOfItsSides() {
+        var world=corpusWorld();var saved=world.ledger.snapshot();
+        long tube=saved.active().values().stream().filter(r->r.device().heat()!=null&&r.device().heat().side()==HeatSides.Side.TUBE).findFirst().orElseThrow().device().id();
+        long shell=saved.active().get(tube).device().heat().partner(),pair=PhysicalFluidTopology.sideIdentity(Math.min(tube,shell));
+        assertEquals(Map.of(pair,1234.5),saved.heatTransits(),"a load reads the transit the facts carry");
+        var written=saved.withHeatTransits(Map.of(pair,-42.25));
+        assertEquals(-42.25,written.active().get(Math.min(tube,shell)).device().heat().transitJoule(),"the lower side holds it");
+        assertEquals(0,written.active().get(Math.max(tube,shell)).device().heat().transitJoule(),"the other side 0");
+        assertSame(written,written.withHeatTransits(written.heatTransits()),"an unchanged transit writes nothing new");
+        var decoded=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(written),written.onlineTick(),key->model);
+        assertEquals(Map.of(pair,-42.25),decoded.heatTransits(),"the facts round-trip it");
+        double before=world.ledger.snapshot().destroyed().totalEnergy();world.ledger.removedHeat(-42.25);
+        assertEquals(before-42.25,world.ledger.snapshot().destroyed().totalEnergy(),1e-9,"a removed unit books it as destroyed energy");
+    }
     @Test void aFactsSectionThisBuildCannotReadRefusesTheWorld() {
         var world=world();var image=image(world);long island=world.coordinator.snapshots().getFirst().id();
         var unit=CheckpointImages.unitBytes(image,island);

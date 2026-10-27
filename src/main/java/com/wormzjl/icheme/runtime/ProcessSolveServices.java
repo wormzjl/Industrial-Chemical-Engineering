@@ -365,16 +365,22 @@ public final class ProcessSolveServices {
     /** Immutable worker result envelope routed only after main-thread completion draining. */
     public sealed interface ProcessSolveResult permits V3ColumnSolveResult,FluidIslandSolveResult {}
 
-    /** Contains no live level, block entity, callback, or mutable server-owned collection. */
+    /** Contains no live level, block entity, callback, or mutable server-owned collection. {@code reads}: each coupled
+     * exchanger side's read of its other side, by connection id, made on the server at the dispatch (plan section 5.2). */
     public record FluidIslandCommand(FluidThermodynamics model,PassiveNetwork snapshot,double durationSeconds,
                                      PassiveIntervalSolver.Settings settings,long wallBudgetNanos,
-                                     com.wormzjl.icheme.runtime.fluid.RetainedSolver retained) implements ProcessSolveCommand {
+                                     com.wormzjl.icheme.runtime.fluid.RetainedSolver retained,
+                                     Map<Long,com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read> reads) implements ProcessSolveCommand {
         /** Without a retained handle the job gets its own, which is the per-job solver of before. */
         public FluidIslandCommand(FluidThermodynamics model,PassiveNetwork snapshot,double durationSeconds,PassiveIntervalSolver.Settings settings,long wallBudgetNanos) {
             this(model,snapshot,durationSeconds,settings,wallBudgetNanos,new com.wormzjl.icheme.runtime.fluid.RetainedSolver());
         }
+        /** No coupled exchanger side read. */
+        public FluidIslandCommand(FluidThermodynamics model,PassiveNetwork snapshot,double durationSeconds,PassiveIntervalSolver.Settings settings,long wallBudgetNanos,com.wormzjl.icheme.runtime.fluid.RetainedSolver retained) {
+            this(model,snapshot,durationSeconds,settings,wallBudgetNanos,retained,Map.of());
+        }
         public FluidIslandCommand {
-            Objects.requireNonNull(model);Objects.requireNonNull(snapshot);Objects.requireNonNull(settings);Objects.requireNonNull(retained);
+            Objects.requireNonNull(model);Objects.requireNonNull(snapshot);Objects.requireNonNull(settings);Objects.requireNonNull(retained);reads=Map.copyOf(reads);
             if(!Double.isFinite(durationSeconds)||durationSeconds<=0||wallBudgetNanos<=0)throw new IllegalArgumentException("Invalid island solve budget");
         }
         @Override public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
@@ -393,7 +399,7 @@ public final class ProcessSolveServices {
             long[] elapsed={0};
             Runnable hard=()->{cancellationToken.throwIfCancellationRequested();elapsed[0]=nanoClock.getAsLong()-start;if(elapsed[0]>=wallBudgetNanos)throw new FluidWallDeadline();};
             try {
-                var candidate=retained.solve(model,snapshot,durationSeconds,settings,hard);hard.run();
+                var candidate=retained.solve(model,snapshot,durationSeconds,settings,hard,reads);hard.run();
                 return new FluidIslandSolveResult(Optional.of(candidate),"FULL",elapsed[0],-1,Optional.empty(),notices(model,candidate));
             }catch(FluidWallDeadline deadline){return new FluidIslandSolveResult(Optional.empty(),WALL_DEADLINE,elapsed[0]);}
             catch(com.wormzjl.icheme.science.fluid.solver.SparseNewton.Nonconvergence|IllegalArgumentException failed) {

@@ -86,6 +86,26 @@ public final class WorldTopologyLedger {
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed) {
             this(onlineTick,nextIdentity,active,events,constructed,destroyed,FluidBasis.capture(com.wormzjl.icheme.science.material.MaterialRuntime.current()));
         }
+        /** Each exchanger's heat in transit as its sides' facts carry it (plan section 5.2), J, by pair key: the connection id of
+         * its side with the lower identity ({@link PhysicalFluidTopology#sideIdentity}). The two sides' values sum. */
+        public Map<Long,Double> heatTransits() {
+            var transits=new HashMap<Long,Double>();
+            for(var r:active.values()){var heat=r.device().heat();if(heat!=null&&heat.partner()!=0&&heat.transitJoule()!=0)transits.merge(PhysicalFluidTopology.sideIdentity(Math.min(r.device().id(),heat.partner())),heat.transitJoule(),Double::sum);}
+            return transits;
+        }
+        /** These facts with each exchanger's heat in transit ({@code transits}, by pair key) in its sides: the side with the
+         * lower identity holds it, the other 0 (plan section 5.2). */
+        public Snapshot withHeatTransits(Map<Long,Double> transits) {
+            Map<Long,Registration> changed=null;
+            for(var r:active.values()) {
+                var heat=r.device().heat();if(heat==null||heat.partner()==0)continue;
+                double joule=r.device().id()<heat.partner()?transits.getOrDefault(PhysicalFluidTopology.sideIdentity(r.device().id()),0.):0;
+                if(joule==heat.transitJoule())continue;
+                if(changed==null)changed=new HashMap<>(active);
+                changed.put(r.device().id(),new Registration(r.device().withHeat(heat.withTransit(joule)),r.spec(),r.revision()));
+            }
+            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated);
+        }
         public Snapshot {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologySnapshots);
             recoveries=Map.copyOf(recoveries);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
@@ -237,6 +257,12 @@ public final class WorldTopologyLedger {
         return new Prepared(prepared.version,prepared.preparedTick,prepared.nextIdentity,prepared.event,prepared.applied,prepared.constructed,prepared.destroyed,pending);
     }
     public void deliveredRecovery(UUID identity){owned();if(recoveries.remove(identity)==null)throw new IllegalStateException("Recovery is no longer owned");version++;}
+    /** A removed heat-exchanging unit takes the heat it held in transit along (plan section 5.2, J): booked as destroyed
+     * energy, as a removed vessel's contents are. */
+    public void removedHeat(double joule) {
+        owned();if(!Double.isFinite(joule))throw new IllegalArgumentException("Invalid removed heat");if(joule==0)return;
+        destroyed=new MaterialTotal(destroyed.moles(),destroyed.totalEnergy()+joule,destroyed.solidMasses());version++;
+    }
     public void validate(Prepared prepared){owned();if(prepared.version!=version||prepared.preparedTick!=onlineTick)throw new IllegalStateException("Stale topology preparation");}
     public void commit(Prepared prepared) {
         validate(prepared);

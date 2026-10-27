@@ -52,6 +52,8 @@ public final class FluidRuntimeDiagnostics {
     public static final LongAdder certificatesIssued=new LongAdder();
     public static final LongAdder certificatesRenewed=new LongAdder();
     public static final LongAdder certificateWakes=new LongAdder();
+    /** Certificates an exchanger's other side's commit ended (batch 2026-10-27-heat-exchanger-design, plan section 5.2). */
+    public static final LongAdder couplingWakes=new LongAdder();
     /** Materialisations of certified islands, and the online ticks they advanced by replay (the identity at drift 0 included). */
     public static final LongAdder materialisations=new LongAdder();
     public static final LongAdder replayedTicks=new LongAdder();
@@ -94,7 +96,7 @@ public final class FluidRuntimeDiagnostics {
         map.put("completionsRouted",completionsRouted);map.put("islandsPublished",islandsPublished);
         map.put("deadlinesFired",deadlinesFired);
         map.put("drainContinuations",drainContinuations);map.put("drainContinuationsDeferred",drainContinuationsDeferred);
-        map.put("certificatesIssued",certificatesIssued);map.put("certificatesRenewed",certificatesRenewed);map.put("certificateWakes",certificateWakes);
+        map.put("certificatesIssued",certificatesIssued);map.put("certificatesRenewed",certificatesRenewed);map.put("certificateWakes",certificateWakes);map.put("couplingWakes",couplingWakes);
         map.put("materialisations",materialisations);map.put("replayedTicks",replayedTicks);
         map.put("bucketFlushes",bucketFlushes);map.put("devicePresentations",devicePresentations);map.put("staticPayloads",staticPayloads);
         map.put("queuedInputs",queuedInputs);map.put("inputReplies",inputReplies);

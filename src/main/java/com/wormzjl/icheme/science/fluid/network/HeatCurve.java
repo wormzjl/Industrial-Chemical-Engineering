@@ -77,6 +77,8 @@ public final class HeatCurve {
         return film[segment]+(value-h[segment])*filmSlope(segment);
     }
     public double temperatureAt(double value){return temperatureOn(segment(value),value);}
+    /** The temperature's slope at {@code value}, K per J/kg: 0 on a plateau (latent heat), the end lines' beyond the end knots. */
+    public double temperatureSlope(double value){return slope(segment(value));}
     public double filmAt(double value){return filmOn(segment(value),value);}
     /**
      * The enthalpy (J/kg) at {@code temperature} K: the largest on the curve, so a plateau's temperature names its vapour
