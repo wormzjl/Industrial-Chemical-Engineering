@@ -10,11 +10,12 @@ Status: Planned 2026-10-28 (branch `claude/distillation-column-integration-fef62
 
 ## Code areas (planned)
 
-`science/column/v3` (warm solves through `V3ColumnCalculator.calculateWithStrategy`, no solver change in stage A), `science/fluid/solver/PhaseLayout.wallRow` (the pad pressure), `science/fluid/network/ScheduledTransfer` (its first runtime producer), `runtime/fluid` (the column unit's registration and facts, the suspension, the ports, `IslandCoordinator` fence and valve operations), `runtime/assembly` (Start and Stop on a COMPLETE report), `science/equipment/ColumnDesign` and `ColumnTrays` (the operating point), the assembly screen's Operation tab.
+`science/column/v3` (warm solves through `V3ColumnCalculator.calculateWithStrategy`, no solver change in stage A), `science/fluid/solver` (a constant-pressure buffer node; the vessel wall row unchanged), `science/fluid/network/ScheduledTransfer` (its first runtime producer), `runtime/fluid` (the column unit's registration and facts, the suspension, the ports, `IslandCoordinator` fence and valve operations), `runtime/assembly` (Start and Stop on a COMPLETE report), `science/equipment/ColumnDesign` and `ColumnTrays` (the operating point), the assembly screen's Operation tab.
 
 ## History
 
 - 2026-10-28: plan written. Design only: no code, no Gradle run. It answers the 2026-10-26 plan's open next-stage decisions D5 (members suspended with their contents), D7 (the operating point on the design), D14 (inlet voids and outlet buffer vessels; generator ports rejected again for conservation) and D16 (the distillate valve is its port's valve), and gives the heat plan's deferred W9 a place (stage B of the utilities).
+- 2026-10-28: owner decision on Q3: outlets are constant-pressure variable-volume buffers (pressure fixed at the port, inventory free, capacity-bounded) instead of padded vessels; the wall-row change is dropped.
 
 ## Open items
 

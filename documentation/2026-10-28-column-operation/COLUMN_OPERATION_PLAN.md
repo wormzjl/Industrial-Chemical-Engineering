@@ -50,7 +50,7 @@ Owner request 2026-10-28 (summary):
 
 1. **The boundary valves are the boundary.** While the column runs, everything between its boundary valves (the column, the members, the inside pipes) leaves the fluid network and becomes one column unit. The network never solves across it.
 2. **Inlets are sinks at the required pressure.** Each inlet port is a void. What it receives goes into the column's inlet account.
-3. **Outlets are buffer vessels at the product's pressure.** The column fills them; the network empties them through the product valves.
+3. **Outlets are constant-pressure buffers.** Each holds the product's pressure while its volume follows its inventory (a gasholder or bladder accumulator). The column fills them; the network empties them through the product valves.
 4. **The column works in cycles.** Every 100 ticks it takes from its inlet accounts at most its set rates, splits what it took with its split table, and fills its outlet accounts. Mass, every component and energy are conserved by construction.
 5. **The split table comes from the last accepted V3 solve.** It is applied to the feed actually taken, so it follows drift to first order without a solve.
 6. **A solve runs only when the intensive input state leaves a band** around the table's state: the feed composition and enthalpy, the steam ratio, the setpoints. A change of throughput alone never solves (fact 1). The solve starts warm from the table's state.
@@ -69,7 +69,7 @@ flowchart LR
     SOLVE --> TAB
     CYC --> OA[Outlet accounts]
   end
-  OA -->|planned injection| BV[(Buffer vessels at product pressure)]
+  OA -->|planned injection| BV[(Constant-pressure buffers)]
   BV --> PV[Product valves, LC] --> OUT[Product islands]
 ```
 
@@ -89,16 +89,16 @@ flowchart LR
 |---|---|---|---|
 | Feed | void | feed tray pressure + static head | inlet |
 | Steam i | void | steam stage pressure + static head | inlet |
-| Off-gas | buffer vessel, gas | node 0 (the drum) | outlet |
-| Sour water | buffer vessel | node 0 + boot head | outlet |
-| Distillate | buffer vessel | node 0 + the reflux pump's set pressure rise | outlet |
-| Draw i | buffer vessel | draw tray pressure + static head | outlet |
-| Bottoms | buffer vessel | sump pressure + static head | outlet |
+| Off-gas | buffer, gas | node 0 (the drum) | outlet |
+| Sour water | buffer | node 0 + boot head | outlet |
+| Distillate | buffer | node 0 + the reflux pump's set pressure rise | outlet |
+| Draw i | buffer | draw tray pressure + static head | outlet |
+| Bottoms | buffer | sump pressure + static head | outlet |
 
 - The pressures come from the table (state). A new solve that moves a port's pressure by more than 1 kPa changes it, by one queued topology event.
 - The inside lines' friction is left out. Example: 20 m of 0.2 m pipe at 1 m/s of liquid loses about 0.8 kPa, against 250 kPa.
-- **The buffer vessel's pad.** Its bag stands at the port's pressure, not at the ambient one: the wall row's slack branch reads the vessel's own pad pressure, `slack = 2 (P_pad − P)/P_pad`. Every existing vessel has `P_pad` = 101 325 Pa, so existing worlds are bit-identical. Physically: a nitrogen-blanketed drum whose pad a split-range controller holds. The other readers of the ambient for a slack vessel follow it (the empty vessel's state, the bag's work, crystals while slack, the rest gauge).
-- **Size.** An inlet account aims at 30 s of its set rate. A buffer vessel holds 120 s of design production (a real drum holds 5 to 10 min).
+- **The buffer's form.** A new node kind, not a vessel: its pressure is fixed at the port's pressure (the solve's P_k plus the static head, refreshed when a new split table applies) and its inventory is an account of mass in and out, in any phase. The vessel wall row (`PhaseLayout.wallRow`) is unchanged, so existing worlds are bit-identical by construction. It cannot be drawn below empty, so conservation holds by construction (D14); a gas product needs no blanket and no separation rule, and a liquid-full buffer is not stiff. Owner decision 2026-10-28 (variable-volume buffer instead of a padded vessel).
+- **Size.** An inlet account aims at 30 s of its set rate. A buffer holds 120 s of design production (a real drum holds 5 to 10 min).
 
 ### 4.3 The valves
 
@@ -107,7 +107,7 @@ The master operates its boundary valves while it runs (the plan of 2026-10-26, s
 | Valve | Job | Target |
 |---|---|---|
 | Feed, steam i | FC | the column's demand (its set rate, × α under rule A), corrected by its inlet account's level |
-| Distillate, sour water, draw i, bottoms | LC on its buffer vessel | the production rate, corrected by the vessel's level |
+| Distillate, sour water, draw i, bottoms | LC on its buffer | the production rate, corrected by the buffer's fill |
 | Off-gas | LC on the gas buffer (a PC in effect) | the production rate |
 | Reflux | inside: no job | the model sets the reflux |
 
@@ -161,7 +161,7 @@ Every 100 online ticks (staggered by column), one worker job, committed on the s
 
 | Rule | What the column does | Solves | Physical reading |
 |---|---|---|---|
-| A (recommended) | α = min(1, each inlet account / its demand, each buffer vessel's room); every input taken at α × its rate; products and duties scale | none | ratio controllers cut together; a full drum or sump cuts the feed |
+| A (recommended) | α = min(1, each inlet account / its demand, each buffer's room); every input taken at α × its rate; products and duties scale | none | ratio controllers cut together; a full buffer cuts the feed |
 | B | each input taken as available up to its rate; a changed steam ratio is a new intensive state | one per change; rule A where the solve fails (zero steam without a reboiler, the draw wall) | a unit that keeps its crude rate and strips less |
 
 - Absolute setpoints (draws and duties held whatever the feed) are not recommended. With the draws held, a feed cut raises their share of the tray liquid (ρ) about 1/(1 − cut) times, 1.43 times for a 30 % cut. That share meets the liquid-supply screen (ρ ≥ 0.30 rejected) and then the draw wall (ρ ≥ 1).
@@ -213,7 +213,7 @@ Every 100 online ticks (staggered by column), one worker job, committed on the s
 |---|---|---|
 | Fact | The design's operating point (D7): feed composition and rate, feed temperature, top pressure, the three specifications, the steam, draw and pumparound values. Append-only; absent means no operating point, which is every column built before (it cannot run, as before the field). | equipment shape field; corpus `compat/equipment/shapes-4.snbt` |
 | Fact | The column unit's registration: setpoints (rates, specifications, rule), the run switch, the inlet and outlet accounts (moles by component, energy, solids), its ledger totals (taken, produced, duties). | fluid facts schema 6; corpus `compat/fluid/schema-6/` |
-| Fact | The buffer vessels' contents. | vessel contents, as today |
+| Fact | The buffers' inventories (amounts, composition, enthalpy). | new buffer facts |
 | State | The split table and its warm seed (dropped: one cold solve, status STARTING, nothing taken); the port pressures; the cycle clock and windows; the drift reference; pending solves; the valve operations; the suspension set (from the report: a dropped store stops the column until its rebuild walk). | the column unit's state section |
 
 Dismantling the column books every account as removed, named on the ledger, as `removedHeat` does for an exchanger's transit.
@@ -239,7 +239,7 @@ Dismantling the column books every account as removed, named on the ledger, as `
 |---|---|---|
 | C1 Measurement | Homogeneity (α 0.5 and 1.2, prescribed drop and hydraulics); the table's error against drift (feed temperature ±2, 5, 10 K; composition 1, 5, 10 % toward a lighter and a heavier network crude); warm solve success and time (dry, wet, a kettle design). Sets section 6's bands. | One sweep on the default design restated on the network package, and one kettle design; review of at most 50 lines; no product code |
 | C2 Operating point | Save design keeps the operating point; Import copies it; the Operation tab shows it, read only | `EquipmentShapeCompatTest` with `shapes-4.snbt`; `ColumnDesignCodecTest` |
-| C3 Column unit | The registry device and its facts; Start and Stop as queued events; the suspension; the ports; the pad pressure | `FluidFactsCompatTest` with schema 6; chain-100 exact and the 33 junction lines identical (pad = ambient); GameTests: Start and Stop keep the members' contents, ports split islands, dismantling books the accounts |
+| C3 Column unit | The registry device and its facts; Start and Stop as queued events; the suspension; the ports; the constant-pressure buffer node | `FluidFactsCompatTest` with schema 6; chain-100 exact and the 33 junction lines identical (no vessel row changes); GameTests: Start and Stop keep the members' contents, ports split islands, a full buffer cuts the feed, dismantling books the accounts |
 | C4 Cycle | Accounts, split, energy closure, injections (`ScheduledTransfer`'s first runtime producer), valve operation, the fence and L | A conservation gate (components and energy exact over 1000 cycles of drifting feed); a determinism gate (two worker timings, identical products); a running-column GameTest |
 | C5 Solves | The first solve, the triggers, the warm and cold route, fixed application, failure and trip, the table as state | A trigger table test; a failed solve keeps the table; a reload resumes without a solve |
 | C6 Short inputs | Rule A, the outlet room, the statuses (rule B later) | α from the accounts; a blocked product cuts the feed; the prescribed-drop scaled table equals a new solve within closure |
@@ -254,7 +254,7 @@ Later batches: stage B (heat utilities through W9, member capacities), stage C (
 |---|---|---|---|
 | Q1 | Short inputs | A: one α for every input; B: inputs as available, solve on the new ratios; B with A where it fails | A now, B later |
 | Q2 | Setpoints while running | per unit feed (ratio control); absolute rates | per unit feed |
-| Q3 | Outlet form | buffer vessels with a pad pressure in the wall row; generators whose draw the product valve bounds (no vessel physics, but an island whose valve cannot regulate draws past its account: conservation not by construction, D14) | buffer vessels |
+| Q3 | Outlet form | decided 2026-10-28: constant-pressure variable-volume buffers (pressure fixed, inventory free, bounded by capacity); rejected: padded vessels in the wall row, generator outlets (conservation not by construction, D14) | decided |
 | Q4 | Timing | fence with the lag L = 22 s (deterministic); reads at dispatch (form B: no waits, timing-dependent) | fence |
 | Q5 | Applying a new table | at a fixed cycle (deterministic); when the solve finishes | fixed cycle |
 | Q6 | Specification at a solve | S1; S2; S3; S4 (section 8) | S1 now; decide S2 or S3 after C1 |
@@ -270,7 +270,7 @@ Later batches: stage B (heat utilities through W9, member capacities), stage C (
 
 **Risks.**
 
-- The pad pressure changes every vessel's wall row. It is bit-identical at the ambient, but it needs the full final lane.
+- The constant-pressure buffer is a new node kind in the network solver; it touches no existing vessel row, but its own rows and facts need the full final lane.
 - A port's pressure change after a solve is a topology event. The rate limit bounds how often.
 - Product islands certify only if their injection is constant between cycles. Composition changes are applied in bands, as the exchanger's wake thresholds are.
 - V3 and the network model differ (water: Shomate against IF97; the network's translated PR78). The condenser closure absorbs the difference; it shows as the gap between the booked and the solved condenser duty.
