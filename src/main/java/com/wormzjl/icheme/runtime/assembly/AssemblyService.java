@@ -279,11 +279,33 @@ public final class AssemblyService {
     public static void removed(ServerLevel level, Vessel vessel) {
         var store = AssemblyStore.of(level);
         long origin = vessel.origin().asLong();
+        stopColumn(level, origin);
         store.forget(origin);
         FluidWorldAuthority.find(level.getServer()).ifPresent(world -> ExchangerLines.publish(level, world, vessel, null));
         for (long master : store.mastersAt(origin))
             if (store.entry(master) != null && store.entry(master).holds(origin)) revert(level, store, master, vessel.origin(), "removed");
         for (var position : around(vessel)) for (long master : coded(store, position)) revert(level, store, master, BlockPos.of(position), "removed");
+    }
+
+    /**
+     * A structure dismantled (batch 2026-10-28-column-operation, plan section 12): a column's unit leaves the world with it,
+     * its accounts booked as destroyed. A rebuild elsewhere ({@link #removed} alone) keeps the unit: the column stops.
+     */
+    public static void dismantled(ServerLevel level, Vessel vessel) {
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.columnRemoved(position(level, vessel.origin().asLong())));
+    }
+
+    /** A running column at {@code master} stops (plan 4.1): its structure or its assembly changed. */
+    private static void stopColumn(ServerLevel level, long master) {
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+            var unit = world.column(position(level, master));
+            if (unit != null && unit.running()) world.stopColumn(unit.id());
+        });
+    }
+
+    private static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position position(ServerLevel level, long at) {
+        var p = BlockPos.of(at);
+        return new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(), p.getX(), p.getY(), p.getZ());
     }
 
     /** The masters whose reports coded the block at {@code position}. */
@@ -334,6 +356,7 @@ public final class AssemblyService {
         // Its cell first: a reverted entry codes nothing to find it by.
         var cell = cellOf(level, master, master);
         store.revert(master, at.asLong());
+        stopColumn(level, master);
         published(level, master, cell);
         IChemE.LOGGER.info("assembly status=REVERTED master={} was={} at={} reason={}", BlockPos.of(master).toShortString(), status, at.toShortString(), why);
     }

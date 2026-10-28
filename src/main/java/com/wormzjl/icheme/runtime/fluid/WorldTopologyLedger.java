@@ -80,7 +80,9 @@ public final class WorldTopologyLedger {
         }
     }
     public record Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,
-                           MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated) {
+                           MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,
+                           Map<Long,ColumnUnit> columns) {
+        public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,Map.of());}
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,Restated.NONE);}
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,Map.of());}
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed) {
@@ -104,11 +106,11 @@ public final class WorldTopologyLedger {
                 if(changed==null)changed=new HashMap<>(active);
                 changed.put(r.device().id(),new Registration(r.device().withHeat(heat.withTransit(joule)),r.spec(),r.revision()));
             }
-            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated);
+            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns);
         }
         public Snapshot {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologySnapshots);
-            recoveries=Map.copyOf(recoveries);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
+            recoveries=Map.copyOf(recoveries);columns=Map.copyOf(columns);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
             if(onlineTick<0||nextIdentity<1||events.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Invalid world topology snapshot");
             active=Map.copyOf(active);events=List.copyOf(events);Objects.requireNonNull(constructed);Objects.requireNonNull(destroyed);Objects.requireNonNull(restated);
             Objects.requireNonNull(basis);int count=basis.components().size();
@@ -119,6 +121,14 @@ public final class WorldTopologyLedger {
             for(var entry:active.entrySet()){if(entry.getKey()!=entry.getValue().device.id()||entry.getKey()>=nextIdentity)throw new IllegalArgumentException("Invalid active physical identity/position");for(var cell:entry.getValue().device.cells())if(!positions.add(cell))throw new IllegalArgumentException("Invalid active physical identity/position");}
             long last=-1;var ids=new HashSet<UUID>();
             for(var event:events){if(event.tick<last||event.tick>onlineTick||!ids.add(event.id))throw new IllegalArgumentException("Invalid topology event ordering");last=event.tick;}
+            // A column unit (batch 2026-10-28-column-operation): an identity of its own, its accounts on the basis; every device
+            // a column holds names a column unit.
+            for(var entry:columns.entrySet()) {
+                var unit=entry.getValue();
+                if(entry.getKey()!=unit.id()||unit.id()>=nextIdentity||active.containsKey(unit.id())||unit.totals().taken().moles().length!=count)throw new IllegalArgumentException("Invalid column unit identity");
+                for(var s:unit.stations())if(s.account().moles().length!=count)throw new IllegalArgumentException("Column account axis mismatch");
+            }
+            for(var r:active.values())if(r.device.suspended()&&!columns.containsKey(r.device.suspendedBy()))throw new IllegalArgumentException("Device "+r.device.id()+" is held by no column");
         }
         public static Snapshot empty(){return empty(com.wormzjl.icheme.science.material.MaterialRuntime.current());}
         public static Snapshot empty(com.wormzjl.icheme.science.material.MaterialCatalog catalog) {
@@ -160,6 +170,8 @@ public final class WorldTopologyLedger {
     private final Map<PhysicalFluidTopology.Position,Long> activeAt=new HashMap<>(),latestAt=new HashMap<>();
     private final ArrayList<Event> events=new ArrayList<>();
     private final LinkedHashMap<UUID,RecoveredSolid> recoveries=new LinkedHashMap<>();
+    // The column units (batch 2026-10-28-column-operation), by identity, in the order they were made.
+    private final LinkedHashMap<Long,ColumnUnit> columns=new LinkedHashMap<>();
     private final Map<Long,Registration> activeView=Collections.unmodifiableMap(active),latestView=Collections.unmodifiableMap(latest);
     private final List<Event> eventsView=Collections.unmodifiableList(events);
     private final Map<UUID,RecoveredSolid> recoveriesView=Collections.unmodifiableMap(recoveries);
@@ -170,15 +182,15 @@ public final class WorldTopologyLedger {
         latest.putAll(active);latestAt.putAll(activeAt);
         // Every queued event must apply to the registry before it, in order, as when it was queued.
         for(var event:restored.events){check(latest,latestAt,event.edits);apply(latest,latestAt,event.edits);events.add(event);}
-        recoveries.putAll(restored.recoveries);
+        recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);
         shared=restored;sharedVersion=version;
     }
     private void owned(){if(Thread.currentThread()!=owner)throw new IllegalStateException("World topology belongs to the server thread");}
     /** The ledger as a checkpoint saves it. While the ledger is unchanged every snapshot shares the same immutable parts. */
     public Snapshot snapshot() {
         owned();
-        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated);sharedVersion=version;}
-        else if(shared.onlineTick!=onlineTick)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated);
+        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns));sharedVersion=version;}
+        else if(shared.onlineTick!=onlineTick)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns);
         return shared;
     }
     public long onlineTick(){owned();return onlineTick;}
@@ -263,6 +275,28 @@ public final class WorldTopologyLedger {
         owned();if(!Double.isFinite(joule))throw new IllegalArgumentException("Invalid removed heat");if(joule==0)return;
         destroyed=new MaterialTotal(destroyed.moles(),destroyed.totalEnergy()+joule,destroyed.solidMasses());version++;
     }
+    /** The column units (batch 2026-10-28-column-operation): a copy, by identity. */
+    public Map<Long,ColumnUnit> columns(){owned();return Map.copyOf(columns);}
+    /** The column unit {@code id}, or null. */
+    public ColumnUnit column(long id){owned();return columns.get(id);}
+    /** Installs or replaces a column unit's facts. A new one takes an identity reserved below {@link #nextIdentity()}. */
+    public void column(ColumnUnit unit) {
+        owned();if(unit.id()>=nextIdentity||active.containsKey(unit.id())||latest.containsKey(unit.id()))throw new IllegalArgumentException("Invalid column unit identity");
+        for(var s:unit.stations())if(s.account().moles().length!=basis.components().size())throw new IllegalArgumentException("Column account axis mismatch");
+        columns.put(unit.id(),unit);version++;
+    }
+    /**
+     * A column unit dismantled with its column: its accounts leave the world, booked as destroyed material (plan section 12),
+     * as a removed vessel's contents are. Its totals go with it.
+     */
+    public void removeColumn(long id) {
+        owned();var unit=columns.remove(id);if(unit==null)return;
+        var moles=destroyed.moles();double energy=destroyed.totalEnergy();
+        for(var s:unit.stations()){var n=s.account().moles();for(int c=0;c<n.length;c++)moles[c]+=n[c];energy+=s.account().energy();}
+        destroyed=new MaterialTotal(moles,energy,destroyed.solidMasses());version++;
+    }
+    /** Reserves {@code count} identities and returns the first. */
+    public long reserve(int count){owned();if(count<1)throw new IllegalArgumentException("Reserve at least one identity");long first=nextIdentity;nextIdentity=Math.addExact(nextIdentity,count);version++;return first;}
     public void validate(Prepared prepared){owned();if(prepared.version!=version||prepared.preparedTick!=onlineTick)throw new IllegalStateException("Stale topology preparation");}
     public void commit(Prepared prepared) {
         validate(prepared);

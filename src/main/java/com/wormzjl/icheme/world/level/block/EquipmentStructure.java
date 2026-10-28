@@ -561,6 +561,7 @@ public final class EquipmentStructure {
         dismantling = true;
         try {
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(server, vessel);
+            if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.dismantled(server, vessel);
             if (level instanceof ServerLevel server && vessel.shape().fluidDevice()) unregister(server, vessel);
             var layout = ShapeRasterizer.layout(vessel.shape());
             for (var list : java.util.List.of(layout.shell(), layout.interior()))

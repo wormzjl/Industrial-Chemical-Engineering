@@ -69,7 +69,23 @@ class FluidFactsCompatTest {
                 new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,330,280,.25),1234.5));
         var shellSide=heatSide(shell,30,4,HeatSides.shellPassage(1,6),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,450,tube));
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(tube,new WorldTopologyLedger.Registration(tubeSide,spec,0)),new WorldTopologyLedger.Edit(shell,new WorldTopologyLedger.Registration(shellSide,spec,0))),shell+1,null);
-        world.runTo(700);return world;
+        world.runTo(700);
+        // Facts schema 6: a running column unit, a pipe it holds, and its feed port, a void inside the feed valve.
+        long pipe=world.place(40,64,0,Kind.PIPE,Direction.EAST,.05);long feedValve=world.place(41,64,0,Kind.VALVE,Direction.EAST);world.runTo(720);
+        long unit=world.ledger.reserve(1);long port=world.ledger.nextIdentity();int m=model.componentCount();
+        var held=new double[m];held[0]=3.5;held[m-1]=.25;
+        var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,64,0,PhysicalFluidTopology.PORT_LANE);
+        var feed=new PhysicalFluidTopology.Device(port,at,Kind.VOID,Direction.EAST,world.registry.registrations().get(feedValve).device().geometry(),new FlowControl.Passive(),
+                List.of(new PhysicalFluidTopology.Port(at,Direction.EAST,PassiveNetwork.PhasePort.BULK)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        var setpoints=new com.wormzjl.icheme.science.column.operation.Setpoints(10,8,320,2.5,1e4,new double[]{.3},new double[]{.1},new double[]{-2e4});
+        var account=new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(held,-1.2e6);
+        world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,70,0),true,setpoints,
+                List.of(new ColumnUnit.Station(com.wormzjl.icheme.science.column.operation.Port.FEED,0,port,feedValve,account)),
+                new ColumnUnit.Totals(account,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m),2e5,-3e5,-1e4)));
+        var held0=world.registry.registrations().get(pipe);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(pipe,new WorldTopologyLedger.Registration(held0.device().withSuspendedBy(unit),held0.spec(),held0.revision()+1)),
+                new WorldTopologyLedger.Edit(port,new WorldTopologyLedger.Registration(feed,new FluidDeviceSpec(1,330,260000,FluidDeviceSpec.nitrogen(CATALOG).composition()),0))),port+1,null);
+        world.runTo(800);return world;
     }
     private static PhysicalFluidTopology.Device heatSide(long id,int x,int z,PipeResistance.Geometry passage,HeatUnit heat) {
         var inlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,z);var outlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x+2,64,z);
@@ -255,12 +271,15 @@ class FluidFactsCompatTest {
                 assertEquals(Integer.parseInt(expected.getProperty("registrations")),ledger.active().size(),folder+": registrations");
                 // Schema 2 wrote joints; an image of schema 1 reads every registration with all six faces, as pipes were then.
                 assertEquals(Long.parseLong(expected.getProperty("laid","0")),ledger.active().values().stream().filter(r->r.device().joints()!=PhysicalFluidTopology.ALL_FACES).count(),folder+": laid pipes");
-                assertEquals(Long.parseLong(expected.getProperty("lanes","0")),ledger.active().values().stream().filter(r->r.device().position().lane()!=0).count(),folder+": rack lanes");
+                assertEquals(Long.parseLong(expected.getProperty("lanes","0")),ledger.active().values().stream().filter(r->r.device().position().lane()!=0&&r.device().position().lane()<=PhysicalFluidTopology.RACK_PLACES).count(),folder+": rack lanes");
                 // Schema 3 wrote a spec's vessel geometry and the control valve; an older image reads prisms and no control valve.
                 assertEquals(Long.parseLong(expected.getProperty("shaped","0")),shaped(ledger),folder+": shaped vessels");
                 assertEquals(Long.parseLong(expected.getProperty("controlValves","0")),controlValves(ledger),folder+": control valves");
                 // Schema 5 wrote heat sides and channel counts; an older image reads none and one channel everywhere.
                 assertEquals(expected.getProperty("heatSides",""),heatSides(ledger),folder+": heat sides");
+                // Schema 6 wrote the column units and the devices they hold; an older image reads none.
+                assertEquals(Long.parseLong(expected.getProperty("suspended","0")),suspended(ledger),folder+": suspended devices");
+                assertEquals(expected.getProperty("columns",""),columns(ledger),folder+": column units");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
@@ -385,10 +404,12 @@ class FluidFactsCompatTest {
         var loaded=load(image,key->model,CATALOG);var props=new Properties();
         props.setProperty("registrations",Integer.toString(loaded.world().orElseThrow().active().size()));
         props.setProperty("laid",Long.toString(loaded.world().orElseThrow().active().values().stream().filter(r->r.device().joints()!=PhysicalFluidTopology.ALL_FACES).count()));
-        props.setProperty("lanes",Long.toString(loaded.world().orElseThrow().active().values().stream().filter(r->r.device().position().lane()!=0).count()));
+        props.setProperty("lanes",Long.toString(loaded.world().orElseThrow().active().values().stream().filter(r->r.device().position().lane()!=0&&r.device().position().lane()<=PhysicalFluidTopology.RACK_PLACES).count()));
         props.setProperty("shaped",Long.toString(shaped(loaded.world().orElseThrow())));
         props.setProperty("controlValves",Long.toString(controlValves(loaded.world().orElseThrow())));
         props.setProperty("heatSides",heatSides(loaded.world().orElseThrow()));
+        props.setProperty("suspended",Long.toString(suspended(loaded.world().orElseThrow())));
+        props.setProperty("columns",columns(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
@@ -401,6 +422,17 @@ class FluidFactsCompatTest {
             if(!text.isEmpty())text.append(";");
             text.append(r.device().id()).append(":").append(g.channels());
             if(h!=null)text.append(":").append(h.unit()).append(":").append(h.side()).append(":").append(h.area()).append(":").append(h.partner()).append(":").append(h.control()).append(":").append(h.transitJoule());
+        }
+        return text.toString();
+    }
+    private static long suspended(WorldTopologyLedger.Snapshot world){return world.active().values().stream().filter(r->r.device().suspended()).count();}
+    /** Every column unit, in identity order: what schema 6 carries. */
+    private static String columns(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var u:new TreeMap<>(world.columns()).values()) {
+            if(!text.isEmpty())text.append(";");
+            text.append(u.id()).append(":").append(u.running()).append(":").append(u.setpoints().feedRate()).append(":").append(u.totals().taken().total());
+            for(var s:u.stations())text.append(":").append(s.port()).append(s.index()).append("=").append(s.device()).append("/").append(s.valve()).append("/").append(s.account().total()).append("/").append(s.account().energy());
         }
         return text.toString();
     }

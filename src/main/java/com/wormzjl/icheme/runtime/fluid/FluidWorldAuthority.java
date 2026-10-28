@@ -338,6 +338,98 @@ public final class FluidWorldAuthority implements AutoCloseable {
             edits.add(new WorldTopologyLedger.Edit(partner.device().id(),new WorldTopologyLedger.Registration(partner.device().withHeat(partner.device().heat().withControl(heat.control())),partner.spec(),Math.addExact(partner.revision(),1))));
         return submit(edits,topology.nextIdentity());
     }
+    // ---------------- running columns (batch 2026-10-28-column-operation, C3) ----------------
+
+    /**
+     * Where a running column's port stands (plan 4.2): its kind and number, the boundary valve, the cell inside the valve
+     * (the column's side of it), the face from that cell to the valve, and the port's pressure (Pa) and temperature (K).
+     */
+    public record PortSpot(com.wormzjl.icheme.science.column.operation.Port port,int index,long valve,PhysicalFluidTopology.Position cell,
+                           PhysicalFluidTopology.Direction toward,double pressure,double temperature) {}
+    /** A Start (plan 4.1): the column's origin, its setpoints, the pipe blocks in front of its nozzles, and its ports. */
+    public record ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,
+                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots) {}
+    /** The most devices a column holds: its members and the pipes between them. */
+    public static final int COLUMN_LIMIT=4096;
+    /** The column unit of the column at {@code master}, or null. */
+    public @org.jetbrains.annotations.Nullable ColumnUnit column(PhysicalFluidTopology.Position master) {
+        owned();for(var u:topology.columns().values())if(u.master().equals(master))return u;
+        return null;
+    }
+    /**
+     * Starts the column {@code request} names (plan 4.1), one queued ledger event: every device inside its boundary valves
+     * (reached from its nozzles' pipe blocks without crossing a valve) is held by its column unit, and a port stands inside
+     * each valve, a void at an inlet, a generator at an outlet. What the held devices hold stays with them. Returns null,
+     * or why the column cannot start; nothing changes then.
+     */
+    public @org.jetbrains.annotations.Nullable String startColumn(ColumnStart request) {
+        owned();if(closed)return "the fluid world is closed";
+        var existing=column(request.master());
+        if(existing!=null&&existing.running())return "already running";
+        var valves=new HashSet<Long>();for(var s:request.spots())valves.add(s.valve());
+        java.util.function.Function<PhysicalFluidTopology.Position,WorldTopologyLedger.Registration> at=p->registry.at(p).orElse(null);
+        var inside=new LinkedHashMap<Long,WorldTopologyLedger.Registration>();var queue=new ArrayDeque<WorldTopologyLedger.Registration>();
+        for(var nozzle:request.nozzles()) {
+            var r=at.apply(nozzle);if(r==null)return "a nozzle's pipe block is not registered";
+            if(!valves.contains(r.device().id())&&inside.putIfAbsent(r.device().id(),r)==null)queue.add(r);
+        }
+        while(!queue.isEmpty()) {
+            var r=queue.removeFirst();var d=r.device();
+            if(d.fixed())return "a generator or a void stands inside the column";
+            if(d.suspended()||d.port()||topology.pending(d.id()))return "a device inside the column is held or being edited";
+            if(inside.size()>COLUMN_LIMIT)return "the column holds more than "+COLUMN_LIMIT+" devices";
+            for(var contact:d.contacts()) {
+                var next=PhysicalFluidTopology.across(at,WorldTopologyLedger.Registration::device,d,contact.cell(),contact.direction());
+                if(next==null||valves.contains(next.device().id())||!d.joins(next.device(),contact.cell(),contact.direction()))continue;
+                if(inside.putIfAbsent(next.device().id(),next)==null)queue.add(next);
+            }
+        }
+        for(var s:request.spots()) {
+            var valve=registrations().get(s.valve());
+            if(valve==null||inside.containsKey(s.valve()))return "a boundary valve is missing or inside the column";
+            if(at.apply(s.cell().withLane(PhysicalFluidTopology.PORT_LANE))!=null)return "a port's place is taken";
+        }
+        long unit=existing!=null?existing.id():topology.reserve(1);long first=topology.nextIdentity();
+        var edits=new ArrayList<WorldTopologyLedger.Edit>();var stations=new ArrayList<ColumnUnit.Station>();
+        int m=model.componentCount();var nitrogen=FluidDeviceSpec.nitrogen(catalog).composition();
+        for(var r:inside.values())edits.add(new WorldTopologyLedger.Edit(r.device().id(),new WorldTopologyLedger.Registration(r.device().withSuspendedBy(unit),r.spec(),Math.addExact(r.revision(),1))));
+        long id=first;
+        for(var s:request.spots()) {
+            var cell=s.cell().withLane(PhysicalFluidTopology.PORT_LANE);var valve=registrations().get(s.valve()).device();
+            var kind=s.port().inlet()?TopologyCompiler.Kind.VOID:TopologyCompiler.Kind.GENERATOR;
+            var device=new PhysicalFluidTopology.Device(id,cell,kind,s.toward(),valve.geometry(),new com.wormzjl.icheme.science.fluid.network.FlowControl.Passive(),
+                    List.of(new PhysicalFluidTopology.Port(cell,s.toward(),com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.BULK)),true,
+                    PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+            edits.add(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,s.temperature(),s.pressure(),nitrogen),0)));
+            var kept=existing==null?null:existing.station(s.port(),s.index());
+            stations.add(new ColumnUnit.Station(s.port(),s.index(),id,s.valve(),kept==null?com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m):kept.account()));
+            id++;
+        }
+        // Stations a stopped column kept and this start no longer has (the design lost a port) keep their accounts, stopped.
+        if(existing!=null)for(var s:existing.stations())if(stations.stream().noneMatch(t->t.port()==s.port()&&t.index()==s.index()))
+            return "the column's ports changed while it was stopped";
+        topology.column(new ColumnUnit(unit,request.master(),true,request.setpoints(),stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m)));
+        submit(edits,id);
+        IChemE.LOGGER.info("column status=STARTED master={},{},{} unit={} held={} ports={}",request.master().x(),request.master().y(),request.master().z(),unit,inside.size(),stations.size());
+        return null;
+    }
+    /** Stops column unit {@code unit} (plan 4.1), one queued ledger event: its held devices are released as they are and its
+     * ports leave. Every account stays with the unit. Nothing when it is not running. */
+    public void stopColumn(long unit) {
+        owned();if(closed)return;var u=topology.column(unit);if(u==null||!u.running())return;
+        var edits=new ArrayList<WorldTopologyLedger.Edit>();
+        for(var r:registrations().values())if(r.device().suspendedBy()==unit)
+            edits.add(new WorldTopologyLedger.Edit(r.device().id(),new WorldTopologyLedger.Registration(r.device().withSuspendedBy(0),r.spec(),Math.addExact(r.revision(),1))));
+        for(var s:u.stations())if(s.device()!=0&&registrations().containsKey(s.device()))edits.add(new WorldTopologyLedger.Edit(s.device(),null));
+        topology.column(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()));
+        if(!edits.isEmpty())submit(edits,topology.nextIdentity());
+        IChemE.LOGGER.info("column status=STOPPED master={},{},{} unit={}",u.master().x(),u.master().y(),u.master().z(),unit);
+    }
+    /** The column at {@code master} is gone (plan section 12): it stops, and its accounts leave the world, booked as destroyed. */
+    public void columnRemoved(PhysicalFluidTopology.Position master) {
+        owned();var u=column(master);if(u==null)return;
+        stopColumn(u.id());topology.removeColumn(u.id());data.setDirty();
+    }
     /** The most pipes one line resize changes; a longer line is refused whole. */
     public static final int LINE_LIMIT=4096;
     /** Resizes the pipe line through pipe {@code id} as one event: see {@link PhysicalRegistry#resizeLine}. */
