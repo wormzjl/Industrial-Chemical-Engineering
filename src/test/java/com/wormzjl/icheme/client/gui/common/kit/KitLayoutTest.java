@@ -129,6 +129,21 @@ class KitLayoutTest {
     }
 
     @Test
+    void compactMetricsPlaceTheSameRowsShorterAndATitleOnlyChoiceHoversItsLine() {
+        var normal = Column.place(every(), 20, 74, 180, M);
+        var compact = Column.place(every(), 20, 74, 180, M, Column.Metrics.COMPACT);
+        assertTrue(compact.bounds().h() < normal.bounds().h());
+        assertEquals(normal.slots().keySet(), compact.slots().keySet());
+        for (var p : compact.rows()) for (var s : p.slots().values()) assertTrue(s.inside(p.rect()), "a widget inside its compact row");
+        var titles = Column.place(every(), 20, 74, 180, M, new Column.Metrics(11, 12, 20, 20, 10));
+        var choice = titles.rows().get(2);
+        assertEquals(12, choice.rect().h());
+        assertEquals("", choice.texts().get(1), "a title-only choice draws no line");
+        assertEquals("Hold the outlet temperature\nSets the bypass to hold it", titles.hover(choice.rect().x() + 20, choice.rect().y() + 3));
+        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(11, 20, 17, 20, 10), "a field row lower than its box");
+    }
+
+    @Test
     void aColumnRefusesWhatItCannotPlace() {
         assertThrows(IllegalArgumentException.class, () -> Column.place(every(), 0, 0, 99, M));
         assertThrows(IllegalArgumentException.class, () -> new Column.Bar(1.5));

@@ -56,7 +56,19 @@ public final class Column {
         }
     }
 
-    public static final int LINE_ROW = 12, CHOICE_ROW = 24, FIELD_ROW = 24, BUTTON_ROW = 24, BAR_ROW = 12, BOX = 58, WIDGET = 18, BUTTON_GAP = 4;
+    public static final int BOX = 58, WIDGET = 18, BUTTON_GAP = 4;
+
+    /**
+     * Row heights: a line, a choice, a field row, a button row, a bar. A choice lower than 20 px draws its title only (its
+     * line on hover). {@link #DEFAULT} is the process screens' spacing; {@link #COMPACT} fits more rows in a short screen.
+     */
+    public record Metrics(int line, int choice, int field, int buttons, int bar) {
+        public static final Metrics DEFAULT = new Metrics(12, 24, 24, 24, 12), COMPACT = new Metrics(11, 20, 20, 20, 10);
+
+        public Metrics {
+            if (line < Measure.LINE || choice < Measure.LINE || field < WIDGET || buttons < WIDGET || bar < 8) throw new IllegalArgumentException("Rows lower than what they draw");
+        }
+    }
     /** A field row's label width: the row less the box, the unit and their gaps. */
     public static final int FIELD_TAIL = 80;
 
@@ -78,23 +90,28 @@ public final class Column {
 
     /** {@code rows} placed from ({@code x}, {@code y}) down, {@code width} wide. */
     public static Column place(List<? extends Row> rows, int x, int y, int width, Measure m) {
+        return place(rows, x, y, width, m, Metrics.DEFAULT);
+    }
+
+    /** {@code rows} placed from ({@code x}, {@code y}) down, {@code width} wide, at row heights {@code metrics}. */
+    public static Column place(List<? extends Row> rows, int x, int y, int width, Measure m, Metrics metrics) {
         if (width < FIELD_TAIL + 20) throw new IllegalArgumentException("A column narrower than a field row");
         var placed = new ArrayList<Placed>();
         int at = y;
         for (var row : rows) {
-            var p = place(row, x, at, width, m);
+            var p = place(row, x, at, width, m, metrics);
             placed.add(p);
             at = p.rect().bottom();
         }
         return new Column(placed, new Rect(x, y, width, at - y));
     }
 
-    private static Placed place(Row row, int x, int y, int w, Measure m) {
+    private static Placed place(Row row, int x, int y, int w, Measure m, Metrics h) {
         var slots = new LinkedHashMap<String, Rect>();
         return switch (row) {
             case Line l -> {
                 String shown = m.cut(l.text(), w);
-                yield new Placed(row, new Rect(x, y, w, LINE_ROW), slots, List.of(shown), shown.equals(l.text()) ? null : l.text());
+                yield new Placed(row, new Rect(x, y, w, h.line()), slots, List.of(shown), shown.equals(l.text()) ? null : l.text());
             }
             case Paragraph p -> {
                 var lines = m.wrap(p.text(), w);
@@ -102,21 +119,22 @@ public final class Column {
             }
             case Choice c -> {
                 String title = m.cut(c.title(), w - 12), line = m.cut(c.line(), w - 12);
-                boolean cut = !title.equals(c.title()) || !line.equals(c.line());
-                yield new Placed(row, new Rect(x, y, w, CHOICE_ROW), slots, List.of(title, line), cut ? c.title() + "\n" + c.line() : null);
+                boolean titleOnly = h.choice() < 20, cut = !title.equals(c.title()) || !titleOnly && !line.equals(c.line());
+                boolean hidden = titleOnly && !c.line().isEmpty();
+                yield new Placed(row, new Rect(x, y, w, h.choice()), slots, List.of(title, titleOnly ? "" : line), cut || hidden ? c.title() + "\n" + c.line() : null);
             }
             case Field f -> {
                 slots.put(f.key(), new Rect(x + w - FIELD_TAIL + 4, y, BOX, WIDGET));
                 String label = m.cut(f.label(), w - FIELD_TAIL), unit = m.cut(f.unit(), 15);
                 String hover = f.hint() != null ? f.label() + "\n" + f.hint() : label.equals(f.label()) ? null : f.label();
-                yield new Placed(row, new Rect(x, y, w, FIELD_ROW), slots, List.of(label, unit), hover);
+                yield new Placed(row, new Rect(x, y, w, h.field()), slots, List.of(label, unit), hover);
             }
             case Buttons b -> {
                 int n = b.buttons().size(), bw = (w - BUTTON_GAP * (n - 1)) / n;
                 for (int i = 0; i < n; i++) slots.put(b.buttons().get(i).key(), new Rect(x + i * (bw + BUTTON_GAP), y, bw, WIDGET));
-                yield new Placed(row, new Rect(x, y, w, BUTTON_ROW), slots, List.of(), null);
+                yield new Placed(row, new Rect(x, y, w, h.buttons()), slots, List.of(), null);
             }
-            case Bar ignored -> new Placed(row, new Rect(x, y, w, BAR_ROW), slots, List.of(), null);
+            case Bar ignored -> new Placed(row, new Rect(x, y, w, h.bar()), slots, List.of(), null);
             case Gap g -> new Placed(row, new Rect(x, y, w, g.height()), slots, List.of(), null);
         };
     }
@@ -170,7 +188,7 @@ public final class Column {
                 case Choice ch -> {
                     radio(c, r.x(), r.y(), ch.selected());
                     c.text(p.texts().get(0), r.x() + 12, r.y(), ch.selected() ? Palette.ACCENT : Palette.TEXT);
-                    c.text(p.texts().get(1), r.x() + 12, r.y() + Measure.LINE, Palette.MUTED);
+                    if (!p.texts().get(1).isEmpty()) c.text(p.texts().get(1), r.x() + 12, r.y() + Measure.LINE, Palette.MUTED);
                 }
                 case Field ignored -> {
                     c.text(p.texts().get(0), r.x(), r.y() + 5, Palette.MUTED);

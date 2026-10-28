@@ -52,3 +52,26 @@ The owner chose option C of [GUI_TOOLKIT_REVIEW.md](../2026-10-28-gui-toolkit-ev
 - **T1, where.** (a) Stacked on the heat GUI branch: it merges after the heat batch, or with it. (b) Wait until the heat batch is on `main`.
 - **T2, how far.** (a) The Control tab only; other pages and screens move when a task touches them. (b) All of `FluidDeviceScreen` now.
 - **T3, the drawings.** (a) One painter, two models. (b) One model for both drawings as well (assembly and heat records merged).
+
+## 7. Control tab styles tried (2026-10-28, owner: "Try a few different styles")
+
+The four styles use the same rows from `HeatControlColumn`. `Column.Metrics` sets the row heights: `DEFAULT` 12/24/24/24/12 (line, choice, field, buttons, bar) and `COMPACT` 11/20/20/20/10. A choice lower than 20 px shows only its title; its line shows on hover. The sheets are in `tmp/heat-gui-renders/styles/`.
+
+- **A, List** (as shipped): radio modes, each with its line, at `DEFAULT` heights.
+- **B, Compact**: the modes are buttons, two to a row, and the chosen mode has an accent edge. The heading and the small gaps are removed. One line under the buttons explains the chosen mode. The acting line carries the share ("· 43.0 %"). `COMPACT` heights.
+- **C, Split**: the drawing takes 38 % of the width. Two columns at `COMPACT` heights: the side and the modes on the left (105 px), and the settings, what acts and the notes on the right.
+- **D, Cards**: the drawing takes 45 % of the width. Each section sits in a `PANEL` panel under an accent header: the mode (title only), "Set points", and what acts now. Gaps of 8 px between the sections.
+
+The column's height against its 128 px view, at 464 by 254:
+
+| Case | A | B | C | D |
+|---|---|---|---|---|
+| Exchanger, shell side with bypass | 236 | 146 | 111 | 211 |
+| Exchanger, feed ratio | 224 | 147 | 111 | 201 |
+| Air cooler | 172 | 112 | 72 | 149 |
+| Fired heater | 150 | 92 | 71 | 145 |
+
+- A: every word shows. Every unit except the pool scrolls.
+- B: the air cooler and the fired heater fit. An exchanger scrolls about 20 px. The buttons cut long mode titles ("Outlet temperatur", "Fire to the set poin"). Shorter button titles or three to a row would fix that.
+- C: everything fits, with no scroll. The drawing shrinks (166 px), so its long tags drop. The 105 px column cuts the mode lines and the field labels ("Never cool bel", "Convectio").
+- D: the easiest to scan. After A it is the tallest (145 to 211 px), and the drawing loses 10 % of the width.
