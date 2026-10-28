@@ -3,6 +3,7 @@ import com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
 
+import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.*;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
@@ -10,6 +11,9 @@ import com.wormzjl.icheme.client.gui.common.kit.KitWidgets;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
+import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
+import com.wormzjl.icheme.client.gui.common.kit.SkinField;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
 import com.wormzjl.icheme.runtime.fluid.SlurryFeed;
@@ -110,7 +114,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private final ProcessScroll railScroll=new ProcessScroll();
     private int railBuiltOffset,hoverX=-1,hoverY=-1,clipTop=Integer.MIN_VALUE,clipBottom=Integer.MAX_VALUE;
     private int railTop(){return 90;}
-    private int railBottom(){return imageHeight-52;}
+    /** The rail ends inside the HMI screen's glass (see {@link #pageWell}). */
+    private int railBottom(){return imageHeight-55;}
     private int railOffset(){return railScroll.value()*RAIL_STEP;}
     private boolean inRail(int y,int height){return y>=railTop()&&y+height<=railBottom();}
     private int tableX(){return rail()+24;}
@@ -171,6 +176,20 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private Button action(String key,int x,int y,int w,Runnable run){
         var b=button(tr(key),x,y,w,run);b.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid."+key+".hint")));return b;
     }
+    // The panel door (GUI_TOOLKIT_PLAN.md section 10): the frame, the title row, the tabs, the footer and the Control
+    // column are drawn by the theme's skin; the rail and the tables sit in its HMI screen, in the screens' dark palette,
+    // with the game's own widgets.
+    private static Skin skin(){return ClientConfig.skin();}
+    /** A button on the door, drawn by the theme's skin. */
+    private SkinButton doorButton(String text,int x,int y,int w,Runnable action){
+        var b=new SkinButton(leftPos+x,topPos+y,w,18,Component.literal(text),p->action.run(),FluidDeviceScreen::skin);
+        b.setTooltip(Tooltip.create(Component.literal(text)));return addRenderableWidget(b);
+    }
+    private SkinButton doorAction(String key,int x,int y,int w,Runnable run){
+        var b=doorButton(tr(key),x,y,w,run);b.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid."+key+".hint")));return b;
+    }
+    /** The theme button on the title row: it names the theme shown. */
+    private int themeWidth(){return Math.max(font.width(tr("theme.light")),font.width(tr("theme.dark")))+16;}
     private EditBox field(String key,String label,int x,int y,int width){
         labels.add(new Label(label,x,y,width));
         var box=new EditBox(font,leftPos+x,topPos+y+12,width,18,Component.literal(label));
@@ -228,16 +247,19 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(tank()){tabs.add("outlets");pages.add(4);}
         if(!datasheet.isEmpty()){tabs.add("datasheet");pages.add(5);}
         var tabSlots=FluidGuiLayout.tabs(imageWidth,tabs.size());
-        for(int i=0;i<tabs.size();i++){int target=pages.get(i);var slot=tabSlots.get(i);action(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).active=page!=target;}
+        for(int i=0;i<tabs.size();i++){int target=pages.get(i);var slot=tabSlots.get(i);doorAction(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).latched(true).active=page!=target;}
+        int themeWidth=themeWidth();
+        doorButton(tr(ClientConfig.theme()==ClientConfig.Theme.DARK?"theme.dark":"theme.light"),imageWidth-10-themeWidth,5,themeWidth,()->{ClientConfig.toggleTheme();rebuild();})
+            .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.theme.hint")));
         var footer=FluidGuiLayout.footer(imageWidth);int by=imageHeight-27;boolean compact=imageWidth<500;
-        var close=footer.get(0);action("close",close.x(),by,close.width(),this::onClose);
-        var basis=footer.get(2);button(tr(compact?(mass?"mass_basis_short":"mole_basis_short"):(mass?"mass_basis":"mole_basis")),basis.x(),by,basis.width(),this::toggleBasis)
+        var close=footer.get(0);doorAction("close",close.x(),by,close.width(),this::onClose);
+        var basis=footer.get(2);doorButton(tr(compact?(mass?"mass_basis_short":"mole_basis_short"):(mass?"mass_basis":"mole_basis")),basis.x(),by,basis.width(),this::toggleBasis)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.table_basis.hint")));
-        var temperature=footer.get(3);button(compact?temperatureUnit.symbol():tr("temperature_unit",temperatureUnit.symbol()),temperature.x(),by,temperature.width(),this::toggleTemperature)
+        var temperature=footer.get(3);doorButton(compact?temperatureUnit.symbol():tr("temperature_unit",temperatureUnit.symbol()),temperature.x(),by,temperature.width(),this::toggleTemperature)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.column.temperature_unit.hint")));
-        var pressure=footer.get(4);button(compact?pressureUnit.symbol():tr("pressure_unit",pressureUnit.symbol()),pressure.x(),by,pressure.width(),this::togglePressure)
+        var pressure=footer.get(4);doorButton(compact?pressureUnit.symbol():tr("pressure_unit",pressureUnit.symbol()),pressure.x(),by,pressure.width(),this::togglePressure)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.pressure_unit.hint")));
-        var rate=footer.get(5);button(compact?flowRateUnit.suffix():tr("flow_unit",flowRateUnit.suffix()),rate.x(),by,rate.width(),this::toggleFlowRate)
+        var rate=footer.get(5);doorButton(compact?flowRateUnit.suffix():tr("flow_unit",flowRateUnit.suffix()),rate.x(),by,rate.width(),this::toggleFlowRate)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.flow_unit.hint")));
         if(data==null)return;
         phaseBasisButton=button(tr("phase_ratio."+phaseBasis.key()+"_basis"),12,0,rail()-4,()->{
@@ -245,7 +267,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         });
         phaseBasisButton.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.phase_ratio.basis_hint")));layoutPhaseBasisButton();
         // A heat side applies its control from its Control tab only.
-        if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()))){var apply=footer.get(1);action("apply",apply.x(),by,apply.width(),this::apply);}
+        if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()))){var apply=footer.get(1);doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);}
         if(page==CONTROL){
             buildControl();
             if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
@@ -493,29 +515,50 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         int y=readingsTop()+readings().size()*RAIL_LINE+2;
         phaseBasisButton.setPosition(leftPos+12,topPos+y);phaseBasisButton.visible=inRail(y,18);
     }
+    /** The drawing's box inside the Control tab's HMI screen, as {@link #renderBg} drew it this frame. */
+    private Rect drawingBox;
+    /** Every page but the Control tab: the rail and the tables in one HMI screen, from below the status to the footer's divider. */
+    private Rect pageWell(){return new Rect(5,72,imageWidth-10,imageHeight-50-72);}
     @Override protected void renderBg(GuiGraphics g,float partialTick,int mouseX,int mouseY){
-        g.fill(leftPos,topPos,leftPos+imageWidth,topPos+imageHeight,BG);
-        g.renderOutline(leftPos,topPos,imageWidth,imageHeight,LINE);
+        var skin=skin();var canvas=new GuiCanvas(g,font,leftPos,topPos);
+        g.pose().pushPose();g.pose().translate(leftPos,topPos,0);
+        skin.page(canvas,new Rect(0,0,imageWidth,imageHeight));
+        // The HMI screen goes under the widgets that sit on it.
+        var data=menu.clientData();
+        if(data!=null){if(page==CONTROL&&data.view().heat()!=null)drawingBox=skin.well(canvas,controlWell());else skin.well(canvas,pageWell());}
+        g.pose().popPose();
+    }
+    /** A line of text on the door in the tone {@code palette} names, cut to {@code width} and read in full on hover. */
+    private void doorText(GuiCanvas canvas,Skin skin,String value,int x,int y,int palette,int width){
+        String shown=font.plainSubstrByWidth(value,Math.max(0,width));skin.text(canvas,shown,x,y,palette);
+        if(shown.length()<value.length()&&hoverX>=x&&hoverX<x+width&&hoverY>=y&&hoverY<y+9)hovered=value;
+    }
+    /** The status line on the door's message display; its full text on hover where it is cut. */
+    private void doorStatus(GuiCanvas canvas,Skin skin,String value,int palette){
+        int width=imageWidth-20;String shown=font.plainSubstrByWidth(value,width);skin.status(canvas,new Rect(10,59,width,9),shown,palette);
+        if(shown.length()<value.length()&&hoverX>=10&&hoverX<10+width&&hoverY>=55&&hoverY<69)hovered=value;
     }
     @Override protected void renderLabels(GuiGraphics g,int mouseX,int mouseY){
         hoverX=mouseX-leftPos;hoverY=mouseY-topPos;
-        text(g,title.getString(),10,10,TEXT,imageWidth-20);
+        var skin=skin();var canvas=new GuiCanvas(g,font,leftPos,topPos);
+        String name=title.getString(),shownName=font.plainSubstrByWidth(name,imageWidth-36-themeWidth());skin.title(canvas,10,10,shownName);
+        if(shownName.length()<name.length()&&hoverX>=6&&hoverX<imageWidth-20-themeWidth()&&hoverY>=6&&hoverY<22)hovered=name;
         var data=menu.clientData();
-        if(data==null){text(g,tr("waiting"),10,62,MUTED,imageWidth-20);return;}
+        if(data==null){doorStatus(canvas,skin,tr("waiting"),MUTED);return;}
         // A refused mover's reason ("ERROR: pump inlet not liquid ...") and a hold read in the warning colour.
         // Every device repeats the full status on its scrollable rail (renderStatus).
         var view=data.view();
+        skin.hDivider(canvas,8,imageWidth-8,imageHeight-49);
+        doorText(canvas,skin,message.isBlank()?tr("view_time",number(view.onlineTick()/20.0)):message,10,imageHeight-42,WARN,imageWidth-20);
         if(page==CONTROL&&view.heat()!=null){
             // The status in words, in the player's unit; the engine's own line on hover.
-            text(g,controlStatus(),10,59,warning(view.status())?WARN:ACCENT,imageWidth-20);
-            if(hoverX>=10&&hoverX<imageWidth-10&&hoverY>=57&&hoverY<68)hovered=view.status();
-            g.hLine(8,imageWidth-8,imageHeight-49,LINE);
+            doorStatus(canvas,skin,controlStatus(),warning(view.status())?WARN:ACCENT);
+            if(hoverX>=10&&hoverX<imageWidth-10&&hoverY>=55&&hoverY<69)hovered=view.status();
             renderControl(g);
-            text(g,message.isBlank()?tr("view_time",number(view.onlineTick()/20.0)):message,10,imageHeight-42,WARN,imageWidth-20);
             return;
         }
-        text(g,statusText(view.status()),10,59,warning(view.status())?WARN:MUTED,imageWidth-20);
-        g.vLine(rail()+14,78,imageHeight-52,LINE);g.hLine(8,imageWidth-8,imageHeight-49,LINE);
+        doorStatus(canvas,skin,statusText(view.status()),warning(view.status())?WARN:MUTED);
+        g.vLine(rail()+14,78,railBottom(),LINE);
         text(g,tr("operating"),12,77,ACCENT,rail());
         for(var label:labels)if(label.x()>=tableX())text(g,label.text(),label.x(),label.y(),MUTED,label.width());
         // The rail column (see railTop): drawn clipped to its area, its length sets the rail's scrollbar.
@@ -536,8 +579,6 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             int w=tableWidth();text(g,tr("solid_col.0"),tableX(),128,TEXT,w/2);
             text(g,tr("solid_col.1"),tableX()+w/2,128,TEXT,w/4);text(g,tr("solid_col.2"),tableX()+3*w/4,128,TEXT,w/4);
         }
-        String status=message.isBlank()?tr("view_time",number(view.onlineTick()/20.0)):message;
-        text(g,status,10,imageHeight-42,WARN,imageWidth-20);
         // Scrollbars store screen coordinates because all mouse events arrive there.
         g.pose().pushPose();g.pose().translate(-leftPos,-topPos,0);scroll.draw(g);railScroll.draw(g);g.pose().popPose();
     }
@@ -829,45 +870,52 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
 
     private final ScrollView controlView=new ScrollView();
     private final KitWidgets controlWidgets=new KitWidgets();
-    private Column controlColumn;
+    /** The Control column as placed: layout C's two columns (GUI_TOOLKIT_PLAN.md section 10), or one on a narrow screen. */
+    private List<Column> controlColumns=List.of();
     private HeatFlowsheet flowsheet;private String flowsheetKey="";
     private int controlTop(){return 74;}
     private int controlBottom(){return imageHeight-52;}
-    private int panelWidth(){return FluidGuiLayout.control(imageWidth).panelWidth();}
-    private int panelX(){return FluidGuiLayout.control(imageWidth).panelX();}
-    private int drawingRight(){return FluidGuiLayout.control(imageWidth).drawingRight();}
+    private FluidGuiLayout.ControlSlots controlSlots(){return FluidGuiLayout.control(imageWidth);}
+    private int drawingRight(){return controlSlots().drawingRight();}
     private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol());}
     /**
-     * The Control column on the GUI kit (batch 2026-10-28-gui-toolkit): placed once from the panel's width; its fields and
-     * buttons are kept at their slots and moved as it scrolls, so a scroll rebuilds nothing.
+     * The Control column on the GUI kit (batch 2026-10-28-gui-toolkit): placed once from the columns' widths, at compact
+     * heights; its fields and buttons are kept at their slots and moved as it scrolls, so a scroll rebuilds nothing. Both
+     * columns scroll together, in one view with one bar.
      */
     private void buildControl(){
-        controlColumn=Column.place(HeatControlColumn.rows(controlInput(),FluidDeviceScreen::tr),panelX(),controlTop(),panelWidth(),GuiCanvas.measure(font));
-        controlView.layout(new Rect(panelX()-2,controlTop(),panelWidth()+4,controlBottom()-controlTop()),FluidGuiLayout.control(imageWidth).scrollX(),controlColumn.bounds().h());
-        for(var p:controlColumn.rows()){
+        var slots=controlSlots();var rows=HeatControlColumn.rows(controlInput(),FluidDeviceScreen::tr);var measure=GuiCanvas.measure(font);
+        if(slots.split()){var two=HeatControlColumn.columns(rows);
+            controlColumns=List.of(Column.place(two.left(),slots.leftX(),controlTop(),slots.leftWidth(),measure,Column.Metrics.COMPACT),
+                Column.place(two.right(),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));}
+        else controlColumns=List.of(Column.place(rows,slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
+        int tall=controlColumns.stream().mapToInt(c->c.bounds().h()).max().orElse(0);
+        controlView.layout(new Rect(slots.leftX()-2,controlTop(),slots.rightX()+slots.rightWidth()-slots.leftX()+4,controlBottom()-controlTop()),slots.scrollX(),tall);
+        for(var column:controlColumns)for(var p:column.rows()){
             if(p.row() instanceof Column.Field f)controlWidgets.keep(controlBox(f,p.slots().get(f.key())),p.slots().get(f.key()));
             else if(p.row() instanceof Column.Buttons b)for(var spec:b.buttons()){
                 var slot=p.slots().get(spec.key());
-                var button=button(spec.text(),slot.x(),slot.y(),slot.w(),()->controlAction(spec.key()));
+                // The side shown is latched, as the page's tab is.
+                var button=doorButton(spec.text(),slot.x(),slot.y(),slot.w(),()->controlAction(spec.key())).latched(spec.key().startsWith("side:"));
                 button.active=spec.active();if(spec.hint()!=null)button.setTooltip(Tooltip.create(Component.literal(spec.hint())));
                 controlWidgets.keep(button,slot);
             }
         }
         controlWidgets.place(controlView,leftPos,topPos);
-        // Check lines sits on the drawing, at its lower right (W8).
-        if(canEdit()&&heat().lines()!=null){int bw=Math.min(90,drawingRight()-20);action("check_lines",drawingRight()-bw,controlBottom()-19,bw,()->{FluidNetwork.checkLines(menu);message=tr("waiting");});}
     }
+    /** A field of the Control column: a panel meter at rest, the game's text field while edited. */
     private EditBox controlBox(Column.Field f,Rect slot){
-        var box=new EditBox(font,leftPos+slot.x(),topPos+slot.y(),slot.w(),slot.h(),Component.literal(f.label()));
+        var box=new SkinField(font,leftPos+slot.x(),topPos+slot.y(),slot.w(),slot.h(),Component.literal(f.label()),FluidDeviceScreen::skin);
         box.setMaxLength(48);box.setValue(fields.get(f.key()).text());box.setResponder(v->fields.get(f.key()).text(v));box.setEditable(canEdit());
         box.setTooltip(Tooltip.create(Component.literal(f.hint()==null?f.label():f.label()+"\n"+f.hint())));
         if(f.key().equals("lowLimit"))box.setHint(Component.literal(tr("heat_field.off")));
         editors.put(f.key(),addRenderableWidget(box));return box;
     }
-    /** A Control column action (HeatControlColumn's keys): the other side's screen, the fans by hand, a mode. */
+    /** A Control column action (HeatControlColumn's keys): the other side's screen, the fans by hand, a mode, the lines' check (W8). */
     private void controlAction(String action){
         if(action.startsWith("side:"))FluidNetwork.openPartner(menu);
         else if(action.equals("power")){powerOn=!powerOn;rebuild();}
+        else if(action.equals("check_lines")){FluidNetwork.checkLines(menu);message=tr("waiting");}
         else if(action.startsWith("mode:")){
             String mode=action.substring(5);
             switch(mode){case "burners_out"->powerOn=false;case "firing"->powerOn=true;default->heatMode=HeatUnit.Mode.valueOf(mode.toUpperCase(Locale.ROOT));}
@@ -963,32 +1011,42 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         for(var clause:status.split(" / "))if(clause.startsWith("LIMITED: "))return clause.substring("LIMITED: ".length());
         return "";
     }
+    /** The legend's row under the drawing: its top, 12 px above the column's foot. */
+    private int legendY(){return controlBottom()-12;}
+    /** The Control tab's HMI screen: the drawing's well, above the legend where the drawing has line parts. */
+    private Rect controlWell(){
+        boolean legend=flowsheet().diagram.parts().stream().anyMatch(HeatDiagram.Part::line);
+        int bottom=legend?legendY()-6:controlBottom();
+        return new Rect(5,controlTop()-3,drawingRight()-3,bottom-controlTop()+3);
+    }
     private void renderControl(GuiGraphics g){
+        var skin=skin();var canvas=new GuiCanvas(g,font,leftPos,topPos);
         var sheet=flowsheet();boolean legend=sheet.diagram.parts().stream().anyMatch(HeatDiagram.Part::line);
-        int left=10,top=controlTop(),right=drawingRight(),bottom=controlBottom()-(legend||heat().lines()!=null?24:4);
-        sheet.fit(left,top,right-left,bottom-top);sheet.draw(new GuiCanvas(g,font,leftPos,topPos),flowData);
+        // The drawing on the HMI screen renderBg drew this frame.
+        var box=drawingBox!=null?drawingBox:skin.well(canvas,controlWell());
+        sheet.fit(box.x(),box.y(),box.w(),box.h());sheet.draw(canvas,flowData);
         // A line part reads its state in the column's words; a pill its full text where it was cut.
-        if(hoverX>=left&&hoverX<right&&hoverY>=top&&hoverY<bottom){
+        if(box.contains(hoverX,hoverY)){
             var part=sheet.part(hoverX,hoverY);
             if(part!=null&&part.line()){var p=heat().lines()==null?null:heat().lines().part(part.slot());
                 hovered=partHover(part.slot(),partState(part.slot()),p==null?"":p.detail(),p==null?com.wormzjl.icheme.science.assembly.AssemblyReport.NONE:p.at()).getString();}
             else{var pill=sheet.pill(hoverX,hoverY);if(pill!=null)hovered=portName(pill.role())+" "+heatValue(pill.value());}
         }
         if(legend){
-            int lx=left,ly=controlBottom()-14;
+            int lx=10,ly=legendY();
             int[][] marks={{Palette.TEAL_FILL,Palette.TEAL},{Palette.YELLOW_FILL,Palette.YELLOW},{Palette.RED_FILL,Palette.RED}};String[] words={"legend.in_place","legend.misplaced","legend.missing"};
             for(int i=0;i<3;i++){
-                String word=tr(words[i]);if(lx+10+font.width(word)>right-96)break;
-                g.fill(lx,ly,lx+8,ly+8,marks[i][1]);g.fill(lx+1,ly+1,lx+7,ly+7,marks[i][0]);text(g,word,lx+11,ly,MUTED,font.width(word));lx+=19+font.width(word);
+                String word=tr(words[i]);if(lx+11+font.width(word)>drawingRight())break;
+                g.fill(lx,ly,lx+8,ly+8,marks[i][1]);g.fill(lx+1,ly+1,lx+7,ly+7,marks[i][0]);skin.text(canvas,word,lx+11,ly,MUTED);lx+=19+font.width(word);
             }
         }
-        g.vLine(panelX()-6,top,controlBottom(),LINE);
-        if(controlColumn==null)return;
-        // The column as placed: drawn clipped to its view, a cut line or a field's hint read on hover.
-        var canvas=new GuiCanvas(g,font,leftPos,topPos);
-        canvas.clip(controlView.viewport());controlColumn.draw(canvas,-controlView.offset());canvas.unclip();
-        if(controlView.inside(hoverX,hoverY)){var hover=controlColumn.hover(hoverX,controlView.contentY(hoverY));if(hover!=null)hovered=hover;}
-        controlView.drawBar(canvas);
+        var slots=controlSlots();
+        skin.vDivider(canvas,slots.leftX()-6,controlTop(),controlBottom());
+        if(slots.split())skin.vDivider(canvas,slots.rightX()-7,controlTop(),controlBottom());
+        // The columns as placed: drawn clipped to their view, a field's hint read on hover.
+        canvas.clip(controlView.viewport());for(var column:controlColumns)column.draw(canvas,-controlView.offset(),skin);canvas.unclip();
+        if(controlView.inside(hoverX,hoverY))for(var column:controlColumns){var hover=column.hover(hoverX,controlView.contentY(hoverY));if(hover!=null)hovered=hover;}
+        controlView.drawBar(canvas,skin);
     }
     @Override public boolean keyPressed(int key,int scan,int modifiers){
         if(ProcessUi.textKeyPressed(this,key,scan,modifiers))return true;
@@ -1000,7 +1058,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(page==CONTROL){
             double rx=x-leftPos,ry=y-topPos;
             if(controlView.press(rx,ry,button))return true;
-            if(button==0&&controlColumn!=null&&controlView.inside(rx,ry)){var action=controlColumn.action(rx,controlView.contentY(ry));if(action!=null){controlAction(action);return true;}}
+            if(button==0&&controlView.inside(rx,ry))for(var column:controlColumns){var action=column.action(rx,controlView.contentY(ry));if(action!=null){controlAction(action);return true;}}
             return super.mouseClicked(x,y,button);
         }
         if(scroll.click(x,y,button)||railScroll.click(x,y,button)){rebuildNext=true;return true;}return super.mouseClicked(x,y,button);
@@ -1046,14 +1104,22 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             return List.copyOf(slots);
         }
         /**
-         * The Control tab's columns (HEAT_GUI_PLAN.md section 2): the drawing from x 10 to {@code drawingRight}, the control
-         * column from {@code panelX}, {@code panelWidth} wide, its scrollbar 8 px wide at {@code scrollX}.
+         * The Control tab's columns (HEAT_GUI_PLAN.md section 2; layout C, GUI_TOOLKIT_PLAN.md section 10): the drawing from
+         * x 10 to {@code drawingRight}; the side and the modes from {@code leftX}, {@code leftWidth} wide; the settings, what
+         * acts and the notes from {@code rightX}, {@code rightWidth} wide; one 8 px scrollbar at {@code scrollX}. Where the
+         * right column would be narrower than {@link #SPLIT_MIN}, one column as before: {@code leftWidth} 0, the rows from
+         * {@code rightX}.
          */
-        public record ControlSlots(int drawingRight,int panelX,int panelWidth,int scrollX){}
+        public record ControlSlots(int drawingRight,int leftX,int leftWidth,int rightX,int rightWidth,int scrollX){
+            public boolean split(){return leftWidth>0;}
+        }
+        public static final int SPLIT_MIN=120;
         public static ControlSlots control(int width) {
             if(width<300)throw new IllegalArgumentException("Fluid GUI width below minimum");
-            int panel=Math.clamp(width*9/25,150,240),x=width-panel-20;
-            return new ControlSlots(x-10,x,panel,x+panel+4);
+            int drawingRight=width*38/100,x=drawingRight+10,area=width-20-x,left=Math.clamp((area-12)*2/5,120,170);
+            if(area-left-12>=SPLIT_MIN)return new ControlSlots(drawingRight,x,left,x+left+12,area-left-12,width-16);
+            int panel=Math.clamp(width*9/25,150,240),px=width-panel-20;
+            return new ControlSlots(px-10,px,0,px,panel,px+panel+4);
         }
     }
 

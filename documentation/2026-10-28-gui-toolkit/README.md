@@ -2,18 +2,19 @@
 
 Purpose: owner choice 2026-10-28, option C of the GUI toolkit review: a small GUI toolkit in our own code, first used on the heat Control tab.
 
-Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on `claude/heat-gui-redesign-abb1db`). The kit, the Control tab pilot and the shared flowsheet painter are built. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on `claude/heat-gui-redesign-abb1db`). The kit, the Control tab pilot and the shared flowsheet painter are built. The fluid screen draws the light or the dark control panel door, with layout C and fuller drawings. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [GUI_TOOLKIT_PLAN.md](GUI_TOOLKIT_PLAN.md): the kit, the pilot, the shared flowsheet painter, the gates, the as-built notes (section 5), choices T1 to T3 (section 6), the Control tab styles tried (section 7), the industrial looks (section 8), look 3 refined (section 9).
+- [GUI_TOOLKIT_PLAN.md](GUI_TOOLKIT_PLAN.md): the kit, the pilot, the shared flowsheet painter, the gates, the as-built notes (section 5), choices T1 to T3 (section 6), the Control tab styles tried (section 7), the industrial looks (section 8), look 3 refined (section 9), the light and dark panels shipped with layout C, whole texts and fuller drawings (section 10).
 - The evaluation that chose it: [../2026-10-28-gui-toolkit-evaluation/GUI_TOOLKIT_REVIEW.md](../2026-10-28-gui-toolkit-evaluation/GUI_TOOLKIT_REVIEW.md).
 
 ## Code areas
 
-- `client/gui/common/kit/` (new): `Rect`, `Measure`, `Canvas`, `Palette`, `Format`, `Column`, `ScrollView`, `Skin`, `FlowsheetPainter`; the game adapters `GuiCanvas` and `KitWidgets`.
-- `client/gui/common/HeatControlColumn` (new): the Control column as kit rows. `client/gui/common/HeatFlowsheet` (moved from `screens/inventory`): draws through the painter.
-- `client/gui/screens/inventory/FluidDeviceScreen` (the Control tab on the kit), `AssemblyScreen` (its drawing through the painter); `client/gui/common/ProcessUi` (palette and `number()` alias the kit's).
+- `client/gui/common/kit/` (new): `Rect`, `Measure`, `Canvas`, `Palette`, `Format`, `Column`, `ScrollView`, `Skin`, `PanelSkin`, `FlowsheetPainter`; the game adapters `GuiCanvas`, `KitWidgets`, `SkinButton` and `SkinField`.
+- `client/ClientConfig` (new, `icheme-client.toml`: the theme), registered in `IChemE`.
+- `client/gui/common/HeatControlColumn` (new): the Control column as kit rows, and layout C's split. `client/gui/common/HeatFlowsheet` (moved from `screens/inventory`): draws through the painter, with each unit's insides. `HeatDiagram`: the equipment glyphs.
+- `client/gui/screens/inventory/FluidDeviceScreen` (the panel door, the HMI screen, layout C on the kit), `AssemblyScreen` (its drawing through the painter); `client/gui/common/ProcessUi` (palette and `number()` alias the kit's). Lang: `gui.icheme.fluid.theme.*`.
 - `tools/heat-gui-renders/` (whole Control pages through the shipped code).
 
 ## History
@@ -35,12 +36,18 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
   - Kit: `Column.Heading`, `Skin.text`, `Skin.heading`; field labels that do not fit go above their box.
   - The render tool's `Panel` look in four doors: RAL 7035 green, RAL 7035 IEC white, RAL 7016 anthracite, brushed stainless. The tool's titles are now the server's (vessel and side).
   - Gates: `KitLayoutTest` 10 (one new: stacked fields and headings), `HeatControlColumnTest` 4, `FlowsheetPainterTest` 3, `HeatDiagramTest` 5, `FluidGuiConsistencyTest` 5.
+- 2026-10-28: doors 3a and 3c shipped as the light and dark themes, with layout C, whole texts and fuller drawings (owner: "Both 3a and 3c, configurable as light and dark", "more comprehensive" drawings, "make sure characters are rendered correctly", "this looks a bit weird"; plan section 10), in the themes commit.
+  - Kit: `PanelSkin`, `SkinButton`, `SkinField`; `Skin` page hooks. `Column` cuts no text (wraps, stacks buttons, shows the chosen mode's line). The title-only choice of style D is gone.
+  - `ClientConfig` (`icheme-client.toml`) and a theme button on the title row. `FluidDeviceScreen`: the door, one HMI screen for the other pages, layout C, Check lines in the column.
+  - Drawings: TEMA shell, air cooler bundle with plenum and fans, the heater's sections and flames, the kettle's pool and weir. Readings never overlap.
+  - Render tool: the game's bitmap font, both doors, `drawings.png`; the rejected styles and looks are gone from it.
+  - Gates: quick suite 1733, no failures; `KitLayoutTest` 11 (one new: no text cut), `HeatControlColumnTest` 5 (one new: layout C's split), `FluidGuiConsistencyTest` 5, `HeatDiagramTest` 5, `FlowsheetPainterTest` 3.
+    The heading plate's margins came after the suite; `KitLayoutTest` and `HeatControlColumnTest` ran again, no failures.
 
 ## Open
 
 - T1 to T3 (plan section 6) await the owner; built as (a).
-- The Control tab: layout C preferred (plan section 7) and look 3 chosen (plan section 8). The owner's choice of door, 3a to 3d (plan section 9), is awaited. The chosen look and layout then move into the kit, `HeatControlColumn` and `FluidDeviceScreen`, with kit widgets for the buttons and fields.
-- Seen in the renders (plan section 5): the Control column runs below the fold at 464 by 254 (layout C fits). The ratio field's label was cut; it now goes above its box (plan section 9).
-- Not moved yet (T2 (a)): the fluid screen's other pages and the other screens.
+- At 464 by 254, an exchanger whose lines need a note scrolls its right column by 20 to 40 px (plan section 10). The drawing is small at that width (0.36 of its design size).
+- Themed so far: `FluidDeviceScreen` only. The other screens (assembly, vessel, gauge, column calculator, pipeline tool) stay plain until a task touches them.
 - At the merge to `main`: a `CHANGELOG.md` line, the version, and the code guide's GUI chapter.
 - No in-game check (owner: enough client testing).

@@ -7,9 +7,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * The GUI kit's column and scroll view (batch 2026-10-28-gui-toolkit, GUI_TOOLKIT_PLAN.md section 4): rows placed in
- * order, inside the width and apart; texts cut and wrapped by the measure; hover and click by the same placement; a
- * scroll clamped to its content; a hidden view or a point outside it takes nothing; a widget shown only wholly inside.
+ * The GUI kit's column and scroll view (batch 2026-10-28-gui-toolkit, GUI_TOOLKIT_PLAN.md sections 4 and 10): rows
+ * placed in order, inside the width and apart; no text cut (texts wrap, buttons stack); hover and click by the same
+ * placement; a scroll clamped to its content; a hidden view or a point outside it takes nothing; a widget shown only
+ * wholly inside.
  */
 class KitLayoutTest {
     private static final Measure M = Measure.fixed(6);
@@ -62,15 +63,48 @@ class KitLayoutTest {
     }
 
     @Test
-    void aRowHoversItsFullTextOrHintOutsideItsWidgets() {
-        var column = Column.place(List.of(new Column.Line("A line much longer than the column is wide, cut short", Palette.TEXT),
-                new Column.Line("Short", Palette.TEXT), new Column.Field("lowLimit", "Never cool below", "C", "Blank for no limit")), 0, 0, 120, M);
-        assertEquals("A line much longer than the column is wide, cut short", column.hover(5, 5));
-        assertNull(column.hover(5, 17), "a line not cut has no hover");
+    void aRowHoversItsHintOrItsHiddenLineOutsideItsWidgets() {
+        var column = Column.place(List.of(new Column.Line("A line much longer than the column is wide, wrapped", Palette.TEXT),
+                new Column.Choice("Off", "The unit runs as built", false, "mode:off"), new Column.Field("lowLimit", "Never cool below", "C", "Blank for no limit")), 0, 0, 120, M);
+        assertNull(column.hover(5, 5), "a wrapped line shows whole: no hover");
+        var choice = column.rows().get(1);
+        assertEquals("Off\nThe unit runs as built", column.hover(choice.rect().x() + 20, choice.rect().y() + 3), "an unchosen choice's line on hover");
         var field = column.rows().get(2);
         assertEquals("Never cool below\nBlank for no limit", column.hover(field.rect().x() + 2, field.rect().y() + 5));
         var box = field.slots().get("lowLimit");
         assertNull(column.hover(box.x() + 2, box.y() + 2), "the box has its own tooltip");
+    }
+
+    /** Owner, 2026-10-28: "make sure characters are rendered correctly". No row cuts a text: every word is drawn. */
+    @Test
+    void noRowCutsItsTextTheyWrapAndButtonsStack() {
+        String long_ = "A heading wider than the column it heads";
+        var rows = List.<Column.Row>of(new Column.Heading(long_), new Column.Line(long_, Palette.TEXT),
+                new Column.Choice("Outlet temperature held", "Sets the bypass to hold the outlet at the set point", true, "mode:t"),
+                new Column.Field("r", "Ratio to the other feed of the pair", "", null),
+                new Column.Buttons(List.of(new Column.Button("a", "Convection", false, null), new Column.Button("b", "Radiant", true, null))));
+        var column = Column.place(rows, 0, 0, 105, M, Column.Metrics.COMPACT);
+        for (var p : column.rows()) {
+            for (var t : p.texts()) assertTrue(M.width(t) <= 105, "a text inside the width: " + t);
+            var words = String.join(" ", p.texts()).replace("  ", " ").strip();
+            switch (p.row()) {
+                case Column.Heading h -> assertEquals(h.text(), words);
+                case Column.Line l -> assertEquals(l.text(), words);
+                case Column.Choice c -> assertEquals(c.title() + " " + c.line(), words);
+                case Column.Field f -> assertEquals(f.label(), String.join(" ", p.texts().subList(0, p.lead())));
+                default -> {
+                }
+            }
+        }
+        assertEquals(11 + 2 * Measure.LINE, column.rows().get(1).rect().h(), "a line in three: a line's height and 10 px each further line");
+        var buttons = column.rows().get(4);
+        var a = buttons.slots().get("a");
+        var b = buttons.slots().get("b");
+        assertEquals(new Rect(0, buttons.rect().y(), 105, Column.WIDGET), a, "\"Convection\" does not fit half the row: one button a row, the whole width");
+        assertEquals(new Rect(0, buttons.rect().y() + 20, 105, Column.WIDGET), b);
+        assertEquals(40, buttons.rect().h());
+        var wide = Column.place(List.of(rows.get(4)), 0, 0, 160, M, Column.Metrics.COMPACT).rows().getFirst();
+        assertEquals(20, wide.rect().h(), "side by side where both fit");
     }
 
     @Test
@@ -129,18 +163,22 @@ class KitLayoutTest {
     }
 
     @Test
-    void compactMetricsPlaceTheSameRowsShorterAndATitleOnlyChoiceHoversItsLine() {
+    void compactMetricsPlaceTheSameRowsShorterAndOnlyTheChosenChoiceShowsItsLine() {
         var normal = Column.place(every(), 20, 74, 180, M);
         var compact = Column.place(every(), 20, 74, 180, M, Column.Metrics.COMPACT);
         assertTrue(compact.bounds().h() < normal.bounds().h());
         assertEquals(normal.slots().keySet(), compact.slots().keySet());
         for (var p : compact.rows()) for (var s : p.slots().values()) assertTrue(s.inside(p.rect()), "a widget inside its compact row");
-        var titles = Column.place(every(), 20, 74, 180, M, new Column.Metrics(11, 12, 20, 20, 10));
-        var choice = titles.rows().get(2);
-        assertEquals(12, choice.rect().h());
-        assertEquals("", choice.texts().get(1), "a title-only choice draws no line");
-        assertEquals("Hold the outlet temperature\nSets the bypass to hold it", titles.hover(choice.rect().x() + 20, choice.rect().y() + 3));
+        var chosen = compact.rows().get(2);
+        assertEquals(List.of("Hold the outlet temperature", "Sets the bypass to hold it"), chosen.texts());
+        assertEquals(20, chosen.rect().h());
+        assertNull(chosen.hover());
+        var other = compact.rows().get(3);
+        assertEquals(List.of("Off"), other.texts(), "an unchosen choice draws its title only");
+        assertEquals(11, other.rect().h(), "a line high");
+        assertEquals("Off\nThe unit runs as built", other.hover());
         assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(11, 20, 17, 20, 10), "a field row lower than its box");
+        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(11, 12, 20, 20, 10), "a choice lower than its title and line");
     }
 
     @Test
@@ -207,8 +245,8 @@ class KitLayoutTest {
         assertEquals("scrollbar " + new Rect(204, 74, ScrollView.BAR, 100) + " " + new Rect(204, 74, ScrollView.BAR, 25), calls.getLast(), "the thumb a quarter of the track");
         Column.place(List.of(new Column.Heading("Mode")), 0, 0, 150, M).draw(canvas, 0, new Skin() {
             @Override
-            public void heading(Canvas c, Rect r, String text) {
-                calls.add("heading " + r + " " + text);
+            public void heading(Canvas c, Rect r, List<String> lines) {
+                calls.add("heading " + r + " " + String.join("|", lines));
             }
 
             @Override
@@ -223,7 +261,7 @@ class KitLayoutTest {
             public void scrollbar(Canvas c, Rect track, Rect thumb, boolean dragging) {
             }
         });
-        assertEquals("heading " + new Rect(0, 0, 150, 12) + " Mode", calls.getLast(), "the skin draws a heading in its row");
+        assertEquals("heading " + new Rect(0, 0, 150, Measure.LINE + Column.HEADING_PAD) + " Mode", calls.getLast(), "the skin draws a heading in its row");
     }
 
     @Test
@@ -238,7 +276,7 @@ class KitLayoutTest {
         assertEquals(new Rect(150 - Column.FIELD_TAIL + 4, 24 + 12, Column.BOX, Column.WIDGET), stacked.slots().get("r"), "the box under its label, in line with the other boxes");
         assertEquals("Ratio to the other feed", stacked.texts().getFirst(), "the whole label on its own line");
         assertNull(stacked.hover(), "nothing cut, no hint: no hover");
-        assertEquals(new Rect(0, 60, 150, 12), column.rows().get(2).rect(), "a heading is a line high");
+        assertEquals(new Rect(0, 60, 150, 15), column.rows().get(2).rect(), "a heading: its line and a plate's margins");
     }
 
     @Test

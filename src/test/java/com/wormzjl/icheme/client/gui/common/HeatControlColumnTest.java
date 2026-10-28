@@ -109,21 +109,50 @@ class HeatControlColumnTest {
         assertTrue(texts.asked.size() > 30, "the cases ask for the column's texts: " + texts.asked.size());
     }
 
+    /** Layout C's two columns, or one on a narrow screen, as FluidDeviceScreen.buildControl places them. */
+    private static List<Column> place(List<Column.Row> rows, FluidGuiLayout.ControlSlots slots) {
+        if (!slots.split()) return List.of(Column.place(rows, slots.rightX(), 74, slots.rightWidth(), M, Column.Metrics.COMPACT));
+        var two = HeatControlColumn.columns(rows);
+        return List.of(Column.place(two.left(), slots.leftX(), 74, slots.leftWidth(), M, Column.Metrics.COMPACT),
+                Column.place(two.right(), slots.rightX(), 74, slots.rightWidth(), M, Column.Metrics.COMPACT));
+    }
+
     @Test
-    void theColumnAndItsWidgetsFitThePanelAtEverySupportedWidth() {
+    void theColumnsAndTheirWidgetsFitThePanelAtEverySupportedWidth() {
         var texts = new Recording();
         for (var c : cases()) {
             var rows = HeatControlColumn.rows(c.in(), texts);
             for (int width = 300; width <= 790; width += 7) {
                 var slots = FluidGuiLayout.control(width);
-                var column = Column.place(rows, slots.panelX(), 74, slots.panelWidth(), M);
-                for (var p : column.rows()) {
-                    assertTrue(p.rect().x() >= slots.panelX() && p.rect().right() <= slots.panelX() + slots.panelWidth(), c.name() + " at " + width);
-                    for (var s : p.slots().values()) assertTrue(s.inside(p.rect()) && s.w() >= 40, c.name() + " a widget at " + width + ": " + s);
+                var keys = new HashSet<String>();
+                for (var column : place(rows, slots)) {
+                    var bounds = column.bounds();
+                    for (var p : column.rows()) {
+                        assertTrue(p.rect().x() >= bounds.x() && p.rect().right() <= bounds.right(), c.name() + " at " + width);
+                        for (var t : p.texts()) assertTrue(M.width(t) <= p.rect().w(), c.name() + " a text cut at " + width + ": " + t);
+                        for (var s : p.slots().values()) assertTrue(s.inside(p.rect()) && s.w() >= 40, c.name() + " a widget at " + width + ": " + s);
+                    }
+                    for (var key : column.slots().keySet()) assertTrue(keys.add(key), c.name() + " one widget per key: " + key);
                 }
-                column.slots();
             }
         }
+    }
+
+    @Test
+    void layoutCPutsTheSelectorAndTheModesLeftAndTheRestRight() {
+        var texts = new Recording();
+        var lines = new FluidView.Lines("CHECKED", 1, List.of());
+        var in = new HeatControlColumn.Input(heat("EXCHANGER", "TUBE", true, "bypass", 0.25, lines, List.of()), new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE, 330, 0, 0), true, true, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "C");
+        var two = HeatControlColumn.columns(HeatControlColumn.rows(in, texts));
+        assertInstanceOf(Column.Buttons.class, two.left().getFirst(), "the side selector heads the left");
+        assertInstanceOf(Column.Heading.class, two.left().get(1));
+        assertInstanceOf(Column.Gap.class, two.left().get(2), "a heading keeps its gap");
+        assertTrue(two.left().subList(3, two.left().size()).stream().allMatch(r -> r instanceof Column.Choice), "then the modes, and nothing else");
+        assertEquals(List.of("heatTemperature", "lowLimit", "check_lines"), keys(two.right()));
+        assertTrue(two.right().stream().noneMatch(r -> r instanceof Column.Gap || r instanceof Column.Choice));
+        var pool = new HeatControlColumn.Input(heat("KETTLE", "SHELL", true, "none", null, null, List.of()), null, true, false, HeatUnit.Mode.OFF, true, "C");
+        var poolColumns = HeatControlColumn.columns(HeatControlColumn.rows(pool, texts));
+        assertInstanceOf(Column.Paragraph.class, poolColumns.left().getLast(), "the pool's note closes the left");
     }
 
     @Test
@@ -185,7 +214,7 @@ class HeatControlColumnTest {
         assertTrue(rows.stream().anyMatch(r -> r instanceof Column.Line l && l.text().equals(texts.get("heat_effort.feed_valve", "0.5"))), "tube feed 3 over shell feed 6");
         assertTrue(rows.stream().noneMatch(r -> r instanceof Column.Bar), "a ratio has no bar");
         assertTrue(rows.stream().anyMatch(r -> r instanceof Column.Paragraph p && p.text().equals(texts.get("lines_note.ratio.complete", 0)) && p.colour() == Palette.ACCENT));
-        assertEquals(List.of("side:0", "side:1", "heatRatio", "lowLimit"), keys(rows));
+        assertEquals(List.of("side:0", "side:1", "heatRatio", "lowLimit", "check_lines"), keys(rows), "Check lines under the lines' note");
         var checked = new HeatControlColumn.Input(in.heat().with("none", null, "NONE", ports, new FluidView.Lines("CHECKED", 2, List.of())), in.applied(), true, true, HeatUnit.Mode.RATIO, true, "C");
         assertTrue(HeatControlColumn.rows(checked, texts).stream().anyMatch(r -> r instanceof Column.Paragraph p && p.text().equals(texts.get("lines_note.ratio.checked", 2)) && p.colour() == Palette.WARN));
     }

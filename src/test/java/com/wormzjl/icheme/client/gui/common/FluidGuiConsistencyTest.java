@@ -49,20 +49,28 @@ class FluidGuiConsistencyTest {
         }
     }
     /**
-     * The Control tab's columns (HEAT_GUI_PLAN.md section 2) at every supported width: the drawing keeps at least 100 px
-     * (a third of the design grid), the column at least 150 px with its 58 px fields inside it, its scrollbar inside the
-     * screen, and the drawing's Check lines button (up to 90 px) inside the drawing.
+     * The Control tab's columns (HEAT_GUI_PLAN.md section 2; layout C, GUI_TOOLKIT_PLAN.md section 10) at every supported
+     * width: the drawing keeps at least 100 px (a third of the design grid); from about 460 px two columns, each at least
+     * 120 px with 12 px between them, else one column of 150 to 240 px; the scrollbar after them, inside the screen.
      */
     @Test void theControlTabsColumnsFitEverySupportedScreenWidth() {
+        boolean split=false;
         for(int width=300;width<=790;width++){
             var c=FluidGuiLayout.control(width);
             assertTrue(c.drawingRight()-10>=100,"drawing at "+width);
-            assertTrue(c.panelWidth()>=150&&c.panelWidth()<=240,"column at "+width);
-            assertTrue(c.panelX()>=c.drawingRight()+10);
-            assertTrue(c.panelX()+c.panelWidth()-76>=c.panelX()+60,"a field's label keeps 60 px at "+width);
-            assertTrue(c.scrollX()>=c.panelX()+c.panelWidth()&&c.scrollX()+8<=width-6,"scrollbar at "+width);
-            assertTrue(c.drawingRight()-Math.min(90,c.drawingRight()-20)>=10,"Check lines at "+width);
+            assertTrue(c.leftX()>=c.drawingRight()+10,"the columns right of the drawing at "+width);
+            if(c.split()){
+                split=true;
+                assertTrue(c.leftWidth()>=120&&c.rightWidth()>=FluidGuiLayout.SPLIT_MIN,"two columns at "+width);
+                assertEquals(c.leftX()+c.leftWidth()+12,c.rightX());
+            }else{
+                assertTrue(c.rightWidth()>=150&&c.rightWidth()<=240,"one column at "+width);
+                assertEquals(c.leftX(),c.rightX());
+                assertTrue(!split,"two columns from some width on, at "+width);
+            }
+            assertTrue(c.scrollX()>=c.rightX()+c.rightWidth()&&c.scrollX()+8<=width-6,"scrollbar at "+width);
         }
+        assertTrue(FluidGuiLayout.control(464).split(),"two columns at 464 px: the 480 by 270 GUI");
         assertThrows(IllegalArgumentException.class,()->FluidGuiLayout.control(299));
     }
 }

@@ -22,15 +22,24 @@ public final class HeatDiagram {
     /** The slot of the unit's own body parts, drawn in the neutral colours. */
     public static final String BODY = "body";
 
+    /**
+     * What a part draws. The unit's own parts draw their insides (GUI_TOOLKIT_PLAN.md section 10, owner: "improve the
+     * equipment drawing so they are more comprehensive"), each inside its box.
+     */
     public enum Glyph {
-        /** A shell (rounded), its channel head, a box (an air cooler's bundle, a heater's sections, its stack), a lying drum. */
-        SHELL, HEAD, BOX, DRUM,
+        /** An exchanger's shell (tubesheet, U-tube bundle, segmental baffles, dished rear head), its channel bonnet (pass partition), a saddle. */
+        SHELL, HEAD, SADDLE,
+        /** A kettle's shell: the cone up from the channel, the U-tube bundle under the pool, the weir, the liquid and its levels. */
+        KETTLE,
+        /** An air cooler's finned tube bundle between its headers, the plenum under it, a fan with its ring, blades, shaft and motor. */
+        BUNDLE, PLENUM, FAN,
+        /** A fired heater's stack (damper, breeching), convection section (tube rows), transition cone, firebox (refractory, wall coil, flames), burner. */
+        STACK, CONVECTION, TRANSITION, RADIANT, BURNER,
         TEE,
         /** A control valve on a line across (its stem up) or on a line down (its stem to the left). */
         VALVE, VALVE_DOWN,
         /** A flowmeter on a line, "FT" in a circle. */
-        METER,
-        FAN, BURNER
+        METER
     }
 
     /**
@@ -48,7 +57,7 @@ public final class HeatDiagram {
         }
     }
 
-    /** A pipe line through {@code points} (x, y pairs), with an arrow at its end; a utility line (air, flue, the bundle) is drawn dashed. */
+    /** A pipe line through {@code points} (x, y pairs), with an arrow at its end; a utility line (the air) is drawn dashed. */
     public record Wire(int[] points, boolean arrow, boolean utility) {
     }
 
@@ -150,6 +159,8 @@ public final class HeatDiagram {
     private void exchanger(ExchangerBlueprint.Design design) {
         part(BODY, Glyph.HEAD, 146, 136, 24, 44, null);
         part(BODY, Glyph.SHELL, 170, 130, 180, 56, t("label.exchanger"));
+        part(BODY, Glyph.SADDLE, 204, 186, 22, 9, null);
+        part(BODY, Glyph.SADDLE, 296, 186, 22, 9, null);
         tag(260, 168, Align.CENTRE, Value.of(Show.DUTY, "duty"));
         nozzle("SHELL_INLET", 195, 130);
         nozzle("SHELL_OUTLET", 325, 130);
@@ -218,11 +229,13 @@ public final class HeatDiagram {
         tag(164, 118, Align.LEFT, Value.of(Show.TEMPERATURE, "port:TUBE_OUTLET"));
     }
 
-    // The air cooler: its bundle across, the fans below it blowing air up through it.
+    // The air cooler, forced draft: its bundle across between its headers, the plenum under it, the fans under that blowing
+    // air up through the bundle.
 
     private void airCooler() {
-        part(BODY, Glyph.BOX, 150, 60, 150, 46, t("label.air_cooler"));
-        tag(225, 94, Align.CENTRE, Value.of(Show.DUTY, "duty"));
+        part(BODY, Glyph.BUNDLE, 150, 60, 150, 46, t("label.air_cooler"));
+        part(BODY, Glyph.PLENUM, 160, 106, 130, 18, null);
+        tag(225, 96, Align.CENTRE, Value.of(Show.DUTY, "duty"));
         nozzle("PROCESS_INLET", 150, 83);
         nozzle("PROCESS_OUTLET", 300, 83);
         wire(true, 104, 83, 150, 83);
@@ -230,22 +243,24 @@ public final class HeatDiagram {
         pill(4, 83, 100, "PROCESS_INLET", Value.of(Show.TEMPERATURE, "port:PROCESS_INLET"));
         pill(340, 83, 100, "PROCESS_OUTLET", Value.of(Show.TEMPERATURE, "port:PROCESS_OUTLET"));
         tag(127, 72, Align.CENTRE, Value.of(Show.FLOW, "port:PROCESS_INLET"));
-        for (int x : new int[]{185, 265}) {
-            part(BODY, Glyph.FAN, x - 14, 126, 28, 28, null);
-            utility(x, 125, x, 108);
-            utility(x, 186, x, 156);
+        for (int x : new int[]{190, 260}) {
+            part(BODY, Glyph.FAN, x - 16, 124, 32, 38, null);
+            // The air: drawn in under the fan, out over the bundle.
+            utilityArrow(x, 196, x, 166);
+            utilityArrow(x, 58, x, 34);
         }
-        label(225, 140, t("label.fans"), Align.CENTRE);
-        tag(225, 200, Align.CENTRE, Value.of(Show.TEMPERATURE, "air"));
+        label(225, 150, t("label.fans"), Align.CENTRE);
+        tag(225, 206, Align.CENTRE, Value.of(Show.TEMPERATURE, "air"));
     }
 
-    // The fired heater: the convection section over the radiant box, the stack on top, the burners under the floor.
+    // The fired heater, vertical cylindrical: the convection section over the radiant firebox, the transition cone between
+    // them, the stack on top, the burners under the floor.
 
     private void heater(HeatSides.Side side) {
-        part(BODY, Glyph.BOX, 220, 4, 20, 26, null);
-        part(BODY, Glyph.BOX, 180, 30, 100, 50, t("label.convection"));
-        part(BODY, Glyph.BOX, 160, 90, 140, 110, t("label.radiant"));
-        utility(230, 89, 230, 81);
+        part(BODY, Glyph.STACK, 216, 0, 28, 30, null);
+        part(BODY, Glyph.CONVECTION, 180, 30, 100, 50, t("label.convection"));
+        part(BODY, Glyph.TRANSITION, 160, 80, 140, 10, null);
+        part(BODY, Glyph.RADIANT, 160, 90, 140, 110, t("label.radiant"));
         nozzle("CONVECTION_INLET", 180, 45);
         nozzle("CONVECTION_OUTLET", 280, 65);
         nozzle("RADIANT_INLET", 300, 110);
@@ -260,22 +275,21 @@ public final class HeatDiagram {
         pill(4, 180, 100, "RADIANT_OUTLET", Value.of(Show.TEMPERATURE, "port:RADIANT_OUTLET"));
         tag(142, 34, Align.CENTRE, Value.of(Show.FLOW, "port:CONVECTION_INLET"));
         tag(320, 99, Align.CENTRE, Value.of(Show.FLOW, "port:RADIANT_INLET"));
-        tag(230, side == HeatSides.Side.CONVECTION ? 68 : 160, Align.CENTRE, Value.of(Show.DUTY, "duty"));
-        for (int x : new int[]{195, 230, 265}) {
-            part(BODY, Glyph.BURNER, x - 5, 202, 10, 10, null);
-            utility(x, 201, x, 190);
-        }
-        label(230, 224, t("label.burners"), Align.CENTRE);
+        tag(230, side == HeatSides.Side.CONVECTION ? 68 : 134, Align.CENTRE, Value.of(Show.DUTY, "duty"));
+        // The burners under the floor; their flames rise in the firebox (RADIANT draws them over these).
+        for (int x : HEATER_BURNERS) part(BODY, Glyph.BURNER, x - 6, 200, 12, 14, null);
+        label(230, 226, t("label.burners"), Align.CENTRE);
     }
 
-    // The kettle: the shell a lying drum, the tube bundle low in it, the weir at its far end.
+    /** The burners' centres, design x: a quarter, half and three quarters across the firebox. */
+    public static final int[] HEATER_BURNERS = {195, 230, 265};
+
+    // The kettle: the shell a lying drum on a cone from the channel, the U-tube bundle low in its pool, the weir at its far end.
 
     private void kettle() {
         part(BODY, Glyph.HEAD, 126, 110, 24, 50, null);
-        part(BODY, Glyph.DRUM, 150, 90, 190, 90, t("label.kettle"));
-        utility(166, 141, 284, 141, 284, 170, 166, 170, 166, 141);
-        utility(300, 132, 300, 179);
-        tag(245, 148, Align.CENTRE, Value.of(Show.DUTY, "duty"));
+        part(BODY, Glyph.KETTLE, 150, 90, 190, 90, t("label.kettle"));
+        tag(225, 150, Align.CENTRE, Value.of(Show.DUTY, "duty"));
         nozzle("TUBE_INLET", 138, 160);
         nozzle("TUBE_OUTLET", 126, 124);
         nozzle("FEED", 220, 180);
@@ -323,8 +337,9 @@ public final class HeatDiagram {
         wires.add(new Wire(points, arrow, false));
     }
 
-    private void utility(int... points) {
-        wires.add(new Wire(points, false, true));
+    /** A utility line (air, flue) with an arrow at its end. */
+    private void utilityArrow(int... points) {
+        wires.add(new Wire(points, true, true));
     }
 
     private void pill(int x, int y, int w, String role, Value value) {

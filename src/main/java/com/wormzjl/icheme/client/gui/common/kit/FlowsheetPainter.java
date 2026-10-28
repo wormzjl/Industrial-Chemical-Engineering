@@ -111,6 +111,53 @@ public final class FlowsheetPainter {
         }
     }
 
+    /** A straight line between canvas points, one pixel wide, at any slope. */
+    public void line(int x0, int y0, int x1, int y1, int colour) {
+        int dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = Integer.signum(x1 - x0), sy = Integer.signum(y1 - y0), err = dx + dy;
+        while (true) {
+            c.fill(x0, y0, x0 + 1, y0 + 1, colour);
+            if (x0 == x1 && y0 == y1) return;
+            int e2 = 2 * err;
+            if (e2 >= dy) {
+                err += dy;
+                x0 += sx;
+            }
+            if (e2 <= dx) {
+                err += dx;
+                y0 += sy;
+            }
+        }
+    }
+
+    /**
+     * A vessel lying across, canvas pixels: its ends dished {@code left} and {@code right} pixels deep (a half ellipse over
+     * the full height; 0 flat, half the height a half circle), filled and outlined.
+     */
+    public void vessel(int x0, int y0, int x1, int y1, int left, int right, Look look) {
+        double b = (y1 - y0) / 2.0;
+        for (int yy = y0; yy < y1; yy++) {
+            double t = Math.min(1, Math.abs(yy + 0.5 - (y0 + b)) / b);
+            double chord = 1 - Math.sqrt(Math.max(0, 1 - t * t));
+            int l = x0 + (int) Math.round(left * chord), r = x1 - 1 - (int) Math.round(right * chord);
+            c.hLine(l, r, yy, look.fill());
+            c.fill(l, yy, l + 1, yy + 1, look.stroke());
+            c.fill(r, yy, r + 1, yy + 1, look.stroke());
+        }
+        c.hLine(x0 + left / 2, x1 - 1 - right / 2, y0, look.stroke());
+        c.hLine(x0 + left / 2, x1 - 1 - right / 2, y1 - 1, look.stroke());
+    }
+
+    /** A trapezoid, canvas pixels: its top edge {@code topInset} and its bottom edge {@code bottomInset} in from each side, filled and outlined. */
+    public void trapezoid(int x0, int y0, int x1, int y1, int topInset, int bottomInset, Look look) {
+        int h = Math.max(1, y1 - y0 - 1);
+        for (int yy = y0; yy < y1; yy++) {
+            int inset = (int) Math.round(topInset + (bottomInset - topInset) * (yy - y0) / (double) h);
+            c.hLine(x0 + inset, x1 - 1 - inset, yy, yy == y0 || yy == y1 - 1 ? look.stroke() : look.fill());
+            c.fill(x0 + inset, yy, x0 + inset + 1, yy + 1, look.stroke());
+            c.fill(x1 - 1 - inset, yy, x1 - inset, yy + 1, look.stroke());
+        }
+    }
+
     /** A filled box with its outline, canvas pixels. */
     public void box(int x0, int y0, int x1, int y1, Look look) {
         c.fill(x0, y0, x1, y1, look.fill());
@@ -189,11 +236,43 @@ public final class FlowsheetPainter {
         return true;
     }
 
+    /**
+     * A label centred on design point ({@code x}, {@code y}) on a plate of {@code plate} (ARGB), drawn only if it fits
+     * {@code width} design units and covers no label placed before it; whether it was drawn.
+     */
+    public boolean fitted(String text, int x, int y, int width, int colour, int plate) {
+        return c.measure().width(text) * fontScale() <= width * scale - 2 && tag(text, x, y, 0.5f, colour, plate);
+    }
+
     /** A label at design point ({@code x}, {@code y}), its anchor 0 at its left, 0.5 its centre, 1 its right. */
     public void label(String text, int x, int y, float anchor, int colour) {
         float fs = fontScale();
         float w = c.measure().width(text) * fs;
         c.text(text, x(x) - w * anchor, y(y) - c.measure().height() * fs / 2 + fs, fs, colour);
+    }
+
+    /** The canvas boxes the labels placed with {@link #tag} and the areas {@link #take}n hold; a later label avoids them. */
+    private final java.util.List<Rect> taken = new java.util.ArrayList<>();
+
+    /** Holds canvas box {@code r} (a pill) against later labels. */
+    public void take(Rect r) {
+        taken.add(r);
+    }
+
+    /**
+     * A label at design point ({@code x}, {@code y}) as {@link #label} places it, on a plate of {@code plate} (ARGB; 0
+     * none), drawn only where it covers no label or area placed before it, so no text is ever drawn over another; whether it
+     * was drawn.
+     */
+    public boolean tag(String text, int x, int y, float anchor, int colour, int plate) {
+        float fs = fontScale(), w = c.measure().width(text) * fs, h = c.measure().height() * fs;
+        float left = x(x) - w * anchor, top = y(y) - h / 2 + fs;
+        var box = new Rect((int) Math.floor(left) - 1, (int) Math.floor(top) - 1, (int) Math.ceil(w) + 2, (int) Math.ceil(h));
+        for (var t : taken) if (t.overlaps(box)) return false;
+        taken.add(box);
+        if (plate != 0) c.fill(box.x(), box.y(), box.right(), box.bottom(), plate);
+        c.text(text, left, top, fs, colour);
+        return true;
     }
 
     /** A design point's x of canvas x {@code cx}. */

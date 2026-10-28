@@ -18,7 +18,8 @@ import org.jetbrains.annotations.Nullable;
  * render tool build the same column the screen draws.
  * <p>
  * Widget keys: {@code side:0} and {@code side:1} (the side selector; the other side opens its own screen), {@code power}
- * (an air cooler's fans by hand), and the fields' draft keys. Choice actions: {@code mode:<mode>}.
+ * (an air cooler's fans by hand), {@code check_lines} (an exchanger's lines, W8), and the fields' draft keys. Choice
+ * actions: {@code mode:<mode>}.
  */
 public final class HeatControlColumn {
     private HeatControlColumn() {
@@ -101,8 +102,33 @@ public final class HeatControlColumn {
         }
         String note = linesNote(in, t);
         if (note != null) rows.add(new Column.Paragraph(note, "COMPLETE".equals(in.heat().lines().status()) ? Palette.ACCENT : Palette.WARN));
+        // Check lines (W8) under the lines' note: the drawing keeps its width for the legend.
+        if (in.canEdit() && in.heat().lines() != null)
+            rows.add(new Column.Buttons(List.of(new Column.Button("check_lines", t.get("check_lines"), true, t.get("check_lines.hint")))));
         if (!in.canEdit() && !in.pool()) rows.add(new Column.Paragraph(t.get("reader_note"), Palette.MUTED));
         return rows;
+    }
+
+    /** The column in two (layout C): the side selector and the modes, or the pool's note; then the rest. */
+    public record Columns(List<Column.Row> left, List<Column.Row> right) {
+    }
+
+    /**
+     * Layout C (owner: "C looks better", GUI_TOOLKIT_PLAN.md sections 7 and 10): the side selector and the modes (or the
+     * pool's note) on the left; the fans, the fields, what acts, the notes and Check lines on the right. The small gaps go,
+     * except under a heading.
+     */
+    public static Columns columns(List<Column.Row> rows) {
+        int cut = 0;
+        for (int i = 0; i < rows.size(); i++) if (rows.get(i) instanceof Column.Choice) cut = i + 1;
+        for (int i = 0; i < rows.size() && cut == 0; i++) if (rows.get(i) instanceof Column.Paragraph) cut = i + 1;
+        return new Columns(gapless(rows.subList(0, cut)), gapless(rows.subList(cut, rows.size())));
+    }
+
+    private static List<Column.Row> gapless(List<Column.Row> rows) {
+        var kept = new ArrayList<Column.Row>();
+        for (int i = 0; i < rows.size(); i++) if (!(rows.get(i) instanceof Column.Gap) || i > 0 && rows.get(i - 1) instanceof Column.Heading) kept.add(rows.get(i));
+        return kept;
     }
 
     /** The side selector's two sides, or null for a one-sided unit (an air cooler). */

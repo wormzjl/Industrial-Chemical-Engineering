@@ -109,3 +109,30 @@ Owner: "C looks better"; the buttons and colours "look too bare"; "a more indust
   - 3b: RAL 7035 with IEC 60073 white for a selection (white is the neutral colour that confirms one), white legend plates, green LED meters.
   - 3c: RAL 7016 anthracite, aluminium legend plates, amber LED meters, a red top zone.
   - 3d: brushed stainless steel, red LED meters, an amber display.
+
+## 10. Light and dark panels, layout C, whole texts, fuller drawings (2026-10-28)
+
+Owner: "Both 3a and 3c, configurable as light and dark mod. Also you need to improve the equipment drawing so they are more comprehensive"; then "make sure characters are rendered correctly" (a button read "Convectio") and "this looks a bit weird" (the heading plate).
+
+- **Themes.** `kit/PanelSkin` is the control panel door: `LIGHT` is door 3a, `DARK` is door 3c (section 9). `kit/Skin` now holds the page hooks: the page, the title, the status, the buttons (`Press`: rest, off, latched, primary; and hover), the fields, the well and the dividers. `Skin.PLAIN` draws what the screens drew before.
+- **Setting.** `client/ClientConfig` writes `icheme-client.toml`, `[gui] theme = LIGHT | DARK` (default `LIGHT`). The client loads it; a dedicated server does not. A theme button on the title row switches the theme and saves it.
+- **Widgets.** `kit/SkinButton` is a vanilla button drawn by the skin. Inactive and latched, it is lit (the tab or side shown); Apply is the blue confirm button. `kit/SkinField` is an unbordered `EditBox`. At rest the skin draws it as a 7-segment meter. While it has focus, the game draws the text, the cursor and the selection 4 px in. Its inner width and clicks keep the bordered field's margin.
+- **FluidDeviceScreen.**
+  - The door holds the frame, the title row, the tabs, the status display, the footer and the Control column.
+  - Every other page sits in one HMI screen (`pageWell`): the rail, the tables and the game's own widgets, in the dark palette.
+  - Layout C: `FluidGuiLayout.control` gives two columns from about 455 px wide (left 120 to 170 px, right at least 120 px), else one column. `HeatControlColumn.columns` splits the rows: the selector and modes on the left, the rest on the right. Both columns scroll together.
+  - Check lines moved from the drawing into the column, under the lines' note. The drawing's legend gets the full width.
+- **No text is cut.** In `Column`, lines, headings, choice titles and stacked field labels wrap. A button row whose texts do not fit side by side stacks its buttons. Only the chosen mode shows its line; the other modes show theirs on hover (a radio list). A heading's row has room for a plate with 3 to 4 px margins. In `FlowsheetPainter`, a reading never covers another text (`tag`, `take`); it is skipped, and its pill still says it.
+- **Drawings** (`HeatDiagram` glyphs, drawn in `HeatFlowsheet`):
+  - shell-and-tube: a TEMA U-tube shell with its tubesheet, U-bundle, segmental baffles and dished rear head; a bonnet with its pass partition; two saddles.
+  - air cooler: a finned bundle between plug headers, the plenum, and fans with ring, blades, shaft and motor; air arrows.
+  - vertical cylindrical heater: a stack with breeching and damper, convection rows (the shock row bare), the transition cone, a firebox with refractory, the wall coil and three flames, burner tiles.
+  - kettle: the cone from the channel, the U-bundle in the pool, the weir, both liquid levels and bubbles.
+  - Labels and readings sit on plates over the insides.
+- **Render tool.** It now draws in the game's bitmap font, read from the Minecraft resources jar, so widths and cuts are the game's. It renders layout C in both doors, and a `drawings.png` sheet at the design scale.
+- **Measured** (464 by 254 GUI px, the game font, the 128 px view; the tallest column counts):
+  - exchanger with no lines: 103 px;
+  - exchangers whose lines need a note: 147 to 167 px; they scroll, and the note and Check lines sit below the fold;
+  - air cooler: 93 px (a reader 127 px);
+  - fired heater: 98 px;
+  - kettle tubes: 103 px; its pool: 74 px.
