@@ -36,7 +36,7 @@ abstract class BlockLineHarness {
             case VALVE->new FlowControl.PressureValve(200000);
             default->new FlowControl.Passive();
         };
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,0),kind,facing,BLOCK,control);
+        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,0),FluidTestSupport.mechanical(kind),facing,BLOCK,control);
     }
     static PhysicalFluidTopology.Device device(long id,int x,int y,TopologyCompiler.Kind kind){return device(id,x,y,kind,PhysicalFluidTopology.Direction.NORTH);}
     /** A block on the floor row. */

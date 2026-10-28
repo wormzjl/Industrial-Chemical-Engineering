@@ -27,7 +27,7 @@ class PumpBottomPortDrainTest {
     final FluidThermodynamics model=FluidTestSupport.networkModel();
 
     static PhysicalFluidTopology.Device device(long id,int x,int y,Kind kind,PhysicalFluidTopology.Direction facing,FlowControl control) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,0),kind,facing,BLOCK,control);
+        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,BLOCK,control);
     }
     static PhysicalFluidTopology.Device device(long id,int x,int y,Kind kind) {
         return device(id,x,y,kind,PhysicalFluidTopology.Direction.NORTH,new FlowControl.Passive());
@@ -63,12 +63,14 @@ class PumpBottomPortDrainTest {
     }
 
     /** Scenario 2b: the filled tank drained at {@code target} m3/s by a pump one pipe block below its bottom face (only pipes
-     * connect, decision D20; the pump stood on the face until 2026-09-28). */
+     * connect, decision D20; the pump stood on the face until 2026-09-28). The pump is in-line and lies on its side, two
+     * blocks below the face as before, between two elbows (batch 2026-10-28-old-mover-removal: an in-line mover is
+     * horizontal); the void is two blocks below the pump, as before. */
     void drain(double target,int slices) {
         long tankId=3;var tank=filledTank(tankId);
         var devices=List.of(device(tankId,0,Y,Kind.RESERVOIR),
-                device(7,0,Y-1,Kind.PIPE),device(4,0,Y-2,Kind.PUMP,PhysicalFluidTopology.Direction.DOWN,new FlowControl.Pump(target,500000)),
-                device(5,0,Y-3,Kind.PIPE),device(6,0,Y-4,Kind.VOID));
+                device(7,0,Y-1,Kind.PIPE),device(8,0,Y-2,Kind.PIPE),device(4,1,Y-2,Kind.PUMP,PhysicalFluidTopology.Direction.EAST,new FlowControl.Pump(target,500000)),
+                device(5,2,Y-2,Kind.PIPE),device(9,2,Y-3,Kind.PIPE),device(6,2,Y-4,Kind.VOID));
         var graph=island(devices,Map.of(6L,new FluidDeviceSpec(1,298.15,101325,nitrogen())),Map.of(tankId,tank));
         int pump=-1;for(int i=0;i<graph.pipes().size();i++)if(graph.pipes().get(i).control() instanceof FlowControl.Pump)pump=i;
         assertTrue(pump>=0);
@@ -106,8 +108,9 @@ class PumpBottomPortDrainTest {
         int y=PumpBottomPortDrainTest.Y;
         var devices=List.of(PumpBottomPortDrainTest.device(7,-2,y,Kind.GENERATOR),PumpBottomPortDrainTest.device(8,-1,y,Kind.PIPE),
                 PumpBottomPortDrainTest.device(tankId,0,y,Kind.RESERVOIR),
-                PumpBottomPortDrainTest.device(9,0,y-1,Kind.PIPE),PumpBottomPortDrainTest.device(4,0,y-2,Kind.PUMP,PhysicalFluidTopology.Direction.DOWN,new FlowControl.Pump(.001,500000)),
-                PumpBottomPortDrainTest.device(5,0,y-3,Kind.PIPE),PumpBottomPortDrainTest.device(6,0,y-4,Kind.VOID));
+                PumpBottomPortDrainTest.device(9,0,y-1,Kind.PIPE),PumpBottomPortDrainTest.device(10,0,y-2,Kind.PIPE),
+                PumpBottomPortDrainTest.device(4,1,y-2,Kind.PUMP,PhysicalFluidTopology.Direction.EAST,new FlowControl.Pump(.001,500000)),
+                PumpBottomPortDrainTest.device(5,2,y-2,Kind.PIPE),PumpBottomPortDrainTest.device(11,2,y-3,Kind.PIPE),PumpBottomPortDrainTest.device(6,2,y-4,Kind.VOID));
         var graph=base.island(devices,Map.of(7L,new com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec(1,298.15,130000,com.wormzjl.icheme.fluid.support.FluidTestSupport.water()),
                 6L,new com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec(1,298.15,101325,com.wormzjl.icheme.fluid.support.FluidTestSupport.nitrogen())),Map.of(tankId,tank));
         var retained=new RetainedSolver();PassiveIntervalSolver.Result last=null;

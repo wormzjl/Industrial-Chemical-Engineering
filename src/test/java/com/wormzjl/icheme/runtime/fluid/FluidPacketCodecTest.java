@@ -213,7 +213,7 @@ class FluidPacketCodecTest {
         for(double ratio:new double[]{1.009,10.01,Double.NaN,0})
             assertThrows(IllegalArgumentException.class,()->new FluidNetwork.Controls(298.15,101325,.05,.000045,.05,500000,n,com.wormzjl.icheme.runtime.fluid.SlurryFeed.NONE,ratio),"ratio "+ratio);
         assertEquals(3.0,new FluidNetwork.Controls(298.15,101325,.05,.000045,.01,500000,n).maximumPressureRatio(),"the placement default of plan Appendix B");
-        var device=new PhysicalFluidTopology.Device(7,new PhysicalFluidTopology.Position("minecraft:overworld",0,64,0),TopologyCompiler.Kind.COMPRESSOR,PhysicalFluidTopology.Direction.EAST,
+        var device=new PhysicalFluidTopology.Device(7,new PhysicalFluidTopology.Position("minecraft:overworld",0,64,0),TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.Direction.EAST,
                 new com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry(1,.05,.000045,0),new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(.05,2.5));
         var controls=FluidNetwork.Controls.from(new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(),3));
         assertEquals(.05,controls.volumeFlow());assertEquals(2.5,controls.maximumPressureRatio());

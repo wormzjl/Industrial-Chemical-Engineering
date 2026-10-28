@@ -98,6 +98,9 @@ public final class PhysicalFluidTopology {
             if(kind==TopologyCompiler.Kind.PIPE&&control instanceof FlowControl.Mover&&(cutoff!=Cutoff.NONE||facing.y!=0))throw new IllegalArgumentException("An inline mover needs a horizontal pipe without a cutoff");
             if(kind!=TopologyCompiler.Kind.GENERATOR&&!generatorEnabled)throw new IllegalArgumentException("Only a generator has a source switch");
             ports=List.copyOf(ports);
+            // The one-block pump and compressor are gone (batch 2026-10-28-old-mover-removal): a mover is either constructed,
+            // with ports, or in-line, a pipe carrying its control.
+            if(ports.isEmpty()&&(kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR))throw new IllegalArgumentException("A pump or compressor without ports is an in-line mover: a pipe carrying its control");
             if(ports.isEmpty()&&control instanceof FlowControl.Mover mover&&!mover.enabled())throw new IllegalArgumentException("Only constructed movers have a power switch");
             if(ports.size()>MAXIMUM_PORTS)throw new IllegalArgumentException("Too many device ports: "+ports.size());
             var seen=new HashSet<Contact>();

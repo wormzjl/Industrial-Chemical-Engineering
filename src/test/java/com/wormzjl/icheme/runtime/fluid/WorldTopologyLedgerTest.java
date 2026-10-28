@@ -51,7 +51,7 @@ class WorldTopologyLedgerTest {
         assertEquals(List.of(a.event()),ready(ledger));assertThrows(IllegalStateException.class,()->ledger.applyBatch(List.of(b.event().id()),List.of(),List.of(),new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],4));
     }
     private WorldTopologyLedger.Registration record(long id,Kind kind) {
-        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0),kind,PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive());
+        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive());
         return new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(),0);
     }
     @Test void pendingPhysicalEventsRoundTripWithControlSettingsAndTheirOriginalTimestamps() {

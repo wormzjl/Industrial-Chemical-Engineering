@@ -911,7 +911,9 @@ class HoldClassWorldsTest {
             w.runTo(1903);w.place(1,-1,2,Kind.PIPE,NORTH,passive,null,.05);
             w.runTo(1949);w.place(5,-1,1,Kind.PIPE,NORTH,passive,null,.01);
             w.runTo(2087);w.place(3,-1,2,Kind.PIPE,NORTH,passive,null,.05);
-            w.runTo(2449);w.place(0,-2,2,Kind.PUMP,DOWN,new FlowControl.Pump(.01,500000),null,.02);
+            // The seed's pump hung DOWN below (0,-1,2), a dead end; an in-line mover lies on its side (batch
+            // 2026-10-28-old-mover-removal), so an elbow takes its cell and the pump hangs off it, still discharging away.
+            w.runTo(2449);w.place(0,-2,2,Kind.PIPE,NORTH,passive,null,.02);w.place(1,-2,2,Kind.PUMP,EAST,new FlowControl.Pump(.01,500000),null,.02);
             w.runTo(2641);w.place(5,-1,0,Kind.GENERATOR,NORTH,passive,pilot(269.91164644552856,2832869.246130703,0.1315093967488998,0.2208042977245737,0,0.6476863055265265,0),.01);
             w.runTo(2857);w.place(0,-1,0,Kind.PIPE,NORTH,passive,null,.02);
             w.runTo(3251);w.place(-1,0,2,Kind.PIPE,NORTH,passive,null,.1);
@@ -964,7 +966,9 @@ class HoldClassWorldsTest {
     @Test void aJunctionPutAtANewPressureIsStatedAsWhatItsRowMixes() {
         cold(w->{
             var passive=new FlowControl.Passive();var nitrogen=pilot(298.15,101325,1,0,0,0,0);
-            w.runTo(470);w.place(1,-1,0,Kind.COMPRESSOR,DOWN,new FlowControl.Compressor(0.05,1.5),null,0.05);
+            // The seed's compressor hung DOWN below (1,0,0), a dead end; an in-line mover lies on its side (batch
+            // 2026-10-28-old-mover-removal), so an elbow takes its cell and the compressor hangs off it, still discharging away.
+            w.runTo(470);w.place(1,-1,0,Kind.PIPE,NORTH,passive,null,0.05);w.place(2,-1,0,Kind.COMPRESSOR,EAST,new FlowControl.Compressor(0.05,1.5),null,0.05);
             w.runTo(739);w.place(-3,0,0,Kind.PIPE,NORTH,passive,null,0.05);
             w.runTo(753);w.place(-7,0,-3,Kind.VOID,NORTH,passive,nitrogen,0.05);
             w.runTo(784);w.place(-4,0,0,Kind.PIPE,NORTH,passive,null,0.05);

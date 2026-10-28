@@ -43,3 +43,15 @@ Owner decision 2026-10-28: "Keep defaults" (B1, J1, V1).
 ## 5. Gates
 
 `./gradlew test`, `test slowGates`, the fluid GameTests (fresh run id). No dev client running. No in-game check (owner feedback 2026-10-18, 2026-10-28).
+
+## 6. Second step: remove entirely (owner decision 2026-10-28)
+
+Owner request: "Remove the old pump/compressor block entirely". Owner answers: remove the engine's portless form and the save conversion; rebuild the test worlds that have an upright mover with a horizontal one.
+
+This overrides the AGENTS.md rule that a change never discards a fact, for these registrations only. A mover holds no stock, so the vessels keep every mole.
+
+1. Engine: `PhysicalFluidTopology.Device` refuses a `PUMP` or `COMPRESSOR` without ports. A mover is constructed (two ports) or in-line (a horizontal `PIPE` carrying its control). The horizontal rule stays.
+2. Saves: no block alias, no `convertOneBlockMover`, no ledger kind exception. `FluidFacts.world` drops a portless `PUMP`/`COMPRESSOR` registration and names it in a WARN line (`World.removedMovers`). The topology state read then refuses the unit, so the load takes the FACTS route and rebuilds the islands from the remaining facts. An old block in a chunk is lost to the block registry (no alias), as for any removed block.
+3. Corpus image `src/test/resources/compat/removed-movers/`, written by main `96806b8a` (tool `tools/old-mover-removal/`), read by `FluidFactsCompatTest.aWorldWithOneBlockMoversOpensWithoutThemAndKeepsEveryVessel`.
+4. Tests: every helper that laid a pump or compressor by kind lays an in-line mover (`FluidTestSupport.mechanical`). Upright movers are rebuilt horizontally at the same height, with an elbow beside them: `ElevatedBlockLineIslandTest` (rising pump line), `PumpBottomPortDrainTest` (two drains), `PhysicalFluidTopologyTest` (bottom-face pump), `HoldClassWorldsTest` seeds 850 and 743 (dead-end stubs). Each hold world is checked with its rule-off patch.
+5. Remove `OldMoverConversionGameTests` and the conversion unit test.

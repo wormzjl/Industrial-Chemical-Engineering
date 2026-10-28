@@ -157,12 +157,17 @@ final class FluidFacts {
 
     /** A pending solid recovery as saved. */
     record Recovery(UUID id,PhysicalFluidTopology.Position position,UUID player,List<Solid> solids,double energy) {}
-    /** The topology unit's facts as saved: compositions and totals lie on {@code basis}'s axis. */
+    /**
+     * The topology unit's facts as saved: compositions and totals lie on {@code basis}'s axis. {@code removedMovers}: the
+     * saved one-block pumps and compressors this build no longer has (owner decision 2026-10-28, batch
+     * 2026-10-28-old-mover-removal), left out of {@code registrations}. A mover holds no stock, so nothing is booked; the
+     * islands are rebuilt from the other facts.
+     */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
-                 WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated) {
+                 WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
+                 List<String> removedMovers) {
         /** The ledger these facts and {@code events} make at {@code onlineTick}, its recoveries' solids named by {@code record}. */
-        WorldTopologyLedger.Snapshot snapshot(long onlineTick,List<WorldTopologyLedger.Event> events,Function<Solid,SolidMaterial> record) {
-            var active=new HashMap<Long,WorldTopologyLedger.Registration>();
+        WorldTopologyLedger.Snapshot snapshot(long onlineTick,List<WorldTopologyLedger.Event> events,Function<Solid,SolidMaterial> record) {            var active=new HashMap<Long,WorldTopologyLedger.Registration>();
             for(var r:registrations)if(active.put(r.device().id(),r)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate device "+r.device().id());
             var pending=new HashMap<UUID,WorldTopologyLedger.RecoveredSolid>();
             for(var r:recoveries)if(pending.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,inventory(r.solids,record),r.energy))!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate recovery "+r.id);
@@ -192,7 +197,9 @@ final class FluidFacts {
             var basis=f.record(null,q->{var id=q.text("");var components=q.list(List.of(),c->c.text(""));var retired=q.text("");var revision=q.text("");
                 if(!retired.isEmpty()&&!retired.matches("[0-9a-f]{64}:[0-9a-f]{64}"))throw q.invalid("basis: invalid retired fingerprint");
                 return valid(q,"basis",()->new WorldTopologyLedger.FluidBasis(id,components,revision));});
-            var registrations=f.list(List.of(),FluidFacts::registration);
+            var removedMovers=new ArrayList<String>();
+            var registrations=new ArrayList<>(f.list(List.of(),q->registration(q,removedMovers)));registrations.removeIf(Objects::isNull);
+            if(!removedMovers.isEmpty())warn("one-block movers removed (batch 2026-10-28-old-mover-removal): "+removedMovers);
             var constructed=f.record(null,FluidFacts::total);var destroyed=f.record(null,FluidFacts::total);
             var recoveries=f.list(List.of(),q->{var id=required(uuid(q),q,"recovery identity");var position=required(position(q),q,"recovery position");
                 var player=q.list(List.of(),FluidFacts::uuid);var solids=solids(q);double energy=q.f64(0);
@@ -202,7 +209,7 @@ final class FluidFacts {
                 var solids=new HashMap<String,Double>();for(var e:q.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))solids.put(e.getKey(),e.getValue());
                 return valid(q,"restated totals",()->new WorldTopologyLedger.Restated(energy,moles,solids));});
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
-            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated);
+            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers));
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {
@@ -224,7 +231,12 @@ final class FluidFacts {
                         .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())))
                 .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points());
     }
-    private static WorldTopologyLedger.Registration registration(Record f) {
+    private static WorldTopologyLedger.Registration registration(Record f){return registration(f,null);}
+    /**
+     * A saved registration. A one-block pump or compressor (portless) is gone: with {@code removed} it is read whole, named
+     * there and returned as null; without (a queued event's replacement, which is state) it does not read.
+     */
+    private static WorldTopologyLedger.Registration registration(Record f,List<String> removed) {
         long id=f.count(0);var position=position(f);
         var kind=f.name(TopologyCompiler.Kind.class,null);var facing=f.name(PhysicalFluidTopology.Direction.class,null);
         var geometry=f.record(null,q->{double length=q.f64(0),diameter=q.f64(0),roughness=q.f64(0),minorLoss=q.f64(0);return valid(q,"geometry",()->new PipeResistance.Geometry(length,diameter,roughness,minorLoss));});
@@ -245,6 +257,10 @@ final class FluidFacts {
         long slots=f.count(0);if(slots>PhysicalFluidTopology.RACK_WIDTH)throw f.invalid("lane width "+slots);
         long points=f.count(0);if(points>>>60!=0)throw f.invalid("lane points "+points);
         required(position,f,"device position");required(kind,f,"device kind");required(facing,f,"device facing");required(geometry,f,"device geometry");required(spec,f,"device spec");
+        if((kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR)&&ports.isEmpty()){
+            if(removed==null)throw f.invalid("registration "+id+": a one-block "+kind.name().toLowerCase(Locale.ROOT)+", which this build no longer has");
+            removed.add(kind.name().toLowerCase(Locale.ROOT)+" "+id+" at "+position.x()+", "+position.y()+", "+position.z());return null;
+        }
         return valid(f,"registration "+id,()->new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,filter,(int)joints,(int)slots,points),spec,revision));
     }
     private static void geometry(Fields f,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){f.name(g.form()).f64(g.capacity()).f64(g.height()).f64(g.diameter()).f64(g.length()).f64(g.bootDiameter()).f64(g.bootLength());}

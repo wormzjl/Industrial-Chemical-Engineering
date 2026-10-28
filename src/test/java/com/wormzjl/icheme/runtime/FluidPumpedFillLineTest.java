@@ -42,13 +42,14 @@ class FluidPumpedFillLineTest {
     /** A line of blocks along +x, every block facing east, in the WP5 rig's letters: G generator, U pump, P pipe, R tank, V void;
      * a pipe block stands between the generator and the pump and between the suction tank and the compressor, since only pipes
      * connect (decision D20; they touched until 2026-09-28);
-     * and C, a compressor (phase-ports batch, decision D2). */
+     * and C, a compressor (phase-ports batch, decision D2). A pump or compressor is in-line, a pipe carrying its control
+     * (batch 2026-10-28-old-mover-removal), and has the bore of the line it is installed on. */
     private PassiveNetwork line(String layout) {
         var devices=new ArrayList<PhysicalFluidTopology.Device>();var boundaries=new LinkedHashMap<Long,PassiveNetwork.Reservoir>();
         for(int i=0;i<layout.length();i++) {
             var kind=switch(layout.charAt(i)){case 'G'->TopologyCompiler.Kind.GENERATOR;case 'U'->TopologyCompiler.Kind.PUMP;case 'C'->TopologyCompiler.Kind.COMPRESSOR;case 'P','W'->TopologyCompiler.Kind.PIPE;
                 case 'R'->TopologyCompiler.Kind.RESERVOIR;case 'V'->TopologyCompiler.Kind.VOID;default->throw new IllegalArgumentException(layout);};
-            var device=new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,64,0),kind,PhysicalFluidTopology.Direction.EAST,layout.charAt(i)=='W'?WIDE:BLOCK,
+            var device=new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,64,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,layout.charAt(i)=='W'||"UC".indexOf(layout.charAt(i))>=0&&i>0&&layout.charAt(i-1)=='W'?WIDE:BLOCK,
                     kind==TopologyCompiler.Kind.PUMP?new FlowControl.Pump(.01,500000):kind==TopologyCompiler.Kind.COMPRESSOR?new FlowControl.Compressor(.01,COMPRESSOR_RATIO):new FlowControl.Passive());
             devices.add(device);
             if(kind==TopologyCompiler.Kind.GENERATOR)boundaries.put(device.id(),new FluidDeviceSpec(1,298.15,101325,pure(MaterialTestBasis.NETWORK)).initialize(device,model,()->{}));

@@ -149,26 +149,6 @@ public final class PhysicalRegistry {
         var d=record.device();var replacement=new PhysicalFluidTopology.Device(d.id(),d.position(),d.kind(),axis,d.geometry(),control,d.ports(),d.generatorEnabled(),d.cutoff(),d.inlineFilter(),d.joints());
         submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(replacement,record.spec(),Math.addExact(record.revision(),1)))),topology.nextIdentity(),null);return true;
     }
-    /**
-     * A one-block pump or compressor (a portless {@code PUMP} or {@code COMPRESSOR}) whose block now loads as a pipe (batch
-     * 2026-10-28-old-mover-removal): queues it as the in-line mover on that pipe. It keeps its identity, position, facing,
-     * control, spec and joints; its bore is the largest of the pipes it meets on its axis (option B1: each half of its
-     * link took that pipe's bore before), else its own. A vertical one stays as it is (option V1: an in-line mover is
-     * horizontal only, and converting it would lose its control). Returns whether it queued an edit.
-     */
-    public boolean convertOneBlockMover(long id){
-        var record=registrations().get(id);if(record==null)return false;var d=record.device();
-        if(d.kind()!=TopologyCompiler.Kind.PUMP&&d.kind()!=TopologyCompiler.Kind.COMPRESSOR||!d.ports().isEmpty()||d.facing().y!=0)return false;
-        double bore=0;
-        for(var face:new PhysicalFluidTopology.Direction[]{d.facing(),PhysicalFluidTopology.opposite(d.facing())}){
-            var next=at(d.position().offset(face)).orElse(null);
-            if(next!=null&&next.device().kind()==TopologyCompiler.Kind.PIPE&&next.device().mechanicallyConnects(PhysicalFluidTopology.opposite(face)))bore=Math.max(bore,next.device().geometry().diameter());
-        }
-        var g=d.geometry();if(bore==0)bore=g.diameter();
-        var pipe=new PhysicalFluidTopology.Device(d.id(),d.position(),TopologyCompiler.Kind.PIPE,d.facing(),new PipeResistance.Geometry(g.length(),bore,g.roughness(),g.minorLoss()),
-                d.control(),List.of(),d.generatorEnabled(),d.cutoff(),d.inlineFilter(),d.joints(),d.slots(),d.points());
-        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(pipe,record.spec(),Math.addExact(record.revision(),1)))),topology.nextIdentity(),null);return true;
-    }
     public boolean installPipeFilter(long id,PhysicalFluidTopology.Direction axis) {
         var r=registrations().get(id);if(!canInstallFitting(r,axis))return false;
         var d=r.device().withInlineFilter(axis,true);

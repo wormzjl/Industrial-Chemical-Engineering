@@ -36,7 +36,7 @@ class SlurryTankPumpTest {
     final FluidThermodynamics pilot=FluidTestSupport.model(MaterialCatalog.bundled(),PILOT);
 
     static PhysicalFluidTopology.Device device(long id,int x,int y,int z,Kind kind,PhysicalFluidTopology.Direction facing,FlowControl control) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,z),kind,facing,BLOCK,control);
+        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,BLOCK,control);
     }
     static PhysicalFluidTopology.Device device(long id,int x,int y,int z,Kind kind){return device(id,x,y,z,kind,NORTH,new FlowControl.Passive());}
     static int node(PassiveNetwork graph,long id){for(int i=0;i<graph.reservoirs().size();i++)if(graph.reservoirs().get(i).id()==id)return i;throw new AssertionError(id);}

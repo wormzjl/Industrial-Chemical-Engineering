@@ -33,7 +33,7 @@ class PhysicalRegistryTest {
         World(int workers){super(workers);}
         WorldTopologyLedger.Registration record(long id,int x,int z,Kind kind,PhysicalFluidTopology.Direction facing) {
             var control=kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive();
-            var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),kind,facing,new PipeResistance.Geometry(1,.05,.000045,0),control);
+            var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),control);
             var spec=kind==Kind.GENERATOR?FluidDeviceSpec.water(catalog):FluidDeviceSpec.nitrogen(catalog);
             if(kind==Kind.RESERVOIR)spec=new FluidDeviceSpec(1,298.15,101325,spec.composition());
             return new WorldTopologyLedger.Registration(device,spec,0);
@@ -81,35 +81,6 @@ class PhysicalRegistryTest {
         var result=new HashMap<Set<PhysicalFluidTopology.Position>,IslandCoordinator.Snapshot>();
         for(var island:w.coordinator.observe()){var positions=new HashSet<PhysicalFluidTopology.Position>();for(long id:w.registry.members(island.id()))positions.add(at(w,id));result.put(Set.copyOf(positions),island);}
         return result;
-    }
-
-    /**
-     * A one-block pump whose block loads as a pipe (batch 2026-10-28-old-mover-removal) becomes the in-line mover there
-     * with every fact it had; on a line of one bore it compiles to the same network. Beside a wider pipe it takes the
-     * wider bore (option B1). An upright one, a plain pipe and an absent device are left alone (option V1).
-     */
-    @Test void aOneBlockMoverConvertsToTheInlineMoverWithItsFacts() {
-        var w=new World(0);
-        w.queue(0,0,Kind.RESERVOIR);w.queue(1,0,Kind.PIPE);long pump=w.queue(2,0,Kind.PUMP);long downstream=w.queue(3,0,Kind.PIPE);w.queue(4,0,Kind.RESERVOIR);w.apply();
-        var before=w.registry.registrations().get(pump);var pipes=w.island(pump).graph().pipes();
-        assertTrue(w.registry.convertOneBlockMover(pump));w.apply();
-        var after=w.registry.registrations().get(pump);var d=after.device();
-        assertEquals(List.of(Kind.PIPE,Kind.PUMP,before.device().position(),before.device().facing(),before.device().control(),before.spec(),before.revision()+1,.05),
-                List.of(d.kind(),d.hydraulicKind(),d.position(),d.facing(),d.control(),after.spec(),after.revision(),d.geometry().diameter()));
-        assertEquals(pipes,w.island(pump).graph().pipes(),"one bore: the same network");
-        assertFalse(w.registry.convertOneBlockMover(pump),"converted once");
-        assertFalse(w.registry.convertOneBlockMover(downstream),"a plain pipe");
-        assertFalse(w.registry.convertOneBlockMover(999),"no device");
-        // Beside a wider pipe: the largest bore it meets on its axis.
-        long wide=w.queue(1,4,Kind.PIPE),second=w.queue(2,4,Kind.PUMP);w.queue(3,4,Kind.PIPE);w.apply();
-        var r=w.registry.registrations().get(wide);var g=r.device().geometry();
-        w.registry.submit(List.of(new WorldTopologyLedger.Edit(wide,new WorldTopologyLedger.Registration(r.device().withGeometry(new PipeResistance.Geometry(1,.1,g.roughness(),0)),r.spec(),r.revision()+1))),w.ledger.nextIdentity(),null);
-        assertTrue(w.registry.convertOneBlockMover(second));w.apply();
-        assertEquals(.1,w.registry.registrations().get(second).device().geometry().diameter());
-        // Upright: an in-line mover is horizontal only, so it keeps its one-block registration.
-        long upright=w.ledger.nextIdentity();var u=w.record(upright,6,6,Kind.PUMP,PhysicalFluidTopology.Direction.UP);
-        w.registry.submit(List.of(new WorldTopologyLedger.Edit(upright,u)),upright+1,null);w.apply();
-        assertFalse(w.registry.convertOneBlockMover(upright));assertEquals(Kind.PUMP,w.registry.registrations().get(upright).device().kind());
     }
 
     @Test void anEventTouchingOneIslandCompilesAndReplacesOnlyThatIsland() {
@@ -366,7 +337,7 @@ class PhysicalRegistryTest {
     }
     private long queueSpec(World w,int x,int z,Kind kind,FluidDeviceSpec spec) {
         long id=w.ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),kind,PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
         w.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);return id;
     }
     /** What the ledger booked between two snapshots equals {@code expected}, to roundoff of the cumulative totals. */

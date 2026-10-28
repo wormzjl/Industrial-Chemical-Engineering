@@ -13,7 +13,7 @@ import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*
 class PhysicalFluidTopologyTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
     private PhysicalFluidTopology.Device device(long id,int x,int z,Kind kind,PhysicalFluidTopology.Direction facing) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),kind,facing,new PipeResistance.Geometry(1,.05,.000045,0),
+        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),
                 kind==Kind.PUMP?new FlowControl.Pump(.00001,500000):kind==Kind.COMPRESSOR?new FlowControl.Compressor(.00001,3):kind==Kind.VALVE?new FlowControl.PressureValve(150000):new FlowControl.Passive());
     }
     private PassiveNetwork.Reservoir reservoir(long id){return new PassiveNetwork.Reservoir(id,0,model.initialNitrogenCharge(1,298.15,101325,()->{}));}
@@ -136,14 +136,14 @@ class PhysicalFluidTopologyTest {
         assertEquals(0,result.averageMassFlows()[graph.pipes().indexOf(compressor)],1e-12);
         assertTrue(Arrays.stream(result.averageMassFlows()).anyMatch(q->Math.abs(q)>1e-6));
         assertThrows(IllegalArgumentException.class,()->new PhysicalFluidTopology.Device(9,new PhysicalFluidTopology.Position("minecraft:overworld",9,0,0),Kind.COMPRESSOR,facing,
-                new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Pump(.01,500000)),"a compressor block takes a compressor's controls");
+                new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Pump(.01,500000)),"a compressor without ports is an in-line mover, a pipe");
     }
 
     // ---------------- faces to ports (phase-ports WP5, plan 4.1, default A1) ----------------
 
     private static final PhysicalFluidTopology.Direction N=PhysicalFluidTopology.Direction.NORTH;
     private PhysicalFluidTopology.Device at(long id,int x,int y,int z,Kind kind,PhysicalFluidTopology.Direction facing) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),kind,facing,new PipeResistance.Geometry(1,.05,.000045,0),
+        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),
                 kind==Kind.PUMP?new FlowControl.Pump(.001,500000):kind==Kind.COMPRESSOR?new FlowControl.Compressor(.00001,3):new FlowControl.Passive());
     }
     private PassiveNetwork.Reservoir nitrogenAt(long id,int y,PassiveNetwork.NodeKind kind,double pressure){return new PassiveNetwork.Reservoir(id,y,model.initialNitrogenCharge(1,298.15,pressure,()->{}),kind);}
@@ -222,26 +222,27 @@ class PhysicalFluidTopologyTest {
     }
     /**
      * A pump one pipe block below a tank's DOWN face (only pipes connect, decision D20; the pump stood on the face itself until
-     * 2026-09-28). Facing down it draws from the tank's bottom: the passive suction run has the tank's
-     * LIQUID port. Facing up it pumps into the tank's bottom: the compiled pump connection runs from the pump's junction to
+     * 2026-09-28), in-line and on its side beside an elbow below that pipe (batch 2026-10-28-old-mover-removal). Facing away
+     * it draws from the tank's bottom: the passive suction run has the tank's LIQUID port. Facing back it pumps into the
+     * tank's bottom: the compiled pump connection runs from the pump's junction to
      * the tank, and the port follows the tank's end through the {@code fromEnd ? b : a} swap, in either identity order
      * (which decides whether the run is stated from the tank or from the pump).
      */
     @Test void aPumpOnATanksBottomFaceTakesTheBottomPortInEitherOrientationAndIdentityOrder() {
         for(boolean tankFirst:new boolean[]{true,false}) {
             long tank=tankFirst?1:2,pump=tankFirst?2:1;
-            // Suction from the bottom: tank at y=2, a pipe block (only pipes connect, decision D20), the pump at y=0 facing DOWN, a pipe and a void below it.
-            var drawing=PhysicalFluidTopology.compile(List.of(at(tank,0,2,0,Kind.RESERVOIR,N),at(5,0,1,0,Kind.PIPE,N),at(pump,0,0,0,Kind.PUMP,PhysicalFluidTopology.Direction.DOWN),at(3,0,-1,0,Kind.PIPE,N),at(4,0,-2,0,Kind.VOID,N)),
-                    Map.of(tank,nitrogenAt(tank,2,PassiveNetwork.NodeKind.RESERVOIR,101325),4L,nitrogenAt(4,-2,PassiveNetwork.NodeKind.VOID,101325)));
+            // Suction from the bottom: tank at y=2, a pipe block (only pipes connect, decision D20), an elbow, the pump beside it facing away, a pipe and a void.
+            var drawing=PhysicalFluidTopology.compile(List.of(at(tank,0,2,0,Kind.RESERVOIR,N),at(5,0,1,0,Kind.PIPE,N),at(6,0,0,0,Kind.PIPE,N),at(pump,1,0,0,Kind.PUMP,PhysicalFluidTopology.Direction.EAST),at(3,2,0,0,Kind.PIPE,N),at(4,3,0,0,Kind.VOID,N)),
+                    Map.of(tank,nitrogenAt(tank,2,PassiveNetwork.NodeKind.RESERVOIR,101325),4L,nitrogenAt(4,0,PassiveNetwork.NodeKind.VOID,101325)));
             assertTrue(drawing.islands().getFirst().error().isEmpty(),drawing.diagnostics().toString());
             var graph=drawing.islands().getFirst().graph();int t=node(graph,tank),u=node(graph,pump);
             var suction=between(graph,t,u);assertInstanceOf(FlowControl.Passive.class,suction.control());
             assertEquals(PassiveNetwork.PhasePort.LIQUID,suction.portAt(t));assertEquals(PassiveNetwork.PhasePort.BULK,suction.portAt(u));
             var moving=graph.pipes().stream().filter(p->p.control() instanceof FlowControl.Pump).findFirst().orElseThrow();
             assertEquals(u,moving.first());assertTrue(moving.bulk(),"the pump's own connection joins its junction and the void");
-            // Discharge into the bottom: a generator and a pipe below the pump, the pump facing UP into the tank.
-            var filling=PhysicalFluidTopology.compile(List.of(at(tank,0,2,0,Kind.RESERVOIR,N),at(5,0,1,0,Kind.PIPE,N),at(pump,0,0,0,Kind.PUMP,PhysicalFluidTopology.Direction.UP),at(3,0,-1,0,Kind.PIPE,N),at(4,0,-2,0,Kind.GENERATOR,N)),
-                    Map.of(tank,nitrogenAt(tank,2,PassiveNetwork.NodeKind.RESERVOIR,101325),4L,nitrogenAt(4,-2,PassiveNetwork.NodeKind.GENERATOR,101325)));
+            // Discharge into the bottom: a generator and a pipe beyond the pump, the pump facing back into the tank.
+            var filling=PhysicalFluidTopology.compile(List.of(at(tank,0,2,0,Kind.RESERVOIR,N),at(5,0,1,0,Kind.PIPE,N),at(6,0,0,0,Kind.PIPE,N),at(pump,1,0,0,Kind.PUMP,PhysicalFluidTopology.Direction.WEST),at(3,2,0,0,Kind.PIPE,N),at(4,3,0,0,Kind.GENERATOR,N)),
+                    Map.of(tank,nitrogenAt(tank,2,PassiveNetwork.NodeKind.RESERVOIR,101325),4L,nitrogenAt(4,0,PassiveNetwork.NodeKind.GENERATOR,101325)));
             assertTrue(filling.islands().getFirst().error().isEmpty(),filling.diagnostics().toString());
             graph=filling.islands().getFirst().graph();t=node(graph,tank);u=node(graph,pump);
             var discharge=between(graph,t,u);assertInstanceOf(FlowControl.Pump.class,discharge.control());
@@ -351,7 +352,7 @@ class PhysicalFluidTopologyTest {
      */
     private static PhysicalFluidTopology.Device at(long id,int x,Kind kind,PhysicalFluidTopology.Direction facing) {
         var control=switch(kind){case PUMP->new FlowControl.Pump(.01,500000);case COMPRESSOR->new FlowControl.Compressor(.05,3);case VALVE->new FlowControl.PressureValve(200000);default->new FlowControl.Passive();};
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,0),kind,facing,new PipeResistance.Geometry(1,.05,.000045,0),control);
+        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),control);
     }
     private PhysicalFluidTopology.Compiled compile(String layout) {
         var devices=new ArrayList<PhysicalFluidTopology.Device>();var boundaries=new LinkedHashMap<Long,PassiveNetwork.Reservoir>();
@@ -370,12 +371,11 @@ class PhysicalFluidTopologyTest {
     }
 
     @Test void equipmentSideBySideExchangesNothing() {
-        // A generator against a pump, the pump's discharge piped to a tank: the pump has one port, the generator touches nothing.
-        var pumped=compile("GUPR");
-        assertFalse(islandOf(pumped,4).contains(1L),"the generator is not joined to the pump: "+pumped.diagnostics());
-        assertTrue(pumped.diagnostics().get(2L).startsWith("ERROR"),"the pump has one port: "+pumped.diagnostics());
-        // A valve, a compressor or a filter against a tank, piped on to a void: nothing reaches the tank.
-        for(String layout:List.of("RQPV","RCPV","RFPV"))assertTrue(islandOf(compile(layout),1).isEmpty(),layout+": the tank is joined to nothing");
+        // An in-line pump or compressor is a pipe carrying its control (batch 2026-10-28-old-mover-removal, option J1): it
+        // joins the equipment on its axis as a pipe does.
+        for(String layout:List.of("GUPR","RCPV")){var moved=compile(layout);assertEquals(4,islandOf(moved,4).size(),layout+": one line: "+moved.diagnostics());}
+        // A valve or a filter against a tank, piped on to a void: nothing reaches the tank.
+        for(String layout:List.of("RQPV","RFPV"))assertTrue(islandOf(compile(layout),1).isEmpty(),layout+": the tank is joined to nothing");
         // Two filters and a pump in a row between pipes: no connection across a device-device face.
         assertTrue(islandOf(compile("GPFFPR"),6).isEmpty(),"two filters side by side do not pass fluid");
     }
@@ -387,10 +387,11 @@ class PhysicalFluidTopologyTest {
         }
     }
 
-    /** Owner decision 2026-10-16: a pump's or valve's half of each link takes the bore of the pipe on that side. */
+    /** Owner decision 2026-10-16: a valve's half of each link takes the bore of the pipe on that side. (A pump is an
+     * in-line mover, a pipe of its own bore, since batch 2026-10-28-old-mover-removal.) */
     @Test void anActuatorTakesTheBoreOfThePipeOnEachSide() {
         var facing=PhysicalFluidTopology.Direction.EAST;
-        for(var kind:List.of(Kind.PUMP,Kind.VALVE)) {
+        for(var kind:List.of(Kind.VALVE)) {
             var devices=List.of(device(1,0,0,Kind.RESERVOIR,facing),bore(device(2,1,0,Kind.PIPE,facing),.2),device(3,2,0,kind,facing),bore(device(4,3,0,Kind.PIPE,facing),.3),device(5,4,0,Kind.RESERVOIR,facing));
             var graph=PhysicalFluidTopology.compile(devices,Map.of(1L,reservoir(1),5L,reservoir(5))).islands().getFirst().graph();
             var bores=graph.pipes().stream().flatMap(p->p.sections().stream()).map(PipeResistance.Geometry::diameter).collect(java.util.stream.Collectors.toSet());
@@ -405,14 +406,15 @@ class PhysicalFluidTopologyTest {
 
     @Test void theRegistryWalksFollowTheSameRule() {
         var w=new EventPathWorld();w.runTo(100);
-        long tank=w.place(0,0,0,Kind.RESERVOIR,NORTH,.05);long pump=w.place(1,0,0,Kind.PUMP,EAST,.05);w.place(2,0,0,Kind.PIPE,NORTH,.05);
+        // A valve: an in-line pump is a pipe and joins the tank (batch 2026-10-28-old-mover-removal, option J1).
+        long tank=w.place(0,0,0,Kind.RESERVOIR,NORTH,.05);long valve=w.place(1,0,0,Kind.VALVE,EAST,.05);w.place(2,0,0,Kind.PIPE,NORTH,.05);
         w.place(3,0,0,Kind.VOID,NORTH,.05);w.runTo(102);
-        assertNull(w.registry.owner(pump),"a pump against a tank is in no island");
+        assertNull(w.registry.owner(valve),"a valve against a tank is in no island");
         assertEquals(List.of(tank),w.registry.members(w.registry.owner(tank)),"the tank is an island of its own");
         // A pipe between them: the placement's walk reaches both, and one island holds the line.
         w.runTo(300);w.place(0,0,1,Kind.PIPE,NORTH,.05);w.runTo(302);
-        assertNull(w.registry.owner(pump),"a pipe beside the tank but not between them changes nothing");
-        w.runTo(4000);w.assertKeptUp("a pump against a tank");
+        assertNull(w.registry.owner(valve),"a pipe beside the tank but not between them changes nothing");
+        w.runTo(4000);w.assertKeptUp("a valve against a tank");
     }
 
     // ---------------- explicit pipe joints and rack lanes (batch 2026-10-26-pipe-laying-system) ----------------

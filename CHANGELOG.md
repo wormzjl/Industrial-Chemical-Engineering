@@ -17,7 +17,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ### Removed
 
-- The old one-block Process Fluid Pump and Process Gas Compressor blocks; the In-line Pump and In-line Compressor on pipes replace them. A saved world loads each as a pipe with an in-line mover that keeps its identity, facing and settings (batch `2026-10-28-old-mover-removal`).
+- The old one-block Process Fluid Pump and Process Gas Compressor blocks, and the engine's portless pump and compressor form; the In-line Pump and In-line Compressor on pipes replace them. A saved world that has old ones loads without them: their blocks are gone, the log names each removed mover, and the islands are rebuilt from the saved facts with every vessel's contents kept (owner decision; batch `2026-10-28-old-mover-removal`, corpus image `compat/removed-movers`).
 
 ### Fixed
 
