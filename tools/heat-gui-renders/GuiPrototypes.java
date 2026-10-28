@@ -1,3 +1,6 @@
+import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
+import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
+import com.wormzjl.icheme.client.gui.common.AssemblyFlowsheet;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
@@ -11,6 +14,12 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
+import com.wormzjl.icheme.science.assembly.AssemblyReport;
+import com.wormzjl.icheme.science.assembly.AssemblyView;
+import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
+import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
@@ -61,7 +70,8 @@ public final class GuiPrototypes {
     }
 
     static List<Prototype> prototypes() {
-        var out = new ArrayList<>(List.of(pump(), generator(), valve(), tank(), pipe(), column(), assembly()));
+        var out = new ArrayList<>(List.of(pump(), generator(), valve(), tank(), pipe(), column()));
+        out.addAll(assembly());
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         return out;
@@ -119,39 +129,90 @@ public final class GuiPrototypes {
         c.text("Tray 14", box.x() + 8, dy + 4, Palette.TEXT);
     }
 
-    // ---- The assembly check: the drawing and the parts on the glass, the check and the go-to on the door ----
+    // ---- The assembly check: the shipped AssemblyColumn and AssemblyFlowsheet on the door (GUI_REVIEW.md order 4) ----
 
-    static Prototype assembly() {
-        return new Prototype("assembly", 464, 254, (d, s) -> {
-            d.title("Distillation column");
-            d.tabs(0, "Structure", "Operation");
-            d.status("Checked: 9 connected, 1 misplaced, 2 missing", Palette.WARN);
-            int top = 74, bottom = d.h - 38, side = 150;
-            var box = d.well(new Rect(5, top - 3, d.w - side - 15, bottom - top + 3));
-            int lx = box.x() + box.w() / 2 + 6;
-            var c = d.c;
-            c.outline(box.x() + 30, box.y() + 10, 30, box.h() - 20, Palette.TEAL);
-            c.text("Column", box.x() + 26, box.bottom() - 8, Palette.MUTED);
-            c.outline(box.x() + 80, box.y() + 14, 28, 14, Palette.TEAL);
-            c.outline(box.x() + 80, box.bottom() - 30, 28, 14, Palette.YELLOW);
-            c.outline(box.x() + 120, box.y() + 60, 20, 12, Palette.RED);
-            c.vLine(lx - 6, box.y(), box.bottom(), Palette.LINE);
-            String[][] parts = {{"Condenser", "Connected"}, {"Reflux drum", "Connected"}, {"Reflux pump", "Misplaced"}, {"Reboiler", "Connected"}, {"Feed valve", "Missing"}, {"Flowmeter", "Missing"}};
-            int[] colours = {Palette.TEAL, Palette.TEAL, Palette.YELLOW, Palette.TEAL, Palette.RED, Palette.RED};
-            for (int i = 0; i < parts.length; i++) {
-                int y = box.y() + 2 + i * 12;
-                c.fill(lx, y + 1, lx + 6, y + 7, colours[i]);
-                c.text(parts[i][0], lx + 10, y, Palette.TEXT);
-                c.text(parts[i][1], box.right() - 3 - d.m.width(parts[i][1]), y, colours[i]);
-            }
-            d.column(Door.rows(
-                    Door.group("Check", "Checks the parts against the design. The engine answers within 5 s.",
-                            new Column.Buttons(List.of(new Column.Button("validate", "Check parts", true, null))), new Column.Line("12 parts, 3 to fix", Palette.TEXT)),
-                    Door.group("Selected", null, new Column.Line("Reflux pump", Palette.TEXT),
-                            new Column.Buttons(List.of(new Column.Button("open", "Open unit", true, null))))),
-                    d.w - side - 4, top, side - 6, Map.of());
-            d.footer(2, "Close", "Datasheet");
-        });
+    /** A column with a kettle, one side draw and one pumparound. */
+    static final ColumnTrays ASSEMBLY = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
+            new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true));
+
+    /** A check of {@link #ASSEMBLY}: an in-line pump where the reflux pump goes (misplaced), no feed valve, the PA cooler's line open; the rest in place. */
+    static AssemblyReport assemblyReport() {
+        var slots = ColumnBlueprint.of(ASSEMBLY).slots();
+        var faults = Map.of(ColumnBlueprint.REFLUX_PUMP, new AssemblyReport.SlotReport(ColumnBlueprint.REFLUX_PUMP, AssemblyReport.State.WRONG_KIND, 1003, AssemblyReport.NONE, "INLINE_PUMP"),
+                ColumnBlueprint.FEED_VALVE, new AssemblyReport.SlotReport(ColumnBlueprint.FEED_VALVE, AssemblyReport.State.MISSING, AssemblyReport.NONE, AssemblyReport.NONE, ""),
+                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.OPEN_END, 1012, AssemblyReport.NONE, "unconnected"));
+        var reports = new ArrayList<AssemblyReport.SlotReport>();
+        var members = new ArrayList<Long>();
+        for (int i = 0; i < slots.size(); i++) {
+            var slot = slots.get(i);
+            var r = faults.getOrDefault(slot, new AssemblyReport.SlotReport(slot, AssemblyReport.State.OK, 1000L + i, AssemblyReport.NONE, ""));
+            reports.add(r);
+            if (r.member() != AssemblyReport.NONE) members.add(r.member());
+        }
+        // Each drawn port of a unit in place is connected; a faulted unit's still need their pipes.
+        var ports = new ArrayList<AssemblyReport.PortReport>();
+        for (var m : AssemblyDiagram.of(ASSEMBLY).ports())
+            for (var r : reports)
+                if (r.slot().equals(m.slot()) && r.member() != AssemblyReport.NONE)
+                    ports.add(new AssemblyReport.PortReport(r.member(), m.role(), Math.max(0, m.ordinal()), r.state() == AssemblyReport.State.OK ? AssemblyReport.PortState.CONNECTED : AssemblyReport.PortState.NEEDED));
+        return new AssemblyReport(reports, ports, java.util.Set.of(), members);
+    }
+
+    /** Nothing selected after a check; then the reflux pump selected while the next check is queued. */
+    static List<Prototype> assembly() {
+        return List.of(new Prototype("assembly", 464, 254, (d, s) -> assemblyDoor(d, null, false)),
+                new Prototype("assembly-selected", 464, 254, (d, s) -> assemblyDoor(d, ColumnBlueprint.REFLUX_PUMP, true)));
+    }
+
+    /**
+     * The assembly screen's door as AssemblyScreen draws it: the title and the theme key, the tabs (Structure latched,
+     * Operation off until the structure is complete), the status once, the glass with the drawing and the parts list, the
+     * door column, the footer under its divider.
+     */
+    static void assemblyDoor(Door d, Slot selected, boolean queued) {
+        var t = DIALOG;
+        var report = assemblyReport();
+        var diagram = AssemblyDiagram.of(ASSEMBLY);
+        var slots = ColumnBlueprint.of(ASSEMBLY).slots();
+        d.title(t.get(AssemblyColumn.KEY + "title"));
+        var tabs = AssemblyColumn.tabs(false, false, t);
+        var tabSlots = AssemblyColumn.tabSlots(d.w);
+        for (int i = 0; i < tabs.size(); i++) {
+            var spec = tabs.get(i);
+            d.skin.button(d.c, tabSlots.get(i), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+        }
+        var status = AssemblyColumn.status(new AssemblyView(AssemblyView.Status.CHECKED, report, AssemblyReport.NONE), at -> "?", t);
+        d.skin.status(d.c, AssemblyColumn.display(d.w), status.text(), status.palette());
+        d.skin.hDivider(d.c, 8, d.w - 8, d.h - AssemblyColumn.DIVIDER);
+        var box = d.well(AssemblyColumn.glass(d.w, d.h, true));
+        var split = AssemblyColumn.split(box);
+        var sheet = new AssemblyFlowsheet(diagram);
+        sheet.fit(split.drawing());
+        d.c.clip(split.drawing());
+        sheet.draw(d.c, report, selected, x -> AssemblyColumn.text(x, t));
+        d.c.unclip();
+        var area = split.list();
+        d.c.vLine(area.x() - AssemblyColumn.GAP / 2, box.y() - 1, box.bottom(), Palette.LINE);
+        var lines = new Rect(area.x(), area.y(), area.w() - ScrollView.BAR - 2, area.h());
+        var parts = AssemblyColumn.parts(AssemblyColumn.parts(slots, diagram, report, t), AssemblyColumn.words(t), lines.w(), d.m);
+        var listView = new ScrollView();
+        listView.layout(area, area.right() - ScrollView.BAR, parts.height());
+        d.c.clip(area);
+        AssemblyColumn.draw(d.c, parts, lines, 0, selected == null ? -1 : slots.indexOf(selected));
+        d.c.unclip();
+        listView.drawBar(d.c, d.skin);
+        // The door column, narrowed for its bar where it is taller than its area (KitDoor).
+        String name = selected == null ? null : AssemblyColumn.text(diagram.part(selected).name(), t);
+        var rows = AssemblyColumn.rows(AssemblyColumn.input(slots.size(), report, queued, name, selected != null), t);
+        var door = AssemblyColumn.area(d.w, d.h);
+        int tall = Column.place(rows, door.x(), door.y(), door.w(), d.m, Column.Metrics.COMPACT).bounds().h();
+        d.column(rows, door.x(), door.y(), tall > door.h() ? door.w() - ScrollView.BAR - 4 : door.w(), Map.of());
+        var footer = AssemblyColumn.footer(d.w, d.h);
+        var keys = AssemblyColumn.footerButtons(t);
+        for (int i = 0; i < keys.size(); i++) d.skin.button(d.c, footer.get(i), keys.get(i).text(), Skin.Press.REST, false);
+        if (d.skin == PanelSkin.LIGHT)
+            System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view, list %d lines in %d px%n", "assembly" + (selected == null ? "" : " selected"), tall, door.h(),
+                    parts.lines().size(), lines.h());
     }
 
     // ---- The equipment constructor: the shipped ConstructorColumn on its door left of the world (GUI_REVIEW.md order 3) ----

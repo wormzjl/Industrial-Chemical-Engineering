@@ -96,9 +96,9 @@ class AssemblyDiagramTest {
             for (var p : d.pills()) keys.add(p.text().key());
         }
         // The screen's own texts (AssemblyScreen).
-        keys.addAll(List.of("title", "heading", "validate", "open_unit", "datasheet", "tab.operation", "tab.structure", "no_design", "operation", "queued",
+        keys.addAll(List.of("title", "validate", "open_unit", "datasheet", "tab.operation", "tab.structure", "no_design", "operation", "queued",
                 "status.no_design", "status.not_validated", "status.changed", "status.checked", "status.complete", "word.not_validated", "word.connected",
-                "word.misplaced", "word.missing", "word.not_checked", "state.not_validated", "state.ok", "state.missing", "state.missing.terminal",
+                "word.misplaced", "word.missing", "word.not_loaded", "state.not_validated", "state.ok", "state.missing", "state.missing.terminal",
                 "state.missing.returns", "state.missing.found", "state.open_end", "state.open_end.unconnected", "state.not_loaded", "state.wrong_kind",
                 "state.backwards", "state.wrong_port", "state.wrong_port.returns", "state.valve_reversed", "state.extra_valve", "state.wrong_order",
                 "state.branched", "state.shared", "port", "port.needed"));
