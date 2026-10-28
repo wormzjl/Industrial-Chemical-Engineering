@@ -78,10 +78,14 @@ import java.util.function.Function;
  *
  * <p>28 (batch 2026-10-27-heat-exchanger-design, W7): a node also carries its kettle's pool after its geometry (a presence
  * flag, then its key, partner, bundle surface, its bundle's bottom and diameter, wall cells, give-back and active share).</p>
+ *
+ * <p>29 (batch 2026-10-27-heat-exchanger-design, the owner's test of 2026-10-28): tag 2 is a fired heater's radiant coil (its
+ * set temperature, duty, firing and partner's connection id; the reach is gone), tag 4 its convection coil (its conductance,
+ * its radiant coil's connection id and its flue gas), and an air cooler's actuator is its draught (louvers and fans).</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=28;
+    public static final int VERSION=29;
     /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -332,7 +336,8 @@ public final class FluidCheckpointCodec {
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();w.u8(3);w.f64(cooled.area());
                     w.f64(air.temperature());w.f64(air.barePerFace());w.f64(air.film());w.f64(air.capacity());w.f64(air.natural());
                     w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
-                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.reach());w.f64(coil.duty());w.f64(coil.firing());}
+                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.duty());w.f64(coil.firing());w.i64(coil.partner());}
+                case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{w.u8(4);w.f64(coil.conductance());w.i64(coil.radiant());w.f64(coil.flue());}
             }
         }
     }
@@ -385,7 +390,8 @@ public final class FluidCheckpointCodec {
     private static com.wormzjl.icheme.science.fluid.network.HeatLaw heat(Reader r) {
         int tag=r.u8();
         if(tag==0)return null;
-        if(tag==2)return new com.wormzjl.icheme.science.fluid.network.FiredCoil(r.f64(),r.f64(),r.f64(),r.f64());
+        if(tag==2)return new com.wormzjl.icheme.science.fluid.network.FiredCoil(r.f64(),r.f64(),r.f64(),r.i64());
+        if(tag==4)return new com.wormzjl.icheme.science.fluid.network.ConvectionCoil(r.f64(),r.i64(),r.f64());
         if(tag==3) {
             double area=r.f64();var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(r.f64(),r.f64(),r.f64(),r.f64(),r.f64());double draught=r.f64();
             var control=control(r);return new com.wormzjl.icheme.science.fluid.network.AirCooled(area,air,draught,control,limit(r));

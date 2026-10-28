@@ -69,11 +69,16 @@ public final class ExchangerRelay {
      * the read only bounds the give-back), the heat in transit due as of the slice start ({@code transitDue}, J, the energy
      * the exchanger holds: positive is owed to the streams), the other side's slice length ({@code partnerSeconds}, s, for
      * the share) and the share of this slice the other side spent counting this one stopped ({@code sitOut}, 0 to 1). With
-     * the exchanger's lines complete (W8, plan section 7), {@code operation} names the valve the side's control works.
+     * the exchanger's lines complete (W8, plan section 7), {@code operation} names the valve the side's control works. A fired
+     * heater's convection coil reads only {@code heatRate}: its radiant coil's heat (W) as of the slice start (F1).
      */
-    public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation) {
-        public Read {if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1))throw new IllegalArgumentException("Invalid side read");}
+    public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate) {
+        public Read {if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1)||!Double.isFinite(heatRate))throw new IllegalArgumentException("Invalid side read");}
+        public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,0);}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut){this(partner,stopped,transitDue,partnerSeconds,sitOut,null);}
+        /** A convection coil's read of its radiant coil in another island (the owner's test of 2026-10-28, F1): the radiant
+         * coil's heat (W) as its island committed it as of the slice start; nothing else. */
+        public static Read radiant(double heatRate){return new Read(null,false,0,0,0,null,heatRate);}
         /** No partner known, nothing in transit: the side moves no heat. */
         public static final Read NONE=new Read(null,true,0,0,0);
     }

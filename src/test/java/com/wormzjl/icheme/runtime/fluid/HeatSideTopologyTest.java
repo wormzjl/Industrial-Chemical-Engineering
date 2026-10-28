@@ -148,8 +148,10 @@ class HeatSideTopologyTest {
         System.out.printf(Locale.ROOT,"air cooler from 85 °C: full fans %.2f K, louvers %.3f at %.2f K, low limit %.2f K%n",cold.outlet(),warm.law().louvers(),warm.outlet(),guarded.outlet());
     }
     /** A fired heater's coil over {@code area} m² firing to {@code setPoint} K with its burners at {@code burners}. */
-    private static HeatUnit coil(HeatSides.Side side,double area,double setPoint,double burners) {
-        return new HeatUnit(HeatSides.Unit.FIRED_HEATER,side,area,0).withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING,setPoint,0,burners));
+    private static HeatUnit coil(HeatSides.Side side,double area,double setPoint,double burners){return coil(side,area,setPoint,burners,0);}
+    /** {@link #coil} whose other coil is device {@code partner}. */
+    private static HeatUnit coil(HeatSides.Side side,double area,double setPoint,double burners,long partner) {
+        return new HeatUnit(HeatSides.Unit.FIRED_HEATER,side,area,partner).withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING,setPoint,0,burners));
     }
     /** A short coil passage, 19 m of 6" tube (its outlet junction holds 160 kg of water: a lag of about 20 s), and a wide outlet run. */
     private static final PipeResistance.Geometry COIL=HeatSides.heaterPassage(10,1),OUTLET=new PipeResistance.Geometry(1,.2,.000045,0);
@@ -226,14 +228,28 @@ class HeatSideTopologyTest {
         assertFalse(FluidThermodynamics.holdsLiquid(steam),"all vapour");
         assertEquals(473.15,steam.temperature(),1);
     }
-    /** A heater's convection coil and radiant coil in series: 30 % and 70 % of the heat, the outlet at the set point. */
-    @Test void aHeatersTwoCoilsInSeriesShareTheHeatThirtySeventy() {
-        var run=fire(323.15,coil(HeatSides.Side.CONVECTION,200,393.15,1),coil(HeatSides.Side.RADIANT,200,393.15,1));
-        double total=run.heat()[0]+run.heat()[1];
-        assertEquals(.3,run.heat()[0]/total,.005);
+    /**
+     * A heater's convection coil and radiant coil in series (F1, the owner's test of 2026-10-28): the radiant coil brings the
+     * outlet to the set point, and the convection coil before it takes the flue gas that leaves: its heat is the counterflow
+     * law's on the radiant coil's heat, it never takes more than the gas holds between the bridgewall and its inlet, and its
+     * outlet stays far below the bridgewall. Without the radiant coil's partner it takes nothing.
+     */
+    @Test void aHeatersConvectionCoilTakesTheRadiantCoilsFlueGas() {
+        var run=fire(323.15,coil(HeatSides.Side.CONVECTION,200,393.15,1,11),coil(HeatSides.Side.RADIANT,200,393.15,1,10));
+        double convection=run.heat()[0],radiant=run.heat()[1],total=convection+radiant;
         assertEquals(393.15,run.outlet(11).temperature(),.1);
         var curve=waterCurve(323.15);
         assertEquals(run.flow()*(curve.enthalpyAt(393.15)-curve.enthalpyAt(323.15)),total,.01*total);
+        var law=(ConvectionCoil)run.coil(10).heat();
+        assertEquals(ConvectionCoil.flueOf(radiant),law.flue(),.01*law.flue(),"the flue gas behind the radiant coil's heat");
+        // Its curve spans its inlet to the bridgewall, as the solver samples it.
+        var wide=HeatCurve.sample(model,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(water(323.15,1_000_000)),1_000_000,313.15,ConvectionCoil.BRIDGEWALL+10,HeatCurve.Films.DEFAULT,()->{});
+        assertEquals(law.heat(wide,wide.enthalpyAt(323.15),run.flow()),convection,.01*convection,"the counterflow law");
+        assertTrue(convection<law.flue()*(ConvectionCoil.BRIDGEWALL-323.15),"no more than the gas holds");
+        assertTrue(convection>0&&run.outlet(10).temperature()<393.15,"the convection coil preheats: "+run.outlet(10).temperature());
+        System.out.printf(Locale.ROOT,"heater in series: convection %.0f kW (%.2f of radiant %.0f kW), out at %.2f K%n",convection/1e3,convection/radiant,radiant/1e3,run.outlet(10).temperature());
+        var alone=fire(323.15,coil(HeatSides.Side.CONVECTION,200,393.15,1));
+        assertEquals(0,alone.heat()[0],"no radiant coil, no flue gas");
     }
     @Test void onlyASideCarriesAUnitAndInletAndOutletPorts() {
         var ports=List.of(port(at(0,0,0),WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(at(2,0,0),EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));

@@ -545,4 +545,50 @@ class ExchangerCouplingTest {
         assertSettled(rig,seen(rig.island(rig.hotIsland),HOT),"after the wake");
         assertLedger(rig,-5e5,"after the wake");
     }
+
+    // ---- a fired heater's coils in two islands (the owner's test of 2026-10-28, F1) ----
+
+    private static final long RADIANT=30,CONVECTION=31;
+    /** A fired heater's coil over 100 m² (3.5 MW radiant at full firing) firing to 170 °C, below boiling at 10 bar, its other coil {@code partner}. */
+    private static HeatUnit fired(HeatSides.Side side,long partner) {
+        return new HeatUnit(HeatSides.Unit.FIRED_HEATER,side,100,partner).withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING,443.15,0,1));
+    }
+    /** {@code side}'s heat over the island's last interval, W. */
+    private static double heatRate(IslandCoordinator.Snapshot island,long side) {
+        var last=island.lastResult().orElseThrow();double joule=0;
+        for(var b:last.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT&&b.nodeId()==PhysicalFluidTopology.sideIdentity(side))joule+=b.totalEnergyJoule();
+        return joule/last.advancedSeconds();
+    }
+    /**
+     * A fired heater whose radiant and convection coils each heat their own water line: two islands. The convection coil
+     * reads the radiant coil's heat through the relay as of each slice start, so at steady state its flue gas is the radiant
+     * heat over 1000 K, as in one island. When the radiant line's feed warms, the radiant coil fires less, and the certified
+     * convection island is woken and follows. The coils book nothing into an exchanger's heat in transit: their heat is fuel.
+     */
+    @Test void aConvectionCoilInAnotherIslandReadsItsRadiantCoil() {
+        var devices=new ArrayList<PhysicalFluidTopology.Device>();
+        devices.addAll(line(1,RADIANT,2,0,HeatSides.heaterPassage(100,3),fired(HeatSides.Side.RADIANT,CONVECTION)));
+        devices.addAll(line(3,CONVECTION,4,10,HeatSides.heaterPassage(100,3),fired(HeatSides.Side.CONVECTION,RADIANT)));
+        var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,source(1,water(323.15,1_000_000)),2L,sink(2,900_000),3L,source(3,water(323.15,1_000_000)),4L,sink(4,900_000)));
+        assertEquals(2,compiled.islands().size(),"each coil in its own island");
+        var rig=new Rig(CertificatePolicy.defaults());rig.hotIsland=islandOf(compiled,RADIANT);rig.coldIsland=islandOf(compiled,CONVECTION);
+        rig.register(rig.hotIsland,compiled.islands().get((int)rig.hotIsland-1).graph(),100);
+        rig.register(rig.coldIsland,compiled.islands().get((int)rig.coldIsland-1).graph(),100);
+        rig.run(300);
+        double radiant=heatRate(rig.island(rig.hotIsland),RADIANT),convection=heatRate(rig.island(rig.coldIsland),CONVECTION);
+        var law=(ConvectionCoil)pipe(rig.island(rig.coldIsland).graph(),CONVECTION).heat();
+        System.out.printf(Locale.ROOT,"coils apart: radiant %.0f kW, convection %.0f kW, flue %.0f W/K%n",radiant/1e3,convection/1e3,law.flue());
+        assertTrue(radiant>0,"the radiant coil fires");
+        assertEquals(ConvectionCoil.flueOf(radiant),law.flue(),1e-3*law.flue(),"the flue gas behind the radiant coil's heat");
+        assertTrue(convection>0&&convection<law.flue()*(ConvectionCoil.BRIDGEWALL-323.15),"the convection coil takes part of what the gas holds: "+convection);
+        assertTrue(rig.coordinator.transits().isEmpty(),"no heat in transit: "+rig.coordinator.transits());
+        assertTrue(rig.island(rig.hotIsland).certificate().isPresent()&&rig.island(rig.coldIsland).certificate().isPresent(),"both steady coils certify");
+        rig.step(rig.hotIsland,1,water(433.15,1_000_000));
+        rig.run(120);
+        double warmed=heatRate(rig.island(rig.hotIsland),RADIANT);
+        law=(ConvectionCoil)pipe(rig.island(rig.coldIsland).graph(),CONVECTION).heat();
+        System.out.printf(Locale.ROOT,"radiant feed at 160 C: radiant %.0f kW, flue %.0f W/K%n",warmed/1e3,law.flue());
+        assertTrue(warmed<.9*radiant,"the warmer feed needs less firing: "+warmed);
+        assertEquals(ConvectionCoil.flueOf(warmed),law.flue(),1e-3*law.flue(),"the woken convection coil follows");
+    }
 }

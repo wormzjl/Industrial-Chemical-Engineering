@@ -345,7 +345,7 @@ public final class IslandCertificate {
     }
     /** The digest of what replay takes to be fixed about an island: everything but its finite inventories and states. */
     static String graphIdentity(PassiveNetwork graph) {
-        var d=new Digest();d.text("icheme-certificate-graph-identity-7");d.integer(graph.reservoirs().size());
+        var d=new Digest();d.text("icheme-certificate-graph-identity-8");d.integer(graph.reservoirs().size());
         for(var node:graph.reservoirs()) {
             d.number(node.id());d.text(node.kind().name());d.real(node.elevation());
             // A junction's volume is a numerical placeholder that a solve may move; a vessel's is its identity.
@@ -379,7 +379,8 @@ public final class IslandCertificate {
                     control(d,side.control());d.integer(side.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();d.integer(3);d.real(cooled.area());d.real(air.temperature());d.real(air.barePerFace());d.real(air.film());d.real(air.capacity());d.real(air.natural());
                     d.real(cooled.draught());control(d,cooled.control());d.integer(cooled.limit().ordinal());}
-                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.real(coil.reach());d.real(coil.duty());d.real(coil.firing());}
+                case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{d.integer(4);d.real(coil.conductance());d.number(coil.radiant());d.real(coil.flue());}
+                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.number(coil.partner());d.real(coil.duty());d.real(coil.firing());}
             }
             // What each end draws (PassiveNetwork.PhasePort): it changes the equations, so a replay holds only under it.
             d.integer(pipe.firstPort().ordinal());d.integer(pipe.secondPort().ordinal());

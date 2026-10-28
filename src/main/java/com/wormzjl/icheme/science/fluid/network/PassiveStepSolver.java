@@ -1759,13 +1759,16 @@ public final class PassiveStepSolver {
     /**
      * {@code graph} with each local heat actuator planned for a step that starts with {@code flows} (kg/s per connection, in
      * {@code graph}'s order; null where none is known) on its donor's curve (batch 2026-10-27-heat-exchanger-design): a fired
-     * coil's firing share ({@link FiredCoil#planned}, W6; it fires fully where its end draws nothing) and a controlled air
-     * cooler's fans ({@link AirCooled#planned}, W4). Each stays fixed inside the step's Newton; the next step plans it again
-     * from where this one ended. An exchanger side's bypass needs its partner and is planned per slice ({@link #couple}).
-     * {@code graph} itself where nothing changes.
+     * coil's firing share ({@link FiredCoil#planned}, W6; it fires fully where its end draws nothing), a controlled air
+     * cooler's louvers and fans ({@link AirCooled#planned}, W4), and the flue gas of a convection coil whose radiant coil is
+     * in this island: the radiant coil's planned heat at the step's start ({@link ConvectionCoil#flueOf}). Each stays fixed
+     * inside the step's Newton; the next step plans it again from where this one ended. An exchanger side's bypass needs its
+     * partner and is planned per slice ({@link #couple}), as is a convection coil's flue gas from another island's radiant
+     * coil. {@code graph} itself where nothing changes.
      */
     public PassiveNetwork plan(PassiveNetwork graph,double[] flows,Runnable checkpoint) {
         List<PassiveNetwork.Pipe> pipes=null;
+        Map<Long,Double> radiant=null;
         for(int e=0;e<graph.pipes().size();e++) {
             var pipe=graph.pipes().get(e);
             if(!(pipe.heat() instanceof FiredCoil)&&!(pipe.heat() instanceof AirCooled cooled&&cooled.control()!=null))continue;
@@ -1777,7 +1780,36 @@ public final class PassiveStepSolver {
                 case AirCooled cooled->curve==null?cooled:cooled.planned(curve,inlet,flow);
                 default->pipe.heat();
             };
+            if(planned instanceof FiredCoil){if(radiant==null)radiant=new HashMap<>();radiant.put(pipe.id(),curve==null?0:planned.heat(curve,inlet,flow));}
             if(planned.equals(pipe.heat()))continue;
+            if(pipes==null)pipes=new ArrayList<>(graph.pipes());
+            pipes.set(e,pipe.withHeat(planned));
+        }
+        if(radiant!=null)for(int e=0;e<graph.pipes().size();e++) {
+            var pipe=pipes==null?graph.pipes().get(e):pipes.get(e);
+            if(!(pipe.heat() instanceof ConvectionCoil coil)||!radiant.containsKey(coil.radiant()))continue;
+            var planned=coil.withFlue(ConvectionCoil.flueOf(radiant.get(coil.radiant())));
+            if(planned.equals(coil))continue;
+            if(pipes==null)pipes=new ArrayList<>(graph.pipes());
+            pipes.set(e,pipe.withHeat(planned));
+        }
+        return pipes==null?graph:new PassiveNetwork(graph.reservoirs(),pipes,graph.scheduledTransfers());
+    }
+    /**
+     * {@code graph} with the flue gas of each convection coil whose radiant coil is in another island (the owner's test of
+     * 2026-10-28, proposal F1): the radiant coil's heat as its island committed it as of the slice start, from the coil's
+     * read ({@link ExchangerRelay.Read#heatRate}); none without a read. A radiant coil in this island plans it at each step
+     * instead ({@link #plan}). {@code graph} itself where nothing changes.
+     */
+    private static PassiveNetwork flueGas(PassiveNetwork graph,Map<Long,ExchangerRelay.Read> reads) {
+        List<PassiveNetwork.Pipe> pipes=null;
+        for(int e=0;e<graph.pipes().size();e++) {
+            var pipe=graph.pipes().get(e);if(!(pipe.heat() instanceof ConvectionCoil coil))continue;
+            boolean local=false;for(var other:graph.pipes())if(other.id()==coil.radiant()&&other.heat() instanceof FiredCoil)local=true;
+            if(local)continue;
+            var read=reads.get(pipe.id());
+            var planned=coil.withFlue(ConvectionCoil.flueOf(read==null?0:read.heatRate()));
+            if(planned.equals(coil))continue;
             if(pipes==null)pipes=new ArrayList<>(graph.pipes());
             pipes.set(e,pipe.withHeat(planned));
         }
@@ -1799,6 +1831,7 @@ public final class PassiveStepSolver {
      */
     public PassiveNetwork couple(PassiveNetwork graph,Map<Long,ExchangerRelay.Read> reads,double[] flows,double seconds,Runnable checkpoint) {
         graph=pools(graph,reads,seconds,checkpoint);
+        graph=flueGas(graph,reads);
         List<PassiveNetwork.Pipe> pipes=null;
         boolean known=flows!=null&&flows.length==graph.pipes().size();
         for(int e=0;e<graph.pipes().size();e++) {

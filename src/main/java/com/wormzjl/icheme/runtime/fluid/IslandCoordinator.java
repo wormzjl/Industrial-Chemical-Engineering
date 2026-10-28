@@ -852,8 +852,13 @@ public final class IslandCoordinator {
 
     // ---- exchanger coupling (batch 2026-10-27-heat-exchanger-design, plan section 5.2; owner Q16: form C, the fence) ----
 
-    /** An exchanger's side's stream at a commit or a replay's end: what its other side reads as of a later slice start. */
-    private record SideRecord(long tick,ExchangerRelay.Partner stream) {}
+    /** An exchanger's side's stream at a commit or a replay's end, and the heat rate (W) of the span that ended there: what
+     * its other side reads as of a later slice start (a fired heater's convection coil reads its radiant coil's rate, F1). */
+    private record SideRecord(long tick,ExchangerRelay.Partner stream,double rate) {}
+    /** What a coupled side is: an exchanger's side or a kettle's pool, which read each other and share a heat in transit; or a
+     * fired heater's radiant coil, whose heat sets the flue gas its convection coil reads (the owner's test of 2026-10-28,
+     * F1). The coils share no transit: their heat comes from fuel. */
+    private enum SideKind { EXCHANGER, RADIANT, CONVECTION }
     /** A committed or replayed span of a side and the heat its stream took up over it, J. */
     private record Booked(long start,long end,double joule) {}
     /** A side keeps at most this many booked spans; older ones merge (the transit stays exact, only an as-of split moves). */
@@ -868,7 +873,7 @@ public final class IslandCoordinator {
      * solved slice read of its other side, and that slice's heat rate (W).
      */
     private static final class Coupled {
-        final long pipe,partner;
+        final long pipe,partner;final SideKind kind;
         SideRecord current,previous;
         final ArrayDeque<Booked> booked=new ArrayDeque<>();
         final ArrayDeque<long[]> sawStopped=new ArrayDeque<>();
@@ -877,13 +882,20 @@ public final class IslandCoordinator {
         ExchangerRelay.Partner readUsed;
         boolean read;
         double heatRate;
-        Coupled(long pipe,long partner){this.pipe=pipe;this.partner=partner;}
+        // A convection coil: the radiant coil's heat rate (W) its last solved slice read.
+        double rateUsed;
+        Coupled(long pipe,long partner,SideKind kind){this.pipe=pipe;this.partner=partner;this.kind=kind;}
         long pair(){return Math.min(pipe,partner);}
         void record(SideRecord next){if(current!=null&&current.tick()<next.tick())previous=current;current=next;}
         /** The stream as of {@code tick}: the latest record at or before it, else the current one (after a load, decision D1). */
         ExchangerRelay.Partner asOf(long tick) {
             if(current==null)return null;
             return current.tick()<=tick||previous==null||previous.tick()>tick?current.stream():previous.stream();
+        }
+        /** The heat rate (W) as of {@code tick}, picked as {@link #asOf} picks the stream; 0 before any record. */
+        double rateAsOf(long tick) {
+            if(current==null)return 0;
+            return current.tick()<=tick||previous==null||previous.tick()>tick?current.rate():previous.rate();
         }
         /** The heat booked past {@code tick}, J: each span's share of its own beyond it. */
         double bookedPast(long tick) {
@@ -906,14 +918,22 @@ public final class IslandCoordinator {
             while(!sawStopped.isEmpty()&&sawStopped.peekFirst()[1]<=tick)sawStopped.removeFirst();
         }
     }
-    /** The island's coupled sides: each coupled heat side's connection id, and each kettle's pool's key (W7). */
+    /** The island's coupled sides: each coupled heat side's connection id, each kettle's pool's key (W7), and each fired
+     * heater coil with its partner (F1). */
     private static long[] coupledSides(PassiveNetwork graph) {
-        var sides=graph.pipes().stream().filter(p->p.heat() instanceof HeatSide side&&side.coupled()).mapToLong(PassiveNetwork.Pipe::id);
+        var sides=graph.pipes().stream().filter(p->p.heat() instanceof HeatSide side&&side.coupled()||p.heat() instanceof FiredCoil coil&&coil.partner()!=0
+                ||p.heat() instanceof ConvectionCoil coil&&coil.radiant()!=0).mapToLong(PassiveNetwork.Pipe::id);
         var pools=graph.reservoirs().stream().filter(n->n.inventory().pool()!=null).mapToLong(n->n.inventory().pool().id());
         return java.util.stream.LongStream.concat(sides,pools).toArray();
     }
+    private static SideKind kindOf(PassiveNetwork graph,long pipe) {
+        for(var p:graph.pipes())if(p.id()==pipe)return p.heat() instanceof FiredCoil?SideKind.RADIANT:p.heat() instanceof ConvectionCoil?SideKind.CONVECTION:SideKind.EXCHANGER;
+        return SideKind.EXCHANGER;
+    }
     private static long partnerOf(PassiveNetwork graph,long pipe) {
         for(var p:graph.pipes())if(p.id()==pipe&&p.heat() instanceof HeatSide side)return side.partner();
+        for(var p:graph.pipes())if(p.id()==pipe&&p.heat() instanceof FiredCoil coil)return coil.partner();
+        for(var p:graph.pipes())if(p.id()==pipe&&p.heat() instanceof ConvectionCoil coil)return coil.radiant();
         for(var n:graph.reservoirs())if(n.inventory().pool()!=null&&n.inventory().pool().id()==pipe)return n.inventory().pool().partner();
         throw new IllegalArgumentException("No coupled side "+pipe);
     }
@@ -947,7 +967,8 @@ public final class IslandCoordinator {
     private boolean coupledThrough(Island island) {
         long start=island.clock.committedTick();
         for(long pipe:island.sides) {
-            var side=coupled.get(pipe);if(side==null)continue;
+            // A radiant coil reads nothing of its convection coil.
+            var side=coupled.get(pipe);if(side==null||side.kind==SideKind.RADIANT)continue;
             var other=other(side);if(other==null||other==island||stoppedSide(other)||other.clock.committedTick()>=start)continue;
             var certificate=other.certificate;
             if(certificate!=null&&Math.min(Math.min(other.clock.onlineTick(),other.fence()),Math.min(other.holdTick,certificate.horizonTick()))>=start)continue;
@@ -965,9 +986,11 @@ public final class IslandCoordinator {
         if(island.sides.length==0)return Map.of();
         var reads=new HashMap<Long,ExchangerRelay.Read>();long start=slice.startTick(),end=slice.endTick();
         for(long pipe:island.sides) {
-            var side=coupled.get(pipe);if(side==null)continue;
+            var side=coupled.get(pipe);if(side==null||side.kind==SideKind.RADIANT)continue;
             var other=other(side);var otherSide=coupled.get(side.partner);
             if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)materialise(other);
+            // A convection coil reads its radiant coil's heat as of the slice start (F1); one in this island plans it per step.
+            if(side.kind==SideKind.CONVECTION){reads.put(pipe,ExchangerRelay.Read.radiant(otherSide==null||other==null?0:otherSide.rateAsOf(start)));continue;}
             boolean stoppedOther=other==null||other!=island&&stoppedSide(other);
             double due=transits.getOrDefault(side.pair(),0.)+(otherSide==null?0:otherSide.bookedPast(start));
             double seconds=other==null?0:other==island?slice.seconds():Math.min(other.clock.snapshot().cadenceTicks(),other.maximumSliceTicks)/20.0;
@@ -985,11 +1008,11 @@ public final class IslandCoordinator {
         for(long pipe:island.sides) {
             var side=coupled.get(pipe);if(side==null)continue;
             double joule=heat(result,pipe);
-            if(joule!=0)transits.merge(side.pair(),-joule,Double::sum);
+            if(joule!=0&&side.kind==SideKind.EXCHANGER)transits.merge(side.pair(),-joule,Double::sum);
             var other=other(side);side.prune(other==null?end:other.clock.committedTick());side.book(start,end,joule);
             var read=reads==null?null:reads.get(pipe);
-            if(read!=null){if(read.stopped())side.stopped(start,end);side.read=true;side.readUsed=read.partner();side.heatRate=joule/((end-start)/20.0);}
-            side.record(new SideRecord(end,stream(island.graph,result.endpointFlows(),pipe)));
+            if(read!=null){if(read.stopped())side.stopped(start,end);side.read=true;side.readUsed=read.partner();side.rateUsed=read.heatRate();side.heatRate=joule/((end-start)/20.0);}
+            side.record(new SideRecord(end,stream(island.graph,result.endpointFlows(),pipe),joule/((end-start)/20.0)));
             if(other!=null&&other!=island&&other.certificate!=null&&moved(side,coupled.get(side.partner),other))toWake.add(other.id);
         }
     }
@@ -1000,6 +1023,13 @@ public final class IslandCoordinator {
     }
     /** Decision D4: whether {@code otherSide}'s certified island must solve again after {@code side}'s commit. */
     private boolean moved(Coupled side,Coupled otherSide,Island other) {
+        // A radiant coil's commit wakes its convection coil when its heat moved (F1); a convection coil's wakes nothing.
+        if(side.kind!=SideKind.EXCHANGER) {
+            if(side.kind!=SideKind.RADIANT||otherSide==null||side.current==null)return false;
+            double rate=side.current.rate();
+            if(!otherSide.read){otherSide.read=true;otherSide.rateUsed=rate;return false;}
+            return Math.abs(rate-otherSide.rateUsed)>WAKE_FLOW*Math.abs(otherSide.rateUsed)+1;
+        }
         if(otherSide==null||side.current==null||side.current.stream()==null)return false;
         var now=side.current.stream();
         if(!otherSide.read){otherSide.read=true;otherSide.readUsed=now;return false;}
@@ -1207,9 +1237,10 @@ public final class IslandCoordinator {
         for(var node:island.graph.reservoirs())if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)stockOwners.put(node.id(),island.id);
         for(long pipe:island.sides) {
             sideOwners.put(pipe,island.id);
-            var side=coupled.computeIfAbsent(pipe,p->new Coupled(p,partnerOf(island.graph,p)));
+            var side=coupled.computeIfAbsent(pipe,p->new Coupled(p,partnerOf(island.graph,p),kindOf(island.graph,p)));
             if(side.current==null){
-                side.record(new SideRecord(island.clock.committedTick(),stream(island.graph,island.lastResult.map(PassiveIntervalSolver.Result::endpointFlows).orElse(null),pipe)));
+                double rate=island.lastResult.map(last->last.advancedSeconds()>0?heat(last,pipe)/last.advancedSeconds():0.).orElse(0.);
+                side.record(new SideRecord(island.clock.committedTick(),stream(island.graph,island.lastResult.map(PassiveIntervalSolver.Result::endpointFlows).orElse(null),pipe),rate));
                 // Its last span from its last interval (a loaded island's; a certified one replays that interval's rate up to its committed
                 // tick): behind the fence the only span its other side may still read past its own start.
                 island.lastResult.ifPresent(last->{long end=island.clock.committedTick(),start=Math.max(0,end-Math.round(last.advancedSeconds()*20));if(end>start)side.book(start,end,heat(last,pipe));});

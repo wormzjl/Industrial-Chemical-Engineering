@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.fluid.network.AirCooled;
+import com.wormzjl.icheme.science.fluid.network.ConvectionCoil;
 import com.wormzjl.icheme.science.fluid.network.FiredCoil;
 import com.wormzjl.icheme.science.fluid.network.HeatControl;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
@@ -46,6 +47,12 @@ public final class HeatSides {
      * ({@link ProcessUnit#RADIANT_SHARE}).
      */
     static final double CONVECTION_FLUX=15;
+    /**
+     * A convection coil's overall coefficient against the flue gas, W/m²K of bare tube ({@link ConvectionCoil}): it gives the
+     * coils' 70/30 design split at a 250 °C crude inlet (about 15 kW/m² over a 270 K mean difference, as studded and
+     * finned convection tubes run; the owner's test of 2026-10-28, OWNER_TEST_REVIEW.md section 1).
+     */
+    static final double CONVECTION_U=54.9;
     /** A fired heater's coil tubes, m: 6" schedule 80, the tubes {@link ProcessUnit#heaterDuty} counts. */
     static final double HEATER_TUBE=.168,HEATER_BORE=.146;
     /** A coil's duty per parallel pass, MW (about 2 m/s of oil per pass), its straight tube between return bends, m, and a bend's velocity heads. */
@@ -151,15 +158,16 @@ public final class HeatSides {
      * here is never moved against); a kettle's tubes the same against the wall their pool makes (W7);</li>
      * <li>an air cooler's process side against air at {@link #AIR_TEMPERATURE} over its bare tube surface {@code area}
      * (m²), with its fans at {@code share} of full speed and its louvers open ({@link #AIR}); a controller works both;</li>
-     * <li>a fired heater's coil towards the set point {@code target}, the radiant coil all the way and the convection coil
-     * its 30 % share of it, at most its {@link #coilDuty} with the burners at {@code share}.</li></ul>
+     * <li>a fired heater's radiant coil towards the set point {@code target}, at most its {@link #coilDuty} with the burners
+     * at {@code share}; its convection coil against the flue gas the radiant coil's heat leaves ({@link ConvectionCoil}, over
+     * {@link #CONVECTION_U}). Each names the other as its {@code partner}.</li></ul>
      */
     public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner,@Nullable HeatControl control) {
         return switch(unit) {
             case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
                 yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE);}
             case AIR_COOLER->new AirCooled(area,AIR,AIR.draught(share),control,HeatControl.Limit.NONE);
-            case FIRED_HEATER->new FiredCoil(target,side==Side.RADIANT?1:1-ProcessUnit.RADIANT_SHARE,coilDuty(side,area,share),1);
+            case FIRED_HEATER->side==Side.RADIANT?new FiredCoil(target,coilDuty(side,area,share),1,partner):new ConvectionCoil(CONVECTION_U*area,partner,0);
             default->null;
         };
     }

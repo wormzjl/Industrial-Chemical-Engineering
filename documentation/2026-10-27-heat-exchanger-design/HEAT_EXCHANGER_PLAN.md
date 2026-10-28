@@ -409,6 +409,15 @@ W6 as built (2026-10-27):
 | set point 200 °C (saturation 180 °C) | 10.21 kg/s | 27.6 MW | 200.000 °C, all steam |
 | convection then radiant | 10.61 kg/s | 0.94 + 2.19 MW | 120.001 °C; split 0.300 |
 
+F1 as built (2026-10-28, the owner's test, OWNER_TEST_REVIEW.md section 1; supersedes the reach above). The owner: "I don't think furnace convection section can heat to 800C, try to find a better model", then "Build F1".
+
+- **Radiant coil.** `FiredCoil` as above without the reach: β · |ṁ| · (h_set − h_in), at most its duty; it names its convection coil as its partner.
+- **Convection coil.** `ConvectionCoil`, a counterflow exchanger against the flue gas leaving the radiant box: Q = ε C_min (T_bw − T_in), with T_bw 800 °C, C_g = Q_r / (1800 − 800 K), UA = 54.9 W/m²K × its bare tube, and the stream's mean capacity rate from its inlet to the bridgewall on its curve. The closed form is smooth where the two capacity rates meet. The coil never passes the bridgewall, never takes more than the gas holds, and takes nothing with the burners out.
+- **Flue gas.** Planned at each step from the radiant coil's planned heat where both coils share an island (`PassiveStepSolver.plan`). Across islands the coordinator relays the radiant coil's heat rate as of the slice start (`SideRecord.rate`, `ExchangerRelay.Read.heatRate`). Only the convection coil waits at the fence, and a moved radiant rate (1e-3) wakes a certified convection island. The coils book nothing into a heat in transit.
+- **Deleted.** The convection reach 0.3, its duty cap and firing plan, and "the coil fires at its maximum".
+- **Formats.** Checkpoint state format 29 (tag 2 radiant coil with its partner, tag 4 convection coil; also the air cooler's draught); certificate graph identity 8. Facts unchanged.
+- **Gates.** `ConvectionCoilTest` 5 (the design split 3.00 MW = 0.429 Q_r, crude 250 → 283 °C; bounds; smoothness), `HeatSideTopologyTest` (water 50 → 120 °C in series: convection 1336 kW = 0.75 of the radiant 1786 kW, out at 80.1 °C), `ExchangerCouplingTest` (two islands: radiant 3500 kW, convection 2065 kW; a warmer radiant feed, 919 kW, followed after the wake). Review probe: 9.97 kg/s from 25 °C, convection 701.5 kW, out 41.8 °C.
+
 W3a as built (2026-10-27): harness part 8 (`HxCouplingSim.java timing`), part 7's relay on the game's clock.
 
 - **Clock.** 20 ticks a second. A slice is dispatched once online time reaches its end. It commits 0 to 40 ticks later, capped at half the cadence. One job per side is in flight. Cadences are fixed (1 to 20 s) or wobble with load (×1.25, ×0.9). A side is stopped only while held, and a held side drops its job.

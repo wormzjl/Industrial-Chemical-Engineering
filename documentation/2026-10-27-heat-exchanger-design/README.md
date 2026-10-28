@@ -6,7 +6,7 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C), W4 (the built-in control), W7 (the kettle) and W8 (the exchanger assembly) are built; study W3a is done. W9 (the column hook) is deferred until the column's operation stage exists. The owner's review world is ready ([REVIEW_WORLD.md](REVIEW_WORLD.md)); the owner's test findings are in [OWNER_TEST_REVIEW.md](OWNER_TEST_REVIEW.md): the air cooler, exchanger and heater-hold fixes are built; the water steam virial and the GUI are built on their own branches, not merged here; the furnace convection model (F1 or F2) awaits the owner. The owner answered Q1 to Q16 (Q16 form C; Q15 no curve-span notice). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C), W4 (the built-in control), W7 (the kettle) and W8 (the exchanger assembly) are built; study W3a is done. W9 (the column hook) is deferred until the column's operation stage exists. The owner's review world is ready ([REVIEW_WORLD.md](REVIEW_WORLD.md)); the owner's test findings are in [OWNER_TEST_REVIEW.md](OWNER_TEST_REVIEW.md): the air cooler, exchanger and heater-hold fixes are built; the water steam virial and the GUI are built on their own branches, not merged here; the furnace convection model F1 is built. The owner answered Q1 to Q16 (Q16 form C; Q15 no curve-span notice). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -221,6 +221,11 @@ The plan also touches:
   - Furnace: proposal F (a counterflow convection coil against the flue gas leaving the radiant box) replaces A; F1 recommended.
   - The side sessions finished: the water steam virial (`claude/water-steam-virial`) and the GUI (`claude/heat-gui-redesign-abb1db`), not merged here; the old pump and compressor removal is its own batch (`claude/vigorous-bell-dab92b`).
   - Gates: the heat classes (48, then the coupling class, 12), quick suite 1704 with no failures, fluid GameTests 35/35 (`ownerfixes1`), and the probe.
+- 2026-10-28, F1 the furnace convection model, in the F1 commit. The owner: "Build F1".
+  - `ConvectionCoil` (new): a counterflow exchanger against the flue gas leaving the radiant box (T_bw 800 °C, C_g = Q_r / 1000 K, 54.9 W/m²K). `FiredCoil` is the radiant coil: the reach is gone, and it names its partner.
+  - The flue gas is planned per step in one island; across islands the relay carries the radiant coil's heat rate, and only the convection coil waits at the fence. The coils book no heat in transit.
+  - Formats: checkpoint state 29, certificate graph identity 8.
+  - Gates: `ConvectionCoilTest` 5, the series and two-island tests, quick suite 1710 with no failures, fluid GameTests 35/35 (`furnacef1`). Probe: the owner's case 701.5 kW, out at 41.8 °C, steady, no hold.
 
 ## Notes
 
@@ -232,7 +237,7 @@ The plan also touches:
 - Open from W5: the drawn fans keep turning when switched off (the motion switch is the client's own).
 - Open from W6: the heaters' FUEL nozzle stays unconnected (fuel is another scope, Q11); the datasheet does not list the coils' surfaces yet.
 - Measured in W1: a junction boils from heat inside the Newton. Measured in W3: the quasi-steady wall on a condensing curve (7 sweeps, 0.10 ms). Not measured yet: the campaign's cost and holds in worlds with exchangers (it has none).
-- Owner test (2026-10-28): the furnace convection model, F1 (recommended) or F2, awaits the owner (OWNER_TEST_REVIEW.md section 1). To merge into this branch on the owner's word: `claude/water-steam-virial` (`c6e7d480`) and `claude/heat-gui-redesign-abb1db` (`e8465a72`; then the air cooler's actuator name becomes "louvers"). The probe (`runReviewWorldServer -PreviewProbe=true|owner`, `HeatExchangerReviewWorld` and `ColumnReviewWorld` owner mode, the `build.gradle` switch) is scratch, to `tools/` at the cleanup. The GUI (approved mockup) is built in the `heat-gui` session's branch.
+- Owner test (2026-10-28): F1 built (the furnace's convection coil against the flue gas). At the GUI merge, `FluidWorldAuthority`'s coil status line conflicts (the reach is gone). To merge into this branch on the owner's word: `claude/water-steam-virial` (`c6e7d480`) and `claude/heat-gui-redesign-abb1db` (`e8465a72`; then the air cooler's actuator name becomes "louvers"). The probe (`runReviewWorldServer -PreviewProbe=true|owner`, `HeatExchangerReviewWorld` and `ColumnReviewWorld` owner mode, the `build.gradle` switch) is scratch, to `tools/` at the cleanup. The GUI (approved mockup) is built in the `heat-gui` session's branch.
 - Code guide at the merge: the review world row (`verification.md`, `machine-assemblies.md`) names one column plant; `runReviewWorldServer` now builds the heat plant too.
 - Open from W8: the split-range pass valve; a LIMITED status for a saturated real valve; the hold after a revert has no gate; a valve outside the side's island is not operated.
 - Open from W4: the target vapour fraction (plan section 6) is not built; a controller on both sides of one exchanger is allowed and untested; the kettle's steam valve waits for W7 and the assembly's real valves for W8.

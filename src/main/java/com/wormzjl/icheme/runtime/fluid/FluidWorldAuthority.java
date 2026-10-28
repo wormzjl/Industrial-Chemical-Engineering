@@ -754,11 +754,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // A filter's and a heat side's own pipe (batch 2026-10-27-heat-exchanger-design): the drop across the cake or the passage.
         long own=filter!=null?PhysicalFluidTopology.filterIdentity(id):registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE?PhysicalFluidTopology.sideIdentity(id):0;
         if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own)devicePressureChange=snapshot.graph().reservoirs().get(pipe.first()).state().pressure()-snapshot.graph().reservoirs().get(pipe.second()).state().pressure();
-        // A fired heater's coil firing at its maximum short of what it should do (batch 2026-10-27-heat-exchanger-design, owner
-        // Q11): the radiant coil names its outlet's shortfall from the set point; the convection coil heats only part of the way.
+        // A fired heater's radiant coil firing at its maximum short of what it should do (batch 2026-10-27-heat-exchanger-design,
+        // owner Q11): it names its outlet's shortfall from the set point. The convection coil takes the flue gas as it comes (F1).
         if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own&&pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil coil&&coil.firing()>0&&coil.firing()<1) {
             double shortfall=coil.setTemperature()-snapshot.graph().reservoirs().get(pipe.second()).state().temperature();
-            status=(coil.reach()<1?"DUTY INSUFFICIENT: the coil fires at its maximum / ":shortfall>0?String.format(java.util.Locale.ROOT,"DUTY INSUFFICIENT: outlet %.1f K below the set point / ",shortfall):"")+status;
+            status=(shortfall>0?String.format(java.util.Locale.ROOT,"DUTY INSUFFICIENT: outlet %.1f K below the set point / ",shortfall):"")+status;
         }
         // A side's controller short of its target (W4, plan section 6): its actuator at an end, or held back by its low limit.
         if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own)status=controlStatus(pipe.heat(),registration.device().heat())+status;

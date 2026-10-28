@@ -2,7 +2,7 @@
 
 The owner's findings from `REVIEW_WORLD.md`: each gives the expected behaviour, what the code did, and the fix or proposal. Probe: `-PreviewProbe=true` rebuilds the plant and applies the owner's changes; `owner` watches a copy of the owner's save (scratch until the cleanup, `run/review-probe`). The owner answered on 2026-10-28: "I don't think furnace convection section can heat to 800C, try to find a better model. Others as recommended". So sections 2 to 4 are fixed here, 5 to 7 on their own branches, and section 1 is a new proposal.
 
-## 1. Fired heater: the convection duty (proposal F, replacing A)
+## 1. Fired heater: the convection duty (F1 built, replacing A)
 
 - **Expected.** The burners' flue gas gives the radiant coil Q_r while it cools from the flame (about 1800 °C) to the bridgewall (about 800 °C), so it carries C_g = Q_r / 1000 K, about 1 kW/K per MW of radiant duty. It then crosses the convection coil, a counterflow exchanger: Q_c = ε C_min (T_bw − T_in). The 800 °C is the gas entering the convection section; the process leaving it is far colder, since the gas holds at most C_g (T_bw − T_in).
 - **The model now (W6).** Each coil heats toward the set point (reach 1 and 0.3), each to its own cap; the convection duty does not depend on the radiant firing.
@@ -12,6 +12,7 @@ The owner's findings from `REVIEW_WORLD.md`: each gives the expected behaviour, 
   - Only a separately fed, starved coil nears the bridgewall: 0.1 kg/s of water beside 1148 kW of radiant duty leaves at 767 °C. Real heaters trip on low pass flow.
   - Deletes the convection reach 0.3, its duty cap, its firing plan and its DUTY INSUFFICIENT. Risks: one slice of lag across islands; a closed form with the mean heat capacity misses a pinch inside a boiling plateau by a few K (the exchanger's 8 counterflow cells against a flue-gas stream avoid it, at more work).
 - **F2.** F1 with the bridgewall falling at turndown (a radiant balance in T⁴): more faithful at low firing; one more solve. Not recommended now.
+- **Built: F1** (the owner: "Build F1"; plan section 10, F1 as built). Probe: the owner's case gives 701.5 kW and 41.8 °C out, as proposed; the review plant raises wet steam at 180.6 °C in the convection coil.
 
 ## 2. Air cooler: overcooling at low flow (fixed)
 
