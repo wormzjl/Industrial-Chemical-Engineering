@@ -15,13 +15,15 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-10-28
+
 ### Removed
 
-- The old one-block Process Fluid Pump and Process Gas Compressor blocks, and the engine's portless pump and compressor form; the In-line Pump and In-line Compressor on pipes replace them. A saved world that has old ones loads without them: their blocks are gone, the log names each removed mover, and the islands are rebuilt from the saved facts with every vessel's contents kept (owner decision; batch `2026-10-28-old-mover-removal`, corpus image `compat/removed-movers`).
+- The old one-block Process Fluid Pump and Process Gas Compressor blocks, and the engine's portless pump and compressor form; the In-line Pump and In-line Compressor on pipes replace them. A saved world that has old ones loads without them: their blocks are gone, the log names each removed mover, and the islands are rebuilt from the saved facts with every vessel's contents kept (owner decision; batch `2026-10-28-old-mover-removal`, commits `83ed8a58`, `0ec436f6`; corpus image `compat/removed-movers`).
 
 ### Fixed
 
-- The quick suite passes again: the creative tab registers from `ModCreativeTabs`, so unit tests that log through `IChemE` no longer need Minecraft bootstrapped, and the V3 cascade test counts thermo calls instead of reused workspaces (batch `2026-10-28-main-test-repair`).
+- The quick suite passes again: the creative tab registers from `ModCreativeTabs`, so unit tests that log through `IChemE` no longer need Minecraft bootstrapped, and the V3 cascade test counts thermo calls instead of reused workspaces (batch `2026-10-28-main-test-repair`, commit `3f7df293`).
 
 ## [0.16.1] - 2026-10-27
 

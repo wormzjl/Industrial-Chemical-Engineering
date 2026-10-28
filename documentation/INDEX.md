@@ -14,8 +14,8 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-10-28-main-test-repair](2026-10-28-main-test-repair/README.md) | Fix main's 16 failing quick-suite tests | In progress since 2026-10-28 |
-| [2026-10-28-old-mover-removal](2026-10-28-old-mover-removal/README.md) | Remove the old one-block pump and compressor and their engine form; in-line movers replace them | In progress since 2026-10-28 |
+| [2026-10-28-main-test-repair](2026-10-28-main-test-repair/README.md) | Fix main's 16 failing quick-suite tests | Implemented 2026-10-28 (0.16.2) |
+| [2026-10-28-old-mover-removal](2026-10-28-old-mover-removal/README.md) | Remove the old one-block pump and compressor and their engine form; in-line movers replace them | Implemented 2026-10-28 (0.16.2) |
 | [2026-10-27-column-pressure-drop/](2026-10-27-column-pressure-drop/README.md) | Keep published tray pressure profiles consistent on the aggressive solve path | Implemented 2026-10-27 (0.16.0) |
 | [2026-10-27-hold-class-wall-deadline/](2026-10-27-hold-class-wall-deadline/README.md) | Audit an intermittent HoldClassWorldsTest wall deadline | Implemented 2026-10-27 |
 | [2026-10-27-column-bench-audit/](2026-10-27-column-bench-audit/README.md) | Audit main-versus-fork column benchmark data | Implemented 2026-10-27 |

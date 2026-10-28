@@ -2,7 +2,7 @@
 
 Purpose: make main's quick suite green again. On main `96806b8a` (0.16.1), 16 of 1654 tests failed, all from changes merged in 0.16.x (owner request 2026-10-28: "Fix main's 16 failing quick-suite tests", done in the session of batch [2026-10-28-old-mover-removal](../2026-10-28-old-mover-removal/README.md), on its branch).
 
-Status: In progress since 2026-10-28 (branch `claude/vigorous-bell-dab92b`, after the old mover removal's commits). Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-10-28, released as 0.16.2 (branch `claude/vigorous-bell-dab92b`, after the old mover removal's commits). Index: [../INDEX.md](../INDEX.md).
 
 ## Review
 
