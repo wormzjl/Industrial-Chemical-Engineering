@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.google.gson.*;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
+import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -66,30 +67,38 @@ class FluidPropertyCoverageTest {
         }
         assertTrue(failures.isEmpty(), String.join("\n", failures));
     }
-    @Test void steamScreeningRetainsTheRejectedPointAndChecksIndependentViscosityReferences() throws Exception {
+    /**
+     * The NIST (IAPWS-95) steam points, all at or below 2 MPa: every one lies inside the second-virial steam's qualified
+     * partial pressure, where its volume {@code R T/p + B} matches NIST within 0.5 % (the ideal gas's errors there reach
+     * 2.0 %); the dilute viscosity within 5 %. The states past the qualified pressure are judged against the full IF97
+     * Region 2 ({@code SteamVirialTest}): these points no longer reach them.
+     */
+    @Test void steamVolumeAndViscosityMatchIndependentReferencesInsideTheQualifiedPressure() throws Exception {
         try(var in=getClass().getResourceAsStream("/fluid/reference/water-vapor-checks.json")) {
             var rows=JsonParser.parseReader(new InputStreamReader(Objects.requireNonNull(in),StandardCharsets.UTF_8)).getAsJsonArray();
-            int accepted=0,rejected=0;
+            int accepted=0;
             for(var value:rows) {
                 var row=value.getAsJsonObject();double t=row.get("temperatureKelvin").getAsDouble(),p=row.get("partialPressurePascal").getAsDouble();
-                double ideal=FluidThermodynamics.R*t/p,reference=row.get("referenceVolume").getAsDouble();
-                if(p<=FluidThermodynamics.waterVaporPressureLimit(t)){assertTrue(Math.abs(ideal/reference-1)<=.02,row.toString());accepted++;}else rejected++;
+                double virial=SteamVirial.molarVolume(t,p),reference=row.get("referenceVolume").getAsDouble();
+                assertTrue(p<=FluidThermodynamics.waterVaporPressureLimit(t),row.toString());
+                assertTrue(Math.abs(virial/reference-1)<=.005,row+": "+(virial/reference-1));accepted++;
                 double mu=WaterRegion1.diluteVaporViscosity(t);assertEquals(row.get("referenceViscosity").getAsDouble(),mu,.05*mu);
             }
-            assertTrue(accepted>=10);assertTrue(rejected>=1);
+            assertEquals(13,accepted);
         }
     }
+    /** The NIST compressibilities at the same points: the virial's {@code 1/(p Z)} within 0.5 %. */
     @Test void steamCompressionMatchesIndependentPressureDifferencesWithinTheSampledEnvelope() throws Exception {
         try(var in=getClass().getResourceAsStream("/fluid/reference/water-vapor-compression.json")) {
             var rows=JsonParser.parseReader(new InputStreamReader(Objects.requireNonNull(in),StandardCharsets.UTF_8)).getAsJsonArray();
             int accepted=0;
             for(var value:rows) {
                 var row=value.getAsJsonObject();double t=row.get("temperatureKelvin").getAsDouble(),p=row.get("partialPressurePascal").getAsDouble();
-                if(p<=FluidThermodynamics.waterVaporPressureLimit(t)) {
-                    assertTrue(Math.abs(1/(p*row.get("referenceCompressibility").getAsDouble())-1)<=.02,row.toString());accepted++;
-                }
+                double virial=FluidThermodynamics.R*t/(p*p*SteamVirial.molarVolume(t,p));
+                assertTrue(p<=FluidThermodynamics.waterVaporPressureLimit(t),row.toString());
+                assertTrue(Math.abs(virial/row.get("referenceCompressibility").getAsDouble()-1)<=.005,row+": "+(virial/row.get("referenceCompressibility").getAsDouble()-1));accepted++;
             }
-            assertEquals(12,accepted);
+            assertEquals(13,accepted);
         }
     }
 }

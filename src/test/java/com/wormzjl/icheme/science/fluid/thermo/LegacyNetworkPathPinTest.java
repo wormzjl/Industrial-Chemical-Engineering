@@ -64,14 +64,19 @@ class LegacyNetworkPathPinTest {
      * <p>Re-pinned for the mod rename to IChemE (the value before, {@code 98a1af1147a2fc7e952a83a62d274ad68a1c875ce7c3c7bd80ce757b904a8d78}):
      * the refusals hash their exception class and message, which name the package {@code com.wormzjl.icheme} and the
      * {@code icheme:} ids. With those names mapped back to {@code createcheme} the digest is the value before, bit for bit.</p>
+     *
+     * <p>Re-pinned for the second-virial steam ({@code separate-free-water-v3}, 2026-10-28; the value before,
+     * {@code 37c1b7020d789e0d44041f8cc0a9b24ac8c694c63ef59e36214f08ccdccab1ee}): the wet flashes whose state holds steam
+     * move, their gas volume, partial pressures, enthalpy and acoustic bound now those of {@code R T / p + B} steam; every
+     * changed line runs only for a state or a phase holding water, so the dry probe states run no changed code.</p>
      */
-    static final String DIGEST = "37c1b7020d789e0d44041f8cc0a9b24ac8c694c63ef59e36214f08ccdccab1ee";
+    static final String DIGEST = "02fec125e6b5a3502bf79a257554be4b3588352edd914c4bb66b59c0895902b0";
     /**
      * The revision string: the formulation tag {@code direct-liquid-v1:tp-engine-v1:range-continuation-v1} (the phases
      * decided by the equilibrium engine, every data range continued since the owner rule of 2026-10-16) and the fluid
      * thermodynamic fingerprint of the widened {@code fluid_domain} (nitrogen, methane and the envelope to 10 MPa, P3 WP7
      * data) replace main 0.8.0's: a fresh world. Since WP4 it carries the free water's formulation and revision
-     * ({@code separate-free-water-v2:water-iapws-shomate-r2}: its ice), as a spine package's identity does, and the
+     * ({@code separate-free-water-v2:water-iapws-shomate-r2}: its ice; v3 since 2026-10-28, the virial steam), as a spine package's identity does, and the
      * fingerprint hashes the ice's science. Since D37 S4 the {@code cp-segments-v1} tag is gone with the segments, and the
      * fingerprint is the nitrogen record r3's. Since 2026-10-26 nothing is hashed and each record declares its own
      * revision (owner decisions): the fingerprint (last {@code 7b222959...}) is every record's declared revision,
@@ -128,7 +133,7 @@ class LegacyNetworkPathPinTest {
             "ice=icheme:crystal_ice_ih@crystal-ice-ih-r1",
             "fluid-data=conditional_solute_log_tables@dwsim-conditional-solute-ambient-v2,liquid_volume_reference_points@nist-liquid-calibration-20260915")
             + ":direct-liquid-v1:tp-engine-v1:range-continuation-v1"
-            + ":separate-free-water-v2:water-iapws-shomate-r2:fluid-domain-data-v1:catalog-volume-reference-v1";
+            + ":separate-free-water-v3:water-iapws-shomate-r2:fluid-domain-data-v1:catalog-volume-reference-v1";
 
     /** A property record's two viscosities in the fluid identity: {@code id/liquid@revision,id/vapor@revision}. */
     private static String viscosities(String id, String liquid, String vapor) {

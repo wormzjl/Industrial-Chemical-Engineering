@@ -1,6 +1,6 @@
 # Multiphase equilibrium engine
 
-**Snapshot:** ce71b45c (main, mod 0.15.0), 2026-10-27 · **Updated:** 2026-10-27 (batch 2026-10-26-multi-machine-framework: `ThermoIdentity` format `thermo-identity-v2`, its parts the package's and the spine's declared-revision identities in place of fingerprints; `PhaseContract.forNetworkPackage` takes the spine revision) · earlier: 2026-10-21 (0.11.1 test review: archived tests no longer named; `slowGates` beside `test`, G5 = 19) · 2026-10-21 (mod rename to IChemE, 0.11.0: package `com.wormzjl.icheme`, mod id `icheme`) · earlier: 2026-10-19
+**Snapshot:** 3a527f1e (branch claude/water-steam-virial, mod 0.15.0), 2026-10-28 · **Updated:** 2026-10-28 (batch 2026-10-27-heat-exchanger-design, water steam: `SteamVirial`, the second-virial steam of `separate-free-water-v3` (IF97 Region 2's B(T)), its computed 2 % limit table, the steam's fugacity on condensed water and ice, `SteamVirialTest` with `If97Region2`) · earlier: 2026-10-27 (batch 2026-10-26-multi-machine-framework: `ThermoIdentity` format `thermo-identity-v2`, its parts the package's and the spine's declared-revision identities in place of fingerprints; `PhaseContract.forNetworkPackage` takes the spine revision) · earlier: 2026-10-21 (0.11.1 test review: archived tests no longer named; `slowGates` beside `test`, G5 = 19) · 2026-10-21 (mod rename to IChemE, 0.11.0: package `com.wormzjl.icheme`, mod id `icheme`) · earlier: 2026-10-19
 Up: [code guide](README.md)
 
 ## Read this when
@@ -45,6 +45,7 @@ Paths are under [`src/main/java/com/wormzjl/icheme/science/thermo/`](../../../sr
 | [`phase/CubicPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CubicPhaseEvaluator.java) (264) | Fluid family `pr78_translated_v1`: translated PR78 at the state pressure for every root (`TranslatedPengRobinson.residualOnly`), one `IdealGasFunction` per component; `forPackage` (a spine package, from `SpinePackageData`), `fromPackage` (the caller's translations and ideal gases), a public constructor on a constant k matrix | State and derivative conventions |
 | [`phase/CrystalPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CrystalPhaseEvaluator.java) (217) | `SolidPhaseEvaluator` of a crystal record; `anchor(CubicPhaseEvaluator)`, `anchored(...)` gives the immutable `Anchored` view (a `CrystalFugacity`) | Crystal state, ln phi against the ideal gas |
 | [`phase/FreeWaterIce`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FreeWaterIce.java) (126) | Ice Ih of the free water: melting line by Clapeyron, fugacity over ice (IAPWS R14-08 scaled to meet the liquid's on the line); immutable | Freeze rules |
+| [`phase/SteamVirial`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/SteamVirial.java) (117) | The free water's steam beyond the ideal gas (`separate-free-water-v3`): IAPWS-IF97 Region 2's second virial B(T) (its five I = 1 terms), v = RT/p + B, p_w = n_w RT/(V - n_w B), residual h, s, g; linear below 273.15 K | Steam volume, partial pressure and energy, engine and network alike |
 | [`phase/FreeWaterModel`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FreeWaterModel.java) (45) | Interface of the water the free-water rule needs: revision, saturation pressure, steam partial-pressure limit, liquid, steam, ice; implemented by the network (`NetworkPhaseEngine.NetworkFreeWater`) | Water datum contract |
 | [`phase/PhaseState`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseState.java) (179), [`PhaseDerivatives`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseDerivatives.java) (70), [`PhaseAmounts`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseAmounts.java) (54) | Caller-owned phase state (frozen copies in results); first derivatives at fixed composition; one phase of a result over the shared basis | Conventions, conservation |
 | [`phase/PhaseIdentification`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseIdentification.java) (134) | Venkatarathnam–Oellrich phase identification parameter (PIP) on the untranslated cubic; liquid-like when PIP > max(1, Z); `denseLiquidLike` (v < 3.9514 b, `VAPOUR_BRANCH_VOLUME_RATIO`) | Phase labels |
@@ -172,14 +173,20 @@ flowchart TD
 <details><summary>Free water and ice</summary>
 
 - The rule (`solveWet`): water never dissolves in the hydrocarbon phases. The hydrocarbon liquid is at P, the hydrocarbon
-  vapour at pc = P - p_w, ideal steam shares the gas volume, and liquid water comes from the water model at P.
+  vapour at pc = P - p_w, the steam shares the gas volume, and liquid water comes from the water model at P.
+- The steam (`SteamVirial`, since `separate-free-water-v3`, 2026-10-28) is a second-virial gas: its ideal-gas functions
+  (`FreeWaterModel.vapor`) plus IF97 Region 2's B(T), so v = RT/p + B, p_w = n_w RT/(V_gas - n_w B), and the residuals
+  h = p (B - T dB/dT), s = -p dB/dT, g = p B at the steam's partial pressure. Condensed water (liquid at p_sat, ice at
+  its fugacity) carries the steam's chemical potential at that pressure, g_ig + B p, so it coexists with the steam
+  exactly at p_w = p_sat. Ideal steam was 7.6 % too light at 10 bar on saturation; the virial is 1.0 % off there.
 - Without hydrocarbons the water is all liquid when P >= p_sat and all steam otherwise.
 - With both: when P > p_sat + `SATURATION_MARGIN` (1e-6 Pa) the hydrocarbons are split at (P, P - p_sat), and the steam
-  that saturates the gas, p_sat V_gas/(RT), is taken from the water if there is that much. Otherwise all water is steam,
-  and pc solves pc + n_w RT/V_gas(pc) = P: up to 3 fixed-point steps, else a bisection on [1e-6 Pa, P] (70 halvings,
-  stop at 1e-8, accepted within 1e-6).
-- Steam above the water model's qualified partial pressure (`vaporPartialPressureLimit`) is answered and graded
-  `EXTRAPOLATED`.
+  that saturates the gas, p_sat V_gas/(RT + p_sat B), is taken from the water if there is that much. Otherwise all
+  water is steam, and pc solves pc + n_w RT/(V_gas(pc) - n_w B) = P: up to 3 fixed-point steps, else a bisection on
+  [1e-6 Pa, P] (70 halvings, stop at 1e-8, accepted within 1e-6).
+- Steam above the water model's qualified partial pressure (`vaporPartialPressureLimit`; the network's
+  `FluidThermodynamics.waterVaporPressureLimit`, where the virial's volume leaves 2 % of IF97 Region 2: 1.8 MPa below
+  500 K, 4.5 MPa from 575 K, 65 MPa from 875 K) is answered and graded `EXTRAPOLATED`.
 - Ice (`FreeWaterIce`): below the melting line T_m(P) the condensed water is ice, and the rule runs with the ice's
   fugacity in place of p_sat. The line is Clapeyron's, dT/dP = T_t (v_L - v_s)/h_fus = -7.42e-8 K/Pa (272.42 K at
   10 MPa). The ice's fugacity is p_sub(T) p_sat(T_m(P))/p_sub(T_m(P)), so it meets the liquid's exactly on the line and
@@ -259,7 +266,7 @@ flowchart TD
   (`packageRevision()`, from `MaterialCatalog.fluidRevision`: the declared revision of every record the fluid models
   read), the evaluator family, the spine revision (`spineRevision()`, from `MaterialCatalog.spineRevision`: each spine
   and crystal record's declared revision; `NO_SPINE` "spine:none" without one), and the water part
-  (`separate-free-water-v2:<water revision>`, or `NO_WATER` "water:none"). Nothing is hashed (owner decision
+  (`separate-free-water-v3:<water revision>`, or `NO_WATER` "water:none"; v3 since 2026-10-28, the virial steam). Nothing is hashed (owner decision
   2026-10-26): a data change moves the identity only through the revision bump that declares it
   ([thermo-materials.md](thermo-materials.md)).
 - Family ids: `pr78_translated_v1` (`CubicPhaseEvaluator.FAMILY`); crystals
@@ -344,6 +351,7 @@ flowchart TD
 | Phase labels | `PhaseIdentification` | `FluidTpEquilibriumP3Test` (`singlePhasesAreLabelledByThePhaseIdentificationParameter`, `hotGasesAreVapourLikeOverTheGrid`, `theLabelRuleSeparatesAHotGasFromACompressedLiquid`) |
 | PH/UV searches and balance steps | `FluidTpEquilibrium` (`solvePh`, `solveUv`, `newtonUv`, `nestedUv`, `wetCoexistence`, `freezingAtVolume`, `waterTriplePoint`) | `FluidTpEquilibriumPhUvTest`, `qualification/G3F8ConservationAndDerivativeTest` |
 | Free-water rule | `FluidTpEquilibrium` (`solveWet`, `freeWaterSplit`, `hydrocarbonVapour`), `FreeWaterModel` | `FluidTpEquilibriumP3Test.freeWaterFollowsTheNetworkRule`, `freeWaterPhaseCountEqualsTheNetworkFlash`, `FreeWaterIceTest` |
+| Steam volume and energy, qualified partial pressure | `SteamVirial`; fluid `FluidThermodynamics.waterVaporPressureLimit` | `SteamVirialTest` (against the full IF97 Region 2 of `If97Region2`, itself checked on IF97's verification tables), fluid `FluidPropertyCoverageTest` (NIST steam), runtime `FluidFactsCompatTest.aWorldSavedUnderTheIdealSteamRestatesOntoTheVirialSteam` |
 | Ice | `FreeWaterIce`; data `crystals/ice_ih.json`, the water's `ice` | `FreeWaterIceTest` |
 | Crystal competition and deposition | `FluidTpEquilibrium` (`solveWithCrystals`, `solveWetWithCrystals`, `depositFromVapour`, `depositFromFluid`, `binaryThreePhase`, `pureCrystalStep`), `CrystalPhaseEvaluator` | `GasSolidEquilibriumTest`, `NearPureCrystalStepTest`, `CrystalPhaseEvaluatorTest`, `SolidCarbonDioxideQualificationTest`, `qualification/G4*`, `G5*` |
 | Onsets | `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`, `DepositionOnset` | `GasSolidEquilibriumTest`, `G4F1`, `G4F2`, `G5F2` |
@@ -357,12 +365,13 @@ flowchart TD
 
 ## Tests that document it
 
-- Unit tests, `science/thermo/phase` (77 tests): `CrystalPhaseEvaluatorTest` (5), `CubicPhaseEvaluatorTest` (6),
+- Unit tests, `science/thermo/phase` (81 tests): `CrystalPhaseEvaluatorTest` (5), `CubicPhaseEvaluatorTest` (6),
   `FluidTpEquilibriumP3Test` (16: critical band, Newton finish, merging, phase labels, free water, the longer stability
   budget, two liquids, unstable products), `FluidTpEquilibriumPhUvTest` (8), `FluidTpEquilibriumTest` (7),
   `FreeWaterIceTest` (7), `GasSolidEquilibriumTest` (12), `NearPureCrystalStepTest` (4),
   `SolidCarbonDioxideQualificationTest` (5), `SolidPhaseEvaluatorTest` (2), `SpinePackageEvaluatorTest` (3),
-  `ThermoIdentityTest` (2). Helpers: `PhaseTestSupport`, `SolidCarbonDioxideReferences`.
+  `SteamVirialTest` (4), `ThermoIdentityTest` (2). Helpers: `PhaseTestSupport`, `SolidCarbonDioxideReferences`,
+  `If97Region2` (the full IF97 Region 2 residual, Region 4's saturation line and the B23 boundary).
 - `science/thermo/TangentPlaneStabilityTest` (10: brute-force minima, per-branch verdicts, bitwise repeats, a dense
   liquid is no vapour at the lower pressure).
 - Qualification families, `science/thermo/qualification` (described in [verification.md](verification.md)):

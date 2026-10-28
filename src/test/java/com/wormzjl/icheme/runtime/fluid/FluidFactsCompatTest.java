@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
 import net.minecraft.nbt.*;
 import java.io.IOException;
 import java.nio.file.*;
@@ -288,6 +289,71 @@ class FluidFactsCompatTest {
         assertEquals(0,ledger.restated().energy(),1e-9*energy,"the same data gives the same energy");
         var reloaded=new EventPathWorld(1,ledger,restated.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList());
         assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->model,CATALOG).route(),"restated once");
+    }
+    /**
+     * A vessel of superheated steam and nitrogen, charged from a generator of 80 % steam at 520 K and 10 bar, written under
+     * the ideal steam of {@code separate-free-water-v2} (corpus image {@code steam-v2}, 2026-10-28). The second-virial
+     * steam of v3 changes the thermodynamic revision, so the world restates on load by a TP flash at each vessel's saved
+     * temperature and pressure: its moles, wall volume, temperature and pressure kept, its contents' volume and energy the
+     * virial steam's ({@code p_w = n_w R T / (V - n_w B)}), and the ledger books the energy difference, the steam's
+     * residual energy {@code n_w u_res = -n_w p_w T dB/dT}. When the image is missing the test writes it under
+     * {@code build/compat/fluid/}.
+     */
+    @Test void aWorldSavedUnderTheIdealSteamRestatesOntoTheVirialSteam() throws IOException {
+        var folder=CORPUS.resolve("steam-v2");
+        if(!Files.isDirectory(folder)) {
+            var written=Path.of("build/compat/fluid/steam-v2");write(image(steamWorld()),written);
+            fail("No steam corpus image: copy "+written.toAbsolutePath()+" to "+folder);
+        }
+        var image=read(folder);var core=FluidCheckpointCodec.readCore(image.core());var saved=new TreeMap<Long,FluidFacts.Vessel>();
+        for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());
+            for(var v:FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id()).vessels())saved.put(v.id(),v);}
+        var restated=load(image,key->model,CATALOG);
+        assertEquals(FluidCheckpointStore.Route.FACTS,restated.route());
+        assertTrue(restated.reason().contains("property data of package "+PACKAGE+" changed"),restated.reason());
+        var ledger=restated.world().orElseThrow();
+        assertTrue(ledger.restated().removedMoles().isEmpty()&&ledger.restated().removedSolids().isEmpty());
+        double energy=0,residual=0;int vessels=0;
+        for(var e:restated.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs()) {
+            if(n.kind()!=PassiveNetwork.NodeKind.RESERVOIR)continue;
+            var v=saved.get(n.id());var s=n.state();vessels++;
+            assertArrayEquals(v.moles(),n.inventory().moles(),"vessel "+n.id()+": its moles are kept exactly");
+            assertEquals(v.volume(),n.inventory().volume());
+            assertEquals(v.temperature(),s.temperature(),1e-9*v.temperature(),"vessel "+n.id()+": its temperature is kept");
+            assertTrue(s.waterVapor()>0&&s.waterLiquid()==0&&s.waterVapor()==v.waterVapor(),"all of the water is steam, as saved");
+            // The restatement is a TP flash at the saved temperature and pressure (FluidFacts.rebuild): the denser virial
+            // steam fills less than the wall until the island's first solve brings the contents back to it.
+            assertEquals(v.pressure(),s.pressure(),"vessel "+n.id()+": restated at its saved pressure");
+            assertTrue(s.volume()<v.volume(),"vessel "+n.id()+": the virial steam is denser than the ideal steam it was saved as");
+            double b=SteamVirial.secondVirial(s.temperature()),t=s.temperature();
+            assertEquals(s.waterVapor()*FluidThermodynamics.R*t/(s.vaporVolume()-s.waterVapor()*b),s.waterPartialPressure(),1e-9*s.waterPartialPressure(),"the virial steam's partial pressure");
+            energy+=n.inventory().internalEnergy()-v.energy();
+            residual+=-s.waterVapor()*s.waterPartialPressure()*t*SteamVirial.temperatureDerivative(t);
+            System.out.println("steam-v2 vessel "+n.id()+": T "+t+" K, steam "+s.waterVapor()+" mol at "+s.waterPartialPressure()+" Pa of "+s.pressure()
+                    +" Pa, volume "+v.volume()+" -> "+s.volume()+" m3, U "+v.energy()+" -> "+n.inventory().internalEnergy()+" J");
+        }
+        assertEquals(1,vessels);
+        // U = U_N2 + n_w (u_ig - p_w T dB/dT): the steam's residual energy, the nitrogen's own moving a few joules.
+        assertEquals(residual,energy,1e-3*Math.abs(residual),"the energy moves by the steam's residual energy");
+        // dB/dT > 0 below the Boyle temperature, so the steam's own energy falls: -25.1 kJ for the image's 145.5 mol at 661 K and
+        // 7.98 bar, -173 J/mol (SteamVirialTest checks dB/dT against IF97 Region 2).
+        assertTrue(residual<0,"the steam's residual energy: "+residual+" J");
+        assertEquals(energy,ledger.restated().energy(),1e-9*Math.abs(energy),"the ledger books the energy difference");
+        var reloaded=new EventPathWorld(1,ledger,restated.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList());
+        assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->model,CATALOG).route(),"restated once");
+    }
+    /** A 1 m3 vessel charged from a generator of 80 % steam and 20 % nitrogen at 520 K and 10 bar (the steam's dew point 444 K), the generator then removed. */
+    private EventPathWorld steamWorld() {
+        var world=new EventPathWorld();
+        double[] nitrogen=FluidDeviceSpec.nitrogen(CATALOG).composition(),water=FluidDeviceSpec.water(CATALOG).composition(),n=new double[nitrogen.length];
+        for(int c=0;c<n.length;c++)n[c]=.2*nitrogen[c]+.8*water[c];
+        long generator=world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,520,1e6,n),.05);
+        for(int x=1;x<=2;x++)world.place(x,64,0,Kind.PIPE,Direction.EAST,.05);
+        world.place(3,64,0,Kind.RESERVOIR,Direction.EAST);
+        world.runTo(400);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(generator,null)),world.ledger.nextIdentity(),null);world.runTo(600);
+        world.assertKeptUp("the steam line");
+        return world;
     }
     private void write(FluidCheckpointCodec.Image image,Path folder) throws IOException {
         Files.createDirectories(folder);NbtIo.writeCompressed(image.core(),folder.resolve("core.dat"));

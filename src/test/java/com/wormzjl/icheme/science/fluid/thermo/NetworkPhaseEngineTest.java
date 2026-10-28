@@ -294,7 +294,7 @@ class NetworkPhaseEngineTest {
                             assertEquals(0, state.waterLiquid(), 0, at + ": all steam");
                             assertEquals(p, state.hydrocarbonPartialPressure() + state.waterPartialPressure(), 1e-6 * p, at);
                             assertTrue(state.hydrocarbonPartialPressure() > 0.5 * p, at + ": pc " + state.hydrocarbonPartialPressure());
-                            // Ideal steam in a gas whose Z is within a few per cent of one: p_w close to y_w P (the heavy
+                            // The virial steam (B p_w/(R T) at most 2 % here) in a gas whose Z is within a few per cent of one: p_w close to y_w P (the heavy
                             // mixture's gas has the lowest Z: p_w/(y_w P) 1.05 at 750 K and 2 MPa).
                             double steamFraction = state.waterVapor() / (state.waterVapor() + sum(state.vaporView()));
                             double ratio = state.waterPartialPressure() / (steamFraction * p);
@@ -313,8 +313,9 @@ class NetworkPhaseEngineTest {
         System.out.printf("WP7c hot network states: %d answered, %d past the steam's qualified partial pressure; the gases' p_w within %.4f of y_w P over %d wet states%n",
                 answered, steamBeyond, worstRatio, wetGas);
         assertTrue(answered > 100 && wetGas > 40, answered + " answered, " + wetGas + " wet gases");
-        // The gases' Z lies within 4 % of one here (nitrogen 1.036 at 600 K and 10 MPa, the light gas 0.977 at 2 MPa).
-        assertTrue(worstRatio < 0.04, "the gases' steam partial pressure is the ideal-mixing one to 4 %: " + worstRatio);
+        // The gases' Z lies within 4 % of one here (nitrogen 1.036 at 600 K and 10 MPa, the light gas 0.977 at 2 MPa), and the
+        // virial steam's B p_w/(R T) within 2 % (-1.8 % in that nitrogen); the two add there: 0.051 (under 4 % with ideal steam).
+        assertTrue(worstRatio < 0.06, "the gases' steam partial pressure is the ideal-mixing one to 6 %: " + worstRatio);
         // The pinned 700 K states of the WP7b note: pure N2 with 0.1 mol water at 0.1 MPa, and the lean gas at 0.1 MPa.
         var wetNitrogen = model.flashTP(700, 1e5, pure(nitrogen, 1, 0.1), () -> {});
         assertEquals(1e5 / 11, wetNitrogen.waterPartialPressure(), 1e-3 * 1e5 / 11, "p_w of 0.1 mol steam in 1.1 mol gas");
