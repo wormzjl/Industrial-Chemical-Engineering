@@ -97,17 +97,8 @@ class V3ColumnInputDraftTest {
 
     private static V3EditorDraft.SideDrawDraft.Row row(String tray, String rate) { return new V3EditorDraft.SideDrawDraft.Row(tray, rate); }
 
-    // Merged from V3DiagramLayoutTest.
-    @Test void largerWindowFitsEverySupportedTrayCountWithoutScrolling(){
-        for(int trays=0;trays<=64;trays++)for(int available:new int[]{740,920,1300}){
-            assertTrue(ColumnCalculatorV3Screen.DiagramLayout.contentHeight(trays,available)<=available,"trays="+trays);
-            assertTrue(ColumnCalculatorV3Screen.DiagramLayout.trayPitch(trays,available)>=3);
-        }
-    }
-    @Test void smallWindowsScrollInsteadOfMakingTraysUnclickable(){
-        assertTrue(ColumnCalculatorV3Screen.DiagramLayout.contentHeight(64,320)>320);
-        assertEquals(3,ColumnCalculatorV3Screen.DiagramLayout.trayPitch(64,320));
-    }
+    // The drawing's tray layout moved to CalculatorColumn (batch 2026-10-28-gui-toolkit): its gate is
+    // CalculatorColumnTest.theDrawingFitsLargeGlassesAndScrollsSmallOnesWithTraysClickable.
 
     // Merged from V3ColumnScalarDraftTest.
     private static final List<String> VALID = List.of(
@@ -136,6 +127,7 @@ class V3ColumnInputDraftTest {
         assertInvalid(6, "-0.01", "Reflux ratio");
         assertInvalid(7, "0", "Top pressure");
         assertInvalid(9, "-1", "Column diameter");
+        assertInvalid(9, "0", "Column diameter");
         assertInvalid(9, "16", "Column diameter");
     }
 
@@ -149,13 +141,13 @@ class V3ColumnInputDraftTest {
                 fields.set(6, Double.toString(reflux));
                 fields.set(7, stages == 2 ? "1" : "3");
                 fields.set(8, "0");
-                fields.set(9, "0");
+                fields.set(9, stages == 2 ? "0.1" : "15");
                 V3EditorDraft.ColumnScalarDraft.Values values = V3EditorDraft.ColumnScalarDraft.parse(fields);
                 assertEquals(stages, values.stageCount());
                 assertEquals(reflux, values.refluxRatio());
                 assertEquals(stages == 2 ? 100_000.0 : 300_000.0, values.topPressurePascal());
                 assertEquals(0.0, values.pressureDropPascal());
-                assertEquals(0.0, values.columnDiameterMetres());
+                assertEquals(stages == 2 ? 0.1 : 15.0, values.columnDiameterMetres());
             }
         }
     }

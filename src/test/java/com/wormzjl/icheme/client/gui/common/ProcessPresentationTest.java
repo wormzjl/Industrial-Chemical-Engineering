@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.client.gui.common;
 
 import com.wormzjl.icheme.client.gui.common.ProcessUi.NumericDraft;
-import com.wormzjl.icheme.client.gui.common.ProcessUi.TemperatureUnit;
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,7 +30,7 @@ class ProcessPresentationTest {
         assertThrows(IllegalArgumentException.class,()->new RelativeComposition(List.of("A"),List.of(.02),new double[]{-1}));
     }
     @Test void celsiusDefaultsAndUnitRoundTripsKeepPhysicalTemperature(){
-        var unit=TemperatureUnit.CELSIUS;assertEquals("C",unit.symbol());assertEquals(25,unit.display(298.15),1e-12);
+        var unit=TemperatureUnit.CELSIUS;assertEquals("°C",unit.symbol());assertEquals(25,unit.display(298.15),1e-12);
         assertEquals(298.15,unit.kelvin(25),1e-12);assertEquals("K",unit.next().symbol());assertEquals(unit,unit.next().next());
     }
     @Test void conciseDraftPreservesUntouchedPrecisionAndSmallDiameters(){

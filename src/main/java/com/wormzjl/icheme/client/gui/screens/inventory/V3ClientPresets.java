@@ -14,7 +14,10 @@ import java.util.function.Function;
 /** Explicitly refreshed, client-owned JSON libraries. Neither custom paths nor files cross the wire. */
 final class V3ClientPresets {
     static final int MAX_BYTES=65536,MAX_FILES=256;
-    /** {@code schema} is the only version a file of the kind may carry; column 2 added {@code stage_pressure_drop_kpa}. */
+    /**
+     * {@code schema} is the only version a file of the kind may carry. Column 2 added {@code stage_pressure_drop_kpa};
+     * since 2026-10-28 (owner choice (a)) it is no longer written, and a file's is ignored: the tray hydraulics give the drop.
+     */
     enum Kind {
         COLUMN("columnpreset","column",2),MIXTURE("mixturepreset","mixture",1);
         final String folder,id;final int schema;
@@ -113,10 +116,10 @@ final class V3ClientPresets {
             }
             Map<String,String> f=new LinkedHashMap<>();
             String[] names={"feed_flow_kmol_h","feed_temperature_kelvin","tray_count","feed_tray","top_temperature_kelvin",
-                "reboiler_duty_mw","reflux_ratio","top_pressure_bar","stage_pressure_drop_kpa","diameter_m"};
+                "reboiler_duty_mw","reflux_ratio","top_pressure_bar",null,"diameter_m"};
             for(int i=0;i<10;i++){
+                if(names[i]==null)continue;// s8, the tray drop, stays the draft's
                 double value=number(o,names[i]);if(i==1||i==4)value-=273.15;
-                if(i==8&&value<0)throw new IllegalArgumentException("Negative stage pressure drop");
                 if(i==2||i==3)f.put("s"+i,Integer.toString(integer(o,names[i])));else f.put("s"+i,Double.toString(value));
             }
             int total=integer(o,"tray_count"),feed=integer(o,"feed_tray");
@@ -176,7 +179,7 @@ final class V3ClientPresets {
         o.addProperty("top_temperature_kelvin",V3EditorDraft.value(input,ControlledQuantity.CONDENSER_OUTLET_TEMPERATURE));
         o.addProperty("reboiler_duty_mw",V3EditorDraft.value(input,ControlledQuantity.REBOILER_DUTY)/1e6);
         o.addProperty("reflux_ratio",V3EditorDraft.value(input,ControlledQuantity.ORGANIC_REFLUX_RATIO));
-        o.addProperty("top_pressure_bar",input.topPressurePascal()/1e5);o.addProperty("stage_pressure_drop_kpa",input.stagePressureDropPascal()/1000);
+        o.addProperty("top_pressure_bar",input.topPressurePascal()/1e5);
         o.addProperty("diameter_m",input.columnDiameterMetres());
         JsonArray draws=new JsonArray(),steam=new JsonArray(),pas=new JsonArray();
         for(var d:input.sideDraws()){var v=new JsonObject();v.addProperty("tray",d.trayNumber()+1);v.addProperty("flow_kmol_h",d.molarFlowMolPerSecond()*3.6);draws.add(v);}

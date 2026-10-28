@@ -1,10 +1,24 @@
 package com.wormzjl.icheme.client.gui.screens;
 
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.EquipmentGhost;
 import com.wormzjl.icheme.client.gui.common.ColumnDiagram;
+import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
+import com.wormzjl.icheme.client.gui.common.ConstructorColumn.Category;
+import com.wormzjl.icheme.client.gui.common.ConstructorColumn.Equipment;
+import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.PaintSwatch;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
+import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
+import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
+import com.wormzjl.icheme.client.gui.common.kit.Palette;
+import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
+import com.wormzjl.icheme.client.gui.common.kit.SkinField;
+import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.EquipmentNetwork;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
@@ -20,7 +34,7 @@ import com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEnti
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
@@ -33,25 +47,28 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.function.IntConsumer;
 import java.util.function.IntUnaryOperator;
 
 import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
-import static com.wormzjl.icheme.science.equipment.UnitDesign.size;
-import static com.wormzjl.icheme.science.equipment.UnitDesign.whole;
 
 /**
  * The equipment constructor's screen: first what to build (a vertical drum, a horizontal drum, a distillation column, or
  * a unit: a heat exchanger, a kettle reboiler, an air cooler bay, a steam ejector, a centrifugal pump, a reciprocating
  * compressor, a vertical or a cabin heater; owner requests 2026-10-16 and 2026-10-17), then its
- * design, in a panel on the left beside the world and the vessel's ghost; a drum's side connections and every kind's
+ * design, on a panel door at the left beside the world and the vessel's ghost; a drum's side connections and every kind's
  * paint have pages of their own (owner requests 2026-10-16). It edits a local draft; the server receives the design when
  * the screen closes, or with a build request on Build. A column is imported whole (its diameter, trays, feed, draws,
  * pumparounds, steam and components) from the design saved in the nearest column calculator and built from it only
- * (batch 2026-10-26-multi-machine-framework); its schematic is the calculator's ({@link ColumnDiagram}). A bottom outlet leaving through a skirt turns to the sides its form allows (owner request
- * 2026-10-25, {@link EquipmentShape#outlets}): a standing drum's on its Nozzles page, a trickle-bed reactor's effluent on
- * its design page. A column's side nozzles take their sides by themselves; its Nozzles page turns any of them to a side
+ * (batch 2026-10-26-multi-machine-framework); its schematic is the calculator's ({@link ColumnDiagram}), on the HMI glass
+ * beside the world. A bottom outlet leaving through a skirt turns to the sides its form allows (owner request
+ * 2026-10-25, {@link EquipmentShape#outlets}): a standing drum's on its Nozzles page, a trickle-bed reactor's on its
+ * design page. A column's side nozzles take their sides by themselves; its Nozzles page turns any of them to a side
  * the player picks (finding F3, owner decision 2026-10-27).
+ *
+ * <p>The door draws through the GUI kit in the client's theme (batch 2026-10-28-gui-toolkit, GUI_REVIEW.md order 3): each
+ * page's rows come from {@link ConstructorColumn}; the settings' steppers, the selectors and the push buttons are kept at
+ * their slots ({@link KitDoor}), the texts and values placed again each frame. An edit that changes what a widget shows
+ * or where it stands rebuilds the page.
  */
 public final class EquipmentConstructorScreen extends Screen {
     /** The screen's pages: what to build, its design, a drum's side connections, a column's side nozzles and the paint. */
@@ -59,57 +76,9 @@ public final class EquipmentConstructorScreen extends Screen {
         CHOOSE, DESIGN, CONNECTIONS, NOZZLES, PAINT
     }
 
-    /** The paint page's palette: two rows of eight swatches across the panel. */
-    private static final int SWATCHES_PER_ROW = 8;
-    private static final String PAINT_KEY = "gui.icheme.paint.";
-
-    /** Panel layout in GUI pixels, top-down, so it fits a 240-pixel-high GUI (854×480 at scale 2). */
-    /** The schematic strip's width: the steam lines (90 pixels left of the axis) to the draw marks (39 right of it), and margins. */
+    /** The schematic's width on its glass: the steam lines (90 pixels left of the axis) to the draw marks (39 right of it), and margins. */
     private static final int STRIP = 140;
-    private static final int PANEL = 196, TOP = 24, ROW = 17, ROWS = 8, LINE = 11, LINES = TOP + ROWS * ROW + 4, STATUS = LINES + 3 * LINE + 2, BUTTONS = STATUS + 14;
-    /** The choice page: the groups' buttons in a left column, the shown group's kinds in a right one, each kind's description in its hover text. */
-    private static final int CHOICE = 38, CHOICE_PITCH = 24, GROUP_WIDTH = 64;
-    /** The width of a column's Nozzles button, left of Change on its design page's title row. */
-    private static final int NOZZLES_BUTTON = 50;
-    private static final String KEY = "gui.icheme.equipment_constructor.";
-
-    /** The choice page's groups: their buttons in the left column, the chosen group's kinds in the right one. */
-    private enum Category {
-        VESSELS, HEAT, MACHINES, REACTORS, SOLID_FUEL;
-
-        String key() {
-            return KEY + "category." + name().toLowerCase(Locale.ROOT);
-        }
-    }
-
-    /** What the constructor builds, by group; a horizontal drum lies along or across the constructor's facing, every other is its placement form. */
-    private enum Equipment {
-        VERTICAL_DRUM(Category.VESSELS), HORIZONTAL_DRUM(Category.VESSELS), COLUMN(Category.VESSELS), FLOATING_ROOF_TANK(Category.VESSELS), SPHERE(Category.VESSELS), ADSORBER(Category.VESSELS), CYCLONE(Category.VESSELS),
-        EXCHANGER(Category.HEAT), KETTLE(Category.HEAT), AIR_COOLER(Category.HEAT), VERTICAL_HEATER(Category.HEAT), CABIN_HEATER(Category.HEAT),
-        PUMP(Category.MACHINES), COMPRESSOR(Category.MACHINES), CENTRIFUGAL_COMPRESSOR(Category.MACHINES), EJECTOR(Category.MACHINES),
-        STEAM_TURBINE(Category.MACHINES), CONDENSING_TURBINE(Category.MACHINES),
-        STIRRED_REACTOR(Category.REACTORS), TRICKLE_BED_REACTOR(Category.REACTORS), EBULLATED_BED_REACTOR(Category.REACTORS), FCC_CONVERTER(Category.REACTORS),
-        DELAYED_COKER(Category.REACTORS),
-        FLUIDIZED_BED_BOILER(Category.SOLID_FUEL), FLUIDIZED_BED_GASIFIER(Category.SOLID_FUEL), GRATE_BOILER(Category.SOLID_FUEL), FIXED_BED_GASIFIER(Category.SOLID_FUEL);
-
-        final Category category;
-
-        Equipment(Category category) {
-            this.category = category;
-        }
-
-        static Equipment of(VesselPlacement.Form form) {
-            return switch (form) {
-                case VERTICAL -> VERTICAL_DRUM;
-                case LENGTHWISE, CROSSWISE -> HORIZONTAL_DRUM;
-                default -> valueOf(form.name());
-            };
-        }
-
-        String key() {
-            return KEY + "equipment." + name().toLowerCase(Locale.ROOT);
-        }
-    }
+    private static final String KEY = "gui.icheme." + ConstructorColumn.KEY;
 
     private final BlockPos position;
     private final Direction facing;
@@ -144,17 +113,14 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The bottom outlet's quarter turns from the front, the player's choice kept for the other forms ({@link #outlet()}). */
     private int outlet;
     private int channel = Paint.BODY;
+    /** The door's column: its view, its kept widgets, its hover. */
+    private final KitDoor door = new KitDoor();
     private @Nullable EditBox custom;
-    /** The paint page's body and structure buttons (null off that page). */
-    private final Button[] channelButtons = new Button[2];
-    private @Nullable Button build;
-    /** A lying drum's boot toggle, on the Nozzles page with the drain it carries (null off that page). */
-    private @Nullable Button bootButton;
-    /**
-     * The bottom outlet's side (owner request 2026-10-25): a standing drum's on the Nozzles page where a lying drum's boot
-     * stands, a trickle-bed reactor's on its design page under its skirt (null elsewhere).
-     */
-    private @Nullable Button outletButton;
+    private @Nullable SkinButton build;
+    /** What the page's widgets showed and where they stood at the last rebuild ({@link #signature}). */
+    private List<String> built = List.of();
+    /** The hint under the pointer this frame, drawn after the widgets. */
+    private @Nullable String hovered;
     private ShapeRasterizer.Layout layout;
     /** Set by Import until the server answers ({@link #answered}). */
     private boolean importing;
@@ -205,6 +171,14 @@ public final class EquipmentConstructorScreen extends Screen {
                 column, List.copyOf(turns));
     }
 
+    private static Skin skin() {
+        return ClientConfig.skin();
+    }
+
+    private static String tr(String key, Object... args) {
+        return Component.translatable("gui.icheme." + key, args).getString();
+    }
+
     /** The trays the column form shows and builds: the imported design's, else the constructor's own (which build nothing). */
     private ColumnTrays shownTrays() {
         return column != null ? column.trays() : trays;
@@ -225,20 +199,14 @@ public final class EquipmentConstructorScreen extends Screen {
         return (outlets() >> outlet & 1) != 0 ? outlet : 0;
     }
 
-    /** What the bottom outlet's button says: the side it faces as seen from the constructor. */
-    private Component outletLabel() {
-        int[] side = EquipmentShape.side(outlet());
-        return Component.translatable(KEY + "side." + toward(side[0], side[1]));
-    }
-
-    /** The bottom outlet's button on row {@code row}: a click turns the outlet to the next side its form allows. */
-    private void addOutletButton(int row) {
-        outletButton = addRenderableWidget(Button.builder(outletLabel(), b -> {
-            int allowed = outlets(), next = outlet();
-            do next = (next + 1) % EquipmentShape.CONNECTION_SIDES; while ((allowed >> next & 1) == 0);
-            outlet = next;
-            refresh();
-        }).bounds(PANEL - 80, TOP + row * ROW, 74, 16).tooltip(Tooltip.create(Component.translatable(KEY + "outlet.hint"))).build());
+    /** Each side's word ({@link EquipmentShape#side}) as seen from the constructor: a connection's, a side nozzle's or the bottom outlet's. */
+    private List<String> words() {
+        var out = new ArrayList<String>();
+        for (int side = 0; side < EquipmentShape.CONNECTION_SIDES; side++) {
+            int[] s = EquipmentShape.side(side);
+            out.add(toward(s[0], s[1]));
+        }
+        return out;
     }
 
     /** The draft's drum with no side connections, which fitting and adding them place around. */
@@ -276,43 +244,106 @@ public final class EquipmentConstructorScreen extends Screen {
         return minecraft != null && minecraft.level != null && minecraft.level.getBlockEntity(position) instanceof EquipmentConstructorBlockEntity constructor ? constructor : null;
     }
 
+    // ---- The pages ----
+
+    /** The page's rows, footer and message display as the builder makes them from the draft. */
+    private ConstructorColumn.Page panel() {
+        return switch (page) {
+            case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentConstructorScreen::tr);
+            case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
+                    form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
+                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH), EquipmentConstructorScreen::tr);
+            case CONNECTIONS -> {
+                var c = connections.isEmpty() ? null : connection();
+                int[] stations = stations();
+                yield ConstructorColumn.connections(new ConstructorColumn.Connections(connections.size(), selected, c != null ? c.side() : 0, words(),
+                        c != null ? number(c.station() + .5) : "", form.orientation().horizontal(), c != null ? c.offset() : 0,
+                        c != null && c.offset() != 0 ? toward(c.across(), Integer.signum(c.offset())) : null,
+                        connections.size() < EquipmentShape.MAX_CONNECTIONS && stations[0] <= stations[1], EquipmentShape.bootFor(diameter, tangentLength) != null, hasBoot(),
+                        new ConstructorColumn.Outlet(outlets(), outlet(), words())), EquipmentConstructorScreen::tr);
+            }
+            case NOZZLES -> {
+                var sides = sideNozzles();
+                nozzle = clamp(nozzle, 0, Math.max(0, sides.size() - 1));
+                ConstructorColumn.Nozzle shown = null;
+                if (!sides.isEmpty()) {
+                    var n = sides.get(nozzle);
+                    shown = new ConstructorColumn.Nozzle(n.role().name().toLowerCase(Locale.ROOT), n.index(), n.placed(), n.placed() ? number(n.nozzle().base()[1]) : "-",
+                            place(n).where(), n.turned(), n.side(), n.home());
+                }
+                yield ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(sides.size(), nozzle, shown, words(), (int) sides.stream().filter(ColumnDesign.SideNozzle::turned).count()),
+                        EquipmentConstructorScreen::tr);
+            }
+            case PAINT -> ConstructorColumn.paint(channel, EquipmentConstructorScreen::tr);
+        };
+    }
+
     @Override
     protected void init() {
+        WindowScale.apply(minecraft, this);
         build = null;
-        bootButton = null;
-        outletButton = null;
         custom = null;
-        channelButtons[0] = channelButtons[1] = null;
-        switch (page) {
-            case CHOOSE -> {
-                // The groups down the left, the shown group's kinds down the right: each button says the kind's short name,
-                // its hover text the full name and what it is; the current kind and its group are marked.
-                var current = Equipment.of(form);
-                var shown = category != null ? category : current.category;
-                for (var group : Category.values()) {
-                    Component name = Component.translatable(group.key());
-                    if (group == shown) name = Component.translatable(KEY + "current", name);
-                    addRenderableWidget(Button.builder(name, b -> {
-                        category = group;
-                        rebuildWidgets();
-                    }).bounds(8, CHOICE + group.ordinal() * CHOICE_PITCH, GROUP_WIDTH, 20).tooltip(Tooltip.create(Component.translatable(group.key() + ".hint"))).build());
-                }
-                int row = 0, left = 8 + GROUP_WIDTH + 4;
-                for (var equipment : Equipment.values()) {
-                    if (equipment.category != shown) continue;
-                    Component name = Component.translatable(equipment.key() + ".short");
-                    if (equipment == current) name = Component.translatable(KEY + "current", name);
-                    addRenderableWidget(Button.builder(name, b -> choose(equipment)).bounds(left, CHOICE + row++ * CHOICE_PITCH, PANEL - 8 - left, 20)
-                            .tooltip(Tooltip.create(Component.translatable(equipment.key()).copy().append("\n").append(Component.translatable(equipment.key() + ".hint"))))
-                            .build());
-                }
-                addRenderableWidget(Button.builder(Component.translatable(KEY + "done"), b -> onClose()).bounds(100, BUTTONS, 88, 20).build());
+        var m = GuiCanvas.measure(font);
+        var shown = panel();
+        door.layout(ConstructorColumn.area(height, shown.display()), shown.rows(), m);
+        door.keep(this::box, (spec, slot) -> addRenderableWidget(SkinButton.of(spec, slot, this::act, EquipmentConstructorScreen::skin)));
+        // The palette in the Paint group's gap: each swatch outlined while it is the edited colour.
+        if (page == Page.PAINT) {
+            var swatches = DialogColumns.palette(door.column(), Paint.PALETTE.size());
+            for (int i = 0; i < swatches.size(); i++) {
+                var slot = swatches.get(i);
+                var swatch = new PaintSwatch(slot.x(), slot.y(), Paint.PALETTE.get(i), () -> paint.colour(channel), this::colour);
+                swatch.setWidth(slot.w());
+                door.keep(addRenderableWidget(swatch), slot);
             }
-            case DESIGN -> designPage();
-            case CONNECTIONS -> connectionsPage();
-            case NOZZLES -> nozzlesPage();
-            case PAINT -> paintPage();
         }
+        // The footer's push buttons, Build the primary one; Change (the design page) or Back (the choice page) beside the title.
+        var footer = ConstructorColumn.footer(height, shown.footer().size());
+        for (int i = 0; i < shown.footer().size(); i++) {
+            var spec = shown.footer().get(i);
+            var button = addRenderableWidget(SkinButton.of(spec, footer.get(i), this::act, EquipmentConstructorScreen::skin));
+            if (spec.key().equals("build")) build = button.primary(true);
+        }
+        if (page == Page.DESIGN || page == Page.CHOOSE) {
+            String key = page == Page.DESIGN ? "change" : "back";
+            var spec = new Column.Button(key, tr(ConstructorColumn.KEY + key), true, tr(ConstructorColumn.KEY + key + ".hint"));
+            addRenderableWidget(SkinButton.of(spec, ConstructorColumn.TITLE_KEY, this::act, EquipmentConstructorScreen::skin));
+        }
+        if (build != null) build.active = buildable();
+        built = signature(shown);
+        door.place(0, 0);
+    }
+
+    /** The custom colour's LCD entry: the edited channel's colour as RRGGBB, painting it once six digits are typed. */
+    private AbstractWidget box(Column.Field f, Rect slot) {
+        var box = new SkinField(font, slot.x(), slot.y(), slot.w(), slot.h(), Component.literal(f.label()), EquipmentConstructorScreen::skin);
+        box.setTooltip(Tooltip.create(Component.literal(f.hint() == null ? f.label() : f.label() + "\n" + f.hint())));
+        box.setMaxLength(7);
+        box.setFilter(text -> text.matches("#?[0-9a-fA-F]{0,6}"));
+        box.setValue(rgb(paint.colour(channel)));
+        box.setResponder(text -> {
+            if (Paint.isHex(text)) colour(Paint.parseHex(text));
+        });
+        custom = box;
+        return addRenderableWidget(box);
+    }
+
+    /** A colour as the custom field shows it: RRGGBB, its # left out so six digits fit the box. */
+    private static String rgb(int colour) {
+        return Paint.hex(colour).substring(1);
+    }
+
+    /**
+     * What the page's widgets show and where they stand: every slot of the column, every button's text and state, the
+     * footer's. An edit that changes it rebuilds the page; values and labels that keep it are placed each frame.
+     */
+    private List<String> signature(ConstructorColumn.Page shown) {
+        var out = new ArrayList<String>();
+        for (var e : door.place(shown.rows(), GuiCanvas.measure(font)).slots().entrySet()) out.add(e.getKey() + "@" + e.getValue());
+        var buttons = new ArrayList<>(ConstructorColumn.buttons(shown.rows()));
+        buttons.addAll(shown.footer());
+        for (var b : buttons) out.add(b.key() + "|" + b.text() + "|" + b.active() + "|" + b.latched() + "|" + b.hint());
+        return out;
     }
 
     private void show(Page next) {
@@ -320,196 +351,116 @@ public final class EquipmentConstructorScreen extends Screen {
         rebuildWidgets();
     }
 
-    private void designPage() {
-        var change = Button.builder(Component.translatable(KEY + "change"), b -> show(Page.CHOOSE)).bounds(PANEL - 80, TOP - 1, 74, 16).build();
-        change.setTooltip(Tooltip.create(Component.translatable(KEY + "change.hint")));
-        addRenderableWidget(change);
-        if (form.designed()) {
-            unitDesign();
+    /** A press on a key of the door, by its key ({@link ConstructorColumn}): a stepper's ends in - or +, a selector's names its position after a colon. */
+    private void act(String key) {
+        if (key.endsWith("-") || key.endsWith("+")) {
+            step(key.substring(0, key.length() - 1), key.endsWith("+") ? 1 : -1);
             return;
         }
-        int next = 3;
-        // A column's diameter, trays and feed are its imported design's: shown, not edited (plan 2026-10-26, section 4.5);
-        // its side nozzles have a page of their own, opened beside Change.
-        if (form.column()) {
-            next = 4;
-            addRenderableWidget(Button.builder(Component.translatable(KEY + "nozzles"), b -> show(Page.NOZZLES)).bounds(PANEL - 80 - 4 - NOZZLES_BUTTON, TOP - 1, NOZZLES_BUTTON, 16)
-                    .tooltip(Tooltip.create(Component.translatable(KEY + "column_nozzles.hint"))).build());
-        } else {
-            stepper(1, this::diameter);
-            stepper(2, step -> tangentLength = clamp(tangentLength + step, 1, (int) EquipmentShape.MAX_TANGENT_LENGTH));
-        }
-        if (Equipment.of(form) == Equipment.HORIZONTAL_DRUM) {
-            var axis = Button.builder(Component.translatable(KEY + "form." + form.name().toLowerCase(Locale.ROOT)), b -> {
-                form = form == VesselPlacement.Form.LENGTHWISE ? VesselPlacement.Form.CROSSWISE : VesselPlacement.Form.LENGTHWISE;
+        int colon = key.indexOf(':');
+        String what = colon < 0 ? key : key.substring(0, colon), at = colon < 0 ? "" : key.substring(colon + 1);
+        switch (what) {
+            case "category" -> {
+                category = Category.valueOf(at.toUpperCase(Locale.ROOT));
+                rebuildWidgets();
+            }
+            case "kind" -> choose(Equipment.valueOf(at.toUpperCase(Locale.ROOT)));
+            case "back" -> {
+                category = null;
+                show(Page.DESIGN);
+            }
+            case "change" -> show(Page.CHOOSE);
+            case "nozzles" -> show(form.column() ? Page.NOZZLES : Page.CONNECTIONS);
+            case "paint" -> show(Page.PAINT);
+            case "build" -> build();
+            case "import" -> importColumn();
+            case "axis" -> {
+                form = at.equals("crosswise") ? VesselPlacement.Form.CROSSWISE : VesselPlacement.Form.LENGTHWISE;
                 refresh();
-                rebuildWidgets();
-            }).bounds(PANEL - 80, TOP + 3 * ROW, 74, 16).build();
-            axis.setTooltip(Tooltip.create(Component.translatable(KEY + "axis.hint")));
-            addRenderableWidget(axis);
-            next = 4;
-        }
-        stepper(next, step -> support = clamp(support + step, minimumSupport(), EquipmentShape.MAX_SUPPORT));
-        stepper(next + 1, step -> forward = clamp(forward + step, 1, VesselPlacement.MAX_FORWARD));
-        stepper(next + 2, step -> right = clamp(right + step, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT));
-        stepper(next + 3, step -> up = clamp(up + step, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT));
-        // A column imports its design; a drum's side connections have their own page, as the paint does.
-        if (form.column())
-            bottomRow(Button.builder(Component.translatable(KEY + "import"), b -> importColumn()).tooltip(Tooltip.create(Component.translatable(KEY + "import.hint", EquipmentNetwork.IMPORT_REACH))),
-                    paintButton());
-        else bottomRow(Button.builder(Component.translatable(KEY + "nozzles"), b -> show(Page.CONNECTIONS)).tooltip(Tooltip.create(Component.translatable(KEY + "connections.hint"))),
-                paintButton());
-    }
-
-    private Button.Builder paintButton() {
-        return Button.builder(Component.translatable(KEY + "paint"), b -> show(Page.PAINT)).tooltip(Tooltip.create(Component.translatable(KEY + "paint.hint")));
-    }
-
-    /**
-     * The paint page (owner request 2026-10-16): the body's and the structure's colours, each a button that picks it for
-     * editing; the palette; a custom colour as #RRGGBB; the defaults.
-     */
-    private void paintPage() {
-        for (int c : new int[]{Paint.BODY, Paint.STRUCTURE}) {
-            int k = c;
-            channelButtons[c] = addRenderableWidget(Button.builder(colourName(paint.colour(c)), b -> {
-                channel = k;
-                rebuildWidgets();
-            }).bounds(PANEL - 80, TOP + (1 + c) * ROW, 74, 16).tooltip(Tooltip.create(hint(1 + c))).build());
-        }
-        for (int i = 0; i < Paint.PALETTE.size(); i++) {
-            int x = 8 + i % SWATCHES_PER_ROW * (PaintSwatch.WIDTH + PaintSwatch.GAP), y = TOP + (3 + i / SWATCHES_PER_ROW) * ROW;
-            addRenderableWidget(new PaintSwatch(x, y, Paint.PALETTE.get(i), () -> paint.colour(channel), this::colour));
-        }
-        custom = new EditBox(font, PANEL - 80, TOP + 5 * ROW, 74, 16, Component.translatable(KEY + "custom"));
-        custom.setMaxLength(7);
-        custom.setFilter(text -> text.matches("#?[0-9a-fA-F]{0,6}"));
-        custom.setValue(Paint.hex(paint.colour(channel)));
-        custom.setResponder(text -> {
-            if (Paint.isHex(text)) colour(Paint.parseHex(text));
-        });
-        custom.setTooltip(Tooltip.create(hint(5)));
-        addRenderableWidget(custom);
-        addRenderableWidget(Button.builder(Component.translatable(KEY + "paint.default"), b -> {
-            paint = IChemE.defaultPaint();
-            refresh();
-            rebuildWidgets();
-        }).bounds(PANEL - 80, TOP + 6 * ROW, 74, 16).tooltip(Tooltip.create(hint(6))).build());
-        bottomRow(Button.builder(Component.translatable(KEY + "back"), b -> show(Page.DESIGN)).tooltip(Tooltip.create(Component.translatable(KEY + "back.hint"))));
-    }
-
-    /** Paints the edited channel {@code rgb}: its button names the colour, and the custom field shows it unless typed in. */
-    private void colour(int rgb) {
-        if (paint.colour(channel) == rgb) return;
-        paint = paint.with(channel, rgb);
-        refresh();
-        if (channelButtons[channel] != null) channelButtons[channel].setMessage(colourName(rgb));
-        if (custom != null && !custom.isFocused()) custom.setValue(Paint.hex(rgb));
-    }
-
-    /** A colour as the page names it: its palette number, or #RRGGBB for a custom one. */
-    private static Component colourName(int rgb) {
-        var swatch = Paint.swatch(rgb);
-        return swatch != null ? Component.literal("RAL " + swatch.ral()) : Component.literal(Paint.hex(rgb));
-    }
-
-    /**
-     * A unit's design: its size (an exchanger's shell, a kettle's bundle, an ejector's suction, a pump's discharge, a
-     * compressor's bore, a heater's radiant section; an air cooler's bay, its width and length together, and its bays in
-     * parallel and in series), its tube length (a compressor's throws, a heater's radiant height or length), its support's
-     * height (none for a pump, which stands at grade) and its placement.
-     */
-    private void unitDesign() {
-        var kind = form.kind();
-        int row = 1;
-        if (kind == EquipmentShape.Kind.AIR_COOLER) {
-            stepper(row++, this::bay);
-            stepper(row++, step -> bank = new ProcessUnit.Bank(clamp(bank.parallel() + step, 1, ProcessUnit.Bank.MAX_PARALLEL), bank.series()));
-            stepper(row, step -> bank = new ProcessUnit.Bank(bank.parallel(), clamp(bank.series() + step, 1, ProcessUnit.Bank.MAX_SERIES)));
-        } else stepper(row, this::diameter);
-        row++;
-        int lengthStep = UnitDesign.of(kind).lengthStep();
-        if (lengthRow(kind))
-            // A compressor's throws come in opposed pairs.
-            stepper(row++, step -> tangentLength = unitLength(kind, tangentLength + (lengthStep > 1 ? lengthStep * Integer.signum(step) : step)));
-        if (ProcessUnit.maxSupport(kind) > 0) stepper(row++, step -> support = clamp(support + step, minimumSupport(), ProcessUnit.maxSupport(kind)));
-        // A bottom outlet leaving through the skirt turns where the design lets it (a trickle-bed reactor's effluent).
-        if (outletRow()) addOutletButton(row++);
-        stepper(row, step -> forward = clamp(forward + step, 1, VesselPlacement.MAX_FORWARD));
-        stepper(row + 1, step -> right = clamp(right + step, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT));
-        stepper(row + 2, step -> up = clamp(up + step, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT));
-        bottomRow(paintButton());
-    }
-
-    /** Whether a unit's design has a length row: tubes, throws, a heater's radiant height or length (not a bay's, an ejector's or a pump's). */
-    private static boolean lengthRow(EquipmentShape.Kind kind) {
-        return UnitDesign.of(kind).lengthRow() != null;
-    }
-
-    /** Whether a unit's design page has a bottom outlet row: its design turns the outlet (a trickle-bed reactor's effluent). */
-    private boolean outletRow() {
-        return form.designed() && Integer.bitCount(outlets()) > 1;
-    }
-
-    /**
-     * The connections page: which connection, the side it faces, its height (a lying drum's place along its axis) and its
-     * offset across the shell; Add places a new one where it meets nothing, Remove takes the selected one away.
-     */
-    private void connectionsPage() {
-        stepper(1, step -> {
-            selected = clamp(selected + step, 0, Math.max(0, connections.size() - 1));
-            rebuildWidgets();
-        });
-        if (!connections.isEmpty()) {
-            var side = Button.builder(Component.translatable(KEY + "side." + toward(connection().axis(), connection().sign())), b -> {
+            }
+            case "outlet" -> {
+                outlet = Integer.parseInt(at);
+                refresh();
+            }
+            case "add" -> add();
+            case "remove" -> {
+                connections.remove(selected);
+                selected = clamp(selected, 0, Math.max(0, connections.size() - 1));
+                refresh();
+            }
+            case "side" -> {
                 var c = connection();
-                connections.set(selected, new EquipmentShape.Connection((c.side() + 1) % EquipmentShape.CONNECTION_SIDES, c.station(), c.offset()));
+                connections.set(selected, new EquipmentShape.Connection(Integer.parseInt(at), c.station(), c.offset()));
                 refresh();
+            }
+            case "boot" -> {
+                boot = at.equals("on");
+                refresh();
+            }
+            case "face" -> {
+                var sides = sideNozzles();
+                if (!sides.isEmpty()) face(sides.get(clamp(nozzle, 0, sides.size() - 1)), at.equals("auto") ? -1 : Integer.parseInt(at));
+                refresh();
+            }
+            case "reset" -> {
+                turns.clear();
+                refresh();
+            }
+            case "channel" -> {
+                channel = Integer.parseInt(at);
                 rebuildWidgets();
-            }).bounds(PANEL - 80, TOP + 2 * ROW, 74, 16).tooltip(Tooltip.create(hint(2))).build();
-            addRenderableWidget(side);
-            stepper(3, step -> {
+            }
+            case "default" -> {
+                // Rebuilt, so the custom field shows the edited channel's default colour.
+                paint = IChemE.defaultPaint();
+                follow();
+                rebuildWidgets();
+            }
+            default -> {
+            }
+        }
+    }
+
+    /** A stepper's press on setting {@code key}, {@code direction} one way or the other; Shift steps by five. */
+    private void step(String key, int direction) {
+        int step = direction * (hasShiftDown() ? 5 : 1);
+        var kind = form.kind();
+        switch (key) {
+            case "size" -> {
+                if (kind == EquipmentShape.Kind.AIR_COOLER) bay(step);
+                else diameter(step);
+            }
+            case "length" -> {
+                if (form.designed()) {
+                    // A compressor's throws come in opposed pairs.
+                    int pair = UnitDesign.of(kind).lengthStep();
+                    tangentLength = unitLength(kind, tangentLength + (pair > 1 ? pair * Integer.signum(step) : step));
+                } else tangentLength = clamp(tangentLength + step, 1, (int) EquipmentShape.MAX_TANGENT_LENGTH);
+            }
+            case "support" -> support = clamp(support + step, minimumSupport(), form.designed() ? ProcessUnit.maxSupport(kind) : EquipmentShape.MAX_SUPPORT);
+            case "parallel" -> bank = new ProcessUnit.Bank(clamp(bank.parallel() + step, 1, ProcessUnit.Bank.MAX_PARALLEL), bank.series());
+            case "series" -> bank = new ProcessUnit.Bank(bank.parallel(), clamp(bank.series() + step, 1, ProcessUnit.Bank.MAX_SERIES));
+            case "forward" -> forward = clamp(forward + step, 1, VesselPlacement.MAX_FORWARD);
+            case "right" -> right = clamp(right + step, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT);
+            case "up" -> up = clamp(up + step, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT);
+            case "connection" -> selected = clamp(selected + step, 0, Math.max(0, connections.size() - 1));
+            case "station" -> {
+                if (connections.isEmpty()) break;
                 var c = connection();
                 int[] stations = stations();
                 connections.set(selected, new EquipmentShape.Connection(c.side(), clamp(c.station() + step, stations[0], stations[1]), c.offset()));
-            });
-            stepper(4, step -> {
+            }
+            case "offset" -> {
+                if (connections.isEmpty()) break;
                 var c = connection();
                 int across = EquipmentShape.maximumOffset(diameter);
                 connections.set(selected, new EquipmentShape.Connection(c.side(), c.station(), clamp(c.offset() + step, -across, across)));
-            });
+            }
+            case "nozzle" -> nozzle = clamp(nozzle + step, 0, Math.max(0, sideNozzles().size() - 1));
+            default -> {
+            }
         }
-        int half = (PANEL - 16 - 4) / 2, y = TOP + 5 * ROW;
-        var add = Button.builder(Component.translatable(KEY + "add"), b -> add()).bounds(8, y, half, 16)
-                .tooltip(Tooltip.create(Component.translatable(KEY + "add.hint", EquipmentShape.MAX_CONNECTIONS))).build();
-        int[] stations = stations();
-        add.active = connections.size() < EquipmentShape.MAX_CONNECTIONS && stations[0] <= stations[1];
-        addRenderableWidget(add);
-        var remove = Button.builder(Component.translatable(KEY + "remove"), b -> {
-            connections.remove(selected);
-            selected = clamp(selected, 0, Math.max(0, connections.size() - 1));
-            refresh();
-            rebuildWidgets();
-        }).bounds(8 + half + 4, y, half, 16).tooltip(Tooltip.create(Component.translatable(KEY + "remove.hint"))).build();
-        remove.active = !connections.isEmpty();
-        addRenderableWidget(remove);
-        if (form.orientation().horizontal()) {
-            bootButton = addRenderableWidget(Button.builder(bootLabel(), b -> {
-                boot = !boot;
-                refresh();
-            }).bounds(PANEL - 80, TOP + 6 * ROW, 74, 16).tooltip(Tooltip.create(Component.translatable(KEY + "boot.hint"))).build());
-            bootButton.active = EquipmentShape.bootFor(diameter, tangentLength) != null;
-        } else if (Integer.bitCount(outlets()) > 1) addOutletButton(6);
-        bottomRow(Button.builder(Component.translatable(KEY + "back"), b -> show(Page.DESIGN)).tooltip(Tooltip.create(Component.translatable(KEY + "back.hint"))));
-    }
-
-    /** The bottom row: the page's own buttons beside Build and Done. Build waits while a side connection clashes or a column's side nozzle has no row. */
-    private void bottomRow(Button.Builder... own) {
-        int gap = 4, count = own.length + 2, span = (PANEL - 16 - (count - 1) * gap) / count;
-        for (int i = 0; i < own.length; i++) addRenderableWidget(own[i].bounds(8 + i * (span + gap), BUTTONS, span, 20).build());
-        build = addRenderableWidget(Button.builder(Component.translatable(KEY + "build"), b -> build()).bounds(8 + own.length * (span + gap), BUTTONS, span, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable(KEY + "done"), b -> onClose()).bounds(8 + (own.length + 1) * (span + gap), BUTTONS, span, 20).build());
-        build.active = buildable();
+        refresh();
     }
 
     /** Whether Build may send the draft: an imported column or another form, no side connection clashing, every column side nozzle placed. */
@@ -517,34 +468,12 @@ public final class EquipmentConstructorScreen extends Screen {
         return clash() == null && unplaced() == null && design().buildable();
     }
 
-    /**
-     * A column's side nozzles page (finding F3, owner decision 2026-10-27): which nozzle and where it stands, the side it
-     * faces (a click turns it: automatic, then the front, the left, the back and the right as seen from the constructor,
-     * then automatic again), its height; All auto lets every nozzle take its side by itself again.
-     */
-    private void nozzlesPage() {
-        var sides = sideNozzles();
-        nozzle = clamp(nozzle, 0, Math.max(0, sides.size() - 1));
-        stepper(1, step -> {
-            nozzle = clamp(nozzle + step, 0, Math.max(0, sideNozzles().size() - 1));
-            rebuildWidgets();
-        });
-        if (!sides.isEmpty()) {
-            var shown = sides.get(nozzle);
-            addRenderableWidget(Button.builder(turnLabel(shown), b -> {
-                turn(shown);
-                refresh();
-                rebuildWidgets();
-            }).bounds(PANEL - 80, TOP + 3 * ROW, 74, 16).tooltip(Tooltip.create(hint(3))).build());
-        }
-        var automatic = Button.builder(Component.translatable(KEY + "nozzle.reset"), b -> {
-            turns.clear();
-            refresh();
-            rebuildWidgets();
-        }).bounds(PANEL - 80, TOP + 5 * ROW, 74, 16).tooltip(Tooltip.create(hint(5))).build();
-        automatic.active = !turns.isEmpty();
-        addRenderableWidget(automatic);
-        bottomRow(Button.builder(Component.translatable(KEY + "back"), b -> show(Page.DESIGN)).tooltip(Tooltip.create(Component.translatable(KEY + "back.hint"))));
+    /** Paints the edited channel {@code rgb}: the custom field shows it unless typed in. */
+    private void colour(int rgb) {
+        if (paint.colour(channel) == rgb) return;
+        paint = paint.with(channel, rgb);
+        refresh();
+        if (custom != null && !custom.isFocused()) custom.setValue(rgb(rgb));
     }
 
     /** The draft column's side nozzles in placing order, placed or not; none for another form. */
@@ -558,32 +487,19 @@ public final class EquipmentConstructorScreen extends Screen {
         return null;
     }
 
-    /** Turns side nozzle {@code n} on: from automatic to the front, then each side in turn, from the right back to automatic. */
-    private void turn(ColumnDesign.SideNozzle n) {
-        int side = -1;
-        for (int i = 0; i < turns.size(); i++)
-            if (turns.get(i).role() == n.role() && turns.get(i).index() == n.index()) side = turns.remove(i).side();
-        if (side + 1 < EquipmentShape.CONNECTION_SIDES) turns.add(new ColumnTrays.Turn(n.role(), n.index(), side + 1));
-    }
-
-    /** What a side nozzle's Faces button says: the side the player turned it to, or Auto and the side it takes by itself. */
-    private Component turnLabel(ColumnDesign.SideNozzle n) {
-        return n.turned() ? sideName(n.side()) : Component.translatable(KEY + "nozzle.auto", sideName(n.side()));
-    }
-
-    /** Side {@code side} ({@link EquipmentShape#side}) as seen from the constructor. */
-    private Component sideName(int side) {
-        int[] s = EquipmentShape.side(side);
-        return Component.translatable(KEY + "side." + toward(s[0], s[1]));
+    /** Turns side nozzle {@code n} to side {@code side}, or lets it take its side by itself again ({@code side} -1). */
+    private void face(ColumnDesign.SideNozzle n, int side) {
+        turns.removeIf(t -> t.role() == n.role() && t.index() == n.index());
+        if (side >= 0) turns.add(new ColumnTrays.Turn(n.role(), n.index(), side));
     }
 
     /** A side nozzle's name: its role and, where its role has several, its number. */
-    private static Component nozzleName(ColumnDesign.SideNozzle n) {
-        return Component.translatable(KEY + "nozzle.role." + n.role().name().toLowerCase(Locale.ROOT), n.index());
+    private static String nozzleName(ColumnDesign.SideNozzle n) {
+        return tr(ConstructorColumn.KEY + "nozzle.role." + n.role().name().toLowerCase(Locale.ROOT), n.index());
     }
 
     /** Where a side nozzle stands, in words and in tray numbers for the schematic's mark: k - 0.5 over tray k, k + 0.5 under it, the tray count plus one in the sump. */
-    private record Place(Component words, double stage) {
+    private record Place(UnitDesign.Line where, double stage) {
     }
 
     /** Where side nozzle {@code n} stands, its trays numbered as the column calculator numbers them (tray 1 is the condenser). */
@@ -600,12 +516,12 @@ public final class EquipmentConstructorScreen extends Screen {
         };
         if (k > t.trays()) {
             boolean out = n.role() == EquipmentShape.Role.BOTTOMS;
-            return new Place(out ? Component.translatable(KEY + "nozzle.sump_out") : Component.translatable(KEY + "nozzle.sump_in", t.trays() + 1), t.trays() + 1);
+            return new Place(out ? new UnitDesign.Line("nozzle.sump_out") : new UnitDesign.Line("nozzle.sump_in", t.trays() + 1), t.trays() + 1);
         }
         return switch (n.role()) {
-            case REFLUX, FEED, RETURN -> new Place(Component.translatable(KEY + "nozzle.over", k + 1), k - .5);
-            case STEAM -> new Place(Component.translatable(KEY + "nozzle.under_in", k + 1), k + .5);
-            default -> new Place(Component.translatable(KEY + "nozzle.under_out", k + 1), k + .5);
+            case REFLUX, FEED, RETURN -> new Place(new UnitDesign.Line("nozzle.over", k + 1), k - .5);
+            case STEAM -> new Place(new UnitDesign.Line("nozzle.under_in", k + 1), k + .5);
+            default -> new Place(new UnitDesign.Line("nozzle.under_out", k + 1), k + .5);
         };
     }
 
@@ -628,7 +544,6 @@ public final class EquipmentConstructorScreen extends Screen {
         connections.add(EquipmentShape.place(connections, wanted, template()));
         selected = connections.size() - 1;
         refresh();
-        rebuildWidgets();
     }
 
     private EquipmentShape.Heading front() {
@@ -659,66 +574,18 @@ public final class EquipmentConstructorScreen extends Screen {
     }
 
     /** What clash {@code clash} meets, as the status says it. */
-    private static Component clashText(EquipmentShape.Clash clash) {
+    private static String clashText(EquipmentShape.Clash clash) {
         int k = clash.connection() + 1;
+        String key = ConstructorColumn.KEY + "clash.";
         return switch (clash.other()) {
-            case EquipmentShape.Clash.VAPOUR -> Component.translatable(KEY + "clash.vapour", k);
-            case EquipmentShape.Clash.LIQUID -> Component.translatable(KEY + "clash.liquid", k);
-            case EquipmentShape.Clash.SADDLE -> Component.translatable(KEY + "clash.saddle", k);
-            case EquipmentShape.Clash.GROUND -> Component.translatable(KEY + "clash.ground", k);
-            case EquipmentShape.Clash.MANWAY -> Component.translatable(KEY + "clash.manway", k);
-            case EquipmentShape.Clash.BOOT -> Component.translatable(KEY + "clash.boot", k);
-            default -> Component.translatable(KEY + "clash.connection", k, clash.other() + 1);
+            case EquipmentShape.Clash.VAPOUR -> tr(key + "vapour", k);
+            case EquipmentShape.Clash.LIQUID -> tr(key + "liquid", k);
+            case EquipmentShape.Clash.SADDLE -> tr(key + "saddle", k);
+            case EquipmentShape.Clash.GROUND -> tr(key + "ground", k);
+            case EquipmentShape.Clash.MANWAY -> tr(key + "manway", k);
+            case EquipmentShape.Clash.BOOT -> tr(key + "boot", k);
+            default -> tr(key + "connection", k, clash.other() + 1);
         };
-    }
-
-    /** The page's rows, top-down: its title, then what each row sets. */
-    private String[] rows() {
-        if (page == Page.NOZZLES) return new String[]{"column_nozzles", "nozzle", "", "column_faces", "nozzle_height", "nozzle.turned"};
-        if (page == Page.CONNECTIONS)
-            return form.orientation().horizontal() ? new String[]{"connections", "connection", "faces", "along", "offset", "", "boot"}
-                    : Integer.bitCount(outlets()) > 1 ? new String[]{"connections", "connection", "faces", "height", "offset", "", "outlet"}
-                    : new String[]{"connections", "connection", "faces", "height", "offset"};
-        if (page == Page.PAINT) return new String[]{"paint", "paint.body", "paint.structure", "paint.palette", "paint.palette", "custom", "paint.default"};
-        return switch (Equipment.of(form)) {
-            case VERTICAL_DRUM -> new String[]{"equipment", "diameter", "tangent_length", "skirt", "forward", "right", "up"};
-            case HORIZONTAL_DRUM -> new String[]{"equipment", "diameter", "tangent_length", "axis", "saddles", "forward", "right", "up"};
-            case COLUMN -> new String[]{"equipment", "diameter", "trays", "feed", "skirt", "forward", "right", "up"};
-            case AIR_COOLER -> new String[]{"equipment", "bay", "parallel", "series", "bundle_height", "forward", "right", "up"};
-            default -> {
-                // A unit's rows, as its design names them: its size, its second size and its support where it has them.
-                var design = UnitDesign.of(form.kind());
-                var names = new ArrayList<String>(List.of("equipment", design.sizeRow()));
-                if (design.lengthRow() != null) names.add(design.lengthRow());
-                if (design.supportRow() != null) names.add(design.supportRow());
-                if (outletRow()) names.add("outlet");
-                names.addAll(List.of("forward", "right", "up"));
-                yield names.toArray(String[]::new);
-            }
-        };
-    }
-
-    /** What row {@code row} sets, as its hover text says it. */
-    private Component hint(int row) {
-        String name = rows()[row];
-        return Component.translatable(name.equals("equipment") ? Equipment.of(form).key() + ".hint" : KEY + name + ".hint");
-    }
-
-    /** A row of [−] value [+], each button saying what the row sets; shift steps by five. */
-    private void stepper(int row, IntConsumer change) {
-        int y = TOP + row * ROW;
-        var hint = Tooltip.create(hint(row).copy().append("\n").append(Component.translatable(KEY + "shift")));
-        var minus = Button.builder(Component.literal("−"), b -> edit(change, -1)).bounds(PANEL - 80, y, 20, 16).build();
-        var plus = Button.builder(Component.literal("+"), b -> edit(change, 1)).bounds(PANEL - 26, y, 20, 16).build();
-        minus.setTooltip(hint);
-        plus.setTooltip(hint);
-        addRenderableWidget(minus);
-        addRenderableWidget(plus);
-    }
-
-    private void edit(IntConsumer change, int direction) {
-        change.accept(direction * (hasShiftDown() ? 5 : 1));
-        refresh();
     }
 
     /** The air cooler's bay {@code steps} steps on along {@link ProcessUnit#bays}: narrowest and shortest first. */
@@ -792,7 +659,7 @@ public final class EquipmentConstructorScreen extends Screen {
             connections.addAll(EquipmentShape.defaultConnections(diameter, tangentLength, form.orientation(), support, hasBoot(), outlet()));
             selected = 0;
         }
-        refresh();
+        follow();
         show(Page.DESIGN);
     }
 
@@ -830,27 +697,23 @@ public final class EquipmentConstructorScreen extends Screen {
         return hasBoot() ? EquipmentShape.minimumBootSupport(diameter, tangentLength) : 1;
     }
 
-    /** What the boot toggle says: whether the drum has one, or that it is too short for one. */
-    private Component bootLabel() {
-        return Component.translatable(KEY + (EquipmentShape.bootFor(diameter, tangentLength) == null ? "boot.none" : hasBoot() ? "boot.on" : "boot.off"));
-    }
-
     /**
-     * Follows an edit: a boot raises the saddles to what its drain needs; the connections fit the drum again; the bottom
-     * outlet's button says its side (the front where the edit left the player's side refused).
+     * Follows an edit: a boot raises the saddles to what its drain needs; the connections fit the drum again; the ghost's
+     * layout follows the shape; Build acts while the draft is buildable.
      */
-    private void refresh() {
+    private void follow() {
         refused = null;
         support = Math.max(support, minimumSupport());
-        if (bootButton != null) {
-            bootButton.active = EquipmentShape.bootFor(diameter, tangentLength) != null;
-            bootButton.setMessage(bootLabel());
-        }
         fitConnections();
         var shape = design().shape(facing);
         if (!shape.equals(layout.shape())) layout = ShapeRasterizer.layout(shape);
-        if (outletButton != null) outletButton.setMessage(outletLabel());
         if (build != null) build.active = buildable();
+    }
+
+    /** Follows an edit on the page, and rebuilds it where its widgets would show or stand otherwise (a side turned, the bottom outlet refused, a selection moved). */
+    private void refresh() {
+        follow();
+        if (minecraft != null && !signature(panel()).equals(built)) rebuildWidgets();
     }
 
     private static int clamp(int value, int low, int high) {
@@ -873,6 +736,7 @@ public final class EquipmentConstructorScreen extends Screen {
     public void removed() {
         if (!sent && !design().equals(saved)) EquipmentNetwork.send(position, design(), EquipmentNetwork.Action.KEEP);
         sent = true;
+        WindowScale.restore(minecraft);
     }
 
     @Override
@@ -880,230 +744,132 @@ public final class EquipmentConstructorScreen extends Screen {
         return false;
     }
 
-    /** No blur: the ghost in the world is half of this screen. */
-    @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.fill(0, 0, PANEL, height, 0xE0202A31);
-        graphics.fill(PANEL, 0, PANEL + 1, height, ProcessUi.LINE);
-        if ((page == Page.DESIGN || page == Page.NOZZLES) && form.column()) graphics.fill(width - 4 - STRIP, 20, width - 4, height - 20, 0xC0202A31);
+    // ---- Drawing ----
+
+    /** The message display's line: an import under way, what keeps Build waiting, blocked cells, else what the equipment holds or does. */
+    private record Status(String text, boolean warn) {
     }
 
-    @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawString(font, title, 8, 8, ProcessUi.TEXT);
-        switch (page) {
-            case CHOOSE -> choices(graphics);
-            case DESIGN -> designRows(graphics, mouseX, mouseY);
-            case CONNECTIONS -> connectionRows(graphics, mouseX, mouseY);
-            case NOZZLES -> nozzleRows(graphics, mouseX, mouseY);
-            case PAINT -> paintRows(graphics, mouseX, mouseY);
-        }
+    /** What the equipment holds or does ({@link UnitDesign#held}: a vessel's volume, an exchanger's tube surface, a pump's flow and motor, a heater's duty, ...). */
+    private UnitDesign.Line held() {
+        var shape = layout.shape();
+        return form.designed() ? UnitDesign.of(form.kind()).held(shape) : new UnitDesign.Line("volume", number(shape.volume()), number(shape.surfaceArea()));
     }
 
-    /**
-     * The paint page: each channel's label (the edited one marked) and colour; the edited colour's name, what it paints,
-     * and what keeps its own colour; the ghost shows the paint.
-     */
-    private void paintRows(GuiGraphics graphics, int mouseX, int mouseY) {
-        String[] names = rows();
-        graphics.drawString(font, Component.translatable(KEY + "paint"), 8, TOP + 4, ProcessUi.ACCENT);
-        for (int c : new int[]{Paint.BODY, Paint.STRUCTURE}) {
-            int y = TOP + (1 + c) * ROW;
-            graphics.drawString(font, (c == channel ? "▶ " : "  ") + Component.translatable(KEY + names[1 + c]).getString(), 8, y + 4, c == channel ? ProcessUi.ACCENT : ProcessUi.TEXT);
-            graphics.fill(PANEL - 100, y + 1, PANEL - 84, y + 15, ProcessUi.LINE);
-            graphics.fill(PANEL - 99, y + 2, PANEL - 85, y + 14, 0xFF000000 | paint.colour(c));
-        }
-        graphics.drawString(font, Component.translatable(KEY + "custom"), 8, TOP + 5 * ROW + 4, ProcessUi.TEXT);
-        var swatch = Paint.swatch(paint.colour(channel));
-        Component name = swatch != null ? Component.translatable(KEY + "paint.named", swatch.ral(), Component.translatable(PAINT_KEY + swatch.key()))
-                : Component.translatable(KEY + "paint.custom", Paint.hex(paint.colour(channel)));
-        graphics.drawString(font, name, 8, LINES, ProcessUi.MUTED);
-        graphics.drawString(font, Component.translatable(KEY + (channel == Paint.BODY ? "paint.body.parts" : "paint.structure.parts")), 8, LINES + LINE, ProcessUi.MUTED);
-        graphics.drawString(font, Component.translatable(KEY + "paint.unpainted"), 8, LINES + 2 * LINE, ProcessUi.MUTED);
-        status(graphics);
-        describe(mouseX, mouseY, names.length, new String[]{"paint.named", "paint.parts", "paint.unpainted"});
-    }
-
-    /**
-     * The status line: an import under way, why the last import brought no design, the first clash, a column's first side
-     * nozzle with no row, or whether the ghost's cells are free.
-     */
-    private void status(GuiGraphics graphics) {
+    private Status status() {
         int blocked = EquipmentGhost.blockedCount();
         var clash = clash();
         var unplaced = unplaced();
-        var status = importing ? Component.translatable(KEY + "importing")
-                : refused != null ? refused
-                : !design().buildable() ? Component.translatable(KEY + "import_needed")
-                : clash != null ? clashText(clash)
-                : unplaced != null ? Component.translatable(KEY + "nozzle.unplaced", nozzleName(unplaced))
-                : EquipmentGhost.standing() ? Component.translatable(KEY + "standing")
-                : blocked == 0 ? Component.translatable(KEY + "clear") : Component.translatable(KEY + "blocked", blocked);
-        graphics.drawString(font, status, 8, STATUS, refused == null && clash == null && unplaced == null && blocked == 0 && !EquipmentGhost.standing() ? ProcessUi.ACCENT : ProcessUi.WARN);
+        String k = ConstructorColumn.KEY;
+        if (importing) return new Status(tr(k + "importing"), false);
+        if (refused != null) return new Status(refused.getString(), true);
+        if (!design().buildable()) return new Status(tr(k + "import_needed"), true);
+        if (clash != null) return new Status(clashText(clash), true);
+        if (unplaced != null) return new Status(tr(k + "nozzle.unplaced", nozzleName(unplaced)), true);
+        if (EquipmentGhost.standing()) return new Status(tr(k + "standing"), true);
+        if (blocked > 0) return new Status(tr(k + "blocked", blocked), true);
+        var held = held();
+        return new Status(tr(k + held.key(), held.args()), false);
     }
 
-    private void designRows(GuiGraphics graphics, int mouseX, int mouseY) {
-        var equipment = Equipment.of(form);
-        String[] names = rows();
-        String place = Integer.toString(forward), shift = Integer.toString(right), lift = Integer.toString(up), across = size(diameter) + " m";
-        String[] values = switch (equipment) {
-            case VERTICAL_DRUM -> new String[]{"", across, tangentLength + " m", support + " m", place, shift, lift};
-            case HORIZONTAL_DRUM -> new String[]{"", across, tangentLength + " m", "", support + " m", place, shift, lift};
-            // The calculator's numbering: its trays and the condenser and reboiler; the feed counted from the condenser.
-            case COLUMN -> new String[]{"", size(column != null ? column.diameter() : diameter) + " m", Integer.toString(shownTrays().trays() + 2),
-                    Integer.toString(shownTrays().feed() + 1), support + " m", place, shift, lift};
-            // A bay's width × length in m, without spaces or unit: a value stands in the 34 pixels between its − and +.
-            case AIR_COOLER -> new String[]{"", size(diameter) + "×" + tangentLength, Integer.toString(bank.parallel()),
-                    Integer.toString(bank.series()), support + " m", place, shift, lift};
-            default -> {
-                var design = UnitDesign.of(form.kind());
-                var shown = new ArrayList<String>(List.of("", across));
-                if (design.lengthRow() != null) shown.add(design.lengthInMetres() ? tangentLength + " m" : Integer.toString(tangentLength));
-                if (design.supportRow() != null) shown.add(support + " m");
-                if (outletRow()) shown.add("");
-                shown.addAll(List.of(place, shift, lift));
-                yield shown.toArray(String[]::new);
-            }
-        };
-        // The kind's full name, or its short one where the full one would run under the Change button (a column's Nozzles button).
-        Component title = Component.translatable(equipment.key());
-        if (font.width(title) > PANEL - 80 - 12 - (form.column() ? NOZZLES_BUTTON + 4 : 0)) title = Component.translatable(equipment.key() + ".short");
-        graphics.drawString(font, title, 8, TOP + 4, ProcessUi.ACCENT);
-        for (int row = 1; row < names.length; row++) {
-            int y = TOP + row * ROW + 4;
-            graphics.drawString(font, Component.translatable(KEY + names[row]), 8, y, ProcessUi.TEXT);
-            if (!values[row].isEmpty()) graphics.drawCenteredString(font, values[row], PANEL - 43, y, ProcessUi.ACCENT);
-        }
+    /** The message display's hover: what the equipment holds and why, its top and length, its cells, what Build needs on this page. */
+    private String statusHint() {
         var shape = layout.shape();
-        // The middle line says what the equipment holds or does: a vessel's volume, a unit's as its design says it
-        // ({@link UnitDesign#held}: an exchanger's tube surface, a pump's flow and motor, a heater's duty, ...).
-        var does = form.designed() ? UnitDesign.of(form.kind()).held(shape) : new UnitDesign.Line("volume", number(shape.volume()), number(shape.surfaceArea()));
-        String middle = does.key();
-        Component held = Component.translatable(KEY + middle, does.args());
-        int y = LINES;
-        for (var line : new Component[]{
-                Component.translatable(KEY + "extent", number(shape.topElevation()), number(shape.overallLength())),
-                held,
-                Component.translatable(KEY + "cells", layout.shell().size(), layout.interior().size())}) {
-            graphics.drawString(font, line, 8, y, ProcessUi.MUTED);
-            y += LINE;
+        var held = held();
+        String k = ConstructorColumn.KEY;
+        return String.join("\n", tr(k + held.key(), held.args()), tr(k + held.key() + ".hint"), tr(k + "extent", number(shape.topElevation()), number(shape.overallLength())),
+                tr(k + "cells", layout.shell().size(), layout.interior().size()),
+                tr(k + (page == Page.CONNECTIONS ? "clash.hint" : page == Page.NOZZLES ? "nozzle.status.hint" : "status.hint")));
+    }
+
+    /** No blur: the ghost in the world is half of this screen. The door, its title, column and message display; a column's schematic on its glass. */
+    @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        var skin = skin();
+        var canvas = new GuiCanvas(g, font, 0, 0);
+        var m = GuiCanvas.measure(font);
+        skin.page(canvas, new Rect(0, 0, ConstructorColumn.PANEL, height));
+        var equipment = Equipment.of(form);
+        String title = page == Page.CHOOSE ? this.title.getString()
+                : ConstructorColumn.title(tr(ConstructorColumn.KEY + "equipment." + equipment.key()), tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".short"), m);
+        skin.title(canvas, 10, 10, title);
+        // Placed again for this frame's texts and values; the widgets keep their slots.
+        var shown = panel();
+        door.place(shown.rows(), m);
+        hovered = door.draw(canvas, skin, mouseX, mouseY);
+        if (page != Page.CHOOSE && new Rect(6, 6, m.width(title) + 8, 16).contains(mouseX, mouseY))
+            hovered = tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".hint");
+        if (shown.display()) {
+            var line = ConstructorColumn.display(height);
+            var status = status();
+            skin.status(canvas, line, m.cut(status.text(), line.w()), status.warn() ? Palette.WARN : Palette.ACCENT);
+            if (new Rect(line.x() - 4, line.y() - 5, line.w() + 8, 15).contains(mouseX, mouseY)) hovered = statusHint();
         }
-        status(graphics);
-        if (form.column()) schematic(graphics, Double.NaN);
-        describe(mouseX, mouseY, names.length, new String[]{"extent", middle, "cells"});
-    }
-
-    /**
-     * A column's side nozzles page: which nozzle (its name, red where it has no row), its height; where it stands in the
-     * column and the side it takes first by itself; how many the player turned; the status. The schematic marks where
-     * the shown nozzle stands.
-     */
-    private void nozzleRows(GuiGraphics graphics, int mouseX, int mouseY) {
-        var sides = sideNozzles();
-        graphics.drawString(font, Component.translatable(KEY + "column_nozzles"), 8, TOP + 4, ProcessUi.ACCENT);
-        graphics.drawString(font, Component.translatable(KEY + "nozzle"), 8, TOP + ROW + 4, ProcessUi.TEXT);
-        graphics.drawCenteredString(font, sides.isEmpty() ? "0" : (nozzle + 1) + " / " + sides.size(), PANEL - 43, TOP + ROW + 4, ProcessUi.ACCENT);
-        double marked = Double.NaN;
-        if (!sides.isEmpty()) {
-            var n = sides.get(clamp(nozzle, 0, sides.size() - 1));
-            var place = place(n);
-            marked = place.stage();
-            graphics.drawString(font, nozzleName(n), 8, TOP + 2 * ROW + 4, n.placed() ? ProcessUi.ACCENT : ProcessUi.WARN);
-            graphics.drawString(font, Component.translatable(KEY + "column_faces"), 8, TOP + 3 * ROW + 4, ProcessUi.TEXT);
-            graphics.drawString(font, Component.translatable(KEY + "nozzle_height"), 8, TOP + 4 * ROW + 4, ProcessUi.TEXT);
-            graphics.drawCenteredString(font, n.placed() ? number(n.nozzle().base()[1]) + " m" : "-", PANEL - 43, TOP + 4 * ROW + 4, n.placed() ? ProcessUi.ACCENT : ProcessUi.WARN);
-            graphics.drawString(font, place.words(), 8, LINES, ProcessUi.MUTED);
-            graphics.drawString(font, Component.translatable(KEY + "nozzle.home", sideName(n.home())), 8, LINES + LINE, ProcessUi.MUTED);
+        if ((page == Page.DESIGN || page == Page.NOZZLES) && form.column()) {
+            double marked = Double.NaN;
+            var sides = sideNozzles();
+            if (page == Page.NOZZLES && !sides.isEmpty()) marked = place(sides.get(clamp(nozzle, 0, sides.size() - 1))).stage();
+            schematic(g, skin.well(canvas, new Rect(width - 16 - STRIP, 16, STRIP + 12, height - 32)), marked);
         }
-        graphics.drawString(font, Component.translatable(KEY + "nozzle.turned", sides.stream().filter(ColumnDesign.SideNozzle::turned).count()), 8, TOP + 5 * ROW + 4, ProcessUi.TEXT);
-        status(graphics);
-        schematic(graphics, marked);
-        describe(mouseX, mouseY, rows().length, sides.isEmpty() ? new String[0] : new String[]{"nozzle.where", "nozzle.home"});
+    }
+
+    @Override
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        door.place(0, 0);
+        hovered = null;
+        super.render(g, mouseX, mouseY, partialTick);
+        KitDoor.hint(g, font, hovered, mouseX, mouseY);
+    }
+
+    @Override
+    public boolean mouseClicked(double x, double y, int button) {
+        return door.press(x, y, button) || super.mouseClicked(x, y, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double x, double y, int button, double dx, double dy) {
+        return door.drag(y) || super.mouseDragged(x, y, button, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(double x, double y, int button) {
+        door.release();
+        return super.mouseReleased(x, y, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        return door.wheel(x, y, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 
     /**
-     * The connections page: the selected connection's side (on its button), height or place along the axis, and offset;
-     * that its nozzle takes any pipe and what its port draws; the first clash, if any.
+     * The column's trays, feed, side draws, pumparounds and steam, drawn as the column calculator draws them, on the HMI
+     * glass {@code box}: the draw marks end 4 pixels inside its right edge, the steam lines start at least 7 inside its
+     * left one. {@code marked}: where a side nozzle stands, in tray numbers ({@link Place#stage}), a bright bar across the
+     * shell; NaN for none.
      */
-    private void connectionRows(GuiGraphics graphics, int mouseX, int mouseY) {
-        String[] names = rows();
-        graphics.drawString(font, Component.translatable(KEY + "connections"), 8, TOP + 4, ProcessUi.ACCENT);
-        graphics.drawString(font, Component.translatable(KEY + "connection"), 8, TOP + ROW + 4, ProcessUi.TEXT);
-        graphics.drawCenteredString(font, connections.isEmpty() ? "0" : (selected + 1) + " / " + connections.size(), PANEL - 43, TOP + ROW + 4, ProcessUi.ACCENT);
-        Component status;
-        if (connections.isEmpty()) {
-            graphics.drawString(font, Component.translatable(KEY + "connections.none"), 8, TOP + 2 * ROW + 4, ProcessUi.MUTED);
-            status = Component.translatable(KEY + "clash.none");
-        } else {
-            var c = connection();
-            graphics.drawString(font, Component.translatable(KEY + "faces"), 8, TOP + 2 * ROW + 4, ProcessUi.TEXT);
-            graphics.drawString(font, Component.translatable(KEY + names[3]), 8, TOP + 3 * ROW + 4, ProcessUi.TEXT);
-            graphics.drawCenteredString(font, number(c.station() + .5) + " m", PANEL - 43, TOP + 3 * ROW + 4, ProcessUi.ACCENT);
-            // The offset's label says which way it runs, as the side's button does.
-            graphics.drawString(font, c.offset() == 0 ? Component.translatable(KEY + "offset")
-                    : Component.translatable(KEY + "offset." + toward(c.across(), Integer.signum(c.offset()))), 8, TOP + 4 * ROW + 4, ProcessUi.TEXT);
-            graphics.drawCenteredString(font, Math.abs(c.offset()) + " m", PANEL - 43, TOP + 4 * ROW + 4, ProcessUi.ACCENT);
-            graphics.drawString(font, Component.translatable(KEY + "connection.size"), 8, LINES, ProcessUi.MUTED);
-            graphics.drawString(font, Component.translatable(KEY + "connection.port"), 8, LINES + LINE, ProcessUi.MUTED);
-            var clash = clash();
-            status = clash != null ? clashText(clash) : Component.translatable(KEY + "clash.none");
-        }
-        if (form.orientation().horizontal()) graphics.drawString(font, Component.translatable(KEY + "boot"), 8, TOP + 6 * ROW + 4, ProcessUi.TEXT);
-        else if (outletButton != null) graphics.drawString(font, Component.translatable(KEY + "outlet"), 8, TOP + 6 * ROW + 4, ProcessUi.TEXT);
-        graphics.drawString(font, status, 8, STATUS, clash() == null ? ProcessUi.ACCENT : ProcessUi.WARN);
-        describe(mouseX, mouseY, connections.isEmpty() ? 2 : names.length, connections.isEmpty() ? new String[0] : new String[]{"connection.size", "connection.port"});
-    }
-
-    /**
-     * Hover text for the panel's words: a row's label or value says what the row sets (its buttons say it too), the
-     * datasheet lines ({@code lines}, by key) and the status line what they report.
-     */
-    private void describe(int mouseX, int mouseY, int rows, String[] lines) {
-        if (mouseX < 4 || mouseX >= PANEL - 4) return;
-        Component text = null;
-        int row = Math.floorDiv(mouseY - TOP, ROW);
-        boolean label = mouseX < PANEL - 82, value = mouseX >= PANEL - 60 && mouseX < PANEL - 26;
-        if (mouseY >= TOP && row < rows && (label || value && row > 0) && !rows()[row].isEmpty()) text = hint(row);
-        else if (mouseY >= LINES && mouseY < LINES + lines.length * LINE) text = Component.translatable(KEY + lines[(mouseY - LINES) / LINE] + ".hint");
-        else if (mouseY >= STATUS - 1 && mouseY < STATUS + 10)
-            text = Component.translatable(KEY + (page == Page.CONNECTIONS ? "clash.hint" : page == Page.NOZZLES ? "nozzle.status.hint" : "status.hint"));
-        if (text != null) setTooltipForNextRenderPass(font.split(text, 200));
-    }
-
-    /** The choice page's heading; what each kind of equipment is shows over its button (the draft's kind is marked on it). */
-    private void choices(GuiGraphics g) {
-        g.drawString(font, Component.translatable(KEY + "choose"), 8, TOP + 4, ProcessUi.TEXT);
-    }
-
-    /**
-     * The column's trays, feed, side draws, pumparounds and steam, drawn as the column calculator draws them, inside the
-     * right strip: the draw marks end 4 pixels inside its right edge, the steam lines start at least 7 inside its left one.
-     * {@code marked}: where a side nozzle stands, in tray numbers ({@link Place#stage}), a bright bar across the shell; NaN
-     * for none.
-     */
-    private void schematic(GuiGraphics g, double marked) {
+    private void schematic(GuiGraphics g, Rect box, double marked) {
         var trays = shownTrays();
-        int x = width - 8 - ColumnDiagram.MARK - 13, top = 32, bottom = height - 54, n = trays.trays();
+        var c = new GuiCanvas(g, font, 0, 0);
+        int x = box.right() - 4 - ColumnDiagram.MARK - 13, top = box.y() + 10, bottom = box.bottom() - 31, n = trays.trays();
         double pitch = (bottom - top - 34) / (double) Math.max(1, n);
         IntUnaryOperator at = k -> top + 14 + (int) Math.round((k - 1) * pitch);
-        ColumnDiagram.shell(g, x, top, bottom, 0xFF2B3740, ProcessUi.LINE);
-        for (int k = 1; k <= n; k++) if (pitch >= 3 || k % 5 == 0 || k == 1 || k == n) ColumnDiagram.tray(g, x, at.applyAsInt(k), ProcessUi.MUTED);
+        ColumnDiagram.shell(c, x, top, bottom, 0xFF2B3740, ProcessUi.LINE);
+        for (int k = 1; k <= n; k++) if (pitch >= 3 || k % 5 == 0 || k == 1 || k == n) ColumnDiagram.tray(c, x, at.applyAsInt(k), ProcessUi.MUTED);
         int fy = at.applyAsInt(trays.feed());
-        ColumnDiagram.feed(g, x, x - 70, fy, ProcessUi.ACCENT);
-        g.drawString(font, Component.translatable(KEY + "schematic.feed", trays.feed() + 1), x - 70, fy - 10, ProcessUi.ACCENT);
-        for (int draw : trays.draws()) ColumnDiagram.draw(g, x, at.applyAsInt(draw), ProcessUi.ACCENT);
+        ColumnDiagram.feed(c, x, x - 70, fy, ProcessUi.ACCENT);
+        g.drawString(font, tr(ConstructorColumn.KEY + "schematic.feed", trays.feed() + 1), x - 70, fy - 10, ProcessUi.ACCENT);
+        for (int draw : trays.draws()) ColumnDiagram.draw(c, x, at.applyAsInt(draw), ProcessUi.ACCENT);
         for (int i = 0; i < trays.pumparounds().size(); i++) {
             var p = trays.pumparounds().get(i);
-            ColumnDiagram.pumparound(g, x, i, at.applyAsInt(p.draw()), at.applyAsInt(p.ret()), ProcessUi.WARN);
+            ColumnDiagram.pumparound(c, x, i, at.applyAsInt(p.draw()), at.applyAsInt(p.ret()), ProcessUi.WARN);
         }
-        for (int i = 0; i < trays.steam().size(); i++) ColumnDiagram.steam(g, x, i, at.applyAsInt(trays.steam().get(i)), ProcessUi.WARN);
+        for (int i = 0; i < trays.steam().size(); i++) ColumnDiagram.steam(c, x, i, at.applyAsInt(trays.steam().get(i)), ProcessUi.WARN);
         if (!Double.isNaN(marked)) {
             int y = top + 14 + (int) Math.round((marked - 1) * pitch);
             g.fill(x - ColumnDiagram.HALF + 2, y - 1, x + ColumnDiagram.HALF, y + 2, 0xFFFFFFFF);
         }
-        int left = width - STRIP;
-        g.drawString(font, Component.translatable(KEY + "schematic.draws", trays.draws().size()), left, height - 46, ProcessUi.MUTED);
-        g.drawString(font, Component.translatable(KEY + "schematic.extras", trays.pumparounds().size(), trays.steam().size()), left, height - 35, ProcessUi.MUTED);
+        g.drawString(font, tr(ConstructorColumn.KEY + "schematic.draws", trays.draws().size()), box.x() + 2, box.bottom() - 23, ProcessUi.MUTED);
+        g.drawString(font, tr(ConstructorColumn.KEY + "schematic.extras", trays.pumparounds().size(), trays.steam().size()), box.x() + 2, box.bottom() - 12, ProcessUi.MUTED);
     }
 }

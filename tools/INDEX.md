@@ -9,7 +9,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
 | [heat-exchanger-design/](heat-exchanger-design/README.md) | Exchanger coupling, cell-count, 1-2 shell, per-phase film, zero-wall relay and game-timing study harnesses | `2026-10-27-heat-exchanger-design` | Concluded 2026-10-27 |
-| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat units' Control-tab flowsheet | `2026-10-27-heat-exchanger-design` | In progress since 2026-10-28 |
+| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design` | In progress since 2026-10-28 |
 | [old-mover-removal/](old-mover-removal/README.md) | Writer of the removed-movers corpus image (a world with one-block movers) | `2026-10-28-old-mover-removal` | Implemented 2026-10-28 |
 | [column-sump/](column-sump/README.md) | Column sump probes, nozzle sweeps and software renders | `2026-10-27-column-sump` | Concluded 2026-10-27 (batch in 0.15.1) |
 | [skirt-shadow/](skirt-shadow/README.md) | Skirt floor renders with the in-game skylight and a skylight probe, before and after; probe of the GameTest's light wait | `2026-10-27-skirt-shadow` | Implemented 2026-10-27 |

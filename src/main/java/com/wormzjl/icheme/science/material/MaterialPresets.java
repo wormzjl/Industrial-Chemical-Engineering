@@ -16,7 +16,7 @@ public final class MaterialPresets {
         }
         public boolean matches(V3ColumnInput input){return packageId.equals(input.packageId())&&assayId.equals(input.assayId());}
     }
-    /** {@code diameter} (required) is the sieve-tray hydraulics input; zero authors the prescribed uniform drop. */
+    /** {@code diameter} (required, above 0) is the sieve-tray hydraulics input; {@code pressureDrop} is the first solve's guess. */
     public record Column(Descriptor descriptor,int order,boolean visible,double feedVolume,double feedTemperature,
             int stages,int feedStage,double pressure,double pressureDrop,List<V3ColumnSpecification> specifications,
             List<V3SideDrawSpec> draws,List<V3SteamFeedSpec> steam,List<V3PumparoundSpec> pumparounds,double diameter) {
@@ -73,7 +73,6 @@ public final class MaterialPresets {
             if(label.length()>128)throw new IllegalArgumentException("label: exceeds 128 characters");
             if(kind.equals("column")) {
                 String pkg=text(row,"package"),assay=text(row,"assay");requireAssay(packages,pkg,assay);
-                if(id.equals("holland_3_2"))throw new IllegalArgumentException("id: reserved independent example");
                 var d=new Descriptor(id,label,text(row,"translation_key"),pkg,assay);var o=row.getAsJsonObject("operating");
                 var specs=List.<V3ColumnSpecification>of(new V3ColumnSpecification.CondenserOutletTemperature(number(o,"condenserTemperatureKelvin")),
                         new V3ColumnSpecification.OrganicRefluxRatio(number(o,"organicRefluxRatio")),new V3ColumnSpecification.ReboilerDuty(number(o,"reboilerDutyWatts")));
@@ -86,8 +85,8 @@ public final class MaterialPresets {
                 var p=packages.get(pkg);double t=c.feedTemperature(),bottom=c.pressure()+(c.stages()-1)*c.pressureDrop();
                 if(c.stages()<2||c.stages()>64||c.feedStage()<1||c.feedStage()>c.stages()||t<p.minimumTemperature()||t>p.maximumTemperature()||c.pressure()<p.minimumPressure()||bottom>p.maximumPressure()||c.pressureDrop()<0)
                     throw new IllegalArgumentException("operating: outside package or column domain");
-                if(c.diameter()<0||c.diameter()>V3ColumnInput.MAX_COLUMN_DIAMETER_METRES)
-                    throw new IllegalArgumentException("operating.columnDiameterMetres: outside 0.."+V3ColumnInput.MAX_COLUMN_DIAMETER_METRES+" m");
+                if(!(c.diameter()>0)||c.diameter()>V3ColumnInput.MAX_COLUMN_DIAMETER_METRES)
+                    throw new IllegalArgumentException("operating.columnDiameterMetres: not above 0 and at most "+V3ColumnInput.MAX_COLUMN_DIAMETER_METRES+" m");
                 columns.put(id,c);
             } else if(kind.equals("fluid")) {
                 if(row.has("component")) {

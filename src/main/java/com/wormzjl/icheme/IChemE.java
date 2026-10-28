@@ -205,6 +205,8 @@ public final class IChemE {
         modEventBus.addListener(com.wormzjl.icheme.network.EquipmentNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.AssemblyNetwork::register);
         modContainer.registerConfig(ModConfig.Type.COMMON, CONFIG_SPEC, "icheme-common.toml");
+        // The client's own settings (the process screens' panel theme); a dedicated server never loads them.
+        modContainer.registerConfig(ModConfig.Type.CLIENT, com.wormzjl.icheme.client.ClientConfig.SPEC, "icheme-client.toml");
         // A dedicated server never draws equipment: its geometries keep no facets once laid out.
         if (FMLEnvironment.dist.isDedicatedServer()) com.wormzjl.icheme.science.equipment.ShapeRasterizer.serverOnly();
 

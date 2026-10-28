@@ -26,9 +26,22 @@ public interface DisplayUnit {
         public String format(double si){return Double.isFinite(si)?number(si)+" "+symbol:"—";}
     }
 
+    /** Temperatures cross the wire in kelvin; display defaults to Celsius. */
+    enum TemperatureUnit implements DisplayUnit {
+        CELSIUS("°C",273.15), KELVIN("K",0);
+        private final String symbol;
+        private final double offset;
+        TemperatureUnit(String symbol,double offset){this.symbol=symbol;this.offset=offset;}
+        public String symbol(){return symbol;}
+        public double display(double kelvin){return kelvin-offset;}
+        public double kelvin(double displayed){return displayed+offset;}
+        @Override public double si(double displayed){return kelvin(displayed);}
+        public TemperatureUnit next(){return this==CELSIUS?KELVIN:CELSIUS;}
+    }
+
     /** Presentation time basis only. Network controls and process rates always use seconds. */
     enum FlowRateUnit implements DisplayUnit {
-        PER_SECOND(1,"/s"),PER_HOUR(3600,"/h");
+        PER_SECOND(1,"/s"),PER_MINUTE(60,"/min"),PER_HOUR(3600,"/h");
 
         private final double seconds;
         private final String suffix;
@@ -38,6 +51,6 @@ public interface DisplayUnit {
         @Override public double si(double displayed){return perSecond(displayed);}
         public String unit(String quantity){return quantity+suffix;}
         public String suffix(){return suffix;}
-        public FlowRateUnit next(){return this==PER_SECOND?PER_HOUR:PER_SECOND;}
+        public FlowRateUnit next(){return switch(this){case PER_SECOND->PER_MINUTE;case PER_MINUTE->PER_HOUR;case PER_HOUR->PER_SECOND;};}
     }
 }

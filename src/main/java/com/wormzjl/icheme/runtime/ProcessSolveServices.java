@@ -4,7 +4,6 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
-import com.wormzjl.icheme.science.column.v3.V3HollandExample32;
 import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
 import com.wormzjl.icheme.science.column.v3.V3NeuralInitializer;
 import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
@@ -493,10 +492,7 @@ public final class ProcessSolveServices {
         }
         private ProcessSolveResult solveInCatalog(BoundedCpuSolveService.CancellationToken cancellationToken) {
             cancellationToken.throwIfCancellationRequested();
-            V3ColumnOutcome outcome = V3HollandExample32.isPackage(input.packageId())
-                    && initialization.mode() != V3InitializationOptions.Mode.LNN_ONLY
-                    ? V3HollandExample32.calculate(input, cancellationToken::throwIfCancellationRequested)
-                    : initialization.mode() == V3InitializationOptions.Mode.LNN_ONLY
+            V3ColumnOutcome outcome = initialization.mode() == V3InitializationOptions.Mode.LNN_ONLY
                     || strategy == V3SolveStrategy.DRIFT_SPEC && warmStart == null
                     ? V3ColumnCalculator.calculate(input, cancellationToken::throwIfCancellationRequested,
                             stageTraceCutoffMoleFraction, convergenceClosureFraction, initialization, model,

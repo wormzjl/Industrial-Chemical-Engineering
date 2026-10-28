@@ -5,7 +5,7 @@ import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGu
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.PhaseRatioBasis;
 
 import com.wormzjl.icheme.client.gui.common.ProcessUi.NumericDraft;
-import com.wormzjl.icheme.client.gui.common.ProcessUi.TemperatureUnit;
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
 import com.wormzjl.icheme.science.fluid.state.ParticleSize;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial;
@@ -19,7 +19,10 @@ class FluidGuiConsistencyTest {
         for(int cycle=0;cycle<100;cycle++)for(var unit:PressureUnit.values()){pressure=pressure.in(unit);assertEquals(Double.doubleToRawLongBits(exact),Double.doubleToRawLongBits(pressure.si()));}
         pressure=pressure.in(PressureUnit.BAR);pressure.text("2.5");assertEquals(250000,pressure.si());assertEquals(.25,pressure.in(PressureUnit.MEGAPASCAL).value());
         var flow=new NumericDraft(.0123456789,FlowRateUnit.PER_SECOND);
-        for(int i=0;i<100;i++){flow=flow.in(FlowRateUnit.PER_HOUR).in(FlowRateUnit.PER_SECOND);assertEquals(.0123456789,flow.si());}
+        for(int i=0;i<100;i++){flow=flow.in(FlowRateUnit.PER_MINUTE).in(FlowRateUnit.PER_HOUR).in(FlowRateUnit.PER_SECOND);assertEquals(.0123456789,flow.si());}
+        // The flow key steps per second, per minute, per hour (owner: "add a min between s and h").
+        assertEquals(FlowRateUnit.PER_MINUTE,FlowRateUnit.PER_SECOND.next());assertEquals(FlowRateUnit.PER_SECOND,FlowRateUnit.PER_SECOND.next().next().next());
+        assertEquals(60,FlowRateUnit.PER_MINUTE.display(1),1e-12);
         var temp=new NumericDraft(298.123456789,TemperatureUnit.CELSIUS);assertEquals(298.123456789,temp.in(TemperatureUnit.KELVIN).in(TemperatureUnit.CELSIUS).si());
         flow.text("NaN");var invalid=flow;assertThrows(IllegalArgumentException.class,()->invalid.in(FlowRateUnit.PER_HOUR));assertEquals("NaN",flow.text());
     }
@@ -45,24 +48,36 @@ class FluidGuiConsistencyTest {
         for(int width=300;width<=790;width++){
             var footer=FluidGuiLayout.footer(width);assertEquals(6,footer.size());int end=4;
             for(var slot:footer){assertTrue(slot.x()>=end+6);assertTrue(slot.width()>=32);end=slot.x()+slot.width();assertTrue(end<=width-10);}
+            // The display keys' strip stands clear of Apply and inside the door's edge, under the divider (height - 49).
+            for(int i=2;i<6;i++)assertEquals(40,footer.get(i).width());
+            var strip=FluidGuiLayout.softKeys(width,254);var apply=footer.get(1);
+            assertTrue(strip.x()>=apply.x()+apply.width()+4);assertTrue(strip.right()<=width-5);assertTrue(strip.y()>254-47&&strip.bottom()<=254-4);
             for(int count=1;count<=4;count++)for(var slot:FluidGuiLayout.tabs(width,count)){assertTrue(slot.x()>=10);assertTrue(slot.x()+slot.width()<=width-10);}
         }
     }
     /**
-     * The Control tab's columns (HEAT_GUI_PLAN.md section 2) at every supported width: the drawing keeps at least 100 px
-     * (a third of the design grid), the column at least 150 px with its 58 px fields inside it, its scrollbar inside the
-     * screen, and the drawing's Check lines button (up to 90 px) inside the drawing.
+     * The Control tab's columns (HEAT_GUI_PLAN.md section 2; layout C, GUI_TOOLKIT_PLAN.md section 10) at every supported
+     * width: the drawing keeps at least 100 px (a third of the design grid); from about 460 px two columns, each at least
+     * 120 px with 12 px between them, else one column of 150 to 240 px; the scrollbar after them, inside the screen.
      */
     @Test void theControlTabsColumnsFitEverySupportedScreenWidth() {
+        boolean split=false;
         for(int width=300;width<=790;width++){
             var c=FluidGuiLayout.control(width);
             assertTrue(c.drawingRight()-10>=100,"drawing at "+width);
-            assertTrue(c.panelWidth()>=150&&c.panelWidth()<=240,"column at "+width);
-            assertTrue(c.panelX()>=c.drawingRight()+10);
-            assertTrue(c.panelX()+c.panelWidth()-76>=c.panelX()+60,"a field's label keeps 60 px at "+width);
-            assertTrue(c.scrollX()>=c.panelX()+c.panelWidth()&&c.scrollX()+8<=width-6,"scrollbar at "+width);
-            assertTrue(c.drawingRight()-Math.min(90,c.drawingRight()-20)>=10,"Check lines at "+width);
+            assertTrue(c.leftX()>=c.drawingRight()+10,"the columns right of the drawing at "+width);
+            if(c.split()){
+                split=true;
+                assertTrue(c.leftWidth()>=120&&c.rightWidth()>=FluidGuiLayout.SPLIT_MIN,"two columns at "+width);
+                assertEquals(c.leftX()+c.leftWidth()+12,c.rightX());
+            }else{
+                assertTrue(c.rightWidth()>=150&&c.rightWidth()<=240,"one column at "+width);
+                assertEquals(c.leftX(),c.rightX());
+                assertTrue(!split,"two columns from some width on, at "+width);
+            }
+            assertTrue(c.scrollX()>=c.rightX()+c.rightWidth()&&c.scrollX()+8<=width-6,"scrollbar at "+width);
         }
+        assertTrue(FluidGuiLayout.control(464).split(),"two columns at 464 px: the 480 by 270 GUI");
         assertThrows(IllegalArgumentException.class,()->FluidGuiLayout.control(299));
     }
 }

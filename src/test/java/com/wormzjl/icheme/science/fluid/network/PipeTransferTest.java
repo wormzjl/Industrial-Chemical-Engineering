@@ -31,7 +31,6 @@ class PipeTransferTest {
     @Test void allCrudeGeneratorsSupplyFiniteFlowAtTheExactAmbientLimit() {
         var catalog=MaterialCatalog.bundled();
         for(var preset:com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset.values()) {
-            if(preset==com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset.HOLLAND)continue;
             var input=preset.input(catalog);var feed=input.feedComponentMolarFlowsMolPerSecond();
             var amounts=new double[model.componentCount()];
             for(int i=0;i<feed.length;i++)amounts[model.components().indexOf(input.componentBasis().componentIds().get(i))]=feed[i];
@@ -52,8 +51,7 @@ class PipeTransferTest {
     // Finite vessels cool while draining; keep their initial state just inside the 293.15 K domain.
     @Test void allRegroupedCrudesAndMixedDonorsConserveInventoryAtAmbientAndHeatedStates() {
         var catalog=MaterialCatalog.bundled();
-        var presets=Arrays.stream(com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset.values())
-                .filter(p->p!=com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset.HOLLAND).toList();
+        var presets=Arrays.asList(com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset.values());
         var weights=com.wormzjl.icheme.fluid.support.FluidTestSupport.molecularWeights(model);
         var failures=new ArrayList<String>();
         for(int crude=0;crude<presets.size();crude++)for(double temperature:new double[]{293.2,298.15,350}) {

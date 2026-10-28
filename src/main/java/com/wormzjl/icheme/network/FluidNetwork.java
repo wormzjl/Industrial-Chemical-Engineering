@@ -357,7 +357,8 @@ public final class FluidNetwork {
                     // A heat side's passage is its unit's datasheet; a fired heater's burners switch and fire to its set point
                     // (batch 2026-10-27-heat-exchanger-design; the edit moves both coils, FluidWorldAuthority.edit). An
                     // exchanger side and an air cooler take a control (W4): a mode, its set point inside the package's
-                    // envelope, a low limit and the manual share (an air cooler's fans switch as its power).
+                    // envelope, a low limit and the manual share (an air cooler's fans: their share of full speed, so a
+                    // fixed fan speed holds with no controller; GUI_TOOLKIT_PLAN.md section 11).
                     case HEAT_SIDE->{
                         double share=controls.power==Power.ON?1:0;
                         if(heat.burners()){world.model().domain().requireInputTemperature(controls.temperature);heat=heat.withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING,controls.temperature,0,share));}
@@ -366,7 +367,7 @@ public final class FluidNetwork {
                             if(c.mode()==HeatUnit.Mode.FIRING)throw new IllegalArgumentException("Only a fired heater's coil fires to a set point.");
                             if(c.mode()==HeatUnit.Mode.OUTLET_TEMPERATURE)world.model().domain().requireInputTemperature(c.target());
                             if(c.lowLimit()>0)world.model().domain().requireInputTemperature(c.lowLimit());
-                            heat=heat.withControl(heat.fans()?c.withShare(share):c);
+                            heat=heat.withControl(c);
                         }
                         else if(heat.fans())heat=heat.withControl(heat.control().withShare(share));
                         else throw new IllegalArgumentException("A heat side's passage is its unit's datasheet.");

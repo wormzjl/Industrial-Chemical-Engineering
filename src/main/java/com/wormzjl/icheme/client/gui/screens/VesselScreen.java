@@ -1,7 +1,17 @@
 package com.wormzjl.icheme.client.gui.screens;
 
+import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.MachineAnimation;
-import com.wormzjl.icheme.client.gui.common.ProcessUi;
+import com.wormzjl.icheme.client.gui.common.DialogColumns;
+import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
+import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
+import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
+import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
+import com.wormzjl.icheme.client.gui.common.kit.SkinField;
+import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
@@ -9,84 +19,113 @@ import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.core.Direction;
-import net.minecraft.network.chat.Component;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
 import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
 
-
 /**
- * A column's or a process unit's screen: its datasheet, with its nozzles. A drum shows the same datasheet on a tab of
- * its tank screen (owner request 2026-10-16), from {@link #datasheet}. It shows geometry only, read from the cells the
- * client already has, so it requests nothing.
+ * A column's or a process unit's datasheet on a panel door (batch 2026-10-28-gui-toolkit, GUI_REVIEW.md order 2): its
+ * sizes on the door (the ones the player chose as LCD entries, the rest as LED meters), a moving unit's switch; its
+ * kind, support, cells and nozzles on the HMI glass, which scrolls. A drum shows the same datasheet on a tab of its tank
+ * screen (owner request 2026-10-16), from {@link #sheet}. It shows geometry only, read from the cells the client already
+ * has, so it requests nothing.
  */
 public final class VesselScreen extends Screen {
-    /**
-     * The panel's least width (a longer line widens it: a unit's nozzle lines run past 256), the line pitch, and the
-     * panel's height besides its lines (the title above them, the buttons below).
-     */
-    private static final int WIDTH = 256, LINE = 12, FRAME = 56;
+    /** The panel's size where the window has room (wide enough for the nozzle table's three columns), and the door column's width. */
+    private static final int WIDTH = 400, HEIGHT = 250, DOOR = 150;
     private static final String KEY = "gui.icheme.vessel.";
-    private final List<Component> lines;
+    private final DialogColumns.Sheet sheet;
     private final boolean moving;
-    private int left, top, panel, pitch, tall;
+    private final KitDoor door = new KitDoor();
+    private final ScrollView glassView = new ScrollView();
+    private int left, top, panelWidth, panelHeight;
+    private @Nullable Rect glassBox;
+    private @Nullable String hovered;
 
     public VesselScreen(EquipmentStructure.Vessel vessel) {
         super(Component.translatable(KEY + "title." + vessel.shape().kind().name().toLowerCase(Locale.ROOT)));
-        lines = datasheet(vessel);
+        sheet = sheet(vessel);
         moving = vessel.shape().unit() && ProcessUnit.moves(vessel.shape().kind());
     }
 
-    /** The vessel's datasheet, a line each: its kind first, then its sizes and cells, then each nozzle. */
-    public static List<Component> datasheet(EquipmentStructure.Vessel vessel) {
+    private static Skin skin() {
+        return ClientConfig.skin();
+    }
+
+    private static String tr(String key, Object... args) {
+        return Component.translatable("gui.icheme." + key, args).getString();
+    }
+
+    /**
+     * The vessel's datasheet: its sizes (a drum's or a column's diameter and length as chosen, then what follows from
+     * them); its notes, its kind first, then a unit's design lines, the support, the cells and the controller; the cells
+     * other blocks hold as a warning; each nozzle with its port and the side it faces seen from the vessel's front.
+     */
+    public static DialogColumns.Sheet sheet(EquipmentStructure.Vessel vessel) {
         var shape = vessel.shape();
         var layout = ShapeRasterizer.layout(shape);
-        var cell = layout.controller();
-        var controller = vessel.origin().offset(cell.x(), cell.y(), cell.z());
-        var lines = new ArrayList<Component>();
+        var sizes = new ArrayList<DialogColumns.Size>();
+        var notes = new ArrayList<String>();
         if (shape.designed()) {
-            lines.addAll(unit(shape));
-            // A storage vessel's volume and area, as a drum's.
-            if (shape.storage()) lines.addAll(List.of(Component.translatable(KEY + "volume", number(shape.volume())), Component.translatable(KEY + "area", number(shape.surfaceArea()))));
+            var design = UnitDesign.of(shape.kind());
+            String kind = shape.kind().name().toLowerCase(Locale.ROOT);
+            notes.add(text(KEY + "kind." + kind + design.variant(shape)));
+            for (var line : design.datasheet(shape)) notes.add(text(KEY + line.key(), line.args()));
+            notes.add(text(KEY + "unit_support." + kind, shape.support()));
         } else {
-            var support = shape.saddles()
-                    ? Component.translatable(KEY + "saddles", shape.support(), number(EquipmentShape.SADDLE_POSITION * shape.tangentLength()))
-                    : shape.skirt() ? Component.translatable(KEY + "skirt", shape.support()) : Component.translatable(KEY + "unsupported");
-            lines.addAll(List.of(
-                    shape.column() ? Component.translatable(KEY + "kind.column", shape.trays().trays())
-                            : Component.translatable(KEY + (shape.saddles() ? "kind.saddles" : shape.skirt() ? "kind.skirt" : "kind.bare")),
-                    Component.translatable(KEY + "diameter", number(shape.diameter())),
-                    Component.translatable(KEY + "tangent_length", number(shape.tangentLength())),
-                    Component.translatable(KEY + "length", number(shape.overallLength())),
-                    Component.translatable(KEY + "top", number(shape.topElevation())),
-                    support,
-                    Component.translatable(KEY + "volume", number(shape.volume())),
-                    Component.translatable(KEY + "area", number(shape.surfaceArea()))));
+            notes.add(shape.column() ? text(KEY + "kind.column", shape.trays().trays())
+                    : text(KEY + (shape.saddles() ? "kind.saddles" : shape.skirt() ? "kind.skirt" : "kind.bare")));
+            notes.add(shape.saddles() ? text(KEY + "saddles", shape.support(), number(EquipmentShape.SADDLE_POSITION * shape.tangentLength()))
+                    : shape.skirt() ? text(KEY + "skirt", shape.support()) : text(KEY + "unsupported"));
+            sizes.add(new DialogColumns.Size("diameter", number(shape.diameter()), "m", true));
+            sizes.add(new DialogColumns.Size("length", number(shape.tangentLength()), "m", true));
         }
-        lines.add(Component.translatable(KEY + "cells", layout.shell().size(), layout.interior().size()));
+        sizes.add(new DialogColumns.Size("overall", number(shape.overallLength()), "m", false));
+        sizes.add(new DialogColumns.Size("top", number(shape.topElevation()), "m", false));
+        // A storage vessel's volume and area, as a drum's.
+        if (!shape.designed() || shape.storage()) {
+            sizes.add(new DialogColumns.Size("volume", number(shape.volume()), "m³", false));
+            sizes.add(new DialogColumns.Size("area", number(shape.surfaceArea()), "m²", false));
+        }
+        notes.add(text(KEY + "cells", layout.shell().size(), layout.interior().size()));
+        var cell = layout.controller();
+        notes.add(text(KEY + "controller", vessel.origin().offset(cell.x(), cell.y(), cell.z()).toShortString()));
         int blocked = blocked(vessel, layout);
-        if (blocked > 0) lines.add(Component.translatable(KEY + "blocked", blocked));
-        lines.add(Component.translatable(KEY + "controller", controller.toShortString()));
-        // Each nozzle: what it is for, the port its position makes it and where it faces (any pipe connects; its neck takes
-        // the pipe's size, owner decision 2026-10-21: a 1 m pipe has a 1 m root).
-        var transform = shape.transform();
-        for (var nozzle : shape.nozzles()) {
-            var out = transform.direction(nozzle.direction());
-            var facing = Direction.getNearest(out[0], out[1], out[2]).getSerializedName();
-            lines.add(Component.translatable(KEY + "nozzle", Component.translatable(KEY + "role." + nozzle.role().name().toLowerCase(Locale.ROOT)),
-                    Component.translatable(KEY + "port." + nozzle.role().port.name().toLowerCase(Locale.ROOT)),
-                    Component.translatable(KEY + "facing." + facing)));
-        }
-        return List.copyOf(lines);
+        // Each nozzle: what it is for, the port its position makes it and the side it faces (any pipe connects; its neck
+        // takes the pipe's size, owner decision 2026-10-21: a 1 m pipe has a 1 m root).
+        var nozzles = new ArrayList<DialogColumns.Nozzle>();
+        for (var nozzle : shape.nozzles())
+            nozzles.add(new DialogColumns.Nozzle(text(KEY + "role." + nozzle.role().name().toLowerCase(Locale.ROOT)),
+                    text(KEY + "port." + nozzle.role().port.name().toLowerCase(Locale.ROOT)), text("gui.icheme.equipment_constructor.side." + side(shape, nozzle))));
+        return new DialogColumns.Sheet(sizes, notes, blocked > 0 ? text(KEY + "blocked", blocked) : null, nozzles);
+    }
+
+    private static String text(String key, Object... args) {
+        return Component.translatable(key, args).getString();
+    }
+
+    /**
+     * The side {@code nozzle} faces, as the constructor names sides: top or bottom, else seen from in front of the
+     * vessel's front ({@link EquipmentShape#front()}: a standing vessel's liquid outlet side, a lying drum's front head).
+     */
+    private static String side(EquipmentShape shape, EquipmentShape.Nozzle nozzle) {
+        var out = shape.transform().direction(nozzle.direction());
+        long x = Math.round(out[0]), y = Math.round(out[1]), z = Math.round(out[2]);
+        if (y != 0) return y > 0 ? "top" : "bottom";
+        var f = shape.front();
+        if (x == f.dx && z == f.dz) return "front";
+        if (x == -f.dx && z == -f.dz) return "back";
+        // Facing the front, the viewer looks along -front; their right is that turned clockwise seen from above.
+        return x == f.dz && z == -f.dx ? "right" : "left";
     }
 
     /**
@@ -104,55 +143,103 @@ public final class VesselScreen extends Screen {
         return found;
     }
 
-    /** A unit's kind and sizes, as its design says them ({@link UnitDesign#datasheet}), then its length, top and support's height. */
-    private static List<Component> unit(EquipmentShape shape) {
-        var design = UnitDesign.of(shape.kind());
-        String kind = shape.kind().name().toLowerCase(Locale.ROOT);
-        var lines = new ArrayList<Component>();
-        lines.add(Component.translatable(KEY + "kind." + kind + design.variant(shape)));
-        for (var line : design.datasheet(shape)) lines.add(Component.translatable(KEY + line.key(), line.args()));
-        lines.add(Component.translatable(KEY + "unit_length", number(shape.overallLength())));
-        lines.add(Component.translatable(KEY + "top", number(shape.topElevation())));
-        lines.add(Component.translatable(KEY + "unit_support." + kind, shape.support()));
-        return lines;
+    private List<Column.Row> rows() {
+        return DialogColumns.vessel(sheet.sizes(), moving, MachineAnimation.running(), VesselScreen::tr);
+    }
+
+    @Override
+    public void removed() {
+        super.removed();
+        WindowScale.restore(minecraft);
     }
 
     @Override
     protected void init() {
-        panel = WIDTH;
-        for (var line : lines) panel = Math.max(panel, font.width(line) + 16);
-        left = (width - panel) / 2;
-        // Lines closer where they would not fit the window (an FCC's or a coker's 18 in a 240-pixel-high GUI), never
-        // closer than the font's own line height.
-        pitch = Math.max(font.lineHeight, Math.min(LINE, (height - FRAME - 4) / Math.max(1, lines.size())));
-        tall = lines.size() * pitch + FRAME;
-        top = Math.max(0, (height - tall) / 2);
-        int y = top + tall - 26;
-        // A moving unit's switch: every unit's fans, shafts and rods move, or stand still as a stopped mover's do.
-        if (moving) addRenderableWidget(Button.builder(motionLabel(), b -> {
-            MachineAnimation.toggle();
-            b.setMessage(motionLabel());
-        }).bounds(left + panel / 2 - 144, y, 140, 20).tooltip(Tooltip.create(Component.translatable(KEY + "motion.hint"))).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose())
-                .bounds(moving ? left + panel / 2 + 4 : left + (panel - 80) / 2, y, 80, 20).build());
+        WindowScale.apply(minecraft, this);
+        panelWidth = Math.min(WIDTH, width - 8);
+        panelHeight = Math.min(HEIGHT, height - 8);
+        left = (width - panelWidth) / 2;
+        top = (height - panelHeight) / 2;
+        var m = GuiCanvas.measure(font);
+        var rows = rows();
+        door.layout(new Rect(10, DialogColumns.TOP, DOOR, panelHeight - DialogColumns.TOP - DialogColumns.FOOTER), rows, m);
+        door.keep(this::size, (spec, slot) -> addRenderableWidget(SkinButton.of(spec, slot, this::act, VesselScreen::skin)));
+        var done = DialogColumns.footer(panelWidth, panelHeight, 1).getFirst();
+        addRenderableWidget(new SkinButton(left + done.x(), top + done.y(), done.w(), done.h(), Component.translatable("gui.done"), b -> onClose(), VesselScreen::skin));
+        door.place(left, top);
     }
 
-    private static Component motionLabel() {
-        return Component.translatable(KEY + (MachineAnimation.running() ? "motion.running" : "motion.still"));
+    /** A size the player chose, as the constructor's LCD entry shows it: read here, not edited. */
+    private AbstractWidget size(Column.Field f, Rect slot) {
+        var box = new SkinField(font, slot.x(), slot.y(), slot.w(), slot.h(), Component.literal(f.label()), VesselScreen::skin);
+        sheet.sizes().stream().filter(s -> s.key().equals(f.key())).findFirst().ifPresent(s -> box.setValue(s.value()));
+        box.setEditable(false);
+        box.active = false;
+        box.setTooltip(Tooltip.create(Component.literal(f.hint() == null ? f.label() : f.label() + "\n" + f.hint())));
+        return addRenderableWidget(box);
+    }
+
+    /** The moving parts' switch: every unit's fans, shafts and rods move, or stand still as a stopped mover's do. */
+    private void act(String key) {
+        if (key.equals("motion:running") != MachineAnimation.running()) MachineAnimation.toggle();
+        rebuildWidgets();
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.renderBackground(graphics, mouseX, mouseY, partialTick);
-        graphics.fill(left, top, left + panel, top + tall, ProcessUi.BG);
-        graphics.renderOutline(left, top, panel, tall, ProcessUi.LINE);
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        super.renderBackground(g, mouseX, mouseY, partialTick);
+        var skin = skin();
+        g.pose().pushPose();
+        g.pose().translate(left, top, 0);
+        var canvas = new GuiCanvas(g, font, left, top);
+        skin.page(canvas, new Rect(0, 0, panelWidth, panelHeight));
+        // The HMI glass right of the door column, from the title row to the footer.
+        glassBox = skin.well(canvas, new Rect(DOOR + 16, 25, panelWidth - DOOR - 21, panelHeight - 60));
+        g.pose().popPose();
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawString(font, title, left + 8, top + 8, ProcessUi.TEXT);
-        for (int i = 0; i < lines.size(); i++)
-            graphics.drawString(font, lines.get(i), left + 8, top + 24 + i * pitch, i == 0 ? ProcessUi.MUTED : ProcessUi.TEXT);
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        door.place(left, top);
+        super.render(g, mouseX, mouseY, partialTick);
+        var skin = skin();
+        var canvas = new GuiCanvas(g, font, left, top);
+        g.pose().pushPose();
+        g.pose().translate(left, top, 0);
+        skin.title(canvas, 10, 10, font.plainSubstrByWidth(title.getString(), panelWidth - 20));
+        hovered = door.draw(canvas, skin, mouseX - left, mouseY - top);
+        if (glassBox != null) {
+            // The glass's lines, its bar inside its right edge where they are taller than it.
+            var glass = DialogColumns.glass(sheet, false, glassBox.w() - ScrollView.BAR - 2, GuiCanvas.measure(font), VesselScreen::tr);
+            glassView.layout(glassBox, glassBox.right() - ScrollView.BAR, glass.height());
+            canvas.clip(glassBox);
+            DialogColumns.draw(canvas, glass, new Rect(glassBox.x(), glassBox.y(), glassBox.w() - ScrollView.BAR - 2, glassBox.h()), glassView.offset());
+            canvas.unclip();
+            glassView.drawBar(canvas, skin);
+        }
+        g.pose().popPose();
+        KitDoor.hint(g, font, hovered, mouseX, mouseY);
+    }
+
+    @Override
+    public boolean mouseClicked(double x, double y, int button) {
+        return door.press(x - left, y - top, button) || glassView.press(x - left, y - top, button) || super.mouseClicked(x, y, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double x, double y, int button, double dx, double dy) {
+        return door.drag(y - top) || glassView.drag(y - top) || super.mouseDragged(x, y, button, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(double x, double y, int button) {
+        door.release();
+        glassView.release();
+        return super.mouseReleased(x, y, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        return door.wheel(x - left, y - top, vertical) || glassView.wheel(x - left, y - top, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 }

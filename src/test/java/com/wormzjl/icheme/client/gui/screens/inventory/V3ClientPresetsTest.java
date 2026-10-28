@@ -19,9 +19,9 @@ class V3ClientPresetsTest {
     @Test void bundledLibrariesAreIndependentAndPreserveAuthoredOperatingData(){
         var l=library();var columns=l.refresh(V3ClientPresets.Kind.COLUMN);var mixtures=l.refresh(V3ClientPresets.Kind.MIXTURE);
         assertTrue(columns.problems().isEmpty(),()->columns.problems().toString());assertTrue(mixtures.problems().isEmpty());
-        assertEquals(8,columns.entries().size());assertEquals(9,mixtures.entries().size());
+        assertEquals(7,columns.entries().size());assertEquals(8,mixtures.entries().size());
         for(var entry:columns.entries()){
-            if(entry.file().equals("holland_3_2.json")||entry.file().equals("pot.json"))continue;
+            if(entry.file().equals("pot.json"))continue;
             var d=draft();var column=(V3ClientPresets.Column)entry.preset();d.loadColumn(column.fields());
             var changed=d.assemble();assertEquals(reference().packageId(),changed.packageId());
             var source=MaterialCatalog.bundled().presets().column(entry.file().replace(".json","")).input(MaterialCatalog.bundled());
@@ -52,16 +52,17 @@ class V3ClientPresetsTest {
         String json=V3ClientPresets.mixtureJson("custom",d.composition());
         Path file=l.save(V3ClientPresets.Kind.MIXTURE,"custom",json);
         assertEquals(game.resolve("IChemE/mixturepreset/custom.json"),file);
-        assertEquals(9,first.entries().size());assertEquals(10,l.refresh(V3ClientPresets.Kind.MIXTURE).entries().size());
+        assertEquals(8,first.entries().size());assertEquals(9,l.refresh(V3ClientPresets.Kind.MIXTURE).entries().size());
         assertNotEquals(file,l.save(V3ClientPresets.Kind.MIXTURE,"custom",json));assertEquals(json,Files.readString(file));
         assertThrows(IllegalArgumentException.class,()->l.save(V3ClientPresets.Kind.MIXTURE,"../escape",json));
     }
     @Test void jsonRoundTripRetainsIndependentMixtureAndColumnConfiguration(){
         var d=draft();for(int i=0;i<V3ColumnInput.MAX_SIDE_DRAWS;i++)d.removeDraw(i);for(int i=0;i<4;i++)d.removePumparound(i);d.set("s2","2");d.set("s3","2");d.set("s8","0.7");
-        var pot=d.assemble();assertEquals(0,pot.stageCount());assertEquals(1,pot.feedStageNumber());assertEquals(700,pot.stagePressureDropPascal(),1e-9);
+        // The tray drop is the base's (owner choice (a)): an edit of s8 does not reach the input, and no preset carries it.
+        var pot=d.assemble();assertEquals(0,pot.stageCount());assertEquals(1,pot.feedStageNumber());assertEquals(d.base().stagePressureDropPascal(),pot.stagePressureDropPascal(),1e-9);
         assertTrue(pot.sideDraws().isEmpty());assertTrue(pot.pumparounds().isEmpty());assertEquals(1,pot.steamFeeds().getFirst().stageNumber());
         String column=V3ClientPresets.columnJson("pot",pot);
-        assertFalse(column.contains("package"));assertFalse(column.contains("components"));
+        assertFalse(column.contains("package"));assertFalse(column.contains("components"));assertFalse(column.contains("stage_pressure_drop_kpa"));
         var c=(V3ClientPresets.Column)V3ClientPresets.decode(column,V3ClientPresets.Kind.COLUMN);
         var restored=draft();restored.loadColumn(c.fields());
         var reloaded=restored.assemble();assertEquals(pot.stageCount(),reloaded.stageCount());assertEquals(pot.steamFeeds(),reloaded.steamFeeds());
@@ -94,20 +95,15 @@ class V3ClientPresetsTest {
         var l=library();Files.createDirectories(l.directory(V3ClientPresets.Kind.COLUMN));
         Files.writeString(l.directory(V3ClientPresets.Kind.COLUMN).resolve("broken.json"),"{broken");
         Files.writeString(l.directory(V3ClientPresets.Kind.COLUMN).resolve("large.json")," ".repeat(V3ClientPresets.MAX_BYTES+1));
-        var result=l.refresh(V3ClientPresets.Kind.COLUMN);assertEquals(8,result.entries().size());assertEquals(2,result.problems().size());
+        var result=l.refresh(V3ClientPresets.Kind.COLUMN);assertEquals(7,result.entries().size());assertEquals(2,result.problems().size());
         var o=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();o.addProperty("tray_count",1);
         assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(o.toString(),V3ClientPresets.Kind.COLUMN));
-        // Column schema 2 carries the stage drop; a schema 1 file (no drop) is refused, not defaulted.
-        var old=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();old.addProperty("schema_version",1);old.remove("stage_pressure_drop_kpa");
+        // A schema 1 file is refused by its version; a schema 2 file that still carries the stage drop reads, the drop ignored.
+        var old=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();old.addProperty("schema_version",1);
         assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(old.toString(),V3ClientPresets.Kind.COLUMN));
-    }
-
-    @Test void separateHollandFilesCanReconstructTheFixedBenchmark(){
-        var input=V3HollandExample32.input();var d=draft();
-        var column=(V3ClientPresets.Column)library().refresh(V3ClientPresets.Kind.COLUMN).entries().stream().filter(e->e.file().equals("holland_3_2.json")).findFirst().orElseThrow().preset();
-        var mix=(V3ClientPresets.Mixture)library().refresh(V3ClientPresets.Kind.MIXTURE).entries().stream().filter(e->e.file().equals("holland_3_2.json")).findFirst().orElseThrow().preset();
-        d.loadColumn(column.fields());d.composition(input,Arrays.stream(V3HollandExample32.molecularWeights()).boxed().toList());d.composition().load(mix.amounts(),mix.mass());
-        assertEquals(input,d.assemble());
-        d.set("s6","9990");assertThrows(IllegalArgumentException.class,()->V3HollandExample32.validateInput(d.assemble()));
+        var dropped=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();dropped.addProperty("stage_pressure_drop_kpa",5.0);
+        var carried=(V3ClientPresets.Column)V3ClientPresets.decode(dropped.toString(),V3ClientPresets.Kind.COLUMN);
+        assertFalse(carried.fields().containsKey("s8"));var loaded=draft();loaded.loadColumn(carried.fields());
+        assertEquals(loaded.base().stagePressureDropPascal(),loaded.assemble().stagePressureDropPascal(),1e-9);
     }
 }

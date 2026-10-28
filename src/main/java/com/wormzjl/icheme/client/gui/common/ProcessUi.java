@@ -19,11 +19,13 @@ import java.util.Locale;
  * recovery, and the small editor types both process screens use (temperature unit, numeric draft, row scrollbar).
  */
 public final class ProcessUi {
-    public static final int BG=0xFF202A31,PANEL=0xFF28363F,LINE=0xFF536C7A,TEXT=0xFFEAF1F5,
-        MUTED=0xFFA9BCC7,ACCENT=0xFF79D6CE,WARN=0xFFFFCD82;
+    public static final int BG=com.wormzjl.icheme.client.gui.common.kit.Palette.BG,PANEL=com.wormzjl.icheme.client.gui.common.kit.Palette.PANEL,
+        LINE=com.wormzjl.icheme.client.gui.common.kit.Palette.LINE,TEXT=com.wormzjl.icheme.client.gui.common.kit.Palette.TEXT,
+        MUTED=com.wormzjl.icheme.client.gui.common.kit.Palette.MUTED,ACCENT=com.wormzjl.icheme.client.gui.common.kit.Palette.ACCENT,
+        WARN=com.wormzjl.icheme.client.gui.common.kit.Palette.WARN;
     private ProcessUi(){}
     public static String number(double value){
-        return String.format(Locale.ROOT,value!=0&&Math.abs(value)<0.05?"%.3g":"%.1f",value);
+        return com.wormzjl.icheme.client.gui.common.kit.Format.number(value);
     }
     /** The gauge's resolution, Pa (owner decision D42, {@code NetworkReduction.REST_RESOLUTION}). */
     public static final double PRESSURE_RESOLUTION=0.1;
@@ -73,19 +75,6 @@ public final class ProcessUi {
             int cellWidth=i==0?first:(width-first)/Math.max(1,cells.length-1);
             g.drawString(font,font.plainSubstrByWidth(cells[i],Math.max(0,cellWidth-6)),at+3,y,header?TEXT:MUTED,false);at+=cellWidth;
         }
-    }
-
-    /** Temperatures cross the wire in kelvin; display defaults to Celsius. */
-    public enum TemperatureUnit implements DisplayUnit {
-        CELSIUS("C",273.15), KELVIN("K",0);
-        private final String symbol;
-        private final double offset;
-        TemperatureUnit(String symbol,double offset){this.symbol=symbol;this.offset=offset;}
-        public String symbol(){return symbol;}
-        public double display(double kelvin){return kelvin-offset;}
-        public double kelvin(double displayed){return displayed+offset;}
-        @Override public double si(double displayed){return kelvin(displayed);}
-        public TemperatureUnit next(){return this==CELSIUS?KELVIN:CELSIUS;}
     }
 
     /** Keeps untouched full-precision input values behind concise text. */
