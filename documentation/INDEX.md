@@ -14,9 +14,9 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-10-28-drum-outlet-placement/](2026-10-28-drum-outlet-placement/README.md) | A lying boot drum's oil outlet at the bottom of its front end, not mid-height on the head | Implemented 2026-10-28 (unreleased) |
-| [2026-10-28-constructor-templates/](2026-10-28-constructor-templates/README.md) | Constructor: current kind opens its design, column templates, calculator Save kept on close | In progress since 2026-10-28
-| [2026-10-28-gui-toolkit/](2026-10-28-gui-toolkit/README.md) | An own small GUI toolkit, first on the heat Control tab | Implemented 2026-10-28 (0.17.0) |
+| [2026-10-28-drum-outlet-placement/](2026-10-28-drum-outlet-placement/README.md) | A lying boot drum's oil outlet at the bottom of its front end, not mid-height on the head | Implemented 2026-10-28 (0.17.1) |
+| [2026-10-28-constructor-templates/](2026-10-28-constructor-templates/README.md) | Constructor: current kind opens its design, column templates, calculator Save kept on close | Implemented 2026-10-28 (0.17.1) |
+| [2026-10-28-gui-toolkit/](2026-10-28-gui-toolkit/README.md) | An own small GUI toolkit, first on the heat Control tab | Implemented 2026-10-28 (0.17.0, 0.17.1) |
 | [2026-10-28-gui-toolkit-evaluation/](2026-10-28-gui-toolkit-evaluation/README.md) | LDLib2 or an own toolkit for the GUI: evaluation and options | Concluded 2026-10-28 |
 | [2026-10-27-heat-exchanger-design/](2026-10-27-heat-exchanger-design/README.md) | Heat exchanger system: UA from size, coupling of the two sides, built-in control | Implemented 2026-10-28 (0.17.0) |
 | [2026-10-28-main-test-repair](2026-10-28-main-test-repair/README.md) | Fix main's 16 failing quick-suite tests | Implemented 2026-10-28 (0.16.2) |

@@ -46,7 +46,7 @@ Owner reports, 2026-10-28:
   - `PresentationMailboxTest`: a closed or removed session's command runs on its bucket.
   - `AssemblyPresentationTest`: a press queued before close still validates.
 - Renders: `equipment-constructor-choose`, `-column-design`, `-templates` (`tools/heat-gui-renders/GuiPrototypes.java`).
-- Gates at `25dc375b`: `test` 1801/1801, `slowGates` 188/188. No in-game check.
+- Gates at `25dc375b`: `test` 1801/1801, `slowGates` 188/188. Released as 0.17.1 at `545c827a` (rebased onto main) with no test run (owner: "no test"). No in-game check.
 - Tool folders: `tools/heat-gui-renders/` (two new prototypes). Code guide: equipment, column-v3, client-gui, machine-assemblies, fluid-runtime, README.
 
 ## 6. Open items

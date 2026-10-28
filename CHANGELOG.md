@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-28
+
 ### Changed
 
 - A lying boot drum's oil outlet faces down beside its front saddle, with a smaller largest line there, where a pipe's largest did not fit; it no longer leaves mid-height from the front head on eight drum sizes (2 x 6 m among them). `6588cdfe`; batch `2026-10-28-drum-outlet-placement`. No version bump (owner: "merge no test no bump").
@@ -22,7 +24,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ### Fixed
 
-- Equipment Constructor and column calculator (commit `25dc375b`; batch `2026-10-28-constructor-templates`, review `CONSTRUCTOR_TEMPLATES_REVIEW.md`): the choice page's current kind opens its design when pressed; a calculator's Save design pressed just before its screen closes is kept (a queued command outlives its screen; so does Calculate and the assembly screen's Validate), so the constructor's Import finds it; a column's design page has Templates: the bundled column templates and the player's own, made into a design by the server (`ColumnDesign.of`, an air cooler and standard pumps). Protocol `equipment-14`.
+- Equipment Constructor and column calculator (commits `545c827a`, `aea5ce8f`; batch `2026-10-28-constructor-templates`, review `CONSTRUCTOR_TEMPLATES_REVIEW.md`): the choice page's current kind opens its design when pressed; a calculator's Save design pressed just before its screen closes is kept (a queued command outlives its screen; so does Calculate and the assembly screen's Validate), so the constructor's Import finds it; a column's design page has Templates: the bundled column templates and the player's own, made into a design by the server (`ColumnDesign.of`, an air cooler and standard pumps). Protocol `equipment-14`.
 
 ## [0.17.0] - 2026-10-28
 

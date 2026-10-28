@@ -2,7 +2,7 @@
 
 Purpose: a lying boot drum's oil (organic) outlet leaves at the bottom of its front end, not mid-height on the front head (owner report 2026-10-28 with a screenshot of a 2 m x 6 m boot drum: "Horizontal drum organic outlet should on the bottom right, not on the right").
 
-Status: Implemented 2026-10-28, merged to main without a version bump (owner: "merge no test no bump"; branch `claude/drum-outlet-placement-1df644`, base `ac572f12`). Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-10-28, merged to main without a version bump (owner: "merge no test no bump"), released in 0.17.1 with batch 2026-10-28-constructor-templates (branch `claude/drum-outlet-placement-1df644`, base `ac572f12`). Index: [../INDEX.md](../INDEX.md).
 
 ## Physics and finding
 
