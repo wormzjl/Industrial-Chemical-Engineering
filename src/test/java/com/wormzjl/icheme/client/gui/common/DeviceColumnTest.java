@@ -158,6 +158,23 @@ class DeviceColumnTest {
             assertEquals(e.getValue(), keys(place(input(Kind.VALVE, true, false, e.getKey(), 3, "", "volume"), texts, 464), Column.Field.class), "valve " + e.getKey());
     }
 
+    /**
+     * One scale for every device screen (owner 2026-10-28, option b): a flow valve's page and a pump's, with the four
+     * readings each shows, fit the door view of the device screen's design height, so 2560 by 1440 shows them at scale 3.
+     */
+    @Test
+    void aValvesAndAPumpsPageFitTheDesignView() {
+        var texts = new HeatControlColumnTest.Recording();
+        int view = FluidGuiLayout.doorView(FluidGuiLayout.HEIGHT);
+        assertEquals(338, view);
+        for (var c : List.of(new Case("valve", input(Kind.VALVE, true, false, DeviceColumn.Valve.MASS_FLOW, 4, "Fully open / target limited", "volume")),
+                new Case("pump", input(Kind.PUMP, true, true, DeviceColumn.Valve.NONE, 4, "", "volume"))))
+            for (int width : new int[]{464, 790}) {
+                int tall = place(c.in(), texts, width).bounds().h();
+                assertTrue(tall <= view, c.name() + " at " + width + ": " + tall + " px in a " + view + " px view");
+            }
+    }
+
     private static List<String> keys(Column column, Class<? extends Column.Row> type) {
         var out = new ArrayList<String>();
         for (var p : column.rows()) if (type.isInstance(p.row())) out.addAll(p.slots().keySet());
@@ -181,9 +198,12 @@ class DeviceColumnTest {
         assertTrue(reader.stream().noneMatch(Column.Button::active), "a reader sees the switch and moves nothing");
 
         var flow = DeviceColumn.rows(input(Kind.VALVE, true, false, DeviceColumn.Valve.MASS_FLOW, 2, "", "volume"), texts);
-        var target = (Column.Group) flow.getFirst();
-        assertEquals(List.of("valve:mass", "valve:volume"), target.rows().stream().map(r -> ((Column.Choice) r).action()).toList());
-        assertTrue(((Column.Choice) target.rows().getFirst()).selected());
+        var setPoint = (Column.Group) flow.getFirst();
+        assertEquals("Set point", setPoint.title(), "the target is the set point's own, in its group (option b)");
+        var targets = setPoint.rows().stream().filter(Column.Choice.class::isInstance).map(Column.Choice.class::cast).toList();
+        assertEquals(List.of("valve:mass", "valve:volume"), targets.stream().map(Column.Choice::action).toList());
+        assertTrue(targets.getFirst().selected());
+        assertInstanceOf(Column.Field.class, setPoint.rows().getLast(), "the value after what it holds");
 
         var filter = DeviceColumn.rows(input(Kind.FILTER, true, false, DeviceColumn.Valve.NONE, 2, "", "volume"), texts);
         var recover = ((Column.Buttons) ((Column.Group) filter.getFirst()).rows().getFirst()).buttons().getFirst();

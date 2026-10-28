@@ -12,7 +12,7 @@ import org.jetbrains.annotations.Nullable;
  * A fluid device's door column on every page but the Control tab (batch 2026-10-28-gui-toolkit, GUI_REVIEW.md order 1,
  * GUI_TOOLKIT_PLAN.md section 14): function groups of the GUI kit in place of the old rail. First come the groups that
  * hold widgets, whose places do not move with what the plant reads: the side selector, Control (Off and On), the set
- * points (Set point, Limit, a valve's Target, a pipe's Size), a filter's Solids, the Phases with their basis key. Then
+ * points (Set point, a valve's with its target first, Limit, a pipe's Size), a filter's Solids, the Phases with their basis key. Then
  * the groups whose texts change: a tank's Level, a Valve's opening, the Readings (LED meters). The status is the door's
  * message display's alone.
  *
@@ -108,12 +108,14 @@ public final class DeviceColumn {
             case VOID -> List.of(group(setPoint, field("pressure", t, "pressure", p)));
             case PIPE -> List.of(group(t.get("device_group.size"), field("diameter", t, "bore", "m")));
             case VALVE -> switch (in.valve()) {
+                // What the set point holds (mass or volume flow) and its value in one group (owner 2026-10-28, option b:
+                // one plate fewer, so the valve's page fits the device screen's design height).
                 case MASS_FLOW, VOLUME_FLOW -> {
                     boolean byMass = in.valve() == Valve.MASS_FLOW;
-                    yield List.of(new Column.Group(t.get("heat_group.target"), null, List.of(
-                                    new Column.Choice(t.get("valve_target.mass_flow"), t.get("valve_target.mass_flow.hint"), byMass, "valve:mass"),
-                                    new Column.Choice(t.get("valve_target.volume_flow"), t.get("valve_target.volume_flow.hint"), !byMass, "valve:volume"))),
-                            group(setPoint, field(byMass ? "massFlow" : "volumeFlow", t, "flow", byMass ? mass : volume)));
+                    yield List.of(group(setPoint,
+                            new Column.Choice(t.get("valve_target.mass_flow"), t.get("valve_target.mass_flow.hint"), byMass, "valve:mass"),
+                            new Column.Choice(t.get("valve_target.volume_flow"), t.get("valve_target.volume_flow.hint"), !byMass, "valve:volume"),
+                            field(byMass ? "massFlow" : "volumeFlow", t, "flow", byMass ? mass : volume)));
                 }
                 case PRESSURE -> List.of(group(setPoint, field("pressure", t, "pressure", p)));
                 default -> List.of();

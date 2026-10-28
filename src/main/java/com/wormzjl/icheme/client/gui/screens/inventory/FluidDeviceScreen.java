@@ -66,8 +66,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private static String tr(String key,Object...args){return Component.translatable("gui.icheme.fluid."+key,args).getString();}
     @Override public void removed(){super.removed();WindowScale.restore(minecraft);}
     @Override protected void init(){
-        WindowScale.apply(minecraft,this);
-        imageWidth=Math.max(300,Math.min(790,width-16));imageHeight=Math.max(250,height-16);
+        WindowScale.apply(minecraft,this,FluidGuiLayout.HEIGHT,this::fits);
+        imageWidth=FluidGuiLayout.imageWidth(width);imageHeight=FluidGuiLayout.imageHeight(height);
         super.init();titleLabelY=inventoryLabelY=-1000;
         if(library==null)library=new V3ClientPresets(minecraft.gameDirectory.toPath(),name->{
             try{return minecraft.getResourceManager().getResource(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("icheme",name.substring("assets/icheme/".length()))).orElseThrow().open();}
@@ -107,8 +107,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean pool(){return heat()!=null&&unitKind()==com.wormzjl.icheme.science.equipment.HeatSides.Unit.KETTLE&&sideKind()==com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL;}
     private String flowUnit(){return flowRateUnit.unit(mass?"kg":"kmol");}
     // Every page but the Control tab: the door column from x 10 to side(), its bar right of it, then the tables' HMI
-    // screen. The column scrolls in its own view (the Control tab's view), as the table area scrolls its rows: at 480x270
-    // scaled pixels (the automatic GUI scale at 1920x1080) the screen is 254 GUI px high and a pump's column does not fit.
+    // screen. The screen takes the scale at which the window holds its design height (FluidGuiLayout.HEIGHT), lower where
+    // its tallest column still does not fit, down to the minimum a player reads (WindowScale, fits): 2 at 1920x1080, where
+    // the design size's 4 left a pump's column 128 px. There the column scrolls in its own view (the Control tab's view),
+    // as the table area scrolls its rows.
     private int side(){return FluidGuiLayout.side(imageWidth);}
     private int hoverX=-1,hoverY=-1;
     private int tableX(){return side()+24;}
@@ -805,8 +807,22 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** The door columns as placed: layout C's two (GUI_TOOLKIT_PLAN.md section 10), one on a narrow screen, or a device's page's. */
     private List<Column> doorColumns=List.of();
     private HeatFlowsheet flowsheet;private String flowsheetKey="";
-    private int controlTop(){return 74;}
-    private int controlBottom(){return imageHeight-52;}
+    private int controlTop(){return FluidGuiLayout.DOOR_TOP;}
+    private int controlBottom(){return imageHeight-FluidGuiLayout.DOOR_FOOT;}
+    /**
+     * Whether the door fits in a window {@code width} by {@code height} GUI px (WindowScale.Fit): the device's column
+     * and a heat unit's Control tab's columns, so a page change never changes the scale.
+     */
+    private boolean fits(int width,int height){return FluidGuiLayout.fits(width,height,this::tallest);}
+    private int tallest(int width){
+        if(menu.clientData()==null)return 0;
+        int tall=deviceColumn(width).bounds().h();
+        if(heat()!=null)for(var column:controlColumns(width))tall=Math.max(tall,column.bounds().h());
+        return tall;
+    }
+    // A column that grows past its view after the screen opened (the first publication's readings) lowers the scale
+    // where a lower one holds it; the screen builds again between frames, so no frame draws at two scales.
+    @Override protected void containerTick(){super.containerTick();if(doorView.max()>0&&WindowScale.lower(minecraft,FluidGuiLayout.HEIGHT,this::fits))rebuildWidgets();}
     private FluidGuiLayout.ControlSlots controlSlots(){return FluidGuiLayout.control(imageWidth);}
     private int drawingRight(){return controlSlots().drawingRight();}
     private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol());}
@@ -816,14 +832,19 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      * columns scroll together, in one view with one bar.
      */
     private void buildControl(){
-        var slots=controlSlots();var input=controlInput();var measure=GuiCanvas.measure(font);
-        if(slots.split()){var two=HeatControlColumn.columns(input,FluidDeviceScreen::tr);
-            doorColumns=List.of(Column.place(two.left(),slots.leftX(),controlTop(),slots.leftWidth(),measure,Column.Metrics.COMPACT),
-                Column.place(two.right(),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));}
-        else doorColumns=List.of(Column.place(HeatControlColumn.rows(input,FluidDeviceScreen::tr),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
+        var slots=controlSlots();
+        doorColumns=controlColumns(imageWidth);
         int tall=doorColumns.stream().mapToInt(c->c.bounds().h()).max().orElse(0);
         doorView.layout(new Rect(slots.leftX()-2,controlTop(),slots.rightX()+slots.rightWidth()-slots.leftX()+4,controlBottom()-controlTop()),slots.scrollX(),tall);
         keepWidgets(this::controlAction);
+    }
+    /** The Control tab's columns at an image width: layout C's two, or one on a narrow screen. */
+    private List<Column> controlColumns(int width){
+        var slots=FluidGuiLayout.control(width);var input=controlInput();var measure=GuiCanvas.measure(font);
+        if(!slots.split())return List.of(Column.place(HeatControlColumn.rows(input,FluidDeviceScreen::tr),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
+        var two=HeatControlColumn.columns(input,FluidDeviceScreen::tr);
+        return List.of(Column.place(two.left(),slots.leftX(),controlTop(),slots.leftWidth(),measure,Column.Metrics.COMPACT),
+            Column.place(two.right(),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
     }
     /**
      * A device's page's door column (DeviceColumn, GUI_REVIEW.md order 1) in place of the old rail: from x 10 to
@@ -835,9 +856,13 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         keepWidgets(this::deviceAction);
     }
     private Column placeDevice(){
-        var column=Column.place(DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr),10,controlTop(),side()-10,GuiCanvas.measure(font),Column.Metrics.COMPACT);
+        var column=deviceColumn(imageWidth);
         doorView.layout(new Rect(8,controlTop(),side()-6,controlBottom()-controlTop()),side()+3,column.bounds().h());
         return column;
+    }
+    /** The device's page's column at an image width: from x 10 to {@code FluidGuiLayout.side}. */
+    private Column deviceColumn(int width){
+        return Column.place(DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr),10,controlTop(),FluidGuiLayout.side(width)-10,GuiCanvas.measure(font),Column.Metrics.COMPACT);
     }
     /**
      * The door columns' fields and buttons, kept at their slots and moved as the view scrolls, so a scroll rebuilds
@@ -1067,6 +1092,25 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** Shared fluid-screen control positions, including the minimum supported 300px GUI width. */
     public static final class FluidGuiLayout {
         private FluidGuiLayout(){}
+        /** The screen's image in a window {@code width} by {@code height} GUI px: 8 px round it, 300 to 790 px wide, at least 250 high. */
+        public static int imageWidth(int width){return Math.max(300,Math.min(790,width-16));}
+        public static int imageHeight(int height){return Math.max(250,height-16);}
+        /** The door columns' view on every page: from y {@code DOOR_TOP} to {@code DOOR_FOOT} px above the image's foot. */
+        public static final int DOOR_TOP=74,DOOR_FOOT=52;
+        /**
+         * The device screen's design height (WindowScale, owner 2026-10-28 option b: one scale for every device screen):
+         * its door view is 338 px there, room for a valve's page (323 px) and a pump's (330 px); 2560 by 1440 takes scale 3.
+         */
+        public static final int HEIGHT=480;
+        /** The door view in a window {@code height} GUI px high. */
+        public static int doorView(int height){return imageHeight(height)-DOOR_FOOT-DOOR_TOP;}
+        /**
+         * Whether the door columns fit their view, with no bar, in a window {@code width} by {@code height} GUI px
+         * ({@code WindowScale.Fit}); {@code tallest} gives the tallest door column the screen places at an image width.
+         */
+        public static boolean fits(int width,int height,java.util.function.IntUnaryOperator tallest){
+            return tallest.applyAsInt(imageWidth(width))<=doorView(height);
+        }
         public record Slot(int x,int width){}
         /** A display key's width: the short labels (Mole, °C, kPa, /min) with room to spare (owner: the wider keys were "too big"). */
         static final int KEY=40;
