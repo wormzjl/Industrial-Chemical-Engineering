@@ -570,7 +570,11 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             rows.add(meter("filter_load",value(filter==null?Double.NaN:filter.loading()*100),"%"));
             rows.add(meter("captured",value(filter==null?Double.NaN:filter.captured().massKg()),"kg"));
         }
-        if(view.devicePressureChange()!=null)rows.add(meter("pressure_change",pressureValue(view.devicePressureChange()),p));
+        // A compressor reads its pressure ratio, the quantity its limit is set in, with the pressure change on its hover
+        // (owner 2026-10-28, option A: its page fits the device screen's 338 px view at 2560x1440).
+        boolean ratio=data.kind()==TopologyCompiler.Kind.COMPRESSOR&&view.devicePressureChange()!=null&&state!=null&&state.pressure()>0;
+        if(ratio)rows.add(new DeviceColumn.Meter("pressure_ratio",value((state.pressure()+view.devicePressureChange())/state.pressure()),"",tr("pressure_ratio.hint",pressureValue(view.devicePressureChange())+" "+p)));
+        else if(view.devicePressureChange()!=null)rows.add(meter("pressure_change",pressureValue(view.devicePressureChange()),p));
         if(view.heat()!=null){var heat=view.heat();
             rows.add(meter("outlet_temperature",temperatureValue(heat.outletTemperature()),t));
             rows.add(new DeviceColumn.Meter("duty",value(Math.abs(heat.heatWatt())/1000),"kW",tr(heat.burners()!=null?"duty.fired":heat.heatWatt()<0?"duty.cooled":"duty.heated")));
@@ -582,8 +586,6 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             if(heat.setPoint()!=null)rows.add(meter("set_temperature",temperatureValue(heat.setPoint()),t));
             if(heat.maximumWatt()!=null)rows.add(new DeviceColumn.Meter("duty_available",value(heat.maximumWatt()/1000),"kW",tr("duty_available.hint")));
         }
-        if(data.kind()==TopologyCompiler.Kind.COMPRESSOR&&view.devicePressureChange()!=null&&state!=null&&state.pressure()>0)
-            rows.add(meter("pressure_ratio",value((state.pressure()+view.devicePressureChange())/state.pressure()),""));
         // An instrument's main value on its meter, the other on hover: a flowmeter's mass flow (its volume flow), a level
         // gauge's share of its span (its height).
         for(var sensor:data.sensors()){

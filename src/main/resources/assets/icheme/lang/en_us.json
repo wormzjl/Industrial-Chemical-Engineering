@@ -1395,6 +1395,7 @@
   "gui.icheme.fluid.captured": "Captured solids",
   "gui.icheme.fluid.pressure_change": "Pressure change",
   "gui.icheme.fluid.pressure_ratio": "Pressure ratio",
+  "gui.icheme.fluid.pressure_ratio.hint": "Discharge over suction pressure. Pressure change %s.",
   "gui.icheme.fluid.outlets": "Connections by face",
   "gui.icheme.fluid.outlets.hint": "Top outlets draw gas first, then the lighter and the heavier liquid phase. Bottom outlets draw the heaviest liquid phase first, then the lighter one, then gas. Side outlets draw all phases together. Inflow through any face is not distinguished.",
   "gui.icheme.fluid.outlets.none": "No connection leaves this tank.",
