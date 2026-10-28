@@ -18,8 +18,9 @@ import java.util.TreeMap;
  *   <li>the film is a property of the curve, by vapour fraction ({@link #sample}), so a stream that starts to condense
  *   halfway through gets the condensing film there, with no mode and no lag;</li>
  *   <li>beyond its end knots the curve extends its end segment's temperature line and holds its end film, with value and
- *   slope continuous, and never throws inside a residual (AGENTS.md "Thermo validity"); {@link #extrapolated} reports
- *   it.</li>
+ *   slope continuous, and never throws inside a residual (AGENTS.md "Thermo validity"). It raises no notice: its span is
+ *   a sampling window that the next step samples again around the new state, and the property models' own data-range
+ *   notices report every node state that leaves a data range (owner Q15, 2026-10-28).</li>
  * </ul>
  */
 public final class HeatCurve {
@@ -66,8 +67,6 @@ public final class HeatCurve {
     public double enthalpy(int knot){return h[knot];}
     public double temperature(int knot){return t[knot];}
     public double film(int knot){return film[knot];}
-    /** Whether {@code value} lies beyond the end knots, where the curve extrapolates. */
-    public boolean extrapolated(double value){return value<h[0]||value>h[h.length-1];}
 
     /** The segment {@code value} lies on: -1 below the first knot, {@code knots()-1} above the last, else the segment
      * from that knot to the next. */

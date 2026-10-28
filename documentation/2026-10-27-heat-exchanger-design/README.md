@@ -6,7 +6,7 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C), W4 (the built-in control), W7 (the kettle) and W8 (the exchanger assembly) are built; study W3a is done. W9 (the column hook) is deferred until the column's operation stage exists. The owner's review world is ready ([REVIEW_WORLD.md](REVIEW_WORLD.md)). The owner answered Q1 to Q14 and Q16 (form C); Q15 is open. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C), W4 (the built-in control), W7 (the kettle) and W8 (the exchanger assembly) are built; study W3a is done. W9 (the column hook) is deferred until the column's operation stage exists. The owner's review world is ready ([REVIEW_WORLD.md](REVIEW_WORLD.md)). The owner answered Q1 to Q16 (Q16 form C; Q15 no curve-span notice). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -209,12 +209,12 @@ The plan also touches:
   - `HeatExchangerReviewWorld` (fluidGameTest, namespace `icheme_review`, run by `runReviewWorldServer` beside the column plant; not a gate) builds five units with water lines and controls: both exchangers at 30 °C (one with a 0.1 m real bypass, lines not checked, valve without its flowmeter), the largest air cooler at 80 °C, a vertical heater fed by a pump to 200 °C, a 1 m kettle at 0.5 MW fed from a generator 1 m over its shell floor with a 0.15 m vapour line.
   - Four builds to tune: a 45 °C set point was out of reach of the internal exchanger; the default air cooler was limited at full fans; a pump beside a generator does not join (a device joins only a pipe); the kettle's 0.05 m vapour line held the shell at 147 kPa, over the feed's head, so the pool boiled down.
   - Level renamed with the column batch's `nbt.js`; copied to `run/saves/IChemE heat exchanger review`.
+- 2026-10-28, Q15 answered (yes: drop the curve-span notice), in the Q15 commit. `HeatCurve.extrapolated`, never wired to a status line, removed with its test assertion; plan sections 3, 4 and 12 record the answer. The property models' data-range notices stay (AGENTS.md "Thermo validity"); the heater coils' "water vapour partial pressure extrapolated above 250 kPa" is one of them.
 
 ## Notes
 
-- Q16 answered 2026-10-27: form C, the coupling fence (W3a). Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
+- Q15 answered 2026-10-28: no curve-span notice (plan sections 4 and 12). Q16 answered 2026-10-27: form C, the coupling fence (W3a). Q14 answered 2026-10-27: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
 - Open from W1:
-  - Q15: the curve-span extrapolation notice, recommended dropped (plan section 12). W3 found that a two-sided march cannot leave its span;
   - a pipe gauge downstream of a side reads the outlet junction; a gauge on the unit itself still reads its inlet node;
   - the step accepts a junction laid out without a phase its enthalpy holds; only the seeds guard it (W1 saw liquid 22 K superheated when the seeds missed the heat). To be put to the owner;
   - the curve is fluid only: a stream carrying crystals reads its enthalpy on the fluid's curve.

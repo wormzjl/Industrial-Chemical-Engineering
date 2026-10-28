@@ -21,7 +21,7 @@ You spawn at noon, facing east. The five units stand in a row 8 blocks to your l
    - Break a bypass pipe. Expected: the status goes back to not validated, and the internal bypass controls again.
    - The world has no ratio station; the solver gate covers RATIO.
 3. **Unit 3 (W5, W4).** Lower the set point to 70 °C. Expected: LIMITED, the fans at full speed, about 76.6 °C (349.7 K in a build at that set point). Switch the fans off: the outlet rises toward 85 °C.
-4. **Unit 4 (W6).** Change the firing target. Both coils show the notice "outside data range: water vapour partial pressure extrapolated above 250 kPa". This is the curve-span notice that Q15 proposes to drop.
+4. **Unit 4 (W6).** Change the firing target. Both coils show the notice "outside data range: water vapour partial pressure extrapolated above 250 kPa". It is the water data's own range notice (AGENTS.md "Thermo validity"), which stays; the curve-span notice is gone (Q15).
 5. **Unit 5 (W7).** Change the tube duty. The pool boils at about 100 °C. Its level stands near the feed generator's height. If you remove the feed generator, the pool boils down to EMPTY in about 20 minutes (258 kg at 0.22 kg/s).
 6. Save, leave and reload the world. Every unit keeps its control, and unit 2 keeps its checked lines (a chunk-load check publishes them again).
 

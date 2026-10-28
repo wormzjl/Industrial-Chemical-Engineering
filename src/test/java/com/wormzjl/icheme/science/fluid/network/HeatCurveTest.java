@@ -53,7 +53,6 @@ class HeatCurveTest {
         var curve=sensible();
         assertEquals(425,curve.temperatureAt(500_000),1e-12);
         assertEquals(275,curve.temperatureAt(-100_000),1e-12);
-        assertTrue(curve.extrapolated(500_000)&&!curve.extrapolated(200_000));
         // One line through the extension: the exponential from 425 K, and heating towards a wall above the top knot.
         assertEquals(300+125/Math.E,curve.temperatureAt(curve.march(500_000,2,8000,300)),1e-10);
         assertEquals(450-150/Math.E,curve.temperatureAt(curve.march(0,2,8000,450)),1e-10);

@@ -99,6 +99,7 @@ A shell-and-tube exchanger passes two streams that never mix. Each side is a flo
 | Q12 order | W1 heat law, W2 device, W3 coupling, W4 control, W5 air cooler, W6 fired heaters, W7 kettle, W8 assembly, W9 column hook | section 10 |
 | Q13 two bypasses | Keep the internal bypass for exchangers without an assembly; a complete assembly's valves take over | sections 6, 7 |
 | Q14 order after the review | The one-sided air cooler (W5) and fired heater (W6) before the timing study and the coupling: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9 | section 10 |
+| Q15 curve-span notice (2026-10-28) | No notice when a side's march leaves its curve's span; the property models' data-range notices stay | section 4 |
 
 ## 4. UA from size, a film per phase
 
@@ -132,7 +133,7 @@ The pairs land inside or near the design ranges. Two are high: organic condenser
    - The kernel integrates dh/dA = −h_film(h) (T(h) − T_wall) / ṁ exactly per segment. With both factors linear in h on a segment this is a partial-fraction integral, with its degenerate branches (a constant film, a constant temperature, a common root).
    - A stream that starts to condense halfway through the exchanger gets the condensing film there, in the same Newton.
    - The film is continuous along the curve: no new unknown, no switch, no mode.
-   - **The curve's span**: from the side's inlet to the other side's inlet temperature as of the slice start, with a margin of 10 K each way. Beyond it the curve extrapolates with continuous value and slope, and the island's status line carries a data-range notice (AGENTS.md "Thermo validity"). No enthalpy or wall temperature raises an exception inside a residual.
+   - **The curve's span**: from the side's inlet to the other side's inlet temperature as of the slice start, with a margin of 10 K each way. Beyond it the curve extrapolates with continuous value and slope (AGENTS.md "Thermo validity"), with no notice (owner Q15, 2026-10-28): the span is a sampling window that the next step samples again, and the property models' own data-range notices report every node state that leaves a data range. No enthalpy or wall temperature raises an exception inside a residual.
 3. **The other side's film** reaches a side only through the coupling record (section 5), never through its Newton.
 4. **No wall heat** (Q10). With steel, weak films charge the wall slowly (gas/gas 6 minutes); without it a gas exchanger answers as fast as a water one, one slice late. No steady state moves.
 
@@ -353,7 +354,7 @@ W1 as built (2026-10-27), three changes from the plan of revision 4, each revers
 - The heat is booked as `HEAT` boundary transfers (section 5.1), not as a new interval-result field. The audit, the certificate replay and the codec read it with no format change.
 - The passage law moves to W2. A channel count on the section geometry reaches the codec and the certificate signature, and the device states the side's geometry.
 
-Left open by W1, for W2's screen: the extrapolation notice on the island's status line (the kernel reports it, `HeatCurve.extrapolated`) and the gauges' outlet temperature.
+Left open by W1, for W2's screen: the extrapolation notice on the island's status line (the kernel reports it, `HeatCurve.extrapolated`) and the gauges' outlet temperature. The notice was dropped by Q15 (2026-10-28) and `HeatCurve.extrapolated` removed.
 
 W2 as built (2026-10-27), as designed after mapping the device code:
 
@@ -547,7 +548,7 @@ Answered on 2026-10-27: Q1 to Q14 (section 3).
 Decided in revision 3 without a question (reversible; the review gives the numbers): the give-back split by slice heat, chosen among three forms; the controller without the give-back in its target.
 
 - **Q14 Order after the review** (answered 2026-10-27: yes). The air cooler (W5) and the fired heater (W6) have one side and a known partner, so they need no partner read. Order: W1, W2, W5, W6, W3a, W3, W4, W7, W8, W9.
-- **Q15 The curve's extrapolation notice** (W5, open). Section 4 asks for a status-line notice when a side's march leaves its curve's span. The span is a sampling window (the side's inlet and wall temperatures, 10 K beyond each) that the next step samples again around the new state. The property model's own data-range notices still report every node state that leaves a data range. An air cooler's march approaches its flat wall and never leaves the span. W3: a two-sided march cannot leave it either (section 10, W3 as built). Recommended: no notice for the curve's span.
+- **Q15 The curve's extrapolation notice** (answered 2026-10-28: yes, no notice; `HeatCurve.extrapolated` removed). Section 4 asks for a status-line notice when a side's march leaves its curve's span. The span is a sampling window (the side's inlet and wall temperatures, 10 K beyond each) that the next step samples again around the new state. The property model's own data-range notices still report every node state that leaves a data range. An air cooler's march approaches its flat wall and never leaves the span. W3: a two-sided march cannot leave it either (section 10, W3 as built). Recommended: no notice for the curve's span.
 - **Q16 The coupling's timing form** (answered 2026-10-27: C, the fence). Recommended: C, the fence. It is deterministic, energy-exact, the fastest to settle, control and recover, and the simplest (no extrapolation). Its cost: a fast side runs up to one partner cadence behind online time (19 s against 7 s for a 5 s side with a 20 s partner), and after a partner's hold the waiting side's readings hold until the partner catches up. The alternative is B, if screens must never wait: about 30 % slower to settle on average, and up to 1 K of dependence on job times. Numbers: [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md).
 
 ## 13. Risks
