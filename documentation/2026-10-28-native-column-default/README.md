@@ -2,7 +2,7 @@
 
 Purpose: use the C++ column library by default, with the Java path wherever the library is missing (owner request 2026-10-28: "Use C++ solver as default").
 
-Status: In progress since 2026-10-28 (branch `claude/distillation-column-integration-fef62f`, base `ac572f12`, beside the column operation plan); awaits the owner's choice among the review's options. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-28 (branch `claude/distillation-column-integration-fef62f`, base `ac572f12`, beside the column operation plan); the owner chose option A (keep the C++ default) on 2026-10-29. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -16,9 +16,9 @@ Status: In progress since 2026-10-28 (branch `claude/distillation-column-integra
 ## History
 
 - 2026-10-28 (`9c5eb01f`): the C++ library is built by `processResources` when CMake is found, packed into the jar and loaded by default; the C++ Peng-Robinson outer pass of the inside-out trial runs unless `-Dicheme.native.thermo.batch=false`. Checks: column quick tests 405/405, column slow gates 99/99 with the library loaded; `NativeColumnSolverTest` 3/3 with the pass on and off; the jar copies and reuses the library. The C++ pass equals the Java kernel to 5e-14 in ln(phi); a separating crude column publishes the same products to 7e-13 relative and takes the same time. The C++ Newton stays a test probe (not wired; slower than the Java banded Newton). Code guide: `column-v3.md` (class row, owner row, the determinism exception) and `README.md` (the exception).
+- 2026-10-29: owner decision: option A of the review, the C++ library stays the default with the Java path as fallback. No code change.
 
 ## Open items
 
-- The owner's choice among options A to D of the review (A as built).
 - Side finding for its own task: on the PC03/PC10 binary every published success has no separation and passes the audit, also for the pilot that `V3ColdStartTest` requires to succeed.
 - A jar carries only its build machine's library (Windows x86-64 here); Linux and macOS run the Java path.

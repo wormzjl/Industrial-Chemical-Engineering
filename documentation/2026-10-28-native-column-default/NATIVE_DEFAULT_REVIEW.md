@@ -39,6 +39,8 @@ The column uses the C++ library without a switch wherever it can load, and the J
 
 ## 7. Options for the owner
 
+Owner decision 2026-10-29: A.
+
 - A (as built, recommended): keep the C++ default. Cost: last-digit differences between machines with and without the library.
 - B: back to opt-in. Java stays the default and bit-identical everywhere; the C++ pass stays behind a switch.
 - C: A plus a bit-identical C++ pass: port `DeterministicMath` (log, cbrt, acos, cos) and the kernel's root repair to C++, and gate the snapshot bit for bit.
