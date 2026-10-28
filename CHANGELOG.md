@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- Water steam as a second-virial gas from IAPWS-IF97 Region 2 (option B of the owner test review; commits `3a527f1e`, `4521b65c`; batch `2026-10-27-heat-exchanger-design`, review `WATER_STEAM_VIRIAL_REVIEW.md`): the free water's steam has v = RT/p + B(T), h = h_ig + p(B - T dB/dT) and p_w = n_w RT/(V - n_w B), in the network state, the velocity stiffness and the phase engine alike (`SteamVirial`). The volume is within 1.05 % of Region 2 at 10 bar saturation (ideal 7.6 %). The steam's qualified partial pressure is the virial's own computed 2 % table: 1.8 MPa below 500 K up to 65 MPa from 875 K (ideal 0.125 to 2 MPa), so water at 10 bar no longer raises the "water vapour partial pressure" notice. Identity `separate-free-water-v3`: a world with free water restates once on load and keeps its facts (corpus `compat/fluid/steam-v2`).
+
 ## [0.15.0] - 2026-10-27
 
 ### Added
