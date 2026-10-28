@@ -26,6 +26,8 @@ No facts-schema or shape change: the registration record is unchanged; only its 
 
 ## 4. Owner options (choices the physics does not force)
 
+Owner decision 2026-10-28: "Keep defaults" (B1, J1, V1).
+
 **B. The converted mover's bore.** The old block registered 0.05 m, but each half of its link took the bore of the pipe it met (`PhysicalFluidTopology.half`, owner decision 2026-10-16). An in-line mover uses its own bore for both halves.
 - **B1 (recommended)**: the largest bore of the pipes it meets on its axis, else 0.05 m. Same hydraulics as before where both sides have one bore (every line laid by the tool); where they differ, the smaller side's half-block now takes the larger bore. Drawn at the line's size.
 - B2: keep 0.05 m. Changes the hydraulics on every line that is not 0.05 m: on a 0.2 m line, 1 m at 0.05 m bore instead of 0.2 m (at 0.01 m³/s, 5.1 m/s instead of 0.32 m/s), and the mover is drawn with reducers.

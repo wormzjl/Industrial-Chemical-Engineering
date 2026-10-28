@@ -16,9 +16,9 @@ Status: In progress since 2026-10-28 (branch `claude/vigorous-bell-dab92b`, base
 ## History
 
 - 2026-10-28: plan written; defaults B1, J1 and V1 implemented, awaiting the owner's choice. The first `test` run showed that the ledger refused the change of kind; `Overlay.sameKind` now allows only this conversion. Commit `83ed8a58` (code and tests), then the documents and the CHANGELOG `[Unreleased]` line. Gates on `83ed8a58`: `slowGates` 188/188; `test` 1654 with 16 failures, all on main already (review section 8); fluid GameTests 37/37 (`movers1`). No in-game check. Not merged, not pushed.
+- 2026-10-28: owner decision on the migration options: "Keep defaults" (B1 largest axial bore, J1 joins as an in-line mover, V1 an upright one keeps its registration).
 
 ## Open items
 
-- Owner choice on options B, J and V (plan section 4).
 - Resolved 2026-10-28 on this branch: main's 16 quick-suite failures (review section 8), batch [2026-10-28-main-test-repair](../2026-10-28-main-test-repair/README.md) (`3f7df293`). With it, `test` 1654/1654, `slowGates` 188/188 and fluid GameTests 37/37 on `3f7df293`.
 - The heat exchanger batch's review world places an old `FLUID_PUMP`; that batch moves it to an in-line pump after this lands.

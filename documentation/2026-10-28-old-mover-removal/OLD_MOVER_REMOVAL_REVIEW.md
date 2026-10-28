@@ -24,7 +24,7 @@ A pump or a compressor sits in the line, flanged to its pipe at the line's bore.
 
 On a line of one bore, the converted mover compiles to the same network: same pipes, sections, controls and ports (`PhysicalRegistryTest.aOneBlockMoverConvertsToTheInlineMoverWithItsFacts` asserts that the island's pipes are equal). It differs only where the two sides of the line had different bores (B1), or where the old block touched a tank, generator, void or filter on its axis: it now joins it (J1).
 
-## 5. Owner options (defaults implemented)
+## 5. Owner options (defaults implemented; owner decision 2026-10-28: "Keep defaults")
 
 B1 (largest axial bore), J1 (joins as an in-line mover) and V1 (upright ones keep their registration). The alternatives are in plan section 4.
 
