@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- The fluid device pages fit on big screens (commit `bb27fbd8`; batch `2026-10-28-gui-toolkit`, plan section 20): one GUI scale for every device screen, the one at which the window holds 464 by 480 GUI px (2 at 1920 by 1080, 3 at 2560 by 1440, 4 at 3840 by 2160), lower while a door column does not fit, never below the minimum a player reads (half the design size's scale, rounded up, at least 2); a flow valve's target inside its Set point group. No version bump (owner: "Merge no bump no test").
+
 ## [0.17.0] - 2026-10-28
 
 ### Added

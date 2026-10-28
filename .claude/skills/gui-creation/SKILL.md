@@ -61,6 +61,14 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
    largest at which the window holds 464 by 254 GUI px, so design and render every screen at 464 by 254, and check it
    up to 1.5 times that (from scale 2; 533 by 280 is a 1600 by 840 window). Only a window under 928 by 508 screen px
    (scale 1) reaches twice. Never size a widget from the player's GUI scale.
+   A screen whose pages are taller (owner: "on big screens these should all fit into one page instead of requiring
+   sliders", "It should scale") has its own design height and a fit: `WindowScale.apply(minecraft, this, designHeight,
+   fit)`. It takes the scale that holds 464 by its design height, steps down while its door does not fit, and never
+   goes below `WindowScale.minimum` (half the design size's scale rounded up, at least 2 where that is 2 or more;
+   owner: "Define a minimum scale user can see correctly, use slider below that"); below it the door scrolls. The
+   fluid device screen's design height is 480 (`FluidGuiLayout.HEIGHT`, a 338 px door view): one scale for every
+   device, 2 at 1920 by 1080, 3 at 2560 by 1440, 4 at 3840 by 2160. Keep a device page within 338 px, or tell the
+   owner what keeps a bar.
 
 ## Alignment (owner: "make alignment a rule for GUI creating")
 
@@ -116,7 +124,8 @@ java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main too
 ```
 
 Both draw in the game's bitmap font from the Minecraft resources jar (`build/moddev/artifacts/`), at 464 by 254 GUI
-px (the automatic scale at 1920 by 1080), and print each column's height against its view. Send the owner the
+px (the design size), and print each column's height against its view. The fluid device pages are drawn at the size a
+window takes for them (`-Dwindow=2560x1440`, 1920x1080 by default; the tool prints the scale). Send the owner the
 sheets with `SendUserFile`.
 
 ## Pitfalls

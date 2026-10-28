@@ -310,3 +310,22 @@ Owner, on the calculator's 800 by 420 render: "This should be scaled to window s
 - **Choice (d)**: a fired heater's duty target needs the heat engine (`FiredCoil`, `HeatControl`); it moves to the heat batch, `2026-10-27-heat-exchanger-design`.
 - **Choice (e)** (owner: "Keep on the gauge"): a gauge's unit stays the gauge's own, its dial's scale for every player.
 - **Open.** No in-game check of the scale (owner: no dev-client check unless asked); judged by the gate, the game's code path and the renders.
+
+## 20. Device pages fit on big screens (2026-10-28)
+
+Owner, on a device page's door column and its bar: "I think on big screens these should all fit into one page instead of requiring sliders", then "It should scale".
+
+- **Expected.** In a big window a device's door column shows whole, with no bar: the screen takes a smaller whole scale (more GUI px), while its font stays readable.
+- **What the code did.** Every screen took the largest whole scale at which the window holds 464 by 254 GUI px (section 19): 4 in a 1920 by 1080 window, where the door view is 128 px and the columns are 263 to 347 px (a pump 330, a valve 347).
+- **Options rendered** (a 2560 by 1440 window, a pump's page and a valve's): (a) each screen the largest scale its own column fits (the pump at 3, the valve at 2; at 3840 by 2160 a source and a tank at 5, the others at 4); (b) one scale for every device screen, the valve's Target inside its Set point group (347 to 323 px), all at 3; (c) one scale from the valve's page as it is, all at 2. A door of two columns was started and dropped ("It should scale"). Owner: "(b)". For the pages taller than (b)'s view (a heat side with up to twelve readings, 402 px; a mover with instruments, 410 px and more), owner: "Define a minimum scale user can see correctly, use slider below that".
+- **As built.**
+  - `WindowScale.minimum`: half the design size's scale, rounded up, and never below 2 where that one is 2 or more (even with the Unicode font). 2 at 1920 by 1080, 3 at 2560 by 1440, 4 at 3840 by 2160, 2 at 1366 by 768, 1 at 800 by 600.
+  - `WindowScale.of(width, height, unicode, designHeight, fit)`: the largest scale at which the window holds 464 by the screen's design height, between the minimum and the design size's scale; lowered a whole step (two with the Unicode font) while the screen's door columns do not fit, down to the minimum. Below that the view scrolls. `apply(minecraft, screen, designHeight, fit)`; `lower`: a column that grows past its view after the screen opened (the first publication's readings) builds the screen again at the lower scale, in its tick, so no frame draws at two scales. The scale only steps down while the screen is open.
+  - `FluidDeviceScreen`: design height `FluidGuiLayout.HEIGHT` 480, a door view of 338 px (`doorView`). Its fit is the tallest of the device column and a heat unit's Control columns (`tallest`), so a tab change never rescales. `FluidGuiLayout.imageWidth`, `imageHeight`, `DOOR_TOP`, `DOOR_FOOT` and `fits` replace the screen's own numbers. The other six kit screens keep section 19's scale.
+  - `DeviceColumn`: a flow valve's Set point group holds what it holds (Mass flow, Volume flow) above its flow entry; the device page has no Target plate (the Control tab keeps its own).
+  - Every device page, measured: 1920 by 1080 at scale 2 (view 398 px), 2560 by 1440 at 3 (338 px), 3840 by 2160 at 4 (398 px). Columns: pump 330, valve 323, pipe 293, source 286, tank 263 px.
+  - Gates: `KitLayoutTest.aTallerScreenStepsDownToTheMinimumScaleAPlayerReads` (the minimum, the scales, the steps, a sweep), `DeviceColumnTest.aValvesAndAPumpsPageFitTheDesignView`; the target test reads the Set point group.
+  - Render tool: `GuiPrototypes` draws the device pages at the scale a window takes (`-Dwindow=WIDTHxHEIGHT`, 1920x1080 by default), and a valve in a 1366 by 768 window (scale 2, it scrolls). The option sheet came and went with the pick.
+- **Open.**
+  - At 2560 by 1440 (scale 3, view 338 px) a compressor's page (five readings, 350 px), a heat side with nine readings or more and a mover with instruments keep a bar. At 1920 by 1080 and 3840 by 2160 (view 398 px) a heat side with twelve readings (402 px) and a mover with four instruments (410 px) do. Trimming them (for example a compressor's pressure ratio on its Δp meter's hover) is the owner's call.
+  - No in-game check (owner: no dev-client check unless asked).
