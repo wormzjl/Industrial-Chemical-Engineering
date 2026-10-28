@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * The GUI kit's column and scroll view (batch 2026-10-28-gui-toolkit, GUI_TOOLKIT_PLAN.md sections 4 and 10): rows
+ * The GUI kit's column and scroll view (batch 2026-10-28-gui-toolkit, GUI_TOOLKIT_PLAN.md sections 4, 10, 11): rows
  * placed in order, inside the width and apart; no text cut (texts wrap, buttons stack); hover and click by the same
  * placement; a scroll clamped to its content; a hidden view or a point outside it takes nothing; a widget shown only
  * wholly inside.
@@ -63,12 +63,12 @@ class KitLayoutTest {
     }
 
     @Test
-    void aRowHoversItsHintOrItsHiddenLineOutsideItsWidgets() {
+    void aRowHoversItsHintOutsideItsWidgets() {
         var column = Column.place(List.of(new Column.Line("A line much longer than the column is wide, wrapped", Palette.TEXT),
                 new Column.Choice("Off", "The unit runs as built", false, "mode:off"), new Column.Field("lowLimit", "Never cool below", "C", "Blank for no limit")), 0, 0, 120, M);
         assertNull(column.hover(5, 5), "a wrapped line shows whole: no hover");
         var choice = column.rows().get(1);
-        assertEquals("Off\nThe unit runs as built", column.hover(choice.rect().x() + 20, choice.rect().y() + 3), "an unchosen choice's line on hover");
+        assertEquals("The unit runs as built", column.hover(choice.rect().x() + 20, choice.rect().y() + 3), "a choice's hint on hover");
         var field = column.rows().get(2);
         assertEquals("Never cool below\nBlank for no limit", column.hover(field.rect().x() + 2, field.rect().y() + 5));
         var box = field.slots().get("lowLimit");
@@ -78,32 +78,34 @@ class KitLayoutTest {
     /** Owner, 2026-10-28: "make sure characters are rendered correctly". No row cuts a text: every word is drawn. */
     @Test
     void noRowCutsItsTextTheyWrapAndButtonsStack() {
-        String long_ = "A heading wider than the column it heads";
-        var rows = List.<Column.Row>of(new Column.Heading(long_), new Column.Line(long_, Palette.TEXT),
-                new Column.Choice("Outlet temperature held", "Sets the bypass to hold the outlet at the set point", true, "mode:t"),
+        String long_ = "A plate wider than the group it names";
+        var rows = List.<Column.Row>of(new Column.Group(long_, null, List.of(new Column.Line(long_, Palette.TEXT))),
+                new Column.Choice("Outlet temperature held at the set point", "Sets the bypass", true, "mode:t"),
                 new Column.Field("r", "Ratio to the other feed of the pair", "", null),
                 new Column.Buttons(List.of(new Column.Button("a", "Convection", false, null), new Column.Button("b", "Radiant", true, null))));
         var column = Column.place(rows, 0, 0, 105, M, Column.Metrics.COMPACT);
         for (var p : column.rows()) {
-            for (var t : p.texts()) assertTrue(M.width(t) <= 105, "a text inside the width: " + t);
+            for (var t : p.texts()) assertTrue(M.width(t) <= p.rect().w(), "a text inside its row: " + t);
             var words = String.join(" ", p.texts()).replace("  ", " ").strip();
             switch (p.row()) {
-                case Column.Heading h -> assertEquals(h.text(), words);
+                case Column.Group g -> assertEquals(g.title(), words);
                 case Column.Line l -> assertEquals(l.text(), words);
-                case Column.Choice c -> assertEquals(c.title() + " " + c.line(), words);
+                case Column.Choice c -> assertEquals(c.title(), words);
                 case Column.Field f -> assertEquals(f.label(), String.join(" ", p.texts().subList(0, p.lead())));
                 default -> {
                 }
             }
         }
-        assertEquals(11 + 2 * Measure.LINE, column.rows().get(1).rect().h(), "a line in three: a line's height and 10 px each further line");
+        var line = column.rows().get(1);
+        assertEquals(11 + (line.texts().size() - 1) * Measure.LINE, line.rect().h(), "a wrapped line: a line's height and 10 px each further line");
+        assertTrue(line.texts().size() > 1);
         var buttons = column.rows().get(4);
         var a = buttons.slots().get("a");
         var b = buttons.slots().get("b");
         assertEquals(new Rect(0, buttons.rect().y(), 105, Column.WIDGET), a, "\"Convection\" does not fit half the row: one button a row, the whole width");
         assertEquals(new Rect(0, buttons.rect().y() + 20, 105, Column.WIDGET), b);
         assertEquals(40, buttons.rect().h());
-        var wide = Column.place(List.of(rows.get(4)), 0, 0, 160, M, Column.Metrics.COMPACT).rows().getFirst();
+        var wide = Column.place(List.of(rows.get(3)), 0, 0, 160, M, Column.Metrics.COMPACT).rows().getFirst();
         assertEquals(20, wide.rect().h(), "side by side where both fit");
     }
 
@@ -163,22 +165,44 @@ class KitLayoutTest {
     }
 
     @Test
-    void compactMetricsPlaceTheSameRowsShorterAndOnlyTheChosenChoiceShowsItsLine() {
+    void compactMetricsPlaceTheSameRowsShorterAndAChoiceDrawsItsTitleOnly() {
         var normal = Column.place(every(), 20, 74, 180, M);
         var compact = Column.place(every(), 20, 74, 180, M, Column.Metrics.COMPACT);
         assertTrue(compact.bounds().h() < normal.bounds().h());
         assertEquals(normal.slots().keySet(), compact.slots().keySet());
         for (var p : compact.rows()) for (var s : p.slots().values()) assertTrue(s.inside(p.rect()), "a widget inside its compact row");
-        var chosen = compact.rows().get(2);
-        assertEquals(List.of("Hold the outlet temperature", "Sets the bypass to hold it"), chosen.texts());
-        assertEquals(20, chosen.rect().h());
-        assertNull(chosen.hover());
-        var other = compact.rows().get(3);
-        assertEquals(List.of("Off"), other.texts(), "an unchosen choice draws its title only");
-        assertEquals(11, other.rect().h(), "a line high");
-        assertEquals("Off\nThe unit runs as built", other.hover());
-        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(11, 20, 17, 20, 10), "a field row lower than its box");
-        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(11, 12, 20, 20, 10), "a choice lower than its title and line");
+        for (int i : new int[]{2, 3}) {
+            var choice = compact.rows().get(i);
+            assertEquals(List.of(((Column.Choice) choice.row()).title()), choice.texts(), "chosen or not, a choice draws its title");
+            assertEquals(11, choice.rect().h(), "a line high");
+        }
+        assertEquals("Sets the bypass to hold it", compact.rows().get(2).hover());
+        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(11, 17, 20, 10), "a field row lower than its box");
+        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(9, 20, 20, 10), "a line lower than its text");
+    }
+
+    /** Owner, 2026-10-28: "Text plate and function group should be better designed so new users are not overwhelmed". */
+    @Test
+    void aGroupFramesItsRowsUnderItsPlateAndHoversItsHintOnItsOwnSpace() {
+        var rows = List.<Column.Row>of(new Column.Group("Set point", "What to hold", List.of(new Column.Field("t", "Outlet", "C", null),
+                new Column.Buttons(List.of(new Column.Button("a", "Run", false, null, true), new Column.Button("b", "Stop", true, null))))), new Column.Line("After", Palette.TEXT));
+        var column = Column.place(rows, 10, 0, 150, M, Column.Metrics.COMPACT);
+        var group = column.rows().get(0);
+        var field = column.rows().get(1);
+        var buttons = column.rows().get(2);
+        int top = Column.plate(1) + 2;
+        assertEquals(new Rect(10 + Column.INSET, top, 150 - 2 * Column.INSET, 20), field.rect(), "the rows inset, under the plate");
+        assertEquals(top + 20, buttons.rect().y());
+        int frame = buttons.rect().bottom() + Column.INSET;
+        assertEquals(new Rect(10, 0, 150, frame + Column.GROUP_GAP), group.rect(), "the group round its rows, and the gap under its frame");
+        assertEquals(List.of("Set point"), group.texts());
+        assertEquals(frame + Column.GROUP_GAP, column.rows().get(3).rect().y(), "the next row under the gap");
+        assertEquals("What to hold", column.hover(12, 2), "the plate's space hovers the group's hint");
+        assertEquals("What to hold", column.hover(12, frame - 2), "and the frame's");
+        assertNull(column.hover(field.rect().x() + 2, field.rect().y() + 5), "a row inside answers for itself");
+        assertEquals(List.of("t", "a", "b"), List.copyOf(column.slots().keySet()));
+        assertTrue(((Column.Buttons) buttons.row()).buttons().getFirst().latched());
+        assertFalse(new Column.Button("x", "X", true, null).latched(), "a button is not latched unless it says so");
     }
 
     @Test
@@ -243,10 +267,10 @@ class KitLayoutTest {
         view.layout(new Rect(20, 74, 180, 100), 204, 400);
         view.drawBar(canvas, skin);
         assertEquals("scrollbar " + new Rect(204, 74, ScrollView.BAR, 100) + " " + new Rect(204, 74, ScrollView.BAR, 25), calls.getLast(), "the thumb a quarter of the track");
-        Column.place(List.of(new Column.Heading("Mode")), 0, 0, 150, M).draw(canvas, 0, new Skin() {
+        Column.place(List.of(new Column.Group("Mode", null, List.of(new Column.Line("x", Palette.TEXT)))), 0, 0, 150, M).draw(canvas, 0, new Skin() {
             @Override
-            public void heading(Canvas c, Rect r, List<String> lines) {
-                calls.add("heading " + r + " " + String.join("|", lines));
+            public void group(Canvas c, Rect r, List<String> title) {
+                calls.add("group " + r + " " + String.join("|", title));
             }
 
             @Override
@@ -261,27 +285,26 @@ class KitLayoutTest {
             public void scrollbar(Canvas c, Rect track, Rect thumb, boolean dragging) {
             }
         });
-        assertEquals("heading " + new Rect(0, 0, 150, Measure.LINE + Column.HEADING_PAD) + " Mode", calls.getLast(), "the skin draws a heading in its row");
+        assertEquals("group " + new Rect(0, 0, 150, Column.plate(1) + 2 + 12 + Column.INSET) + " Mode", calls.getLast(), "the skin draws a group's frame and plate");
     }
 
     @Test
     void aFieldWhoseLabelDoesNotFitBesideItsBoxStacksTheLabelAboveIt() {
-        var rows = List.<Column.Row>of(new Column.Field("t", "Set point", "C", null), new Column.Field("r", "Ratio to the other feed", "", null), new Column.Heading("What this side holds"));
+        var rows = List.<Column.Row>of(new Column.Field("t", "Set point", "C", null), new Column.Field("r", "Ratio to the other feed", "", null));
         var column = Column.place(rows, 0, 0, 150, M);
         var inline = column.rows().get(0);
         assertEquals(24, inline.rect().h(), "54 px of label beside the box: one row");
         assertEquals(new Rect(150 - Column.FIELD_TAIL + 4, 0, Column.BOX, Column.WIDGET), inline.slots().get("t"));
         var stacked = column.rows().get(1);
-        assertEquals(12 + 24, stacked.rect().h(), "138 px of label in 70 px: the label above the box");
+        assertEquals(12 + 24, stacked.rect().h(), "138 px of label in 74 px: the label above the box");
         assertEquals(new Rect(150 - Column.FIELD_TAIL + 4, 24 + 12, Column.BOX, Column.WIDGET), stacked.slots().get("r"), "the box under its label, in line with the other boxes");
         assertEquals("Ratio to the other feed", stacked.texts().getFirst(), "the whole label on its own line");
         assertNull(stacked.hover(), "nothing cut, no hint: no hover");
-        assertEquals(new Rect(0, 60, 150, 15), column.rows().get(2).rect(), "a heading: its line and a plate's margins");
     }
 
     @Test
     void aColumnRefusesWhatItCannotPlace() {
-        assertThrows(IllegalArgumentException.class, () -> Column.place(every(), 0, 0, 99, M));
+        assertThrows(IllegalArgumentException.class, () -> Column.place(every(), 0, 0, Column.FIELD_TAIL + 19, M), "narrower than a field row");
         assertThrows(IllegalArgumentException.class, () -> new Column.Bar(1.5));
         assertThrows(IllegalArgumentException.class, () -> new Column.Buttons(List.of()));
         var twice = List.<Column.Row>of(new Column.Field("x", "A", "", null), new Column.Field("x", "B", "", null));

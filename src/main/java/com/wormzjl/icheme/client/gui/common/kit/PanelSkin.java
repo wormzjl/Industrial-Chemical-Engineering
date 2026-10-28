@@ -5,10 +5,11 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * A control panel door (GUI_TOOLKIT_PLAN.md sections 9 and 10; owner: "Both 3a and 3c, configurable as light and dark"):
- * engraved legend plates for the title and the headings, engraved text, push buttons in a black bezel with a chrome ring
- * (lit from behind when latched), pilot lights with a glow, 7-segment LED panel meters for the fields, an LED bar graph
- * with a top zone, a message display for the status, the HMI screen in its bezel with a power LED, a quarter-turn latch.
+ * A control panel door (GUI_TOOLKIT_PLAN.md sections 9 to 11; owner: "Both 3a and 3c, configurable as light and dark"):
+ * flat engraved legend plates for the title and the function groups, an engraved line round each group, engraved text,
+ * push buttons in a black bezel with a chrome ring (lit from behind when latched), pilot lights with a glow, 7-segment
+ * LED panel meters for the fields, an LED bar graph with a top zone, a message display for the status, the HMI screen
+ * in its bezel with a power LED, a quarter-turn latch.
  * Panel legends keep their colour; the lamps show state. Button colours follow IEC 60073: black general, green running
  * (latched), blue confirm. {@link #LIGHT} is door 3a, {@link #DARK} door 3c.
  */
@@ -36,9 +37,9 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
     private static final Face BLUE_CONFIRM = new Face(0xFF1F5FBF, 0xFF6A9BE8, 0xFF143F80, 0xFFFFFFFF);
     private static final Window SCREEN = new Window(0xFF10161B, 0xFF3BE060, 0);
 
-    /** Door 3a: RAL 7035 light grey, black legend plates, green lamps, red LED meters, a green bar graph. */
+    /** Door 3a: RAL 7035 light grey, white legend plates (black ones read as buttons), green lamps, red LED meters, a green bar graph. */
     public static final PanelSkin LIGHT = new PanelSkin(new Door(0xFFC9CCC8, 0xFFE2E5E1, 0xFFA5A8A4, 0xFF6E716D),
-            new Face(0xFF1A1A1A, 0xFF3A3A3A, 0xFF000000, 0xFFF0F0F0), 0xFFE9ECE8, false,
+            new Face(0xFFF4F4F0, 0xFFFFFFFF, 0xFF6E716D, 0xFF1A1A1A), 0xFFE9ECE8, false,
             BLACK_KEY, GREEN_LIT, BLUE_CONFIRM, new Face(0xFF8A8D89, 0xFF9C9F9B, 0xFF767975, 0xFFC4C7C3), 0xFF111111, 0xFFA9ACA8,
             new Window(0xFF0A0A0A, 0xFFFF3B1F, 0xFF2A0D08), 0xFF3BE060, 0xFF1F3A26, new Window(0xFF0A0A0A, 0xFF3BE060, 0xFF12301A), 0xFFFFB000,
             new Window(0xFF06100D, 0xFF6CF0C2, 0), 0xFFFFB347, SCREEN, 0xFF1A1A1A, new Ink(0xFF1A1A1A, 0xFF3C3F3B, 0xFF1E7A34, 0xFF9A6A00));
@@ -67,21 +68,32 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         c.text(text, x, y, tone(palette));
     }
 
-    /** A legend plate as wide as its widest line and its margins, one pixel short of its row. */
+    /**
+     * A function group: an engraved line round its rows, broken at the top left by its plate (GUI_TOOLKIT_PLAN.md
+     * section 11). The plate is as wide as its widest line and its margins.
+     */
     @Override
-    public void heading(Canvas c, Rect r, List<String> lines) {
-        int wide = 0;
-        for (var line : lines) wide = Math.max(wide, c.measure().width(line));
-        legendPlate(c, new Rect(r.x(), r.y(), Math.min(r.w(), wide + 8), r.h() - 1), lines);
+    public void group(Canvas c, Rect r, List<String> title) {
+        int plate = Column.plate(title.size()), top = r.y() + plate / 2, wide = 0;
+        for (var line : title) wide = Math.max(wide, c.measure().width(line));
+        int x0 = r.x(), x1 = r.right() - 1, y1 = r.bottom() - 1;
+        c.fill(x0, top, x1, top + 1, door.dark());
+        c.fill(x0, top, x0 + 1, y1, door.dark());
+        c.fill(x0, y1 - 1, x1, y1, door.dark());
+        c.fill(x1 - 1, top, x1, y1, door.dark());
+        c.fill(x0 + 1, top + 1, x1 - 1, top + 2, door.light());
+        c.fill(x0 + 1, top + 1, x0 + 2, y1 - 1, door.light());
+        c.fill(x0, y1, x1 + 1, y1 + 1, door.light());
+        c.fill(x1, top, x1 + 1, y1, door.light());
+        legendPlate(c, new Rect(x0 + 4, r.y(), Math.min(r.w() - 8, wide + 8), plate), title);
     }
 
-    /** An engraved plate: cut corners, a lit top edge, its lines 4 px in from its sides and centred in its height. */
+    /** A flat engraved plate, unlike a push button: a rim with cut corners, its lines 4 px in and centred in its height. */
     private void legendPlate(Canvas c, Rect r, List<String> lines) {
         c.fill(r.x() + 1, r.y(), r.right() - 1, r.bottom(), legend.dark());
         c.fill(r.x(), r.y() + 1, r.right(), r.bottom() - 1, legend.dark());
         c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.bottom() - 1, legend.face());
-        c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.y() + 2, legend.light());
-        // Capitals stand 7 px over a 9 px line: centred, they leave as much face above them (under the lit edge) as below.
+        // Capitals stand 7 px over a 9 px line: centred, they leave as much face above them as below.
         int top = r.y() + (r.h() - lines.size() * Measure.LINE) / 2 + 2;
         for (int i = 0; i < lines.size(); i++) c.text(lines.get(i), r.x() + 4, top + i * Measure.LINE, legend.text());
     }

@@ -396,7 +396,6 @@ public final class HeatDiagramRender {
         skin.button(canvas, new Rect(tabs.get(1).x(), 29, tabs.get(1).width(), 18), tr("gui.icheme.fluid.control"), Skin.Press.CURRENT, false);
         skin.status(canvas, new Rect(10, 59, WIDTH - 20, 9), "Holding 45.0 °C · steady since 12 s", Palette.ACCENT);
         skin.hDivider(canvas, 8, WIDTH - 8, HEIGHT - 49);
-        skin.text(canvas, "View at 102.4 s", 10, HEIGHT - 42, Palette.WARN);
         var footer = FluidGuiLayout.footer(WIDTH);
         String[] footerText = {tr("gui.icheme.fluid.close"), tr("gui.icheme.fluid.apply"), tr("gui.icheme.fluid.mole_basis_short"), "°C", "kPa", "/s"};
         for (int i = 0; i < footer.size(); i++)
@@ -427,13 +426,13 @@ public final class HeatDiagramRender {
         boolean controllable = !c.unit().equals("FIRED_HEATER") && !(c.unit().equals("KETTLE") && c.side().equals("SHELL"));
         var applied = controllable ? new HeatUnit.Control(c.mode(), c.mode() == HeatUnit.Mode.RATIO ? 0.5 : 318.15, 0, 0.25) : null;
         var input = new HeatControlColumn.Input(heat, applied, c.edit(), controllable, c.mode(), c.powerOn(), "°C");
-        var rows = HeatControlColumn.rows(input, (key, a) -> tr("gui.icheme.fluid." + key, a));
+        HeatControlColumn.Texts texts = (key, a) -> tr("gui.icheme.fluid." + key, a);
         List<Column> columns;
         if (slots.split()) {
-            var two = HeatControlColumn.columns(rows);
+            var two = HeatControlColumn.columns(input, texts);
             columns = List.of(Column.place(two.left(), slots.leftX(), controlTop, slots.leftWidth(), m, Column.Metrics.COMPACT),
                     Column.place(two.right(), slots.rightX(), controlTop, slots.rightWidth(), m, Column.Metrics.COMPACT));
-        } else columns = List.of(Column.place(rows, slots.rightX(), controlTop, slots.rightWidth(), m, Column.Metrics.COMPACT));
+        } else columns = List.of(Column.place(HeatControlColumn.rows(input, texts), slots.rightX(), controlTop, slots.rightWidth(), m, Column.Metrics.COMPACT));
         int tall = columns.stream().mapToInt(col -> col.bounds().h()).max().orElse(0);
         var view = new ScrollView();
         view.layout(new Rect(slots.leftX() - 2, controlTop, slots.rightX() + slots.rightWidth() - slots.leftX() + 4, controlBottom - controlTop), slots.scrollX(), tall);
@@ -441,7 +440,7 @@ public final class HeatDiagramRender {
         while (scrolled && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
         overflow = view.max() > 0;
         canvas.clip(view.viewport());
-        var drafts = Map.of("heatTemperature", "45.0", "heatDuty", "500.0", "heatRatio", "0.5", "bypass", "25.0", "temperature", "200.0", "lowLimit", "");
+        var drafts = Map.of("heatTemperature", "45.0", "heatDuty", "500.0", "heatRatio", "0.5", "bypass", "25.0", "fans", "60.0", "temperature", "200.0", "lowLimit", "");
         for (var column : columns) {
             column.draw(canvas, -view.offset(), skin);
             for (var p : column.rows()) {
@@ -451,8 +450,8 @@ public final class HeatDiagramRender {
                 } else if (p.row() instanceof Column.Buttons b) {
                     for (var spec : b.buttons()) {
                         var r = p.slots().get(spec.key());
-                        // The side shown is latched, as the screen marks it.
-                        var press = !spec.active() ? spec.key().startsWith("side:") ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST;
+                        // The side shown and the switch's position are latched, as the screen marks them.
+                        var press = !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST;
                         if (view.visible(r)) skin.button(canvas, view.onScreen(r), spec.text(), press, false);
                     }
                 }

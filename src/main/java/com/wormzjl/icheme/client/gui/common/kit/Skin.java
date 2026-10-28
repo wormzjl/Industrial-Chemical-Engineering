@@ -3,7 +3,7 @@ package com.wormzjl.icheme.client.gui.common.kit;
 /**
  * How a screen and the kit's rows draw (batch 2026-10-28-gui-toolkit, GUI_TOOLKIT_PLAN.md sections 8 to 10): the page,
  * its title and status, the buttons and fields, the well the drawing and the tables sit in, the dividers, and what the
- * rows ask for (the texts in the tones the rows name by the palette's colours, headings, a choice's mark, a bar, a scroll
+ * rows ask for (the texts in the tones the rows name by the palette's colours, function groups, a choice's mark, a bar, a scroll
  * bar). {@link #PLAIN} is the look the screens drew before; {@link PanelSkin} draws a control panel door, light or dark.
  */
 public interface Skin {
@@ -22,9 +22,17 @@ public interface Skin {
         c.text(text, x, y, tone(palette));
     }
 
-    /** A section's heading in its row {@code r}, its {@code lines} as wrapped: muted lines, or a legend plate. */
-    default void heading(Canvas c, Rect r, java.util.List<String> lines) {
-        for (int i = 0; i < lines.size(); i++) text(c, lines.get(i), r.x(), r.y() + 2 + i * Measure.LINE, Palette.MUTED);
+    /**
+     * A function group's frame {@code r} and its plate: the plate, {@link Column#plate} px high, at the frame's top
+     * left with its {@code title} lines; the frame's top edge through the plate's middle. Here a thin outline broken by
+     * the muted title.
+     */
+    default void group(Canvas c, Rect r, java.util.List<String> title) {
+        int plate = Column.plate(title.size()), top = r.y() + plate / 2, wide = 0;
+        for (var line : title) wide = Math.max(wide, c.measure().width(line));
+        c.outline(r.x(), top, r.w(), r.bottom() - top, Palette.LINE);
+        c.fill(r.x() + 4, top, r.x() + 12 + wide, top + 1, Palette.BG);
+        for (int i = 0; i < title.size(); i++) text(c, title.get(i), r.x() + 8, r.y() + 2 + i * Measure.LINE, Palette.MUTED);
     }
 
     /** A choice's 8 by 8 mark with its top left at ({@code x}, {@code y}). */

@@ -2,11 +2,11 @@
 
 Purpose: owner choice 2026-10-28, option C of the GUI toolkit review: a small GUI toolkit in our own code, first used on the heat Control tab.
 
-Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on `claude/heat-gui-redesign-abb1db`). The kit, the Control tab pilot and the shared flowsheet painter are built. The fluid screen draws the light or the dark control panel door, with layout C and fuller drawings. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on `claude/heat-gui-redesign-abb1db`). The kit, the Control tab pilot and the shared flowsheet painter are built. The fluid screen draws the light or the dark control panel door, with layout C and fuller drawings. The Control column is framed function groups with short plates: an Off and On switch, then a target. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [GUI_TOOLKIT_PLAN.md](GUI_TOOLKIT_PLAN.md): the kit, the pilot, the shared flowsheet painter, the gates, the as-built notes (section 5), choices T1 to T3 (section 6), the Control tab styles tried (section 7), the industrial looks (section 8), look 3 refined (section 9), the light and dark panels shipped with layout C, whole texts and fuller drawings (section 10).
+- [GUI_TOOLKIT_PLAN.md](GUI_TOOLKIT_PLAN.md): the kit, the pilot, the shared flowsheet painter, the gates, the as-built notes (section 5), choices T1 to T3 (section 6), the Control tab styles tried (section 7), the industrial looks (section 8), look 3 refined (section 9), the light and dark panels shipped with layout C, whole texts and fuller drawings (section 10), function groups, plates and the On and Off switch (section 11).
 - The evaluation that chose it: [../2026-10-28-gui-toolkit-evaluation/GUI_TOOLKIT_REVIEW.md](../2026-10-28-gui-toolkit-evaluation/GUI_TOOLKIT_REVIEW.md).
 
 ## Code areas
@@ -15,6 +15,7 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
 - `client/ClientConfig` (new, `icheme-client.toml`: the theme), registered in `IChemE`.
 - `client/gui/common/HeatControlColumn` (new): the Control column as kit rows, and layout C's split. `client/gui/common/HeatFlowsheet` (moved from `screens/inventory`): draws through the painter, with each unit's insides. `HeatDiagram`: the equipment glyphs.
 - `client/gui/screens/inventory/FluidDeviceScreen` (the panel door, the HMI screen, layout C on the kit), `AssemblyScreen` (its drawing through the painter); `client/gui/common/ProcessUi` (palette and `number()` alias the kit's). Lang: `gui.icheme.fluid.theme.*`.
+- `network/FluidNetwork` (an air cooler's edit keeps the fans' share the client sends).
 - `tools/heat-gui-renders/` (whole Control pages through the shipped code).
 
 ## History
@@ -43,11 +44,18 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
   - Render tool: the game's bitmap font, both doors, `drawings.png`; the rejected styles and looks are gone from it.
   - Gates: quick suite 1733, no failures; `KitLayoutTest` 11 (one new: no text cut), `HeatControlColumnTest` 5 (one new: layout C's split), `FluidGuiConsistencyTest` 5, `HeatDiagramTest` 5, `FlowsheetPainterTest` 3.
     The heading plate's margins came after the suite; `KitLayoutTest` and `HeatControlColumnTest` ran again, no failures.
+- 2026-10-28: function groups, plates and the On and Off switch, in the groups commit (owner: "a On/off switch plus a target duty mode and target temperature mode", "Text plate and function group should be better designed so new users are not overwhelmed", the view time "can be removed", "Never cool below" in the air cooler "is useless", "AC should have duty ratio mode and target temperature mode as well"; plan section 11).
+  - Kit: `Column.Group` replaces `Column.Heading`; `Skin.group`, flat plates (white on the light door); `Column.Button.latched`; a choice is a title and a hover.
+  - `HeatControlColumn`: Control (Off, On), Target, Set point or By hand, and the actuator's group named by the server. Complete lines take no note. An air cooler has a fan speed target and no low limit.
+  - `FluidDeviceScreen`: the switch and target drafts (`heatTarget`), the air cooler's fan speed, no view time. `FluidNetwork`: an air cooler keeps the sent share.
+  - Lang: the modes' titles and lines, the heading and "Acting now" left; plates, switch, targets and hovers came.
+  - Gates: quick suite 1734, no failures (`KitLayoutTest` 12, one new: a group frames its rows; `HeatControlColumnTest` 5, rewritten for the switch and targets; `HeatDiagramTest` 5).
 
 ## Open
 
 - T1 to T3 (plan section 6) await the owner; built as (a).
-- At 464 by 254, an exchanger whose lines need a note scrolls its right column by 20 to 40 px (plan section 10). The drawing is small at that width (0.36 of its design size).
+- At 464 by 254, an exchanger whose lines are incomplete scrolls its right column by 21 to 31 px to its warning (plan section 11). The drawing is small at that width (0.36 of its design size).
+- A fired heater's duty target needs the heat engine (`FiredCoil`, `HeatControl`); "duty ratio" was read as the fans' speed; an air cooler's stored low limit stays hidden (plan section 11).
 - Themed so far: `FluidDeviceScreen` only. The other screens (assembly, vessel, gauge, column calculator, pipeline tool) stay plain until a task touches them.
 - At the merge to `main`: a `CHANGELOG.md` line, the version, and the code guide's GUI chapter.
 - No in-game check (owner: enough client testing).

@@ -90,8 +90,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean burners(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().burners()!=null;}
     /** An exchanger side or an air cooler: its control's mode, set point, low limit and manual share are fields (W4). */
     private boolean controllable(){var data=menu.clientData();return data!=null&&data.controls().heat()!=null;}
-    /** The control mode as drafted; the set points, low limit and bypass are drafts in {@link #fields}. */
+    /** The control mode as drafted, OFF while the switch stands at Off; the set points, low limit and bypass are drafts in {@link #fields}. */
     private HeatUnit.Mode heatMode=HeatUnit.Mode.OFF;
+    /** The target the switch's On holds: the drafted mode while On (OFF: an air cooler's fixed fan speed); for a side loaded Off, the outlet temperature. */
+    private HeatUnit.Mode heatTarget=HeatUnit.Mode.OUTLET_TEMPERATURE;
     /** The rail's power switch: a generator's or a built mover's. A heat unit's fans and burners are on its Control tab. */
     private boolean switchable(){return generator()||constructedMover();}
     /** The Control tab (HEAT_GUI_PLAN.md section 2): every heat unit's sides and a kettle's pool. */
@@ -154,12 +156,15 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         fields.put("volumeFlow",new NumericDraft(c.volumeFlow(),flowRateUnit));fields.put("maximumAddedPressure",new NumericDraft(c.maximumAddedPressure(),pressureUnit));
         fields.put("maximumPressureRatio",new NumericDraft(c.maximumPressureRatio()));fields.put("massFlow",new NumericDraft(c.massFlow(),flowRateUnit));
         // A controllable heat side's control (W4): the set point of the other mode starts at 40 °C or 0 kW; no low limit is blank.
-        var heat=c.heat();heatMode=heat==null?HeatUnit.Mode.OFF:heat.mode();
+        var heat=c.heat();heatMode=heat==null?HeatUnit.Mode.OFF:heat.mode();heatTarget=heatMode==HeatUnit.Mode.OFF?HeatUnit.Mode.OUTLET_TEMPERATURE:heatMode;
         fields.put("heatTemperature",new NumericDraft(heat!=null&&heat.mode()==HeatUnit.Mode.OUTLET_TEMPERATURE?heat.target():313.15,temperatureUnit));
         fields.put("heatDuty",new NumericDraft(heat!=null&&heat.mode()==HeatUnit.Mode.DUTY?heat.target()/1000:0));
         fields.put("heatRatio",new NumericDraft(heat!=null&&heat.mode()==HeatUnit.Mode.RATIO?heat.target():1));
         var low=new NumericDraft(heat!=null&&heat.lowLimit()>0?heat.lowLimit():0,temperatureUnit);if(heat==null||heat.lowLimit()==0)low.text("");fields.put("lowLimit",low);
         fields.put("bypass",new NumericDraft(heat==null?0:heat.share()*100));
+        // An air cooler's switch stands On while a controller holds a target or its fans run at a fixed speed (mode OFF, share above 0).
+        if(heat!=null&&fans()){powerOn=heat.mode()!=HeatUnit.Mode.OFF||heat.share()>0;if(heat.mode()==HeatUnit.Mode.OFF&&heat.share()>0)heatTarget=HeatUnit.Mode.OFF;}
+        fields.put("fans",new NumericDraft(heat!=null&&heat.share()>0?heat.share()*100:100));
         composition=new RelativeComposition(data.components(),data.molecularWeights(),c.composition());
         if(mass)composition.toggleBasis();
         loadSolids(c.solids());
@@ -431,13 +436,15 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         }catch(IllegalArgumentException e){message=tr("invalid_input");}
     }
     /** A controllable heat side's control as drafted (W4), null for another device: the set point of its mode (K, or the
-     * duty in kW as W), the low limit (blank for none) and the manual share (an exchanger side's bypass in %, an air
-     * cooler's fans as its power). An invalid draft throws, which the caller reports. */
+     * duty in kW as W), the low limit (blank for none) and the manual share: an exchanger side's bypass in %; an air
+     * cooler's fans, still while Off, at the fixed fan speed in % with no controller. A controller starts from the
+     * applied share. An invalid draft throws, which the caller reports. */
     private HeatUnit.Control heatControl(){
         if(!controllable())return null;
         double target=switch(heatMode){case OUTLET_TEMPERATURE->fields.get("heatTemperature").si();case DUTY->fields.get("heatDuty").value()*1000;case RATIO->fields.get("heatRatio").value();default->0;};
         var low=fields.get("lowLimit");double lowLimit=low.text().isBlank()?0:low.si();
-        double share=fans()?(powerOn?1:0):heatMode==HeatUnit.Mode.OFF?fields.get("bypass").value()/100:menu.clientData().controls().heat().share();
+        String manual=fans()?"fans":"bypass";
+        double share=fans()&&!powerOn?0:heatMode==HeatUnit.Mode.OFF?fields.get(manual).value()/100:menu.clientData().controls().heat().share();
         return new HeatUnit.Control(heatMode,target,lowLimit,share);
     }
     private double[][] amounts(){
@@ -549,7 +556,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // Every device repeats the full status on its scrollable rail (renderStatus).
         var view=data.view();
         skin.hDivider(canvas,8,imageWidth-8,imageHeight-49);
-        doorText(canvas,skin,message.isBlank()?tr("view_time",number(view.onlineTick()/20.0)):message,10,imageHeight-42,WARN,imageWidth-20);
+        // A message only (waiting, an invalid input); the view's time is gone (owner, 2026-10-28).
+        if(!message.isBlank())doorText(canvas,skin,message,10,imageHeight-42,WARN,imageWidth-20);
         if(page==CONTROL&&view.heat()!=null){
             // The status in words, in the player's unit; the engine's own line on hover.
             doorStatus(canvas,skin,controlStatus(),warning(view.status())?WARN:ACCENT);
@@ -884,19 +892,19 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      * columns scroll together, in one view with one bar.
      */
     private void buildControl(){
-        var slots=controlSlots();var rows=HeatControlColumn.rows(controlInput(),FluidDeviceScreen::tr);var measure=GuiCanvas.measure(font);
-        if(slots.split()){var two=HeatControlColumn.columns(rows);
+        var slots=controlSlots();var input=controlInput();var measure=GuiCanvas.measure(font);
+        if(slots.split()){var two=HeatControlColumn.columns(input,FluidDeviceScreen::tr);
             controlColumns=List.of(Column.place(two.left(),slots.leftX(),controlTop(),slots.leftWidth(),measure,Column.Metrics.COMPACT),
                 Column.place(two.right(),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));}
-        else controlColumns=List.of(Column.place(rows,slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
+        else controlColumns=List.of(Column.place(HeatControlColumn.rows(input,FluidDeviceScreen::tr),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
         int tall=controlColumns.stream().mapToInt(c->c.bounds().h()).max().orElse(0);
         controlView.layout(new Rect(slots.leftX()-2,controlTop(),slots.rightX()+slots.rightWidth()-slots.leftX()+4,controlBottom()-controlTop()),slots.scrollX(),tall);
         for(var column:controlColumns)for(var p:column.rows()){
             if(p.row() instanceof Column.Field f)controlWidgets.keep(controlBox(f,p.slots().get(f.key())),p.slots().get(f.key()));
             else if(p.row() instanceof Column.Buttons b)for(var spec:b.buttons()){
                 var slot=p.slots().get(spec.key());
-                // The side shown is latched, as the page's tab is.
-                var button=doorButton(spec.text(),slot.x(),slot.y(),slot.w(),()->controlAction(spec.key())).latched(spec.key().startsWith("side:"));
+                // The side shown and the switch's position are latched, as the page's tab is.
+                var button=doorButton(spec.text(),slot.x(),slot.y(),slot.w(),()->controlAction(spec.key())).latched(spec.latched());
                 button.active=spec.active();if(spec.hint()!=null)button.setTooltip(Tooltip.create(Component.literal(spec.hint())));
                 controlWidgets.keep(button,slot);
             }
@@ -911,14 +919,23 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(f.key().equals("lowLimit"))box.setHint(Component.literal(tr("heat_field.off")));
         editors.put(f.key(),addRenderableWidget(box));return box;
     }
-    /** A Control column action (HeatControlColumn's keys): the other side's screen, the fans by hand, a mode, the lines' check (W8). */
+    /**
+     * A Control column action (HeatControlColumn's keys), a draft until Apply: the other side's screen; the switch (a
+     * heater's burners; else Off, or the target On holds, an air cooler's fans running too); a target (an air cooler's
+     * fixed fan speed: no controller); the lines' check (W8).
+     */
     private void controlAction(String action){
         if(action.startsWith("side:"))FluidNetwork.openPartner(menu);
-        else if(action.equals("power")){powerOn=!powerOn;rebuild();}
         else if(action.equals("check_lines")){FluidNetwork.checkLines(menu);message=tr("waiting");}
-        else if(action.startsWith("mode:")){
-            String mode=action.substring(5);
-            switch(mode){case "burners_out"->powerOn=false;case "firing"->powerOn=true;default->heatMode=HeatUnit.Mode.valueOf(mode.toUpperCase(Locale.ROOT));}
+        else{
+            if(action.startsWith("power:")){
+                boolean on=action.endsWith(":on");
+                if(burners())powerOn=on;
+                else{if(fans())powerOn=on;heatMode=on?heatTarget:HeatUnit.Mode.OFF;}
+            }else if(action.startsWith("target:")){
+                String key=action.substring(7);
+                heatMode=heatTarget=key.equals("fan_speed")?HeatUnit.Mode.OFF:HeatUnit.Mode.valueOf(key.toUpperCase(Locale.ROOT));
+            }
             rebuild();
         }
     }

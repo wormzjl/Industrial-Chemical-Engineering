@@ -136,3 +136,27 @@ Owner: "Both 3a and 3c, configurable as light and dark mod. Also you need to imp
   - air cooler: 93 px (a reader 127 px);
   - fired heater: 98 px;
   - kettle tubes: 103 px; its pool: 74 px.
+
+## 11. Function groups, plates, the On and Off switch (2026-10-28)
+
+Owner: "The logic should be something like a On/off switch plus a target duty mode and target temperature mode"; "Text plate and function group should be better designed so new users are not overwhelmed"; "that "at xxx s" message can be removed from gui"; "Never cool below" in the air cooler "is useless, remove it, you should never cool below target"; "AC should have duty ratio mode and target temperature mode as well".
+
+- **Expected.** On a real control panel door, the devices of one function sit together inside an engraved line, and a short legend plate names the group. Each device carries a one- or two-word legend. A new operator reads the groups in order: what to switch, what to hold, at what value, what acts. Explanations belong in the manual; here, in hovers.
+- **What the column did.** One heading plate ("What this side holds") over a radio list of four modes. The chosen mode had a sentence under it. Then came the fields, an "Acting now: ..." line, the bar, a sentence on the effort, a note on the lines, and Check lines. On the light door the plates were black, like the buttons, so they read as buttons.
+- **As built.**
+  - Kit: `Column.Group(title, hint, rows)` replaces `Column.Heading`. Its rows sit `INSET` (4 px) inside a frame, under a plate `Column.plate(lines)` high, with `GROUP_GAP` (4 px) below. A column ends at its last frame.
+  - `Skin.group` draws the frame and the plate. `PanelSkin.group` draws an engraved line broken by a flat plate (a rim, no bevel). The light door's plates are white with black legends; the dark door keeps its aluminium plates.
+  - `Column.Button.latched` marks the position a switch or a selector stands in. `Column.Choice` is a title with a hover; a choice no longer shows a line. `Metrics` lost its choice height. `BOX` is 54 px (six 7-segment digits) and `FIELD_TAIL` 76 px.
+  - `HeatControlColumn.columns(input, texts)` builds layout C directly. The left column holds the side selector, then **Control** (Off and On), then **Target** while On: outlet temperature, duty, an exchanger's feed ratio, an air cooler's fan speed. The right column holds **Set point** (while On) or **By hand** (while Off: an exchanger's bypass), then the actuator's group.
+  - An air cooler (read as: "duty ratio" is the fans' share of full speed): Off stops its fans, leaving natural draught. On holds the outlet temperature, a duty, or a fixed fan speed in % (no controller: mode `OFF` with the fans' share). Run and Stop are gone. The server took an air cooler's share from its power (full or still); `FluidNetwork` now keeps the share the client sends. The fans' law is continuous in the share (`AirCooled.Air.films`: draught = natural + (1 − natural) × fans). A side loaded with mode `OFF` and a share above 0 reads On at its fan speed, so the built default (fans at full) shows as On, 100 %.
+  - The actuator's plate is named by the server: Internal bypass, Bypass valve, Feed valve, Fans, Louvers and fans, Burners. It holds the bar, a short effort line, a note on incomplete lines and Check lines. Each plate's hover says what that part is.
+  - Complete lines take no note: the plate already says "Bypass valve" or "Feed valve". Check lines shows only while a target needs lines.
+  - The switch maps onto the engine's modes; the engine is unchanged. A heater's Off and On are its burners; an air cooler's, its fans. Elsewhere Off is mode `OFF` (no controller, the manual share holds), and On is the target last chosen (`FluidDeviceScreen.heatTarget`; the outlet temperature for a side loaded Off). Every press is a draft until Apply.
+  - An air cooler has no low limit field. A low limit an older world stored stays as it was and is resent on Apply.
+  - The status band shows only messages; the view's time is gone.
+- **Measured** (464 by 254 GUI px, the game font, the 128 px view; the tallest column): exchanger Off 105 px, held with complete lines 125, held with incomplete lines 149 to 159 (they scroll to the warning); feed ratio 136; air cooler at a fan speed 97 (a reader held at its outlet 123); fired heater 85; kettle tubes 110; its pool 78.
+- **Open.**
+  - A fired heater's duty target needs the heat engine (`FiredCoil`, `HeatControl`); the column lists none for it.
+  - "Duty ratio" read as the fans' speed (the Fan speed target). If it meant something else, the target list is one line in `HeatControlColumn.targets`.
+  - A low limit already stored on an air cooler stays hidden: keep it (as built), or clear it on the next Apply.
+  - No in-game check (owner: enough client testing).

@@ -7,21 +7,25 @@ import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A column of rows placed top to bottom in one pass from its width (GUI_TOOLKIT_PLAN.md section 1): lines, paragraphs,
- * choices, field rows, button rows, bars and gaps. A placed row keeps its rect, the texts it draws, the slots its fields
- * and buttons take, and its hover text. The same placement draws the rows, places the widgets and answers clicks and
- * hovers, so they cannot drift apart. No text is cut (owner, 2026-10-28: "make sure characters are rendered correctly"):
- * a text wider than its row wraps, and a button row whose texts do not fit side by side stacks its buttons.
+ * A column of rows placed top to bottom in one pass from its width (GUI_TOOLKIT_PLAN.md section 1): function groups,
+ * lines, paragraphs, choices, field rows, button rows, bars and gaps. A placed row keeps its rect, the texts it draws, the
+ * slots its fields and buttons take, and its hover text. The same placement draws the rows, places the widgets and answers
+ * clicks and hovers, so they cannot drift apart. No text is cut (owner, 2026-10-28: "make sure characters are rendered
+ * correctly"): a text wider than its row wraps, and a button row whose texts do not fit side by side stacks its buttons.
  */
 public final class Column {
-    public sealed interface Row permits Heading, Line, Paragraph, Choice, Field, Buttons, Bar, Gap {
+    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Buttons, Bar, Gap {
     }
 
     /**
-     * A section's heading, wrapped to the width less a plate's margins; the skin draws it (a muted line, or a legend
-     * plate) in a row {@link #HEADING_PAD} px taller than its lines.
+     * A function group (owner, 2026-10-28: "Text plate and function group should be better designed so new users are not
+     * overwhelmed"; GUI_TOOLKIT_PLAN.md section 11): its rows in a frame, {@link #INSET} px in, under a plate that names the
+     * function in a word or two. The plate's hover (or null) says more. The skin draws the frame and the plate.
      */
-    public record Heading(String text) implements Row {
+    public record Group(String title, @Nullable String hint, List<Row> rows) implements Row {
+        public Group {
+            rows = List.copyOf(rows);
+        }
     }
 
     /** A line of text, wrapped to the width where it is wider. */
@@ -33,10 +37,10 @@ public final class Column {
     }
 
     /**
-     * One choice of a list (a mode): its title, its line, whether it is chosen, and the action a click on it runs (null:
-     * none). The title wraps beside the mark; the chosen choice's line wraps under it, another's shows on hover.
+     * One choice of a list: its title (wrapped beside the mark), its hover (or null), whether it is chosen, and the action
+     * a click on it runs (null: none).
      */
-    public record Choice(String title, String line, boolean selected, @Nullable String action) implements Row {
+    public record Choice(String title, @Nullable String hint, boolean selected, @Nullable String action) implements Row {
     }
 
     /**
@@ -54,7 +58,14 @@ public final class Column {
         }
     }
 
-    public record Button(String key, String text, boolean active, @Nullable String hint) {
+    /**
+     * A button: its key, text, whether a click acts, its hover (or null), and whether it is latched: the position a
+     * selector or a switch stands in (the side shown, Off or On), lit from behind.
+     */
+    public record Button(String key, String text, boolean active, @Nullable String hint, boolean latched) {
+        public Button(String key, String text, boolean active, @Nullable String hint) {
+            this(key, text, active, hint, false);
+        }
     }
 
     /** A bar filled to {@code share} of its width. */
@@ -70,26 +81,33 @@ public final class Column {
         }
     }
 
-    public static final int BOX = 58, WIDGET = 18, BUTTON_GAP = 4, HEADING_PAD = 5;
+    /** A field's box (six 7-segment digits); a widget's height; the gap between buttons side by side. */
+    public static final int BOX = 54, WIDGET = 18, BUTTON_GAP = 4;
+    /** A group: its rows' inset from the frame, its plate's height over the plate's lines, the gap under the frame. */
+    public static final int INSET = 4, PLATE_PAD = 4, GROUP_GAP = 4;
+
+    /** A group's plate height for {@code lines} lines of title. */
+    public static int plate(int lines) {
+        return lines * Measure.LINE + PLATE_PAD;
+    }
 
     /**
-     * Row heights: a line, a choice (its title and one line), a field row, a button row, a bar; each further line of a
-     * wrapped text adds 10 px. {@link #DEFAULT} is the process screens' spacing; {@link #COMPACT} fits more rows in a short
-     * screen.
+     * Row heights: a line, a field row, a button row, a bar; each further line of a wrapped text adds 10 px.
+     * {@link #DEFAULT} is the process screens' spacing; {@link #COMPACT} fits more rows in a short screen.
      */
-    public record Metrics(int line, int choice, int field, int buttons, int bar) {
-        public static final Metrics DEFAULT = new Metrics(12, 24, 24, 24, 12), COMPACT = new Metrics(11, 20, 20, 20, 10);
+    public record Metrics(int line, int field, int buttons, int bar) {
+        public static final Metrics DEFAULT = new Metrics(12, 24, 24, 12), COMPACT = new Metrics(11, 20, 20, 10);
 
         public Metrics {
-            if (line < Measure.LINE || choice < 2 * Measure.LINE || field < WIDGET || buttons < WIDGET || bar < 8) throw new IllegalArgumentException("Rows lower than what they draw");
+            if (line < Measure.LINE || field < WIDGET || buttons < WIDGET || bar < 8) throw new IllegalArgumentException("Rows lower than what they draw");
         }
     }
     /** A field row's label width: the row less the box, the unit and their gaps. */
-    public static final int FIELD_TAIL = 80;
+    public static final int FIELD_TAIL = 76;
 
     /**
-     * A row as placed: its rect, its widget slots by key, the lines it draws, how many of them lead (a choice's title, a
-     * field's label; after them a choice's line, a field's unit), and its hover text (or null).
+     * A row as placed: its rect, its widget slots by key, the lines it draws, how many of them lead (a field's label;
+     * after them its unit), and its hover text (or null). A group is placed before its rows, its rect around them.
      */
     public record Placed(Row row, Rect rect, Map<String, Rect> slots, List<String> texts, int lead, @Nullable String hover) {
         public Placed {
@@ -111,27 +129,42 @@ public final class Column {
         return place(rows, x, y, width, m, Metrics.DEFAULT);
     }
 
-    /** {@code rows} placed from ({@code x}, {@code y}) down, {@code width} wide, at row heights {@code metrics}. */
+    /**
+     * {@code rows} placed from ({@code x}, {@code y}) down, {@code width} wide, at row heights {@code metrics}. The column
+     * ends at its last group's frame: the gap under it separates nothing.
+     */
     public static Column place(List<? extends Row> rows, int x, int y, int width, Measure m, Metrics metrics) {
         if (width < FIELD_TAIL + 20) throw new IllegalArgumentException("A column narrower than a field row");
         var placed = new ArrayList<Placed>();
+        int bottom = place(rows, x, y, width, m, metrics, placed);
+        if (!rows.isEmpty() && rows.getLast() instanceof Group) bottom -= GROUP_GAP;
+        return new Column(placed, new Rect(x, y, width, bottom - y));
+    }
+
+    /** Places {@code rows} into {@code out}, a group before its own rows; returns the bottom. */
+    private static int place(List<? extends Row> rows, int x, int y, int w, Measure m, Metrics h, List<Placed> out) {
         int at = y;
         for (var row : rows) {
-            var p = place(row, x, at, width, m, metrics);
-            placed.add(p);
-            at = p.rect().bottom();
+            if (row instanceof Group g) {
+                // The plate over the frame's top edge, its rows under it; the group's rect takes the gap under its frame.
+                var title = m.wrap(g.title(), w - 2 * INSET - 8);
+                int index = out.size();
+                out.add(null);
+                int bottom = place(g.rows(), x + INSET, at + plate(title.size()) + 2, w - 2 * INSET, m, h, out) + INSET;
+                out.set(index, new Placed(g, new Rect(x, at, w, bottom + GROUP_GAP - at), Map.of(), title, title.size(), g.hint()));
+                at = bottom + GROUP_GAP;
+            } else {
+                var p = place(row, x, at, w, m, h);
+                out.add(p);
+                at = p.rect().bottom();
+            }
         }
-        return new Column(placed, new Rect(x, y, width, at - y));
+        return at;
     }
 
     private static Placed place(Row row, int x, int y, int w, Measure m, Metrics h) {
         var slots = new LinkedHashMap<String, Rect>();
         return switch (row) {
-            case Heading hd -> {
-                // Room for a legend plate: 2 px over and under its lines, and 1 px under the plate.
-                var lines = m.wrap(hd.text(), w - 8);
-                yield new Placed(row, new Rect(x, y, w, lines.size() * Measure.LINE + HEADING_PAD), slots, lines, lines.size(), null);
-            }
             case Line l -> {
                 var lines = m.wrap(l.text(), w);
                 yield new Placed(row, new Rect(x, y, w, h.line() + (lines.size() - 1) * Measure.LINE), slots, lines, lines.size(), null);
@@ -141,13 +174,9 @@ public final class Column {
                 yield new Placed(row, new Rect(x, y, w, lines.size() * Measure.LINE + 4), slots, lines, lines.size(), null);
             }
             case Choice c -> {
-                // The title wrapped beside the mark; the chosen one's line under it, another's on hover.
-                var texts = new ArrayList<>(m.wrap(c.title(), w - 12));
-                int lead = texts.size();
-                if (!c.selected() && !c.line().isEmpty())
-                    yield new Placed(row, new Rect(x, y, w, Math.max(h.line(), lead * Measure.LINE + h.choice() - 2 * Measure.LINE)), slots, texts, lead, c.title() + "\n" + c.line());
-                if (!c.line().isEmpty()) texts.addAll(m.wrap(c.line(), w - 12));
-                yield new Placed(row, new Rect(x, y, w, h.choice() + Math.max(0, texts.size() - 2) * Measure.LINE), slots, texts, lead, null);
+                // The title wrapped beside the mark; what it does on hover.
+                var lines = m.wrap(c.title(), w - 12);
+                yield new Placed(row, new Rect(x, y, w, h.line() + (lines.size() - 1) * Measure.LINE), slots, lines, lines.size(), c.hint());
             }
             case Field f -> {
                 // A label wider than its share of the row goes above the box, wrapped to the row.
@@ -168,6 +197,7 @@ public final class Column {
             }
             case Bar ignored -> new Placed(row, new Rect(x, y, w, h.bar()), slots, List.of(), 0, null);
             case Gap g -> new Placed(row, new Rect(x, y, w, g.height()), slots, List.of(), 0, null);
+            case Group g -> throw new IllegalStateException("A group is placed with its rows");
         };
     }
 
@@ -188,10 +218,15 @@ public final class Column {
         return all;
     }
 
-    /** The row at content point ({@code px}, {@code py}), or null. */
+    /** The row at content point ({@code px}, {@code py}), or null: a group's own row before the group. */
     public @Nullable Placed at(double px, double py) {
-        for (var p : rows) if (p.rect().contains(px, py)) return p;
-        return null;
+        Placed group = null;
+        for (var p : rows)
+            if (p.rect().contains(px, py)) {
+                if (!(p.row() instanceof Group)) return p;
+                group = p;
+            }
+        return group;
     }
 
     /** The action of the choice at content point ({@code px}, {@code py}), or null. */
@@ -219,7 +254,7 @@ public final class Column {
             var r = p.rect().moved(0, dy);
             var texts = p.texts();
             switch (p.row()) {
-                case Heading ignored -> skin.heading(c, r, texts);
+                case Group ignored -> skin.group(c, new Rect(r.x(), r.y(), r.w(), r.h() - GROUP_GAP), texts);
                 case Line l -> {
                     for (int i = 0; i < texts.size(); i++) skin.text(c, texts.get(i), r.x(), r.y() + i * Measure.LINE, l.colour());
                 }
@@ -228,8 +263,7 @@ public final class Column {
                 }
                 case Choice ch -> {
                     skin.mark(c, r.x(), r.y(), ch.selected());
-                    for (int i = 0; i < texts.size(); i++)
-                        skin.text(c, texts.get(i), r.x() + 12, r.y() + i * Measure.LINE, i >= p.lead() ? Palette.MUTED : ch.selected() ? Palette.ACCENT : Palette.TEXT);
+                    for (int i = 0; i < texts.size(); i++) skin.text(c, texts.get(i), r.x() + 12, r.y() + i * Measure.LINE, ch.selected() ? Palette.ACCENT : Palette.TEXT);
                 }
                 case Field ignored -> {
                     // A stacked label on the lines above its box, else beside it; the unit after the box.
