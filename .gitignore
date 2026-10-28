@@ -81,5 +81,7 @@ CLAUDE.md
 /examples/crude-assays/source-quality.json
 /examples/crude-assays/test_quality.py
 
+# Local JDK installation
+/oracleJdk-25/
 # Scratch output (owner rule: <repo root>/tmp/<name>/, indexed in tmp/INDEX.md)
 /tmp/

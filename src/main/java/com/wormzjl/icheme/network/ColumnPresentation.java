@@ -36,6 +36,14 @@ final class ColumnPresentation {
     }
 
     static void queue(IPayloadContext context, BlockPos pos, long nonce, Runnable action) {
+        queue(context, pos, nonce, action, false);
+    }
+
+    static void queueImmediate(IPayloadContext context, BlockPos pos, long nonce, Runnable action) {
+        queue(context, pos, nonce, action, true);
+    }
+
+    private static void queue(IPayloadContext context, BlockPos pos, long nonce, Runnable action, boolean immediate) {
         if (!(context.player() instanceof ServerPlayer player)
                 || !(player.containerMenu instanceof ColumnCalculatorV3Menu menu) || !menu.blockPos().equals(pos)) return;
         var engine = FluidWorldAuthority.find(player.getServer());
@@ -61,7 +69,10 @@ final class ColumnPresentation {
             }
             return;
         }
-        if (!host.mailbox.submit(session, engine.orElseThrow().onlineTick(), action))
+        boolean accepted = immediate
+                ? host.mailbox.submitImmediate(session, engine.orElseThrow().onlineTick(), action)
+                : host.mailbox.submit(session, engine.orElseThrow().onlineTick(), action);
+        if (!accepted)
             session.rejection = new Rejection(pos, nonce, "A request is already awaiting the engine");
     }
 
@@ -106,6 +117,21 @@ final class ColumnPresentation {
     static void refresh(MinecraftServer server) {
         var host = SERVERS.get(server);
         if (host != null) host.sessions.values().forEach(session -> session.refresh = true);
+    }
+
+    /** A terminal solve is already an engine event; publish it on the next engine tick instead of waiting for the
+     * next five-second bucket. Sessions still have to be subscribed and valid, so unsolicited clients receive nothing. */
+    static void refreshNow(MinecraftServer server, BlockPos pos) {
+        var host = SERVERS.get(server);
+        if (host == null) return;
+        boolean matched = false;
+        for (Session session : host.sessions.values()) {
+            if (session.menu.blockPos().equals(pos)) {
+                session.refresh = true;
+                matched = true;
+            }
+        }
+        if (matched) host.mailbox.requestImmediate();
     }
 
     static void forget(MinecraftServer server) { SERVERS.remove(server); }

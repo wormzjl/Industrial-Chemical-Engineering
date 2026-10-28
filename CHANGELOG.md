@@ -19,6 +19,55 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 - Water steam as a second-virial gas from IAPWS-IF97 Region 2 (option B of the owner test review; commits `3a527f1e`, `4521b65c`; batch `2026-10-27-heat-exchanger-design`, review `WATER_STEAM_VIRIAL_REVIEW.md`): the free water's steam has v = RT/p + B(T), h = h_ig + p(B - T dB/dT) and p_w = n_w RT/(V - n_w B), in the network state, the velocity stiffness and the phase engine alike (`SteamVirial`). The volume is within 1.05 % of Region 2 at 10 bar saturation (ideal 7.6 %). The steam's qualified partial pressure is the virial's own computed 2 % table: 1.8 MPa below 500 K up to 65 MPa from 875 K (ideal 0.125 to 2 MPa), so water at 10 bar no longer raises the "water vapour partial pressure" notice. Identity `separate-free-water-v3`: a world with free water restates once on load and keeps its facts (corpus `compat/fluid/steam-v2`).
 
+## [0.16.2] - 2026-10-28
+
+### Removed
+
+- The old one-block Process Fluid Pump and Process Gas Compressor blocks, and the engine's portless pump and compressor form; the In-line Pump and In-line Compressor on pipes replace them. A saved world that has old ones loads without them: their blocks are gone, the log names each removed mover, and the islands are rebuilt from the saved facts with every vessel's contents kept (owner decision; batch `2026-10-28-old-mover-removal`, commits `83ed8a58`, `0ec436f6`; corpus image `compat/removed-movers`).
+
+### Fixed
+
+- The quick suite passes again: the creative tab registers from `ModCreativeTabs`, so unit tests that log through `IChemE` no longer need Minecraft bootstrapped, and the V3 cascade test counts thermo calls instead of reused workspaces (batch `2026-10-28-main-test-repair`, commit `3f7df293`).
+
+## [0.16.1] - 2026-10-27
+
+### Fixed
+
+- The column screen no longer renders a persisted `STALE` result as an accepted result; after loading an old cached solve, it requires a fresh calculation before showing profiles such as tray pressure drop.
+
+## [0.16.0] - 2026-10-27
+
+### Added
+
+- Chinese (`zh_cn`) language support and a dedicated creative tab keep IChemE items under the mod's own category (commit `188fba66`; batch `2026-10-27-creative-tab`).
+- Aggressive interactive distillation solves use the admitted 1e-3 closure after the existing acceptance audit; 42-stage requests now use a 15-30-42 seed ladder to avoid deadline exhaustion (commits `a52bc072`, `07a2be7d`; batch `2026-10-26-v3-solver-performance`).
+
+### Fixed
+
+- The aggressive interactive distillation path publishes the flow-marched tray pressure profile after its bounded hydraulic correction, keeping the GUI's per-tray and total dP readings consistent with the hydraulic summary (`e54daa8`; batch `2026-10-27-column-pressure-drop`).
+
+## [0.15.3] - 2026-10-27
+
+### Fixed
+
+- The equipment constructor's Import always finishes: the screen sends its draft with the import (protocol `equipment-13`, one `ConstructorPayload` with an `Action`; `ImportPayload` deleted), the calculator's column lands on that draft, and the server answers every import (`ImportAnswer`): the screen loads the design or shows why there is none on its status line (`dbefe7f4`; batch `2026-10-27-constructor-import`).
+
+## [0.15.2] - 2026-10-27
+
+### Fixed
+
+- The skylight GameTest `EquipmentCompatGameTests.aSkirtsFloorTakesTheSkylightAboveTheDrum` waits for the light engine's run of the queued work, not a tick count: it failed once on a loaded machine (`33936ffd`, docs and probe `5df6cb7b`; batch `2026-10-27-skirt-shadow`, probe in `tools/skirt-shadow/gametest-probe/`).
+
+## [0.15.1] - 2026-10-27
+
+### Changed
+
+- Distillation column sump sized from engineering references (commit `a0ab6b50`; batch `2026-10-27-column-sump`, survey `COLUMN_SUMP_SURVEY.md`, review `COLUMN_SUMP_REVIEW.md`): the space from the bottom tangent to the bottom tray is the stack of the low level, the level span, the reboiler return and its clearances, to the next whole metre: 3 m up to D 1.5 m and 4 m up to D 8 m (was 2 m up to D 4 m, then D/2), half the diameter beyond as before; placed columns under 8 m refresh taller, their trays, side nozzles and platforms up to two blocks higher; ten more short designs find a row for every nozzle.
+
+### Fixed
+
+- The floor inside a vessel's skirt is no longer shadowed (commit `d02d221f`; batch `2026-10-27-skirt-shadow`, review `SKIRT_SHADOW_REVIEW.md`): a vessel whose skirt shows its inside (standing drums, columns, trickle-bed and ebullated-bed reactors) has interior cells that let skylight through (`EquipmentInteriorBlock.SKYLIGHT`), so the floor seen through the slots and the port is lit as the ground beside it instead of darkening a level a block towards the middle (level 9 under a 10 m drum). Placed vessels restate their interior cells at their next load. A first fix that repainted skirts (`c9e827ac`) was reverted (`f2b15b31`). Tool folder `tools/skirt-shadow/`.
+
 ## [0.15.0] - 2026-10-27
 
 ### Added

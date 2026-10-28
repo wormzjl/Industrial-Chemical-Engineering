@@ -31,4 +31,18 @@ class PresentationMailboxTest {
         box.subscribe("reopened", 8137);
         assertEquals(8200, box.nextTick(), "restored engine epoch, not wall-clock or a new zero epoch");
     }
+    @Test void terminalEventCanPublishOnTheNextEngineTick() {
+        var box = new PresentationMailbox<String>(); var log = new ArrayList<String>();
+        box.subscribe("a", 0);
+        box.requestImmediate();
+        box.tick(1, key -> true, key -> log.add("view-" + key));
+        assertEquals(List.of("view-a"), log);
+        assertEquals(100, box.nextTick());
+    }
+    @Test void immediateCommandRunsAtTheNextEngineTick() {
+        var box = new PresentationMailbox<String>(); var log = new ArrayList<String>();
+        assertTrue(box.submitImmediate("a", 124, () -> log.add("input-a")));
+        box.tick(124, key -> true, key -> log.add("view-" + key));
+        assertEquals(List.of("input-a", "view-a"), log);
+    }
 }

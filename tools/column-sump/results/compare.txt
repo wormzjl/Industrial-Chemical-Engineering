@@ -1,0 +1,15 @@
+designs 212, side nozzles 1306
+move minus the sump growth, by role:
+  bottoms -1: 75
+  bottoms -2: 81
+  bottoms 0: 56
+  draw 0: 192
+  feed 0: 212
+  pumparound_draw 0: 98
+  reflux 0: 212
+  return 0: 98
+  steam 0: 136
+  vapour_return -1: 77
+  vapour_return 0: 69
+side changes: {"vapour_return":1}
+  d  1.0 n  1 kettle             vapour_return side 3->0 y 1.5->1.5

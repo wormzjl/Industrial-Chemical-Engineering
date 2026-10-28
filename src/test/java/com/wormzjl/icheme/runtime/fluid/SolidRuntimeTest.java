@@ -82,7 +82,7 @@ class SolidRuntimeTest {
     @Test void physicalPumpFilterAndNitrogenReceiverStartTogether(){
         var devices=new ArrayList<PhysicalFluidTopology.Device>();
         var kinds=new TopologyCompiler.Kind[]{TopologyCompiler.Kind.GENERATOR,TopologyCompiler.Kind.PIPE,TopologyCompiler.Kind.PUMP,TopologyCompiler.Kind.PIPE,TopologyCompiler.Kind.FILTER,TopologyCompiler.Kind.PIPE,TopologyCompiler.Kind.RESERVOIR};
-        for(int i=0;i<kinds.length;i++)devices.add(new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,-60,0),kinds[i],PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),i==2?new FlowControl.Pump(.01,500000):new FlowControl.Passive()));
+        for(int i=0;i<kinds.length;i++)devices.add(new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,-60,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kinds[i]),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),i==2?new FlowControl.Pump(.01,500000):new FlowControl.Passive()));
         var spec=new FluidDeviceSpec(1,298.15,101325,FluidDeviceSpec.water(catalog).composition(),SlurryFeed.demo());
         var source=spec.initialize(devices.getFirst(),model,()->{});
         var sink=FluidTestSupport.chargedBoundary(FluidDeviceSpec.nitrogen(catalog),devices.getLast(),model);

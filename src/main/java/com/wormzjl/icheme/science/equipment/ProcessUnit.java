@@ -599,6 +599,8 @@ public final class ProcessUnit {
      */
     double[] bodyRows;
     int irregularFrom = Integer.MAX_VALUE;
+    /** Whether a skirt shows its inside through an opening ({@link #skirt}): its interior cells let skylight through ({@link ShapeRasterizer#skylight}). */
+    boolean openSkirt;
     /**
      * A floating-roof tank's parts the client draws, not the chunk mesh (plan section 3.4): the roof, drawn landed on its
      * legs, and the rolling ladder, drawn level from its pivot; null for any other shape.
@@ -3621,6 +3623,7 @@ public final class ProcessUnit {
         double ri = r - EquipmentShape.SKIRT_WALL;
         boolean open = openings.length > 0, bay = false;
         for (var o : openings) bay |= o[2] <= 0;
+        openSkirt |= open;
         var cut = new double[n][];
         for (int i = 0; i < n; i++) {
             double mid = 2 * Math.PI * (i + .5) / n;

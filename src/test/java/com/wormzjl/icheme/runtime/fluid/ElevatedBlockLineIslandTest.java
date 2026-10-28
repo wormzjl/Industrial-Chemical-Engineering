@@ -59,12 +59,15 @@ class ElevatedBlockLineIslandTest extends BlockLineHarness {
     /** generator - pipe - pump - pipe - tank, all of it vertical (a pipe block below the pump since only pipes connect,
      * decision D20; the pump stood on the generator until 2026-09-28). The pump.s outlet junction sits two
      * blocks above the generator, so its head is added there and only the remaining two blocks of
-     * column stand between it and the tank. */
+     * column stand between it and the tank. The pump is in-line and lies on its side at that height, between two elbows
+     * (batch 2026-10-28-old-mover-removal: an in-line mover is horizontal), so the column is the same two blocks below it
+     * and two above it. */
     private PassiveNetwork risingPumpLine(double generatorPressure) {
         var devices=List.of(device(1,0,BOTTOM,TopologyCompiler.Kind.GENERATOR),
-                device(6,0,BOTTOM+1,TopologyCompiler.Kind.PIPE),device(2,0,BOTTOM+2,TopologyCompiler.Kind.PUMP,PhysicalFluidTopology.Direction.UP),
-                device(4,0,BOTTOM+3,TopologyCompiler.Kind.PIPE),
-                device(5,0,BOTTOM+LIFT,TopologyCompiler.Kind.RESERVOIR));
+                device(6,0,BOTTOM+1,TopologyCompiler.Kind.PIPE),device(7,0,BOTTOM+2,TopologyCompiler.Kind.PIPE),
+                device(2,1,BOTTOM+2,TopologyCompiler.Kind.PUMP,PhysicalFluidTopology.Direction.EAST),
+                device(8,2,BOTTOM+2,TopologyCompiler.Kind.PIPE),device(4,2,BOTTOM+3,TopologyCompiler.Kind.PIPE),
+                device(5,2,BOTTOM+LIFT,TopologyCompiler.Kind.RESERVOIR));
         return island(devices,Map.of(1L,generatorSpec(generatorPressure),5L,tankSpec(101325)));
     }
     /** The flat control: the same blocks in a row at one y. */

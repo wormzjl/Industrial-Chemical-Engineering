@@ -33,7 +33,7 @@ class PhysicalRegistryTest {
         World(int workers){super(workers);}
         WorldTopologyLedger.Registration record(long id,int x,int z,Kind kind,PhysicalFluidTopology.Direction facing) {
             var control=kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive();
-            var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),kind,facing,new PipeResistance.Geometry(1,.05,.000045,0),control);
+            var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),control);
             var spec=kind==Kind.GENERATOR?FluidDeviceSpec.water(catalog):FluidDeviceSpec.nitrogen(catalog);
             if(kind==Kind.RESERVOIR)spec=new FluidDeviceSpec(1,298.15,101325,spec.composition());
             return new WorldTopologyLedger.Registration(device,spec,0);
@@ -337,7 +337,7 @@ class PhysicalRegistryTest {
     }
     private long queueSpec(World w,int x,int z,Kind kind,FluidDeviceSpec spec) {
         long id=w.ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),kind,PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
         w.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);return id;
     }
     /** What the ledger booked between two snapshots equals {@code expected}, to roundoff of the cumulative totals. */

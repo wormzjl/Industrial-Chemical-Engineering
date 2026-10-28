@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification;
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification.ControlledQuantity;
+import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.column.v3.V3ColumnStreamProperties;
 import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
 import com.wormzjl.icheme.science.column.v3.V3ConvergenceEvidence;
@@ -68,6 +69,8 @@ public final class ColumnCalculatorV3BlockEntity extends BlockEntity implements 
     private String detail = "Methane-enriched CDU draft is ready";
     private V3ColumnInput currentInput = freshInput();
     private V3ColumnDisplayResult displayResult;
+    /** Process-local numerical cache; never written to the saved facts section. */
+    private V3NeuralSeed warmSeed;
     private V3Operation activeOperation;
     private List<String> attemptDetails = List.of();
     /** The design the player saved for an equipment constructor to import; apart from the input, which Calculate replaces. */
@@ -115,6 +118,7 @@ public final class ColumnCalculatorV3BlockEntity extends BlockEntity implements 
         activeOperation = null;
         if (outcome instanceof V3ColumnOutcome.Success success) {
             displayResult = V3ColumnDisplayResult.fromAccepted(success);
+            warmSeed = success.result().warmSeed().orElse(null);
             resultRevision = Math.incrementExact(resultRevision);
             status = V3Status.SUCCESS;
             detail = V3HollandExample32.isPackage(operation.input().packageId())
@@ -179,6 +183,7 @@ public final class ColumnCalculatorV3BlockEntity extends BlockEntity implements 
         }
         currentInput = preset;
         displayResult = null;
+        warmSeed = null;
         attemptDetails = List.of();
         status = V3Status.DIRTY;
         detail = bounded(presetDetail);
@@ -194,6 +199,8 @@ public final class ColumnCalculatorV3BlockEntity extends BlockEntity implements 
     /** The stored column input: a read, nothing is solved or published. */
     public V3ColumnInput currentInput() { return currentInput; }
 
+    /** Returns the last accepted numerical state for a repeat-request predictor. Server thread only. */
+    public V3NeuralSeed warmSeed() { return warmSeed; }
     /** The design the player saved, which an equipment constructor imports: a read. */
     public Optional<ColumnDesign> savedDesign() { return Optional.ofNullable(savedDesign); }
 

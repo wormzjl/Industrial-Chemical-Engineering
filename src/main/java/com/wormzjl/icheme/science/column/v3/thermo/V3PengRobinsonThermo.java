@@ -64,6 +64,21 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
         return session.componentCriticalTemperatureKelvin(publicComponent);
     }
 
+    public double componentCriticalPressurePascal(int publicComponent) {
+        return session.componentCriticalPressurePascal(publicComponent);
+    }
+
+    public double[][] binaryInteractions() {
+        double[][] source = session.binaryInteractions();
+        double[][] copy = new double[source.length][];
+        for (int row = 0; row < source.length; row++) copy[row] = source[row].clone();
+        return copy;
+    }
+
+    public double idealGasMolarEnthalpy(double temperatureKelvin, double[] normalizedComposition) {
+        return session.idealGasMolarEnthalpy(temperatureKelvin, normalizedComposition);
+    }
+
     public double componentAcentricFactor(int publicComponent) {
         return session.componentAcentricFactor(publicComponent);
     }

@@ -284,7 +284,7 @@ final class ColumnStructure {
             rows.side(EquipmentShape.Role.RETURN, i + 1, over.apply(p.ret()), yB + t.trayHeight(d, p.ret()) + .3, RIGHT, size(d / 6, .6));
         }
         if (reboiled(t))
-            rows.side(EquipmentShape.Role.VAPOUR_RETURN, 1, under.apply(t.trays() + 1), yB + .75 * sump, LEFT, size(.27 * d, PipeSizes.MAX_OUTSIDE));
+            rows.side(EquipmentShape.Role.VAPOUR_RETURN, 1, under.apply(t.trays() + 1), yB + .75 * sump, LEFT, returnOd(d));
         for (int i = 0; i < t.draws().size(); i++)
             rows.side(EquipmentShape.Role.DRAW, i + 1, under.apply(t.draws().get(i)), yB + t.trayHeight(d, t.draws().get(i)) - .2, LEFT, size(d / 8, .5));
         for (int i = 0; i < t.steam().size(); i++) {
@@ -305,6 +305,11 @@ final class ColumnStructure {
      */
     static boolean reboiled(ColumnTrays trays) {
         return trays.components() == null || trays.components().kettle();
+    }
+
+    /** The reboiler's vapour return's design size on a column {@code diameter} across: the largest side nozzle; the sump's stack makes room for it. */
+    static double returnOd(double diameter) {
+        return size(.27 * diameter, PipeSizes.MAX_OUTSIDE);
     }
 
     /**

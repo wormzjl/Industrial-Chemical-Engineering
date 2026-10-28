@@ -21,7 +21,7 @@ class PipePresentationTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
     private static final PipeResistance.Geometry BORE=new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0);
     private PhysicalFluidTopology.Device device(long id,int x,int y,int z,Kind kind){
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),kind,PhysicalFluidTopology.Direction.EAST,BORE,new FlowControl.Passive());
+        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,BORE,new FlowControl.Passive());
     }
     private PassiveNetwork.Reservoir boundary(PhysicalFluidTopology.Device d,double pressure,int component){
         double[] n=new double[model.components().size()];n[component]=1;
@@ -33,7 +33,7 @@ class PipePresentationTest {
         for(var kind:List.of(Kind.PUMP,Kind.COMPRESSOR))for(var facing:List.of(PhysicalFluidTopology.Direction.EAST,PhysicalFluidTopology.Direction.WEST)){
             var source=device(1,-2,0,0,Kind.GENERATOR);var sink=device(2,2,0,0,Kind.VOID);
             FlowControl control=kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Compressor(.05,3);
-            var mover=new PhysicalFluidTopology.Device(100,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),kind,facing,BORE,control);
+            var mover=new PhysicalFluidTopology.Device(100,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,BORE,control);
             var compiled=PhysicalFluidTopology.compile(List.of(source,device(3,-1,0,0,Kind.PIPE),mover,device(4,1,0,0,Kind.PIPE),sink),Map.of(1L,boundary(source,150000,0),2L,boundary(sink,101325,0)));
             var graph=compiled.islands().getFirst().graph();var mappings=PipePresentation.actuatorMappings(mover,graph);assertEquals(1,mappings.size());
             var discharge=graph.pipes().stream().filter(p->p.id()==mappings.getFirst().pipeId()).findFirst().orElseThrow();

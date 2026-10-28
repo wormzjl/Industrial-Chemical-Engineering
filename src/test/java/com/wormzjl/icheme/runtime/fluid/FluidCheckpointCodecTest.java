@@ -144,7 +144,7 @@ class FluidCheckpointCodecTest {
                 (FluidDeviceSpec)a[6],(long)a[7]);
         var kinds=com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.class.getEnumConstants();
         var reservoir=device.apply(new Object[]{1L,"minecraft:overworld",0,kinds[0],block,new FlowControl.Passive(),new FluidDeviceSpec(2,300,150000,nitrogen),0L});
-        var pump=device.apply(new Object[]{2L,"minecraft:overworld",1,com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PUMP,block,new FlowControl.Pump(.01,500000),new FluidDeviceSpec(1,298.15,101325,nitrogen),0L});
+        var pump=device.apply(new Object[]{2L,"minecraft:overworld",1,com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,block,new FlowControl.Pump(.01,500000),new FluidDeviceSpec(1,298.15,101325,nitrogen),0L});
         var valve=device.apply(new Object[]{3L,"minecraft:overworld",2,com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.VALVE,wide,new FlowControl.PressureValve(120000),new FluidDeviceSpec(1,298.15,101325,nitrogen),0L});
         var pipe=device.apply(new Object[]{4L,"minecraft:the_nether",5,com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,wide,new FlowControl.Passive(),new FluidDeviceSpec(1,298.15,101325,mixed),0L});
         var generator=device.apply(new Object[]{5L,"minecraft:overworld",7,com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR,block,new FlowControl.Passive(),new FluidDeviceSpec(1,320,180000,mixed,slurry),0L});
@@ -224,8 +224,8 @@ class FluidCheckpointCodecTest {
     @Test void aCompressorRegistrationRoundTripsInTheTopologyUnit() {
         var empty=WorldTopologyLedger.Snapshot.empty(MaterialCatalog.bundled());int count=empty.basis().components().size();
         var nitrogen=new double[count];nitrogen[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=1;
-        var device=new PhysicalFluidTopology.Device(4,new PhysicalFluidTopology.Position("minecraft:overworld",3,64,-3),com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.COMPRESSOR,
-                PhysicalFluidTopology.Direction.UP,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Compressor(.05,3));
+        var device=new PhysicalFluidTopology.Device(4,new PhysicalFluidTopology.Position("minecraft:overworld",3,64,-3),com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,
+                PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Compressor(.05,3));
         var world=new WorldTopologyLedger.Snapshot(12,9,Map.of(4L,new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,101325,nitrogen),2)),List.of(),
                 WorldTopologyLedger.MaterialTotal.empty(count),WorldTopologyLedger.MaterialTotal.empty(count),empty.basis(),Map.of());
         var bytes=FluidCheckpointCodec.encodeTopology(world);var decoded=FluidCheckpointCodec.decodeTopology(bytes,12,key->model);

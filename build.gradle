@@ -265,6 +265,61 @@ if (configuredTestForks < 1 || configuredTestForks > 8) throw new GradleExceptio
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
     maxParallelForks = configuredTestForks
+    if (providers.gradleProperty('nativeLibraryPath').isPresent())
+        systemProperty 'icheme.native.path', providers.gradleProperty('nativeLibraryPath').get()
+    if (providers.gradleProperty('nativeThermoBatch').isPresent())
+        systemProperty 'icheme.native.thermo.batch', providers.gradleProperty('nativeThermoBatch').get()
+}
+
+// The native column solver is an optional shared-library lane. It is never part of the ordinary Java build and
+// never launches a solver executable: CMake emits a platform shared library (DLL/SO/DYLIB) loaded by JNI when present.
+def nativeSourceDirectory = layout.projectDirectory.dir('src/main/cpp')
+def nativeBuildDirectory = layout.buildDirectory.dir('native').get().asFile
+def nativeBuildDirectoryPath = nativeBuildDirectory.absolutePath
+tasks.register('nativeConfigure', Exec) {
+    group = 'native'
+    description = 'Configures the optional cross-platform C++ column shared library.'
+    inputs.dir(nativeSourceDirectory)
+    outputs.dir(nativeBuildDirectory)
+    doFirst {
+        nativeBuildDirectory.mkdirs()
+        commandLine 'cmake', '-S', nativeSourceDirectory.asFile.absolutePath, '-B', nativeBuildDirectory.absolutePath,
+                '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY',
+                "-DICHEME_JAVA_HOME=${System.getProperty('java.home')}"
+    }
+}
+tasks.register('nativeBuild', Exec) {
+    group = 'native'
+    description = 'Builds the optional C++ column solver shared library; no solver executable is produced.'
+    dependsOn tasks.named('nativeConfigure')
+    inputs.dir(nativeSourceDirectory)
+    outputs.dir(nativeBuildDirectory)
+    doFirst { commandLine 'cmake', '--build', nativeBuildDirectory.absolutePath, '--config', 'Release' }
+}
+tasks.register('nativeSmoke', Test) {
+    group = 'verification'
+    description = 'Loads the optional native shared library and checks its JNI version probe; no executable is run.'
+    dependsOn tasks.named('nativeBuild'), tasks.named('testClasses')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter { includeTestsMatching 'com.wormzjl.icheme.science.column.v3.NativeColumnSolverTest' }
+    systemProperty 'icheme.native.path', nativeBuildDirectory.absolutePath
+    maxParallelForks = 1
+    doLast {
+        def nativeFiles = java.nio.file.Files.walk(java.nio.file.Path.of(nativeBuildDirectoryPath))
+        try {
+            def productExecutable = nativeFiles
+                    .filter { java.nio.file.Files.isRegularFile(it) }
+                    .filter { it.toString().toLowerCase(java.util.Locale.ROOT).endsWith('.exe') }
+                    .filter { !it.toString().replace('\\', '/').contains('/CMakeFiles/') }
+                    .findFirst()
+            if (productExecutable.isPresent()) {
+                throw new GradleException("Native solver build unexpectedly produced executable: ${productExecutable.get()}")
+            }
+        } finally {
+            nativeFiles.close()
+        }
+    }
 }
 // Only PackagedSparseLuTest reads the packaged jar; it runs under test and fluidScienceTest.
 tasks.withType(Test).matching { it.name in ['test', 'fluidScienceTest'] }.configureEach {

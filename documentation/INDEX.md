@@ -16,6 +16,16 @@ Status words:
 |---|---|---|
 | [2026-10-28-gui-toolkit-evaluation/](2026-10-28-gui-toolkit-evaluation/README.md) | LDLib2 or an own toolkit for the GUI: evaluation and options | Concluded 2026-10-28 |
 | [2026-10-27-heat-exchanger-design/](2026-10-27-heat-exchanger-design/README.md) | Heat exchanger system: UA from size, coupling of the two sides, built-in control | In progress since 2026-10-27 |
+| [2026-10-28-main-test-repair](2026-10-28-main-test-repair/README.md) | Fix main's 16 failing quick-suite tests | Implemented 2026-10-28 (0.16.2) |
+| [2026-10-28-old-mover-removal](2026-10-28-old-mover-removal/README.md) | Remove the old one-block pump and compressor and their engine form; in-line movers replace them | Implemented 2026-10-28 (0.16.2) |
+| [2026-10-27-column-pressure-drop/](2026-10-27-column-pressure-drop/README.md) | Keep published tray pressure profiles consistent on the aggressive solve path | Implemented 2026-10-27 (0.16.0) |
+| [2026-10-27-hold-class-wall-deadline/](2026-10-27-hold-class-wall-deadline/README.md) | Audit an intermittent HoldClassWorldsTest wall deadline | Implemented 2026-10-27 |
+| [2026-10-27-column-bench-audit/](2026-10-27-column-bench-audit/README.md) | Audit main-versus-fork column benchmark data | Implemented 2026-10-27 |
+| [2026-10-27-creative-tab/](2026-10-27-creative-tab/README.md) | Keep IChemE items in the mod creative tab | Implemented 2026-10-27 |
+| [2026-10-26-v3-solver-performance/](2026-10-26-v3-solver-performance/README.md) | V3 distillation solver performance and aggressive warm-start path | Implemented 2026-10-27 |
+| [2026-10-27-constructor-import/](2026-10-27-constructor-import/README.md) | Equipment Constructor import always answers and preserves the draft | Implemented 2026-10-27 (0.15.3) |
+| [2026-10-27-column-sump/](2026-10-27-column-sump/README.md) | Distillation column sump sized from engineering references | Implemented 2026-10-27 (0.15.1) |
+| [2026-10-27-skirt-shadow/](2026-10-27-skirt-shadow/README.md) | Skylight on the floor inside vessel skirts | Implemented 2026-10-27 (0.15.1; GameTest fix 0.15.2) |
 | [2026-10-26-multi-machine-framework/](2026-10-26-multi-machine-framework/README.md) | Multi-machine assemblies, first stage: the distillation column structure | Implemented 2026-10-27 |
 | [2026-10-26-process-control/](2026-10-26-process-control/README.md) | Process sensors and local regulation | Implemented 2026-10-27 |
 | [2026-10-26-liquid-level-gauge-accessory](2026-10-26-liquid-level-gauge-accessory/README.md) | Attachable full-height floating-roof tank level indicator | In progress since 2026-10-26; delivered b1477c09; rebase on current main600549d9 confirmed2026-10-26, main merge pending |

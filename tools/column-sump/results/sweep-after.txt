@@ -1,0 +1,43 @@
+designs 315, refused 93, side nozzles 1131, off their band 1, turned 157 {DRAW=3, FEED=2, REFLUX=18, RETURN=35, STEAM=83, VAPOUR_RETURN=16}
+ladders 840, moved 109; davits moved 29; top platform gone 0; clashes: cage 2, deck 0, mast 0
+cage clashes into a pipe block cell: 0
+designs with a deck walk cut between a ladder and the next (or the top manway): 0
+pipe cells taken by the structure (rasterized): 0
+  off: d 15.0 n 1 steam+draw: STEAM wanted 13.20 at 11.50, side 1
+  d 0.5: designs 8 cage 0 deck 0 mast 0
+  d 1.0: designs 18 cage 2 deck 0 mast 0
+  d 1.5: designs 28 cage 0 deck 0 mast 0
+  d 2.0: designs 28 cage 0 deck 0 mast 0
+  d 3.0: designs 28 cage 0 deck 0 mast 0
+  d 4.0: designs 28 cage 0 deck 0 mast 0
+  d 6.0: designs 28 cage 0 deck 0 mast 0
+  d 8.0: designs 28 cage 0 deck 0 mast 0
+  d 15.0: designs 28 cage 0 deck 0 mast 0
+  refused 4: pumparound 1's draw has no free row by its tray on any side of a N-tray column
+  refused 4: pumparound 1's return has no free row by its tray on any side of a N-tray column
+  refused 8: pumparound 2's draw has no free row by its tray on any side of a N-tray column
+  refused 19: pumparound 2's return has no free row by its tray on any side of a N-tray column
+  refused 37: side draw 1 has no free row by its tray on any side of a N-tray column
+  refused 8: side draw 2 has no free row by its tray on any side of a N-tray column
+  refused 6: steam feed 1 has no free row by its tray on any side of a N-tray column
+  refused 6: the feed nozzle has no free row by its tray on any side of a N-tray column
+  refused 1: the reboiler's vapour return has no free row by its tray on any side of a N-tray column
+d 1.0 n 1 steam+draw: REFLUX->front FEED->left DRAW->front STEAM->right clash [1, 0, 0]
+d 1.0 n 3 steam+draw: STEAM->front clash [1, 0, 0]
+d 15.0 n 1 steam+draw: OFF STEAM 13.2->11.5 clash [0, 0, 0]
+  slim refused 4: d 0.5: pumparound 1's draw
+  slim refused 2: d 0.5: pumparound 1's return
+  slim refused 2: d 0.5: pumparound 2's return
+  slim refused 12: d 0.5: side draw 1
+  slim refused 6: d 0.5: the feed nozzle
+  slim refused 1: d 0.5: the reboiler's vapour return
+  slim refused 2: d 1.0: pumparound 2's draw
+  slim refused 5: d 1.0: pumparound 2's return
+  slim refused 3: d 1.0: side draw 1
+  slim refused 1: d 1.0: side draw 2
+  slim refused 6: d 1.0: steam feed 1
+  slim refused 1: d 1.5: pumparound 2's draw
+  slim refused 2: d 1.5: pumparound 2's return
+  slim refused 3: d 1.5: side draw 1
+  slim refused 1: d 1.5: side draw 2
+clearance d 0.5 48, d 1 36, d 1.5 29, d 2 24 deg

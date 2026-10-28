@@ -7,6 +7,8 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
 import com.wormzjl.icheme.science.column.v3.V3HollandExample32;
 import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
 import com.wormzjl.icheme.science.column.v3.V3NeuralInitializer;
+import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
+import com.wormzjl.icheme.science.column.v3.V3SolveStrategy;
 import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity.V3Operation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
@@ -93,6 +95,12 @@ public final class ProcessSolveServices {
 
     /** Admits one immutable V3 input through the existing shared bounded service. */
     public static AdmissionResult submitV3Column(MinecraftServer server, V3ColumnRequest request) {
+        return submitV3Column(server, request, null);
+    }
+
+    /** Admits one V3 input and supplies the previous accepted state as a process-local warm cache. */
+    public static AdmissionResult submitV3Column(MinecraftServer server, V3ColumnRequest request,
+            V3NeuralSeed warmStart) {
         requireServerThread(server);
         Objects.requireNonNull(request, "request");
         double stageTraceCutoffMoleFraction = IChemE.columnV3StageTraceCutoffMolPercent() / 100.0;
@@ -104,7 +112,7 @@ public final class ProcessSolveServices {
                 ? V3NeuralInitializer.UNAVAILABLE : IChemE.columnV3NeuralModel().bind(catalog,request.operation().input());
         return submit(server, request, new V3ColumnCommand(request.operation().input(),
                         stageTraceCutoffMoleFraction, convergenceClosureFraction, initialization, model,
-                        liquidSupplyScreenRatio,catalog),
+                        liquidSupplyScreenRatio, catalog, V3SolveStrategy.AGGRESSIVE, warmStart),
                 request.operation().input().packageId());
     }
 
@@ -448,13 +456,21 @@ public final class ProcessSolveServices {
     record V3ColumnCommand(
             V3ColumnInput input, double stageTraceCutoffMoleFraction, double convergenceClosureFraction,
             V3InitializationOptions initialization, V3NeuralInitializer model, double liquidSupplyScreenRatio,
-            com.wormzjl.icheme.science.material.MaterialCatalog catalog)
+            com.wormzjl.icheme.science.material.MaterialCatalog catalog, V3SolveStrategy strategy,
+            V3NeuralSeed warmStart)
             implements ProcessSolveCommand {
+        V3ColumnCommand(V3ColumnInput input, double stageTraceCutoffMoleFraction, double convergenceClosureFraction,
+                V3InitializationOptions initialization, V3NeuralInitializer model, double liquidSupplyScreenRatio,
+                com.wormzjl.icheme.science.material.MaterialCatalog catalog) {
+            this(input, stageTraceCutoffMoleFraction, convergenceClosureFraction, initialization, model,
+                    liquidSupplyScreenRatio, catalog, V3SolveStrategy.DRIFT_SPEC, null);
+        }
         V3ColumnCommand {
             Objects.requireNonNull(catalog, "catalog");
             Objects.requireNonNull(input, "input");
             Objects.requireNonNull(initialization, "initialization");
             Objects.requireNonNull(model, "model");
+            Objects.requireNonNull(strategy, "strategy");
             if (!Double.isFinite(stageTraceCutoffMoleFraction) || stageTraceCutoffMoleFraction < 0.0
                     || stageTraceCutoffMoleFraction > 0.01) {
                 throw new IllegalArgumentException("V3 stage-trace cutoff must be finite and in [0, 0.01] mole fraction");
@@ -480,9 +496,14 @@ public final class ProcessSolveServices {
             V3ColumnOutcome outcome = V3HollandExample32.isPackage(input.packageId())
                     && initialization.mode() != V3InitializationOptions.Mode.LNN_ONLY
                     ? V3HollandExample32.calculate(input, cancellationToken::throwIfCancellationRequested)
-                    : V3ColumnCalculator.calculate(input, cancellationToken::throwIfCancellationRequested,
+                    : initialization.mode() == V3InitializationOptions.Mode.LNN_ONLY
+                    || strategy == V3SolveStrategy.DRIFT_SPEC && warmStart == null
+                    ? V3ColumnCalculator.calculate(input, cancellationToken::throwIfCancellationRequested,
                             stageTraceCutoffMoleFraction, convergenceClosureFraction, initialization, model,
-                            liquidSupplyScreenRatio);
+                            liquidSupplyScreenRatio)
+                    : V3ColumnCalculator.calculateWithStrategy(input,
+                            cancellationToken::throwIfCancellationRequested,
+                            strategy, warmStart, liquidSupplyScreenRatio);
             cancellationToken.throwIfCancellationRequested();
             return new V3ColumnSolveResult(outcome);
         }

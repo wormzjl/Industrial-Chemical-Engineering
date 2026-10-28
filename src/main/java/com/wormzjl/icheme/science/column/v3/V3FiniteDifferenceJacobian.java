@@ -22,6 +22,18 @@ final class V3FiniteDifferenceJacobian {
     }
 
     /**
+     * Builds the compact Jacobian around a residual the caller has already evaluated for this exact state.
+     * A Newton iteration always has that residual available, so avoiding the duplicate base evaluation saves one
+     * complete PR property pass per Jacobian without changing any probe or derivative value.
+     */
+    static Jacobian evaluateCompact(
+            V3MeshResidualEvaluator evaluator, V3DryMeshCoordinateMap coordinates, V3DryMeshState state,
+            V3MeshResidual baseResidual, V3ThermoWorkspaceFactory workspaceFactory,
+            DifferenceScale differenceScale, V3SolveControl control) {
+        return evaluate(evaluator, coordinates, state, baseResidual, workspaceFactory, differenceScale, control, true, false);
+    }
+
+    /**
      * Shared evaluation. {@code compact = false} keeps the dense matrix and {@code stageColored = true} forces the
      * stage-colored path below its size threshold; both serve only the test-tree verification oracle.
      */
@@ -38,6 +50,27 @@ final class V3FiniteDifferenceJacobian {
         control.checkpoint();
         double[] base = coordinates.encode(state);
         V3MeshResidual baseResidual = evaluator.evaluate(state, workspaceFactory.newWorkspace());
+        int rows = baseResidual.rows().size();
+        if (rows != base.length) throw new IllegalArgumentException("V3 MESH Jacobian requires a square residual/coordinate map");
+        if (stageColored || base.length >= STAGE_COLORED_MINIMUM_COORDINATES) {
+            return stageColoredJacobian(evaluator, coordinates, base, baseResidual, workspaceFactory, differenceScale, control, compact);
+        }
+        return centralJacobian(evaluator, coordinates, base, baseResidual, workspaceFactory, differenceScale, control, compact);
+    }
+
+    private static Jacobian evaluate(
+            V3MeshResidualEvaluator evaluator, V3DryMeshCoordinateMap coordinates, V3DryMeshState state,
+            V3MeshResidual baseResidual, V3ThermoWorkspaceFactory workspaceFactory,
+            DifferenceScale differenceScale, V3SolveControl control, boolean compact, boolean stageColored) {
+        evaluator = Objects.requireNonNull(evaluator, "evaluator");
+        coordinates = Objects.requireNonNull(coordinates, "coordinates");
+        state = Objects.requireNonNull(state, "state");
+        baseResidual = Objects.requireNonNull(baseResidual, "baseResidual");
+        workspaceFactory = Objects.requireNonNull(workspaceFactory, "workspaceFactory");
+        differenceScale = Objects.requireNonNull(differenceScale, "differenceScale");
+        control = Objects.requireNonNull(control, "control");
+        control.checkpoint();
+        double[] base = coordinates.encode(state);
         int rows = baseResidual.rows().size();
         if (rows != base.length) throw new IllegalArgumentException("V3 MESH Jacobian requires a square residual/coordinate map");
         if (stageColored || base.length >= STAGE_COLORED_MINIMUM_COORDINATES) {

@@ -245,7 +245,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     @Override public void acceptFluidView(FluidView view){lastView=view;}
     public FluidView lastView(){return lastView;}
     public void open(ServerPlayer player,boolean debug) {
-        if(identity==0){player.displayClientMessage(Component.literal("Fluid device is waiting for its world identity."),true);return;}
+        if(identity==0){player.displayClientMessage(Component.translatable("gui.icheme.fluid.waiting_identity"),true);return;}
         player.openMenu(new MenuProvider() {
             public Component getDisplayName(){return Component.translatable(FluidDeviceBlock.hasPump(getBlockState())?"item.icheme.fluid_pump":FluidDeviceBlock.hasCompressor(getBlockState())?"item.icheme.fluid_compressor":FluidDeviceBlock.hasFilter(getBlockState())?"item.icheme.inline_filter":FluidDeviceBlock.hasPressureValve(getBlockState())?"item.icheme.pressure_control_valve":getBlockState().getBlock().getDescriptionId());}
             public AbstractContainerMenu createMenu(int containerId,Inventory inventory,Player player){return new FluidDeviceMenu(containerId,inventory,worldPosition,identity,debug,FluidDeviceMenu.REACH);}

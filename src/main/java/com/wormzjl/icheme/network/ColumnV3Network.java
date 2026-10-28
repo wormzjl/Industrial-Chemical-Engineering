@@ -130,7 +130,8 @@ public final class ColumnV3Network {
     }
 
     private static void handleCalculate(CalculatePayload payload, IPayloadContext context) {
-        ColumnPresentation.queue(context, payload.blockPos(), payload.clientNonce(), () -> applyCalculate(payload, context));
+        ColumnPresentation.queueImmediate(context, payload.blockPos(), payload.clientNonce(),
+                () -> applyCalculate(payload, context));
     }
 
     private static void applyCalculate(CalculatePayload payload, IPayloadContext context) {
@@ -162,7 +163,8 @@ public final class ColumnV3Network {
         try {
             ProcessSolveServices.AdmissionResult admission = ProcessSolveServices.submitV3Column(
                     player.getServer(),
-                    new V3ColumnRequest(requestId, target, acceptedOperation, System.nanoTime()));
+                    new V3ColumnRequest(requestId, target, acceptedOperation, System.nanoTime()),
+                    calculator.warmSeed());
             if (!admission.accepted()) {
                 calculator.failOperation(acceptedOperation, "Admission rejected: " + admission.admission().name());
             }
@@ -233,6 +235,7 @@ public final class ColumnV3Network {
             logTerminal(job, "STALE_RESULT", "operation_mismatch");
             return;
         }
+        ColumnPresentation.refreshNow(server, job.request().target().blockPos());
         logTerminal(job, terminalStatus, terminalDetail);
     }
 

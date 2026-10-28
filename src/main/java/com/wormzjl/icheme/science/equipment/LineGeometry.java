@@ -121,8 +121,6 @@ public final class LineGeometry {
         switch (key.kind()) {
             case PIPE -> pipe(m, key);
             case VALVE -> valve(m, key);
-            case PUMP -> pump(m, key);
-            case COMPRESSOR -> compressor(m, key);
             case FILTER -> strainer(m, key);
             case RESERVOIR -> tank(m, key);
             case GENERATOR -> box(m, key, Material.FEED);
@@ -571,49 +569,6 @@ public final class LineGeometry {
      */
     private static void valve(Mesh m, Key key) {
         ValveGeometry.pressure(m,key);
-    }
-
-    /**
-     * A vertical in-line pump (API 610 OH3): a round casing on the line, flanged suction and discharge, a bearing bracket
-     * and the motor standing on it, the whole on a pedestal to the floor.
-     */
-    private static void pump(Mesh m, Key key) {
-        double od = line(key), rc = Math.max(.12, Math.min(.4, .5 * PipeSizes.flange(od) + .06));
-        int n = Math.max(12, PipeSizes.sides(2 * rc));
-        var up = Frame.of(new double[]{.5, 0, .5}, 1, 1);
-        double low = .5 - .55 * rc, high = .5 + .55 * rc, bracket = Math.max(.04, Math.min(.1, .3 * rc)), motor = high + bracket;
-        m.cylinder(up, rc, low, high, n, Material.MACHINE);
-        lineNozzles(m, key, .8 * rc, od);
-        m.frustum(up, .55 * rc, .4 * rc, high, motor, n, Material.MACHINE);
-        double rm = Math.max(.1, Math.min(.36, .75 * rc + .04)), cowl = Math.min(.06, .3 * (.98 - motor));
-        m.cylinder(up, rm, motor, .98 - cowl, n, Material.MOTOR);
-        m.frustum(up, .9 * rm, .6 * rm, .98 - cowl, .98, n, Material.MOTOR);
-        m.annulus(up, 0, .6 * rm, .98, n, 1, Material.MOTOR);
-        // Pedestal and its foot plate.
-        m.prism(up, .45 * rc, .04, low, n, Material.STEELWORK);
-        double foot = .6 * rc;
-        m.box(new double[]{.5 - foot, 0, .5 - foot}, new double[]{.5 + foot, .04, .5 + foot}, ALL_FACES, Material.STEELWORK);
-    }
-
-    /** A compressor on its skid: a barrel casing on the line, its motor lying above it, pedestals under the barrel. */
-    private static void compressor(Mesh m, Key key) {
-        double od = line(key), rb = Math.max(.14, Math.min(.3, .5 * PipeSizes.flange(od) + .05)), half = .32;
-        int a = key.facing() & ~1, n = Math.max(12, PipeSizes.sides(2 * rb));
-        var f = frame(a, ref(a));
-        m.box(new double[]{.04, 0, .04}, new double[]{.96, .06, .96}, ALL_FACES, Material.STEELWORK);
-        m.cylinder(f, rb, -half, half, n, Material.MACHINE);
-        lineNozzles(m, key, half, od);
-        double[] along = step(a);
-        double width = .06;
-        for (double s : new double[]{-.2, .2}) {
-            double cx = .5 + s * along[0], cz = .5 + s * along[2];
-            double wx = along[0] != 0 ? width : .6 * rb, wz = along[2] != 0 ? width : .6 * rb;
-            m.box(new double[]{cx - wx, .06, cz - wz}, new double[]{cx + wx, .5 - .7 * rb, cz + wz}, ALL_FACES & ~12, Material.STEELWORK);
-        }
-        double rm = Math.min(.16, (.98 - .5 - rb - .02) / 2);
-        if (rm < .05) return;
-        var motor = new Frame(new double[]{.5, .5 + rb + .02 + rm, .5}, along, new double[]{0, 1, 0});
-        m.cylinder(motor, rm, -.24, .24, Math.max(12, PipeSizes.sides(2 * rm)), Material.MOTOR);
     }
 
     /** A Y-strainer: a body on the line, its screen leg 45° down and downstream (the facing), closed by a blind flange. */

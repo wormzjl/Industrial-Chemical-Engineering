@@ -138,7 +138,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     private static boolean boundary(TopologyCompiler.Kind kind){return kind==TopologyCompiler.Kind.RESERVOIR||kind==TopologyCompiler.Kind.GENERATOR||kind==TopologyCompiler.Kind.VOID;}
     static boolean face(BlockState state,Direction direction) {
         if(hasAxialAccessory(state)&&state.getValue(FACING).getAxis()!=direction.getAxis())return false;
-        var block=(FluidDeviceBlock)state.getBlock();return block.kind!=TopologyCompiler.Kind.PUMP&&block.kind!=TopologyCompiler.Kind.COMPRESSOR&&block.kind!=TopologyCompiler.Kind.VALVE&&block.kind!=TopologyCompiler.Kind.FILTER||state.getValue(FACING).getAxis()==direction.getAxis();
+        var block=(FluidDeviceBlock)state.getBlock();return block.kind!=TopologyCompiler.Kind.VALVE&&block.kind!=TopologyCompiler.Kind.FILTER||state.getValue(FACING).getAxis()==direction.getAxis();
     }
     /**
      * The faces the fluid block at {@code position} may connect through (batch 2026-10-26-pipe-laying-system): a laid

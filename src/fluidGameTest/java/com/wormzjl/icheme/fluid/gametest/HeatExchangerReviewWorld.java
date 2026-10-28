@@ -6,6 +6,7 @@ import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
+import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
@@ -15,6 +16,8 @@ import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
+import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
+import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
@@ -272,20 +275,23 @@ public final class HeatExchangerReviewWorld {
         }
 
         /**
-         * A one-block pump on the line from {@code end} (its generator) to {@code front} (the nozzle's pipe block), in place of
-         * the line's pipe beside the nozzle's (a device joins only a pipe), its outlet towards the nozzle, at
-         * {@code volumeFlow} m³/s and up to 5 bar.
+         * An In-line Pump on the line from {@code end} (its generator) to {@code front} (the nozzle's pipe block), on the
+         * line's second pipe from the generator, discharging towards the nozzle, at {@code volumeFlow} m³/s and up to 5 bar.
+         * It is installed as the item installs it (batch 2026-10-28-old-mover-removal removed the one-block pump).
          */
         void pump(BlockPos end, BlockPos front, double volumeFlow) {
             Direction towards = null;
             for (var q : Direction.values()) if (end.relative(q).distManhattan(front) < end.distManhattan(front) && plant.devices.contains(end.relative(q))) towards = q;
-            if (towards == null) throw new IllegalStateException("No pipe beside the generator at " + end.toShortString());
+            if (towards == null || towards.getAxis().isVertical()) throw new IllegalStateException("No horizontal pipe beside the generator at " + end.toShortString());
             pumpFacing = towards;
             var at = end.relative(towards, 2);
             if (!plant.devices.contains(at) || at.equals(front)) throw new IllegalStateException("No pipe for the pump at " + at.toShortString());
-            var state = ModBlocks.FLUID_PUMP.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, towards);
+            var state = plant.level.getBlockState(at).setValue(FluidDeviceBlock.FACING, towards).setValue(FluidDeviceBlock.INLINE_MOVER, FluidDeviceBlock.InlineMover.PUMP);
             plant.level.setBlock(at, FluidDeviceBlock.connectedState(state, plant.level, at), Block.UPDATE_ALL);
             long id = id(at);
+            if (!world.installPipeMover(id, PhysicalFluidTopology.Direction.valueOf(towards.name()), TopologyCompiler.Kind.PUMP))
+                throw new IllegalStateException("The pipe at " + at.toShortString() + " takes no pump");
+            if (plant.level.getBlockEntity(at) instanceof FluidDeviceBlockEntity entity) entity.refreshGeometry(entity.bore(), true);
             var r = world.registrations().get(id);
             world.edit(id, r.revision(), r.device().withControl(new FlowControl.Pump(volumeFlow, 500_000, true)), r.spec());
         }

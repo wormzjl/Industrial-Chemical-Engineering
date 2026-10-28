@@ -393,7 +393,11 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
     // A wide panel moves the amount columns left by one column so the feed rate shows on both bases (bothRates).
     private boolean bothRates(){return imageWidth>=660;}
     private int amountX(){return Math.max(120,imageWidth-(bothRates()?406:310));}
-    private V3ColumnInspection inspection(){return invalidated||conflict||state==null?null:state.displayResult().flatMap(V3ColumnDisplayResult::inspection).orElse(null);}
+    /** Persisted results are replayed as STALE until the server accepts a fresh solve; never draw that old cache as current. */
+    private V3ColumnInspection inspection(){
+        return invalidated||conflict||state==null||state.status()!=V3Status.SUCCESS ? null
+                : state.displayResult().flatMap(V3ColumnDisplayResult::inspection).orElse(null);
+    }
     private String freshness(){return inspection()!=null?tr("accepted"):invalidated?tr("draft_cleared"):tr("no_result");}
     private String status(){
         if(conflict)return tr("conflict");

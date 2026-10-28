@@ -150,6 +150,29 @@ class V3SimultaneousColumnSolverTest {
                 .audit(warmConverged.state(), thermo.newWorkspace(), V3SolveControl.UNBOUNDED).accepted());
     }
 
+    @Test
+    void insideOutFrozenPropertyPredictorStillRequiresStrictPrCertification() {
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
+        V3ColumnProblem problem = V3ColumnProblemResolver.resolve(
+                V3TestInputs.cdu17Binary("test:inside-out-gate"), V3CondenserPhaseBranch.TWO_PHASE);
+        V3FlashResult feedFlash = thermo.flashTP(problem.input().feedTemperatureKelvin(),
+                problem.nodePressurePascal(problem.topology().feedTrayNumber()),
+                problem.input().feedComponentMolarFlowsMolPerSecond(), thermo.newWorkspace());
+        V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(
+                problem, thermo, feedFlash.molarEnthalpyJoulesPerMol());
+        V3DryMeshCoordinateMap coordinates = new V3DryMeshCoordinateMap(problem);
+        V3DryMeshState seed = V3ColumnInitializer.initialize(problem, thermo, thermo.newWorkspace()).state();
+
+        V3SimultaneousColumnSolver.Attempt attempt = V3SimultaneousColumnSolver.solveWithInsideOut(
+                problem, evaluator, coordinates, seed, thermo::newWorkspace, 128, 1.0e-8,
+                V3SolveControl.UNBOUNDED, V3SimultaneousColumnSolver.NewtonTrace.NONE);
+
+        V3SimultaneousColumnSolver.Attempt.Converged converged = assertInstanceOf(
+                V3SimultaneousColumnSolver.Attempt.Converged.class, attempt, attempt::toString);
+        assertTrue(converged.evidence().convergenceEvidence().satisfiesGates());
+        assertTrue(evaluator.evaluate(converged.state(), thermo.newWorkspace()).maximumAbsoluteScaledResidual() <= 1.0e-8);
+    }
+
     /**
      * The stall stop belongs to the budget that asks for it and to no other solve.
      *
@@ -203,7 +226,9 @@ class V3SimultaneousColumnSolverTest {
      * on and costs more, not less. That measurement is why the reduced budget is spent only where the state is
      * a seed — and why the stage continuation, whose rungs each certify, kept the full cascade.</p>
      *
-     * <p>The workspace count is the proxy for work: every residual evaluation takes a fresh one.</p>
+     * <p>The proxy for work is the count of thermo fugacity calls each solve makes ({@link #counting}): every residual
+     * evaluation makes the same number. It was the workspace count until the solver reused one workspace per attempt
+     * ({@code 0967a985}), after which every attempt counted one.</p>
      */
     @Test
     void theDampedCascadeCapIsHonouredAndTheRampsTwoDampingsAreEnough() {
@@ -295,12 +320,11 @@ class V3SimultaneousColumnSolverTest {
                 thermo::newWorkspace, 32, 1.0e-9, V3SolveControl.UNBOUNDED, V3SimultaneousColumnSolver.NewtonTrace.NONE, budget);
     }
 
+    /** The workspace factory of one solve, whose thermo calls {@code thermo} counts in {@code evaluations}. */
     private static V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory counting(
-            NewtonManufacturedThermo thermo, AtomicInteger workspaces) {
-        return () -> {
-            workspaces.incrementAndGet();
-            return thermo.newWorkspace();
-        };
+            NewtonManufacturedThermo thermo, AtomicInteger evaluations) {
+        thermo.evaluations = evaluations;
+        return thermo::newWorkspace;
     }
 
     private static V3DryMeshState perturbedState(V3ColumnProblem problem, V3DryMeshCoordinateMap coordinates) {
@@ -359,6 +383,8 @@ class V3SimultaneousColumnSolverTest {
                 {12.0 / 7.0, 8.0 / 13.0}, {12.0 / 7.0, 8.0 / 13.0}, {42.0 / 17.0, 28.0 / 53.0}
         };
         private final V3ComponentBasis basis = new V3ComponentBasis(List.of("component-a", "component-b"));
+        /** Fugacity calls, the work of the solve under way ({@link #counting}); solves run one at a time. */
+        private AtomicInteger evaluations = new AtomicInteger();
 
         @Override public V3ComponentBasis componentBasis() { return basis; }
         @Override public V3ThermoWorkspace newWorkspace() { return new V3ThermoWorkspace(2); }
@@ -367,6 +393,7 @@ class V3SimultaneousColumnSolverTest {
         public V3FugacityResult fugacity(
                 double temperatureKelvin, double pressurePascal, double[] composition, Root phase,
                 V3ThermoWorkspace workspace) {
+            evaluations.incrementAndGet();
             int node = nodeForTemperature(temperatureKelvin);
             double[] logPhi = new double[2];
             if (phase == Root.LIQUID) {

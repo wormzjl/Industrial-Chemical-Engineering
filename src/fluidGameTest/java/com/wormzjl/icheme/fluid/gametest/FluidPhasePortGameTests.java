@@ -115,7 +115,7 @@ public final class FluidPhasePortGameTests {
     @GameTest(template="empty",timeoutTicks=30000,batch="fluid-pump-refused")
     public static void aPumpOnAGasTankIsRefusedWithItsReasonOnItsStatusLine(GameTestHelper helper) {
         var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
-        // A pipe block between the tank and the pump: only pipes connect (decision D20).
+        // A pipe block between the tank and the in-line pump, as the line stood with the one-block pump (decision D20).
         var tank=helper.absolutePos(new BlockPos(0,1,0));var suction=tank.east();var pump=suction.east();var pipe=pump.east();var sink=pipe.east();var all=List.of(tank,suction,pump,pipe,sink);
         place(helper,tank,ModBlocks.FLUID_RESERVOIR.get().defaultBlockState());
         // A placed tank holds nothing (decision D54): the gas tank is charged first, at 102 kPa (TankCharge).
@@ -130,7 +130,7 @@ public final class FluidPhasePortGameTests {
                 helper.assertTrue(System.nanoTime()<deadline[0],"The tank was not charged");
                 if(!charge.charged())return;
                 place(helper,suction,ModBlocks.FLUID_PIPE.get().defaultBlockState());
-                place(helper,pump,ModBlocks.FLUID_PUMP.get().defaultBlockState().setValue(FluidDeviceBlock.FACING,Direction.EAST));
+                place(helper,pump,FluidPumpStartupGameTests.inlinePump(Direction.EAST));
                 place(helper,pipe,ModBlocks.FLUID_PIPE.get().defaultBlockState());place(helper,sink,ModBlocks.FLUID_VOID.get().defaultBlockState());
                 pumpIds[0]=identity(helper,pump);deadline[0]=System.nanoTime()+60_000_000_000L;return;
             }

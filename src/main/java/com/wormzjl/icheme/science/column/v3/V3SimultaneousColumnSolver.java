@@ -15,6 +15,13 @@ final class V3SimultaneousColumnSolver {
     private static final int MAXIMUM_FROZEN_FINE_JACOBIAN_STEPS = 1;
     private static final int UNLIMITED_LOCAL_BLOCK_ATTEMPTS = Integer.MAX_VALUE;
     private static final int LOCAL_BLOCK_JACOBIAN_MINIMUM_COORDINATES = 96;
+    /**
+     * A continuation seed below this residual is already in the strict Newton basin.  Taking a PR derivative
+     * snapshot there costs more than it can save, so the inside-out trial is reserved for genuinely cold seeds.
+     */
+    private static final double INSIDE_OUT_TRIGGER_RESIDUAL = 5.0e-2;
+    /** Stop rebuilding a local predictor after two consecutive Armijo rejections in one attempt. */
+    private static final int MAXIMUM_CONSECUTIVE_LOCAL_BLOCK_REJECTIONS = 2;
     private static final double FALLBACK_MAXIMUM_LOG_FLOW_CHANGE = 0.25;
     private static final double FALLBACK_MAXIMUM_TEMPERATURE_CHANGE_KELVIN = 10.0;
     private static final double INITIAL_GAUSS_NEWTON_DAMPING = 1.0e-8;
@@ -43,6 +50,11 @@ final class V3SimultaneousColumnSolver {
         coordinates = Objects.requireNonNull(coordinates, "coordinates");
         initialState = Objects.requireNonNull(initialState, "initialState");
         workspaceFactory = Objects.requireNonNull(workspaceFactory, "workspaceFactory");
+        // A Newton attempt evaluates residuals serially.  Reusing one caller-owned thermo
+        // workspace keeps the PR temperature cache and scratch arrays alive across probes and
+        // line-search trials; no residual retains or mutates the workspace after it returns.
+        V3ThermoWorkspace sharedWorkspace = workspaceFactory.newWorkspace();
+        workspaceFactory = () -> sharedWorkspace;
         initialConvergenceEvidence = Objects.requireNonNull(initialConvergenceEvidence, "initialConvergenceEvidence");
         return solve(problem, evaluator, coordinates, initialState, workspaceFactory, initialConvergenceEvidence,
                 maximumIterations, scaledTolerance, V3FiniteDifferenceJacobian.DifferenceScale.FINE, V3SolveControl.UNBOUNDED);
@@ -148,6 +160,81 @@ final class V3SimultaneousColumnSolver {
                 control, trace, MAXIMUM_FROZEN_FINE_JACOBIAN_STEPS, 1, RungBudget.DEFAULT, Extension.NONE);
     }
 
+    /**
+     * Boston-Sullivan inside-out trial: strict PR properties are refreshed outside a few cheap frozen-property
+     * MESH sweeps, then the ordinary strict solver certifies the best inner state.  The frozen evaluator is never
+     * used for publication or auditing; if it does not lower the fresh residual, the caller receives the ordinary
+     * strict solve from the original seed.
+     */
+    static Attempt solveWithInsideOut(
+            V3ColumnProblem problem, V3MeshResidualEvaluator evaluator, V3DryMeshCoordinateMap coordinates,
+            V3DryMeshState initialState, V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory workspaceFactory,
+            int maximumIterations, double scaledTolerance, V3SolveControl control, NewtonTrace trace) {
+        Objects.requireNonNull(problem, "problem");
+        Objects.requireNonNull(evaluator, "evaluator");
+        Objects.requireNonNull(coordinates, "coordinates");
+        Objects.requireNonNull(initialState, "initialState");
+        Objects.requireNonNull(workspaceFactory, "workspaceFactory");
+        Objects.requireNonNull(control, "control");
+        Objects.requireNonNull(trace, "trace");
+        if (evaluator.usesFrozenThermo()) throw new IllegalArgumentException("V3 inside-out outer solve needs a strict evaluator");
+        if (!problem.hasSideDraws() && !problem.hasSteamFeeds()
+                && !problem.hasPumparounds() && !problem.hasWetTrays()) {
+            V3DryMeshState bestState = initialState;
+            double bestResidual;
+            try {
+                bestResidual = evaluator.evaluate(bestState, workspaceFactory.newWorkspace())
+                        .maximumAbsoluteScaledResidual();
+            } catch (IllegalArgumentException | V3ThermoException unavailable) {
+                return solve(problem, evaluator, coordinates, initialState, workspaceFactory,
+                        V3ConvergenceEvidence.unavailable(), maximumIterations, scaledTolerance,
+                        V3FiniteDifferenceJacobian.DifferenceScale.FINE, control, trace);
+            }
+            if (!(bestResidual > INSIDE_OUT_TRIGGER_RESIDUAL)) {
+                return solve(problem, evaluator, coordinates, initialState, workspaceFactory,
+                        V3ConvergenceEvidence.unavailable(), maximumIterations, scaledTolerance,
+                        V3FiniteDifferenceJacobian.DifferenceScale.FINE, control, trace);
+            }
+            for (int outer = 0; outer < 2; outer++) {
+                control.checkpoint();
+                V3MeshResidualEvaluator.ThermoSnapshot snapshot;
+                try {
+                    snapshot = evaluator.captureThermoSnapshot(bestState, workspaceFactory.newWorkspace());
+                } catch (IllegalArgumentException | V3ThermoException unavailable) {
+                    break;
+                }
+                V3MeshResidualEvaluator frozenEvaluator = evaluator.withFrozenThermo(snapshot);
+                Attempt inner = solve(problem, frozenEvaluator, coordinates, bestState, workspaceFactory,
+                        V3ConvergenceEvidence.unavailable(), Math.min(12, Math.max(4, maximumIterations / 8)),
+                        Math.max(1.0e-6, scaledTolerance * 100.0), V3FiniteDifferenceJacobian.DifferenceScale.FINE,
+                        control, trace);
+                V3MeshResidual fresh;
+                try {
+                    fresh = evaluator.evaluate(inner.state(), workspaceFactory.newWorkspace());
+                } catch (IllegalArgumentException | V3ThermoException unavailable) {
+                    break;
+                }
+                double residual = fresh.maximumAbsoluteScaledResidual();
+                if (!(residual < bestResidual) || !Double.isFinite(residual)) break;
+                bestState = inner.state();
+                bestResidual = residual;
+                if (bestResidual <= scaledTolerance) break;
+            }
+            if (bestState != initialState) {
+                Attempt accelerated = solve(problem, evaluator, coordinates, bestState, workspaceFactory,
+                        V3ConvergenceEvidence.unavailable(), maximumIterations, scaledTolerance,
+                        V3FiniteDifferenceJacobian.DifferenceScale.FINE, control, trace);
+                if (accelerated instanceof Attempt.Converged) return accelerated;
+                // A frozen-property predictor is only a preconditioner.  If the strict corrector cannot certify
+                // that state, preserve the ordinary cold-start behaviour instead of returning a failure whose
+                // basin was chosen by the approximate inner model.
+            }
+        }
+        return solve(problem, evaluator, coordinates, initialState, workspaceFactory,
+                V3ConvergenceEvidence.unavailable(), maximumIterations, scaledTolerance,
+                V3FiniteDifferenceJacobian.DifferenceScale.FINE, control, trace);
+    }
+
     private static Attempt solve(
             V3ColumnProblem problem,
             V3MeshResidualEvaluator evaluator,
@@ -181,6 +268,13 @@ final class V3SimultaneousColumnSolver {
                 || maximumLocalBlockAttempts < 0) {
             throw new IllegalArgumentException("V3 Newton solve limits are invalid");
         }
+        // A solve is serial: all residual probes complete before the next probe starts. Reuse one mutable PR
+        // workspace for the whole attempt instead of allocating a fresh kernel workspace for every residual,
+        // Jacobian colour and line-search trial. Fugacity result objects copy the values they expose, so the
+        // workspace can safely be overwritten after each evaluation while preserving numerical behaviour.
+        final V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory reusableWorkspace =
+                newWorkspaceFactory(workspaceFactory.newWorkspace());
+        workspaceFactory = reusableWorkspace;
         V3StageBlockLayout layout = new V3StageBlockLayout(problem);
         V3BandedPivotedSolver.Workspace linearWorkspace = new V3BandedPivotedSolver.Workspace();
         int maximumLineSearchSteps = differenceScale == V3FiniteDifferenceJacobian.DifferenceScale.COARSE
@@ -196,6 +290,8 @@ final class V3SimultaneousColumnSolver {
         V3FiniteDifferenceJacobian.Jacobian cachedFineJacobian = null;
         int frozenFineJacobianSteps = 0;
         int localBlockAttempts = 0;
+        int consecutiveLocalBlockRejections = 0;
+        boolean localBlocksDisabled = false;
         for (int iteration = 0; iteration <= maximumIterations; iteration++) {
             control.checkpoint();
             V3MeshResidual residual;
@@ -267,7 +363,7 @@ final class V3SimultaneousColumnSolver {
                                     + earlier + " and " + maximumResidual + " now", lastConvergenceEvidence));
                 }
             }
-            if (maximumLocalBlockAttempts > localBlockAttempts
+            if (!localBlocksDisabled && maximumLocalBlockAttempts > localBlockAttempts
                     && differenceScale == V3FiniteDifferenceJacobian.DifferenceScale.FINE
                     && coordinates.coordinateCount() >= LOCAL_BLOCK_JACOBIAN_MINIMUM_COORDINATES) {
                 localBlockAttempts++;
@@ -284,6 +380,7 @@ final class V3SimultaneousColumnSolver {
                                 maximumLineSearchSteps, control);
                         if (localTrial != null) {
                             localBlockAccepted = true;
+                            consecutiveLocalBlockRejections = 0;
                             trace.localBlockDirection(iteration, true);
                             state = localTrial.state();
                             lastMerit = localTrial.merit();
@@ -298,13 +395,15 @@ final class V3SimultaneousColumnSolver {
                     // one-sided PR probe crosses a property/root boundary.
                 }
                 if (!localBlockAccepted) trace.localBlockDirection(iteration, false);
+                if (!localBlockAccepted && ++consecutiveLocalBlockRejections
+                        >= MAXIMUM_CONSECUTIVE_LOCAL_BLOCK_REJECTIONS) localBlocksDisabled = true;
             }
             boolean usesFrozenFineJacobian = differenceScale == V3FiniteDifferenceJacobian.DifferenceScale.FINE
                     && cachedFineJacobian != null && frozenFineJacobianSteps < maximumFrozenFineJacobianSteps;
             V3FiniteDifferenceJacobian.Jacobian jacobian = usesFrozenFineJacobian
                     ? cachedFineJacobian
                     : V3FiniteDifferenceJacobian.evaluateCompact(
-                            evaluator, coordinates, state, workspaceFactory, differenceScale, control);
+                            evaluator, coordinates, state, residual, workspaceFactory, differenceScale, control);
             trace.finiteDifferenceJacobian(iteration, usesFrozenFineJacobian);
             if (!usesFrozenFineJacobian && differenceScale == V3FiniteDifferenceJacobian.DifferenceScale.FINE) {
                 cachedFineJacobian = jacobian;
@@ -401,6 +500,12 @@ final class V3SimultaneousColumnSolver {
             }
         }
         throw new IllegalStateException("V3 Newton solve escaped its bounded iteration loop");
+    }
+
+    private static V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory newWorkspaceFactory(
+            com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace workspace) {
+        Objects.requireNonNull(workspace, "workspace");
+        return () -> workspace;
     }
 
     /**

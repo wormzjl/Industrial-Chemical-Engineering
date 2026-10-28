@@ -9,7 +9,7 @@ You spawn at noon, facing east. The five units stand in a row 8 blocks to your l
 | 1 | Exchanger, internal bypass | tubes 90 °C, 2 bar → 1 atm; shell 20 °C, 1.5 bar → 1 atm | shell outlet 30 °C | shell 30.00 °C, 806 kW; tubes out 53.4 °C |
 | 2 | Exchanger with a real bypass (W8) | the same; shell bypass: inlet tee, 0.1 m line with a control valve, outlet tee | shell outlet 30 °C | LINES NOT CHECKED; shell 29.8 °C, 305 kW (the bare valve stands open, the internal bypass is shut) |
 | 3 | Air cooler, largest size | 85 °C, 2 bar → 1 atm (22.5 kg/s) | outlet 80 °C, all bays | 79.9 °C, 473 kW, fans part-way |
-| 4 | Vertical fired heater | pump at 0.6 L/s from 10 bar, 50 °C → convection → radiant → 10 bar | radiant outlet 200 °C (firing) | 0.59 kg/s; convection out 180.6 °C (610 kW, the flue gas law F1), radiant out 200.0 °C (1075 kW) |
+| 4 | Vertical fired heater | in-line pump at 0.6 L/s from 10 bar, 50 °C → convection → radiant → 10 bar | radiant outlet 200 °C (firing) | 0.59 kg/s; convection out 180.6 °C (610 kW, the flue gas law F1), radiant out 200.0 °C (1075 kW) |
 | 5 | Kettle, 1 m bundle | tubes 150 °C, 6 bar → 5 bar; feed 99 °C from a generator at 1 atm, 1 m over the shell floor; vapour through a 0.15 m line to 1 atm | tube duty 0.5 MW | duty 499.8 kW; tubes out 132.6 °C; pool 100.0 °C, 101.4 kPa, 258 kg |
 
 ## What to check

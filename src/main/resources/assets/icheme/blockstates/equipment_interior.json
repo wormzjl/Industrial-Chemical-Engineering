@@ -1,9 +1,15 @@
 {
   "variants": {
-    "open=false": {
+    "open=false,skylight=false": {
       "model": "icheme:block/equipment_interior"
     },
-    "open=true": {
+    "open=false,skylight=true": {
+      "model": "icheme:block/equipment_interior"
+    },
+    "open=true,skylight=false": {
+      "model": "icheme:block/equipment_interior"
+    },
+    "open=true,skylight=true": {
       "model": "icheme:block/equipment_interior"
     }
   }

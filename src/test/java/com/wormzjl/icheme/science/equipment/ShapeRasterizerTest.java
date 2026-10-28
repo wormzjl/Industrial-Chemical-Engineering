@@ -148,6 +148,27 @@ class ShapeRasterizerTest {
         assertEquals(Set.of(Material.SUPPORT), materials(drum(3, 9, Orientation.HORIZONTAL, Heading.NORTH, 2), 0, 1));
     }
 
+    /**
+     * A vessel whose skirt shows its inside lets skylight through its interior cells (owner request 2026-10-27: "Remove
+     * the shadow in drum/vessel skirt", the floor inside a skirt dark, worse the wider the drum); every other vessel keeps
+     * its interior opaque and its shadow on the ground.
+     */
+    @Test
+    void aSkirtShowingItsInsideLetsSkylightThrough() {
+        for (var shape : List.of(drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 3), drum(10, 12, Orientation.VERTICAL, Heading.EAST, 4),
+                EquipmentShape.column(3, ColumnTrays.simple(12, 6), Heading.NORTH, 4), leastUnit(Kind.TRICKLE_BED_REACTOR), leastUnit(Kind.EBULLATED_BED_REACTOR)))
+            assertTrue(ShapeRasterizer.skylight(shape), shape.toString());
+        for (var shape : List.of(drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 0), drum(3, 9, Orientation.HORIZONTAL, Heading.NORTH, 2),
+                leastUnit(Kind.SPHERE), leastUnit(Kind.TANK), leastUnit(Kind.ADSORBER), leastUnit(Kind.DELAYED_COKER), leastUnit(Kind.PUMP), leastUnit(Kind.AIR_COOLER)))
+            assertFalse(ShapeRasterizer.skylight(shape), shape.toString());
+    }
+
+    private static EquipmentShape leastUnit(Kind kind) {
+        double d = ProcessUnit.minDiameter(kind);
+        int length = ProcessUnit.minLength(kind, d);
+        return EquipmentShape.designed(kind, d, length, Heading.NORTH, ProcessUnit.minSupport(kind, d, length), ProcessUnit.Bank.ONE);
+    }
+
     @Test
     void everyPieceStaysInsideItsCellAndFacesOutwards() {
         for (var shape : SHAPES)

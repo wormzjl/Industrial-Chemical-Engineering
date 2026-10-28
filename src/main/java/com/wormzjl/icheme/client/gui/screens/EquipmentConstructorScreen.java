@@ -17,6 +17,8 @@ import com.wormzjl.icheme.science.equipment.VesselPlacement;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity.Design;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -30,6 +32,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.function.IntConsumer;
 import java.util.function.IntUnaryOperator;
 
@@ -153,8 +156,10 @@ public final class EquipmentConstructorScreen extends Screen {
      */
     private @Nullable Button outletButton;
     private ShapeRasterizer.Layout layout;
-    /** Set by Import until the constructor's synced design changes; the draft then takes it. */
-    private @Nullable Design importing;
+    /** Set by Import until the server answers ({@link #answered}). */
+    private boolean importing;
+    /** Why the last import brought no design, on the status line until the next edit; null otherwise. */
+    private @Nullable Component refused;
     private boolean sent;
 
     public EquipmentConstructorScreen(BlockPos position, Direction facing, Design design) {
@@ -791,11 +796,31 @@ public final class EquipmentConstructorScreen extends Screen {
         show(Page.DESIGN);
     }
 
+    /** Sends the draft with an import: the server keeps it, imports onto it and answers ({@link #answered}). */
     private void importColumn() {
-        var constructor = constructor();
-        if (constructor == null) return;
-        importing = constructor.design();
-        EquipmentNetwork.requestImport(position);
+        importing = true;
+        refused = null;
+        saved = design();
+        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.IMPORT);
+    }
+
+    /**
+     * The server's answer to an import. An open screen for that constructor stops waiting: it takes the imported design
+     * whole (the draft it sent with the calculator's column), or shows why there is none on its status line. The message
+     * goes to chat when a design came, or when no such screen is open.
+     */
+    public static void answered(BlockPos at, Component message, Optional<Design> design) {
+        var minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof EquipmentConstructorScreen screen && screen.position.equals(at)) {
+            screen.importing = false;
+            if (design.isEmpty()) {
+                screen.refused = message;
+                return;
+            }
+            screen.load(design.get());
+            screen.rebuildWidgets();
+        }
+        if (minecraft.player != null) minecraft.player.displayClientMessage(design.isPresent() ? message : message.copy().withStyle(ChatFormatting.RED), false);
     }
 
     private int minimumSupport() {
@@ -815,6 +840,7 @@ public final class EquipmentConstructorScreen extends Screen {
      * outlet's button says its side (the front where the edit left the player's side refused).
      */
     private void refresh() {
+        refused = null;
         support = Math.max(support, minimumSupport());
         if (bootButton != null) {
             bootButton.active = EquipmentShape.bootFor(diameter, tangentLength) != null;
@@ -832,30 +858,20 @@ public final class EquipmentConstructorScreen extends Screen {
     }
 
     private void build() {
-        EquipmentNetwork.send(position, design(), true);
+        EquipmentNetwork.send(position, design(), EquipmentNetwork.Action.BUILD);
         sent = true;
         onClose();
     }
 
     @Override
     public void tick() {
-        var constructor = constructor();
-        if (constructor == null) {
-            onClose();
-            return;
-        }
-        // An import arrives as the constructor's synced design: the draft takes it whole.
-        if (importing != null && !constructor.design().equals(importing)) {
-            importing = null;
-            load(constructor.design());
-            rebuildWidgets();
-        }
+        if (constructor() == null) onClose();
     }
 
     /** Closing keeps the draft as the constructor's design (unless Build already sent it). */
     @Override
     public void removed() {
-        if (!sent && !design().equals(saved)) EquipmentNetwork.send(position, design(), false);
+        if (!sent && !design().equals(saved)) EquipmentNetwork.send(position, design(), EquipmentNetwork.Action.KEEP);
         sent = true;
     }
 
@@ -909,18 +925,22 @@ public final class EquipmentConstructorScreen extends Screen {
         describe(mouseX, mouseY, names.length, new String[]{"paint.named", "paint.parts", "paint.unpainted"});
     }
 
-    /** The status line: an import under way, the first clash, a column's first side nozzle with no row, or whether the ghost's cells are free. */
+    /**
+     * The status line: an import under way, why the last import brought no design, the first clash, a column's first side
+     * nozzle with no row, or whether the ghost's cells are free.
+     */
     private void status(GuiGraphics graphics) {
         int blocked = EquipmentGhost.blockedCount();
         var clash = clash();
         var unplaced = unplaced();
-        var status = importing != null ? Component.translatable(KEY + "importing")
+        var status = importing ? Component.translatable(KEY + "importing")
+                : refused != null ? refused
                 : !design().buildable() ? Component.translatable(KEY + "import_needed")
                 : clash != null ? clashText(clash)
                 : unplaced != null ? Component.translatable(KEY + "nozzle.unplaced", nozzleName(unplaced))
                 : EquipmentGhost.standing() ? Component.translatable(KEY + "standing")
                 : blocked == 0 ? Component.translatable(KEY + "clear") : Component.translatable(KEY + "blocked", blocked);
-        graphics.drawString(font, status, 8, STATUS, clash == null && unplaced == null && blocked == 0 && !EquipmentGhost.standing() ? ProcessUi.ACCENT : ProcessUi.WARN);
+        graphics.drawString(font, status, 8, STATUS, refused == null && clash == null && unplaced == null && blocked == 0 && !EquipmentGhost.standing() ? ProcessUi.ACCENT : ProcessUi.WARN);
     }
 
     private void designRows(GuiGraphics graphics, int mouseX, int mouseY) {

@@ -17,6 +17,8 @@ public final class V3ColumnResult {
     private final String datasetRevision;
     private final V3TrayHydraulicsSummary trayHydraulics;
     private final V3ColumnInspection inspection;
+    /** Process-local accepted state used only as a warm seed for a later request; never serialized. */
+    private V3NeuralSeed warmSeed;
 
     public Optional<V3ColumnInspection> inspection() { return Optional.ofNullable(inspection); }
 
@@ -28,6 +30,7 @@ public final class V3ColumnResult {
             V3ConvergenceEvidence convergenceEvidence, List<V3ColumnStreamProperties> streams, String formulationRevision,
             V3ColumnDutyLedger dutyLedger, V3TrayHydraulicsSummary trayHydraulics, V3ColumnInspection inspection) {
         this.inspection = inspection;
+        this.warmSeed = null;
         this.trayHydraulics = trayHydraulics;
         this.dutyLedger = dutyLedger;
         this.problem = Objects.requireNonNull(problem, "problem");
@@ -59,10 +62,12 @@ public final class V3ColumnResult {
             V3ColumnProblem problem, V3InputDigest inputDigest, V3AcceptanceAudit acceptanceAudit,
             V3ConvergenceEvidence convergenceEvidence, V3DryMeshState state, V3PengRobinsonThermo thermo,
             String formulationRevision, V3ColumnDutyLedger dutyLedger, V3TrayHydraulicsSummary trayHydraulics) {
-        return new V3ColumnResult(problem, inputDigest, acceptanceAudit, convergenceEvidence,
+        V3ColumnResult result = new V3ColumnResult(problem, inputDigest, acceptanceAudit, convergenceEvidence,
                 V3ColumnStreamProperties.fromAccepted(problem, state, thermo), formulationRevision,
                 Objects.requireNonNull(dutyLedger, "dutyLedger"), trayHydraulics,
                 V3ColumnInspection.fromAccepted(problem, state, acceptanceAudit));
+        result.warmSeed = V3NeuralSeed.capture(problem, state, thermo.datasetRevision());
+        return result;
     }
 
     static V3ColumnResult accepted(
@@ -76,6 +81,11 @@ public final class V3ColumnResult {
 
     public V3ColumnProblem problem() {
         return problem;
+    }
+
+    /** Returns the process-local accepted state for a subsequent drifted request, when available. */
+    public java.util.Optional<V3NeuralSeed> warmSeed() {
+        return java.util.Optional.ofNullable(warmSeed);
     }
 
     public V3InputDigest inputDigest() {

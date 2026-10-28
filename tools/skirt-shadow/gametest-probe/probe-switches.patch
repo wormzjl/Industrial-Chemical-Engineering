@@ -1,0 +1,26 @@
+diff --git a/build.gradle b/build.gradle
+index 75a01ae3..99919553 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -79,7 +79,7 @@ neoForge {
+             def fixtureRun = providers.gradleProperty('fluidGameTestRunId').getOrElse('')
+             if (!(fixtureRun ==~ /[A-Za-z0-9_-]*/)) throw new GradleException('Invalid fluidGameTestRunId')
+             gameDirectory = layout.projectDirectory.dir(fixtureRun.isEmpty() ? 'run/fluid-gametest' : "run/fluid-gametest-${fixtureRun}")
+-            systemProperty 'neoforge.enabledGameTestNamespaces', 'icheme_fluid_test'
++            systemProperty 'neoforge.enabledGameTestNamespaces', providers.gradleProperty('probeNamespace').getOrElse('icheme_fluid_test'); systemProperty 'icheme.probe.ruleOff', providers.gradleProperty('probeRuleOff').getOrElse('false')
+             systemProperty 'icheme.fluid.testFailure', providers.gradleProperty('fluidGameTestDeliberateFailure').getOrElse('false')
+             // Re-derive every island's schedule from scratch at each pump and tick; any drift fails the run.
+             systemProperty 'icheme.fluid.scheduler.verify', 'true'
+diff --git a/src/main/java/com/wormzjl/icheme/world/level/block/EquipmentInteriorBlock.java b/src/main/java/com/wormzjl/icheme/world/level/block/EquipmentInteriorBlock.java
+index 89781925..2cce39ca 100644
+--- a/src/main/java/com/wormzjl/icheme/world/level/block/EquipmentInteriorBlock.java
++++ b/src/main/java/com/wormzjl/icheme/world/level/block/EquipmentInteriorBlock.java
+@@ -45,7 +45,7 @@ public final class EquipmentInteriorBlock extends Block {
+ 
+     /** Light passes: an open tank's cell or a skylight one. */
+     private static boolean clear(BlockState state) {
+-        return state.getValue(OPEN) || state.getValue(SKYLIGHT);
++        return state.getValue(OPEN) || state.getValue(SKYLIGHT) && !Boolean.getBoolean("icheme.probe.ruleOff");
+     }
+ 
+     @Override

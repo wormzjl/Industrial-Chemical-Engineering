@@ -37,7 +37,7 @@ class FluidDataRangeIslandTest {
         String layout="RPCPR";
         for(int i=0;i<layout.length();i++) {
             var kind=switch(layout.charAt(i)){case 'C'->TopologyCompiler.Kind.COMPRESSOR;case 'P'->TopologyCompiler.Kind.PIPE;default->TopologyCompiler.Kind.RESERVOIR;};
-            var device=new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,64,0),kind,PhysicalFluidTopology.Direction.EAST,block,
+            var device=new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,64,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,block,
                     kind==TopologyCompiler.Kind.COMPRESSOR?new FlowControl.Compressor(.01,1.05):new FlowControl.Passive());
             devices.add(device);
             if(kind==TopologyCompiler.Kind.RESERVOIR)boundaries.put(device.id(),FluidTestSupport.chargedBoundary(new FluidDeviceSpec(1,298.15,101325,nitrogen),device,model));

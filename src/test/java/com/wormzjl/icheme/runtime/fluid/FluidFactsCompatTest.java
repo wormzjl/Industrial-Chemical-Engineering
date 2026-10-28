@@ -355,6 +355,28 @@ class FluidFactsCompatTest {
         world.assertKeptUp("the steam line");
         return world;
     }
+    /**
+     * A world saved with one-block pumps and compressors, by main {@code 96806b8a} before batch
+     * 2026-10-28-old-mover-removal (image under {@code compat/removed-movers/}, writer in
+     * {@code tools/old-mover-removal/image-writer/}). The owner removed them whole (decision 2026-10-28), so the world
+     * opens without them: its islands rebuild from the other facts, every vessel keeps its stock (a mover holds none),
+     * and the rebuilt world saves as an exact checkpoint.
+     */
+    @Test void aWorldWithOneBlockMoversOpensWithoutThemAndKeepsEveryVessel() throws IOException {
+        var folder=Path.of("src/test/resources/compat/removed-movers");var image=read(folder);
+        var expected=new Properties();try(var in=Files.newBufferedReader(folder.resolve("expected.properties"))){expected.load(in);}
+        var loaded=load(image,key->model,CATALOG);
+        assertEquals(FluidCheckpointStore.Route.FACTS,loaded.route());
+        assertTrue(loaded.reason().contains("one-block movers"),loaded.reason());
+        var ledger=loaded.world().orElseThrow();
+        assertEquals(Integer.parseInt(expected.getProperty("registrations"))-Integer.parseInt(expected.getProperty("movers")),ledger.active().size(),"every other registration kept");
+        assertTrue(ledger.active().values().stream().noneMatch(r->r.device().kind()==Kind.PUMP||r.device().kind()==Kind.COMPRESSOR),"no mover left");
+        double total=Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum();
+        assertEquals(Double.parseDouble(expected.getProperty("moles")),total,1e-12*total,"every vessel keeps its stock");
+        assertEquals(Long.parseLong(expected.getProperty("vessels")),contents(loaded.checkpoint()).size());
+        var reloaded=new EventPathWorld(1,ledger,loaded.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList());
+        assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->model,CATALOG).route(),"opened once");
+    }
     private void write(FluidCheckpointCodec.Image image,Path folder) throws IOException {
         Files.createDirectories(folder);NbtIo.writeCompressed(image.core(),folder.resolve("core.dat"));
         for(var pack:image.packs().entrySet())Files.write(folder.resolve("pack-"+pack.getKey()+".bin"),pack.getValue());

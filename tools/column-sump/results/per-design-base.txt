@@ -1,0 +1,315 @@
+d  0.5 n  1 kettle                REFUSED the feed nozzle has no free row by its tray on any side
+d  0.5 n  1 steam+draw            REFUSED the feed nozzle has no free row by its tray on any side
+d  0.5 n  1 full                  REFUSED the feed nozzle has no free row by its tray on any side
+d  0.5 n  3 kettle                REFUSED the feed nozzle has no free row by its tray on any side
+d  0.5 n  3 kettle+steam+draw+PA  REFUSED the feed nozzle has no free row by its tray on any side
+d  0.5 n  3 steam+draw            REFUSED the feed nozzle has no free row by its tray on any side
+d  0.5 n  3 full                  REFUSED the feed nozzle has no free row by its tray on any side
+d  0.5 n  5 kettle                REFUSED the reboiler's vapour return has no free row by its tray on any side
+d  0.5 n  5 kettle+steam+draw+PA  REFUSED pumparound 1's draw has no free row by its tray on any side
+d  0.5 n  5 steam+draw            REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n  5 full                  REFUSED the feed nozzle has no free row by its tray on any side
+d  0.5 n 10 kettle                 reflux/0@7.5 feed/0@4.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  0.5 n 10 kettle+steam+draw+PA  REFUSED pumparound 1's draw has no free row by its tray on any side
+d  0.5 n 10 steam+draw            REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n 10 full                  REFUSED pumparound 1's draw has no free row by its tray on any side
+d  0.5 n 15 kettle                 reflux/0@10.5 feed/0@5.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  0.5 n 15 kettle+steam+draw+PA  REFUSED pumparound 1's return has no free row by its tray on any side
+d  0.5 n 15 steam+draw             reflux/0@10.5 feed/0@5.5 draw/1@7.5 steam/0@1.5 bottoms/0@-1.5
+d  0.5 n 15 full                  REFUSED pumparound 1's draw has no free row by its tray on any side
+d  0.5 n 20 kettle                 reflux/0@13.5 feed/0@7.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  0.5 n 20 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n 20 steam+draw            REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n 20 full                  REFUSED pumparound 1's return has no free row by its tray on any side
+d  0.5 n 30 kettle                 reflux/3@19.5 feed/0@10.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  0.5 n 30 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n 30 steam+draw            REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n 30 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  0.5 n 40 kettle                 reflux/0@25.5 feed/0@13.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  0.5 n 40 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n 40 steam+draw            REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n 40 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  0.5 n 64 kettle                 reflux/0@40.5 feed/0@20.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  0.5 n 64 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n 64 steam+draw            REFUSED side draw 1 has no free row by its tray on any side
+d  0.5 n 64 full                  REFUSED side draw 1 has no free row by its tray on any side
+d  1.0 n  1 kettle                 reflux/0@2.5 feed/1@1.5 vapour_return/3@1.5 bottoms/0@-1.5
+d  1.0 n  1 steam+draw            REFUSED steam feed 1 has no free row by its tray on any side
+d  1.0 n  1 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  1.0 n  3 kettle                REFUSED the reboiler's vapour return has no free row by its tray on any side
+d  1.0 n  3 kettle+steam+draw+PA  REFUSED the reboiler's vapour return has no free row by its tray on any side
+d  1.0 n  3 steam+draw            REFUSED steam feed 1 has no free row by its tray on any side
+d  1.0 n  3 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  1.0 n  5 kettle                REFUSED the reboiler's vapour return has no free row by its tray on any side
+d  1.0 n  5 kettle+steam+draw+PA  REFUSED the reboiler's vapour return has no free row by its tray on any side
+d  1.0 n  5 steam+draw            REFUSED steam feed 1 has no free row by its tray on any side
+d  1.0 n  5 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  1.0 n 10 kettle                 reflux/0@7.5 feed/0@4.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  1.0 n 10 kettle+steam+draw+PA  REFUSED steam feed 1 has no free row by its tray on any side
+d  1.0 n 10 steam+draw             reflux/0@7.5 feed/0@4.5 draw/1@5.5 steam/0@1.5 bottoms/0@-1.5
+d  1.0 n 10 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  1.0 n 15 kettle                 reflux/0@10.5 feed/0@5.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  1.0 n 15 kettle+steam+draw+PA  REFUSED steam feed 1 has no free row by its tray on any side
+d  1.0 n 15 steam+draw             reflux/0@10.5 feed/0@5.5 draw/1@7.5 steam/0@1.5 bottoms/0@-1.5
+d  1.0 n 15 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  1.0 n 20 kettle                 reflux/0@13.5 feed/0@7.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  1.0 n 20 kettle+steam+draw+PA  REFUSED steam feed 1 has no free row by its tray on any side
+d  1.0 n 20 steam+draw             reflux/0@13.5 feed/0@7.5 draw/1@8.5 steam/0@1.5 bottoms/0@-1.5
+d  1.0 n 20 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  1.0 n 30 kettle                 reflux/3@19.5 feed/0@10.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  1.0 n 30 kettle+steam+draw+PA  REFUSED steam feed 1 has no free row by its tray on any side
+d  1.0 n 30 steam+draw             reflux/3@19.5 feed/0@10.5 draw/1@11.5 steam/0@1.5 bottoms/0@-1.5
+d  1.0 n 30 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  1.0 n 40 kettle                 reflux/0@25.5 feed/0@13.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  1.0 n 40 kettle+steam+draw+PA  REFUSED steam feed 1 has no free row by its tray on any side
+d  1.0 n 40 steam+draw             reflux/0@25.5 feed/0@13.5 draw/3@14.5 steam/0@1.5 bottoms/0@-1.5
+d  1.0 n 40 full                  REFUSED side draw 1 has no free row by its tray on any side
+d  1.0 n 64 kettle                 reflux/0@40.5 feed/0@20.5 vapour_return/0@1.5 bottoms/0@-1.5
+d  1.0 n 64 kettle+steam+draw+PA  REFUSED steam feed 1 has no free row by its tray on any side
+d  1.0 n 64 steam+draw             reflux/0@40.5 feed/0@20.5 draw/1@21.5 steam/0@1.5 bottoms/0@-1.5
+d  1.0 n 64 full                  REFUSED side draw 2 has no free row by its tray on any side
+d  1.5 n  1 kettle                 reflux/3@2.5 feed/0@1.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  1.5 n  1 steam+draw            REFUSED steam feed 1 has no free row by its tray on any side
+d  1.5 n  1 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  1.5 n  3 kettle                 reflux/3@3.5 feed/0@2.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  1.5 n  3 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  1.5 n  3 steam+draw             reflux/3@3.5 feed/0@2.5 draw/1@2.5 steam/3@1.5 bottoms/0@-1.5
+d  1.5 n  3 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  1.5 n  5 kettle                 reflux/3@4.5 feed/0@2.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  1.5 n  5 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  1.5 n  5 steam+draw             reflux/3@4.5 feed/0@2.5 draw/1@4.5 steam/1@1.5 bottoms/0@-1.5
+d  1.5 n  5 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  1.5 n 10 kettle                 reflux/3@7.5 feed/0@4.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  1.5 n 10 kettle+steam+draw+PA   reflux/3@7.5 feed/0@4.5 pumparound_draw/3@5.5 return/0@7.5 vapour_return/1@1.5 draw/1@5.5 steam/0@1.5 bottoms/0@-1.5
+d  1.5 n 10 steam+draw             reflux/3@7.5 feed/0@4.5 draw/1@5.5 steam/1@1.5 bottoms/0@-1.5
+d  1.5 n 10 full                  REFUSED side draw 1 has no free row by its tray on any side
+d  1.5 n 15 kettle                 reflux/3@10.5 feed/0@5.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  1.5 n 15 kettle+steam+draw+PA   reflux/3@10.5 feed/0@5.5 pumparound_draw/3@7.5 return/0@8.5 vapour_return/1@1.5 draw/1@7.5 steam/0@1.5 bottoms/0@-1.5
+d  1.5 n 15 steam+draw             reflux/3@10.5 feed/0@5.5 draw/1@7.5 steam/1@1.5 bottoms/0@-1.5
+d  1.5 n 15 full                  REFUSED side draw 2 has no free row by its tray on any side
+d  1.5 n 20 kettle                 reflux/3@13.5 feed/0@7.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  1.5 n 20 kettle+steam+draw+PA   reflux/3@13.5 feed/0@7.5 pumparound_draw/3@9.5 return/3@11.5 vapour_return/1@1.5 draw/1@8.5 steam/0@1.5 bottoms/0@-1.5
+d  1.5 n 20 steam+draw             reflux/3@13.5 feed/0@7.5 draw/1@8.5 steam/1@1.5 bottoms/0@-1.5
+d  1.5 n 20 full                   reflux/3@13.5 feed/0@7.5 pumparound_draw/3@10.5 return/0@11.5 pumparound_draw/3@5.5 return/3@7.5 vapour_return/1@1.5 draw/1@10.5 draw/1@7.5 draw/1@4.5 steam/0@1.5 bottoms/0@-1.5
+d  1.5 n 30 kettle                 reflux/3@19.5 feed/0@10.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  1.5 n 30 kettle+steam+draw+PA   reflux/3@19.5 feed/0@10.5 pumparound_draw/3@13.5 return/0@14.5 vapour_return/1@1.5 draw/1@11.5 steam/0@1.5 bottoms/0@-1.5
+d  1.5 n 30 steam+draw             reflux/3@19.5 feed/0@10.5 draw/1@11.5 steam/1@1.5 bottoms/0@-1.5
+d  1.5 n 30 full                   reflux/3@19.5 feed/0@10.5 pumparound_draw/3@13.5 return/3@15.5 pumparound_draw/3@7.5 return/3@9.5 vapour_return/1@1.5 draw/1@15.5 draw/1@10.5 draw/1@6.5 steam/0@1.5 bottoms/0@-1.5
+d  1.5 n 40 kettle                 reflux/3@25.5 feed/0@13.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  1.5 n 40 kettle+steam+draw+PA   reflux/3@25.5 feed/0@13.5 pumparound_draw/3@17.5 return/3@19.5 vapour_return/1@1.5 draw/1@14.5 steam/0@1.5 bottoms/0@-1.5
+d  1.5 n 40 steam+draw             reflux/3@25.5 feed/0@13.5 draw/1@14.5 steam/1@1.5 bottoms/0@-1.5
+d  1.5 n 40 full                   reflux/3@25.5 feed/0@13.5 pumparound_draw/3@17.5 return/3@19.5 pumparound_draw/3@10.5 return/0@11.5 vapour_return/1@1.5 draw/1@19.5 draw/1@13.5 draw/1@7.5 steam/0@1.5 bottoms/0@-1.5
+d  1.5 n 64 kettle                 reflux/3@40.5 feed/0@20.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  1.5 n 64 kettle+steam+draw+PA   reflux/3@40.5 feed/0@20.5 pumparound_draw/3@26.5 return/3@28.5 vapour_return/1@1.5 draw/1@21.5 steam/0@1.5 bottoms/0@-1.5
+d  1.5 n 64 steam+draw             reflux/3@40.5 feed/0@20.5 draw/1@21.5 steam/1@1.5 bottoms/0@-1.5
+d  1.5 n 64 full                   reflux/3@40.5 feed/0@20.5 pumparound_draw/3@27.5 return/3@29.5 pumparound_draw/3@14.5 return/3@16.5 vapour_return/1@1.5 draw/1@30.5 draw/1@20.5 draw/1@11.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n  1 kettle                 reflux/3@2.5 feed/0@1.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  2.0 n  1 steam+draw            REFUSED steam feed 1 has no free row by its tray on any side
+d  2.0 n  1 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  2.0 n  3 kettle                 reflux/3@3.5 feed/0@2.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  2.0 n  3 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  2.0 n  3 steam+draw             reflux/3@3.5 feed/0@2.5 draw/1@2.5 steam/3@1.5 bottoms/0@-1.5
+d  2.0 n  3 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  2.0 n  5 kettle                 reflux/3@4.5 feed/0@2.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  2.0 n  5 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  2.0 n  5 steam+draw             reflux/3@4.5 feed/0@2.5 draw/1@4.5 steam/1@1.5 bottoms/0@-1.5
+d  2.0 n  5 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  2.0 n 10 kettle                 reflux/3@7.5 feed/0@4.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  2.0 n 10 kettle+steam+draw+PA   reflux/3@7.5 feed/0@4.5 pumparound_draw/3@5.5 return/0@7.5 vapour_return/1@1.5 draw/1@5.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n 10 steam+draw             reflux/3@7.5 feed/0@4.5 draw/1@5.5 steam/1@1.5 bottoms/0@-1.5
+d  2.0 n 10 full                  REFUSED side draw 1 has no free row by its tray on any side
+d  2.0 n 15 kettle                 reflux/3@10.5 feed/0@5.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  2.0 n 15 kettle+steam+draw+PA   reflux/3@10.5 feed/0@5.5 pumparound_draw/3@7.5 return/0@8.5 vapour_return/1@1.5 draw/1@7.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n 15 steam+draw             reflux/3@10.5 feed/0@5.5 draw/1@7.5 steam/1@1.5 bottoms/0@-1.5
+d  2.0 n 15 full                  REFUSED side draw 2 has no free row by its tray on any side
+d  2.0 n 20 kettle                 reflux/3@13.5 feed/0@7.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  2.0 n 20 kettle+steam+draw+PA   reflux/3@13.5 feed/0@7.5 pumparound_draw/3@9.5 return/3@11.5 vapour_return/1@1.5 draw/1@8.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n 20 steam+draw             reflux/3@13.5 feed/0@7.5 draw/1@8.5 steam/1@1.5 bottoms/0@-1.5
+d  2.0 n 20 full                   reflux/3@13.5 feed/0@7.5 pumparound_draw/3@10.5 return/0@11.5 pumparound_draw/3@5.5 return/3@7.5 vapour_return/1@1.5 draw/1@10.5 draw/1@7.5 draw/1@4.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n 30 kettle                 reflux/3@19.5 feed/0@10.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  2.0 n 30 kettle+steam+draw+PA   reflux/3@19.5 feed/0@10.5 pumparound_draw/3@13.5 return/0@14.5 vapour_return/1@1.5 draw/1@11.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n 30 steam+draw             reflux/3@19.5 feed/0@10.5 draw/1@11.5 steam/1@1.5 bottoms/0@-1.5
+d  2.0 n 30 full                   reflux/3@19.5 feed/0@10.5 pumparound_draw/3@13.5 return/3@15.5 pumparound_draw/3@7.5 return/3@9.5 vapour_return/1@1.5 draw/1@15.5 draw/1@10.5 draw/1@6.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n 40 kettle                 reflux/3@25.5 feed/0@13.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  2.0 n 40 kettle+steam+draw+PA   reflux/3@25.5 feed/0@13.5 pumparound_draw/3@17.5 return/3@19.5 vapour_return/1@1.5 draw/1@14.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n 40 steam+draw             reflux/3@25.5 feed/0@13.5 draw/1@14.5 steam/1@1.5 bottoms/0@-1.5
+d  2.0 n 40 full                   reflux/3@25.5 feed/0@13.5 pumparound_draw/3@17.5 return/3@19.5 pumparound_draw/3@10.5 return/0@11.5 vapour_return/1@1.5 draw/1@19.5 draw/1@13.5 draw/1@7.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n 64 kettle                 reflux/3@40.5 feed/0@20.5 vapour_return/1@1.5 bottoms/0@-1.5
+d  2.0 n 64 kettle+steam+draw+PA   reflux/3@40.5 feed/0@20.5 pumparound_draw/3@26.5 return/3@28.5 vapour_return/1@1.5 draw/1@21.5 steam/0@1.5 bottoms/0@-1.5
+d  2.0 n 64 steam+draw             reflux/3@40.5 feed/0@20.5 draw/1@21.5 steam/1@1.5 bottoms/0@-1.5
+d  2.0 n 64 full                   reflux/3@40.5 feed/0@20.5 pumparound_draw/3@27.5 return/3@29.5 pumparound_draw/3@14.5 return/3@16.5 vapour_return/1@1.5 draw/1@30.5 draw/1@20.5 draw/1@11.5 steam/0@1.5 bottoms/0@-1.5
+d  3.0 n  1 kettle                 reflux/3@2.5 feed/0@1.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  3.0 n  1 steam+draw            REFUSED steam feed 1 has no free row by its tray on any side
+d  3.0 n  1 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  3.0 n  3 kettle                 reflux/3@3.5 feed/0@2.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  3.0 n  3 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  3.0 n  3 steam+draw             reflux/3@3.5 feed/0@2.5 draw/1@2.5 steam/3@1.5 bottoms/0@-2.5
+d  3.0 n  3 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  3.0 n  5 kettle                 reflux/3@4.5 feed/0@2.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  3.0 n  5 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  3.0 n  5 steam+draw             reflux/3@4.5 feed/0@2.5 draw/1@4.5 steam/1@1.5 bottoms/0@-2.5
+d  3.0 n  5 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  3.0 n 10 kettle                 reflux/3@7.5 feed/0@4.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  3.0 n 10 kettle+steam+draw+PA   reflux/3@7.5 feed/0@4.5 pumparound_draw/3@5.5 return/0@7.5 vapour_return/1@1.5 draw/1@5.5 steam/0@1.5 bottoms/0@-2.5
+d  3.0 n 10 steam+draw             reflux/3@7.5 feed/0@4.5 draw/1@5.5 steam/1@1.5 bottoms/0@-2.5
+d  3.0 n 10 full                  REFUSED side draw 1 has no free row by its tray on any side
+d  3.0 n 15 kettle                 reflux/3@10.5 feed/0@5.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  3.0 n 15 kettle+steam+draw+PA   reflux/3@10.5 feed/0@5.5 pumparound_draw/3@7.5 return/0@8.5 vapour_return/1@1.5 draw/1@7.5 steam/0@1.5 bottoms/0@-2.5
+d  3.0 n 15 steam+draw             reflux/3@10.5 feed/0@5.5 draw/1@7.5 steam/1@1.5 bottoms/0@-2.5
+d  3.0 n 15 full                  REFUSED side draw 2 has no free row by its tray on any side
+d  3.0 n 20 kettle                 reflux/3@13.5 feed/0@7.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  3.0 n 20 kettle+steam+draw+PA   reflux/3@13.5 feed/0@7.5 pumparound_draw/3@9.5 return/3@11.5 vapour_return/1@1.5 draw/1@8.5 steam/0@1.5 bottoms/0@-2.5
+d  3.0 n 20 steam+draw             reflux/3@13.5 feed/0@7.5 draw/1@8.5 steam/1@1.5 bottoms/0@-2.5
+d  3.0 n 20 full                   reflux/3@13.5 feed/0@7.5 pumparound_draw/3@10.5 return/0@11.5 pumparound_draw/3@5.5 return/3@7.5 vapour_return/1@1.5 draw/1@10.5 draw/1@7.5 draw/1@4.5 steam/0@1.5 bottoms/0@-2.5
+d  3.0 n 30 kettle                 reflux/3@19.5 feed/0@10.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  3.0 n 30 kettle+steam+draw+PA   reflux/3@19.5 feed/0@10.5 pumparound_draw/3@13.5 return/0@14.5 vapour_return/1@1.5 draw/1@11.5 steam/0@1.5 bottoms/0@-2.5
+d  3.0 n 30 steam+draw             reflux/3@19.5 feed/0@10.5 draw/1@11.5 steam/1@1.5 bottoms/0@-2.5
+d  3.0 n 30 full                   reflux/3@19.5 feed/0@10.5 pumparound_draw/3@13.5 return/3@15.5 pumparound_draw/3@7.5 return/3@9.5 vapour_return/1@1.5 draw/1@15.5 draw/1@10.5 draw/1@6.5 steam/0@1.5 bottoms/0@-2.5
+d  3.0 n 40 kettle                 reflux/3@25.5 feed/0@13.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  3.0 n 40 kettle+steam+draw+PA   reflux/3@25.5 feed/0@13.5 pumparound_draw/3@17.5 return/3@19.5 vapour_return/1@1.5 draw/1@14.5 steam/0@1.5 bottoms/0@-2.5
+d  3.0 n 40 steam+draw             reflux/3@25.5 feed/0@13.5 draw/1@14.5 steam/1@1.5 bottoms/0@-2.5
+d  3.0 n 40 full                   reflux/3@25.5 feed/0@13.5 pumparound_draw/3@17.5 return/3@19.5 pumparound_draw/3@10.5 return/0@11.5 vapour_return/1@1.5 draw/1@19.5 draw/1@13.5 draw/1@7.5 steam/0@1.5 bottoms/0@-2.5
+d  3.0 n 64 kettle                 reflux/3@40.5 feed/0@20.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  3.0 n 64 kettle+steam+draw+PA   reflux/3@40.5 feed/0@20.5 pumparound_draw/3@26.5 return/3@28.5 vapour_return/1@1.5 draw/1@21.5 steam/0@1.5 bottoms/0@-2.5
+d  3.0 n 64 steam+draw             reflux/3@40.5 feed/0@20.5 draw/1@21.5 steam/1@1.5 bottoms/0@-2.5
+d  3.0 n 64 full                   reflux/3@40.5 feed/0@20.5 pumparound_draw/3@27.5 return/3@29.5 pumparound_draw/3@14.5 return/3@16.5 vapour_return/1@1.5 draw/1@30.5 draw/1@20.5 draw/1@11.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n  1 kettle                 reflux/3@2.5 feed/0@1.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  4.0 n  1 steam+draw            REFUSED steam feed 1 has no free row by its tray on any side
+d  4.0 n  1 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  4.0 n  3 kettle                 reflux/3@3.5 feed/0@2.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  4.0 n  3 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  4.0 n  3 steam+draw             reflux/3@3.5 feed/0@2.5 draw/1@2.5 steam/3@1.5 bottoms/0@-2.5
+d  4.0 n  3 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  4.0 n  5 kettle                 reflux/3@4.5 feed/0@2.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  4.0 n  5 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  4.0 n  5 steam+draw             reflux/3@4.5 feed/0@2.5 draw/1@4.5 steam/1@1.5 bottoms/0@-2.5
+d  4.0 n  5 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  4.0 n 10 kettle                 reflux/3@7.5 feed/0@4.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  4.0 n 10 kettle+steam+draw+PA   reflux/3@7.5 feed/0@4.5 pumparound_draw/3@5.5 return/0@7.5 vapour_return/1@1.5 draw/1@5.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n 10 steam+draw             reflux/3@7.5 feed/0@4.5 draw/1@5.5 steam/1@1.5 bottoms/0@-2.5
+d  4.0 n 10 full                  REFUSED side draw 1 has no free row by its tray on any side
+d  4.0 n 15 kettle                 reflux/3@10.5 feed/0@5.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  4.0 n 15 kettle+steam+draw+PA   reflux/3@10.5 feed/0@5.5 pumparound_draw/3@7.5 return/0@8.5 vapour_return/1@1.5 draw/1@7.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n 15 steam+draw             reflux/3@10.5 feed/0@5.5 draw/1@7.5 steam/1@1.5 bottoms/0@-2.5
+d  4.0 n 15 full                  REFUSED side draw 2 has no free row by its tray on any side
+d  4.0 n 20 kettle                 reflux/3@13.5 feed/0@7.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  4.0 n 20 kettle+steam+draw+PA   reflux/3@13.5 feed/0@7.5 pumparound_draw/3@9.5 return/3@11.5 vapour_return/1@1.5 draw/1@8.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n 20 steam+draw             reflux/3@13.5 feed/0@7.5 draw/1@8.5 steam/1@1.5 bottoms/0@-2.5
+d  4.0 n 20 full                   reflux/3@13.5 feed/0@7.5 pumparound_draw/3@10.5 return/0@11.5 pumparound_draw/3@5.5 return/3@7.5 vapour_return/1@1.5 draw/1@10.5 draw/1@7.5 draw/1@4.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n 30 kettle                 reflux/3@19.5 feed/0@10.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  4.0 n 30 kettle+steam+draw+PA   reflux/3@19.5 feed/0@10.5 pumparound_draw/3@13.5 return/0@14.5 vapour_return/1@1.5 draw/1@11.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n 30 steam+draw             reflux/3@19.5 feed/0@10.5 draw/1@11.5 steam/1@1.5 bottoms/0@-2.5
+d  4.0 n 30 full                   reflux/3@19.5 feed/0@10.5 pumparound_draw/3@13.5 return/3@15.5 pumparound_draw/3@7.5 return/3@9.5 vapour_return/1@1.5 draw/1@15.5 draw/1@10.5 draw/1@6.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n 40 kettle                 reflux/3@25.5 feed/0@13.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  4.0 n 40 kettle+steam+draw+PA   reflux/3@25.5 feed/0@13.5 pumparound_draw/3@17.5 return/3@19.5 vapour_return/1@1.5 draw/1@14.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n 40 steam+draw             reflux/3@25.5 feed/0@13.5 draw/1@14.5 steam/1@1.5 bottoms/0@-2.5
+d  4.0 n 40 full                   reflux/3@25.5 feed/0@13.5 pumparound_draw/3@17.5 return/3@19.5 pumparound_draw/3@10.5 return/0@11.5 vapour_return/1@1.5 draw/1@19.5 draw/1@13.5 draw/1@7.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n 64 kettle                 reflux/3@40.5 feed/0@20.5 vapour_return/1@1.5 bottoms/0@-2.5
+d  4.0 n 64 kettle+steam+draw+PA   reflux/3@40.5 feed/0@20.5 pumparound_draw/3@26.5 return/3@28.5 vapour_return/1@1.5 draw/1@21.5 steam/0@1.5 bottoms/0@-2.5
+d  4.0 n 64 steam+draw             reflux/3@40.5 feed/0@20.5 draw/1@21.5 steam/1@1.5 bottoms/0@-2.5
+d  4.0 n 64 full                   reflux/3@40.5 feed/0@20.5 pumparound_draw/3@27.5 return/3@29.5 pumparound_draw/3@14.5 return/3@16.5 vapour_return/1@1.5 draw/1@30.5 draw/1@20.5 draw/1@11.5 steam/0@1.5 bottoms/0@-2.5
+d  6.0 n  1 kettle                 reflux/3@3.5 feed/0@2.5 vapour_return/1@2.5 bottoms/0@-2.5
+d  6.0 n  1 steam+draw             reflux/3@3.5 feed/0@2.5 draw/1@2.5 steam/2@1.5 bottoms/0@-2.5
+d  6.0 n  1 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  6.0 n  3 kettle                 reflux/3@4.5 feed/0@3.5 vapour_return/1@2.5 bottoms/0@-2.5
+d  6.0 n  3 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  6.0 n  3 steam+draw             reflux/3@4.5 feed/0@3.5 draw/1@3.5 steam/3@2.5 bottoms/0@-2.5
+d  6.0 n  3 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  6.0 n  5 kettle                 reflux/3@5.5 feed/0@3.5 vapour_return/1@2.5 bottoms/0@-2.5
+d  6.0 n  5 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  6.0 n  5 steam+draw             reflux/3@5.5 feed/0@3.5 draw/1@5.5 steam/1@2.5 bottoms/0@-2.5
+d  6.0 n  5 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  6.0 n 10 kettle                 reflux/3@8.5 feed/0@5.5 vapour_return/1@2.5 bottoms/0@-2.5
+d  6.0 n 10 kettle+steam+draw+PA   reflux/3@8.5 feed/0@5.5 pumparound_draw/3@6.5 return/0@8.5 vapour_return/1@2.5 draw/1@6.5 steam/0@2.5 bottoms/0@-2.5
+d  6.0 n 10 steam+draw             reflux/3@8.5 feed/0@5.5 draw/1@6.5 steam/1@2.5 bottoms/0@-2.5
+d  6.0 n 10 full                  REFUSED side draw 1 has no free row by its tray on any side
+d  6.0 n 15 kettle                 reflux/3@11.5 feed/0@6.5 vapour_return/1@2.5 bottoms/0@-2.5
+d  6.0 n 15 kettle+steam+draw+PA   reflux/3@11.5 feed/0@6.5 pumparound_draw/3@8.5 return/0@9.5 vapour_return/1@2.5 draw/1@8.5 steam/0@2.5 bottoms/0@-2.5
+d  6.0 n 15 steam+draw             reflux/3@11.5 feed/0@6.5 draw/1@8.5 steam/1@2.5 bottoms/0@-2.5
+d  6.0 n 15 full                  REFUSED side draw 2 has no free row by its tray on any side
+d  6.0 n 20 kettle                 reflux/3@14.5 feed/0@8.5 vapour_return/1@2.5 bottoms/0@-2.5
+d  6.0 n 20 kettle+steam+draw+PA   reflux/3@14.5 feed/0@8.5 pumparound_draw/3@10.5 return/3@12.5 vapour_return/1@2.5 draw/1@9.5 steam/0@2.5 bottoms/0@-2.5
+d  6.0 n 20 steam+draw             reflux/3@14.5 feed/0@8.5 draw/1@9.5 steam/1@2.5 bottoms/0@-2.5
+d  6.0 n 20 full                   reflux/3@14.5 feed/0@8.5 pumparound_draw/3@11.5 return/0@12.5 pumparound_draw/3@6.5 return/3@8.5 vapour_return/1@2.5 draw/1@11.5 draw/1@8.5 draw/1@5.5 steam/0@2.5 bottoms/0@-2.5
+d  6.0 n 30 kettle                 reflux/3@20.5 feed/0@11.5 vapour_return/1@2.5 bottoms/0@-2.5
+d  6.0 n 30 kettle+steam+draw+PA   reflux/3@20.5 feed/0@11.5 pumparound_draw/3@14.5 return/0@15.5 vapour_return/1@2.5 draw/1@12.5 steam/0@2.5 bottoms/0@-2.5
+d  6.0 n 30 steam+draw             reflux/3@20.5 feed/0@11.5 draw/1@12.5 steam/1@2.5 bottoms/0@-2.5
+d  6.0 n 30 full                   reflux/3@20.5 feed/0@11.5 pumparound_draw/3@14.5 return/3@16.5 pumparound_draw/3@8.5 return/3@10.5 vapour_return/1@2.5 draw/1@16.5 draw/1@11.5 draw/1@7.5 steam/0@2.5 bottoms/0@-2.5
+d  6.0 n 40 kettle                 reflux/3@26.5 feed/0@14.5 vapour_return/1@2.5 bottoms/0@-2.5
+d  6.0 n 40 kettle+steam+draw+PA   reflux/3@26.5 feed/0@14.5 pumparound_draw/3@18.5 return/3@20.5 vapour_return/1@2.5 draw/1@15.5 steam/0@2.5 bottoms/0@-2.5
+d  6.0 n 40 steam+draw             reflux/3@26.5 feed/0@14.5 draw/1@15.5 steam/1@2.5 bottoms/0@-2.5
+d  6.0 n 40 full                   reflux/3@26.5 feed/0@14.5 pumparound_draw/3@18.5 return/3@20.5 pumparound_draw/3@11.5 return/0@12.5 vapour_return/1@2.5 draw/1@20.5 draw/1@14.5 draw/1@8.5 steam/0@2.5 bottoms/0@-2.5
+d  6.0 n 64 kettle                 reflux/3@41.5 feed/0@21.5 vapour_return/1@2.5 bottoms/0@-2.5
+d  6.0 n 64 kettle+steam+draw+PA   reflux/3@41.5 feed/0@21.5 pumparound_draw/3@27.5 return/3@29.5 vapour_return/1@2.5 draw/1@22.5 steam/0@2.5 bottoms/0@-2.5
+d  6.0 n 64 steam+draw             reflux/3@41.5 feed/0@21.5 draw/1@22.5 steam/1@2.5 bottoms/0@-2.5
+d  6.0 n 64 full                   reflux/3@41.5 feed/0@21.5 pumparound_draw/3@28.5 return/3@30.5 pumparound_draw/3@15.5 return/3@17.5 vapour_return/1@2.5 draw/1@31.5 draw/1@21.5 draw/1@12.5 steam/0@2.5 bottoms/0@-2.5
+d  8.0 n  1 kettle                 reflux/3@4.5 feed/0@3.5 vapour_return/1@2.5 bottoms/0@-3.5
+d  8.0 n  1 steam+draw             reflux/3@4.5 feed/0@3.5 draw/1@3.5 steam/2@2.5 bottoms/0@-3.5
+d  8.0 n  1 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  8.0 n  3 kettle                 reflux/3@5.5 feed/0@4.5 vapour_return/1@2.5 bottoms/0@-3.5
+d  8.0 n  3 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  8.0 n  3 steam+draw             reflux/3@5.5 feed/0@4.5 draw/1@4.5 steam/3@3.5 bottoms/0@-3.5
+d  8.0 n  3 full                  REFUSED pumparound 2's draw has no free row by its tray on any side
+d  8.0 n  5 kettle                 reflux/3@6.5 feed/0@4.5 vapour_return/1@2.5 bottoms/0@-3.5
+d  8.0 n  5 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d  8.0 n  5 steam+draw             reflux/3@6.5 feed/0@4.5 draw/1@6.5 steam/1@3.5 bottoms/0@-3.5
+d  8.0 n  5 full                  REFUSED pumparound 2's return has no free row by its tray on any side
+d  8.0 n 10 kettle                 reflux/3@9.5 feed/0@6.5 vapour_return/1@2.5 bottoms/0@-3.5
+d  8.0 n 10 kettle+steam+draw+PA   reflux/3@9.5 feed/0@6.5 pumparound_draw/3@7.5 return/0@9.5 vapour_return/1@2.5 draw/1@7.5 steam/0@3.5 bottoms/0@-3.5
+d  8.0 n 10 steam+draw             reflux/3@9.5 feed/0@6.5 draw/1@7.5 steam/1@3.5 bottoms/0@-3.5
+d  8.0 n 10 full                  REFUSED side draw 1 has no free row by its tray on any side
+d  8.0 n 15 kettle                 reflux/3@12.5 feed/0@7.5 vapour_return/1@2.5 bottoms/0@-3.5
+d  8.0 n 15 kettle+steam+draw+PA   reflux/3@12.5 feed/0@7.5 pumparound_draw/3@9.5 return/0@10.5 vapour_return/1@2.5 draw/1@9.5 steam/0@3.5 bottoms/0@-3.5
+d  8.0 n 15 steam+draw             reflux/3@12.5 feed/0@7.5 draw/1@9.5 steam/1@3.5 bottoms/0@-3.5
+d  8.0 n 15 full                  REFUSED side draw 2 has no free row by its tray on any side
+d  8.0 n 20 kettle                 reflux/3@15.5 feed/0@9.5 vapour_return/1@2.5 bottoms/0@-3.5
+d  8.0 n 20 kettle+steam+draw+PA   reflux/3@15.5 feed/0@9.5 pumparound_draw/3@11.5 return/3@13.5 vapour_return/1@2.5 draw/1@10.5 steam/0@3.5 bottoms/0@-3.5
+d  8.0 n 20 steam+draw             reflux/3@15.5 feed/0@9.5 draw/1@10.5 steam/1@3.5 bottoms/0@-3.5
+d  8.0 n 20 full                   reflux/3@15.5 feed/0@9.5 pumparound_draw/3@12.5 return/0@13.5 pumparound_draw/3@7.5 return/3@9.5 vapour_return/1@2.5 draw/1@12.5 draw/1@9.5 draw/1@6.5 steam/0@3.5 bottoms/0@-3.5
+d  8.0 n 30 kettle                 reflux/3@21.5 feed/0@12.5 vapour_return/1@2.5 bottoms/0@-3.5
+d  8.0 n 30 kettle+steam+draw+PA   reflux/3@21.5 feed/0@12.5 pumparound_draw/3@15.5 return/0@16.5 vapour_return/1@2.5 draw/1@13.5 steam/0@3.5 bottoms/0@-3.5
+d  8.0 n 30 steam+draw             reflux/3@21.5 feed/0@12.5 draw/1@13.5 steam/1@3.5 bottoms/0@-3.5
+d  8.0 n 30 full                   reflux/3@21.5 feed/0@12.5 pumparound_draw/3@15.5 return/3@17.5 pumparound_draw/3@9.5 return/3@11.5 vapour_return/1@2.5 draw/1@17.5 draw/1@12.5 draw/1@8.5 steam/0@3.5 bottoms/0@-3.5
+d  8.0 n 40 kettle                 reflux/3@27.5 feed/0@15.5 vapour_return/1@2.5 bottoms/0@-3.5
+d  8.0 n 40 kettle+steam+draw+PA   reflux/3@27.5 feed/0@15.5 pumparound_draw/3@19.5 return/3@21.5 vapour_return/1@2.5 draw/1@16.5 steam/0@3.5 bottoms/0@-3.5
+d  8.0 n 40 steam+draw             reflux/3@27.5 feed/0@15.5 draw/1@16.5 steam/1@3.5 bottoms/0@-3.5
+d  8.0 n 40 full                   reflux/3@27.5 feed/0@15.5 pumparound_draw/3@19.5 return/3@21.5 pumparound_draw/3@12.5 return/0@13.5 vapour_return/1@2.5 draw/1@21.5 draw/1@15.5 draw/1@9.5 steam/0@3.5 bottoms/0@-3.5
+d  8.0 n 64 kettle                 reflux/3@42.5 feed/0@22.5 vapour_return/1@2.5 bottoms/0@-3.5
+d  8.0 n 64 kettle+steam+draw+PA   reflux/3@42.5 feed/0@22.5 pumparound_draw/3@28.5 return/3@30.5 vapour_return/1@2.5 draw/1@23.5 steam/0@3.5 bottoms/0@-3.5
+d  8.0 n 64 steam+draw             reflux/3@42.5 feed/0@22.5 draw/1@23.5 steam/1@3.5 bottoms/0@-3.5
+d  8.0 n 64 full                   reflux/3@42.5 feed/0@22.5 pumparound_draw/3@29.5 return/3@31.5 pumparound_draw/3@16.5 return/3@18.5 vapour_return/1@2.5 draw/1@32.5 draw/1@22.5 draw/1@13.5 steam/0@3.5 bottoms/0@-3.5
+d 15.0 n  1 kettle                 reflux/3@7.5 feed/0@7.5 vapour_return/1@5.5 bottoms/0@-5.5
+d 15.0 n  1 steam+draw             reflux/3@7.5 feed/0@7.5 draw/1@7.5 steam/1@5.5 bottoms/0@-5.5
+d 15.0 n  1 full                  REFUSED pumparound 1's return has no free row by its tray on any side
+d 15.0 n  3 kettle                 reflux/3@9.5 feed/0@7.5 vapour_return/1@5.5 bottoms/0@-5.5
+d 15.0 n  3 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d 15.0 n  3 steam+draw             reflux/3@9.5 feed/0@7.5 draw/1@8.5 steam/3@7.5 bottoms/0@-5.5
+d 15.0 n  3 full                  REFUSED pumparound 1's return has no free row by its tray on any side
+d 15.0 n  5 kettle                 reflux/3@10.5 feed/0@8.5 vapour_return/1@5.5 bottoms/0@-5.5
+d 15.0 n  5 kettle+steam+draw+PA  REFUSED side draw 1 has no free row by its tray on any side
+d 15.0 n  5 steam+draw             reflux/3@10.5 feed/0@8.5 draw/1@9.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n  5 full                  REFUSED side draw 1 has no free row by its tray on any side
+d 15.0 n 10 kettle                 reflux/3@13.5 feed/0@9.5 vapour_return/1@5.5 bottoms/0@-5.5
+d 15.0 n 10 kettle+steam+draw+PA   reflux/3@13.5 feed/0@9.5 pumparound_draw/3@10.5 return/0@12.5 vapour_return/1@5.5 draw/1@10.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 10 steam+draw             reflux/3@13.5 feed/0@9.5 draw/1@10.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 10 full                  REFUSED side draw 1 has no free row by its tray on any side
+d 15.0 n 15 kettle                 reflux/3@16.5 feed/0@11.5 vapour_return/1@5.5 bottoms/0@-5.5
+d 15.0 n 15 kettle+steam+draw+PA   reflux/3@16.5 feed/0@11.5 pumparound_draw/3@12.5 return/3@14.5 vapour_return/1@5.5 draw/1@12.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 15 steam+draw             reflux/3@16.5 feed/0@11.5 draw/1@12.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 15 full                  REFUSED side draw 2 has no free row by its tray on any side
+d 15.0 n 20 kettle                 reflux/3@19.5 feed/0@12.5 vapour_return/1@5.5 bottoms/0@-5.5
+d 15.0 n 20 kettle+steam+draw+PA   reflux/3@19.5 feed/0@12.5 pumparound_draw/3@15.5 return/0@16.5 vapour_return/1@5.5 draw/1@13.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 20 steam+draw             reflux/3@19.5 feed/0@12.5 draw/1@13.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 20 full                   reflux/3@19.5 feed/0@13.5 pumparound_draw/3@15.5 return/3@17.5 pumparound_draw/3@11.5 return/3@13.5 vapour_return/1@5.5 draw/1@16.5 draw/1@13.5 draw/1@10.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 30 kettle                 reflux/3@25.5 feed/0@15.5 vapour_return/1@5.5 bottoms/0@-5.5
+d 15.0 n 30 kettle+steam+draw+PA   reflux/3@25.5 feed/0@15.5 pumparound_draw/3@18.5 return/3@20.5 vapour_return/1@5.5 draw/1@16.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 30 steam+draw             reflux/3@25.5 feed/0@15.5 draw/1@16.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 30 full                   reflux/3@25.5 feed/0@16.5 pumparound_draw/3@19.5 return/0@20.5 pumparound_draw/3@13.5 return/0@14.5 vapour_return/1@5.5 draw/1@21.5 draw/1@16.5 draw/1@12.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 40 kettle                 reflux/3@31.5 feed/0@18.5 vapour_return/1@5.5 bottoms/0@-5.5
+d 15.0 n 40 kettle+steam+draw+PA   reflux/3@31.5 feed/0@18.5 pumparound_draw/3@22.5 return/3@24.5 vapour_return/1@5.5 draw/1@19.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 40 steam+draw             reflux/3@31.5 feed/0@18.5 draw/1@19.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 40 full                   reflux/3@31.5 feed/0@19.5 pumparound_draw/3@23.5 return/3@25.5 pumparound_draw/3@15.5 return/3@17.5 vapour_return/1@5.5 draw/1@25.5 draw/1@19.5 draw/1@13.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 64 kettle                 reflux/3@45.5 feed/0@25.5 vapour_return/1@5.5 bottoms/0@-5.5
+d 15.0 n 64 kettle+steam+draw+PA   reflux/3@45.5 feed/0@25.5 pumparound_draw/3@32.5 return/3@34.5 vapour_return/1@5.5 draw/1@27.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 64 steam+draw             reflux/3@45.5 feed/0@25.5 draw/1@27.5 steam/1@7.5 bottoms/0@-5.5
+d 15.0 n 64 full                   reflux/3@45.5 feed/0@26.5 pumparound_draw/3@33.5 return/0@34.5 pumparound_draw/3@20.5 return/3@22.5 vapour_return/1@5.5 draw/1@36.5 draw/1@26.5 draw/1@16.5 steam/1@7.5 bottoms/0@-5.5

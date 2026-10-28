@@ -1,8 +1,177 @@
 {
-  "parent": "minecraft:block/cube_bottom_top",
+  "parent": "minecraft:block/block",
   "textures": {
-    "bottom": "minecraft:block/deepslate_tiles",
-    "side": "minecraft:block/purple_concrete",
-    "top": "minecraft:block/redstone_lamp_on"
+    "shell": "icheme:block/computer_shell",
+    "keys": "icheme:block/computer_keys",
+    "led": "icheme:block/computer_led",
+    "vent": "icheme:block/computer_vent",
+    "screen": "icheme:block/computer_screen",
+    "particle": "icheme:block/computer_shell"
+  },
+  "elements": [
+    {
+      "name": "monitor_bezel",
+      "from": [0.8, 4.6, 6.5],
+      "to": [10.6, 12.4, 8.6],
+      "faces": {
+        "north": {"uv": [0, 3, 10, 11], "texture": "#shell"},
+        "south": {"uv": [0, 3, 10, 11], "texture": "#shell"},
+        "east": {"uv": [0, 3, 2, 11], "texture": "#shell"},
+        "west": {"uv": [0, 3, 2, 11], "texture": "#shell"},
+        "up": {"uv": [0, 0, 10, 2], "texture": "#shell"},
+        "down": {"uv": [0, 0, 10, 2], "texture": "#shell"}
+      }
+    },
+    {
+      "name": "screen",
+      "from": [1.6, 5.1, 8.55],
+      "to": [9.8, 11.3, 8.95],
+      "faces": {
+        "south": {"uv": [0, 0, 16, 16], "texture": "#screen"}
+      }
+    },
+    {
+      "name": "stand_neck",
+      "from": [4.7, 0.4, 6.9],
+      "to": [6.7, 4.7, 8],
+      "faces": {
+        "north": {"uv": [0, 0, 2, 4], "texture": "#shell"},
+        "south": {"uv": [0, 0, 2, 4], "texture": "#shell"},
+        "east": {"uv": [0, 0, 1, 4], "texture": "#shell"},
+        "west": {"uv": [0, 0, 1, 4], "texture": "#shell"},
+        "up": {"uv": [0, 0, 2, 1], "texture": "#shell"},
+        "down": {"uv": [0, 0, 2, 1], "texture": "#shell"}
+      }
+    },
+    {
+      "name": "stand_foot",
+      "from": [2.4, 0.2, 6.6],
+      "to": [9, 1, 9.6],
+      "faces": {
+        "north": {"uv": [0, 0, 7, 1], "texture": "#shell"},
+        "south": {"uv": [0, 0, 7, 1], "texture": "#shell"},
+        "east": {"uv": [0, 0, 3, 1], "texture": "#shell"},
+        "west": {"uv": [0, 0, 3, 1], "texture": "#shell"},
+        "up": {"uv": [0, 0, 7, 3], "texture": "#shell"},
+        "down": {"uv": [0, 0, 7, 3], "texture": "#shell"}
+      }
+    },
+    {
+      "name": "tower",
+      "from": [11.1, 0.25, 3.4],
+      "to": [15.7, 11, 9],
+      "faces": {
+        "north": {"uv": [0, 2, 5, 13], "texture": "#shell"},
+        "south": {"uv": [0, 2, 5, 13], "texture": "#shell"},
+        "east": {"uv": [0, 2, 6, 13], "texture": "#shell"},
+        "west": {"uv": [0, 2, 6, 13], "texture": "#shell"},
+        "up": {"uv": [0, 0, 5, 6], "texture": "#shell"},
+        "down": {"uv": [0, 0, 5, 6], "texture": "#shell"}
+      }
+    },
+    {
+      "name": "power_led",
+      "from": [11.45, 9.5, 8.95],
+      "to": [12.15, 10.15, 9.25],
+      "faces": {
+        "south": {"uv": [0, 0, 1, 1], "texture": "#led"},
+        "east": {"uv": [0, 0, 1, 1], "texture": "#led"},
+        "west": {"uv": [0, 0, 1, 1], "texture": "#led"},
+        "up": {"uv": [0, 0, 1, 1], "texture": "#led"}
+      }
+    },
+    {
+      "name": "tower_vents",
+      "from": [12.5, 2.2, 8.95],
+      "to": [15.1, 9.6, 9.2],
+      "faces": {
+        "south": {"uv": [0, 0, 3, 7], "texture": "#vent"}
+      }
+    },
+    {
+      "name": "keyboard",
+      "from": [0.7, 0.2, 9.9],
+      "to": [11.2, 0.8, 12.7],
+      "faces": {
+        "north": {"uv": [0, 0, 11, 1], "texture": "#shell"},
+        "south": {"uv": [0, 0, 11, 1], "texture": "#shell"},
+        "east": {"uv": [0, 0, 3, 1], "texture": "#shell"},
+        "west": {"uv": [0, 0, 3, 1], "texture": "#shell"},
+        "up": {"uv": [0, 0, 11, 3], "texture": "#shell"},
+        "down": {"uv": [0, 0, 11, 3], "texture": "#shell"}
+      }
+    },
+    {
+      "name": "keys_top",
+      "from": [1.1, 0.8, 11.85],
+      "to": [10.7, 1.15, 12.5],
+      "faces": {
+        "north": {"uv": [0, 0, 10, 1], "texture": "#keys"},
+        "south": {"uv": [0, 0, 10, 1], "texture": "#keys"},
+        "east": {"uv": [0, 0, 1, 1], "texture": "#keys"},
+        "west": {"uv": [0, 0, 1, 1], "texture": "#keys"},
+        "up": {"uv": [0, 0, 10, 1], "texture": "#keys"}
+      }
+    },
+    {
+      "name": "keys_mid",
+      "from": [1.1, 0.8, 11.05],
+      "to": [10.7, 1.15, 11.7],
+      "faces": {
+        "north": {"uv": [0, 0, 10, 1], "texture": "#keys"},
+        "south": {"uv": [0, 0, 10, 1], "texture": "#keys"},
+        "east": {"uv": [0, 0, 1, 1], "texture": "#keys"},
+        "west": {"uv": [0, 0, 1, 1], "texture": "#keys"},
+        "up": {"uv": [0, 0, 10, 1], "texture": "#keys"}
+      }
+    },
+    {
+      "name": "keys_space",
+      "from": [2.4, 0.8, 10.25],
+      "to": [9.4, 1.15, 10.9],
+      "faces": {
+        "north": {"uv": [0, 0, 7, 1], "texture": "#keys"},
+        "south": {"uv": [0, 0, 7, 1], "texture": "#keys"},
+        "east": {"uv": [0, 0, 1, 1], "texture": "#keys"},
+        "west": {"uv": [0, 0, 1, 1], "texture": "#keys"},
+        "up": {"uv": [0, 0, 7, 1], "texture": "#keys"}
+      }
+    },
+    {
+      "name": "mouse",
+      "from": [12.3, 0.25, 10.3],
+      "to": [14.8, 1.15, 12.3],
+      "faces": {
+        "north": {"uv": [0, 0, 3, 1], "texture": "#keys"},
+        "south": {"uv": [0, 0, 3, 1], "texture": "#keys"},
+        "east": {"uv": [0, 0, 2, 1], "texture": "#keys"},
+        "west": {"uv": [0, 0, 2, 1], "texture": "#keys"},
+        "up": {"uv": [0, 0, 3, 2], "texture": "#keys"},
+        "down": {"uv": [0, 0, 3, 2], "texture": "#keys"}
+      }
+    }
+  ],
+  "display": {
+    "gui": {
+      "rotation": [30, 225, 0],
+      "scale": [0.625, 0.625, 0.625]
+    },
+    "ground": {
+      "translation": [0, 3, 0],
+      "scale": [0.25, 0.25, 0.25]
+    },
+    "fixed": {
+      "rotation": [0, 180, 0],
+      "scale": [0.5, 0.5, 0.5]
+    },
+    "thirdperson_righthand": {
+      "rotation": [75, 45, 0],
+      "translation": [0, 2.5, 0],
+      "scale": [0.375, 0.375, 0.375]
+    },
+    "firstperson_righthand": {
+      "rotation": [0, 45, 0],
+      "scale": [0.4, 0.4, 0.4]
+    }
   }
 }

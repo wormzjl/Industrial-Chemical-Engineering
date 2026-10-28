@@ -220,8 +220,10 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         }
         if (!(level instanceof ServerLevel serverLevel) || shape == null) return;
         if (stale()) EquipmentStructure.refreshLater(serverLevel, origin(), shape, box, worldPosition);
-        else if (cell().equals(ShapeRasterizer.layout(shape).controller()))
+        else if (cell().equals(ShapeRasterizer.layout(shape).controller())) {
             com.wormzjl.icheme.runtime.assembly.AssemblyService.controllerLoaded(serverLevel, worldPosition, shape);
+            EquipmentStructure.restateLater(serverLevel, origin(), shape);
+        }
         var here = fluidPosition();
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world -> world.at(here)
                 .filter(record -> record.device().position().equals(here) && !record.device().ports().isEmpty())

@@ -167,6 +167,8 @@ public final class FluidCheckpointCodec {
     }
     static WorldTopologyLedger.Snapshot topology(byte[] data,Sections s,long onlineTick,Function<PackageKey,FluidThermodynamics> models) {
         var world=worldFacts(data,s);
+        // The islands compiled the removed one-block movers: their state cannot be used, and the load rebuilds them from the facts.
+        if(!world.removedMovers().isEmpty())throw new IllegalArgumentException("its one-block movers "+world.removedMovers()+" were removed");
         if(s.stateFormat()!=VERSION)throw new IllegalArgumentException("The topology's state is of format "+s.stateFormat()+"; this build reads "+VERSION);
         var events=FluidFacts.events(data,s.stateOffset(),s.stateLength());
         var model=new FluidThermodynamics[1];

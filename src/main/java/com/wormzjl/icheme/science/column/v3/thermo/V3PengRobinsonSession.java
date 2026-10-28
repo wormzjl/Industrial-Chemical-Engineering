@@ -68,12 +68,20 @@ final class V3PengRobinsonSession {
         return requireComponent(publicComponent).criticalTemperatureKelvin();
     }
 
+    double componentCriticalPressurePascal(int publicComponent) {
+        return requireComponent(publicComponent).criticalPressurePascal();
+    }
+
     double componentAcentricFactor(int publicComponent) {
         return requireComponent(publicComponent).acentricFactor();
     }
 
     double componentStandardLiquidDensityKgPerCubicMetre(int publicComponent) {
         return requireComponent(publicComponent).standardLiquidDensityKgPerCubicMetre();
+    }
+
+    double[][] binaryInteractions() {
+        return propertyPackage.binaryInteractions();
     }
 
     private V3PropertyComponent requireComponent(int publicComponent) {

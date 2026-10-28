@@ -1,0 +1,21 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/equipment/ColumnTrays.java b/src/main/java/com/wormzjl/icheme/science/equipment/ColumnTrays.java
+index b82f8ca5..fae931a8 100644
+--- a/src/main/java/com/wormzjl/icheme/science/equipment/ColumnTrays.java
++++ b/src/main/java/com/wormzjl/icheme/science/equipment/ColumnTrays.java
+@@ -132,7 +132,15 @@ public record ColumnTrays(int trays, int feed, List<Integer> draws, List<Integer
+ 
+     /** Space under the bottom tray for the sump and the reboiler return, m. */
+     public static double bottomSpace(double diameter) {
+-        return Math.max(2, diameter / 2);
++        String rule = System.getProperty("sump.rule", "base");
++        return switch (rule) {
++            case "base" -> Math.max(2, diameter / 2);
++            default -> {
++                String[] p = rule.split(",");
++                double a = Double.parseDouble(p[0]), b = Double.parseDouble(p[1]), cap = p.length > 2 ? Double.parseDouble(p[2]) : 1e9, floor = p.length > 3 ? Double.parseDouble(p[3]) : 0;
++                yield Math.min(cap, Math.max(floor, Math.ceil((a + b * diameter) * 2 - 1e-9) / 2));
++            }
++        };
+     }
+ 
+     /** Tangent-to-tangent length, whole metres: the trays, the space above them and the sump. */

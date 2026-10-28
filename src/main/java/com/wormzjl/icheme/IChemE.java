@@ -16,7 +16,6 @@ import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
 import com.wormzjl.icheme.science.column.v3.V3NeuralRegistry;
 import com.wormzjl.icheme.science.column.v3.V3NeuralInitializer;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.item.CreativeModeTabs;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -24,7 +23,6 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
@@ -199,13 +197,13 @@ public final class IChemE {
     public IChemE(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
+        com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
         ModBlockEntities.register(modEventBus);
         ModMenus.register(modEventBus);
         modEventBus.addListener(ColumnV3Network::register);
         modEventBus.addListener(com.wormzjl.icheme.network.FluidNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.EquipmentNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.AssemblyNetwork::register);
-        modEventBus.addListener(IChemE::addCreativeTabItem);
         modContainer.registerConfig(ModConfig.Type.COMMON, CONFIG_SPEC, "icheme-common.toml");
         // A dedicated server never draws equipment: its geometries keep no facets once laid out.
         if (FMLEnvironment.dist.isDedicatedServer()) com.wormzjl.icheme.science.equipment.ShapeRasterizer.serverOnly();
@@ -293,23 +291,6 @@ public final class IChemE {
     /** Read on the server thread when admitting a V3 request, never from its worker. */
     public static double columnV3LiquidSupplyScreenRatio() {
         return COLUMN_V3_LIQUID_SUPPLY_SCREEN_RATIO.get();
-    }
-
-    private static void addCreativeTabItem(BuildCreativeModeTabContentsEvent event) {
-        if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
-            event.accept(ModItems.COLUMN_CALCULATOR_V3.get());
-            event.accept(ModItems.PRESSURE_PROBE.get());event.accept(ModItems.TEMPERATURE_PROBE.get());event.accept(ModItems.FLOWMETER.get());event.accept(ModItems.DIGITAL_LEVEL_METER.get());
-            event.accept(ModItems.PRESSURE_GAUGE.get());
-            event.accept(ModItems.TEMPERATURE_GAUGE.get());
-            event.accept(ModItems.ACCESSORY_WRENCH.get());
-            event.accept(ModItems.PIPELINE_TOOL.get());
-            event.accept(ModItems.PIPE_LAYING_TOOL.get());
-            event.accept(ModItems.PIPE_RACK.get());
-            event.accept(ModItems.PIPELINE_SIGHT_GLASS.get());
-            event.accept(ModItems.PIPELINE_SHUTOFF_VALVE.get());
-            event.accept(ModItems.PIPELINE_CHECK_VALVE.get());
-            event.accept(ModItems.FLUID_RESERVOIR.get());event.accept(ModItems.FLUID_PIPE.get());event.accept(ModItems.FLUID_PUMP.get());event.accept(ModItems.FLUID_COMPRESSOR.get());event.accept(ModItems.PRESSURE_CONTROL_VALVE.get());event.accept(ModItems.FLUID_GENERATOR.get());event.accept(ModItems.FLUID_VOID.get());event.accept(ModItems.INLINE_FILTER.get());event.accept(ModItems.FLUID_DEBUGGER.get());event.accept(ModItems.EQUIPMENT_CONSTRUCTOR.get());
-        }
     }
 
     private static void onServerStarting(ServerStartingEvent event) {

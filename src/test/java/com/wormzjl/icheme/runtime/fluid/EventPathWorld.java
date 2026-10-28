@@ -88,10 +88,13 @@ class EventPathWorld {
     static FluidDeviceSpec pure(int component,double temperature,double pressure) {
         double[] n=new double[FluidDeviceSpec.nitrogen(CATALOG).composition().length];n[component]=1;return new FluidDeviceSpec(1,temperature,pressure,n);
     }
-    /** Places one block at the current online tick; returns its identity. */
+    /**
+     * Places one block at the current online tick; returns its identity. A {@code PUMP} or {@code COMPRESSOR} is an in-line
+     * mover, a pipe of {@code bore} carrying {@code control} (the one-block movers are gone, batch 2026-10-28-old-mover-removal).
+     */
     long place(int x,int y,int z,Kind kind,PhysicalFluidTopology.Direction facing,FlowControl control,FluidDeviceSpec spec,double bore) {
         long id=ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,y,z),kind,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control);
+        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,y,z),FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control);
         registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec!=null?spec:FluidDeviceSpec.nitrogen(catalog),0))),id+1,null);
         return id;
     }

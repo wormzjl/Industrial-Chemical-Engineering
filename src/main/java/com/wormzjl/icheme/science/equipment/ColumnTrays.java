@@ -130,9 +130,23 @@ public record ColumnTrays(int trays, int feed, List<Integer> draws, List<Integer
         return new ColumnTrays(trays, feed, List.of(), List.of(), List.of());
     }
 
-    /** Space under the bottom tray for the sump and the reboiler return, m. */
+    /**
+     * The sump's stack under the bottom tray (batch 2026-10-27-column-sump, {@code COLUMN_SUMP_SURVEY.md}), m: the low
+     * liquid level over the bottom tangent; the span to the high level, about 7 min of bottoms at 0.2 m/min (a flux per
+     * square metre, so the same at every diameter); the high level to the reboiler return's bottom; its top to the bottom
+     * tray. The return ({@link ColumnStructure#returnOd}) stands between the last two.
+     */
+    static final double LOW_LEVEL = .3, LEVEL_SPAN = 1.5, UNDER_RETURN = .3, OVER_RETURN = .45;
+
+    /**
+     * Space under the bottom tray for the sump and the reboiler return, m: the sump's stack to the next whole metre (3 m
+     * to D 1.5, 4 m to D 8), so the bottom tray stands on a block face and the trays over it keep their cell rows, as
+     * with the 2 m sump before the stack; or half the diameter where that is more, as before (a wide column's head holds
+     * minutes of bottoms by itself, so its sump keeps its height and its nozzles their rows).
+     */
     public static double bottomSpace(double diameter) {
-        return Math.max(2, diameter / 2);
+        double stack = LOW_LEVEL + LEVEL_SPAN + UNDER_RETURN + ColumnStructure.returnOd(diameter) + OVER_RETURN;
+        return Math.max(diameter / 2, Math.ceil(stack - 1e-9));
     }
 
     /** Tangent-to-tangent length, whole metres: the trays, the space above them and the sump. */

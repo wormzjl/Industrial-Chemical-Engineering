@@ -51,6 +51,8 @@ public final class V3ColumnCalculator {
     private static final int MAXIMUM_STEAM_SUBDIVISIONS = 2;
     public static final int MAXIMUM_NEWTON_ITERATIONS = 128;
     public static final double SCALED_RESIDUAL_TOLERANCE = 1.0e-8;
+    /** Fast interactive requests use the admitted gameplay closure; strict/offline requests retain 1e-8. */
+    private static final double AGGRESSIVE_CLOSURE_TOLERANCE = 1.0e-3;
     private static final double PRESSURE_CONTINUATION_TRIGGER_PASCAL = 100_000.0;
     private static final double PRESSURE_CONTINUATION_ANCHOR_PASCAL = 150_000.0;
     private static final double PRESSURE_CONTINUATION_STEP_PASCAL = 10_000.0;
@@ -81,6 +83,13 @@ public final class V3ColumnCalculator {
     private static final int MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES = 1;
     /** Free-water tray-set refreshes within one attempt; only a converged attempt spends one. */
     private static final int MAXIMUM_WET_TRAY_REFRESHES = 3;
+    /**
+     * A large wet request has to run the classical steam/heat ramp after a learned seed is rejected.  The bundled
+     * model's correction is not trained for that high-dimensional wet lane and can spend its whole two-second
+     * allowance before handing back the unchanged classical route.  Give it a short probe instead; a candidate that
+     * closes quickly is still accepted, while a poor candidate falls back almost immediately.
+     */
+    private static final int LARGE_WET_NEURAL_PROBE_MILLISECONDS = 100;
     /**
      * Newton budget of the one refresh that follows a stalled attempt and only removes points.
      *
@@ -149,7 +158,9 @@ public final class V3ColumnCalculator {
     private enum ContinuationJacobianPolicy {
         NONE,
         STAGE_LOCAL_BLOCKS,
-        PRESSURE_LOCAL_PREDICTOR
+        PRESSURE_LOCAL_PREDICTOR,
+        /** Boston-Sullivan outer thermodynamics with a frozen-property inner MESH correction. */
+        INSIDE_OUT
     }
 
     private V3ColumnCalculator() {}
@@ -249,10 +260,11 @@ public final class V3ColumnCalculator {
         V3ColumnOutcome.Failure coolingFailure = staticCoolingAdmission(input);
         if (coolingFailure != null) return coolingFailure;
         long started = System.nanoTime();
+        int neuralBudgetMilliseconds = neuralBudgetMilliseconds(input, options);
         NeuralProgress progress = new NeuralProgress(trace);
         V3SolveControl neuralControl = () -> {
             control.checkpoint(); // Whole-request cancellation always wins over the local neural budget.
-            if (System.nanoTime() - started >= options.budgetMilliseconds() * 1_000_000L)
+            if (System.nanoTime() - started >= neuralBudgetMilliseconds * 1_000_000L)
                 throw new NeuralBudgetExceeded();
         };
         String reason = "model unavailable or outside coverage";
@@ -323,6 +335,8 @@ public final class V3ColumnCalculator {
                 || lastFailure.code() == V3SolverFailureCode.INFEASIBLE_SPECIFICATION)) return lastFailure;
         String event = "initializer=" + (options.mode() == V3InitializationOptions.Mode.LNN_ONLY ? "LNN_FAILED" : "CURRENT_BACKUP")
                 + "; model=" + modelId + "; neuralMs=" + (System.nanoTime() - started) / 1_000_000
+                + (neuralBudgetMilliseconds == options.budgetMilliseconds()
+                ? "" : "; neuralBudgetMs=" + neuralBudgetMilliseconds)
                 + "; " + reason;
         if (options.mode() == V3InitializationOptions.Mode.LNN_ONLY)
             return initializationEvent(lastFailure != null ? lastFailure
@@ -458,6 +472,11 @@ public final class V3ColumnCalculator {
             if (mismatch <= HYDRAULIC_MISMATCH_TOLERANCE) {
                 return summarised(nominal, hydraulics, solved, traffic, marched, false, mismatch);
             }
+            // The published inspection carries the pressure profile of its solved problem.  Even on the
+            // aggressive interactive route we must therefore apply the marched profile when the authored drop is
+            // zero (the common diameter-driven preset): publishing only the hydraulic summary would show a
+            // positive column dP while every inspected tray still had the flat nominal pressure.  Keep the same
+            // bounded correction path for all routes so the summary and per-tray readings cannot disagree.
             V3SolvePass corrected = hydraulicCorrection(input, pass, thermo, policy, control, marched);
             if (corrected == null) {
                 // One half step, then the full one from the state it reached: a correction that refuses a 20 kPa
@@ -767,6 +786,23 @@ public final class V3ColumnCalculator {
                 liquidSupplyScreenRatio));
     }
 
+    /** Re-solves a request using one of the repeat-request warm-start policies. */
+    public static V3ColumnOutcome calculateWithStrategy(
+            V3ColumnInput input, V3SolveControl control, V3SolveStrategy strategy,
+            V3NeuralSeed warmStart, double liquidSupplyScreenRatio) {
+        Objects.requireNonNull(input, "input");
+        Objects.requireNonNull(control, "control");
+        Objects.requireNonNull(strategy, "strategy");
+        V3LiquidSupplyScreen.requireRatio(liquidSupplyScreenRatio);
+        // Warm corrections already have a nearby certified state; keep their strict hydraulic polish. The coarse
+        // ramp and no-second-pressure-solve policy are reserved for the expensive first interactive solve.
+        SolvePolicy policy = strategy == V3SolveStrategy.AGGRESSIVE && warmStart == null
+                ? SolvePolicy.OFF_FAST : SolvePolicy.OFF;
+        return com.wormzjl.icheme.science.material.MaterialRuntime.pinned(input.packageId(),
+                () -> calculateInCatalog(input, control, policy, liquidSupplyScreenRatio,
+                        strategy, warmStart));
+    }
+
     /**
      * Converts an authored closure request into the tolerance every gate uses.
      *
@@ -784,18 +820,22 @@ public final class V3ColumnCalculator {
     private static V3ColumnOutcome calculate(
             V3ColumnInput input, V3SolveControl control, SolvePolicy policy, double liquidSupplyScreenRatio) {
         return com.wormzjl.icheme.science.material.MaterialRuntime.pinned(input.packageId(),
-                () -> calculateInCatalog(input, control, policy, liquidSupplyScreenRatio));
+                () -> calculateInCatalog(input, control, policy, liquidSupplyScreenRatio,
+                        V3SolveStrategy.DRIFT_SPEC, null));
     }
 
     private static V3ColumnOutcome calculateInCatalog(
-            V3ColumnInput input, V3SolveControl control, SolvePolicy policy, double liquidSupplyScreenRatio) {
+            V3ColumnInput input, V3SolveControl control, SolvePolicy policy, double liquidSupplyScreenRatio,
+            V3SolveStrategy strategy, V3NeuralSeed warmStart) {
         Objects.requireNonNull(input, "input");
         Objects.requireNonNull(control, "control");
         RequestAdmission admission = requestOnlyAdmission(input, liquidSupplyScreenRatio);
         if (admission.typed()) return admission.failure();
         CondenserAttempts condenserAttempts = new CondenserAttempts();
-        V3CondenserPhaseBranch preferred = preferredCondenserBranch(input, control);
-        V3ColumnOutcome outcome = calculateBranch(input, control, preferred, policy, condenserAttempts);
+        V3CondenserPhaseBranch preferred = warmStart != null
+                && (input.equals(warmStart.input()) || warmCompatible(input, warmStart.input(), strategy))
+                ? warmStart.branch() : preferredCondenserBranch(input, control);
+        V3ColumnOutcome outcome = calculateBranch(input, control, preferred, policy, condenserAttempts, strategy, warmStart);
         if (outcome instanceof V3ColumnOutcome.Success
                 || outcome instanceof V3ColumnOutcome.Failure failure
                 && (failure.code() == V3SolverFailureCode.INVALID_INPUT
@@ -806,7 +846,7 @@ public final class V3ColumnCalculator {
         // A known phase mismatch has its bounded same-rung warm correction. Restarting either branch
         // from the smallest grid discards that useful profile and can revisit an inappropriate phase.
         if (!condenserAttempts.allowsColdRecovery() || condenserAttempts.hasAttempted(alternate)) return outcome;
-        V3ColumnOutcome alternative = calculateBranch(input, control, alternate, policy, condenserAttempts);
+        V3ColumnOutcome alternative = calculateBranch(input, control, alternate, policy, condenserAttempts, strategy, warmStart);
         return alternative instanceof V3ColumnOutcome.Success ? alternative : outcome;
     }
 
@@ -945,7 +985,8 @@ public final class V3ColumnCalculator {
     }
 
     private static V3ColumnOutcome calculateBranch(V3ColumnInput input, V3SolveControl control,
-            V3CondenserPhaseBranch condenserBranch, SolvePolicy policy, CondenserAttempts condenserAttempts) {
+            V3CondenserPhaseBranch condenserBranch, SolvePolicy policy, CondenserAttempts condenserAttempts,
+            V3SolveStrategy strategy, V3NeuralSeed warmStart) {
         List<String> advisoryEvidence = List.of();
         boolean admitted = false;
         try {
@@ -960,9 +1001,14 @@ public final class V3ColumnCalculator {
             }
             admitted = true;
             V3SolvePass pass;
-            pass = requiresPressureContinuation(admission)
-                    ? solvePressureContinuation(input, thermo, control, condenserBranch, policy, condenserAttempts)
-                    : solveStageContinuation(input, thermo, control, condenserBranch, policy, condenserAttempts);
+            pass = warmStartPass(input, problem, thermo, control, policy, strategy, warmStart);
+            if (pass == null) {
+                pass = requiresPressureContinuation(admission)
+                        ? solvePressureContinuation(input, thermo, control, condenserBranch, policy, condenserAttempts,
+                                strategy)
+                        : solveStageContinuation(input, thermo, control, condenserBranch, policy, condenserAttempts,
+                                strategy);
+            }
             if (!publishesSuccess(pass.attempt(), pass.audit())
                     && !hasCondenserPhaseMismatch(pass)
                     && condenserAttempts.allowsColdRecovery()
@@ -1111,6 +1157,91 @@ public final class V3ColumnCalculator {
         }
     }
 
+    /** Attempts a direct correction from the previous accepted state; a rejected candidate never replaces cold solve. */
+    private static V3SolvePass warmStartPass(V3ColumnInput input, V3ColumnProblem problem,
+            V3PengRobinsonThermo thermo, V3SolveControl control, SolvePolicy policy,
+            V3SolveStrategy strategy, V3NeuralSeed warmStart) {
+        if (warmStart == null || warmStart.branch() != problem.topology().condenserPhaseBranch()
+                || !(input.equals(warmStart.input()) || warmCompatible(input, warmStart.input(), strategy))) {
+            return null;
+        }
+        V3DryMeshState seed;
+        try {
+            seed = retargetWarmSeed(input, problem, warmStart);
+            int iterations = strategy == V3SolveStrategy.AGGRESSIVE ? 8 : 16;
+            V3SolvePass pass = solveSingleProblem(problem, thermo, seed, control,
+                    strategy == V3SolveStrategy.AGGRESSIVE ? "warm/aggressive" : "warm/drift-spec",
+                    ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, iterations, policy);
+            if (publishesSuccess(pass.attempt(), pass.audit())) return pass;
+        } catch (V3ThermoException | IllegalArgumentException | IllegalStateException ignored) {
+            // Warm starts are an optional cache. Any shape, property or trust-region mismatch uses cold recovery.
+        }
+        return null;
+    }
+
+    private static V3DryMeshState retargetWarmSeed(V3ColumnInput input, V3ColumnProblem problem,
+            V3NeuralSeed source) {
+        double[] temperature = source.temperatures();
+        temperature[0] = input.specifications().stream()
+                .filter(V3ColumnSpecification.CondenserOutletTemperature.class::isInstance)
+                .map(V3ColumnSpecification.CondenserOutletTemperature.class::cast).findFirst().orElseThrow().kelvin();
+        double[] water = source.freeWater();
+        for (double value : water) if (value != 0.0) throw new IllegalArgumentException("wet warm seed requires wet continuation");
+        V3NeuralSeed retargeted = new V3NeuralSeed(input, source.propertyRevision(), source.branch(),
+                source.liquid(), source.vapor(), temperature, water, new boolean[input.stageCount() + 2]);
+        return retargeted.stateFor(problem);
+    }
+
+    private static boolean warmCompatible(V3ColumnInput target, V3ColumnInput source, V3SolveStrategy strategy) {
+        if (!target.packageId().equals(source.packageId()) || !target.componentBasis().equals(source.componentBasis())
+                || target.stageCount() != source.stageCount() || target.feedStageNumber() != source.feedStageNumber()
+                || !sameFeatureShape(target, source)) {
+            return false;
+        }
+        double limit = strategy == V3SolveStrategy.AGGRESSIVE ? 0.50 : 0.15;
+        if (relativeDrift(target.topPressurePascal(), source.topPressurePascal()) > limit
+                || relativeDrift(target.feedTemperatureKelvin(), source.feedTemperatureKelvin()) > limit
+                || relativeDrift(specValue(target, V3ColumnSpecification.CondenserOutletTemperature.class),
+                        specValue(source, V3ColumnSpecification.CondenserOutletTemperature.class)) > limit) {
+            return false;
+        }
+        double[] a = target.feedComponentMolarFlowsMolPerSecond(), b = source.feedComponentMolarFlowsMolPerSecond();
+        for (int i = 0; i < a.length; i++) if (relativeDrift(a[i], b[i]) > limit) {
+            return false;
+        }
+        return relativeDrift(reboilerDuty(target), reboilerDuty(source)) <= limit;
+    }
+
+    private static boolean sameFeatureShape(V3ColumnInput a, V3ColumnInput b) {
+        if (a.sideDraws().size() != b.sideDraws().size() || a.steamFeeds().size() != b.steamFeeds().size()
+                || a.pumparounds().size() != b.pumparounds().size()) return false;
+        for (int i = 0; i < a.sideDraws().size(); i++)
+            if (a.sideDraws().get(i).trayNumber() != b.sideDraws().get(i).trayNumber()) return false;
+        for (int i = 0; i < a.steamFeeds().size(); i++)
+            if (a.steamFeeds().get(i).stageNumber() != b.steamFeeds().get(i).stageNumber()) return false;
+        for (int i = 0; i < a.pumparounds().size(); i++)
+            if (a.pumparounds().get(i).drawTray() != b.pumparounds().get(i).drawTray()
+                    || a.pumparounds().get(i).returnTray() != b.pumparounds().get(i).returnTray()) return false;
+        return true;
+    }
+
+    private static double specValue(V3ColumnInput input,
+            Class<? extends V3ColumnSpecification> type) {
+        return input.specifications().stream().filter(type::isInstance).findFirst()
+                .map(spec -> spec instanceof V3ColumnSpecification.CondenserOutletTemperature t ? t.kelvin()
+                        : spec instanceof V3ColumnSpecification.ReboilerDuty q ? q.watts()
+                        : spec instanceof V3ColumnSpecification.OrganicRefluxRatio r ? r.ratio() : 0.0)
+                .orElse(0.0);
+    }
+
+    private static double reboilerDuty(V3ColumnInput input) {
+        return specValue(input, V3ColumnSpecification.ReboilerDuty.class);
+    }
+
+    private static double relativeDrift(double a, double b) {
+        return Math.abs(a - b) / Math.max(1.0, Math.max(Math.abs(a), Math.abs(b)));
+    }
+
     private static boolean requiresPressureContinuation(V3OperatingDomainValidator.Assessment admission) {
         return admission instanceof V3OperatingDomainValidator.Assessment.Eligible eligible
                 && eligible.minimumNodePressurePascal() <= PRESSURE_CONTINUATION_TRIGGER_PASCAL;
@@ -1125,8 +1256,9 @@ public final class V3ColumnCalculator {
      */
     private static V3SolvePass solveStageContinuation(
             V3ColumnInput input, V3PengRobinsonThermo thermo, V3SolveControl control,
-            V3CondenserPhaseBranch condenserBranch, SolvePolicy policy, CondenserAttempts condenserAttempts) {
-        List<Integer> stageCounts = continuationStageCounts(input.stageCount());
+            V3CondenserPhaseBranch condenserBranch, SolvePolicy policy, CondenserAttempts condenserAttempts,
+            V3SolveStrategy strategy) {
+        List<Integer> stageCounts = continuationStageCounts(input.stageCount(), strategy);
         String stagePath = continuationStagePath(stageCounts);
         V3DryMeshState previousState = null;
         V3SolvePass lastPass = null;
@@ -1145,9 +1277,17 @@ public final class V3ColumnCalculator {
                     ? initializeForSolve(stageProblem, thermo, V3ColumnInitializer.Mode.SEQUENTIAL_MATERIAL_VLE)
                     : continuationSeed(stageProblem, previousTopology, previousState, thermo, control);
             V3SolvePass preceding = lastPass;
+            // Only the authored dry cold seed tries the inside-out preconditioner.  Feature-bearing requests use
+            // their dry surrogate later in a bounded ramp, but that surrogate can already be close enough that
+            // the extra property snapshot costs more than it saves on the small seed grids.
+            ContinuationJacobianPolicy stageJacobianPolicy = !featureRampRequired
+                    && input.stageCount() >= 4
+                    && previousState == null
+                    ? ContinuationJacobianPolicy.INSIDE_OUT
+                    : ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS;
             lastPass = solveSingleProblem(stageProblem, thermo,
                     seed, control, "cold/stage-continuation/" + stagePath + "/fine-fd",
-                    ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, policy);
+                    stageJacobianPolicy, policy);
             if (preceding != null) lastPass = withPriorSupportNotes(preceding, lastPass);
             PhaseCorrection phaseCorrection = correctCondenserPhase(lastPass, thermo, control, policy, condenserAttempts);
             lastPass = phaseCorrection.pass();
@@ -1194,7 +1334,8 @@ public final class V3ColumnCalculator {
      */
     private static V3SolvePass solvePressureContinuation(
             V3ColumnInput input, V3PengRobinsonThermo thermo, V3SolveControl control,
-            V3CondenserPhaseBranch condenserBranch, SolvePolicy policy, CondenserAttempts condenserAttempts) {
+            V3CondenserPhaseBranch condenserBranch, SolvePolicy policy, CondenserAttempts condenserAttempts,
+            V3SolveStrategy strategy) {
         if (input.topPressurePascal() > PRESSURE_CONTINUATION_TRIGGER_PASCAL) {
             throw new IllegalArgumentException("V3 pressure continuation was requested outside its low-pressure lane");
         }
@@ -1203,7 +1344,8 @@ public final class V3ColumnCalculator {
                 ? withoutPumparounds(withoutSideDraws(withoutSteamWithSurrogateDuty(input))) : input;
         boolean finePressureSteps = !input.sideDraws().isEmpty() || steamRampRequired;
         V3ColumnInput anchorInput = withTopPressure(continuationInput, PRESSURE_CONTINUATION_ANCHOR_PASCAL);
-        V3SolvePass pass = solveStageContinuation(anchorInput, thermo, control, condenserBranch, policy, condenserAttempts);
+        V3SolvePass pass = solveStageContinuation(anchorInput, thermo, control, condenserBranch, policy,
+                condenserAttempts, strategy);
         List<String> pressureEvents = new ArrayList<>();
         String pressurePath = continuationPressurePath(input.topPressurePascal(), finePressureSteps);
         if (!publishesSuccess(pass.attempt(), pass.audit())) {
@@ -1436,6 +1578,9 @@ public final class V3ColumnCalculator {
         int refreshes = 0;
         int stalledRefreshes = 0;
         int wetTrayRefreshes = 0;
+        // The interactive closure already tolerates the bounded floor defect; one refresh catches a stale support
+        // without paying for the repeated polish passes used by strict/offline certificates.
+        int floorRefreshLimit = policy.fastPublication() ? 1 : MAXIMUM_FLOOR_SUPPORT_REFRESHES;
         int attempts = 0;
         List<String> wetTrayEvents = new ArrayList<>();
         // The floor support is frozen for the length of one Newton solve, so it is re-derived from the
@@ -1447,7 +1592,7 @@ public final class V3ColumnCalculator {
             V3ColumnProblem attemptProblem = prepared.problem();
             V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(
                     attemptProblem, thermo, feedMolarEnthalpy);
-            telemetry = new SolveTelemetry(attemptProblem, policy.progress());
+            telemetry = new SolveTelemetry(attemptProblem, policy.progress(), jacobianPolicy == ContinuationJacobianPolicy.INSIDE_OUT);
             V3DryMeshCoordinateMap coordinates = new V3DryMeshCoordinateMap(attemptProblem);
             V3DryMeshState attemptSeed = prepared.seed();
             if (policy.progress() != null) {
@@ -1467,6 +1612,9 @@ public final class V3ColumnCalculator {
                 case PRESSURE_LOCAL_PREDICTOR -> V3SimultaneousColumnSolver.solveWithOneLocalBlockPredictor(
                         attemptProblem, evaluator, coordinates, attemptSeed, thermo::newWorkspace,
                         nextIterations, policy.closureTolerance(), control, telemetry);
+                case INSIDE_OUT -> V3SimultaneousColumnSolver.solveWithInsideOut(
+                        attemptProblem, evaluator, coordinates, attemptSeed, thermo::newWorkspace,
+                        nextIterations, policy.closureTolerance(), control, telemetry);
             };
             if (policy.progress() != null) {
                 policy.progress().finishedAttempt(attempts,
@@ -1481,7 +1629,7 @@ public final class V3ColumnCalculator {
             // rung the continuation is going to subdivide or abandon anyway, and re-solving it three times
             // triples the cost of every case that is on its way to a typed failure.
             boolean converged = attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged;
-            boolean floorBudget = refreshes < MAXIMUM_FLOOR_SUPPORT_REFRESHES
+            boolean floorBudget = refreshes < floorRefreshLimit
                     && (converged || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
             // The wet set is re-derived only from a state that solved its own equations, and carries its own
             // small budget so it never has to compete with the support refreshes for one. How far a tray sits
@@ -1724,6 +1872,7 @@ public final class V3ColumnCalculator {
         // this increment and whose later rungs double the water already placed.
         int steamRampSteps = Math.max(4, Math.min(24, (int) Math.ceil(totalSteamMolPerSecond / 4.0)));
         List<RampStep> rampSteps = new ArrayList<>(rampSteps(input, steamRampSteps));
+        if (policy.fastPublication()) rampSteps = new ArrayList<>(fastRampSteps(input, rampSteps));
         if (coupled) {
             // A different bounded homotopy from the same freshly accepted dry state. This
             // avoids an intermediate steam-only or heat-only state becoming a path barrier.
@@ -2120,6 +2269,24 @@ public final class V3ColumnCalculator {
         return List.copyOf(steps);
     }
 
+    /** Coarse homotopy used only by the interactive aggressive route. Every feature still has an authored final
+     * rung; retaining the first rung preserves phase admission while dropping repeated midpoint corrections. */
+    private static List<RampStep> fastRampSteps(V3ColumnInput input, List<RampStep> source) {
+        List<RampStep> result = new ArrayList<>(source.size());
+        String previousPath = "";
+        for (RampStep step : source) {
+            boolean first = !step.pathLabel().equals(previousPath);
+            boolean requested = step.requested(input);
+            // One midpoint is useful when a large authored flow or duty crosses a phase boundary.
+            double fraction = step.pathLabel().equals("draw-ramp") ? step.drawFraction()
+                    : step.pathLabel().equals(HEAT_RAMP_LABEL) ? step.heatFraction() : step.steamFraction();
+            boolean midpoint = Math.abs(fraction - 0.5) < 0.26 && fraction > 0.0 && fraction < 1.0;
+            if (first || midpoint || requested) result.add(step);
+            previousPath = step.pathLabel();
+        }
+        return List.copyOf(result);
+    }
+
     /**
      * Steam rung fractions: a doubling schedule at the resolution {@code steamRampSteps} sets.
      *
@@ -2312,6 +2479,15 @@ public final class V3ColumnCalculator {
 
     private static boolean featureRampRequired(V3ColumnInput input) {
         return !input.sideDraws().isEmpty() || !input.steamFeeds().isEmpty() || !input.pumparounds().isEmpty();
+    }
+
+    private static int neuralBudgetMilliseconds(V3ColumnInput input, V3InitializationOptions options) {
+        if (options.mode() != V3InitializationOptions.Mode.LNN_FIRST
+                || input.stageCount() < 32
+                || !featureRampRequired(input)) {
+            return options.budgetMilliseconds();
+        }
+        return Math.min(options.budgetMilliseconds(), LARGE_WET_NEURAL_PROBE_MILLISECONDS);
     }
 
     private static V3SolvePass withRampEvents(V3SolvePass pass, List<String> events) {
@@ -2780,18 +2956,27 @@ public final class V3ColumnCalculator {
      * ({@link #withoutCutoff()}); the closure never can.</p>
      */
     private record SolvePolicy(double requestedCutoff, double attemptCutoff, double closureTolerance,
-            java.util.function.Consumer<V3NeuralSeed> observer, NeuralProgress progress) {
+            java.util.function.Consumer<V3NeuralSeed> observer, NeuralProgress progress, boolean fastPublication) {
         private SolvePolicy(double requestedCutoff, double attemptCutoff, double closureTolerance) {
-            this(requestedCutoff, attemptCutoff, closureTolerance, null);
+            this(requestedCutoff, attemptCutoff, closureTolerance, null, null, false);
         }
 
         /** Only the learned path carries an in-flight recorder; every classical solve leaves it null. */
         private SolvePolicy(double requestedCutoff, double attemptCutoff, double closureTolerance,
                 java.util.function.Consumer<V3NeuralSeed> observer) {
-            this(requestedCutoff, attemptCutoff, closureTolerance, observer, null);
+            this(requestedCutoff, attemptCutoff, closureTolerance, observer, null, false);
+        }
+        private SolvePolicy(double requestedCutoff, double attemptCutoff, double closureTolerance,
+                java.util.function.Consumer<V3NeuralSeed> observer, NeuralProgress progress) {
+            this(requestedCutoff, attemptCutoff, closureTolerance, observer, progress, false);
         }
         private static final SolvePolicy OFF =
-                new SolvePolicy(0.0, 0.0, V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE);
+                new SolvePolicy(0.0, 0.0, V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE, null, null, false);
+        private static final SolvePolicy OFF_FAST =
+                // Interactive cold requests trade the last digits of the MESH closure for a bounded response. The
+                // strict DRIFT_SPEC path keeps the 1e-8 certificate; this route uses the public 1e-3 gameplay
+                // closure while retaining the independent conservation and final-step audits.
+                new SolvePolicy(0.0, 0.0, AGGRESSIVE_CLOSURE_TOLERANCE, null, null, true);
 
         private SolvePolicy {
             V3TruncationSupport.requireCutoff(requestedCutoff);
@@ -2805,7 +2990,7 @@ public final class V3ColumnCalculator {
         /** Same closure, no stage-trace cutoff; the ramp's intermediate rungs run untruncated by design. */
         private SolvePolicy withoutCutoff() {
             return requestedCutoff == 0.0 && attemptCutoff == 0.0
-                    ? this : new SolvePolicy(0.0, 0.0, closureTolerance, observer, progress);
+                    ? this : new SolvePolicy(0.0, 0.0, closureTolerance, observer, progress, fastPublication);
         }
 
         /** The trace a solve on this policy reports through; unobserved classical solves report nowhere. */
@@ -2841,7 +3026,17 @@ public final class V3ColumnCalculator {
      * 287 s. With the intermediate 30-stage grid the same column converges in 5.4 s.</p>
      */
     static List<Integer> continuationStageCounts(int requestedStageCount) {
+        return continuationStageCounts(requestedStageCount, V3SolveStrategy.DRIFT_SPEC);
+    }
+
+    static List<Integer> continuationStageCounts(int requestedStageCount, V3SolveStrategy strategy) {
         List<Integer> result = new java.util.ArrayList<>();
+        if (strategy == V3SolveStrategy.AGGRESSIVE && requestedStageCount >= 32) {
+            result.add(Math.min(15, requestedStageCount - 1));
+            if (requestedStageCount >= 38) result.add(30);
+            result.add(requestedStageCount);
+            return List.copyOf(result);
+        }
         for (int stageCount : new int[] {4, 8, 15}) {
             if (stageCount < requestedStageCount) result.add(stageCount);
         }
@@ -3234,6 +3429,7 @@ public final class V3ColumnCalculator {
         private final V3ColumnProblem problem;
         /** Where a learned pass keeps its in-flight evidence; null on every classical solve. */
         private final NeuralProgress progress;
+        private final boolean insideOut;
         private int acceptedLocalBlockDirections;
         private int rejectedLocalBlockDirections;
         private int freshFiniteDifferenceJacobians;
@@ -3244,9 +3440,10 @@ public final class V3ColumnCalculator {
         private double finalDominantPhysicalResidual;
         private V3DryMeshState finalState;
 
-        private SolveTelemetry(V3ColumnProblem problem, NeuralProgress progress) {
+        private SolveTelemetry(V3ColumnProblem problem, NeuralProgress progress, boolean insideOut) {
             this.problem = Objects.requireNonNull(problem, "problem");
             this.progress = progress;
+            this.insideOut = insideOut;
         }
 
         @Override
@@ -3287,6 +3484,7 @@ public final class V3ColumnCalculator {
 
         List<String> events() {
             List<String> events = new ArrayList<>();
+            if (insideOut) events.add("Boston-Sullivan inside-out: frozen K/H inner predictor with strict PR certification");
             if (Double.isFinite(initialMaximumScaledResidual)) {
                 events.add("scaled residual: initial=" + initialMaximumScaledResidual
                         + ", final=" + finalMaximumScaledResidual);

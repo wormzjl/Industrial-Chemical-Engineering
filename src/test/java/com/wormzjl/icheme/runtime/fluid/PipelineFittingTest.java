@@ -110,7 +110,7 @@ class PipelineFittingTest {
             var records=new ArrayList<Device>();var stocks=new HashMap<Long,PassiveNetwork.Reservoir>();
             for(int x=0;x<7;x++) {
                 long id=x+1;var kind=x==0||x==6?Kind.RESERVOIR:x==4?Kind.PUMP:Kind.PIPE;
-                var device=new Device(id,new Position(DIM,x,64,0),kind,kind==Kind.PUMP?pumpFacing:Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive());
+                var device=new Device(id,new Position(DIM,x,64,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),kind==Kind.PUMP?pumpFacing:Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive());
                 if(x==2)device=device.withCutoff(Direction.EAST,Cutoff.CHECK);
                 records.add(device);if(kind==Kind.RESERVOIR)stocks.put(id,new PassiveNetwork.Reservoir(id,64,model.initialNitrogenCharge(1,298.15,200000,NOOP)));
             }
@@ -334,7 +334,7 @@ class PipelineFittingTest {
 
     // ---- Inline pump and compressor --------------------------------------------------------------------------------
 
-    @Test void eachHorizontalHeadingUsesTheNativeActuatorWithoutChangingHostOrOwnedContents(){
+    @Test void eachHorizontalHeadingInstallsOneMoverWithoutChangingHostOrOwnedContents(){
         for(var axis:List.of(Direction.NORTH,Direction.SOUTH,Direction.EAST,Direction.WEST))for(var kind:List.of(Kind.PUMP,Kind.COMPRESSOR)){
             var world=line(axis);var before=stock(world);var old=world.registry.registrations().get(3L);
             assertFalse(world.registry.installPipeMover(3,Direction.UP,kind));assertFalse(world.registry.installPipeMover(3,axis.x==0?Direction.EAST:Direction.NORTH,kind));
@@ -343,11 +343,10 @@ class PipelineFittingTest {
             var installed=world.registry.registrations().get(3L);var d=installed.device();
             assertEquals(Kind.PIPE,d.kind());assertEquals(kind,d.hydraulicKind());assertEquals(PhysicalFluidTopology.defaultMover(kind),d.control());assertEquals(old.spec(),installed.spec());assertEquals(old.device().geometry(),d.geometry());assertEquals(old.device().id(),d.id());
             world.registry.applyPending();assertEquals(before,stock(world));
-            var boundaries=new HashMap<Long,PassiveNetwork.Reservoir>();for(var n:graph(world).reservoirs())if(n.id()>0&&n.kind()==PassiveNetwork.NodeKind.RESERVOIR)boundaries.put(n.id(),n);
-            var nativeDevices=world.ledger.active().values().stream().map(r->{var x=r.device();return x.id()==3?new Device(x.id(),x.position(),kind,x.facing(),x.geometry(),x.control()):x;}).toList();
-            var nativeGraph=PhysicalFluidTopology.compile(nativeDevices,boundaries).islands().getFirst().graph();
-            assertEquals(nativeGraph.pipes(),graph(world).pipes());assertEquals(1,graph(world).pipes().stream().filter(p->p.control() instanceof FlowControl.Mover).count());
-            assertEquals(PipePresentation.actuatorMappings(new Device(d.id(),d.position(),kind,d.facing(),d.geometry(),d.control()),graph(world)),PipePresentation.actuatorMappings(d,graph(world)));assertTrue(world.commands.isEmpty());
+            // The one-block mover this was once compared with is gone (batch 2026-10-28-old-mover-removal): the in-line
+            // mover is the only form, one driven pipe in the host's bore.
+            assertEquals(1,graph(world).pipes().stream().filter(p->p.control() instanceof FlowControl.Mover).count());
+            assertFalse(PipePresentation.actuatorMappings(d,graph(world)).isEmpty());assertTrue(world.commands.isEmpty());
         }
     }
     @Test void pendingControlResizeRemovalAndReinstallationComposeAndRoundTrip(){

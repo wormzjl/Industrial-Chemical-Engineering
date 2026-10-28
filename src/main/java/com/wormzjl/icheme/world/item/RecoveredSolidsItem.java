@@ -37,12 +37,13 @@ public final class RecoveredSolidsItem extends Item {
     }
     @Override public void appendHoverText(ItemStack stack,TooltipContext context,List<Component> tooltip,TooltipFlag flag) {
         var value=contents(stack);
-        if(value.isEmpty()){tooltip.add(Component.literal("No captured solids"));return;}
+        if(value.isEmpty()){tooltip.add(Component.translatable("tooltip.icheme.recovered_solids.empty"));return;}
         var contents=value.orElseThrow();
-        tooltip.add(Component.literal(String.format(Locale.ROOT,"Captured solids: %.6g kg",contents.solids().massKg())));
+        tooltip.add(Component.translatable("tooltip.icheme.recovered_solids.mass",String.format(Locale.ROOT,"%.6g",contents.solids().massKg())));
         int shown=0;for(var p:contents.solids().populations()){
-            if(shown++==8){tooltip.add(Component.literal("More particle grades stored in this container"));break;}
-            tooltip.add(Component.literal(String.format(Locale.ROOT,"%s · %.6g µm · %.6g kg",p.material().id(),p.size().diameterMetres()*1e6,p.massKg())));
+            if(shown++==8){tooltip.add(Component.translatable("tooltip.icheme.recovered_solids.more"));break;}
+            tooltip.add(Component.translatable("tooltip.icheme.recovered_solids.grade",p.material().id(),
+                    String.format(Locale.ROOT,"%.6g",p.size().diameterMetres()*1e6),String.format(Locale.ROOT,"%.6g",p.massKg())));
         }
     }
 }

@@ -399,8 +399,9 @@ class ColumnStructureTest {
     /**
      * Owner answer Q9 (a), batch 2026-10-26-multi-machine-framework: the reboiler's vapour return only on a column whose
      * component design has a kettle. With a kettle, and without a component design, the nozzles stand as before; the sump
-     * steam turns to the front from the return's row (finding F3; finding F1 had left it out). A column stripped by sump
-     * steam has no return, and its steam takes its home side at that row.
+     * steam stands a row over the return, under the bottom tray (the sump's stack, batch 2026-10-27-column-sump), turned to
+     * the front: on its home side its pipe would crowd the return's (finding F3; finding F1 had left it out). A column
+     * stripped by sump steam has no return, and its steam takes its home side at that row.
      */
     @Test
     void theVapourReturnComesWithAKettle() {
@@ -415,9 +416,11 @@ class ColumnStructureTest {
         assertEquals(List.of(), ColumnStructure.unplaced(before));
         var steam = ColumnDesign.sides(before).stream().filter(n -> n.role() == Role.STEAM).findFirst().orElseThrow();
         var vapourReturn = ColumnDesign.sides(before).stream().filter(n -> n.role() == Role.VAPOUR_RETURN).findFirst().orElseThrow();
-        assertEquals(List.of(FRONT, vapourReturn.nozzle().base()[1]), List.of(steam.side(), steam.nozzle().base()[1]), "the steam turns at the return's row");
+        assertEquals(List.of(FRONT, vapourReturn.nozzle().base()[1] + 1), List.of(steam.side(), steam.nozzle().base()[1]), "the steam turns a row over the return");
+        assertTrue(steam.nozzle().base()[1] < before.bottomTangent() + plain.trayHeight(2, plain.trays()), "the steam stands under the bottom tray");
         var stripped = column.apply(false);
         assertEquals(List.of(), ColumnStructure.unplaced(stripped));
+        assertEquals(steam.nozzle().base()[1], ColumnDesign.sides(stripped).stream().filter(n -> n.role() == Role.STEAM).findFirst().orElseThrow().nozzle().base()[1]);
         assertEquals(List.of(Role.VAPOUR_OUTLET, Role.REFLUX, Role.FEED, Role.STEAM, Role.BOTTOMS), stripped.nozzles().stream().map(EquipmentShape.Nozzle::role).toList());
         assertEquals(LEFT, ColumnDesign.sides(stripped).stream().filter(n -> n.role() == Role.STEAM).findFirst().orElseThrow().side());
     }

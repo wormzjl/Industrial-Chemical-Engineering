@@ -378,6 +378,18 @@ public final class ShapeRasterizer {
         return geometry(shape).fluidCells;
     }
 
+    /**
+     * Whether the vessel's interior cells let skylight through (owner request 2026-10-27: "Remove the shadow in
+     * drum/vessel skirt"): its skirt shows its inside through its port, slots or bays, a drum's or a column's hollow skirt
+     * and a unit's open one. Opaque, they leave the skirt's floor lit only from its ring, a light level less a block
+     * inwards: a stepped shadow, down to level 9 under a 10 m drum. Through them, the floor takes the skylight of the open
+     * ground beside the vessel, and roofs, caves and night still darken it. Any other vessel keeps its interior opaque and
+     * its shadow on the ground under it.
+     */
+    public static boolean skylight(EquipmentShape shape) {
+        return geometry(shape).skylight;
+    }
+
     /** Surface polygons of the cell at its actual position, without key normalization; {@code codes} as {@link #cellCodes}. */
     static List<Polygon> surface(EquipmentShape shape, int x, int y, int z, long codes) {
         return surface(shape, x, y, z, codes, true);
@@ -484,6 +496,8 @@ public final class ShapeRasterizer {
          */
         private final boolean hollow;
         private final double slotLow, slotHigh, innerRadius;
+        /** Its interior cells let skylight through: a hollow skirt or a unit's open one ({@link ShapeRasterizer#skylight}). */
+        private final boolean skylight;
         /** A drum's manway and a lying drum's boot, or null. */
         private final @Nullable Manway manway;
         private final EquipmentShape.@Nullable Boot boot;
@@ -578,6 +592,7 @@ public final class ShapeRasterizer {
                 if (manway != null) manway.draw(mesh);
                 for (double c : saddles) saddle(c);
             }
+            skylight = unit != null ? unit.openSkirt : hollow;
             if (column != null) {
                 var ladders = new Mesh();
                 ladders.transform(transform);

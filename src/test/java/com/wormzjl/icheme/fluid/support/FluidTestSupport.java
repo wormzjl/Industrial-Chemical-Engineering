@@ -22,6 +22,15 @@ public final class FluidTestSupport {
 
     private FluidTestSupport() {}
 
+    /**
+     * The registered kind of a one-cell device a test lays out by its hydraulic kind: a pump or compressor is an in-line
+     * mover, a {@code PIPE} carrying its control (batch 2026-10-28-old-mover-removal); every other kind is itself.
+     */
+    public static com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind mechanical(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind kind) {
+        return kind == com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PUMP || kind == com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.COMPRESSOR
+                ? com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE : kind;
+    }
+
     /** First step of the multi-interval line rigs: small enough that a transient does not begin with an oversized
      * attempt; the controller doubles out of it within a few substeps. */
     public static final double COLD_START_SECONDS = .05;

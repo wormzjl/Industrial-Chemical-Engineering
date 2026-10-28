@@ -4,8 +4,6 @@
     "icheme:fluid_reservoir",
     "icheme:fluid_pipe",
     "icheme:pipe_rack",
-    "icheme:fluid_pump",
-    "icheme:fluid_compressor",
     "icheme:fluid_generator",
     "icheme:fluid_void",
     "icheme:inline_filter",

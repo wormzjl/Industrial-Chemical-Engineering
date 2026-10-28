@@ -17,8 +17,6 @@ public final class ModBlocks {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(IChemE.MOD_ID);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_RESERVOIR=fluid("fluid_reservoir",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.RESERVOIR);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_PIPE=fluid("fluid_pipe",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE);
-    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_PUMP=fluid("fluid_pump",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PUMP);
-    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_COMPRESSOR=fluid("fluid_compressor",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.COMPRESSOR);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_GENERATOR=fluid("fluid_generator",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_VOID=fluid("fluid_void",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.VOID);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> INLINE_FILTER=fluid("inline_filter",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.FILTER);
@@ -41,6 +39,7 @@ public final class ModBlocks {
                     .strength(3.5F)
                     .sound(SoundType.METAL)
                     .requiresCorrectToolForDrops()
+                    .noOcclusion()
     );
 
     // Parametric vessels (batch 2026-10-15-custom-equipment-rendering): placed whole by EquipmentStructure, no items, no drops.

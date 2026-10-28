@@ -27,15 +27,25 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * placed blocks out of the vessel. A closed vessel's cell is opaque: it casts its shadow and gives Distant Horizons a
  * solid voxel. An {@link #OPEN} cell (a floating-roof tank's, owner request 2026-10-21: its roof shows from above, plan
  * section 3.3) passes light, hides no face beside it and collides up to the tank's floating roof where it stands now
- * ({@link FloatingRoofs}); the rolling ladder down to the roof is climbable.
+ * ({@link FloatingRoofs}); the rolling ladder down to the roof is climbable. A {@link #SKYLIGHT} cell (a vessel whose
+ * skirt shows its inside, {@link com.wormzjl.icheme.science.equipment.ShapeRasterizer#skylight}) is solid and hides the
+ * faces beside it as a closed one, but lets light through as a shell cell does, so the floor inside the skirt is lit as
+ * the ground beside the vessel. A save from before the property reads it false: the vessel's next load restates it
+ * ({@link EquipmentStructure#restateLater}).
  */
 public final class EquipmentInteriorBlock extends Block {
     public static final MapCodec<EquipmentInteriorBlock> CODEC = simpleCodec(EquipmentInteriorBlock::new);
     public static final BooleanProperty OPEN = BooleanProperty.create("open");
+    public static final BooleanProperty SKYLIGHT = BooleanProperty.create("skylight");
 
     public EquipmentInteriorBlock(Properties properties) {
         super(properties);
-        registerDefaultState(stateDefinition.any().setValue(OPEN, false));
+        registerDefaultState(stateDefinition.any().setValue(OPEN, false).setValue(SKYLIGHT, false));
+    }
+
+    /** Light passes: an open tank's cell or a skylight one. */
+    private static boolean clear(BlockState state) {
+        return state.getValue(OPEN) || state.getValue(SKYLIGHT);
     }
 
     @Override
@@ -45,7 +55,7 @@ public final class EquipmentInteriorBlock extends Block {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(OPEN);
+        builder.add(OPEN, SKYLIGHT);
     }
 
     @Override
@@ -60,12 +70,12 @@ public final class EquipmentInteriorBlock extends Block {
 
     @Override
     protected int getLightBlock(BlockState state, BlockGetter level, BlockPos position) {
-        return state.getValue(OPEN) ? 0 : super.getLightBlock(state, level, position);
+        return clear(state) ? 0 : super.getLightBlock(state, level, position);
     }
 
     @Override
     protected boolean propagatesSkylightDown(BlockState state, BlockGetter level, BlockPos position) {
-        return state.getValue(OPEN) || super.propagatesSkylightDown(state, level, position);
+        return clear(state) || super.propagatesSkylightDown(state, level, position);
     }
 
     @Override
