@@ -71,13 +71,24 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
     }
     /** Nonnegative interval transport; a junction counts outgoing material once. A void aggregates incoming rates
      * from independent islands as one second of transport (intervalSeconds = 1), never its dummy boundary inventory. */
-    public record PipeInfo(PipeTransfer.Stream contents,List<PipeConnection> connections,boolean junction,boolean changedDirection){
+    public record PipeInfo(PipeTransfer.Stream contents,List<PipeConnection> connections,boolean junction,boolean changedDirection,Reading reading){
+        public PipeInfo(PipeTransfer.Stream contents,List<PipeConnection> connections,boolean junction,boolean changedDirection){this(contents,connections,junction,changedDirection,null);}
         public PipeInfo {
             Objects.requireNonNull(contents);connections=List.copyOf(connections);
             if(connections.size()>12||connections.stream().map(PipeConnection::pipeId).distinct().count()!=connections.size())
                 throw new IllegalArgumentException("Invalid pipe inspection connections");
         }
         public static PipeInfo empty(int components){return new PipeInfo(new PipeTransfer.Stream(0,new double[3][components],new double[3]),List.of(),false,false);}
+        public PipeInfo withReading(Reading value){return new PipeInfo(contents,connections,junction,changedDirection,value);}
+    }
+    /**
+     * The stream a plain pipe carries, as its line gauge reads it (fluid-16, batch 2026-10-27-heat-exchanger-design,
+     * OWNER_TEST_REVIEW.md section 6): the temperature (K) of what flows and the pressure (Pa) at the block. A still pipe
+     * ({@code flowing} false) shows the last flowing temperature, or what lies in it at rest.
+     */
+    public record Reading(double temperature,double pressure,boolean flowing) {
+        public Reading {if(!(temperature>0)||!Double.isFinite(temperature)||!Double.isFinite(pressure))throw new IllegalArgumentException("Invalid line reading");}
+        public Reading still(){return new Reading(temperature,pressure,false);}
     }
     /** Speed is the previous-five-online-seconds bulk speed at this block's bore; gradient is endpoint pressure difference / path length. */
     public record PipeConnection(long pipeId,double massRateKgPerSecond,double velocityMetresPerSecond,double pressureDropPascalPerMetre,boolean reverse){
@@ -95,15 +106,80 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      * a side without fans; an exchanger side's bypass share as it stands (W4), null for another side; a fired heater's coil:
      * its burners' share of full firing, the set point (K) and the coil's most heat (W) with the burners as they are, null for
      * a side without burners.
+     *
+     * <p>fluid-16 (the heat GUI, HEAT_GUI_PLAN.md section 1): the {@code actuator} the side's control moves, as a key the
+     * screen names ({@link #ACTUATORS}), and its {@code effort}, 0 to 1 (the bypassed share, the fans' speed, the burners'
+     * share of the coil's duty), or null; the controller's planned {@code limit} by its name; every inlet and outlet of the
+     * unit, both sides ({@link Port}); and an exchanger's control lines ({@link Lines}), null for a unit without them.</p>
      */
     public record Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,
-                       Double burners,Double setPoint,Double maximumWatt,Double bypass) {
+                       Double burners,Double setPoint,Double maximumWatt,Double bypass,
+                       String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
+        /** The actuators the screen names: an internal bypass, the real bypass valve, a ratio's feed valve, fans, burners, none. */
+        public static final Set<String> ACTUATORS=Set.of("none","bypass","bypass_valve","feed_valve","fans","louvers","burners");
+        /** An exchanger's four nozzles, a kettle's five; a little room for another unit's. */
+        public static final int MAXIMUM_PORTS=8;
+        public Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,Double burners,Double setPoint,Double maximumWatt,Double bypass) {
+            this(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,"none",null,"NONE",List.of(),null);
+        }
         public Heat {
             Objects.requireNonNull(unit);Objects.requireNonNull(side);
+            actuator=actuator==null?"none":actuator;limit=limit==null?"NONE":limit;ports=ports==null?List.of():List.copyOf(ports);
             if(!(outletTemperature>0)||!Double.isFinite(outletTemperature)||!Double.isFinite(heatWatt)||(fans==null)!=(fanPowerWatt==null)
                     ||fans!=null&&!(fans>=0&&fans<=1&&fanPowerWatt>=0&&Double.isFinite(fanPowerWatt))||bypass!=null&&!(bypass>=0&&bypass<=1)
                     ||(burners==null)!=(setPoint==null)||burners!=null&&!(burners>=0&&burners<=1&&setPoint>0&&Double.isFinite(setPoint))
                     ||maximumWatt!=null&&!(maximumWatt>=0&&Double.isFinite(maximumWatt)))throw new IllegalArgumentException("Invalid heat side presentation");
+            if(!ACTUATORS.contains(actuator)||effort!=null&&!(effort>=0&&effort<=1)||limit.length()>32||ports.size()>MAXIMUM_PORTS
+                    ||ports.stream().map(Port::role).distinct().count()!=ports.size())throw new IllegalArgumentException("Invalid heat side control presentation");
+        }
+        /** This side with its control's actuator and effort, its limit, the unit's ports and lines. */
+        public Heat with(String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines);
+        }
+        /** The port of nozzle role {@code role}, or null. */
+        public Port port(String role){for(var p:ports)if(p.role().equals(role))return p;return null;}
+    }
+    /**
+     * The stream at one of a heat unit's nozzles over the last completed interval (fluid-16): the nozzle's role by name
+     * ({@code TUBE_INLET}, a kettle shell's {@code FEED}), its temperature (K) and pressure (Pa), null while the node holds
+     * nothing, its mass flow (kg/s, negative against the nozzle's direction), and what it carries per second by phase:
+     * mol/s on the menu's axis and m³/s, in the order of {@link PipeTransfer.Stream} (hydrocarbon liquid, water, vapour).
+     */
+    public record Port(String role,Double temperature,Double pressure,double massFlow,double[][] phaseMoles,double[] phaseVolumes) {
+        public Port {
+            Objects.requireNonNull(role);Objects.requireNonNull(phaseMoles);Objects.requireNonNull(phaseVolumes);
+            phaseMoles=Arrays.stream(phaseMoles).map(double[]::clone).toArray(double[][]::new);phaseVolumes=phaseVolumes.clone();
+            if(role.length()>32||temperature!=null&&!(temperature>0&&Double.isFinite(temperature))||pressure!=null&&!Double.isFinite(pressure)||!Double.isFinite(massFlow)
+                    ||phaseMoles.length!=3||phaseVolumes.length!=3)throw new IllegalArgumentException("Invalid heat port presentation");
+            for(int p=0;p<3;p++){if(!(phaseVolumes[p]>=0)||!Double.isFinite(phaseVolumes[p]))throw new IllegalArgumentException("Invalid heat port phase");for(double n:phaseMoles[p])if(!(n>=0)||!Double.isFinite(n))throw new IllegalArgumentException("Invalid heat port amount");}
+        }
+        @Override public double[][] phaseMoles(){return Arrays.stream(phaseMoles).map(double[]::clone).toArray(double[][]::new);}
+        @Override public double[] phaseVolumes(){return phaseVolumes.clone();}
+    }
+    /**
+     * An exchanger's control lines as the side's screen draws them (fluid-16, W8): this side's lines {@code status} by
+     * {@link FluidWorldAuthority.Lines.Status} name, or {@code NONE} where only the other side asks for lines; how many parts
+     * are not in place; and every part the exchanger's design asks for ({@link Part}).
+     */
+    public record Lines(String status,int missing,List<Part> parts) {
+        public static final int MAXIMUM_PARTS=12;
+        public Lines {
+            Objects.requireNonNull(status);parts=List.copyOf(parts);
+            if(status.length()>32||missing<0||parts.size()>MAXIMUM_PARTS||parts.stream().map(Part::slot).distinct().count()!=parts.size())throw new IllegalArgumentException("Invalid exchanger lines presentation");
+        }
+        public Part part(String slot){for(var p:parts)if(p.slot().equals(slot))return p;return null;}
+    }
+    /**
+     * One part of an exchanger's lines: its slot ({@code shell_inlet_tee}), its state by {@code AssemblyReport.State} name
+     * ({@code NOT_VALIDATED} before a check), the report's detail and the place of its fault (a block position, or
+     * {@code Long.MIN_VALUE} for none), and the stream at the part when one is registered there: a tee's temperature (K), a
+     * valve's or a metered line's mass flow (kg/s).
+     */
+    public record Part(String slot,String state,String detail,long at,Double temperature,Double massFlow) {
+        public Part {
+            Objects.requireNonNull(slot);Objects.requireNonNull(state);detail=detail==null?"":detail;
+            if(slot.length()>48||state.length()>32||detail.length()>64||temperature!=null&&!(temperature>0&&Double.isFinite(temperature))||massFlow!=null&&!Double.isFinite(massFlow))
+                throw new IllegalArgumentException("Invalid exchanger part presentation");
         }
     }
     /** Every field but the heat side's: a view of a device that is not one. */

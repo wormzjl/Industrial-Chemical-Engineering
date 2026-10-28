@@ -46,9 +46,12 @@ import java.util.*;
  * way it faces.</p>
  * <p>{@code fluid-13}: power also controls generators; void contents are accepted incoming transport, normalized to one second.</p>
  * <p>{@code fluid-14}: a tank publishes capacity and separate top/bottom absolute pressures, including empty capacity.</p>
+ * <p>{@code fluid-16} (the heat GUI, batch 2026-10-27-heat-exchanger-design, HEAT_GUI_PLAN.md): a heat side's view carries
+ * its control's actuator, effort and limit, the stream at every port of its unit and an exchanger's lines part by part;
+ * a pipe's inspection carries the line reading of the stream it carries.</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-15";
+    public static final String PROTOCOL="fluid-16";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -120,6 +123,7 @@ public final class FluidNetwork {
                 requirePhaseAxis(view.pipeInfo().contents().phaseMoles(),components.size());
             }
             if(view.state()!=null)requirePhaseAxis(view.state().phaseMoles(),components.size());
+            if(view.heat()!=null)for(var port:view.heat().ports())requirePhaseAxis(port.phaseMoles(),components.size());
             for(var transfer:view.pipeHistory()){requirePhaseAxis(transfer.forward().phaseMoles(),components.size());requirePhaseAxis(transfer.reverse().phaseMoles(),components.size());}
             // A crystal (owner decision D23) is made of a component of the axis, wherever the view shows solids.
             if(view.state()!=null)requireCrystalAxis(view.state().solids(),components);

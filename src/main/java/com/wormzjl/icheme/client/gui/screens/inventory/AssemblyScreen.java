@@ -507,27 +507,35 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         var where = text(part.where());
         var r = slotReport(part.slot());
         if (r == null) return tr("state.not_validated", name, where);
-        String detail = r.detail();
-        return switch (r.state()) {
+        return stateText(name, where, part.wanted() == null ? null : text(part.wanted()), r.state(), r.detail(), r.at());
+    }
+
+    /**
+     * A slot's state in words (plan section 5.3), for a column's part or an exchanger's line part (the heat GUI): its
+     * {@code name}, {@code where} it goes, the kind its slot asks for ({@code wanted}, null: where), and the report's
+     * state, detail and the place of its fault.
+     */
+    public static Component stateText(Component name, Component where, @Nullable Component wanted, AssemblyReport.State state, String detail, long at) {
+        return switch (state) {
             case OK -> tr("state.ok", name);
             case MISSING -> detail.isEmpty() ? tr("state.missing", name, where)
-                    : detail.equals("terminal") ? tr("state.missing.terminal", name, position(r.at()))
+                    : detail.equals("terminal") ? tr("state.missing.terminal", name, position(at))
                     : detail.startsWith("returns:") ? tr("state.missing.returns", name, role(detail.substring(8)))
-                    : tr("state.missing.found", name, found(detail), position(r.at()));
-            case OPEN_END -> detail.equals("unconnected") || r.at() == AssemblyReport.NONE ? tr("state.open_end.unconnected", name, where)
-                    : tr("state.open_end", name, position(r.at()));
+                    : tr("state.missing.found", name, found(detail), position(at));
+            case OPEN_END -> detail.equals("unconnected") || at == AssemblyReport.NONE ? tr("state.open_end.unconnected", name, where)
+                    : tr("state.open_end", name, position(at));
             case NOT_LOADED -> {
-                var at = BlockPos.of(r.at());
-                yield tr("state.not_loaded", name, at.getX() >> 4, at.getZ() >> 4);
+                var pos = BlockPos.of(at);
+                yield tr("state.not_loaded", name, pos.getX() >> 4, pos.getZ() >> 4);
             }
-            case WRONG_KIND -> tr("state.wrong_kind", name, found(detail), part.wanted() == null ? where : text(part.wanted()));
+            case WRONG_KIND -> tr("state.wrong_kind", name, found(detail), wanted == null ? where : wanted);
             case WRONG_PORT -> detail.equals("backwards") ? tr("state.backwards", name)
                     : detail.startsWith("returns:") ? tr("state.wrong_port.returns", name, role(detail.substring(8)))
                     : tr("state.wrong_port", name, role(detail), where);
             case VALVE_REVERSED -> tr("state.valve_reversed", name);
-            case EXTRA_VALVE -> tr("state.extra_valve", name, found(detail), position(r.at()));
+            case EXTRA_VALVE -> tr("state.extra_valve", name, found(detail), position(at));
             case WRONG_ORDER -> tr("state.wrong_order", name, where);
-            case BRANCHED -> tr("state.branched", name, position(r.at()));
+            case BRANCHED -> tr("state.branched", name, position(at));
             case SHARED -> tr("state.shared", name);
         };
     }

@@ -41,5 +41,12 @@ How the numbers are read:
 
 ## 4. Verification
 
-- Gates: `HeatDiagramTest` (every unit and line design: parts inside the grid and apart, a square at every nozzle a line meets, every text has its English line); `FluidPacketCodecTest` (fluid-16; ports, lines and the pipe reading round-trip and are bounded); `FluidGuiConsistencyTest` (the Control page's columns at 300 to 790 px); `HeatPresentationTest` (ports and the pipe reading from a solved island).
-- Software renders of the drawing to SVG (`tools/heat-gui-renders/`), judged by eye. No dev-client check (owner: enough client testing). `./gradlew test` green before the commit.
+- Gates: `HeatDiagramTest` (every unit and line design: parts inside the grid and apart, a square at every nozzle a line meets, every text has its English line, no key defined twice); `FluidPacketCodecTest` (fluid-16; ports, lines and the pipe reading round-trip and are bounded); `FluidGuiConsistencyTest` (the Control page's columns at 300 to 790 px); `HeatPresentationTest` (an air cooler's ports and fans from a solved island; an exchanger's lines part by part and the bypass valve or internal bypass acting).
+- Software renders of the drawing to PNG (`tools/heat-gui-renders/HeatDiagramRender.java`, Java2D, the drawing's own `HeatDiagram` records), judged by eye. No dev-client check (owner: enough client testing). `./gradlew test` green before the commit.
+
+## 5. As built (2026-10-28)
+
+- The status line sits where every page has it, under the tabs (not above Close and Apply); the raw status shows on hover.
+- The Control tab has its own mouse handlers: a scroll area of another page never takes its clicks. One walker lays out and draws the column, so a widget and its text cannot drift apart when it scrolls.
+- The statuses stay as the server writes them (the tests read them); the screen re-reads the LOW LIMIT and DUTY INSUFFICIENT clauses by their formats (`%.1f K`). A change to those formats needs the screen's patterns changed with it.
+- Not gated: the authority's memory of a pipe's last flowing reading (`lineReading`), and the kettle's shell ports (`poolPorts`); both are read only by the screen.

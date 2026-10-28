@@ -24,6 +24,7 @@ Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (th
 - [HX_ZERO_WALL_STUDY_REVIEW.md](HX_ZERO_WALL_STUDY_REVIEW.md): the revision 3 study: the wall without heat, the relay planned at dispatch, three give-back splits, holds, and the controller.
 - [HX_TIMING_STUDY_REVIEW.md](HX_TIMING_STUDY_REVIEW.md): study W3a, how a side reads its partner on the game's clock: forms A, B and C (harness part 8); recommends C, the fence (Q16).
 - [HEAT_EXCHANGER_PLAN_REVIEW.md](HEAT_EXCHANGER_PLAN_REVIEW.md): the review of revision 3 against the code (a Fable subagent, read-only; 22 findings, taken into revision 4).
+- [HEAT_GUI_PLAN.md](HEAT_GUI_PLAN.md): the mockup built: the Control tab, the stream switch, a pipe's temperature (fluid-16), the owner options Q-G1 to Q-G4 and the as-built notes.
 
 ## Code areas
 
@@ -85,6 +86,13 @@ Changed by W8:
 - `science/fluid/network`: `ExchangerRelay.Operation` and `Read.operation`, `PassiveStepSolver.couple` (the valve's planned target, `VALVE_DEADBAND`), `PassiveNetwork.Pipe.withControl`;
 - `runtime/fluid`: `HeatUnit` (`Mode.RATIO`, `lines`), `IslandCoordinator` (`operations`, `sameControl`), `FluidWorldAuthority` (`Lines`, the held valves, `operate`, the lines' status), `PhysicalRegistry.flowmeterOn`; `runtime/instrument/InstrumentService` (a flowmeter installed or removed);
 - `world/level/block/EquipmentStructure.sideIdentities`; `network/FluidNetwork` (`LinesPayload`), `FluidDeviceScreen` (the ratio mode and field, Check lines), `en_us.json`.
+
+Changed by the heat GUI task (branch `claude/heat-gui-redesign-abb1db`):
+
+- `runtime/fluid`: `FluidView` (`Heat.actuator`, `effort`, `limit`, `ports`, `lines`; the records `Port`, `Lines`, `Part`; `PipeInfo.reading`), `HeatPresentation` (new: a unit's ports, actuator and lines, read where the side's view is built), `FluidWorldAuthority` (`Lines.slots`, two lines in `view`, `lineReading` and its memory of a pipe's last flowing reading);
+- `runtime/assembly/ExchangerLines.publish` (passes the report's slots); `network/FluidNetwork` (fluid-16; a port's phase axis checked);
+- `client/gui/common/HeatDiagram` (new: each unit's flowsheet on a design grid), `client/gui/screens/inventory/HeatFlowsheet` (new: draws it), `FluidDeviceScreen` (the Control tab, the stream switch, a pipe's temperature and pressure, the statuses in words; the rail's control rows removed), `AssemblyScreen.stateText` (the hover text shared);
+- `en_us.json` (`heat_ratio_input` and the Control tab's lines).
 
 The plan also touches:
 
@@ -212,6 +220,12 @@ The plan also touches:
   - Level renamed with the column batch's `nbt.js`; copied to `run/saves/IChemE heat exchanger review`.
 - 2026-10-28, owner test of the review world, in the owner test commit: findings and proposals in OWNER_TEST_REVIEW.md, mockup HEAT_GUI_MOCKUP.svg. Two read-only Opus surveys (GUI, water data). The water saturation data already span the triple to the critical point (IAPWS); the notice is the ideal steam's 2 % limit. No reproduction yet: the owner's dev client ran from this worktree. The old pump and compressor removal went to its own session (owner's choice).
 - 2026-10-28, Q15 answered (yes: drop the curve-span notice), in the Q15 commit. `HeatCurve.extrapolated`, never wired to a status line, removed with its test assertion; plan sections 3, 4 and 12 record the answer. The property models' data-range notices stay (AGENTS.md "Thermo validity"); the heater coils' "water vapour partial pressure extrapolated above 250 kPa" is one of them.
+- 2026-10-28, the heat GUI (owner: "GUI seems ok but it needs its own thread"), on branch `claude/heat-gui-redesign-abb1db` (base `8f78119b`): plan `cef28f4a`, the build in the heat GUI commit.
+  - Control tab on every heat side and the kettle's shell: the flowsheet (nozzles, the W8 parts in the report's colours, T and flow on every line, Check lines on the drawing), the side selector, the modes naming the actuator, the set point and "Never cool below", "Acting now" with its effort bar, the lines' note. Overview: a stream switch, each port's T, P, flow, phases and composition. A pipe: its temperature and pressure, "(no flow)" when still.
+  - Fluid wire fluid-16 (no compatibility work): the side's actuator, effort, limit, ports and lines, and a pipe's reading, read by `HeatPresentation` where the view is built; a replay sends the cache. The actuator's name comes from the server, so louvers need one server line.
+  - Fixes: the duplicate `ratio_input` (the exchanger's is `heat_ratio_input`); statuses in words clause by clause, LOW LIMIT and DUTY INSUFFICIENT in the player's unit.
+  - Owner options Q-G1 to Q-G4 built as (a) (plan section 3).
+  - Gates: `HeatDiagramTest` 5, `HeatPresentationTest` 2, `FluidPacketCodecTest` +2, `FluidGuiConsistencyTest` +1; quick suite 1714 (one failure, the new test's valve built without a valve's control, fixed and its classes re-run). Layout judged by PNG renders (`tools/heat-gui-renders/`); no in-game check (owner).
 
 ## Notes
 
@@ -233,3 +247,4 @@ The plan also touches:
   - D6, a budget hold counted as stopped, has no gate.
 - 2026-10-28 (W7 open): the kettle's LIQUID_OUTLET is a plain vessel port, so the level is the player's (no weir); the pool's film follows the level, not a level controller.
 - Code guide: not updated yet; the fluid network chapter is updated before the merge.
+- Open from the heat GUI (2026-10-28): Q-G1 to Q-G4 await the owner; louvers on an air cooler need `HeatPresentation.complete` to name `louvers` (its language lines exist); the screen reads the LOW LIMIT and DUTY INSUFFICIENT clauses by their `%.1f K` formats; not gated: a pipe's remembered reading and the kettle's shell ports; the Control tab not seen in the client.
