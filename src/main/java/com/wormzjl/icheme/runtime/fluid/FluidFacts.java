@@ -284,16 +284,13 @@ final class FluidFacts {
     private static void column(Fields f,ColumnUnit u) {
         var s=u.setpoints();var t=u.totals();
         f.count(u.id());position(f,u.master());f.bool(u.running())
-                .record(q->q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())
-                        .doubles(s.steamPerFeed()).doubles(s.drawsPerFeed()).doubles(s.pumparoundsPerFeed()))
+                .record(q->setpoints(q,s))
                 .list(u.stations(),(q,st)->q.name(st.port()).count(st.index()).count(st.device()).count(st.valve()).record(a->account(a,st.account())))
                 .record(q->q.record(a->account(a,t.taken())).record(a->account(a,t.produced())).f64(t.reboiler()).f64(t.condenser()).f64(t.pumparounds()));
     }
     private static ColumnUnit column(Record f) {
         long id=f.count(0);var master=position(f);boolean running=f.bool(false);
-        var setpoints=f.record(null,q->{double design=q.f64(0),rate=q.f64(0),condenser=q.f64(0),reflux=q.f64(0),reboiler=q.f64(0);
-            var steam=q.doubles(new double[0]);var draws=q.doubles(new double[0]);var pumparounds=q.doubles(new double[0]);
-            return valid(q,"column setpoints",()->new com.wormzjl.icheme.science.column.operation.Setpoints(design,rate,condenser,reflux,reboiler,steam,draws,pumparounds));});
+        var setpoints=f.record(null,FluidFacts::setpoints);
         var stations=f.list(List.of(),q->{var port=q.name(com.wormzjl.icheme.science.column.operation.Port.class,null);long index=q.count(0),device=q.count(0),valve=q.count(0);
             var account=q.record(null,FluidFacts::account);required(port,q,"station port");required(account,q,"station account");
             if(index>=ColumnUnit.MAXIMUM_STATIONS)throw q.invalid("station index "+index);
@@ -303,6 +300,15 @@ final class FluidFacts {
             return valid(q,"column totals",()->new ColumnUnit.Totals(taken,produced,reboiler,condenser,pumparounds));});
         required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
         return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals));
+    }
+    private static Fields setpoints(Fields q,com.wormzjl.icheme.science.column.operation.Setpoints s) {
+        return q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())
+                .doubles(s.steamPerFeed()).doubles(s.drawsPerFeed()).doubles(s.pumparoundsPerFeed());
+    }
+    private static com.wormzjl.icheme.science.column.operation.Setpoints setpoints(Record q) {
+        double design=q.f64(0),rate=q.f64(0),condenser=q.f64(0),reflux=q.f64(0),reboiler=q.f64(0);
+        var steam=q.doubles(new double[0]);var draws=q.doubles(new double[0]);var pumparounds=q.doubles(new double[0]);
+        return valid(q,"column setpoints",()->new com.wormzjl.icheme.science.column.operation.Setpoints(design,rate,condenser,reflux,reboiler,steam,draws,pumparounds));
     }
     private static void account(Fields f,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account a){f.doubles(a.moles()).f64(a.energy());}
     private static com.wormzjl.icheme.science.column.operation.ColumnCycle.Account account(Record f) {
@@ -344,24 +350,69 @@ final class FluidFacts {
             default->throw new IllegalArgumentException("unknown control "+kind);
         });
     }
-    /** The topology unit's state: its queued events, each with the registrations it would install. */
-    static byte[] events(List<WorldTopologyLedger.Event> events) {
+    /**
+     * The topology unit's state: its queued events, each with the registrations it would install; then the running column
+     * units' engine state ({@link ColumnUnit.State}), by unit. A checkpoint written before the column states has none.
+     */
+    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns) {
+        var states=new ArrayList<ColumnUnit>();for(var u:columns.values())if(u.state()!=null)states.add(u);states.sort(Comparator.comparingLong(ColumnUnit::id));
         return section(f->f.list(events,(q,event)->{uuid(q,event.id());q.count(event.tick());
             q.list(event.edits(),(e,edit)->e.count(edit.id()).list(edit.replacement()==null?List.<WorldTopologyLedger.Registration>of():List.of(edit.replacement()),FluidFacts::registration));
             var touched=new ArrayList<>(event.touched());Collections.sort(touched);q.list(touched,(t,id)->t.count(id));
             var recovery=event.recovery();
             q.list(recovery==null?List.<WorldTopologyLedger.Recovery>of():List.of(recovery),(r,v)->r.count(v.filterId()).list(v.player()==null?List.<UUID>of():List.of(v.player()),FluidFacts::uuid));
-        }));
+        }).list(states,(q,u)->columnState(q.count(u.id()),u.state())));
     }
-    static List<WorldTopologyLedger.Event> events(byte[] data,int offset,int length) {
-        return read(data,offset,length,"state of the topology unit",f->f.list(List.of(),q->{
-            var id=required(uuid(q),q,"event identity");long tick=q.count(0);
-            var edits=q.list(List.of(),e->{long device=e.count(0);var replacement=e.list(List.of(),FluidFacts::registration);if(replacement.size()>1)throw e.invalid("two replacements");
-                return valid(e,"edit",()->new WorldTopologyLedger.Edit(device,replacement.isEmpty()?null:replacement.getFirst()));});
-            var touched=new HashSet<Long>();for(long t:q.list(List.<Long>of(),t->t.count(0)))if(!touched.add(t))throw q.invalid("duplicate touched device");
-            var recovery=q.list(List.of(),r->{long filter=r.count(0);var player=r.list(List.of(),FluidFacts::uuid);return valid(r,"recovery",()->new WorldTopologyLedger.Recovery(filter,player.isEmpty()?null:player.getFirst()));});
-            return valid(q,"event",()->new WorldTopologyLedger.Event(id,tick,edits,touched,recovery.isEmpty()?null:recovery.getFirst()));
-        }));
+    static byte[] events(List<WorldTopologyLedger.Event> events){return topologyState(events,Map.of());}
+    /** A topology unit's state: its events, and the column states that validate (one that does not is dropped: that unit solves again). */
+    record TopologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit.State> columns) {}
+    static TopologyState topologyState(byte[] data,int offset,int length) {
+        return read(data,offset,length,"state of the topology unit",f->{
+            var events=f.list(List.<WorldTopologyLedger.Event>of(),q->{
+                var id=required(uuid(q),q,"event identity");long tick=q.count(0);
+                var edits=q.list(List.of(),e->{long device=e.count(0);var replacement=e.list(List.of(),FluidFacts::registration);if(replacement.size()>1)throw e.invalid("two replacements");
+                    return valid(e,"edit",()->new WorldTopologyLedger.Edit(device,replacement.isEmpty()?null:replacement.getFirst()));});
+                var touched=new HashSet<Long>();for(long t:q.list(List.<Long>of(),t->t.count(0)))if(!touched.add(t))throw q.invalid("duplicate touched device");
+                var recovery=q.list(List.of(),r->{long filter=r.count(0);var player=r.list(List.of(),FluidFacts::uuid);return valid(r,"recovery",()->new WorldTopologyLedger.Recovery(filter,player.isEmpty()?null:player.getFirst()));});
+                return valid(q,"event",()->new WorldTopologyLedger.Event(id,tick,edits,touched,recovery.isEmpty()?null:recovery.getFirst()));
+            });
+            var columns=new HashMap<Long,ColumnUnit.State>();
+            for(var entry:f.list(List.<Map.Entry<Long,ColumnUnit.State>>of(),q->{long id=q.count(0);var state=columnState(q);return new AbstractMap.SimpleEntry<>(id,state);}))
+                if(entry.getValue()!=null&&columns.put(entry.getKey(),entry.getValue())!=null)throw new IllegalArgumentException("Invalid saved topology state: duplicate column unit "+entry.getKey());
+            return new TopologyState(events,columns);
+        });
+    }
+    static List<WorldTopologyLedger.Event> events(byte[] data,int offset,int length){return topologyState(data,offset,length).events();}
+    private static Fields columnState(Fields f,ColumnUnit.State s) {
+        var t=s.table();var ref=t.reference();
+        var held=new double[t.held().length];for(int i=0;i<held.length;i++)held[i]=t.held()[i]?1:0;
+        return f.list(t.axis(),(q,id)->q.text(id))
+                .list(t.products(),(q,p)->q.name(p.port()).count(p.index()).doubles(p.recovery()).f64(p.temperature()).f64(p.pressure()))
+                .f64(t.reboilerPerFeed()).doubles(t.pumparoundPerFeed()).f64(t.condenserPerFeed())
+                .record(q->q.doubles(ref.feedFractions()).f64(ref.feedEnthalpy()).f64(ref.enthalpySlope()).doubles(ref.steamRatios()).f64(ref.alpha()).record(p->setpoints(p,ref.setpoints())))
+                .doubles(held).doubles(s.enthalpy()).i64(s.tableTick()).i64(s.applied()).f64(s.solvedCondenser())
+                .list(s.levels(),(q,l)->q.count(l.device()).i64(l.tick()).f64(l.held()).f64(l.rate()).f64(l.molarMass()))
+                .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())));
+    }
+    /** A column unit's engine state as saved, or null where it does not validate. */
+    private static ColumnUnit.State columnState(Record f) {
+        var axis=f.list(List.<String>of(),q->q.text(""));
+        var products=f.list(List.<com.wormzjl.icheme.science.column.operation.SplitTable.Product>of(),q->{
+            var port=q.name(com.wormzjl.icheme.science.column.operation.Port.class,null);long index=q.count(0);var recovery=q.doubles(new double[0]);double t=q.f64(0),p=q.f64(0);
+            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Product(port,Math.toIntExact(index),recovery,t,p);}catch(RuntimeException invalid){return null;}});
+        double reboiler=f.f64(0);var pa=f.doubles(new double[0]);double condenser=f.f64(0);
+        var reference=f.record(null,q->{var z=q.doubles(new double[0]);double h=q.f64(0),slope=q.f64(0);var steam=q.doubles(new double[0]);double alpha=q.f64(0);
+            var setpoints=q.record(null,p->{try{return setpoints(p);}catch(IllegalArgumentException invalid){return null;}});
+            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Reference(z,h,slope,steam,alpha,setpoints);}catch(RuntimeException invalid){return null;}});
+        var held=f.doubles(new double[0]);var enthalpy=f.doubles(new double[0]);long tableTick=f.i64(0),applied=f.i64(0);double solved=f.f64(0);
+        var levels=f.list(List.<ColumnUnit.State.Level>of(),q->{long device=q.count(0),tick=q.i64(0);double amount=q.f64(0),rate=q.f64(0),molar=q.f64(0);return new ColumnUnit.State.Level(device,tick,amount,rate,molar);});
+        var credits=f.list(List.<ColumnUnit.State.Credit>of(),q->{long device=q.count(0),tick=q.i64(0);
+            var product=q.record(null,a->{try{return account(a);}catch(IllegalArgumentException invalid){return null;}});return product==null?null:new ColumnUnit.State.Credit(device,tick,product);});
+        try {
+            var kept=new boolean[held.length];for(int i=0;i<kept.length;i++)kept[i]=held[i]!=0;
+            if(products.contains(null)||credits.contains(null))return null;
+            return new ColumnUnit.State(new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept),enthalpy,tableTick,applied,solved,levels,credits);
+        }catch(RuntimeException invalid){return null;}
     }
 
     // ---------------- an island ----------------

@@ -115,6 +115,12 @@ public final class ProcessSolveServices {
                 request.operation().input().packageId());
     }
 
+    /** A running column's solve (batch 2026-10-28-column-operation, plan section 6): a V3 job under the solve deadline. */
+    public static AdmissionResult submitColumnUnit(MinecraftServer server,ColumnUnitRequest request,ColumnUnitCommand command) {
+        requireServerThread(server);Objects.requireNonNull(request);Objects.requireNonNull(command);
+        return submit(server,request,command,command.model().hydrocarbon.revision());
+    }
+
     /** Fluid islands share the existing workers and queue with V3; their wall budget starts on the worker. */
     public static AdmissionResult submitFluidIsland(MinecraftServer server,FluidIslandRequest request,FluidIslandCommand command) {
         requireServerThread(server);Objects.requireNonNull(request);Objects.requireNonNull(command);
@@ -310,6 +316,11 @@ public final class ProcessSolveServices {
                 result.add(new V3ColumnCompletion(v3Request, context.admissionDiagnostics(), v3Completion(completion)));
             } else if(context.request() instanceof FluidIslandRequest fluidRequest) {
                 result.add(new FluidIslandCompletion(fluidRequest,context.admissionDiagnostics(),fluidCompletion(completion)));
+            } else if(context.request() instanceof ColumnUnitRequest columnRequest) {
+                // A worker failure, a cancellation or the deadline is a failed solve, named by its status.
+                var outcome=completion.result().map(value->{if(!(value instanceof ColumnUnitSolveResult column))throw new IllegalStateException("Column unit request completed with a different result family");return column.outcome();})
+                        .orElseGet(()->new com.wormzjl.icheme.science.column.operation.ColumnSolve.Failed(completion.status().name()+(completion.detail()==null?"":": "+completion.detail())));
+                result.add(new ColumnUnitCompletion(columnRequest,outcome));
             } else {
                 throw new IllegalStateException("Unknown process-solve request family");
             }
@@ -365,12 +376,12 @@ public final class ProcessSolveServices {
     }
 
     /** Immutable worker envelope. Adding a job family extends this sealed protocol, never the executor count. */
-    public sealed interface ProcessSolveCommand permits V3ColumnCommand,FluidIslandCommand {
+    public sealed interface ProcessSolveCommand permits V3ColumnCommand,FluidIslandCommand,ColumnUnitCommand {
         ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken);
     }
 
     /** Immutable worker result envelope routed only after main-thread completion draining. */
-    public sealed interface ProcessSolveResult permits V3ColumnSolveResult,FluidIslandSolveResult {}
+    public sealed interface ProcessSolveResult permits V3ColumnSolveResult,FluidIslandSolveResult,ColumnUnitSolveResult {}
 
     /** Contains no live level, block entity, callback, or mutable server-owned collection. {@code reads}: each coupled
      * exchanger side's read of its other side, by connection id, made on the server at the dispatch (plan section 5.2). */
@@ -518,7 +529,7 @@ public final class ProcessSolveServices {
     }
 
     /** Stable block identity; no loaded level or block entity is retained. */
-    public sealed interface SolveTarget permits ColumnTarget,FluidIslandTarget {}
+    public sealed interface SolveTarget permits ColumnTarget,FluidIslandTarget,ColumnUnitTarget {}
     public record ColumnTarget(ResourceKey<Level> dimension, BlockPos blockPos) implements SolveTarget {
         public ColumnTarget {
             Objects.requireNonNull(dimension, "dimension");
@@ -526,12 +537,35 @@ public final class ProcessSolveServices {
         }
     }
 
+    /** A running column unit, by its identity (batch 2026-10-28-column-operation). */
+    public record ColumnUnitTarget(ResourceKey<Level> dimension,long unit) implements SolveTarget {
+        public ColumnUnitTarget {Objects.requireNonNull(dimension);if(unit<=0)throw new IllegalArgumentException("Invalid column unit identity");}
+    }
+    /** Server-only delivery context of a column unit's solve; the handler gets the outcome, a failed one for a worker failure or a shutdown. */
+    public record ColumnUnitRequest(long requestId,ColumnUnitTarget target,long inputRevision,java.util.function.Consumer<com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome> handler) implements ProcessSolveRequest {
+        public ColumnUnitRequest {Objects.requireNonNull(target);Objects.requireNonNull(handler);if(requestId<=0||inputRevision<0)throw new IllegalArgumentException("Invalid column unit request stamp");}
+    }
+    /** A column unit's solve: the job and the network's model, read on the server at admission. */
+    public record ColumnUnitCommand(com.wormzjl.icheme.science.column.operation.ColumnSolve.Job job,FluidThermodynamics model,
+                                    com.wormzjl.icheme.science.material.MaterialCatalog catalog,double liquidSupplyScreenRatio) implements ProcessSolveCommand {
+        public ColumnUnitCommand {Objects.requireNonNull(job);Objects.requireNonNull(model);Objects.requireNonNull(catalog);}
+        @Override public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
+            return new ColumnUnitSolveResult(com.wormzjl.icheme.science.column.operation.ColumnSolve.run(job,model,catalog,liquidSupplyScreenRatio,cancellationToken::throwIfCancellationRequested));
+        }
+    }
+    public record ColumnUnitSolveResult(com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome outcome) implements ProcessSolveResult {
+        public ColumnUnitSolveResult {Objects.requireNonNull(outcome);}
+    }
+    public record ColumnUnitCompletion(ColumnUnitRequest request,com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome outcome) implements ProcessSolveCompletion {
+        public ColumnUnitCompletion {Objects.requireNonNull(request);Objects.requireNonNull(outcome);}
+    }
+
     public record FluidIslandTarget(ResourceKey<Level> dimension,long islandId) implements SolveTarget {
         public FluidIslandTarget {Objects.requireNonNull(dimension);if(islandId<=0)throw new IllegalArgumentException("Invalid island identity");}
     }
 
     /** Immutable server-thread request context retained until exactly one terminal completion is drained. */
-    public sealed interface ProcessSolveRequest permits V3ColumnRequest,FluidIslandRequest {
+    public sealed interface ProcessSolveRequest permits V3ColumnRequest,FluidIslandRequest,ColumnUnitRequest {
         long requestId();
 
         SolveTarget target();
@@ -594,7 +628,7 @@ public final class ProcessSolveServices {
     }
 
     /** Marker for the central router; only it may drain the shared completion queue. */
-    public sealed interface ProcessSolveCompletion permits V3ColumnCompletion,FluidIslandCompletion {}
+    public sealed interface ProcessSolveCompletion permits V3ColumnCompletion,FluidIslandCompletion,ColumnUnitCompletion {}
 
     public record AdmissionResult(Admission admission, Diagnostics diagnostics) {
         public AdmissionResult {

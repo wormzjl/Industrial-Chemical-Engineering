@@ -2,8 +2,12 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.column.operation.ColumnCycle;
 import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
+import com.wormzjl.icheme.science.column.operation.ColumnSolve;
+import com.wormzjl.icheme.science.column.operation.DriftBands;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.column.operation.SplitTable;
+import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.fluid.network.ConservativeTransport;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
@@ -33,7 +37,32 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     /** The share of an outlet's available moles a slice may take: a margin over the valve's regulation tolerance. */
     static final double TAKE_MARGIN=1-1e-6;
 
-    /** Arrivals at an inlet over online ticks {@code start} to {@code end}. */
+    /** At most one solve per this many online ticks (30 s), except a setpoint edit (plan section 6). */
+    static final long SOLVE_SPACING=600;
+    /** A failed solve's retries back off: 30, 60, 120 s (plan section 6). */
+    static final long[] RETRY_TICKS={600,1200,2400};
+    /** A new table applies at the second cycle after its trigger (owner Q5). */
+    static final long APPLY_TICKS=2*CYCLE_TICKS;
+    /** The windows a save keeps beyond the fence: a port island this far behind still reads its plan. */
+    static final long KEEP_TICKS=2400;
+
+    /** Where a column's solves go (C5). */
+    public interface Solves {
+        /** The calculator input of unit {@code unit}'s design, or null where it has none. */
+        V3ColumnInput design(ColumnUnit unit);
+        /** Submits {@code job}; {@code done} gets its outcome on the server thread. False: not admitted, the next cycle tries again. */
+        boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done);
+        /** No solves: a table comes only from {@link #table}. */
+        Solves NONE=new Solves(){public V3ColumnInput design(ColumnUnit unit){return null;}public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done){return false;}};
+    }
+    /** A solve in flight: why, the cycle that asked and the cycle that applies it; its outcome once it is done. */
+    static final class Pending {
+        final DriftBands.Trigger trigger;final long tick;ColumnSolve.Outcome outcome;
+        Pending(DriftBands.Trigger trigger,long tick){this.trigger=trigger;this.tick=tick;}
+        long applyAt(){return tick+APPLY_TICKS;}
+    }
+
+    /** Arrivals at an inlet over online ticks {@code start} to {@code end}: already in the account, a cycle takes none of it before its time. */
     record Span(long start,long end,Account arrived) {}
     /** A cycle's product credited to an outlet at {@code tick}. */
     record Credit(long tick,Account product) {}
@@ -48,6 +77,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         long nextCycle;
         String status="STARTING: waiting for the first solve";
         ColumnCycle.Step last;
+        /** The solve in flight, the tick of the last one asked, the failures in a row and the earliest retry, the warm seed. */
+        Pending pending;long lastSolve=Long.MIN_VALUE/2,retryAt=Long.MIN_VALUE/2;int failures;V3NeuralSeed seed;
+        /** The cycle that asked the table's solve and the cycle it applied at; V3's own condenser duty there, W; what the last solve said beyond its table. */
+        long tableTick,applied;double solvedCondenser;String note="";
         final Map<Long,ArrayDeque<Span>> spans=new HashMap<>();
         final Map<Long,ArrayDeque<Credit>> credits=new HashMap<>();
         final Map<Long,ArrayDeque<Level>> levels=new HashMap<>();
@@ -58,14 +91,19 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private final PhysicalRegistry registry;
     private final IslandCoordinator coordinator;
     private final double[] weights;
+    /** The network's component ids, water last. */
+    private final List<String> axis;
     private final Map<Long,Run> runs=new TreeMap<>();
     /** Each port device's unit and station, from the ledger's running units. */
     private final Map<Long,Long> portUnits=new HashMap<>();
     /** The port devices whose islands a cycle's new plan reaches at a later tick (the cycle's tick plus the fence), by that tick. */
     private final TreeMap<Long,Set<Long>> wakes=new TreeMap<>();
+    private Solves solves=Solves.NONE;
+    /** Where this world's column solves go. */
+    public void solves(Solves solves){this.solves=Objects.requireNonNull(solves);}
 
-    public ColumnOperation(WorldTopologyLedger topology,PhysicalRegistry registry,IslandCoordinator coordinator,double[] weights) {
-        this.topology=Objects.requireNonNull(topology);this.registry=Objects.requireNonNull(registry);this.coordinator=Objects.requireNonNull(coordinator);this.weights=weights.clone();
+    public ColumnOperation(WorldTopologyLedger topology,PhysicalRegistry registry,IslandCoordinator coordinator,List<String> axis,double[] weights) {
+        this.topology=Objects.requireNonNull(topology);this.registry=Objects.requireNonNull(registry);this.coordinator=Objects.requireNonNull(coordinator);this.weights=weights.clone();this.axis=List.copyOf(axis);if(axis.size()!=weights.length)throw new IllegalArgumentException("One weight per component");
         refresh();
     }
 
@@ -75,10 +113,34 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         runs.keySet().removeIf(id->{var u=units.get(id);return u==null||!u.running();});
         for(var u:units.values()) {
             if(!u.running())continue;
-            runs.computeIfAbsent(u.id(),id->new Run(id,firstCycle(id)));
+            runs.computeIfAbsent(u.id(),id->restore(u));
             for(var s:u.stations())if(s.device()!=0)portUnits.put(s.device(),u.id());
         }
         schedule();
+    }
+    /**
+     * A running unit's run: its saved engine state where it holds one this world can use (the network's axis, an outlet for
+     * every product), so a reload takes no solve; otherwise a start. The cycles keep their grid, staggered by the identity.
+     */
+    private Run restore(ColumnUnit u) {
+        var r=new Run(u.id(),firstCycle(u.id()));var s=u.state();
+        if(s==null||!s.table().axis().equals(axis)||missingStation(u,s.table())!=null)return r;
+        r.table=s.table();r.enthalpy=s.enthalpy();r.tableTick=s.tableTick();r.applied=s.applied();r.solvedCondenser=s.solvedCondenser();r.status="RUNNING";
+        r.lastSolve=s.tableTick();
+        for(var l:s.levels())r.levels.computeIfAbsent(l.device(),d->new ArrayDeque<>()).addLast(new Level(l.tick(),l.held(),l.rate(),l.molarMass()));
+        for(var c:s.credits())r.credits.computeIfAbsent(c.device(),d->new ArrayDeque<>()).addLast(new Credit(c.tick(),c.product()));
+        return r;
+    }
+    /** A unit's engine state into the ledger after each cycle, so a save carries it: the windows older than the plans can still read are dropped. */
+    private void save(Run r) {
+        var u=topology.column(r.unit);if(u==null||!u.running())return;
+        if(r.table==null){if(u.state()!=null)topology.column(u.withState(null));return;}
+        long through=r.nextCycle-FENCE_TICKS-KEEP_TICKS;
+        var levels=new ArrayList<ColumnUnit.State.Level>();
+        for(var e:new TreeMap<>(r.levels).entrySet()){asOf(e.getValue(),Level::tick,through);for(var l:e.getValue())levels.add(new ColumnUnit.State.Level(e.getKey(),l.tick(),l.held(),l.rate(),l.molarMass()));}
+        var credits=new ArrayList<ColumnUnit.State.Credit>();
+        for(var e:new TreeMap<>(r.credits).entrySet()){asOf(e.getValue(),Credit::tick,through);for(var c:e.getValue())credits.add(new ColumnUnit.State.Credit(e.getKey(),c.tick(),c.product()));}
+        topology.column(u.withState(new ColumnUnit.State(r.table,r.enthalpy,r.tableTick,r.applied,r.solvedCondenser,levels,credits)));
     }
     /** A unit's first cycle: the next multiple of the cycle after now, staggered by its identity. */
     private long firstCycle(long unit) {
@@ -112,13 +174,94 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(cycling)return;cycling=true;
         try {
             long now=coordinator.now();
-            for(var r:List.copyOf(runs.values()))while(r.nextCycle<=now&&inletsThrough(r,r.nextCycle)){cycle(r,r.nextCycle);r.nextCycle+=CYCLE_TICKS;}
+            for(var r:List.copyOf(runs.values()))while(r.nextCycle<=now&&inletsThrough(r,r.nextCycle)&&applied(r,r.nextCycle)){cycle(r,r.nextCycle);r.nextCycle+=CYCLE_TICKS;save(r);}
             // A certified port island rests on its old plan: wake it where the new one starts.
             while(!wakes.isEmpty()&&wakes.firstKey()<=now)for(long device:wakes.pollFirstEntry().getValue()){Long owner=registry.owner(device);if(owner!=null)coordinator.portsMoved(owner);}
         } finally{cycling=false;}
         schedule();
     }
     private boolean cycling;
+
+    // ---------------- solves (plan section 6) ----------------
+
+    /**
+     * Whether the cycle at {@code tick} may run: no solve applies there, or its outcome is in and applied now. A solve
+     * applies at the second cycle after its trigger whenever it finishes, so a table never depends on the worker's timing;
+     * the solve deadline bounds the wait (a deadline that expires is a failed solve).
+     */
+    private boolean applied(Run r,long tick) {
+        var p=r.pending;if(p==null||p.applyAt()>tick)return true;
+        if(p.outcome==null)return false;
+        r.pending=null;
+        var u=topology.column(r.unit);
+        String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
+        if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
+            r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();
+            return true;
+        }
+        String reason=refused!=null?refused:((ColumnSolve.Failed)p.outcome).reason();
+        r.failures++;r.retryAt=tick+RETRY_TICKS[Math.min(r.failures,RETRY_TICKS.length)-1];
+        r.note=r.table==null?"":String.format(Locale.ROOT,"the %s solve failed (%s), the table of %d s ago kept",p.trigger.name().toLowerCase(Locale.ROOT),reason,(tick-r.tableTick)/20);
+        if(r.table==null)r.status="NOT READY: "+reason;
+        return true;
+    }
+    /** A product of {@code table} the unit has no outlet for, as a refusal, or null. */
+    private static String missingStation(ColumnUnit u,SplitTable table) {
+        for(var p:table.products())if(u.station(p.port(),p.index())==null)return "the solve gives a "+p.port().name().toLowerCase(Locale.ROOT)+" the column has no nozzle for";
+        return null;
+    }
+    /**
+     * Asks a solve at the cycle at {@code tick} for {@code trigger}, of the state {@code taken}: one in flight per column, at
+     * most one per {@link #SOLVE_SPACING} except a setpoint edit or a start, none before a failure's retry time.
+     */
+    private void request(Run r,ColumnUnit u,long tick,DriftBands.Trigger trigger,ColumnSolve.Taken taken) {
+        if(r.pending!=null||tick<r.retryAt)return;
+        boolean urgent=trigger==DriftBands.Trigger.SETPOINT||trigger==DriftBands.Trigger.START;
+        if(!urgent&&tick<r.lastSolve+SOLVE_SPACING)return;
+        var design=solves.design(u);
+        if(design==null){if(r.table==null)r.status="NOT READY: the design has no operating point";return;}
+        if(taken==null)taken=designTaken(u,design);
+        var pending=new Pending(trigger,tick);
+        var job=new ColumnSolve.Job(trigger,design,u.setpoints(),taken,trigger==DriftBands.Trigger.START?null:r.seed);
+        // In flight before the submission: a solver may answer at once.
+        r.pending=pending;
+        if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.pending=null;return;}
+        r.lastSolve=tick;
+        if(r.table==null)r.status="STARTING: the first solve";
+    }
+    /** A solve's outcome, on the server thread: a cycle waiting for it runs now. */
+    private void done(Run r,Pending pending,ColumnSolve.Outcome outcome) {
+        if(runs.get(r.unit)!=r||r.pending!=pending)return;
+        pending.outcome=outcome;
+        if(r.nextCycle<=coordinator.now()&&r.nextCycle>=pending.applyAt())due();
+    }
+    /** The design's own feed and steam at the set rate, on the network's axis (a start, before anything was taken). */
+    private ColumnSolve.Taken designTaken(ColumnUnit u,V3ColumnInput design) {
+        double[] feed=new double[weights.length];
+        double[] flows=design.feedComponentMolarFlowsMolPerSecond();double total=0;for(double f:flows)total+=f;
+        double scale=total>0&&u.setpoints().feedRate()>0?u.setpoints().feedRate()/total:1;
+        for(int c=0;c<flows.length;c++){int i=axis.indexOf(design.componentBasis().componentId(c));if(i>=0)feed[i]+=flows[c]*scale;}
+        var steam=new ArrayList<ColumnSolve.Steam>();
+        double rate=total*scale;double[] ratios=u.setpoints().steamPerFeed();
+        for(int j=0;j<design.steamFeeds().size();j++)steam.add(new ColumnSolve.Steam(j<ratios.length?ratios[j]*rate:0,design.steamFeeds().get(j).temperatureKelvin(),Double.NaN));
+        return new ColumnSolve.Taken(feed,Double.NaN,steam);
+    }
+    /** What the cycle {@code step} took, as rates over the cycle. */
+    private ColumnSolve.Taken taken(ColumnCycle.Step step,V3ColumnInput design) {
+        double seconds=CYCLE_TICKS/20.0;var feed=step.feed().moles();
+        int water=weights.length-1;var steam=new ArrayList<ColumnSolve.Steam>();
+        for(int j=0;j<step.steam().size();j++) {
+            var a=step.steam().get(j);var n=a.moles();double w=n[water];
+            // A steam port's hydrocarbons are split as feed (plan section 11).
+            for(int i=0;i<n.length;i++)if(i!=water)feed[i]+=n[i];
+            double hint=j<design.steamFeeds().size()?design.steamFeeds().get(j).temperatureKelvin():400;
+            steam.add(new ColumnSolve.Steam(w/seconds,hint,w>0?a.energy()/a.total():Double.NaN));
+        }
+        double total=0;for(double n:feed)total+=n;
+        double energy=step.feed().energy();
+        for(int i=0;i<feed.length;i++)feed[i]/=seconds;
+        return new ColumnSolve.Taken(feed,total>0?energy/step.feed().total():Double.NaN,steam);
+    }
     /** Whether every inlet island of {@code r} has booked through {@code tick} (plan section 9). */
     private boolean inletsThrough(Run r,long tick) {
         var u=topology.column(r.unit);
@@ -133,24 +276,26 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     /** One cycle at online tick {@code tick} (plan section 5). */
     private void cycle(Run r,long tick) {
         var u=topology.column(r.unit);var stations=new ArrayList<>(u.stations());
-        // Take each inlet's spans up to the tick into its account, an interval across the tick shared by time.
-        for(int i=0;i<stations.size();i++) {
-            var s=stations.get(i);if(!s.port().inlet())continue;
-            var queue=r.spans.get(s.device());if(queue==null||queue.isEmpty())continue;
-            var account=s.account();
-            while(!queue.isEmpty()&&queue.peekFirst().start()<tick) {
-                var span=queue.removeFirst();
-                if(span.end()<=tick){account=account.plus(span.arrived());continue;}
-                double share=(tick-span.start())/(double)(span.end()-span.start());var now=span.arrived().part(share);
-                account=account.plus(now);queue.addFirst(new Span(tick,span.end(),span.arrived().less(now)));break;
+        // What each inlet had by the tick: its account less what arrived after it, an interval across the tick shared by time.
+        var available=new HashMap<Long,Account>();
+        for(var s:u.stations()) {
+            if(!s.port().inlet())continue;
+            var later=Account.empty(weights.length);var queue=r.spans.get(s.device());
+            if(queue!=null) {
+                while(!queue.isEmpty()&&queue.peekFirst().end()<=tick)queue.removeFirst();
+                for(var span:queue)later=later.plus(span.start()>=tick?span.arrived():span.arrived().part((span.end()-tick)/(double)(span.end()-span.start())));
             }
-            stations.set(i,s.withAccount(account));
+            available.put(s.device(),s.account().less(later));
         }
         var totals=u.totals();
-        if(r.table==null){levels(r,u,stations,tick,false);topology.column(u.withStations(true,stations));return;}
-        var t=r.table;var feed=station(stations,Port.FEED,0);
+        if(r.table==null) {
+            request(r,u,tick,DriftBands.Trigger.START,null);
+            levels(r,u,available,tick,false);return;
+        }
+        var t=r.table;var feedStation=station(stations,Port.FEED,0);
+        var feedAvailable=feedStation==null?Account.empty(weights.length):available.get(feedStation.device());
         var steam=new ArrayList<Account>();
-        for(int j=0;j<u.setpoints().steamPerFeed().length;j++){var s=station(stations,Port.STEAM,j);steam.add(s==null?Account.empty(weights.length):s.account());}
+        for(int j=0;j<u.setpoints().steamPerFeed().length;j++){var s=station(stations,Port.STEAM,j);steam.add(s==null?Account.empty(weights.length):available.get(s.device()));}
         double[] room=new double[t.products().size()];
         double design=u.setpoints().designFeedRate()*BUFFER_SECONDS;
         for(int k=0;k<room.length;k++) {
@@ -159,11 +304,18 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             room[k]=Math.max(0,design*share-s.account().total());
         }
         var energy=r.enthalpy;
-        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feed==null?Account.empty(weights.length):feed.account(),steam,room,(k,n)->{double sum=0;for(double v:n)sum+=v;return sum*energy[k];},false);
+        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,(k,n)->{double sum=0;for(double v:n)sum+=v;return sum*energy[k];},false);
         r.last=step;
-        if(step.trip()!=null){r.status="UPSET: "+step.trip();levels(r,u,stations,tick,false);topology.column(u.withStations(true,stations));return;}
+        if(step.trip()!=null) {
+            // The model has no steady state for this input (a capability limit): the inlets close, a solve of the state the
+            // column was given may lift it.
+            r.status="UPSET: "+step.trip();
+            if(feedAvailable.total()>0){var source=solves.design(u);if(source!=null)request(r,u,tick,DriftBands.Trigger.CLOSURE,attempted(u,feedAvailable,steam,source));}
+            levels(r,u,available,tick,false);return;
+        }
         replace(stations,Port.FEED,0,a->a.less(step.feed()));
         for(int j=0;j<steam.size();j++){var taken=step.steam().get(j);replace(stations,Port.STEAM,j,a->a.less(taken));}
+        for(var e:available.entrySet()){for(var s:stations)if(s.device()==e.getKey())available.put(e.getKey(),s.port()==Port.FEED?e.getValue().less(step.feed()):s.port()==Port.STEAM?e.getValue().less(step.steam().get(s.index())):e.getValue());}
         for(int k=0;k<t.products().size();k++) {
             var p=t.products().get(k);var product=step.products().get(k);
             var s=station(stations,p.port(),p.index());replace(stations,p.port(),p.index(),a->a.plus(product));
@@ -173,18 +325,33 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var out=Account.empty(weights.length);for(var a:step.products())out=out.plus(a);
         double pumparounds=0;for(double q:step.pumparounds())pumparounds+=q;
         totals=new ColumnUnit.Totals(totals.taken().plus(in),totals.produced().plus(out),totals.reboiler()+step.reboiler(),totals.condenser()+step.condenser(),totals.pumparounds()+pumparounds);
-        levels(r,u,stations,tick,true);
         topology.column(u.withStations(true,stations).withTotals(totals));
+        levels(r,u,available,tick,true);
         r.status=step.limit()==ColumnCycle.Limit.NONE?"RUNNING":String.format(Locale.ROOT,"LIMITED: %s, %.0f %%",step.limit().name().toLowerCase(Locale.ROOT),100*step.alpha());
+        // A new solve where the state taken left the table's bands, or the setpoints moved (plan section 6).
+        DriftBands.Trigger trigger=u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT
+                :DriftBands.check(t,step,u.setpoints().designFeedRate()*CYCLE_TICKS/20.0).map(DriftBands.Crossing::trigger).orElse(null);
+        if(trigger!=null&&step.feedMoles()>0){var source=solves.design(u);if(source!=null)request(r,u,tick,trigger,taken(step,source));}
+        if(r.pending!=null)r.status="RE-SOLVING: "+r.pending.trigger.name().toLowerCase(Locale.ROOT)+"; "+r.status;
+        if(!r.note.isEmpty())r.status+="; "+r.note;
+    }
+    /** The state a tripped cycle was given: the feed it holds at the set rate, the steam at its ratios. */
+    private ColumnSolve.Taken attempted(ColumnUnit u,Account feed,List<Account> steam,V3ColumnInput design) {
+        double seconds=CYCLE_TICKS/20.0,demand=u.setpoints().feedRate()*seconds;
+        var feedTaken=feed.part(Math.min(1,demand/feed.total()));
+        var steamTaken=new ArrayList<Account>();double[] ratios=u.setpoints().steamPerFeed();
+        for(int j=0;j<steam.size();j++){var s=steam.get(j);double want=ratios[j]*feedTaken.total();steamTaken.add(s.total()>0?s.part(Math.min(1,want/s.total())):s);}
+        var none=new double[0];
+        return taken(new ColumnCycle.Step(1,ColumnCycle.Limit.NONE,feedTaken,steamTaken,List.of(),0,none,0,0,null),design);
     }
     /** Each inlet's level after the cycle at {@code tick} and the rate the column then demands of it (none: {@code demanding} false);
      * every port's island wakes where the plans this cycle dates take effect, the tick plus the fence. */
-    private void levels(Run r,ColumnUnit u,List<ColumnUnit.Station> stations,long tick,boolean demanding) {
-        for(var s:stations) {
+    private void levels(Run r,ColumnUnit u,Map<Long,Account> available,long tick,boolean demanding) {
+        for(var s:u.stations()) {
             if(s.device()!=0)wakes.computeIfAbsent(tick+FENCE_TICKS,t->new TreeSet<>()).add(s.device());
             if(!s.port().inlet())continue;
             double rate=!demanding?0:s.port()==Port.FEED?u.setpoints().feedRate():u.setpoints().feedRate()*u.setpoints().steamPerFeed()[s.index()];
-            r.levels.computeIfAbsent(s.device(),d->new ArrayDeque<>()).addLast(new Level(tick,s.account().total(),rate,molar(s.account().moles())));
+            r.levels.computeIfAbsent(s.device(),d->new ArrayDeque<>()).addLast(new Level(tick,available.get(s.device()).total(),rate,molar(available.get(s.device()).moles())));
         }
     }
     /** The latest entry of {@code log} at or before {@code through}, after dropping every older one, or null. */
@@ -203,11 +370,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
 
     // ---------------- the islands' ports (IslandCoordinator.Ports) ----------------
 
-    /** The outlet fence (plan section 9): every cycle through {@code start - L} has run for each outlet port the island holds. */
+    /** The fence (plan section 9): every cycle through {@code start - L} has run for each port the island holds, whose plans read it. */
     @Override public boolean ready(long island,PassiveNetwork graph,long start) {
         if(portUnits.isEmpty())return true;
         for(var node:graph.reservoirs()) {
-            if(node.kind()!=PassiveNetwork.NodeKind.GENERATOR)continue;
             Long unit=portUnits.get(node.id());if(unit==null)continue;
             var r=runs.get(unit);if(r!=null&&r.nextCycle<=start-FENCE_TICKS)return false;
         }
@@ -295,8 +461,9 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 // A void takes: its booking is what left the island, negative.
                 var arrived=new double[n.length];for(int i=0;i<n.length;i++)arrived[i]=Math.max(0,-n[i]);
                 var account=new Account(arrived,-joule);
+                // In the account at once (a fact), and a span the cycles take it by (state).
+                topology.column(withAccount(u,s,s.account().plus(account)));
                 if(r!=null)r.spans.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Span(start,end,account));
-                else topology.column(withAccount(u,s,s.account().plus(account)));
             } else {
                 // A generator gives: debit exactly that, component by component; the energy by the same share of the account.
                 var held=s.account().moles();double before=s.account().total(),given=0;

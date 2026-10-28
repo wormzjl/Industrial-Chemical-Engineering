@@ -1,6 +1,8 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
+import com.wormzjl.icheme.science.column.operation.ColumnSolve;
+import com.wormzjl.icheme.science.column.operation.DriftBands;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.column.operation.Setpoints;
 import com.wormzjl.icheme.science.column.operation.SplitTable;
@@ -10,6 +12,7 @@ import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.PortPlan;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
+import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction;
@@ -43,14 +46,16 @@ class ColumnRunTest {
 
     private record Rig(EventPathWorld world,ColumnOperation ops,Counting counting,long unit,long feed,long product,long tank){}
     /** A 3 bar nitrogen feed line into a feed port, a distillate port out to a tank, a table sending everything to the distillate; jobs taking {@code lag} ticks. */
-    private Rig rig(int lag) {
+    private Rig rig(int lag){return rig(lag,null);}
+    /** The rig with its tables from {@code solves}, or installed at once where null. */
+    private Rig rig(int lag,Fake solves) {
         var world=new EventPathWorld();world.lag=lag;var model=world.model;int m=model.componentCount();
         var n2=EventPathWorld.nitrogen().composition();
         long generator=world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,n2),.05);
         world.place(1,64,0,Kind.PIPE,Direction.EAST,.05);long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST);
         long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST);world.place(12,64,0,Kind.PIPE,Direction.EAST,.05);
         long tank=world.place(13,64,0,Kind.RESERVOIR,Direction.EAST);
-        var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.molecularWeights());var counting=new Counting(ops);world.coordinator.ports(counting);
+        var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.components(),model.molecularWeights());var counting=new Counting(ops);world.coordinator.ports(counting);
         world.runTo(40);
         // Start: a feed port inside the feed valve, a distillate port inside the product valve.
         long unit=world.ledger.reserve(1);long feed=world.ledger.nextIdentity(),product=feed+1;
@@ -60,14 +65,9 @@ class ColumnRunTest {
                 List.of(new ColumnUnit.Station(Port.FEED,0,feed,feedValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,product,productValve,Account.empty(m))),ColumnUnit.Totals.empty(m)));
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
                 new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0))),product+1,null);
+        if(solves!=null){solves.model=model;ops.solves(solves);}
         ops.refresh();
-        // The table: everything to the distillate at 330 K, 1 kJ/mol below what the feed brings, so the condenser removes it.
-        double h=model.flashTP(340,300000,n2.clone(),()->{}).enthalpy()/sum(n2);
-        var z=new double[m];for(int i=0;i<m;i++)z[i]=n2[i]/sum(n2);
-        var all=new double[m];Arrays.fill(all,1);var held=new boolean[m];Arrays.fill(held,true);
-        var table=new SplitTable(model.components(),List.of(new SplitTable.Product(Port.DISTILLATE,0,all,330,250000)),0,new double[0],-1000,
-                new SplitTable.Reference(z,h,30,new double[0],1,setpoints),held);
-        ops.table(unit,table,new double[]{h-1000});
+        if(solves==null){var s=table(model,setpoints);ops.table(unit,s.table(),s.enthalpy());}
         return new Rig(world,ops,counting,unit,feed,product,tank);
     }
 
@@ -79,7 +79,7 @@ class ColumnRunTest {
         assertTrue(totals.taken().total()>40,"the column took its feed at its set rate, 0.5 mol/s from the first cycle's demand a fence later, 121 s: "+totals.taken().total()+" mol, status "+ops.status(unit));
         for(int i=0;i<m;i++) {
             double in=-arrived[i],inlet=u.station(Port.FEED,0).account().moles()[i],taken=totals.taken().moles()[i];
-            assertEquals(in,inlet+taken+pending(ops,unit,feed,i),1e-9*Math.max(1,in),"component "+i+": what arrived is in the feed account or taken");
+            assertEquals(in,inlet+taken,1e-9*Math.max(1,in),"component "+i+": what arrived is in the feed account or taken");
             double made=totals.produced().moles()[i],outlet=u.station(Port.DISTILLATE,0).account().moles()[i];
             assertEquals(taken,made,1e-9*Math.max(1,taken),"component "+i+": the cycle puts every taken mole in a product");
             assertEquals(made,outlet+given[i],1e-9*Math.max(1,made),"component "+i+": what was made is in the outlet account or downstream");
@@ -103,9 +103,128 @@ class ColumnRunTest {
         assertEquals(ta.condenser(),tb.condenser(),"the condenser duty");
         assertArrayEquals(a.counting().moles.get(a.product()),b.counting().moles.get(b.product()),"the product given downstream");
     }
-    /** Moles of component {@code i} still in the feed port's spans (booked, not yet taken into the account). */
-    private static double pending(ColumnOperation ops,long unit,long device,int i) {
-        var r=ops.run(unit);var spans=r==null?null:r.spans.get(device);if(spans==null)return 0;
-        double s=0;for(var span:spans)s+=span.arrived().moles()[i];return s;
+
+    /** The cycle at {@code expected} ran at {@code actual}: a cycle runs once its inlets booked through it, a tick or so later. */
+    private static void assertCycle(long expected,long actual,String message){assertTrue(Math.abs(actual-expected)<ColumnOperation.CYCLE_TICKS/2,message+": expected "+expected+", was "+actual);}
+    /** A solve's table: everything to the distillate at 330 K, 1 kJ/mol below what the feed brings, so the condenser removes it. */
+    static ColumnSolve.Solved table(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints) {
+        int m=model.componentCount();var n2=EventPathWorld.nitrogen().composition();
+        double h=model.flashTP(340,300000,n2.clone(),()->{}).enthalpy()/sum(n2);
+        var z=new double[m];for(int i=0;i<m;i++)z[i]=n2[i]/sum(n2);
+        var all=new double[m];Arrays.fill(all,1);var held=new boolean[m];Arrays.fill(held,true);
+        var table=new SplitTable(model.components(),List.of(new SplitTable.Product(Port.DISTILLATE,0,all,330,250000)),0,new double[0],-1000,
+                new SplitTable.Reference(z,h,30,new double[0],1,setpoints),held);
+        return new ColumnSolve.Solved(table,new double[]{h-1000},null,-1000,"test","");
+    }
+    /** A solver answering every job {@code delay} ticks after it was asked (0: at once): {@link #table}, or a failure where {@code fail} holds. */
+    static final class Fake implements ColumnOperation.Solves {
+        static final com.wormzjl.icheme.science.column.v3.V3ColumnInput DESIGN;
+        static{var c=MaterialCatalog.bundled();DESIGN=c.presets().column("tia_juana").input(c);}
+        com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model;EventPathWorld world;final long delay;
+        java.util.function.Predicate<ColumnSolve.Job> fail=j->false;
+        final List<ColumnSolve.Job> jobs=new ArrayList<>();final List<Long> asked=new ArrayList<>();
+        final TreeMap<Long,List<Runnable>> due=new TreeMap<>();
+        Fake(long delay){this.delay=delay;}
+        public com.wormzjl.icheme.science.column.v3.V3ColumnInput design(ColumnUnit unit){return DESIGN;}
+        public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done) {
+            jobs.add(job);long now=world.ledger.onlineTick();asked.add(now);
+            ColumnSolve.Outcome o=fail.test(job)?new ColumnSolve.Failed("test refusal"):table(model,job.setpoints());
+            if(delay==0)done.accept(o);else due.computeIfAbsent(now+delay,t->new ArrayList<>()).add(()->done.accept(o));
+            return true;
+        }
+        /** Runs the world tick by tick to {@code tick}, each answer at its tick. */
+        void runTo(long tick) {
+            while(world.ledger.onlineTick()<tick) {
+                world.runTo(world.ledger.onlineTick()+1);
+                var ready=due.headMap(world.ledger.onlineTick(),true);var answers=new ArrayList<Runnable>();ready.values().forEach(answers::addAll);ready.clear();
+                answers.forEach(Runnable::run);
+            }
+        }
+        List<Long> asked(DriftBands.Trigger trigger){var out=new ArrayList<Long>();for(int i=0;i<jobs.size();i++)if(jobs.get(i).trigger()==trigger)out.add(asked.get(i));return out;}
+    }
+
+    /**
+     * Fixed application (owner Q5, plan section 9): a start asks its solve at the column's first cycle and its table applies at
+     * the second cycle after, whether the solve answers at once, before that cycle, or after it (the cycle then waits); the
+     * three worlds book the same feed, products and condenser duty bit for bit.
+     */
+    @Test void aTableAppliesAtTheSecondCycleAfterItsTriggerHoweverLongItsSolveTakes() {
+        var worlds=new ArrayList<Rig>();var fakes=new ArrayList<Fake>();
+        for(long delay:new long[]{0,150,350}){var f=new Fake(delay);var r=rig(0,f);f.world=r.world();worlds.add(r);fakes.add(f);}
+        for(var f:fakes)while(f.asked.isEmpty())f.runTo(f.world.ledger.onlineTick()+1);
+        long start=fakes.get(0).asked(DriftBands.Trigger.START).get(0),cycle=worlds.get(0).ops().run(worlds.get(0).unit()).nextCycle-ColumnOperation.CYCLE_TICKS;
+        for(int k=0;k<3;k++) {
+            var f=fakes.get(k);var r=worlds.get(k);
+            assertEquals(List.of(start),f.asked(DriftBands.Trigger.START),"one start solve, at the first cycle");
+            var run=r.ops().run(r.unit());
+            if(f.delay>ColumnOperation.APPLY_TICKS){f.runTo(start+f.delay-1);assertNull(run.table,"its cycle waits for the solve");}
+            while(run.table==null)f.runTo(f.world.ledger.onlineTick()+1);
+            assertTrue(r.ops().status(r.unit()).startsWith("RUNNING")||r.ops().status(r.unit()).startsWith("LIMITED"),r.ops().status(r.unit()));
+            assertEquals(cycle,run.tableTick,"the start solve was asked at the first cycle");
+            assertEquals(run.tableTick+ColumnOperation.APPLY_TICKS,run.applied,"its table applied at the second cycle after");
+            f.runTo(3000);
+            assertNotNull(r.ops().run(r.unit()).table);
+        }
+        var ta=worlds.get(0).world().ledger.column(worlds.get(0).unit()).totals();
+        assertTrue(ta.taken().total()>20,"the column ran: "+ta.taken().total());
+        for(int k=1;k<3;k++) {
+            var tb=worlds.get(k).world().ledger.column(worlds.get(k).unit()).totals();
+            assertArrayEquals(ta.taken().moles(),tb.taken().moles(),"the feed taken, solve delay "+fakes.get(k).delay);
+            assertArrayEquals(ta.produced().moles(),tb.produced().moles(),"the products, solve delay "+fakes.get(k).delay);
+            assertEquals(ta.condenser(),tb.condenser(),"the condenser duty, solve delay "+fakes.get(k).delay);
+        }
+    }
+    /**
+     * A setpoint edit solves at the next cycle (plan section 6); a failed solve keeps the table, names it on the status line
+     * and retries after 30 s, then 60 s (plan section 6).
+     */
+    @Test void aSetpointEditSolvesAtOnceAndAFailedSolveKeepsTheTable() {
+        var f=new Fake(0);var r=rig(0,f);f.world=r.world();var world=r.world();
+        f.runTo(1000);
+        var kept=r.ops().run(r.unit()).table;assertNotNull(kept);
+        var u=world.ledger.column(r.unit());var s=u.setpoints();
+        world.ledger.column(u.withSetpoints(new Setpoints(s.designFeedRate(),s.feedRate(),s.condenserTemperature(),2,s.reboilerPerFeed(),s.steamPerFeed(),s.drawsPerFeed(),s.pumparoundsPerFeed())));
+        f.fail=j->j.setpoints().refluxRatio()==2;
+        f.runTo(4000);
+        var asked=f.asked(DriftBands.Trigger.SETPOINT);
+        assertTrue(asked.size()>=3,"asked "+asked);
+        assertTrue(asked.get(0)<=1000+ColumnOperation.CYCLE_TICKS,"at the next cycle: "+asked);
+        assertCycle(asked.get(0)+ColumnOperation.APPLY_TICKS+600,asked.get(1),"the first retry 30 s after the failure applied");
+        assertCycle(asked.get(1)+ColumnOperation.APPLY_TICKS+1200,asked.get(2),"the second 60 s after");
+        assertSame(kept,r.ops().run(r.unit()).table,"the table stays");
+        assertTrue(r.ops().status(r.unit()).contains("setpoint solve failed (test refusal)"),r.ops().status(r.unit()));
+        // The solve succeeds: the next retry's table applies and the note goes.
+        f.fail=j->false;f.runTo(asked.get(2)+ColumnOperation.APPLY_TICKS+2400+ColumnOperation.APPLY_TICKS+1);
+        assertNotSame(kept,r.ops().run(r.unit()).table);
+        assertEquals(2,r.ops().run(r.unit()).table.reference().setpoints().refluxRatio());
+        assertFalse(r.ops().status(r.unit()).contains("failed"),r.ops().status(r.unit()));
+    }
+    /**
+     * The table is state the topology unit saves (plan section 12): a world read from its checkpoint resumes the running
+     * column on its saved table and windows, takes its feed on, and asks no start solve.
+     */
+    @Test void aReloadResumesOnTheSavedTableWithoutASolve() {
+        var f=new Fake(0);var r=rig(0,f);f.world=r.world();var world=r.world();
+        f.runTo(1500);
+        var before=r.ops().run(r.unit());assertNotNull(before.table);
+        double taken=world.ledger.column(r.unit()).totals().taken().total();assertTrue(taken>0,"it ran before the save");
+        var bytes=FluidCheckpointCodec.encodeTopology(world.ledger.snapshot());
+        var saved=FluidCheckpointCodec.decodeTopology(bytes,world.ledger.onlineTick(),k->world.model);
+        var state=saved.columns().get(r.unit()).state();
+        assertNotNull(state,"the running unit's engine state is in the topology unit");
+        assertArrayEquals(before.table.products().getFirst().recovery(),state.table().products().getFirst().recovery());
+        assertArrayEquals(before.enthalpy,state.enthalpy());
+        assertEquals(before.tableTick,state.tableTick());
+        assertFalse(state.levels().isEmpty(),"the inlet's levels through the fence");
+        var again=new EventPathWorld(1,saved,world.coordinator.snapshots());
+        var g=new Fake(0);g.world=again;g.model=again.model;
+        var ops=new ColumnOperation(again.ledger,again.registry,again.coordinator,again.model.components(),again.model.molecularWeights());
+        ops.solves(g);again.coordinator.ports(ops);ops.refresh();
+        assertNotNull(ops.run(r.unit()).table,"the saved table at once");
+        g.runTo(again.ledger.onlineTick()+1000);
+        assertTrue(g.asked(DriftBands.Trigger.START).isEmpty(),"no start solve: "+g.jobs);
+        assertTrue(again.ledger.column(r.unit()).totals().taken().total()>taken+10,"it takes its feed on after the reload");
+        // A stopped unit keeps no engine state.
+        var u=again.ledger.column(r.unit());assertNull(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()).state());
     }
 }

@@ -3,23 +3,26 @@ package com.wormzjl.icheme.runtime.fluid;
 import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.column.operation.Setpoints;
+import com.wormzjl.icheme.science.column.operation.SplitTable;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * A designed column's operation, its facts (batch 2026-10-28-column-operation, plan sections 4 and 12): the player's
- * setpoints and run switch, its ports with what each one's account holds, and its totals. Fluid facts schema 6. The split
- * table, the cycle clock and the solves are state ({@code ColumnOperation}).
+ * setpoints and run switch, its ports with what each one's account holds, and its totals. Fluid facts schema 6. Its
+ * {@link State} (the split table, the fence's windows) is state: the topology unit's state section carries it.
  *
  * <p>{@code id} is a registry identity (from the ledger's counter, never a device's): the devices a running column holds
  * name it ({@link PhysicalFluidTopology.Device#suspendedBy}). {@code master} is the column's origin. An inlet's account holds
  * what its port took from the network and the column has not used yet; an outlet's what the column made and its port has
  * not given yet. Both stay while the column is stopped: a station's {@code device} is then 0.</p>
  */
-public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals) {
+public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,State state) {
     /** The most stations a column has: a feed, three steams, an off-gas, a sour water, a distillate, eight draws, a bottoms. */
     public static final int MAXIMUM_STATIONS=16;
+    /** Without engine state: one solve before it runs. */
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals){this(id,master,running,setpoints,stations,totals,null);}
     public ColumnUnit {
         Objects.requireNonNull(master);Objects.requireNonNull(setpoints);Objects.requireNonNull(totals);stations=List.copyOf(stations);
         if(id<=0||master.lane()!=0||stations.size()>MAXIMUM_STATIONS)throw new IllegalArgumentException("Invalid column unit");
@@ -30,6 +33,7 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
             int w=s.account().moles().length;if(width<0)width=w;else if(w!=width)throw new IllegalArgumentException("Column accounts on one axis");
         }
         if(width>=0&&(totals.taken().moles().length!=width||totals.produced().moles().length!=width))throw new IllegalArgumentException("Column totals on the accounts' axis");
+        if(state!=null&&!running)throw new IllegalArgumentException("A stopped column has no engine state");
     }
 
     /**
@@ -62,7 +66,28 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         for(var s:stations)if(s.port()==port&&s.index()==index)return s;
         return null;
     }
-    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals);}
-    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals);}
-    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value);}
+    /** These stations, running or not; a stopped column forgets its engine state. */
+    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,value?state:null);}
+    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,state);}
+    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,state);}
+    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,value);}
+
+    /**
+     * A running unit's engine state (plan section 12): its split table and the products' specific enthalpies (J/mol), the
+     * cycles that asked and applied it, V3's condenser duty there (W), and the inlets' levels and outlets' credits the port
+     * plans read through the fence. Rebuilt by the engine: a unit without it solves once before it takes anything.
+     */
+    public record State(SplitTable table,double[] enthalpy,long tableTick,long applied,double solvedCondenser,List<Level> levels,List<Credit> credits) {
+        public State {
+            Objects.requireNonNull(table);enthalpy=enthalpy.clone();levels=List.copyOf(levels);credits=List.copyOf(credits);
+            if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy per product");
+            for(double h:enthalpy)if(!Double.isFinite(h))throw new IllegalArgumentException("Invalid product enthalpy");
+            if(!Double.isFinite(solvedCondenser))throw new IllegalArgumentException("Invalid solved condenser duty");
+        }
+        @Override public double[] enthalpy(){return enthalpy.clone();}
+        /** An inlet's level after the cycle at {@code tick}, mol, the rate the column demanded there, mol/s, and the account's molar mass, kg/mol. */
+        public record Level(long device,long tick,double held,double rate,double molarMass) {}
+        /** A cycle's product credited to an outlet at {@code tick}. */
+        public record Credit(long device,long tick,Account product) {public Credit{Objects.requireNonNull(product);}}
+    }
 }

@@ -71,6 +71,7 @@ public final class ProcessSolveCoordinator {
             switch (completion) {
                 case V3ColumnCompletion v3 -> ColumnV3Network.handleRoutedCompletion(server, v3);
                 case ProcessSolveServices.FluidIslandCompletion fluid -> fluid.request().handler().completed(fluid);
+                case ProcessSolveServices.ColumnUnitCompletion column -> column.request().handler().accept(column.outcome());
             }
         }
     }
@@ -79,6 +80,7 @@ public final class ProcessSolveCoordinator {
         switch (request) {
             case V3ColumnRequest v3 -> ColumnV3Network.handleRoutedAbandoned(server, v3);
             case ProcessSolveServices.FluidIslandRequest fluid -> fluid.handler().abandoned(fluid);
+            case ProcessSolveServices.ColumnUnitRequest column -> column.handler().accept(new com.wormzjl.icheme.science.column.operation.ColumnSolve.Failed("SERVER_SHUTDOWN"));
         }
     }
 }

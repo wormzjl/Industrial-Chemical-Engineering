@@ -153,10 +153,10 @@ public final class FluidCheckpointCodec {
 
     /**
      * The world topology ledger without its online tick, which a checkpoint keeps as its epoch: its facts (the registry,
-     * totals, recoveries and identity counter) and its state (the queued events), as a unit's two sections. It changes
+     * totals, recoveries and identity counter) and its state (the queued events, the running columns' engine state), as a unit's two sections. It changes
      * only when the ledger commits, so a save keeps the unit of an unchanged ledger.
      */
-    public static byte[] encodeTopology(WorldTopologyLedger.Snapshot world){return sections(FluidFacts.world(world),FluidFacts.events(world.events()));}
+    public static byte[] encodeTopology(WorldTopologyLedger.Snapshot world){return sections(FluidFacts.world(world),FluidFacts.topologyState(world.events(),world.columns()));}
     /**
      * A topology {@link #encodeTopology} wrote, at {@code onlineTick}, validated as the ledger itself validates it. Its
      * pending recoveries' solids are read as records of its basis package, whose model {@code models} gives (asked only
@@ -170,12 +170,18 @@ public final class FluidCheckpointCodec {
         // The islands compiled the removed one-block movers: their state cannot be used, and the load rebuilds them from the facts.
         if(!world.removedMovers().isEmpty())throw new IllegalArgumentException("its one-block movers "+world.removedMovers()+" were removed");
         if(s.stateFormat()!=VERSION)throw new IllegalArgumentException("The topology's state is of format "+s.stateFormat()+"; this build reads "+VERSION);
-        var events=FluidFacts.events(data,s.stateOffset(),s.stateLength());
+        var state=FluidFacts.topologyState(data,s.stateOffset(),s.stateLength());
         var model=new FluidThermodynamics[1];
-        return world.snapshot(onlineTick,events,saved->{
+        var snapshot=world.snapshot(onlineTick,state.events(),saved->{
             if(model[0]==null)model[0]=Objects.requireNonNull(models.apply(new PackageKey(world.basis().packageId())));
             return record(new SolidMaterial(saved.id(),saved.revision(),saved.density(),saved.heatCapacity()),model[0]);
         });
+        // A running unit takes its engine state back; a state for a unit that is gone or stopped is dropped.
+        if(state.columns().isEmpty())return snapshot;
+        var columns=new HashMap<>(snapshot.columns());
+        state.columns().forEach((id,saved)->{var u=columns.get(id);if(u!=null&&u.running())columns.put(id,u.withState(saved));});
+        return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),snapshot.active(),snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
+                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns));
     }
     /** The facts of a topology unit; facts this build cannot read refuse the world. */
     static FluidFacts.World worldFacts(byte[] data,Sections s) {
@@ -186,7 +192,7 @@ public final class FluidCheckpointCodec {
      * immutable parts with the state it was taken from, so an unchanged ledger is the same objects. */
     public static boolean sameWorldBody(WorldTopologyLedger.Snapshot a,WorldTopologyLedger.Snapshot b) {
         return a.nextIdentity()==b.nextIdentity()&&a.active()==b.active()&&a.events()==b.events()&&a.constructed()==b.constructed()
-                &&a.destroyed()==b.destroyed()&&a.basis()==b.basis()&&a.recoveries()==b.recoveries()&&a.restated()==b.restated();
+                &&a.destroyed()==b.destroyed()&&a.basis()==b.basis()&&a.recoveries()==b.recoveries()&&a.restated()==b.restated()&&a.columns()==b.columns();
     }
     static byte[] topologyUnit(WorldTopologyLedger.Snapshot world,long generation) {
         var w=new Writer();header(w,TOPOLOGY,0,0,generation);w.raw(encodeTopology(world));return w.toByteArray();

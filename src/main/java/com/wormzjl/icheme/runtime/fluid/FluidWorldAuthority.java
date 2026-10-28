@@ -102,7 +102,15 @@ public final class FluidWorldAuthority implements AutoCloseable {
         logLoad();
         registry.flowmeters(accessories.allSensors().stream().filter(s->s.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).map(s->s.key().host()).toList());
         registry.load();data.bindCapture(this::capture);
-        columns=new ColumnOperation(topology,registry,runtime.coordinator(),model.molecularWeights());runtime.coordinator().ports(columns);
+        columns=new ColumnOperation(topology,registry,runtime.coordinator(),model.components(),model.molecularWeights());runtime.coordinator().ports(columns);
+        columns.solves(new ColumnOperation.Solves() {
+            @Override public com.wormzjl.icheme.science.column.v3.V3ColumnInput design(ColumnUnit unit){return columnDesign(unit.master());}
+            @Override public boolean submit(long unit,com.wormzjl.icheme.science.column.operation.ColumnSolve.Job job,java.util.function.Consumer<com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome> done) {
+                var dimension=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,net.minecraft.resources.ResourceLocation.parse(topology.column(unit).master().dimension()));
+                var request=new com.wormzjl.icheme.runtime.ProcessSolveServices.ColumnUnitRequest(com.wormzjl.icheme.runtime.ProcessSolveServices.nextRequestId(),new com.wormzjl.icheme.runtime.ProcessSolveServices.ColumnUnitTarget(dimension,unit),0,done);
+                return com.wormzjl.icheme.runtime.ProcessSolveServices.submitColumnUnit(server,request,new com.wormzjl.icheme.runtime.ProcessSolveServices.ColumnUnitCommand(job,model,catalog,IChemE.columnV3LiquidSupplyScreenRatio())).accepted();
+            }
+        });
         instruments=new com.wormzjl.icheme.runtime.instrument.InstrumentService(server,this,accessories);
         instruments.reconcileLegacyValves();
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
@@ -427,6 +435,22 @@ public final class FluidWorldAuthority implements AutoCloseable {
         topology.column(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()));
         if(!edits.isEmpty())submit(edits,topology.nextIdentity());columns.refresh();
         IChemE.LOGGER.info("column status=STOPPED master={},{},{} unit={}",u.master().x(),u.master().y(),u.master().z(),unit);
+    }
+    /**
+     * The calculator input of the design of the column at {@code master}, as built (its shell's diameter), or null where it
+     * cannot be read: no operating point, or its chunk not loaded (a read never loads one).
+     */
+    private com.wormzjl.icheme.science.column.v3.V3ColumnInput columnDesign(PhysicalFluidTopology.Position master) {
+        for(var level:server.getAllLevels()) {
+            if(!level.dimension().location().toString().equals(master.dimension()))continue;
+            var at=new net.minecraft.core.BlockPos(master.x(),master.y(),master.z());
+            if(!level.isLoaded(at))return null;
+            var vessel=com.wormzjl.icheme.world.level.block.EquipmentStructure.find(level,at);
+            if(vessel==null||vessel.shape().trays()==null)return null;
+            var trays=vessel.shape().trays();var point=trays.operating();
+            return point==null||!point.fits(trays)?null:point.input(trays,vessel.shape().diameter());
+        }
+        return null;
     }
     /** The column at {@code master} is gone (plan section 12): it stops, and its accounts leave the world, booked as destroyed. */
     public void columnRemoved(PhysicalFluidTopology.Position master) {
