@@ -72,7 +72,7 @@ public final class GuiPrototypes {
     }
 
     static List<Prototype> prototypes() {
-        var out = new ArrayList<>(List.of(pump(), generator(), tank(), pipe()));
+        var out = new ArrayList<>(List.of(pump(), compressor(), generator(), tank(), pipe()));
         out.addAll(valve());
         out.addAll(calculator());
         out.addAll(assembly());
@@ -578,6 +578,30 @@ public final class GuiPrototypes {
             contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "92.1", "511"}, new String[]{"Ethanol", "7.9", "43.8"}));
             d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
         });
+    }
+
+    /** A compressor's page: its readings as {@code meters} give them. */
+    static Prototype compressor(String file, int fw, int fh, List<DeviceColumn.Meter> meters) {
+        var in = new DeviceColumn.Input(Kind.COMPRESSOR, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("volume", 0, 0, 1, 0), meters);
+        return devicePage(file, fw, fh, in, (d, s) -> {
+            d.title("Centrifugal compressor");
+            d.tabs(0, "Overview", "Datasheet");
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var box = device(d, in, Map.of("volumeFlow", "1200", "maximumPressureRatio", "4.00"));
+            contents(d, box, 2, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Methane", "92.0", "46.0"}, new String[]{"Ethane", "8.0", "4.0"}));
+            d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+        });
+    }
+
+    /** A compressor's readings: its pressure ratio, the pressure change on that meter's hover (owner 2026-10-28, option A). */
+    static List<DeviceColumn.Meter> compressorMeters() {
+        return List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.01", "bar"), meter("throughput", "50.0", "kmol/h"),
+                new DeviceColumn.Meter("pressure_ratio", "4.00", "", HeatDiagramRender.tr("gui.icheme.fluid.pressure_ratio.hint", "3.04 bar")));
+    }
+
+    static Prototype compressor() {
+        return compressor("fluid-compressor", WINDOW[0], WINDOW[1], compressorMeters());
     }
 
     static Prototype generator() {

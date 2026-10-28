@@ -159,16 +159,17 @@ class DeviceColumnTest {
     }
 
     /**
-     * One scale for every device screen (owner 2026-10-28, option b): a flow valve's page and a pump's, with the four
+     * One scale for every device screen (owner 2026-10-28, option b): a flow valve's page, a pump's and a compressor's, with the four
      * readings each shows, fit the door view of the device screen's design height, so 2560 by 1440 shows them at scale 3.
      */
     @Test
-    void aValvesAndAPumpsPageFitTheDesignView() {
+    void aValvesAPumpsAndACompressorsPageFitTheDesignView() {
         var texts = new HeatControlColumnTest.Recording();
         int view = FluidGuiLayout.doorView(FluidGuiLayout.HEIGHT);
         assertEquals(338, view);
         for (var c : List.of(new Case("valve", input(Kind.VALVE, true, false, DeviceColumn.Valve.MASS_FLOW, 4, "Fully open / target limited", "volume")),
-                new Case("pump", input(Kind.PUMP, true, true, DeviceColumn.Valve.NONE, 4, "", "volume"))))
+                new Case("pump", input(Kind.PUMP, true, true, DeviceColumn.Valve.NONE, 4, "", "volume")),
+                new Case("compressor (its ratio, its pressure change on hover)", input(Kind.COMPRESSOR, true, true, DeviceColumn.Valve.NONE, 4, "", "volume"))))
             for (int width : new int[]{464, 790}) {
                 int tall = place(c.in(), texts, width).bounds().h();
                 assertTrue(tall <= view, c.name() + " at " + width + ": " + tall + " px in a " + view + " px view");
