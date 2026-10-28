@@ -2,7 +2,7 @@
 
 Purpose: a lying boot drum's oil (organic) outlet leaves at the bottom of its front end, not mid-height on the front head (owner report 2026-10-28 with a screenshot of a 2 m x 6 m boot drum: "Horizontal drum organic outlet should on the bottom right, not on the right").
 
-Status: In progress since 2026-10-28 (branch `claude/drum-outlet-placement-1df644`, base `ac572f12`). Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-10-28, merged to main without a version bump (owner: "merge no test no bump"; branch `claude/drum-outlet-placement-1df644`, base `ac572f12`). Index: [../INDEX.md](../INDEX.md).
 
 ## Physics and finding
 
@@ -27,6 +27,7 @@ Status: In progress since 2026-10-28 (branch `claude/drum-outlet-placement-1df64
 ## History
 
 - 2026-10-28: diagnosis, sweep and drawings of A and B; owner chose A. Commit `6588cdfe` (code and tests). Tests: `science.equipment.*`, `EquipmentRefreshTest`, `PipeAnchor*` (160, all pass; the layout golden table holds no boot drum, unchanged); quick suite `test` 1796/1796 on `6588cdfe`. `slowGates` not yet run (before a merge). No in-game check. Not merged, not pushed.
+- 2026-10-28: merged to main on the owner's order "merge no test no bump": main (`f3fe505d`, device pages on big screens) merged into the branch (`75fbdaac`, CHANGELOG lines of both kept), then main fast-forwarded. No version bump; the CHANGELOG line stays under `[Unreleased]`. No test run after the merge of main; `slowGates` not run.
 
 ## Open items
 
