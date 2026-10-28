@@ -1,14 +1,32 @@
 package com.wormzjl.icheme.client.gui.screens.inventory;
 
 import com.wormzjl.icheme.client.ClientConfig;
-import com.wormzjl.icheme.client.gui.common.ColumnDiagram;
-import com.wormzjl.icheme.client.gui.common.ProcessUi;
-import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
+import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn.Connection;
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn.Mark;
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn.Metric;
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn.Page;
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn.View;
 import com.wormzjl.icheme.client.gui.common.ComponentDropdown;
 import com.wormzjl.icheme.client.gui.common.ComponentSearch;
-import static com.wormzjl.icheme.client.gui.common.ProcessUi.*;
+import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
+import com.wormzjl.icheme.client.gui.common.ProcessUi;
+import com.wormzjl.icheme.client.gui.common.kit.Canvas;
+import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
+import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
+import com.wormzjl.icheme.client.gui.common.kit.KitWidgets;
+import com.wormzjl.icheme.client.gui.common.kit.Measure;
+import com.wormzjl.icheme.client.gui.common.kit.Palette;
+import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
+import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
+import com.wormzjl.icheme.client.gui.common.kit.SkinField;
 import com.wormzjl.icheme.network.ColumnV3Network;
 import com.wormzjl.icheme.science.column.v3.*;
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.material.MaterialName;
@@ -16,7 +34,9 @@ import com.wormzjl.icheme.world.inventory.ColumnCalculatorV3Menu;
 import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity.V3State;
 import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity.V3Status;
 import java.util.*;
+import java.util.stream.IntStream;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
@@ -25,52 +45,70 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import org.lwjgl.glfw.GLFW;
 
-/** Editable process drawing; accepted results are discarded on any physical draft edit. */
+/**
+ * The column calculator: an editable process drawing whose accepted results are discarded on any physical draft edit.
+ * A panel door on the GUI kit since batch 2026-10-28-gui-toolkit (GUI_REVIEW.md order 5; the door's parts from
+ * {@link CalculatorColumn}): the Column page's drawing on the HMI glass, the inputs in function groups on the door, the
+ * selected connection's group under them; the Feed page's mixture table on the glass; the Results page's views (profiles,
+ * products, heat, a tray, the solver's report) on the glass, chosen on the door; the Equipment page's choices on the door,
+ * the derived components on the glass. The status is said once, on the message display, the solver's own line on its
+ * hover. Opening replays the server's state; the screen asks for a solve only when the player presses Solve.
+ */
 public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<ColumnCalculatorV3Menu> {
-    private static final int CONTENT=78;
-    private static final String[] PAGES={"overview","composition","results","diagnostics","components"},
-        RESULTS={"profiles","streams","heat"},METRICS={"temperature","pressure","pressure_drop","traffic"};
     private static String tr(String key,Object...args){return Component.translatable("gui.icheme.column."+key,args).getString();}
-    private final List<Label> labels=new ArrayList<>();
-    private final List<Hit> hits=new ArrayList<>();
+    /** A text under {@code gui.icheme.}, as the builder names them. */
+    private static String lang(String key,Object...args){return Component.translatable("gui.icheme."+key,args).getString();}
+    private static final HeatControlColumn.Texts TEXTS=ColumnCalculatorV3Screen::lang;
+    private static final CalculatorColumn.Rows EMPTY=new CalculatorColumn.Rows(List.of(),List.of());
+    /** A canvas that draws nothing: the glass's inside at a rebuild, before a frame draws it. */
+    private static final Canvas NOTHING=new Canvas(){
+        @Override public Measure measure(){return Measure.fixed(6);}
+        @Override public void fill(int x0,int y0,int x1,int y1,int argb){}
+        @Override public void text(String text,int x,int y,int argb){}
+        @Override public void text(String text,float x,float y,float scale,int argb){}
+        @Override public void clip(Rect area){}
+        @Override public void unclip(){}
+    };
     private final Map<String,EditBox> editors=new LinkedHashMap<>();
-    private final List<Scroll> scrolls=new ArrayList<>();
-    private final Scroll canvasY=new Scroll(),canvasX=new Scroll(),listScroll=new Scroll(),railScroll=new Scroll(),solverScroll=new Scroll();
-    private Scroll dragging;
+    private final KitDoor door=new KitDoor();
+    private final ScrollView glassView=new ScrollView();
+    private final KitWidgets glassWidgets=new KitWidgets();
     private V3State state;
     private V3EditorDraft draft;
     private V3ColumnInput candidate;
-    private String validation=tr("waiting"),rejection="",notice="",hoveredText,search="",presetName="";
+    private String validation=tr("waiting"),rejection="",notice="",hovered,search="",presetName="";
     private V3ClientPresets library;
     private V3ClientPresets.Kind presetKind;
     private V3ClientPresets.Snapshot presetSnapshot;
-    private boolean savingPreset,massRate,connectionMenu;
+    /** The basis shown, the client's (ClientConfig), one switch for every screen. */
+    private boolean savingPreset,massRate=ClientConfig.basis()==ClientConfig.Basis.MASS;
     /** Components page: the player's choices (the saved design's until edited), the draft's design or why it cannot be saved. */
     private ColumnComponents.Choices choices=ColumnComponents.Choices.DEFAULT;
     private boolean choicesEdited,savingDesign;
     private ColumnDesign designPreview;
     private String designProblem="";
     private long pendingNonce;
-    private boolean conflict,rebuilding,invalidated,awaitingResult,infoOnly,needsRebuild;
+    private boolean conflict,rebuilding,invalidated,awaitingResult,needsRebuild,twoColumns;
     /** The client's temperature unit, one switch for every screen (ClientConfig). */
     private boolean kelvin=ClientConfig.temperature()==TemperatureUnit.KELVIN;
-    private int page,results,offset,selectedNode=1,selectedStream,metric,lineCount,pointerX,pointerY,selectedDraw=-1,selectedPA=-1,selectedSteam=-1;
-    private Button solve;
+    private Page page=Page.COLUMN;
+    private View view=View.PROFILES;
+    private Metric metric=Metric.TEMPERATURE;
+    private int selectedNode=1,selectedStream,selectedDraw=-1,selectedPA=-1,selectedSteam=-1;
+    private SkinButton solve;
     private ComponentDropdown componentDropdown;
-    private record Hit(int x,int y,int w,int h,Runnable action,String hint){}
-    private static final class Scroll {
-        int x,y,length,visible,total,value;boolean horizontal;
-        int max(){return Math.max(0,total-visible);}
-        int thumb(){return Math.min(length,Math.max(18,total==0?length:length*visible/total));}
-        int position(){return max()==0?0:(length-thumb())*value/max();}
-        boolean contains(int px,int py){return horizontal?px>=x&&px<x+length&&py>=y&&py<y+8:px>=x&&px<x+8&&py>=y&&py<y+length;}
-        void seek(int px,int py){int at=(horizontal?px-x:py-y)-thumb()/2;value=Math.clamp((int)Math.round((double)at*max()/Math.max(1,length-thumb())),0,max());}
-    }
+    /** What renderBg drew on the glass this frame, for clicks and hovers: the glass's inside, the drawing, a plot and its drops, the templates' list. */
+    private Rect glassBox,plotBox,listBox;
+    private CalculatorColumn.Drawing drawing;
+    private double[] drops;
+    private int plotNodes;
+    private AssemblyColumn.PartList presetList;
     public ColumnCalculatorV3Screen(ColumnCalculatorV3Menu menu,Inventory inventory,Component title){
         super(menu,inventory,title);imageWidth=840;imageHeight=460;
     }
+    private static Skin skin(){return ClientConfig.skin();}
     @Override protected void init(){
-        imageWidth=Math.max(180,width-16);imageHeight=Math.max(140,height-16);
+        imageWidth=CalculatorColumn.width(width);imageHeight=CalculatorColumn.height(height);
         super.init();titleLabelY=inventoryLabelY=-1000;
         if(library==null)library=new V3ClientPresets(minecraft.gameDirectory.toPath(),name->{
             try{return minecraft.getResourceManager().getResource(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("icheme",name.substring("assets/icheme/".length()))).orElseThrow().open();}
@@ -136,64 +174,14 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
         try{designPreview=ColumnDesign.of(candidate,choices);}catch(IllegalArgumentException e){designProblem=Objects.toString(e.getMessage(),"");}
     }
     private void choose(ColumnComponents.Choices next){choices=next;choicesEdited=true;notice="";rebuild();}
-    private static <E extends Enum<E>> E next(E kind){var all=kind.getDeclaringClass().getEnumConstants();return all[(kind.ordinal()+1)%all.length];}
-    private static String kindKey(Enum<?> kind){return kind.name().toLowerCase(Locale.ROOT);}
-    /** The choice rows' pitch: 22, closer (down to a button's height and a pixel) where the page would run past its body. */
-    private int componentPitch(){return Math.clamp((bodyBottom()-CONTENT-6)/(2+(candidate==null?0:candidate.pumparounds().size())),19,22);}
-    private int componentsTextY(){return CONTENT+2+(2+(candidate==null?0:candidate.pumparounds().size()))*componentPitch()+4;}
-    private void buildComponents(){
-        checkDesign();int y=CONTENT+2,w=Math.max(60,Math.min(200,imageWidth-200)),p=componentPitch();
-        labels.add(new Label(tr("component_condenser"),10,y+5,150));
-        button(tr("condenser."+kindKey(choices.condenser())),170,y,w,()->choose(choices.withCondenser(next(choices.condenser()))))
-            .setTooltip(Tooltip.create(Component.literal(tr("condenser.hint"))));
-        labels.add(new Label(tr("component_reflux_pump"),10,y+p+5,150));
-        button(tr("pump."+kindKey(choices.refluxPump())),170,y+p,w,()->choose(choices.withRefluxPump(next(choices.refluxPump()))))
-            .setTooltip(Tooltip.create(Component.literal(tr("pump.hint"))));
-        if(candidate!=null){
-            var fitted=choices.fit(candidate.pumparounds().size());
-            for(int i=0;i<candidate.pumparounds().size();i++){
-                int at=i;var pump=fitted.pumparoundPumps().get(i);
-                labels.add(new Label(tr("component_pa_pump",i+1),10,y+(2+i)*p+5,150));
-                button(tr("pump."+kindKey(pump)),170,y+(2+i)*p,w,()->choose(choices.withPumparoundPump(at,next(pump))))
-                    .setTooltip(Tooltip.create(Component.literal(tr("pump.hint"))));
-            }
-        }
-        // In the page's action row, as every page keeps its actions, so it shows at any window size.
-        action("save_design",10,54,130,this::saveDesign).active=designPreview!=null&&!busy()&&!conflict&&state!=null;
-    }
-    private void changePage(int target){page=target;connectionMenu=false;offset=listScroll.value=0;presetKind=null;savingPreset=false;rebuild();}
-    private int bodyBottom(){return imageHeight-(conflict?73:48);}
-    private int rows(){return Math.max(1,(bodyBottom()-CONTENT-10)/15);}
-    private boolean narrow(){return imageWidth<710;}
-    private int solverWidth(){return 152;}
-    private int trayWidth(){return Math.max(185,Math.min(260,imageWidth/3));}
-    private int canvasWidth(){return narrow()?imageWidth-30:imageWidth-solverWidth()-trayWidth()-38;}
-    private int solverX(){return canvasWidth()+22;}
-    private int trayX(){return solverX()+solverWidth()+12;}
-    private int virtualWidth(){return Math.max(330,canvasWidth());}
-    private int cx(){return virtualWidth()/2;}
-    private int pitch(){return DiagramLayout.trayPitch(stageCount(),bodyBottom()-CONTENT-12);}
-    private int trayY(int tray){return 52+tray*pitch();}
-    private int columnBottom(){return trayY(stageCount()+1)+12;}
-    private int canvasHeight(){return Math.max(columnBottom()+67,trayY(feedTray())+78);}
+    private void changePage(Page target){page=target;presetKind=null;savingPreset=false;glassView.reset();door.reset();rebuild();}
     private int stageCount(){return draft==null?2:draft.preview("s2",draft.base().stageCount()+2,2,66)-2;}
     private int feedTray(){return draft.preview("s3",draft.base().feedStageNumber()+1,2,stageCount()+2)-1;}
-    private int sx(int x){return 10+x-canvasX.value;}
-    private int sy(int y){return CONTENT+y-canvasY.value;}
-    private Button button(String text,int x,int y,int w,Runnable action){
-        return addRenderableWidget(ProcessUi.button(text,leftPos+x,topPos+y,Math.max(20,w),action));
-    }
-    private Button action(String key,int x,int y,int w,Runnable action){
-        var b=button(tr(key),x,y,w,action);b.setTooltip(Tooltip.create(Component.literal(tr(key+".hint"))));return b;
-    }
-    private void rateButton(int x,int y,int w){
-        button(tr(massRate?"mass_rate":"molar_rate"),x,y,w,()->{toggleBasis();})
-            .setTooltip(Tooltip.create(Component.literal(tr("flow_basis.hint"))));
-    }
     private void toggleBasis(){
-        try{if(draft!=null){draft.composition().toggleBasis();massRate=draft.composition().mass();}else massRate=!massRate;rejection="";rebuild();}
+        try{if(draft!=null){draft.composition().toggleBasis();massRate=draft.composition().mass();}else massRate=!massRate;rejection="";basisToConfig();rebuild();}
         catch(IllegalArgumentException e){rejection=validationMessage(e);}
     }
+    private void basisToConfig(){ClientConfig.basis(massRate?ClientConfig.Basis.MASS:ClientConfig.Basis.MOLE);}
     private String validationMessage(IllegalArgumentException e){
         String message=Objects.toString(e.getMessage(),"").toLowerCase(Locale.ROOT);
         if(message.contains("steam"))return tr("invalid_steam");
@@ -202,154 +190,164 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
         if(message.contains("heat")||message.contains("cool")||message.contains("pumparound"))return tr("invalid_pa");
         return tr("invalid_input");
     }
+    private V3ClientPresets.Kind pageKind(){return page==Page.FEED?V3ClientPresets.Kind.MIXTURE:V3ClientPresets.Kind.COLUMN;}
+
+    // ---- The door ----
+
+    /** The page's door rows: the templates while they show; else the page's, none before the first draft. */
+    private CalculatorColumn.Rows rows(){
+        if(presetKind!=null&&draft!=null)return CalculatorColumn.presets(conflict,savingPreset,TEXTS);
+        return switch(page){
+            case COLUMN->draft==null?EMPTY:CalculatorColumn.column(columnInput(),TEXTS);
+            case FEED->draft==null?EMPTY:CalculatorColumn.feed(conflict,editable(),unit(),TEXTS);
+            case RESULTS->CalculatorColumn.results(resultsInput(),TEXTS);
+            case EQUIPMENT->draft==null?EMPTY:CalculatorColumn.equipment(equipmentInput(),TEXTS);
+        };
+    }
+    private CalculatorColumn.ColumnInput columnInput(){
+        var selected=selectedDraw>=0?Connection.DRAW:selectedPA>=0?Connection.PA:selectedSteam>=0?Connection.STEAM:Connection.NONE;
+        int index=Math.max(selectedDraw,Math.max(selectedPA,selectedSteam));
+        boolean spread=selectedPA<0||draft.get("c"+selectedPA+"split").equals("UNIFORM");
+        boolean addDraw=editable()&&stageCount()>0&&IntStream.range(0,V3ColumnInput.MAX_SIDE_DRAWS).anyMatch(i->draft.get("d"+i+"stage").isBlank());
+        boolean addPa=editable()&&stageCount()>1&&IntStream.range(0,4).anyMatch(i->draft.get("c"+i+"draw").isBlank());
+        return new CalculatorColumn.ColumnInput(conflict,editable(),unit(),selected,index,spread,addDraw,addPa,editable()&&draft.canAddSteam());
+    }
+    private List<V3ColumnStreamProperties> streams(){return inspection()==null?List.of():state.displayResult().orElseThrow().streams();}
+    private CalculatorColumn.ResultsInput resultsInput(){
+        var streams=streams();selectedStream=Math.clamp(selectedStream,0,Math.max(0,streams.size()-1));
+        selectedNode=Math.clamp(selectedNode,0,stageCount()+1);
+        return new CalculatorColumn.ResultsInput(conflict,view,metric,streams.stream().map(this::streamName).toList(),selectedStream,draft==null?-1:selectedNode,stageCount());
+    }
+    private CalculatorColumn.EquipmentInput equipmentInput(){
+        checkDesign();var fitted=choices.fit(candidate==null?0:candidate.pumparounds().size());
+        return new CalculatorColumn.EquipmentInput(conflict,fitted.condenser(),fitted.refluxPump(),fitted.pumparoundPumps(),designPreview!=null&&!busy()&&!conflict&&state!=null);
+    }
+    /** A push button or a tab at door rect {@code at}. */
+    private SkinButton push(Column.Button spec,Rect at){
+        return addRenderableWidget(SkinButton.of(spec,at.moved(leftPos,topPos),this::act,ColumnCalculatorV3Screen::skin));
+    }
     private void rebuild(){
         if(rebuilding)return;rebuilding=true;needsRebuild=false;
         String focus=editors.entrySet().stream().filter(e->e.getValue()==getFocused()).map(Map.Entry::getKey).findFirst().orElse(null);
         int cursor=focus==null?0:editors.get(focus).getCursorPosition();
         boolean dropdownOpen=componentDropdown!=null&&componentDropdown.expanded();
-        clearWidgets();editors.clear();labels.clear();scrolls.clear();componentDropdown=null;
-        int tab=(imageWidth-20)/PAGES.length;
-        for(int i=0;i<PAGES.length;i++){int t=i;action(PAGES[i],10+i*tab,28,tab-3,()->changePage(t)).active=page!=i;}
-        solve=action("solve",10,imageHeight-25,64,this::submit);
-        button(tr("temperature_unit",unit()),imageWidth-130,imageHeight-25,120,()->{kelvin=!kelvin;ClientConfig.temperature(temperatureUnit());rebuild();})
-            .setTooltip(Tooltip.create(Component.literal(tr("temperature_unit.hint"))));
-        if(conflict){
-            action("use_server",10,imageHeight-69,120,()->{draft=newDraft(state.input());conflict=false;invalidated=false;validate();rebuild();});
-            action("keep_draft",136,imageHeight-69,115,()->{conflict=false;validate();rebuild();});
-        }
-        if(presetKind!=null&&draft!=null)buildPresets();
-        else if(page==0&&draft!=null){
-            action("column_templates",10,54,100,()->openPresets(V3ClientPresets.Kind.COLUMN));
-            action("save_column",116,54,86,()->openSave(V3ClientPresets.Kind.COLUMN));
-            if(narrow())button(tr(infoOnly?"drawing":"information"),436,54,105,()->{infoOnly=!infoOnly;rebuild();});
-            action("connections",208,54,112,()->{connectionMenu=!connectionMenu;rebuild();});
-            action("mixture_templates",326,54,104,()->openPresets(V3ClientPresets.Kind.MIXTURE));
-            if(!narrow()||!infoOnly){if(connectionMenu)buildConnections();else buildDrawing();}
-        }else if(page==1&&draft!=null)buildComposition();
-        else if(page==4&&draft!=null)buildComponents();
-        else if(page==2){
-            int w=(imageWidth-20)/3;
-            for(int i=0;i<3;i++){int t=i;action(RESULTS[i],10+i*w,54,w-3,()->{results=t;offset=listScroll.value=0;rebuild();}).active=results!=i;}
-            if(results==0)button(tr(METRICS[metric],unit()),10,CONTENT,175,()->{metric=(metric+1)%4;rebuild();})
-                .setTooltip(Tooltip.create(Component.literal(tr("profile_metric.hint"))));
-            if(results==1&&inspection()!=null){
-                var streams=state.displayResult().orElseThrow().streams();
-                if(!streams.isEmpty()){
-                    selectedStream=Math.clamp(selectedStream,0,streams.size()-1);
-                    button(streamName(streams.get(selectedStream)),10,CONTENT,imageWidth-160,()->{selectedStream=(selectedStream+1)%streams.size();offset=listScroll.value=0;rebuild();})
-                        .setTooltip(Tooltip.create(Component.literal(tr("next_product.hint"))));
-                    rateButton(imageWidth-142,CONTENT,128);
-                }
-            }
-        }
-        if(page==3&&presetKind==null)action("copy_report",10,54,130,()->{
-            if(state!=null)minecraft.keyboardHandler.setClipboard(String.join("\n",state.diagnostics())+"\n"+state.displayResult().map(Object::toString).orElse(""));
-            notice=tr("report_copied");rejection="";
-        });
+        clearWidgets();editors.clear();componentDropdown=null;glassWidgets.clear();solve=null;
+        var m=GuiCanvas.measure(font);
+        var tabs=CalculatorColumn.tabs(page,TEXTS);var tabSlots=CalculatorColumn.tabSlots(imageWidth);
+        for(int i=0;i<tabs.size();i++)push(tabs.get(i),tabSlots.get(i));
+        // The theme key shows the contrast sign; its hover names the panel shown.
+        String theme=lang(ClientConfig.theme()==ClientConfig.Theme.DARK?"fluid.theme.dark":"fluid.theme.light");
+        var at=CalculatorColumn.theme(imageWidth);
+        var themeKey=new SkinButton(leftPos+at.x(),topPos+at.y(),at.w(),at.h(),Component.literal(theme),b->{ClientConfig.toggleTheme();rebuild();},ColumnCalculatorV3Screen::skin).icon(Skin.Icon.THEME);
+        themeKey.setTooltip(Tooltip.create(Component.literal(theme+"\n").append(Component.translatable("gui.icheme.fluid.theme.hint"))));
+        addRenderableWidget(themeKey);
+        // Templates, Solve and Save; the basis and the temperature unit are display keys on their tray (renderBg).
+        var footer=CalculatorColumn.footer(imageWidth,imageHeight);
+        var keys=CalculatorColumn.footerButtons(new CalculatorColumn.Footer(presetKind!=null,page==Page.FEED,true,massRate,unit()),TEXTS);
+        for(int i=0;i<keys.size();i++){var b=push(keys.get(i),footer.get(i));if(keys.get(i).key().equals("solve"))solve=b.primary(true);}
+        var rows=rows();twoColumns=rows.two();
+        door.layout(CalculatorColumn.door(imageWidth,imageHeight,twoColumns),CalculatorColumn.bar(imageWidth),rows.at(imageWidth),m);
+        door.keep(this::field,(spec,slot)->addRenderableWidget(SkinButton.of(spec,slot,this::act,ColumnCalculatorV3Screen::skin)));
+        door.place(leftPos,topPos);
+        var box=skin().well(NOTHING,CalculatorColumn.glass(imageWidth,imageHeight,twoColumns));
+        if(presetKind!=null&&draft!=null){if(savingPreset)buildSaveForm(box,m);else checkPresets();}
+        else if(page==Page.FEED&&draft!=null)buildComposition(box,m);
+        glassWidgets.place(glassView,leftPos,topPos);
         if(focus!=null&&editors.containsKey(focus)){setFocused(editors.get(focus));editors.get(focus).setCursorPosition(cursor);}
         if(componentDropdown!=null&&"search".equals(focus))componentDropdown.expanded(dropdownOpen);
         rebuilding=false;updateControls();
     }
     @Override protected void containerTick(){super.containerTick();if(needsRebuild)rebuild();}
-    private void field(String name,String key,int x,int y,int w){
-        labels.add(new Label(name,x,y,w));
-        var e=new EditBox(font,leftPos+x,topPos+y+11,w,18,Component.literal(name));
+    /** An entry on the door: its LCD, the draft's text in the shown unit; the drawing follows the trays and connections it changes. */
+    private AbstractWidget field(Column.Field f,Rect slot){
+        String key=f.key();
+        var e=new SkinField(font,slot.x(),slot.y(),slot.w(),slot.h(),Component.literal(f.label()),ColumnCalculatorV3Screen::skin);
         e.setMaxLength(32);e.setValue(draft.display(key,kelvin));
         e.setResponder(v->{draft.setDisplay(key,v,kelvin);edited();if(key.equals("s2")||key.equals("s3")||key.endsWith("stage")||key.endsWith("draw")||key.endsWith("return"))needsRebuild=true;});
-        e.setTooltip(Tooltip.create(Component.literal(name)));editors.put(key,addRenderableWidget(e));
+        e.setTooltip(Tooltip.create(Component.literal(f.hint()==null?f.label():f.label()+"\n"+f.hint())));
+        editors.put(key,addRenderableWidget(e));
+        return e;
     }
-    private void canvasField(String label,String key,int x,int y,int w){
-        int px=sx(x),py=sy(y);
-        if(px>=10&&px+w<=10+canvasWidth()&&py>=CONTENT&&py+30<bodyBottom()-12){field(tr(label,unit()),key,px,py,w);editors.get(key).setTooltip(Tooltip.create(Component.literal(tr(label+".hint"))));}
-    }
-    private void canvasButton(String key,int x,int y,int w,Runnable run,boolean enabled){
-        int px=sx(x),py=sy(y);
-        if(px>=10&&px+w<=10+canvasWidth()&&py>=CONTENT&&py+18<bodyBottom()-12)
-            action(key,px,py,w,run).active=editable()&&enabled;
-    }
-    private void configure(Scroll s,int x,int y,int length,int visible,int total,boolean horizontal){
-        s.x=x;s.y=y;s.length=Math.max(20,length);s.visible=visible;s.total=total;s.horizontal=horizontal;s.value=Math.clamp(s.value,0,s.max());
-        if(!scrolls.contains(s))scrolls.add(s);
-    }
-    private void buildConnections(){
-        action("add_draw",10,CONTENT+26,240,()->{selectedDraw=draft.addDraw(Math.clamp(selectedNode+1,2,Math.max(2,stageCount()+1)));selectedPA=selectedSteam=-1;connectionMenu=false;edited();rebuild();}).active=editable()&&
-            stageCount()>0&&java.util.stream.IntStream.range(0,V3ColumnInput.MAX_SIDE_DRAWS).anyMatch(i->draft.get("d"+i+"stage").isBlank());
-        action("add_pa",10,CONTENT+51,240,()->{selectedPA=draft.addPumparound(Math.clamp(selectedNode+1,3,Math.max(3,stageCount()+1)));selectedDraw=selectedSteam=-1;connectionMenu=false;edited();rebuild();}).active=editable()&&
-            stageCount()>1&&java.util.stream.IntStream.range(0,4).anyMatch(i->draft.get("c"+i+"draw").isBlank());
-        action("add_steam",10,CONTENT+76,240,()->{selectedSteam=draft.addSteam(Math.clamp(selectedNode+1,2,stageCount()+2));selectedDraw=selectedPA=-1;connectionMenu=false;edited();rebuild();}).active=editable()&&
-            draft.canAddSteam();
-    }
-    private void buildDrawing(){
-        int view=bodyBottom()-CONTENT-12;
-        configure(canvasY,10+canvasWidth()+2,CONTENT,view,view,canvasHeight(),false);
-        configure(canvasX,10,bodyBottom()-10,canvasWidth(),canvasWidth(),virtualWidth(),true);
-        int left=5,right=cx()+34;
-        canvasField("tray_count","s2",left,0,58);
-        canvasField("diameter","s9",left+65,0,72);
-        canvasField("top_temperature","s4",right,0,82);
-        canvasField("reflux","s6",right+88,0,65);
-        canvasField("top_pressure","s7",right,32,62);
-        int fy=trayY(feedTray());
-        canvasField("feed_flow","s0",left,fy+12,76);
-        canvasField("feed_temperature","s1",left,fy+46,65);
-        canvasField("feed_tray","s3",left+72,fy+46,50);
-        canvasField("duty","s5",right,columnBottom()+6,112);
-        int location=selectedDraw>=0?draft.preview("d"+selectedDraw+"stage",2,2,stageCount()+2)-1:
-            selectedPA>=0?draft.preview("c"+selectedPA+"draw",3,2,stageCount()+2)-1:
-            selectedSteam>=0?draft.preview("t"+selectedSteam+"stage",stageCount()+2,2,stageCount()+2)-1:1;
-        int ey=Math.max(69,Math.min(trayY(location)-12,columnBottom()-100));
-        if(selectedDraw>=0){
-            int i=selectedDraw;String k="d"+i;
-            canvasField("draw_flow",k+"rate",right,ey,70);canvasField("draw_tray",k+"stage",right+76,ey,50);
-            canvasButton("remove_draw",right,ey+34,90,()->{draft.removeDraw(i);selectedDraw=-1;edited();rebuild();},true);
-        }else if(selectedPA>=0){
-            int i=selectedPA;String k="c"+i;
-            canvasField("cooling",k+"duty",right,ey,72);
-            canvasField("draw_tray",k+"draw",right,ey+34,58);canvasField("return_tray",k+"return",right+65,ey+34,75);
-            canvasButton(draft.get(k+"split").equals("UNIFORM")?"uniform_heat":"return_heat",right,ey+70,124,()->{draft.set(k+"split",draft.get(k+"split").equals("UNIFORM")?"RETURN_TRAY":"UNIFORM");edited();rebuild();},true);
-            canvasButton("remove_pa",right,ey+91,90,()->{draft.removePumparound(i);selectedPA=-1;edited();rebuild();},true);
-        }else if(selectedSteam>=0){
-            int i=selectedSteam;String k="t"+i;
-            canvasField("steam_flow",k+"rate",right,ey,82);canvasField("injection_tray",k+"stage",right+88,ey,38);
-            canvasField("steam_temperature",k+"T",right,ey+34,70);
-            canvasButton("remove_steam",right,ey+69,106,()->{draft.removeSteam(i);selectedSteam=-1;edited();rebuild();},true);
+    private void act(String key){
+        switch(key){
+            case "templates"->openPresets(pageKind());
+            case "solve"->submit();
+            case "save"->openSave(pageKind());
+            case "basis"->toggleBasis();
+            case "temperature"->{kelvin=!kelvin;ClientConfig.temperature(temperatureUnit());rebuild();}
+            case "use_server"->{draft=newDraft(state.input());conflict=false;invalidated=false;validate();rebuild();}
+            case "keep_draft"->{conflict=false;validate();rebuild();}
+            case "add:draw"->{selectedDraw=draft.addDraw(Math.clamp(selectedNode+1,2,Math.max(2,stageCount()+1)));selectedPA=selectedSteam=-1;edited();rebuild();}
+            case "add:pa"->{selectedPA=draft.addPumparound(Math.clamp(selectedNode+1,3,Math.max(3,stageCount()+1)));selectedDraw=selectedSteam=-1;edited();rebuild();}
+            case "add:steam"->{selectedSteam=draft.addSteam(Math.clamp(selectedNode+1,2,stageCount()+2));selectedDraw=selectedPA=-1;edited();rebuild();}
+            case "remove"->{
+                if(selectedDraw>=0){draft.removeDraw(selectedDraw);selectedDraw=-1;}
+                else if(selectedPA>=0){draft.removePumparound(selectedPA);selectedPA=-1;}
+                else if(selectedSteam>=0){draft.removeSteam(selectedSteam);selectedSteam=-1;}
+                edited();rebuild();
+            }
+            case "split:uniform","split:return"->{if(selectedPA>=0){draft.set("c"+selectedPA+"split",key.equals("split:uniform")?"UNIFORM":"RETURN_TRAY");edited();rebuild();}}
+            case "clear"->{draft.composition().clear();edited();rebuild();}
+            case "copy_report"->{
+                if(state!=null)minecraft.keyboardHandler.setClipboard(String.join("\n",state.diagnostics())+"\n"+state.displayResult().map(Object::toString).orElse(""));
+                notice=tr("report_copied");rejection="";
+            }
+            case "save_design"->saveDesign();
+            case "back"->{presetKind=null;savingPreset=false;glassView.reset();rebuild();}
+            case "refresh"->{rejection="";notice="";presetSnapshot=library.refresh(presetKind);glassView.reset();rebuild();}
+            case "open_folder"->net.minecraft.Util.getPlatform().openPath(library.directory(presetKind));
+            case "save_json"->saveJson();
+            case "tray-","tray+"->{selectedNode=Math.clamp(selectedNode+(key.equals("tray+")?1:-1),0,stageCount()+1);glassView.reset();rebuild();}
+            default->{
+                int colon=key.indexOf(':');String head=colon<0?key:key.substring(0,colon),tail=colon<0?"":key.substring(colon+1);
+                switch(head){
+                    case "tab"->changePage(Page.valueOf(tail.toUpperCase(Locale.ROOT)));
+                    case "view"->{view=View.valueOf(tail.toUpperCase(Locale.ROOT));glassView.reset();rebuild();}
+                    case "metric"->{metric=Metric.valueOf(tail.toUpperCase(Locale.ROOT));rebuild();}
+                    case "stream"->{selectedStream=Integer.parseInt(tail);glassView.reset();rebuild();}
+                    case "condenser"->choose(choices.withCondenser(ColumnComponents.Condenser.valueOf(tail.toUpperCase(Locale.ROOT))));
+                    case "reflux"->choose(choices.withRefluxPump(ColumnComponents.Pump.valueOf(tail.toUpperCase(Locale.ROOT))));
+                    default->{
+                        if(head.startsWith("pa")&&candidate!=null){
+                            var fitted=choices.fit(candidate.pumparounds().size());
+                            choose(fitted.withPumparoundPump(Integer.parseInt(head.substring(2)),ColumnComponents.Pump.valueOf(tail.toUpperCase(Locale.ROOT))));
+                        }
+                    }
+                }
+            }
         }
     }
     private String unit(){return temperatureUnit().symbol();}
     private TemperatureUnit temperatureUnit(){return kelvin?TemperatureUnit.KELVIN:TemperatureUnit.CELSIUS;}
     private double temperature(double k){return temperatureUnit().display(k);}
+
+    // ---- The templates ----
+
     private void openPresets(V3ClientPresets.Kind kind){
-        rejection="";notice="";presetKind=kind;savingPreset=false;presetSnapshot=library.refresh(kind);listScroll.value=0;rebuild();
+        rejection="";notice="";presetKind=kind;savingPreset=false;presetSnapshot=library.refresh(kind);glassView.reset();rebuild();
     }
     private void openSave(V3ClientPresets.Kind kind){presetKind=kind;savingPreset=true;presetName="";rebuild();}
-    private void buildPresets(){
-        action("back",10,54,65,()->{presetKind=null;savingPreset=false;rebuild();});
-        if(savingPreset){
-            labels.add(new Label(tr("preset_filename"),10,CONTENT,imageWidth-30));
-            var box=new EditBox(font,leftPos+10,topPos+CONTENT+18,Math.min(230,imageWidth-35),18,Component.literal(tr("preset_filename")));
-            box.setMaxLength(64);box.setValue(presetName);box.setResponder(v->presetName=v);editors.put("presetName",addRenderableWidget(box));
-            action("save_json",10,CONTENT+43,100,()->{
-                try{
-                    String json=presetKind==V3ClientPresets.Kind.COLUMN?V3ClientPresets.columnJson(presetName,draft.assembleOperating()):V3ClientPresets.mixtureJson(presetName,draft.composition());
-                    var path=library.save(presetKind,presetName,json);notice=tr("saved",path.getFileName().toString());rejection="";presetKind=null;savingPreset=false;rebuild();
-                }catch(java.io.IOException|IllegalArgumentException e){rejection=tr("save_failed");}
-            });
-            labels.add(new Label(tr("preset_filename_hint"),10,CONTENT+70,imageWidth-30));return;
-        }
-        action("refresh",82,54,84,()->{rejection="";notice="";presetSnapshot=library.refresh(presetKind);listScroll.value=0;rebuild();});
-        labels.add(new Label(tr(presetKind==V3ClientPresets.Kind.COLUMN?"column_library":"mixture_library"),10,CONTENT,imageWidth-25));
-        action("open_folder",172,54,92,()->net.minecraft.Util.getPlatform().openPath(library.directory(presetKind)));
-        if(presetSnapshot==null)return;
-        int count=Math.max(1,(bodyBottom()-CONTENT-35)/23);
-        configure(listScroll,imageWidth-18,CONTENT+20,bodyBottom()-CONTENT-32,count,presetSnapshot.entries().size(),false);
-        offset=listScroll.value;
-        for(int i=offset;i<Math.min(presetSnapshot.entries().size(),offset+count);i++){
-            var entry=presetSnapshot.entries().get(i);var preset=entry.preset();
-            String name=preset.translationKey().isBlank()?preset.name():Component.translatable(preset.translationKey()).getString();
-            button(name+"  "+tr(entry.bundled()?"bundled":"custom"),10,CONTENT+20+(i-offset)*23,imageWidth-40,()->loadPreset(preset))
-                .setTooltip(Tooltip.create(Component.literal(tr(entry.file().equals("holland_3_2.json")?"benchmark_hint":presetKind==V3ClientPresets.Kind.COLUMN?"column_templates.hint":"mixture_templates.hint"))));
-        }
-        if(!presetSnapshot.problems().isEmpty())rejection=tr("preset_errors",presetSnapshot.problems().size(),presetSnapshot.problems().getFirst().file());
+    private void checkPresets(){
+        if(presetSnapshot!=null&&!presetSnapshot.problems().isEmpty())rejection=tr("preset_errors",presetSnapshot.problems().size(),presetSnapshot.problems().getFirst().file());
+    }
+    private void saveJson(){
+        try{
+            String json=presetKind==V3ClientPresets.Kind.COLUMN?V3ClientPresets.columnJson(presetName,draft.assembleOperating()):V3ClientPresets.mixtureJson(presetName,draft.composition());
+            var path=library.save(presetKind,presetName,json);notice=tr("saved",path.getFileName().toString());rejection="";presetKind=null;savingPreset=false;rebuild();
+        }catch(java.io.IOException|IllegalArgumentException e){rejection=tr("save_failed");}
+    }
+    private String library(){return tr(presetKind==V3ClientPresets.Kind.COLUMN?"column_library":"mixture_library");}
+    private CalculatorColumn.SaveForm saveForm(Rect box,Measure m){return CalculatorColumn.saveForm(library(),tr("preset_filename"),tr("preset_filename_hint"),box,m);}
+    /** The new template's name: a text field on the glass, under the library and its label. */
+    private void buildSaveForm(Rect box,Measure m){
+        var at=saveForm(box,m).name();
+        var name=new EditBox(font,leftPos+at.x(),topPos+at.y(),at.w(),at.h(),Component.literal(tr("preset_filename")));
+        name.setMaxLength(64);name.setValue(presetName);name.setResponder(v->presetName=v);editors.put("presetName",addRenderableWidget(name));
+    }
+    private List<V3ClientPresets.Entry> presetEntries(){return presetSnapshot==null?List.of():presetSnapshot.entries();}
+    private String presetName(V3ClientPresets.Preset preset){return preset.translationKey().isBlank()?preset.name():Component.translatable(preset.translationKey()).getString();}
+    private String presetHint(V3ClientPresets.Entry entry){
+        return tr(entry.file().equals("holland_3_2.json")?"benchmark_hint":presetKind==V3ClientPresets.Kind.COLUMN?"column_templates.hint":"mixture_templates.hint");
     }
     private void loadPreset(V3ClientPresets.Preset preset){
         if(busy())return;
@@ -360,285 +358,362 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
             }else if(preset instanceof V3ClientPresets.Mixture mixture){
                 var source=state.editorCatalog().templates().values().stream().filter(i->i.packageId().equals(mixture.packageId())).findFirst().orElseThrow();
                 var comp=new V3CompositionDraft(source,state.editorCatalog().weightsFor(source));comp.load(mixture.amounts(),mixture.mass());
-                draft.composition(source,state.editorCatalog().weightsFor(source));draft.composition().load(mixture.amounts(),mixture.mass());massRate=mixture.mass();
+                draft.composition(source,state.editorCatalog().weightsFor(source));draft.composition().load(mixture.amounts(),mixture.mass());massRate=mixture.mass();basisToConfig();
             }
-            selectedDraw=selectedPA=selectedSteam=-1;connectionMenu=false;presetKind=null;listScroll.value=0;edited();rebuild();
+            selectedDraw=selectedPA=selectedSteam=-1;presetKind=null;glassView.reset();edited();rebuild();
         }catch(IllegalArgumentException|NoSuchElementException e){rejection=tr("preset_incompatible");}
     }
-    private void buildComposition(){
-        action("mixture_templates",10,54,108,()->openPresets(V3ClientPresets.Kind.MIXTURE));
-        action("save_mixture",124,54,94,()->openSave(V3ClientPresets.Kind.MIXTURE));
-        action("clear_mixture",224,54,72,()->{draft.composition().clear();edited();rebuild();}).active=editable();
-        button(tr(draft.composition().mass()?"mass_percent":"mole_percent"),imageWidth<570?166:302,imageWidth<570?CONTENT:54,85,()->{
-            toggleBasis();
-        }).setTooltip(Tooltip.create(Component.literal(tr("composition_basis.hint"))));
+
+    // ---- The feed's mixture ----
+
+    /** The search field over the table, the table's rows below it, scrolled in their view. */
+    private Rect feedArea(Rect box){return new Rect(box.x(),box.y()+24,box.w()-ScrollView.BAR-2,0);}
+    private Rect feedViewport(Rect box){return new Rect(box.x(),box.y()+22,box.w(),box.h()-22);}
+    private CalculatorColumn.FeedTable feedTable(Rect box,Measure m,boolean values){
+        double[] fractions=null;double total=Double.NaN;
+        if(values)try{fractions=draft.composition().displayFractions();total=Arrays.stream(draft.assembleOperating().feedComponentMolarFlowsMolPerSecond()).sum();}catch(IllegalArgumentException ignored){}
+        var rows=new ArrayList<CalculatorColumn.FeedRow>();
+        for(int id:draft.composition().rows()){
+            String share="",flow="",other="";
+            if(values){
+                share=fractions==null?"—":percent(fractions[id]*100);
+                flow=fractions==null||!Double.isFinite(total)?"—":percent(draft.composition().componentFlow(id,total,massRate));
+                other=fractions==null||!Double.isFinite(total)?"—":percent(draft.composition().componentFlow(id,total,!massRate));
+            }
+            rows.add(new CalculatorColumn.FeedRow(id,material(draft.composition().source().componentBasis().componentId(id)),share,flow,other));
+        }
+        var header=List.of(tr("component"),tr("relative_amount"),tr(draft.composition().mass()?"mass_percent":"mole_percent"),tr(massRate?"mass_rate":"molar_rate"),tr(massRate?"molar_rate":"mass_rate"));
+        return CalculatorColumn.feedTable(header,rows,feedArea(box),m);
+    }
+    private void buildComposition(Rect box,Measure m){
         var options=new ArrayList<ComponentSearch.Option>();
         var basis=draft.composition().source().componentBasis();
         for(int i=0;i<basis.componentCount();i++)if(!draft.composition().contains(i))
             options.add(new ComponentSearch.Option(i,material(basis.componentId(i)),basis.componentId(i)));
-        componentDropdown=new ComponentDropdown(font,leftPos+10,topPos+CONTENT,Math.min(360,imageWidth-40),bodyBottom()-CONTENT-12,
+        componentDropdown=new ComponentDropdown(font,leftPos+box.x(),topPos+box.y(),Math.min(360,box.w()),box.h(),
             options,search,value->search=value,id->{
                 if(!editable())return;draft.composition().add(id);search="";edited();rebuild();
             });
         editors.put("search",addRenderableWidget(componentDropdown));
-        var ids=draft.composition().rows();int count=Math.max(1,(bodyBottom()-CONTENT-66)/25);
-        offset=Math.clamp(listScroll.value,0,Math.max(0,ids.size()-count));
-        int amount=amountX();
-        for(int i=offset;i<Math.min(ids.size(),offset+count);i++){
-            int id=ids.get(i),y=CONTENT+51+(i-offset)*25;
-            var e=new EditBox(font,leftPos+amount,topPos+y,58,18,Component.literal(tr("relative_amount")));
+        var table=feedTable(box,m,false);
+        glassView.layout(feedViewport(box),box.right()-ScrollView.BAR,table.height());
+        for(var entry:table.entries()){
+            int id=entry.row().id();var a=entry.amount();
+            var e=new EditBox(font,a.x(),a.y(),a.w(),a.h(),Component.literal(tr("relative_amount")));
             e.setMaxLength(24);e.setValue(draft.composition().get(id));e.setTooltip(Tooltip.create(Component.literal(tr("relative_amount.hint"))));
             e.setResponder(v->{draft.composition().set(id,v);edited();});editors.put("comp"+id,addRenderableWidget(e));
-            button("x",imageWidth-47,y,22,()->{if(!editable())return;draft.composition().remove(id);edited();rebuild();}).setTooltip(Tooltip.create(Component.literal(tr("remove_component.hint"))));
+            glassWidgets.keep(e,a);
+            var r=entry.remove();
+            var remove=Button.builder(Component.literal("×"),b->{if(!editable())return;draft.composition().remove(id);edited();rebuild();}).bounds(r.x(),r.y(),r.w(),r.h()).build();
+            remove.setTooltip(Tooltip.create(Component.literal(tr("remove_component.hint"))));
+            glassWidgets.keep(addRenderableWidget(remove),r);
         }
-        configure(listScroll,imageWidth-18,CONTENT+51,bodyBottom()-CONTENT-63,count,ids.size(),false);
     }
-    // A wide panel moves the amount columns left by one column so the feed rate shows on both bases (bothRates).
-    private boolean bothRates(){return imageWidth>=660;}
-    private int amountX(){return Math.max(120,imageWidth-(bothRates()?406:310));}
+
+    // ---- The status ----
+
     private V3ColumnInspection inspection(){return invalidated||conflict||state==null?null:state.displayResult().flatMap(V3ColumnDisplayResult::inspection).orElse(null);}
-    private String freshness(){return inspection()!=null?tr("accepted"):invalidated?tr("draft_cleared"):tr("no_result");}
-    private String status(){
-        if(conflict)return tr("conflict");
-        if(!rejection.isBlank())return rejection;
-        if(!notice.isBlank())return notice;
-        if(busy())return tr(savingDesign?"design_saving":"solving");
-        if(!invalidated&&state!=null&&state.status()==V3Status.FAILED)return tr("failed");
-        return validation;
+    private boolean failed(){return !invalidated&&state!=null&&state.status()==V3Status.FAILED;}
+    private CalculatorColumn.Status status(){
+        String engine=state==null?null:tr("diagnostic_status",tr("status."+state.status().name().toLowerCase(Locale.ROOT)))
+            +(state.diagnostics().isEmpty()?"":"\n"+state.diagnostics().getFirst());
+        return CalculatorColumn.status(new CalculatorColumn.StatusInput(draft==null,conflict,rejection,notice,busy(),savingDesign,failed(),
+            draft!=null&&candidate==null?validation:null,inspection()!=null,invalidated,engine),TEXTS);
     }
+
+    // ---- Drawing ----
+
     @Override public void render(GuiGraphics g,int mouseX,int mouseY,float partialTick){
         ProcessUi.restoreCursor(minecraft,this);
-        hoveredText=null;pointerX=mouseX-leftPos;pointerY=mouseY-topPos;
+        hovered=null;
+        door.place(leftPos,topPos);glassWidgets.place(glassView,leftPos,topPos);
         super.render(g,mouseX,mouseY,partialTick);
-        if(hoveredText!=null&&(componentDropdown==null||!componentDropdown.popupContains(mouseX,mouseY)))g.renderTooltip(font,Component.literal(hoveredText),mouseX,mouseY);
+        if(componentDropdown==null||!componentDropdown.popupContains(mouseX,mouseY))KitDoor.hint(g,font,hovered,mouseX,mouseY);
         if(componentDropdown!=null)componentDropdown.renderSuggestions(g,mouseX,mouseY);
     }
     @Override protected void renderBg(GuiGraphics g,float partialTick,int mouseX,int mouseY){
-        g.fill(leftPos,topPos,leftPos+imageWidth,topPos+imageHeight,BG);g.renderOutline(leftPos,topPos,imageWidth,imageHeight,LINE);
+        var skin=skin();var canvas=new GuiCanvas(g,font,leftPos,topPos);
+        g.pose().pushPose();g.pose().translate(leftPos,topPos,0);
+        skin.page(canvas,new Rect(0,0,imageWidth,imageHeight));
+        skin.hDivider(canvas,8,imageWidth-8,imageHeight-CalculatorColumn.DIVIDER);
+        skin.softKeys(canvas,CalculatorColumn.keys(imageWidth,imageHeight));
+        for(int x:CalculatorColumn.dividers(imageWidth,imageHeight,twoColumns))skin.vDivider(canvas,x,CalculatorColumn.TOP,imageHeight-CalculatorColumn.FOOT);
+        // The glass goes under the widgets that sit on it (the feed's entries, a template's name).
+        var box=skin.well(canvas,CalculatorColumn.glass(imageWidth,imageHeight,twoColumns));
+        glassBox=box;drawing=null;plotBox=null;drops=null;presetList=null;listBox=null;
+        canvas.clip(box);glass(canvas,box);canvas.unclip();
+        glassView.drawBar(canvas,skin);
+        g.pose().popPose();
     }
-    @Override protected void renderLabels(GuiGraphics g,int mouseX,int mouseY){
-        hits.clear();text(g,tr("title",tr(PAGES[page])),10,10,TEXT,imageWidth/2);
-        text(g,freshness(),imageWidth/2,10,inspection()!=null?ACCENT:WARN,imageWidth/2-60);
-        g.hLine(8,imageWidth-8,CONTENT-3,LINE);
-        g.enableScissor(leftPos+8,topPos+CONTENT-2,leftPos+imageWidth-8,topPos+Math.max(CONTENT,bodyBottom()-12));
-        if(presetKind!=null){ /* Preset widgets and labels render below. */ }
-        else if(page==0)overview(g);
-        else if(page==1)composition(g);
-        else if(page==2){if(results==0)profile(g);else if(results==1)streams(g);else heat(g);}
-        else if(page==4)components(g);
-        else diagnostics(g);
-        for(var l:labels)text(g,l.text(),l.x(),l.y(),MUTED,l.width());
-        g.disableScissor();
-        for(var s:scrolls)drawScroll(g,s);
-        for(var hit:hits)if(pointerX>=hit.x&&pointerX<hit.x+hit.w&&pointerY>=hit.y&&pointerY<hit.y+hit.h){
-            g.renderOutline(hit.x,hit.y,hit.w,hit.h,ACCENT);hoveredText=hit.hint;
-        }
-        g.hLine(8,imageWidth-8,imageHeight-47,LINE);
-        text(g,status(),10,imageHeight-40,candidate==null||!rejection.isBlank()?WARN:notice.isBlank()?MUTED:ACCENT,imageWidth-20);
-        text(g,tr(page==1?"relative_hint":"drawing_hint"),85,imageHeight-20,MUTED,imageWidth-225);
-    }
-    private void drawScroll(GuiGraphics g,Scroll s){
-        if(s.max()==0)return;
-        g.fill(s.x,s.y,s.x+(s.horizontal?s.length:8),s.y+(s.horizontal?8:s.length),PANEL);
-        int p=s.position();g.fill(s.x+(s.horizontal?p:1),s.y+(s.horizontal?1:p),
-            s.x+(s.horizontal?p+s.thumb():7),s.y+(s.horizontal?7:p+s.thumb()),dragging==s?ACCENT:LINE);
-    }
-    private void hit(int x,int y,int w,int h,Runnable action,String hint){
-        if(y>=CONTENT&&y+h<=bodyBottom()-12&&x>=10&&x+w<=imageWidth-20)hits.add(new Hit(x,y,w,h,action,hint));
-    }
-    private void overview(GuiGraphics g){
-        if(draft==null){text(g,tr("waiting"),10,CONTENT,MUTED,imageWidth-20);return;}
-        selectedNode=Math.clamp(selectedNode,0,stageCount()+1);
-        if(!narrow()||!infoOnly){if(connectionMenu)text(g,tr("connections.hint"),10,CONTENT,MUTED,canvasWidth());else diagram(g);}
-        if(!narrow()){solverInfo(g,solverX(),solverWidth());inspect(g,trayX(),trayWidth());}
-        else if(infoOnly){int w=(imageWidth-42)/2;solverInfo(g,10,w);inspect(g,w+28,w);}
-    }
-    private void diagram(GuiGraphics g){
-        int x=sx(cx()),top=sy(trayY(0)-12),bottom=sy(columnBottom()),n=stageCount();
-        g.enableScissor(leftPos+10,topPos+CONTENT,leftPos+10+canvasWidth(),topPos+bodyBottom()-12);
-        ColumnDiagram.shell(g,x,top,bottom,PANEL,LINE);
-        var view=inspection();double min=view==null?0:view.nodes().stream().mapToDouble(V3ColumnInspection.Node::temperatureKelvin).min().orElse(0);
-        double max=view==null?1:view.nodes().stream().mapToDouble(V3ColumnInspection.Node::temperatureKelvin).max().orElse(1);
-        for(int node=0;node<n+2;node++){
-            int y=sy(trayY(node)),at=node;
-            int color=view==null?MUTED:temperatureColor((view.nodes().get(node).temperatureKelvin()-min)/Math.max(1e-9,max-min));
-            ColumnDiagram.tray(g,x,y,color);
-            if(node==selectedNode)g.renderOutline(x-23,y-2,47,5,TEXT);
-            if(node==0||node==n+1||(node+1)%5==0&&node<=n-2){
-                int labelY=node==0?y-9:node==n+1?y+2:y-4;
-                g.fill(x-8,labelY-1,x+14,labelY+9,PANEL);text(g,Integer.toString(node+1),x-7,labelY,MUTED,20);
+    /** What the glass shows: the templates, the drawing, the mixture, a result, the components; a note before the first draft. */
+    private void glass(Canvas c,Rect box){
+        var m=c.measure();
+        if(presetKind!=null&&draft!=null){
+            if(savingPreset){
+                var form=saveForm(box,m);glassView.layout(box,box.right()-ScrollView.BAR,0);
+                CalculatorColumn.draw(c,form.head(),box,0);CalculatorColumn.draw(c,form.hint(),new Rect(box.x(),form.hintY(),box.w(),box.bottom()-form.hintY()),0);
+                return;
             }
-            int hitY=node==0?top:y-Math.max(1,pitch()/2);
-            int hitHeight=node==0?y+Math.max(1,pitch()/2)-top:node==n+1?bottom-hitY:Math.max(3,pitch());
-            hit(x-24,hitY,49,hitHeight,()->{selectedNode=at;railScroll.value=0;rebuild();},tr(node==0?"inspect_top":node==n+1?"inspect_bottom":"inspect_tray",node+1));
+            var head=new CalculatorColumn.SheetBuilder(box.w(),m).note(library(),Palette.MUTED).build();
+            CalculatorColumn.draw(c,head,box,0);
+            var area=new Rect(box.x(),box.y()+head.height(),box.w(),box.h()-head.height());
+            var lines=new Rect(area.x(),area.y(),area.w()-ScrollView.BAR-2,area.h());
+            var parts=new ArrayList<AssemblyColumn.Part>();
+            for(var entry:presetEntries())parts.add(new AssemblyColumn.Part(presetName(entry.preset()),tr(entry.bundled()?"bundled":"custom"),entry.bundled()?Palette.ACCENT:Palette.TEXT));
+            var list=AssemblyColumn.parts(parts,List.of(tr("bundled"),tr("custom")),lines.w(),m);
+            glassView.layout(area,area.right()-ScrollView.BAR,list.height());
+            c.clip(area);AssemblyColumn.draw(c,list,lines,glassView.offset(),-1);c.unclip();
+            presetList=list;listBox=lines;
+            return;
         }
-        int fy=sy(trayY(feedTray()));
-        ColumnDiagram.feed(g,x,sx(5),fy,ACCENT);text(g,tr("feed_icon"),sx(5),fy-11,ACCENT,125);
-        hit(sx(5),fy-13,Math.min(125,font.width(tr("feed_icon"))+8),13,()->changePage(1),tr("feed_icon.hint"));
-        for(int i=0;i<V3ColumnInput.MAX_SIDE_DRAWS;i++)if(!draft.get("d"+i+"stage").isBlank()){
-            int at=draft.preview("d"+i+"stage",2,2,n+2)-1,y=sy(trayY(at)),id=i;
-            ColumnDiagram.draw(g,x,y,ACCENT);text(g,tr("draw_icon",i+1),x+27,y-9,ACCENT,26);
-            hit(x+26,y-11,28,13,()->{selectedDraw=id;selectedPA=selectedSteam=-1;rebuild();},tr("draw_icon.hint",i+1,at+1));
-        }
-        for(int i=0;i<4;i++)if(!draft.get("c"+i+"draw").isBlank()){
-            int a=sy(trayY(draft.preview("c"+i+"draw",3,2,n+2)-1)),b=sy(trayY(draft.preview("c"+i+"return",2,2,n+2)-1));
-            int lane=ColumnDiagram.pumparound(g,x,i,a,b,WARN),mid=(a+b)/2,id=i;
-            text(g,tr("pa_icon",i+1),lane-24,mid-4,WARN,24);
-            hit(lane-25,mid-6,29,13,()->{selectedPA=id;selectedDraw=selectedSteam=-1;rebuild();},tr("pa_icon.hint",i+1));
-        }
-        for(int i=0;i<2;i++)if(!draft.get("t"+i+"stage").isBlank()){
-            int at=draft.preview("t"+i+"stage",n+2,2,n+2)-1,y=sy(trayY(at)),id=i;
-            int start=ColumnDiagram.steam(g,x,i,y,WARN);
-            text(g,tr("steam_icon",i+1),start-22,y-10,WARN,26);
-            hit(start-24,y-12,32,14,()->{selectedSteam=id;selectedDraw=selectedPA=-1;rebuild();},tr("steam_icon.hint",i+1,at+1));
-        }
-        g.disableScissor();
-    }
-    private void solverInfo(GuiGraphics g,int x,int w){
-        List<String> lines=new ArrayList<>();lines.add(tr("solver_info"));var view=inspection();
-        if(view==null){
-            lines.add(tr(invalidated?"not_solved":busy()?"solving_short":state!=null&&state.status()==V3Status.FAILED?"failure_short":"no_result"));
-            if(!invalidated&&state!=null&&state.status()==V3Status.FAILED){
-                String raw=String.join(" ",state.diagnostics()).toLowerCase(Locale.ROOT);
-                var draw=java.util.regex.Pattern.compile("side draw on authored tray ([0-9]+) requests ([0-9.eE+-]+) kmol/h; final internal liquid ([0-9.eE+-]+)").matcher(raw);
-                if(draw.find()){
-                    wrap(lines,tr("draw_balance",Integer.parseInt(draw.group(1)),draw.group(2),draw.group(3)),w);
-                    if(Double.parseDouble(draw.group(2))>=Double.parseDouble(draw.group(3)))wrap(lines,tr("liquid_depletion"),w);
-                }else if(raw.contains("exhaust")||raw.contains("deplet"))wrap(lines,tr("liquid_depletion"),w);
-                else if(raw.contains("pressure"))wrap(lines,tr("pressure_failure"),w);
-                else wrap(lines,tr("solver_failed_hint"),w);
+        if(draft==null&&page!=Page.RESULTS){sheet(c,box,new CalculatorColumn.SheetBuilder(sheetWidth(box),m).note(tr("waiting"),Palette.MUTED));return;}
+        switch(page){
+            case COLUMN->columnDrawing(c,box,m);
+            case FEED->{
+                var table=feedTable(box,m,true);
+                glassView.layout(feedViewport(box),box.right()-ScrollView.BAR,table.height());
+                var viewport=feedViewport(box);c.clip(viewport);
+                if(table.entries().isEmpty())CalculatorColumn.draw(c,new CalculatorColumn.SheetBuilder(box.w(),m).note(tr("empty_mixture"),Palette.MUTED).build(),new Rect(box.x(),table.top()+CalculatorColumn.PITCH+4,box.w(),box.h()),0);
+                CalculatorColumn.draw(c,table,viewport,glassView.offset());
+                c.unclip();
             }
-        }else{
-            List<String> wet=new ArrayList<>();
-            for(int i=1;i<=view.input().stageCount();i++)if(view.nodes().get(i).freeWaterMolPerSecond()>0)wet.add(Integer.toString(i+1));
-            wrap(lines,tr("wet_trays",wet.isEmpty()?tr("none"):String.join(", ",wet)),w);
-            lines.add(tr("column_dp",fmt(totalDrop(view))));
-            state.displayResult().orElseThrow().trayHydraulics().ifPresent(h->{
-                wrap(lines,tr(h.floods()?"flooding":"below_flood",h.maximumFloodTray()+1),w);
-                lines.add(tr("worst_flood",fmt(h.maximumFloodFraction()*100)));
-                if(!h.correctionApplied()&&h.residualMismatchFraction()>0.01)wrap(lines,tr("uncorrected_pressure"),w);
-            });
-            boolean dew=view.audit().advisoryEvidence().stream().anyMatch(a->a.contains("dew point")||a.contains("dew-point"));
-            if(dew)wrap(lines,tr("dew_warning"),w);
-            lines.add(tr("iterations",state.displayResult().orElseThrow().newtonIterations()));
-        }
-        panelLines(g,lines,x,w,solverScroll);
-    }
-    private void panelLines(GuiGraphics g,List<String> lines,int x,int w,Scroll scroll){
-        int visible=Math.max(1,(bodyBottom()-CONTENT-12)/14);
-        configure(scroll,x+w+2,CONTENT,bodyBottom()-CONTENT-12,visible,lines.size(),false);
-        for(int i=scroll.value;i<Math.min(lines.size(),scroll.value+visible);i++)text(g,lines.get(i),x,CONTENT+(i-scroll.value)*14,i==0?ACCENT:MUTED,w);
-    }
-    private void inspect(GuiGraphics g,int x,int w){
-        List<String> lines=new ArrayList<>();lines.add(tr("tray_info"));lines.add(nodeName(selectedNode,stageCount()));var view=inspection();
-        if(view!=null){
-            var node=view.nodes().get(selectedNode);
-            lines.add(tr("tray_tp",fmt(temperature(node.temperatureKelvin())),unit(),fmt(node.pressurePascal()/1000)));
-            lines.add(tr("tray_dp",selectedNode>0&&selectedNode<=stageCount()?fmt(drop(view,selectedNode)):"—"));
-            lines.add(tr("hc_liquid",fmt(node.liquidMolPerSecond()*3.6)));
-            lines.add(tr("hc_vapor",fmt(node.vaporMolPerSecond()*3.6)));
-            lines.add(tr("water_vapor",fmt(node.waterVaporMolPerSecond()*3.6)));
-            lines.add(tr("free_water",fmt(node.freeWaterMolPerSecond()*3.6)));
-        }else lines.add(tr("solve_to_inspect"));
-        int visible=Math.max(1,(bodyBottom()-CONTENT-12)/14);
-        configure(railScroll,x+w+2,CONTENT,bodyBottom()-CONTENT-12,visible,lines.size()+(view==null?0:view.input().componentBasis().componentCount()+1),false);
-        for(int i=railScroll.value;i<Math.min(lines.size(),railScroll.value+visible);i++)text(g,lines.get(i),x,CONTENT+(i-railScroll.value)*14,i==0?ACCENT:MUTED,w);
-        if(view!=null){
-            var node=view.nodes().get(selectedNode);
-            List<String[]> data=new ArrayList<>();data.add(new String[]{tr("component"),tr("liquid_percent"),tr("vapor_percent")});
-            for(int c=0;c<view.input().componentBasis().componentCount();c++)data.add(new String[]{
-                material(view.input().componentBasis().componentId(c)),node.liquidMolPerSecond()==0?"—":percent(node.liquidFractions().get(c)*100),
-                node.vaporMolPerSecond()==0?"—":percent(node.vaporFractions().get(c)*100)});
-            for(int i=0;i<data.size();i++){int y=CONTENT+(lines.size()+i-railScroll.value)*14;if(y>=CONTENT&&y+14<bodyBottom()-12)tableRow(g,data.get(i),x,y,w,i==0);}
+            case RESULTS->results(c,box,m);
+            case EQUIPMENT->sheet(c,box,equipment(box,m));
         }
     }
-    private void composition(GuiGraphics g){
-        if(draft==null)return;
-        int amount=amountX(),norm=amount+74,flow=amount+156,other=flow+96;
-        // The feed rate on the toggled basis, then (when the panel has room) on the other one: kmol/h and kg/h together.
-        boolean both=bothRates();
-        text(g,tr("component"),10,CONTENT+34,TEXT,amount-18);text(g,tr("relative_amount"),amount,CONTENT+34,TEXT,68);
-        text(g,tr(draft.composition().mass()?"mass_percent":"mole_percent"),norm,CONTENT+34,TEXT,76);
-        text(g,tr(massRate?"mass_rate":"molar_rate"),flow,CONTENT+34,TEXT,95);
-        if(both)text(g,tr(massRate?"molar_rate":"mass_rate"),other,CONTENT+34,TEXT,95);
-        double[] fractions=null;double total=Double.NaN;
-        try{fractions=draft.composition().displayFractions();total=Arrays.stream(draft.assembleOperating().feedComponentMolarFlowsMolPerSecond()).sum();}catch(IllegalArgumentException ignored){}
-        var ids=draft.composition().rows();int count=Math.max(1,(bodyBottom()-CONTENT-66)/25);
-        for(int i=offset;i<Math.min(ids.size(),offset+count);i++){
-            int id=ids.get(i),y=CONTENT+51+(i-offset)*25;g.hLine(10,imageWidth-25,y+22,LINE);
-            text(g,material(draft.composition().source().componentBasis().componentId(id)),12,y+5,MUTED,amount-20);
-            text(g,fractions==null?"—":percent(fractions[id]*100),norm,y+5,TEXT,74);
-            text(g,fractions==null||!Double.isFinite(total)?"—":percent(draft.composition().componentFlow(id,total,massRate)),flow,y+5,TEXT,90);
-            if(both)text(g,fractions==null||!Double.isFinite(total)?"—":percent(draft.composition().componentFlow(id,total,!massRate)),other,y+5,TEXT,80);
+    /** A sheet of readouts (built {@link #sheetWidth} wide) in its scrolled view, its numbers clear of the bar. */
+    private void sheet(Canvas c,Rect box,CalculatorColumn.SheetBuilder builder){
+        var sheet=builder.build();
+        glassView.layout(box,box.right()-ScrollView.BAR,sheet.height());
+        CalculatorColumn.draw(c,sheet,new Rect(box.x(),box.y(),sheetWidth(box),box.h()),glassView.offset());
+    }
+    /** The sheets' width: the glass less its bar. */
+    private static int sheetWidth(Rect box){return box.w()-ScrollView.BAR-2;}
+    private void columnDrawing(Canvas c,Rect box,Measure m){
+        int n=stageCount();selectedNode=Math.clamp(selectedNode,0,n+1);
+        var draws=new ArrayList<Mark>();var pas=new ArrayList<Mark>();var steams=new ArrayList<Mark>();
+        for(int i=0;i<V3ColumnInput.MAX_SIDE_DRAWS;i++)if(!draft.get("d"+i+"stage").isBlank())draws.add(new Mark(i,draft.preview("d"+i+"stage",2,2,n+2)-1,0));
+        for(int i=0;i<4;i++)if(!draft.get("c"+i+"draw").isBlank())pas.add(new Mark(i,draft.preview("c"+i+"draw",3,2,n+2)-1,draft.preview("c"+i+"return",2,2,n+2)-1));
+        for(int i=0;i<2;i++)if(!draft.get("t"+i+"stage").isBlank())steams.add(new Mark(i,draft.preview("t"+i+"stage",n+2,2,n+2)-1,0));
+        var view=inspection();double[] shares=null;
+        if(view!=null&&view.nodes().size()==n+2){
+            double min=view.nodes().stream().mapToDouble(V3ColumnInspection.Node::temperatureKelvin).min().orElse(0),max=view.nodes().stream().mapToDouble(V3ColumnInspection.Node::temperatureKelvin).max().orElse(1);
+            shares=new double[n+2];for(int i=0;i<n+2;i++)shares[i]=(view.nodes().get(i).temperatureKelvin()-min)/Math.max(1e-9,max-min);
         }
-        if(ids.isEmpty())text(g,tr("empty_mixture"),10,CONTENT+58,MUTED,imageWidth-35);
+        var selected=selectedDraw>=0?Connection.DRAW:selectedPA>=0?Connection.PA:selectedSteam>=0?Connection.STEAM:Connection.NONE;
+        var in=new CalculatorColumn.DrawingInput(n,feedTray(),draws,pas,steams,selectedNode,selected,Math.max(selectedDraw,Math.max(selectedPA,selectedSteam)),shares);
+        glassView.layout(box,box.right()-ScrollView.BAR,CalculatorColumn.drawingHeight(n,box.h()));
+        var d=CalculatorColumn.drawing(in,box,glassView.offset(),m,TEXTS,node->trayHint(node,n,view));
+        CalculatorColumn.draw(c,d,TEXTS);
+        drawing=d;
     }
-    private void tableRow(GuiGraphics g,String[] cells,int x,int y,int w,boolean header){
-        ProcessUi.tableRow(g,font,cells,x,y,w,header);
+    private String trayHint(int node,int n,V3ColumnInspection view){
+        String hint=tr(node==0?"inspect_top":node==n+1?"inspect_bottom":"inspect_tray",node+1);
+        if(view==null||node>=view.nodes().size())return hint;
+        var at=view.nodes().get(node);
+        return hint+"\n"+tr("tray_reading",fmt(temperature(at.temperatureKelvin())),unit(),fmt(at.pressurePascal()/1000));
     }
-    private static String percent(double value){return value!=0&&Math.abs(value)<0.05?String.format(Locale.ROOT,"%.2g",value):fmt(value);}
-    private void wrap(List<String> lines,String value,int width){
-        while(font.width(value)>width){String s=font.plainSubstrByWidth(value,width);if(s.isEmpty())break;int space=s.lastIndexOf(32);if(space>s.length()/2)s=s.substring(0,space);lines.add(s);value=value.substring(s.length()).stripLeading();}
-        lines.add(value);
-    }
-    private void profile(GuiGraphics g){
-        if(metric==2){pressureDrop(g);return;}
+    private void results(Canvas c,Rect box,Measure m){
         var view=inspection();
-        if(view==null){text(g,tr("solve_profiles"),10,CONTENT+27,MUTED,imageWidth-20);return;}
-        int x=53,y=CONTENT+39,w=imageWidth-76,h=bodyBottom()-y-42;
-        if(h<12)return;
-        int series=metric==3?4:1;double min=Double.POSITIVE_INFINITY,max=Double.NEGATIVE_INFINITY;
-        for(var node:view.nodes())for(int s=0;s<series;s++){
-            double v=profileValue(node,s);if(Double.isFinite(v)){min=Math.min(min,v);max=Math.max(max,v);}}
-        if(!Double.isFinite(min)){text(g,tr("absent_phase"),10,y,WARN,w);return;}
-        if (max-min < Math.max(1,Math.abs(max))*1e-9) {
-            double padding=Math.max(0.01,Math.abs(max)*0.01);
-            min-=padding;max+=padding;
+        switch(this.view){
+            case PROFILES->{
+                if(view==null){sheet(c,box,new CalculatorColumn.SheetBuilder(sheetWidth(box),m).note(tr("solve_profiles"),Palette.MUTED));return;}
+                glassView.layout(box,box.right()-ScrollView.BAR,0);
+                int nodes=view.nodes().size();
+                if(metric==Metric.DROP){
+                    int head=CalculatorColumn.heading(c,box,tr("column_dp",fmt(totalDrop(view))),List.of(),m);
+                    var plot=CalculatorColumn.plot(box,head);
+                    var values=new double[nodes];for(int i=2;i<=view.input().stageCount();i++)values[i]=drop(view,i);
+                    CalculatorColumn.drops(c,plot,values);plotBox=plot;drops=values;plotNodes=nodes;
+                    return;
+                }
+                var legend=metric!=Metric.TRAFFIC?List.<CalculatorColumn.Legend>of():List.of(new CalculatorColumn.Legend(tr("traffic.organic"),CalculatorColumn.TRAFFIC[0]),
+                    new CalculatorColumn.Legend(tr("traffic.vapor"),CalculatorColumn.TRAFFIC[1]),new CalculatorColumn.Legend(tr("traffic.water"),CalculatorColumn.TRAFFIC[2]),
+                    new CalculatorColumn.Legend(tr("traffic.aqueous"),CalculatorColumn.TRAFFIC[3]));
+                String title=switch(metric){case TEMPERATURE->tr("temperature",unit());case PRESSURE->tr("pressure");default->tr("traffic");};
+                int head=CalculatorColumn.heading(c,box,title,legend,m);
+                var plot=CalculatorColumn.plot(box,head);
+                if(plot.h()<12)return;
+                int series=metric==Metric.TRAFFIC?4:1;var values=new double[series][nodes];
+                for(int s=0;s<series;s++)for(int i=0;i<nodes;i++)values[s][i]=profileValue(view.nodes().get(i),s);
+                if(!CalculatorColumn.profile(c,plot,values,metric==Metric.TRAFFIC?CalculatorColumn.TRAFFIC:new int[]{Palette.ACCENT}))
+                    CalculatorColumn.draw(c,new CalculatorColumn.SheetBuilder(box.w(),m).note(tr("absent_phase"),Palette.WARN).build(),new Rect(box.x(),box.y()+head,box.w(),box.h()-head),0);
+                else{plotBox=plot;plotNodes=nodes;}
+            }
+            case PRODUCTS->sheet(c,box,products(box,m));
+            case HEAT->sheet(c,box,heat(box,m));
+            case TRAY->sheet(c,box,tray(box,m));
+            case SOLVER->sheet(c,box,solver(box,m));
         }
-        double span=max-min;
-        g.fill(x,y,x+w,y+h,PANEL);g.renderOutline(x,y,w+1,h+1,LINE);
-        int[] colors={ACCENT,WARN,0xFF91B5FF,0xFFD5AFF1};
-        for(int n=0;n<view.nodes().size();n++){
-            int py=y+n*h/(view.nodes().size()-1);
-            if(n==0||n==view.nodes().size()-1||n%5==0&&n<view.nodes().size()-2){
-                text(g,Integer.toString(n+1),22,py-4,MUTED,25);g.hLine(x,x+w,py,LINE);}}
-        for(int s=0;s<series;s++){
-            int px0=0,py0=0;boolean previous=false;
-            for(int n=0;n<view.nodes().size();n++){
-                double value=profileValue(view.nodes().get(n),s);
-                if(!Double.isFinite(value)){previous=false;continue;}
-                int px=x+(int)Math.round((value-min)/span*w),py=y+n*h/(view.nodes().size()-1);
-                if(previous)line(g,px0,py0,px,py,colors[s]);px0=px;py0=py;previous=true;}}
-        text(g,fmt(min),x,y+h+5,MUTED,w/3);
-        text(g,fmt((min+max)/2),x+w/2-font.width(fmt((min+max)/2))/2,y+h+5,MUTED,w/3);
-        text(g,fmt(max),x+w-font.width(fmt(max)),y+h+5,MUTED,w/3);
-        if(metric==3)text(g,tr("traffic_legend"),10,CONTENT+25,MUTED,imageWidth-20);
-        hit(x,y,w,h,()->{selectedNode=Math.clamp((pointerY-y)*(stageCount()+1)/h,0,stageCount()+1);page=0;infoOnly=true;railScroll.value=0;rebuild();},tr("profile_click.hint"));
     }
     private double profileValue(V3ColumnInspection.Node node,int series){
         return switch(metric){
-            case 0->temperature(node.temperatureKelvin());
-            case 1->node.pressurePascal()/1000;
-            case 3->switch(series){case 0->node.liquidMolPerSecond()*3.6;case 1->node.vaporMolPerSecond()*3.6;
+            case TEMPERATURE->temperature(node.temperatureKelvin());
+            case PRESSURE->node.pressurePascal()/1000;
+            case TRAFFIC->switch(series){case 0->node.liquidMolPerSecond()*3.6;case 1->node.vaporMolPerSecond()*3.6;
                 case 2->node.waterVaporMolPerSecond()*3.6;default->node.freeWaterMolPerSecond()*3.6;};
-            default->throw new IllegalStateException("Unknown profile");};
+            case DROP->throw new IllegalStateException("A drop is a bar, not a profile");};
     }
-    private void streams(GuiGraphics g){
-        if(inspection()==null){text(g,tr("solve_products"),10,CONTENT+27,MUTED,imageWidth-25);return;}
-        var products=state.displayResult().orElseThrow().streams();if(products.isEmpty())return;
+    private CalculatorColumn.SheetBuilder products(Rect box,Measure m){
+        int width=sheetWidth(box);var out=new CalculatorColumn.SheetBuilder(width,m);
+        var products=streams();
+        if(products.isEmpty()){out.note(tr("solve_products"),Palette.MUTED);return out;}
         var stream=products.get(Math.clamp(selectedStream,0,products.size()-1));
-        // Both rates side by side, kmol/h and kg/h, for the stream and for each component.
-        text(g,tr("product_tp",fmt(stream.molarFlowMolPerSecond()*3.6)+" kmol/h  ·  "+fmt(stream.massFlowKgPerSecond()*3600),"kg/h",fmt(temperature(stream.temperatureKelvin())),unit(),fmt(stream.pressurePascal()/1000)),10,CONTENT+26,MUTED,imageWidth-30);
-        List<String[]> data=new ArrayList<>();
-        for(var c:stream.moleFractions())data.add(new String[]{material(c.componentId()),percent(c.moleFraction()*100),percent(c.massFraction()*100),
-            percent(stream.molarFlowMolPerSecond()*c.moleFraction()*3.6),percent(stream.massFlowKgPerSecond()*c.massFraction()*3600)});
-        table(g,new String[]{tr("component"),tr("mole_percent"),tr("mass_percent"),tr("molar_rate"),tr("mass_rate")},data,CONTENT+46);
+        out.pair(tr("field.flow"),fmt(stream.molarFlowMolPerSecond()*3.6)+" kmol/h").pair(tr("reading.mass_flow"),fmt(stream.massFlowKgPerSecond()*3600)+" kg/h")
+            .pair(tr("field.temperature"),fmt(temperature(stream.temperatureKelvin()))+" "+unit()).pair(tr("reading.pressure"),fmt(stream.pressurePascal()/1000)+" kPa").blank();
+        // The basis shown first; the other one too where the glass has room.
+        List<String> header=massRate?List.of(tr("component"),tr("mass_percent"),tr("mass_rate"),tr("mole_percent"),tr("molar_rate"))
+            :List.of(tr("component"),tr("mole_percent"),tr("molar_rate"),tr("mass_percent"),tr("mass_rate"));
+        var rows=new ArrayList<List<String>>();
+        for(var c:stream.moleFractions()){
+            String molePercent=percent(c.moleFraction()*100),massPercent=percent(c.massFraction()*100);
+            String moles=percent(stream.molarFlowMolPerSecond()*c.moleFraction()*3.6),mass=percent(stream.massFlowKgPerSecond()*c.massFraction()*3600);
+            rows.add(massRate?List.of(material(c.componentId()),massPercent,mass,molePercent,moles):List.of(material(c.componentId()),molePercent,moles,massPercent,mass));
+        }
+        // Both bases where the names keep 80 px beside the numbers.
+        if(CalculatorColumn.SheetBuilder.fits(header,rows,width-80+m.width(header.getFirst()),m))return out.table(header,rows);
+        return out.table(header.subList(0,3),rows.stream().map(r->r.subList(0,3)).toList());
     }
-    private void table(GuiGraphics g,String[] headers,List<String[]> data,int y){
-        int visible=Math.max(1,(bodyBottom()-y-32)/17);
-        configure(listScroll,imageWidth-18,y+18,bodyBottom()-y-30,visible,data.size(),false);
-        offset=listScroll.value;tableRow(g,headers,10,y,imageWidth-36,true);
-        for(int i=offset;i<Math.min(data.size(),offset+visible);i++)tableRow(g,data.get(i),10,y+18+(i-offset)*17,imageWidth-36,false);
+    private CalculatorColumn.SheetBuilder tray(Rect box,Measure m){
+        var out=new CalculatorColumn.SheetBuilder(sheetWidth(box),m);var view=inspection();
+        if(draft==null){out.note(tr("waiting"),Palette.MUTED);return out;}
+        int n=stageCount();selectedNode=Math.clamp(selectedNode,0,n+1);
+        out.note(nodeName(selectedNode,n),Palette.TEXT);
+        if(view==null||selectedNode>=view.nodes().size()){out.note(tr("solve_to_inspect"),Palette.MUTED);return out;}
+        var node=view.nodes().get(selectedNode);
+        out.pair(tr("field.temperature"),fmt(temperature(node.temperatureKelvin()))+" "+unit()).pair(tr("reading.pressure"),fmt(node.pressurePascal()/1000)+" kPa")
+            .pair(tr("tray_dp"),selectedNode>0&&selectedNode<=n?fmt(drop(view,selectedNode))+" kPa":"—")
+            .pair(tr("hc_liquid"),fmt(node.liquidMolPerSecond()*3.6)+" kmol/h").pair(tr("hc_vapor"),fmt(node.vaporMolPerSecond()*3.6)+" kmol/h")
+            .pair(tr("water_vapor"),fmt(node.waterVaporMolPerSecond()*3.6)+" kmol/h").pair(tr("free_water"),fmt(node.freeWaterMolPerSecond()*3.6)+" kmol/h").blank();
+        var rows=new ArrayList<List<String>>();
+        for(int c=0;c<view.input().componentBasis().componentCount();c++)rows.add(List.of(material(view.input().componentBasis().componentId(c)),
+            node.liquidMolPerSecond()==0?"—":percent(node.liquidFractions().get(c)*100),node.vaporMolPerSecond()==0?"—":percent(node.vaporFractions().get(c)*100)));
+        return out.table(List.of(tr("component"),tr("liquid_percent"),tr("vapor_percent")),rows);
+    }
+    private CalculatorColumn.SheetBuilder heat(Rect box,Measure m){
+        var out=new CalculatorColumn.SheetBuilder(sheetWidth(box),m).note(tr("signed_heat"),Palette.MUTED);
+        if(inspection()!=null)state.displayResult().ifPresent(result->result.dutyLedger().ifPresent(d->{
+            out.note(tr("tray_duty",1,fmt(d.condenserWatts()/1e6)),Palette.TEXT).note(tr("tray_duty",stageCount()+2,fmt(d.reboilerWatts()/1e6)),Palette.TEXT)
+                .note(tr("stage_heat",fmt(d.stageHeatTotalWatts()/1e6)),Palette.TEXT)
+                .note(tr("feed_enthalpy",fmt(d.feedEnthalpyWatts()/1e6)),Palette.TEXT).note(tr("steam_enthalpy",fmt(d.steamEnthalpyWatts()/1e6)),Palette.TEXT);
+            for(var stage:d.stageDuties())out.note(tr("tray_duty",stage.trayNumber()+1,fmt(stage.dutyWatts()/1e6)),Palette.TEXT);
+        }));
+        return out;
+    }
+    /** The solver's report: the latest attempt, the result's checks (wet trays, drop, flooding, warnings), why a solve failed, the numerical evidence. */
+    private CalculatorColumn.SheetBuilder solver(Rect box,Measure m){
+        var out=new CalculatorColumn.SheetBuilder(sheetWidth(box),m);
+        out.note(tr("diagnostic_status",state==null?tr("waiting"):tr("status."+state.status().name().toLowerCase(Locale.ROOT))),Palette.TEXT);
+        if(!rejection.isBlank())out.note(rejection,Palette.WARN);
+        var view=inspection();
+        if(view!=null){
+            List<String> wet=new ArrayList<>();
+            for(int i=1;i<=view.input().stageCount();i++)if(view.nodes().get(i).freeWaterMolPerSecond()>0)wet.add(Integer.toString(i+1));
+            out.note(tr("wet_trays",wet.isEmpty()?tr("none"):String.join(", ",wet)),Palette.TEXT).note(tr("column_dp",fmt(totalDrop(view))),Palette.TEXT);
+            state.displayResult().orElseThrow().trayHydraulics().ifPresent(h->{
+                out.note(tr(h.floods()?"flooding":"below_flood",h.maximumFloodTray()+1),h.floods()?Palette.WARN:Palette.TEXT).note(tr("worst_flood",fmt(h.maximumFloodFraction()*100)),Palette.TEXT);
+                if(!h.correctionApplied()&&h.residualMismatchFraction()>0.01)out.note(tr("uncorrected_pressure"),Palette.WARN);
+            });
+            if(view.audit().advisoryEvidence().stream().anyMatch(a->a.contains("dew point")||a.contains("dew-point")))out.note(tr("dew_warning"),Palette.WARN);
+        }else if(failed()){
+            String raw=String.join(" ",state.diagnostics()).toLowerCase(Locale.ROOT);
+            var draw=java.util.regex.Pattern.compile("side draw on authored tray ([0-9]+) requests ([0-9.eE+-]+) kmol/h; final internal liquid ([0-9.eE+-]+)").matcher(raw);
+            if(draw.find()){
+                out.note(tr("draw_balance",Integer.parseInt(draw.group(1)),draw.group(2),draw.group(3)),Palette.WARN);
+                if(Double.parseDouble(draw.group(2))>=Double.parseDouble(draw.group(3)))out.note(tr("liquid_depletion"),Palette.WARN);
+            }else if(raw.contains("exhaust")||raw.contains("deplet"))out.note(tr("liquid_depletion"),Palette.WARN);
+            else if(raw.contains("pressure"))out.note(tr("pressure_failure"),Palette.WARN);
+        }
+        if(!invalidated&&state!=null)state.displayResult().ifPresent(r->{
+            out.note(tr("iterations",r.newtonIterations()),Palette.TEXT).note(tr("residual",fraction(r.maximumScaledResidual())),Palette.TEXT)
+                .note(tr("closure",fraction(r.closureTolerance())),Palette.TEXT);
+            r.inspection().ifPresent(v->{for(var check:v.audit().checks())out.note(tr("audit_value",check.family(),fraction(check.value()),fraction(check.limit())),Palette.TEXT);});
+            out.note(tr("dataset",com.wormzjl.icheme.science.material.MaterialCatalog.Package.label(r.datasetRevision())),Palette.TEXT)
+                .note(tr("formulation",r.formulationRevision()),Palette.TEXT).note(tr("digest",r.inputDigest()),Palette.TEXT);
+        });
+        if(state!=null&&state.status()==V3Status.FAILED)out.note(tr("solver_failed_hint"),Palette.MUTED);
+        return out;
+    }
+    /** The design's state, then the derived and fixed components (plan section 4.1), then how the saved design differs. */
+    private CalculatorColumn.SheetBuilder equipment(Rect box,Measure m){
+        checkDesign();
+        var out=new CalculatorColumn.SheetBuilder(sheetWidth(box),m);
+        var saved=state==null?Optional.<ColumnDesign>empty():state.design();
+        if(designPreview==null)out.note(tr("design_not_saved",designProblem),Palette.WARN);
+        else if(saved.isPresent()&&saved.get().equals(designPreview))out.note(tr("design_saved"),Palette.ACCENT);
+        else out.note(tr("design_ready",designPreview.trays().trays()+2,fmt(designPreview.diameter())),Palette.TEXT);
+        out.blank();
+        out.pair(tr("component_ejector"),candidate==null?"—":ColumnComponents.ejectorRequired(candidate.topPressurePascal())
+                ?tr("ejector_required",fmt(candidate.topPressurePascal()/1000)):tr("ejector_none",fmt(candidate.topPressurePascal()/1000)))
+            .pair(tr("component_kettle"),candidate==null?"—":reboilerDuty(candidate)>0?tr("kettle_required",fmt(reboilerDuty(candidate)/1e6)):tr("kettle_none"))
+            .pair(tr("component_receiver"),tr("receiver")).pair(tr("component_reflux_line"),tr("reflux_line"))
+            .pair(tr("component_valves"),candidate==null?"—":tr("valves",candidate.steamFeeds().size(),candidate.sideDraws().size())).blank();
+        if(saved.isPresent()&&!saved.get().equals(designPreview))out.note(tr("design_differs",saved.get().trays().trays()+2,fmt(saved.get().diameter())),Palette.MUTED);
+        else if(saved.isEmpty())out.note(tr("design_none"),Palette.MUTED);
+        return out;
+    }
+    private static double reboilerDuty(V3ColumnInput input){
+        return input.specifications().stream().filter(V3ColumnSpecification.ReboilerDuty.class::isInstance)
+            .mapToDouble(s->((V3ColumnSpecification.ReboilerDuty)s).watts()).findFirst().orElse(0);
+    }
+    @Override protected void renderLabels(GuiGraphics g,int mouseX,int mouseY){
+        int x=mouseX-leftPos,y=mouseY-topPos;
+        var skin=skin();var canvas=new GuiCanvas(g,font,leftPos,topPos);
+        String name=title.getString(),shown=font.plainSubstrByWidth(name,CalculatorColumn.title(imageWidth));
+        skin.title(canvas,10,10,shown);
+        if(shown.length()<name.length()&&x>=6&&x<CalculatorColumn.title(imageWidth)+14&&y>=6&&y<22)hovered=name;
+        // The status once, on the message display; the solver's own line on hover.
+        var status=status();var line=CalculatorColumn.display(imageWidth);
+        String words=font.plainSubstrByWidth(status.text(),line.w());
+        skin.status(canvas,line,words,status.palette());
+        if(new Rect(line.x()-4,line.y()-5,line.w()+8,15).contains(x,y))
+            hovered=words.length()<status.text().length()?status.text()+(status.hint()==null?"":"\n"+status.hint()):status.hint();
+        var hint=door.draw(canvas,skin,x,y);
+        if(hint!=null)hovered=hint;
+        var glass=glassHint(x,y);
+        if(glass!=null)hovered=glass;
+    }
+    /** What a point on the glass reads: a part of the drawing, a template, a plot's tray. */
+    private String glassHint(double x,double y){
+        if(glassBox==null||!glassBox.contains(x,y))return null;
+        if(drawing!=null){var hit=drawing.at(x,y);return hit==null?null:hit.hint();}
+        if(presetList!=null&&listBox!=null&&listBox.contains(x,y)){
+            int i=AssemblyColumn.entry(presetList,listBox,glassView.offset(),y);
+            return i<0||i>=presetEntries().size()?null:presetHint(presetEntries().get(i));
+        }
+        if(plotBox!=null){
+            if(drops!=null){
+                if(!plotBox.contains(x,y))return y<plotBox.y()?tr("terminal_no_dp"):null;
+                int tray=CalculatorColumn.dropNode(plotBox,drops,y);
+                return tray<0?null:tr("dp_click.hint",tray+1,fmt(drops[tray]));
+            }
+            return plotBox.contains(x,y)?tr("profile_click.hint"):null;
+        }
+        return null;
+    }
+    /** A click on the glass: a part of the drawing, a template, a plot's tray. */
+    private boolean glassClick(double x,double y){
+        if(drawing!=null){
+            var hit=drawing.at(x,y);if(hit==null)return false;
+            String a=hit.action();int colon=a.indexOf(':'),at=colon<0?0:Integer.parseInt(a.substring(colon+1));
+            if(a.equals("feed"))changePage(Page.FEED);
+            else if(a.startsWith("tray:")){selectedNode=at;}
+            else if(a.startsWith("draw:")){selectedDraw=at;selectedPA=selectedSteam=-1;rebuild();}
+            else if(a.startsWith("pa:")){selectedPA=at;selectedDraw=selectedSteam=-1;rebuild();}
+            else if(a.startsWith("steam:")){selectedSteam=at;selectedDraw=selectedPA=-1;rebuild();}
+            return true;
+        }
+        if(presetList!=null&&listBox!=null&&listBox.contains(x,y)){
+            int i=AssemblyColumn.entry(presetList,listBox,glassView.offset(),y);
+            if(i>=0&&i<presetEntries().size())loadPreset(presetEntries().get(i).preset());
+            return true;
+        }
+        if(plotBox!=null&&plotBox.contains(x,y)){
+            int node=drops!=null?CalculatorColumn.dropNode(plotBox,drops,y):CalculatorColumn.node(plotBox,plotNodes,y);
+            if(node<0)return false;
+            selectedNode=node;view=View.TRAY;glassView.reset();rebuild();return true;
+        }
+        return false;
     }
     private static double drop(V3ColumnInspection view,int tray){
         if(tray<=1||tray>view.input().stageCount())return 0;
@@ -649,147 +724,44 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
         if(stream.streamId().startsWith("side_liquid_tray_"))return tr("stream.side_draw",Integer.parseInt(stream.streamId().substring("side_liquid_tray_".length()))+1);
         return tr("stream."+stream.streamId());
     }
-    private void pressureDrop(GuiGraphics g){
-        var view=inspection();
-        if(view==null){text(g,tr("solve_profiles"),10,CONTENT,MUTED,imageWidth-30);return;}
-        int n=view.input().stageCount(),x=60,y=CONTENT+58,w=imageWidth-92,h=bodyBottom()-y-48;
-        double total=totalDrop(view),max=0;
-        for(int i=2;i<=n;i++)max=Math.max(max,drop(view,i));max=Math.max(max,0.001);
-        text(g,tr("column_dp",fmt(total)),10,CONTENT+25,TEXT,imageWidth-30);
-        text(g,tr("terminal_no_dp"),10,CONTENT+40,MUTED,imageWidth-30);
-        if(h<16)return;
-        g.fill(x,y,x+w,y+h,PANEL);
-        for(int i=2;i<=n;i++){
-            int py=y+(i-2)*h/(n-1),next=y+(i-1)*h/(n-1),tray=i;
-            int bar=(int)Math.round(drop(view,i)/max*w);
-            g.fill(x,py,x+bar,Math.max(py+1,next-1),ACCENT);
-            if(i==2||i==n||i%5==0)text(g,Integer.toString(i+1),20,py,MUTED,35);
-            hit(x,py,w,Math.max(1,next-py),()->{selectedNode=tray;page=0;infoOnly=true;railScroll.value=0;rebuild();},tr("dp_click.hint",i+1,fmt(drop(view,i))));
-        }
-        text(g,"0",x,y+h+5,MUTED,30);text(g,fmt(max)+" kPa",x+w-85,y+h+5,MUTED,85);
-    }
-    private void heat(GuiGraphics g){
-        List<String> lines=new ArrayList<>();lines.add(tr("signed_heat"));
-        if(inspection()!=null)state.displayResult().ifPresent(result->result.dutyLedger().ifPresent(d->{
-            lines.add(tr("tray_duty",1,fmt(d.condenserWatts()/1e6)));lines.add(tr("tray_duty",stageCount()+2,fmt(d.reboilerWatts()/1e6)));
-            lines.add(tr("stage_heat",fmt(d.stageHeatTotalWatts()/1e6)));
-            lines.add(tr("feed_enthalpy",fmt(d.feedEnthalpyWatts()/1e6)));lines.add(tr("steam_enthalpy",fmt(d.steamEnthalpyWatts()/1e6)));
-            for(var stage:d.stageDuties())lines.add(tr("tray_duty",stage.trayNumber()+1,fmt(stage.dutyWatts()/1e6)));
-        }));
-        drawLines(g,lines,10,CONTENT,imageWidth-20);
-    }
-    private void diagnostics(GuiGraphics g){
-        List<String> lines=new ArrayList<>();lines.add(tr("diagnostic_status",state==null?tr("waiting"):tr("status."+state.status().name().toLowerCase(Locale.ROOT))));
-        if(!rejection.isBlank())wrap(lines,rejection,imageWidth-35);
-        if(!invalidated&&state!=null)state.displayResult().ifPresent(r->{
-            lines.add(tr("iterations",r.newtonIterations()));lines.add(tr("residual",fraction(r.maximumScaledResidual())));
-            lines.add(tr("closure",fraction(r.closureTolerance())));
-            r.inspection().ifPresent(v->{for(var check:v.audit().checks())lines.add(tr("audit_value",check.family(),fraction(check.value()),fraction(check.limit())));});
-            lines.add(tr("dataset",com.wormzjl.icheme.science.material.MaterialCatalog.Package.label(r.datasetRevision())));lines.add(tr("formulation",r.formulationRevision()));lines.add(tr("digest",r.inputDigest()));
-        });
-        if(state!=null&&state.status()==V3Status.FAILED)wrap(lines,tr("solver_failed_hint"),imageWidth-35);
-        drawLines(g,lines,10,CONTENT,imageWidth-20);
-    }
-    /** The derived and fixed components (plan section 4.1) under the choices, and the design's save state under Save design. */
-    private void components(GuiGraphics g){
-        if(draft==null){text(g,tr("waiting"),10,CONTENT,MUTED,imageWidth-20);return;}
-        int y=componentsTextY(),w=imageWidth-190;
-        String[][] rows={{"component_ejector",candidate==null?"—":ColumnComponents.ejectorRequired(candidate.topPressurePascal())
-                ?tr("ejector_required",fmt(candidate.topPressurePascal()/1000)):tr("ejector_none",fmt(candidate.topPressurePascal()/1000))},
-            {"component_kettle",candidate==null?"—":reboilerDuty(candidate)>0?tr("kettle_required",fmt(reboilerDuty(candidate)/1e6)):tr("kettle_none")},
-            {"component_receiver",tr("receiver")},{"component_reflux_line",tr("reflux_line")},
-            {"component_valves",candidate==null?"—":tr("valves",candidate.steamFeeds().size(),candidate.sideDraws().size())}};
-        // The fixed components while they fit above the footer; the choices above them always do.
-        int shown=0;
-        for(int i=0;i<rows.length&&y+15*i+9<=bodyBottom();i++,shown++){text(g,tr(rows[i][0]),10,y+15*i,MUTED,150);text(g,rows[i][1],170,y+15*i,TEXT,w);}
-        // The save state beside Save design; how the saved design differs under the fixed components, if there is room.
-        var saved=state==null?Optional.<ColumnDesign>empty():state.design();
-        int x=146,right=imageWidth-x-10;
-        if(designPreview==null)text(g,tr("design_not_saved",designProblem),x,59,WARN,right);
-        else if(saved.isPresent()&&saved.get().equals(designPreview))text(g,tr("design_saved"),x,59,ACCENT,right);
-        else text(g,tr("design_ready",designPreview.trays().trays()+2,fmt(designPreview.diameter())),x,59,TEXT,right);
-        y+=shown*15+6;
-        if(y+9>bodyBottom())return;
-        if(saved.isPresent()&&!saved.get().equals(designPreview))
-            text(g,tr("design_differs",saved.get().trays().trays()+2,fmt(saved.get().diameter())),10,y,MUTED,imageWidth-20);
-        else if(saved.isEmpty())text(g,tr("design_none"),10,y,MUTED,imageWidth-20);
-    }
-    private static double reboilerDuty(V3ColumnInput input){
-        return input.specifications().stream().filter(V3ColumnSpecification.ReboilerDuty.class::isInstance)
-            .mapToDouble(s->((V3ColumnSpecification.ReboilerDuty)s).watts()).findFirst().orElse(0);
-    }
-    private void drawLines(GuiGraphics g,List<String> lines,int x,int y,int w){
-        lineCount=lines.size();
-        configure(listScroll,imageWidth-18,CONTENT,bodyBottom()-CONTENT-12,rows(),lines.size(),false);
-        offset=listScroll.value;
-        for(int i=offset;i<Math.min(lines.size(),offset+rows());i++)text(g,lines.get(i),x,y+(i-offset)*15,i==0?TEXT:MUTED,w-12);
-    }
-    private String material(String id){return state==null?id:materialName(state.materialNames().getOrDefault(id,MaterialName.chemical(id)));}
-    private void text(GuiGraphics g,String value,int x,int y,int color,int max){
-        if(max<=0)return;
-        String shown=font.width(value)>max?font.plainSubstrByWidth(value,Math.max(1,max-8))+"...":value;
-        g.drawString(font,shown,x,y,color,false);
-        if (!shown.equals(value) && pointerX >= x && pointerX < x + max && pointerY >= y && pointerY < y + 10)
-            hoveredText = value;
-    }
+    private String material(String id){return state==null?id:ProcessUi.materialName(state.materialNames().getOrDefault(id,MaterialName.chemical(id)));}
+    private static String percent(double value){return value!=0&&Math.abs(value)<0.05?String.format(Locale.ROOT,"%.2g",value):fmt(value);}
     private static String fmt(double value){return String.format(Locale.ROOT,"%.1f",value);}
     private static String fraction(double value){return String.format(Locale.ROOT,"%.5g",value);}
     private static String nodeName(int node,int stages){return tr(node==0?"top_tray":node==stages+1?"bottom_tray":"tray",node+1);}
-    private static int temperatureColor(double t){
-        t=Math.clamp(t,0,1);return 0xFF000000|((int)(77+173*t)<<16)|((int)(161+30*t)<<8)|(int)(211-123*t);}
-    private static void line(GuiGraphics g,int x0,int y0,int x1,int y1,int color){
-        int steps=Math.max(Math.abs(x1-x0),Math.abs(y1-y0));
-        for(int i=0;i<=steps;i++){double f=steps==0?0:(double)i/steps;
-            int x=(int)Math.round(x0+(x1-x0)*f),y=(int)Math.round(y0+(y1-y0)*f);g.fill(x,y,x+1,y+1,color);}}
-    @Override public boolean mouseScrolled(double x,double y,double horizontal,double vertical){
-        if(componentDropdown!=null&&componentDropdown.popupScroll(x,y,vertical))return true;
-        int px=(int)x-leftPos,py=(int)y-topPos;
-        if(py>=CONTENT&&py<bodyBottom()&&!(page==2&&results==0&&presetKind==null)){
-            Scroll target=presetKind!=null||page!=0?listScroll:!narrow()?(px>=trayX()?railScroll:px>=solverX()?solverScroll:canvasY):infoOnly?(px>imageWidth/2?railScroll:solverScroll):canvasY;
-            if(page==0&&!infoOnly&&horizontal!=0)target=canvasX;
-            target.value=Math.clamp(target.value+(int)Math.signum(horizontal!=0?horizontal:-vertical)*(target==canvasY||target==canvasX?30:3),0,target.max());
-            offset=listScroll.value;rebuild();return true;
-        }
-        return super.mouseScrolled(x,y,horizontal,vertical);
+
+    // ---- Input ----
+
+    @Override public boolean mouseScrolled(double mx,double my,double horizontal,double vertical){
+        if(componentDropdown!=null&&componentDropdown.popupScroll(mx,my,vertical))return true;
+        double x=mx-leftPos,y=my-topPos;
+        return door.wheel(x,y,vertical)||glassView.wheel(x,y,vertical)||super.mouseScrolled(mx,my,horizontal,vertical);
     }
-    @Override public boolean mouseClicked(double x,double y,int button){
-        if(componentDropdown!=null&&componentDropdown.popupClick(x,y,button))return true;
-        if(button!=0)return super.mouseClicked(x,y,button);
-        int px=(int)x-leftPos,py=(int)y-topPos;
-        for(var s:scrolls)if(s.max()>0&&s.contains(px,py)){
-            dragging=s;setDragging(true);s.seek(px,py);offset=listScroll.value;rebuild();return true;
-        }
-        // Native fields win where a connection label and a widget share the viewport.
-        for(var e:editors.values())if(e.isMouseOver(x,y))return super.mouseClicked(x,y,button);
-        for(var h:hits)if(px>=h.x&&px<h.x+h.w&&py>=h.y&&py<h.y+h.h){h.action.run();return true;}
-        return super.mouseClicked(x,y,button);
+    @Override public boolean mouseClicked(double mx,double my,int button){
+        if(componentDropdown!=null&&componentDropdown.popupClick(mx,my,button))return true;
+        double x=mx-leftPos,y=my-topPos;
+        if(door.press(x,y,button)||glassView.press(x,y,button))return true;
+        // A widget on the glass (an entry, a name) wins over the glass under it.
+        if(button==0&&children().stream().noneMatch(w->w.isMouseOver(mx,my))&&glassClick(x,y))return true;
+        return super.mouseClicked(mx,my,button);
     }
-    @Override public boolean mouseDragged(double x,double y,int button,double dx,double dy){
-        if(componentDropdown!=null&&componentDropdown.popupDrag(y))return true;
-        if(button==0&&dragging!=null){dragging.seek((int)x-leftPos,(int)y-topPos);offset=listScroll.value;rebuild();return true;}
-        return super.mouseDragged(x,y,button,dx,dy);
+    @Override public boolean mouseDragged(double mx,double my,int button,double dx,double dy){
+        if(componentDropdown!=null&&componentDropdown.popupDrag(my))return true;
+        return door.drag(my-topPos)||glassView.drag(my-topPos)||super.mouseDragged(mx,my,button,dx,dy);
     }
-    @Override public boolean mouseReleased(double x,double y,int button){
+    @Override public boolean mouseReleased(double mx,double my,int button){
         if(componentDropdown!=null)componentDropdown.popupRelease();
-        if(dragging!=null){dragging=null;setDragging(false);return true;}return super.mouseReleased(x,y,button);
+        door.release();glassView.release();
+        return super.mouseReleased(mx,my,button);
     }
     @Override public boolean keyPressed(int key,int scan,int modifiers){
         if(ProcessUi.textKeyPressed(this,key,scan,modifiers))return true;
-        if(page==0&&!(getFocused() instanceof EditBox)){
-            if(key==GLFW.GLFW_KEY_UP||key==GLFW.GLFW_KEY_DOWN){
-                selectedNode=Math.clamp(selectedNode+(key==GLFW.GLFW_KEY_UP?-1:1),0,stageCount()+1);railScroll.value=0;rebuild();return true;
-            }
+        boolean trays=presetKind==null&&(page==Page.COLUMN||page==Page.RESULTS&&view==View.TRAY);
+        if(trays&&draft!=null&&!(getFocused() instanceof EditBox)&&(key==GLFW.GLFW_KEY_UP||key==GLFW.GLFW_KEY_DOWN)){
+            selectedNode=Math.clamp(selectedNode+(key==GLFW.GLFW_KEY_UP?-1:1),0,stageCount()+1);
+            if(page==Page.RESULTS)rebuild();
+            return true;
         }
         return super.keyPressed(key,scan,modifiers);
-    }
-
-    /** Compact geometry in GUI units; three-pixel tray targets are nine physical pixels at scale 3. */
-    static final class DiagramLayout {
-        private DiagramLayout(){}
-        static int trayPitch(int interiorTrays,int viewportHeight){
-            if(interiorTrays<0||interiorTrays>64)throw new IllegalArgumentException("Tray count outside diagram bounds");
-            return Math.max(3,Math.max(96,viewportHeight-131)/(interiorTrays+1));
-        }
-        static int contentHeight(int interiorTrays,int viewportHeight){return 131+(interiorTrays+1)*trayPitch(interiorTrays,viewportHeight);}
     }
 }

@@ -1,6 +1,7 @@
 import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
 import com.wormzjl.icheme.client.gui.common.AssemblyFlowsheet;
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
@@ -70,41 +71,133 @@ public final class GuiPrototypes {
     }
 
     static List<Prototype> prototypes() {
-        var out = new ArrayList<>(List.of(pump(), generator(), valve(), tank(), pipe(), column()));
+        var out = new ArrayList<>(List.of(pump(), generator(), valve(), tank(), pipe()));
+        out.addAll(calculator());
         out.addAll(assembly());
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         return out;
     }
 
-    // ---- The column calculator: the drawing on the glass, the inputs in groups on the door ----
+    // ---- The column calculator: the shipped CalculatorColumn on its door (GUI_REVIEW.md order 5) ----
 
-    static Prototype column() {
-        return new Prototype("column-calculator", 640, 360, (d, s) -> {
-            d.title("Column calculator");
-            d.tabs(0, "Column", "Feed", "Results", "Equipment");
-            d.status("Solved: 22 trays, condenser 45.0 °C, reboiler 12.0 MW", Palette.ACCENT);
-            int top = 74, bottom = d.h - 38, glassRight = 250;
-            var box = d.well(new Rect(5, top - 3, glassRight - 5, bottom - top + 3));
-            columnDrawing(d, box);
-            d.skin.vDivider(d.c, glassRight + 4, top, bottom);
-            int x = glassRight + 10, cw = (d.w - x - 22) / 2;
-            d.column(Door.rows(
-                    Door.group("Column", null, Door.field("trays", "Trays", ""), Door.field("dia", "Diameter", "m"), Door.field("top", "Top P", "bar")),
-                    Door.group("Feed", null, Door.field("feed", "Flow", "kmol/h"), Door.field("ft", "Temperature", "°C"), Door.field("tray", "Tray", ""))),
-                    x, top, cw, Map.of("trays", "22", "dia", "8.0", "top", "1.20", "feed", "420", "ft", "180.0", "tray", "8"));
-            d.skin.vDivider(d.c, x + cw + 5, top, bottom);
-            d.column(Door.rows(
-                    Door.group("Condenser", null, Door.field("ct", "Outlet", "°C"), Door.field("reflux", "Reflux", "")),
-                    Door.group("Reboiler", null, Door.field("duty", "Duty", "MW")),
-                    Door.group("Draw D1", "The selected side draw: click another on the drawing.", Door.field("draw", "Flow", "kmol/h"), Door.field("dtray", "Tray", ""),
-                            new Column.Buttons(List.of(new Column.Button("remove", "Remove", true, null))))),
-                    x + cw + 12, top, cw, Map.of("ct", "45.0", "reflux", "2.50", "duty", "12.0", "draw", "60.0", "dtray", "14"));
-            d.footer(3, "Templates", "Solve", "Save", "°C");
-        });
+    /** The Column page with draw D1 selected and the Results page's profiles, at the smallest split door, a one-column door and a wide one. */
+    static List<Prototype> calculator() {
+        return List.of(new Prototype("column-calculator", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.COLUMN, CalculatorColumn.Metric.TEMPERATURE), true),
+                new Prototype("column-calculator-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.COLUMN, CalculatorColumn.Metric.TEMPERATURE), true),
+                new Prototype("column-calculator-wide", 800, 420, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.COLUMN, CalculatorColumn.Metric.TEMPERATURE)),
+                new Prototype("column-calculator-results", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TEMPERATURE)),
+                new Prototype("column-calculator-results-wide", 800, 420, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TRAFFIC)));
     }
 
-    /** A column on the glass: the shell, its trays, the condenser and reboiler, the feed and one draw. */
+    /** The draft's entries as the door shows them. */
+    static final Map<String, String> CALCULATOR = Map.ofEntries(Map.entry("s2", "20"), Map.entry("s9", "8.0"), Map.entry("s7", "1.20"), Map.entry("s0", "420"),
+            Map.entry("s1", "180.0"), Map.entry("s3", "8"), Map.entry("s4", "45.0"), Map.entry("s6", "2.50"), Map.entry("s5", "12.0"), Map.entry("d0rate", "60.0"),
+            Map.entry("d0stage", "14"));
+
+    /** A made-up accepted result down the 22 nodes: temperature, and the four phases' flows (water vapour only in the top half, no aqueous phase below tray 6). */
+    static double[][] calculatorProfile(CalculatorColumn.Metric metric) {
+        int nodes = 22;
+        if (metric == CalculatorColumn.Metric.TEMPERATURE) {
+            var t = new double[1][nodes];
+            for (int i = 0; i < nodes; i++) t[0][i] = 45 + 190 * Math.pow(i / 21.0, 0.8);
+            return t;
+        }
+        var f = new double[4][nodes];
+        for (int i = 0; i < nodes; i++) {
+            f[0][i] = i == 0 ? 1050 : 900 + 30 * Math.sin(i / 3.0) + (i >= 8 ? 420 : 0);
+            f[1][i] = i == nodes - 1 ? Double.NaN : 1300 - 25 * i;
+            f[2][i] = i < 11 ? 180 - 12 * i : Double.NaN;
+            f[3][i] = i < 6 ? 60 - 9 * i : Double.NaN;
+        }
+        return f;
+    }
+
+    /**
+     * The calculator's door as ColumnCalculatorV3Screen draws it: the title and the theme key; the tabs, the page shown
+     * latched; the status once; the footer's divider and the display keys' tray; the glass (the drawing with D1
+     * selected, or a profile) left of the door columns, one view over them, scrolled to its end where the door asks;
+     * Templates, Solve (primary) and Save; the basis and temperature keys.
+     */
+    static void calculatorDoor(Door d, CalculatorColumn.Page page, CalculatorColumn.Metric metric) {
+        var t = DIALOG;
+        d.skin.title(d.c, 10, 10, d.m.cut(HeatDiagramRender.tr("block.icheme.column_calculator_v3"), CalculatorColumn.title(d.w)));
+        d.skin.iconKey(d.c, CalculatorColumn.theme(d.w), Skin.Icon.THEME, false);
+        var tabs = CalculatorColumn.tabs(page, t);
+        var tabSlots = CalculatorColumn.tabSlots(d.w);
+        for (int i = 0; i < tabs.size(); i++) {
+            var spec = tabs.get(i);
+            d.skin.button(d.c, tabSlots.get(i), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+        }
+        var status = CalculatorColumn.status(new CalculatorColumn.StatusInput(false, false, "", "", false, false, false, null, true, false, null), t);
+        d.skin.status(d.c, CalculatorColumn.display(d.w), status.text(), status.palette());
+        var rows = page == CalculatorColumn.Page.COLUMN
+                ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
+                : CalculatorColumn.results(new CalculatorColumn.ResultsInput(false, CalculatorColumn.View.PROFILES, metric, List.of(), 0, 13, 20), t);
+        boolean two = rows.two();
+        d.skin.hDivider(d.c, 8, d.w - 8, d.h - CalculatorColumn.DIVIDER);
+        d.skin.softKeys(d.c, CalculatorColumn.keys(d.w, d.h));
+        for (int x : CalculatorColumn.dividers(d.w, d.h, two)) d.skin.vDivider(d.c, x, CalculatorColumn.TOP, d.h - CalculatorColumn.FOOT);
+        var box = d.well(CalculatorColumn.glass(d.w, d.h, two));
+        d.c.clip(box);
+        if (page == CalculatorColumn.Page.COLUMN) {
+            var shares = new double[22];
+            for (int i = 0; i < shares.length; i++) shares[i] = Math.pow(i / 21.0, 0.8);
+            var in = new CalculatorColumn.DrawingInput(20, 7, List.of(new CalculatorColumn.Mark(0, 13, 0)), List.of(new CalculatorColumn.Mark(0, 10, 8)),
+                    List.of(new CalculatorColumn.Mark(0, 21, 0)), 13, CalculatorColumn.Connection.DRAW, 0, shares);
+            CalculatorColumn.draw(d.c, CalculatorColumn.drawing(in, box, 0, d.m, t, node -> ""), t);
+        } else {
+            var legend = metric == CalculatorColumn.Metric.TRAFFIC ? List.of(new CalculatorColumn.Legend(t.get("column.traffic.organic"), CalculatorColumn.TRAFFIC[0]),
+                    new CalculatorColumn.Legend(t.get("column.traffic.vapor"), CalculatorColumn.TRAFFIC[1]), new CalculatorColumn.Legend(t.get("column.traffic.water"), CalculatorColumn.TRAFFIC[2]),
+                    new CalculatorColumn.Legend(t.get("column.traffic.aqueous"), CalculatorColumn.TRAFFIC[3])) : List.<CalculatorColumn.Legend>of();
+            String title = metric == CalculatorColumn.Metric.TRAFFIC ? t.get("column.traffic") : t.get("column.temperature", "°C");
+            int head = CalculatorColumn.heading(d.c, box, title, legend, d.m);
+            CalculatorColumn.profile(d.c, CalculatorColumn.plot(box, head), calculatorProfile(metric),
+                    metric == CalculatorColumn.Metric.TRAFFIC ? CalculatorColumn.TRAFFIC : new int[]{Palette.ACCENT});
+        }
+        d.c.unclip();
+        // The door columns in one view (KitDoor): each in its area, the bar right of the last.
+        var areas = CalculatorColumn.door(d.w, d.h, two);
+        var lists = rows.at(d.w);
+        var columns = new ArrayList<Column>();
+        int tall = 0;
+        for (int i = 0; i < areas.size(); i++) {
+            var a = areas.get(i);
+            columns.add(Column.place(lists.get(i), a.x(), a.y(), a.w(), d.m, Column.Metrics.COMPACT));
+            tall = Math.max(tall, columns.getLast().bounds().h());
+        }
+        var first = areas.getFirst();
+        var view = new ScrollView();
+        view.layout(new Rect(first.x() - 2, first.y(), areas.getLast().right() - first.x() + 4, first.h()), CalculatorColumn.bar(d.w), tall);
+        while (d.end && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
+        d.c.clip(view.viewport());
+        for (var column : columns) {
+            column.draw(d.c, -view.offset(), d.skin);
+            for (var p : column.rows()) {
+                List<Column.Button> specs = p.row() instanceof Column.Buttons b ? b.buttons() : p.row() instanceof Column.Setting st && st.steps() ? List.of(st.minus(), st.plus()) : List.of();
+                for (var spec : specs) {
+                    var r = p.slots().get(spec.key());
+                    if (view.visible(r)) d.skin.button(d.c, view.onScreen(r), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+                }
+                if (p.row() instanceof Column.Field f && view.visible(p.slots().get(f.key())))
+                    d.skin.field(d.c, view.onScreen(p.slots().get(f.key())), CALCULATOR.getOrDefault(f.key(), ""), "", false);
+            }
+        }
+        d.c.unclip();
+        view.drawBar(d.c, d.skin);
+        var footer = CalculatorColumn.footer(d.w, d.h);
+        var keys = CalculatorColumn.footerButtons(new CalculatorColumn.Footer(false, false, true, false, "°C"), t);
+        for (int i = 0; i < keys.size(); i++) {
+            var spec = keys.get(i);
+            if (spec.soft()) d.skin.softKey(d.c, footer.get(i), spec.text(), false);
+            else d.skin.button(d.c, footer.get(i), spec.text(), spec.key().equals("solve") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+        }
+        if (!d.end && d.skin == PanelSkin.LIGHT)
+            System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d: %d door columns %d px wide, %d px tall in a %d px view, glass %d px%n", "calculator " + page.key(), d.w, d.h,
+                    areas.size(), first.w(), tall, first.h(), box.w());
+    }
+
+    /** A column on the glass as an illustration (the constructor's schematic): the shell, its trays, the condenser and reboiler, the feed and one draw. */
     static void columnDrawing(Door d, Rect box) {
         var c = d.c;
         int cx = box.x() + box.w() / 2, x0 = cx - 18, x1 = cx + 18, y0 = box.y() + 30, y1 = box.bottom() - 34;

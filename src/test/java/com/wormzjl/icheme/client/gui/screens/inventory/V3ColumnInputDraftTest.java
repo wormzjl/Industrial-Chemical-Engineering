@@ -97,17 +97,8 @@ class V3ColumnInputDraftTest {
 
     private static V3EditorDraft.SideDrawDraft.Row row(String tray, String rate) { return new V3EditorDraft.SideDrawDraft.Row(tray, rate); }
 
-    // Merged from V3DiagramLayoutTest.
-    @Test void largerWindowFitsEverySupportedTrayCountWithoutScrolling(){
-        for(int trays=0;trays<=64;trays++)for(int available:new int[]{740,920,1300}){
-            assertTrue(ColumnCalculatorV3Screen.DiagramLayout.contentHeight(trays,available)<=available,"trays="+trays);
-            assertTrue(ColumnCalculatorV3Screen.DiagramLayout.trayPitch(trays,available)>=3);
-        }
-    }
-    @Test void smallWindowsScrollInsteadOfMakingTraysUnclickable(){
-        assertTrue(ColumnCalculatorV3Screen.DiagramLayout.contentHeight(64,320)>320);
-        assertEquals(3,ColumnCalculatorV3Screen.DiagramLayout.trayPitch(64,320));
-    }
+    // The drawing's tray layout moved to CalculatorColumn (batch 2026-10-28-gui-toolkit): its gate is
+    // CalculatorColumnTest.theDrawingFitsLargeGlassesAndScrollsSmallOnesWithTraysClickable.
 
     // Merged from V3ColumnScalarDraftTest.
     private static final List<String> VALID = List.of(

@@ -495,4 +495,33 @@ class KitLayoutTest {
         var twice = List.<Column.Row>of(new Column.Field("x", "A", "", null), new Column.Field("x", "B", "", null));
         assertThrows(IllegalStateException.class, () -> Column.place(twice, 0, 0, 150, M).slots());
     }
+
+    /** A door of two columns (the column calculator's): each column in its area, one view over both as tall as the taller, one bar; every widget of both kept. */
+    @Test
+    void aDoorOfTwoColumnsScrollsThemInOneView() {
+        var tall = new ArrayList<Column.Row>();
+        for (int i = 0; i < 8; i++) tall.add(new Column.Field("f" + i, "Entry " + i, "m", null));
+        var shortRows = List.<Column.Row>of(new Column.Field("g", "Other", "", null), new Column.Buttons(List.of(new Column.Button("a", "Add", true, null), new Column.Button("b", "Drop", true, null))));
+        var areas = List.of(new Rect(168, 74, 132, 100), new Rect(312, 74, 132, 100));
+        var door = new KitDoor();
+        door.layout(areas, 448, List.of(tall, shortRows), M);
+        var columns = door.columns();
+        assertEquals(2, columns.size());
+        for (int i = 0; i < 2; i++) assertTrue(columns.get(i).bounds().x() == areas.get(i).x() && columns.get(i).bounds().w() == areas.get(i).w(), "a column in its area");
+        int taller = columns.getFirst().bounds().h();
+        assertTrue(taller > columns.getLast().bounds().h() && taller > 100);
+        assertEquals(new Rect(166, 74, 280, 100), door.view().viewport(), "one view over both columns");
+        assertEquals(taller - 100, door.view().max(), "the view as tall as the taller column");
+        var kept = new ArrayList<String>();
+        door.keep((f, slot) -> {
+            kept.add(f.key());
+            return null;
+        }, (b, slot) -> {
+            kept.add(b.key());
+            return null;
+        });
+        assertEquals(List.of("f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "g", "a", "b"), kept);
+        assertEquals(columns.getFirst(), door.column());
+        assertThrows(IllegalArgumentException.class, () -> door.layout(areas, 448, List.of(tall), M), "one row list an area");
+    }
 }

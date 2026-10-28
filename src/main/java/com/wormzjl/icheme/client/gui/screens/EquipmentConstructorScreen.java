@@ -830,20 +830,21 @@ public final class EquipmentConstructorScreen extends Screen {
      */
     private void schematic(GuiGraphics g, Rect box, double marked) {
         var trays = shownTrays();
+        var c = new GuiCanvas(g, font, 0, 0);
         int x = box.right() - 4 - ColumnDiagram.MARK - 13, top = box.y() + 10, bottom = box.bottom() - 31, n = trays.trays();
         double pitch = (bottom - top - 34) / (double) Math.max(1, n);
         IntUnaryOperator at = k -> top + 14 + (int) Math.round((k - 1) * pitch);
-        ColumnDiagram.shell(g, x, top, bottom, 0xFF2B3740, ProcessUi.LINE);
-        for (int k = 1; k <= n; k++) if (pitch >= 3 || k % 5 == 0 || k == 1 || k == n) ColumnDiagram.tray(g, x, at.applyAsInt(k), ProcessUi.MUTED);
+        ColumnDiagram.shell(c, x, top, bottom, 0xFF2B3740, ProcessUi.LINE);
+        for (int k = 1; k <= n; k++) if (pitch >= 3 || k % 5 == 0 || k == 1 || k == n) ColumnDiagram.tray(c, x, at.applyAsInt(k), ProcessUi.MUTED);
         int fy = at.applyAsInt(trays.feed());
-        ColumnDiagram.feed(g, x, x - 70, fy, ProcessUi.ACCENT);
+        ColumnDiagram.feed(c, x, x - 70, fy, ProcessUi.ACCENT);
         g.drawString(font, tr(ConstructorColumn.KEY + "schematic.feed", trays.feed() + 1), x - 70, fy - 10, ProcessUi.ACCENT);
-        for (int draw : trays.draws()) ColumnDiagram.draw(g, x, at.applyAsInt(draw), ProcessUi.ACCENT);
+        for (int draw : trays.draws()) ColumnDiagram.draw(c, x, at.applyAsInt(draw), ProcessUi.ACCENT);
         for (int i = 0; i < trays.pumparounds().size(); i++) {
             var p = trays.pumparounds().get(i);
-            ColumnDiagram.pumparound(g, x, i, at.applyAsInt(p.draw()), at.applyAsInt(p.ret()), ProcessUi.WARN);
+            ColumnDiagram.pumparound(c, x, i, at.applyAsInt(p.draw()), at.applyAsInt(p.ret()), ProcessUi.WARN);
         }
-        for (int i = 0; i < trays.steam().size(); i++) ColumnDiagram.steam(g, x, i, at.applyAsInt(trays.steam().get(i)), ProcessUi.WARN);
+        for (int i = 0; i < trays.steam().size(); i++) ColumnDiagram.steam(c, x, i, at.applyAsInt(trays.steam().get(i)), ProcessUi.WARN);
         if (!Double.isNaN(marked)) {
             int y = top + 14 + (int) Math.round((marked - 1) * pitch);
             g.fill(x - ColumnDiagram.HALF + 2, y - 1, x + ColumnDiagram.HALF, y + 2, 0xFFFFFFFF);
