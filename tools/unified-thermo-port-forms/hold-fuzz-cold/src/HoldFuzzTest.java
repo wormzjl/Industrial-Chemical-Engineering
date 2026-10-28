@@ -216,10 +216,21 @@ class HoldFuzzTest {
             });
             registry.load();
         }
-        /** As FluidWorldAuthority.place, with the block's own control, bore and spec (a player's edits made at placement). */
+        /**
+         * As FluidWorldAuthority.place, with the block's own control, bore and spec (a player's edits made at placement).
+         * The engine has no portless mover since 0.16.2 (batch 2026-10-28-old-mover-removal): a drawn pump or compressor
+         * goes in line on a straight pipe joined along its facing, as the fitting item installs it, and an upright one,
+         * which no in-line mover fits, is that straight pipe without its mover. The draws are unchanged.
+         */
         void place(Block b) {
             long id=ledger.nextIdentity();
-            var device=new PhysicalFluidTopology.Device(id,b.position(),b.kind,b.facing,new PipeResistance.Geometry(1,b.bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),b.control);
+            var geometry=new PipeResistance.Geometry(1,b.bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0);
+            PhysicalFluidTopology.Device device;
+            if(b.kind==Kind.PUMP||b.kind==Kind.COMPRESSOR) {
+                int axis=1<<b.facing.ordinal()|1<<opposite(b.facing).ordinal();
+                device=new PhysicalFluidTopology.Device(id,b.position(),Kind.PIPE,b.facing,geometry,b.facing.y==0?b.control:new FlowControl.Passive()).withJoints(axis);
+            }
+            else device=new PhysicalFluidTopology.Device(id,b.position(),b.kind,b.facing,geometry,b.control);
             var spec=b.spec!=null?b.spec:FluidDeviceSpec.nitrogen(CATALOG);
             registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         }

@@ -61,3 +61,4 @@ Status: Done 2026-10-16. Index: [../INDEX.md](../INDEX.md).
 ### History
 
 - Done 2026-10-16 (form 4 chosen; `c63e9a8b` on `claude/unified-thermo-port`, merged 2026-10-19 in 0.9.0 (main `5b49f940`, not pushed); report `M4B_REVIEW_FORMS.md`)
+- 2026-10-28 (batch 2026-10-27-heat-exchanger-design, merge lane): `hold-fuzz-cold` and `hold-fuzz-bundled` place a drawn pump or compressor in line on a straight pipe joined along its facing, and an upright one as that pipe without its mover. Since 0.16.2 the engine refuses portless movers, so the old harness had them refused and skipped. The draws are unchanged, so a seed keeps its layout; the new baseline is main 0.16.2 with this harness.
