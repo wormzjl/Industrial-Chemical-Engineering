@@ -40,4 +40,4 @@ The owner's findings from `REVIEW_WORLD.md`: each gives the expected behaviour, 
 ## 6 and 7. Line temperatures and the GUI (built, branch `claude/heat-gui-redesign-abb1db`, `e8465a72`)
 
 - Built: the Control tab with the flowsheet, the stream switch, a pipe's temperature and pressure, and fluid-16. Owner options Q-G1 to Q-G4 are built as (a). At the merge the air cooler's actuator becomes "louvers" (section 2).
-- The old pump and compressor removal is its own batch (`claude/vigorous-bell-dab92b`). After it lands, the review world's heater pump becomes an in-line pump.
+- The old pump and compressor removal landed on main as 0.16.2 and is merged here (`342c6d22`): the review world's heater pump is an In-line Pump. A save made before it opens without the one-block pump; rebuild the review world.
