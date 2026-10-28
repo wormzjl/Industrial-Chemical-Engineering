@@ -1,3 +1,4 @@
+import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
@@ -11,6 +12,9 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.UnitDesign;
+import com.wormzjl.icheme.science.equipment.VesselPlacement;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
@@ -57,7 +61,10 @@ public final class GuiPrototypes {
     }
 
     static List<Prototype> prototypes() {
-        return List.of(pump(), generator(), valve(), tank(), pipe(), column(), assembly(), constructor(), pipelineTool(), gauge(), thermometer(), vessel(), unit());
+        var out = new ArrayList<>(List.of(pump(), generator(), valve(), tank(), pipe(), column(), assembly()));
+        out.addAll(constructor());
+        out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
+        return out;
     }
 
     // ---- The column calculator: the drawing on the glass, the inputs in groups on the door ----
@@ -147,33 +154,93 @@ public final class GuiPrototypes {
         });
     }
 
-    // ---- The equipment constructor: its panel on the left of the world; steppers on 7-segment meters ----
+    // ---- The equipment constructor: the shipped ConstructorColumn on its door left of the world (GUI_REVIEW.md order 3) ----
 
-    static Prototype constructor() {
-        return new Prototype("equipment-constructor", 464, 254, (d, s) -> {
-            int panel = 200;
-            d.c.fill(panel, 0, d.w, d.h, 0xFF4A6B3A);
-            d.c.text("(the world and the ghost)", panel + 80, d.h / 2, 0xFFE0E0E0);
-            d.skin.page(d.c, new Rect(0, 0, panel, d.h));
-            d.skin.title(d.c, 10, 10, "Vertical drum on a skirt");
-            var col = d.column(Door.rows(
-                    Door.group("Size", null, Door.field("dia", "Diameter", "m"), Door.field("len", "Length", "m"), Door.field("skirt", "Skirt", "m")),
-                    Door.group("Place", "Where it stands from you: forward, right and up, in blocks.", Door.field("fwd", "Forward", ""), Door.field("right", "Right", ""), Door.field("up", "Up", ""))),
-                    8, 28, panel - 16, Map.of("dia", "2.0", "len", "6.0", "skirt", "2.0", "fwd", "3", "right", "0", "up", "0"));
-            // Steppers: [-] and [+] before each meter (shift: steps of 5, in the hover).
-            for (var p : col.rows())
-                if (p.row() instanceof Column.Field f) {
-                    var box = p.slots().get(f.key());
-                    d.skin.button(d.c, new Rect(box.x() - 32, box.y(), 14, box.h()), "-", Skin.Press.REST, false);
-                    d.skin.button(d.c, new Rect(box.x() - 16, box.y(), 14, box.h()), "+", Skin.Press.REST, false);
-                }
-            d.skin.status(d.c, new Rect(10, d.h - 47, panel - 20, 9), "Volume 18.8 m³", Palette.ACCENT);
-            // Done is the screen's close: closing saves the draft already.
-            String[] bottom = {"Nozzles", "Paint", "Build"};
-            int bw = (panel - 20 - 6) / 3;
-            for (int i = 0; i < 3; i++)
-                d.skin.button(d.c, new Rect(10 + i * (bw + 3), d.h - 27, bw, 18), bottom[i], i == 2 ? Skin.Press.PRIMARY : Skin.Press.REST, false);
-        });
+    /** A standing drum's sides as seen from the constructor ({@code EquipmentShape.side} 0 to 3): front, left, back, right. */
+    static final List<String> STANDING = List.of("front", "left", "back", "right");
+    static final String CONSTRUCTOR = ConstructorColumn.KEY;
+
+    static List<Prototype> constructor() {
+        var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
+        var drum = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.VERTICAL, 2, 6, 3, 3, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
+        var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
+        var connections = ConstructorColumn.connections(new ConstructorColumn.Connections(2, 1, 1, STANDING, "4.5", false, -1, "back", true, false, false,
+                new ConstructorColumn.Outlet(0b1011, 0, STANDING)), DIALOG);
+        var nozzles = ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(7, 2, new ConstructorColumn.Nozzle("pumparound_draw", 1, true, "18.5",
+                new UnitDesign.Line("nozzle.under_out", 12), false, 3, 1), STANDING, 0), DIALOG);
+        String volume = DIALOG.get(CONSTRUCTOR + "volume", "20.9", "46.4");
+        return List.of(
+                new Prototype("equipment-constructor-choose", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.VESSELS,
+                        ConstructorColumn.Equipment.VERTICAL_DRUM, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
+                new Prototype("equipment-constructor", 464, 254, (d, s) -> constructorDoor(d, drum, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-lying", 464, 254, (d, s) -> constructorDoor(d, lying, "Horizontal drum", "change",
+                        DIALOG.get(CONSTRUCTOR + "blocked", 3), Palette.WARN, Map.of()), true),
+                new Prototype("equipment-constructor-nozzles", 464, 254, (d, s) -> constructorDoor(d, connections, "Vertical drum", null,
+                        DIALOG.get(CONSTRUCTOR + "clash.liquid", 2), Palette.WARN, Map.of()), true),
+                new Prototype("equipment-constructor-column", 464, 254, (d, s) -> {
+                    constructorDoor(d, nozzles, "Distillation column", null, DIALOG.get(CONSTRUCTOR + "volume", "1696.5", "792.7"), Palette.ACCENT, Map.of());
+                    // The schematic on its glass beside the world (the screen draws the calculator's; here an illustration).
+                    columnDrawing(d, d.well(new Rect(d.w - 16 - 140, 16, 152, d.h - 32)));
+                }, true),
+                new Prototype("equipment-constructor-paint", 464, 254, (d, s) -> {
+                    var column = constructorDoor(d, ConstructorColumn.paint(0, DIALOG), "Vertical drum", null, volume, Palette.ACCENT, Map.of("custom", "A1A1A0"));
+                    swatches(d, DialogColumns.palette(column, Paint.PALETTE.size()), 0);
+                }, true));
+    }
+
+    /** The palette as PaintSwatch draws it: the edited colour ({@code chosen}) outlined in white. */
+    static void swatches(Door d, List<Rect> swatches, int chosen) {
+        for (int i = 0; i < swatches.size(); i++) {
+            var r = swatches.get(i);
+            boolean edited = i == chosen;
+            d.c.fill(r.x(), r.y(), r.right(), r.bottom(), edited ? 0xFFFFFFFF : Palette.LINE);
+            if (edited) d.c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.bottom() - 1, 0xFF000000);
+            int inset = edited ? 2 : 1;
+            d.c.fill(r.x() + inset, r.y() + inset, r.right() - inset, r.bottom() - inset, 0xFF000000 | Paint.PALETTE.get(i).rgb());
+        }
+    }
+
+    /**
+     * The constructor's door as EquipmentConstructorScreen draws it: the world beside it; the title and its key
+     * ({@code key}: Change or Back, or none); the page's column in its view, narrowed for its bar where it is taller,
+     * scrolled to its end where the door asks; the message display; the footer, Build the primary key. Fields show
+     * {@code values}. Returns the column as placed, unscrolled (where the column scrolls, the palette is not drawn).
+     */
+    static Column constructorDoor(Door d, ConstructorColumn.Page page, String title, String key, String status, int tone, Map<String, String> values) {
+        int panel = ConstructorColumn.PANEL;
+        d.c.fill(panel, 0, d.w, d.h, 0xFF4A6B3A);
+        d.c.text("(the world and the ghost)", panel + 30, d.h / 2, 0xFFE0E0E0);
+        d.skin.page(d.c, new Rect(0, 0, panel, d.h));
+        d.skin.title(d.c, 10, 10, title);
+        if (key != null) d.skin.button(d.c, ConstructorColumn.TITLE_KEY, DIALOG.get(CONSTRUCTOR + key), Skin.Press.REST, false);
+        var area = ConstructorColumn.area(d.h, page.display());
+        int tall = Column.place(page.rows(), area.x(), area.y(), area.w(), d.m, Column.Metrics.COMPACT).bounds().h();
+        int width = tall > area.h() ? area.w() - ScrollView.BAR - 4 : area.w();
+        var column = Column.place(page.rows(), area.x(), area.y(), width, d.m, Column.Metrics.COMPACT);
+        var view = new ScrollView();
+        view.layout(new Rect(area.x() - 2, area.y(), width + 4, area.h()), area.x() + width + 3, column.bounds().h());
+        while (d.end && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
+        d.c.clip(view.viewport());
+        column.draw(d.c, -view.offset(), d.skin);
+        for (var p : column.rows()) {
+            List<Column.Button> specs = p.row() instanceof Column.Buttons b ? b.buttons() : p.row() instanceof Column.Setting st && st.steps() ? List.of(st.minus(), st.plus()) : List.of();
+            for (var spec : specs) {
+                var r = p.slots().get(spec.key());
+                if (view.visible(r)) d.skin.button(d.c, view.onScreen(r), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+            }
+            if (p.row() instanceof Column.Field f && view.visible(p.slots().get(f.key())))
+                d.skin.field(d.c, view.onScreen(p.slots().get(f.key())), values.getOrDefault(f.key(), ""), "", false);
+        }
+        d.c.unclip();
+        view.drawBar(d.c, d.skin);
+        if (page.display()) d.skin.status(d.c, ConstructorColumn.display(d.h), status, tone);
+        var slots = ConstructorColumn.footer(d.h, page.footer().size());
+        for (int i = 0; i < page.footer().size(); i++) {
+            var spec = page.footer().get(i);
+            d.skin.button(d.c, slots.get(i), spec.text(), spec.key().equals("build") ? Skin.Press.PRIMARY : spec.active() ? Skin.Press.REST : Skin.Press.OFF, false);
+        }
+        if (!d.end && d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", title, column.bounds().h(), area.h());
+        return view.offset() == 0 ? column : Column.place(List.of(), area.x(), area.y(), width, d.m, Column.Metrics.COMPACT);
     }
 
     // ---- Small dialogs: the shipped DialogColumns on the door (the gauge, the pipeline tool, the vessel's datasheet) ----
@@ -478,6 +545,8 @@ public final class GuiPrototypes {
                 else if (p.row() instanceof Column.Buttons b)
                     for (var spec : b.buttons())
                         skin.button(c, p.slots().get(spec.key()), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+                else if (p.row() instanceof Column.Setting st && st.steps())
+                    for (var spec : List.of(st.minus(), st.plus())) skin.button(c, p.slots().get(spec.key()), spec.text(), Skin.Press.REST, false);
             }
             return column;
         }

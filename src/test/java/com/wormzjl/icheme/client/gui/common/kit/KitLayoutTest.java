@@ -404,6 +404,89 @@ class KitLayoutTest {
         assertEquals(List.of(reading.slots().get("now") + " 72.6"), calls, "the skin draws the meter; an entry's box is its widget's");
     }
 
+    /**
+     * GUI_REVIEW.md order 3, the equipment constructor's steppers: a setting's box stands where an entry's does, its [−]
+     * and [+] before it on the box's line, 14 px each; its label wraps in the share they leave, and where it cannot stand
+     * beside, the group's labels go above; its hover over its label and box, the steppers their own; the skin draws its
+     * value on an entry's LCD. A setting without steps shows its value in line, its label in an entry's share.
+     */
+    @Test
+    void aSettingStepsBeforeItsBoxInLineWithTheEntries() {
+        var rows = List.<Column.Row>of(new Column.Field("t", "Set point", "C", null), new Column.Setting("d", "Diameter", "2.0", "m", "Inside diameter", true),
+                new Column.Setting("n", "Trays", "22", "", null, false));
+        var column = Column.place(rows, 0, 0, 180, M);
+        int boxX = 180 - Column.FIELD_TAIL + 4;
+        var setting = column.rows().get(1);
+        var box = setting.slots().get("d");
+        assertEquals(new Rect(boxX, 24, Column.BOX, Column.WIDGET), box, "the box in line with the entry's");
+        assertEquals(List.of("d", "d-", "d+"), List.copyOf(setting.slots().keySet()), "the box first, then the steppers");
+        assertEquals(new Rect(boxX - Column.STEPPERS, 24, Column.STEP, Column.WIDGET), setting.slots().get("d-"));
+        assertEquals(new Rect(boxX - Column.STEP - 2, 24, Column.STEP, Column.WIDGET), setting.slots().get("d+"));
+        assertEquals(new Rect(boxX, 48, Column.BOX, Column.WIDGET), column.rows().get(2).slots().get("n"));
+        assertEquals(List.of("n"), List.copyOf(column.rows().get(2).slots().keySet()), "no steps, no steppers");
+        assertEquals(List.of("Diameter"), setting.texts().subList(0, setting.lead()), "48 px of label in a 72 px share");
+        assertEquals("m", setting.texts().getLast());
+        assertEquals("Diameter\nInside diameter", column.hover(2, 30));
+        assertEquals("Diameter\nInside diameter", column.hover(box.x() + 2, box.y() + 2), "no widget on the box: its hover there too");
+        assertNull(column.hover(boxX - Column.STEPPERS + 2, 30), "a stepper has its own tooltip");
+        var setting2 = new Column.Setting("d", "Diameter", "2.0", "m", null, true);
+        assertEquals(new Column.Button("d-", "-", true, null), setting2.minus());
+        assertEquals(new Column.Button("d+", "+", true, null), setting2.plus());
+
+        // A 66 px word in the 42 px a stepped setting leaves at 150 px: that group's labels stand above their boxes.
+        var above = Column.place(List.of(new Column.Setting("r", "Regenerator", "8.0", "m", null, true), new Column.Field("t", "Set", "C", null)), 0, 0, 150, M);
+        assertEquals(12 + 24, above.rows().get(0).rect().h(), "above its box");
+        assertEquals(12 + 24, above.rows().get(1).rect().h(), "and its neighbour's too");
+        assertEquals(above.rows().get(0).slots().get("r").x(), above.rows().get(1).slots().get("t").x(), "the boxes in line");
+        assertTrue(above.rows().get(0).slots().get("r-").x() >= 0);
+
+        var calls = new ArrayList<String>();
+        column.draw(new Canvas() {
+            @Override
+            public Measure measure() {
+                return M;
+            }
+
+            @Override
+            public void fill(int x0, int y0, int x1, int y1, int argb) {
+            }
+
+            @Override
+            public void text(String text, int x, int y, int argb) {
+            }
+
+            @Override
+            public void text(String text, float x, float y, float scale, int argb) {
+            }
+
+            @Override
+            public void clip(Rect area) {
+            }
+
+            @Override
+            public void unclip() {
+            }
+        }, 0, new Skin() {
+            @Override
+            public void field(Canvas c, Rect r, String value, String hint, boolean editing) {
+                calls.add(r + " " + value);
+            }
+
+            @Override
+            public void mark(Canvas c, int x, int y, boolean selected) {
+            }
+
+            @Override
+            public void bar(Canvas c, Rect r, double share) {
+            }
+
+            @Override
+            public void scrollbar(Canvas c, Rect track, Rect thumb, boolean dragging) {
+            }
+        });
+        assertEquals(List.of(box + " 2.0", column.rows().get(2).slots().get("n") + " 22"), calls, "the skin draws the settings' LCDs; an entry's box is its widget's");
+    }
+
     @Test
     void aColumnRefusesWhatItCannotPlace() {
         assertThrows(IllegalArgumentException.class, () -> Column.place(every(), 0, 0, Column.FIELD_TAIL + 19, M), "narrower than a field row");

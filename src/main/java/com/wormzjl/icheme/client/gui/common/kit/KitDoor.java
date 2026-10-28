@@ -50,7 +50,8 @@ public final class KitDoor {
 
     /**
      * Keeps every field and button of the column as placed, each made by {@code field} or {@code button} at its content
-     * slot (the screen adds it); {@link #place(int, int)} moves them to where the view shows them.
+     * slot (the screen adds it), a setting's steppers as buttons; {@link #place(int, int)} moves them to where the view
+     * shows them.
      */
     public void keep(BiFunction<Column.Field, Rect, ? extends AbstractWidget> field, BiFunction<Column.Button, Rect, ? extends AbstractWidget> button) {
         for (var p : column().rows()) {
@@ -58,6 +59,9 @@ public final class KitDoor {
                 var slot = p.slots().get(f.key());
                 widgets.keep(field.apply(f, slot), slot);
             } else if (p.row() instanceof Column.Buttons b) for (var spec : b.buttons()) {
+                var slot = p.slots().get(spec.key());
+                widgets.keep(button.apply(spec, slot), slot);
+            } else if (p.row() instanceof Column.Setting s && s.steps()) for (var spec : List.of(s.minus(), s.plus())) {
                 var slot = p.slots().get(spec.key());
                 widgets.keep(button.apply(spec, slot), slot);
             }

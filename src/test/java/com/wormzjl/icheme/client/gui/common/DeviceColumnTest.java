@@ -108,7 +108,7 @@ class DeviceColumnTest {
     static void assertInLine(Column column, String what) {
         var boxes = new java.util.HashSet<List<Integer>>();
         for (var p : column.rows())
-            if (p.row() instanceof Column.Field || p.row() instanceof Column.Reading) {
+            if (p.row() instanceof Column.Field || p.row() instanceof Column.Reading || p.row() instanceof Column.Setting) {
                 var box = p.slots().values().iterator().next();
                 boxes.add(List.of(box.x(), box.w()));
                 assertTrue(M.width(p.texts().getLast()) <= Column.UNIT, what + ": a unit wider than its place after the box: " + p.texts().getLast());

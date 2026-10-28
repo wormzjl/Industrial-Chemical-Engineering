@@ -8,13 +8,13 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * A column of rows placed top to bottom in one pass from its width (GUI_TOOLKIT_PLAN.md section 1): function groups,
- * lines, paragraphs, choices, field rows, button rows, bars and gaps. A placed row keeps its rect, the texts it draws, the
+ * lines, paragraphs, choices, field, meter and setting rows, button rows, bars and gaps. A placed row keeps its rect, the texts it draws, the
  * slots its fields and buttons take, and its hover text. The same placement draws the rows, places the widgets and answers
  * clicks and hovers, so they cannot drift apart. No text is cut (owner, 2026-10-28: "make sure characters are rendered
  * correctly"): a text wider than its row wraps, and a button row whose texts do not fit side by side stacks its buttons.
  */
 public final class Column {
-    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Reading, Buttons, Bar, Split, Gap {
+    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Reading, Setting, Buttons, Bar, Split, Gap {
     }
 
     /**
@@ -59,6 +59,25 @@ public final class Column {
      * keyed {@code key}, takes no widget.
      */
     public record Reading(String key, String label, String value, String unit, @Nullable String hint) implements Row {
+    }
+
+    /**
+     * A set point the player steps rather than types (the equipment constructor's sizes and places, GUI_REVIEW.md order
+     * 3): laid out as a {@link Field}, its box an LCD showing {@code value} ({@link Skin#field}), its slot keyed
+     * {@code key} taking no widget. With {@code steps}, a [−] and a [+] button ({@link #STEP} px each, {@link #minus} and
+     * {@link #plus}) stand before the box, and the label wraps in the share they leave; without, the value is set
+     * elsewhere (an imported design's) and shows on the same LCD, in line.
+     */
+    public record Setting(String key, String label, String value, String unit, @Nullable String hint, boolean steps) implements Row {
+        /** The [−] button: key {@code key + "-"}, the setting's hint on hover. */
+        public Button minus() {
+            return new Button(key + "-", "-", true, hint);
+        }
+
+        /** The [+] button: key {@code key + "+"}. */
+        public Button plus() {
+            return new Button(key + "+", "+", true, hint);
+        }
     }
 
     /** Buttons side by side, sharing the width; one a row, each the whole width, where a text does not fit its share. */
@@ -140,6 +159,8 @@ public final class Column {
      * down a column (owner: "Try to align them somehow", "make alignment a rule"). A wider unit is the label's last line.
      */
     public static final int UNIT = 23;
+    /** A stepper's width, and the room a {@link Setting}'s two take before its box: [−], 2 px, [+], 2 px. */
+    public static final int STEP = 14, STEPPERS = 2 * STEP + 4;
 
     /**
      * A row as placed: its rect, its widget slots by key, the lines it draws, how many of them lead (a field's label;
@@ -184,7 +205,7 @@ public final class Column {
      * in line down the column whatever the rows hold.
      */
     private static int place(List<? extends Row> rows, int x, int y, int w, Measure m, Metrics h, List<Placed> out) {
-        boolean beside = rows.stream().filter(row -> row instanceof Field || row instanceof Reading).allMatch(row -> beside(label(row), unit(row), w, m));
+        boolean beside = rows.stream().filter(Column::labelled).allMatch(row -> beside(label(row), unit(row), share(row, w), m));
         int at = y;
         for (var row : rows) {
             if (row instanceof Group g) {
@@ -204,12 +225,30 @@ public final class Column {
         return at;
     }
 
+    /** Whether {@code row} is a labelled box: an entry, a meter or a setting. */
+    private static boolean labelled(Row row) {
+        return row instanceof Field || row instanceof Reading || row instanceof Setting;
+    }
+
     private static String label(Row row) {
-        return row instanceof Field f ? f.label() : ((Reading) row).label();
+        return switch (row) {
+            case Field f -> f.label();
+            case Setting s -> s.label();
+            default -> ((Reading) row).label();
+        };
     }
 
     private static String unit(Row row) {
-        return row instanceof Field f ? f.unit() : ((Reading) row).unit();
+        return switch (row) {
+            case Field f -> f.unit();
+            case Setting s -> s.unit();
+            default -> ((Reading) row).unit();
+        };
+    }
+
+    /** A labelled row's share for its label beside the box, in a row {@code w} wide: less a setting's steppers. */
+    private static int share(Row row, int w) {
+        return w - FIELD_TAIL - (row instanceof Setting s && s.steps() ? STEPPERS : 0);
     }
 
     /** Whether {@code unit} is wider than its place after the box: then it is the label's last line. */
@@ -217,9 +256,8 @@ public final class Column {
         return m.width(unit) > UNIT;
     }
 
-    /** Whether a label (and a unit under it) fits beside its box: two lines at most, every word whole in the share. */
-    private static boolean beside(String label, String unit, int w, Measure m) {
-        int share = w - FIELD_TAIL;
+    /** Whether a label (and a unit under it) fits beside its box in {@code share}: two lines at most, every word whole. */
+    private static boolean beside(String label, String unit, int share, Measure m) {
         var words = new ArrayList<>(List.of(label.split(" ")));
         int lines = m.wrap(label, share).size();
         if (under(unit, m)) {
@@ -247,6 +285,7 @@ public final class Column {
             }
             case Field f -> labelled(row, f.key(), f.label(), f.unit(), f.hint(), x, y, w, m, h, beside);
             case Reading r -> labelled(row, r.key(), r.label(), r.unit(), r.hint(), x, y, w, m, h, beside);
+            case Setting s -> labelled(row, s.key(), s.label(), s.unit(), s.hint(), x, y, w, m, h, beside);
             case Buttons b -> {
                 // Side by side while every text fits its button; else one button a row, each the whole width.
                 int n = b.buttons().size(), bw = (w - BUTTON_GAP * (n - 1)) / n;
@@ -272,18 +311,25 @@ public final class Column {
      * An entry's or a meter's row, as its group arranges them ({@code beside}). Its label beside the box, wrapped to
      * two lines; or above the box, wrapped to the row. Its box is {@link #BOX} px at the same place in every row, its unit
      * after it in {@link #UNIT} px, so boxes and units stand in line down the column; a unit wider than that place
-     * (kmol/min, m³/min) is the label's last line, as a meter's legend plate reads "Flow, kmol/min".
+     * (kmol/min, m³/min) is the label's last line, as a meter's legend plate reads "Flow, kmol/min". A setting's
+     * steppers stand before its box, on the box's line: its slot first, then {@code key + "-"} and {@code key + "+"}.
      */
     private static Placed labelled(Row row, String key, String label, String unit, @Nullable String hint, int x, int y, int w, Measure m, Metrics h,
                                    boolean beside) {
         boolean under = under(unit, m);
-        var lines = new ArrayList<>(m.wrap(label, beside ? w - FIELD_TAIL : w));
+        var lines = new ArrayList<>(m.wrap(label, beside ? share(row, w) : w));
         if (under) lines.add(unit);
         int above = beside ? 0 : h.line() + (lines.size() - 1) * Measure.LINE;
         var texts = new ArrayList<>(lines);
         texts.add(under ? "" : unit);
-        return new Placed(row, new Rect(x, y, w, above + h.field()), Map.of(key, new Rect(x + w - FIELD_TAIL + 4, y + above, BOX, WIDGET)), texts,
-                lines.size(), hint != null ? label + "\n" + hint : null);
+        var box = new Rect(x + w - FIELD_TAIL + 4, y + above, BOX, WIDGET);
+        var slots = new LinkedHashMap<String, Rect>();
+        slots.put(key, box);
+        if (row instanceof Setting s && s.steps()) {
+            slots.put(s.minus().key(), new Rect(box.x() - STEPPERS, box.y(), STEP, WIDGET));
+            slots.put(s.plus().key(), new Rect(box.x() - STEP - 2, box.y(), STEP, WIDGET));
+        }
+        return new Placed(row, new Rect(x, y, w, above + h.field()), slots, texts, lines.size(), hint != null ? label + "\n" + hint : null);
     }
 
     public List<Placed> rows() {
@@ -294,7 +340,7 @@ public final class Column {
         return bounds;
     }
 
-    /** Every slot, top to bottom, by key: the widgets' and the meters' ({@link Reading}). */
+    /** Every slot, top to bottom, by key: the widgets' and the boxes of the meters ({@link Reading}) and settings ({@link Setting}). */
     public Map<String, Rect> slots() {
         var all = new LinkedHashMap<String, Rect>();
         for (var p : rows)
@@ -320,11 +366,16 @@ public final class Column {
         return p != null && p.row() instanceof Choice c ? c.action() : null;
     }
 
-    /** The hover text at content point ({@code px}, {@code py}): a row's, outside its widgets (they have their own); a meter's over its box too. */
+    /**
+     * The hover text at content point ({@code px}, {@code py}): a row's, outside its widgets (they have their own); a
+     * meter's and a setting's over its box too.
+     */
     public @Nullable String hover(double px, double py) {
         var p = at(px, py);
         if (p == null) return null;
         if (p.row() instanceof Field || p.row() instanceof Buttons) for (var slot : p.slots().values()) if (slot.contains(px, py)) return null;
+        if (p.row() instanceof Setting s)
+            for (var e : p.slots().entrySet()) if (!e.getKey().equals(s.key()) && e.getValue().contains(px, py)) return null;
         return p.hover();
     }
 
@@ -352,6 +403,7 @@ public final class Column {
                 }
                 case Field ignored -> labels(c, skin, p, r, dy);
                 case Reading reading -> skin.meter(c, labels(c, skin, p, r, dy), reading.value());
+                case Setting setting -> skin.field(c, labels(c, skin, p, r, dy), setting.value(), "", false);
                 case Bar b -> skin.bar(c, new Rect(r.x(), r.y(), r.w(), 8), b.share());
                 case Split s -> {
                     var shares = s.shares();
