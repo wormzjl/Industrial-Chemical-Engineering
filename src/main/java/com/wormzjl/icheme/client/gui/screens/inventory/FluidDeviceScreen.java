@@ -4,6 +4,12 @@ import com.wormzjl.icheme.science.display.DisplayUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
 
 import com.wormzjl.icheme.client.gui.common.*;
+import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
+import com.wormzjl.icheme.client.gui.common.kit.KitWidgets;
+import com.wormzjl.icheme.client.gui.common.kit.Palette;
+import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
 import com.wormzjl.icheme.runtime.fluid.SlurryFeed;
@@ -213,7 +219,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         rebuildNext=false;String focused=editors.entrySet().stream().filter(e->e.getValue()==getFocused()).map(Map.Entry::getKey).findFirst().orElse(null);
         int cursor=focused==null?0:editors.get(focused).getCursorPosition();
         boolean dropdownOpen=componentDropdown!=null&&componentDropdown.expanded();
-        clearWidgets();editors.clear();labels.clear();componentDropdown=null;phaseBasisButton=null;
+        clearWidgets();editors.clear();labels.clear();componentDropdown=null;phaseBasisButton=null;controlWidgets.clear();controlView.shown(page==CONTROL);
         var data=menu.clientData();
         var tabs=new ArrayList<String>();var pages=new ArrayList<Integer>();tabs.add("overview");pages.add(0);
         if(heat()!=null){tabs.add("control");pages.add(CONTROL);}
@@ -470,6 +476,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     @Override public void render(GuiGraphics g,int mouseX,int mouseY,float partialTick){
         ProcessUi.restoreCursor(minecraft,this);refresh();if(rebuildNext)rebuild();hovered=null;
         layoutPhaseBasisButton();
+        // The Control column's widgets follow its scroll before they draw.
+        if(page==CONTROL)controlWidgets.place(controlView,leftPos,topPos);
         super.render(g,mouseX,mouseY,partialTick);
         if(hovered!=null&&(componentDropdown==null||!componentDropdown.popupContains(mouseX,mouseY))){
             var lines=new ArrayList<net.minecraft.util.FormattedCharSequence>();
@@ -504,7 +512,6 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             g.hLine(8,imageWidth-8,imageHeight-49,LINE);
             renderControl(g);
             text(g,message.isBlank()?tr("view_time",number(view.onlineTick()/20.0)):message,10,imageHeight-42,WARN,imageWidth-20);
-            g.pose().pushPose();g.pose().translate(-leftPos,-topPos,0);controlScroll.draw(g);g.pose().popPose();
             return;
         }
         text(g,statusText(view.status()),10,59,warning(view.status())?WARN:MUTED,imageWidth-20);
@@ -820,159 +827,52 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     // ---- The Control tab (HEAT_GUI_PLAN.md section 2): the unit's flowsheet on the left, its control column on the right ----
 
-    private static final int LEGEND_TEAL=0xFF1D9E75,LEGEND_YELLOW=0xFFEF9F27,LEGEND_RED=0xFFE24B4A;
-    private final ProcessScroll controlScroll=new ProcessScroll();
-    private int controlBuiltOffset;
+    private final ScrollView controlView=new ScrollView();
+    private final KitWidgets controlWidgets=new KitWidgets();
+    private Column controlColumn;
     private HeatFlowsheet flowsheet;private String flowsheetKey="";
-    /** A mode row of the column as last drawn (its top, in the screen's own coordinates) and what choosing it does. */
-    private record ModeRow(int y,Runnable select){}
-    private List<ModeRow> modeRows=List.of();
-    private record Mode(String key,boolean selected,Runnable select){}
-    private record ControlField(String key,String label,String unit,String hint){}
-    private record Sides(String[] keys,int own){}
     private int controlTop(){return 74;}
     private int controlBottom(){return imageHeight-52;}
     private int panelWidth(){return FluidGuiLayout.control(imageWidth).panelWidth();}
     private int panelX(){return FluidGuiLayout.control(imageWidth).panelX();}
     private int drawingRight(){return FluidGuiLayout.control(imageWidth).drawingRight();}
-    private int controlOffset(){return controlScroll.value()*RAIL_STEP;}
-    private boolean inControl(int y,int height){return y>=controlTop()&&y+height<=controlBottom();}
-    /** The side selector's two sides and which is this one; null for a one-sided unit (an air cooler). */
-    private Sides sideKeys(){
-        if(!paired())return null;var side=sideKind();
-        return switch(unitKind()){
-            case EXCHANGER->new Sides(new String[]{"tube","shell"},side==com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE?0:1);
-            case FIRED_HEATER->new Sides(new String[]{"convection","radiant"},side==com.wormzjl.icheme.science.equipment.HeatSides.Side.CONVECTION?0:1);
-            case KETTLE->new Sides(new String[]{"kettle_tube","pool"},side==com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE?0:1);
-            default->null;
-        };
-    }
-    /** The modes this side lists (Q-G2 (a): a heater's burners as two modes, out and firing). */
-    private List<Mode> modes(){
-        if(burners())return List.of(new Mode("burners_out",!powerOn,()->powerOn=false),new Mode("firing",powerOn,()->powerOn=true));
-        if(!controllable())return List.of();
-        var list=new ArrayList<Mode>();
-        for(var m:exchangerSide()?List.of(HeatUnit.Mode.OFF,HeatUnit.Mode.OUTLET_TEMPERATURE,HeatUnit.Mode.DUTY,HeatUnit.Mode.RATIO):List.of(HeatUnit.Mode.OFF,HeatUnit.Mode.OUTLET_TEMPERATURE,HeatUnit.Mode.DUTY))
-            list.add(new Mode(m.name().toLowerCase(Locale.ROOT),heatMode==m,()->heatMode=m));
-        return list;
-    }
-    /** What a mode moves, named from the server's view (its actuator: fans or louvers, burners), else the bypass; a ratio its feed valve. */
-    private String modeActuator(String mode){
-        if(mode.equals("ratio"))return "feed_valve";
-        var actuator=heat().actuator();return actuator.equals("fans")||actuator.equals("louvers")||actuator.equals("burners")?actuator:"bypass";
-    }
-    private List<ControlField> controlFields(){
-        var list=new ArrayList<ControlField>();String t=temperatureUnit.symbol();
-        if(burners())list.add(new ControlField("temperature",tr("heat_field.temperature"),t,null));
-        if(controllable()){
-            switch(heatMode){
-                case OUTLET_TEMPERATURE->list.add(new ControlField("heatTemperature",tr("heat_field.temperature"),t,null));
-                case DUTY->list.add(new ControlField("heatDuty",tr("heat_field.duty"),"kW",null));
-                case RATIO->list.add(new ControlField("heatRatio",tr("heat_ratio_input"),"",null));
-                default->{if(!fans())list.add(new ControlField("bypass",tr("heat_field.bypass"),"%",null));}
-            }
-            list.add(new ControlField("lowLimit",tr("heat_field.low_limit"),t,tr("heat_field.low_limit.hint")));
-        }
-        return list;
-    }
+    private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol());}
+    /**
+     * The Control column on the GUI kit (batch 2026-10-28-gui-toolkit): placed once from the panel's width; its fields and
+     * buttons are kept at their slots and moved as it scrolls, so a scroll rebuilds nothing.
+     */
     private void buildControl(){
-        controlBuiltOffset=controlOffset();controlColumn(null);
+        controlColumn=Column.place(HeatControlColumn.rows(controlInput(),FluidDeviceScreen::tr),panelX(),controlTop(),panelWidth(),GuiCanvas.measure(font));
+        controlView.layout(new Rect(panelX()-2,controlTop(),panelWidth()+4,controlBottom()-controlTop()),FluidGuiLayout.control(imageWidth).scrollX(),controlColumn.bounds().h());
+        for(var p:controlColumn.rows()){
+            if(p.row() instanceof Column.Field f)controlWidgets.keep(controlBox(f,p.slots().get(f.key())),p.slots().get(f.key()));
+            else if(p.row() instanceof Column.Buttons b)for(var spec:b.buttons()){
+                var slot=p.slots().get(spec.key());
+                var button=button(spec.text(),slot.x(),slot.y(),slot.w(),()->controlAction(spec.key()));
+                button.active=spec.active();if(spec.hint()!=null)button.setTooltip(Tooltip.create(Component.literal(spec.hint())));
+                controlWidgets.keep(button,slot);
+            }
+        }
+        controlWidgets.place(controlView,leftPos,topPos);
         // Check lines sits on the drawing, at its lower right (W8).
         if(canEdit()&&heat().lines()!=null){int bw=Math.min(90,drawingRight()-20);action("check_lines",drawingRight()-bw,controlBottom()-19,bw,()->{FluidNetwork.checkLines(menu);message=tr("waiting");});}
     }
-    private void controlBox(ControlField f,int x,int y){
-        var box=new EditBox(font,leftPos+x,topPos+y,58,18,Component.literal(f.label()));
+    private EditBox controlBox(Column.Field f,Rect slot){
+        var box=new EditBox(font,leftPos+slot.x(),topPos+slot.y(),slot.w(),slot.h(),Component.literal(f.label()));
         box.setMaxLength(48);box.setValue(fields.get(f.key()).text());box.setResponder(v->fields.get(f.key()).text(v));box.setEditable(canEdit());
         box.setTooltip(Tooltip.create(Component.literal(f.hint()==null?f.label():f.label()+"\n"+f.hint())));
         if(f.key().equals("lowLimit"))box.setHint(Component.literal(tr("heat_field.off")));
-        box.visible=inControl(y,18);editors.put(f.key(),addRenderableWidget(box));
+        editors.put(f.key(),addRenderableWidget(box));return box;
     }
-    /**
-     * Walks the Control column top to bottom: builds its widgets ({@code g} null) or draws its texts at the same places,
-     * so the two never drift apart. Returns where the column ends.
-     */
-    private int controlColumn(GuiGraphics g){
-        boolean build=g==null;var heat=heat();
-        int x=panelX(),w=panelWidth(),y=controlTop()-controlOffset();
-        var rows=new ArrayList<ModeRow>();
-        // The side selector: the other side's own screen, which opens on its Control tab.
-        var sides=sideKeys();
-        if(sides!=null){
-            int bw=(w-4)/2;
-            if(build)for(int i=0;i<2;i++){
-                boolean mine=i==sides.own();var b=button(tr("heat_side."+sides.keys()[i]),x+i*(bw+4),y,bw,mine?()->{}:()->FluidNetwork.openPartner(menu));
-                b.active=!mine;b.visible=inControl(y,18);b.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.heat_side.hint")));
-            }
-            y+=26;
+    /** A Control column action (HeatControlColumn's keys): the other side's screen, the fans by hand, a mode. */
+    private void controlAction(String action){
+        if(action.startsWith("side:"))FluidNetwork.openPartner(menu);
+        else if(action.equals("power")){powerOn=!powerOn;rebuild();}
+        else if(action.startsWith("mode:")){
+            String mode=action.substring(5);
+            switch(mode){case "burners_out"->powerOn=false;case "firing"->powerOn=true;default->heatMode=HeatUnit.Mode.valueOf(mode.toUpperCase(Locale.ROOT));}
+            rebuild();
         }
-        if(pool())y=paragraph(g,tr("pool_note"),x,y,w,MUTED);
-        else {
-            if(!build)text(g,tr("heat_holds"),x,y,MUTED,w);
-            y+=14;
-            for(var m:modes()){
-                if(!build){
-                    radio(g,x,y,m.selected());
-                    text(g,tr("heat_mode."+m.key()+".title"),x+12,y,m.selected()?ACCENT:TEXT,w-12);
-                    text(g,tr("heat_mode."+m.key()+".line",tr("heat_actuator."+modeActuator(m.key()))),x+12,y+10,MUTED,w-12);
-                    if(canEdit())rows.add(new ModeRow(y,m.select()));
-                }
-                y+=24;
-            }
-            // An air cooler in manual: its fans switch by hand.
-            if(fans()&&heatMode==HeatUnit.Mode.OFF&&canEdit()){
-                if(build){var power=action(powerOn?"fans_on":"fans_off",x,y,w,()->{powerOn=!powerOn;rebuild();});power.visible=inControl(y,18);}
-                y+=24;
-            }
-            for(var f:controlFields()){
-                if(build)controlBox(f,x+w-76,y);
-                else{
-                    text(g,f.label(),x,y+5,MUTED,w-80);text(g,f.unit(),x+w-15,y+5,MUTED,15);
-                    if(f.hint()!=null&&hoverX>=x&&hoverX<x+w-80&&hoverY>=Math.max(y,clipTop)&&hoverY<Math.min(y+18,clipBottom))hovered=f.hint();
-                }
-                y+=24;
-            }
-        }
-        // What acts now, named by the server, and how hard it works.
-        String actuator=heat.actuator();
-        if(!actuator.equals("none")){
-            boolean ratio=actuator.equals("feed_valve");
-            if(!build){
-                text(g,tr("heat_acting",tr("heat_acting."+actuator)),x,y,MUTED,w);
-                if(heat.effort()!=null){
-                    g.fill(x,y+12,x+w,y+20,BG);g.renderOutline(x,y+12,w,8,LINE);g.fill(x+1,y+13,x+1+(int)Math.round((w-2)*heat.effort()),y+19,ACCENT);
-                    text(g,tr("heat_effort."+actuator,number(heat.effort()*100)),x,y+24,TEXT,w);
-                }else if(ratio){double r=measuredRatio();text(g,tr("heat_effort.feed_valve",Double.isFinite(r)?number(r):"—"),x,y+12,TEXT,w);}
-            }
-            y+=heat.effort()!=null?38:ratio?26:14;
-        }
-        var note=linesNote();
-        if(note!=null)y=paragraph(g,note,x,y,w,"COMPLETE".equals(heat.lines().status())?ACCENT:WARN);
-        if(!canEdit()&&!pool())y=paragraph(g,tr("reader_note"),x,y,w,MUTED);
-        if(!build)modeRows=rows;
-        return y;
-    }
-    private int paragraph(GuiGraphics g,String text,int x,int y,int w,int colour){
-        var lines=font.split(Component.literal(text),w);
-        if(g!=null)for(int i=0;i<lines.size();i++)g.drawString(font,lines.get(i),x,y+i*10,colour,false);
-        return y+lines.size()*10+4;
-    }
-    private static void radio(GuiGraphics g,int x,int y,boolean selected){
-        g.fill(x,y,x+8,y+8,selected?ACCENT:LINE);g.fill(x+1,y+1,x+7,y+7,BG);
-        if(selected)g.fill(x+2,y+2,x+6,y+6,ACCENT);
-    }
-    /** This feed over the other side's, as the ports read: what a ratio holds. */
-    private double measuredRatio(){
-        var heat=heat();var own=HeatDiagram.roles(unitKind(),sideKind());
-        var other=HeatDiagram.roles(unitKind(),sideKind()==com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE?com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL:com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE);
-        var a=heat.port(own.getFirst());var b=heat.port(other.getFirst());
-        return a==null||b==null||b.massFlow()==0?Double.NaN:Math.abs(a.massFlow())/Math.abs(b.massFlow());
-    }
-    /** The note under "Acting now" about this side's lines (W8), or null where this side asks for none. */
-    private String linesNote(){
-        var lines=heat().lines();var control=menu.clientData().controls().heat();
-        if(lines==null||lines.status().equals("NONE")||control==null)return null;
-        String kind=control.mode()==HeatUnit.Mode.RATIO?"ratio":"bypass",status=lines.status().toLowerCase(Locale.ROOT);
-        return tr("lines_note."+kind+"."+status,lines.missing());
     }
     /** The lines an exchanger's drawing shows: those its parts name. */
     private static com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Design design(com.wormzjl.icheme.runtime.fluid.FluidView.Heat heat){
@@ -1069,27 +969,19 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         }
         if(legend){
             int lx=left,ly=controlBottom()-14;
-            int[][] marks={{0xFF12392F,LEGEND_TEAL},{0xFF3D2E0F,LEGEND_YELLOW},{0xFF3F1A1A,LEGEND_RED}};String[] words={"legend.in_place","legend.misplaced","legend.missing"};
+            int[][] marks={{Palette.TEAL_FILL,Palette.TEAL},{Palette.YELLOW_FILL,Palette.YELLOW},{Palette.RED_FILL,Palette.RED}};String[] words={"legend.in_place","legend.misplaced","legend.missing"};
             for(int i=0;i<3;i++){
                 String word=tr(words[i]);if(lx+10+font.width(word)>right-96)break;
                 g.fill(lx,ly,lx+8,ly+8,marks[i][1]);g.fill(lx+1,ly+1,lx+7,ly+7,marks[i][0]);text(g,word,lx+11,ly,MUTED,font.width(word));lx+=19+font.width(word);
             }
         }
         g.vLine(panelX()-6,top,controlBottom(),LINE);
-        int ctop=controlTop(),cbottom=controlBottom();
-        g.enableScissor(leftPos+panelX()-2,topPos+ctop,leftPos+panelX()+panelWidth()+2,topPos+cbottom);clipTop=ctop;clipBottom=cbottom;
-        int end=controlColumn(g);
-        g.disableScissor();clipTop=Integer.MIN_VALUE;clipBottom=Integer.MAX_VALUE;
-        int start=ctop-controlOffset(),visible=Math.max(1,(cbottom-ctop)/RAIL_STEP),overflow=end-start-(cbottom-ctop);
-        controlScroll.configure(leftPos+panelX()+panelWidth()+4,topPos+ctop,cbottom-ctop,visible,visible+(overflow>0?(overflow+RAIL_STEP-1)/RAIL_STEP:0));
-        if(controlOffset()!=controlBuiltOffset)rebuildNext=true;
-    }
-    /** A click on a mode row of the column chooses it. */
-    private boolean clickMode(double mx,double my){
-        double x=mx-leftPos,y=my-topPos;
-        if(x<panelX()||x>=panelX()+panelWidth()||y<controlTop()||y>=controlBottom())return false;
-        for(var row:modeRows)if(y>=row.y()&&y<row.y()+22){row.select().run();rebuild();return true;}
-        return false;
+        if(controlColumn==null)return;
+        // The column as placed: drawn clipped to its view, a cut line or a field's hint read on hover.
+        var canvas=new GuiCanvas(g,font,leftPos,topPos);
+        canvas.clip(controlView.viewport());controlColumn.draw(canvas,-controlView.offset());canvas.unclip();
+        if(controlView.inside(hoverX,hoverY)){var hover=controlColumn.hover(hoverX,controlView.contentY(hoverY));if(hover!=null)hovered=hover;}
+        controlView.drawBar(canvas);
     }
     @Override public boolean keyPressed(int key,int scan,int modifiers){
         if(ProcessUi.textKeyPressed(this,key,scan,modifiers))return true;
@@ -1097,24 +989,25 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     @Override public boolean mouseClicked(double x,double y,int button){
         if(componentDropdown!=null&&componentDropdown.popupClick(x,y,button))return true;
-        // The Control tab has its own column scroll; the rail's and the table's are not on it.
+        // The Control tab's column view: its bar, then a choice it places (a mode); the rail's and the table's scrolls are not on it.
         if(page==CONTROL){
-            if(controlScroll.click(x,y,button)){rebuildNext=true;return true;}
-            if(button==0&&clickMode(x,y))return true;
+            double rx=x-leftPos,ry=y-topPos;
+            if(controlView.press(rx,ry,button))return true;
+            if(button==0&&controlColumn!=null&&controlView.inside(rx,ry)){var action=controlColumn.action(rx,controlView.contentY(ry));if(action!=null){controlAction(action);return true;}}
             return super.mouseClicked(x,y,button);
         }
         if(scroll.click(x,y,button)||railScroll.click(x,y,button)){rebuildNext=true;return true;}return super.mouseClicked(x,y,button);
     }
     @Override public boolean mouseDragged(double x,double y,int button,double dx,double dy){
         if(componentDropdown!=null&&componentDropdown.popupDrag(y))return true;
-        if(page==CONTROL){if(controlScroll.drag(y)){rebuildNext=true;return true;}return super.mouseDragged(x,y,button,dx,dy);}
+        if(page==CONTROL){if(controlView.drag(y-topPos))return true;return super.mouseDragged(x,y,button,dx,dy);}
         if(scroll.drag(y)||railScroll.drag(y)){rebuildNext=true;return true;}return super.mouseDragged(x,y,button,dx,dy);
     }
-    @Override public boolean mouseReleased(double x,double y,int button){if(componentDropdown!=null)componentDropdown.popupRelease();scroll.release();railScroll.release();controlScroll.release();return super.mouseReleased(x,y,button);}
+    @Override public boolean mouseReleased(double x,double y,int button){if(componentDropdown!=null)componentDropdown.popupRelease();scroll.release();railScroll.release();controlView.release();return super.mouseReleased(x,y,button);}
     @Override public boolean mouseScrolled(double x,double y,double horizontal,double vertical){
         if(componentDropdown!=null&&componentDropdown.popupScroll(x,y,vertical))return true;
         if(page==CONTROL){
-            if(x>=leftPos+panelX()-6&&y>=topPos+controlTop()&&y<topPos+controlBottom()&&controlScroll.wheel(vertical)){rebuildNext=true;return true;}
+            if(controlView.wheel(x-leftPos,y-topPos,vertical))return true;
             return super.mouseScrolled(x,y,horizontal,vertical);
         }
         if(x>=leftPos+tableX()&&scroll.wheel(vertical)){rebuildNext=true;return true;}
