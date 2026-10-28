@@ -8,6 +8,9 @@ import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Part;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.PortMark;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Text;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
+import com.wormzjl.icheme.client.gui.common.kit.FlowsheetPainter;
+import com.wormzjl.icheme.client.gui.common.kit.FlowsheetPainter.Look;
+import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.network.AssemblyNetwork;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.PortState;
@@ -41,11 +44,9 @@ import java.util.Locale;
  */
 public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> {
     private static final String KEY = AssemblyDiagram.KEY;
-    private static final int TEAL_FILL = 0xFF12392F, TEAL = 0xFF1D9E75, TEAL_TEXT = 0xFF9FE1CB, YELLOW_FILL = 0xFF3D2E0F, YELLOW = 0xFFEF9F27,
-            YELLOW_TEXT = 0xFFFAC775, RED_FILL = 0xFF3F1A1A, RED = 0xFFE24B4A, RED_TEXT = 0xFFF7C1C1, BODY = 0xFF33434D, EDGE = 0xFF444441, ROW = 11,
-            LIST_MIN = 150, LIST_MAX = 260;
-    /** The design's labels against the 9-pixel font, and the smallest font drawn. */
-    private static final double FONT = 1.2, MIN_FONT = 0.5;
+    private static final int ROW = 11, LIST_MIN = 150, LIST_MAX = 260;
+    /** The design's labels against the 9-pixel font. */
+    private static final double FONT = 1.2;
 
     private final @Nullable ColumnTrays trays;
     private final @Nullable AssemblyDiagram diagram;
@@ -214,115 +215,62 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         };
     }
 
-    // The drawing.
-
-    private int x(int design) {
-        return ox + (int) Math.round(design * scale);
-    }
-
-    private int y(int design) {
-        return oy + (int) Math.round(design * scale);
-    }
-
-    private int px(int design) {
-        return Math.max(1, (int) Math.round(design * scale));
-    }
+    // The drawing, through the kit's flowsheet painter (batch 2026-10-28-gui-toolkit).
 
     /** A part's look: fill, line, text. */
-    private int[] look(Part part) {
+    private Look look(Part part) {
         var r = slotReport(part.slot());
-        if (part.glyph() == Glyph.COLUMN && (r == null || r.state() == AssemblyReport.State.OK)) return new int[]{BODY, ProcessUi.LINE, ProcessUi.TEXT};
-        if (r == null) return new int[]{RED_FILL, RED, RED_TEXT};
-        return switch (r.state().colour) {
-            case TEAL -> new int[]{TEAL_FILL, TEAL, TEAL_TEXT};
-            case YELLOW -> new int[]{YELLOW_FILL, YELLOW, YELLOW_TEXT};
-            case RED -> new int[]{RED_FILL, RED, RED_TEXT};
+        if (part.glyph() == Glyph.COLUMN && (r == null || r.state() == AssemblyReport.State.OK)) return new Look(FlowsheetPainter.BODY, ProcessUi.LINE, ProcessUi.TEXT);
+        return r == null ? Look.RED : Look.of(r.state().colour);
+    }
+
+    private static float anchor(Align align) {
+        return switch (align) {
+            case LEFT -> 0;
+            case CENTRE -> 0.5f;
+            case RIGHT -> 1;
         };
     }
 
     private void drawDiagram(GuiGraphics g) {
         var d = diagram;
-        for (var w : d.wires()) wire(g, w);
-        for (var t : d.trays()) g.hLine(x(t[0]), x(t[2]), y(t[1]), ProcessUi.LINE);
-        for (var p : d.pills()) {
-            g.fill(x(p.x()), y(p.y() - 11), x(p.x() + p.w()), y(p.y() + 11), ProcessUi.PANEL);
-            g.renderOutline(x(p.x()), y(p.y() - 11), x(p.x() + p.w()) - x(p.x()), y(p.y() + 11) - y(p.y() - 11), ProcessUi.LINE);
-            fitted(g, text(p.text()), p.x() + p.w() / 2, p.y(), p.w(), ProcessUi.MUTED);
+        var p = new FlowsheetPainter(new GuiCanvas(g, font, 0, 0), ox, oy, scale, FONT);
+        for (var w : d.wires()) p.wire(w.points(), w.arrow(), w.utility(), w.utility() ? ProcessUi.LINE : ProcessUi.MUTED);
+        for (var t : d.trays()) g.hLine(p.x(t[0]), p.x(t[2]), p.y(t[1]), ProcessUi.LINE);
+        for (var pill : d.pills()) {
+            p.pill(pill.x(), pill.y(), pill.w(), 11);
+            p.fitted(text(pill.text()).getString(), pill.x() + pill.w() / 2, pill.y(), pill.w(), ProcessUi.MUTED);
         }
-        for (var part : d.parts()) part(g, part);
+        for (var part : d.parts()) part(p, part);
         // Free labels only where the font keeps the design's proportion; below it they would cover the parts.
-        if (scale * FONT >= MIN_FONT) for (var l : d.labels()) label(g, text(l.text()), l.x(), l.y(), l.align(), ProcessUi.MUTED);
-        for (var m : d.ports()) port(g, m);
+        if (p.labels()) for (var l : d.labels()) p.label(text(l.text()).getString(), l.x(), l.y(), anchor(l.align()), ProcessUi.MUTED);
+        for (var m : d.ports()) port(p, m);
     }
 
-    private void wire(GuiGraphics g, AssemblyDiagram.Wire w) {
-        int[] p = w.points();
-        int colour = w.utility() ? ProcessUi.LINE : ProcessUi.MUTED;
-        for (int i = 0; i + 3 < p.length; i += 2) {
-            int x0 = x(p[i]), y0 = y(p[i + 1]), x1 = x(p[i + 2]), y1 = y(p[i + 3]);
-            boolean across = y0 == y1;
-            int from = across ? Math.min(x0, x1) : Math.min(y0, y1), to = across ? Math.max(x0, x1) : Math.max(y0, y1);
-            // A utility line is dashed: two pixels on, one off.
-            for (int a = from; a <= to; a += w.utility() ? 3 : to - from + 1) {
-                int b = w.utility() ? Math.min(a + 1, to) : to;
-                if (across) g.hLine(a, b, y0, colour);
-                else g.fill(x0, a, x0 + 1, b + 1, colour);
-            }
-        }
-        if (!w.arrow() || p.length < 4) return;
-        int n = p.length;
-        int ex = x(p[n - 2]), ey = y(p[n - 1]), dx = Integer.signum(x(p[n - 2]) - x(p[n - 4])), dy = Integer.signum(y(p[n - 1]) - y(p[n - 3]));
-        for (int k = 0; k < 3; k++) {
-            int bx = ex - dx * k, by = ey - dy * k;
-            if (dx != 0) g.vLine(bx, by - k - 1, by + k + 1, colour);
-            else g.hLine(bx - k, bx + k, by, colour);
-        }
-    }
-
-    private void part(GuiGraphics g, Part part) {
-        int[] look = look(part);
-        int x0 = x(part.x()), y0 = y(part.y()), x1 = x(part.x() + part.w()), y1 = y(part.y() + part.h());
+    private void part(FlowsheetPainter p, Part part) {
+        var look = look(part);
+        int x0 = p.x(part.x()), y0 = p.y(part.y()), x1 = p.x(part.x() + part.w()), y1 = p.y(part.y() + part.h());
         switch (part.glyph()) {
             case COLUMN, UNIT, DRUM -> {
-                if (part.glyph() == Glyph.DRUM) box(g, x(part.x() + 60), y(part.y() + 26), x(part.x() + 82), y(part.y() + 64), look);
-                box(g, x0, y0, x1, y1, look);
+                if (part.glyph() == Glyph.DRUM) p.box(p.x(part.x() + 60), p.y(part.y() + 26), p.x(part.x() + 82), p.y(part.y() + 64), look);
+                p.box(x0, y0, x1, y1, look);
             }
-            case TEE -> g.fill(x0, y0, Math.max(x1, x0 + 2), Math.max(y1, y0 + 2), look[1]);
-            case VALVE -> {
-                int cx = (x0 + x1) / 2, cy = y(part.y() + part.h() - 6), hw = Math.max(2, px(8)), hh = Math.max(2, px(6));
-                for (int dx = -hw; dx <= hw; dx++) {
-                    int h = Math.round(hh * Math.abs(dx) / (float) hw);
-                    g.vLine(cx + dx, cy - h - 1, cy + h + 1, look[1]);
-                }
-                g.vLine(cx, cy - px(11) - 1, cy, look[1]);
-                g.fill(cx - px(5), cy - px(16), cx + px(5) + 1, cy - px(11), look[1]);
-            }
+            case TEE -> p.tee(x0, y0, x1, y1, look);
+            case VALVE -> p.valve((x0 + x1) / 2, p.y(part.y() + part.h() - 6), look);
             default -> {
                 boolean down = part.glyph() == Glyph.PUMP_DOWN || part.glyph() == Glyph.INLINE_PUMP_DOWN;
                 boolean standard = part.glyph() == Glyph.PUMP_DOWN || part.glyph() == Glyph.PUMP_ACROSS;
-                int cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, r = Math.max(2, (x1 - x0) / 2);
+                int cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
                 if (standard) {
-                    int m = px(4), o = px(10), s = px(8);
-                    if (down) g.fill(cx + o, cy - m, cx + o + s, cy + m, look[1]);
-                    else g.fill(cx - m, cy + o, cx + m, cy + o + s, look[1]);
+                    int m = p.px(4), o = p.px(10), s = p.px(8);
+                    if (down) p.canvas().fill(cx + o, cy - m, cx + o + s, cy + m, look.stroke());
+                    else p.canvas().fill(cx - m, cy + o, cx + m, cy + o + s, look.stroke());
                 }
-                for (int dy = -r; dy <= r; dy++) {
-                    int half = (int) Math.round(Math.sqrt(r * r - dy * dy));
-                    g.hLine(cx - half, cx + half, cy + dy, look[0]);
-                    g.fill(cx - half, cy + dy, cx - half + 1, cy + dy + 1, look[1]);
-                    g.fill(cx + half, cy + dy, cx + half + 1, cy + dy + 1, look[1]);
-                }
-                g.hLine(cx - 1, cx + 1, cy - r, look[1]);
-                g.hLine(cx - 1, cx + 1, cy + r, look[1]);
+                p.circle(cx, cy, Math.max(2, (x1 - x0) / 2), look);
             }
         }
-        if (part.label() != null) fitted(g, text(part.label()), part.x() + part.w() / 2, part.y() + part.h() / 2, part.w(), look[2]);
-        if (part.slot().equals(selected)) g.renderOutline(x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4, ProcessUi.TEXT);
-    }
-
-    private static void box(GuiGraphics g, int x0, int y0, int x1, int y1, int[] look) {
-        g.fill(x0, y0, x1, y1, look[0]);
-        g.renderOutline(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0), look[1]);
+        if (part.label() != null) p.fitted(text(part.label()).getString(), part.x() + part.w() / 2, part.y() + part.h() / 2, part.w(), look.text());
+        if (part.slot().equals(selected)) p.canvas().outline(x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4, ProcessUi.TEXT);
     }
 
     /** A port's state, or null while there is no report or no unit in its slot: it still needs its pipe. */
@@ -339,38 +287,10 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return found;
     }
 
-    private void port(GuiGraphics g, PortMark m) {
+    private void port(FlowsheetPainter p, PortMark m) {
         var state = portState(m);
         if (state == PortState.UNUSED) return;
-        int half = Math.max(2, px(PortMark.SIZE / 2)), cx = x(m.x()), cy = y(m.y());
-        int fill = state == PortState.CONNECTED ? PortColours.CONNECTED : PortColours.of(m.role().port);
-        g.fill(cx - half - 1, cy - half - 1, cx + half + 1, cy + half + 1, EDGE);
-        g.fill(cx - half, cy - half, cx + half, cy + half, 0xFF000000 | fill);
-    }
-
-    private float fontScale() {
-        return (float) Math.clamp(scale * FONT, MIN_FONT, 1.0);
-    }
-
-    /** A label centred on design point ({@code x}, {@code y}), drawn only if it fits {@code width} design units. */
-    private void fitted(GuiGraphics g, Component text, int x, int y, int width, int colour) {
-        if (font.width(text) * fontScale() <= width * scale - 2) label(g, text, x, y, Align.CENTRE, colour);
-    }
-
-    /** A label at design point ({@code x}, {@code y}), in a font scaled with the drawing, never below {@link #MIN_FONT}. */
-    private void label(GuiGraphics g, Component text, int x, int y, Align align, int colour) {
-        float fs = fontScale();
-        float w = font.width(text) * fs;
-        float tx = switch (align) {
-            case LEFT -> x(x);
-            case CENTRE -> x(x) - w / 2;
-            case RIGHT -> x(x) - w;
-        };
-        g.pose().pushPose();
-        g.pose().translate(tx, y(y) - font.lineHeight * fs / 2 + fs, 0);
-        g.pose().scale(fs, fs, 1);
-        g.drawString(font, text, 0, 0, colour, false);
-        g.pose().popPose();
+        p.square(m.x(), m.y(), PortMark.SIZE, state == PortState.CONNECTED ? PortColours.CONNECTED : PortColours.of(m.role().port));
     }
 
     // The parts list.
@@ -408,12 +328,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     }
 
     private static int wordColour(@Nullable SlotReport r) {
-        if (r == null) return RED_TEXT;
-        return switch (r.state().colour) {
-            case TEAL -> TEAL_TEXT;
-            case YELLOW -> YELLOW_TEXT;
-            case RED -> RED_TEXT;
-        };
+        return (r == null ? Look.RED : Look.of(r.state().colour)).text();
     }
 
     private @Nullable Slot listSlot(double mx, double my) {

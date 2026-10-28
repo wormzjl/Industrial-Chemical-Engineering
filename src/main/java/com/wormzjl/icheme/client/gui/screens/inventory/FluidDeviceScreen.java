@@ -891,7 +891,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private final HeatFlowsheet.Data flowData=new HeatFlowsheet.Data(){
         @Override public String value(HeatDiagram.Value value){return heatValue(value);}
         @Override public String state(String slot){return partState(slot);}
+        @Override public String text(AssemblyDiagram.Text text){return AssemblyScreen.text(text).getString();}
     };
+    /** A line part's hover: its name and its state in the column's words. */
+    private static Component partHover(String slot,String state,String detail,long at){
+        var name=Component.translatable("gui.icheme.assembly.part."+slot);var where=Component.translatable("gui.icheme.assembly.where."+slot);
+        try{return AssemblyScreen.stateText(name,where,null,com.wormzjl.icheme.science.assembly.AssemblyReport.State.valueOf(state),detail,at);}
+        catch(IllegalArgumentException notChecked){return Component.translatable("gui.icheme.assembly.state.not_validated",name,where);}
+    }
     /** A drawing's reading from this side's view, in the player's units; empty (a pill "—") where nothing reads it yet. */
     private String heatValue(HeatDiagram.Value value){
         var heat=heat();
@@ -959,12 +966,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private void renderControl(GuiGraphics g){
         var sheet=flowsheet();boolean legend=sheet.diagram.parts().stream().anyMatch(HeatDiagram.Part::line);
         int left=10,top=controlTop(),right=drawingRight(),bottom=controlBottom()-(legend||heat().lines()!=null?24:4);
-        sheet.fit(left,top,right-left,bottom-top);sheet.draw(g,font,flowData);
+        sheet.fit(left,top,right-left,bottom-top);sheet.draw(new GuiCanvas(g,font,leftPos,topPos),flowData);
         // A line part reads its state in the column's words; a pill its full text where it was cut.
         if(hoverX>=left&&hoverX<right&&hoverY>=top&&hoverY<bottom){
             var part=sheet.part(hoverX,hoverY);
             if(part!=null&&part.line()){var p=heat().lines()==null?null:heat().lines().part(part.slot());
-                hovered=HeatFlowsheet.hover(part.slot(),partState(part.slot()),p==null?"":p.detail(),p==null?com.wormzjl.icheme.science.assembly.AssemblyReport.NONE:p.at()).getString();}
+                hovered=partHover(part.slot(),partState(part.slot()),p==null?"":p.detail(),p==null?com.wormzjl.icheme.science.assembly.AssemblyReport.NONE:p.at()).getString();}
             else{var pill=sheet.pill(hoverX,hoverY);if(pill!=null)hovered=portName(pill.role())+" "+heatValue(pill.value());}
         }
         if(legend){

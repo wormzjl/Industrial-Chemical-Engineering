@@ -34,6 +34,11 @@ public final class GuiCanvas implements Canvas {
             }
 
             @Override
+            public int height() {
+                return font.lineHeight;
+            }
+
+            @Override
             public String cut(String text, int width) {
                 return font.plainSubstrByWidth(text, Math.max(0, width));
             }

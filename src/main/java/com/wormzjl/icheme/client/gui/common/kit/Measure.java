@@ -13,6 +13,11 @@ public interface Measure {
 
     int width(String text);
 
+    /** The font's glyph height, px (the game font's 9). */
+    default int height() {
+        return 9;
+    }
+
     /** The longest start of {@code text} no wider than {@code width}. */
     default String cut(String text, int width) {
         if (width(text) <= width) return text;
