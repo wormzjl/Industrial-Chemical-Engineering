@@ -544,4 +544,42 @@ class KitLayoutTest {
             }
         }
     }
+
+    /**
+     * A screen designed taller (the device screen, 480 GUI px) takes the scale that holds its design, then steps down while
+     * its door does not fit, never below the minimum a player reads: half the design size's scale, rounded up, and 2 where
+     * that one is 2 or more (owner 2026-10-28: "Define a minimum scale user can see correctly, use slider below that").
+     */
+    @Test
+    void aTallerScreenStepsDownToTheMinimumScaleAPlayerReads() {
+        assertEquals(2, WindowScale.minimum(1920, 1080, false));
+        assertEquals(3, WindowScale.minimum(2560, 1440, false), "half of 5, rounded up");
+        assertEquals(4, WindowScale.minimum(3840, 2160, false));
+        assertEquals(2, WindowScale.minimum(1366, 768, false), "never 1 where the design size takes 2");
+        assertEquals(1, WindowScale.minimum(800, 600, false));
+        assertEquals(2, WindowScale.minimum(2560, 1440, true), "the Unicode font's even scales: half of 4");
+        assertEquals(4, WindowScale.minimum(3840, 2160, true));
+
+        WindowScale.Fit any = (w, h) -> true, never = (w, h) -> false, tall = (w, h) -> h >= 720;
+        assertEquals(2, WindowScale.of(1920, 1080, false, 480, any), "960 by 540");
+        assertEquals(3, WindowScale.of(2560, 1440, false, 480, any), "854 by 480");
+        assertEquals(4, WindowScale.of(3840, 2160, false, 480, any), "960 by 540, not the design size's 8");
+        assertEquals(2, WindowScale.of(1366, 768, false, 480, any), "the minimum, where 480 needs scale 1");
+        assertEquals(2, WindowScale.of(1600, 900, false, 480, any));
+        assertEquals(1, WindowScale.of(800, 600, false, 480, any));
+        assertEquals(2, WindowScale.of(2560, 1440, true, 480, any), "an even scale");
+        assertEquals(3, WindowScale.of(2560, 1440, false, 480, never), "a door that never fits scrolls at the minimum");
+        assertEquals(3, WindowScale.of(2560, 1440, false, 480, tall), "not below the minimum to fit it");
+        assertEquals(3, WindowScale.of(1856, 2160, false, 480, tall), "down from 4 to the scale that holds 720 px");
+        assertEquals(2, WindowScale.of(1856, 2160, true, 480, tall), "the Unicode font steps by two: from 4 to 2");
+        for (int w = WindowScale.WIDTH; w <= 3840; w += 37) {
+            for (int h = WindowScale.HEIGHT; h <= 2160; h += 29) {
+                int s = WindowScale.of(w, h, false, 480, never);
+                assertEquals(WindowScale.minimum(w, h, false), s, w + " by " + h);
+                assertEquals(WindowScale.of(w, h, false), WindowScale.of(w, h, false, WindowScale.HEIGHT, any), w + " by " + h + " at the design size");
+                int fit = WindowScale.of(w, h, false, 480, any);
+                assertTrue(fit >= s && fit <= WindowScale.of(w, h, false), w + " by " + h + " between the minimum and the design size's: " + fit);
+            }
+        }
+    }
 }

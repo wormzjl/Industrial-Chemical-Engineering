@@ -14,6 +14,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
@@ -71,7 +72,8 @@ public final class GuiPrototypes {
     }
 
     static List<Prototype> prototypes() {
-        var out = new ArrayList<>(List.of(pump(), generator(), valve(), tank(), pipe()));
+        var out = new ArrayList<>(List.of(pump(), generator(), tank(), pipe()));
+        out.addAll(valve());
         out.addAll(calculator());
         out.addAll(assembly());
         out.addAll(constructor());
@@ -509,7 +511,7 @@ public final class GuiPrototypes {
      * asks for it. Fields show {@code drafts} by key. Returns the glass's inner box.
      */
     static Rect device(Door d, DeviceColumn.Input in, Map<String, String> drafts) {
-        int side = FluidGuiLayout.side(d.w), top = 74, bottom = d.h - 52;
+        int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
         var column = Column.place(DeviceColumn.rows(in, TEXTS), 10, top, side - 10, d.m, Column.Metrics.COMPACT);
         var view = new ScrollView();
         view.layout(new Rect(8, top, side - 6, bottom - top), side + 3, column.bounds().h());
@@ -547,71 +549,97 @@ public final class GuiPrototypes {
         return new DeviceColumn.Meter(key, value, unit, null);
     }
 
+    /** The window the device pages are drawn for, in screen px: {@code -Dwindow=1920x1080} (the default). */
+    static final int[] WINDOW = java.util.Arrays.stream(System.getProperty("window", "1920x1080").split("x")).mapToInt(Integer::parseInt).toArray();
+
+    /**
+     * A device's page as a window {@code fw} by {@code fh} screen px shows it: at the scale FluidDeviceScreen takes
+     * (WindowScale with the page's column as its fit), its image 8 px inside the window's GUI size; drawn scrolled to its
+     * end too where even that scale leaves the column a bar.
+     */
+    static Prototype devicePage(String file, int fw, int fh, DeviceColumn.Input in, BiConsumer<Door, Skin> body) {
+        var m = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
+        var rows = DeviceColumn.rows(in, TEXTS);
+        WindowScale.Fit fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
+        int s = WindowScale.of(fw, fh, false, FluidGuiLayout.HEIGHT, fit), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
+        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: scale %d (the design size's %d, the minimum %d), %d by %d GUI px%n", file, fw, fh, s, WindowScale.of(fw, fh, false), WindowScale.minimum(fw, fh, false), gw, gh);
+        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.fits(gw, gh));
+    }
+
     static Prototype pump() {
-        return new Prototype("fluid-pump", 464, 254, (d, s) -> {
+        var in = new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.20", "bar"),
+                meter("throughput", "554.8", "kmol/h"), meter("pressure_change", "2.40", "bar")));
+        return devicePage("fluid-pump", WINDOW[0], WINDOW[1], in, (d, s) -> {
             d.title("Centrifugal pump");
             d.tabs(0, "Overview", "Datasheet");
             d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
-            var box = device(d, new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
-                    phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.20", "bar"),
-                    meter("throughput", "554.8", "kmol/h"), meter("pressure_change", "2.40", "bar"))), Map.of("volumeFlow", "12.0", "maximumAddedPressure", "5.00"));
+            var box = device(d, in, Map.of("volumeFlow", "12.0", "maximumAddedPressure", "5.00"));
             contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "92.1", "511"}, new String[]{"Ethanol", "7.9", "43.8"}));
             d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
-        }, true);
+        });
     }
 
     static Prototype generator() {
-        return new Prototype("fluid-generator", 464, 254, (d, s) -> {
+        var in = new DeviceColumn.Input(Kind.GENERATOR, true, true, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("mole", 1, 0, 0.1, 0), List.of(meter("temperature", "25.0", "°C"), meter("pressure", "2.00", "bar"), meter("throughput", "0.2", "kmol/s")));
+        return devicePage("fluid-generator", WINDOW[0], WINDOW[1], in, (d, s) -> {
             d.title("Fluid source");
             d.tabs(0, "Overview", "Composition", "Solids");
             d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
-            var box = device(d, new DeviceColumn.Input(Kind.GENERATOR, true, true, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
-                    phases("mole", 1, 0, 0.1, 0), List.of(meter("temperature", "25.0", "°C"), meter("pressure", "2.00", "bar"), meter("throughput", "0.2", "kmol/s"))),
-                    Map.of("pressure", "2.00", "temperature", "25.0"));
+            var box = device(d, in, Map.of("pressure", "2.00", "temperature", "25.0"));
             contents(d, box, 0, List.of(new String[]{"Component", "Mole %", "kmol/s"}, new String[]{"n-Hexane", "61.0", "0.1"}, new String[]{"n-Heptane", "39.0", "0.1"}));
             d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/s");
-        }, true);
+        });
     }
 
-    static Prototype valve() {
-        return new Prototype("fluid-valve", 464, 254, (d, s) -> {
+    /** The valve, the tallest page, in a {@link #WINDOW} window; and in a 1366 by 768 one, where scale 2 still leaves it a bar. */
+    static List<Prototype> valve() {
+        return List.of(valve("fluid-valve", WINDOW[0], WINDOW[1]), valve("fluid-valve-1366x768", 1366, 768));
+    }
+
+    static Prototype valve(String file, int fw, int fh) {
+        var in = new DeviceColumn.Input(Kind.VALVE, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.MASS_FLOW, new DeviceColumn.Opening(0.63, "Holding the set point"),
+                false, null, null, List.of(), phases("volume", 1, 0, 0, 0), List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"),
+                meter("throughput", "2.5", "kg/s"), meter("pressure_change", "-1.10", "bar")));
+        return devicePage(file, fw, fh, in, (d, s) -> {
             d.title("Control valve");
             d.tabs(0, "Overview");
             d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
-            var box = device(d, new DeviceColumn.Input(Kind.VALVE, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.MASS_FLOW, new DeviceColumn.Opening(0.63, "Holding the set point"),
-                    false, null, null, List.of(), phases("volume", 1, 0, 0, 0), List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"),
-                    meter("throughput", "2.5", "kg/s"), meter("pressure_change", "-1.10", "bar"))), Map.of("massFlow", "2.50"));
+            var box = device(d, in, Map.of("massFlow", "2.50"));
             contents(d, box, 0, List.of(new String[]{"Component", "Mass %", "kg/s"}, new String[]{"Toluene", "100.0", "2.5"}));
             d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
-        }, true);
+        });
     }
 
     static Prototype tank() {
-        return new Prototype("fluid-tank", 464, 254, (d, s) -> {
+        var in = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false,
+                new DeviceColumn.Level(0.63, "25200.0", "40000.0"), null, List.of(), phases("volume", 0, 25.2, 14.8, 0),
+                List.of(meter("temperature", "20.0", "°C"), meter("top_pressure", "1.01", "bar"), meter("bottom_pressure", "1.25", "bar"), meter("net_flow", "-0.4", "kg/s"),
+                        meter("mass", "25150.0", "kg")));
+        return devicePage("fluid-tank", WINDOW[0], WINDOW[1], in, (d, s) -> {
             d.title("Atmospheric tank");
             d.tabs(0, "Overview", "Outlets", "Datasheet");
             d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
-            var box = device(d, new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false,
-                    new DeviceColumn.Level(0.63, "25200.0", "40000.0"), null, List.of(), phases("volume", 0, 25.2, 14.8, 0),
-                    List.of(meter("temperature", "20.0", "°C"), meter("top_pressure", "1.01", "bar"), meter("bottom_pressure", "1.25", "bar"), meter("net_flow", "-0.4", "kg/s"),
-                            meter("mass", "25150.0", "kg"))), Map.of());
+            var box = device(d, in, Map.of());
             contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"Water", "99.2", "1390"}, new String[]{"Salt", "0.8", "11.2"}));
             d.footer(1, "Close", "Mole", "°C", "bar", "/s");
-        }, true);
+        });
     }
 
     static Prototype pipe() {
-        return new Prototype("fluid-pipe", 464, 254, (d, s) -> {
+        var in = new DeviceColumn.Input(Kind.PIPE, true, false, true, "kPa", "°C", "/min", DeviceColumn.Valve.NONE, null, false, null,
+                HeatDiagramRender.tr("gui.icheme.fluid.junction", 3), List.of(), phases("volume", 0, 1, 0, 0),
+                List.of(meter("temperature", "35.0", "°C"), meter("pressure", "180.0", "kPa"), meter("throughput", "120.0", "kmol/min"),
+                        meter("velocity_lowest", "0.8", "m/s"), meter("velocity_highest", "1.6", "m/s"), meter("gradient", "0.4", "kPa/m")));
+        return devicePage("fluid-pipe", WINDOW[0], WINDOW[1], in, (d, s) -> {
             d.title("Pipe");
             d.tabs(0, "Overview", "Connections");
             d.status(Door.tr("gui.icheme.fluid.reversed_interval") + " " + Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
-            var box = device(d, new DeviceColumn.Input(Kind.PIPE, true, false, true, "kPa", "°C", "/min", DeviceColumn.Valve.NONE, null, false, null,
-                    Door.tr("gui.icheme.fluid.junction", 3), List.of(), phases("volume", 0, 1, 0, 0),
-                    List.of(meter("temperature", "35.0", "°C"), meter("pressure", "180.0", "kPa"), meter("throughput", "120.0", "kmol/min"),
-                            meter("velocity_lowest", "0.8", "m/s"), meter("velocity_highest", "1.6", "m/s"), meter("gradient", "0.4", "kPa/m"))), Map.of("diameter", "0.10"));
+            var box = device(d, in, Map.of("diameter", "0.10"));
             contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/min"}, new String[]{"Water", "100.0", "120.0"}));
             d.footer(2, "Close", "Apply", "Mole", "°C", "kPa", "/min");
-        }, true);
+        });
     }
 
     static BufferedImage render(Prototype p, Skin skin, boolean end) {
