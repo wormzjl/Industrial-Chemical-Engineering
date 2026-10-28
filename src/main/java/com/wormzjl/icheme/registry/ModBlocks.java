@@ -17,8 +17,9 @@ public final class ModBlocks {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(IChemE.MOD_ID);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_RESERVOIR=fluid("fluid_reservoir",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.RESERVOIR);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_PIPE=fluid("fluid_pipe",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE);
-    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_PUMP=fluid("fluid_pump",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PUMP);
-    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_COMPRESSOR=fluid("fluid_compressor",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.COMPRESSOR);
+    // The one-block pump and compressor are gone (batch 2026-10-28-old-mover-removal): a saved one loads as a pipe, keeping
+    // its facing, connections and block entity, and FluidWorldAuthority.loadedChunk turns its registration into an in-line mover.
+    static{for(var removed:new String[]{"fluid_pump","fluid_compressor"})BLOCKS.addAlias(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,removed),FLUID_PIPE.getId());}
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_GENERATOR=fluid("fluid_generator",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_VOID=fluid("fluid_void",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.VOID);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> INLINE_FILTER=fluid("inline_filter",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.FILTER);

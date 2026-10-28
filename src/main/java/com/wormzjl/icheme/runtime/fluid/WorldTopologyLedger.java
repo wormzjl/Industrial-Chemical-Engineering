@@ -278,13 +278,24 @@ public final class WorldTopologyLedger {
                 if(!seen.add(edit.id))throw new IllegalArgumentException("Duplicate identity in topology event");
                 var previous=get(edit.id);var replacement=edit.replacement;
                 if(replacement==null) {if(previous==null)throw new IllegalStateException("Missing removed device");for(var cell:previous.device.cells())at(cell).remove(edit.id);changed.put(edit.id,Optional.empty());continue;}
-                if(previous!=null&&(!previous.device.position().dimension().equals(replacement.device.position().dimension())||previous.device.kind()!=replacement.device.kind()||replacement.revision!=Math.addExact(previous.revision,1)))throw new IllegalStateException("Stale device edit or a changed kind or dimension");
+                if(previous!=null&&(!previous.device.position().dimension().equals(replacement.device.position().dimension())||!sameKind(previous.device,replacement.device)||replacement.revision!=Math.addExact(previous.revision,1)))throw new IllegalStateException("Stale device edit or a changed kind or dimension");
                 if(previous==null&&replacement.revision!=0)throw new IllegalStateException("New device has a stale revision");
                 if(previous!=null&&previous.device.kind()==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.RESERVOIR&&!previous.spec.sameCharge(replacement.spec))throw new IllegalStateException("Finite-reservoir initialization cannot be reapplied");
                 if(previous!=null)for(var cell:previous.device.cells())at(cell).remove(edit.id);
                 changed.put(edit.id,Optional.of(replacement));for(var cell:replacement.device.cells()){at(cell).add(edit.id);placed.add(cell);}
             }
             for(var position:placed)if(at(position).size()>1)throw new IllegalStateException("Two devices occupy one position");
+        }
+        /**
+         * An edit keeps the device's kind. The one change of kind is a one-block pump or compressor (portless) becoming the
+         * in-line mover on its pipe (batch 2026-10-28-old-mover-removal, {@link PhysicalRegistry#convertOneBlockMover}):
+         * it compiles to the same hydraulic kind.
+         */
+        private static boolean sameKind(PhysicalFluidTopology.Device previous,PhysicalFluidTopology.Device replacement) {
+            if(previous.kind()==replacement.kind())return true;
+            var kind=previous.kind();
+            return (kind==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PUMP||kind==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.COMPRESSOR)&&previous.ports().isEmpty()
+                    &&replacement.kind()==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE&&replacement.hydraulicKind()==kind;
         }
     }
     /** Owned recovery awaiting delivery to a player or a loaded world chunk. */

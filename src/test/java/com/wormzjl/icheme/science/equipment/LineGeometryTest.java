@@ -37,11 +37,12 @@ class LineGeometryTest {
                 }
         for (double od : SIZES) keys.add(key(Kind.PIPE, EAST, od, new int[]{WEST, EAST}, 0, 0, true));
         for (var kind : Kind.values()) {
-            if (kind == Kind.PIPE) continue;
+            // A pump or compressor is an in-line mover on a pipe (InlineMoverGeometry); no block draws one alone.
+            if (kind == Kind.PIPE || kind == Kind.PUMP || kind == Kind.COMPRESSOR) continue;
             for (int facing : new int[]{NORTH, EAST, UP})
                 for (double od : SIZES) {
                     int a = facing & ~1;
-                    boolean inline = kind == Kind.VALVE || kind == Kind.PUMP || kind == Kind.COMPRESSOR || kind == Kind.FILTER;
+                    boolean inline = kind == Kind.VALVE || kind == Kind.FILTER;
                     int[] faces = inline ? new int[]{a, a + 1} : new int[]{UP, a, a + 1};
                     int flanged = 0;
                     for (int face : faces) flanged |= 1 << face;
@@ -290,24 +291,23 @@ class LineGeometryTest {
 
     @Test
     void flangePairsMatchAcrossTheJoint() {
-        // A pipe flanged to a pump on its east face and the pump's west nozzle draw flanges of one size on the shared plane.
+        // A pipe flanged to a strainer on its east face and the strainer's west nozzle draw flanges of one size on the shared plane.
         for (double od : new double[]{1 / 16.0, .15, .4}) {
             var pipe = key(Kind.PIPE, EAST, od, new int[]{WEST, EAST}, 0, 1 << EAST, false);
-            var pump = key(Kind.PUMP, EAST, .05, new int[]{WEST, EAST}, od, 1 << WEST | 1 << EAST, false);
+            var strainer = key(Kind.FILTER, EAST, .05, new int[]{WEST, EAST}, od, 1 << WEST | 1 << EAST, false);
             double expected = PipeSizes.flange(PipeSizes.outsideOf(PipeSizes.code(od))) / 2;
             assertEquals(expected, rimRadius(pipe, 0, 1, Material.FLANGE), 1e-9, "pipe " + od);
-            assertEquals(expected, rimRadius(pump, 0, 0, Material.FLANGE), 1e-9, "pump " + od);
+            assertEquals(expected, rimRadius(strainer, 0, 0, Material.FLANGE), 1e-9, "strainer " + od);
         }
     }
 
     @Test
     void devicesStandAsPhotographed() {
-        // A control valve's actuator above a horizontal line and beside a vertical one; a pump's motor on top; a
-        // strainer's leg below the line and downstream.
+        // A control valve's actuator above a horizontal line and beside a vertical one; a strainer's leg below the line
+        // and downstream.
         assertTrue(centroid(LineGeometry.polygons(key(Kind.VALVE, EAST, .1, new int[0], 0, 0, false)), Material.ACTUATOR)[1] > .7);
         var vertical = centroid(LineGeometry.polygons(key(Kind.VALVE, UP, .1, new int[0], 0, 0, false)), Material.ACTUATOR);
         assertTrue(vertical[2] < .3 && Math.abs(vertical[1] - .5) < .1, List.of(vertical[0], vertical[1], vertical[2]).toString());
-        assertTrue(centroid(LineGeometry.polygons(key(Kind.PUMP, NORTH, .1, new int[0], 0, 0, false)), Material.MOTOR)[1] > .7);
         // The two connection flanges balance about the line; the service cover shifts their centre down/downstream.
         var cover = centroid(LineGeometry.polygons(key(Kind.FILTER, EAST, .15, new int[0], 0, 0, false)), Material.FLANGE);
         assertTrue(cover[0] > .5 && cover[1] < .5, "filter service cover lies below and downstream of the line");

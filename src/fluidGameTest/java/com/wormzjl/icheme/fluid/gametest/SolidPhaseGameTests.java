@@ -29,11 +29,11 @@ public final class SolidPhaseGameTests {
         // Give asynchronous workers wall time; unpaced test ticks otherwise create hours of catch-up debt.
         helper.onEachTick(()->java.util.concurrent.locks.LockSupport.parkNanos(1_000_000L));
         var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
-        // A pipe block between the generator and the pump: only pipes connect (decision D20).
+        // A pipe block between the generator and the in-line pump, as the line stood with the one-block pump (decision D20).
         var source=helper.absolutePos(new BlockPos(0,2,0));var suction=source.east();var pump=source.east(2);var left=source.east(3);var filter=source.east(4);var right=source.east(5);var tank=source.east(6);
         level.setBlock(source,ModBlocks.FLUID_GENERATOR.get().defaultBlockState(),3);
         level.setBlock(suction,ModBlocks.FLUID_PIPE.get().defaultBlockState(),3);
-        level.setBlock(pump,ModBlocks.FLUID_PUMP.get().defaultBlockState().setValue(FluidDeviceBlock.FACING,Direction.EAST),3);
+        level.setBlock(pump,FluidPumpStartupGameTests.inlinePump(Direction.EAST),3);
         level.setBlock(left,ModBlocks.FLUID_PIPE.get().defaultBlockState(),3);
         level.setBlock(filter,ModBlocks.INLINE_FILTER.get().defaultBlockState().setValue(FluidDeviceBlock.FACING,Direction.EAST),3);
         level.setBlock(right,ModBlocks.FLUID_PIPE.get().defaultBlockState(),3);

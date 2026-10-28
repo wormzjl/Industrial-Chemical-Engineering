@@ -402,6 +402,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
             else if(entity instanceof FluidDeviceBlockEntity pipe) {
                 var position=new PhysicalFluidTopology.Position(name,cell.getX(),cell.getY(),cell.getZ());
                 var record=registry.at(position).orElseGet(()->place(position,pipe.kind(),PhysicalFluidTopology.Direction.valueOf(pipe.getBlockState().getValue(FluidDeviceBlock.FACING).name()),FluidDeviceBlock.cutoff(pipe.getBlockState()),FluidDeviceBlock.hasPressureValve(pipe.getBlockState()),FluidDeviceBlock.hasFilter(pipe.getBlockState()),FluidDeviceBlock.hasMover(pipe.getBlockState())?pipe.getBlockState().getValue(FluidDeviceBlock.INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE,pipe.kind()==TopologyCompiler.Kind.PIPE?pipe.joints():PhysicalFluidTopology.ALL_FACES));
+                // A one-block pump or compressor loads as a pipe (its block id is an alias): it becomes the in-line mover there.
+                var d=record.device();
+                if(pipe.kind()==TopologyCompiler.Kind.PIPE&&d.ports().isEmpty()&&(d.kind()==TopologyCompiler.Kind.PUMP||d.kind()==TopologyCompiler.Kind.COMPRESSOR)
+                        &&!registry.convertOneBlockMover(d.id()))
+                    com.wormzjl.icheme.IChemE.LOGGER.warn("mover_compat device={} at {} faces {}: an in-line mover stands on a horizontal pipe; it keeps its one-block registration",d.id(),position,d.facing());
                 if(pipe.fluidIdentity()!=record.device().id())pipe.bindIdentity(record.device().id());else deviceLoaded(record.device().id());
             } else if(entity instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&shell.shape().fluidDevice()) {
                 var origin=shell.origin();

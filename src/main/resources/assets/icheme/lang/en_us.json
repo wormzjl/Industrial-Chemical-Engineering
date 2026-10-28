@@ -114,8 +114,6 @@
   "block.icheme.fluid_reservoir": "Fluid Reservoir",
   "block.icheme.fluid_pipe": "Process Fluid Pipe",
   "block.icheme.pipe_rack": "Pipe Rack",
-  "block.icheme.fluid_pump": "Process Fluid Pump",
-  "block.icheme.fluid_compressor": "Process Gas Compressor",
   "item.icheme.pressure_control_valve": "Control Valve",
   "item.icheme.pressure_control_valve.install": "Right-click a straight pipe to install. Aim along it to set flow direction.",
   "item.icheme.pressure_control_valve.toggle": "Empty-hand right-click opens pressure controls.",

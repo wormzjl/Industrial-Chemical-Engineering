@@ -45,8 +45,6 @@
   "gui.icheme.column_preset.holland_3_2": "Holland 例题 3-2",
   "block.icheme.fluid_reservoir": "流体储罐",
   "block.icheme.fluid_pipe": "工艺流体管道",
-  "block.icheme.fluid_pump": "工艺流体泵",
-  "block.icheme.fluid_compressor": "工艺气体压缩机",
   "item.icheme.pressure_control_valve": "压力控制阀",
   "item.icheme.pressure_control_valve.install": "右键直管安装。沿管道瞄准以设定流向。",
   "item.icheme.pressure_control_valve.toggle": "空手右键打开压力控制。",
