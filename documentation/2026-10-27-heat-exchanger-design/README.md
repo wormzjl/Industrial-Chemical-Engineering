@@ -6,11 +6,12 @@ Purpose: Owner request 2026-10-27: design a heat exchanger system:
 - built-in control that keeps the fluid solver converging;
 - a view on input/output buffers that decouple the networks on both sides with a relayed pressure.
 
-Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C), W4 (the built-in control), W7 (the kettle) and W8 (the exchanger assembly) are built; study W3a is done. W9 (the column hook) is deferred until the column's operation stage exists. The owner's review world is ready ([REVIEW_WORLD.md](REVIEW_WORLD.md)). The owner answered Q1 to Q16 (Q16 form C; Q15 no curve-span notice). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-27. W1 (the heat law), W2 (the device), W5 (the air cooler), W6 (the fired heaters), W3 (the two-sided coupling, form C), W4 (the built-in control), W7 (the kettle) and W8 (the exchanger assembly) are built; study W3a is done. W9 (the column hook) is deferred until the column's operation stage exists. The owner's review world is ready ([REVIEW_WORLD.md](REVIEW_WORLD.md)); the owner's test findings are in [OWNER_TEST_REVIEW.md](OWNER_TEST_REVIEW.md), proposals awaiting approval. The owner answered Q1 to Q16 (Q16 form C; Q15 no curve-span notice). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
 - [REVIEW_WORLD.md](REVIEW_WORLD.md): the owner's test world, five units under control, and what to check.
+- [OWNER_TEST_REVIEW.md](OWNER_TEST_REVIEW.md): the owner's findings from that world, each as expected, found, proposed; [HEAT_GUI_MOCKUP.svg](HEAT_GUI_MOCKUP.svg), the Control tab and stream switch for approval.
 - [HEAT_EXCHANGER_PLAN.md](HEAT_EXCHANGER_PLAN.md), revision 4, with W1, W2, W5, W6, W3a, W3, W4, W7 and W8 as built and W9 deferred (section 10). It covers:
   - the physics in numbers and the owner's decisions;
   - UA from size with a film per phase and the approximations that keep it free of lag;
@@ -209,6 +210,7 @@ The plan also touches:
   - `HeatExchangerReviewWorld` (fluidGameTest, namespace `icheme_review`, run by `runReviewWorldServer` beside the column plant; not a gate) builds five units with water lines and controls: both exchangers at 30 °C (one with a 0.1 m real bypass, lines not checked, valve without its flowmeter), the largest air cooler at 80 °C, a vertical heater fed by a pump to 200 °C, a 1 m kettle at 0.5 MW fed from a generator 1 m over its shell floor with a 0.15 m vapour line.
   - Four builds to tune: a 45 °C set point was out of reach of the internal exchanger; the default air cooler was limited at full fans; a pump beside a generator does not join (a device joins only a pipe); the kettle's 0.05 m vapour line held the shell at 147 kPa, over the feed's head, so the pool boiled down.
   - Level renamed with the column batch's `nbt.js`; copied to `run/saves/IChemE heat exchanger review`.
+- 2026-10-28, owner test of the review world, in the owner test commit: findings and proposals in OWNER_TEST_REVIEW.md, mockup HEAT_GUI_MOCKUP.svg. Two read-only Opus surveys (GUI, water data). The water saturation data already span the triple to the critical point (IAPWS); the notice is the ideal steam's 2 % limit. No reproduction yet: the owner's dev client ran from this worktree. The old pump and compressor removal went to its own session (owner's choice).
 - 2026-10-28, Q15 answered (yes: drop the curve-span notice), in the Q15 commit. `HeatCurve.extrapolated`, never wired to a status line, removed with its test assertion; plan sections 3, 4 and 12 record the answer. The property models' data-range notices stay (AGENTS.md "Thermo validity"); the heater coils' "water vapour partial pressure extrapolated above 250 kPa" is one of them.
 
 ## Notes
@@ -221,6 +223,7 @@ The plan also touches:
 - Open from W5: the drawn fans keep turning when switched off (the motion switch is the client's own).
 - Open from W6: the heaters' FUEL nozzle stays unconnected (fuel is another scope, Q11); the datasheet does not list the coils' surfaces yet.
 - Measured in W1: a junction boils from heat inside the Newton. Measured in W3: the quasi-steady wall on a condensing curve (7 sweeps, 0.10 ms). Not measured yet: the campaign's cost and holds in worlds with exchangers (it has none).
+- Owner test (2026-10-28): proposals in OWNER_TEST_REVIEW.md await the owner (furnace A1/A2, air cooler louvers or bypass, water steam B or A, the mockup); the heater at 100 kPa and the exchanger's settling wait for the probe run (`runReviewWorldServer -PreviewProbe=true`, scratch, to `tools/` at the cleanup).
 - Code guide at the merge: the review world row (`verification.md`, `machine-assemblies.md`) names one column plant; `runReviewWorldServer` now builds the heat plant too.
 - Open from W8: the split-range pass valve; a LIMITED status for a saturated real valve; the hold after a revert has no gate; a valve outside the side's island is not operated.
 - Open from W4: the target vapour fraction (plan section 6) is not built; a controller on both sides of one exchanger is allowed and untested; the kettle's steam valve waits for W7 and the assembly's real valves for W8.

@@ -1,0 +1,78 @@
+<svg viewBox="0 0 680 560" width="1020" height="840" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" role="img">
+<title>Mockup of the redesigned heat exchanger screen (OWNER_TEST_REVIEW.md section 7, 2026-10-28, for approval)</title>
+<desc>Top: a new Control tab with the exchanger drawn as a flowsheet, temperatures on every line, the bypass parts coloured by state, and a control panel with explained modes. Bottom: the Overview tab with a stream switch above the phase table. Numbers are illustrative.</desc>
+<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#A9BCC7" stroke-width="1.5"/></marker></defs>
+<rect x="0" y="0" width="680" height="382" rx="4" fill="#202A31" stroke="#536C7A"/>
+<text x="12" y="19" style="fill:#EAF1F5;font-size:13px">Heat exchanger: shell side</text>
+<rect x="12" y="28" width="96" height="18" rx="2" fill="#28363F" stroke="#536C7A"/><text x="60" y="41" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Overview</text>
+<rect x="114" y="28" width="96" height="18" rx="2" fill="#28363F" stroke="#79D6CE"/><text x="162" y="41" text-anchor="middle" style="fill:#79D6CE;font-size:11px">Control</text>
+<rect x="216" y="28" width="96" height="18" rx="2" fill="#28363F" stroke="#536C7A"/><text x="264" y="41" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Datasheet</text>
+<line x1="12" y1="54" x2="668" y2="54" stroke="#536C7A" stroke-width="0.5"/>
+<rect x="20" y="111" width="112" height="18" rx="9" fill="#28363F" stroke="#536C7A"/><text x="76" y="124" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Cold in 20.0 °C</text>
+<line x1="132" y1="120" x2="171" y2="120" stroke="#A9BCC7" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="171" y="116" width="8" height="8" fill="#12392F" stroke="#1D9E75"/>
+<line x1="175" y1="116" x2="175" y2="85" stroke="#A9BCC7" stroke-width="1.5"/>
+<line x1="175" y1="85" x2="305" y2="85" stroke="#A9BCC7" stroke-width="1.5"/>
+<line x1="305" y1="85" x2="305" y2="114" stroke="#A9BCC7" stroke-width="1.5" marker-end="url(#ar)"/>
+<g><path d="M226 78L226 92L240 85Z M254 78L254 92L240 85Z" fill="#12392F" stroke="#1D9E75" stroke-width="1.2"/><line x1="240" y1="85" x2="240" y2="70" stroke="#1D9E75" stroke-width="1.2"/><rect x="233" y="62" width="14" height="8" fill="#12392F" stroke="#1D9E75"/></g>
+<circle cx="278" cy="85" r="9" fill="#3F1A1A" stroke="#E24B4A" stroke-dasharray="3 2"/><text x="278" y="89" text-anchor="middle" style="fill:#F7C1C1;font-size:11px">FT</text>
+<text x="200" y="78" text-anchor="middle" style="fill:#EAF1F5;font-size:11px">7.4 kg/s</text>
+<line x1="175" y1="124" x2="175" y2="208" stroke="#A9BCC7" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="181" y="168" style="fill:#EAF1F5;font-size:11px">20.0 °C · 9.8 kg/s</text>
+<rect x="301" y="116" width="8" height="8" fill="#12392F" stroke="#1D9E75"/>
+<line x1="305" y1="210" x2="305" y2="126" stroke="#A9BCC7" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="311" y="168" style="fill:#EAF1F5;font-size:11px">37.5 °C</text>
+<line x1="309" y1="120" x2="340" y2="120" stroke="#A9BCC7" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="342" y="111" width="86" height="18" rx="9" fill="#28363F" stroke="#536C7A"/><text x="385" y="124" text-anchor="middle" style="fill:#79D6CE;font-size:11px">Out 30.0 °C</text>
+<rect x="150" y="210" width="180" height="56" rx="28" fill="#33434D" stroke="#1D9E75" stroke-width="1.2"/>
+<rect x="128" y="216" width="24" height="44" rx="3" fill="#33434D" stroke="#1D9E75" stroke-width="1.2"/>
+<text x="240" y="236" text-anchor="middle" style="fill:#EAF1F5;font-size:11px">E-1 shell and tube</text>
+<text x="240" y="252" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">433 kW</text>
+<rect x="20" y="229" width="96" height="18" rx="9" fill="#28363F" stroke="#536C7A"/><text x="68" y="242" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Hot out 72.6 °C</text>
+<line x1="128" y1="238" x2="118" y2="238" stroke="#A9BCC7" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="20" y="300" width="96" height="18" rx="9" fill="#28363F" stroke="#536C7A"/><text x="68" y="313" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Hot in 90.0 °C</text>
+<path d="M116 309L140 309L140 262" fill="none" stroke="#A9BCC7" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="146" y="290" style="fill:#A9BCC7;font-size:11px">tube side · 5.9 kg/s</text>
+<rect x="20" y="328" width="408" height="22" rx="2" fill="#28363F" stroke="#536C7A" stroke-width="0.5"/>
+<rect x="28" y="335" width="8" height="8" fill="#12392F" stroke="#1D9E75"/><text x="40" y="343" style="fill:#A9BCC7;font-size:11px">in place</text>
+<rect x="96" y="335" width="8" height="8" fill="#3F1A1A" stroke="#E24B4A"/><text x="108" y="343" style="fill:#A9BCC7;font-size:11px">missing: flowmeter on the bypass valve</text>
+<rect x="340" y="331" width="84" height="16" rx="2" fill="#33434D" stroke="#536C7A"/><text x="382" y="343" text-anchor="middle" style="fill:#EAF1F5;font-size:11px">Check lines</text>
+<rect x="442" y="62" width="226" height="290" rx="2" fill="#28363F" stroke="#536C7A" stroke-width="0.5"/>
+<rect x="452" y="72" width="100" height="18" rx="2" fill="#202A31" stroke="#536C7A"/><text x="502" y="85" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Tube side</text>
+<rect x="558" y="72" width="100" height="18" rx="2" fill="#202A31" stroke="#79D6CE"/><text x="608" y="85" text-anchor="middle" style="fill:#79D6CE;font-size:11px">Shell side</text>
+<text x="452" y="108" style="fill:#A9BCC7;font-size:11px">What this side holds</text>
+<circle cx="458" cy="122" r="4.5" fill="none" stroke="#A9BCC7"/><text x="468" y="126" style="fill:#EAF1F5;font-size:11px">Manual: you set the bypass</text>
+<circle cx="458" cy="142" r="4.5" fill="none" stroke="#79D6CE"/><circle cx="458" cy="142" r="2.2" fill="#79D6CE"/><text x="468" y="146" style="fill:#79D6CE;font-size:11px">Outlet temperature</text>
+<text x="468" y="159" style="fill:#A9BCC7;font-size:11px">the bypass moves to hold it</text>
+<circle cx="458" cy="176" r="4.5" fill="none" stroke="#A9BCC7"/><text x="468" y="180" style="fill:#EAF1F5;font-size:11px">Duty: the bypass holds the kW</text>
+<circle cx="458" cy="196" r="4.5" fill="none" stroke="#A9BCC7"/><text x="468" y="200" style="fill:#EAF1F5;font-size:11px">Feed ratio: needs a feed valve</text>
+<text x="452" y="226" style="fill:#A9BCC7;font-size:11px">Set point</text>
+<rect x="574" y="214" width="56" height="16" rx="2" fill="#202A31" stroke="#536C7A"/><text x="602" y="226" text-anchor="middle" style="fill:#EAF1F5;font-size:11px">30.0</text><text x="636" y="226" style="fill:#A9BCC7;font-size:11px">°C</text>
+<text x="452" y="248" style="fill:#A9BCC7;font-size:11px">Never cool below</text>
+<rect x="574" y="236" width="56" height="16" rx="2" fill="#202A31" stroke="#536C7A"/><text x="602" y="248" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">off</text><text x="636" y="248" style="fill:#A9BCC7;font-size:11px">°C</text>
+<text x="452" y="276" style="fill:#A9BCC7;font-size:11px">Acting now: internal bypass</text>
+<rect x="452" y="284" width="206" height="8" fill="#202A31" stroke="#536C7A" stroke-width="0.5"/><rect x="452" y="284" width="87" height="8" fill="#79D6CE"/>
+<text x="452" y="306" style="fill:#EAF1F5;font-size:11px">42 % of the shell flow bypassed</text>
+<text x="452" y="326" style="fill:#FFCD82;font-size:11px">The real bypass valve waits for</text>
+<text x="452" y="340" style="fill:#FFCD82;font-size:11px">its flowmeter.</text>
+<line x1="12" y1="358" x2="668" y2="358" stroke="#536C7A" stroke-width="0.5"/>
+<text x="12" y="374" style="fill:#79D6CE;font-size:11px">Holding 30.0 °C · steady since 125 s</text>
+<rect x="540" y="363" width="56" height="16" rx="2" fill="#33434D" stroke="#536C7A"/><text x="568" y="375" text-anchor="middle" style="fill:#EAF1F5;font-size:11px">Close</text>
+<rect x="604" y="363" width="64" height="16" rx="2" fill="#33434D" stroke="#79D6CE"/><text x="636" y="375" text-anchor="middle" style="fill:#79D6CE;font-size:11px">Apply</text>
+<rect x="0" y="398" width="680" height="160" rx="4" fill="#202A31" stroke="#536C7A"/>
+<text x="12" y="417" style="fill:#EAF1F5;font-size:13px">Heat exchanger: shell side</text>
+<rect x="12" y="426" width="96" height="18" rx="2" fill="#28363F" stroke="#79D6CE"/><text x="60" y="439" text-anchor="middle" style="fill:#79D6CE;font-size:11px">Overview</text>
+<rect x="114" y="426" width="96" height="18" rx="2" fill="#28363F" stroke="#536C7A"/><text x="162" y="439" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Control</text>
+<rect x="216" y="426" width="96" height="18" rx="2" fill="#28363F" stroke="#536C7A"/><text x="264" y="439" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Datasheet</text>
+<text x="12" y="467" style="fill:#A9BCC7;font-size:11px">Stream</text>
+<rect x="60" y="455" width="78" height="18" rx="2" fill="#28363F" stroke="#536C7A"/><text x="99" y="468" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Shell in</text>
+<rect x="142" y="455" width="78" height="18" rx="2" fill="#28363F" stroke="#79D6CE"/><text x="181" y="468" text-anchor="middle" style="fill:#79D6CE;font-size:11px">Shell out</text>
+<rect x="224" y="455" width="78" height="18" rx="2" fill="#28363F" stroke="#536C7A"/><text x="263" y="468" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Tube in</text>
+<rect x="306" y="455" width="78" height="18" rx="2" fill="#28363F" stroke="#536C7A"/><text x="345" y="468" text-anchor="middle" style="fill:#A9BCC7;font-size:11px">Tube out</text>
+<text x="398" y="468" style="fill:#EAF1F5;font-size:11px">37.5 °C · 121.9 kPa · 9.8 kg/s</text>
+<rect x="12" y="484" width="656" height="16" fill="#536C7A"/>
+<text x="20" y="496" style="fill:#EAF1F5;font-size:11px">Liquid · component</text><text x="420" y="496" style="fill:#EAF1F5;font-size:11px">Mole %</text><text x="560" y="496" style="fill:#EAF1F5;font-size:11px">kmol/s</text>
+<rect x="12" y="500" width="656" height="18" fill="#28363F"/>
+<text x="20" y="513" style="fill:#EAF1F5;font-size:11px">Water</text><text x="420" y="513" style="fill:#EAF1F5;font-size:11px">100.00</text><text x="560" y="513" style="fill:#EAF1F5;font-size:11px">0.544</text>
+<text x="12" y="540" style="fill:#A9BCC7;font-size:11px">Kettle: Tubes in, Tubes out, Feed, Vapour, Liquid · heater: Convection in, out, Radiant in, out · air cooler: In, Out</text>
+</svg>
