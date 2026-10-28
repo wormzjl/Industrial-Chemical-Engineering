@@ -2,6 +2,7 @@ package com.wormzjl.icheme.client.gui.screens.inventory;
 import com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
 
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.*;
@@ -40,18 +41,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private final ProcessScroll scroll=new ProcessScroll();
     private RelativeComposition composition;
     private ComponentDropdown componentDropdown;
-    private static TemperatureUnit preferredTemperatureUnit=TemperatureUnit.CELSIUS;
-    private TemperatureUnit temperatureUnit=preferredTemperatureUnit;
-    private static PressureUnit preferredPressureUnit=PressureUnit.KILOPASCAL;
-    private PressureUnit pressureUnit=preferredPressureUnit;
-    /** Client UI thread only; keep one time basis when moving between equipment screens this session. */
-    private static FlowRateUnit preferredFlowRateUnit=FlowRateUnit.PER_SECOND;
-    private FlowRateUnit flowRateUnit=preferredFlowRateUnit;
-    /** Ratio basis and table/flow basis are separate client-session preferences. */
+    // The units and the table and flow basis are the client's, one switch for every screen (ClientConfig).
+    private TemperatureUnit temperatureUnit=ClientConfig.temperature();
+    private PressureUnit pressureUnit=ClientConfig.pressure();
+    private FlowRateUnit flowRateUnit=ClientConfig.flowTime();
+    private boolean mass=ClientConfig.basis()==ClientConfig.Basis.MASS;
+    /** The phase ratio's basis, the rail's own: kept while the game runs. */
     private static PhaseRatioBasis preferredPhaseBasis=PhaseRatioBasis.VOLUME;
     private PhaseRatioBasis phaseBasis=preferredPhaseBasis;
-    private static boolean preferredMass;
-    private boolean mass=preferredMass;
     private Button phaseBasisButton;
     private String[][] particles=new String[64][3];
     private long revision=Long.MIN_VALUE,messageRevision;
@@ -193,8 +190,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private SkinButton doorAction(String key,int x,int y,int w,Runnable run){
         var b=doorButton(tr(key),x,y,w,run);b.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid."+key+".hint")));return b;
     }
-    /** The theme button on the title row: it names the theme shown. */
-    private int themeWidth(){return Math.max(font.width(tr("theme.light")),font.width(tr("theme.dark")))+16;}
+    /** The theme key on the title row: a square with the contrast sign (owner: "an icon instead of word"). */
+    private int themeWidth(){return 18;}
     private EditBox field(String key,String label,int x,int y,int width){
         labels.add(new Label(label,x,y,width));
         var box=new EditBox(font,leftPos+x,topPos+y+12,width,18,Component.literal(label));
@@ -218,7 +215,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean paired(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().paired();}
     private void changePage(int target){if(heat()!=null&&(target==0||target==CONTROL))preferredHeatPage=target;page=target;templates=false;scroll.reset();rebuild();}
     private void toggleBasis(){
-        try{if(composition!=null){composition.toggleBasis();mass=composition.mass();}else mass=!mass;preferredMass=mass;rebuild();}
+        try{if(composition!=null){composition.toggleBasis();mass=composition.mass();}else mass=!mass;ClientConfig.basis(mass?ClientConfig.Basis.MASS:ClientConfig.Basis.MOLE);rebuild();}
         catch(IllegalArgumentException e){message=tr("invalid_composition");}
     }
     /** Validate all affected drafts first, so a refused unit change loses no input or precision. */
@@ -231,13 +228,13 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         }catch(IllegalArgumentException e){message=tr("invalid_unit");return false;}
     }
     private void toggleTemperature(){
-        var next=temperatureUnit.next();if(convertUnit(next,"temperature","heatTemperature","lowLimit")){temperatureUnit=preferredTemperatureUnit=next;rebuild();}
+        var next=temperatureUnit.next();if(convertUnit(next,"temperature","heatTemperature","lowLimit")){temperatureUnit=next;ClientConfig.temperature(next);rebuild();}
     }
     private void toggleFlowRate(){
-        var next=flowRateUnit.next();if(convertUnit(next,"volumeFlow","massFlow")){flowRateUnit=preferredFlowRateUnit=next;rebuild();}
+        var next=flowRateUnit.next();if(convertUnit(next,"volumeFlow","massFlow")){flowRateUnit=next;ClientConfig.flowTime(next);rebuild();}
     }
     private void togglePressure(){
-        var next=pressureUnit.next();if(convertUnit(next,"pressure","maximumAddedPressure")){pressureUnit=preferredPressureUnit=next;rebuild();}
+        var next=pressureUnit.next();if(convertUnit(next,"pressure","maximumAddedPressure")){pressureUnit=next;ClientConfig.pressure(next);rebuild();}
     }
     private void rebuild(){
         rebuildNext=false;String focused=editors.entrySet().stream().filter(e->e.getValue()==getFocused()).map(Map.Entry::getKey).findFirst().orElse(null);
@@ -254,17 +251,21 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var tabSlots=FluidGuiLayout.tabs(imageWidth,tabs.size());
         for(int i=0;i<tabs.size();i++){int target=pages.get(i);var slot=tabSlots.get(i);doorAction(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).latched(true).active=page!=target;}
         int themeWidth=themeWidth();
-        doorButton(tr(ClientConfig.theme()==ClientConfig.Theme.DARK?"theme.dark":"theme.light"),imageWidth-10-themeWidth,5,themeWidth,()->{ClientConfig.toggleTheme();rebuild();})
-            .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.theme.hint")));
-        var footer=FluidGuiLayout.footer(imageWidth);int by=imageHeight-27;boolean compact=imageWidth<500;
+        // The theme key shows the contrast sign; its hover names the panel shown, its message stays for narration.
+        String theme=tr(ClientConfig.theme()==ClientConfig.Theme.DARK?"theme.dark":"theme.light");
+        doorButton(theme,imageWidth-10-themeWidth,5,themeWidth,()->{ClientConfig.toggleTheme();rebuild();}).icon(Skin.Icon.THEME)
+            .setTooltip(Tooltip.create(Component.literal(theme+"\n").append(Component.translatable("gui.icheme.fluid.theme.hint"))));
+        var footer=FluidGuiLayout.footer(imageWidth);int by=imageHeight-27;
         var close=footer.get(0);doorAction("close",close.x(),by,close.width(),this::onClose);
-        var basis=footer.get(2);doorButton(tr(compact?(mass?"mass_basis_short":"mole_basis_short"):(mass?"mass_basis":"mole_basis")),basis.x(),by,basis.width(),this::toggleBasis)
+        // The basis and the units are display keys on their strip (renderBg): they change what the screen shows, not the
+        // plant. Each shows its value alone; its hover says what it switches.
+        var basis=footer.get(2);doorButton(tr(mass?"mass_basis_short":"mole_basis_short"),basis.x(),by,basis.width(),this::toggleBasis).soft(true)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.table_basis.hint")));
-        var temperature=footer.get(3);doorButton(compact?temperatureUnit.symbol():tr("temperature_unit",temperatureUnit.symbol()),temperature.x(),by,temperature.width(),this::toggleTemperature)
+        var temperature=footer.get(3);doorButton(temperatureUnit.symbol(),temperature.x(),by,temperature.width(),this::toggleTemperature).soft(true)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.column.temperature_unit.hint")));
-        var pressure=footer.get(4);doorButton(compact?pressureUnit.symbol():tr("pressure_unit",pressureUnit.symbol()),pressure.x(),by,pressure.width(),this::togglePressure)
+        var pressure=footer.get(4);doorButton(pressureUnit.symbol(),pressure.x(),by,pressure.width(),this::togglePressure).soft(true)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.pressure_unit.hint")));
-        var rate=footer.get(5);doorButton(compact?flowRateUnit.suffix():tr("flow_unit",flowRateUnit.suffix()),rate.x(),by,rate.width(),this::toggleFlowRate)
+        var rate=footer.get(5);doorButton(flowRateUnit.suffix(),rate.x(),by,rate.width(),this::toggleFlowRate).soft(true)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.flow_unit.hint")));
         if(data==null)return;
         phaseBasisButton=button(tr("phase_ratio."+phaseBasis.key()+"_basis"),12,0,rail()-4,()->{
@@ -533,6 +534,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // The HMI screen goes under the widgets that sit on it.
         var data=menu.clientData();
         if(data!=null){if(page==CONTROL&&data.view().heat()!=null)drawingBox=skin.well(canvas,controlWell());else skin.well(canvas,pageWell());}
+        skin.softKeys(canvas,FluidGuiLayout.softKeys(imageWidth,imageHeight));
         g.pose().popPose();
     }
     /** A line of text on the door in the tone {@code palette} names, cut to {@code width} and read in full on hover. */
@@ -1102,17 +1104,27 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     public static final class FluidGuiLayout {
         private FluidGuiLayout(){}
         public record Slot(int x,int width){}
-        /** Close, Apply, composition/flow basis, temperature, pressure and flow-time unit. */
+        /** A display key's width: the short labels (Mole, °C, kPa, /min) with room to spare (owner: the wider keys were "too big"). */
+        static final int KEY=40;
+        /**
+         * Close and Apply at the left, then the display keys at the right, {@link #KEY} px each and 6 px apart: the
+         * composition and flow basis, the temperature, pressure and flow-time unit. Close and Apply take what is left
+         * up to 50 and 60 px, so Apply ends 4 px before the keys' strip ({@link #softKeys}).
+         */
         public static List<Slot> footer(int width) {
             if(width<300)throw new IllegalArgumentException("Fluid GUI width below minimum");
-            int[] natural={50,60,90,70,80,60},minimum={38,40,44,32,38,32};
-            int available=width-50,total=Arrays.stream(natural).sum(),floor=Arrays.stream(minimum).sum();
+            int[] natural={50,60},minimum={38,40};
+            int keys=width-10-(4*KEY+3*6),available=keys-8-6-10,total=natural[0]+natural[1],floor=minimum[0]+minimum[1];
             int[] sizes=natural.clone();
-            if(available<total)for(int i=0;i<sizes.length;i++)sizes[i]=minimum[i]+(natural[i]-minimum[i])*(available-floor)/(total-floor);
+            if(available<total)for(int i=0;i<2;i++)sizes[i]=minimum[i]+(natural[i]-minimum[i])*(available-floor)/(total-floor);
             var slots=new ArrayList<Slot>();slots.add(new Slot(10,sizes[0]));slots.add(new Slot(16+sizes[0],sizes[1]));
-            int x=width-10;for(int i=2;i<6;i++)x-=sizes[i];x-=18;
-            for(int i=2;i<6;i++){slots.add(new Slot(x,sizes[i]));x+=sizes[i]+6;}
+            for(int i=0;i<4;i++)slots.add(new Slot(keys+i*(KEY+6),KEY));
             return List.copyOf(slots);
+        }
+        /** The strip the display keys (the footer's basis and units, slots 2 to 5, at {@code height} - 27) sit on: 4 px round them. */
+        public static Rect softKeys(int width,int height) {
+            var footer=footer(width);var first=footer.get(2);var last=footer.get(5);
+            return new Rect(first.x()-4,height-31,last.x()+last.width()+4-(first.x()-4),26);
         }
         public static List<Slot> tabs(int width,int count) {
             if(width<300||count<1||count>4)throw new IllegalArgumentException("Invalid fluid tabs");

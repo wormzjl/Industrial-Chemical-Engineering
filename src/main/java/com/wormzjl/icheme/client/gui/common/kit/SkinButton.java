@@ -13,7 +13,8 @@ import net.minecraft.network.chat.Component;
  */
 public final class SkinButton extends Button {
     private final Supplier<Skin> skin;
-    private boolean latched, primary;
+    private boolean latched, primary, soft;
+    private Skin.Icon icon;
 
     public SkinButton(int x, int y, int width, int height, Component message, OnPress onPress, Supplier<Skin> skin) {
         super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
@@ -32,9 +33,31 @@ public final class SkinButton extends Button {
         return this;
     }
 
+    /** A display key (a unit, a basis): it changes what the screens show, not the plant ({@link Skin#softKey}). */
+    public SkinButton soft(boolean value) {
+        soft = value;
+        return this;
+    }
+
+    /** A sign on its face instead of its message; the message stays for narration ({@link Skin#iconKey}). */
+    public SkinButton icon(Skin.Icon value) {
+        icon = value;
+        return this;
+    }
+
     @Override
     protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        var canvas = new GuiCanvas(g, Minecraft.getInstance().font, 0, 0);
+        var r = new Rect(getX(), getY(), width, height);
+        if (icon != null) {
+            skin.get().iconKey(canvas, r, icon, isHoveredOrFocused());
+            return;
+        }
+        if (soft) {
+            skin.get().softKey(canvas, r, getMessage().getString(), isHoveredOrFocused());
+            return;
+        }
         var press = !active ? latched ? Skin.Press.CURRENT : Skin.Press.OFF : primary ? Skin.Press.PRIMARY : Skin.Press.REST;
-        skin.get().button(new GuiCanvas(g, Minecraft.getInstance().font, 0, 0), new Rect(getX(), getY(), width, height), getMessage().getString(), press, isHoveredOrFocused());
+        skin.get().button(canvas, r, getMessage().getString(), press, isHoveredOrFocused());
     }
 }

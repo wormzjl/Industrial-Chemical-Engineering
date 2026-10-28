@@ -104,6 +104,8 @@ public final class Column {
     }
     /** A field row's label width: the row less the box, the unit and their gaps. */
     public static final int FIELD_TAIL = 76;
+    /** A unit's own width after the box; a wider unit narrows the box. */
+    public static final int UNIT = 15;
 
     /**
      * A row as placed: its rect, its widget slots by key, the lines it draws, how many of them lead (a field's label;
@@ -179,12 +181,14 @@ public final class Column {
                 yield new Placed(row, new Rect(x, y, w, h.line() + (lines.size() - 1) * Measure.LINE), slots, lines, lines.size(), c.hint());
             }
             case Field f -> {
-                // A label wider than its share of the row goes above the box, wrapped to the row.
+                // A label wider than its share of the row goes above the box, wrapped to the row. A unit wider than its
+                // 15 px takes the rest from the box's right end (m³/s, kg/s), so every box starts where the others do.
                 var label = m.width(f.label()) > w - FIELD_TAIL ? m.wrap(f.label(), w) : List.of(f.label());
                 int above = m.width(f.label()) > w - FIELD_TAIL ? h.line() + (label.size() - 1) * Measure.LINE : 0;
-                slots.put(f.key(), new Rect(x + w - FIELD_TAIL + 4, y + above, BOX, WIDGET));
+                int wider = Math.clamp(m.width(f.unit()) - UNIT, 0, BOX - 30);
+                slots.put(f.key(), new Rect(x + w - FIELD_TAIL + 4, y + above, BOX - wider, WIDGET));
                 var texts = new ArrayList<>(label);
-                texts.add(m.cut(f.unit(), 15));
+                texts.add(m.width(f.unit()) > UNIT + BOX - 30 ? m.cut(f.unit(), UNIT + BOX - 30) : f.unit());
                 yield new Placed(row, new Rect(x, y, w, above + h.field()), slots, texts, label.size(), f.hint() != null ? f.label() + "\n" + f.hint() : null);
             }
             case Buttons b -> {
@@ -270,7 +274,7 @@ public final class Column {
                     var box = p.slots().values().iterator().next().moved(0, dy);
                     boolean stacked = box.y() > r.y();
                     for (int i = 0; i < p.lead(); i++) skin.text(c, texts.get(i), r.x(), stacked ? r.y() + i * Measure.LINE : r.y() + 5, Palette.MUTED);
-                    skin.text(c, texts.getLast(), r.right() - 15, box.y() + 5, Palette.MUTED);
+                    skin.text(c, texts.getLast(), box.right() + 3, box.y() + 5, Palette.MUTED);
                 }
                 case Bar b -> skin.bar(c, new Rect(r.x(), r.y(), r.w(), 8), b.share());
                 case Buttons ignored -> {

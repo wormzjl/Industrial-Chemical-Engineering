@@ -1,7 +1,9 @@
 package com.wormzjl.icheme.client.gui.screens.inventory;
 
+import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.ColumnDiagram;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
 import com.wormzjl.icheme.client.gui.common.ComponentDropdown;
 import com.wormzjl.icheme.client.gui.common.ComponentSearch;
 import static com.wormzjl.icheme.client.gui.common.ProcessUi.*;
@@ -49,7 +51,9 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
     private ColumnDesign designPreview;
     private String designProblem="";
     private long pendingNonce;
-    private boolean conflict,rebuilding,invalidated,awaitingResult,kelvin,infoOnly,needsRebuild;
+    private boolean conflict,rebuilding,invalidated,awaitingResult,infoOnly,needsRebuild;
+    /** The client's temperature unit, one switch for every screen (ClientConfig). */
+    private boolean kelvin=ClientConfig.temperature()==TemperatureUnit.KELVIN;
     private int page,results,offset,selectedNode=1,selectedStream,metric,lineCount,pointerX,pointerY,selectedDraw=-1,selectedPA=-1,selectedSteam=-1;
     private Button solve;
     private ComponentDropdown componentDropdown;
@@ -207,7 +211,7 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
         int tab=(imageWidth-20)/PAGES.length;
         for(int i=0;i<PAGES.length;i++){int t=i;action(PAGES[i],10+i*tab,28,tab-3,()->changePage(t)).active=page!=i;}
         solve=action("solve",10,imageHeight-25,64,this::submit);
-        button(tr("temperature_unit",unit()),imageWidth-130,imageHeight-25,120,()->{kelvin=!kelvin;rebuild();})
+        button(tr("temperature_unit",unit()),imageWidth-130,imageHeight-25,120,()->{kelvin=!kelvin;ClientConfig.temperature(temperatureUnit());rebuild();})
             .setTooltip(Tooltip.create(Component.literal(tr("temperature_unit.hint"))));
         if(conflict){
             action("use_server",10,imageHeight-69,120,()->{draft=newDraft(state.input());conflict=false;invalidated=false;validate();rebuild();});
@@ -285,7 +289,6 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
         canvasField("top_temperature","s4",right,0,82);
         canvasField("reflux","s6",right+88,0,65);
         canvasField("top_pressure","s7",right,32,62);
-        canvasField("pressure_drop","s8",right+68,32,70);
         int fy=trayY(feedTray());
         canvasField("feed_flow","s0",left,fy+12,76);
         canvasField("feed_temperature","s1",left,fy+46,65);

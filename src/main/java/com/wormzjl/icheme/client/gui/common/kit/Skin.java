@@ -68,6 +68,40 @@ public interface Skin {
         centred(c, r, text, active ? 0xFFFFFFFF : 0xFFA0A0A0);
     }
 
+    /** A sign a key shows instead of a word: the theme's contrast sign, a ring half filled. */
+    enum Icon {
+        THEME
+    }
+
+    /** A key {@code r} with {@code icon} on its face instead of a word, {@code hover} as for a button. */
+    default void iconKey(Canvas c, Rect r, Icon icon, boolean hover) {
+        button(c, r, "", Press.REST, hover);
+        icon(c, r, icon, 0xFFFFFFFF);
+    }
+
+    /** {@code icon} centred in {@code r}, 10 by 10 px, in {@code argb}. */
+    static void icon(Canvas c, Rect r, Icon icon, int argb) {
+        int x0 = r.x() + (r.w() - 10) / 2, y0 = r.y() + (r.h() - 10) / 2;
+        // THEME: a ring of radius 5 round pixel centres, its left half filled.
+        for (int y = 0; y < 10; y++)
+            for (int x = 0; x < 10; x++) {
+                double d = (x - 4.5) * (x - 4.5) + (y - 4.5) * (y - 4.5);
+                if (d < 25 && (d >= 16 || x < 5)) c.fill(x0 + x, y0 + y, x0 + x + 1, y0 + y + 1, argb);
+            }
+    }
+
+    /**
+     * The strip {@code r} the display keys sit on ({@link #softKey}). A display key (a unit, a basis) changes what the
+     * screens show, not the plant, so a skin may set it apart from its push buttons. Here none.
+     */
+    default void softKeys(Canvas c, Rect r) {
+    }
+
+    /** A display key {@code r} on its strip ({@link #softKeys}), {@code hover} as for a button. Here a button at rest. */
+    default void softKey(Canvas c, Rect r, String text, boolean hover) {
+        button(c, r, text, Press.REST, hover);
+    }
+
     /**
      * A field {@code r} showing {@code value}, or {@code hint} when it is empty. While {@code editing} the game draws the
      * text and the cursor ({@link #fieldText()}, 4 px in), so the skin draws only the box.

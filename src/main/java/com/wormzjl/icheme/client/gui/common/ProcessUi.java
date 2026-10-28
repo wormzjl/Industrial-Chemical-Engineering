@@ -77,19 +77,6 @@ public final class ProcessUi {
         }
     }
 
-    /** Temperatures cross the wire in kelvin; display defaults to Celsius. */
-    public enum TemperatureUnit implements DisplayUnit {
-        CELSIUS("C",273.15), KELVIN("K",0);
-        private final String symbol;
-        private final double offset;
-        TemperatureUnit(String symbol,double offset){this.symbol=symbol;this.offset=offset;}
-        public String symbol(){return symbol;}
-        public double display(double kelvin){return kelvin-offset;}
-        public double kelvin(double displayed){return displayed+offset;}
-        @Override public double si(double displayed){return kelvin(displayed);}
-        public TemperatureUnit next(){return this==CELSIUS?KELVIN:CELSIUS;}
-    }
-
     /** Keeps untouched full-precision input values behind concise text. */
     public static final class NumericDraft {
         private final double exact;

@@ -46,9 +46,9 @@ import javax.imageio.ImageIO;
  * {@code java -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/HeatDiagramRender.java src/main/resources/assets/icheme/lang/en_us.json tmp/heat-gui-renders build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar}
  */
 public final class HeatDiagramRender {
-    private static final int SCALE = 2, WIDTH = 464, HEIGHT = 254;
-    private static Map<String, String> lang;
-    private static GameFont font;
+    static final int SCALE = 2, WIDTH = 464, HEIGHT = 254;
+    static Map<String, String> lang;
+    static GameFont font;
 
     private record Case(String file, String unit, String side, boolean paired, ExchangerBlueprint.Design design, HeatUnit.Mode mode, boolean powerOn,
                         String actuator, Double effort, FluidView.Lines lines, boolean edit) {
@@ -136,7 +136,7 @@ public final class HeatDiagramRender {
         return new FluidView.Lines(status, missing, List.of());
     }
 
-    private static Map<String, String> lang(Path file) throws Exception {
+    static Map<String, String> lang(Path file) throws Exception {
         var map = new HashMap<String, String>();
         var m = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(Files.readString(file, StandardCharsets.UTF_8));
         while (m.find()) map.put(m.group(1), unescape(m.group(2)));
@@ -166,7 +166,7 @@ public final class HeatDiagramRender {
         return out.toString();
     }
 
-    private static String tr(String key, Object... args) {
+    static String tr(String key, Object... args) {
         String line = lang.get(key);
         return line == null ? "?" + key : String.format(Locale.ROOT, line, args);
     }
@@ -201,7 +201,7 @@ public final class HeatDiagramRender {
      * character's pixels from its sheet, its advance the glyph's inked width plus one (a space 4), its top at the line's
      * top plus 7 less its ascent. A character no sheet holds (the game's unifont) is drawn and measured in a sans font.
      */
-    private static final class GameFont {
+    static final class GameFont {
         private record Glyph(BufferedImage sheet, int x0, int y0, int width, int height, float scale, int ascent, int advance) {
         }
 
@@ -285,7 +285,7 @@ public final class HeatDiagramRender {
     }
 
     /** A Java2D canvas in GUI pixels, drawn at {@link #SCALE}, in the game font (or a 9 px sans font standing in). */
-    private static final class Java2dCanvas implements Canvas {
+    static final class Java2dCanvas implements Canvas {
         private final Graphics2D g;
         private final Font sans = new Font(Font.SANS_SERIF, Font.PLAIN, 9);
         private final FontMetrics metrics;
@@ -341,7 +341,7 @@ public final class HeatDiagramRender {
     }
 
     /** Pages side by side, each under its title. */
-    private static void grid(Path file, List<String> titles, List<BufferedImage> pages) throws Exception {
+    static void grid(Path file, List<String> titles, List<BufferedImage> pages) throws Exception {
         int w = pages.getFirst().getWidth(), h = pages.getFirst().getHeight(), label = 40, rows = (pages.size() + 1) / 2;
         var sheet = new BufferedImage(2 * w, rows * (h + label), BufferedImage.TYPE_INT_RGB);
         var g = sheet.createGraphics();
@@ -384,13 +384,12 @@ public final class HeatDiagramRender {
         var slots = FluidGuiLayout.control(WIDTH);
         int legendY = controlBottom - 12, wellBottom = legend ? legendY - 6 : controlBottom;
         var box = skin.well(canvas, new Rect(5, controlTop - 3, slots.drawingRight() - 3, wellBottom - controlTop + 3));
-        // The title row: the server's title (vessel and side) and the theme button.
-        String themeText = tr(skin == PanelSkin.DARK ? "gui.icheme.fluid.theme.dark" : "gui.icheme.fluid.theme.light");
-        int themeWidth = Math.max(m.width(tr("gui.icheme.fluid.theme.light")), m.width(tr("gui.icheme.fluid.theme.dark"))) + 16;
+        // The title row: the server's title (vessel and side) and the theme key with its contrast sign.
+        int themeWidth = 18;
         String vessel = c.unit().equals("FIRED_HEATER") ? "vertical_heater" : c.unit().toLowerCase(Locale.ROOT);
         String title = tr("gui.icheme.heat_side.title", tr("gui.icheme.vessel.title." + vessel), tr("gui.icheme.heat_side." + c.side().toLowerCase(Locale.ROOT)));
         skin.title(canvas, 10, 10, m.cut(title, WIDTH - 36 - themeWidth));
-        skin.button(canvas, new Rect(WIDTH - 10 - themeWidth, 5, themeWidth, 18), themeText, Skin.Press.REST, false);
+        skin.iconKey(canvas, new Rect(WIDTH - 10 - themeWidth, 5, themeWidth, 18), Skin.Icon.THEME, false);
         var tabs = FluidGuiLayout.tabs(WIDTH, 2);
         skin.button(canvas, new Rect(tabs.get(0).x(), 29, tabs.get(0).width(), 18), tr("gui.icheme.fluid.overview"), Skin.Press.REST, false);
         skin.button(canvas, new Rect(tabs.get(1).x(), 29, tabs.get(1).width(), 18), tr("gui.icheme.fluid.control"), Skin.Press.CURRENT, false);
@@ -398,8 +397,12 @@ public final class HeatDiagramRender {
         skin.hDivider(canvas, 8, WIDTH - 8, HEIGHT - 49);
         var footer = FluidGuiLayout.footer(WIDTH);
         String[] footerText = {tr("gui.icheme.fluid.close"), tr("gui.icheme.fluid.apply"), tr("gui.icheme.fluid.mole_basis_short"), "°C", "kPa", "/s"};
-        for (int i = 0; i < footer.size(); i++)
-            skin.button(canvas, new Rect(footer.get(i).x(), HEIGHT - 27, footer.get(i).width(), 18), footerText[i], i == 1 ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+        skin.softKeys(canvas, FluidGuiLayout.softKeys(WIDTH, HEIGHT));
+        for (int i = 0; i < footer.size(); i++) {
+            var r = new Rect(footer.get(i).x(), HEIGHT - 27, footer.get(i).width(), 18);
+            if (i < 2) skin.button(canvas, r, footerText[i], i == 1 ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+            else skin.softKey(canvas, r, footerText[i], false);
+        }
         sheet.fit(box.x(), box.y(), box.w(), box.h());
         sheet.draw(canvas, data());
         if (legend) {

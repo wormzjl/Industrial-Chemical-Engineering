@@ -160,3 +160,20 @@ Owner: "The logic should be something like a On/off switch plus a target duty mo
   - "Duty ratio" read as the fans' speed (the Fan speed target). If it meant something else, the target list is one line in `HeatControlColumn.targets`.
   - A low limit already stored on an air cooler stays hidden: keep it (as built), or clear it on the next Apply.
   - No in-game check (owner: enough client testing).
+
+## 12. Display keys, the client's units, the theme sign (2026-10-28)
+
+Owner: "these buttons should distinguish themselves from the left ones" (the footer's Mole, °C, bar and /s); "Panel color and unit should be a client-wide switch, so it persists between GUI and does not affect server side"; "Make the panel color switch an icon instead of word"; the wide keys are "too big, latter one looks better" (the prototype's 40 px keys); "add a min between s and h".
+
+- **Expected.** On a real panel, a push button acts on the plant (Close, Apply). A unit or a basis acts on nothing: it changes what a display shows. It belongs with the displays, and it is the operator's own setting, the same on every screen they open. The plant never learns it.
+- **What the code did.** The four unit keys were black push buttons like Close and Apply. The fluid screen kept its units in static fields (the game session only); the column calculator reset °C or K on every open. The theme was already the client's, in `icheme-client.toml`, but its key was a word ("Light panel", 70 px).
+- **As built.**
+  - Kit: `Skin.softKeys` and `Skin.softKey` (`PanelSkin`: flat keys on the message display's glass, in the HMI screen's bezel, lettered in the display's colour); `SkinButton.soft`. `FluidGuiLayout.softKeys(width, height)` is the strip, 4 px round the footer's slots 2 to 5. Those are display keys of a fixed `FluidGuiLayout.KEY` (40 px), each showing its value alone (Mole, °C, kPa, /min; the long labels and their lang keys are gone, the hovers say what each switches); Close and Apply take what is left, up to 50 and 60 px. The gate (`FluidGuiConsistencyTest`): from 300 to 790 px wide, the keys are 40 px, the strip clears Apply by 4 px and stays inside the door's edge, under the divider.
+  - Units: flows per minute between per second and per hour (`FlowRateUnit.PER_MINUTE`, the key steps s, min, h). Celsius reads "°C": the game showed a bare "C" in every temperature, where the renders already wrote "°C".
+  - `Skin.Icon.THEME`, `Skin.iconKey`, `SkinButton.icon`: the theme key is an 18 px square with a contrast sign (a ring, its left half filled). Its hover names the panel shown; its message stays for narration.
+  - `ClientConfig` (`icheme-client.toml`, section `units`): `temperature`, `pressure`, `flow_time` and `basis`, beside `gui.theme`. Each key saves the file. `FluidDeviceScreen` and `ColumnCalculatorV3Screen` read them on open. `TemperatureUnit` moved from `ProcessUi` into `DisplayUnit`, beside the pressure and flow units, so the config names no screen class (a dedicated server builds the spec, then never loads it).
+  - Controls cross the network in SI (`DisplayUnit`, `NumericDraft.si`) and the column's inputs in kelvin, so no unit reaches the server.
+- **Open.**
+  - The phase ratio's basis (the rail's own key) stays a session setting; it goes with the rail (`GUI_REVIEW.md`, order 1).
+  - The column calculator shows pressures in bar and flows in kmol/h whatever the config says; it takes the units when it moves onto the kit.
+  - A gauge's unit is the gauge's own, a fact the item saves (`GaugeSettings.unit`): it is the dial's scale in the world, the same for every player. Option 1: keep it (as built). Option 2: the dial follows each player's config, and the saved unit is only a default.

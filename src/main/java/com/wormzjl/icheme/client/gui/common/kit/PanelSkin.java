@@ -160,6 +160,38 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         Skin.centred(c, r, text, f.text());
     }
 
+    /** A black key with its sign in the key's legend colour (owner: "Make the panel color switch an icon instead of word"). */
+    @Override
+    public void iconKey(Canvas c, Rect r, Icon icon, boolean hover) {
+        button(c, r, "", Press.REST, hover);
+        Skin.icon(c, r, icon, key.text());
+    }
+
+    /**
+     * The display keys' strip: the message display's glass in the HMI screen's bezel. A unit or a basis changes what the
+     * screens show, not the plant, so its keys belong to the displays, not with the push buttons (owner: "these buttons
+     * should distinguish themselves from the left ones").
+     */
+    @Override
+    public void softKeys(Canvas c, Rect r) {
+        c.fill(r.x() + 1, r.y(), r.right() - 1, r.bottom(), screenBezel);
+        c.fill(r.x(), r.y() + 1, r.right(), r.bottom() - 1, screenBezel);
+        c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.y() + 2, mix(screenBezel, 0xFFFFFFFF, 0.18));
+        c.fill(r.x() + 2, r.y() + 2, r.right() - 2, r.bottom() - 2, display.glass());
+    }
+
+    /** A display key: flat on the glass, framed and lettered in the display's colour; the pointer lights its frame. */
+    @Override
+    public void softKey(Canvas c, Rect r, String text, boolean hover) {
+        int x0 = r.x(), y0 = r.y(), x1 = r.right(), y1 = r.bottom(), frame = mix(display.glass(), display.on(), hover ? 0.9 : 0.4);
+        c.fill(x0 + 1, y0 + 1, x1 - 1, y1 - 1, mix(display.glass(), display.on(), hover ? 0.2 : 0.08));
+        c.fill(x0 + 1, y0, x1 - 1, y0 + 1, frame);
+        c.fill(x0 + 1, y1 - 1, x1 - 1, y1, frame);
+        c.fill(x0, y0 + 1, x0 + 1, y1 - 1, frame);
+        c.fill(x1 - 1, y0 + 1, x1, y1 - 1, frame);
+        Skin.centred(c, r, text, display.on());
+    }
+
     /**
      * A panel meter: numbers in 7-segment LEDs, right-aligned over their unlit segments; other text as text. An empty
      * meter shows its hint dimmed; in segments a word reads better in capitals (OFF). While edited, only the window.
@@ -170,7 +202,7 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         if (editing) return;
         String shown = value.isEmpty() ? hint.toUpperCase(Locale.ROOT) : value;
         int on = value.isEmpty() ? mix(meter.off(), meter.on(), 0.7) : meter.on();
-        if (SEGMENTS.matcher(shown).matches() && (shown.length() * 8 <= r.w() - 6)) segments(c, shown, r.right() - 4, r.y() + (r.h() - 11) / 2, on, mix(meter.glass(), meter.off(), 0.6));
+        if (SEGMENTS.matcher(shown).matches() && segmentsWidth(shown) <= r.w() - 6) segments(c, shown, r.right() - 4, r.y() + (r.h() - 11) / 2, on, mix(meter.glass(), meter.off(), 0.6));
         else c.text(c.measure().cut(shown, r.w() - 8), r.x() + 4, r.y() + (r.h() - 8) / 2, on);
     }
 
@@ -184,9 +216,14 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
      * twice a segment's stroke (owner, 2026-10-28: "the point should be slightly larger"), in 2 px of its own between
      * the digits.
      */
+    /** The width {@link #segments} draws {@code text} in. */
+    static int segmentsWidth(String text) {
+        int digits = (int) text.chars().filter(ch -> ch != '.').count();
+        return digits * 8 - 2 + (text.length() - digits) * 2;
+    }
+
     private static void segments(Canvas c, String text, int right, int top, int on, int off) {
-        int digits = (int) text.chars().filter(ch -> ch != '.').count(), points = text.length() - digits;
-        int x = right - (digits * 8 - 2 + points * 2);
+        int x = right - segmentsWidth(text);
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             if (ch == '.') {

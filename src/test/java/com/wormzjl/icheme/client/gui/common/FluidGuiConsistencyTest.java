@@ -5,7 +5,7 @@ import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGu
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.PhaseRatioBasis;
 
 import com.wormzjl.icheme.client.gui.common.ProcessUi.NumericDraft;
-import com.wormzjl.icheme.client.gui.common.ProcessUi.TemperatureUnit;
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
 import com.wormzjl.icheme.science.fluid.state.ParticleSize;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial;
@@ -19,7 +19,10 @@ class FluidGuiConsistencyTest {
         for(int cycle=0;cycle<100;cycle++)for(var unit:PressureUnit.values()){pressure=pressure.in(unit);assertEquals(Double.doubleToRawLongBits(exact),Double.doubleToRawLongBits(pressure.si()));}
         pressure=pressure.in(PressureUnit.BAR);pressure.text("2.5");assertEquals(250000,pressure.si());assertEquals(.25,pressure.in(PressureUnit.MEGAPASCAL).value());
         var flow=new NumericDraft(.0123456789,FlowRateUnit.PER_SECOND);
-        for(int i=0;i<100;i++){flow=flow.in(FlowRateUnit.PER_HOUR).in(FlowRateUnit.PER_SECOND);assertEquals(.0123456789,flow.si());}
+        for(int i=0;i<100;i++){flow=flow.in(FlowRateUnit.PER_MINUTE).in(FlowRateUnit.PER_HOUR).in(FlowRateUnit.PER_SECOND);assertEquals(.0123456789,flow.si());}
+        // The flow key steps per second, per minute, per hour (owner: "add a min between s and h").
+        assertEquals(FlowRateUnit.PER_MINUTE,FlowRateUnit.PER_SECOND.next());assertEquals(FlowRateUnit.PER_SECOND,FlowRateUnit.PER_SECOND.next().next().next());
+        assertEquals(60,FlowRateUnit.PER_MINUTE.display(1),1e-12);
         var temp=new NumericDraft(298.123456789,TemperatureUnit.CELSIUS);assertEquals(298.123456789,temp.in(TemperatureUnit.KELVIN).in(TemperatureUnit.CELSIUS).si());
         flow.text("NaN");var invalid=flow;assertThrows(IllegalArgumentException.class,()->invalid.in(FlowRateUnit.PER_HOUR));assertEquals("NaN",flow.text());
     }
@@ -45,6 +48,10 @@ class FluidGuiConsistencyTest {
         for(int width=300;width<=790;width++){
             var footer=FluidGuiLayout.footer(width);assertEquals(6,footer.size());int end=4;
             for(var slot:footer){assertTrue(slot.x()>=end+6);assertTrue(slot.width()>=32);end=slot.x()+slot.width();assertTrue(end<=width-10);}
+            // The display keys' strip stands clear of Apply and inside the door's edge, under the divider (height - 49).
+            for(int i=2;i<6;i++)assertEquals(40,footer.get(i).width());
+            var strip=FluidGuiLayout.softKeys(width,254);var apply=footer.get(1);
+            assertTrue(strip.x()>=apply.x()+apply.width()+4);assertTrue(strip.right()<=width-5);assertTrue(strip.y()>254-47&&strip.bottom()<=254-4);
             for(int count=1;count<=4;count++)for(var slot:FluidGuiLayout.tabs(width,count)){assertTrue(slot.x()>=10);assertTrue(slot.x()+slot.width()<=width-10);}
         }
     }
