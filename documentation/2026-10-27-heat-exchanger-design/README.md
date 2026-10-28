@@ -247,6 +247,7 @@ The plan also touches:
   - Formats: main kept checkpoint 22, certificate identity 2 and facts schema 4, so this branch's 29, 8 and 5 stand.
   - The review world's heater pump is an In-line Pump on the feed line's second pipe (`HeatExchangerReviewWorld.pump`, installed as the fitting item installs it). A save of the review world made before the sync opens without its one-block pump (main's facts path removes it whole): rebuild the world, or fit an In-line Pump on the heater's feed line.
   - Gates on the synced branch: `test` 1736 with one failure, main's removed-movers compat test, whose image predates the virial steam, so the load names the property data's change first; the test now expects that reason (`8190466a`; `FluidFactsCompatTest` 10/10). `slowGates` 188, fluid GameTests 36/36 (`sync-main`). Probe: stage 1 steady at no flow after 79.8 s ("pump cannot drive forward flow"), stage 2 at 9.970 kg/s, convection 701.5 kW out at 41.8 °C, radiant 1148.6 kW, as with the one-block pump; no hold.
+- 2026-10-28, the review world rebuilt on the owner's word ("Rebuild review world") with the heater's In-line Pump: `run/saves/IChemE heat exchanger review`; the owner's test save kept as `IChemE heat exchanger review (owner test 2026-10-28)`. REVIEW_WORLD.md's build column now gives this build: the kettle's tubes carry 21.8 kg/s since the owner-test fixes (out 144.7 °C, not 132.6 °C), both exchangers hold 30.0 °C through the internal bypass until the lines are checked, and the heater's coils are still filling at the snapshot.
 
 ## Notes
 

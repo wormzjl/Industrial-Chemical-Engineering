@@ -1,16 +1,16 @@
 # Heat exchanger review world (2026-10-28)
 
-The owner's own test of W1 to W8. The world is `run/saves/IChemE heat exchanger review` in worktree `research-folder-reorganize-b8443b`. Open it with `./gradlew runClient` from that worktree: single player, creative, cheats on. To rebuild it: `./gradlew runReviewWorldServer` (it writes `run/review-world/world`), then `node tools/multi-machine-framework/review-world/nbt.js review run/review-world/world/level.dat "IChemE heat exchanger review"`, then copy the result into `run/saves/`. The builder is `HeatExchangerReviewWorld` (fluidGameTest, namespace `icheme_review`, not a gate). The same world also holds the column review plant, at another place.
+The owner's own test of W1 to W8. The world is `run/saves/IChemE heat exchanger review` in worktree `research-folder-reorganize-b8443b`. Open it with `./gradlew runClient` from that worktree: single player, creative, cheats on. To rebuild it: `./gradlew runReviewWorldServer` (it writes `run/review-world/world`), then `node tools/multi-machine-framework/review-world/nbt.js review run/review-world/world/level.dat "IChemE heat exchanger review"`, then copy the result into `run/saves/`. The builder is `HeatExchangerReviewWorld` (fluidGameTest, namespace `icheme_review`, not a gate). Rebuilt 2026-10-28 after the main 0.16.2 sync, with the heater's In-line Pump; the owner's test save is kept beside it as `IChemE heat exchanger review (owner test 2026-10-28)`. The same world also holds the column review plant, at another place.
 
 You spawn at noon, facing east. The five units stand in a row 8 blocks to your left, 18 blocks apart. Every fluid is water. Every line ends at a generator or a void. The values below are from the build, after about 40 s of running.
 
 | # | Unit | Lines | Control | At the build |
 |---|---|---|---|---|
-| 1 | Exchanger, internal bypass | tubes 90 °C, 2 bar → 1 atm; shell 20 °C, 1.5 bar → 1 atm | shell outlet 30 °C | shell 30.00 °C, 806 kW; tubes out 53.4 °C |
-| 2 | Exchanger with a real bypass (W8) | the same; shell bypass: inlet tee, 0.1 m line with a control valve, outlet tee | shell outlet 30 °C | LINES NOT CHECKED; shell 29.8 °C, 305 kW (the bare valve stands open, the internal bypass is shut) |
-| 3 | Air cooler, largest size | 85 °C, 2 bar → 1 atm (22.5 kg/s) | outlet 80 °C, all bays | 79.9 °C, 473 kW, fans part-way |
-| 4 | Vertical fired heater | in-line pump at 0.6 L/s from 10 bar, 50 °C → convection → radiant → 10 bar | radiant outlet 200 °C (firing) | 0.59 kg/s; convection out 180.6 °C (610 kW, the flue gas law F1), radiant out 200.0 °C (1075 kW) |
-| 5 | Kettle, 1 m bundle | tubes 150 °C, 6 bar → 5 bar; feed 99 °C from a generator at 1 atm, 1 m over the shell floor; vapour through a 0.15 m line to 1 atm | tube duty 0.5 MW | duty 499.8 kW; tubes out 132.6 °C; pool 100.0 °C, 101.4 kPa, 258 kg |
+| 1 | Exchanger, internal bypass | tubes 90 °C, 2 bar → 1 atm; shell 20 °C, 1.5 bar → 1 atm | shell outlet 30 °C | shell 30.00 °C, 806 kW; tubes out 56.5 °C |
+| 2 | Exchanger with a real bypass (W8) | the same; shell bypass: inlet tee, 0.1 m line with a control valve, outlet tee | shell outlet 30 °C | LINES NOT CHECKED (the internal bypass controls until the lines are checked); shell 30.0 °C, 305 kW |
+| 3 | Air cooler, largest size | 85 °C, 2 bar → 1 atm (22.5 kg/s) | outlet 80 °C, all bays | 80.0 °C, 473 kW, fans part-way |
+| 4 | Vertical fired heater | in-line pump at 0.6 L/s from 10 bar, 50 °C → convection → radiant → 10 bar | radiant outlet 200 °C (firing) | convection out 180.6 °C (602 kW, the flue gas law F1), radiant out 200.0 °C (1050 kW); the coils still filling (FULL) |
+| 5 | Kettle, 1 m bundle | tubes 150 °C, 6 bar → 5 bar; feed 99 °C from a generator at 1 atm, 1 m over the shell floor; vapour through a 0.15 m line to 1 atm | tube duty 0.5 MW | duty 500.0 kW; tubes 21.8 kg/s, out 144.7 °C; pool 100.0 °C, 101.4 kPa, 258 kg |
 
 ## What to check
 
