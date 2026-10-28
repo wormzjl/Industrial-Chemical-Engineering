@@ -1,50 +1,49 @@
 # Owner test of the review world (2026-10-28)
 
-The owner's findings from `REVIEW_WORLD.md`, each as expected behaviour, what the code does, and a proposal. Items marked "to reproduce" wait until the dev client is closed (AGENTS.md: no test run while a client runs). The removal of the old pump and compressor blocks runs in its own session.
+The owner's findings from `REVIEW_WORLD.md`: each gives the expected behaviour, what the code does, and a proposal. Reproduced with a probe on the review-world run: `-PreviewProbe=true` rebuilds the plant and applies the changes; `owner` watches a copy of the owner's save. Both write to `run/review-probe`, and the probe is scratch until the cleanup. The old pump and compressor removal and the GUI build (sections 6 and 7) run in their own sessions.
 
 ## 1. Fired heater: the convection duty
 
-- **Expected.** The burners release the fired duty F. The radiant box absorbs most of it (here 70 % of the absorbed duty); the flue gas then passes the convection section, which takes a fixed share (30 %). So the convection duty follows the radiant duty, Q_c = k · Q_r with k = 0.30 / 0.70 = 0.43, and it is zero when the burners are out.
-- **The model now (W6).** Each coil heats its own stream toward the heater's set point: Q = β · reach · ṁ · (h_set − h_in), reach 1 for the radiant and 0.3 for the convection coil, each with its own duty cap (70 % and 30 % of the heater duty) and its own firing share β. In the review world's series arrangement at β = 1 this gives exactly Q_c = 0.43 · Q_r (481 kW against 1121 kW). It does not when a coil is duty-limited (each β is planned alone), or when the convection coil carries another stream (it then heats that stream 30 % of the way to the radiant's set point, whatever the radiant fires).
-- **Proposal A (recommended).** One firing per heater, set on the radiant coil: Q_r = min(ṁ_r (h_set − h_in,r), radiant duty). The convection coil takes Q_c = k · Q_r. It is capped so that its outlet stays below the flue gas leaving the radiant box, and it is zero without convection flow (that heat goes up the stack). The two coils in one island (series) are planned in the same step; coils in two islands read each other through the W3 relay, like an exchanger's sides. Option on the cap: A1 a fixed flue temperature (800 °C); A2 no cap (simplest; at a small convection flow its outlet can run hot without bound).
+- **Expected.** The radiant box absorbs a fixed share of the fired duty (70 % of the absorbed duty), and the flue gas then gives the convection section its share (30 %). So Q_c = 0.43 · Q_r, and Q_c is zero with the burners out.
+- **The model now (W6).** Each coil heats its own stream toward the set point: Q = β · reach · ṁ · (h_set − h_in), reach 1 and 0.3, each coil with its own cap and its own β. This is 0.43 · Q_r only for coils in series at β = 1; it differs when a coil is duty-limited or carries another stream.
+- **Proposal A.** One firing per heater on the radiant coil: Q_r = min(ṁ (h_set − h_in), radiant duty), and Q_c = 0.43 · Q_r, zero without convection flow. Coils in two islands read each other through the W3 relay. The cap is the owner's choice: A1, the convection outlet below an 800 °C flue gas (recommended); A2, no cap.
 
 ## 2. Air cooler: overcooling at low flow
 
-- **Expected.** With the fans stopped, natural draught still moves air over the bundle: about a third of the design capacity (GPSA quotes 25 to 40 %). At a low process flow that alone cools the stream to near the air temperature. Plants hold the outlet with louvers that shut the air path, or with a hot bypass around the cooler.
-- **The model now (W4, W5).** The fans' effort runs from still (natural draught, films 0.29 to 0.67 of full fans) to full. At its lowest the status reads "LIMITED: the fans stand still, natural draught moves more". In the review world's cooler (natural draught UA 4.2 kW/K, inlet 85 °C, set point 80 °C), the fans stopped already overcool any flow under 11.5 kg/s: 74 °C at 5 kg/s, 47 °C at 1 kg/s. So the controller does what the model allows; the model has no actuator below natural draught. To confirm: the status the owner saw (if it did not read LIMITED, that is a separate defect, to reproduce).
-- **Owner direction (2026-10-28).** "AC should be able to adjust its duty to match target T as well as furnace": like the burners, the cooler turns its duty down to whatever holds the target, at any flow.
-- **Options for the mechanism.** (a) Louvers, recommended: one actuator whose effort runs from shut louvers (no air, no duty) through natural draught (louvers open, fans still) to full fans; the air films scale with the air flow. No new fact; the status names the louvers or the fans. (b) An internal hot bypass, as the exchanger's: also exact at any flow, reuses the exchanger's bypass code; less common on liquid coolers. Either way LIMITED remains only at full fans.
+- **Expected.** Stopped fans still leave natural draught, a third of design (GPSA 25 to 40 %). Louvers or a hot bypass hold the outlet at low load. An air condenser's tubes are mostly vapour, and its condensate leaves in about one residence time.
+- **Owner direction.** "AC should be able to adjust its duty to match target T as well as furnace."
+- **Found, cause (i), natural draught.** The fans run from still to full; there is no actuator below natural draught. In the review cooler, stopped fans overcool 85 °C water below 11.5 kg/s (74 °C at 5 kg/s, 47 °C at 1 kg/s). The status then reads "LIMITED: the fans stand still".
+- **Found, cause (ii), the outlet holdup (the owner's own case).**
+  - The owner's feed, 125 °C at 120 kPa, is 0.128 kg/s of steam, condensed at 62 kPa above a 4 m condensate leg. The controller set the fans to 7.7 % for the target, with no limit.
+  - The outlet still read 25 °C, rising 2 K per 100 s (the owner's save: 61 °C). The vacuum drew 25 °C void water up the leg into the outlet node. That node holds half the tubes' volume as liquid, about 260 kg; at 0.128 kg/s it flushes with τ ≈ 33 min.
+- **Options.**
+  - For (i): louvers (recommended), one effort from shut louvers through natural draught to full fans; or an internal hot bypass.
+  - For (ii), shared with section 4: a heat side's outlet node holds only its header, about 10 % of the passage, while the passage stays quasi-steady (Q10). This settles in seconds; it risks a stiffer junction (holdup was added once for stability).
 
-## 3. Fired heater: convergence at a 100 kPa generator (to reproduce)
+## 3. Fired heater at a 100 kPa generator
 
-- **Expected.** The pump adds at most 5 bar. From a 1 bar generator it reaches 6 bar, short of the 10 bar void, so no forward flow is possible: the pump stalls, the coils carry no flow and the burners have nothing to heat (zero heat at zero flow). The island should report no flow, not hold.
-- **The code.** The owner's client log: island 377 HELD at tick 23754, "Newton line search stalled at residual 1.787; active-set pass 1", repeated every few seconds. Suspects: reverse flow from the 10 bar void through the coils toward the pump (the fired coil heats |ṁ|, so a reversed stream is fired too, into a liquid-only pump), or the pump at its head limit against a boiling coil. To reproduce from the owner's saved world before any proposal.
+- **Expected.** The pump's +5 bar from a 1 bar feed cannot reach the 10 bar void. The pump stalls, the coils sit still and nothing is fired: no flow, no hold.
+- **Reproduced.** In a fresh build, the feed generator set to 25 °C and 100 kPa holds the heater at its first slice: "Newton line search stalled at residual 1.7870486723459762", the same number as the owner's log. It retries every few seconds.
+  - At 50 °C (only the pressure lowered) there is no hold: no flow, STEADY in 80 s.
+  - Then the void at 100 kPa and the pump at 0.01 m³/s release it: 9.97 kg/s, 64 °C out, DUTY INSUFFICIENT, steady.
+  - The owner's save ended in a different still state ("pump cannot drive forward flow", coils full of 200 °C steam at 1 bar), not reproduced by these steps.
+- **Next.** Trace the stalled Newton on this two-step reproduction before proposing a fix.
 
-## 4. Exchanger: slow to steady (to reproduce)
+## 4. Exchanger: slow to steady
 
-- **Expected.** Fixed inlets and a fixed set point give a fixed bypass, wall and outlets. A quasi-steady exchanger (Q10) settles in about one residence time of its outlet junctions, tens of seconds, and both islands then certify STEADY and stop solving.
-- **The code.** W3's gate certified both sides at 125 s without a controller. W4 added the bypass, and a side's commit wakes its certified partner when the bypass moves by more than 0.001, its stream by 0.05 K or 0.1 % of flow, or the transit by 0.1 % of a slice's heat (`IslandCoordinator.moved`). A dead-beat controller that ignores the give-back can move its bypass a little at every slice. The two sides can then keep waking each other, and the screens keep changing. In the review builds, both exchangers showed FULL, not STEADY, at 40 s while the other units were STEADY.
-- **Reproduction.** A probe run (`runReviewWorldServer -PreviewProbe=true`, its own folder `run/review-probe`) watches every unit for 400 s after the build, with the coupling-wake counter on. The proposal follows from what it shows.
+- **Expected.** Fixed inputs give fixed outlets within about a residence time, and both islands then certify STEADY.
+- **Found, cause (i), holdup.** The tube outlets creep with τ ≈ 50 s at 5.7 kg/s (327.0 → 329.6 K over 160 s). This is section 2's outlet node.
+- **Found, cause (ii), a wake ping-pong.** After 250 s every outlet is constant to 0.01 K, yet coupling wakes run 23 → 224 in 160 s, one per side per commit. `IslandCoordinator.moved` tests the booked transit, which holds the span the side ahead booked past the other's commit. The owner's save holds −1.07 MJ, against a 4 kJ threshold. Only the settled transit (`settledTransit`) returns to 0 at steady state (W3).
+- **Proposal (recommended, forced by the physics).** Wake on the settled transit: a clock offset between two islands is not a change. Recheck with the probe: the wakes stop once outlets are constant.
 
 ## 5. Water vapour pressure range
 
-- **Expected.** Saturation from the triple point to the critical point, and steam that is non-ideal at plant pressures. Against IAPWS-IF97 Region 2, saturated steam has Z 0.985 at 1 bar, 0.930 at 10 bar and 0.669 at 100 bar.
-- **The code.** Water's saturation pressure already spans 273.16 to 647.096 K (`icheme:water`, `water-iapws-shomate-r2`). That is the IAPWS equation of Wagner and Pruss (1993), within 2e-4 of IF97 from 0.01 to 200 bar. The notice comes from the steam instead: free water's vapour is an ideal gas, qualified within 2 % of NIST up to `FluidThermodynamics.waterVaporPressureLimit`. That limit is 125 kPa below 400 K, 250 kPa from 450 to 500 K and 2 MPa from 900 K. At 10 bar the ideal steam is 7.6 % too light and its latent heat about 3 % high; at 100 bar, 33 % and 28 %.
-- **Options (owner).** The identity for both is the same: `SEPARATE_FREE_WATER_FORMULATION` v2 → v3. No material revision moves, so the column identity and the neural sidecar stay valid. Contents are restated at load and no facts change.
-  - B (recommended, a game-level continuation): a second virial coefficient from Region 2's five first-order terms. The closure stays explicit, and steam is within 2 % to about 12 bar at saturation, 49 bar at 584 K and 225 bar at 800 K. That covers both test cases, but not a 100 bar boiler.
-  - A: the full Region 2 residual (43 constants). It is valid to the critical region and makes the closure implicit. AGENTS.md rules out new reference models unless you choose one.
+- **Found.** Water's saturation already spans 273.16 to 647.096 K: the IAPWS equation of Wagner and Pruss (`water-iapws-shomate-r2`), within 2e-4 of IF97. The notice is the ideal-gas steam's 2 % limit, `FluidThermodynamics.waterVaporPressureLimit` (125 kPa below 400 K, 250 kPa at 450 to 500 K). At 10 bar ideal steam is 7.6 % too light; at 100 bar, 33 %.
+- **Options.** Both bump only `SEPARATE_FREE_WATER_FORMULATION` v2 → v3: no material revision moves, contents are restated at load, no facts change.
+  - B (recommended): a second virial from IF97 Region 2, within 2 % to about 12 bar at saturation and 49 bar at 584 K.
+  - A: the full Region 2 residual, a new reference model (the owner's choice per AGENTS.md).
 
-## 6. Temperatures on the lines (furnace case)
+## 6. Temperatures on the lines, and 7. GUI redesign (approved)
 
-- **Expected.** A line carries a stream, so opening any pipe shows that stream's temperature (and pressure), as a plant's line gauge would.
-- **The code.** A plain pipe's screen has no temperature row in any case: `FluidDeviceScreen.readings()` builds it only for non-pipes. That has been so since the display unification `f44930f5`, with no recorded reason. A line shows a temperature only where it meets a generator, a pump, a valve or a unit side, or through a fitted gauge or probe. The furnace's crossover (convection out to radiant in, 180.5 °C two-phase) is the only line in the world whose two ends are both nozzles. Its temperature appears only inside the two coil screens. Neither the STEADY replay nor the notice plays any part.
-- **Proposal.** A pipe's screen reads the stream it carries, from the pipe observation the temperature gauge already uses (the donor node: T, P and phase split). When the pipe is still it shows the last value marked "no flow". The Control tab's flowsheet (section 7) labels every line as well.
-
-## 7. GUI redesign (mockup for approval: `HEAT_GUI_MOCKUP.svg`)
-
-- **Control tab** (new, every heat unit):
-  - The unit drawn as a flowsheet, in the column's part colours (teal in place, yellow misplaced, red missing). It shows the lines its control asks for (bypass: tee, valve, flowmeter, tee; ratio: feed valve, flowmeter), with temperature and flow on every line.
-  - Beside it, the modes as a list, each with one line saying what moves. The actuator is named per unit: bypass, louvers and fans, burners. "Never cool below" replaces "Low limit"; "Acting now" names the actuator in use (internal bypass or the real valve). The status is in words, in the unit's temperature unit, and Check lines sits on the drawing.
-- **Overview** keeps the readings and the phase table, with a stream switch above it: each inlet and outlet of the unit (kettle: tubes in and out, feed, vapour, liquid).
-- **What it needs.** Each port's stream (T, P, flow, phases, composition) on the wire: fluid wire 15 → 16, no compatibility work. The lines report's part states sent to the client; today only status, missing count and valve.
-- **Found in passing.** `gui.icheme.fluid.ratio_input` is defined twice in `en_us.json` (lines 30 and 1241), so the Ratio field likely reads "Max pressure ratio (out/in)". Statuses show K and a raw "/ FULL".
+- No pipe screen shows a temperature (`FluidDeviceScreen.readings()`, since `f44930f5`). The furnace's nozzle-to-nozzle crossover made that visible. The fix: a pipe reads its stream from the pipe observation.
+- The owner approved the mockup (`HEAT_GUI_MOCKUP.svg`): a Control tab with the flowsheet, temperatures on every line and explained modes, a stream switch on Overview, the per-port wire (fluid 15 → 16), and the duplicate `gui.icheme.fluid.ratio_input`. It is built in its own session (`HEAT_GUI_PLAN.md` there).

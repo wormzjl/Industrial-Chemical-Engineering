@@ -3,6 +3,7 @@ package com.wormzjl.icheme.fluid.gametest;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
+import com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
@@ -65,8 +66,23 @@ public final class HeatExchangerReviewWorld {
     /** The row's units, each {@code SPACING} blocks east of the last. */
     private static final int SPACING = 18;
 
-    @GameTest(template = "empty", timeoutTicks = 3000, batch = "review-heat")
+    /**
+     * Owner test probe (OWNER_TEST_REVIEW.md, scratch until the batch's tooling cleanup): {@code -PreviewProbe=true} builds the
+     * plant and applies the owner's changes; {@code -PreviewProbe=owner} builds nothing and watches the world already in
+     * {@code run/review-probe/world} (a copy of the owner's save).
+     */
+    static final String PROBE_MODE = System.getProperty("icheme.review.probe", "false");
+    private static final boolean PROBE = PROBE_MODE.equals("true");
+    static final boolean OWNER = PROBE_MODE.equals("owner");
+    /** The probe's watch after the owner's changes: this many reports, 5 s apart. */
+    private static final int PROBE_REPORTS = 80;
+
+    @GameTest(template = "empty", timeoutTicks = 12000, batch = "review-heat")
     public static void theHeatUnitsStandRunning(GameTestHelper helper) {
+        if (OWNER) {
+            watchOwnerWorld(helper);
+            return;
+        }
         var level = helper.getLevel();
         // West of the column review plant, clear of the test's own structure block, on the ground.
         var corner = helper.absolutePos(new BlockPos(-110, 0, 48));
@@ -94,9 +110,51 @@ public final class HeatExchangerReviewWorld {
                 .thenIdle(1200)
                 .thenExecute(() -> {
                     if (failure[0] == null) rig.report();
-                    plant.release();
+                    if (failure[0] == null && PROBE) rig.probe();
+                    if (!PROBE) plant.release();
                     if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(!PROBE || failure[0] != null || rig.probeDone(), "Probing"))
+                .thenExecute(() -> {
+                    if (PROBE) plant.release();
                 }).thenSucceed();
+    }
+
+    /**
+     * The owner's world as saved: every heat side, generator, void and pump with its settings once, then their status every
+     * 5 s for 150 s. Holds show in the engine's own warnings.
+     */
+    private static void watchOwnerWorld(GameTestHelper helper) {
+        var world = FluidWorldAuthority.find(helper.getLevel().getServer()).orElseThrow();
+        FluidRuntimeDiagnostics.ENABLED = true;
+        var ids = new java.util.ArrayList<Long>();
+        for (var e : world.registrations().entrySet()) {
+            var d = e.getValue().device();
+            boolean pump = d.control() instanceof FlowControl.Pump;
+            if (d.kind() != com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.HEAT_SIDE && d.kind() != com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR
+                    && d.kind() != com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.VOID && !pump) continue;
+            ids.add(e.getKey());
+            var s = e.getValue().spec();
+            IChemE.LOGGER.info("review_owner device={} kind={} at={} control={} heat={} spec={}", e.getKey(), d.kind(), d.position(), d.control(), d.heat(),
+                    s == null ? "-" : String.format(Locale.ROOT, "%.2f K %.0f Pa", s.temperature(), s.pressure()));
+        }
+        long[] next = {world.onlineTick() + 20};
+        int[] left = {30};
+        helper.onEachTick(() -> {
+            if (left[0] <= 0 || world.onlineTick() < next[0]) return;
+            next[0] += 100;
+            left[0]--;
+            for (long id : ids) {
+                var view = world.view(id);
+                var heat = view.heat();
+                IChemE.LOGGER.info("review_owner t={} device={} flow={} status={} outlet={} duty_kW={} state={}", world.onlineTick(), id,
+                        String.format(Locale.ROOT, "%.4f", view.massFlow()), view.status(),
+                        heat == null ? "-" : String.format(Locale.ROOT, "%.2f K", heat.outletTemperature()),
+                        heat == null ? "-" : String.format(Locale.ROOT, "%.1f", heat.heatWatt() / 1000),
+                        view.state() == null ? "-" : String.format(Locale.ROOT, "%.2f K %.0f Pa %.1f kg", view.state().temperature(), view.state().pressure(), view.state().mass()));
+            }
+        });
+        helper.succeedWhen(() -> helper.assertTrue(left[0] <= 0, "Watching"));
     }
 
     private static final class Rig {
@@ -106,6 +164,8 @@ public final class HeatExchangerReviewWorld {
         /** The registrations to report, by label. */
         final Map<String, Long> watched = new LinkedHashMap<>();
         Vessel internal, lined, cooler, heater, kettle;
+        BlockPos heaterFeed, coolerFeed, heaterVoid;
+        Direction pumpFacing;
 
         Rig(AssemblyGameTests.Plant plant) {
             this.plant = plant;
@@ -146,14 +206,14 @@ public final class HeatExchangerReviewWorld {
             source(lined, Role.TUBE_INLET, 363.15, 200_000);
             sink(lined, Role.TUBE_OUTLET, 101_325);
             // 3. The air cooler.
-            source(cooler, Role.PROCESS_INLET, 358.15, 200_000);
+            coolerFeed = source(cooler, Role.PROCESS_INLET, 358.15, 200_000);
             sink(cooler, Role.PROCESS_OUTLET, 101_325);
             // 4. The fired heater: a feed pump, the convection coil, then the radiant coil.
-            var feed = line(heater, Role.CONVECTION_INLET, ModBlocks.FLUID_GENERATOR.get().defaultBlockState());
+            var feed = heaterFeed = line(heater, Role.CONVECTION_INLET, ModBlocks.FLUID_GENERATOR.get().defaultBlockState());
             generator(feed, 323.15, 1_000_000);
             pump(feed, AssemblyGameTests.Plant.front(heater, Role.CONVECTION_INLET), .0006);
             plant.route(AssemblyGameTests.Plant.front(heater, Role.CONVECTION_OUTLET), AssemblyGameTests.Plant.front(heater, Role.RADIANT_INLET));
-            sink(heater, Role.RADIANT_OUTLET, 1_000_000);
+            heaterVoid = sink(heater, Role.RADIANT_OUTLET, 1_000_000);
             // 5. The kettle: its tubes, its shell's hydrostatic feed and its vapour.
             source(kettle, Role.TUBE_INLET, 423.15, 600_000);
             sink(kettle, Role.TUBE_OUTLET, 500_000);
@@ -220,6 +280,7 @@ public final class HeatExchangerReviewWorld {
             Direction towards = null;
             for (var q : Direction.values()) if (end.relative(q).distManhattan(front) < end.distManhattan(front) && plant.devices.contains(end.relative(q))) towards = q;
             if (towards == null) throw new IllegalStateException("No pipe beside the generator at " + end.toShortString());
+            pumpFacing = towards;
             var at = end.relative(towards, 2);
             if (!plant.devices.contains(at) || at.equals(front)) throw new IllegalStateException("No pipe for the pump at " + at.toShortString());
             var state = ModBlocks.FLUID_PUMP.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, towards);
@@ -249,13 +310,75 @@ public final class HeatExchangerReviewWorld {
         }
 
         /** A line from {@code role}'s nozzle to a generator delivering water at {@code temperature} K and {@code pressure} Pa. */
-        void source(Vessel v, Role role, double temperature, double pressure) {
-            generator(line(v, role, ModBlocks.FLUID_GENERATOR.get().defaultBlockState()), temperature, pressure);
+        BlockPos source(Vessel v, Role role, double temperature, double pressure) {
+            var at = line(v, role, ModBlocks.FLUID_GENERATOR.get().defaultBlockState());
+            generator(at, temperature, pressure);
+            return at;
         }
 
-        /** A line from {@code role}'s nozzle to a void at {@code pressure} Pa. */
-        void sink(Vessel v, Role role, double pressure) {
-            sink(line(v, role, ModBlocks.FLUID_VOID.get().defaultBlockState()), pressure);
+        /**
+         * The owner's settings of 2026-10-28 as found in the owner's save, then a watch: the heater's feed generator at 25 °C
+         * and 100 kPa, its void at 100 kPa, its pump at 0.01 m³/s; the air cooler fed 125 °C at 120 kPa (a little steam);
+         * every unit, the heater's pump and the generators reported every 5 s.
+         */
+        void probe() {
+            FluidRuntimeDiagnostics.ENABLED = true;
+            long pump = id(heaterFeed.relative(pumpFacing, 2));
+            watched.put("heater_pump", pump);
+            watched.put("heater_feed", id(heaterFeed));
+            watched.put("heater_void", id(heaterVoid));
+            watched.put("cooler_feed", id(coolerFeed));
+            heaterPump = pump;
+            // The owner's likely order: the feed first (the void still at 10 bar), then the void and the pump.
+            respec(heaterFeed, 298.15, 100_000);
+            IChemE.LOGGER.info("review_probe changes=stage 1: heater feed 25 C 100 kPa, void still 10 bar");
+            probeLeft = PROBE_REPORTS;
+            probeNext = world.onlineTick() + 100;
+        }
+
+        int probeLeft;
+        long heaterPump;
+        long probeNext;
+
+        boolean probeDone() {
+            if (probeLeft > 0 && world.onlineTick() >= probeNext) {
+                probeNext += 100;
+                probeLeft--;
+                if (probeLeft == PROBE_REPORTS / 2) {
+                    respec(heaterVoid, 298.15, 100_000);
+                    var r = world.registrations().get(heaterPump);
+                    world.edit(heaterPump, r.revision(), r.device().withControl(new FlowControl.Pump(.01, 500_000, true)), r.spec());
+                    IChemE.LOGGER.info("review_probe changes=stage 2: heater void 100 kPa, pump 0.01 m3/s");
+                }
+                for (var e : watched.entrySet()) {
+                    var view = world.view(e.getValue());
+                    var heat = view.heat();
+                    IChemE.LOGGER.info("review_probe t={} unit={} flow={} status={} outlet={} duty_kW={} fans={} bypass={} burners={} state={}",
+                            world.onlineTick(), e.getKey(), String.format(Locale.ROOT, "%.4f", view.massFlow()), view.status(),
+                            heat == null ? "-" : String.format(Locale.ROOT, "%.2f K", heat.outletTemperature()),
+                            heat == null ? "-" : String.format(Locale.ROOT, "%.1f", heat.heatWatt() / 1000),
+                            heat == null || heat.fans() == null ? "-" : String.format(Locale.ROOT, "%.4f", heat.fans()),
+                            heat == null || heat.bypass() == null ? "-" : String.format(Locale.ROOT, "%.4f", heat.bypass()),
+                            heat == null || heat.burners() == null ? "-" : String.format(Locale.ROOT, "%.4f", heat.burners()),
+                            view.state() == null ? "-" : String.format(Locale.ROOT, "%.2f K %.0f Pa %.1f kg", view.state().temperature(), view.state().pressure(), view.state().mass()));
+                }
+                var c = FluidRuntimeDiagnostics.sample();
+                IChemE.LOGGER.info("review_probe t={} couplingWakes={} certificatesIssued={} certificateWakes={}", world.onlineTick(), c.get("couplingWakes"), c.get("certificatesIssued"), c.get("certificateWakes"));
+            }
+            return probeLeft == 0;
+        }
+
+        void respec(BlockPos at, double temperature, double pressure) {
+            long id = id(at);
+            var r = world.registrations().get(id);
+            world.edit(id, r.revision(), r.device(), new FluidDeviceSpec(1, temperature, pressure, water));
+        }
+
+        /** A line from {@code role}'s nozzle to a void at {@code pressure} Pa; returns the void's position. */
+        BlockPos sink(Vessel v, Role role, double pressure) {
+            var at = line(v, role, ModBlocks.FLUID_VOID.get().defaultBlockState());
+            sink(at, pressure);
+            return at;
         }
 
         void generator(BlockPos at, double temperature, double pressure) {

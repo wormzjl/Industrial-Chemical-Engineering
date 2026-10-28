@@ -97,8 +97,12 @@ neoForge {
         reviewWorldServer {
             type = 'gameTestServer'
             sourceSet = sourceSets.fluidGameTest
-            gameDirectory = layout.projectDirectory.dir('run/review-world')
+            // -PreviewProbe=true|owner: the heat batch's owner-test probe (scratch, HeatExchangerReviewWorld), in its own folder.
+            def probeMode = providers.gradleProperty('reviewProbe').getOrElse('false')
+            if (!(probeMode in ['false', 'true', 'owner'])) throw new GradleException('reviewProbe is false, true or owner')
+            gameDirectory = layout.projectDirectory.dir(probeMode == 'false' ? 'run/review-world' : 'run/review-probe')
             systemProperty 'neoforge.enabledGameTestNamespaces', 'icheme_review'
+            systemProperty 'icheme.review.probe', probeMode
         }
         fluidBenchmarkServer {
             type = 'gameTestServer'
