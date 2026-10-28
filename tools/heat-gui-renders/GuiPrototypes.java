@@ -61,6 +61,7 @@ public final class GuiPrototypes {
         var jar = Path.of(args.length > 2 ? args[2] : "build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar");
         HeatDiagramRender.font = Files.exists(jar) ? HeatDiagramRender.GameFont.load(jar) : null;
         for (var p : prototypes()) {
+            if (!p.file().startsWith(System.getProperty("only", ""))) continue;
             var titles = new ArrayList<>(List.of("Light panel (3a)", "Dark panel (3c)"));
             var pages = new ArrayList<>(List.of(render(p, PanelSkin.LIGHT, false), render(p, PanelSkin.DARK, false)));
             if (p.scrolls()) {
@@ -78,6 +79,7 @@ public final class GuiPrototypes {
         out.addAll(assembly());
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
+        out.addAll(OperationPrototypes.operation());
         return out;
     }
 
