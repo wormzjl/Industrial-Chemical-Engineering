@@ -44,7 +44,8 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
 
 1. Function groups in frames under flat plates of one or two words. Sentences go to hovers, never on the door.
 2. A device that runs has an Off and On switch, then its target. Selector positions are latched. A reader sees the
-   switch latched, with nothing active.
+   switch latched, with nothing active. A latched key whose press has a meaning of its own still acts (the
+   constructor's current kind opens its design; owner report 2026-10-28); `SkinButton` draws it latched.
 3. No cut text: wrap, stack buttons, keep units whole. No noise: no timestamps, no raw engine lines on the door, no
    status said twice. The status is said once, on the message display; the engine's own line goes in its hover.
 4. The door holds switches, set points and meters; the HMI glass (`Skin.well`) holds tables and drawings.
