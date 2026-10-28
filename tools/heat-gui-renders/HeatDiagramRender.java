@@ -75,12 +75,15 @@ public final class HeatDiagramRender {
         // The styles and the industrial looks tried for the owner, two by two, for the units that differ most.
         var styles = out.resolve("styles");
         var industrial = out.resolve("industrial");
+        var panel = out.resolve("panel");
         Files.createDirectories(styles);
         Files.createDirectories(industrial);
+        Files.createDirectories(panel);
         for (var c : cases)
             if (List.of("exchanger-shell-bypass", "exchanger-ratio", "air-cooler", "fired-heater").contains(c.file())) {
                 styles(styles.resolve(c.file() + ".png"), c);
                 industrial(industrial.resolve(c.file() + ".png"), c);
+                panels(panel.resolve(c.file() + ".png"), c);
             }
     }
 
@@ -204,6 +207,11 @@ public final class HeatDiagramRender {
         void vDivider(Canvas c, int x, int y0, int y1);
 
         void hDivider(Canvas c, int x0, int x1, int y);
+
+        /** The page's status line, its text's top left at {@code r}'s. */
+        default void status(Canvas c, Rect r, String text, int palette) {
+            c.text(text, r.x(), r.y(), tone(palette));
+        }
     }
 
     /** Today's look: the kit's plain skin, the game's widgets as plain boxes. */
@@ -524,6 +532,287 @@ public final class HeatDiagramRender {
                     new Ink(0xFFD8DADC, 0xFF9A9EA3, 0xFFA8D1F5, 0xFFF2C12E), Mark.SQUARE, 0xFFA8D1F5, 0,
                     new Gauge(0xFF8A8E93, 0, false, 4, 0xFF5A5E63), 0xFF45484B, 0, true, false));
 
+    /** A face of a push button or a legend plate: its colour, its top-left and bottom-right edges, and its legend's colour. */
+    private record Face(int face, int light, int dark, int text) {
+    }
+
+    /** A door sheet: its colour, its top-left and bottom-right edges, its outer edge, and whether it is brushed steel. */
+    private record Door(int sheet, int light, int dark, int edge, boolean brushed) {
+    }
+
+    /** A window (a panel meter, the bar graph, the message display, the HMI screen): its glass, lit and unlit colours. */
+    private record Window(int glass, int on, int off) {
+    }
+
+    /**
+     * Look 3 refined (owner: "Refine look 3"): a control panel door. Engraved legend plates for the title and the
+     * headings, engraved text, push buttons in a black bezel with a chrome ring (lit from behind when latched), pilot
+     * lights with a glow, 7-segment LED panel meters, an LED bar graph with a top zone, a message display for the status,
+     * the HMI screen in its bezel with a power LED, a quarter-turn latch. Panel legends keep their colour; lamps show state.
+     */
+    private record Panel(String name, Door door, Face legend, int emboss, boolean shadow, Face key, Face lit, Face confirm, Face dim,
+                         int bezel, int chrome, Window meter, int lampOn, int lampOff, Window bar, int barTop, Window display,
+                         Window screen, int screenBezel, Ink ink) implements Look {
+        private static final Pattern SEGMENTS = Pattern.compile("[0-9.\\-ofOF]+");
+        /** The seven segments a to g of a 6 by 11 digit: x0, y0, x1, y1. */
+        private static final int[][] SEG = {{1, 0, 5, 1}, {5, 1, 6, 5}, {5, 6, 6, 10}, {1, 10, 5, 11}, {0, 6, 1, 10}, {0, 1, 1, 5}, {1, 5, 5, 6}};
+
+        @Override
+        public int tone(int p) {
+            return p == Palette.TEXT ? ink.text() : p == Palette.MUTED ? ink.dim() : p == Palette.ACCENT ? ink.accent() : p == Palette.WARN ? ink.warn() : p;
+        }
+
+        /** Engraved: a highlight under the text on a light door, a shadow on a dark one. */
+        @Override
+        public void text(Canvas c, String text, int x, int y, int palette) {
+            c.text(text, shadow ? x + 1 : x, y + 1, emboss);
+            c.text(text, x, y, tone(palette));
+        }
+
+        @Override
+        public void heading(Canvas c, Rect r, String text) {
+            legendPlate(c, new Rect(r.x(), r.y(), Math.min(r.w(), c.measure().width(text) + 7), r.h()), text);
+        }
+
+        private void legendPlate(Canvas c, Rect r, String text) {
+            c.fill(r.x() + 1, r.y(), r.right() - 1, r.bottom(), legend.dark());
+            c.fill(r.x(), r.y() + 1, r.right(), r.bottom() - 1, legend.dark());
+            c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.bottom() - 1, legend.face());
+            c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.y() + 2, legend.light());
+            c.text(c.measure().cut(text, r.w() - 6), r.x() + 3, r.y() + (r.h() - 9) / 2 + 1, legend.text());
+        }
+
+        private static int hash(int a, int b) {
+            int h = a * 0x9E3779B1 ^ b * 0x85EBCA77;
+            h ^= h >>> 15;
+            h *= 0x2C1B3C6D;
+            return h ^ h >>> 12;
+        }
+
+        @Override
+        public void page(Canvas c, Rect r) {
+            int x0 = r.x(), y0 = r.y(), x1 = r.right(), y1 = r.bottom();
+            c.fill(x0 + 1, y0, x1 - 1, y1, door.edge());
+            c.fill(x0, y0 + 1, x1, y1 - 1, door.edge());
+            c.fill(x0 + 1, y0 + 1, x1 - 1, y1 - 1, door.sheet());
+            // Brushed steel: each row a shade off, with streaks of random length.
+            if (door.brushed())
+                for (int y = y0 + 1; y < y1 - 1; y++) {
+                    int h = hash(y, 0);
+                    if ((h & 3) == 0) c.fill(x0 + 1, y, x1 - 1, y + 1, 0x10FFFFFF);
+                    else if ((h & 3) == 1) c.fill(x0 + 1, y, x1 - 1, y + 1, 0x0C000000);
+                    for (int k = 1; k <= 3; k++) {
+                        int s = hash(y, k), sx = x0 + 1 + Math.floorMod(s, x1 - x0 - 2), len = 20 + Math.floorMod(s >>> 9, 140);
+                        c.fill(sx, y, Math.min(x1 - 1, sx + len), y + 1, (s & 1) == 0 ? 0x18FFFFFF : 0x0E000000);
+                    }
+                }
+            c.fill(x0 + 1, y0 + 1, x1 - 1, y0 + 2, door.light());
+            c.fill(x0 + 1, y0 + 2, x0 + 2, y1 - 1, door.light());
+            c.fill(x0 + 2, y1 - 2, x1 - 1, y1 - 1, door.dark());
+            c.fill(x1 - 2, y0 + 2, x1 - 1, y1 - 2, door.dark());
+            // A quarter-turn latch on the door's right edge.
+            int ly = (y0 + y1) / 2 - 11;
+            c.fill(x1 - 7, ly, x1 - 2, ly + 22, bezel);
+            c.fill(x1 - 6, ly + 1, x1 - 3, ly + 21, key.face());
+            c.fill(x1 - 5, ly + 5, x1 - 4, ly + 17, chrome);
+        }
+
+        @Override
+        public void title(Canvas c, int x, int y, String text) {
+            legendPlate(c, new Rect(x - 4, y - 4, c.measure().width(text) + 8, 16), text);
+        }
+
+        /** The status on a message display. */
+        @Override
+        public void status(Canvas c, Rect r, String text, int palette) {
+            window(c, new Rect(r.x() - 4, r.y() - 5, r.w() + 8, 15), display.glass());
+            c.text(text, r.x(), r.y() - 2, display.on());
+        }
+
+        private void window(Canvas c, Rect r, int glass) {
+            c.fill(r.x() + 1, r.y(), r.right() - 1, r.bottom(), bezel);
+            c.fill(r.x(), r.y() + 1, r.right(), r.bottom() - 1, bezel);
+            c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.bottom() - 1, glass);
+        }
+
+        @Override
+        public void button(Canvas c, Rect r, String text, Press press) {
+            var f = switch (press) {
+                case REST -> key;
+                case OFF -> dim;
+                case CURRENT, CHOSEN -> lit;
+                case PRIMARY -> confirm;
+            };
+            int x0 = r.x(), y0 = r.y(), x1 = r.right(), y1 = r.bottom();
+            c.fill(x0 + 1, y0, x1 - 1, y1, bezel);
+            c.fill(x0, y0 + 1, x1, y1 - 1, bezel);
+            // The chrome ring, lit from above.
+            c.fill(x0 + 1, y0 + 1, x1 - 1, y1 - 1, chrome);
+            c.fill(x0 + 1, y0 + 1, x1 - 1, y0 + 2, mix(chrome, 0xFFFFFFFF, 0.5));
+            c.fill(x0 + 1, y1 - 2, x1 - 1, y1 - 1, mix(chrome, 0xFF000000, 0.35));
+            c.fill(x0 + 2, y0 + 2, x1 - 2, y1 - 2, f.face());
+            c.fill(x0 + 2, y0 + 2, x1 - 3, y0 + 3, f.light());
+            c.fill(x0 + 2, y0 + 3, x0 + 3, y1 - 3, f.light());
+            c.fill(x0 + 3, y1 - 3, x1 - 2, y1 - 2, f.dark());
+            c.fill(x1 - 3, y0 + 3, x1 - 2, y1 - 3, f.dark());
+            // A latched button is lit from behind.
+            if (press == Press.CURRENT || press == Press.CHOSEN) c.fill(x0 + 4, y0 + 4, x1 - 4, y1 - 4, mix(f.face(), f.light(), 0.4));
+            centred(c, r, text, f.text());
+        }
+
+        /** A panel meter: numbers in 7-segment LEDs, right-aligned over their unlit segments; other text as text. */
+        @Override
+        public void field(Canvas c, Rect r, String value, String hint) {
+            window(c, r, meter.glass());
+            // An empty meter shows its hint dimmed; in segments a word reads better in capitals (OFF).
+            String shown = value.isEmpty() ? hint.toUpperCase(Locale.ROOT) : value;
+            int on = value.isEmpty() ? mix(meter.off(), meter.on(), 0.7) : meter.on();
+            if (SEGMENTS.matcher(shown).matches()) segments(c, shown, r.right() - 4, r.y() + 3, on, mix(meter.glass(), meter.off(), 0.6));
+            else c.text(shown, r.x() + 4, r.y() + 5, on);
+        }
+
+        private static void segments(Canvas c, String text, int right, int top, int on, int off) {
+            int digits = (int) text.chars().filter(ch -> ch != '.').count(), x = right - (digits * 8 - 2);
+            for (int i = 0; i < text.length(); i++) {
+                char ch = text.charAt(i);
+                if (ch == '.') {
+                    c.fill(x - 2, top + 10, x - 1, top + 11, on);
+                    continue;
+                }
+                digit(c, x, top, 0b1111111, off);
+                digit(c, x, top, bits(ch), on);
+                x += 8;
+            }
+        }
+
+        private static void digit(Canvas c, int x, int y, int bits, int argb) {
+            for (int s = 0; s < 7; s++) if ((bits >> s & 1) != 0) c.fill(x + SEG[s][0], y + SEG[s][1], x + SEG[s][2], y + SEG[s][3], argb);
+        }
+
+        /** A character's segments, a to g as bits 0 to 6. */
+        private static int bits(char ch) {
+            return switch (ch) {
+                case '0', 'O' -> 0b0111111;
+                case '1' -> 0b0000110;
+                case '2' -> 0b1011011;
+                case '3' -> 0b1001111;
+                case '4' -> 0b1100110;
+                case '5' -> 0b1101101;
+                case '6' -> 0b1111101;
+                case '7' -> 0b0000111;
+                case '8' -> 0b1111111;
+                case '9' -> 0b1101111;
+                case '-' -> 0b1000000;
+                case 'o' -> 0b1011100;
+                case 'f', 'F' -> 0b1110001;
+                default -> 0;
+            };
+        }
+
+        @Override
+        public boolean framed() {
+            return true;
+        }
+
+        /** The HMI screen: its bezel, a little deeper below for the power LED. */
+        @Override
+        public Rect well(Canvas c, Rect r) {
+            c.fill(r.x() + 1, r.y(), r.right() - 1, r.bottom(), screenBezel);
+            c.fill(r.x(), r.y() + 1, r.right(), r.bottom() - 1, screenBezel);
+            c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.y() + 2, mix(screenBezel, 0xFFFFFFFF, 0.18));
+            var glass = new Rect(r.x() + 3, r.y() + 3, r.w() - 6, r.h() - 7);
+            c.fill(glass.x(), glass.y(), glass.right(), glass.bottom(), screen.glass());
+            c.fill(r.right() - 8, r.bottom() - 3, r.right() - 5, r.bottom() - 2, screen.on());
+            return new Rect(glass.x() + 3, glass.y() + 3, glass.w() - 6, glass.h() - 6);
+        }
+
+        /** A fold pressed into the door. */
+        @Override
+        public void vDivider(Canvas c, int x, int y0, int y1) {
+            c.fill(x, y0, x + 1, y1, door.dark());
+            c.fill(x + 1, y0, x + 2, y1, door.light());
+        }
+
+        @Override
+        public void hDivider(Canvas c, int x0, int x1, int y) {
+            c.fill(x0, y, x1, y + 1, door.dark());
+            c.fill(x0, y + 1, x1, y + 2, door.light());
+        }
+
+        /** A pilot light: a lens in a bezel with a chrome edge; lit, it glows on the door. */
+        @Override
+        public void mark(Canvas c, int x, int y, boolean selected) {
+            if (selected) {
+                int glow = (lampOn & 0x00FFFFFF) | 0x50000000;
+                c.fill(x + 1, y - 1, x + 7, y + 9, glow);
+                c.fill(x - 1, y + 1, x + 9, y + 7, glow);
+            }
+            c.fill(x + 2, y, x + 6, y + 8, bezel);
+            c.fill(x, y + 2, x + 8, y + 6, bezel);
+            c.fill(x + 1, y + 1, x + 7, y + 7, bezel);
+            c.fill(x + 2, y + 1, x + 6, y + 2, chrome);
+            int lens = selected ? lampOn : lampOff;
+            c.fill(x + 3, y + 2, x + 5, y + 6, lens);
+            c.fill(x + 2, y + 3, x + 6, y + 5, lens);
+            c.fill(x + 3, y + 3, x + 4, y + 4, selected ? 0xE0FFFFFF : 0x40FFFFFF);
+        }
+
+        /** An LED bar graph, 2 px segments; the top tenth in its own colour, as a meter's printed zone. */
+        @Override
+        public void bar(Canvas c, Rect r, double share) {
+            window(c, r, bar.glass());
+            int x0 = r.x() + 2, n = (r.w() - 3) / 3, lit = (int) Math.round(n * share);
+            for (int s = 0; s < n; s++) {
+                boolean top = s >= n * 9 / 10;
+                int on = top ? barTop : bar.on(), off = top ? mix(bar.glass(), barTop, 0.22) : bar.off();
+                c.fill(x0 + 3 * s, r.y() + 2, x0 + 3 * s + 2, r.bottom() - 2, s < lit ? on : off);
+            }
+        }
+
+        /** A slot in the door with a small black key in it. */
+        @Override
+        public void scrollbar(Canvas c, Rect track, Rect thumb, boolean dragging) {
+            c.fill(track.x() + 3, track.y(), track.x() + 5, track.bottom(), door.dark());
+            c.fill(track.x() + 5, track.y(), track.x() + 6, track.bottom(), door.light());
+            c.fill(thumb.x() + 1, thumb.y(), thumb.right() - 1, thumb.bottom(), bezel);
+            c.fill(thumb.x() + 2, thumb.y() + 1, thumb.right() - 2, thumb.bottom() - 1, dragging ? lit.face() : key.face());
+            c.fill(thumb.x() + 2, thumb.y() + 1, thumb.right() - 2, thumb.y() + 2, key.light());
+        }
+    }
+
+    private static final Face BLACK_KEY = new Face(0xFF262626, 0xFF4A4A4A, 0xFF141414, 0xFFF0F0F0);
+    private static final Face GREEN_LIT = new Face(0xFF2DB34A, 0xFF8BE89A, 0xFF1B7A30, 0xFF06200C);
+    private static final Face BLUE_CONFIRM = new Face(0xFF1F5FBF, 0xFF6A9BE8, 0xFF143F80, 0xFFFFFFFF);
+    private static final Face BLACK_PLATE = new Face(0xFF1A1A1A, 0xFF3A3A3A, 0xFF000000, 0xFFF0F0F0);
+    private static final Door RAL_7035 = new Door(0xFFC9CCC8, 0xFFE2E5E1, 0xFFA5A8A4, 0xFF6E716D, false);
+    private static final Window RED_LED = new Window(0xFF0A0A0A, 0xFFFF3B1F, 0xFF2A0D08), GREEN_LED = new Window(0xFF0A0A0A, 0xFF4CF07A, 0xFF0D2A14);
+    private static final Window SCREEN = new Window(0xFF10161B, 0xFF3BE060, 0);
+
+    /** Look 3 refined, in four doors. */
+    private static final List<Panel> PANELS = List.of(
+            new Panel("RAL 7035 door, green lamps, red LED meters", RAL_7035, BLACK_PLATE, 0xFFE9ECE8, false,
+                    BLACK_KEY, GREEN_LIT, BLUE_CONFIRM, new Face(0xFF8A8D89, 0xFF9C9F9B, 0xFF767975, 0xFFC4C7C3), 0xFF111111, 0xFFA9ACA8,
+                    RED_LED, 0xFF3BE060, 0xFF1F3A26, new Window(0xFF0A0A0A, 0xFF3BE060, 0xFF12301A), 0xFFFFB000,
+                    new Window(0xFF06100D, 0xFF6CF0C2, 0), SCREEN, 0xFF1A1A1A, new Ink(0xFF1A1A1A, 0xFF3C3F3B, 0xFF1E7A34, 0xFF9A6A00)),
+            // IEC 60073: white is the neutral colour that confirms a selection; legends keep their colour, the lamps show state.
+            new Panel("RAL 7035 door, IEC white selection, white legend plates, green LED meters", RAL_7035,
+                    new Face(0xFFF4F4F0, 0xFFFFFFFF, 0xFF6E716D, 0xFF111111), 0xFFE9ECE8, false,
+                    BLACK_KEY, new Face(0xFFF4F0DC, 0xFFFFFFFF, 0xFFC9C3A6, 0xFF1A1A1A), BLUE_CONFIRM,
+                    new Face(0xFF8A8D89, 0xFF9C9F9B, 0xFF767975, 0xFFC4C7C3), 0xFF111111, 0xFFA9ACA8,
+                    GREEN_LED, 0xFFFFF4D6, 0xFF6A6B66, GREEN_LED, 0xFFFFB000,
+                    new Window(0xFF06100D, 0xFF6CF0C2, 0), SCREEN, 0xFF1A1A1A, new Ink(0xFF1A1A1A, 0xFF3C3F3B, 0xFF1A1A1A, 0xFF9A6A00)),
+            new Panel("RAL 7016 anthracite door, aluminium legend plates, amber LED meters",
+                    new Door(0xFF383E42, 0xFF4F565B, 0xFF24282B, 0xFF121416, false), new Face(0xFFB9BDC0, 0xFFDDE1E4, 0xFF6E7275, 0xFF111111), 0xA0000000, true,
+                    new Face(0xFF1A1C1E, 0xFF3A3E42, 0xFF0C0D0E, 0xFFE6E6E6), GREEN_LIT, BLUE_CONFIRM,
+                    new Face(0xFF2C3134, 0xFF363B3F, 0xFF22262A, 0xFF6E757A), 0xFF0A0B0C, 0xFF8E9396,
+                    new Window(0xFF080808, 0xFFFFB000, 0xFF2A1E05), 0xFF3BE060, 0xFF1A2A1F, new Window(0xFF080808, 0xFFFFB000, 0xFF2A1E05), 0xFFFF4A2A,
+                    new Window(0xFF05090C, 0xFF7FD7FF, 0), SCREEN, 0xFF0E0F10, new Ink(0xFFE6E8EA, 0xFFA9AFB4, 0xFF7EE29A, 0xFFFFC24A)),
+            new Panel("Brushed stainless door, red LED meters, amber display",
+                    new Door(0xFFB4B9BD, 0xFFE6EAED, 0xFF878C91, 0xFF5A5F63, true), BLACK_PLATE, 0xFFEEF2F5, false,
+                    BLACK_KEY, GREEN_LIT, BLUE_CONFIRM, new Face(0xFF8C9196, 0xFF9DA2A7, 0xFF7A7F84, 0xFFC9CED2), 0xFF111111, 0xFFC4C9CD,
+                    RED_LED, 0xFF3BE060, 0xFF1F3A26, new Window(0xFF0A0A0A, 0xFF3BE060, 0xFF12301A), 0xFFFFB000,
+                    new Window(0xFF070A05, 0xFFFFC24A, 0), SCREEN, 0xFF1A1A1A, new Ink(0xFF141618, 0xFF3A3F44, 0xFF1E6E34, 0xFF8A5A00)));
+
     /**
      * The Control tab's styles tried for the owner (batch 2026-10-28-gui-toolkit), each over the rows HeatControlColumn
      * builds: A as shipped; B to D prototypes, their row transforms here in the tool until the owner picks one.
@@ -563,6 +852,17 @@ public final class HeatDiagramRender {
         grid(file, titles, pages);
     }
 
+    /** One case in style C, in each door of look 3 refined. */
+    private static void panels(Path file, Case c) throws Exception {
+        var pages = new ArrayList<BufferedImage>();
+        var titles = new ArrayList<String>();
+        for (int i = 0; i < PANELS.size(); i++) {
+            pages.add(page(c, Style.SPLIT, PANELS.get(i), false));
+            titles.add("3" + (char) ('a' + i) + "  " + PANELS.get(i).name());
+        }
+        grid(file, titles, pages);
+    }
+
     /** Pages two by two, each under its title, as they open. */
     private static void grid(Path file, List<String> titles, List<BufferedImage> pages) throws Exception {
         int w = pages.getFirst().getWidth(), h = pages.getFirst().getHeight(), label = 40, rows = (pages.size() + 1) / 2;
@@ -593,19 +893,20 @@ public final class HeatDiagramRender {
         canvas.fill(-4, -4, WIDTH + 4, HEIGHT + 4, 0xFF101418);
         // The page's frame as the screen draws it: title, tabs, status, separators, footer.
         look.page(canvas, new Rect(0, 0, WIDTH, HEIGHT));
-        String block = tr("block.icheme." + c.unit().toLowerCase(Locale.ROOT));
-        look.title(canvas, 10, 10, block.startsWith("?") ? c.unit() + " · " + c.side() : block);
+        // The title the server sends: the vessel and the side (EquipmentShellBlockEntity.open).
+        String vessel = c.unit().equals("FIRED_HEATER") ? "vertical_heater" : c.unit().toLowerCase(Locale.ROOT);
+        look.title(canvas, 10, 10, tr("gui.icheme.heat_side.title", tr("gui.icheme.vessel.title." + vessel), tr("gui.icheme.heat_side." + c.side().toLowerCase(Locale.ROOT))));
         var tabs = FluidGuiLayout.tabs(WIDTH, 2);
         look.button(canvas, new Rect(tabs.get(0).x(), 29, tabs.get(0).width(), 18), tr("gui.icheme.fluid.overview"), Press.REST);
         look.button(canvas, new Rect(tabs.get(1).x(), 29, tabs.get(1).width(), 18), tr("gui.icheme.fluid.control"), Press.CURRENT);
-        canvas.text("Holding 45.0 C · steady since 12 s", 10, 59, look.tone(Palette.ACCENT));
+        look.status(canvas, new Rect(10, 59, WIDTH - 20, 9), "Holding 45.0 C · steady since 12 s", Palette.ACCENT);
         int controlTop = 74, controlBottom = HEIGHT - 52;
         look.hDivider(canvas, 8, WIDTH - 8, HEIGHT - 49);
         var footer = FluidGuiLayout.footer(WIDTH);
         String[] footerText = {tr("gui.icheme.fluid.close"), tr("gui.icheme.fluid.apply"), "Mole", "C", "kPa", "/s"};
         for (int i = 0; i < footer.size(); i++)
             look.button(canvas, new Rect(footer.get(i).x(), HEIGHT - 27, footer.get(i).width(), 18), footerText[i], i == 1 ? Press.PRIMARY : Press.REST);
-        canvas.text("View at 102.4 s", 10, HEIGHT - 42, look.tone(Palette.WARN));
+        look.text(canvas, "View at 102.4 s", 10, HEIGHT - 42, Palette.WARN);
         // Each style's split of the page: A and B as FluidGuiLayout.control places it; C and D with a narrower drawing.
         var slots = FluidGuiLayout.control(WIDTH);
         int drawingRight = switch (style) {
@@ -652,7 +953,7 @@ public final class HeatDiagramRender {
                 if (lx + 10 + canvas.measure().width(word) > drawingRight - check - 6) break;
                 canvas.fill(lx, ly, lx + 8, ly + 8, marks[i][1]);
                 canvas.fill(lx + 1, ly + 1, lx + 7, ly + 7, marks[i][0]);
-                canvas.text(word, lx + 11, ly, look.tone(Palette.MUTED));
+                look.text(canvas, word, lx + 11, ly, Palette.MUTED);
                 lx += 19 + canvas.measure().width(word);
             }
         }
@@ -695,7 +996,7 @@ public final class HeatDiagramRender {
         for (int i = 0; i < rows.size(); i++) {
             var r = rows.get(i);
             if (r instanceof Column.Gap) continue;
-            if (r instanceof Column.Line && next(rows, i) instanceof Column.Choice) continue; // the heading: the buttons say it
+            if (r instanceof Column.Heading) continue; // the heading: the buttons say it
             if (r instanceof Column.Choice) {
                 int end = i;
                 while (end < rows.size() && rows.get(end) instanceof Column.Choice) end++;
@@ -746,9 +1047,9 @@ public final class HeatDiagramRender {
             String key;
             Column.Row shown = r;
             if (r instanceof Column.Buttons b && b.buttons().getFirst().key().startsWith("side:")) key = "side";
-            else if (r instanceof Column.Line l && next(rows, i) instanceof Column.Choice) {
+            else if (r instanceof Column.Heading hd) {
                 key = "mode";
-                shown = new Column.Line(l.text(), Palette.ACCENT);
+                shown = new Column.Line(hd.text(), Palette.ACCENT);
             } else if (r instanceof Column.Choice) key = "mode";
             else if (r instanceof Column.Buttons || r instanceof Column.Field) {
                 key = "settings";

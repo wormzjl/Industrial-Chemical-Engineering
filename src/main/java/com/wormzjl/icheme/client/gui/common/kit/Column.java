@@ -13,7 +13,11 @@ import org.jetbrains.annotations.Nullable;
  * widgets and answers clicks and hovers, so they cannot drift apart.
  */
 public final class Column {
-    public sealed interface Row permits Line, Paragraph, Choice, Field, Buttons, Bar, Gap {
+    public sealed interface Row permits Heading, Line, Paragraph, Choice, Field, Buttons, Bar, Gap {
+    }
+
+    /** A section's heading, one line high, cut to the width; the skin draws it (a muted line, or a legend plate). */
+    public record Heading(String text) implements Row {
     }
 
     /** One line of text, cut to the width; its full text on hover where cut. */
@@ -28,7 +32,10 @@ public final class Column {
     public record Choice(String title, String line, boolean selected, @Nullable String action) implements Row {
     }
 
-    /** A labelled field: its key, label, unit and hint; its box ({@link #BOX} px) at the row's right, the unit after the box. */
+    /**
+     * A labelled field: its key, label, unit and hint; its box ({@link #BOX} px) at the row's right, the unit after the
+     * box. A label wider than its share of the row goes on a line of its own above the box (the box where it always is).
+     */
     public record Field(String key, String label, String unit, @Nullable String hint) implements Row {
     }
 
@@ -109,6 +116,10 @@ public final class Column {
     private static Placed place(Row row, int x, int y, int w, Measure m, Metrics h) {
         var slots = new LinkedHashMap<String, Rect>();
         return switch (row) {
+            case Heading hd -> {
+                String shown = m.cut(hd.text(), w);
+                yield new Placed(row, new Rect(x, y, w, h.line()), slots, List.of(shown), shown.equals(hd.text()) ? null : hd.text());
+            }
             case Line l -> {
                 String shown = m.cut(l.text(), w);
                 yield new Placed(row, new Rect(x, y, w, h.line()), slots, List.of(shown), shown.equals(l.text()) ? null : l.text());
@@ -124,10 +135,11 @@ public final class Column {
                 yield new Placed(row, new Rect(x, y, w, h.choice()), slots, List.of(title, titleOnly ? "" : line), cut || hidden ? c.title() + "\n" + c.line() : null);
             }
             case Field f -> {
-                slots.put(f.key(), new Rect(x + w - FIELD_TAIL + 4, y, BOX, WIDGET));
-                String label = m.cut(f.label(), w - FIELD_TAIL), unit = m.cut(f.unit(), 15);
+                boolean stacked = m.width(f.label()) > w - FIELD_TAIL;
+                slots.put(f.key(), new Rect(x + w - FIELD_TAIL + 4, stacked ? y + h.line() : y, BOX, WIDGET));
+                String label = m.cut(f.label(), stacked ? w : w - FIELD_TAIL), unit = m.cut(f.unit(), 15);
                 String hover = f.hint() != null ? f.label() + "\n" + f.hint() : label.equals(f.label()) ? null : f.label();
-                yield new Placed(row, new Rect(x, y, w, h.field()), slots, List.of(label, unit), hover);
+                yield new Placed(row, new Rect(x, y, w, stacked ? h.line() + h.field() : h.field()), slots, List.of(label, unit), hover);
             }
             case Buttons b -> {
                 int n = b.buttons().size(), bw = (w - BUTTON_GAP * (n - 1)) / n;
@@ -186,18 +198,21 @@ public final class Column {
         for (var p : rows) {
             var r = p.rect().moved(0, dy);
             switch (p.row()) {
-                case Line l -> c.text(p.texts().getFirst(), r.x(), r.y(), skin.tone(l.colour()));
+                case Heading ignored -> skin.heading(c, r, p.texts().getFirst());
+                case Line l -> skin.text(c, p.texts().getFirst(), r.x(), r.y(), l.colour());
                 case Paragraph para -> {
-                    for (int i = 0; i < p.texts().size(); i++) c.text(p.texts().get(i), r.x(), r.y() + i * Measure.LINE, skin.tone(para.colour()));
+                    for (int i = 0; i < p.texts().size(); i++) skin.text(c, p.texts().get(i), r.x(), r.y() + i * Measure.LINE, para.colour());
                 }
                 case Choice ch -> {
                     skin.mark(c, r.x(), r.y(), ch.selected());
-                    c.text(p.texts().get(0), r.x() + 12, r.y(), skin.tone(ch.selected() ? Palette.ACCENT : Palette.TEXT));
-                    if (!p.texts().get(1).isEmpty()) c.text(p.texts().get(1), r.x() + 12, r.y() + Measure.LINE, skin.tone(Palette.MUTED));
+                    skin.text(c, p.texts().get(0), r.x() + 12, r.y(), ch.selected() ? Palette.ACCENT : Palette.TEXT);
+                    if (!p.texts().get(1).isEmpty()) skin.text(c, p.texts().get(1), r.x() + 12, r.y() + Measure.LINE, Palette.MUTED);
                 }
                 case Field ignored -> {
-                    c.text(p.texts().get(0), r.x(), r.y() + 5, skin.tone(Palette.MUTED));
-                    c.text(p.texts().get(1), r.right() - 15, r.y() + 5, skin.tone(Palette.MUTED));
+                    // A stacked field's label on the line above its box; the unit after the box.
+                    var box = p.slots().values().iterator().next().moved(0, dy);
+                    skin.text(c, p.texts().get(0), r.x(), box.y() > r.y() ? r.y() : r.y() + 5, Palette.MUTED);
+                    skin.text(c, p.texts().get(1), r.right() - 15, box.y() + 5, Palette.MUTED);
                 }
                 case Bar b -> skin.bar(c, new Rect(r.x(), r.y(), r.w(), 8), b.share());
                 case Buttons ignored -> {

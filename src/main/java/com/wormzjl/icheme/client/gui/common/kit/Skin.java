@@ -1,14 +1,24 @@
 package com.wormzjl.icheme.client.gui.common.kit;
 
 /**
- * How the kit draws what its rows ask for (batch 2026-10-28-gui-toolkit, GUI_TOOLKIT_PLAN.md section 8): the text tones
- * the rows name by the palette's colours, a choice's mark, a bar, and a scroll bar. {@link #PLAIN} is the look the
+ * How the kit draws what its rows ask for (batch 2026-10-28-gui-toolkit, GUI_TOOLKIT_PLAN.md section 8): the texts in
+ * the tones the rows name by the palette's colours, headings, a choice's mark, a bar, and a scroll bar. {@link #PLAIN} is the look the
  * screens draw today; the skins tried for the owner live in the render tool until one is chosen.
  */
 public interface Skin {
     /** A row colour named by the palette ({@link Palette#TEXT}, {@link Palette#MUTED}, {@link Palette#ACCENT}, {@link Palette#WARN}) in this skin. */
     default int tone(int palette) {
         return palette;
+    }
+
+    /** A row's text at ({@code x}, {@code y}) in the tone the row names by {@code palette}; a skin may engrave it. */
+    default void text(Canvas c, String text, int x, int y, int palette) {
+        c.text(text, x, y, tone(palette));
+    }
+
+    /** A section's heading in its row {@code r}: a muted line, or a legend plate. */
+    default void heading(Canvas c, Rect r, String text) {
+        text(c, text, r.x(), r.y(), Palette.MUTED);
     }
 
     /** A choice's 8 by 8 mark with its top left at ({@code x}, {@code y}). */

@@ -205,6 +205,40 @@ class KitLayoutTest {
         view.layout(new Rect(20, 74, 180, 100), 204, 400);
         view.drawBar(canvas, skin);
         assertEquals("scrollbar " + new Rect(204, 74, ScrollView.BAR, 100) + " " + new Rect(204, 74, ScrollView.BAR, 25), calls.getLast(), "the thumb a quarter of the track");
+        Column.place(List.of(new Column.Heading("Mode")), 0, 0, 150, M).draw(canvas, 0, new Skin() {
+            @Override
+            public void heading(Canvas c, Rect r, String text) {
+                calls.add("heading " + r + " " + text);
+            }
+
+            @Override
+            public void mark(Canvas c, int x, int y, boolean selected) {
+            }
+
+            @Override
+            public void bar(Canvas c, Rect r, double share) {
+            }
+
+            @Override
+            public void scrollbar(Canvas c, Rect track, Rect thumb, boolean dragging) {
+            }
+        });
+        assertEquals("heading " + new Rect(0, 0, 150, 12) + " Mode", calls.getLast(), "the skin draws a heading in its row");
+    }
+
+    @Test
+    void aFieldWhoseLabelDoesNotFitBesideItsBoxStacksTheLabelAboveIt() {
+        var rows = List.<Column.Row>of(new Column.Field("t", "Set point", "C", null), new Column.Field("r", "Ratio to the other feed", "", null), new Column.Heading("What this side holds"));
+        var column = Column.place(rows, 0, 0, 150, M);
+        var inline = column.rows().get(0);
+        assertEquals(24, inline.rect().h(), "54 px of label beside the box: one row");
+        assertEquals(new Rect(150 - Column.FIELD_TAIL + 4, 0, Column.BOX, Column.WIDGET), inline.slots().get("t"));
+        var stacked = column.rows().get(1);
+        assertEquals(12 + 24, stacked.rect().h(), "138 px of label in 70 px: the label above the box");
+        assertEquals(new Rect(150 - Column.FIELD_TAIL + 4, 24 + 12, Column.BOX, Column.WIDGET), stacked.slots().get("r"), "the box under its label, in line with the other boxes");
+        assertEquals("Ratio to the other feed", stacked.texts().getFirst(), "the whole label on its own line");
+        assertNull(stacked.hover(), "nothing cut, no hint: no hover");
+        assertEquals(new Rect(0, 60, 150, 12), column.rows().get(2).rect(), "a heading is a line high");
     }
 
     @Test

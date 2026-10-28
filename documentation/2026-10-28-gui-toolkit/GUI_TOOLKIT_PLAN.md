@@ -89,3 +89,23 @@ Owner: "C looks better"; the buttons and colours "look too bare"; "a more indust
   3. **Control panel door.** RAL 7035 grey with screws and an engraved black title plate. Push buttons in IEC 60073 colours: black general, illuminated green for running, blue for confirm. Green pilot lights for the modes. Red LED panel meters for the fields and a green LED bar graph. The flowsheet sits on an HMI screen in a black bezel.
   4. **Control room, dark** (low ambient light). Flat dark grey, with pale blue for what is chosen and amber for warnings. A grey bar with quarter ticks.
 - In the game the buttons and fields are vanilla widgets. A chosen look then needs kit widgets that draw through the skin: a button drawn in the look, and an `EditBox` without its border over the look's field.
+
+## 9. Look 3 refined: the control panel door (2026-10-28, owner: "Refine look 3")
+
+- The kit, for every look:
+  - `Column.Heading`: a section heading, which the skin draws (`PLAIN`: a muted line; a panel: a legend plate). "What this side holds" is now a heading.
+  - `Skin.text`: a skin may engrave the rows' texts.
+  - A field whose label does not fit beside its box puts the label on its own line above the box. The box stays in line with the other boxes. This fixes the cut "Ratio to the other feed" and "Never cool below".
+- The panel look (the tool's `Panel`):
+  - Legend plates for the title and the headings, and engraved text.
+  - Push buttons in a black bezel with a chrome ring, lit from behind when latched (the page and the side shown).
+  - Pilot lights with a glow for the modes.
+  - 7-segment LED panel meters for the fields: right-aligned over unlit segments; an empty limit reads OFF.
+  - An LED bar graph whose top tenth has its own colour, as a meter's printed zone.
+  - The status on a message display. The flowsheet on an HMI screen with a power LED. A quarter-turn latch on the door.
+  - The legends keep their colour; the lamps show state, as on a real panel.
+- The four doors (sheets in `tmp/heat-gui-renders/panel/`):
+  - 3a: RAL 7035, green lamps, red LED meters.
+  - 3b: RAL 7035 with IEC 60073 white for a selection (white is the neutral colour that confirms one), white legend plates, green LED meters.
+  - 3c: RAL 7016 anthracite, aluminium legend plates, amber LED meters, a red top zone.
+  - 3d: brushed stainless steel, red LED meters, an amber display.

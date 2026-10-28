@@ -73,7 +73,7 @@ public final class HeatControlColumn {
         }
         if (in.pool()) rows.add(new Column.Paragraph(t.get("pool_note"), Palette.MUTED));
         else {
-            rows.add(new Column.Line(t.get("heat_holds"), Palette.MUTED));
+            rows.add(new Column.Heading(t.get("heat_holds")));
             rows.add(new Column.Gap(2));
             for (var m : modes(in))
                 rows.add(new Column.Choice(t.get("heat_mode." + m.key() + ".title"), t.get("heat_mode." + m.key() + ".line", t.get("heat_actuator." + actuator(in, m.key()))),
