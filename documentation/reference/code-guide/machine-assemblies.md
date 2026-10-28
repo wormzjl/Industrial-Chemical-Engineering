@@ -1,6 +1,6 @@
 # Machine assemblies: a column's plant, validated against its design
 
-**Snapshot:** SNAPSHOT_SHA (branch `claude/heat-exchanger-design-cf05d1`), 2026-10-28 · **Updated:** 2026-10-28 (batch 2026-10-27-heat-exchanger-design, W8: a shell-and-tube exchanger's control lines as a second kind of assembly (`ExchangerBlueprint`, `ExchangerLines`, the FLOWMETER fitting, a bypass tee's branch scoring, `AssemblyService.metered` and `redesigned`), the heat review world; batch 2026-10-28-gui-toolkit: the button reads Check parts) · earlier: 2026-10-27 at ce71b45c (new chapter, batch 2026-10-26-multi-machine-framework, first stage: the distillation column assembly; work packages W1 to W7, findings F2 and F3, owner answers Q1 to Q9)
+**Snapshot:** f20ceefa (branch `claude/heat-exchanger-design-cf05d1`), 2026-10-28 · **Updated:** 2026-10-28 (batch 2026-10-27-heat-exchanger-design, W8: a shell-and-tube exchanger's control lines as a second kind of assembly (`ExchangerBlueprint`, `ExchangerLines`, the FLOWMETER fitting, a bypass tee's branch scoring, `AssemblyService.metered` and `redesigned`), the heat review world; batch 2026-10-28-gui-toolkit: the button reads Check parts) · earlier: 2026-10-27 at ce71b45c (new chapter, batch 2026-10-26-multi-machine-framework, first stage: the distillation column assembly; work packages W1 to W7, findings F2 and F3, owner answers Q1 to Q9)
 Up: [code guide](README.md)
 
 ## Read this when
