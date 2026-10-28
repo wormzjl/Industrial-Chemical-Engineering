@@ -258,6 +258,7 @@ class DialogColumnsTest {
         assertEquals(10, two.get(0).x());
         assertEquals(236, two.get(1).right());
         assertEquals(two.get(0).w(), two.get(1).w());
+        assertEquals(List.of(), DialogColumns.footer(200, 254, 0), "a page with no push buttons");
         var done = DialogColumns.footer(340, 250, 1).getFirst();
         assertEquals(new Rect(250, 223, 80, 18), done);
     }

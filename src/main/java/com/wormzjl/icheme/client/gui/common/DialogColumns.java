@@ -23,8 +23,9 @@ public final class DialogColumns {
     /** The column's top, the room the footer takes under the column (the push buttons at height - 27), and the glass's line pitch. */
     public static final int TOP = 28, FOOTER = 35, PITCH = 11;
 
-    /** The footer's push buttons: two share the width from 10 to width - 10, 4 px apart; one (Done) is 80 px at the right. */
+    /** The footer's push buttons: two or more share the width from 10 to width - 10, 4 px apart; one (Done) is 80 px at the right; none, none. */
     public static List<Rect> footer(int width, int height, int count) {
+        if (count == 0) return List.of();
         if (count == 1) return List.of(new Rect(width - 90, height - 27, 80, 18));
         int w = (width - 20 - 4 * (count - 1)) / count;
         var out = new ArrayList<Rect>();

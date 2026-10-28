@@ -52,7 +52,7 @@ public final class ConstructorColumn {
 
     /** The footer's {@code count} push buttons sharing the door's width; none on the choice page. */
     public static List<Rect> footer(int height, int count) {
-        return count == 0 ? List.of() : DialogColumns.footer(PANEL, height, count);
+        return DialogColumns.footer(PANEL, height, count);
     }
 
     /** The kind's name on the title plate: the full one where it leaves room for Change, else the short one. */
