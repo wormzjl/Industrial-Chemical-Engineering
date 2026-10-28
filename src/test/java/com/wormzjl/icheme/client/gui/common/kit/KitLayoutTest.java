@@ -144,6 +144,70 @@ class KitLayoutTest {
     }
 
     @Test
+    void aSkinDrawsTheMarksTheBarsAndTheTonesItsRowsName() {
+        var texts = new ArrayList<String>();
+        var calls = new ArrayList<String>();
+        var canvas = new Canvas() {
+            @Override
+            public Measure measure() {
+                return M;
+            }
+
+            @Override
+            public void fill(int x0, int y0, int x1, int y1, int argb) {
+            }
+
+            @Override
+            public void text(String text, int x, int y, int argb) {
+                texts.add(text + "@" + Integer.toHexString(argb));
+            }
+
+            @Override
+            public void text(String text, float x, float y, float scale, int argb) {
+            }
+
+            @Override
+            public void clip(Rect area) {
+            }
+
+            @Override
+            public void unclip() {
+            }
+        };
+        var skin = new Skin() {
+            @Override
+            public int tone(int palette) {
+                return palette == Palette.MUTED ? 0xFF123456 : palette;
+            }
+
+            @Override
+            public void mark(Canvas c, int x, int y, boolean selected) {
+                calls.add("mark " + x + "," + y + " " + selected);
+            }
+
+            @Override
+            public void bar(Canvas c, Rect r, double share) {
+                calls.add("bar " + r + " " + share);
+            }
+
+            @Override
+            public void scrollbar(Canvas c, Rect track, Rect thumb, boolean dragging) {
+                calls.add("scrollbar " + track + " " + thumb);
+            }
+        };
+        var column = Column.place(every(), 20, 74, 180, M);
+        column.draw(canvas, -10, skin);
+        var choice = column.rows().get(2).rect();
+        var bar = column.rows().get(8).rect();
+        assertEquals(List.of("mark 20," + (choice.y() - 10) + " true", "mark 20," + (choice.bottom() - 10) + " false", "bar " + new Rect(20, bar.y() - 10, 180, 8) + " 0.25"), calls);
+        assertTrue(texts.contains("What this side holds@ff123456"), "a muted line in the skin's tone: " + texts);
+        var view = new ScrollView();
+        view.layout(new Rect(20, 74, 180, 100), 204, 400);
+        view.drawBar(canvas, skin);
+        assertEquals("scrollbar " + new Rect(204, 74, ScrollView.BAR, 100) + " " + new Rect(204, 74, ScrollView.BAR, 25), calls.getLast(), "the thumb a quarter of the track");
+    }
+
+    @Test
     void aColumnRefusesWhatItCannotPlace() {
         assertThrows(IllegalArgumentException.class, () -> Column.place(every(), 0, 0, 99, M));
         assertThrows(IllegalArgumentException.class, () -> new Column.Bar(1.5));

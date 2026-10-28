@@ -104,9 +104,12 @@ public final class ScrollView {
     }
 
     public void drawBar(Canvas c) {
+        drawBar(c, Skin.PLAIN);
+    }
+
+    public void drawBar(Canvas c, Skin skin) {
         if (!shown || max() == 0) return;
         int at = (viewport.h() - thumb()) * offset / max();
-        c.fill(barX, viewport.y(), barX + BAR, viewport.bottom(), Palette.PANEL);
-        c.fill(barX + 1, viewport.y() + at, barX + BAR - 1, viewport.y() + at + thumb(), dragging ? Palette.ACCENT : Palette.LINE);
+        skin.scrollbar(c, new Rect(barX, viewport.y(), BAR, viewport.h()), new Rect(barX, viewport.y() + at, BAR, thumb()), dragging);
     }
 }

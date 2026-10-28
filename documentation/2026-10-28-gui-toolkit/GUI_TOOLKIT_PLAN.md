@@ -75,3 +75,17 @@ The column's height against its 128 px view, at 464 by 254:
 - B: the air cooler and the fired heater fit. An exchanger scrolls about 20 px. The buttons cut long mode titles ("Outlet temperatur", "Fire to the set poin"). Shorter button titles or three to a row would fix that.
 - C: everything fits, with no scroll. The drawing shrinks (166 px), so its long tags drop. The 105 px column cuts the mode lines and the field labels ("Never cool bel", "Convectio").
 - D: the easiest to scan. After A it is the tallest (145 to 211 px), and the drawing loses 10 % of the width.
+
+Owner: "C looks better"; the buttons and colours "look too bare"; "a more industrial aesthetic", "real industrial style".
+
+## 8. Industrial looks for layout C (2026-10-28)
+
+- `kit/Skin` decides how the rows draw: the text tones (the rows name them by the palette's colours), a choice's mark, the bar and the scroll bar. `Skin.PLAIN` draws what the screens drew before, and `Column.draw(c, dy)` and `ScrollView.drawBar(c)` use it.
+- The render tool adds a `Look` over `Skin`: the page, the title, the buttons, the fields, the drawing's well and the dividers. `PLAIN` reproduces the sheets of section 7. In every look the flowsheet sits on a dark process screen. The sheets are in `tmp/heat-gui-renders/industrial/`.
+- LDLib2 was read for its widget vocabulary only: its ORE and MC sprites (a dark outline with cut corners, a light top-left edge, a dark bottom-right edge, sunken slots, lamps), and its flat themes (one accent, used only for focus, selection and a filled bar).
+- The four looks, after real plant screens and panels:
+  1. **HMI, ISA-101 high-performance.** Flat grey, with colour only for state. A latched button is dark grey. Entered values are dark blue. A grey analog bar with quarter ticks. A grey title bar.
+  2. **SCADA, classic** (the WinCC and InTouch era). 3D grey bevels, a navy title bar, white entry fields and a black process screen. The running mode button is green and pushed in. Navy block progress bar.
+  3. **Control panel door.** RAL 7035 grey with screws and an engraved black title plate. Push buttons in IEC 60073 colours: black general, illuminated green for running, blue for confirm. Green pilot lights for the modes. Red LED panel meters for the fields and a green LED bar graph. The flowsheet sits on an HMI screen in a black bezel.
+  4. **Control room, dark** (low ambient light). Flat dark grey, with pale blue for what is chosen and amber for warnings. A grey bar with quarter ticks.
+- In the game the buttons and fields are vanilla widgets. A chosen look then needs kit widgets that draw through the skin: a button drawn in the look, and an `EditBox` without its border over the look's field.

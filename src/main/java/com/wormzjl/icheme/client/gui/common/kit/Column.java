@@ -176,40 +176,35 @@ public final class Column {
         return p.hover();
     }
 
-    /** Draws the rows' texts and marks, moved down by {@code dy}; the widgets draw themselves. */
+    /** Draws the rows' texts and marks, moved down by {@code dy}, in today's look; the widgets draw themselves. */
     public void draw(Canvas c, int dy) {
+        draw(c, dy, Skin.PLAIN);
+    }
+
+    /** Draws the rows' texts and marks, moved down by {@code dy}, in {@code skin}; the widgets draw themselves. */
+    public void draw(Canvas c, int dy, Skin skin) {
         for (var p : rows) {
             var r = p.rect().moved(0, dy);
             switch (p.row()) {
-                case Line l -> c.text(p.texts().getFirst(), r.x(), r.y(), l.colour());
+                case Line l -> c.text(p.texts().getFirst(), r.x(), r.y(), skin.tone(l.colour()));
                 case Paragraph para -> {
-                    for (int i = 0; i < p.texts().size(); i++) c.text(p.texts().get(i), r.x(), r.y() + i * Measure.LINE, para.colour());
+                    for (int i = 0; i < p.texts().size(); i++) c.text(p.texts().get(i), r.x(), r.y() + i * Measure.LINE, skin.tone(para.colour()));
                 }
                 case Choice ch -> {
-                    radio(c, r.x(), r.y(), ch.selected());
-                    c.text(p.texts().get(0), r.x() + 12, r.y(), ch.selected() ? Palette.ACCENT : Palette.TEXT);
-                    if (!p.texts().get(1).isEmpty()) c.text(p.texts().get(1), r.x() + 12, r.y() + Measure.LINE, Palette.MUTED);
+                    skin.mark(c, r.x(), r.y(), ch.selected());
+                    c.text(p.texts().get(0), r.x() + 12, r.y(), skin.tone(ch.selected() ? Palette.ACCENT : Palette.TEXT));
+                    if (!p.texts().get(1).isEmpty()) c.text(p.texts().get(1), r.x() + 12, r.y() + Measure.LINE, skin.tone(Palette.MUTED));
                 }
                 case Field ignored -> {
-                    c.text(p.texts().get(0), r.x(), r.y() + 5, Palette.MUTED);
-                    c.text(p.texts().get(1), r.right() - 15, r.y() + 5, Palette.MUTED);
+                    c.text(p.texts().get(0), r.x(), r.y() + 5, skin.tone(Palette.MUTED));
+                    c.text(p.texts().get(1), r.right() - 15, r.y() + 5, skin.tone(Palette.MUTED));
                 }
-                case Bar b -> {
-                    c.fill(r.x(), r.y(), r.right(), r.y() + 8, Palette.BG);
-                    c.outline(r.x(), r.y(), r.w(), 8, Palette.LINE);
-                    c.fill(r.x() + 1, r.y() + 1, r.x() + 1 + (int) Math.round((r.w() - 2) * b.share()), r.y() + 7, Palette.ACCENT);
-                }
+                case Bar b -> skin.bar(c, new Rect(r.x(), r.y(), r.w(), 8), b.share());
                 case Buttons ignored -> {
                 }
                 case Gap ignored -> {
                 }
             }
         }
-    }
-
-    private static void radio(Canvas c, int x, int y, boolean selected) {
-        c.fill(x, y, x + 8, y + 8, selected ? Palette.ACCENT : Palette.LINE);
-        c.fill(x + 1, y + 1, x + 7, y + 7, Palette.BG);
-        if (selected) c.fill(x + 2, y + 2, x + 6, y + 6, Palette.ACCENT);
     }
 }
