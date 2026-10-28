@@ -179,12 +179,19 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         return meter.on();
     }
 
+    /**
+     * Digits 6 by 11 px, 2 px apart, right-aligned at {@code right}. A decimal point is a 2 by 2 px dot on the baseline,
+     * twice a segment's stroke (owner, 2026-10-28: "the point should be slightly larger"), in 2 px of its own between
+     * the digits.
+     */
     private static void segments(Canvas c, String text, int right, int top, int on, int off) {
-        int digits = (int) text.chars().filter(ch -> ch != '.').count(), x = right - (digits * 8 - 2);
+        int digits = (int) text.chars().filter(ch -> ch != '.').count(), points = text.length() - digits;
+        int x = right - (digits * 8 - 2 + points * 2);
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             if (ch == '.') {
-                c.fill(x - 2, top + 10, x - 1, top + 11, on);
+                c.fill(x - 1, top + 9, x + 1, top + 11, on);
+                x += 2;
                 continue;
             }
             digit(c, x, top, 0b1111111, off);

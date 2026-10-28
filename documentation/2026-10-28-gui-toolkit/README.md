@@ -50,6 +50,7 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
   - `FluidDeviceScreen`: the switch and target drafts (`heatTarget`), the air cooler's fan speed, no view time. `FluidNetwork`: an air cooler keeps the sent share.
   - Lang: the modes' titles and lines, the heading and "Acting now" left; plates, switch, targets and hovers came.
   - Gates: quick suite 1734, no failures (`KitLayoutTest` 12, one new: a group frames its rows; `HeatControlColumnTest` 5, rewritten for the switch and targets; `HeatDiagramTest` 5).
+- 2026-10-28: the meters' decimal point is a 2 by 2 px dot in 2 px of its own (owner: "the point should be slightly larger"), in the point commit. Checked on the renders; drawing only, no gate covers it.
 
 ## Open
 
