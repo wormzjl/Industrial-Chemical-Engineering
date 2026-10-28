@@ -2,7 +2,7 @@
 
 Purpose: software renders of the heat units' Control-tab flowsheet, so its layout is judged without a game client (owner: enough client testing).
 
-Batch: `2026-10-27-heat-exchanger-design`, the heat GUI task (`HEAT_GUI_PLAN.md` section 4), branch `claude/heat-gui-redesign-abb1db`.
+Batch: `2026-10-27-heat-exchanger-design`, the heat GUI task (`HEAT_GUI_PLAN.md` section 4), branch `claude/heat-gui-redesign-abb1db`; then `2026-10-28-gui-toolkit` (`GuiPrototypes.java`, the kit's renders). Status: in use since 2026-10-28; it draws the shipped screen code, so it stays as a check of later GUI work.
 
 ## How to run
 

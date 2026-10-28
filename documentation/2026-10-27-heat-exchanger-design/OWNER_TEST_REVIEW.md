@@ -1,6 +1,6 @@
 # Owner test of the review world (2026-10-28)
 
-The owner's findings from `REVIEW_WORLD.md`: each gives the expected behaviour, what the code did, and the fix or proposal. Probe: `-PreviewProbe=true` rebuilds the plant and applies the owner's changes; `owner` watches a copy of the owner's save (scratch until the cleanup, `run/review-probe`). The owner answered on 2026-10-28: "I don't think furnace convection section can heat to 800C, try to find a better model. Others as recommended". So sections 2 to 4 are fixed here, 5 to 7 on their own branches, and section 1 is a new proposal.
+The owner's findings from `REVIEW_WORLD.md`: each gives the expected behaviour, what the code did, and the fix or proposal. Probe: `tools/heat-exchanger-design/review-probe/`, detached from the tracked paths in `f20ceefa`; its README gives the patch that re-attaches it. On `runReviewWorldServer`, `-PreviewProbe=true` rebuilds the plant and applies the owner's changes; `owner` watches a copy of the owner's save; both run in `run/review-probe`. The owner answered on 2026-10-28: "I don't think furnace convection section can heat to 800C, try to find a better model. Others as recommended". So sections 2 to 4 are fixed here, 5 to 7 on their own branches, and section 1 is a new proposal.
 
 ## 1. Fired heater: the convection duty (F1 built, replacing A)
 

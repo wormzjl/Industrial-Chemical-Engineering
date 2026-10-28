@@ -9,7 +9,7 @@ Purpose: offline study harnesses behind the heat exchanger design (batch [`2026-
 - how the sides couple when the wall holds no heat (a relay of the heat in transit);
 - how a side reads its partner on the game's clock (dispatch after the slice end, job latency, adaptive cadence).
 
-No game code, no Gradle.
+No game code, no Gradle, except `review-probe/`: the owner-test probe of the review world, detached from the tracked paths at the batch's tooling cleanup (`f20ceefa`). Its own [README](review-probe/README.md) says how to re-attach and run it.
 
 ## How to run
 
@@ -64,3 +64,4 @@ The default run takes about 4 s, `timing` about 5 s, the other modes about a sec
 - 2026-10-27, revision 2 (owner answers): per-side films (`Case.uaHot`, `uaCold`; parts 1 to 4 byte-identical), parts 5 to 6, the `PREDICTED`, `INFLIGHT` and `JOINT` schemes, and the `lowflow` mode (from a one-off probe). Summary: `documentation/2026-10-27-heat-exchanger-design/HX_FILMS_STUDY_REVIEW.md`.
 - 2026-10-27, revision 3 (owner Q10 to Q13): part 7 (the relay, planned at dispatch, three give-back splits, holds, controller; the controller's give-back offset was measured and removed). Parts 1 to 6 and both modes byte-identical. Summary: `documentation/2026-10-27-heat-exchanger-design/HX_ZERO_WALL_STUDY_REVIEW.md`.
 - 2026-10-27, revision 4 (study W3a): part 8 and the `timing` mode. Parts 1 to 7 and both older modes are byte-identical. Summary: `documentation/2026-10-27-heat-exchanger-design/HX_TIMING_STUDY_REVIEW.md`.
+- 2026-10-28: `review-probe/`, the owner-test probe of the review world (`OWNER_TEST_REVIEW.md`), detached from `build.gradle` and the fluid GameTest sources in `f20ceefa`.
