@@ -20,5 +20,5 @@ Status: In progress since 2026-10-28 (branch `claude/vigorous-bell-dab92b`, base
 ## Open items
 
 - Owner choice on options B, J and V (plan section 4).
-- Already on main, outside this batch: 16 quick-suite failures (`IChemE` creative tab static init in unit tests, one V3 cascade test), review section 8.
+- Resolved 2026-10-28 on this branch: main's 16 quick-suite failures (review section 8), batch [2026-10-28-main-test-repair](../2026-10-28-main-test-repair/README.md) (`3f7df293`). With it, `test` 1654/1654, `slowGates` 188/188 and fluid GameTests 37/37 on `3f7df293`.
 - The heat exchanger batch's review world places an old `FLUID_PUMP`; that batch moves it to an in-line pump after this lands.
