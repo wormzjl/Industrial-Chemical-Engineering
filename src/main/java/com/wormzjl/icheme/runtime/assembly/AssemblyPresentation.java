@@ -58,7 +58,7 @@ public final class AssemblyPresentation<V> {
         });
     }
 
-    /** A GUI closed: the session and its queued command end. */
+    /** A GUI closed: the session ends; a press it queued still runs on its bucket (PresentationMailbox). */
     public void close(V viewer) {
         mailbox.remove(viewer);
         sent.remove(viewer);

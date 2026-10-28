@@ -137,13 +137,14 @@ class AssemblyPresentationTest {
         assertTrue(host.sent.isEmpty());
         presentation.tick(BUCKET);
         assertEquals(List.of(Map.entry(a, AssemblyView.NOT_VALIDATED)), host.sent);
-        // A session no longer valid (the player walked away) is dropped at its bucket with its queued press.
+        // A session no longer valid (the player walked away) is dropped at its bucket; the press it queued still runs
+        // (owner decision 2026-10-28: closing ends the subscription, not the input), and nothing is sent to it.
         host.sent.clear();
         presentation.validate(a, BUCKET + 1);
         host.closed.add(a);
         presentation.tick(2 * BUCKET);
         assertTrue(host.sent.isEmpty());
-        assertEquals(List.of(), host.validations);
+        assertEquals(List.of(COLUMN), host.validations);
         assertEquals(0, presentation.sessions());
         // With no session, nothing is sent, whatever changes.
         host.views.put(COLUMN, checked(9));

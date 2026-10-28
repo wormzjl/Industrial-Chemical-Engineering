@@ -19,6 +19,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
 import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
+import com.wormzjl.icheme.client.gui.screens.inventory.ColumnTemplates;
 import com.wormzjl.icheme.network.EquipmentNetwork;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
@@ -59,7 +60,9 @@ import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
  * paint have pages of their own (owner requests 2026-10-16). It edits a local draft; the server receives the design when
  * the screen closes, or with a build request on Build. A column is imported whole (its diameter, trays, feed, draws,
  * pumparounds, steam and components) from the design saved in the nearest column calculator and built from it only
- * (batch 2026-10-26-multi-machine-framework); its schematic is the calculator's ({@link ColumnDiagram}), on the HMI glass
+ * (batch 2026-10-26-multi-machine-framework), or made from a column template on its Templates page (the calculator's
+ * library: the bundled templates and the player's own, {@link ColumnTemplates}; owner request 2026-10-28); its
+ * schematic is the calculator's ({@link ColumnDiagram}), on the HMI glass
  * beside the world. A bottom outlet leaving through a skirt turns to the sides its form allows (owner request
  * 2026-10-25, {@link EquipmentShape#outlets}): a standing drum's on its Nozzles page, a trickle-bed reactor's on its
  * design page. A column's side nozzles take their sides by themselves; its Nozzles page turns any of them to a side
@@ -71,9 +74,9 @@ import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
  * or where it stands rebuilds the page.
  */
 public final class EquipmentConstructorScreen extends Screen {
-    /** The screen's pages: what to build, its design, a drum's side connections, a column's side nozzles and the paint. */
+    /** The screen's pages: what to build, its design, a drum's side connections, a column's side nozzles, the paint and a column's templates. */
     private enum Page {
-        CHOOSE, DESIGN, CONNECTIONS, NOZZLES, PAINT
+        CHOOSE, DESIGN, CONNECTIONS, NOZZLES, PAINT, TEMPLATES
     }
 
     /** The schematic's width on its glass: the steam lines (90 pixels left of the axis) to the draw marks (39 right of it), and margins. */
@@ -126,6 +129,8 @@ public final class EquipmentConstructorScreen extends Screen {
     private boolean importing;
     /** Why the last import brought no design, on the status line until the next edit; null otherwise. */
     private @Nullable Component refused;
+    /** The column templates the Templates page lists, read again each time it opens. */
+    private ColumnTemplates.Library templates = new ColumnTemplates.Library(List.of(), 0);
     private boolean sent;
 
     public EquipmentConstructorScreen(BlockPos position, Direction facing, Design design) {
@@ -275,7 +280,21 @@ public final class EquipmentConstructorScreen extends Screen {
                         EquipmentConstructorScreen::tr);
             }
             case PAINT -> ConstructorColumn.paint(channel, EquipmentConstructorScreen::tr);
+            case TEMPLATES -> ConstructorColumn.templates(templateKeys(), templates.unreadable(), EquipmentConstructorScreen::tr);
         };
+    }
+
+    /** The templates as their page lists them: a name cut to its key (its hover says it whole), whether it builds a column and why not. */
+    private List<ConstructorColumn.Template> templateKeys() {
+        var m = GuiCanvas.measure(font);
+        var out = new ArrayList<ConstructorColumn.Template>();
+        String k = ConstructorColumn.KEY;
+        for (var template : templates.templates()) {
+            String hint = template.usable() ? tr(k + (template.bundled() ? "template.bundled" : "template.own"), template.name())
+                    : tr(k + "template.unusable", template.name(), template.problem());
+            out.add(new ConstructorColumn.Template(m.cut(template.name(), ConstructorColumn.WIDTH - 12), template.usable(), hint));
+        }
+        return out;
     }
 
     @Override
@@ -304,7 +323,7 @@ public final class EquipmentConstructorScreen extends Screen {
             var button = addRenderableWidget(SkinButton.of(spec, footer.get(i), this::act, EquipmentConstructorScreen::skin));
             if (spec.key().equals("build")) build = button.primary(true);
         }
-        if (page == Page.DESIGN || page == Page.CHOOSE) {
+        if (page == Page.DESIGN || page == Page.CHOOSE || page == Page.TEMPLATES) {
             String key = page == Page.DESIGN ? "change" : "back";
             var spec = new Column.Button(key, tr(ConstructorColumn.KEY + key), true, tr(ConstructorColumn.KEY + key + ".hint"));
             addRenderableWidget(SkinButton.of(spec, ConstructorColumn.TITLE_KEY, this::act, EquipmentConstructorScreen::skin));
@@ -374,6 +393,11 @@ public final class EquipmentConstructorScreen extends Screen {
             case "paint" -> show(Page.PAINT);
             case "build" -> build();
             case "import" -> importColumn();
+            case "templates" -> {
+                templates = ColumnTemplates.load(minecraft);
+                show(Page.TEMPLATES);
+            }
+            case "template" -> loadTemplate(Integer.parseInt(at));
             case "axis" -> {
                 form = at.equals("crosswise") ? VesselPlacement.Form.CROSSWISE : VesselPlacement.Form.LENGTHWISE;
                 refresh();
@@ -672,7 +696,23 @@ public final class EquipmentConstructorScreen extends Screen {
     }
 
     /**
-     * The server's answer to an import. An open screen for that constructor stops waiting: it takes the imported design
+     * Sends the draft, then column template {@code index}: the server makes its design ({@code ColumnDesign.of}) and
+     * answers as an import does ({@link #answered}); the design page waits for it.
+     */
+    private void loadTemplate(int index) {
+        if (index < 0 || index >= templates.templates().size()) return;
+        var template = templates.templates().get(index);
+        if (!template.usable()) return;
+        importing = true;
+        refused = null;
+        saved = design();
+        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.KEEP);
+        EquipmentNetwork.sendTemplate(position, template.name(), template.input());
+        show(Page.DESIGN);
+    }
+
+    /**
+     * The server's answer to an import or a template. An open screen for that constructor stops waiting: it takes the imported design
      * whole (the draft it sent with the calculator's column), or shows why there is none on its status line. The message
      * goes to chat when a design came, or when no such screen is open.
      */

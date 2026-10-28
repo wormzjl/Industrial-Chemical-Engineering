@@ -168,7 +168,8 @@ public final class ConstructorColumn {
 
     /**
      * What to build: the groups as a latched selector, three a row, then the shown group's kinds, one a row, the draft's
-     * latched (Back, right of the title, returns to its design). A kind's hover gives its full name and what it is. Keys:
+     * latched. The draft's kind still acts: pressed, it returns to its design, as Back right of the title does (owner
+     * report 2026-10-28: the green kind could not be pressed). A kind's hover gives its full name and what it is. Keys:
      * {@code category:<category>}, {@code kind:<equipment>}.
      */
     public static Page choose(Category shown, Equipment current, HeatControlColumn.Texts t) {
@@ -186,9 +187,31 @@ public final class ConstructorColumn {
         for (var e : Equipment.values()) {
             if (e.category != shown) continue;
             String key = KEY + "equipment." + e.key();
-            rows.add(new Column.Buttons(List.of(position("kind:" + e.key(), t.get(key + ".short"), e == current, t.get(key) + "\n" + t.get(key + ".hint")))));
+            rows.add(new Column.Buttons(List.of(new Column.Button("kind:" + e.key(), t.get(key + ".short"), true, t.get(key) + "\n" + t.get(key + ".hint"), e == current))));
         }
         return new Page(List.of(new Column.Group(t.get(KEY + "group.equipment"), t.get(KEY + "group.equipment.hint"), rows)), List.of(), false);
+    }
+
+    // ---- The column templates ----
+
+    /** A column template as its page lists it: its name (cut to the column by the screen), whether it builds a column, its hover. */
+    public record Template(String name, boolean usable, String hint) {
+    }
+
+    /**
+     * A column's templates (owner request 2026-10-28: "it should allow default templates"): one key a row, the bundled
+     * templates first, then the player's; a template that builds no column is off, its hover saying why. Then a warning
+     * where files could not be read. Back, right of the title, returns to the design. Keys: {@code template:<index>}.
+     */
+    public static Page templates(List<Template> templates, int unreadable, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        for (int i = 0; i < templates.size(); i++) {
+            var template = templates.get(i);
+            rows.add(new Column.Buttons(List.of(new Column.Button("template:" + i, template.name(), template.usable(), template.hint()))));
+        }
+        if (templates.isEmpty()) rows.add(new Column.Line(t.get(KEY + "templates.none"), Palette.MUTED));
+        if (unreadable > 0) rows.add(new Column.Line(t.get(KEY + "templates.unreadable", unreadable), Palette.WARN));
+        return new Page(List.of(new Column.Group(t.get(KEY + "group.templates"), t.get(KEY + "group.templates.hint"), rows)), List.of(), false);
     }
 
     // ---- The design page ----
@@ -219,10 +242,10 @@ public final class ConstructorColumn {
 
     /**
      * The design page: Size (the form's sizes and its support; a column's imported diameter, trays and feed tray shown,
-     * with Import), a unit's Bottom outlet where its design turns it, then Place (a lying drum's axis, then forward, right
+     * with Import and Templates), a unit's Bottom outlet where its design turns it, then Place (a lying drum's axis, then forward, right
      * and up). Footer: a drum's or a column's Nozzles, Paint, Build. Keys: the settings {@code size}, {@code length},
      * {@code support}, {@code parallel}, {@code series}, {@code forward}, {@code right}, {@code up} (their steppers
-     * {@code <key>-} and {@code <key>+}); {@code import}; {@code axis:lengthwise}, {@code axis:crosswise};
+     * {@code <key>-} and {@code <key>+}); a column's {@code import} and {@code templates}; {@code axis:lengthwise}, {@code axis:crosswise};
      * {@code outlet:<turn>}.
      */
     public static Page design(Design in, HeatControlColumn.Texts t) {
@@ -243,7 +266,8 @@ public final class ConstructorColumn {
                 size.add(shown("trays", "trays", Integer.toString(c.trays()), "", t));
                 size.add(shown("feed", "feed", Integer.toString(c.feed()), "", t));
                 size.add(step("support", "skirt", support, "m", t));
-                size.add(new Column.Buttons(List.of(new Column.Button("import", t.get(KEY + "import"), true, t.get(KEY + "import.hint", in.reach())))));
+                size.add(new Column.Buttons(List.of(new Column.Button("import", t.get(KEY + "import"), true, t.get(KEY + "import.hint", in.reach())),
+                        new Column.Button("templates", t.get(KEY + "templates"), true, t.get(KEY + "templates.hint")))));
             }
             case AIR_COOLER -> {
                 // A bay's width × length in m, without spaces: it stands whole in the box.

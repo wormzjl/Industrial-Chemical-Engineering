@@ -23,13 +23,26 @@ class PresentationMailboxTest {
         box.tick(100, key -> true, key -> {});
         assertEquals(List.of("first"), log);
     }
-    @Test void closedSessionsExpireTheirUnsentCommands() {
-        var box = new PresentationMailbox<String>();
-        box.submit("closed", 0, () -> fail("closed session acted"));
+    @Test void aClosedSessionsAcceptedCommandStillRunsOnItsBucket() {
+        var box = new PresentationMailbox<String>(); var log = new ArrayList<String>();
+        box.submit("closed", 0, () -> log.add("input"));
         box.tick(100, key -> false, key -> fail("closed session published"));
+        assertEquals(List.of("input"), log, "closing ends the subscription, not the input");
         assertEquals(0, box.size()); assertEquals(Long.MAX_VALUE, box.nextTick());
         box.subscribe("reopened", 8137);
         assertEquals(8200, box.nextTick(), "restored engine epoch, not wall-clock or a new zero epoch");
+    }
+    @Test void aRemovedSessionsCommandKeepsItsBucket() {
+        var box = new PresentationMailbox<String>(); var log = new ArrayList<String>();
+        box.submit("saved", 0, () -> log.add("save"));
+        box.remove("saved");
+        assertEquals(100, box.nextTick(), "the command still waits for its bucket");
+        box.subscribe("reopened", 40);
+        assertEquals(100, box.nextTick(), "a new session keeps that bucket");
+        box.tick(100, key -> true, key -> log.add("view-" + key));
+        assertEquals(List.of("save", "view-reopened"), log);
+        box.remove("reopened");
+        assertEquals(Long.MAX_VALUE, box.nextTick());
     }
     @Test void terminalEventCanPublishOnTheNextEngineTick() {
         var box = new PresentationMailbox<String>(); var log = new ArrayList<String>();

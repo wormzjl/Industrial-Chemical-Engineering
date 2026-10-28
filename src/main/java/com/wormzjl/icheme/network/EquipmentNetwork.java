@@ -1,6 +1,8 @@
 package com.wormzjl.icheme.network;
 
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
@@ -31,10 +33,11 @@ import java.util.Optional;
  * Equipment protocol {@value #PROTOCOL}: the constructor screen sends its design with what to do with it: keep it (the
  * screen closes), build it (Build) or import the nearest column calculator's design onto it (Import). Placing a vessel is
  * a world edit, like placing blocks; it involves no process state, so the server answers at once in chat. An import reads
- * the calculator's saved design (nothing is solved) and always answers the requesting player ({@link ImportAnswer}).
+ * the calculator's saved design (nothing is solved) and always answers the requesting player ({@link ImportAnswer}); so
+ * does a column template ({@link TemplatePayload}, protocol 14).
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-13";
+    public static final String PROTOCOL = "equipment-14";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
     /** A column calculator is imported from within this many blocks of the constructor. */
@@ -127,9 +130,37 @@ public final class EquipmentNetwork {
         }
     }
 
+    /**
+     * Client to server: a column template for a constructor (owner request 2026-10-28), sent after the screen's draft
+     * ({@link Action#KEEP}): its name as shown, and its input, the calculator's default input with the template's column
+     * settings. The server makes the design from it ({@link ColumnDesign#of}, an air cooler and standard pumps), as a
+     * calculator's Save design does, and answers as an import does ({@link ImportAnswer}).
+     */
+    public record TemplatePayload(BlockPos position, String name, V3ColumnInput input) implements CustomPacketPayload {
+        public static final int MAX_NAME = 128;
+        public static final Type<TemplatePayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_template"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, TemplatePayload> STREAM_CODEC = new StreamCodec<>() {
+            public TemplatePayload decode(RegistryFriendlyByteBuf b) {
+                return new TemplatePayload(b.readBlockPos(), b.readUtf(MAX_NAME), ColumnV3Network.readInput(b));
+            }
+
+            public void encode(RegistryFriendlyByteBuf b, TemplatePayload p) {
+                b.writeBlockPos(p.position);
+                b.writeUtf(p.name, MAX_NAME);
+                ColumnV3Network.writeInput(b, p.input);
+            }
+        };
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public static void register(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
         registrar.playToServer(ConstructorPayload.TYPE, ConstructorPayload.STREAM_CODEC, EquipmentNetwork::constructor);
+        registrar.playToServer(TemplatePayload.TYPE, TemplatePayload.STREAM_CODEC, EquipmentNetwork::template);
         registrar.playToClient(ImportAnswer.TYPE, ImportAnswer.STREAM_CODEC, (answer, context) -> com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.answered(
                 answer.position(), answer.message(), answer.design().map(tag -> EquipmentConstructorBlockEntity.readDesign(tag, EquipmentConstructorBlockEntity.Design.fresh(), repair -> {
                 }))));
@@ -226,6 +257,34 @@ public final class EquipmentNetwork {
         var column = design.column();
         // The calculator's numbering: its trays and the condenser and reboiler.
         answer(player, at, Component.translatable("message.icheme.equipment.imported", column.trays().trays() + 2, column.trays().feed() + 1, column.diameter()), design);
+    }
+
+    /** Client: send a column template for the constructor at {@code position}, after its draft. */
+    public static void sendTemplate(BlockPos position, String name, V3ColumnInput input) {
+        String shown = name.length() > TemplatePayload.MAX_NAME ? name.substring(0, TemplatePayload.MAX_NAME) : name;
+        PacketDistributor.sendToServer(new TemplatePayload(position, shown, input));
+    }
+
+    /** Makes the template's column design and sets it on the constructor's design, as an import does; always answered. */
+    private static void template(TemplatePayload payload, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+        var at = payload.position();
+        var constructor = editable(player, at);
+        if (constructor == null) {
+            answer(player, at, Component.translatable("message.icheme.equipment.not_editable"), null);
+            return;
+        }
+        ColumnDesign column;
+        try {
+            column = ColumnDesign.of(payload.input(), ColumnComponents.Choices.DEFAULT.fit(payload.input().pumparounds().size()));
+        } catch (IllegalArgumentException refused) {
+            answer(player, at, Component.translatable("message.icheme.equipment.template_refused", payload.name(), refused.getMessage()), null);
+            return;
+        }
+        var design = constructor.design().imported(column);
+        constructor.apply(design);
+        // The calculator's numbering: its trays and the condenser and reboiler.
+        answer(player, at, Component.translatable("message.icheme.equipment.template", payload.name(), column.trays().trays() + 2, column.trays().feed() + 1, column.diameter()), design);
     }
 
     /** Answers an import: the message, and the constructor's design when one was imported (null: nothing was). */

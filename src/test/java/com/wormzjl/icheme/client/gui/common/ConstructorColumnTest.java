@@ -86,7 +86,32 @@ class ConstructorColumnTest {
         for (var role : ROLES)
             for (boolean turned : new boolean[]{false, true}) out.add(new Case("nozzle " + role + " " + turned, ConstructorColumn.nozzles(nozzles(role, !turned, turned, 14), t)));
         for (int channel : new int[]{0, 1}) out.add(new Case("paint " + channel, ConstructorColumn.paint(channel, t)));
+        out.add(new Case("templates", ConstructorColumn.templates(TEMPLATES, 0, t)));
+        out.add(new Case("no templates, files unreadable", ConstructorColumn.templates(List.of(), 3, t)));
         return out;
+    }
+
+    /** The Templates page as the screen fills it: the bundled crude templates and the pot (off), then one of the player's. */
+    private static final List<ConstructorColumn.Template> TEMPLATES = List.of(new ConstructorColumn.Template("Bonga", true, "Bonga, bundled"),
+            new ConstructorColumn.Template("Tia Juana Light (default)", true, "bundled"), new ConstructorColumn.Template("WTI Light - Export", true, "bundled"),
+            new ConstructorColumn.Template("Two-tray pot", false, "builds no column"), new ConstructorColumn.Template("My column", true, "yours"));
+
+    @Test
+    void theTemplatesPageListsEveryTemplateAKeyARowTheUnusableOff() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        var page = ConstructorColumn.templates(TEMPLATES, 0, t);
+        var keys = buttons(page);
+        assertEquals(List.of("template:0", "template:1", "template:2", "template:3", "template:4"), List.copyOf(keys.keySet()));
+        assertFalse(keys.get("template:3").active(), "a template that builds no column is off");
+        assertTrue(keys.get("template:4").active() && !keys.get("template:4").latched());
+        assertEquals("builds no column", keys.get("template:3").hint());
+        assertTrue(page.footer().isEmpty() && !page.display(), "Back by the title, no footer, no message display");
+        var empty = ConstructorColumn.templates(List.of(), 2, t);
+        assertEquals(List.of(t.get(ConstructorColumn.KEY + "templates.none"), t.get(ConstructorColumn.KEY + "templates.unreadable", 2)),
+                ((Column.Group) empty.rows().getFirst()).rows().stream().map(r -> ((Column.Line) r).text()).toList());
+        var column = buttons(ConstructorColumn.design(design(Form.COLUMN, 2, 20, 3, 3, 0, 0), t));
+        assertTrue(column.get("import").active() && column.get("templates").active(), "a column's Templates beside its Import");
+        assertFalse(buttons(ConstructorColumn.design(design(Form.VERTICAL, 2, 6, 3, 3, 0, 0), t)).containsKey("templates"), "a drum has no templates");
     }
 
     @Test
@@ -97,7 +122,7 @@ class ConstructorColumnTest {
         var keys = new ArrayList<>(List.of("change", "change.hint", "importing", "import_needed", "standing", "blocked", "extent", "cells", "volume", "volume.hint",
                 "status.hint", "clash.hint", "nozzle.status.hint", "nozzle.unplaced", "nozzle.sump_out", "nozzle.over", "nozzle.under_in", "nozzle.under_out",
                 "schematic.feed", "schematic.draws", "schematic.extras", "paint.swatch", "clash.connection", "clash.vapour", "clash.liquid", "clash.saddle",
-                "clash.ground", "clash.manway", "clash.boot"));
+                "clash.ground", "clash.manway", "clash.boot", "template.bundled", "template.own", "template.unusable"));
         for (var e : Equipment.values()) keys.add("equipment." + e.key() + ".hint");
         for (var key : keys) texts.get(ConstructorColumn.KEY + key, "1", "2");
         assertEquals(Set.of(), texts.missing);
@@ -198,7 +223,8 @@ class ConstructorColumnTest {
         assertEquals(List.of("category:vessels", "category:heat", "category:machines", "category:reactors", "category:solid_fuel", "kind:vertical_drum", "kind:horizontal_drum",
                 "kind:column", "kind:floating_roof_tank", "kind:sphere", "kind:adsorber", "kind:cyclone"), List.copyOf(choose.keySet()));
         assertTrue(choose.get("category:vessels").latched() && !choose.get("category:vessels").active() && choose.get("category:heat").active());
-        assertTrue(choose.get("kind:column").latched() && !choose.get("kind:column").active() && choose.get("kind:sphere").active());
+        assertTrue(choose.get("kind:column").latched() && choose.get("kind:column").active() && choose.get("kind:sphere").active() && !choose.get("kind:sphere").latched(),
+                "the draft's kind latched, and still pressed to return to its design");
         var elsewhere = buttons(ConstructorColumn.choose(Category.HEAT, Equipment.COLUMN, t));
         assertTrue(elsewhere.values().stream().filter(b -> b.key().startsWith("kind:")).noneMatch(Column.Button::latched), "the draft's kind latched only in its group");
         for (var category : Category.values())

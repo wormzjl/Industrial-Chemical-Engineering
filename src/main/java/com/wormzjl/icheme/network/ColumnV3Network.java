@@ -22,7 +22,6 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
-import com.wormzjl.icheme.world.inventory.ColumnCalculatorV3Menu;
 import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
@@ -138,9 +137,9 @@ public final class ColumnV3Network {
             reject(context, payload.blockPos(), payload.clientNonce(), "REJECTED_CONTEXT");
             return;
         }
+        // The screen was open when the request came (ColumnPresentation.queue); it may have closed since.
         ColumnCalculatorV3BlockEntity calculator = resolveCalculator(player, payload.blockPos());
-        if (calculator == null || !(player.containerMenu instanceof ColumnCalculatorV3Menu menu)
-                || !menu.blockPos().equals(payload.blockPos()) || !menu.stillValid(player)) {
+        if (calculator == null) {
             reject(context, payload.blockPos(), payload.clientNonce(), "REJECTED_CONTEXT");
             return;
         }
@@ -184,9 +183,9 @@ public final class ColumnV3Network {
             reject(context, payload.blockPos(), payload.clientNonce(), "REJECTED_CONTEXT");
             return;
         }
+        // Stored even when the screen closed after Save (owner decision 2026-10-28): the screen was open when it came.
         ColumnCalculatorV3BlockEntity calculator = resolveCalculator(player, payload.blockPos());
-        if (calculator == null || !(player.containerMenu instanceof ColumnCalculatorV3Menu menu)
-                || !menu.blockPos().equals(payload.blockPos()) || !menu.stillValid(player)) {
+        if (calculator == null) {
             reject(context, payload.blockPos(), payload.clientNonce(), "REJECTED_CONTEXT");
             return;
         }

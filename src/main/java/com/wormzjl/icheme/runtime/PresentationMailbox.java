@@ -10,7 +10,9 @@ import java.util.function.Predicate;
 
 /**
  * Owner-thread session commands and presentation at 100 online-tick deadlines.
- * At most one unacknowledged command per session. Closing a session expires its unsent command.
+ * At most one unacknowledged command per session. A command the host accepted runs on its bucket even when its session
+ * closed first: closing ends the subscription, not the input (owner decision 2026-10-28; a column calculator's Save
+ * design pressed just before its screen closed was lost, and the constructor then found no design to import).
  * No wall clock, worker access, or per-tick scan. The host persists the online epoch.
  */
 public final class PresentationMailbox<K> {
@@ -22,7 +24,7 @@ public final class PresentationMailbox<K> {
 
     public void subscribe(K key, long now) {
         owned();
-        if (viewers.isEmpty()) next = Math.addExact(now, PERIOD - Math.floorMod(now, PERIOD));
+        if (viewers.isEmpty() && pending.isEmpty()) next = Math.addExact(now, PERIOD - Math.floorMod(now, PERIOD));
         viewers.add(key);
     }
 
@@ -37,24 +39,28 @@ public final class PresentationMailbox<K> {
         return accepted;
     }
 
+    /** Ends a session's subscription; a command it sent still runs on its bucket. */
     public void remove(K key) {
-        owned(); viewers.remove(key); pending.remove(key);
-        if (viewers.isEmpty()) next = Long.MAX_VALUE;
+        owned(); viewers.remove(key);
+        idle();
     }
 
     public void tick(long now, Predicate<K> valid, Consumer<K> publish) {
         owned();
         if (now < next) return;
         next = Math.addExact(now, PERIOD - Math.floorMod(now, PERIOD));
-        // Run all inputs before publishing, so concurrent viewers see one settled bucket.
+        // Run every accepted input, of open and closed sessions alike, in the order they came, before publishing, so
+        // concurrent viewers see one settled bucket. Only open sessions are published to.
+        for (K key : List.copyOf(pending.keySet())) pending.remove(key).run();
         for (K key : List.copyOf(viewers)) {
-            if (!valid.test(key)) { remove(key); continue; }
-            Runnable action = pending.remove(key);
-            if (action != null) action.run();
+            if (valid.test(key)) publish.accept(key); else viewers.remove(key);
         }
-        for (K key : List.copyOf(viewers)) {
-            if (valid.test(key)) publish.accept(key); else remove(key);
-        }
+        idle();
+    }
+
+    /** With no session and no command left, no bucket is due. */
+    private void idle() {
+        if (viewers.isEmpty() && pending.isEmpty()) next = Long.MAX_VALUE;
     }
 
     public long nextTick() { owned(); return next; }
@@ -62,7 +68,7 @@ public final class PresentationMailbox<K> {
     /** Requests one prompt publication on the next engine tick without changing the normal cadence afterwards. */
     public void requestImmediate() {
         owned();
-        if (!viewers.isEmpty()) next = 0;
+        if (!viewers.isEmpty() || !pending.isEmpty()) next = 0;
     }
     private void owned() {
         if (Thread.currentThread() != owner) throw new IllegalStateException("Presentation belongs to the server thread");

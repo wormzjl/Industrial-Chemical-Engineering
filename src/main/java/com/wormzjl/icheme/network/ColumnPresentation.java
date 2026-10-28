@@ -43,9 +43,13 @@ final class ColumnPresentation {
         queue(context, pos, nonce, action, true);
     }
 
+    /**
+     * A request is taken only from a player whose calculator screen is open on {@code pos} and within reach; once taken,
+     * it runs on its bucket even if the screen closes first (PresentationMailbox), so its action does not ask again.
+     */
     private static void queue(IPayloadContext context, BlockPos pos, long nonce, Runnable action, boolean immediate) {
         if (!(context.player() instanceof ServerPlayer player)
-                || !(player.containerMenu instanceof ColumnCalculatorV3Menu menu) || !menu.blockPos().equals(pos)) return;
+                || !(player.containerMenu instanceof ColumnCalculatorV3Menu menu) || !menu.blockPos().equals(pos) || !menu.stillValid(player)) return;
         var engine = FluidWorldAuthority.find(player.getServer());
         if (engine.isEmpty()) return; // No active simulation may accept a command.
         var host = SERVERS.computeIfAbsent(player.getServer(), ignored -> new ColumnPresentation());

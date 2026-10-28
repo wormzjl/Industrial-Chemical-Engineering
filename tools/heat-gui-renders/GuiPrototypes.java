@@ -129,7 +129,7 @@ public final class GuiPrototypes {
         var tabSlots = CalculatorColumn.tabSlots(d.w);
         for (int i = 0; i < tabs.size(); i++) {
             var spec = tabs.get(i);
-            d.skin.button(d.c, tabSlots.get(i), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+            d.skin.button(d.c, tabSlots.get(i), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
         }
         var status = CalculatorColumn.status(new CalculatorColumn.StatusInput(false, false, "", "", false, false, false, null, true, false, null), t);
         d.skin.status(d.c, CalculatorColumn.display(d.w), status.text(), status.palette());
@@ -179,7 +179,7 @@ public final class GuiPrototypes {
                 List<Column.Button> specs = p.row() instanceof Column.Buttons b ? b.buttons() : p.row() instanceof Column.Setting st && st.steps() ? List.of(st.minus(), st.plus()) : List.of();
                 for (var spec : specs) {
                     var r = p.slots().get(spec.key());
-                    if (view.visible(r)) d.skin.button(d.c, view.onScreen(r), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+                    if (view.visible(r)) d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
                 }
                 if (p.row() instanceof Column.Field f && view.visible(p.slots().get(f.key())))
                     d.skin.field(d.c, view.onScreen(p.slots().get(f.key())), CALCULATOR.getOrDefault(f.key(), ""), "", false);
@@ -274,7 +274,7 @@ public final class GuiPrototypes {
         var tabSlots = AssemblyColumn.tabSlots(d.w);
         for (int i = 0; i < tabs.size(); i++) {
             var spec = tabs.get(i);
-            d.skin.button(d.c, tabSlots.get(i), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+            d.skin.button(d.c, tabSlots.get(i), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
         }
         var status = AssemblyColumn.status(new AssemblyView(AssemblyView.Status.CHECKED, report, AssemblyReport.NONE), at -> "?", t);
         d.skin.status(d.c, AssemblyColumn.display(d.w), status.text(), status.palette());
@@ -325,7 +325,21 @@ public final class GuiPrototypes {
         var nozzles = ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(7, 2, new ConstructorColumn.Nozzle("pumparound_draw", 1, true, "18.5",
                 new UnitDesign.Line("nozzle.under_out", 12), false, 3, 1), STANDING, 0), DIALOG);
         String volume = DIALOG.get(CONSTRUCTOR + "volume", "20.9", "46.4");
+        // A column's design page with Import and Templates, and its Templates page: the bundled templates, the pot off, one of the player's.
+        var columnDesign = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.COLUMN, 8, 6, 10, 3, 0, 0, new ProcessUnit.Bank(1, 1),
+                new ConstructorColumn.Imported(8, 42, 38), outlet, 16), DIALOG);
+        var templates = new ArrayList<ConstructorColumn.Template>();
+        for (var name : List.of("Bonga", "Cold Lake Blend", "Dalia", "Tia Juana Light (default)", "Upper Zakum", "WTI Light - Export"))
+            templates.add(new ConstructorColumn.Template(name, true, DIALOG.get(CONSTRUCTOR + "template.bundled", name)));
+        templates.add(new ConstructorColumn.Template("Two-tray pot", false, DIALOG.get(CONSTRUCTOR + "template.unusable", "Two-tray pot", "a column needs a tray")));
+        templates.add(new ConstructorColumn.Template("My vacuum column", true, DIALOG.get(CONSTRUCTOR + "template.own", "My vacuum column")));
+        var templatePage = ConstructorColumn.templates(templates, 0, DIALOG);
         return List.of(
+                new Prototype("equipment-constructor-column-design", 464, 254, (d, s) -> {
+                    constructorDoor(d, columnDesign, "Distillation column", "change", DIALOG.get(CONSTRUCTOR + "volume", "1696.5", "792.7"), Palette.ACCENT, Map.of());
+                    columnDrawing(d, d.well(new Rect(d.w - 16 - 140, 16, 152, d.h - 32)));
+                }, true),
+                new Prototype("equipment-constructor-templates", 464, 254, (d, s) -> constructorDoor(d, templatePage, "Distillation column", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor-choose", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.VESSELS,
                         ConstructorColumn.Equipment.VERTICAL_DRUM, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor", 464, 254, (d, s) -> constructorDoor(d, drum, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
@@ -382,7 +396,7 @@ public final class GuiPrototypes {
             List<Column.Button> specs = p.row() instanceof Column.Buttons b ? b.buttons() : p.row() instanceof Column.Setting st && st.steps() ? List.of(st.minus(), st.plus()) : List.of();
             for (var spec : specs) {
                 var r = p.slots().get(spec.key());
-                if (view.visible(r)) d.skin.button(d.c, view.onScreen(r), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+                if (view.visible(r)) d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
             }
             if (p.row() instanceof Column.Field f && view.visible(p.slots().get(f.key())))
                 d.skin.field(d.c, view.onScreen(p.slots().get(f.key())), values.getOrDefault(f.key(), ""), "", false);
@@ -527,7 +541,7 @@ public final class GuiPrototypes {
                     var r = p.slots().get(spec.key());
                     if (!view.visible(r)) continue;
                     if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), false);
-                    else d.skin.button(d.c, view.onScreen(r), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+                    else d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
                 }
         }
         d.c.unclip();
@@ -750,7 +764,7 @@ public final class GuiPrototypes {
                 if (p.row() instanceof Column.Field f) skin.field(c, p.slots().get(f.key()), values.getOrDefault(f.key(), ""), "off", false);
                 else if (p.row() instanceof Column.Buttons b)
                     for (var spec : b.buttons())
-                        skin.button(c, p.slots().get(spec.key()), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+                        skin.button(c, p.slots().get(spec.key()), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
                 else if (p.row() instanceof Column.Setting st && st.steps())
                     for (var spec : List.of(st.minus(), st.plus())) skin.button(c, p.slots().get(spec.key()), spec.text(), Skin.Press.REST, false);
             }

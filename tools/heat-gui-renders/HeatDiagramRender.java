@@ -454,7 +454,7 @@ public final class HeatDiagramRender {
                     for (var spec : b.buttons()) {
                         var r = p.slots().get(spec.key());
                         // The side shown and the switch's position are latched, as the screen marks them.
-                        var press = !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST;
+                        var press = spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST;
                         if (view.visible(r)) skin.button(canvas, view.onScreen(r), spec.text(), press, false);
                     }
                 }
