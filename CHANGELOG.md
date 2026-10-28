@@ -27,6 +27,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 ### Removed
 
 - The Holland Example 3-2 column preset, its server template and its separate solve path; its benchmark data and solver test stay (commit `c266a36c`, batch `2026-10-28-gui-toolkit`). A calculator block that saved it starts from the default column.
+- The heat batch's owner-test probe (the `reviewProbe` Gradle property, the probe and owner modes of `HeatExchangerReviewWorld`, the owner hook of `ColumnReviewWorld`), detached to `tools/heat-exchanger-design/review-probe/` with a patch to re-attach it (commits `f20ceefa`, `44ba7c7a`, batch `2026-10-27-heat-exchanger-design`).
 
 ## [0.16.2] - 2026-10-28
 
