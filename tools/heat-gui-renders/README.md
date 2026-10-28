@@ -34,7 +34,7 @@ It writes one sheet per screen to `tmp/gui-prototypes/`, both doors side by side
 
 - `HeatDiagramRender.java`: a single-file Java program (Java2D, headless). It lays the page out as `FluidDeviceScreen` does and draws it with the shipped code: `PanelSkin` for the page and the widgets, `HeatControlColumn` in layout C, `HeatFlowsheet`. Only the page's order of drawing and the illustrative readings are its own. Line parts cycle teal, yellow and red to show the legend's colours.
 - The English texts come from `en_us.json`; a key without a line is drawn as `?` and the key.
-- `GuiPrototypes.java`: proposed screens drawn through the same kit (`Column`, `PanelSkin`) and `HeatDiagramRender`'s font and canvas (the multi-file source launcher, JDK 22 or later). Its layouts are proposals for the owner, not the screens' code.
+- `GuiPrototypes.java`: proposed screens drawn through the same kit (`Column`, `PanelSkin`) and `HeatDiagramRender`'s font and canvas (the multi-file source launcher, JDK 22 or later). Its layouts are proposals for the owner, not the screens' code, except the fluid device pages: their door column is the shipped `DeviceColumn` at `FluidGuiLayout.side`, shown as opened and scrolled to its end, and the tool prints each column's height.
 
 ## History
 
@@ -47,3 +47,4 @@ It writes one sheet per screen to `tmp/gui-prototypes/`, both doors side by side
 - 2026-10-28, batch 2026-10-28-gui-toolkit: function groups (`GUI_TOOLKIT_PLAN.md` section 11). The tool builds the column with `HeatControlColumn.columns(input, texts)`, latches the switch's position from `Column.Button.latched`, and draws no view time.
 - 2026-10-28, batch 2026-10-28-gui-toolkit: `GuiPrototypes.java`, the other screens under the panel rules (`GUI_REVIEW.md`); `HeatDiagramRender`'s font, canvas and helpers are package-private for it. Both tools draw the footer's unit keys as display keys on their strip and the theme key as its contrast sign (`GUI_TOOLKIT_PLAN.md` section 12).
 - 2026-10-28, batch 2026-10-28-gui-toolkit: the prototypes draw entries as LCDs and readings (`Door.reading`, `Column.Reading`) as LED meters; option sheets for the display keys and the fields came and went with the owner's choices (`GUI_TOOLKIT_PLAN.md` sections 12 and 13).
+- 2026-10-28, batch 2026-10-28-gui-toolkit: the device pages (pump, generator, valve, tank, and a new pipe page) draw the shipped `DeviceColumn` through a `ScrollView` at the screen's geometry, opened and scrolled to the end (`Prototype.scrolls`, `Door.end`); a column's display key draws as one. `HeatDiagramRender.tr` writes a line with no arguments as it stands, so "Volume %" no longer throws (`GUI_TOOLKIT_PLAN.md` section 14).

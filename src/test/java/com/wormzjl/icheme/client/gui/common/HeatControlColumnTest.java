@@ -37,7 +37,7 @@ class HeatControlColumnTest {
     }
 
     /** The English lines, filled in as the game fills them; every key asked for is recorded, and a missing one too. */
-    private static final class Recording implements HeatControlColumn.Texts {
+    static final class Recording implements HeatControlColumn.Texts {
         final Set<String> asked = new TreeSet<>(), missing = new TreeSet<>();
 
         @Override
@@ -54,7 +54,8 @@ class HeatControlColumnTest {
                 missing.add(full);
                 return key;
             }
-            return String.format(java.util.Locale.ROOT, line, args);
+            // A line with no arguments reads as written, a bare "%" too ("Volume %"), as the game shows it.
+            return args.length == 0 ? line : String.format(java.util.Locale.ROOT, line, args);
         }
     }
 

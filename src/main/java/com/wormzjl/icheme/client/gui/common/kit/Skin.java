@@ -68,6 +68,30 @@ public interface Skin {
         centred(c, r, text, active ? 0xFFFFFFFF : 0xFFA0A0A0);
     }
 
+    /**
+     * A split bar {@code r}: {@code amounts} side by side in {@code colours}, each as wide as its share of their sum; empty
+     * while they sum to nothing. Here on a dark line.
+     */
+    default void split(Canvas c, Rect r, double[] amounts, int[] colours) {
+        c.fill(r.x(), r.y(), r.right(), r.bottom(), Palette.LINE);
+        splitFill(c, new Rect(r.x() + 1, r.y() + 1, r.w() - 2, r.h() - 2), amounts, colours);
+    }
+
+    /** The shares of a split bar inside {@code r}; the last ends at the right edge, so rounding leaves no gap. */
+    static void splitFill(Canvas c, Rect r, double[] amounts, int[] colours) {
+        double total = 0;
+        for (double a : amounts) total += Math.max(0, a);
+        if (!(total > 0)) return;
+        double at = 0;
+        int x = r.x();
+        for (int i = 0; i < amounts.length; i++) {
+            at += Math.max(0, amounts[i]);
+            int end = i == amounts.length - 1 ? r.right() : r.x() + (int) Math.round(r.w() * at / total);
+            if (end > x) c.fill(x, r.y(), end, r.bottom(), colours[i]);
+            x = Math.max(x, end);
+        }
+    }
+
     /** A sign a key shows instead of a word: the theme's contrast sign, a ring half filled. */
     enum Icon {
         THEME

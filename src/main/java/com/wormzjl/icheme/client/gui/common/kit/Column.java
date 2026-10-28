@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
  * correctly"): a text wider than its row wraps, and a button row whose texts do not fit side by side stacks its buttons.
  */
 public final class Column {
-    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Reading, Buttons, Bar, Gap {
+    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Reading, Buttons, Bar, Split, Gap {
     }
 
     /**
@@ -69,13 +69,33 @@ public final class Column {
     }
 
     /**
-     * A button: its key, text, whether a click acts, its hover (or null), and whether it is latched: the position a
-     * selector or a switch stands in (the side shown, Off or On), lit from behind.
+     * A button: its key, text, whether a click acts, its hover (or null), whether it is latched (the position a selector
+     * or a switch stands in: the side shown, Off or On; lit from behind), and whether it is a display key ({@link
+     * Skin#softKey}: a basis or a unit, which changes what the screen shows, not the plant).
      */
-    public record Button(String key, String text, boolean active, @Nullable String hint, boolean latched) {
+    public record Button(String key, String text, boolean active, @Nullable String hint, boolean latched, boolean soft) {
         public Button(String key, String text, boolean active, @Nullable String hint) {
-            this(key, text, active, hint, false);
+            this(key, text, active, hint, false, false);
         }
+
+        public Button(String key, String text, boolean active, @Nullable String hint, boolean latched) {
+            this(key, text, active, hint, latched, false);
+        }
+    }
+
+    /**
+     * Shares of a whole in one bar, each in its colour, over a legend of one share a line: its label at the left, its
+     * value at the right (a phase split). The legend's height is the shares' count, whatever their values, so rows
+     * under it keep their places; its hover (or null) says more.
+     */
+    public record Split(List<Share> shares, @Nullable String hint) implements Row {
+        public Split {
+            shares = List.copyOf(shares);
+        }
+    }
+
+    /** A share of a {@link Split}: its label, its value as shown, its amount, its colour. */
+    public record Share(String label, String value, double amount, int colour) {
     }
 
     /** A bar filled to {@code share} of its width. */
@@ -114,8 +134,10 @@ public final class Column {
     }
     /** A field row's label width: the row less the box, the unit and their gaps. */
     public static final int FIELD_TAIL = 76;
-    /** A unit's own width after the box; a wider unit narrows the box. */
+    /** A unit's own width after the box; a wider unit narrows the box, by {@link #UNIT_STEAL} at most. */
     public static final int UNIT = 15;
+    /** The most a unit takes from its box, which keeps five 7-segment digits; a unit wider still is the label's last line. */
+    public static final int UNIT_STEAL = 8;
 
     /**
      * A row as placed: its rect, its widget slots by key, the lines it draws, how many of them lead (a field's label;
@@ -153,8 +175,15 @@ public final class Column {
         return new Column(placed, new Rect(x, y, width, bottom - y));
     }
 
-    /** Places {@code rows} into {@code out}, a group before its own rows; returns the bottom. */
+    /**
+     * Places {@code rows} into {@code out}, a group before its own rows; returns the bottom. The entries and meters of one
+     * group share one arrangement (owner: "This Arrangement is not good", "Try to align them somehow"): every label
+     * beside its box, or every label above it; and one box width, so their units start in line.
+     */
     private static int place(List<? extends Row> rows, int x, int y, int w, Measure m, Metrics h, List<Placed> out) {
+        var labelled = rows.stream().filter(row -> row instanceof Field || row instanceof Reading).toList();
+        boolean beside = labelled.stream().allMatch(row -> beside(label(row), unit(row), w, m));
+        int steal = Math.clamp(labelled.stream().map(Column::unit).filter(unit -> !under(unit, m)).mapToInt(unit -> m.width(unit) - UNIT).max().orElse(0), 0, UNIT_STEAL);
         int at = y;
         for (var row : rows) {
             if (row instanceof Group g) {
@@ -166,7 +195,7 @@ public final class Column {
                 out.set(index, new Placed(g, new Rect(x, at, w, bottom + GROUP_GAP - at), Map.of(), title, title.size(), g.hint()));
                 at = bottom + GROUP_GAP;
             } else {
-                var p = place(row, x, at, w, m, h);
+                var p = place(row, x, at, w, m, h, beside, steal);
                 out.add(p);
                 at = p.rect().bottom();
             }
@@ -174,7 +203,32 @@ public final class Column {
         return at;
     }
 
-    private static Placed place(Row row, int x, int y, int w, Measure m, Metrics h) {
+    private static String label(Row row) {
+        return row instanceof Field f ? f.label() : ((Reading) row).label();
+    }
+
+    private static String unit(Row row) {
+        return row instanceof Field f ? f.unit() : ((Reading) row).unit();
+    }
+
+    /** Whether {@code unit} is wider than its place and what a box can spare: then it is the label's last line. */
+    private static boolean under(String unit, Measure m) {
+        return m.width(unit) > UNIT + UNIT_STEAL;
+    }
+
+    /** Whether a label (and a unit under it) fits beside its box: two lines at most, every word whole in the share. */
+    private static boolean beside(String label, String unit, int w, Measure m) {
+        int share = w - FIELD_TAIL;
+        var words = new ArrayList<>(List.of(label.split(" ")));
+        int lines = m.wrap(label, share).size();
+        if (under(unit, m)) {
+            words.add(unit);
+            lines++;
+        }
+        return lines <= 2 && words.stream().allMatch(word -> m.width(word) <= share);
+    }
+
+    private static Placed place(Row row, int x, int y, int w, Measure m, Metrics h, boolean beside, int steal) {
         var slots = new LinkedHashMap<String, Rect>();
         return switch (row) {
             case Line l -> {
@@ -190,8 +244,8 @@ public final class Column {
                 var lines = m.wrap(c.title(), w - 12);
                 yield new Placed(row, new Rect(x, y, w, h.line() + (lines.size() - 1) * Measure.LINE), slots, lines, lines.size(), c.hint());
             }
-            case Field f -> labelled(row, f.key(), f.label(), f.unit(), f.hint(), x, y, w, m, h);
-            case Reading r -> labelled(row, r.key(), r.label(), r.unit(), r.hint(), x, y, w, m, h);
+            case Field f -> labelled(row, f.key(), f.label(), f.unit(), f.hint(), x, y, w, m, h, beside, steal);
+            case Reading r -> labelled(row, r.key(), r.label(), r.unit(), r.hint(), x, y, w, m, h, beside, steal);
             case Buttons b -> {
                 // Side by side while every text fits its button; else one button a row, each the whole width.
                 int n = b.buttons().size(), bw = (w - BUTTON_GAP * (n - 1)) / n;
@@ -201,26 +255,33 @@ public final class Column {
                 yield new Placed(row, new Rect(x, y, w, stacked ? n * h.buttons() : h.buttons()), slots, List.of(), 0, null);
             }
             case Bar ignored -> new Placed(row, new Rect(x, y, w, h.bar()), slots, List.of(), 0, null);
+            case Split s -> {
+                // The bar, 8 px, then one legend line a share; a label cut only where a row is narrower than a share's
+                // label and value side by side.
+                var texts = new ArrayList<String>();
+                for (var share : s.shares()) texts.add(m.cut(share.label(), Math.max(0, w - 12 - m.width(share.value()) - 6)));
+                yield new Placed(row, new Rect(x, y, w, 12 + s.shares().size() * Measure.LINE + 2), slots, texts, texts.size(), s.hint());
+            }
             case Gap g -> new Placed(row, new Rect(x, y, w, g.height()), slots, List.of(), 0, null);
             case Group g -> throw new IllegalStateException("A group is placed with its rows");
         };
     }
 
     /**
-     * An entry's or a meter's row. Its label beside the box, wrapped to two lines where it is wider than its share and
-     * every word fits the share; else above the box, wrapped to the row. A unit wider than its 15 px takes the rest from
-     * the box's right end (m³/s, kg/s), so every box starts where the others do.
+     * An entry's or a meter's row, as its group arranges them ({@code beside}, {@code steal}). Its label beside the box,
+     * wrapped to two lines; or above the box, wrapped to the row. Every box of the group starts where the others do and
+     * gives its unit {@code steal} px past the unit's own 15 px, up to {@link #UNIT_STEAL} (m/s, kPa); a unit wider still
+     * (kmol/min, m³/min) is the label's last line, as a meter's legend plate reads "Flow, kmol/min".
      */
-    private static Placed labelled(Row row, String key, String label, String unit, @Nullable String hint, int x, int y, int w, Measure m, Metrics h) {
-        int share = w - FIELD_TAIL;
-        var lines = m.wrap(label, share);
-        boolean beside = lines.size() <= 2 && java.util.Arrays.stream(label.split(" ")).allMatch(word -> m.width(word) <= share);
-        if (!beside) lines = m.wrap(label, w);
+    private static Placed labelled(Row row, String key, String label, String unit, @Nullable String hint, int x, int y, int w, Measure m, Metrics h,
+                                   boolean beside, int steal) {
+        boolean under = under(unit, m);
+        var lines = new ArrayList<>(m.wrap(label, beside ? w - FIELD_TAIL : w));
+        if (under) lines.add(unit);
         int above = beside ? 0 : h.line() + (lines.size() - 1) * Measure.LINE;
-        int wider = Math.clamp(m.width(unit) - UNIT, 0, BOX - 30);
         var texts = new ArrayList<>(lines);
-        texts.add(m.width(unit) > UNIT + BOX - 30 ? m.cut(unit, UNIT + BOX - 30) : unit);
-        return new Placed(row, new Rect(x, y, w, above + h.field()), Map.of(key, new Rect(x + w - FIELD_TAIL + 4, y + above, BOX - wider, WIDGET)), texts,
+        texts.add(under ? "" : unit);
+        return new Placed(row, new Rect(x, y, w, above + h.field()), Map.of(key, new Rect(x + w - FIELD_TAIL + 4, y + above, BOX - steal, WIDGET)), texts,
                 lines.size(), hint != null ? label + "\n" + hint : null);
     }
 
@@ -262,7 +323,7 @@ public final class Column {
     public @Nullable String hover(double px, double py) {
         var p = at(px, py);
         if (p == null) return null;
-        if (!(p.row() instanceof Reading)) for (var slot : p.slots().values()) if (slot.contains(px, py)) return null;
+        if (p.row() instanceof Field || p.row() instanceof Buttons) for (var slot : p.slots().values()) if (slot.contains(px, py)) return null;
         return p.hover();
     }
 
@@ -291,6 +352,23 @@ public final class Column {
                 case Field ignored -> labels(c, skin, p, r, dy);
                 case Reading reading -> skin.meter(c, labels(c, skin, p, r, dy), reading.value());
                 case Bar b -> skin.bar(c, new Rect(r.x(), r.y(), r.w(), 8), b.share());
+                case Split s -> {
+                    var shares = s.shares();
+                    double[] amounts = new double[shares.size()];
+                    int[] colours = new int[shares.size()];
+                    for (int i = 0; i < shares.size(); i++) {
+                        amounts[i] = shares.get(i).amount();
+                        colours[i] = shares.get(i).colour();
+                    }
+                    skin.split(c, new Rect(r.x(), r.y(), r.w(), 8), amounts, colours);
+                    for (int i = 0; i < shares.size(); i++) {
+                        int y = r.y() + 12 + i * Measure.LINE;
+                        c.fill(r.x(), y + 1, r.x() + 7, y + 8, colours[i]);
+                        skin.text(c, texts.get(i), r.x() + 11, y, Palette.MUTED);
+                        String value = shares.get(i).value();
+                        skin.text(c, value, r.right() - c.measure().width(value), y, Palette.TEXT);
+                    }
+                }
                 case Buttons ignored -> {
                 }
                 case Gap ignored -> {

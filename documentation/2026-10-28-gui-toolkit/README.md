@@ -2,11 +2,11 @@
 
 Purpose: owner choice 2026-10-28, option C of the GUI toolkit review: a small GUI toolkit in our own code, first used on the heat Control tab.
 
-Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on `claude/heat-gui-redesign-abb1db`). The kit, the Control tab pilot and the shared flowsheet painter are built. The fluid screen draws the light or the dark control panel door, with layout C and fuller drawings. The Control column is framed function groups with short plates: an Off and On switch, then a target. The unit keys are display keys, the theme and the units are the client's, and the other screens are reviewed with prototypes awaiting the owner. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on `claude/heat-gui-redesign-abb1db`). The kit, the Control tab pilot and the shared flowsheet painter are built. The fluid screen draws the light or the dark control panel door, with layout C and fuller drawings. The Control column is framed function groups with short plates: an Off and On switch, then a target. The unit keys are display keys, and the theme and the units are the client's. The other screens are reviewed with prototypes (owner: "Good, proceed"); the device pages are built on the kit (review order 1). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [GUI_TOOLKIT_PLAN.md](GUI_TOOLKIT_PLAN.md): the kit, the pilot, the shared flowsheet painter, the gates, the as-built notes (section 5), choices T1 to T3 (section 6), the Control tab styles tried (section 7), the industrial looks (section 8), look 3 refined (section 9), the light and dark panels shipped with layout C, whole texts and fuller drawings (section 10), function groups, plates and the On and Off switch (section 11), display keys, the client's units and the theme sign (section 12), labels beside their boxes and LCD entries against LED readings (section 13).
+- [GUI_TOOLKIT_PLAN.md](GUI_TOOLKIT_PLAN.md): the kit, the pilot, the shared flowsheet painter, the gates, the as-built notes (section 5), choices T1 to T3 (section 6), the Control tab styles tried (section 7), the industrial looks (section 8), look 3 refined (section 9), the light and dark panels shipped with layout C, whole texts and fuller drawings (section 10), function groups, plates and the On and Off switch (section 11), display keys, the client's units and the theme sign (section 12), labels beside their boxes and LCD entries against LED readings (section 13), the device pages' door column (section 14).
 - [GUI_REVIEW.md](GUI_REVIEW.md): the other screens against the panel rules, their prototypes, the owner's choices (a) to (e) and the order to build them.
 - The evaluation that chose it: [../2026-10-28-gui-toolkit-evaluation/GUI_TOOLKIT_REVIEW.md](../2026-10-28-gui-toolkit-evaluation/GUI_TOOLKIT_REVIEW.md).
 
@@ -14,7 +14,7 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
 
 - `client/gui/common/kit/` (new): `Rect`, `Measure`, `Canvas`, `Palette`, `Format`, `Column`, `ScrollView`, `Skin`, `PanelSkin`, `FlowsheetPainter`; the game adapters `GuiCanvas`, `KitWidgets`, `SkinButton` and `SkinField`.
 - `client/ClientConfig` (new, `icheme-client.toml`: the theme and the display units), registered in `IChemE`. `science/display/DisplayUnit` (holds `TemperatureUnit`, from `ProcessUi`).
-- `client/gui/common/HeatControlColumn` (new): the Control column as kit rows, and layout C's split. `client/gui/common/HeatFlowsheet` (moved from `screens/inventory`): draws through the painter, with each unit's insides. `HeatDiagram`: the equipment glyphs.
+- `client/gui/common/HeatControlColumn` (new): the Control column as kit rows, and layout C's split. `client/gui/common/DeviceColumn` (new): a device page's door column as kit rows. `client/gui/common/HeatFlowsheet` (moved from `screens/inventory`): draws through the painter, with each unit's insides. `HeatDiagram`: the equipment glyphs.
 - `client/gui/screens/inventory/FluidDeviceScreen` (the panel door, the HMI screen, layout C on the kit), `AssemblyScreen` (its drawing through the painter); `ColumnCalculatorV3Screen` (no tray dP field; the client's temperature unit); `client/gui/common/ProcessUi` (palette and `number()` alias the kit's). Lang: `gui.icheme.fluid.theme.*`, the unit keys' hovers.
 - `network/FluidNetwork` (an air cooler's edit keeps the fans' share the client sends).
 - `tools/heat-gui-renders/` (whole Control pages through the shipped code; `GuiPrototypes`, the other screens' prototypes).
@@ -62,12 +62,19 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
   - Kit: `Column.Reading`, `Skin.meter`; `Column.Field` labels wrap beside the box; `PanelSkin.field` an LCD, `PanelSkin.meter` the LED. The options' sheets left the prototypes tool; its tank pressures and vessel volume are readings.
   - Gates: `KitLayoutTest` 13 (the stacked-label test rewritten for labels beside, one new for readings), `HeatControlColumnTest` 5, `FluidGuiConsistencyTest` 5, `HeatDiagramTest` 5, `FlowsheetPainterTest` 3, `ProcessPresentationTest` 5: no failures. The full quick suite did not run again (GUI only).
 
+- 2026-10-28: the device pages' door column (owner: "Good, proceed"; [GUI_REVIEW.md](GUI_REVIEW.md) order 1; plan section 14), in the device commit.
+  - `DeviceColumn` (new) replaces the rail: function groups, widgets above the rows that follow the plant, LED meters for the readings, the status said once. One `ScrollView` for the Control tab and the device pages; `FluidGuiLayout.side`.
+  - Kit: `Column.Split`, `Column.Button.soft`, `Skin.split`, `Column.UNIT_STEAL` (a unit wider than the box can spare is the label's last line; kmol/min was cut). A group's entries and meters share one arrangement and one box width (owner: "Try to align them somehow").
+  - Lang: plates, fields, the valve's targets and the readings' hovers came; the rail's keys left; the readings' words are shorter.
+  - Render tool: the device pages through the shipped column, opened and scrolled to the end, and a pipe page.
+  - Gates: quick suite 1741, no failures (`DeviceColumnTest` 5, new; `KitLayoutTest` 14, one new; `HeatDiagramTest` 5, its key list without the rail's keys). The group alignment came after the suite; the GUI gates ran again (`KitLayoutTest` 14 with the label test rewritten, `DeviceColumnTest` 5, `HeatControlColumnTest` 5, `HeatDiagramTest` 5, `FluidGuiConsistencyTest` 5, `FlowsheetPainterTest` 3): no failures.
+
 ## Open
 
 - T1 to T3 (plan section 6) await the owner; built as (a).
 - At 464 by 254, an exchanger whose lines are incomplete scrolls its right column by 21 to 31 px to its warning (plan section 11). The drawing is small at that width (0.36 of its design size).
 - A fired heater's duty target needs the heat engine (`FiredCoil`, `HeatControl`); "duty ratio" was read as the fans' speed; an air cooler's stored low limit stays hidden (plan section 11).
-- Themed so far: `FluidDeviceScreen` only. The other screens are reviewed ([GUI_REVIEW.md](GUI_REVIEW.md)); their prototypes await the owner's approval, then they are built in the review's order.
+- Themed so far: `FluidDeviceScreen` (the Control tab and the device pages). The other screens follow in the review's order ([GUI_REVIEW.md](GUI_REVIEW.md)), next the small dialogs. The valve's controller words are English from the server (plan section 14).
 - The owner's choices (a) to (e) in [GUI_REVIEW.md](GUI_REVIEW.md): tray dP in column presets, a diameter of 0, the "duty ratio" reading, the heater's duty target, the gauge's unit.
 - At the merge to `main`: a `CHANGELOG.md` line, the version, and the code guide's GUI chapter.
 - No in-game check (owner: enough client testing).

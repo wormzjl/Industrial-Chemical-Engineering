@@ -332,6 +332,13 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         }
     }
 
+    /** A split bar in the bar graph's window: its shares lit side by side. */
+    @Override
+    public void split(Canvas c, Rect r, double[] amounts, int[] colours) {
+        window(c, r, bar.glass());
+        Skin.splitFill(c, new Rect(r.x() + 2, r.y() + 2, r.w() - 4, r.h() - 4), amounts, colours);
+    }
+
     /** A slot in the door with a small black key in it. */
     @Override
     public void scrollbar(Canvas c, Rect track, Rect thumb, boolean dragging) {

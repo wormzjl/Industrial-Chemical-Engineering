@@ -168,7 +168,7 @@ public final class HeatDiagramRender {
 
     static String tr(String key, Object... args) {
         String line = lang.get(key);
-        return line == null ? "?" + key : String.format(Locale.ROOT, line, args);
+        return line == null ? "?" + key : args.length == 0 ? line : String.format(Locale.ROOT, line, args);
     }
 
     /** Illustrative readings: a stream's temperature (°C) and flow (kg/s). */

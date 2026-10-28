@@ -29,7 +29,7 @@ The prototypes are in `tmp/gui-prototypes/` (both doors on each sheet), drawn th
 
 - The column calculator's tray dP field is gone (owner: "outdated"). The draft keeps the base value (`V3EditorDraft`, `unchanged("s8")`); its hover text is removed, while the profile button still uses the label key.
 - The fluid screen's basis and unit keys are 40 px display keys on their strip (rule 5); flows also per minute; Celsius reads "°C". The units, the basis and the theme are the client's config; the column calculator reads its °C or K from it; the theme key shows a contrast sign (rule 6).
-- Units stay whole beside a meter: a wider unit narrows the box (`Column.UNIT`).
+- Units stay whole beside a meter: a wider unit narrows the box by 8 px at most (`Column.UNIT`, `UNIT_STEAL`), wider still it is the label's last line (plan section 14).
 
 ## Owner choices
 
@@ -39,9 +39,9 @@ The prototypes are in `tmp/gui-prototypes/` (both doors on each sheet), drawn th
 - (d) A fired heater's duty target needs the heat engine (`FiredCoil`, `HeatControl`, heat session).
 - (e) A gauge's unit is saved on the gauge (`GaugeSettings.unit`, its dial in the world). Option 1: keep it. Option 2: the dial follows each player's config (plan section 12).
 
-## Implementation order (after the owner approves the prototypes)
+## Implementation order (owner: "Good, proceed")
 
-1. `FluidDeviceScreen` device pages onto `Column` groups (rules 1 to 4; the rail goes).
+1. `FluidDeviceScreen` device pages onto `Column` groups (rules 1 to 4; the rail goes). Built: `DeviceColumn`, plan section 14.
 2. The small dialogs: gauge, pipeline tool, vessel datasheet (kit buttons, meters, themes).
 3. The equipment constructor's panel (steppers, groups, bottom buttons).
 4. The assembly screen (heading, hovers).

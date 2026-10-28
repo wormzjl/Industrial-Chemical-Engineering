@@ -288,28 +288,63 @@ class KitLayoutTest {
         assertEquals("group " + new Rect(0, 0, 150, Column.plate(1) + 2 + 12 + Column.INSET) + " Mode", calls.getLast(), "the skin draws a group's frame and plate");
     }
 
-    /** Owner: "This Arrangement is not good" (one label beside its box, the next above); GUI_TOOLKIT_PLAN.md section 13. */
+    /**
+     * Owner: "This Arrangement is not good" (one label beside its box, the next above), "Try to align them somehow";
+     * GUI_TOOLKIT_PLAN.md sections 13 and 14. A group's labels all stand beside their boxes, in two lines where they must,
+     * or all above them where one cannot.
+     */
     @Test
-    void aFieldLabelWrapsBesideItsBoxInTwoLinesElseGoesAboveIt() {
-        var rows = List.<Column.Row>of(new Column.Field("t", "Set point", "C", null), new Column.Field("r", "Ratio to the other feed", "", null),
-                new Column.Field("p", "Ratio to the other feed of the pair", "", null), new Column.Field("w", "Interconnection limit", "", null));
-        var column = Column.place(rows, 0, 0, 150, M);
+    void aGroupsLabelsStandAllBesideTheirBoxesOrAllAbove() {
         int boxX = 150 - Column.FIELD_TAIL + 4;
-        var inline = column.rows().get(0);
+        var two = Column.place(List.of(new Column.Field("t", "Set point", "C", null), new Column.Field("r", "Ratio to the other feed", "", null)), 0, 0, 150, M);
+        var inline = two.rows().get(0);
         assertEquals(24, inline.rect().h(), "54 px of label beside the box: one row");
         assertEquals(new Rect(boxX, 0, Column.BOX, Column.WIDGET), inline.slots().get("t"));
-        var beside = column.rows().get(1);
+        var beside = two.rows().get(1);
         assertEquals(24, beside.rect().h(), "138 px of label in 74 px: two lines beside the box, the row no taller");
         assertEquals(new Rect(boxX, 24, Column.BOX, Column.WIDGET), beside.slots().get("r"), "the box in line with the others");
         assertEquals(List.of("Ratio to the", "other feed"), beside.texts().subList(0, beside.lead()), "words whole");
         assertNull(beside.hover(), "nothing cut, no hint: no hover");
-        var three = column.rows().get(2);
-        assertEquals(12 + 10 + 24, three.rect().h(), "three lines beside: above the box instead, wrapped to the row");
-        assertEquals(new Rect(boxX, 48 + 22, Column.BOX, Column.WIDGET), three.slots().get("p"));
-        assertEquals(List.of("Ratio to the other feed", "of the pair"), three.texts().subList(0, three.lead()));
-        var word = column.rows().get(3);
-        assertEquals(12 + 24, word.rect().h(), "a 90 px word in a 74 px share is never cut beside the box: above it");
-        assertEquals(List.of("Interconnection limit"), word.texts().subList(0, word.lead()));
+
+        for (var other : List.of("Ratio to the other feed of the pair", "Interconnection limit")) {
+            // Three lines, or a 90 px word in a 74 px share: that label cannot stand beside, so neither does its neighbour.
+            var above = Column.place(List.of(new Column.Field("t", "Set point", "C", null), new Column.Field("p", other, "", null)), 0, 0, 150, M);
+            var first = above.rows().get(0);
+            assertEquals(12 + 24, first.rect().h(), other + ": the short label above its box too");
+            assertEquals(new Rect(boxX, 12, Column.BOX, Column.WIDGET), first.slots().get("t"));
+            var second = above.rows().get(1);
+            assertEquals(boxX, second.slots().get("p").x(), "the boxes in line");
+            for (var t : second.texts()) assertTrue(M.width(t) <= 150, "wrapped to the row: " + t);
+        }
+
+        // Each group decides alone: a group of labels above leaves its neighbour's beside.
+        var groups = Column.place(List.of(new Column.Group("A", null, List.of(new Column.Field("w", "Interconnection limit", "", null))),
+                new Column.Group("B", null, List.of(new Column.Field("t", "Set point", "C", null)))), 0, 0, 150, M);
+        assertEquals(12 + 24, groups.rows().get(1).rect().h(), "A's label above its box");
+        assertEquals(24, groups.rows().get(3).rect().h(), "B's label beside its box");
+    }
+
+    /**
+     * A wide unit narrows its group's boxes by 8 px at most, which keeps five 7-segment digits, so the units start in line;
+     * wider still, it is the label's last line (GUI_TOOLKIT_PLAN.md section 14). No unit is cut.
+     */
+    @Test
+    void aWideUnitNarrowsItsGroupsBoxesALittleThenGoesUnderItsLabel() {
+        var rows = List.<Column.Row>of(new Column.Reading("v", "Speed", "1.6", "m/s", null), new Column.Reading("f", "Flow", "120.0", "kmol/min", null),
+                new Column.Reading("t", "Outlet", "45.0", "C", null));
+        var column = Column.place(rows, 0, 0, 150, M);
+        int boxX = 150 - Column.FIELD_TAIL + 4;
+        var speed = column.rows().get(0);
+        assertEquals(new Rect(boxX, 0, Column.BOX - 3, Column.WIDGET), speed.slots().get("v"), "18 px of unit: 3 px from the box");
+        assertEquals("m/s", speed.texts().getLast());
+        var flow = column.rows().get(1);
+        assertEquals(new Rect(boxX, 24, Column.BOX - 3, Column.WIDGET), flow.slots().get("f"), "48 px of unit: under the label, the box as wide as the others");
+        assertEquals(List.of("Flow", "kmol/min"), flow.texts().subList(0, flow.lead()));
+        assertEquals("", flow.texts().getLast(), "nothing after the box");
+        assertEquals(new Rect(boxX, 48, Column.BOX - 3, Column.WIDGET), column.rows().get(2).slots().get("t"), "a narrow unit's box in line: the units start together");
+        var flows = Column.place(List.of(new Column.Reading("f", "Mass flow", "2.5", "kg/min", null)), 0, 0, 150, M).rows().getFirst();
+        assertEquals(List.of("Mass flow", "kg/min"), flows.texts().subList(0, flows.lead()), "the label's words and the unit, each whole");
+        assertEquals(Column.BOX, flows.slots().get("f").w(), "no unit after the box: the box whole");
     }
 
     /** Owner: "need to differentiate editable value fields with non-editable"; GUI_TOOLKIT_PLAN.md section 13. */

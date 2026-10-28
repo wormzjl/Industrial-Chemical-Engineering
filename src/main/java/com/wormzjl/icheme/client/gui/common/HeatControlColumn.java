@@ -85,15 +85,8 @@ public final class HeatControlColumn {
      * right.
      */
     public static Columns columns(Input in, Texts t) {
-        var left = new ArrayList<Column.Row>();
+        var left = new ArrayList<Column.Row>(sideSelector(in, t));
         var right = new ArrayList<Column.Row>();
-        var sides = sides(in);
-        if (sides != null) {
-            var buttons = new ArrayList<Column.Button>();
-            for (int i = 0; i < 2; i++) buttons.add(position("side:" + i, t.get("heat_side." + sides[i]), t.get("heat_side.hint"), i == own(in), true));
-            left.add(new Column.Buttons(buttons));
-            left.add(new Column.Gap(4));
-        }
         if (in.pool()) left.add(new Column.Paragraph(t.get("pool_note"), Palette.MUTED));
         else if (in.burners() || in.controllable()) {
             boolean on = in.on();
@@ -133,6 +126,18 @@ public final class HeatControlColumn {
         if (!acting.isEmpty()) right.add(new Column.Group(t.get(plate), t.get(plate + ".hint"), acting));
         if (!in.canEdit() && !in.pool()) right.add(new Column.Paragraph(t.get("reader_note"), Palette.MUTED));
         return new Columns(left, right);
+    }
+
+    /**
+     * The side selector, this side latched, and a gap under it; none for a one-sided unit (an air cooler). The Control tab
+     * and the side's other pages both lead with it ({@code DeviceColumn}).
+     */
+    public static List<Column.Row> sideSelector(Input in, Texts t) {
+        var sides = sides(in);
+        if (sides == null) return List.of();
+        var buttons = new ArrayList<Column.Button>();
+        for (int i = 0; i < 2; i++) buttons.add(position("side:" + i, t.get("heat_side." + sides[i]), t.get("heat_side.hint"), i == own(in), true));
+        return List.of(new Column.Buttons(buttons), new Column.Gap(4));
     }
 
     /** A position of a selector or a switch: latched where it stands, a click acts on another while this client edits. */

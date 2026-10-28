@@ -1,10 +1,15 @@
+import com.wormzjl.icheme.client.gui.common.DeviceColumn;
+import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
+import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,8 +30,11 @@ import java.util.function.BiConsumer;
 public final class GuiPrototypes {
     static final int SCALE = HeatDiagramRender.SCALE;
 
-    /** A prototype page: its file name, its size in GUI px, and what it draws on a door. */
-    record Prototype(String file, int width, int height, BiConsumer<Door, Skin> body) {
+    /** A prototype page: its file name, its size in GUI px, what it draws on a door, and whether it shows scrolled to the end too. */
+    record Prototype(String file, int width, int height, BiConsumer<Door, Skin> body, boolean scrolls) {
+        Prototype(String file, int width, int height, BiConsumer<Door, Skin> body) {
+            this(file, width, height, body, false);
+        }
     }
 
     public static void main(String[] args) throws Exception {
@@ -35,12 +43,19 @@ public final class GuiPrototypes {
         Files.createDirectories(out);
         var jar = Path.of(args.length > 2 ? args[2] : "build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar");
         HeatDiagramRender.font = Files.exists(jar) ? HeatDiagramRender.GameFont.load(jar) : null;
-        for (var p : prototypes())
-            HeatDiagramRender.grid(out.resolve(p.file() + ".png"), List.of("Light panel (3a)", "Dark panel (3c)"), List.of(render(p, PanelSkin.LIGHT), render(p, PanelSkin.DARK)));
+        for (var p : prototypes()) {
+            var titles = new ArrayList<>(List.of("Light panel (3a)", "Dark panel (3c)"));
+            var pages = new ArrayList<>(List.of(render(p, PanelSkin.LIGHT, false), render(p, PanelSkin.DARK, false)));
+            if (p.scrolls()) {
+                titles.addAll(List.of("Light, the column scrolled to its end", "Dark, the column scrolled to its end"));
+                pages.addAll(List.of(render(p, PanelSkin.LIGHT, true), render(p, PanelSkin.DARK, true)));
+            }
+            HeatDiagramRender.grid(out.resolve(p.file() + ".png"), titles, pages);
+        }
     }
 
     static List<Prototype> prototypes() {
-        return List.of(pump(), generator(), valve(), tank(), column(), assembly(), constructor(), pipelineTool(), gauge(), vessel());
+        return List.of(pump(), generator(), valve(), tank(), pipe(), column(), assembly(), constructor(), pipelineTool(), gauge(), vessel());
     }
 
     // ---- The column calculator: the drawing on the glass, the inputs in groups on the door ----
@@ -211,97 +226,133 @@ public final class GuiPrototypes {
         });
     }
 
-    // ---- FluidDeviceScreen's device pages: the door holds what the player sets and the indicating meters; the HMI glass the tables ----
+    // ---- FluidDeviceScreen's device pages: the shipped DeviceColumn on the door, the tables on the HMI glass ----
 
-    static final int SIDE = 160;
+    static final HeatControlColumn.Texts TEXTS = (key, a) -> HeatDiagramRender.tr("gui.icheme.fluid." + key, a);
 
-    /** The door's left column, the divider, and the glass on the right; returns the glass's inner box. */
-    static Rect split(Door d, List<Column.Row> rows, Map<String, String> values) {
-        int top = 74, bottom = d.h - 38;
-        d.column(rows, 10, top, SIDE - 10, values);
-        d.skin.vDivider(d.c, SIDE + 4, top, bottom);
-        return d.well(new Rect(SIDE + 10, top - 3, d.w - SIDE - 15, bottom - top + 3));
+    /** A phase split, its four amounts on a basis; mole leaves custom solids out where some are held. */
+    static DeviceColumn.Phases phases(String basis, double... amounts) {
+        return new DeviceColumn.Phases(basis, amounts, false, TEXTS.get("phase_ratio.hint"));
     }
 
-    /** A composition on the glass: the phase tabs latched, the phase bar, the table. */
-    static void contents(Door d, Rect box, String[] phases, int phase, List<String[]> table) {
+    /**
+     * A device's page as FluidDeviceScreen draws it (GUI_TOOLKIT_PLAN.md section 14): the door column from x 10 to
+     * {@code FluidGuiLayout.side}, its view and bar, the divider, the tables' glass; scrolled to the end where the door
+     * asks for it. Fields show {@code drafts} by key. Returns the glass's inner box.
+     */
+    static Rect device(Door d, DeviceColumn.Input in, Map<String, String> drafts) {
+        int side = FluidGuiLayout.side(d.w), top = 74, bottom = d.h - 52;
+        var column = Column.place(DeviceColumn.rows(in, TEXTS), 10, top, side - 10, d.m, Column.Metrics.COMPACT);
+        var view = new ScrollView();
+        view.layout(new Rect(8, top, side - 6, bottom - top), side + 3, column.bounds().h());
+        while (d.end && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
+        d.c.clip(view.viewport());
+        column.draw(d.c, -view.offset(), d.skin);
+        for (var p : column.rows()) {
+            if (p.row() instanceof Column.Field f) {
+                var r = p.slots().get(f.key());
+                if (view.visible(r)) d.skin.field(d.c, view.onScreen(r), drafts.getOrDefault(f.key(), ""), "", false);
+            } else if (p.row() instanceof Column.Buttons b)
+                for (var spec : b.buttons()) {
+                    var r = p.slots().get(spec.key());
+                    if (!view.visible(r)) continue;
+                    if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), false);
+                    else d.skin.button(d.c, view.onScreen(r), spec.text(), !spec.active() ? spec.latched() ? Skin.Press.CURRENT : Skin.Press.OFF : Skin.Press.REST, false);
+                }
+        }
+        d.c.unclip();
+        view.drawBar(d.c, d.skin);
+        if (!d.end && d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-16s column %3d px in a %d px view%n", in.kind(), column.bounds().h(), bottom - top);
+        d.skin.vDivider(d.c, side + 13, top, bottom);
+        return d.well(new Rect(side + 15, 72, d.w - side - 20, d.h - 50 - 72));
+    }
+
+    /** A composition on the glass: the phase tabs latched, the table. */
+    static void contents(Door d, Rect box, int phase, List<String[]> table) {
+        String[] phases = {"Org", "Aq", "Gas", "Solid"};
         int n = phases.length, tw = (box.w() - 3 * (n - 1)) / n;
         for (int i = 0; i < n; i++) d.skin.button(d.c, new Rect(box.x() + i * (tw + 3), box.y(), tw, 16), phases[i], i == phase ? Skin.Press.CURRENT : Skin.Press.REST, false);
         d.table(new Rect(box.x(), box.y() + 20, box.w(), box.h() - 20), new int[]{box.w() - 120, 60, 60}, table);
+    }
+
+    static DeviceColumn.Meter meter(String key, String value, String unit) {
+        return new DeviceColumn.Meter(key, value, unit, null);
     }
 
     static Prototype pump() {
         return new Prototype("fluid-pump", 464, 254, (d, s) -> {
             d.title("Centrifugal pump");
             d.tabs(0, "Overview", "Datasheet");
-            d.status("Running: 12.0 m³/h, 2.40 bar rise", Palette.ACCENT);
-            var box = split(d, Door.rows(
-                    Door.group("Control", null, Door.switchRow("Off", "On", true)),
-                    Door.group("Set point", null, Door.field("flow", "Flow", "m³/h")),
-                    Door.group("Limit", null, Door.field("rise", "Max rise", "bar"))),
-                    Map.of("flow", "12.0", "rise", "5.00"));
-            contents(d, box, new String[]{"Organic", "Aqueous", "Vapor", "Solids"}, 1,
-                    List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "92.1", "511"}, new String[]{"Ethanol", "7.9", "43.8"}));
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var box = device(d, new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                    phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.20", "bar"),
+                    meter("throughput", "554.8", "kmol/h"), meter("pressure_change", "2.40", "bar"))), Map.of("volumeFlow", "12.0", "maximumAddedPressure", "5.00"));
+            contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "92.1", "511"}, new String[]{"Ethanol", "7.9", "43.8"}));
             d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
-        });
+        }, true);
     }
 
     static Prototype generator() {
         return new Prototype("fluid-generator", 464, 254, (d, s) -> {
             d.title("Fluid source");
             d.tabs(0, "Overview", "Composition", "Solids");
-            d.status("Feeding 3.20 kg/s at 2.00 bar, 25.0 °C", Palette.ACCENT);
-            var box = split(d, Door.rows(
-                    Door.group("Control", null, Door.switchRow("Off", "On", true)),
-                    // The flow out is on the status display: no meter repeats it.
-                    Door.group("Set point", null, Door.field("p", "Pressure", "bar"), Door.field("t", "Temperature", "°C"))),
-                    Map.of("p", "2.00", "t", "25.0"));
-            contents(d, box, new String[]{"Organic", "Aqueous", "Vapor", "Solids"}, 0,
-                    List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"n-Hexane", "61.0", "82.4"}, new String[]{"n-Heptane", "39.0", "52.7"}));
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var box = device(d, new DeviceColumn.Input(Kind.GENERATOR, true, true, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                    phases("mole", 1, 0, 0.1, 0), List.of(meter("temperature", "25.0", "°C"), meter("pressure", "2.00", "bar"), meter("throughput", "0.2", "kmol/s"))),
+                    Map.of("pressure", "2.00", "temperature", "25.0"));
+            contents(d, box, 0, List.of(new String[]{"Component", "Mole %", "kmol/s"}, new String[]{"n-Hexane", "61.0", "0.1"}, new String[]{"n-Heptane", "39.0", "0.1"}));
             d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/s");
-        });
+        }, true);
     }
 
     static Prototype valve() {
         return new Prototype("fluid-valve", 464, 254, (d, s) -> {
             d.title("Control valve");
             d.tabs(0, "Overview");
-            d.status("Holding 2.50 kg/s, 63 % open", Palette.ACCENT);
-            var box = split(d, Door.rows(
-                    Door.group("Target", "What the valve holds. Choose one, then press Apply.",
-                            new Column.Choice("Mass flow", null, true, "t:mass"), new Column.Choice("Volume flow", null, false, "t:volume")),
-                    Door.group("Set point", null, Door.field("flow", "Flow", "kg/s")),
-                    Door.group("Valve", null, new Column.Bar(0.63), new Column.Line("63 % open", Palette.TEXT))),
-                    Map.of("flow", "2.50"));
-            contents(d, box, new String[]{"Organic", "Aqueous", "Vapor", "Solids"}, 0,
-                    List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Toluene", "100.0", "97.6"}));
-            d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/s");
-        });
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var box = device(d, new DeviceColumn.Input(Kind.VALVE, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.MASS_FLOW, new DeviceColumn.Opening(0.63, "Holding the set point"),
+                    false, null, null, List.of(), phases("volume", 1, 0, 0, 0), List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"),
+                    meter("throughput", "2.5", "kg/s"), meter("pressure_change", "-1.10", "bar"))), Map.of("massFlow", "2.50"));
+            contents(d, box, 0, List.of(new String[]{"Component", "Mass %", "kg/s"}, new String[]{"Toluene", "100.0", "2.5"}));
+            d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
+        }, true);
     }
 
     static Prototype tank() {
         return new Prototype("fluid-tank", 464, 254, (d, s) -> {
             d.title("Atmospheric tank");
             d.tabs(0, "Overview", "Outlets", "Datasheet");
-            d.status("Filling: 63 % full, 0.40 kg/s in", Palette.ACCENT);
-            var box = split(d, Door.rows(
-                    Door.group("Level", "Contents over capacity.", new Column.Bar(0.63), new Column.Line("63 %, 25.2 of 40 m³", Palette.TEXT)),
-                    // The net flow in is on the status display: no meter repeats it.
-                    Door.group("Pressure", null, Door.reading("top", "Top", "1.01", "bar"), Door.reading("bottom", "Bottom", "1.25", "bar"))),
-                    Map.of("top", "1.01", "bottom", "1.25"));
-            contents(d, box, new String[]{"Organic", "Aqueous", "Vapor", "Solids"}, 1,
-                    List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"Water", "99.2", "1390"}, new String[]{"Salt", "0.8", "11.2"}));
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var box = device(d, new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false,
+                    new DeviceColumn.Level(0.63, "25200.0", "40000.0"), null, List.of(), phases("volume", 0, 25.2, 14.8, 0),
+                    List.of(meter("temperature", "20.0", "°C"), meter("top_pressure", "1.01", "bar"), meter("bottom_pressure", "1.25", "bar"), meter("net_flow", "-0.4", "kg/s"),
+                            meter("mass", "25150.0", "kg"))), Map.of());
+            contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"Water", "99.2", "1390"}, new String[]{"Salt", "0.8", "11.2"}));
             d.footer(1, "Close", "Mole", "°C", "bar", "/s");
-        });
+        }, true);
     }
 
-    static BufferedImage render(Prototype p, Skin skin) {
+    static Prototype pipe() {
+        return new Prototype("fluid-pipe", 464, 254, (d, s) -> {
+            d.title("Pipe");
+            d.tabs(0, "Overview", "Connections");
+            d.status(Door.tr("gui.icheme.fluid.reversed_interval") + " " + Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var box = device(d, new DeviceColumn.Input(Kind.PIPE, true, false, true, "kPa", "°C", "/min", DeviceColumn.Valve.NONE, null, false, null,
+                    Door.tr("gui.icheme.fluid.junction", 3), List.of(), phases("volume", 0, 1, 0, 0),
+                    List.of(meter("temperature", "35.0", "°C"), meter("pressure", "180.0", "kPa"), meter("throughput", "120.0", "kmol/min"),
+                            meter("velocity_lowest", "0.8", "m/s"), meter("velocity_highest", "1.6", "m/s"), meter("gradient", "0.4", "kPa/m"))), Map.of("diameter", "0.10"));
+            contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/min"}, new String[]{"Water", "100.0", "120.0"}));
+            d.footer(2, "Close", "Apply", "Mole", "°C", "kPa", "/min");
+        }, true);
+    }
+
+    static BufferedImage render(Prototype p, Skin skin, boolean end) {
         var image = new BufferedImage((p.width() + 8) * SCALE, (p.height() + 8) * SCALE, BufferedImage.TYPE_INT_RGB);
         var g = image.createGraphics();
         g.scale(SCALE, SCALE);
         g.translate(4, 4);
         var canvas = new HeatDiagramRender.Java2dCanvas(g);
-        var door = new Door(canvas, skin, p.width(), p.height());
+        var door = new Door(canvas, skin, p.width(), p.height(), end);
         skin.page(canvas, new Rect(0, 0, p.width(), p.height()));
         p.body().accept(door, skin);
         g.dispose();
@@ -314,8 +365,11 @@ public final class GuiPrototypes {
         final Skin skin;
         final int w, h;
         final Measure m;
+        /** Whether a scrolled column is drawn scrolled to its end. */
+        final boolean end;
 
-        Door(Canvas c, Skin skin, int w, int h) {
+        Door(Canvas c, Skin skin, int w, int h, boolean end) {
+            this.end = end;
             this.c = c;
             this.skin = skin;
             this.w = w;

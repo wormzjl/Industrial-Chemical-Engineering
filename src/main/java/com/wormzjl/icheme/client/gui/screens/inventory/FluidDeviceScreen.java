@@ -46,10 +46,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private PressureUnit pressureUnit=ClientConfig.pressure();
     private FlowRateUnit flowRateUnit=ClientConfig.flowTime();
     private boolean mass=ClientConfig.basis()==ClientConfig.Basis.MASS;
-    /** The phase ratio's basis, the rail's own: kept while the game runs. */
+    /** The Phases group's basis, a display key of the door column's own: kept while the game runs. */
     private static PhaseRatioBasis preferredPhaseBasis=PhaseRatioBasis.VOLUME;
     private PhaseRatioBasis phaseBasis=preferredPhaseBasis;
-    private Button phaseBasisButton;
     private String[][] particles=new String[64][3];
     private long revision=Long.MIN_VALUE,messageRevision;
     private int page,phase=2;
@@ -91,7 +90,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private HeatUnit.Mode heatMode=HeatUnit.Mode.OFF;
     /** The target the switch's On holds: the drafted mode while On (OFF: an air cooler's fixed fan speed); for a side loaded Off, the outlet temperature. */
     private HeatUnit.Mode heatTarget=HeatUnit.Mode.OUTLET_TEMPERATURE;
-    /** The rail's power switch: a generator's or a built mover's. A heat unit's fans and burners are on its Control tab. */
+    /** The door column's Off and On switch: a generator's or a built mover's. A heat unit's fans and burners are on its Control tab. */
     private boolean switchable(){return generator()||constructedMover();}
     /** The Control tab (HEAT_GUI_PLAN.md section 2): every heat unit's sides and a kettle's pool. */
     private static final int CONTROL=6;
@@ -104,24 +103,16 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** A kettle's shell (W7): its pool, which the tubes heat; it has no control of its own. */
     private boolean pool(){return heat()!=null&&unitKind()==com.wormzjl.icheme.science.equipment.HeatSides.Unit.KETTLE&&sideKind()==com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL;}
     private String flowUnit(){return flowRateUnit.unit(mass?"kg":"kmol");}
-    private int rail(){return Math.min(210,imageWidth/3);}
-    // The rail below "Operating conditions" (its fields, the filter's button and the values) is one column clipped to
-    // the area above the status separator and scrolled by its own bar on the rail/table divider when it is longer than
-    // that area, as the table area scrolls its rows. At 427x240 or 480x270 scaled pixels (GUI scale 2 at 854x480, the
-    // automatic scale at 1920x1080) the screen is 250 GUI px high and a pump's or compressor's column does not fit.
-    private static final int RAIL_STEP=10,RAIL_CONTROL=42,RAIL_LINE=24;
-    private final ProcessScroll railScroll=new ProcessScroll();
-    private int railBuiltOffset,hoverX=-1,hoverY=-1,clipTop=Integer.MIN_VALUE,clipBottom=Integer.MAX_VALUE;
-    private int railTop(){return 90;}
-    /** The rail ends inside the HMI screen's glass (see {@link #pageWell}). */
-    private int railBottom(){return imageHeight-55;}
-    private int railOffset(){return railScroll.value()*RAIL_STEP;}
-    private boolean inRail(int y,int height){return y>=railTop()&&y+height<=railBottom();}
-    private int tableX(){return rail()+24;}
+    // Every page but the Control tab: the door column from x 10 to side(), its bar right of it, then the tables' HMI
+    // screen. The column scrolls in its own view (the Control tab's view), as the table area scrolls its rows: at 480x270
+    // scaled pixels (the automatic GUI scale at 1920x1080) the screen is 254 GUI px high and a pump's column does not fit.
+    private int side(){return FluidGuiLayout.side(imageWidth);}
+    private int hoverX=-1,hoverY=-1;
+    private int tableX(){return side()+24;}
     private int tableWidth(){return imageWidth-tableX()-22;}
     // Page 4 is a tank's "Connections by face": one two-line row per connection in the table area, scrolled like the
-    // other tables, so the list is readable at every GUI scale (it was on the rail, below the tank's values, and did
-    // not fit below about 323 scaled pixels of height). Page 5 is an equipment datasheet, scrolled the same way.
+    // other tables, so the list is readable at every GUI scale (it was in the device's column, below the tank's values,
+    // and did not fit below about 323 scaled pixels of height). Page 5 is an equipment datasheet, scrolled the same way.
     private boolean tank(){return menu.clientData()!=null&&menu.clientData().kind()==TopologyCompiler.Kind.RESERVOIR;}
     // A heat unit's Overview has its stream switch and the stream's line above the phase tabs (HEAT_GUI_PLAN.md section 2).
     private int tableTop(){return page==0?(heat()!=null?164:130):page==1?166:page==3?116:page==4||page==5?100:142;}
@@ -178,9 +169,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private Button action(String key,int x,int y,int w,Runnable run){
         var b=button(tr(key),x,y,w,run);b.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid."+key+".hint")));return b;
     }
-    // The panel door (GUI_TOOLKIT_PLAN.md section 10): the frame, the title row, the tabs, the footer and the Control
-    // column are drawn by the theme's skin; the rail and the tables sit in its HMI screen, in the screens' dark palette,
-    // with the game's own widgets.
+    // The panel door (GUI_TOOLKIT_PLAN.md sections 10 and 14): the frame, the title row, the tabs, the footer and the
+    // door column (switches, set points, meters) are drawn by the theme's skin; the tables and the drawing sit in its HMI
+    // screen, in the screens' dark palette, with the game's own widgets.
     private static Skin skin(){return ClientConfig.skin();}
     /** A button on the door, drawn by the theme's skin. */
     private SkinButton doorButton(String text,int x,int y,int w,Runnable action){
@@ -199,21 +190,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         box.setTooltip(Tooltip.create(Component.literal(label)));box.setEditable(canEdit());editors.put(key,addRenderableWidget(box));
         return box;
     }
-    /** A field of the scrolled rail: its label is clipped with the rail, the box shows only when it lies wholly inside. */
-    private void railField(String key,String label,int y){field(key,label,12,y,rail()-4).visible=inRail(y+12,18);}
-    /** Rail controls above the values: the fields a device's page edits, a filter's recover button, an air cooler's fans,
-     * and a paired heat side's button to its partner (which a reader has too). */
-    private int railControls(){
-        var data=menu.clientData();if(data==null)return 0;
-        int partner=paired()?1:0;if(!canEdit())return partner;
-        // A heat side's control is on its Control tab; its rail keeps the partner button.
-        return partner+switch(data.kind()){case PUMP,COMPRESSOR->constructedMover()?3:2;case GENERATOR->3;case VALVE->data.valve()!=null&&!data.valve().configured()?0:valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW||valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?2:1;case VOID,PIPE,FILTER->1;default->0;};
-    }
-    /** An exchanger's side (W8): it may hold a ratio, and its control may ask for real lines. */
-    private boolean exchangerSide(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().unit().equals(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER.name());}
-    /** A heat side with a partner (an exchanger's): it opens the partner's screen (batch 2026-10-27-heat-exchanger-design). */
-    private boolean paired(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().paired();}
-    private void changePage(int target){if(heat()!=null&&(target==0||target==CONTROL))preferredHeatPage=target;page=target;templates=false;scroll.reset();rebuild();}
+    private void changePage(int target){if(heat()!=null&&(target==0||target==CONTROL))preferredHeatPage=target;page=target;templates=false;scroll.reset();doorView.reset();rebuild();}
     private void toggleBasis(){
         try{if(composition!=null){composition.toggleBasis();mass=composition.mass();}else mass=!mass;ClientConfig.basis(mass?ClientConfig.Basis.MASS:ClientConfig.Basis.MOLE);rebuild();}
         catch(IllegalArgumentException e){message=tr("invalid_composition");}
@@ -240,7 +217,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         rebuildNext=false;String focused=editors.entrySet().stream().filter(e->e.getValue()==getFocused()).map(Map.Entry::getKey).findFirst().orElse(null);
         int cursor=focused==null?0:editors.get(focused).getCursorPosition();
         boolean dropdownOpen=componentDropdown!=null&&componentDropdown.expanded();
-        clearWidgets();editors.clear();labels.clear();componentDropdown=null;phaseBasisButton=null;controlWidgets.clear();controlView.shown(page==CONTROL);
+        clearWidgets();editors.clear();labels.clear();componentDropdown=null;doorWidgets.clear();doorColumns=List.of();
         var data=menu.clientData();
         var tabs=new ArrayList<String>();var pages=new ArrayList<Integer>();tabs.add("overview");pages.add(0);
         if(heat()!=null){tabs.add("control");pages.add(CONTROL);}
@@ -268,10 +245,6 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var rate=footer.get(5);doorButton(flowRateUnit.suffix(),rate.x(),by,rate.width(),this::toggleFlowRate).soft(true)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.flow_unit.hint")));
         if(data==null)return;
-        phaseBasisButton=button(tr("phase_ratio."+phaseBasis.key()+"_basis"),12,0,rail()-4,()->{
-            phaseBasis=preferredPhaseBasis=phaseBasis.next();phaseBasisButton.setMessage(Component.literal(tr("phase_ratio."+phaseBasis.key()+"_basis")));
-        });
-        phaseBasisButton.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.phase_ratio.basis_hint")));layoutPhaseBasisButton();
         // A heat side applies its control from its Control tab only.
         if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()))){var apply=footer.get(1);doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);}
         if(page==CONTROL){
@@ -279,34 +252,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
             return;
         }
-        railBuiltOffset=railOffset();int y=railTop()-railBuiltOffset;
-        if(canEdit()&&switchable()) {
-            var power=action(fans()?(powerOn?"fans_on":"fans_off"):burners()?(powerOn?"burners_on":"burners_off"):(powerOn?"power_on":"power_off"),12,y,rail()-4,()->{powerOn=!powerOn;rebuild();});
-            power.visible=inRail(y,20);y+=RAIL_CONTROL;
-        }
-        if(canEdit())switch(data.kind()){
-            case GENERATOR->{railField("pressure",tr("pressure_input",pressureUnit.symbol()),y);railField("temperature",tr("temperature_input",temperatureUnit.symbol()),y+RAIL_CONTROL);}
-            case PUMP->{railField("volumeFlow",tr("flow_input",flowRateUnit.unit("m³")),y);railField("maximumAddedPressure",tr("head_input",pressureUnit.symbol()),y+RAIL_CONTROL);}
-            case COMPRESSOR->{railField("volumeFlow",tr("flow_input",flowRateUnit.unit("m³")),y);railField("maximumPressureRatio",tr("ratio_input"),y+RAIL_CONTROL);}
-            case VOID->railField("pressure",tr("pressure_input",pressureUnit.symbol()),y);
-            case VALVE->{
-                if(data.valve()==null||data.valve().configured()){
-                    boolean flow=valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW||valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
-                    if(flow){boolean massTarget=valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW;
-                        railField(massTarget?"massFlow":"volumeFlow",tr("flow_input",flowRateUnit.unit(massTarget?"kg":"m³")),y);
-                        var flowBasis=button(massTarget?"Mass flow":"Actual volume flow",12,y+RAIL_CONTROL,rail()-4,()->{valveSource=massTarget?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW:com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW;rebuild();});flowBasis.visible=inRail(y+RAIL_CONTROL,20);
-                    }else railField("pressure",tr("pressure_input",pressureUnit.symbol()),y);
-                }
-            }
-            case PIPE->railField("diameter",tr("diameter_input"),y);
-            default->{}
-        }
-        if(data.kind()==TopologyCompiler.Kind.FILTER&&canEdit()){
-            var recover=action("recover",12,y,rail()-4,()->{FluidNetwork.recoverSolids(menu,revision);message=tr("waiting");});
-            recover.active=data.view().filter()!=null&&!data.view().filter().captured().empty();recover.visible=inRail(y,18);
-        }
-        // A unit's heat side opens its partner side's menu (batch 2026-10-27-heat-exchanger-design).
-        if(paired()){action("partner_side",12,y,rail()-4,()->FluidNetwork.openPartner(menu)).visible=inRail(y,20);y+=RAIL_CONTROL;}
+        buildDevice();
         if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
         else if(page==4)configureScroll(data.view().outlets().size());else if(page==5)configureScroll(datasheet.size());
         else configureScroll(data.view().pipeInfo().connections().size());
@@ -499,15 +445,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private void text(GuiGraphics g,String value,int x,int y,int color,int width){
         String shown=font.plainSubstrByWidth(value,Math.max(0,width));g.drawString(font,shown,x,y,color,false);
         // A line cut to its column reads in full on hover, so a narrow screen drops nothing silently.
-        if(shown.length()<value.length()&&hoverX>=x&&hoverX<x+width&&hoverY>=Math.max(y,clipTop)&&hoverY<Math.min(y+9,clipBottom))hovered=value;
+        if(shown.length()<value.length()&&hoverX>=x&&hoverX<x+width&&hoverY>=y&&hoverY<y+9)hovered=value;
     }
-    private void railLine(GuiGraphics g,String key,String value,int y){text(g,tr(key),12,y,MUTED,rail()-2);text(g,value,12,y+10,TEXT,rail()-2);}
-    private boolean railHover(int mx,int my,int y0,int y1){return mx>=12&&mx<rail()+10&&my>=Math.max(y0,railTop())&&my<Math.min(y1,railBottom());}
     @Override public void render(GuiGraphics g,int mouseX,int mouseY,float partialTick){
         ProcessUi.restoreCursor(minecraft,this);refresh();if(rebuildNext)rebuild();hovered=null;
-        layoutPhaseBasisButton();
-        // The Control column's widgets follow its scroll before they draw.
-        if(page==CONTROL)controlWidgets.place(controlView,leftPos,topPos);
+        // The door column's widgets follow its scroll before they draw.
+        doorWidgets.place(doorView,leftPos,topPos);
         super.render(g,mouseX,mouseY,partialTick);
         if(hovered!=null&&(componentDropdown==null||!componentDropdown.popupContains(mouseX,mouseY))){
             var lines=new ArrayList<net.minecraft.util.FormattedCharSequence>();
@@ -516,17 +459,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         }
         if(componentDropdown!=null)componentDropdown.renderSuggestions(g,mouseX,mouseY);
     }
-    private int readingsTop(){return railTop()-railOffset()+(railControls()==0?4:railControls()*RAIL_CONTROL)+(pipe()&&menu.clientData().view().pipeInfo().junction()?18:0);}
-    private void layoutPhaseBasisButton() {
-        if(phaseBasisButton==null)return;
-        if(page==CONTROL){phaseBasisButton.visible=false;return;}
-        int y=readingsTop()+readings().size()*RAIL_LINE+2;
-        phaseBasisButton.setPosition(leftPos+12,topPos+y);phaseBasisButton.visible=inRail(y,18);
-    }
     /** The drawing's box inside the Control tab's HMI screen, as {@link #renderBg} drew it this frame. */
     private Rect drawingBox;
-    /** Every page but the Control tab: the rail and the tables in one HMI screen, from below the status to the footer's divider. */
-    private Rect pageWell(){return new Rect(5,72,imageWidth-10,imageHeight-50-72);}
+    /** Every page but the Control tab: the tables' HMI screen right of the door column, from below the status to the footer's divider. */
+    private Rect pageWell(){return new Rect(side()+15,72,imageWidth-side()-20,imageHeight-50-72);}
     @Override protected void renderBg(GuiGraphics g,float partialTick,int mouseX,int mouseY){
         var skin=skin();var canvas=new GuiCanvas(g,font,leftPos,topPos);
         g.pose().pushPose();g.pose().translate(leftPos,topPos,0);
@@ -555,7 +491,6 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var data=menu.clientData();
         if(data==null){doorStatus(canvas,skin,tr("waiting"),MUTED);return;}
         // A refused mover's reason ("ERROR: pump inlet not liquid ...") and a hold read in the warning colour.
-        // Every device repeats the full status on its scrollable rail (renderStatus).
         var view=data.view();
         skin.hDivider(canvas,8,imageWidth-8,imageHeight-49);
         // A message only (waiting, an invalid input); the view's time is gone (owner, 2026-10-28).
@@ -567,19 +502,13 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             renderControl(g);
             return;
         }
-        doorStatus(canvas,skin,statusText(view.status()),warning(view.status())?WARN:MUTED);
-        g.vLine(rail()+14,78,railBottom(),LINE);
-        text(g,tr("operating"),12,77,ACCENT,rail());
-        for(var label:labels)if(label.x()>=tableX())text(g,label.text(),label.x(),label.y(),MUTED,label.width());
-        // The rail column (see railTop): drawn clipped to its area, its length sets the rail's scrollbar.
-        int top=railTop(),bottom=railBottom(),start=top-railOffset();
-        g.enableScissor(leftPos+1,topPos+top,leftPos+rail()+10,topPos+bottom);clipTop=top;clipBottom=bottom;
-        for(var label:labels)if(label.x()<tableX())text(g,label.text(),label.x(),label.y(),MUTED,label.width());
-        int end=renderDeviceRail(g);
-        g.disableScissor();clipTop=Integer.MIN_VALUE;clipBottom=Integer.MAX_VALUE;
-        int visible=Math.max(1,(bottom-top)/RAIL_STEP),overflow=end-start-(bottom-top);
-        railScroll.configure(leftPos+rail()+10,topPos+top,bottom-top,visible,visible+(overflow>0?(overflow+RAIL_STEP-1)/RAIL_STEP:0));
-        if(railOffset()!=railBuiltOffset)rebuildNext=true;
+        // The status in words, once, on the message display (a pipe's reversed interval first); the engine's own line on hover.
+        String words=(pipe()&&view.pipeInfo().changedDirection()?tr("reversed_interval")+" ":"")+statusText(view.status());
+        doorStatus(canvas,skin,words,warning(view.status())?WARN:MUTED);
+        if(hoverX>=10&&hoverX<imageWidth-10&&hoverY>=55&&hoverY<69)hovered=words.equals(view.status())?words:words+"\n"+view.status();
+        skin.vDivider(canvas,side()+13,controlTop(),controlBottom());
+        for(var label:labels)text(g,label.text(),label.x(),label.y(),MUTED,label.width());
+        renderDevice(canvas,skin);
         if(page==0)renderContents(g,mouseX-leftPos,mouseY-topPos);
         else if(page==1)renderComposition(g,mouseX-leftPos,mouseY-topPos);
         else if(page==3)renderConnections(g,mouseX-leftPos,mouseY-topPos);
@@ -590,88 +519,117 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             text(g,tr("solid_col.1"),tableX()+w/2,128,TEXT,w/4);text(g,tr("solid_col.2"),tableX()+3*w/4,128,TEXT,w/4);
         }
         // Scrollbars store screen coordinates because all mouse events arrive there.
-        g.pose().pushPose();g.pose().translate(-leftPos,-topPos,0);scroll.draw(g);railScroll.draw(g);g.pose().popPose();
-    }
-    private record Reading(String key,String value,String hint){
-        Reading(String key,String value){this(key,value,null);}
+        g.pose().pushPose();g.pose().translate(-leftPos,-topPos,0);scroll.draw(g);g.pose().popPose();
     }
     private String displayPressure(Double value){return value==null?"—":pressureUnit.format(value);}
     private String quantity(double value,String unit){return (Double.isFinite(value)?number(value):"—")+" "+unit;}
-    /** One row plan drives both drawing and the phase selector's scroll position for every equipment kind. */
-    private List<Reading> readings(){
-        var data=menu.clientData();var view=data.view();var state=view.state();var rows=new ArrayList<Reading>();
-        if(switchable()||fans()||burners())rows.add(new Reading(fans()?"fans_state":burners()?"burners_state":"power_state",tr(data.controls().power()==FluidNetwork.Power.ON?"state_on":"state_off")));
+    private String value(double v){return Double.isFinite(v)?number(v):"—";}
+    private String temperatureValue(double kelvin){return value(temperatureUnit.display(kelvin));}
+    private String pressureValue(Double pascals){return pascals==null?"—":pressureUnit.number(pascals);}
+    private static DeviceColumn.Meter meter(String key,String value,String unit){return new DeviceColumn.Meter(key,value,unit,null);}
+    /**
+     * The Readings group's meters, in the player's units: one value a meter, its unit after it, what it reads on hover. A
+     * switch on the column shows its own position, a tank's fill is its Level group, a valve's opening its Valve group.
+     */
+    private List<DeviceColumn.Meter> meters(){
+        var data=menu.clientData();var view=data.view();var state=view.state();var rows=new ArrayList<DeviceColumn.Meter>();
+        String t=temperatureUnit.symbol(),p=pressureUnit.symbol();
+        // A heat side's burners and fans switch on its Control tab.
+        if(fans()||burners())rows.add(meter(fans()?"fans_state":"burners_state",tr(data.controls().power()==FluidNetwork.Power.ON?"state_on":"state_off"),""));
         // A plain pipe's line reading (OWNER_TEST_REVIEW.md section 6): the stream it carries, as its gauge reads it.
         if(pipe()&&view.pipeInfo().reading()!=null){
-            var line=view.pipeInfo().reading();String t=quantity(temperatureUnit.display(line.temperature()),temperatureUnit.symbol());
-            rows.add(new Reading("temperature",line.flowing()?t:tr("reading.no_flow",t),tr("line_temperature.hint")));
-            rows.add(new Reading("pressure",displayPressure(line.pressure())));
+            var line=view.pipeInfo().reading();
+            rows.add(new DeviceColumn.Meter("temperature",temperatureValue(line.temperature()),t,tr("line_temperature.hint")));
+            rows.add(meter("pressure",pressureValue(line.pressure()),p));
         }
         if(tank()){
             var vessel=view.tank();boolean empty=vessel!=null&&state==null;
-            rows.add(new Reading("temperature",state==null?"—":quantity(temperatureUnit.display(state.temperature()),temperatureUnit.symbol())));
-            rows.add(new Reading("top_pressure",displayPressure(vessel==null?(state==null?null:state.pressure()):vessel.topPressure()),tr("top_pressure.hint")));
-            rows.add(new Reading("bottom_pressure",displayPressure(vessel==null?null:vessel.bottomPressure()),tr("bottom_pressure.hint")));
-            double capacity=vessel!=null?vessel.capacity():state==null?Double.NaN:state.capacity();
-            String volume=(state!=null?number(state.volume()*1000):empty?number(0):"—")+" / "+(Double.isFinite(capacity)?number(capacity*1000):"—")+" L";
-            rows.add(new Reading("volume",volume,tr("volume_capacity.hint")+"\n"+volume));
-            rows.add(new Reading("fill",quantity(state!=null?state.fill()*100:empty?0:Double.NaN,"%")));
-            rows.add(new Reading("mass",quantity(state!=null?state.mass():empty?0:Double.NaN,"kg")));
+            rows.add(meter("temperature",state==null?"—":temperatureValue(state.temperature()),t));
+            rows.add(new DeviceColumn.Meter("top_pressure",pressureValue(vessel==null?(state==null?null:state.pressure()):vessel.topPressure()),p,tr("top_pressure.hint")));
+            rows.add(new DeviceColumn.Meter("bottom_pressure",pressureValue(vessel==null?null:vessel.bottomPressure()),p,tr("bottom_pressure.hint")));
+            rows.add(meter("mass",value(state!=null?state.mass():empty?0:Double.NaN),"kg"));
         }else if(!pipe()&&data.kind()!=TopologyCompiler.Kind.FILTER){
             boolean side=data.kind()==TopologyCompiler.Kind.HEAT_SIDE;
-            if(data.kind()!=TopologyCompiler.Kind.VOID)rows.add(new Reading(side?"inlet_temperature":"temperature",state==null?"—":quantity(temperatureUnit.display(state.temperature()),temperatureUnit.symbol())));
+            if(data.kind()!=TopologyCompiler.Kind.VOID)rows.add(meter(side?"inlet_temperature":"temperature",state==null?"—":temperatureValue(state.temperature()),t));
             String key=data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR?"suction_pressure":data.kind()==TopologyCompiler.Kind.VALVE||side?"inlet_pressure":"pressure";
-            rows.add(new Reading(key,displayPressure(state==null?null:state.pressure())));
+            rows.add(meter(key,pressureValue(state==null?null:state.pressure()),p));
         }
-        rows.add(new Reading(tank()?"net_flow":"throughput",quantity(displayedFlow(),flowUnit()),tr(tank()?"net_flow.hint":"throughput.hint")));
+        rows.add(new DeviceColumn.Meter(tank()?"net_flow":"throughput",value(displayedFlow()),flowUnit(),tr(tank()?"net_flow.hint":"throughput.hint")));
         if(pipe()){
-            var info=view.pipeInfo();
-            rows.add(new Reading("velocity",metricRange(info.connections(),com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection::velocityMetresPerSecond," m/s"),tr("velocity.hint")));
-            rows.add(new Reading("gradient",pressureRange(info.connections()),tr("gradient.hint")));
+            var connections=view.pipeInfo().connections();
+            range(rows,"velocity",connections,com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection::velocityMetresPerSecond,this::value,"m/s",tr("velocity.hint"));
+            range(rows,"gradient",connections,com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection::pressureDropPascalPerMetre,pressureUnit::number,p+"/m",tr("gradient.hint"));
         }
         if(data.kind()==TopologyCompiler.Kind.FILTER){
-            var filter=view.filter();rows.add(new Reading("filter_load",quantity(filter==null?Double.NaN:filter.loading()*100,"%")));
-            rows.add(new Reading("captured",quantity(filter==null?Double.NaN:filter.captured().massKg(),"kg")));
+            var filter=view.filter();
+            rows.add(meter("filter_load",value(filter==null?Double.NaN:filter.loading()*100),"%"));
+            rows.add(meter("captured",value(filter==null?Double.NaN:filter.captured().massKg()),"kg"));
         }
-        if(view.devicePressureChange()!=null)rows.add(new Reading("pressure_change",displayPressure(view.devicePressureChange())));
+        if(view.devicePressureChange()!=null)rows.add(meter("pressure_change",pressureValue(view.devicePressureChange()),p));
         if(view.heat()!=null){var heat=view.heat();
-            rows.add(new Reading("outlet_temperature",quantity(temperatureUnit.display(heat.outletTemperature()),temperatureUnit.symbol())));
-            rows.add(new Reading("duty",quantity(Math.abs(heat.heatWatt())/1000,"kW"),tr(heat.burners()!=null?"duty.fired":heat.heatWatt()<0?"duty.cooled":"duty.heated")));
-            // The control itself (mode, set point, low limit) is on the Control tab; the rail keeps what the actuator does.
+            rows.add(meter("outlet_temperature",temperatureValue(heat.outletTemperature()),t));
+            rows.add(new DeviceColumn.Meter("duty",value(Math.abs(heat.heatWatt())/1000),"kW",tr(heat.burners()!=null?"duty.fired":heat.heatWatt()<0?"duty.cooled":"duty.heated")));
+            // The control itself (mode, set point, low limit) is on the Control tab; this column keeps what the actuator does.
             var control=data.controls().heat();
-            if(heat.bypass()!=null)rows.add(new Reading("bypass",quantity(heat.bypass()*100,"%"),tr("bypass.hint")));
-            if(heat.fans()!=null&&control!=null&&control.mode()!=HeatUnit.Mode.OFF)rows.add(new Reading("fans_speed",quantity(heat.fans()*100,"%"),tr("fans_speed.hint")));
-            if(heat.fanPowerWatt()!=null)rows.add(new Reading("fan_power",quantity(heat.fanPowerWatt()/1000,"kW"),tr("fan_power.hint")));
-            if(heat.setPoint()!=null)rows.add(new Reading("set_temperature",quantity(temperatureUnit.display(heat.setPoint()),temperatureUnit.symbol())));
-            if(heat.maximumWatt()!=null)rows.add(new Reading("duty_available",quantity(heat.maximumWatt()/1000,"kW"),tr("duty_available.hint")));
+            if(heat.bypass()!=null)rows.add(new DeviceColumn.Meter("bypass",value(heat.bypass()*100),"%",tr("bypass.hint")));
+            if(heat.fans()!=null&&control!=null&&control.mode()!=HeatUnit.Mode.OFF)rows.add(new DeviceColumn.Meter("fans_speed",value(heat.fans()*100),"%",tr("fans_speed.hint")));
+            if(heat.fanPowerWatt()!=null)rows.add(new DeviceColumn.Meter("fan_power",value(heat.fanPowerWatt()/1000),"kW",tr("fan_power.hint")));
+            if(heat.setPoint()!=null)rows.add(meter("set_temperature",temperatureValue(heat.setPoint()),t));
+            if(heat.maximumWatt()!=null)rows.add(new DeviceColumn.Meter("duty_available",value(heat.maximumWatt()/1000),"kW",tr("duty_available.hint")));
         }
         if(data.kind()==TopologyCompiler.Kind.COMPRESSOR&&view.devicePressureChange()!=null&&state!=null&&state.pressure()>0)
-            rows.add(new Reading("pressure_ratio",number((state.pressure()+view.devicePressureChange())/state.pressure())));
-        if(data.valve()!=null){rows.add(new Reading("controller",data.valve().status()));rows.add(new Reading("valve_opening",quantity(100*data.valve().opening(),"%")));}
+            rows.add(meter("pressure_ratio",value((state.pressure()+view.devicePressureChange())/state.pressure()),""));
+        // An instrument's main value on its meter, the other on hover: a flowmeter's mass flow (its volume flow), a level
+        // gauge's share of its span (its height).
         for(var sensor:data.sensors()){
             String key=switch(sensor.kind()){case PRESSURE->"pressure_probe";case TEMPERATURE->"temperature_probe";case FLOW->"flowmeter";case LEVEL->sensor.mount().equals("level_boot")?"boot_level":"body_level";};
-            boolean available=sensor.availability()!=com.wormzjl.icheme.runtime.instrument.Instrument.Availability.UNAVAILABLE;
-            String value=available?switch(sensor.kind()){
-                case PRESSURE->pressureUnit.format(sensor.value());
-                case TEMPERATURE->quantity(temperatureUnit.display(sensor.value()),temperatureUnit.symbol())+(sensor.availability()==com.wormzjl.icheme.runtime.instrument.Instrument.Availability.NO_FLOW?" (no flow)":"");
-                case FLOW->quantity(flowRateUnit.display(sensor.value()),flowRateUnit.unit("kg"))+" / "+quantity(flowRateUnit.display(sensor.secondary()),flowRateUnit.unit("m³"));
-                case LEVEL->quantity(sensor.value(),"m")+" / "+quantity(sensor.secondary(),"%")+(sensor.value()<0||sensor.value()>sensor.span()?" (overrange)":"");
-            }:"Unavailable";
-            rows.add(new Reading(key,value));
+            var availability=sensor.availability();
+            if(availability==com.wormzjl.icheme.runtime.instrument.Instrument.Availability.UNAVAILABLE){rows.add(new DeviceColumn.Meter(key,"—","",tr("reading.unavailable")));continue;}
+            rows.add(switch(sensor.kind()){
+                case PRESSURE->meter(key,pressureUnit.number(sensor.value()),p);
+                case TEMPERATURE->new DeviceColumn.Meter(key,temperatureValue(sensor.value()),t,availability==com.wormzjl.icheme.runtime.instrument.Instrument.Availability.NO_FLOW?tr("reading.still"):null);
+                case FLOW->new DeviceColumn.Meter(key,value(flowRateUnit.display(sensor.value())),flowRateUnit.unit("kg"),tr("reading.volume_flow",quantity(flowRateUnit.display(sensor.secondary()),flowRateUnit.unit("m³"))));
+                case LEVEL->new DeviceColumn.Meter(key,value(sensor.secondary()),"%",tr(sensor.value()<0||sensor.value()>sensor.span()?"reading.height_overrange":"reading.height",quantity(sensor.value(),"m")));
+            });
         }
         return List.copyOf(rows);
     }
-    private int renderDeviceRail(GuiGraphics g){
-        var view=menu.clientData().view();int y=readingsTop();
-        if(pipe()&&view.pipeInfo().junction())text(g,tr("junction",view.pipeInfo().connections().size()),12,y-16,ACCENT,rail());
-        for(var row:readings()){
-            railLine(g,row.key(),row.value(),y);
-            if(row.hint()!=null&&railHover(hoverX,hoverY,y,y+RAIL_LINE-1))hovered=row.hint();
-            y+=RAIL_LINE;
-        }
-        y=renderPhaseRatio(g,hoverX,hoverY,y+24);
-        var status=pipe()&&view.pipeInfo().changedDirection()?tr("reversed_interval")+" ":"";
-        return renderStatus(g,hoverX,hoverY,y,status+statusText(view.status()),view.status());
+    /** A pipe's reading over its connections: one meter where they read alike, else the lowest and the highest. */
+    private static void range(List<DeviceColumn.Meter> rows,String key,List<com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection> connections,
+            java.util.function.ToDoubleFunction<com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection> reading,java.util.function.DoubleFunction<String> shown,String unit,String hint){
+        if(connections.isEmpty()){rows.add(new DeviceColumn.Meter(key,"—",unit,hint));return;}
+        String low=shown.apply(connections.stream().mapToDouble(reading).min().orElse(0)),high=shown.apply(connections.stream().mapToDouble(reading).max().orElse(0));
+        if(low.equals(high))rows.add(new DeviceColumn.Meter(key,low,unit,hint));
+        else{rows.add(new DeviceColumn.Meter(key+"_lowest",low,unit,hint));rows.add(new DeviceColumn.Meter(key+"_highest",high,unit,hint));}
+    }
+    /** The Phases group: accepted passing material, stored vessel contents, configured generator feed, or the Overview's stream. */
+    private DeviceColumn.Phases phases(){
+        var data=menu.clientData();var view=data.view();var state=view.state();var info=view.pipeInfo();var port=selectedPort();
+        // A heat unit's selected stream (the Overview's switch) sets the phase split shown.
+        double[] volumes=port!=null?port.phaseVolumes():info!=null?info.contents().phaseVolumes():state!=null?state.phaseVolumes():new double[3];
+        var solids=port!=null?SolidInventory.EMPTY:info!=null?info.contents().solids():state!=null?state.solids():SolidInventory.EMPTY;
+        String hint=tr(generator()?"phase_ratio.generator_hint":tank()?"phase_ratio.tank_hint":"phase_ratio.hint");
+        if(phaseBasis==PhaseRatioBasis.MOLAR)hint+="\n"+tr("phase_ratio.mole_hint");
+        return new DeviceColumn.Phases(phaseBasis.key(),phaseBasis.amounts(volumes,amounts(),solids,data.components(),data.molecularWeights()),phaseBasis.excludesCustomSolids(solids),hint);
+    }
+    /** A tank's Level group: its fill (NaN while unknown), and its contents of its capacity in litres. */
+    private DeviceColumn.Level level(){
+        if(!tank())return null;
+        var view=menu.clientData().view();var vessel=view.tank();var state=view.state();boolean empty=vessel!=null&&state==null;
+        double capacity=vessel!=null?vessel.capacity():state==null?Double.NaN:state.capacity();
+        return new DeviceColumn.Level(state!=null?state.fill():empty?0:Double.NaN,state!=null?number(state.volume()*1000):empty?number(0):"—",value(capacity*1000));
+    }
+    /** What the door column reads on a device's page (DeviceColumn): this device's view and drafts, the player's units. */
+    private DeviceColumn.Input deviceInput(){
+        var data=menu.clientData();var view=data.view();
+        var valve=data.kind()!=TopologyCompiler.Kind.VALVE?DeviceColumn.Valve.NONE:data.valve()!=null&&!data.valve().configured()?DeviceColumn.Valve.UNCONFIGURED:switch(valveSource){
+            case MASS_FLOW->DeviceColumn.Valve.MASS_FLOW;case VOLUME_FLOW->DeviceColumn.Valve.VOLUME_FLOW;default->DeviceColumn.Valve.PRESSURE;};
+        var opening=data.valve()==null?null:new DeviceColumn.Opening(data.valve().opening(),data.valve().status());
+        String junction=pipe()&&view.pipeInfo().junction()?tr("junction",view.pipeInfo().connections().size()):null;
+        // A paired heat side leads with its side selector, as its Control tab does.
+        var lead=heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
+        return new DeviceColumn.Input(data.kind(),canEdit(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
+            view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters());
     }
     private static boolean warning(String status){return status.contains("HELD")||status.contains("ERROR");}
     /**
@@ -717,38 +675,6 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             :outlet.drawn()==1?tr("outlet.drawing_water"):outlet.drawn()==0?tr("outlet.drawing_oil"):"—";
         return drawing+" · "+number(flow)+unit;
     }
-    /** A shared phase block: accepted passing material, stored vessel contents, or configured generator feed. */
-    private int renderPhaseRatio(GuiGraphics g,int mx,int my,int y){
-        var data=menu.clientData();var view=data.view();var state=view.state();var info=view.pipeInfo();var port=selectedPort();
-        // A heat unit's selected stream (the Overview's switch) sets the phase split shown.
-        double[] volumes=port!=null?port.phaseVolumes():info!=null?info.contents().phaseVolumes():state!=null?state.phaseVolumes():new double[3];
-        var solids=port!=null?SolidInventory.EMPTY:info!=null?info.contents().solids():state!=null?state.solids():SolidInventory.EMPTY;
-        var values=phaseBasis.amounts(volumes,amounts(),solids,data.components(),data.molecularWeights());
-        boolean excludes=phaseBasis.excludesCustomSolids(solids);
-        text(g,tr(phaseBasis==PhaseRatioBasis.VOLUME?"phase_ratio":"phase_ratio."+phaseBasis.key()),12,y,MUTED,rail());y+=14;
-        double total=Arrays.stream(values).sum();int at=12;int[] colors={0xffd6a65a,0xff549bd2,0xffb3c0ca,0xffa28565};
-        int[] edges=new int[5];edges[0]=12;double accumulated=0;
-        for(int i=0;i<4;i++){accumulated+=values[i];edges[i+1]=12+(total>0?(int)Math.round((rail()-4)*accumulated/total):0);if(total>0)g.fill(edges[i],y,edges[i+1],y+5,colors[i]);}
-        y+=10;
-        for(int i=0;i<4;i++){
-            int col=i%2,row=i/2;String label=i==3&&phaseBasis==PhaseRatioBasis.MOLAR?tr("phase_ratio.crystals"):tr("phase_short."+i);
-            text(g,label+" "+(total>0?number(100*values[i]/total)+"%":"—"),12+col*rail()/2,y+row*13,TEXT,rail()/2-4);
-        }
-        String hint=tr(generator()?"phase_ratio.generator_hint":tank()?"phase_ratio.tank_hint":"phase_ratio.hint");
-        if(phaseBasis==PhaseRatioBasis.MOLAR)hint+="\n"+tr("phase_ratio.mole_hint");
-        if(railHover(mx,my,y-24,y+26))hovered=hint;
-        y+=34;
-        if(excludes){text(g,tr("phase_ratio.custom_solids_excluded"),12,y,WARN,rail()-2);if(railHover(mx,my,y,y+10))hovered=tr("phase_ratio.mole_hint");y+=14;}
-        return y;
-    }
-    /** The "Status / errors" block from y: every line of the shown text (the rail scrolls); hover reads the raw engine status. */
-    private int renderStatus(GuiGraphics g,int mx,int my,int y,String shown,String status){
-        text(g,tr("pipe_status"),12,y,ACCENT,rail());y+=14;
-        var lines=font.split(Component.literal(shown),rail()-4);
-        for(int i=0;i<lines.size();i++)g.drawString(font,lines.get(i),12,y+i*10,warning(status)?WARN:MUTED,false);
-        if(railHover(mx,my,y-14,y+lines.size()*10))hovered=status;
-        return y+Math.max(1,lines.size())*10-1;
-    }
     /**
      * The engine status in words, clause by clause (" / " between a device's prefixes and its island's status), so a prefixed
      * "/ FULL" reads as words too; a temperature a clause names is shown in the player's unit. A data-range notice (an
@@ -782,18 +708,6 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(base.startsWith("STEADY:"))return since.find()?tr("status_base.steady",since.group(1)):tr("flowing");
         if(base.equals("FULL"))return tr("status_base.full");
         return "";
-    }
-    private String metricRange(List<com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection> metrics,
-            java.util.function.ToDoubleFunction<com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection> value,String unit){
-        if(metrics.isEmpty())return "—";
-        double min=metrics.stream().mapToDouble(value).min().orElse(0),max=metrics.stream().mapToDouble(value).max().orElse(0);
-        return (Math.abs(max-min)<1e-9?number(max):number(min)+"–"+number(max))+unit;
-    }
-    private String pressureRange(List<com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection> metrics){
-        if(metrics.isEmpty())return "—";
-        String min=pressureUnit.number(metrics.stream().mapToDouble(com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection::pressureDropPascalPerMetre).min().orElse(0));
-        String max=pressureUnit.number(metrics.stream().mapToDouble(com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection::pressureDropPascalPerMetre).max().orElse(0));
-        return (min.equals(max)?min:min+"–"+max)+" "+pressureUnit.symbol()+"/m";
     }
     private void renderConnections(GuiGraphics g,int mx,int my){
         var view=menu.clientData().view();var metrics=view.pipeInfo().connections();int x=tableX(),w=tableWidth();
@@ -878,10 +792,11 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     // ---- The Control tab (HEAT_GUI_PLAN.md section 2): the unit's flowsheet on the left, its control column on the right ----
 
-    private final ScrollView controlView=new ScrollView();
-    private final KitWidgets controlWidgets=new KitWidgets();
-    /** The Control column as placed: layout C's two columns (GUI_TOOLKIT_PLAN.md section 10), or one on a narrow screen. */
-    private List<Column> controlColumns=List.of();
+    // The door column's view on every page: the Control tab's columns, or a device's page's column (DeviceColumn).
+    private final ScrollView doorView=new ScrollView();
+    private final KitWidgets doorWidgets=new KitWidgets();
+    /** The door columns as placed: layout C's two (GUI_TOOLKIT_PLAN.md section 10), one on a narrow screen, or a device's page's. */
+    private List<Column> doorColumns=List.of();
     private HeatFlowsheet flowsheet;private String flowsheetKey="";
     private int controlTop(){return 74;}
     private int controlBottom(){return imageHeight-52;}
@@ -896,25 +811,75 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private void buildControl(){
         var slots=controlSlots();var input=controlInput();var measure=GuiCanvas.measure(font);
         if(slots.split()){var two=HeatControlColumn.columns(input,FluidDeviceScreen::tr);
-            controlColumns=List.of(Column.place(two.left(),slots.leftX(),controlTop(),slots.leftWidth(),measure,Column.Metrics.COMPACT),
+            doorColumns=List.of(Column.place(two.left(),slots.leftX(),controlTop(),slots.leftWidth(),measure,Column.Metrics.COMPACT),
                 Column.place(two.right(),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));}
-        else controlColumns=List.of(Column.place(HeatControlColumn.rows(input,FluidDeviceScreen::tr),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
-        int tall=controlColumns.stream().mapToInt(c->c.bounds().h()).max().orElse(0);
-        controlView.layout(new Rect(slots.leftX()-2,controlTop(),slots.rightX()+slots.rightWidth()-slots.leftX()+4,controlBottom()-controlTop()),slots.scrollX(),tall);
-        for(var column:controlColumns)for(var p:column.rows()){
-            if(p.row() instanceof Column.Field f)controlWidgets.keep(controlBox(f,p.slots().get(f.key())),p.slots().get(f.key()));
+        else doorColumns=List.of(Column.place(HeatControlColumn.rows(input,FluidDeviceScreen::tr),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
+        int tall=doorColumns.stream().mapToInt(c->c.bounds().h()).max().orElse(0);
+        doorView.layout(new Rect(slots.leftX()-2,controlTop(),slots.rightX()+slots.rightWidth()-slots.leftX()+4,controlBottom()-controlTop()),slots.scrollX(),tall);
+        keepWidgets(this::controlAction);
+    }
+    /**
+     * A device's page's door column (DeviceColumn, GUI_REVIEW.md order 1) in place of the old rail: from x 10 to
+     * {@link #side}, its bar right of it. Placed at each rebuild for its widgets and again each frame for its texts
+     * ({@link #renderDevice}).
+     */
+    private void buildDevice(){
+        doorColumns=List.of(placeDevice());
+        keepWidgets(this::deviceAction);
+    }
+    private Column placeDevice(){
+        var column=Column.place(DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr),10,controlTop(),side()-10,GuiCanvas.measure(font),Column.Metrics.COMPACT);
+        doorView.layout(new Rect(8,controlTop(),side()-6,controlBottom()-controlTop()),side()+3,column.bounds().h());
+        return column;
+    }
+    /**
+     * The door columns' fields and buttons, kept at their slots and moved as the view scrolls, so a scroll rebuilds
+     * nothing; a button acts through {@code action}.
+     */
+    private void keepWidgets(java.util.function.Consumer<String> action){
+        for(var column:doorColumns)for(var p:column.rows()){
+            if(p.row() instanceof Column.Field f)doorWidgets.keep(doorBox(f,p.slots().get(f.key())),p.slots().get(f.key()));
             else if(p.row() instanceof Column.Buttons b)for(var spec:b.buttons()){
                 var slot=p.slots().get(spec.key());
-                // The side shown and the switch's position are latched, as the page's tab is.
-                var button=doorButton(spec.text(),slot.x(),slot.y(),slot.w(),()->controlAction(spec.key())).latched(spec.latched());
+                // The side shown and the switch's position are latched, as the page's tab is; a display key is flat.
+                var button=doorButton(spec.text(),slot.x(),slot.y(),slot.w(),()->action.accept(spec.key())).latched(spec.latched()).soft(spec.soft());
                 button.active=spec.active();if(spec.hint()!=null)button.setTooltip(Tooltip.create(Component.literal(spec.hint())));
-                controlWidgets.keep(button,slot);
+                doorWidgets.keep(button,slot);
             }
         }
-        controlWidgets.place(controlView,leftPos,topPos);
+        doorWidgets.place(doorView,leftPos,topPos);
     }
-    /** A field of the Control column: a panel meter at rest, the game's text field while edited. */
-    private EditBox controlBox(Column.Field f,Rect slot){
+    /**
+     * A device's page's action (DeviceColumn's keys): the other side's screen; the solids' recovery, sent at once; the
+     * Phases' basis, the display's alone; the switch and a valve's target, drafts until Apply.
+     */
+    private void deviceAction(String action){
+        if(action.startsWith("side:"))FluidNetwork.openPartner(menu);
+        else if(action.equals("recover")){FluidNetwork.recoverSolids(menu,revision);message=tr("waiting");}
+        else{
+            switch(action){
+                case "phase_basis"->phaseBasis=preferredPhaseBasis=phaseBasis.next();
+                case "power:off","power:on"->powerOn=action.endsWith(":on");
+                case "valve:mass"->valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW;
+                case "valve:volume"->valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
+                default->{}
+            }
+            rebuild();
+        }
+    }
+    /** A device's page's door column, placed again from this frame's view: its texts follow the plant with no rebuild. */
+    private void renderDevice(GuiCanvas canvas,Skin skin){
+        doorColumns=List.of(placeDevice());
+        drawDoor(canvas,skin);
+    }
+    /** The door columns as placed: drawn clipped to their view, a row's hint read on hover, the view's bar. */
+    private void drawDoor(GuiCanvas canvas,Skin skin){
+        canvas.clip(doorView.viewport());for(var column:doorColumns)column.draw(canvas,-doorView.offset(),skin);canvas.unclip();
+        if(doorView.inside(hoverX,hoverY))for(var column:doorColumns){var hover=column.hover(hoverX,doorView.contentY(hoverY));if(hover!=null)hovered=hover;}
+        doorView.drawBar(canvas,skin);
+    }
+    /** A field of a door column: a panel's LCD entry at rest, the game's text field while edited. */
+    private EditBox doorBox(Column.Field f,Rect slot){
         var box=new SkinField(font,leftPos+slot.x(),topPos+slot.y(),slot.w(),slot.h(),Component.literal(f.label()),FluidDeviceScreen::skin);
         box.setMaxLength(48);box.setValue(fields.get(f.key()).text());box.setResponder(v->fields.get(f.key()).text(v));box.setEditable(canEdit());
         box.setTooltip(Tooltip.create(Component.literal(f.hint()==null?f.label():f.label()+"\n"+f.hint())));
@@ -1062,10 +1027,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var slots=controlSlots();
         skin.vDivider(canvas,slots.leftX()-6,controlTop(),controlBottom());
         if(slots.split())skin.vDivider(canvas,slots.rightX()-7,controlTop(),controlBottom());
-        // The columns as placed: drawn clipped to their view, a field's hint read on hover.
-        canvas.clip(controlView.viewport());for(var column:controlColumns)column.draw(canvas,-controlView.offset(),skin);canvas.unclip();
-        if(controlView.inside(hoverX,hoverY))for(var column:controlColumns){var hover=column.hover(hoverX,controlView.contentY(hoverY));if(hover!=null)hovered=hover;}
-        controlView.drawBar(canvas,skin);
+        // The columns as placed: drawn clipped to their view, a row's hint read on hover.
+        drawDoor(canvas,skin);
     }
     @Override public boolean keyPressed(int key,int scan,int modifiers){
         if(ProcessUi.textKeyPressed(this,key,scan,modifiers))return true;
@@ -1073,30 +1036,24 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     @Override public boolean mouseClicked(double x,double y,int button){
         if(componentDropdown!=null&&componentDropdown.popupClick(x,y,button))return true;
-        // The Control tab's column view: its bar, then a choice it places (a mode); the rail's and the table's scrolls are not on it.
-        if(page==CONTROL){
-            double rx=x-leftPos,ry=y-topPos;
-            if(controlView.press(rx,ry,button))return true;
-            if(button==0&&controlView.inside(rx,ry))for(var column:controlColumns){var action=column.action(rx,controlView.contentY(ry));if(action!=null){controlAction(action);return true;}}
-            return super.mouseClicked(x,y,button);
-        }
-        if(scroll.click(x,y,button)||railScroll.click(x,y,button)){rebuildNext=true;return true;}return super.mouseClicked(x,y,button);
+        // The door column's view on every page: its bar, then a choice it places (a mode, a valve's target); then the table's scroll.
+        double rx=x-leftPos,ry=y-topPos;
+        if(doorView.press(rx,ry,button))return true;
+        if(button==0&&doorView.inside(rx,ry))for(var column:doorColumns){var action=column.action(rx,doorView.contentY(ry));if(action!=null){if(page==CONTROL)controlAction(action);else deviceAction(action);return true;}}
+        if(page!=CONTROL&&scroll.click(x,y,button)){rebuildNext=true;return true;}
+        return super.mouseClicked(x,y,button);
     }
     @Override public boolean mouseDragged(double x,double y,int button,double dx,double dy){
         if(componentDropdown!=null&&componentDropdown.popupDrag(y))return true;
-        if(page==CONTROL){if(controlView.drag(y-topPos))return true;return super.mouseDragged(x,y,button,dx,dy);}
-        if(scroll.drag(y)||railScroll.drag(y)){rebuildNext=true;return true;}return super.mouseDragged(x,y,button,dx,dy);
+        if(doorView.drag(y-topPos))return true;
+        if(page!=CONTROL&&scroll.drag(y)){rebuildNext=true;return true;}
+        return super.mouseDragged(x,y,button,dx,dy);
     }
-    @Override public boolean mouseReleased(double x,double y,int button){if(componentDropdown!=null)componentDropdown.popupRelease();scroll.release();railScroll.release();controlView.release();return super.mouseReleased(x,y,button);}
+    @Override public boolean mouseReleased(double x,double y,int button){if(componentDropdown!=null)componentDropdown.popupRelease();scroll.release();doorView.release();return super.mouseReleased(x,y,button);}
     @Override public boolean mouseScrolled(double x,double y,double horizontal,double vertical){
         if(componentDropdown!=null&&componentDropdown.popupScroll(x,y,vertical))return true;
-        if(page==CONTROL){
-            if(controlView.wheel(x-leftPos,y-topPos,vertical))return true;
-            return super.mouseScrolled(x,y,horizontal,vertical);
-        }
-        if(x>=leftPos+tableX()&&scroll.wheel(vertical)){rebuildNext=true;return true;}
-        // The wheel over the rail column scrolls it (three steps of 10 px: one value line).
-        if(x<leftPos+tableX()&&y>=topPos+railTop()&&y<topPos+railBottom()&&railScroll.wheel(vertical)){rebuildNext=true;return true;}
+        if(doorView.wheel(x-leftPos,y-topPos,vertical))return true;
+        if(page!=CONTROL&&x>=leftPos+tableX()&&scroll.wheel(vertical)){rebuildNext=true;return true;}
         return super.mouseScrolled(x,y,horizontal,vertical);
     }
 
@@ -1125,6 +1082,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         public static Rect softKeys(int width,int height) {
             var footer=footer(width);var first=footer.get(2);var last=footer.get(5);
             return new Rect(first.x()-4,height-31,last.x()+last.width()+4-(first.x()-4),26);
+        }
+        /**
+         * Every page but the Control tab: the door column's right edge, the column from x 10 (GUI_TOOLKIT_PLAN.md section
+         * 14); its bar from here + 3, the divider at + 13, the tables' HMI screen from + 15.
+         */
+        public static int side(int width) {
+            if(width<300)throw new IllegalArgumentException("Fluid GUI width below minimum");
+            return Math.clamp(width*3/8,120,190);
         }
         public static List<Slot> tabs(int width,int count) {
             if(width<300||count<1||count>4)throw new IllegalArgumentException("Invalid fluid tabs");

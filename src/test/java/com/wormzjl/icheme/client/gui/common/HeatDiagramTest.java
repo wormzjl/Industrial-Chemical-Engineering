@@ -144,7 +144,7 @@ class HeatDiagramTest {
                 "heat_field.low_limit.hint", "heat_field.off", "heat_group.lines.hint", "pool_note", "reader_note", "legend.in_place", "legend.misplaced", "legend.missing",
                 "heat_status.manual", "heat_status.holding", "heat_status.short", "heat_status.low_limit", "heat_status.ratio", "heat_status.ratio_waiting",
                 "heat_status.firing", "heat_status.firing_short", "heat_status.firing_most", "heat_status.burners_out", "heat_status.boiling", "status_base.steady",
-                "status_base.no_flow", "status_base.full", "status.low_limit", "status.duty_short", "stream.contents", "stream.hint", "stream.empty", "reading.no_flow",
+                "status_base.no_flow", "status_base.full", "status.low_limit", "status.duty_short", "stream.contents", "stream.hint", "stream.empty",
                 "line_temperature.hint", "check_lines", "check_lines.hint", "heat_group.control", "heat_group.target", "heat_group.target.hint", "heat_group.set_point",
                 "heat_group.manual", "heat_group.lines", "heat_switch.off", "heat_switch.on", "heat_switch.off.hint", "heat_switch.on.hint", "heat_switch.burners_off.hint",
                 "heat_switch.burners_on.hint", "heat_switch.fans_off.hint", "heat_switch.fans_on.hint"))
@@ -166,8 +166,8 @@ class HeatDiagramTest {
                 if (s != com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.Lines.Status.COMPLETE) keys.add("gui.icheme.fluid.lines_note." + kind + "." + s.name().toLowerCase(Locale.ROOT));
         var missing = keys.stream().filter(k -> !lang.contains(k)).sorted().toList();
         assertEquals(List.of(), missing);
-        // The exchanger's ratio field has its own line; the compressor's keeps its own.
-        assertTrue(lang.contains("gui.icheme.fluid.ratio_input"));
+        // The exchanger's ratio field has its own line; the compressor's limit keeps its own.
+        assertTrue(lang.contains("gui.icheme.fluid.device_field.max_ratio"));
     }
 
     /** No key is defined twice: the language file keeps the last, so a second definition silently renames a field. */
