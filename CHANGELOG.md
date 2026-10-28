@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- A lying boot drum's oil outlet faces down beside its front saddle, with a smaller largest line there, where a pipe's largest did not fit; it no longer leaves mid-height from the front head on eight drum sizes (2 x 6 m among them). `6588cdfe`; batch `2026-10-28-drum-outlet-placement`.
+
 ## [0.17.0] - 2026-10-28
 
 ### Added
