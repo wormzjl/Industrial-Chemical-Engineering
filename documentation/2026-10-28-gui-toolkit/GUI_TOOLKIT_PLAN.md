@@ -211,3 +211,27 @@ Owner, on the review's prototypes and order: "Good, proceed".
 - **Open.**
   - At 464 by 254 the column is 273 to 347 px in a 128 px view: it scrolls, as the rail did.
   - The valve's controller words ("Regulating", "Fully open / target limited") are English from the server (`FluidNetwork.valve`).
+
+## 15. The small dialogs (2026-10-28, GUI_REVIEW.md order 2)
+
+Owner, on the next step: "Yes, go on".
+
+- **Expected.** A dialog is a small panel door under the same rules: function groups under short plates, selector positions latched, sentences in hovers, LCD entries and LED meters with their boxes and units in line, the client's theme, Cancel and Save (or Done) as push buttons.
+- **What the code did.** The gauge, the pipeline tools and the vessel datasheet drew vanilla widgets on a flat panel. The gauge stepped its unit with one button and named its basis "Atmospheric-relative" or "Absolute pressure". The pipeline tool marked the edited paint with "▶" and wrote three note lines under the palette. The datasheet was a list of sentences as wide as its longest line, its nozzles facing world compass names ("faces north").
+- **As built.**
+  - `client/gui/common/DialogColumns` (new, no Minecraft classes): the three columns, the footer's slots, the palette's places, and the datasheet's glass (its lines and their drawing).
+    - Gauge: Range (Minimum, Maximum, the kind's units as a latched selector: Pa, kPa, bar, MPa, or °C, K); a pressure gauge's Reading (Gauge, Absolute). The unit stays saved on the gauge (choice (e) open).
+    - Pipeline tools: Size (Bore, m); the laying tool's Paint (Primary or Secondary latched, the palette in the group's gap, Custom as RRGGBB, Bare steel latched while bare). The notes went to the group's hover.
+    - Datasheet: on the door, Size (a drum's or a column's Diameter and Length as LCD entries, as chosen on the constructor; Overall, Top, Volume and Area as LED meters; a unit's Overall and Top) and a moving unit's Moving parts (Still, Running). On the glass: the blocked-cells warning first; the kind, the design's lines, the support, the cells and the controller, wrapped; a blank line; the nozzle table (Nozzle, Port, Side), each role wrapped in its column. Where a role's word is wider than its column, the table stacks: each role across the glass, its port and side on the line under it. The panel is 400 px wide where the window has room (the prototype's 340 left the role column 45 px, narrower than "Regeneration"), so the three columns are the norm.
+    - The warning line (no range, no size) comes after the widgets. Each panel is sized for it, so neither the panel nor a widget moves while the player types.
+  - `kit/KitDoor` (new): a dialog's column in a view that scrolls where the window is short (narrowed for its bar), its widgets kept at their slots. `SkinButton.of` makes a column's button.
+  - `GaugeScreen`, `PipelineToolScreen` and `VesselScreen` draw through the kit in the client's theme. `VesselScreen.sheet` replaces `datasheet`; a drum's Datasheet tab on `FluidDeviceScreen` draws the same glass, its sizes first.
+  - Sides: Front, Back, Left, Right, Top and Bottom, the constructor's words, seen from the vessel's front (`EquipmentShape.front()`): a standing vessel's liquid outlet side, a lying drum's front head. A crosswise lying drum's front head is the constructor's right, so its sides are a quarter turn from the constructor's; the shape does not keep the constructor's view.
+  - The prototype's nozzle Size column was dropped: a nozzle takes its pipe's size (owner decision 2026-10-21). The Port column shows the phase it draws first.
+  - `GaugeSettings.Unit.measures` and `Unit.of` replace `Unit.next` and the record's own kind check.
+  - Lang: plates, labels and hovers came (`gauge.range`, `gauge.reading`, `pipeline_tool.size`, `.bore`, `.paint`, `vessel.size.*`, `vessel.motion`, `vessel.nozzles.*`). The sentences the sizes and the table replace left (`vessel.diameter`, `.tangent_length`, `.length`, `.top`, `.volume`, `.area`, `.unit_length`, `.nozzle`, `.facing.*`; `gauge.dial_only`; `pipeline_tool.diameter`, `.range`, `.paint.named`, `.paint.unpainted`, `.paint.*.parts`). Ports and the motion switch's words are short table words.
+  - Gates: `DialogColumnsTest` (7): every text has its English line; each column fits its door at full width and narrowed for its bar, boxes in line; each mode's keys and latched positions; the warning moves no widget; the palette fills its gap; the glass cuts no name; the footer. `HeatControlColumnTest.Recording` takes a key prefix.
+  - Render tool: `GuiPrototypes` draws the gauge, a thermometer with its warning, the laying tool, and two datasheets (a drum; an air cooler with moving parts and a blocked-cells warning) through the shipped builders.
+- **Open.**
+  - Choice (e), the gauge's unit. A crosswise lying drum's sides (above).
+  - Owner, on the glass: "different lines needs some distinguishing" (a wrapped line read as an entry of its own). Each glass line now carries its entry and whether it continues one (`GlassLine.entry`, `wrapped`; `glass(..., indent, ...)` never splits a word). Three ways are rendered for the owner (`tmp/gui-prototypes/glass-lines.png`): A, an entry's wrapped lines 8 px in; B, every second entry on a faint band; C, a faint rule between entries. Shipped as none until the owner picks.

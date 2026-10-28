@@ -21,6 +21,18 @@ public final class SkinButton extends Button {
         this.skin = skin;
     }
 
+    /**
+     * A column's button at content slot {@code slot}: active, latched and soft as {@code spec} says, its hint on hover;
+     * pressed, it runs {@code action} with its key.
+     */
+    public static SkinButton of(Column.Button spec, Rect slot, java.util.function.Consumer<String> action, Supplier<Skin> skin) {
+        var b = new SkinButton(slot.x(), slot.y(), slot.w(), slot.h(), Component.literal(spec.text()), p -> action.accept(spec.key()), skin)
+                .latched(spec.latched()).soft(spec.soft());
+        b.active = spec.active();
+        if (spec.hint() != null) b.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(spec.hint())));
+        return b;
+    }
+
     /** Inactive, it reads as latched (the page or the side shown), not as switched off. */
     public SkinButton latched(boolean value) {
         latched = value;

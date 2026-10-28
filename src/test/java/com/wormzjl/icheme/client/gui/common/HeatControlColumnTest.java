@@ -39,10 +39,20 @@ class HeatControlColumnTest {
     /** The English lines, filled in as the game fills them; every key asked for is recorded, and a missing one too. */
     static final class Recording implements HeatControlColumn.Texts {
         final Set<String> asked = new TreeSet<>(), missing = new TreeSet<>();
+        /** The keys' prefix: the fluid screens' by default, {@code gui.icheme.} for the dialogs (DialogColumns). */
+        private final String prefix;
+
+        Recording() {
+            this("gui.icheme.fluid.");
+        }
+
+        Recording(String prefix) {
+            this.prefix = prefix;
+        }
 
         @Override
         public String get(String key, Object... args) {
-            String full = "gui.icheme.fluid." + key;
+            String full = prefix + key;
             asked.add(full);
             String line;
             try {

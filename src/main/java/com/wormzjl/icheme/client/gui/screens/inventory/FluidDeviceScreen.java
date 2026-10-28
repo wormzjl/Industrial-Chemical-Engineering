@@ -58,8 +58,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private V3ClientPresets.Snapshot mixtureSnapshot;
     private record Choice(String label,Runnable select){}
     private List<Choice> choices=List.of();
-    /** Equipment datasheet (page 5), from the client's synced cells; empty for one-block devices. */
-    private List<Component> datasheet=List.of();
+    /** Equipment datasheet (page 5), from the client's synced cells (VesselScreen.sheet); null for one-block devices. */
+    private com.wormzjl.icheme.client.gui.common.DialogColumns.Sheet datasheet;
 
     public FluidDeviceScreen(FluidDeviceMenu menu,Inventory inventory,Component title){super(menu,inventory,title);}
     private static String tr(String key,Object...args){return Component.translatable("gui.icheme.fluid."+key,args).getString();}
@@ -71,7 +71,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             catch(java.io.IOException|NoSuchElementException e){return null;}
         });
         var vessel=minecraft.level==null?null:com.wormzjl.icheme.world.level.block.EquipmentStructure.find(minecraft.level,menu.position());
-        datasheet=vessel==null?List.of():com.wormzjl.icheme.client.gui.screens.VesselScreen.datasheet(vessel);
+        datasheet=vessel==null?null:com.wormzjl.icheme.client.gui.screens.VesselScreen.sheet(vessel);
         refresh();rebuild();
     }
     private boolean generator(){return menu.clientData()!=null&&menu.clientData().kind()==TopologyCompiler.Kind.GENERATOR;}
@@ -79,7 +79,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean transport(){return menu.clientData()!=null&&menu.clientData().view().pipeInfo()!=null;}
     private com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE;
     private boolean canEdit(){return !menu.debug()&&menu.clientData()!=null;}
-    private boolean constructedMover(){var data=menu.clientData();return data!=null&&!datasheet.isEmpty()&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
+    private boolean constructedMover(){var data=menu.clientData();return data!=null&&datasheet!=null&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
     /** An air cooler's side: its fans switch as a mover does (batch 2026-10-27-heat-exchanger-design). */
     private boolean fans(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().fans()!=null;}
     /** A fired heater's coil: its burners switch and its set point is a field, both coils at once (W6). */
@@ -116,7 +116,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean tank(){return menu.clientData()!=null&&menu.clientData().kind()==TopologyCompiler.Kind.RESERVOIR;}
     // A heat unit's Overview has its stream switch and the stream's line above the phase tabs (HEAT_GUI_PLAN.md section 2).
     private int tableTop(){return page==0?(heat()!=null?164:130):page==1?166:page==3?116:page==4||page==5?100:142;}
-    private int rowHeight(){return page==0||page==3?18:page==4?24:page==5?12:25;}
+    private int rowHeight(){return page==0||page==3?18:page==4?24:page==5?com.wormzjl.icheme.client.gui.common.DialogColumns.PITCH:25;}
     private int visibleRows(){return Math.max(1,(imageHeight-64-tableTop())/rowHeight());}
     private void refresh(){
         if(menu.messageRevision()!=messageRevision){messageRevision=menu.messageRevision();message=menu.message();}
@@ -224,7 +224,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(generator()&&canEdit()){tabs.add("composition");pages.add(1);tabs.add("solids");pages.add(2);}
         if(pipe()&&data.view().pipeInfo().connections().size()>1){tabs.add("connections");pages.add(3);}
         if(tank()){tabs.add("outlets");pages.add(4);}
-        if(!datasheet.isEmpty()){tabs.add("datasheet");pages.add(5);}
+        if(datasheet!=null){tabs.add("datasheet");pages.add(5);}
         var tabSlots=FluidGuiLayout.tabs(imageWidth,tabs.size());
         for(int i=0;i<tabs.size();i++){int target=pages.get(i);var slot=tabSlots.get(i);doorAction(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).latched(true).active=page!=target;}
         int themeWidth=themeWidth();
@@ -254,7 +254,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         }
         buildDevice();
         if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
-        else if(page==4)configureScroll(data.view().outlets().size());else if(page==5)configureScroll(datasheet.size());
+        else if(page==4)configureScroll(data.view().outlets().size());else if(page==5)configureScroll(datasheetGlass().lines().size());
         else configureScroll(data.view().pipeInfo().connections().size());
         if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
         if(componentDropdown!=null&&"search".equals(focused))componentDropdown.expanded(dropdownOpen);
@@ -648,13 +648,17 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         }
         if(outlets.isEmpty())text(g,tr("outlets.none"),x,tableTop()+8,MUTED,w);
     }
-    /** A drum's datasheet, page 5: its geometry and nozzles from the client's cells, one line per row; a cut line reads in full on hover. */
+    /** A drum's datasheet's lines on page 5's glass: its sizes, its notes wrapped and its nozzles' table (VesselScreen's glass with the sizes). */
+    private com.wormzjl.icheme.client.gui.common.DialogColumns.Glass datasheetGlass(){
+        return com.wormzjl.icheme.client.gui.common.DialogColumns.glass(datasheet,true,tableWidth()-1,GuiCanvas.measure(font),(k,a)->Component.translatable("gui.icheme."+k,a).getString());
+    }
+    /** A drum's datasheet, page 5: its geometry and nozzles from the client's cells, scrolled a line at a time; no line is cut. */
     private void renderDatasheet(GuiGraphics g,int mx,int my){
         int x=tableX(),w=tableWidth();
         text(g,tr("datasheet"),x,82,ACCENT,w);if(mx>=x&&mx<x+w&&my>=80&&my<92)hovered=tr("datasheet.hint");
-        configureScroll(datasheet.size());
-        for(int i=scroll.value();i<Math.min(datasheet.size(),scroll.value()+visibleRows());i++)
-            text(g,datasheet.get(i).getString(),x,tableTop()+(i-scroll.value())*rowHeight(),i==0?MUTED:TEXT,w-4);
+        var glass=datasheetGlass();configureScroll(glass.lines().size());
+        var canvas=new GuiCanvas(g,font,leftPos,topPos);var box=new Rect(x-3,tableTop()-2,w-1,visibleRows()*rowHeight()+2);
+        canvas.clip(box);com.wormzjl.icheme.client.gui.common.DialogColumns.draw(canvas,glass,box,scroll.value()*rowHeight());canvas.unclip();
     }
     private String outletName(com.wormzjl.icheme.runtime.fluid.FluidView.Outlet outlet){
         String face=tr("face."+outlet.face().name().toLowerCase(Locale.ROOT));

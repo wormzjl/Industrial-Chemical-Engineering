@@ -1,4 +1,5 @@
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
+import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
@@ -9,6 +10,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
+import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
@@ -52,10 +54,23 @@ public final class GuiPrototypes {
             }
             HeatDiagramRender.grid(out.resolve(p.file() + ".png"), titles, pages);
         }
+        // The glass's entries told apart three ways, for the owner to pick (the light door; the glass is the same on both).
+        var titles = new ArrayList<String>();
+        var pages = new ArrayList<BufferedImage>();
+        for (char style : new char[]{'A', 'B', 'C'})
+            for (var p : List.of(vessel(style), unit(style))) {
+                titles.add(switch (style) {
+                    case 'A' -> "A: wrapped lines indented";
+                    case 'B' -> "B: every second entry on a band";
+                    default -> "C: a faint rule between entries";
+                });
+                pages.add(render(p, PanelSkin.LIGHT, false));
+            }
+        HeatDiagramRender.grid(out.resolve("glass-lines.png"), titles, pages);
     }
 
     static List<Prototype> prototypes() {
-        return List.of(pump(), generator(), valve(), tank(), pipe(), column(), assembly(), constructor(), pipelineTool(), gauge(), vessel());
+        return List.of(pump(), generator(), valve(), tank(), pipe(), column(), assembly(), constructor(), pipelineTool(), gauge(), thermometer(), vessel('0'), unit('0'));
     }
 
     // ---- The column calculator: the drawing on the glass, the inputs in groups on the door ----
@@ -174,56 +189,113 @@ public final class GuiPrototypes {
         });
     }
 
-    // ---- Small dialogs: the pipeline tool, the gauge's range, the vessel's datasheet ----
+    // ---- Small dialogs: the shipped DialogColumns on the door (the gauge, the pipeline tool, the vessel's datasheet) ----
+
+    static final HeatControlColumn.Texts DIALOG = (key, a) -> HeatDiagramRender.tr("gui.icheme." + key, a);
+
+    /** A dialog's height as its screen sizes it: its column with every line it may show, then the footer. */
+    static int dialogHeight(List<Column.Row> tallest, int width) {
+        return DialogColumns.TOP + Column.place(tallest, 10, DialogColumns.TOP, width - 20, new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure(), Column.Metrics.COMPACT).bounds().h()
+                + DialogColumns.FOOTER;
+    }
+
+    /** The dialog's footer push buttons, as DialogColumns places them; the last of two is the confirm one. */
+    static void dialogFooter(Door d, String... texts) {
+        var slots = DialogColumns.footer(d.w, d.h, texts.length);
+        for (int i = 0; i < texts.length; i++)
+            d.skin.button(d.c, slots.get(i), texts[i], texts.length == 2 && i == 1 ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+    }
 
     static Prototype pipelineTool() {
-        return new Prototype("pipeline-tool", 230, 250, (d, s) -> {
-            d.skin.title(d.c, 10, 10, "Pipeline tool");
-            d.column(Door.rows(
-                    Door.group("Size", "From 0.001 to 0.8 m.", Door.field("bore", "Bore", "m")),
-                    Door.group("Paint", "Pipe, bends and rack lanes take the first colour; bolts, valves and fittings keep theirs.",
-                            new Column.Buttons(List.of(new Column.Button("p", "Primary", false, null, true), new Column.Button("s", "Secondary", true, null))),
-                            new Column.Gap(44), Door.field("custom", "Custom", ""),
-                            new Column.Buttons(List.of(new Column.Button("bare", "Bare steel", true, null))))),
-                    10, 28, d.w - 20, Map.of("bore", "0.150", "custom", "#7A8B99"));
-            int[] ral = {0xFF8F969C, 0xFF3B3C36, 0xFFE7EBDA, 0xFFA52019, 0xFFF4A900, 0xFF2271B3, 0xFF316650, 0xFF6C7059};
-            for (int r = 0; r < 2; r++)
-                for (int i = 0; i < 8; i++) {
-                    int x = 18 + i * 25, y = 112 + r * 21;
-                    d.c.fill(x, y, x + 20, y + 17, ral[(i + 3 * r) % 8]);
-                    if (r == 0 && i == 0) d.c.outline(x - 1, y - 1, 22, 19, 0xFFFFFFFF);
-                }
-            String[] foot = {"Cancel", "Save"};
-            for (int i = 0; i < 2; i++) d.skin.button(d.c, new Rect(10 + i * 107, d.h - 27, 103, 18), foot[i], i == 1 ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+        var tallest = DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 0, false, false), DIALOG);
+        return new Prototype("pipeline-tool", 230, dialogHeight(tallest, 230), (d, s) -> {
+            d.skin.title(d.c, 10, 10, "Pipe laying tool");
+            var column = d.column(DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 0, false, true), DIALOG), 10, DialogColumns.TOP, d.w - 20,
+                    Map.of("bore", "0.150", "custom", "A1A1A0"));
+            // The palette as PaintSwatch draws it: the edited colour outlined in white.
+            var swatches = DialogColumns.palette(column, Paint.PALETTE.size());
+            for (int i = 0; i < swatches.size(); i++) {
+                var r = swatches.get(i);
+                boolean chosen = i == 0;
+                d.c.fill(r.x(), r.y(), r.right(), r.bottom(), chosen ? 0xFFFFFFFF : Palette.LINE);
+                if (chosen) d.c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.bottom() - 1, 0xFF000000);
+                int inset = chosen ? 2 : 1;
+                d.c.fill(r.x() + inset, r.y() + inset, r.right() - inset, r.bottom() - inset, 0xFF000000 | Paint.PALETTE.get(i).rgb());
+            }
+            dialogFooter(d, "Cancel", "Save");
         });
     }
 
     static Prototype gauge() {
-        return new Prototype("gauge", 246, 170, (d, s) -> {
+        var units = List.of("Pa", "kPa", "bar", "MPa");
+        var tallest = DialogColumns.gauge(new DialogColumns.Gauge(true, units, 2, true, false), DIALOG);
+        return new Prototype("gauge", 246, dialogHeight(tallest, 246), (d, s) -> {
             d.skin.title(d.c, 10, 10, "Pressure gauge");
-            d.column(Door.rows(
-                    Door.group("Range", "The dial's span only; the reading is the same.", Door.field("min", "Minimum", "bar"), Door.field("max", "Maximum", "bar")),
-                    Door.group("Reading", null, new Column.Buttons(List.of(new Column.Button("g", "Gauge", false, null, true), new Column.Button("a", "Absolute", true, null))))),
-                    10, 28, d.w - 20, Map.of("min", "0.00", "max", "10.00"));
-            String[] foot = {"Cancel", "Save"};
-            for (int i = 0; i < 2; i++) d.skin.button(d.c, new Rect(10 + i * 115, d.h - 27, 111, 18), foot[i], i == 1 ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+            d.column(DialogColumns.gauge(new DialogColumns.Gauge(true, units, 2, true, true), DIALOG), 10, DialogColumns.TOP, d.w - 20, Map.of("minimum", "0.00", "maximum", "10.00"));
+            dialogFooter(d, "Cancel", "Save");
         });
     }
 
-    static Prototype vessel() {
-        return new Prototype("vessel-datasheet", 340, 250, (d, s) -> {
-            d.skin.title(d.c, 10, 10, "Vertical drum on a skirt");
-            var col = d.column(Door.rows(
-                    Door.group("Size", null, Door.field("dia", "Diameter", "m"), Door.field("tt", "Length", "m"), Door.reading("vol", "Volume", "18.8", "m³")),
-                    Door.group("Moving parts", "Running turns the units' fans, agitators and impellers; still, they stand. Not saved.",
-                            new Column.Buttons(List.of(new Column.Button("still", "Still", true, null), new Column.Button("run", "Running", false, null, true))))),
-                    10, 28, 150, Map.of("dia", "2.00", "tt", "6.00", "vol", "18.8"));
-            var box = d.well(new Rect(166, 25, d.w - 171, d.h - 60));
-            // The side in its own column: no name is cut. "Length" is tangent to tangent (its hover).
-            d.table(box, new int[]{box.w() - 82, 40, 42}, List.of(new String[]{"Nozzle", "Side", "Size"}, new String[]{"Inlet", "Front", "DN 150"},
-                    new String[]{"Vapour out", "Top", "DN 200"}, new String[]{"Liquid out", "Bottom", "DN 100"}, new String[]{"Drain", "Bottom", "DN 50"}));
-            d.skin.button(d.c, new Rect(d.w - 90, d.h - 27, 80, 18), "Done", Skin.Press.REST, false);
+    /** A thermometer whose drafts form no range: the warning line under the groups, Save waiting. */
+    static Prototype thermometer() {
+        var tallest = DialogColumns.gauge(new DialogColumns.Gauge(false, List.of("°C", "K"), 0, false, false), DIALOG);
+        return new Prototype("gauge-thermometer", 246, dialogHeight(tallest, 246), (d, s) -> {
+            d.skin.title(d.c, 10, 10, "Thermometer");
+            d.column(tallest, 10, DialogColumns.TOP, d.w - 20, Map.of("minimum", "200", "maximum", "20"));
+            var slots = DialogColumns.footer(d.w, d.h, 2);
+            d.skin.button(d.c, slots.get(0), "Cancel", Skin.Press.REST, false);
+            d.skin.button(d.c, slots.get(1), "Save", Skin.Press.OFF, false);
         });
+    }
+
+    static DialogColumns.Size size(String key, String value, String unit, boolean chosen) {
+        return new DialogColumns.Size(key, value, unit, chosen);
+    }
+
+    /** A datasheet: the door's sizes and switch, the glass's notes and nozzles, as VesselScreen draws them. */
+    /**
+     * The datasheet with the glass's entries told apart by {@code style} (owner: "different lines needs some
+     * distinguishing"): 0 as shipped; A an entry's wrapped lines 8 px in; B every second entry on a band; C a faint rule
+     * between entries.
+     */
+    static void datasheet(Door d, String title, DialogColumns.Sheet sheet, boolean moving, char style) {
+        d.skin.title(d.c, 10, 10, title);
+        var values = new java.util.HashMap<String, String>();
+        for (var size : sheet.sizes()) values.put(size.key(), size.value());
+        d.column(DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG), 10, DialogColumns.TOP, 150, values);
+        var box = d.well(new Rect(166, 25, d.w - 171, d.h - 60));
+        var glass = DialogColumns.glass(sheet, false, box.w() - ScrollView.BAR - 2, style == 'A' ? 8 : 0, d.m, DIALOG);
+        d.c.clip(box);
+        int y = box.y() + 2, previous = -1;
+        for (var line : glass.lines()) {
+            if (style == 'B' && line.entry() % 2 == 1) d.c.fill(box.x(), y - 1, box.right(), y + DialogColumns.PITCH - 1, 0x1CFFFFFF);
+            if (style == 'C' && line.entry() >= 0 && !line.wrapped() && previous >= 0) d.c.hLine(box.x() + 2, box.right() - ScrollView.BAR - 4, y - 2, 0xFF2C3A44);
+            previous = line.entry();
+            y += DialogColumns.PITCH;
+        }
+        DialogColumns.draw(d.c, glass, new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()), 0);
+        d.c.unclip();
+        dialogFooter(d, "Done");
+    }
+
+    static Prototype vessel(char style) {
+        var sheet = new DialogColumns.Sheet(List.of(size("diameter", "2.00", "m", true), size("length", "6.00", "m", true), size("overall", "7.10", "m", false),
+                size("top", "10.1", "m", false), size("volume", "20.9", "m³", false), size("area", "46.4", "m²", false)),
+                List.of(DIALOG.get("vessel.kind.skirt"), DIALOG.get("vessel.skirt", 3), DIALOG.get("vessel.cells", 112, 36), DIALOG.get("vessel.controller", "120, 64, -40")),
+                null, List.of(new DialogColumns.Nozzle("Feed", "Bulk", "Left"), new DialogColumns.Nozzle("Vapour outlet", "Vapour", "Top"),
+                new DialogColumns.Nozzle("Liquid outlet", "Liquid", "Front"), new DialogColumns.Nozzle("Side connection", "Bulk", "Right")));
+        return new Prototype("vessel-datasheet" + (style == '0' ? "" : "-" + style), 400, 250, (d, s) -> datasheet(d, "Drum", sheet, false, style));
+    }
+
+    /** A unit with moving parts and long nozzle names: the roles wrap in their column; a blocked count in the warning tone. */
+    static Prototype unit(char style) {
+        var sheet = new DialogColumns.Sheet(List.of(size("overall", "14.0", "m", false), size("top", "5.20", "m", false)),
+                List.of(DIALOG.get("vessel.kind.air_cooler"), DIALOG.get("vessel.bay", "3.0", "9.0", "24.3"), DIALOG.get("vessel.bank", 2, 1),
+                        DIALOG.get("vessel.fans", 2, "2.4", 45), DIALOG.get("vessel.air_side", "1210", "60"), DIALOG.get("vessel.unit_support.air_cooler", 4),
+                        DIALOG.get("vessel.cells", 640, 210), DIALOG.get("vessel.controller", "120, 64, -40")),
+                DIALOG.get("vessel.blocked", 3), List.of(new DialogColumns.Nozzle("Process inlet", "Bulk", "Front"), new DialogColumns.Nozzle("Process outlet", "Bulk", "Back"),
+                new DialogColumns.Nozzle("Regeneration gas outlet", "Vapour", "Bottom")));
+        return new Prototype("vessel-datasheet-unit" + (style == '0' ? "" : "-" + style), 400, 250, (d, s) -> datasheet(d, "Air cooler", sheet, true, style));
     }
 
     // ---- FluidDeviceScreen's device pages: the shipped DeviceColumn on the door, the tables on the HMI glass ----

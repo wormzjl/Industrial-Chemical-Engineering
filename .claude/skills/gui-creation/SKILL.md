@@ -14,8 +14,8 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
 2. Prototype first: draw the screen with `tools/heat-gui-renders/GuiPrototypes.java` (both doors, opened and scrolled
    to the end) and show the owner. Where the choice is open, render two to four options side by side and let the
    owner pick; build only the picked one.
-3. Build the rows in a builder class with no Minecraft classes (as `HeatControlColumn`, `DeviceColumn`), so the
-   gates and the render tool place the same rows the screen draws.
+3. Build the rows in a builder class with no Minecraft classes (as `HeatControlColumn`, `DeviceColumn`,
+   `DialogColumns`), so the gates and the render tool place the same rows the screen draws.
 4. Gate it (below), render the shipped code again, look at every sheet, then commit.
 5. No dev-client check unless the owner asks for one.
 
@@ -27,7 +27,12 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
   with one legend line a share), `Gap`.
 - `Skin`: `Skin.PLAIN` and `PanelSkin.LIGHT` / `PanelSkin.DARK` (the client's theme, `ClientConfig.skin()`).
 - In the game: `GuiCanvas` (the canvas), `ScrollView` (a viewport with its own bar), `KitWidgets` (keeps widgets at
-  their content slots and moves them as the view scrolls: no rebuild on scroll), `SkinButton`, `SkinField`.
+  their content slots and moves them as the view scrolls: no rebuild on scroll), `SkinButton` (`SkinButton.of` makes a
+  column's button), `SkinField`, `KitDoor` (a dialog's column: view, bar where the window is short, kept widgets,
+  drawing and hover; used by the gauge, pipeline tool and vessel screens).
+- A dialog: title at (10, 10), column from `DialogColumns.TOP`, push buttons from `DialogColumns.footer` (two share
+  the width, Save the primary one at the right; Done stands alone at the right). Tables go on the HMI glass, as the
+  datasheet's.
 
 ## The panel rules
 
@@ -61,13 +66,17 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
 - Rows with widgets (switches, set points, selectors, display keys) come before rows whose texts follow the plant
   (levels, openings, readings). The screen then places widgets at a rebuild and the texts again each frame.
 - A widget never moves while the plant's values change (`DeviceColumnTest.aWidgetKeepsItsSlotWhileTheReadingsChange`).
+- A warning that follows what the player types (no range, no size) is the column's last row, and the panel is sized
+  for the rows with it, so neither the panel nor a widget moves while the player types (`DialogColumnsTest`).
+- No cut text in a table either: a long name wraps in its column, its other cells on its first line.
 - Opening a screen replays the last published snapshot; a GUI never asks for a solve (`AGENTS.md`, engine schedule).
 
 ## Gates for a column builder
 
-As in `HeatControlColumnTest` and `DeviceColumnTest`:
+As in `HeatControlColumnTest`, `DeviceColumnTest` and `DialogColumnsTest`:
 - every text the builder names has its English line (`HeatControlColumnTest.Recording`, which fills lines as the
-  game does; a line with no arguments, such as "Volume %", stands as written);
+  game does; a line with no arguments, such as "Volume %", stands as written; `new Recording("gui.icheme.")` for keys
+  outside `gui.icheme.fluid.`);
 - at every width from 300 to 790 px in steps of 7: rows inside the column, no text wider than its row, widgets at
   least 40 px, plates in one line, one widget per key, units whole, `assertInLine`;
 - what each kind or mode shows, for an editor and for a reader.

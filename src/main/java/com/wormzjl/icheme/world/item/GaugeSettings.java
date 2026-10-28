@@ -20,7 +20,10 @@ public record GaugeSettings(Kind kind, double minimum, double maximum, Unit unit
         Unit(String symbol,double factor,double offset){this.symbol=symbol;this.factor=factor;this.offset=offset;}
         public int code(){return switch(this){case PA->0;case KPA->1;case BAR->2;case MPA->3;case CELSIUS->4;case KELVIN->5;};}
         public static Unit fromCode(int code){return switch(code){case 0->PA;case 1->KPA;case 2->BAR;case 3->MPA;case 4->CELSIUS;case 5->KELVIN;default->throw new IllegalArgumentException("Invalid gauge unit");};}
-        public Unit next(Kind kind){return kind==Kind.TEMPERATURE?(this==CELSIUS?KELVIN:CELSIUS):switch(this){case PA->KPA;case KPA->BAR;case BAR->MPA;default->PA;};}
+        /** Whether this unit reads {@code kind}: a pressure unit has a factor (Pa its own), a temperature unit none. */
+        public boolean measures(Kind kind){return (kind==Kind.PRESSURE)==(factor!=1||this==PA);}
+        /** The units of {@code kind}, smallest first, as the gauge's screen offers them. */
+        public static java.util.List<Unit> of(Kind kind){return java.util.Arrays.stream(values()).filter(u->u.measures(kind)).toList();}
     }
     public static final double ATMOSPHERE=101325;
     public static final GaugeSettings PRESSURE=new GaugeSettings(Kind.PRESSURE,ATMOSPHERE,ATMOSPHERE+1e6,Unit.BAR,true);
@@ -51,7 +54,7 @@ public record GaugeSettings(Kind kind, double minimum, double maximum, Unit unit
     };
     public GaugeSettings {
         if(kind==null||unit==null||!Double.isFinite(minimum)||!Double.isFinite(maximum)||minimum<0||!(maximum>minimum)||!Double.isFinite(maximum-minimum))throw new IllegalArgumentException("Finite non-negative endpoints and a positive finite span required");
-        if((kind==Kind.PRESSURE)!=(unit.factor!=1||unit==Unit.PA)||kind==Kind.TEMPERATURE&&relative)throw new IllegalArgumentException("Gauge kind/unit mismatch");
+        if(!unit.measures(kind)||kind==Kind.TEMPERATURE&&relative)throw new IllegalArgumentException("Gauge kind/unit mismatch");
     }
     public double display(double si){return (si-unit.offset-(relative?ATMOSPHERE:0))/unit.factor;}
     public double si(double displayed){return displayed*unit.factor+unit.offset+(relative?ATMOSPHERE:0);}

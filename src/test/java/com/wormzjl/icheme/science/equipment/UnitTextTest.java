@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the current-choice marker 8. The constructor's panel ({@code EquipmentConstructorScreen.PANEL} 196, text at 8) leaves
  * 184 for its middle line with a 4-pixel margin, 104 for a row's label before its steppers at {@code PANEL - 80} and for
  * the kind's title before Change (else its short name shows); its choice buttons ({@code GROUP_WIDTH} 64, the kinds' 112)
- * show their width less 4. The vessel screen widens to its longest line, up to the 427 pixels of an 854-pixel-wide
- * window at GUI scale 2, less its 16-pixel margins.
+ * show their width less 4. The datasheet's lines wrap on the vessel screen's glass (DialogColumns.glass); the limit
+ * keeps each line short, at most the 427 pixels of an 854-pixel-wide window at GUI scale 2, less 16-pixel margins.
  */
 class UnitTextTest {
     private static final String C = "gui.icheme.equipment_constructor.", V = "gui.icheme.vessel.";
