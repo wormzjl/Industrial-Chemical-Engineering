@@ -1,5 +1,7 @@
 # Vacuum-column test — 2026-10-28
 
+Follow-up: [2026-10-29 startup diagnosis](VACUUM_STARTUP_REVIEW.md) confirms false interior phase acceptance in the 150 kPa startup anchor, before the vacuum request is reached.
+
 ## 1. Expected behaviour
 
 - Atmospheric CDU bottoms are the appropriate feed: retain the whole hydrocarbon composition, reheat it, then reduce pressure to recover gas oils and leave a heavier residue.

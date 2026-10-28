@@ -29,3 +29,18 @@ The client counts the condenser and sump: ten interior stages appear as twelve t
 ## History
 
 - 2026-10-28: generated the accepted default Tia Juana CDU bottoms, ran hot wet/dry and reduced-stage diagnostics, corrected the chosen inlet to a 400 C heater/isenthalpic-letdown basis, and verified/exported the final failed request. Source balance error < 1.61e-8 mol/s; all VDU attempts failed to publish. No Gradle suite, native build or in-game check; no production changes or source detachment.
+- 2026-10-29: diagnosed the failure through observation-only temporary source copies, fresh production audits and independent PR/TP checks. Confirmed false two-phase startup states, handoff amplification and a package-range rejection wall; no production fix.
+
+## Reproduce the startup diagnosis
+
+After the original CDU and wet VDU outputs exist, run:
+
+```powershell
+./tools/vacuum-column-test/trace.ps1
+./tools/vacuum-column-test/analyze.ps1
+```
+
+`trace.ps1` instruments copies of two source files under `tmp/vacuum-trace/source/`; it does not edit production sources. `VacuumTrace.java` only observes pass states, selected Newton iterates and line-search outcomes. Generated classes, a copy of the CDU input and all traces stay under `tmp/vacuum-trace/`, registered in `tmp/INDEX.md`. The script refuses to overwrite an existing `trace.jsonl`; preserve that capture before a new run.
+`analyze.ps1` compiles `VacuumAnalyze.java` against unmodified production sources. It independently re-evaluates captured states, runs their full production audit, compares liquid/vapor roots and compositions, and TP-flashes their combined flows. It asserts that two startup states pass the existing audit despite three collapsed liquid/vapor pairs, checks two genuine two-phase controls, and verifies that tracing leaves the original terminal failure unchanged.
+The analyzer pins capture sequence IDs 130, 131, 132, 1714 and 2384 for this baseline and instrumentation. They identify reproducible diagnostic observations, not persisted product identities. Changed numerical code or instrumentation requires deliberately selecting the corresponding new capture states; an assertion failure must be investigated rather than bypassed.
+Results: `trace.jsonl`, `phase-analysis.csv` and `audit-analysis.txt`; see [VACUUM_STARTUP_REVIEW.md](../../documentation/2026-10-28-vacuum-column/VACUUM_STARTUP_REVIEW.md). Neither this offline probe nor its assertions are a Gradle gate or a proposed production implementation.
