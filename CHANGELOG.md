@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- The C++ column library is the default (commit `9c5eb01f`; owner request; batch `2026-10-28-native-column-default`, review `NATIVE_DEFAULT_REVIEW.md`): the build packs it into the jar under `natives/<os>-<arch>/` when CMake is found (PATH, `-PnativeCmake` or Visual Studio), with a static runtime; the column loads it without a switch and runs the inside-out trial's Peng-Robinson outer pass in C++ unless `-Dicheme.native.thermo.batch=false`; without a library the Java path runs. Investigation probes in `tools/native-column-default/`.
+
 ## [0.17.1] - 2026-10-28
 
 ### Changed

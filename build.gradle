@@ -267,34 +267,74 @@ tasks.withType(Test).configureEach {
         systemProperty 'icheme.native.thermo.batch', providers.gradleProperty('nativeThermoBatch').get()
 }
 
-// The native column solver is an optional shared-library lane. It is never part of the ordinary Java build and
-// never launches a solver executable: CMake emits a platform shared library (DLL/SO/DYLIB) loaded by JNI when present.
+// The C++ column library. CMake builds a platform shared library (DLL/SO/DYLIB), never an executable, and the jar
+// carries it under natives/<os>-<arch>/, where NativeColumnSolver loads it by default. CMake comes from
+// -PnativeCmake, the PATH or a Visual Studio installation; without one the jar carries no library and the column
+// runs on its Java path.
 def nativeSourceDirectory = layout.projectDirectory.dir('src/main/cpp')
 def nativeBuildDirectory = layout.buildDirectory.dir('native').get().asFile
 def nativeBuildDirectoryPath = nativeBuildDirectory.absolutePath
+def nativeLibraryName = System.mapLibraryName('icheme_column_solver')
+// The folder name NativeColumnSolver.platform() gives at run time.
+def nativePlatform = {
+    def os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+    def arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
+    def system = os.startsWith('windows') ? 'windows' : os.startsWith('mac') ? 'macos'
+            : os.startsWith('linux') ? 'linux' : os.replace(' ', '_')
+    def machine = arch in ['amd64', 'x86_64'] ? 'x86_64' : arch in ['aarch64', 'arm64'] ? 'aarch64' : arch
+    "${system}-${machine}".toString()
+}()
+def nativeCmake = {
+    if (providers.gradleProperty('nativeCmake').isPresent()) return providers.gradleProperty('nativeCmake').get()
+    def windows = nativePlatform.startsWith('windows')
+    def onPath = providers.environmentVariable('PATH').getOrElse('').split(File.pathSeparator)
+            .collect { new File(it, windows ? 'cmake.exe' : 'cmake') }.find { it.isFile() }
+    if (onPath != null || !windows) return onPath?.absolutePath
+    // Visual Studio, Build Tools included, carries its own CMake beside the MSVC compiler.
+    def roots = [providers.environmentVariable('ProgramFiles').getOrElse('C:/Program Files'),
+                 providers.environmentVariable('ProgramFiles(x86)').getOrElse('C:/Program Files (x86)')]
+    return roots.collectMany { root -> ['2022', '2019'].collectMany { year ->
+        ['BuildTools', 'Community', 'Professional', 'Enterprise'].collect { edition -> new File(root,
+                "Microsoft Visual Studio/${year}/${edition}/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe")
+        } } }.find { it.isFile() }?.absolutePath
+}()
 tasks.register('nativeConfigure', Exec) {
     group = 'native'
-    description = 'Configures the optional cross-platform C++ column shared library.'
-    inputs.dir(nativeSourceDirectory)
-    outputs.dir(nativeBuildDirectory)
+    description = 'Configures the C++ column shared library.'
+    inputs.file(nativeSourceDirectory.file('CMakeLists.txt'))
+    outputs.file(new File(nativeBuildDirectory, 'CMakeCache.txt'))
     doFirst {
         nativeBuildDirectory.mkdirs()
-        commandLine 'cmake', '-S', nativeSourceDirectory.asFile.absolutePath, '-B', nativeBuildDirectory.absolutePath,
+        commandLine nativeCmake ?: 'cmake', '-S', nativeSourceDirectory.asFile.absolutePath,
+                '-B', nativeBuildDirectory.absolutePath,
                 '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY',
                 "-DICHEME_JAVA_HOME=${System.getProperty('java.home')}"
     }
 }
 tasks.register('nativeBuild', Exec) {
     group = 'native'
-    description = 'Builds the optional C++ column solver shared library; no solver executable is produced.'
+    description = 'Builds the C++ column shared library; no executable is produced.'
     dependsOn tasks.named('nativeConfigure')
     inputs.dir(nativeSourceDirectory)
-    outputs.dir(nativeBuildDirectory)
-    doFirst { commandLine 'cmake', '--build', nativeBuildDirectory.absolutePath, '--config', 'Release' }
+    outputs.file(new File(nativeBuildDirectory, nativeLibraryName))
+    doFirst { commandLine nativeCmake ?: 'cmake', '--build', nativeBuildDirectory.absolutePath, '--config', 'Release' }
 }
+def nativeResources = tasks.register('nativeResources', Sync) {
+    group = 'native'
+    description = 'Puts the C++ column library where the jar carries it, natives/<os>-<arch>/.'
+    dependsOn tasks.named('nativeBuild')
+    from(nativeBuildDirectory) {
+        include nativeLibraryName
+        into "natives/${nativePlatform}"
+    }
+    into layout.buildDirectory.dir('generated/nativeResources')
+}
+if (nativeCmake != null) sourceSets.main.resources.srcDir nativeResources
+else logger.lifecycle('No CMake found: the jar carries no C++ column library, and the column runs on its Java path.')
+tasks.withType(Test).configureEach { systemProperty 'icheme.native.packaged', nativeCmake != null }
 tasks.register('nativeSmoke', Test) {
     group = 'verification'
-    description = 'Loads the optional native shared library and checks its JNI version probe; no executable is run.'
+    description = 'Loads the C++ column library from build/native and checks it through JNI; no executable is run.'
     dependsOn tasks.named('nativeBuild'), tasks.named('testClasses')
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath

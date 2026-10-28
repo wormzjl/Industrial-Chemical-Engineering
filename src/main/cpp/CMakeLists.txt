@@ -4,6 +4,8 @@ project(icheme_column_solver LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# A static C and C++ runtime: the library the jar carries loads on machines without the compiler's runtime.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 
 add_library(icheme_column_solver SHARED
     icheme_column_solver.cpp
@@ -17,6 +19,11 @@ if (MSVC)
     target_compile_options(icheme_column_solver PRIVATE /O2 /W4 /EHsc)
 else()
     target_compile_options(icheme_column_solver PRIVATE -O3 -Wall -Wextra -Wpedantic)
+endif()
+if (MINGW)
+    target_link_options(icheme_column_solver PRIVATE -static)
+elseif (UNIX AND NOT APPLE)
+    target_link_options(icheme_column_solver PRIVATE -static-libstdc++ -static-libgcc)
 endif()
 
 # JNI is optional at configure time. The C ABI remains usable by a future Panama or JNI adapter.
@@ -46,7 +53,14 @@ if (JNI_FOUND)
     target_compile_definitions(icheme_column_solver PRIVATE ICHEME_HAS_JNI=1)
 endif()
 
+# The file is the name System.mapLibraryName gives, in the build folder itself for every generator: MinGW drops
+# its lib prefix, and a generator expression keeps a multi-configuration generator from adding a Release folder.
 set_target_properties(icheme_column_solver PROPERTIES
     OUTPUT_NAME "icheme_column_solver"
     POSITION_INDEPENDENT_CODE ON
+    RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}>"
+    LIBRARY_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}>"
 )
+if (WIN32)
+    set_target_properties(icheme_column_solver PROPERTIES PREFIX "")
+endif()
