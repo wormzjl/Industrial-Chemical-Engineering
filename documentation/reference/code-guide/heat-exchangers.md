@@ -1,6 +1,6 @@
 # Heat exchangers: heat sides, the coupling across islands and built-in control
 
-**Snapshot:** f20ceefa (branch `claude/heat-exchanger-design-cf05d1`), 2026-10-28 · **Updated:** 2026-10-28 (new chapter, batch 2026-10-27-heat-exchanger-design: work packages W1 to W8, the owner-test fixes (louvers, the settled-transit wake, junction holdups that skip a heat side's passage) and F1, the convection coil against the flue gas; W9, the column hook, deferred)
+**Snapshot:** f20ceefa (branch `claude/heat-exchanger-design-cf05d1`, released as 0.17.0), 2026-10-28 · **Updated:** 2026-10-28 (new chapter, batch 2026-10-27-heat-exchanger-design: work packages W1 to W8, the owner-test fixes (louvers, the settled-transit wake, junction holdups that skip a heat side's passage) and F1, the convection coil against the flue gas; W9, the column hook, deferred)
 Up: [code guide](README.md)
 
 ## Read this when

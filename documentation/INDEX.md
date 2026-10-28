@@ -14,9 +14,9 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-10-28-gui-toolkit/](2026-10-28-gui-toolkit/README.md) | An own small GUI toolkit, first on the heat Control tab | In progress since 2026-10-28 |
+| [2026-10-28-gui-toolkit/](2026-10-28-gui-toolkit/README.md) | An own small GUI toolkit, first on the heat Control tab | Implemented 2026-10-28 (0.17.0) |
 | [2026-10-28-gui-toolkit-evaluation/](2026-10-28-gui-toolkit-evaluation/README.md) | LDLib2 or an own toolkit for the GUI: evaluation and options | Concluded 2026-10-28 |
-| [2026-10-27-heat-exchanger-design/](2026-10-27-heat-exchanger-design/README.md) | Heat exchanger system: UA from size, coupling of the two sides, built-in control | In progress since 2026-10-27 |
+| [2026-10-27-heat-exchanger-design/](2026-10-27-heat-exchanger-design/README.md) | Heat exchanger system: UA from size, coupling of the two sides, built-in control | Implemented 2026-10-28 (0.17.0) |
 | [2026-10-28-main-test-repair](2026-10-28-main-test-repair/README.md) | Fix main's 16 failing quick-suite tests | Implemented 2026-10-28 (0.16.2) |
 | [2026-10-28-old-mover-removal](2026-10-28-old-mover-removal/README.md) | Remove the old one-block pump and compressor and their engine form; in-line movers replace them | Implemented 2026-10-28 (0.16.2) |
 | [2026-10-27-column-pressure-drop/](2026-10-27-column-pressure-drop/README.md) | Keep published tray pressure profiles consistent on the aggressive solve path | Implemented 2026-10-27 (0.16.0) |

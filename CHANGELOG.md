@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-28
+
 ### Added
 
 - Heat exchangers (commits `dc493256`, `84eaf017`, `6cd7b8d1`, `f97e2317`, `5281f53e`, `2f170a24`, `6a96b09a`, `d47c80dc`, `4840441d`, `28ab7ee4`, `94f77273`, `38e29917`, `61de6055`, `19cf5006`, `7b84b7c3`, `2493ad16`, `d967e748`, `7607f1b7`, `8f78119b`, `1a339b18`, `968a6bf7`, `627d4c47`, `cef28f4a`, `e8465a72`, `8190466a`; merges `0b3922bd`, `acc6cddf`, main 0.16.2 `342c6d22`; batch `2026-10-27-heat-exchanger-design`, plan `HEAT_EXCHANGER_PLAN.md`, reviews `OWNER_TEST_REVIEW.md`, `MERGE_REVIEW.md`): a heat side is a fluid device whose UA scales with its unit's size. Shell-and-tube exchangers with an internal bypass or a real bypass assembly; the kettle, whose shell is a vessel with a pool the tubes boil; air coolers with fans and louvers; fired heaters, whose radiant coil fires to a set point and whose convection coil is a counterflow exchanger against the flue gas from an 800 °C bridgewall. An exchanger's two sides couple across islands through a fence relay. Built-in control holds an outlet temperature or a duty with the bypass, the fans or the burners. The units' Control tab shows the flowsheet, a stream switch and the line temperatures. A heat side's passage holds no fluid, so its ends hold up as their lines. Formats: fluid facts schema 5 (heat units; corpus `compat/fluid/schema-5`), checkpoint state 29, certificate graph identity 8, protocol `fluid-16`.
