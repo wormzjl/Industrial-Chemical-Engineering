@@ -79,6 +79,8 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
   - Lang: plates, labels and hovers came; the sentences the sizes and the nozzle table replace left.
   - Gates: quick suite 1748, no failures (`DialogColumnsTest` 7, new). The glass's entry marks, the stacked table and the wider panel came after the suite, from the owner's "different lines needs some distinguishing" and a word the new check found split; the GUI gates ran again (`DialogColumnsTest` 8, `KitLayoutTest` 14, `DeviceColumnTest` 5, `HeatControlColumnTest` 5, `HeatDiagramTest` 5, `FluidGuiConsistencyTest` 5, `FlowsheetPainterTest` 3, `UnitTextTest` 1): no failures.
 
+- 2026-10-28: every second entry on the datasheet's glass lies on a faint band (owner: "different lines needs some distinguishing"; of three ways rendered, "B: bands"; plan section 15), in the bands commit. `DialogColumns.BAND`, `GlassLine.entry`; the indent option and the option sheet left. Gates: `DialogColumnsTest` 8 (the wrapped-line test is now the bands test), and the other GUI gates: no failures.
+
 ## Open
 
 - T1 to T3 (plan section 6) await the owner; built as (a).
@@ -87,5 +89,4 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
 - Themed so far: `FluidDeviceScreen` (the Control tab and the device pages), the gauge, the pipeline tools and the vessel datasheet. The other screens follow in the review's order ([GUI_REVIEW.md](GUI_REVIEW.md)), next the equipment constructor's panel. A crosswise lying drum's sides on the datasheet are a quarter turn from the constructor's (plan section 15). The valve's controller words are English from the server (plan section 14).
 - The owner's choices (a) to (e) in [GUI_REVIEW.md](GUI_REVIEW.md): tray dP in column presets, a diameter of 0, the "duty ratio" reading, the heater's duty target, the gauge's unit.
 - At the merge to `main`: a `CHANGELOG.md` line, the version, and the code guide's GUI chapter.
-- The glass's entries told apart: options A to C await the owner (plan section 15).
 - No in-game check (owner: enough client testing).

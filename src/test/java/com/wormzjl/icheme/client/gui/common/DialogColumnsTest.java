@@ -215,27 +215,39 @@ class DialogColumnsTest {
         assertEquals(0, DialogColumns.glass(new DialogColumns.Sheet(DRUM, List.of("A drum"), null, List.of()), false, 160, M, t).port());
     }
 
-    /** Each line knows its entry, and a wrapped line is marked, so the glass can tell entries apart; an indent never splits a word. */
+    /**
+     * Owner: "different lines needs some distinguishing" ("B: bands"): an entry's lines, wrapped or not, follow each other
+     * and share one band; neighbouring entries alternate; the blank line and the header lie on none; no word is split.
+     */
     @Test
-    void aWrappedLineKeepsItsEntryAndNoWordSplits() {
+    void everySecondEntryLiesOnABandAndNoWordSplits() {
         var t = new HeatControlColumnTest.Recording("gui.icheme.");
-        for (int indent : new int[]{0, 8})
-            for (int width : new int[]{150, 160, 250}) {
-                var glass = DialogColumns.glass(sheet(), false, width, indent, M, t);
-                int previous = -1;
-                for (var line : glass.lines()) {
-                    if (line.wrapped()) assertEquals(previous, line.entry(), "a wrapped line continues its entry");
-                    else if (line.entry() >= 0) assertTrue(line.entry() > previous, "entries count up");
-                    if (line.entry() >= 0) previous = line.entry();
+        for (int width : new int[]{150, 160, 250}) {
+            var glass = DialogColumns.glass(sheet(), true, width, M, t);
+            int previous = -1;
+            boolean band = true;
+            for (var line : glass.lines()) {
+                if (line.entry() < 0) {
+                    assertFalse(DialogColumns.banded(line), width + ": the blank line and the header lie on no band");
+                    continue;
                 }
-                var words = new java.util.HashSet<String>();
-                for (var text : sheet().notes()) words.addAll(List.of(text.split(" ")));
-                for (var n : sheet().nozzles()) words.addAll(List.of(n.role().split(" ")));
-                for (var line : glass.lines())
-                    if (line.cells().size() != 2 && !line.header())
-                        for (var word : line.cells().getFirst().split(" "))
-                            assertTrue(word.isEmpty() || words.contains(word) || sheet().warning().contains(word), indent + " at " + width + ": a split word " + word);
+                if (line.entry() != previous) {
+                    // The next entry: one on from the last (so an entry's lines follow each other), on the other band.
+                    assertEquals(previous + 1, line.entry(), width + ": entries count up, their lines together");
+                    assertNotEquals(band, DialogColumns.banded(line), width + ": neighbouring entries alternate at entry " + line.entry());
+                    previous = line.entry();
+                    band = DialogColumns.banded(line);
+                } else assertEquals(band, DialogColumns.banded(line), width + ": an entry's wrapped line shares its band");
             }
+            assertTrue(glass.lines().stream().anyMatch(DialogColumns::banded) && glass.lines().stream().anyMatch(l -> l.entry() >= 0 && !DialogColumns.banded(l)));
+            var words = new java.util.HashSet<String>();
+            for (var text : sheet().notes()) words.addAll(List.of(text.split(" ")));
+            for (var n : sheet().nozzles()) words.addAll(List.of(n.role().split(" ")));
+            for (var line : glass.lines())
+                if (line.cells().size() != 2 && !line.header())
+                    for (var word : line.cells().getFirst().split(" "))
+                        assertTrue(word.isEmpty() || words.contains(word) || sheet().warning().contains(word), width + ": a split word " + word);
+        }
     }
 
     /** The footer: two push buttons share the width; Done stands alone at the right; all inside the panel. */

@@ -68,7 +68,10 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
 - A widget never moves while the plant's values change (`DeviceColumnTest.aWidgetKeepsItsSlotWhileTheReadingsChange`).
 - A warning that follows what the player types (no range, no size) is the column's last row, and the panel is sized
   for the rows with it, so neither the panel nor a widget moves while the player types (`DialogColumnsTest`).
-- No cut text in a table either: a long name wraps in its column, its other cells on its first line.
+- No cut text in a table either: a long name wraps in its column, its other cells on its first line. Where a word is
+  wider than its column, the table stacks (the name across the glass, its other cells on the line under it).
+- Entries on the glass are told apart (owner: "different lines needs some distinguishing", picked "B: bands"): every
+  second entry's lines lie on a faint band (`DialogColumns.BAND`), a wrapped line on its entry's band.
 - Opening a screen replays the last published snapshot; a GUI never asks for a solve (`AGENTS.md`, engine schedule).
 
 ## Gates for a column builder

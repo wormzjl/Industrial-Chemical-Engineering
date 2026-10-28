@@ -153,17 +153,17 @@ public final class DialogColumns {
 
     /**
      * A line on the glass: one cell (a note), two (a size: its label and value), or three (a nozzle: its role, port and
-     * side); the nozzles' header ruled under. {@code entry} numbers the note, size or nozzle the line belongs to (-1 for
-     * the blank line and the header); {@code wrapped} marks a line that continues its entry's first.
+     * side); the nozzles' header ruled under. {@code entry} numbers the note, size or nozzle the line belongs to, so an
+     * entry's wrapped lines share its band (-1 for the blank line and the header).
      */
-    public record GlassLine(List<String> cells, int palette, boolean header, int entry, boolean wrapped) {
+    public record GlassLine(List<String> cells, int palette, boolean header, int entry) {
         public GlassLine {
             cells = List.copyOf(cells);
         }
     }
 
-    /** The glass's lines, the nozzle table's port and side columns' widths, how far an entry's wrapped lines sit in, and whether the table stacks (each role on lines of its own). */
-    public record Glass(List<GlassLine> lines, int port, int side, int indent, boolean stacked) {
+    /** The glass's lines, the nozzle table's port and side columns' widths, and whether the table stacks (each role on lines of its own). */
+    public record Glass(List<GlassLine> lines, int port, int side, boolean stacked) {
         public Glass {
             lines = List.copyOf(lines);
         }
@@ -174,27 +174,33 @@ public final class DialogColumns {
     }
 
     /**
+     * The band behind every second entry on the glass (owner: "different lines needs some distinguishing"; of three ways
+     * rendered, "B: bands"): white at 11 %, so a wrapped line reads as its entry's, not as an entry of its own.
+     */
+    public static final int BAND = 0x1CFFFFFF;
+
+    /** Whether {@code line} lies on a band: every second entry's lines, all of them. */
+    public static boolean banded(GlassLine line) {
+        return line.entry() % 2 == 1;
+    }
+
+    /**
      * The datasheet on the HMI glass, {@code width} wide: the warning; the sizes where the door does not show them
      * ({@code sizes}, a drum's tab on its tank screen); the notes wrapped, the kind's muted; then, after a blank line, the
      * nozzles under their header, in three columns.
      */
     public static Glass glass(Sheet sheet, boolean sizes, int width, Measure m, HeatControlColumn.Texts t) {
-        return glass(sheet, sizes, width, 0, m, t);
-    }
-
-    /** {@link #glass}, an entry's wrapped lines {@code indent} px in from its first line. */
-    public static Glass glass(Sheet sheet, boolean sizes, int width, int indent, Measure m, HeatControlColumn.Texts t) {
         var lines = new ArrayList<GlassLine>();
         int entry = 0;
         // The warning first, where it shows unscrolled.
-        if (sheet.warning() != null) note(lines, sheet.warning(), Palette.WARN, entry++, width - 6, indent, m);
+        if (sheet.warning() != null) note(lines, sheet.warning(), Palette.WARN, entry++, width - 6, m);
         if (sizes)
             for (var s : sheet.sizes())
-                lines.add(new GlassLine(List.of(t.get("vessel.size." + s.key()), s.value() + " " + s.unit()), Palette.TEXT, false, entry++, false));
-        for (int i = 0; i < sheet.notes().size(); i++) note(lines, sheet.notes().get(i), i == 0 ? Palette.MUTED : Palette.TEXT, entry++, width - 6, indent, m);
-        if (sheet.nozzles().isEmpty()) return new Glass(lines, 0, 0, indent, false);
+                lines.add(new GlassLine(List.of(t.get("vessel.size." + s.key()), s.value() + " " + s.unit()), Palette.TEXT, false, entry++));
+        for (int i = 0; i < sheet.notes().size(); i++) note(lines, sheet.notes().get(i), i == 0 ? Palette.MUTED : Palette.TEXT, entry++, width - 6, m);
+        if (sheet.nozzles().isEmpty()) return new Glass(lines, 0, 0, false);
         // A blank line, then the table.
-        if (!lines.isEmpty()) lines.add(new GlassLine(List.of(""), Palette.TEXT, false, -1, false));
+        if (!lines.isEmpty()) lines.add(new GlassLine(List.of(""), Palette.TEXT, false, -1));
         var header = List.of(t.get("vessel.nozzles.name"), t.get("vessel.nozzles.port"), t.get("vessel.nozzles.side"));
         int port = m.width(header.get(1)), side = m.width(header.get(2));
         for (var n : sheet.nozzles()) {
@@ -207,57 +213,43 @@ public final class DialogColumns {
         // than its column, the table stacks: each role across the glass, its port and side on the line under it.
         int role = width - 10 - port - side;
         boolean stacked = sheet.nozzles().stream().flatMap(n -> java.util.Arrays.stream(n.role().split(" "))).anyMatch(word -> m.width(word) > role);
-        lines.add(new GlassLine(header, Palette.MUTED, true, -1, false));
+        lines.add(new GlassLine(header, Palette.MUTED, true, -1));
         for (var n : sheet.nozzles()) {
-            var wrapped = wrap(n.role(), stacked ? width - 6 : role, indent, m);
+            var wrapped = m.wrap(n.role(), stacked ? width - 6 : role);
             for (int i = 0; i < wrapped.size(); i++)
-                lines.add(new GlassLine(i == 0 && !stacked ? List.of(wrapped.get(i), n.port(), n.side()) : List.of(wrapped.get(i), "", ""), Palette.TEXT, false, entry, i > 0));
-            if (stacked) lines.add(new GlassLine(List.of("", n.port(), n.side()), Palette.TEXT, false, entry, true));
+                lines.add(new GlassLine(i == 0 && !stacked ? List.of(wrapped.get(i), n.port(), n.side()) : List.of(wrapped.get(i), "", ""), Palette.TEXT, false, entry));
+            if (stacked) lines.add(new GlassLine(List.of("", n.port(), n.side()), Palette.TEXT, false, entry));
             entry++;
         }
-        return new Glass(lines, port, side, indent, stacked);
+        return new Glass(lines, port, side, stacked);
     }
 
-    private static void note(List<GlassLine> lines, String text, int palette, int entry, int width, int indent, Measure m) {
-        var wrapped = wrap(text, width, indent, m);
-        for (int i = 0; i < wrapped.size(); i++) lines.add(new GlassLine(List.of(wrapped.get(i)), palette, false, entry, i > 0));
-    }
-
-    /**
-     * {@code text} wrapped: its first line {@code width} wide, the lines after it {@code indent} narrower; not indented
-     * where a word would not fit the narrower lines whole.
-     */
-    static List<String> wrap(String text, int width, int indent, Measure m) {
-        var first = m.wrap(text, width);
-        if (indent == 0 || first.size() < 2) return first;
-        for (var word : text.split(" ")) if (m.width(word) > width - indent) return first;
-        var out = new ArrayList<String>();
-        out.add(first.getFirst());
-        out.addAll(m.wrap(text.substring(first.getFirst().length()).trim(), width - indent));
-        return out;
+    private static void note(List<GlassLine> lines, String text, int palette, int entry, int width, Measure m) {
+        for (var line : m.wrap(text, width)) lines.add(new GlassLine(List.of(line), palette, false, entry));
     }
 
     /**
      * Draws {@code glass} in {@code box} ({@link #glass}'s width wide), moved up by {@code offset}, in the screens'
-     * palette: a size's value and a nozzle's port and side right-aligned in the accent tone. The caller clips to
-     * {@code box}.
+     * palette: every second entry on its {@link #BAND}; a size's value and a nozzle's port and side right-aligned in the
+     * accent tone. The caller clips to {@code box}.
      */
     public static void draw(Canvas c, Glass glass, Rect box, int offset) {
         var m = c.measure();
         int y = box.y() + 2 - offset, right = box.right() - 3;
         for (var line : glass.lines()) {
             if (y + PITCH > box.y() && y < box.bottom()) {
+                if (banded(line)) c.fill(box.x(), y - 1, box.right(), y + PITCH - 1, BAND);
                 var cells = line.cells();
                 int colour = line.palette();
                 switch (cells.size()) {
-                    case 1 -> c.text(cells.getFirst(), box.x() + 3 + (line.wrapped() ? glass.indent() : 0), y, colour);
+                    case 1 -> c.text(cells.getFirst(), box.x() + 3, y, colour);
                     case 2 -> {
                         c.text(m.cut(cells.get(0), box.w() - 9 - m.width(cells.get(1))), box.x() + 3, y, Palette.MUTED);
                         c.text(cells.get(1), right - m.width(cells.get(1)), y, Palette.ACCENT);
                     }
                     default -> {
                         int sideX = right - glass.side(), portX = sideX - glass.port();
-                        c.text(cells.get(0), box.x() + 3 + (line.wrapped() ? glass.indent() : 0), y, colour);
+                        c.text(cells.get(0), box.x() + 3, y, colour);
                         int tone = line.header() ? colour : Palette.ACCENT;
                         c.text(cells.get(1), portX + glass.port() - 4 - m.width(cells.get(1)), y, tone);
                         c.text(cells.get(2), right - m.width(cells.get(2)), y, tone);

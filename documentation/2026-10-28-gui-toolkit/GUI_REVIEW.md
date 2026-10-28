@@ -43,7 +43,7 @@ The prototypes are in `tmp/gui-prototypes/` (both doors on each sheet), drawn th
 ## Implementation order (owner: "Good, proceed")
 
 1. `FluidDeviceScreen` device pages onto `Column` groups (rules 1 to 4; the rail goes). Built: `DeviceColumn`, plan section 14.
-2. The small dialogs: gauge, pipeline tool, vessel datasheet (kit buttons, meters, themes). Built: `DialogColumns`, plan section 15. Open: how the glass tells entries apart (options A to C).
+2. The small dialogs: gauge, pipeline tool, vessel datasheet (kit buttons, meters, themes). Built: `DialogColumns`, plan section 15.
 3. The equipment constructor's panel (steppers, groups, bottom buttons).
 4. The assembly screen (heading, hovers).
 5. The column calculator on the kit (the largest; its own task).

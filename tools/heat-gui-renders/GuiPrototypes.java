@@ -54,23 +54,10 @@ public final class GuiPrototypes {
             }
             HeatDiagramRender.grid(out.resolve(p.file() + ".png"), titles, pages);
         }
-        // The glass's entries told apart three ways, for the owner to pick (the light door; the glass is the same on both).
-        var titles = new ArrayList<String>();
-        var pages = new ArrayList<BufferedImage>();
-        for (char style : new char[]{'A', 'B', 'C'})
-            for (var p : List.of(vessel(style), unit(style))) {
-                titles.add(switch (style) {
-                    case 'A' -> "A: wrapped lines indented";
-                    case 'B' -> "B: every second entry on a band";
-                    default -> "C: a faint rule between entries";
-                });
-                pages.add(render(p, PanelSkin.LIGHT, false));
-            }
-        HeatDiagramRender.grid(out.resolve("glass-lines.png"), titles, pages);
     }
 
     static List<Prototype> prototypes() {
-        return List.of(pump(), generator(), valve(), tank(), pipe(), column(), assembly(), constructor(), pipelineTool(), gauge(), thermometer(), vessel('0'), unit('0'));
+        return List.of(pump(), generator(), valve(), tank(), pipe(), column(), assembly(), constructor(), pipelineTool(), gauge(), thermometer(), vessel(), unit());
     }
 
     // ---- The column calculator: the drawing on the glass, the inputs in groups on the door ----
@@ -253,49 +240,37 @@ public final class GuiPrototypes {
     }
 
     /** A datasheet: the door's sizes and switch, the glass's notes and nozzles, as VesselScreen draws them. */
-    /**
-     * The datasheet with the glass's entries told apart by {@code style} (owner: "different lines needs some
-     * distinguishing"): 0 as shipped; A an entry's wrapped lines 8 px in; B every second entry on a band; C a faint rule
-     * between entries.
-     */
-    static void datasheet(Door d, String title, DialogColumns.Sheet sheet, boolean moving, char style) {
+    static void datasheet(Door d, String title, DialogColumns.Sheet sheet, boolean moving) {
         d.skin.title(d.c, 10, 10, title);
         var values = new java.util.HashMap<String, String>();
         for (var size : sheet.sizes()) values.put(size.key(), size.value());
         d.column(DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG), 10, DialogColumns.TOP, 150, values);
         var box = d.well(new Rect(166, 25, d.w - 171, d.h - 60));
-        var glass = DialogColumns.glass(sheet, false, box.w() - ScrollView.BAR - 2, style == 'A' ? 8 : 0, d.m, DIALOG);
+        var glass = DialogColumns.glass(sheet, false, box.w() - ScrollView.BAR - 2, d.m, DIALOG);
         d.c.clip(box);
-        int y = box.y() + 2, previous = -1;
-        for (var line : glass.lines()) {
-            if (style == 'B' && line.entry() % 2 == 1) d.c.fill(box.x(), y - 1, box.right(), y + DialogColumns.PITCH - 1, 0x1CFFFFFF);
-            if (style == 'C' && line.entry() >= 0 && !line.wrapped() && previous >= 0) d.c.hLine(box.x() + 2, box.right() - ScrollView.BAR - 4, y - 2, 0xFF2C3A44);
-            previous = line.entry();
-            y += DialogColumns.PITCH;
-        }
         DialogColumns.draw(d.c, glass, new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()), 0);
         d.c.unclip();
         dialogFooter(d, "Done");
     }
 
-    static Prototype vessel(char style) {
+    static Prototype vessel() {
         var sheet = new DialogColumns.Sheet(List.of(size("diameter", "2.00", "m", true), size("length", "6.00", "m", true), size("overall", "7.10", "m", false),
                 size("top", "10.1", "m", false), size("volume", "20.9", "m³", false), size("area", "46.4", "m²", false)),
                 List.of(DIALOG.get("vessel.kind.skirt"), DIALOG.get("vessel.skirt", 3), DIALOG.get("vessel.cells", 112, 36), DIALOG.get("vessel.controller", "120, 64, -40")),
                 null, List.of(new DialogColumns.Nozzle("Feed", "Bulk", "Left"), new DialogColumns.Nozzle("Vapour outlet", "Vapour", "Top"),
                 new DialogColumns.Nozzle("Liquid outlet", "Liquid", "Front"), new DialogColumns.Nozzle("Side connection", "Bulk", "Right")));
-        return new Prototype("vessel-datasheet" + (style == '0' ? "" : "-" + style), 400, 250, (d, s) -> datasheet(d, "Drum", sheet, false, style));
+        return new Prototype("vessel-datasheet", 400, 250, (d, s) -> datasheet(d, "Drum", sheet, false));
     }
 
     /** A unit with moving parts and long nozzle names: the roles wrap in their column; a blocked count in the warning tone. */
-    static Prototype unit(char style) {
+    static Prototype unit() {
         var sheet = new DialogColumns.Sheet(List.of(size("overall", "14.0", "m", false), size("top", "5.20", "m", false)),
                 List.of(DIALOG.get("vessel.kind.air_cooler"), DIALOG.get("vessel.bay", "3.0", "9.0", "24.3"), DIALOG.get("vessel.bank", 2, 1),
                         DIALOG.get("vessel.fans", 2, "2.4", 45), DIALOG.get("vessel.air_side", "1210", "60"), DIALOG.get("vessel.unit_support.air_cooler", 4),
                         DIALOG.get("vessel.cells", 640, 210), DIALOG.get("vessel.controller", "120, 64, -40")),
                 DIALOG.get("vessel.blocked", 3), List.of(new DialogColumns.Nozzle("Process inlet", "Bulk", "Front"), new DialogColumns.Nozzle("Process outlet", "Bulk", "Back"),
                 new DialogColumns.Nozzle("Regeneration gas outlet", "Vapour", "Bottom")));
-        return new Prototype("vessel-datasheet-unit" + (style == '0' ? "" : "-" + style), 400, 250, (d, s) -> datasheet(d, "Air cooler", sheet, true, style));
+        return new Prototype("vessel-datasheet-unit", 400, 250, (d, s) -> datasheet(d, "Air cooler", sheet, true));
     }
 
     // ---- FluidDeviceScreen's device pages: the shipped DeviceColumn on the door, the tables on the HMI glass ----
