@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-10-28-gui-toolkit-evaluation/](2026-10-28-gui-toolkit-evaluation/README.md) | LDLib2 or an own toolkit for the GUI: evaluation and options | Concluded 2026-10-28 |
 | [2026-10-27-heat-exchanger-design/](2026-10-27-heat-exchanger-design/README.md) | Heat exchanger system: UA from size, coupling of the two sides, built-in control | In progress since 2026-10-27 |
 | [2026-10-26-multi-machine-framework/](2026-10-26-multi-machine-framework/README.md) | Multi-machine assemblies, first stage: the distillation column structure | Implemented 2026-10-27 |
 | [2026-10-26-process-control/](2026-10-26-process-control/README.md) | Process sensors and local regulation | Implemented 2026-10-27 |

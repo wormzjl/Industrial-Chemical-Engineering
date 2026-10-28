@@ -441,11 +441,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * A side's exchanger lines as its assembly last reported them (batch 2026-10-27-heat-exchanger-design, W8, plan section 7):
      * not validated, checked with {@code missing} parts not in place, complete but for the flowmeter its valve regulates by
      * ({@code UNMETERED}: a bare control valve stands open), or complete; {@code valve} is the registration of the valve the
-     * side's control works (0 for none). State: the assembly store holds the report, and a validation sets it again.
+     * side's control works (0 for none); {@code slots}, the report's state of each slot (empty before a check), which the
+     * side's screen draws (the heat GUI, fluid-16). State: the assembly store holds the report, and a validation sets it again.
      */
-    public record Lines(Status status,int missing,long valve) {
+    public record Lines(Status status,int missing,long valve,List<com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport> slots) {
         public enum Status { NOT_VALIDATED, CHECKED, UNMETERED, COMPLETE }
-        public Lines {Objects.requireNonNull(status);if(missing<0||valve<0||status==Status.COMPLETE&&valve==0)throw new IllegalArgumentException("Invalid exchanger lines");}
+        public Lines(Status status,int missing,long valve){this(status,missing,valve,List.of());}
+        public Lines {Objects.requireNonNull(status);slots=List.copyOf(slots);if(missing<0||valve<0||status==Status.COMPLETE&&valve==0)throw new IllegalArgumentException("Invalid exchanger lines");}
     }
     private final Map<Long,Lines> lines=new HashMap<>();
     /** The valves whose lines reverted, with the target each holds, applied as their settings at the next tick. */
@@ -545,7 +547,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** A device's block entity loaded or was bound: marked for its bucket, never presented at once. */
     public void deviceLoaded(long id){owned();if(!closed){presentation.deviceLoaded(id);if(instruments!=null)instruments.bind(instrumentHost(id));}}
     /** A device's block entity unloaded or was removed: publications stop marking it, and its watches end (a client asks again when it loads the device). */
-    public void deviceUnloaded(long id){owned();instruments.forget(id);forgetSightGlass(id);forgetMover(id);tankWatchers.remove(id);presentation.deviceUnloaded(id);publishedMenuData.remove(id);publishedGlides.remove(id);}
+    public void deviceUnloaded(long id){owned();instruments.forget(id);forgetSightGlass(id);forgetMover(id);tankWatchers.remove(id);presentation.deviceUnloaded(id);publishedMenuData.remove(id);publishedGlides.remove(id);lastLines.remove(id);}
     /**
      * A client's watch request for open tanks by their node cells (owner decision FR4, R-B): each new watch of a loaded
      * open tank within {@link com.wormzjl.icheme.network.FluidNetwork#WATCH_RANGE} is answered with the tank's last published display, if it has one (a
@@ -699,6 +701,38 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
         return new FluidSavedData.Capture(new FluidCheckpointCodec.Checkpoint(islands),world);
     }
+    /** Each pipe's last flowing line reading, for its screen while it stands still. Presentation state: a restart starts it empty. */
+    private final Map<Long,FluidView.Reading> lastLines=new HashMap<>();
+    /**
+     * The stream pipe {@code id} carries: a junction its own node, another pipe the observation its gauge reads (the donor's
+     * temperature, the pressure at the block). A still pipe keeps the last flowing temperature seen, or, with none, what lies
+     * in it at rest, both marked still. Null where the pipe has no observation yet.
+     */
+    private @org.jetbrains.annotations.Nullable FluidView.Reading lineReading(long id,FluidView view) {
+        boolean moving=view.pipeInfo().connections().stream().anyMatch(c->c.massRateKgPerSecond()>0);
+        FluidView.Reading now;
+        if(view.state()!=null)now=new FluidView.Reading(view.state().temperature(),view.state().pressure(),moving);
+        else {
+            var reading=instrumentPipeReading(id);
+            if(reading==null||!(reading.temperature()>0)||!Double.isFinite(reading.pressure()))return lastLines.get(id)==null?null:lastLines.get(id).still();
+            now=new FluidView.Reading(reading.temperature(),reading.pressure(),reading.flowing());
+        }
+        if(now.flowing()){lastLines.put(id,now);return now;}
+        var last=lastLines.get(id);
+        return last==null?now:new FluidView.Reading(last.temperature(),now.pressure(),false);
+    }
+    /** The heat presentation's reads, over this bucket's island cache. */
+    private HeatPresentation.Source heatSource(Map<Long,IslandCoordinator.Snapshot> islands) {
+        return new HeatPresentation.Source() {
+            @Override public WorldTopologyLedger.Registration registration(long id){return registrations().get(id);}
+            @Override public IslandCoordinator.Snapshot island(long device){Long owner=registry.owner(device);return owner==null?null:islands.computeIfAbsent(owner,runtime.coordinator()::presentation);}
+            @Override public Lines lines(long side){return lines.get(side);}
+            @Override public WorldTopologyLedger.Registration at(PhysicalFluidTopology.Position position){return registry.at(position).orElse(null);}
+            @Override public FluidView view(long device){return FluidWorldAuthority.this.view(device,islands);}
+            @Override public double[] weights(){return model.molecularWeights();}
+            @Override public double portPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port){return node.state().pressure()+com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.portHead(model,node,port,node.state());}
+        };
+    }
     /** The status a side's controller adds (W4, plan section 6), ending in " / ", or nothing while it meets its target. */
     static String controlStatus(com.wormzjl.icheme.science.fluid.network.HeatLaw law,HeatUnit unit) {
         var why=law instanceof com.wormzjl.icheme.science.fluid.network.HeatSide side?side.limit():law instanceof com.wormzjl.icheme.science.fluid.network.AirCooled cooled?cooled.limit():com.wormzjl.icheme.science.fluid.network.HeatControl.Limit.NONE;
@@ -807,6 +841,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
             view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),true,snapshot.graph().reservoirs().get(nodeIndex).state().temperature(),seconds>0?joule/seconds:0,
                     null,null,null,null,null,null));
         }
+        // The heat GUI (HEAT_GUI_PLAN.md section 1): the actuator, the unit's ports and its lines.
+        if(heat!=null&&view.heat()!=null) {
+            com.wormzjl.icheme.science.fluid.network.HeatLaw law=null;
+            for(var pipe:snapshot.graph().pipes())if(own!=0&&pipe.id()==own)law=pipe.heat();
+            view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,heatSource(islands)));
+        }
+        // A plain pipe's line reading (OWNER_TEST_REVIEW.md section 6): the stream it carries, as its gauge reads it.
+        if(registration.device().kind()==TopologyCompiler.Kind.PIPE&&view.pipeInfo()!=null)view=view.withPipeInfo(view.pipeInfo().withReading(lineReading(id,view)));
         if(registration.device().kind()==TopologyCompiler.Kind.VOID) {
             var sources=new ArrayList<IslandCoordinator.Snapshot>();
             for(long island:registry.islands(id))sources.add(islands.computeIfAbsent(island,runtime.coordinator()::presentation));

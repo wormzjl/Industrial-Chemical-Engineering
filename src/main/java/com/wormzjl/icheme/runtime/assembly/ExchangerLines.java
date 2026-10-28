@@ -60,16 +60,18 @@ final class ExchangerLines {
                 continue;
             }
             var report = entry.report();
+            // The report's slot states go with the lines: the side's screen draws each part in its colour (the heat GUI).
+            var slots = report == null ? java.util.List.<AssemblyReport.SlotReport>of() : report.slots();
             world.lines(ids[i], switch (entry.status()) {
                 case NOT_VALIDATED -> new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.NOT_VALIDATED, 0, 0);
-                case CHECKED -> new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.CHECKED, report.missing() + report.misplaced(), 0);
+                case CHECKED -> new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.CHECKED, report.missing() + report.misplaced(), 0, slots);
                 case COMPLETE -> {
                     long valve = valve(level, world, report, ExchangerBlueprint.operated(sides.get(i).side(), asked));
                     // A control valve regulates by its sensor: a bare one stands open, whatever its target.
                     var found = valve == 0 ? null : world.registrations().get(valve);
                     boolean metered = found != null && found.device().control() instanceof FlowControl.ControlValve law && !law.bare();
-                    yield valve == 0 ? new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.CHECKED, 1, 0)
-                            : new FluidWorldAuthority.Lines(metered ? FluidWorldAuthority.Lines.Status.COMPLETE : FluidWorldAuthority.Lines.Status.UNMETERED, 0, valve);
+                    yield valve == 0 ? new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.CHECKED, 1, 0, slots)
+                            : new FluidWorldAuthority.Lines(metered ? FluidWorldAuthority.Lines.Status.COMPLETE : FluidWorldAuthority.Lines.Status.UNMETERED, 0, valve, slots);
                 }
             });
         }

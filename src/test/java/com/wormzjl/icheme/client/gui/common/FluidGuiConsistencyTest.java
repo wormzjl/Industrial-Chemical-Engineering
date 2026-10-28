@@ -48,4 +48,21 @@ class FluidGuiConsistencyTest {
             for(int count=1;count<=4;count++)for(var slot:FluidGuiLayout.tabs(width,count)){assertTrue(slot.x()>=10);assertTrue(slot.x()+slot.width()<=width-10);}
         }
     }
+    /**
+     * The Control tab's columns (HEAT_GUI_PLAN.md section 2) at every supported width: the drawing keeps at least 100 px
+     * (a third of the design grid), the column at least 150 px with its 58 px fields inside it, its scrollbar inside the
+     * screen, and the drawing's Check lines button (up to 90 px) inside the drawing.
+     */
+    @Test void theControlTabsColumnsFitEverySupportedScreenWidth() {
+        for(int width=300;width<=790;width++){
+            var c=FluidGuiLayout.control(width);
+            assertTrue(c.drawingRight()-10>=100,"drawing at "+width);
+            assertTrue(c.panelWidth()>=150&&c.panelWidth()<=240,"column at "+width);
+            assertTrue(c.panelX()>=c.drawingRight()+10);
+            assertTrue(c.panelX()+c.panelWidth()-76>=c.panelX()+60,"a field's label keeps 60 px at "+width);
+            assertTrue(c.scrollX()>=c.panelX()+c.panelWidth()&&c.scrollX()+8<=width-6,"scrollbar at "+width);
+            assertTrue(c.drawingRight()-Math.min(90,c.drawingRight()-20)>=10,"Check lines at "+width);
+        }
+        assertThrows(IllegalArgumentException.class,()->FluidGuiLayout.control(299));
+    }
 }

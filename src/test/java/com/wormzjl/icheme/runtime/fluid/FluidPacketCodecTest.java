@@ -122,9 +122,10 @@ class FluidPacketCodecTest {
      * carries a crystal's record with its solid, D23; fluid-11 a vessel's tank presentation, batch
      * 2026-10-21-floating-roof-tanks) and every payload has its own wire identity. A tank's dry ice crosses
      * the live payload as a solid with its crystal record and comes back equal; a crystal made of a component off the
-     * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures. */
-    @Test void theProtocolIsFluidFifteenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-15",FluidNetwork.PROTOCOL);
+     * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
+     * actuator and a pipe's line reading (the heat GUI). */
+    @Test void theProtocolIsFluidSixteenWithDistinctStaticAndLivePayloads() {
+        assertEquals("fluid-16",FluidNetwork.PROTOCOL);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -189,6 +190,51 @@ class FluidPacketCodecTest {
         assertThrows(IllegalArgumentException.class,()->new FluidView.PipeConnection(1,1,Double.NaN,3,false));
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MenuData(TopologyCompiler.Kind.PIPE,base.view(),base.controls(),
             base.components(),base.presets(),"",base.materialNames(),base.molecularWeights()));
+    }
+    /** fluid-16 (the heat GUI): a pipe's line reading crosses the live payload, still or flowing; an invalid one is refused. */
+    @Test void aPipesLineReadingRoundTrips(){
+        var base=generatorMenu("");int count=base.components().size();
+        for(boolean flowing:new boolean[]{true,false}) {
+            var info=FluidView.PipeInfo.empty(count).withReading(new FluidView.Reading(453.65,950_000,flowing));
+            var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.PIPE,base.view().withPipeInfo(info),base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
+            var copy=FluidNetwork.MenuData.of(data.staticData(0),FluidNetwork.decodeLive(new Gson().toJson(live(data))));
+            assertEquals(info.reading(),copy.view().pipeInfo().reading());
+        }
+        var plain=FluidNetwork.MenuData.of(base.staticData(0),FluidNetwork.decodeLive(new Gson().toJson(live(new FluidNetwork.MenuData(TopologyCompiler.Kind.PIPE,base.view().withPipeInfo(FluidView.PipeInfo.empty(count)),base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights())))));
+        assertNull(plain.view().pipeInfo().reading(),"no observation yet: no reading");
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Reading(0,1e5,true));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Reading(300,Double.NaN,true));
+    }
+    /**
+     * fluid-16 (the heat GUI): a heat side's actuator, effort and limit, its unit's ports with their phases and an exchanger's
+     * lines part by part cross the live payload as sent. A port off the menu's axis, an unknown actuator, an effort over one,
+     * two ports of one role and too many parts are refused.
+     */
+    @Test void aHeatSidesPortsLinesAndActuatorRoundTrip(){
+        var base=generatorMenu("");int count=base.components().size();
+        double[][] n=new double[3][count];n[0][count-1]=544;n[2][count-1]=3;
+        var ports=List.of(new FluidView.Port("SHELL_INLET",293.15,121_900.0,9.8,n,new double[]{.0098,0,.02}),
+                new FluidView.Port("SHELL_OUTLET",310.65,118_000.0,9.8,n,new double[]{.0098,0,.02}),new FluidView.Port("TUBE_INLET",null,null,0,new double[3][count],new double[3]));
+        var lines=new FluidView.Lines("UNMETERED",0,List.of(new FluidView.Part("shell_inlet_tee","OK","",Long.MIN_VALUE,293.15,null),
+                new FluidView.Part("shell_bypass_valve","OK","",Long.MIN_VALUE,null,7.4),new FluidView.Part("shell_outlet_tee","MISSING","terminal",BlockPos.asLong(1,64,-3),null,null)));
+        var heat=new FluidView.Heat("EXCHANGER","SHELL",true,303.15,-433_000,null,null,null,null,null,.42).with("bypass",.42,"NONE",ports,lines);
+        var view=new FluidView(9,4,1200,1300,"FULL",null,0,List.of()).withPipeInfo(FluidView.PipeInfo.empty(count)).withHeat(heat);
+        var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.HEAT_SIDE,view,base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
+        var copy=FluidNetwork.MenuData.of(data.staticData(0),FluidNetwork.decodeLive(new Gson().toJson(live(data)))).view().heat();
+        assertEquals("bypass",copy.actuator());assertEquals(.42,copy.effort());assertEquals("NONE",copy.limit());
+        assertEquals(3,copy.ports().size());assertEquals(310.65,copy.port("SHELL_OUTLET").temperature());assertNull(copy.port("TUBE_INLET").temperature());
+        assertArrayEquals(n[0],copy.port("SHELL_INLET").phaseMoles()[0]);assertArrayEquals(new double[]{.0098,0,.02},copy.port("SHELL_INLET").phaseVolumes());
+        assertEquals(lines,copy.lines());assertEquals(7.4,copy.lines().part("shell_bypass_valve").massFlow());
+        // A side of fluid-15's shape (no actuator, ports or lines) reads as acting on nothing.
+        var old=new FluidView.Heat("AIR_COOLER","PROCESS",false,330,-1e5,1.0,1e4,null,null,null,null);
+        assertEquals("none",old.actuator());assertEquals(List.of(),old.ports());assertNull(old.lines());
+        double[][] offAxis=new double[3][count+1];
+        var wrong=new FluidView(9,4,1200,1300,"FULL",null,0,List.of()).withPipeInfo(FluidView.PipeInfo.empty(count)).withHeat(heat.with("bypass",.42,"NONE",List.of(new FluidView.Port("SHELL_INLET",293.15,1e5,1,offAxis,new double[3])),null));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MenuData(TopologyCompiler.Kind.HEAT_SIDE,wrong,base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights()));
+        assertThrows(IllegalArgumentException.class,()->heat.with("valve",.4,"NONE",ports,lines));
+        assertThrows(IllegalArgumentException.class,()->heat.with("bypass",1.2,"NONE",ports,lines));
+        assertThrows(IllegalArgumentException.class,()->heat.with("bypass",.4,"NONE",List.of(ports.get(0),ports.get(0)),lines));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Lines("CHECKED",1,Collections.nCopies(13,new FluidView.Part("x","OK","",0,null,null))));
     }
     /** The client remembers the last delivered state of the 32 most recent devices, so a reopened menu shows it until its bucket; leaving a world forgets it. */
     @Test void theClientRemembersTheLastDeliveredStateOfRecentDevices() {
