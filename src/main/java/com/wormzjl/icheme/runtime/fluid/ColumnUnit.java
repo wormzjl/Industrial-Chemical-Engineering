@@ -73,18 +73,18 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
     public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,value);}
 
     /**
-     * A running unit's engine state (plan section 12): its split table and the products' specific enthalpies (J/mol), the
+     * A running unit's engine state (plan section 12): its split table and the products' partial molar enthalpies (J/mol), the
      * cycles that asked and applied it, V3's condenser duty there (W), and the inlets' levels and outlets' credits the port
      * plans read through the fence. Rebuilt by the engine: a unit without it solves once before it takes anything.
      */
-    public record State(SplitTable table,double[] enthalpy,long tableTick,long applied,double solvedCondenser,List<Level> levels,List<Credit> credits) {
+    public record State(SplitTable table,double[][] enthalpy,long tableTick,long applied,double solvedCondenser,List<Level> levels,List<Credit> credits) {
         public State {
-            Objects.requireNonNull(table);enthalpy=enthalpy.clone();levels=List.copyOf(levels);credits=List.copyOf(credits);
-            if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy per product");
-            for(double h:enthalpy)if(!Double.isFinite(h))throw new IllegalArgumentException("Invalid product enthalpy");
+            Objects.requireNonNull(table);enthalpy=com.wormzjl.icheme.science.column.operation.ColumnSolve.copy(enthalpy);levels=List.copyOf(levels);credits=List.copyOf(credits);
+            if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy row per product");
+            for(double[] row:enthalpy){if(row.length!=table.axis().size())throw new IllegalArgumentException("A partial enthalpy per component");for(double h:row)if(!Double.isFinite(h))throw new IllegalArgumentException("Invalid product enthalpy");}
             if(!Double.isFinite(solvedCondenser))throw new IllegalArgumentException("Invalid solved condenser duty");
         }
-        @Override public double[] enthalpy(){return enthalpy.clone();}
+        @Override public double[][] enthalpy(){return com.wormzjl.icheme.science.column.operation.ColumnSolve.copy(enthalpy);}
         /** An inlet's level after the cycle at {@code tick}, mol, the rate the column demanded there, mol/s, and the account's molar mass, kg/mol. */
         public record Level(long device,long tick,double held,double rate,double molarMass) {}
         /** A cycle's product credited to an outlet at {@code tick}. */

@@ -36,39 +36,50 @@ class ColumnRunTest {
             inner.booked(island,graph,start,end,result);
         }
     }
-    private static PhysicalFluidTopology.Device port(long id,int x,Kind kind,Direction toward,PipeResistanceGeometry g) {
-        var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,0,PhysicalFluidTopology.PORT_LANE);
+    private static PhysicalFluidTopology.Device port(long id,int x,Kind kind,Direction toward,PipeResistanceGeometry g){return port(id,x,0,kind,toward,g);}
+    private static PhysicalFluidTopology.Device port(long id,int x,int z,Kind kind,Direction toward,PipeResistanceGeometry g) {
+        var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,z,PhysicalFluidTopology.PORT_LANE);
         return new PhysicalFluidTopology.Device(id,at,kind,toward,g.geometry,new FlowControl.Passive(),List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK)),
                 true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
     }
     private record PipeResistanceGeometry(com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry geometry) {}
     private static double sum(double[] n){double s=0;for(double v:n)s+=v;return s;}
 
-    private record Rig(EventPathWorld world,ColumnOperation ops,Counting counting,long unit,long feed,long product,long tank){}
+    private record Rig(EventPathWorld world,ColumnOperation ops,Counting counting,long unit,long feed,long product,long tank,long steamSource){}
     /** A 3 bar nitrogen feed line into a feed port, a distillate port out to a tank, a table sending everything to the distillate; jobs taking {@code lag} ticks. */
     private Rig rig(int lag){return rig(lag,null);}
-    /** The rig with its tables from {@code solves}, or installed at once where null. */
-    private Rig rig(int lag,Fake solves) {
+    private Rig rig(int lag,Fake solves){return rig(lag,solves,false,false);}
+    /**
+     * The rig with its tables from {@code solves}, or installed at once where null; with {@code steam}, a 450 K steam line into
+     * a steam port at 0.2 mol per mol of feed; with {@code blocked}, nothing downstream of the product valve.
+     */
+    private Rig rig(int lag,Fake solves,boolean steam,boolean blocked) {
         var world=new EventPathWorld();world.lag=lag;var model=world.model;int m=model.componentCount();
         var n2=EventPathWorld.nitrogen().composition();
         long generator=world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,n2),.05);
         world.place(1,64,0,Kind.PIPE,Direction.EAST,.05);long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST);
-        long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST);world.place(12,64,0,Kind.PIPE,Direction.EAST,.05);
-        long tank=world.place(13,64,0,Kind.RESERVOIR,Direction.EAST);
+        long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST),tank=0,steamSource=0,steamValve=0;
+        if(!blocked){world.place(12,64,0,Kind.PIPE,Direction.EAST,.05);tank=world.place(13,64,0,Kind.RESERVOIR,Direction.EAST);}
+        var water=new double[m];water[m-1]=1;
+        // The steam line is sized for its 0.1 mol/s (1 cm): a 5 cm valve regulating 6 g/s from 3 to 1.5 bar holds its island (README, open items).
+        if(steam){steamSource=world.place(0,64,2,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,450,300000,water),.05);world.place(1,64,2,Kind.PIPE,Direction.EAST,.01);steamValve=world.place(2,64,2,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),.01);}
         var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.components(),model.molecularWeights());var counting=new Counting(ops);world.coordinator.ports(counting);
         world.runTo(40);
         // Start: a feed port inside the feed valve, a distillate port inside the product valve.
-        long unit=world.ledger.reserve(1);long feed=world.ledger.nextIdentity(),product=feed+1;
+        long unit=world.ledger.reserve(1);long feed=world.ledger.nextIdentity(),product=feed+1,steamPort=feed+2;
         var g=new PipeResistanceGeometry(world.registry.registrations().get(feedValve).device().geometry());
-        var setpoints=new Setpoints(.5,.5,330,1,0,new double[0],new double[0],new double[0]);
-        world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,
-                List.of(new ColumnUnit.Station(Port.FEED,0,feed,feedValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,product,productValve,Account.empty(m))),ColumnUnit.Totals.empty(m)));
-        world.registry.submit(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
-                new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0))),product+1,null);
+        var setpoints=new Setpoints(.5,.5,330,1,0,steam?new double[]{.2}:new double[0],new double[0],new double[0]);
+        var stations=new ArrayList<>(List.of(new ColumnUnit.Station(Port.FEED,0,feed,feedValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,product,productValve,Account.empty(m))));
+        if(steam)stations.add(new ColumnUnit.Station(Port.STEAM,0,steamPort,steamValve,Account.empty(m)));
+        world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,stations,ColumnUnit.Totals.empty(m)));
+        var edits=new ArrayList<>(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
+                new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0))));
+        if(steam)edits.add(new WorldTopologyLedger.Edit(steamPort,new WorldTopologyLedger.Registration(port(steamPort,3,2,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,420,150000,n2),0)));
+        world.registry.submit(edits,steamPort+1,null);
         if(solves!=null){solves.model=model;ops.solves(solves);}
         ops.refresh();
         if(solves==null){var s=table(model,setpoints);ops.table(unit,s.table(),s.enthalpy());}
-        return new Rig(world,ops,counting,unit,feed,product,tank);
+        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource);
     }
 
     @Test void aRunningColumnTakesItsFeedAndGivesItsProductDownstreamConservingEveryComponent() {
@@ -107,14 +118,18 @@ class ColumnRunTest {
     /** The cycle at {@code expected} ran at {@code actual}: a cycle runs once its inlets booked through it, a tick or so later. */
     private static void assertCycle(long expected,long actual,String message){assertTrue(Math.abs(actual-expected)<ColumnOperation.CYCLE_TICKS/2,message+": expected "+expected+", was "+actual);}
     /** A solve's table: everything to the distillate at 330 K, 1 kJ/mol below what the feed brings, so the condenser removes it. */
-    static ColumnSolve.Solved table(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints) {
+    static ColumnSolve.Solved table(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints){return table(model,setpoints,setpoints.steamPerFeed());}
+    /** The table at the steam ratios {@code steam}: the water leaves at the steam's own enthalpy, so the closure holds at any ratio. */
+    static ColumnSolve.Solved table(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints,double[] steam) {
         int m=model.componentCount();var n2=EventPathWorld.nitrogen().composition();
         double h=model.flashTP(340,300000,n2.clone(),()->{}).enthalpy()/sum(n2);
+        var water=new double[m];water[m-1]=1;double hs=model.flashTP(450,300000,water,()->{}).enthalpy();
+        var rows=new double[1][m];Arrays.fill(rows[0],h-1000);rows[0][m-1]=hs;
         var z=new double[m];for(int i=0;i<m;i++)z[i]=n2[i]/sum(n2);
         var all=new double[m];Arrays.fill(all,1);var held=new boolean[m];Arrays.fill(held,true);
         var table=new SplitTable(model.components(),List.of(new SplitTable.Product(Port.DISTILLATE,0,all,330,250000)),0,new double[0],-1000,
-                new SplitTable.Reference(z,h,30,new double[0],1,setpoints),held);
-        return new ColumnSolve.Solved(table,new double[]{h-1000},null,-1000,"test","");
+                new SplitTable.Reference(z,h,30,steam,1,setpoints),held);
+        return new ColumnSolve.Solved(table,rows,null,-1000,"test","");
     }
     /** A solver answering every job {@code delay} ticks after it was asked (0: at once): {@link #table}, or a failure where {@code fail} holds. */
     static final class Fake implements ColumnOperation.Solves {
@@ -128,7 +143,8 @@ class ColumnRunTest {
         public com.wormzjl.icheme.science.column.v3.V3ColumnInput design(ColumnUnit unit){return DESIGN;}
         public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done) {
             jobs.add(job);long now=world.ledger.onlineTick();asked.add(now);
-            ColumnSolve.Outcome o=fail.test(job)?new ColumnSolve.Failed("test refusal"):table(model,job.setpoints());
+            var taken=job.taken();var ratios=new double[taken.steam().size()];for(int j=0;j<ratios.length;j++)ratios[j]=taken.feedRate()>0?taken.steam().get(j).rate()/taken.feedRate():job.setpoints().steamPerFeed()[j];
+            ColumnSolve.Outcome o=fail.test(job)?new ColumnSolve.Failed("test refusal"):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios);
             if(delay==0)done.accept(o);else due.computeIfAbsent(now+delay,t->new ArrayList<>()).add(()->done.accept(o));
             return true;
         }
@@ -226,5 +242,49 @@ class ColumnRunTest {
         assertTrue(again.ledger.column(r.unit()).totals().taken().total()>taken+10,"it takes its feed on after the reload");
         // A stopped unit keeps no engine state.
         var u=again.ledger.column(r.unit());assertNull(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()).state());
+    }
+    /**
+     * A blocked product cuts the feed (plan section 7, owner Q1): with nothing downstream of the product valve the outlet's
+     * buffer fills to 120 s of design production, the cycle's throughput falls to nothing, and the feed valve closes on
+     * the inlet's full account.
+     */
+    @Test void aBlockedProductCutsTheFeed() {
+        var r=rig(0,null,false,true);var world=r.world();
+        world.runTo(5000);
+        double arrived=-sum(r.counting().moles.getOrDefault(r.feed(),new double[1]));
+        world.runTo(6000);
+        var u=world.ledger.column(r.unit());
+        assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
+        double held=u.station(Port.DISTILLATE,0).account().total(),buffer=.5*ColumnOperation.BUFFER_SECONDS;
+        assertEquals(buffer,held,1e-6*buffer,"the outlet holds its full buffer");
+        assertEquals(held,u.totals().taken().total(),1e-9,"the column took what its outlet holds, no more");
+        double later=-sum(r.counting().moles.getOrDefault(r.feed(),new double[1]));
+        assertTrue(later-arrived<.01,"the feed valve closed: "+(later-arrived)+" mol in the last 50 s");
+    }
+    /**
+     * Rule B with A where a solve fails (owner Q1, C1): the steam supply lost, the column first takes its feed as it comes
+     * and solves on the short steam's ratio; that solve failing (no steam, no reboiler), it cuts every input together, so the
+     * feed stops, and says so; at the retry it tries B again.
+     */
+    @Test void underRuleBAShortSteamSolvesOnItsRatioAndAFailedSolveFallsBackToA() {
+        var f=new Fake(0);var r=rig(0,f,true,false);f.world=r.world();var world=r.world();
+        f.runTo(2500);
+        assertTrue(world.ledger.column(r.unit()).totals().taken().total()>20,"it ran on its steam");
+        int settled=f.asked(DriftBands.Trigger.STEAM_RATIO).size();
+        f.fail=j->j.taken().steam().getFirst().rate()==0;
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(r.steamSource(),null)),world.ledger.nextIdentity(),null);
+        long lost=world.ledger.onlineTick();
+        while(r.ops().run(r.unit()).ruleA==false&&world.ledger.onlineTick()<lost+4000)f.runTo(world.ledger.onlineTick()+10);
+        var run=r.ops().run(r.unit());
+        assertTrue(run.ruleA,"a failed solve of the lost steam brought rule A: "+f.jobs.stream().map(j->j.trigger()+" "+j.taken().steam().getFirst().rate()).toList());
+        var asked=f.asked(DriftBands.Trigger.STEAM_RATIO);
+        assertTrue(asked.size()>settled,"it solved on the short steam");
+        assertTrue(r.ops().status(r.unit()).contains("rule A")&&r.ops().status(r.unit()).contains("steam"),r.ops().status(r.unit()));
+        double before=world.ledger.column(r.unit()).totals().taken().total();
+        f.runTo(world.ledger.onlineTick()+500);
+        assertEquals(before,world.ledger.column(r.unit()).totals().taken().total(),1e-9,"rule A: no steam, no feed taken");
+        // At the retry B is tried again: the steam still lost, it solves again, fails again, and A comes back.
+        f.runTo(world.ledger.onlineTick()+1200);
+        assertTrue(f.asked(DriftBands.Trigger.STEAM_RATIO).size()>asked.size(),"B tried again at the retry: "+f.asked(DriftBands.Trigger.STEAM_RATIO));
     }
 }

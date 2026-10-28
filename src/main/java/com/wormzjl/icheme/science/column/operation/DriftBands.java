@@ -68,9 +68,13 @@ public final class DriftBands {
         if (slope > 0 && Math.abs(h - reference.feedEnthalpy()) > ENTHALPY_KELVIN * slope)
             return Optional.of(new Crossing(Trigger.ENTHALPY, (h - reference.feedEnthalpy()) / slope));
         double[] ratios = reference.steamRatios();
+        double[] set = reference.setpoints().steamPerFeed();
         for (int j = 0; j < step.steam().size() && j < ratios.length; j++) {
             double ratio = step.steam().get(j).total() / fed;
-            if (ratios[j] > 0 && Math.abs(ratio - ratios[j]) / ratios[j] > STEAM_RATIO) return Optional.of(new Crossing(Trigger.STEAM_RATIO, ratio / ratios[j] - 1));
+            // Against the larger of the solved and the set ratio: steam that comes where the table solved none (a start before the
+            // steam line filled) or goes where it solved some is a crossing too.
+            double scale = Math.max(ratios[j], j < set.length ? set[j] : 0);
+            if (scale > 0 && Math.abs(ratio - ratios[j]) / scale > STEAM_RATIO) return Optional.of(new Crossing(Trigger.STEAM_RATIO, (ratio - ratios[j]) / scale));
         }
         double alpha = designDemand > 0 ? fed / designDemand : 0;
         if (Math.abs(alpha - reference.alpha()) > THROUGHPUT) return Optional.of(new Crossing(Trigger.THROUGHPUT, alpha));

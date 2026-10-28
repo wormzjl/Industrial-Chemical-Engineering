@@ -72,13 +72,15 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     static final class Run {
         final long unit;
         SplitTable table;
-        /** Each product's specific enthalpy at its solved temperature and port pressure, J/mol, in the table's order. */
-        double[] enthalpy;
+        /** Each product's partial molar enthalpies at its solved temperature and pressure, J/mol, in the table's order (ColumnSolve.Solved). */
+        double[][] enthalpy;
         long nextCycle;
         String status="STARTING: waiting for the first solve";
         ColumnCycle.Step last;
         /** The solve in flight, the tick of the last one asked, the failures in a row and the earliest retry, the warm seed. */
         Pending pending;long lastSolve=Long.MIN_VALUE/2,retryAt=Long.MIN_VALUE/2;int failures;V3NeuralSeed seed;
+        /** Rule A in force (owner Q1, C1: rule B, with A where a solve fails): a solve of the short inputs failed, so every input is cut together until a solve succeeds or the retry tries B again. */
+        boolean ruleA;
         /** The cycle that asked the table's solve and the cycle it applied at; V3's own condenser duty there, W; what the last solve said beyond its table. */
         long tableTick,applied;double solvedCondenser;String note="";
         final Map<Long,ArrayDeque<Span>> spans=new HashMap<>();
@@ -153,13 +155,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     public String status(long unit){var r=runs.get(unit);return r==null?"STOPPED":r.status;}
     /** The last cycle of unit {@code unit}, or null. */
     public ColumnCycle.Step last(long unit){var r=runs.get(unit);return r==null?null:r.last;}
-    /** Installs a solved split table and its products' specific enthalpies (J/mol) for unit {@code unit} (C5). */
-    public void table(long unit,SplitTable table,double[] enthalpy) {
+    /** Installs a solved split table and its products' partial molar enthalpies (J/mol) for unit {@code unit} (C5). */
+    public void table(long unit,SplitTable table,double[][] enthalpy) {
         var r=runs.get(unit);if(r==null)return;
-        if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One specific enthalpy per product");
+        if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy row per product");
         var u=topology.column(unit);
         for(var p:table.products())if(u.station(p.port(),p.index())==null)throw new IllegalArgumentException("Product "+p.port()+" "+p.index()+" has no station");
-        r.table=table;r.enthalpy=enthalpy.clone();r.status="RUNNING";
+        r.table=table;r.enthalpy=ColumnSolve.copy(enthalpy);r.status="RUNNING";
     }
 
     /** The next cycle deadline: the earliest cycle still ahead. A cycle already due waits for its inlets' bookings, which
@@ -197,10 +199,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
             r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();
+            // Only a solve of the short steam itself lifts rule A: one at A's own state says nothing of B's.
+            if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=false;
             return true;
         }
         String reason=refused!=null?refused:((ColumnSolve.Failed)p.outcome).reason();
         r.failures++;r.retryAt=tick+RETRY_TICKS[Math.min(r.failures,RETRY_TICKS.length)-1];
+        // A solve of a changed steam ratio failed (zero steam without a reboiler, the draw wall): rule A, the inputs cut together.
+        if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=true;
         r.note=r.table==null?"":String.format(Locale.ROOT,"the %s solve failed (%s), the table of %d s ago kept",p.trigger.name().toLowerCase(Locale.ROOT),reason,(tick-r.tableTick)/20);
         if(r.table==null)r.status="NOT READY: "+reason;
         return true;
@@ -304,7 +310,9 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             room[k]=Math.max(0,design*share-s.account().total());
         }
         var energy=r.enthalpy;
-        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,(k,n)->{double sum=0;for(double v:n)sum+=v;return sum*energy[k];},false);
+        // Rule A stays until a solve succeeds; at its retry time the cycle tries B again, and a still short steam asks the solve again.
+        if(r.ruleA&&r.pending==null&&tick>=r.retryAt)r.ruleA=false;
+        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;},r.ruleA);
         r.last=step;
         if(step.trip()!=null) {
             // The model has no steady state for this input (a capability limit): the inlets close, a solve of the state the
@@ -328,6 +336,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         topology.column(u.withStations(true,stations).withTotals(totals));
         levels(r,u,available,tick,true);
         r.status=step.limit()==ColumnCycle.Limit.NONE?"RUNNING":String.format(Locale.ROOT,"LIMITED: %s, %.0f %%",step.limit().name().toLowerCase(Locale.ROOT),100*step.alpha());
+        if(r.ruleA)r.status+=", inputs cut together (rule A)";
         // A new solve where the state taken left the table's bands, or the setpoints moved (plan section 6).
         DriftBands.Trigger trigger=u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT
                 :DriftBands.check(t,step,u.setpoints().designFeedRate()*CYCLE_TICKS/20.0).map(DriftBands.Crossing::trigger).orElse(null);

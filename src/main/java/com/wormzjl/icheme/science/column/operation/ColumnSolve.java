@@ -32,6 +32,8 @@ public final class ColumnSolve {
     /** V3's superheat rule for a steam feed, K above saturation at its stage. */
     static final double SUPERHEAT = 5;
     private static final int TEMPERATURE_ITERATIONS = 40;
+    /** The step of a partial molar enthalpy's difference, a share of the product's moles. */
+    static final double PARTIAL_STEP = 1e-5;
 
     private ColumnSolve() {
     }
@@ -83,21 +85,24 @@ public final class ColumnSolve {
     /**
      * An accepted solve.
      *
-     * @param enthalpy        each product's specific enthalpy, J/mol, network basis, at its solved temperature and pressure
+     * @param enthalpy        each product's partial molar enthalpies on the axis, J/mol, network basis, at its solved temperature and
+     *                        pressure: a product of moles n holds the energy sum n_i h_i, exact at its solved composition and
+     *                        first order beside it (plan 5.3: its actual composition, not the solved one's specific enthalpy)
      * @param solvedCondenser V3's own condenser duty, W (column sign)
      * @param route           V3's solve path
      * @param note            what the input left out (feed water too cold to enter as steam), or empty
      */
-    public record Solved(SplitTable table, double[] enthalpy, V3NeuralSeed seed, double solvedCondenser, String route, String note) implements Outcome {
+    public record Solved(SplitTable table, double[][] enthalpy, V3NeuralSeed seed, double solvedCondenser, String route, String note) implements Outcome {
         public Solved {
             Objects.requireNonNull(table, "table");
-            enthalpy = enthalpy.clone();
-            if (enthalpy.length != table.products().size()) throw new IllegalArgumentException("One enthalpy per product");
+            enthalpy = copy(enthalpy);
+            if (enthalpy.length != table.products().size()) throw new IllegalArgumentException("One enthalpy row per product");
+            for (double[] row : enthalpy) if (row.length != table.axis().size()) throw new IllegalArgumentException("A partial enthalpy per axis component");
         }
 
         @Override
-        public double[] enthalpy() {
-            return enthalpy.clone();
+        public double[][] enthalpy() {
+            return copy(enthalpy);
         }
     }
 
@@ -192,7 +197,7 @@ public final class ColumnSolve {
         for (int i = 0; i < m; i++) z[i] = feed[i] / rate;
         var reference = new SplitTable.Reference(z, h, feedSlope, steamRatios, rate / setpoints.designFeedRate(), setpoints);
         var solved = SplitTable.of(axis, boilingPoints(catalog, packageId, axis), input, success.result(), reference);
-        // Each product's specific enthalpy and the closure on the network's basis.
+        // Each product's partial molar enthalpies and the closure on the network's basis.
         double[] pooled = feed.clone();
         double in = h * rate;
         for (int j = 0; j < designSteam.size(); j++) {
@@ -205,13 +210,13 @@ public final class ColumnSolve {
             in += Double.isNaN(s.enthalpy()) ? model.flashTP(steamT[j], p, steam, checkpoint).enthalpy() : s.enthalpy() * s.rate();
         }
         double[][] split = solved.split(pooled);
-        double[] enthalpy = new double[split.length];
+        double[][] enthalpy = new double[split.length][];
         double out = 0;
         for (int k = 0; k < split.length; k++) {
             var product = solved.products().get(k);
             double n = Arrays.stream(split[k]).sum();
-            enthalpy[k] = specific(model, product.temperature(), product.pressure(), n > 0 ? split[k] : pooled, checkpoint);
-            out += enthalpy[k] * n;
+            enthalpy[k] = partial(model, product.temperature(), product.pressure(), n > 0 ? split[k] : pooled, checkpoint);
+            for (int i = 0; i < m; i++) out += enthalpy[k][i] * split[k][i];
         }
         double[] pa = solved.pumparoundPerFeed();
         double paTotal = 0;
@@ -235,6 +240,40 @@ public final class ColumnSolve {
             h0 = hn;
         }
         return Math.abs(h - h0) > 1e-6 * Math.max(1, Math.abs(h)) ? Double.NaN : t;
+    }
+
+    /**
+     * The partial molar enthalpies of {@code moles} at {@code t}, {@code p}, J/mol per axis component: forward differences of
+     * the model's enthalpy, shifted together so that they sum, weighted by {@code moles}, to its enthalpy exactly (Euler: the
+     * enthalpy at fixed temperature and pressure is homogeneous of degree one in the moles). A component whose difference
+     * does not flash takes the specific enthalpy.
+     */
+    static double[] partial(FluidThermodynamics model, double t, double p, double[] moles, Runnable checkpoint) {
+        double total = Arrays.stream(moles).sum(), h = model.flashTP(t, p, moles.clone(), checkpoint).enthalpy();
+        double delta = PARTIAL_STEP * total;
+        double[] partial = new double[moles.length];
+        double sum = 0;
+        for (int i = 0; i < moles.length; i++) {
+            double[] plus = moles.clone();
+            plus[i] += delta;
+            double hi;
+            try {
+                hi = (model.flashTP(t, p, plus, checkpoint).enthalpy() - h) / delta;
+            } catch (IllegalArgumentException | ArithmeticException noFlash) {
+                hi = Double.NaN;
+            }
+            partial[i] = Double.isFinite(hi) ? hi : h / total;
+            sum += partial[i] * moles[i];
+        }
+        double shift = (h - sum) / total;
+        for (int i = 0; i < partial.length; i++) partial[i] += shift;
+        return partial;
+    }
+
+    public static double[][] copy(double[][] rows) {
+        double[][] out = new double[rows.length][];
+        for (int k = 0; k < rows.length; k++) out[k] = rows[k].clone();
+        return out;
     }
 
     /** The model's specific enthalpy of {@code moles} at {@code t}, {@code p}, J/mol. */
