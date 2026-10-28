@@ -5,7 +5,6 @@ import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,62 +40,7 @@ public final class GuiPrototypes {
     }
 
     static List<Prototype> prototypes() {
-        return List.of(pump(), generator(), valve(), tank(), column(), assembly(), constructor(), pipelineTool(), gauge(), vessel(), displayKeys());
-    }
-
-    // ---- The display keys' colours: options for the owner (the message display's mint "feels slightly out of place") ----
-
-    static Prototype displayKeys() {
-        return new Prototype("display-keys", 464, 124, (d, s) -> {
-            var p = (PanelSkin) d.skin;
-            var footer = FluidGuiLayout.footer(464);
-            String[] names = {"A  the meters' LED colour", "B  neutral: white on black glass", "C  flat black keys in an engraved tray"};
-            String[] keys = {"Mole", "°C", "kPa", "/min"};
-            for (int row = 0; row < 3; row++) {
-                int y = 8 + row * 38, by = y + 14;
-                d.skin.text(d.c, names[row], 10, y, Palette.TEXT);
-                d.skin.button(d.c, new Rect(footer.get(0).x(), by, footer.get(0).width(), 18), "Close", Skin.Press.REST, false);
-                d.skin.button(d.c, new Rect(footer.get(1).x(), by, footer.get(1).width(), 18), "Apply", Skin.Press.PRIMARY, false);
-                int x0 = footer.get(2).x() - 4, x1 = footer.get(5).x() + footer.get(5).width() + 4;
-                var strip = new Rect(x0, by - 4, x1 - x0, 26);
-                if (row == 2) {
-                    // An engraved tray in the door, as a function group's line; flat keys, no chrome ring.
-                    d.c.fill(strip.x(), strip.y(), strip.right() - 1, strip.y() + 1, p.door().dark());
-                    d.c.fill(strip.x(), strip.y(), strip.x() + 1, strip.bottom() - 1, p.door().dark());
-                    d.c.fill(strip.x(), strip.bottom() - 1, strip.right(), strip.bottom(), p.door().light());
-                    d.c.fill(strip.right() - 1, strip.y(), strip.right(), strip.bottom(), p.door().light());
-                } else {
-                    int glass = row == 0 ? p.meter().glass() : 0xFF101417;
-                    d.c.fill(strip.x() + 1, strip.y(), strip.right() - 1, strip.bottom(), p.screenBezel());
-                    d.c.fill(strip.x(), strip.y() + 1, strip.right(), strip.bottom() - 1, p.screenBezel());
-                    d.c.fill(strip.x() + 2, strip.y() + 2, strip.right() - 2, strip.bottom() - 2, glass);
-                }
-                for (int i = 0; i < 4; i++) {
-                    var k = footer.get(2 + i);
-                    int kx = k.x(), kr = k.x() + k.width(), ky = by, kb = by + 18;
-                    int face, frame, text;
-                    switch (row) {
-                        case 0 -> { text = p.meter().on(); face = mix(p.meter().glass(), text, 0.08); frame = mix(p.meter().glass(), text, 0.4); }
-                        case 1 -> { text = 0xFFE6E8EA; face = 0xFF1A2026; frame = 0xFF4A5258; }
-                        default -> { text = p.key().text(); face = p.key().face(); frame = p.bezel(); }
-                    }
-                    d.c.fill(kx + 1, ky + 1, kr - 1, kb - 1, face);
-                    d.c.fill(kx + 1, ky, kr - 1, ky + 1, frame);
-                    d.c.fill(kx + 1, kb - 1, kr - 1, kb, frame);
-                    d.c.fill(kx, ky + 1, kx + 1, kb - 1, frame);
-                    d.c.fill(kr - 1, ky + 1, kr, kb - 1, frame);
-                    int w = d.m.width(keys[i]);
-                    d.c.text(keys[i], kx + (k.width() - w) / 2, ky + 5, text);
-                }
-            }
-        });
-    }
-
-    static int mix(int a, int b, double t) {
-        int r = (int) Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
-        int g = (int) Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
-        int bl = (int) Math.round((a & 255) * (1 - t) + (b & 255) * t);
-        return 0xFF000000 | r << 16 | g << 8 | bl;
+        return List.of(pump(), generator(), valve(), tank(), column(), assembly(), constructor(), pipelineTool(), gauge(), vessel());
     }
 
     // ---- The column calculator: the drawing on the glass, the inputs in groups on the door ----

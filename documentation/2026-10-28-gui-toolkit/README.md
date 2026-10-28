@@ -55,8 +55,9 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
 - 2026-10-28: the other screens reviewed with prototypes, the column calculator's tray dP field removed, display keys, the client's units and the theme sign, in the review commit (owner: "Review other GUI based on above rule, prototype first", "remove the tray dP set value from column calculator (outdated)", "these buttons should distinguish themselves from the left ones", "Panel color and unit should be a client-wide switch", "an icon instead of word", "too big, latter one looks better", "add a min between s and h"; plan section 12, [GUI_REVIEW.md](GUI_REVIEW.md)).
   - Kit: `Skin.softKeys`, `softKey`, `iconKey`, `Skin.Icon`; `SkinButton.soft`, `icon`; `Column.UNIT` (a wider unit narrows its box; units stay whole). `FluidGuiLayout`: 40 px display keys, `softKeys`.
   - `ClientConfig` section `units`; `TemperatureUnit` in `DisplayUnit`, Celsius as "°C"; `FlowRateUnit.PER_MINUTE`. The long unit labels and their lang keys are gone.
-  - Prototypes: `tools/heat-gui-renders/GuiPrototypes.java` (ten screens and `display-keys`, three colours for the keys).
+  - Prototypes: `tools/heat-gui-renders/GuiPrototypes.java` (ten screens).
   - Gates: quick suite 1734, no failures (`FluidGuiConsistencyTest` 5, the footer gate widened to the keys and their strip; `ProcessPresentationTest` 5, its Celsius symbol now "°C"; `KitLayoutTest` 12). The first run failed the new strip check at 300 px (the strip came 2 px from Apply); the 40 px keys fixed it.
+- 2026-10-28: the display keys are flat black keys in a tray engraved into the door (owner: the mint on glass "feels slightly out of place"; of three colours rendered, "C looks better"; plan section 12), in the tray commit. The options' sheet left the prototypes tool. Drawing only: judged on the renders; `KitLayoutTest` and `FluidGuiConsistencyTest` ran again.
 
 ## Open
 

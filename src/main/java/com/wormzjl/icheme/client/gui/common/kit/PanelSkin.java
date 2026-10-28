@@ -168,28 +168,26 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
     }
 
     /**
-     * The display keys' strip: the message display's glass in the HMI screen's bezel. A unit or a basis changes what the
-     * screens show, not the plant, so its keys belong to the displays, not with the push buttons (owner: "these buttons
-     * should distinguish themselves from the left ones").
+     * The display keys' tray: a recess pressed into the door, its line engraved as a function group's. A unit or a basis
+     * changes what the screens show, not the plant, so its keys sit apart from the push buttons (owner: "these buttons
+     * should distinguish themselves from the left ones"; of three colours tried, "C looks better").
      */
     @Override
     public void softKeys(Canvas c, Rect r) {
-        c.fill(r.x() + 1, r.y(), r.right() - 1, r.bottom(), screenBezel);
-        c.fill(r.x(), r.y() + 1, r.right(), r.bottom() - 1, screenBezel);
-        c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.y() + 2, mix(screenBezel, 0xFFFFFFFF, 0.18));
-        c.fill(r.x() + 2, r.y() + 2, r.right() - 2, r.bottom() - 2, display.glass());
+        c.fill(r.x(), r.y(), r.right() - 1, r.y() + 1, door.dark());
+        c.fill(r.x(), r.y(), r.x() + 1, r.bottom() - 1, door.dark());
+        c.fill(r.x(), r.bottom() - 1, r.right(), r.bottom(), door.light());
+        c.fill(r.right() - 1, r.y(), r.right(), r.bottom(), door.light());
     }
 
-    /** A display key: flat on the glass, framed and lettered in the display's colour; the pointer lights its frame. */
+    /** A display key: flat and black in a thin rim, no chrome ring; the pointer lights its face as a push button's. */
     @Override
     public void softKey(Canvas c, Rect r, String text, boolean hover) {
-        int x0 = r.x(), y0 = r.y(), x1 = r.right(), y1 = r.bottom(), frame = mix(display.glass(), display.on(), hover ? 0.9 : 0.4);
-        c.fill(x0 + 1, y0 + 1, x1 - 1, y1 - 1, mix(display.glass(), display.on(), hover ? 0.2 : 0.08));
-        c.fill(x0 + 1, y0, x1 - 1, y0 + 1, frame);
-        c.fill(x0 + 1, y1 - 1, x1 - 1, y1, frame);
-        c.fill(x0, y0 + 1, x0 + 1, y1 - 1, frame);
-        c.fill(x1 - 1, y0 + 1, x1, y1 - 1, frame);
-        Skin.centred(c, r, text, display.on());
+        int x0 = r.x(), y0 = r.y(), x1 = r.right(), y1 = r.bottom();
+        c.fill(x0 + 1, y0, x1 - 1, y1, bezel);
+        c.fill(x0, y0 + 1, x1, y1 - 1, bezel);
+        c.fill(x0 + 1, y0 + 1, x1 - 1, y1 - 1, hover ? mix(key.face(), key.light(), 0.35) : key.face());
+        Skin.centred(c, r, text, key.text());
     }
 
     /**

@@ -8,7 +8,7 @@ Batch 2026-10-28-gui-toolkit, 2026-10-28, branch `claude/gui-toolkit`. Owner: "R
 2. A device that runs has an Off and On switch, then its target; selector positions are latched.
 3. No cut text: wrap, stack, keep units whole. No noise: no timestamps, raw engine lines or a status said twice.
 4. The door holds switches, set points and indicating meters (7-segment, bar graphs); the HMI glass holds tables and drawings.
-5. New, owner 2026-10-28: display keys (a unit, a basis) change what the screens show, not the plant. They are flat keys on a glass strip in the message display's colour, at the footer's right; Close, Apply and the other push buttons stay raised (plan section 12).
+5. New, owner 2026-10-28: display keys (a unit, a basis) change what the screens show, not the plant. They are flat black keys in a tray engraved into the door, at the footer's right (owner: "C looks better"); Close, Apply and the other push buttons stay raised (plan section 12).
 6. New, owner 2026-10-28: the theme and the units are the client's, one switch for every screen, kept in `icheme-client.toml`; no unit reaches the server. The theme key is a sign, not a word (plan section 12).
 7. Every screen draws through the kit and the light or dark theme.
 
