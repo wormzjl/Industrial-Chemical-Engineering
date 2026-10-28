@@ -17,9 +17,14 @@ import java.util.Objects;
  * <p>{@code turns}: the side nozzles the player turned in the constructor (finding F3, owner decision 2026-10-27), each
  * to the side it faces; every other side nozzle takes its side by itself ({@link ColumnStructure}). Empty for every column
  * built before the field existed, which is how those columns take their sides. Saved beside the trays, roles by name.
+ *
+ * <p>{@code operating}: the operating point the calculator saved with the design ({@link ColumnOperatingPoint}, batch
+ * 2026-10-28-column-operation, shape fields 4), or null: every column built before the field, which cannot run. It needs
+ * the component design and fits the trays' lists; a layout edit drops it with the components.
  */
 public record ColumnTrays(int trays, int feed, List<Integer> draws, List<Integer> steam, List<Pumparound> pumparounds,
-                          @org.jetbrains.annotations.Nullable ColumnComponents components, List<Turn> turns) {
+                          @org.jetbrains.annotations.Nullable ColumnComponents components, List<Turn> turns,
+                          @org.jetbrains.annotations.Nullable ColumnOperatingPoint operating) {
     /** Tray spacing (the solver's {@code V3TrayHydraulics} spacing) and the disengagement space above the top tray, m. */
     public static final double SPACING = .6, TOP_SPACE = 1.2;
     public static final int MAX_TRAYS = 64, MAX_DRAWS = 4, MAX_STEAM = 2, MAX_PUMPAROUNDS = 4;
@@ -66,27 +71,40 @@ public record ColumnTrays(int trays, int feed, List<Integer> draws, List<Integer
         if (turns.size() > MAX_TURNS) throw new IllegalArgumentException("Too many turned nozzles: " + turns.size());
         var seen = new java.util.HashSet<String>();
         for (var turn : turns) if (!seen.add(turn.role() + "#" + turn.index())) throw new IllegalArgumentException("A nozzle turned twice: " + turn);
+        if (operating != null && (components == null || !operating.fits(new ColumnTrays(trays, feed, draws, steam, pumparounds))))
+            throw new IllegalArgumentException("An operating point belongs to a design with components and fits its trays");
+    }
+
+    /** Trays with components and turned nozzles, without an operating point. */
+    public ColumnTrays(int trays, int feed, List<Integer> draws, List<Integer> steam, List<Pumparound> pumparounds,
+                       @org.jetbrains.annotations.Nullable ColumnComponents components, List<Turn> turns) {
+        this(trays, feed, draws, steam, pumparounds, components, turns, null);
     }
 
     /** Trays with a component design and no turned nozzle. */
     public ColumnTrays(int trays, int feed, List<Integer> draws, List<Integer> steam, List<Pumparound> pumparounds,
                        @org.jetbrains.annotations.Nullable ColumnComponents components) {
-        this(trays, feed, draws, steam, pumparounds, components, List.of());
+        this(trays, feed, draws, steam, pumparounds, components, List.of(), null);
     }
 
     /** Trays without a component design. */
     public ColumnTrays(int trays, int feed, List<Integer> draws, List<Integer> steam, List<Pumparound> pumparounds) {
-        this(trays, feed, draws, steam, pumparounds, null, List.of());
+        this(trays, feed, draws, steam, pumparounds, null, List.of(), null);
     }
 
-    /** These trays with the component design {@code next} (null: none). */
+    /** These trays with the operating point {@code next} (null: none); it needs a component design. */
+    public ColumnTrays withOperating(@org.jetbrains.annotations.Nullable ColumnOperatingPoint next) {
+        return new ColumnTrays(trays, feed, draws, steam, pumparounds, components, turns, next);
+    }
+
+    /** These trays with the component design {@code next} (null: none, and no operating point either). */
     public ColumnTrays withComponents(@org.jetbrains.annotations.Nullable ColumnComponents next) {
-        return new ColumnTrays(trays, feed, draws, steam, pumparounds, next, turns);
+        return new ColumnTrays(trays, feed, draws, steam, pumparounds, next, turns, next == null ? null : operating);
     }
 
     /** These trays with the side nozzles turned as {@code next}. */
     public ColumnTrays withTurns(List<Turn> next) {
-        return new ColumnTrays(trays, feed, draws, steam, pumparounds, components, next);
+        return new ColumnTrays(trays, feed, draws, steam, pumparounds, components, next, operating);
     }
 
     /** Turns for a wire packet: role ordinal, number and side per turn (a wire format: no compatibility, AGENTS.md). */
@@ -122,7 +140,8 @@ public record ColumnTrays(int trays, int feed, List<Integer> draws, List<Integer
     @Override
     public String toString() {
         return "ColumnTrays[trays=" + trays + ", feed=" + feed + ", draws=" + draws + ", steam=" + steam + ", pumparounds=" + pumparounds
-                + (components == null ? "" : ", components=" + components) + (turns.isEmpty() ? "" : ", turns=" + turns) + "]";
+                + (components == null ? "" : ", components=" + components) + (turns.isEmpty() ? "" : ", turns=" + turns)
+                + (operating == null ? "" : ", operating=" + operating) + "]";
     }
 
     /** A plain column: trays and the feed, nothing else. */

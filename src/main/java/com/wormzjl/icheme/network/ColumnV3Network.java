@@ -480,6 +480,9 @@ public final class ColumnV3Network {
         writePumps(buffer, c.pumparoundPumps());
         buffer.writeBoolean(c.ejector());
         buffer.writeBoolean(c.kettle());
+        var point = design.trays().operating();
+        buffer.writeBoolean(point != null);
+        if (point != null) writeOperating(buffer, point);
     }
 
     private static ColumnDesign readDesign(RegistryFriendlyByteBuf buffer) {
@@ -489,10 +492,65 @@ public final class ColumnV3Network {
             var condenser = readKind(buffer, ColumnComponents.Condenser.class);
             var reflux = readKind(buffer, ColumnComponents.Pump.class);
             var pumps = readPumps(buffer);
-            return new ColumnDesign(trays.withComponents(new ColumnComponents(condenser, reflux, pumps, buffer.readBoolean(), buffer.readBoolean())), diameter);
+            var withComponents = trays.withComponents(new ColumnComponents(condenser, reflux, pumps, buffer.readBoolean(), buffer.readBoolean()));
+            return new ColumnDesign(buffer.readBoolean() ? withComponents.withOperating(readOperating(buffer)) : withComponents, diameter);
         } catch (IllegalArgumentException invalid) {
             throw new DecoderException("Invalid V3 column design", invalid);
         }
+    }
+
+    /** A design's operating point: ids, feed rates, the scalars, steam, draws and pumparounds (split by ordinal). */
+    private static void writeOperating(RegistryFriendlyByteBuf buffer, com.wormzjl.icheme.science.equipment.ColumnOperatingPoint point) {
+        buffer.writeUtf(point.packageId(), com.wormzjl.icheme.science.equipment.ColumnOperatingPoint.MAX_ID);
+        buffer.writeUtf(point.assayId(), com.wormzjl.icheme.science.equipment.ColumnOperatingPoint.MAX_ID);
+        buffer.writeVarInt(point.components().size());
+        for (int i = 0; i < point.components().size(); i++) {
+            buffer.writeUtf(point.components().get(i), com.wormzjl.icheme.science.equipment.ColumnOperatingPoint.MAX_ID);
+            buffer.writeDouble(point.feed().get(i));
+        }
+        for (double v : new double[] {point.feedTemperature(), point.topPressure(), point.stageDrop(), point.condenserTemperature(), point.refluxRatio(),
+                point.reboilerDuty()}) buffer.writeDouble(v);
+        buffer.writeVarInt(point.steam().size());
+        for (var s : point.steam()) {
+            buffer.writeDouble(s.flow());
+            buffer.writeDouble(s.temperature());
+        }
+        buffer.writeVarInt(point.draws().size());
+        for (double d : point.draws()) buffer.writeDouble(d);
+        buffer.writeVarInt(point.pumparounds().size());
+        for (var p : point.pumparounds()) {
+            buffer.writeDouble(p.duty());
+            buffer.writeEnum(p.split());
+        }
+    }
+
+    private static com.wormzjl.icheme.science.equipment.ColumnOperatingPoint readOperating(RegistryFriendlyByteBuf buffer) {
+        int max = com.wormzjl.icheme.science.equipment.ColumnOperatingPoint.MAX_ID;
+        String packageId = buffer.readUtf(max), assay = buffer.readUtf(max);
+        int n = boundedCount(buffer.readVarInt(), com.wormzjl.icheme.science.column.v3.V3ComponentBasis.MAX_COMPONENTS);
+        var ids = new java.util.ArrayList<String>();
+        var feed = new java.util.ArrayList<Double>();
+        for (int i = 0; i < n; i++) {
+            ids.add(buffer.readUtf(max));
+            feed.add(finite(buffer.readDouble(), "feed rate"));
+        }
+        double[] s = new double[6];
+        for (int i = 0; i < s.length; i++) s[i] = finite(buffer.readDouble(), "operating value");
+        var steam = new java.util.ArrayList<com.wormzjl.icheme.science.equipment.ColumnOperatingPoint.Steam>();
+        for (int i = boundedCount(buffer.readVarInt(), ColumnTrays.MAX_STEAM); i > 0; i--)
+            steam.add(new com.wormzjl.icheme.science.equipment.ColumnOperatingPoint.Steam(finite(buffer.readDouble(), "steam"), finite(buffer.readDouble(), "steam")));
+        var draws = new java.util.ArrayList<Double>();
+        for (int i = boundedCount(buffer.readVarInt(), ColumnTrays.MAX_DRAWS); i > 0; i--) draws.add(finite(buffer.readDouble(), "draw"));
+        var pas = new java.util.ArrayList<com.wormzjl.icheme.science.equipment.ColumnOperatingPoint.Pumparound>();
+        for (int i = boundedCount(buffer.readVarInt(), ColumnTrays.MAX_PUMPAROUNDS); i > 0; i--)
+            pas.add(new com.wormzjl.icheme.science.equipment.ColumnOperatingPoint.Pumparound(finite(buffer.readDouble(), "pumparound"),
+                    buffer.readEnum(com.wormzjl.icheme.science.column.v3.V3PumparoundSpec.Split.class)));
+        return new com.wormzjl.icheme.science.equipment.ColumnOperatingPoint(packageId, assay, ids, feed, s[0], s[1], s[2], s[3], s[4], s[5], steam, draws, pas);
+    }
+
+    private static int boundedCount(int count, int max) {
+        if (count < 0 || count > max) throw new DecoderException("V3 operating point list of " + count + " entries");
+        return count;
     }
 
     private record StateRequestPayload(BlockPos blockPos, long clientNonce) implements CustomPacketPayload {

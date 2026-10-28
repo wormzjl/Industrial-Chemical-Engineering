@@ -34,23 +34,63 @@ public final class ShapeRepair {
      */
     public record Saved(String kind, String front, @Nullable String orientation, double diameter, double length, int support, int @Nullable [] trays,
                         int @Nullable [] connections, boolean boot, int outlet, int @Nullable [] bank, @Nullable SavedComponents components,
-                        List<SavedTurn> turns) {
+                        List<SavedTurn> turns, @Nullable SavedOperating operating) {
         public Saved {
             turns = List.copyOf(turns);
+        }
+
+        /** A shape saved before its column could carry an operating point. */
+        public Saved(String kind, String front, @Nullable String orientation, double diameter, double length, int support, int @Nullable [] trays,
+                     int @Nullable [] connections, boolean boot, int outlet, int @Nullable [] bank, @Nullable SavedComponents components,
+                     List<SavedTurn> turns) {
+            this(kind, front, orientation, diameter, length, support, trays, connections, boot, outlet, bank, components, turns, null);
         }
 
         /** A shape saved before its column could carry a component design. */
         public Saved(String kind, String front, @Nullable String orientation, double diameter, double length, int support, int @Nullable [] trays,
                      int @Nullable [] connections, boolean boot, int outlet, int @Nullable [] bank) {
-            this(kind, front, orientation, diameter, length, support, trays, connections, boot, outlet, bank, null, List.of());
+            this(kind, front, orientation, diameter, length, support, trays, connections, boot, outlet, bank, null, List.of(), null);
         }
 
         /** A shape saved before its column could carry turned nozzles. */
         public Saved(String kind, String front, @Nullable String orientation, double diameter, double length, int support, int @Nullable [] trays,
                      int @Nullable [] connections, boolean boot, int outlet, int @Nullable [] bank, @Nullable SavedComponents components) {
-            this(kind, front, orientation, diameter, length, support, trays, connections, boot, outlet, bank, components, List.of());
+            this(kind, front, orientation, diameter, length, support, trays, connections, boot, outlet, bank, components, List.of(), null);
         }
     }
+
+    /**
+     * A column's operating point as saved (batch 2026-10-28-column-operation, shape fields 4): its numbers, its ids and
+     * the pumparound splits by name, as written. A missing number reads as NaN, which the point refuses.
+     */
+    public record SavedOperating(String packageId, String assayId, List<String> components, double[] feed, double feedTemperature, double topPressure,
+                                 double stageDrop, double condenserTemperature, double refluxRatio, double reboilerDuty, double[] steamFlows,
+                                 double[] steamTemperatures, double[] draws, double[] pumparoundDuties, List<String> pumparoundSplits) {
+        public SavedOperating {
+            components = List.copyOf(components);
+            pumparoundSplits = List.copyOf(pumparoundSplits);
+        }
+
+        /** @throws IllegalArgumentException for a split this build does not have, mismatched lists or an invalid value */
+        public ColumnOperatingPoint resolve() {
+            if (feed.length != components.size() || steamFlows.length != steamTemperatures.length || pumparoundDuties.length != pumparoundSplits.size())
+                throw new IllegalArgumentException("mismatched lists");
+            var steam = new ArrayList<ColumnOperatingPoint.Steam>();
+            for (int i = 0; i < steamFlows.length; i++) steam.add(new ColumnOperatingPoint.Steam(steamFlows[i], steamTemperatures[i]));
+            var pas = new ArrayList<ColumnOperatingPoint.Pumparound>();
+            for (int i = 0; i < pumparoundDuties.length; i++) {
+                String name = pumparoundSplits.get(i);
+                var split = constant(com.wormzjl.icheme.science.column.v3.V3PumparoundSpec.Split.class, name, SPLIT_ALIASES)
+                        .orElseThrow(() -> new IllegalArgumentException("no pumparound split " + name));
+                pas.add(new ColumnOperatingPoint.Pumparound(pumparoundDuties[i], split));
+            }
+            return new ColumnOperatingPoint(packageId, assayId, components, Arrays.stream(feed).boxed().toList(), feedTemperature, topPressure, stageDrop,
+                    condenserTemperature, refluxRatio, reboilerDuty, steam, Arrays.stream(draws).boxed().toList(), pas);
+        }
+    }
+
+    /** Renamed or removed pumparound splits, by their saved name: the current name. None yet. */
+    static final Map<String, String> SPLIT_ALIASES = Map.of();
 
     /** A turned side nozzle as saved (finding F3): its role by name, its number and the side it faces. */
     public record SavedTurn(String role, int index, int side) {
@@ -166,6 +206,12 @@ public final class ShapeRepair {
                     repairs.add("components (" + invalid.getMessage() + ") -> none");
                 }
             if (!saved.turns().isEmpty()) trays = trays.withTurns(turns(saved.turns(), repairs::add));
+            if (saved.operating() != null)
+                try {
+                    trays = trays.withOperating(saved.operating().resolve());
+                } catch (IllegalArgumentException invalid) {
+                    repairs.add("operating point (" + invalid.getMessage() + ") -> none");
+                }
         }
         List<Connection> connections = List.of();
         if (kind == Kind.DRUM) {

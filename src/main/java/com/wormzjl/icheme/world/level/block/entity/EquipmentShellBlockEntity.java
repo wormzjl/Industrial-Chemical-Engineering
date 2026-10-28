@@ -509,6 +509,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
             tag.putIntArray("Trays", shape.trays().encode());
             if (shape.trays().components() != null) tag.put("Components", ColumnDesignTags.writeComponents(shape.trays().components()));
             if (!shape.trays().turns().isEmpty()) tag.put("Turns", ColumnDesignTags.writeTurns(shape.trays().turns()));
+            if (shape.trays().operating() != null) tag.put("Operating", ColumnDesignTags.writeOperating(shape.trays().operating()));
         } else {
             if (shape.drum()) {
                 tag.putIntArray("Connections", EquipmentShape.Connection.encode(shape.connections()));
@@ -532,7 +533,8 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         return new ShapeRepair.Saved(tag.getString("Kind"), tag.getString("Front"), tag.contains("Orientation") ? tag.getString("Orientation") : null,
                 tag.getDouble("Diameter"), tag.getDouble("TangentLength"), tag.getInt("Support"), tag.contains("Trays") ? tag.getIntArray("Trays") : null,
                 tag.contains("Connections") ? tag.getIntArray("Connections") : null, tag.getBoolean("Boot"), tag.getInt("Outlet"),
-                tag.contains("Bank") ? tag.getIntArray("Bank") : null, ColumnDesignTags.saved(tag, "Components"), ColumnDesignTags.savedTurns(tag, "Turns"));
+                tag.contains("Bank") ? tag.getIntArray("Bank") : null, ColumnDesignTags.saved(tag, "Components"), ColumnDesignTags.savedTurns(tag, "Turns"),
+                ColumnDesignTags.savedOperating(tag, "Operating"));
     }
 
     @Override

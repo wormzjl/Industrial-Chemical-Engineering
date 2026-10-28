@@ -27,6 +27,12 @@ class EquipmentShapeCompatTest {
     /** The sump steam turned to the front, the pumparound draw to the left. */
     static final List<ColumnTrays.Turn> TURNS = List.of(new ColumnTrays.Turn(EquipmentShape.Role.STEAM, 1, 0), new ColumnTrays.Turn(EquipmentShape.Role.PUMPAROUND_DRAW, 1, 1));
 
+    /** A two-component feed with one sump steam, one draw and one uniform pumparound cooler. */
+    static final ColumnOperatingPoint OPERATING = new ColumnOperatingPoint("icheme:tjl20_methane_nitrogen", "icheme:tia_juana_light_methane",
+            List.of("Methane", "Nitrogen"), List.of(10.0, 90.5), 638.15, 250_000, 0, 332.15, 4.17, 0,
+            List.of(new ColumnOperatingPoint.Steam(33.3, 533.15)), List.of(13.6), List.of(new ColumnOperatingPoint.Pumparound(-1.284e6,
+            com.wormzjl.icheme.science.column.v3.V3PumparoundSpec.Split.UNIFORM)));
+
     /** One shape of every kind at its default size, and a lying drum. */
     static List<EquipmentShape> everyKind() {
         var shapes = new ArrayList<EquipmentShape>();
@@ -39,6 +45,9 @@ class EquipmentShapeCompatTest {
         // Shape fields 3 (finding F3): side nozzles the player turned.
         shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), COMPONENTS, TURNS),
                 Heading.EAST, EquipmentShape.minimumSkirt(3)));
+        // Shape fields 4 (batch 2026-10-28-column-operation): the operating point the calculator saved with the design.
+        shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), COMPONENTS, TURNS,
+                OPERATING), Heading.WEST, EquipmentShape.minimumSkirt(3)));
         for (var kind : Kind.values()) {
             if (!kind.designed()) continue;
             double size = ProcessUnit.minDiameter(kind);int length = ProcessUnit.defaultLength(kind, size);
@@ -154,6 +163,33 @@ class EquipmentShapeCompatTest {
     }
 
     /**
+     * A column's operating point (batch 2026-10-28-column-operation) reads by name; one this build cannot read (an unknown
+     * pumparound split, a missing value, a field that is not a compound) is dropped and named, the column and its
+     * components kept: such a column cannot run, as a column built before the field.
+     */
+    @Test
+    void aColumnsOperatingPointReadsByNameAndAnUnreadableOneIsRepairedAway() {
+        var built = everyKind().stream().filter(s -> s.trays() != null && s.trays().operating() != null).findFirst().orElseThrow();
+        var tag = saved(built);
+        assertEquals("UNIFORM", tag.getCompound("Operating").getList("PumparoundSplits", net.minecraft.nbt.Tag.TAG_STRING).getString(0), "splits saved by name");
+        var split = tag.copy();
+        split.getCompound("Operating").getList("PumparoundSplits", net.minecraft.nbt.Tag.TAG_STRING).set(0, net.minecraft.nbt.StringTag.valueOf("SPRAY"));
+        var read = EquipmentShellBlockEntity.readShape(split);
+        assertEquals(built.trays().withOperating(null), read.shape().trays());
+        assertEquals(List.of("operating point (no pumparound split SPRAY) -> none"), read.repairs());
+        var missing = tag.copy();
+        missing.getCompound("Operating").remove("RefluxRatio");
+        assertEquals(1, EquipmentShellBlockEntity.readShape(missing).repairs().size());
+        var broken = tag.copy();
+        broken.putInt("Operating", 7);
+        assertNull(EquipmentShellBlockEntity.readShape(broken).shape().trays().operating());
+        // Without a component design an operating point is refused with it.
+        var noComponents = tag.copy();
+        noComponents.putInt("Components", 7);
+        assertNull(EquipmentShellBlockEntity.readShape(noComponents).shape().trays().operating());
+    }
+
+    /**
      * A constructor builds a column from an imported design only (plan section 4.5): the import sets the form, the
      * diameter, the trays and components and a skirt at least the column's least; a design the player sends keeps the
      * import; the imported column round-trips through the constructor's tags.
@@ -163,13 +199,13 @@ class EquipmentShapeCompatTest {
         var fresh = EquipmentConstructorBlockEntity.Design.DEFAULT;
         assertFalse(new EquipmentConstructorBlockEntity.Design(fresh.diameter(), fresh.tangentLength(), VesselPlacement.Form.COLUMN, EquipmentShape.minimumSkirt(2),
                 fresh.placement(), fresh.trays(), fresh.connections(), fresh.paint(), fresh.bank(), false, 0).buildable(), "no import, no column");
-        var column = new ColumnDesign(new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), COMPONENTS), 6);
+        var column = new ColumnDesign(new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), COMPONENTS).withOperating(OPERATING), 6);
         var imported = fresh.imported(column);
         assertTrue(imported.buildable());
         assertEquals(VesselPlacement.Form.COLUMN, imported.form());
         var shape = imported.shape(net.minecraft.core.Direction.SOUTH);
         assertEquals(6, shape.diameter());
-        assertEquals(column.trays(), shape.trays(), "the trays carry the components into the shape");
+        assertEquals(column.trays(), shape.trays(), "the trays carry the components and the operating point into the shape");
         assertTrue(imported.support() >= EquipmentShape.minimumSkirt(6));
         assertEquals(fresh.placement(), imported.placement());
         // The player's edit (a drum diameter, other trays) keeps the imported column.
@@ -245,9 +281,9 @@ class EquipmentShapeCompatTest {
     private static final Path CORPUS = Path.of("src/test/resources/compat/equipment");
     /**
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
-     * column's components; 3: a column's turned nozzles).
+     * column's components; 3: a column's turned nozzles; 4: a column's operating point).
      */
-    private static final int SHAPE_FIELDS = 3;
+    private static final int SHAPE_FIELDS = 4;
 
     /**
      * Every corpus file's saved shell tags read with no repair, to the shapes recorded beside them. The file of this

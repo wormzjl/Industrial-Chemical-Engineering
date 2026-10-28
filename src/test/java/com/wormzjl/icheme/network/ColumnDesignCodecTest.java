@@ -33,6 +33,7 @@ class ColumnDesignCodecTest {
     @Test
     void theSavedDesignRoundTripsInTheBlockTagsAndRefusesAnUnknownKind() {
         var design = design();
+        assertNotNull(design.trays().operating(), "Save design keeps the operating point");
         var tag = ColumnDesignTags.write(design);
         assertEquals(design, ColumnDesignTags.read(tag));
         var pumps = new ListTag();
