@@ -5,7 +5,7 @@ description: Rules and workflow for creating or changing any IChemE GUI screen (
 
 # GUI creation (IChemE)
 
-The owner's rules for every screen, from batch `documentation/2026-10-28-gui-toolkit/` (plan sections 10 to 14,
+The owner's rules for every screen, from batch `documentation/2026-10-28-gui-toolkit/` (plan sections 10 to 18,
 `GUI_REVIEW.md`). The owner judges screens on rendered images, not in the dev client.
 
 ## Workflow
@@ -15,7 +15,8 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
    to the end) and show the owner. Where the choice is open, render two to four options side by side and let the
    owner pick; build only the picked one.
 3. Build the rows in a builder class with no Minecraft classes (as `HeatControlColumn`, `DeviceColumn`,
-   `DialogColumns`), so the gates and the render tool place the same rows the screen draws.
+   `DialogColumns`, `ConstructorColumn`, `AssemblyColumn`, `CalculatorColumn`), so the gates and the render tool place
+   the same rows the screen draws. A drawing with hit tests goes in its own Minecraft-free class (`AssemblyFlowsheet`).
 4. Gate it (below), render the shipped code again, look at every sheet, then commit.
 5. No dev-client check unless the owner asks for one.
 
@@ -24,15 +25,20 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
 - `Column.place(rows, x, y, width, measure, Column.Metrics.COMPACT)`. Rows: `Group` (a framed function group under a
   plate), `Line`, `Paragraph`, `Choice` (a mark and a title, an action key), `Field` (an entry), `Reading` (a meter),
   `Buttons` of `Button` (`latched` for a selector position, `soft` for a display key), `Bar`, `Split` (a share bar
-  with one legend line a share), `Gap`.
+  with one legend line a share), `Gap`, `Setting` (an LCD entry with − and + steppers before its box, for values the
+  player steps; its box stays in line with the other entries).
 - `Skin`: `Skin.PLAIN` and `PanelSkin.LIGHT` / `PanelSkin.DARK` (the client's theme, `ClientConfig.skin()`).
 - In the game: `GuiCanvas` (the canvas), `ScrollView` (a viewport with its own bar), `KitWidgets` (keeps widgets at
   their content slots and moves them as the view scrolls: no rebuild on scroll), `SkinButton` (`SkinButton.of` makes a
-  column's button), `SkinField`, `KitDoor` (a dialog's column: view, bar where the window is short, kept widgets,
-  drawing and hover; used by the gauge, pipeline tool and vessel screens).
+  column's button), `SkinField`, `KitDoor` (a door's columns: one view, one bar where the window is short, kept
+  widgets, drawing and hover; two columns side by side share the view and the bar, `layout(areas, bar, rows, m)`;
+  used by the dialogs, the constructor, the assembly screen and the column calculator).
 - A dialog: title at (10, 10), column from `DialogColumns.TOP`, push buttons from `DialogColumns.footer` (two share
-  the width, Save the primary one at the right; Done stands alone at the right). Tables go on the HMI glass, as the
-  datasheet's.
+  the width, Save the primary one at the right; Done stands alone at the right; no keys, no slots). Tables go on the
+  HMI glass, as the datasheet's.
+- A screen with pages: tabs always shown, the current one latched, a page that is not available yet off with its
+  hover saying when. The screen rebuilds its widgets only when the page's signature (page, tabs, selection, button
+  states) changes.
 
 ## The panel rules
 
@@ -44,7 +50,9 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
 4. The door holds switches, set points and meters; the HMI glass (`Skin.well`) holds tables and drawings.
 5. What the player types is an LCD entry (`Column.Field`); what the plant reads is an LED meter (`Column.Reading`).
 6. Display keys (a unit, a basis) change what the screens show, not the plant: flat black keys (`soft`) in a tray
-   engraved into the door. Push buttons (Close, Apply) stay raised; Apply is the primary key.
+   engraved into the door. Push buttons (Close, Apply) stay raised. Only a key that confirms is primary (Apply, a
+   dialog's Save, Solve, Build); a key that opens or shows (Datasheet, Open unit, Templates, the calculator's Save
+   form) is a plain push button.
 7. The theme and the units are the client's (`icheme-client.toml`, `ClientConfig`), one switch for every screen, never
    sent to the server. Controls cross the network in SI. The theme key shows a sign (`Skin.Icon.THEME`), not a word.
 8. Every screen draws through the kit and the light or dark theme.
@@ -76,7 +84,8 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
 
 ## Gates for a column builder
 
-As in `HeatControlColumnTest`, `DeviceColumnTest` and `DialogColumnsTest`:
+As in `HeatControlColumnTest`, `DeviceColumnTest`, `DialogColumnsTest`, `ConstructorColumnTest`,
+`AssemblyColumnTest` and `CalculatorColumnTest`:
 - every text the builder names has its English line (`HeatControlColumnTest.Recording`, which fills lines as the
   game does; a line with no arguments, such as "Volume %", stands as written; `new Recording("gui.icheme.")` for keys
   outside `gui.icheme.fluid.`);
@@ -110,6 +119,6 @@ sheets with `SendUserFile`.
 - In the tools, import `FluidDeviceScreen.FluidGuiLayout`; its qualified name fails to compile without the game's
   classes on the class path.
 - Tests measure with `Measure.fixed(6)`; the game font is narrower for i, l, t and k. Check close calls on a render.
-- Some sources are CRLF (`ColumnCalculatorV3Screen`, `ProcessUi`, `DisplayUnit`, `AssemblyScreen`): edit them with
+- Some sources are CRLF (`ColumnCalculatorV3Screen`, `ProcessUi`, `DisplayUnit`, `AssemblyScreen`, `GaugeSettings`): edit them with
   the Edit tool or line-based perl, never `sed -i` or `perl -0`.
 - Perl `s{...}{...}` breaks on an unbalanced brace in the replacement, and `$/` in a pattern is a variable.

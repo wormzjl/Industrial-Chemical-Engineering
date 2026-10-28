@@ -234,3 +234,57 @@ Owner, on the next step: "Yes, go on".
   - Render tool: `GuiPrototypes` draws the gauge, a thermometer with its warning, the laying tool, and two datasheets (a drum; an air cooler with moving parts and a blocked-cells warning) through the shipped builders.
   - Owner, on the glass: "different lines needs some distinguishing" (a wrapped line read as an entry of its own). Of three ways rendered (A, an entry's wrapped lines indented; B, every second entry on a faint band; C, a faint rule between entries), "B: bands". Shipped: each glass line carries its entry (`GlassLine.entry`), and every second entry's lines lie on `DialogColumns.BAND` (white at 11 %), a wrapped line on its entry's band. The indent and the rules left with the option sheet. Gate: `DialogColumnsTest.everySecondEntryLiesOnABandAndNoWordSplits`.
 - **Open.** Choice (e), the gauge's unit. A crosswise lying drum's sides (above).
+
+## 16. The equipment constructor's panel (2026-10-28, GUI_REVIEW.md order 3)
+
+Owner, on the rest of the review's order: "finish this".
+
+- **Expected.** The constructor is a panel door like the others: the choices a player steps through are latched selectors or stepped LCD entries in function groups, sentences go to hovers, the bottom keys are whole words, and the drawing of the design sits on the HMI glass.
+- **What the code did.** Ad hoc rows at fixed steps in the vanilla look on a hand-drawn panel; cycling buttons that showed only the current side; a "▶" marker on the edited row; the Shift hint on every row; 42 px bottom buttons that cut "Nozzles".
+- **As built.**
+  - `client/gui/common/ConstructorColumn` (new, no Minecraft classes): the panel's geometry (a 200 px door, its column 184 px from x 8, the title key, the display, the footer) and the pages (choose, design, connections, nozzles, paint) as kit rows. The `Category` and `Equipment` enums moved here from the screen.
+  - Kit: `Column.Setting(key, label, value, unit, hint, steps)`, an LCD entry with − and + steppers (`STEP` 14, `STEPPERS` 32) before its box; the boxes stay in line with the other entries. `KitDoor.keep` keeps the steppers.
+  - Choose page: one Equipment group, the categories 3 and 2 a row and the kinds one a row, both latched; Back on the title row. A selection's stepper shows its index in segments and "/N" as its unit.
+  - Sides (faces, outlet, nozzle faces) are latched 2 by 2 selectors; a lying drum's axis is a selector in Place; the boot is No or With ("Too short" where it cannot fit).
+  - Column: the imported values are LCD settings without steppers, Import in Size, Nozzles in the footer. Nozzles page: "Nozzle" as the label, its name and place as lines, Height as an LED meter, Auto in the side selector; All auto in the footer.
+  - Paint as on the pipeline tool (channel, palette, RRGGBB, Default); no bare steel (Paint refuses `BARE`).
+  - The display says the status first (importing, import needed, clash, unplaced, standing, blocked) in the warning tone, else the held line; the extent and the cells are in its hover. The Shift hint is once, on each page's first plate.
+  - `EquipmentConstructorScreen` draws the door in the client's theme and rebuilds its widgets only when the page's signature changes. Its state, packets, ghost preview, Import, Build and paint logic are unchanged. The schematic (stations, connections, nozzles) is on the glass beside the door.
+  - Fixed on the way: a footer of no keys (the choose page) divided by zero; `DialogColumns.footer` returns no slots.
+  - Lang (`gui.icheme.equipment_constructor.*`): plates and hovers came; the cycling and marker words left (grepped in `src` and `tools`).
+  - Gates: `ConstructorColumnTest` (5, new); `KitLayoutTest`, `DeviceColumnTest`, `UnitTextTest`.
+- **Open.** At 464 by 254 the connections page scrolls about 82 px. The render's column drawing is an illustration, not the screen's schematic.
+
+## 17. The assembly screen (2026-10-28, GUI_REVIEW.md order 4)
+
+- **Expected.** A door with what the player does (check the parts, open the selected unit), the flowsheet and the parts list on the glass, each part's name and state in its hover, and no block coordinates on the door.
+- **What the code did.** Vanilla buttons, the screen's own scroll bar and colours, its own drawing and hit tests, and the changed block's coordinates in the heading; the parts had no hovers.
+- **As built.**
+  - `client/gui/common/AssemblyColumn` (new, no Minecraft classes): the frame (door column, glass, the drawing and list split, the display, the theme key, the tabs from `FluidGuiLayout.tabs`, the footer from `DialogColumns.footer`), the status words and hover, the door's groups (Check: Check parts and a one-line summary; Selected: the part and Open unit), and the parts list (lines, word column, stacking, bands, click lookup, drawing).
+  - `client/gui/common/AssemblyFlowsheet` (new, no Minecraft classes): the drawing moved out of the screen, with its hit tests (part, port, pill) and report lookups.
+  - `AssemblyScreen`: the panel door in the client's theme, a `KitDoor` column, `SkinButton` tabs, the theme key and footer, the list in a `ScrollView`; rebuilt on a signature (page, tabs, selected part, button states). Packets unchanged; nothing is sent on open.
+  - Tabs always shown, the page latched; Operation is off until the design is complete and its hover says so. On Operation, and for a column with no design, the glass spans the door with a note.
+  - Hovers: every list row and drawn part says its name and state ("not checked yet" before a report); the display's hover says where the structure changed.
+  - List words: "To check" before a report, "Not loaded" for an unloaded chunk; the word column is sized from every word, so the list keeps its layout across reports. A pending check is said in the summary ("Check queued").
+  - Datasheet is a plain push button: it confirms nothing, and only a confirming key is primary.
+  - Door column 134 to 190 px (134 at 464 px), so most names fit one line beside their word; the list 110 to 260 px; the drawing takes the rest.
+  - Gates: `AssemblyColumnTest` (8, new); `AssemblyDiagramTest`'s key list.
+- **Open.** `state.wrong_kind` and `state.missing.found` read "a in-line pump": the templates write "a %s" before `found.inline_pump` (older than this batch; the article belongs in the found words). At 320 px the drawing is about 30 px beside the 110 px list.
+
+## 18. The column calculator on the kit (2026-10-28, GUI_REVIEW.md order 5)
+
+- **Expected.** The calculator is the largest door: the column's, the feed's and the equipment's entries in groups on two door columns, the drawing beside them, the results and the solver's lines on the glass, one status, Solve as the one primary key, the basis and the temperature unit as display keys.
+- **What the code did.** No kit and no theme on a fixed 840 by 460 panel; cut field labels; the reflux ratio hidden between 710 and 823 px; three status readouts; the Diagnostics lines on the door; cycling buttons for the metric, the product, the condenser, the pumps and the pumparound split.
+- **As built.**
+  - `client/gui/common/CalculatorColumn` (new, no Minecraft classes): the frame (a door the window less 16 px, 320 to 960 px wide; the glass; two door columns 132 to 180 px; tabs; footer and key tray), the status said once, the pages' door rows (Column, Feed, Results, Equipment, templates), the drawing (hits, scroll pitch), the plots (profile, tray dP bars), the sheets (wrapped or stacked, never cut), the feed table and the save form.
+  - Kit: `KitDoor` holds columns side by side in one view with one scroll bar (`layout(areas, bar, rows, m)`, `placeAll`, `columns()`). `ColumnDiagram` draws on `kit.Canvas`; the constructor wraps its `GuiGraphics` in a `GuiCanvas`.
+  - `ColumnCalculatorV3Screen` rewritten on it. Requests unchanged: one state request at init, Calculate only from Solve, Save only from Save design. Drafts, presets, the component dropdown, side draws and selection on the drawing are kept.
+  - Review defects: the reflux ratio is in the right column's first group (Condenser), gated at every width; one display line, the engine's line in its hover; the solver's lines moved to Results > Solver on the glass, tray data to Results > Tray; the cycling buttons are latched selectors; the basis and °C are display keys in the footer.
+  - The temperature unit and the basis are the client's (`ClientConfig`); the basis key saves on a toggle and on a mixture template's load. Pressure stays bar and flows kmol/h.
+  - The Feed group (flow, temperature, tray) is on the Column page and the Feed page. Templates are listed on the glass through `AssemblyColumn.parts` (bundled in the accent colour); the template name and feed amounts stay vanilla text boxes on the glass.
+  - Drawing: no condenser or reboiler boxes (trays 1 and N are them in the model); the steam label above its line; a draw's label is its hit.
+  - At 132 px columns the Feed labels go above their boxes ("Temperature" is wider than its share) and the profile selectors stack; the door scrolls at 464 by 254.
+  - Owner choices (a) and (b) kept as today: presets carry `stage_pressure_drop_kpa`, a diameter of 0 is accepted.
+  - Lang (calculator keys only): 62 removed (grepped in `src` and `tools`), 47 re-texted, 80 added.
+  - Gates: `CalculatorColumnTest` (12, new; it takes the two drawing tests forced out of `V3ColumnInputDraftTest` with the screen's `DiagramLayout`); `KitLayoutTest` 16 (a two-column door).
+- **Open.** Client display units for pressure and flow; choices (a) and (b); condenser and reboiler marks on the drawing; a kit text entry for the glass.
