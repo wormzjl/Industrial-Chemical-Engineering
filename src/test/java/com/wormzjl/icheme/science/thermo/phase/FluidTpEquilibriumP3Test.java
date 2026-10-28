@@ -556,18 +556,19 @@ class FluidTpEquilibriumP3Test {
         var steam = service.tp(EquilibriumRequest.tp(cold, 0.5 * coldSaturation, contract.components(), pure,
                 PhaseCompetition.FLUID_ONLY));
         assertEquals(List.of(PhaseKind.VAPOR), steam.phases().stream().map(PhaseAmounts::kind).toList());
-        assertEquals(R * cold / (0.5 * coldSaturation), steam.phases().get(0).state().molarVolume(),
-                1.0e-12 * R * cold / coldSaturation, "ideal steam at the state pressure");
+        assertEquals(SteamVirial.molarVolume(cold, 0.5 * coldSaturation), steam.phases().get(0).state().molarVolume(),
+                1.0e-12 * R * cold / coldSaturation, "the virial steam at the state pressure");
 
         double[] hot = crude.clone();
         hot[water] = 10.0;
-        // Steam past the ideal steam's qualified partial pressure (p_sat 0.93 MPa at 450 K): answered, graded extrapolated
-        // with the limit named (owner rule of 2026-10-16; refused before), and the network carries the same state.
-        var wetHot = service.tp(EquilibriumRequest.tp(450.0, 2.0e6, contract.components(), hot, PhaseCompetition.FLUID_ONLY));
+        // Steam past the virial steam's qualified partial pressure (p_sat 2.64 MPa at 500 K, the limit 2.2 MPa): answered,
+        // graded extrapolated with the limit named (owner rule of 2026-10-16; refused before), and the network carries the
+        // same state.
+        var wetHot = service.tp(EquilibriumRequest.tp(500.0, 4.0e6, contract.components(), hot, PhaseCompetition.FLUID_ONLY));
         assertEquals(Status.CONVERGED, wetHot.status(), wetHot.toString());
         assertEquals(CoverageGrade.EXTRAPOLATED, wetHot.coverage().grade());
-        assertTrue(wetHot.coverage().evidence().contains("the ideal steam's qualified partial pressure"), wetHot.coverage().evidence());
-        assertDoesNotThrow(() -> fluid.flashTP(450.0, 2.0e6, hot.clone(), () -> { }), "the network carries the same steam partial pressure");
+        assertTrue(wetHot.coverage().evidence().contains("the steam's qualified partial pressure"), wetHot.coverage().evidence());
+        assertDoesNotThrow(() -> fluid.flashTP(500.0, 4.0e6, hot.clone(), () -> { }), "the network carries the same steam partial pressure");
 
         // The model must be the one the contract identity names.
         FreeWaterModel inner = PhaseTestSupport.networkFreeWater(fluid);

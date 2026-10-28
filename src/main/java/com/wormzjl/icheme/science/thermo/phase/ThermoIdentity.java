@@ -36,8 +36,9 @@ public final class ThermoIdentity {
     /** The water model revision of a package without water. */
     public static final String NO_WATER = "water:none";
     /** The formulation label of the separate free-water approximation; bumped when its equations change (v2: ice Ih below
-     * the melting line, WP4 of batch 2026-09-24-coolprop-low-temperature). */
-    public static final String SEPARATE_FREE_WATER_FORMULATION = "separate-free-water-v2";
+     * the melting line, WP4 of batch 2026-09-24-coolprop-low-temperature; v3: the steam a second-virial gas from
+     * IAPWS-IF97 Region 2, {@link SteamVirial}, batch 2026-10-27-heat-exchanger-design). */
+    public static final String SEPARATE_FREE_WATER_FORMULATION = "separate-free-water-v3";
     private static final String FORMAT = "thermo-identity-v2";
 
     private final String packageRevision;

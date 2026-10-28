@@ -230,7 +230,7 @@ class FreeWaterIceTest {
         assertEquals(252.9, t, 0.1, "where the ice's vapour pressure is 100 Pa");
         var split = ph.freeWater();
         assertEquals(0.0, split.liquidWater(), "no liquid is left below the triple point");
-        double steam = (liquid[1] - ice.properties(t, p).enthalpy()) / (model.vapor().enthalpy(t) - ice.properties(t, p).enthalpy());
+        double steam = (liquid[1] - ice.properties(t, p).enthalpy()) / (model.vapor().enthalpy(t) + SteamVirial.residualEnthalpy(t, p) - ice.properties(t, p).enthalpy());
         assertEquals(steam, split.waterVapor(), 1e-6, "the steam from the balance");
         assertEquals(1.0 - steam, split.ice(), 1e-6, "the rest is ice");
         assertEquals(liquid[1], ph.enthalpy(), 1e-9 * Math.abs(liquid[1]));
@@ -352,7 +352,9 @@ class FreeWaterIceTest {
         model.liquid(t, p, liquid);
         var solid = ice.properties(t, p);
         double rt = PhaseTestSupport.R * t;
-        return new double[] {model.vapor().enthalpy(t) - rt, rt / p, liquid[1] - p * liquid[0], liquid[0],
+        // The virial steam: u = h_ig - R T - p T dB/dT, v = R T / p + B.
+        return new double[] {model.vapor().enthalpy(t) - rt - p * t * SteamVirial.temperatureDerivative(t), SteamVirial.molarVolume(t, p),
+                liquid[1] - p * liquid[0], liquid[0],
                 solid.enthalpy() - p * solid.volume(), solid.volume()};
     }
 

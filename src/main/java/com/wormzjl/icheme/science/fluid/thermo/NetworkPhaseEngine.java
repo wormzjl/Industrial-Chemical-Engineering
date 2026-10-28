@@ -114,7 +114,8 @@ final class NetworkPhaseEngine {
      * The network's free water as the engine's {@link FreeWaterModel}: the very methods {@link FluidThermodynamics#state}
      * uses (its saturation pressure, its liquid water at the state pressure, its steam partial-pressure limit), its
      * ice below the melting line ({@link FluidThermodynamics#freeWaterIce}, WP4) and its
-     * ideal steam ({@link Steam}).
+     * steam: its ideal-gas functions ({@link Steam}), the engine adding the second virial
+     * ({@link com.wormzjl.icheme.science.thermo.phase.SteamVirial}).
      */
     static final class NetworkFreeWater implements FreeWaterModel {
         private final FluidThermodynamics fluid;
@@ -133,7 +134,7 @@ final class NetworkPhaseEngine {
     }
 
     /**
-     * The network's ideal steam: the water record's Shomate polynomial (the column's {@code vaporMolarEnthalpy}, the
+     * The ideal-gas functions of the network's steam: the water record's Shomate polynomial (the column's {@code vaporMolarEnthalpy}, the
      * network's {@code vaporWaterEnthalpy}), its entropy anchored at {@link #STEAM_STANDARD_ENTROPY}. Past the record's
      * range, from its triple point to its maximum temperature, the heat capacity is held at the end value and the enthalpy
      * and entropy integrate it (owner rule of 2026-10-16), so value and slope are continuous at both ends.

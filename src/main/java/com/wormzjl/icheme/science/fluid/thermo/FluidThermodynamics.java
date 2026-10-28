@@ -15,6 +15,7 @@ import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import com.wormzjl.icheme.science.thermo.phase.FreeWaterIce;
 import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
 import com.wormzjl.icheme.science.thermo.phase.PhaseKind;
+import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
 import com.wormzjl.icheme.science.fluid.state.EnergyReference;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import java.util.Arrays;
@@ -51,7 +52,7 @@ public final class FluidThermodynamics {
      * and a {@code ThreadLocal} set/remove per call, and a coefficient read inside costs a
      * {@code ThreadLocal} lookup and two immutable-map probes. */
     private final MaterialCatalog.Water water;
-    /** The free water's ideal steam, continued past the water record's range ({@link NetworkPhaseEngine.Steam}). */
+    /** The ideal-gas functions of the free water's steam, continued past the water record's range ({@link NetworkPhaseEngine.Steam}). */
     private final NetworkPhaseEngine.Steam steam;
     private final double waterEnthalpyOffset;
     private final double maximumVelocity;
@@ -375,12 +376,13 @@ public final class FluidThermodynamics {
      * ({@code PassiveStepSolver.arrivingInVessel}).
      */
     public double freeWaterVaporPressure(double t,double p){return t<freeWaterIce.meltingTemperature(p)?freeWaterIce.fugacity(t,p):saturationPressure(t);}
-    /** The molar enthalpy of the free water's ideal steam, J/mol ({@link NetworkPhaseEngine.Steam}). */
+    /** The ideal-gas part of the free water's steam enthalpy, J/mol ({@link NetworkPhaseEngine.Steam}); a state adds the second
+     * virial's residual at the steam's partial pressure ({@link SteamVirial#residualEnthalpy}). */
     public double vaporWaterEnthalpy(double t) {
         if(!Double.isFinite(t))throw new IllegalArgumentException("Non-finite water temperature");
         return steam.enthalpy(t);
     }
-    /** The free water's ideal steam: the phase engine's water vapour and the notices' data range. */
+    /** The ideal-gas functions of the free water's steam: the phase engine's water vapour (with {@link SteamVirial}) and the notices' data range. */
     NetworkPhaseEngine.Steam steam(){return steam;}
     public double maximumVelocityMetresPerSecond(){return maximumVelocity;}
     /** The per-node phase support the step solver freezes its Newton unknowns with. */
@@ -396,7 +398,7 @@ public final class FluidThermodynamics {
         double compliance=state.waterVolume()*state.waterCompressibility();
         if(state.liquidVolume()>0)compliance+=state.liquidVolume()*state.liquidProperties().isothermalCompressibility();
         if(state.vaporVolume()>0) {
-            double stiffness=state.waterPartialPressure();
+            double stiffness=steamStiffness(state);
             if(state.vaporProperties()!=null){var gas=state.vaporProperties();stiffness+=-gas.molarVolume()/gas.volumePressureDerivative();}
             compliance+=state.vaporVolume()/stiffness;
         }
@@ -411,7 +413,7 @@ public final class FluidThermodynamics {
      * The fluid a phase-selective vessel outlet draws, read off the vessel's own state with no flash and no extra
      * equation-of-state root: every term is a sum over the phase amounts, volumes and molar properties {@link #state}
      * already computed. The vapour stream is the hydrocarbon vapour and the water vapour ({@code moles} are {@code vapor}
-     * with the water vapour last, the gas volume, enthalpy {@code n_v h_v + n_wv h_wv(T)}, no solid). The condensed phase
+     * with the water vapour last, the gas volume, enthalpy {@code n_v h_v + n_wv h_wv(T, p_w)}, no solid). The condensed phase
      * is the hydrocarbon liquid, the free water and every solid; a port draws its two liquids one after the other
      * (decision D11), so each liquid is its own stream ({@link #phaseStream}) with its volume share of the solids and of
      * {@code H_solids(T,P)}; {@link #liquidMass}, {@link #liquidStreamVolume} and {@link #liquidDensity} state the whole
@@ -453,12 +455,21 @@ public final class FluidThermodynamics {
     public double vaporSpecificEnthalpy(State state,Prepared prepared) {
         double h=0;
         if(state.vaporProperties()!=null)h+=total(state.vaporView())*state.vaporProperties().molarEnthalpy();
-        if(state.waterVapor()>0)h+=state.waterVapor()*(prepared==null?vaporWaterEnthalpy(state.temperature()):match(prepared,state.temperature()).vaporEnthalpy());
+        if(state.waterVapor()>0)h+=state.waterVapor()*((prepared==null?vaporWaterEnthalpy(state.temperature()):match(prepared,state.temperature()).vaporEnthalpy())
+                +SteamVirial.residualEnthalpy(state.temperature(),state.waterPartialPressure()));
         return h/vaporMass(state);
+    }
+    /**
+     * The steam's part of the gas's isothermal stiffness {@code -V dP/dV}: {@code p_w V / (V - n_w B)} of the virial steam
+     * ({@link SteamVirial}), {@code p_w Z} for steam alone; zero without steam.
+     */
+    private static double steamStiffness(State state) {
+        double n=state.waterVapor(),v=state.vaporVolume();
+        return n>0?state.waterPartialPressure()*v/(v-n*SteamVirial.secondVirial(state.temperature())):0;
     }
     /** The vapour stream's velocity limit: {@code min(maximum, V_v/sqrt(M_v V_v/stiffness))}. */
     public double vaporVelocityLimit(State state) {
-        double stiffness=state.waterPartialPressure();
+        double stiffness=steamStiffness(state);
         if(state.vaporProperties()!=null){var gas=state.vaporProperties();stiffness+=-gas.molarVolume()/gas.volumePressureDerivative();}
         return Math.min(maximumVelocity,acoustic(state.vaporVolume(),vaporMass(state),state.vaporVolume()/stiffness));
     }
@@ -607,14 +618,22 @@ public final class FluidThermodynamics {
     /** The amount sum {@link #state} forms ({@code sum}), without its validation: a state's own amounts are valid. */
     private static double total(double[] values){double total=0;for(double value:values)total+=value;return total;}
     /**
-     * The partial pressure up to which the free water's steam is qualified as an ideal gas, Pa (0.125 MPa near ambient
-     * to 2 MPa from 900 K): a data range, which a notice reports (owner rule of 2026-10-16); above it the ideal steam
-     * continues.
+     * The partial pressure up to which the free water's second-virial steam ({@link SteamVirial}) is qualified, Pa: a
+     * data range, which a notice reports (owner rule of 2026-10-16); above it the virial steam continues. Each band holds
+     * the pressure where the virial's volume first leaves 2 % of the full IAPWS-IF97 Region 2 at the band's lower
+     * temperature, rounded down to two digits (computed 2026-10-28, {@code SteamVirialTest} checks it): 1.8 MPa below
+     * 500 K, where the virial holds 2 % up to saturation (to 480.9 K and 1.82 MPa); 4.5 MPa from 575 K (4.9 MPa at
+     * 584 K); 34 MPa from 850 K; 65 MPa from 875 K (Region 2's least from there to its 1073.15 K ceiling, 65.5 MPa at
+     * 1000 K). The ideal steam's limits were 0.125 to 2 MPa.
      */
     public static double waterVaporPressureLimit(double t) {
-        if(t>=900)return 2e6;if(t>=750)return 1.5e6;if(t>=600)return .8e6;
-        if(t>=500)return .4e6;if(t>=450)return .25e6;if(t>=400)return .15e6;return .125e6;
+        int band=0;while(band<VAPOR_LIMIT_TEMPERATURES.length&&t>=VAPOR_LIMIT_TEMPERATURES[band])band++;
+        return VAPOR_LIMIT_PRESSURES[band];
     }
+    /** The lower temperatures of {@link #waterVaporPressureLimit}'s bands after the first, K. */
+    private static final double[] VAPOR_LIMIT_TEMPERATURES={500,525,550,575,600,625,650,675,700,725,750,775,800,825,850,875};
+    /** The limit of each band, Pa, the first below 500 K. */
+    private static final double[] VAPOR_LIMIT_PRESSURES={1.8e6,2.2e6,2.8e6,3.6e6,4.5e6,5.5e6,6.7e6,8.1e6,9.6e6,11e6,13e6,15e6,18e6,22e6,27e6,34e6,65e6};
     /**
      * Liquid water at the state pressure, into the prepared temperature's Region 1 workspace (a fresh one for a
      * standalone call): Region 1 and its continuation past its range ({@link WaterRegion1#evaluateLiquid}).
@@ -678,8 +697,15 @@ public final class FluidThermodynamics {
             vw=waterLiquid*molarVolume;volume+=vw;h+=waterLiquid*(w.specificEnthalpy()*waterMolecularWeight+waterEnthalpyOffset);
             kw=-w.volumePressureDerivative()/w.specificVolume();
         }
-        if(waterVapor>0) {if(nv==0)gasVolume=waterVapor*R*t/p;h+=waterVapor*(prepared==null?vaporWaterEnthalpy(t):prepared.vaporEnthalpy());}
-        double pw=waterVapor>0?waterVapor*R*t/gasVolume:0;
+        // The steam is a second-virial gas (SteamVirial, separate-free-water-v3): alone at the state pressure, n_w (R T/P + B);
+        // beside the hydrocarbon vapour in that vapour's volume (Dalton), p_w = n_w R T / (V - n_w B).
+        double pw=0;
+        if(waterVapor>0) {
+            if(nv==0){gasVolume=waterVapor*SteamVirial.molarVolume(t,p);pw=p;}
+            else pw=SteamVirial.partialPressure(waterVapor,t,gasVolume);
+            if(!(gasVolume>0)||!Double.isFinite(pw))throw new IllegalArgumentException("No virial steam volume at "+t+" K and "+(nv==0?p:pw)+" Pa");
+            h+=waterVapor*((prepared==null?vaporWaterEnthalpy(t):prepared.vaporEnthalpy())+SteamVirial.residualEnthalpy(t,pw));
+        }
         volume+=gasVolume;
         for(int i=0;i<n;i++)mass+=(liquid[i]+vapor[i])*hydrocarbon.molecularWeight(i);
         mass+=(waterLiquid+waterVapor)*waterMolecularWeight;

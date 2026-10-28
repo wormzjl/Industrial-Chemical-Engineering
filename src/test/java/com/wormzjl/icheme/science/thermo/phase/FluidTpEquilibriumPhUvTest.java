@@ -373,7 +373,7 @@ class FluidTpEquilibriumPhUvTest {
                     // 2026-10-16; out of domain before), and the round trips stay pinned on the qualified states as before.
                     assertTrue(tp.converged(), t + " K " + p + " Pa: " + tp.detail());
                     if (tp.coverage().grade() == CoverageGrade.EXTRAPOLATED) {
-                        assertTrue(tp.coverage().evidence().contains("the ideal steam's qualified partial pressure"), tp.coverage().evidence());
+                        assertTrue(tp.coverage().evidence().contains("the steam's qualified partial pressure"), tp.coverage().evidence());
                         continue;
                     }
                     var results = roundTrip(service, workspace, species, amounts, t, p, tally);
@@ -414,14 +414,14 @@ class FluidTpEquilibriumPhUvTest {
         double boiling = 0.5 * (below + above);
         double[] liquid = new double[2];
         model.liquid(boiling, p, liquid);
-        double steam = model.vapor().enthalpy(boiling);
+        double steam = model.vapor().enthalpy(boiling) + SteamVirial.residualEnthalpy(boiling, p);
         for (double beta : new double[] {0.25, 0.8}) {
             String at = "boiling, steam fraction " + beta;
             double h = pure[water] * ((1.0 - beta) * liquid[1] + beta * steam);
             var ph = service.ph(EquilibriumRequest.ph(p, h, species, pure, PhaseCompetition.FLUID_ONLY), workspace);
             assertBoiling(ph, boiling, p, beta, pure, water, at + " PH");
             assertEquals(h, ph.enthalpy(), 1.0e-9 * Math.abs(h), at);
-            double v = pure[water] * ((1.0 - beta) * liquid[0] + beta * R * boiling / p);
+            double v = pure[water] * ((1.0 - beta) * liquid[0] + beta * SteamVirial.molarVolume(boiling, p));
             double u = h - p * v;
             var uv = service.uv(EquilibriumRequest.uv(u, v, species, pure, PhaseCompetition.FLUID_ONLY), workspace);
             assertBoiling(uv, boiling, p, beta, pure, water, at + " UV");

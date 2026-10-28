@@ -65,11 +65,12 @@ import java.util.Objects;
  *
  * <p>Free water ({@link WaterParticipation#SEPARATE_FREE_WATER} with a {@link FreeWaterModel}), the fluid network's
  * rule: the hydrocarbon liquid at the state pressure {@code P}, the hydrocarbon vapour at its partial pressure
- * {@code pc = P - p_w}, ideal steam sharing the gas volume, liquid water from the water model at {@code P}. Without
- * hydrocarbons the water is all liquid when {@code P >= p_sat} and all steam otherwise. With both, when
+ * {@code pc = P - p_w}, the second-virial steam ({@link SteamVirial}) sharing the gas volume, liquid water from the water
+ * model at {@code P}. Without hydrocarbons the water is all liquid when {@code P >= p_sat} and all steam otherwise.
+ * With both, when
  * {@code P > p_sat + 1e-6 Pa} the hydrocarbons are split at {@code (P, P - p_sat)} and the steam that saturates the gas,
- * {@code p_sat V_gas/(R T)}, is taken from the water if there is that much; otherwise all water is steam and {@code pc}
- * solves {@code pc + n_w R T / V_gas(pc) = P}: up to {@link #PARTIAL_PRESSURE_FIXED_POINT_STEPS} fixed-point steps, each
+ * {@code p_sat V_gas/(R T + p_sat B)}, is taken from the water if there is that much; otherwise all water is steam and {@code pc}
+ * solves {@code pc + n_w R T / (V_gas(pc) - n_w B) = P}: up to {@link #PARTIAL_PRESSURE_FIXED_POINT_STEPS} fixed-point steps, each
  * accepted only on the bisection's stop test, else a bisection on {@code [1e-6 Pa, P]}
  * ({@link #PARTIAL_PRESSURE_BISECTIONS} halvings, stop at {@link #PARTIAL_PRESSURE_TOLERANCE}, accepted within
  * {@link #PARTIAL_PRESSURE_ACCEPTANCE}). Steam above the model's qualified partial pressure is answered and graded
@@ -488,7 +489,7 @@ public final class FluidTpEquilibrium {
 
     /**
      * The corners of pure water's triple-point triangle in UV, as {@link #tripleTriangle} gives a crystal's species: the
-     * molar internal energies and volumes {@code (u_V, v_V, u_L, v_L, u_s, v_s)} of the free-water rule's ideal steam, the
+     * molar internal energies and volumes {@code (u_V, v_V, u_L, v_L, u_s, v_s)} of the free-water rule's steam, the
      * water model's liquid and the ice at the ice record's triple point ({@link FreeWaterIce#tripleTemperature()},
      * {@link FreeWaterIce#triplePressure()}), each as its phase states it ({@link #gasPhase}, {@link #freeWaterPhase},
      * {@link #icePhase}); null when the model refuses that point.
@@ -501,8 +502,9 @@ public final class FluidTpEquilibrium {
             double[] liquid = new double[2];
             water.liquid(t, p, liquid);
             CrystalReference.State solid = ice.properties(t, p);
-            double rt = R * t;
-            double[] corners = {water.vapor().enthalpy(t) - rt, rt / p, liquid[1] - p * liquid[0], liquid[0],
+            // The virial steam: u = h_ig - R T - p T dB/dT, v = R T / p + B.
+            double[] corners = {water.vapor().enthalpy(t) - R * t - p * t * SteamVirial.temperatureDerivative(t),
+                    SteamVirial.molarVolume(t, p), liquid[1] - p * liquid[0], liquid[0],
                     solid.enthalpy() - p * solid.volume(), solid.volume()};
             for (double corner : corners) if (!Double.isFinite(corner)) return null;
             return corners;
@@ -1110,7 +1112,7 @@ public final class FluidTpEquilibrium {
             if (split != null && split.waterVapor() > 0.0) {
                 double limit = freeWater.vaporPartialPressureLimit(t);
                 if (split.waterPartialPressure() > limit) {
-                    out = note(out, "the ideal steam's qualified partial pressure " + limit + " Pa (" + split.waterPartialPressure() + " Pa)");
+                    out = note(out, "the steam's qualified partial pressure " + limit + " Pa (" + split.waterPartialPressure() + " Pa)");
                 }
             }
         }
@@ -2197,7 +2199,7 @@ public final class FluidTpEquilibrium {
         }
         double n = w.hydrocarbonTotal;
         double water = w.waterTotal;
-        double steamPerMole = saturation * vapour.molarVolume() / (R * t);
+        double steamPerMole = SteamVirial.moles(saturation, t, vapour.molarVolume());
         double liquidEnd = n * liquid.molarVolume() + water * condensedVolume;
         double vapourEnd = n * vapour.molarVolume() + (water - n * steamPerMole) * condensedVolume;
         double gap = vapourEnd - liquidEnd;
@@ -2424,7 +2426,7 @@ public final class FluidTpEquilibrium {
             waterValue = energy ? w.waterProperties[1] : w.waterProperties[0];
         }
         double water = w.waterTotal;
-        double steamValue = energy ? freeWater.vapor().enthalpy(t) : R * t / p;
+        double steamValue = energy ? freeWater.vapor().enthalpy(t) + SteamVirial.residualEnthalpy(t, p) : SteamVirial.molarVolume(t, p);
         double span = water * (steamValue - waterValue);
         double beta = (target - hydrocarbonValue - water * waterValue) / span;
         double allowance = SPECIFICATION_TOLERANCE * (energy ? w.total * R * t : Math.abs(target)) / Math.abs(span);
@@ -2836,9 +2838,9 @@ public final class FluidTpEquilibrium {
                 partial = steam > 0.0 ? p : 0.0;
                 next = pc;
             } else {
-                double required = saturation * gasVolume / rt;
+                double required = SteamVirial.moles(saturation, t, gasVolume);
                 steam = required <= water ? required : water;
-                partial = steam * rt / gasVolume;
+                partial = SteamVirial.partialPressure(steam, t, gasVolume);
                 next = p - partial;
             }
             if (Math.abs(next - pc) > PARTIAL_PRESSURE_TOLERANCE * p) {
@@ -5405,19 +5407,21 @@ public final class FluidTpEquilibrium {
             int outcome = hydrocarbon(t, w);
             if (outcome == FAILED) return failed(t, p, competition, w);
             double gasVolume = hydrocarbonVapour(t, outcome, w);
-            double required = saturation * gasVolume / (R * t);
+            // The steam the gas holds at the condensed water's vapour pressure: n_w = p_sat V / (R T + p_sat B).
+            double required = SteamVirial.moles(saturation, t, gasVolume);
             if (required <= water) {
-                double partial = gasVolume > 0.0 ? required * R * t / gasVolume : 0.0;
+                double partial = gasVolume > 0.0 ? SteamVirial.partialPressure(required, t, gasVolume) : 0.0;
                 return wetResult(t, p, pc, outcome, required, water - required, saturation, partial, frozen, competition, w);
             }
             saturatedPc = pc;
             saturatedGas = gasVolume;
         }
-        // The gas is unsaturated: all water is steam, and pc solves pc + n_w R T / V_gas(pc) = P. Its fixed point first
-        // (P3 WP4 runtime diagnosis, section 2.6; WP7b): started from the saturated split's gas volume scaled to the root
-        // as an ideal gas, then pc = P - n_w R T / V_gas(pc); a point is accepted only on the bisection's own stop test
-        // (tighter than its acceptance), otherwise the bisection below decides. For a trace of water the fixed point is
-        // the root to rounding after one split, where the bisection needs about 27.
+        // The gas is unsaturated: all water is steam, and pc solves pc + p_w(V_gas(pc)) = P, the virial steam's
+        // p_w = n_w R T / (V_gas - n_w B). Its fixed point first (P3 WP4 runtime diagnosis, section 2.6; WP7b): started
+        // from the saturated split's gas volume scaled to the root as an ideal gas, then pc = P - p_w(V_gas(pc)); a point
+        // is accepted only on the bisection's own stop test (tighter than its acceptance), otherwise the bisection below
+        // decides. For a trace of water the fixed point is the root to rounding after one split, where the bisection needs
+        // about 27.
         if (saturatedGas > 0.0) {
             double guess = p / (1.0 + water * R * t / (saturatedGas * saturatedPc));
             for (int step = 0; step < PARTIAL_PRESSURE_FIXED_POINT_STEPS && guess > PARTIAL_PRESSURE_FLOOR; step++) {
@@ -5426,7 +5430,7 @@ public final class FluidTpEquilibrium {
                 if (outcome == FAILED) break;
                 double gasVolume = hydrocarbonVapour(t, outcome, w);
                 if (!(gasVolume > 0.0)) break;
-                double partial = water * R * t / gasVolume;
+                double partial = SteamVirial.partialPressure(water, t, gasVolume);
                 if (Math.abs(guess + partial - p) < PARTIAL_PRESSURE_TOLERANCE * p) {
                     return wetResult(t, p, guess, outcome, water, 0.0, saturation, partial, frozen, competition, w);
                 }
@@ -5445,11 +5449,12 @@ public final class FluidTpEquilibrium {
             outcome = hydrocarbon(t, w);
             if (outcome == FAILED) return failed(t, p, competition, w);
             gasVolume = hydrocarbonVapour(t, outcome, w);
-            double residual = gasVolume > 0.0 ? pc + water * R * t / gasVolume - p : Double.POSITIVE_INFINITY;
+            // A gas volume the steam's co-volume fills (V <= n_w B, a positive B) is too small: infinite, pc too high.
+            double residual = gasVolume > 0.0 ? pc + SteamVirial.partialPressure(water, t, gasVolume) - p : Double.POSITIVE_INFINITY;
             if (Math.abs(residual) < PARTIAL_PRESSURE_TOLERANCE * p) break;
             if (residual > 0.0) high = pc; else low = pc;
         }
-        double partial = gasVolume > 0.0 ? water * R * t / gasVolume : p;
+        double partial = gasVolume > 0.0 ? SteamVirial.partialPressure(water, t, gasVolume) : p;
         if (Math.abs(pc + partial - p) > PARTIAL_PRESSURE_ACCEPTANCE * p) {
             w.failure = "the hydrocarbon partial pressure closing the gas volume was not found (pc " + pc + " Pa, p_w "
                     + partial + " Pa at " + p + " Pa)";
@@ -5528,16 +5533,20 @@ public final class FluidTpEquilibrium {
     }
 
     /**
-     * The gas: hydrocarbon vapour ({@code vapour} moles, {@code hydrocarbonState} at {@code pc}) and ideal steam sharing
-     * its volume, as one state over the contract basis at {@code P}: volume {@code n_V v_V(pc)} (or {@code n_w R T/P}
-     * for steam alone), enthalpy, entropy and Gibbs energy the sums of both parts (steam at its partial pressure),
+     * The gas: hydrocarbon vapour ({@code vapour} moles, {@code hydrocarbonState} at {@code pc}) and the second-virial
+     * steam ({@link SteamVirial}) sharing its volume, as one state over the contract basis at {@code P}: volume
+     * {@code n_V v_V(pc)} (or {@code n_w (R T/P + B)} for steam alone), the steam at {@code p_w = n_w R T/(V - n_w B)},
+     * enthalpy, entropy and Gibbs energy the sums of both parts (the steam's at its partial pressure with its residual),
      * {@code ln phi_i} from each component's chemical potential against the ideal gas at {@code P}.
      */
     private PhaseAmounts gasPhase(double t, double p, double pc, double vapour, double steam, PhaseState hydrocarbonState,
                                   Workspace w) {
         double rt = R * t;
-        double volume = vapour > 0.0 ? vapour * hydrocarbonState.molarVolume() : steam * rt / p;
-        double partial = steam > 0.0 ? steam * rt / volume : 0.0;
+        double volume = vapour > 0.0 ? vapour * hydrocarbonState.molarVolume() : steam * SteamVirial.molarVolume(t, p);
+        double partial = !(steam > 0.0) ? 0.0 : vapour > 0.0 ? SteamVirial.partialPressure(steam, t, volume) : p;
+        if (!(volume > 0.0) || !Double.isFinite(partial)) {
+            throw new IllegalArgumentException("No virial steam volume at " + t + " K and " + (vapour > 0.0 ? partial : p) + " Pa");
+        }
         double total = vapour + steam;
         IdealGasFunction steamGas = freeWater.vapor();
         double enthalpy = 0.0;
@@ -5548,11 +5557,12 @@ public final class FluidTpEquilibrium {
             entropy += vapour * hydrocarbonState.molarEntropy();
             gibbs += vapour * hydrocarbonState.molarGibbsEnergy();
         }
-        double steamEnthalpy = 0.0;
+        double steamIdealEnthalpy = 0.0;
         double steamGibbs = 0.0;
         if (steam > 0.0) {
-            steamEnthalpy = steamGas.enthalpy(t);
-            double steamEntropy = steamGas.entropy(t, partial);
+            steamIdealEnthalpy = steamGas.enthalpy(t);
+            double steamEnthalpy = steamIdealEnthalpy + SteamVirial.residualEnthalpy(t, partial);
+            double steamEntropy = steamGas.entropy(t, partial) + SteamVirial.residualEntropy(t, partial);
             steamGibbs = steamEnthalpy - t * steamEntropy;
             enthalpy += steam * steamEnthalpy;
             entropy += steam * steamEntropy;
@@ -5581,8 +5591,8 @@ public final class FluidTpEquilibrium {
             double y = steam / total;
             double s = steamGas.entropy(t, p);
             w.gasComposition[waterIndex] = y;
-            w.gasIdealGibbs[waterIndex] = steamEnthalpy - t * s;
-            idealEnthalpy += y * steamEnthalpy;
+            w.gasIdealGibbs[waterIndex] = steamIdealEnthalpy - t * s;
+            idealEnthalpy += y * steamIdealEnthalpy;
             idealEntropy += y * (s - R * DeterministicMath.log(y));
             w.gasLogPhi[waterIndex] = (steamGibbs - w.gasIdealGibbs[waterIndex]) / rt - DeterministicMath.log(y);
         }
@@ -5597,9 +5607,10 @@ public final class FluidTpEquilibrium {
     }
 
     /**
-     * Free liquid water at (T, P) from the water model, with the rule's fugacity {@code p_sat} (so
-     * {@code ln phi = ln(p_sat/P)} and {@code mu = g_ig(T, p_sat)}): the steam it coexists with has the same chemical
-     * potential exactly when {@code p_w = p_sat}, as the rule sets it.
+     * Free liquid water at (T, P) from the water model, with the chemical potential of the rule's steam at
+     * {@code p_w = p_sat} (so {@code ln phi = ln(p_sat/P) + B p_sat/(R T)} and {@code mu = g_ig(T, p_sat) + B p_sat},
+     * {@link SteamVirial}): the steam it coexists with has the same chemical potential exactly when {@code p_w = p_sat},
+     * as the rule sets it.
      */
     private PhaseAmounts freeWaterPhase(double t, double p, double saturation, double amount, Workspace w) {
         freeWater.liquid(t, p, w.waterProperties);
@@ -5607,7 +5618,7 @@ public final class FluidTpEquilibrium {
         double idealEnthalpy = steamGas.enthalpy(t);
         double idealEntropy = steamGas.entropy(t, p);
         double idealGibbs = idealEnthalpy - t * idealEntropy;
-        double logPhi = DeterministicMath.log(saturation / p);
+        double logPhi = DeterministicMath.log(saturation / p) + SteamVirial.residualGibbs(t, saturation) / (R * t);
         double gibbs = idealGibbs + R * t * logPhi;
         double enthalpy = w.waterProperties[1];
         double entropy = (enthalpy - gibbs) / t;
@@ -5622,9 +5633,9 @@ public final class FluidTpEquilibrium {
 
     /**
      * The free water's ice at (T, P) (WP4): a solid phase naming the ice record, its volume and enthalpy the record's
-     * ({@link FreeWaterIce#properties}), with the rule's fugacity {@code fugacity} as the liquid's is {@code p_sat}
-     * ({@code ln phi = ln(f_s/P)}, {@code mu = g_ig(T, f_s)}): the steam it coexists with has its chemical potential
-     * exactly when {@code p_w = f_s}.
+     * ({@link FreeWaterIce#properties}), with the chemical potential of the rule's steam at {@code p_w = f_s} as the
+     * liquid's is at {@code p_sat} ({@code ln phi = ln(f_s/P) + B f_s/(R T)}, {@code mu = g_ig(T, f_s) + B f_s}): the
+     * steam it coexists with has its chemical potential exactly when {@code p_w = f_s}.
      */
     private PhaseAmounts icePhase(double t, double p, double fugacity, double amount, Workspace w) {
         FreeWaterIce ice = freeWater.ice();
@@ -5633,7 +5644,7 @@ public final class FluidTpEquilibrium {
         double idealEnthalpy = steamGas.enthalpy(t);
         double idealEntropy = steamGas.entropy(t, p);
         double idealGibbs = idealEnthalpy - t * idealEntropy;
-        double logPhi = DeterministicMath.log(fugacity / p);
+        double logPhi = DeterministicMath.log(fugacity / p) + SteamVirial.residualGibbs(t, fugacity) / (R * t);
         double gibbs = idealGibbs + R * t * logPhi;
         double entropy = (solid.enthalpy() - gibbs) / t;
         w.oneLogPhi[0] = logPhi;
