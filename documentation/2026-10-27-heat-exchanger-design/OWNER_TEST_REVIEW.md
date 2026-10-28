@@ -1,49 +1,42 @@
 # Owner test of the review world (2026-10-28)
 
-The owner's findings from `REVIEW_WORLD.md`: each gives the expected behaviour, what the code does, and a proposal. Reproduced with a probe on the review-world run: `-PreviewProbe=true` rebuilds the plant and applies the changes; `owner` watches a copy of the owner's save. Both write to `run/review-probe`, and the probe is scratch until the cleanup. The old pump and compressor removal and the GUI build (sections 6 and 7) run in their own sessions.
+The owner's findings from `REVIEW_WORLD.md`: each gives the expected behaviour, what the code did, and the fix or proposal. Probe: `-PreviewProbe=true` rebuilds the plant and applies the owner's changes; `owner` watches a copy of the owner's save (scratch until the cleanup, `run/review-probe`). The owner answered on 2026-10-28: "I don't think furnace convection section can heat to 800C, try to find a better model. Others as recommended". So sections 2 to 4 are fixed here, 5 to 7 on their own branches, and section 1 is a new proposal.
 
-## 1. Fired heater: the convection duty
+## 1. Fired heater: the convection duty (proposal F, replacing A)
 
-- **Expected.** The radiant box absorbs a fixed share of the fired duty (70 % of the absorbed duty), and the flue gas then gives the convection section its share (30 %). So Q_c = 0.43 · Q_r, and Q_c is zero with the burners out.
-- **The model now (W6).** Each coil heats its own stream toward the set point: Q = β · reach · ṁ · (h_set − h_in), reach 1 and 0.3, each coil with its own cap and its own β. This is 0.43 · Q_r only for coils in series at β = 1; it differs when a coil is duty-limited or carries another stream.
-- **Proposal A.** One firing per heater on the radiant coil: Q_r = min(ṁ (h_set − h_in), radiant duty), and Q_c = 0.43 · Q_r, zero without convection flow. Coils in two islands read each other through the W3 relay. The cap is the owner's choice: A1, the convection outlet below an 800 °C flue gas (recommended); A2, no cap.
+- **Expected.** The burners' flue gas gives the radiant coil Q_r while it cools from the flame (about 1800 °C) to the bridgewall (about 800 °C), so it carries C_g = Q_r / 1000 K, about 1 kW/K per MW of radiant duty. It then crosses the convection coil, a counterflow exchanger: Q_c = ε C_min (T_bw − T_in). The 800 °C is the gas entering the convection section; the process leaving it is far colder, since the gas holds at most C_g (T_bw − T_in).
+- **The model now (W6).** Each coil heats toward the set point (reach 1 and 0.3), each to its own cap; the convection duty does not depend on the radiant firing.
+- **F1 (recommended).** The radiant coil as now. The convection coil a counterflow exchanger against the flue gas: T_bw 800 °C; C_g from the radiant coil's heat, planned per step (across islands, its last commit); U_c 55 W/m²K on its bare tube, which gives the 70/30 design split at a 250 °C crude inlet. Zero with the burners out or no radiant flow.
+  - Design 10 MW: crude 250 → 283 °C in the convection coil, stack 371 °C, fired efficiency 80.5 %.
+  - The review heater at 9.97 kg/s of 25 °C water: Q_c 701 kW (0.61 Q_r; W6 gives 492), water out at 41.8 °C, stack 190 °C. In series at 0.1 kg/s to 200 °C steam: wet steam at 180 °C leaves the convection coil.
+  - Only a separately fed, starved coil nears the bridgewall: 0.1 kg/s of water beside 1148 kW of radiant duty leaves at 767 °C. Real heaters trip on low pass flow.
+  - Deletes the convection reach 0.3, its duty cap, its firing plan and its DUTY INSUFFICIENT. Risks: one slice of lag across islands; a closed form with the mean heat capacity misses a pinch inside a boiling plateau by a few K (the exchanger's 8 counterflow cells against a flue-gas stream avoid it, at more work).
+- **F2.** F1 with the bridgewall falling at turndown (a radiant balance in T⁴): more faithful at low firing; one more solve. Not recommended now.
 
-## 2. Air cooler: overcooling at low flow
+## 2. Air cooler: overcooling at low flow (fixed)
 
-- **Expected.** Stopped fans still leave natural draught, a third of design (GPSA 25 to 40 %). Louvers or a hot bypass hold the outlet at low load. An air condenser's tubes are mostly vapour, and its condensate leaves in about one residence time.
-- **Owner direction.** "AC should be able to adjust its duty to match target T as well as furnace."
-- **Found, cause (i), natural draught.** The fans run from still to full; there is no actuator below natural draught. In the review cooler, stopped fans overcool 85 °C water below 11.5 kg/s (74 °C at 5 kg/s, 47 °C at 1 kg/s). The status then reads "LIMITED: the fans stand still".
-- **Found, cause (ii), the outlet holdup (the owner's own case).**
-  - The owner's feed, 125 °C at 120 kPa, is 0.128 kg/s of steam, condensed at 62 kPa above a 4 m condensate leg. The controller set the fans to 7.7 % for the target, with no limit.
-  - The outlet still read 25 °C, rising 2 K per 100 s (the owner's save: 61 °C). The vacuum drew 25 °C void water up the leg into the outlet node. That node holds half the tubes' volume as liquid, about 260 kg; at 0.128 kg/s it flushes with τ ≈ 33 min.
-- **Options.**
-  - For (i): louvers (recommended), one effort from shut louvers through natural draught to full fans; or an internal hot bypass.
-  - For (ii), shared with section 4: a heat side's outlet node holds only its header, about 10 % of the passage, while the passage stays quasi-steady (Q10). This settles in seconds; it risks a stiffer junction (holdup was added once for stability).
+- **Expected.** Stopped fans still leave natural draught, a quarter of full air; louvers hold the outlet below that.
+- **Fixed: louvers.** `AirCooled` has one effort, the air's share of full fans: 0 with the louvers shut (no air, no heat), 0.25 with the louvers open and the fans still, 1 at full fans. The controller holds a set point at any flow. It is LIMITED only at full fans or with the louvers shut (a stream that arrives below the set point). Manual and the power switch keep their meaning: the fans, with the louvers open.
+- Gate (`HeatSideTopologyTest`): 85 °C water held at 80 °C with the louvers 0.626 open and the fans still; above the inlet the louvers shut and the outlet stays at 85 °C.
+- The outlet holdup: section 4.
 
-## 3. Fired heater at a 100 kPa generator
+## 3. Fired heater at a 100 kPa generator (fixed by section 4's sizing)
 
-- **Expected.** The pump's +5 bar from a 1 bar feed cannot reach the 10 bar void. The pump stalls, the coils sit still and nothing is fired: no flow, no hold.
-- **Reproduced.** In a fresh build, the feed generator set to 25 °C and 100 kPa holds the heater at its first slice: "Newton line search stalled at residual 1.7870486723459762", the same number as the owner's log. It retries every few seconds.
-  - At 50 °C (only the pressure lowered) there is no hold: no flow, STEADY in 80 s.
-  - Then the void at 100 kPa and the pump at 0.01 m³/s release it: 9.97 kg/s, 64 °C out, DUTY INSUFFICIENT, steady.
-  - The owner's save ended in a different still state ("pump cannot drive forward flow", coils full of 200 °C steam at 1 bar), not reproduced by these steps.
-- **Next.** Trace the stalled Newton on this two-step reproduction before proposing a fix.
+- **Cause, by A/B on the probe.** The coils' nodes were sized on the coils' passes. With only that rule reverted, the hold returns at the same residual (1.7870486723459762).
+- **With the fix.** Stage 1 is STEADY at no flow in 81 s with "pump cannot drive forward flow", the owner's end state. Stage 2 is steady at 9.97 kg/s. No hold anywhere in the probe.
 
-## 4. Exchanger: slow to steady
+## 4. Exchanger: slow to steady (fixed)
 
-- **Expected.** Fixed inputs give fixed outlets within about a residence time, and both islands then certify STEADY.
-- **Found, cause (i), holdup.** The tube outlets creep with τ ≈ 50 s at 5.7 kg/s (327.0 → 329.6 K over 160 s). This is section 2's outlet node.
-- **Found, cause (ii), a wake ping-pong.** After 250 s every outlet is constant to 0.01 K, yet coupling wakes run 23 → 224 in 160 s, one per side per commit. `IslandCoordinator.moved` tests the booked transit, which holds the span the side ahead booked past the other's commit. The owner's save holds −1.07 MJ, against a 4 kJ threshold. Only the settled transit (`settledTransit`) returns to 0 at steady state (W3).
-- **Proposal (recommended, forced by the physics).** Wake on the settled transit: a clock offset between two islands is not a change. Recheck with the probe: the wakes stop once outlets are constant.
+- **(i) Holdup.** A junction holds 0.05 s of its widest connection's flow at 100 m/s. A heat side's passage counted every tube at once, so the outlet held half a bundle. `PassiveNetwork.sizeJunctionHoldups` now skips a heat side's passage, which holds no fluid (Q10), so its ends are sized on their lines, as headers. The tube outlets stand at their final values by 70 s; before, they settled with τ ≈ 50 s.
+- **(ii) Wake ping-pong.** `IslandCoordinator.moved` reads the settled transit. Probe: no wakes in the first 170 s (before: 1.25 per s with the outlets constant). After that, about one per 8 s, all at the kettle, whose gravity-fed pool really fills (258 → 2035 kg in 400 s, as before the fix) toward the feed's 1 m head.
+- `ExchangerCouplingTest.certifiedSidesWakeWhenTheTransitMoves` moved the transit by −500 kJ from the settled value but wrote it as the booked one. The two differ by one slice of one side's heat (11.7 MJ), and the ledger was off by exactly that. The test now moves the booked transit.
 
-## 5. Water vapour pressure range
+## 5. Water vapour pressure range (built, branch `claude/water-steam-virial`)
 
-- **Found.** Water's saturation already spans 273.16 to 647.096 K: the IAPWS equation of Wagner and Pruss (`water-iapws-shomate-r2`), within 2e-4 of IF97. The notice is the ideal-gas steam's 2 % limit, `FluidThermodynamics.waterVaporPressureLimit` (125 kPa below 400 K, 250 kPa at 450 to 500 K). At 10 bar ideal steam is 7.6 % too light; at 100 bar, 33 %.
-- **Options.** Both bump only `SEPARATE_FREE_WATER_FORMULATION` v2 → v3: no material revision moves, contents are restated at load, no facts change.
-  - B (recommended): a second virial from IF97 Region 2, within 2 % to about 12 bar at saturation and 49 bar at 584 K.
-  - A: the full Region 2 residual, a new reference model (the owner's choice per AGENTS.md).
+- Option B: a second virial from IF97 Region 2, `separate-free-water-v3` (commits `3a527f1e`, `4521b65c`, `c6e7d480`; review `WATER_STEAM_VIRIAL_REVIEW.md` on that branch). The 2 % limit is 1.8 MPa below 500 K, rising to 65 MPa from 875 K, so water at 10 bar raises no notice. Gates: `test` 1709, slowGates 188, fluid GameTests 35/35, chain-100 exact.
+- It reports three items for this batch: the junction-boiling test re-recorded (start a seeded junction's flows from its seeds, the owner's call); chain-100 re-captured; restatement on load is a flash at fixed pressure (0.89 % off the wall for one solve).
 
-## 6. Temperatures on the lines, and 7. GUI redesign (approved)
+## 6 and 7. Line temperatures and the GUI (built, branch `claude/heat-gui-redesign-abb1db`, `e8465a72`)
 
-- No pipe screen shows a temperature (`FluidDeviceScreen.readings()`, since `f44930f5`). The furnace's nozzle-to-nozzle crossover made that visible. The fix: a pipe reads its stream from the pipe observation.
-- The owner approved the mockup (`HEAT_GUI_MOCKUP.svg`): a Control tab with the flowsheet, temperatures on every line and explained modes, a stream switch on Overview, the per-port wire (fluid 15 → 16), and the duplicate `gui.icheme.fluid.ratio_input`. It is built in its own session (`HEAT_GUI_PLAN.md` there).
+- Built: the Control tab with the flowsheet, the stream switch, a pipe's temperature and pressure, and fluid-16. Owner options Q-G1 to Q-G4 are built as (a). At the merge the air cooler's actuator becomes "louvers" (section 2).
+- The old pump and compressor removal is its own batch (`claude/vigorous-bell-dab92b`). After it lands, the review world's heater pump becomes an in-line pump.

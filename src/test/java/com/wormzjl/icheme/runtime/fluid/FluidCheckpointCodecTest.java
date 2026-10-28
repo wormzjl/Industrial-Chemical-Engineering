@@ -70,7 +70,7 @@ class FluidCheckpointCodecTest {
         var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state))),key->model);
         var loaded=FluidCheckpointCodec.decode(image,key->model);var pipes=loaded.islands().getFirst().snapshot().graph().pipes();
         assertEquals(side,pipes.getFirst().heat());assertNull(pipes.get(1).heat());
-        assertEquals(full.graph().pipes().getLast().heat(),pipes.getLast().heat());assertEquals(.4,((AirCooled)pipes.getLast().heat()).fans(),"no flow, the fans stand");
+        assertEquals(full.graph().pipes().getLast().heat(),pipes.getLast().heat());assertEquals(.4,((AirCooled)pipes.getLast().heat()).draught(),"no flow, the louvers and fans stand");
         assertEquals(174,pipes.getFirst().sections().getFirst().channels());
         var planned=full.graph().reservoirs().getLast().inventory().pool();
         assertEquals(pool.shape(),planned.shape());assertEquals(0,planned.active(),"no read of its tubes: the pool moves no heat");

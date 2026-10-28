@@ -859,7 +859,7 @@ public final class IslandCoordinator {
     /** A side keeps at most this many booked spans; older ones merge (the transit stays exact, only an as-of split moves). */
     private static final int MAXIMUM_BOOKED=64;
     /** Decision D4: a side's commit wakes its certified other side when its stream's temperature moved by more than this
-     * (K), its flow by more than this share, or the transit grew past this share of that side's slice heat (plus 1 J). */
+     * (K), its flow by more than this share, or the settled transit grew past this share of that side's slice heat (plus 1 J). */
     static final double WAKE_TEMPERATURE=.05,WAKE_FLOW=1e-3,WAKE_TRANSIT=1e-3;
     /**
      * One coupled exchanger side's relay state, kept by its connection id across the replacements of its island: its last
@@ -1011,7 +1011,8 @@ public final class IslandCoordinator {
                 ||now.law()!=null&&used.law()!=null&&Math.abs(now.law().bypass()-used.law().bypass())>WAKE_FLOW
                 // A kettle's pool that boils dry or floods changes its film (W7).
                 ||now.pool()!=used.pool()||now.pool()&&Math.abs(now.bath().film()-used.bath().film())>WAKE_FLOW*used.bath().film()
-                ||Math.abs(transits.getOrDefault(side.pair(),0.))>WAKE_TRANSIT*Math.abs(otherSide.heatRate)*slice+1;
+                // The settled transit: the heat the side ahead booked past the other's commit is a clock offset, not a change.
+                ||Math.abs(settledTransit(side.pair()))>WAKE_TRANSIT*Math.abs(otherSide.heatRate)*slice+1;
     }
     /** The certified islands woken by an exchanger partner's commit (decision D4) end their certificates here, at the engine's
      * decision points (a round's close, the due deadlines, a pump), never inside a presentation read. */

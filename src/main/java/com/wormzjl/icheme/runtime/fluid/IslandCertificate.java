@@ -378,7 +378,7 @@ public final class IslandCertificate {
                     d.integer(side.wall().length);for(double t:side.wall())d.real(t);d.real(side.bypass());d.real(side.giveBack());d.number(side.partner());d.real(side.active());
                     control(d,side.control());d.integer(side.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();d.integer(3);d.real(cooled.area());d.real(air.temperature());d.real(air.barePerFace());d.real(air.film());d.real(air.capacity());d.real(air.natural());
-                    d.real(cooled.fans());control(d,cooled.control());d.integer(cooled.limit().ordinal());}
+                    d.real(cooled.draught());control(d,cooled.control());d.integer(cooled.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.real(coil.reach());d.real(coil.duty());d.real(coil.firing());}
             }
             // What each end draws (PassiveNetwork.PhasePort): it changes the equations, so a replay holds only under it.

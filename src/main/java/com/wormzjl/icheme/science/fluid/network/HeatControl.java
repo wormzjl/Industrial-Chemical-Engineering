@@ -7,8 +7,8 @@ import java.util.function.DoubleUnaryOperator;
  * A heat side's built-in controller (batch 2026-10-27-heat-exchanger-design, plan section 6, owner Q6). It sets the side's
  * actuator between slices or steps, never inside a Newton, dead-beat on the side's own heat law: the actuator's effort
  * whose heat meets the target at the planned profile, fixed until the next plan. The actuator is the unit's: an exchanger
- * side's bypass ({@link HeatSide}), an air cooler's fans ({@link AirCooled}). Its effort runs from 0 (the bypass fully open,
- * the fans still) to 1 (no bypass, the fans at full speed), and the size of the side's heat rises with it. The controller
+ * side's bypass ({@link HeatSide}), an air cooler's louvers and fans ({@link AirCooled}). Its effort runs from 0 (the bypass
+ * fully open, the louvers shut) to 1 (no bypass, the fans at full speed), and the size of the side's heat rises with it. The controller
  * does not count the give-back of the heat in transit: that closes a loop through the transit and settles four to five
  * times slower (plan section 6).
  *
@@ -37,8 +37,7 @@ public record HeatControl(Target target,double value,double lowLimit,double manu
      * {@code last}. A stream without flow or without heat to move keeps the actuator where it is (the manual setting in
      * manual). The side is cooled when its heat at full effort is negative. A target temperature names the plateau's liquid
      * end on a cooled side and its vapour end on a heated side (plan section 6). A target past what full effort moves takes
-     * full effort; a target on the far side of the inlet, or below what the lowest effort moves (an air cooler's natural
-     * draught), takes the lowest. On a cooled side the low limit then holds the effort back to where the outlet reaches it.
+     * full effort; a target on the far side of the inlet, or below what the lowest effort moves, takes the lowest. On a cooled side the low limit then holds the effort back to where the outlet reaches it.
      */
     public Setting setting(DoubleUnaryOperator heat,HeatCurve curve,double inlet,double mass,double last) {
         double still=target==Target.MANUAL?manual:last;

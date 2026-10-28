@@ -331,7 +331,7 @@ public final class FluidCheckpointCodec {
                     control(w,heat.control());w.u8(heat.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();w.u8(3);w.f64(cooled.area());
                     w.f64(air.temperature());w.f64(air.barePerFace());w.f64(air.film());w.f64(air.capacity());w.f64(air.natural());
-                    w.f64(cooled.fans());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
+                    w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.reach());w.f64(coil.duty());w.f64(coil.firing());}
             }
         }
@@ -387,8 +387,8 @@ public final class FluidCheckpointCodec {
         if(tag==0)return null;
         if(tag==2)return new com.wormzjl.icheme.science.fluid.network.FiredCoil(r.f64(),r.f64(),r.f64(),r.f64());
         if(tag==3) {
-            double area=r.f64();var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(r.f64(),r.f64(),r.f64(),r.f64(),r.f64());double fans=r.f64();
-            var control=control(r);return new com.wormzjl.icheme.science.fluid.network.AirCooled(area,air,fans,control,limit(r));
+            double area=r.f64();var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(r.f64(),r.f64(),r.f64(),r.f64(),r.f64());double draught=r.f64();
+            var control=control(r);return new com.wormzjl.icheme.science.fluid.network.AirCooled(area,air,draught,control,limit(r));
         }
         if(tag!=1)throw r.invalid("unknown heat law "+tag);
         double area=r.f64();var films=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());

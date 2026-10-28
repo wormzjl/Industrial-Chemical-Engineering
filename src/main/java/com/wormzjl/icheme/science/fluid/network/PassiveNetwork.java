@@ -77,7 +77,8 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
     /**
      * Sizes every junction that is not sized yet ({@link #unsized}), once, from its seed state and its connections:
      * {@code m_J = PassiveStepSolver.HOLDUP_TAU * max over its connections of rho_seed * minimumArea * velocityLimit(seed)},
-     * the velocity cap's mass flow on the junction's seed state; an unconnected junction is given 1 kg so its stock is
+     * the velocity cap's mass flow on the junction's seed state, a heat side's passage not counted (its ends are sized on
+     * their lines, as headers are); a junction with no such connection is given 1 kg so its stock is
      * positive. A junction is sized wherever it is given a state: when its island is minted ({@link #mintJunctions}), when a
      * replacement of one structure carries it ({@link #withJunctionStates}), and at a solve's entry for a graph built
      * directly. Between those its buffer's mass stays exactly m_J (the mass pin of {@code ConservativeTransport.reconstruct};
@@ -127,7 +128,9 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
             if(!unsized(node))continue;
             var state=starts==null?node.state():starts.get(i);
             double rho=state.mass()/state.volume(),velocity=model.velocityLimit(state),capacity=0;
-            for(var pipe:graph.pipes)if(pipe.first==i||pipe.second==i)capacity=Math.max(capacity,rho*pipe.minimumArea()*velocity);
+            // A heat side's passage holds no fluid (owner Q10, the quasi-steady exchanger): its ends are fittings on their lines,
+            // a header, never 0.05 s of the cap flow through every tube at once (the owner's test, 2026-10-28: half a bundle).
+            for(var pipe:graph.pipes)if((pipe.first==i||pipe.second==i)&&pipe.heat()==null)capacity=Math.max(capacity,rho*pipe.minimumArea()*velocity);
             double mass=PassiveStepSolver.HOLDUP_TAU*capacity;
             if(!(mass>0))mass=1;
             if(sized==null)sized=new ArrayList<>(graph.reservoirs);

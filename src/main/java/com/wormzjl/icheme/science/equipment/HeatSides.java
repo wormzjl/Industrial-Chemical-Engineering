@@ -150,7 +150,7 @@ public final class HeatSides {
      * {@code partner} is that side's connection id, and each slice plans the wall from it (plan section 5.2; the cells' 25 °C
      * here is never moved against); a kettle's tubes the same against the wall their pool makes (W7);</li>
      * <li>an air cooler's process side against air at {@link #AIR_TEMPERATURE} over its bare tube surface {@code area}
-     * (m²), with its fans at {@code share} of full speed ({@link #AIR});</li>
+     * (m²), with its fans at {@code share} of full speed and its louvers open ({@link #AIR}); a controller works both;</li>
      * <li>a fired heater's coil towards the set point {@code target}, the radiant coil all the way and the convection coil
      * its 30 % share of it, at most its {@link #coilDuty} with the burners at {@code share}.</li></ul>
      */
@@ -158,7 +158,7 @@ public final class HeatSides {
         return switch(unit) {
             case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
                 yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE);}
-            case AIR_COOLER->new AirCooled(area,AIR,share,control,HeatControl.Limit.NONE);
+            case AIR_COOLER->new AirCooled(area,AIR,AIR.draught(share),control,HeatControl.Limit.NONE);
             case FIRED_HEATER->new FiredCoil(target,side==Side.RADIANT?1:1-ProcessUnit.RADIANT_SHARE,coilDuty(side,area,share),1);
             default->null;
         };
@@ -171,7 +171,7 @@ public final class HeatSides {
      * natural draught. At full fans 2.15 (liquid), 2.44 (condensing) and 0.43 (gas) kW/K per m² of face; with the fans
      * still, 0.63, 0.65 and 0.29.
      */
-    public static HeatCurve.Films airFilms(double fans){return AIR.films(fans);}
+    public static HeatCurve.Films airFilms(double fans){return AIR.films(AIR.draught(fans));}
     /** An air cooler's fan power, W, over bare tube surface {@code area} (m²) with its fans at {@code fans} of full speed (the fan laws: the cube of the speed). */
     public static double fanPower(double area,double fans){return FAN_POWER*area/BARE_PER_FACE*fans*fans*fans;}
 }

@@ -117,9 +117,10 @@ class HeatSideTopologyTest {
     /**
      * W4's air cooler gate (plan section 6): the fans hold the outlet of 85 °C water at 65 °C, between natural draught
      * (77.4 °C) and full fans (62.7 °C) on this bay's 61 m² of bare tube, and again after the inlet steps to 75 °C. The controller plans the fans at each step
-     * from its start (as a fired coil's firing), so after 300 s, the outlet junction's 14 s lag spent, the outlet stands at
-     * its set point. A set point below what full fans reach stops at full fans, LIMITED; the low limit holds above one; a
-     * set point above what still fans reach stops at natural draught.
+     * from its start (as a fired coil's firing), so after 300 s, the outlet junction's lag spent, the outlet stands at its
+     * set point. A set point below what full fans reach stops at full fans, LIMITED; the low limit holds above one; the
+     * louvers hold a set point above what natural draught reaches, the fans still (the owner's test, 2026-10-28), and one
+     * above the inlet shuts them: no air, no heat, LIMITED.
      */
     @Test void anAirCoolersFansHoldItsOutletAfterAnInletStep() {
         var held=run(controlledBay(new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,338.15,0,1),358.15),300);
@@ -137,9 +138,14 @@ class HeatSideTopologyTest {
         assertEquals(340.15,guarded.outlet(),.1,"the low limit holds 67 °C");
         assertEquals(HeatControl.Limit.LOW_LIMIT,guarded.law().limit());
         var warm=run(controlledBay(new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,353.15,0,1),358.15),300);
-        assertEquals(0,warm.law().fans());assertEquals(HeatControl.Limit.LOWEST,warm.law().limit());
-        assertTrue(warm.outlet()<353.15-1,"natural draught alone cools below 80 °C: "+warm.outlet());
-        System.out.printf(Locale.ROOT,"air cooler from 85 °C: full fans %.2f K, natural draught %.2f K, low limit %.2f K%n",cold.outlet(),warm.outlet(),guarded.outlet());
+        assertEquals(353.15,warm.outlet(),.1,"the louvers hold 80 °C, above natural draught's 77.4 °C");
+        assertEquals(HeatControl.Limit.NONE,warm.law().limit());assertEquals(0,warm.law().fans());
+        assertTrue(warm.law().louvers()>0&&warm.law().louvers()<1,"louvers at "+warm.law().louvers());
+        var shut=run(controlledBay(new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,363.15,0,1),358.15),300);
+        assertEquals(0,shut.law().draught());assertEquals(HeatControl.Limit.LOWEST,shut.law().limit());
+        assertEquals(358.15,shut.outlet(),.1,"shut louvers move no heat");
+        assertEquals("LIMITED: the louvers are shut / ",FluidWorldAuthority.controlStatus(shut.law(),null));
+        System.out.printf(Locale.ROOT,"air cooler from 85 °C: full fans %.2f K, louvers %.3f at %.2f K, low limit %.2f K%n",cold.outlet(),warm.law().louvers(),warm.outlet(),guarded.outlet());
     }
     /** A fired heater's coil over {@code area} m² firing to {@code setPoint} K with its burners at {@code burners}. */
     private static HeatUnit coil(HeatSides.Side side,double area,double setPoint,double burners) {

@@ -705,7 +705,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         boolean fans=law instanceof com.wormzjl.icheme.science.fluid.network.AirCooled;
         return switch(why) {
             case NONE->"";
-            case LOWEST->fans?"LIMITED: the fans stand still, natural draught moves more / ":"LIMITED: the bypass is fully open / ";
+            case LOWEST->fans?"LIMITED: the louvers are shut / ":"LIMITED: the bypass is fully open / ";
             case HIGHEST->fans?"LIMITED: the fans run at full speed / ":"LIMITED: the bypass is closed / ";
             case LOW_LIMIT->String.format(java.util.Locale.ROOT,"LOW LIMIT: the outlet is held at %.1f K / ",unit==null?0:unit.control().lowLimit());
         };

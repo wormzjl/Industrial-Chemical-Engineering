@@ -50,7 +50,7 @@ class HeatControlTest {
         var warmed=outlet(330,340).setting(up,curve,heated,1,0);
         assertEquals(h(330),mixed(up,heated,warmed),1e-6,"a heated outlet has no low limit");
     }
-    /** An air cooler's still fans still cool by natural draught: a duty below that takes the lowest effort, short of it. */
+    /** An actuator whose lowest effort still moves heat: a duty below that takes the lowest effort, short of it. */
     @Test void naturalDraughtIsTheLeastAFanControllerMoves() {
         var curve=liquid();DoubleUnaryOperator fans=u->-(100_000+300_000*u);
         var least=new HeatControl(HeatControl.Target.DUTY,50_000,0,1).setting(fans,curve,h(360),1,.5);

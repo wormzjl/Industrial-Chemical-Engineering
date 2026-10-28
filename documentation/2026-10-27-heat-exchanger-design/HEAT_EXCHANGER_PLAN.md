@@ -144,7 +144,7 @@ The pairs land inside or near the design ranges. Two are high: organic condenser
 - Overall, per m² of face: 3.3 kW/K (liquid), 4.2 (condensing), 0.45 (gas).
 - The fans move air at 3 m/s, 3.5 kW/K per m² of face. Every tube cell meets fresh air, so the process stream sees ambient air through UA_eff = C_air (1 − e^(−UA/C_air)): 2.15 (liquid), 2.44 (condensing) or 0.42 (gas) kW/K per m² of face.
 - The largest bay, process at 85 °C in 25 °C air: 1.6 MW liquid, 1.8 MW condensing, 0.3 MW gas.
-- Fans off: natural draught, the air's capacity and film to a quarter.
+- Fans off: natural draught, the air's capacity and film to a quarter. Louvers (owner test, 2026-10-28) close it to no air.
 - Fan power is a datasheet and ledger line only: the network has no electricity to draw it from.
 - The air is the unit's own (no nozzles), not a utility. It enters at a constant 25 °C (Q11), for now: no weather, biome or altitude. The heat it carries away leaves the network and is booked in the ledger as the cooler's duty.
 
@@ -374,7 +374,8 @@ W5 as built (2026-10-27):
 - **Fans.** The control record's `share` is the manual setting of the side's actuator: an exchanger side's bypass, an air cooler's fans (1 running, 0 standing still: natural draught, a quarter of the air and its film). `Mode.BYPASS` duplicated "no controller with a manual share" and is removed (no save held it). A new air cooler's fans run. The screen switches them like a mover's power, then Apply. Fan power, 1 kW per m² of face at full speed and the cube of the speed below it, is a datasheet and screen line only. It heats the air, not the stream, so it is not a fluid energy term.
 - **Screen.** A side shows its inlet and outlet temperature, the duty from the interval's `HEAT` boundaries, and an air cooler's fans and fan power (`FluidView.Heat`).
 - **State format 24.** The checkpoint carries a connection's `HeatSide`, so a restored island moves the heat its graph did (format 23 dropped it).
-- **Holdup lag.** The outlet junction holds half the tubes' liquid, so the outlet settles over about the tubes' residence time (a 3 × 6 m bay of water at 13.5 kg/s: 180 kg, a lag of 14 s). That is the physics of the tube contents.
+- **Holdup lag.** The outlet junction held half the tubes' liquid, so the outlet settled over about the tubes' residence time (a 3 × 6 m bay of water at 13.5 kg/s: 180 kg, a lag of 14 s). Superseded after the owner's test (2026-10-28, OWNER_TEST_REVIEW.md section 4): the passage holds no fluid (Q10), so a heat side's ends are sized on their lines, as headers, and the coils' oversized nodes had held the fired heater.
+- **Louvers** (owner test, 2026-10-28, section 2): the air cooler's actuator is one effort, the air's share of full fans: 0 with the louvers shut, the natural draught (0.25) with them open and the fans still, 1 at full fans. Manual and the power switch set the fans with the louvers open, so the manual share keeps its meaning.
 - **Found in passing.** The menu edit rebuilt the device without a rack lane's width and face points, so a pipe laid on a rack could not change its diameter from its menu ("Invalid rack lane"). The edit now changes only what the menu edits (withers).
 
 W6 as built (2026-10-27):
@@ -463,7 +464,7 @@ W4 as built (2026-10-27), as section 6 describes, with these decisions (each rev
 - **When each plans.** An exchanger side's bypass is planned per slice, in `ExchangerRelay.plan`, because it needs the partner's read. The bypass and the wall are solved in turn until the bypass moves by less than 1e-6 (at most 8 rounds): the quasi-steady exchanger as planned meets the target at the partner as read. The study harness re-solved the wall once. An air cooler's fans are planned per step, in `PassiveStepSolver.plan` (W6's `fire`, renamed), as a fired coil's firing is.
 - **The low limit acts in every mode, manual included,** on a cooled side's own outlet. To protect a cooled stream, the player puts the controller on that stream's side.
 - **A set point on a plateau** names its liquid end on a cooled side and its vapour end on a heated side (`HeatCurve.lowestEnthalpyAt`, `enthalpyAt`). The target vapour fraction of section 6 is not built.
-- **The planned limit is a slice input of the law** (`HeatSide.limit`, `AirCooled.limit`), so the status line reads it exactly: "LIMITED: the bypass is closed / fully open", "LIMITED: the fans run at full speed / stand still, natural draught moves more", "LOW LIMIT: the outlet is held at X K".
+- **The planned limit is a slice input of the law** (`HeatSide.limit`, `AirCooled.limit`), so the status line reads it exactly: "LIMITED: the bypass is closed / fully open", "LIMITED: the fans run at full speed / the louvers are shut", "LOW LIMIT: the outlet is held at X K".
 - **The wake.** A partner's bypass that moves by more than 0.001 counts as its record moving (D4).
 - **Formats.** State format 27 (a heat side's controller and limit; tag 3, the air cooler's law); certificate graph identity 6. The facts are unchanged: W2's control fields carry the mode, set point, low limit and manual share.
 - **Screen.** A controllable side shows a mode button, the set point (temperature, or duty in kW), an exchanger side's bypass in manual, an air cooler's fans button in manual, and the low limit (blank for none). The readings add the control, the low limit, the bypass and the fans as planned (`FluidView.Heat.bypass`; the wire's `Controls.heat`).
@@ -472,12 +473,12 @@ W4 as built (2026-10-27), as section 6 describes, with these decisions (each rev
 
 | Gate | Result |
 |---|---|
-| the controller on a known law | outlet and duty met to 1e-6; HIGHEST past full effort, LOWEST past the inlet or below natural draught; the low limit in manual and controlled modes; plateau ends |
+| the controller on a known law | outlet and duty met to 1e-6; HIGHEST past full effort, LOWEST past the inlet or below the lowest effort's heat; the low limit in manual and controlled modes; plateau ends |
 | exchanger cold side held at 45 °C (52.8 °C without), then the hot inlet +15 K, 5 s slices | outlet within 0.1 K; at most 0.70 K off after the step, within 0.1 K from 44 s; bypass 0.521 → 0.657; energy exact |
 | exchanger set point out of reach (80 °C) | bypass closed, LIMITED, the outlets at the steady state |
 | a controlled plan from a cold wall | 0.43 ms; the next slice from its own wall plans the same bypass |
 | air cooler held at 65 °C, then the inlet 85 → 75 °C | outlet within 0.1 K; fans 0.792 → 0.234 |
-| air cooler ends | full fans 62.7 °C (LIMITED at a 45 °C set point); natural draught 77.4 °C (LIMITED at 80 °C); a 67 °C low limit held |
+| air cooler ends | full fans 62.7 °C (LIMITED at a 45 °C set point); 80 °C held by the louvers above natural draught's 77.4 °C, the louvers shut above the inlet (LIMITED); a 67 °C low limit held |
 
 - **In-game.** The owner stopped the check after the air cooler's manual screen. It showed the rail in order and a low limit label cut at the rail's width, now shortened. The rest of the screen is judged by the gates and the rail's row count.
 - **Measured against section 6's evidence.** The step reaches the cold outlet through the hot side's inlet holdup. The cold side reads it as it arrives and plans its bypass on the same read, so its outlet moves 0.70 K at most, not the uncontrolled response the study's instant step gave.

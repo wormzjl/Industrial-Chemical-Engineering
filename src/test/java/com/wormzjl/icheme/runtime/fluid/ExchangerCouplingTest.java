@@ -533,7 +533,9 @@ class ExchangerCouplingTest {
                 rig.coordinator.certificationRefusal(rig.hotIsland),rig.coordinator.certificationRefusal(rig.coldIsland));
         assertTrue(rig.island(rig.hotIsland).certificate().isPresent()&&rig.island(rig.coldIsland).certificate().isPresent(),"both steady sides certify");
         boolean enabled=FluidRuntimeDiagnostics.ENABLED;FluidRuntimeDiagnostics.ENABLED=true;long wakes=FluidRuntimeDiagnostics.couplingWakes.sum();
-        long pair=PhysicalFluidTopology.sideIdentity(Math.min(HOT,COLD));double before=rig.transit();
+        // The transit as booked moves by -500 kJ: it holds the slice the side ahead booked past the other's commit, which
+        // the settled transit leaves out (the wake reads the settled one, so a clock offset wakes nothing).
+        long pair=PhysicalFluidTopology.sideIdentity(Math.min(HOT,COLD));double before=rig.booked();
         rig.coordinator.transit(pair,before-5e5);
         rig.run(10);rig.coordinator.snapshot(rig.hotIsland);rig.coordinator.snapshot(rig.coldIsland);rig.run(1);
         long woken=FluidRuntimeDiagnostics.couplingWakes.sum()-wakes;FluidRuntimeDiagnostics.ENABLED=enabled;
