@@ -36,6 +36,7 @@ The column uses the C++ library without a switch wherever it can load, and the J
 - Expected: PC03 (Tc 569 K, 123 g/mol) and PC10 (Tc 869 K, 382 g/mol) split sharply in 2 to 30 trays at reflux 2.
 - The code: every published success on that binary has distillate and bottoms at the feed's 50/50 (both phases the same, no split), and the audit accepts it, also for the nominal pilot that `V3ColdStartTest` requires to succeed. The Java path that ships does the same.
 - Proposal: its own task. The audit refuses a column whose phases do not split; the pilot gates move to a separating case.
+- Owner decision 2026-10-29: the case with the feed below its bubble point behaves as it should; it simulates what could happen. No task.
 
 ## 7. Options for the owner
 

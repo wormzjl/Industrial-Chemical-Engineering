@@ -1,6 +1,6 @@
 # Column operation: the column simulator in the plant (plan)
 
-Batch `2026-10-28-column-operation`. Base `ac572f12` (main, 0.17.0). Status: Planned. Design only: no code changed, no Gradle run. This is the "next stage" of [the multi-machine framework plan](../2026-10-26-multi-machine-framework/MULTI_MACHINE_FRAMEWORK_PLAN.md) (its section 14.4: D5, D7, D14, D16) and W9 of [the heat exchanger plan](../2026-10-27-heat-exchanger-design/HEAT_EXCHANGER_PLAN.md). Owner questions: section 15.
+Batch `2026-10-28-column-operation`. Base `ac572f12` (main, 0.17.0). Status: decided 2026-10-29 (owner answers, section 15); implementation from 2026-10-29, C1 first. This is the "next stage" of [the multi-machine framework plan](../2026-10-26-multi-machine-framework/MULTI_MACHINE_FRAMEWORK_PLAN.md) (its section 14.4: D5, D7, D14, D16) and W9 of [the heat exchanger plan](../2026-10-27-heat-exchanger-design/HEAT_EXCHANGER_PLAN.md). Owner questions: section 15.
 
 Owner request 2026-10-28 (summary):
 
@@ -164,6 +164,8 @@ Every 100 online ticks (staggered by column), one worker job, committed on the s
 | A (recommended) | α = min(1, each inlet account / its demand, each buffer's room); every input taken at α × its rate; products and duties scale | none | ratio controllers cut together; a full buffer cuts the feed |
 | B | each input taken as available up to its rate; a changed steam ratio is a new intensive state | one per change; rule A where the solve fails (zero steam without a reboiler, the draw wall) | a unit that keeps its crude rate and strips less |
 
+**Owner decision Q1 (2026-10-29): bench B first, then B if it is affordable.** C1 times rule B's solves: warm solves at the new ratios for the steam short by 10, 25 and 50 % of its rate, and for a condenser 5 and 10 K warmer (a cooling-water limit, section 10), on the C1 designs. B is affordable when those solves take at most 1.5 s at the median and 5 s at the 95th percentile. The median keeps a column under 5 % of one worker at one solve per 30 s; the 95th percentile keeps a new table within its application at the second cycle. Then B is the rule, with A where a solve fails. Otherwise A, and the C1 review says why.
+
 - Absolute setpoints (draws and duties held whatever the feed) are not recommended. With the draws held, a feed cut raises their share of the tray liquid (ρ) about 1/(1 − cut) times, 1.43 times for a 30 % cut. That share meets the liquid-supply screen (ρ ≥ 0.30 rejected) and then the draw wall (ρ ≥ 1).
 - Rates above design (Q8): cap α at 1, or allow it up to a flood fraction from the table's hydraulics. Below about 30 to 50 % a real sieve tray weeps; V3 has no efficiency, so a turndown floor would be a rule, not physics.
 
@@ -197,6 +199,9 @@ Every 100 online ticks (staggered by column), one worker job, committed on the s
   - **Stage A (this batch).** The duties are HEAT boundaries named by member. The energy is exact; no utility flows.
   - **Stage B (recommended, a later batch: W9).** Those utility sides stay in the network as heat sides in DUTY mode, with the column as their partner. Only heat crosses, booked as the exchanger relay books its heat in transit. A side that cannot take its duty (LIMITED, DUTY INSUFFICIENT) bounds the column: under rule A it cuts the throughput, under rule B a new solve takes a warmer condenser. An air-cooled condenser has no utility stream: its own law (`AirCooled`) on the column's overhead curve gives its capacity. The member capacities (pumps, drum, kettle) come with it.
   - **Alternative.** Utility streams buffered like the feed, the column warming them by the duty at a design temperature rise. It copies the exchanger physics into the column; not recommended.
+- **The water-cooled condenser (owner 2026-10-29: in this batch, C6b).** A condenser that is a water-cooled exchanger member keeps its cooling-water side in the network while the column runs; only its process side joins the column unit. Suspending the whole member would dead-end the cooling-water line. The water side is a heat side in DUTY mode whose partner is the column, W9 for this one side. Each cycle the column's closed condenser duty goes to the water as heat, booked in transit as the exchanger relay books it. The water leaves warmer by Q/(m c_p): 5 MW into 100 kg/s of water at 4.18 kJ/kg K warms it by 12 K.
+  - A water side that cannot take the duty is LIMITED: no flow, or water so warm that its outlet would pass the condenser's process outlet temperature less the approach. Rule A then cuts the throughput to what the water takes; rule B solves at a warmer condenser.
+  - The kettle's heating medium and the pumparound coolers stay HEAT boundaries (stage A) until stage B. So does an air-cooled condenser, which has no utility stream; its capacity comes with stage B.
 
 ## 11. Package, water, nitrogen and solids
 
@@ -237,22 +242,23 @@ Dismantling the column books every account as removed, named on the ledger, as `
 
 | WP | Content | Gates |
 |---|---|---|
-| C1 Measurement | Homogeneity (α 0.5 and 1.2, prescribed drop and hydraulics); the table's error against drift (feed temperature ±2, 5, 10 K; composition 1, 5, 10 % toward a lighter and a heavier network crude); warm solve success and time (dry, wet, a kettle design). Sets section 6's bands. | One sweep on the default design restated on the network package, and one kettle design; review of at most 50 lines; no product code |
+| C1 Measurement | Homogeneity (α 0.5 and 1.2, prescribed drop and hydraulics); the table's error against drift (feed temperature ±2, 5, 10 K; composition 1, 5, 10 % toward a lighter and a heavier network crude); warm solve success and time (dry, wet, a kettle design); rule B's cost and the A-or-B decision (section 7). Sets section 6's bands. | One sweep on the default design restated on the network package, and one kettle design; a timing run alone on the machine; review of at most 50 lines; no product code |
 | C2 Operating point | Save design keeps the operating point; Import copies it; the Operation tab shows it, read only | `EquipmentShapeCompatTest` with `shapes-4.snbt`; `ColumnDesignCodecTest` |
 | C3 Column unit | The registry device and its facts; Start and Stop as queued events; the suspension; the ports; the constant-pressure buffer node | `FluidFactsCompatTest` with schema 6; chain-100 exact and the 33 junction lines identical (no vessel row changes); GameTests: Start and Stop keep the members' contents, ports split islands, a full buffer cuts the feed, dismantling books the accounts |
 | C4 Cycle | Accounts, split, energy closure, injections (`ScheduledTransfer`'s first runtime producer), valve operation, the fence and L | A conservation gate (components and energy exact over 1000 cycles of drifting feed); a determinism gate (two worker timings, identical products); a running-column GameTest |
 | C5 Solves | The first solve, the triggers, the warm and cold route, fixed application, failure and trip, the table as state | A trigger table test; a failed solve keeps the table; a reload resumes without a solve |
-| C6 Short inputs | Rule A, the outlet room, the statuses (rule B later) | α from the accounts; a blocked product cuts the feed; the prescribed-drop scaled table equals a new solve within closure |
-| C7 GUI | The Operation tab, the members' screens, the mover displays | Codec and presentation tests (a replay is a read; nothing unasked) |
-| C8 Merge prep | Code guide (a new chapter `column-operation.md`; README, machine-assemblies, fluid-runtime, fluid-science, column-v3); CHANGELOG; a minor version, chosen by the owner; tooling cleanup | `test` and `slowGates`; the final lane with the campaign, because the wall row changed |
+| C6 Short inputs | The rule C1 chose (B with A where a solve fails, or A), the outlet room, the statuses | α from the accounts; a blocked product cuts the feed; the prescribed-drop scaled table equals a new solve within closure; under B, a short steam solves on the new ratio and a failed solve falls back to A |
+| C6b Water-cooled condenser | The condenser's water side stays in the network as a DUTY heat side with the column as partner; the duty in transit; LIMITED cuts the throughput (A) or warms the condenser (B) | Conservation including the water's heat; a GameTest: a running column warms its cooling water by Q/(m c_p); a water shortage limits the column |
+| C7 GUI | The Operation tab, the members' screens, the mover displays | Codec and presentation tests (a replay is a read; nothing unasked); a drawing to the owner first |
+| C8 Merge prep | Code guide (a new chapter `column-operation.md`; README, machine-assemblies, fluid-runtime, fluid-science, column-v3, heat-exchangers); CHANGELOG; a minor version, chosen by the owner; tooling cleanup | `test` and `slowGates`; the final lane with the campaign, because the network solver gains a node kind |
 
-Later batches: stage B (heat utilities through W9, member capacities), stage C (vacuum: the ejector, its motive steam, node 0 at the drum's pressure, with the VDU batch), rule B.
+Later batches: stage B (the other heat utilities through W9, the air-cooled condenser, member capacities), stage C (vacuum: the ejector, its motive steam, node 0 at the drum's pressure, with the VDU batch), rule B if C1 finds it unaffordable.
 
 ## 15. Owner questions
 
 | # | Question | Options | Recommended |
 |---|---|---|---|
-| Q1 | Short inputs | A: one α for every input; B: inputs as available, solve on the new ratios; B with A where it fails | A now, B later |
+| Q1 | Short inputs | A: one α for every input; B: inputs as available, solve on the new ratios; B with A where it fails | decided 2026-10-29: bench B's cost in C1; B with A where it fails if affordable (section 7), else A |
 | Q2 | Setpoints while running | per unit feed (ratio control); absolute rates | per unit feed |
 | Q3 | Outlet form | decided 2026-10-28: constant-pressure variable-volume buffers (pressure fixed, inventory free, bounded by capacity); rejected: padded vessels in the wall row, generator outlets (conservation not by construction, D14) | decided |
 | Q4 | Timing | fence with the lag L = 22 s (deterministic); reads at dispatch (form B: no waits, timing-dependent) | fence |
@@ -263,6 +269,8 @@ Later batches: stage B (heat utilities through W9, member capacities), stage C (
 | Q9 | Feed water | a steam feed at the feed stage; straight to the sour water | steam feed |
 | Q10 | Wet columns (free water on trays) | accept cold solves (2.3 to 9 s); extend the warm route to wet seeds in C5 | accept now; extend if C1 shows many wet designs |
 | Q11 | Vacuum columns | not runnable until the VDU batch | as stated |
+
+**Owner answers 2026-10-29:** Q1 as in its row; Q3 decided 2026-10-28; Q2 and Q4 to Q11 as recommended; Q7 with the water-cooled condenser in this batch (section 10, C6b).
 
 **Defaults taken (reversible):** ports at the valves' inner ends; members suspended with their contents kept; V3 on the network's package; the bands of section 6 until C1; a 100-tick cycle; inlet accounts aiming at 30 s; buffer vessels of 120 s; at most one solve per 30 s; a trip at a 50 % closure departure; static heads in the port pressures; inside-line friction left out.
 
