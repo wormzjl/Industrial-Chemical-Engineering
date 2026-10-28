@@ -27,11 +27,13 @@ import static org.junit.jupiter.api.Assertions.*;
 class ColumnRunTest {
     /** The ports' bookings, summed by port node, beside the column's own. */
     static final class Counting implements IslandCoordinator.Ports {
-        final IslandCoordinator.Ports inner;final Map<Long,double[]> moles=new HashMap<>();
+        final IslandCoordinator.Ports inner;final Map<Long,double[]> moles=new HashMap<>();final Map<Long,Double> heat=new HashMap<>();
         Counting(IslandCoordinator.Ports inner){this.inner=inner;}
         public boolean ready(long island,PassiveNetwork graph,long start){return inner.ready(island,graph,start);}
         public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice){return inner.plans(island,graph,slice);}
+        public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit){return inner.heatRead(side,partner,start,seconds,transit);}
         public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
+            for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);
             for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE){var sum=moles.computeIfAbsent(b.nodeId(),id->new double[b.moles().length]);var n=b.moles();for(int i=0;i<n.length;i++)sum[i]+=n[i];}
             inner.booked(island,graph,start,end,result);
         }
@@ -42,18 +44,26 @@ class ColumnRunTest {
         return new PhysicalFluidTopology.Device(id,at,kind,toward,g.geometry,new FlowControl.Passive(),List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK)),
                 true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
     }
+    /** A heat side from x = 2 to 4 along row {@code z}. */
+    private static PhysicalFluidTopology.Device heatSide(long id,int z,com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry passage,HeatUnit heat) {
+        var in=new PhysicalFluidTopology.Position(EventPathWorld.DIM,2,64,z);var out=new PhysicalFluidTopology.Position(EventPathWorld.DIM,4,64,z);
+        var ports=List.of(new PhysicalFluidTopology.Port(in,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),new PhysicalFluidTopology.Port(out,Direction.EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.OUTLET));
+        return new PhysicalFluidTopology.Device(id,in,Kind.HEAT_SIDE,Direction.NORTH,passage,new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+    }
     private record PipeResistanceGeometry(com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry geometry) {}
     private static double sum(double[] n){double s=0;for(double v:n)s+=v;return s;}
 
-    private record Rig(EventPathWorld world,ColumnOperation ops,Counting counting,long unit,long feed,long product,long tank,long steamSource){}
+    private record Rig(EventPathWorld world,ColumnOperation ops,Counting counting,long unit,long feed,long product,long tank,long steamSource,long waterSource,long tube,long shell){}
     /** A 3 bar nitrogen feed line into a feed port, a distillate port out to a tank, a table sending everything to the distillate; jobs taking {@code lag} ticks. */
     private Rig rig(int lag){return rig(lag,null);}
     private Rig rig(int lag,Fake solves){return rig(lag,solves,false,false);}
+    private Rig rig(int lag,Fake solves,boolean steam,boolean blocked){return rig(lag,solves,steam,blocked,false);}
     /**
      * The rig with its tables from {@code solves}, or installed at once where null; with {@code steam}, a 450 K steam line into
-     * a steam port at 0.2 mol per mol of feed; with {@code blocked}, nothing downstream of the product valve.
+     * a steam port at 0.2 mol per mol of feed; with {@code blocked}, nothing downstream of the product valve; with
+     * {@code condenser}, a water-cooled condenser: a 3 bar cooling-water line through its tubes, its shell held by the column.
      */
-    private Rig rig(int lag,Fake solves,boolean steam,boolean blocked) {
+    private Rig rig(int lag,Fake solves,boolean steam,boolean blocked,boolean condenser) {
         var world=new EventPathWorld();world.lag=lag;var model=world.model;int m=model.componentCount();
         var n2=EventPathWorld.nitrogen().composition();
         long generator=world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,n2),.05);
@@ -61,25 +71,32 @@ class ColumnRunTest {
         long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST),tank=0,steamSource=0,steamValve=0;
         if(!blocked){world.place(12,64,0,Kind.PIPE,Direction.EAST,.05);tank=world.place(13,64,0,Kind.RESERVOIR,Direction.EAST);}
         var water=new double[m];water[m-1]=1;
+        long waterSource=0;
+        if(condenser){waterSource=world.place(0,64,4,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,300,300000,water),.05);world.place(1,64,4,Kind.PIPE,Direction.EAST,.05);world.place(5,64,4,Kind.PIPE,Direction.EAST,.05);world.place(6,64,4,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,200000,water),.05);}
         // The steam line is sized for its 0.1 mol/s (1 cm): a 5 cm valve regulating 6 g/s from 3 to 1.5 bar holds its island (README, open items).
         if(steam){steamSource=world.place(0,64,2,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,450,300000,water),.05);world.place(1,64,2,Kind.PIPE,Direction.EAST,.01);steamValve=world.place(2,64,2,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),.01);}
         var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.components(),model.molecularWeights());var counting=new Counting(ops);world.coordinator.ports(counting);
         world.runTo(40);
         // Start: a feed port inside the feed valve, a distillate port inside the product valve.
-        long unit=world.ledger.reserve(1);long feed=world.ledger.nextIdentity(),product=feed+1,steamPort=feed+2;
+        long unit=world.ledger.reserve(1);long feed=world.ledger.nextIdentity(),product=feed+1,steamPort=feed+2,tube=condenser?feed+3:0,shell=condenser?feed+4:0;
         var g=new PipeResistanceGeometry(world.registry.registrations().get(feedValve).device().geometry());
         var setpoints=new Setpoints(.5,.5,330,1,0,steam?new double[]{.2}:new double[0],new double[0],new double[0]);
         var stations=new ArrayList<>(List.of(new ColumnUnit.Station(Port.FEED,0,feed,feedValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,product,productValve,Account.empty(m))));
         if(steam)stations.add(new ColumnUnit.Station(Port.STEAM,0,steamPort,steamValve,Account.empty(m)));
-        world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,stations,ColumnUnit.Totals.empty(m)));
+        world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,stations,ColumnUnit.Totals.empty(m),tube));
         var edits=new ArrayList<>(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
                 new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0))));
         if(steam)edits.add(new WorldTopologyLedger.Edit(steamPort,new WorldTopologyLedger.Registration(port(steamPort,3,2,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,420,150000,n2),0)));
-        world.registry.submit(edits,steamPort+1,null);
+        if(condenser) {
+            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.ProcessUnit.tubeSurface(.5,3);
+            edits.add(new WorldTopologyLedger.Edit(tube,new WorldTopologyLedger.Registration(heatSide(tube,4,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE,area,shell)),new FluidDeviceSpec(1,300,300000,water),0)));
+            edits.add(new WorldTopologyLedger.Edit(shell,new WorldTopologyLedger.Registration(heatSide(shell,8,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,tube)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
+        }
+        world.registry.submit(edits,Math.max(steamPort,shell)+1,null);
         if(solves!=null){solves.model=model;ops.solves(solves);}
         ops.refresh();
         if(solves==null){var s=table(model,setpoints);ops.table(unit,s.table(),s.enthalpy());}
-        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource);
+        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell);
     }
 
     @Test void aRunningColumnTakesItsFeedAndGivesItsProductDownstreamConservingEveryComponent() {
@@ -286,5 +303,36 @@ class ColumnRunTest {
         // At the retry B is tried again: the steam still lost, it solves again, fails again, and A comes back.
         f.runTo(world.ledger.onlineTick()+1200);
         assertTrue(f.asked(DriftBands.Trigger.STEAM_RATIO).size()>asked.size(),"B tried again at the retry: "+f.asked(DriftBands.Trigger.STEAM_RATIO));
+    }
+    /**
+     * A water-cooled condenser (C6b, plan section 10): its tubes stay in the cooling-water line while its shell is the
+     * column's; the heat each cycle's condenser removes goes into transit to the water and the water takes it. Every joule
+     * the column's condenser removed is in the water or still in transit.
+     */
+    @Test void aWaterCooledCondenserGivesItsDutyToItsCoolingWater() {
+        var r=rig(0,null,false,false,true);var world=r.world();
+        world.runTo(4000);
+        var u=world.ledger.column(r.unit());
+        assertEquals(r.tube(),u.condenser());
+        double removed=-u.totals().condenser(),water=r.counting().heat.getOrDefault(PhysicalFluidTopology.sideIdentity(r.tube()),0.),owed=world.coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(r.tube()),PhysicalFluidTopology.sideIdentity(r.shell()),world.ledger.onlineTick());
+        assertTrue(removed>10000,"the column's condenser removed heat: "+removed+" J");
+        assertEquals(removed,water+owed,1e-6*removed,"the water took it or it is in transit: water "+water+" J, owed "+owed+" J");
+        assertTrue(water>.5*removed,"the water took most of it: "+water+" of "+removed+" J");
+        assertTrue(r.ops().status(r.unit()).startsWith("RUNNING")||r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
+        assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+    }
+    /** A cooling-water shortage limits the column (C6b): the water lost, the heat owed fills the condenser's hold and the throughput falls to nothing. */
+    @Test void aCoolingWaterShortageLimitsTheColumn() {
+        var r=rig(0,null,false,false,true);var world=r.world();
+        world.runTo(3000);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(r.waterSource(),null)),world.ledger.nextIdentity(),null);
+        world.runTo(7000);
+        double before=world.ledger.column(r.unit()).totals().taken().total();
+        world.runTo(8000);
+        var u=world.ledger.column(r.unit());
+        assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: condenser"),r.ops().status(r.unit()));
+        assertEquals(before,u.totals().taken().total(),1e-9,"no feed taken while the condenser cannot reject heat");
+        double hold=ColumnOperation.CONDENSER_HOLD_SECONDS*1000*.5,owed=world.coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(r.tube()),PhysicalFluidTopology.sideIdentity(r.shell()),world.ledger.onlineTick());
+        assertTrue(owed<=hold*1.2,"the heat owed stays near the hold: "+owed+" J of "+hold+" J");
     }
 }

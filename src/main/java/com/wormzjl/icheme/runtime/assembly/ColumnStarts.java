@@ -72,7 +72,15 @@ public final class ColumnStarts {
             spots.add(new FluidWorldAuthority.PortSpot(port, index, valve.device().id(), cell, toward, c.pressure(), c.temperature()));
         }
         var master = new PhysicalFluidTopology.Position(dimension, o.getX(), o.getY(), o.getZ());
-        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots), null);
+        // A water-cooled condenser's sides: the column holds its process side, its water side stays in the network (C6b).
+        var condenser = new ArrayList<Long>();
+        if (trays.components().condenser() != com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.AIR_COOLER)
+            for (var s : entry.report().slots())
+                if (s.slot().equals(ColumnBlueprint.CONDENSER)) {
+                    var member = EquipmentStructure.find(level, BlockPos.of(s.at()));
+                    if (member != null) condenser.addAll(EquipmentStructure.heatSides(world, level, member));
+                }
+        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser), null);
     }
 
     private static PhysicalFluidTopology.Direction opposite(PhysicalFluidTopology.Direction d) {

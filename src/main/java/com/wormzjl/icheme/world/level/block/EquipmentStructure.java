@@ -288,6 +288,16 @@ public final class EquipmentStructure {
         return found;
     }
 
+    /** The heat sides registered at {@code vessel}'s nodes, by registry identity: a heat unit's sides (a column's condenser, C6b). */
+    public static List<Long> heatSides(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+        var sides = new ArrayList<Long>();
+        for (long id : heldAtNodes(world, level, vessel)) {
+            var r = world.registrations().get(id);
+            if (r != null && r.device().heat() != null) sides.add(id);
+        }
+        return sides;
+    }
+
     /** The identities registered at {@code vessel}'s nodes. */
     private static List<Long> heldAtNodes(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
         var ids = new ArrayList<Long>();

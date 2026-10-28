@@ -286,7 +286,8 @@ final class FluidFacts {
         f.count(u.id());position(f,u.master());f.bool(u.running())
                 .record(q->setpoints(q,s))
                 .list(u.stations(),(q,st)->q.name(st.port()).count(st.index()).count(st.device()).count(st.valve()).record(a->account(a,st.account())))
-                .record(q->q.record(a->account(a,t.taken())).record(a->account(a,t.produced())).f64(t.reboiler()).f64(t.condenser()).f64(t.pumparounds()));
+                .record(q->q.record(a->account(a,t.taken())).record(a->account(a,t.produced())).f64(t.reboiler()).f64(t.condenser()).f64(t.pumparounds()))
+                .count(u.condenser());
     }
     private static ColumnUnit column(Record f) {
         long id=f.count(0);var master=position(f);boolean running=f.bool(false);
@@ -298,8 +299,9 @@ final class FluidFacts {
         var totals=f.record(null,q->{var taken=q.record(null,FluidFacts::account);var produced=q.record(null,FluidFacts::account);double reboiler=q.f64(0),condenser=q.f64(0),pumparounds=q.f64(0);
             required(taken,q,"taken total");required(produced,q,"produced total");
             return valid(q,"column totals",()->new ColumnUnit.Totals(taken,produced,reboiler,condenser,pumparounds));});
+        long condenser=f.count(0);
         required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
-        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals));
+        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condenser));
     }
     private static Fields setpoints(Fields q,com.wormzjl.icheme.science.column.operation.Setpoints s) {
         return q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())

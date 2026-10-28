@@ -80,7 +80,7 @@ public final class ColumnCycle {
 
     /** What bounded the throughput. */
     public enum Limit {
-        NONE, FEED, STEAM, OUTLET
+        NONE, FEED, STEAM, OUTLET, CONDENSER
     }
 
     /**
@@ -123,6 +123,15 @@ public final class ColumnCycle {
      */
     public static Step step(SplitTable table, Setpoints setpoints, double seconds, Account feed, List<Account> steam, double[] room,
                             ProductEnergy energy, boolean ruleA) {
+        return step(table, setpoints, seconds, feed, steam, room, Double.POSITIVE_INFINITY, energy, ruleA);
+    }
+
+    /**
+     * One cycle whose condenser can reject at most {@code condenserRoom} J (C6b: what its cooling water has not yet taken
+     * leaves less): a short condenser cuts the throughput as a full outlet does, by the table's solved duty per feed.
+     */
+    public static Step step(SplitTable table, Setpoints setpoints, double seconds, Account feed, List<Account> steam, double[] room,
+                            double condenserRoom, ProductEnergy energy, boolean ruleA) {
         Objects.requireNonNull(table, "table");
         int m = table.axis().size();
         double[] steamPerFeed = setpoints.steamPerFeed();
@@ -151,6 +160,14 @@ public final class ColumnCycle {
         if (alphaRoom < alpha) {
             alpha = alphaRoom;
             limit = Limit.OUTLET;
+        }
+        double duty = -table.condenserPerFeed() * demand;
+        if (duty > 0 && condenserRoom < Double.POSITIVE_INFINITY) {
+            double alphaCondenser = Math.max(0, condenserRoom) / duty;
+            if (alphaCondenser < alpha) {
+                alpha = alphaCondenser;
+                limit = Limit.CONDENSER;
+            }
         }
         if (ruleA)
             for (int j = 0; j < steam.size(); j++) {

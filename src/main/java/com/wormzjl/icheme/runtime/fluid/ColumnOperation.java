@@ -62,6 +62,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         long applyAt(){return tick+APPLY_TICKS;}
     }
 
+    /** Heat the cycle at {@code tick} put in transit to the condenser's water, J. */
+    record Owed(long tick,double joule) {}
+    /** The condenser holds at most this many seconds of its design duty its water has not taken, and its water leaves at least this far below the condensate (C6b, plan section 10). */
+    static final double CONDENSER_HOLD_SECONDS=60,APPROACH_KELVIN=5;
     /** Arrivals at an inlet over online ticks {@code start} to {@code end}: already in the account, a cycle takes none of it before its time. */
     record Span(long start,long end,Account arrived) {}
     /** A cycle's product credited to an outlet at {@code tick}. */
@@ -83,6 +87,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         boolean ruleA;
         /** The cycle that asked the table's solve and the cycle it applied at; V3's own condenser duty there, W; what the last solve said beyond its table. */
         long tableTick,applied;double solvedCondenser;String note="";
+        /** The heat booked into the condenser's transit, dated: what the water side reads through the fence (C6b). */
+        final ArrayDeque<Owed> owed=new ArrayDeque<>();
         final Map<Long,ArrayDeque<Span>> spans=new HashMap<>();
         final Map<Long,ArrayDeque<Credit>> credits=new HashMap<>();
         final Map<Long,ArrayDeque<Level>> levels=new HashMap<>();
@@ -98,6 +104,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private final Map<Long,Run> runs=new TreeMap<>();
     /** Each port device's unit and station, from the ledger's running units. */
     private final Map<Long,Long> portUnits=new HashMap<>();
+    /** Each running unit's condenser water side, by its connection ({@link PhysicalFluidTopology#sideIdentity}): the side whose heat partner the column is (C6b). */
+    private final Map<Long,Long> waterSides=new HashMap<>();
     /** The port devices whose islands a cycle's new plan reaches at a later tick (the cycle's tick plus the fence), by that tick. */
     private final TreeMap<Long,Set<Long>> wakes=new TreeMap<>();
     private Solves solves=Solves.NONE;
@@ -111,12 +119,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
 
     /** Reads the ledger's running units again: after a Start, a Stop, a load. A unit that stopped forgets its state. */
     public void refresh() {
-        var units=topology.columns();portUnits.clear();
+        var units=topology.columns();portUnits.clear();waterSides.clear();
         runs.keySet().removeIf(id->{var u=units.get(id);return u==null||!u.running();});
         for(var u:units.values()) {
             if(!u.running())continue;
             runs.computeIfAbsent(u.id(),id->restore(u));
             for(var s:u.stations())if(s.device()!=0)portUnits.put(s.device(),u.id());
+            if(u.condenser()!=0)waterSides.put(PhysicalFluidTopology.sideIdentity(u.condenser()),u.id());
         }
         schedule();
     }
@@ -276,6 +285,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             Long owner=registry.owner(s.device());
             if(owner!=null&&!coordinator.through(owner,tick))return false;
         }
+        // The condenser's water side, through the fence the cycle reads its transit at.
+        if(u.condenser()!=0){Long owner=registry.owner(u.condenser());if(owner!=null&&!coordinator.through(owner,tick-FENCE_TICKS))return false;}
         return true;
     }
 
@@ -312,7 +323,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var energy=r.enthalpy;
         // Rule A stays until a solve succeeds; at its retry time the cycle tries B again, and a still short steam asks the solve again.
         if(r.ruleA&&r.pending==null&&tick>=r.retryAt)r.ruleA=false;
-        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;},r.ruleA);
+        // A water-cooled condenser rejects no more than its water has room for: the heat owed as of the fence against its hold.
+        double condenserRoom=Double.POSITIVE_INFINITY;long partner=partnerOf(u.condenser());
+        if(partner!=0)condenserRoom=CONDENSER_HOLD_SECONDS*Math.abs(t.condenserPerFeed())*u.setpoints().designFeedRate()-coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(u.condenser()),PhysicalFluidTopology.sideIdentity(partner),tick-FENCE_TICKS);
+        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;},r.ruleA);
         r.last=step;
         if(step.trip()!=null) {
             // The model has no steady state for this input (a capability limit): the inlets close, a solve of the state the
@@ -334,6 +348,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double pumparounds=0;for(double q:step.pumparounds())pumparounds+=q;
         totals=new ColumnUnit.Totals(totals.taken().plus(in),totals.produced().plus(out),totals.reboiler()+step.reboiler(),totals.condenser()+step.condenser(),totals.pumparounds()+pumparounds);
         topology.column(u.withStations(true,stations).withTotals(totals));
+        if(partner!=0)owe(r,u,partner,tick,-step.condenser());
         levels(r,u,available,tick,true);
         r.status=step.limit()==ColumnCycle.Limit.NONE?"RUNNING":String.format(Locale.ROOT,"LIMITED: %s, %.0f %%",step.limit().name().toLowerCase(Locale.ROOT),100*step.alpha());
         if(r.ruleA)r.status+=", inputs cut together (rule A)";
@@ -381,11 +396,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
 
     /** The fence (plan section 9): every cycle through {@code start - L} has run for each port the island holds, whose plans read it. */
     @Override public boolean ready(long island,PassiveNetwork graph,long start) {
-        if(portUnits.isEmpty())return true;
+        if(portUnits.isEmpty()&&waterSides.isEmpty())return true;
         for(var node:graph.reservoirs()) {
             Long unit=portUnits.get(node.id());if(unit==null)continue;
             var r=runs.get(unit);if(r!=null&&r.nextCycle<=start-FENCE_TICKS)return false;
         }
+        for(var p:graph.pipes()){Long unit=waterSides.get(p.id());var r=unit==null?null:runs.get(unit);if(r!=null&&r.nextCycle<=start-FENCE_TICKS)return false;}
         return true;
     }
     @Override public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice) {
@@ -481,8 +497,36 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 var account=new Account(held,s.account().energy()-debited);
                 var t=u.totals();u=withAccount(u,s,account).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
                 topology.column(u);
+                long partner=partnerOf(u.condenser());if(partner!=0&&r!=null)owe(r,u,partner,end,-(joule-debited));
             }
         }
+    }
+    /** The heat partner of the registered side {@code side}, or 0. */
+    private long partnerOf(long side) {
+        if(side==0)return 0;var r=registry.registrations().get(side);
+        return r==null||r.device().heat()==null?0:r.device().heat().partner();
+    }
+    /** Books {@code joule} (J) into the condenser's transit to its water at {@code tick}, and wakes the water side where it reads it. */
+    private void owe(Run r,ColumnUnit u,long partner,long tick,double joule) {
+        if(joule==0)return;
+        coordinator.owe(PhysicalFluidTopology.sideIdentity(u.condenser()),PhysicalFluidTopology.sideIdentity(partner),joule);r.owed.addLast(new Owed(tick,joule));
+        while(r.owed.size()>1&&r.owed.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)r.owed.removeFirst();
+        wakes.computeIfAbsent(tick+FENCE_TICKS,k->new TreeSet<>()).add(u.condenser());
+    }
+    /**
+     * A coupled side whose partner a running column holds (C6b): the condenser's water side reads the heat the column owes
+     * it as of its slice start less the fence (the transit now, less what the column booked after that), its outlet below
+     * the condensate by the approach; a side of a member the column holds otherwise moves no heat (a kettle's bundle, a
+     * pumparound cooler: their duties are the column's own, plan section 10, stage A).
+     */
+    @Override public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit) {
+        Long unit=waterSides.get(side);var r=unit==null?null:runs.get(unit);
+        if(r!=null) {
+            double due=transit;for(var o:r.owed)if(o.tick()>start-FENCE_TICKS)due-=o.joule();
+            return com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,Math.max(1,topology.column(unit).setpoints().condenserTemperature()-APPROACH_KELVIN));
+        }
+        var held=registry.registrations().get(partner-PhysicalFluidTopology.sideIdentity(0));
+        return held!=null&&held.device().suspended()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.NONE:null;
     }
     private static ColumnUnit withAccount(ColumnUnit u,ColumnUnit.Station s,Account account) {
         var next=new ArrayList<ColumnUnit.Station>();for(var st:u.stations())next.add(st==s||st.port()==s.port()&&st.index()==s.index()?st.withAccount(account):st);

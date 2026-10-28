@@ -357,9 +357,16 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     public record PortSpot(com.wormzjl.icheme.science.column.operation.Port port,int index,long valve,PhysicalFluidTopology.Position cell,
                            PhysicalFluidTopology.Direction toward,double pressure,double temperature) {}
-    /** A Start (plan 4.1): the column's origin, its setpoints, the pipe blocks in front of its nozzles, and its ports. */
+    /**
+     * A Start (plan 4.1): the column's origin, its setpoints, the pipe blocks in front of its nozzles, its ports, and the
+     * registrations of a water-cooled condenser's two sides (empty for an air cooler): the one the column does not hold is
+     * its water side (C6b).
+     */
     public record ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,
-                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots) {}
+                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser) {
+        public ColumnStart{condenser=List.copyOf(condenser);}
+        public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots){this(master,setpoints,nozzles,spots,List.of());}
+    }
     /** The most devices a column holds: its members and the pipes between them. */
     public static final int COLUMN_LIMIT=4096;
     /** The column unit of the column at {@code master}, or null. */
@@ -419,7 +426,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // Stations a stopped column kept and this start no longer has (the design lost a port) keep their accounts, stopped.
         if(existing!=null)for(var s:existing.stations())if(stations.stream().noneMatch(t->t.port()==s.port()&&t.index()==s.index()))
             return "the column's ports changed while it was stopped";
-        topology.column(new ColumnUnit(unit,request.master(),true,request.setpoints(),stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m)));
+        // The condenser's water side: of its two sides, the one outside the column, partnered with one inside (C6b).
+        long water=0;
+        for(long side:request.condenser()){var r=registrations().get(side);if(r!=null&&!inside.containsKey(side)&&r.device().heat()!=null&&inside.containsKey(r.device().heat().partner()))water=side;}
+        topology.column(new ColumnUnit(unit,request.master(),true,request.setpoints(),stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water));
         submit(edits,id);columns.refresh();
         IChemE.LOGGER.info("column status=STARTED master={},{},{} unit={} held={} ports={}",request.master().x(),request.master().y(),request.master().z(),unit,inside.size(),stations.size());
         return null;

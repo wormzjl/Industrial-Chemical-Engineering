@@ -237,6 +237,12 @@ public final class IslandCoordinator {
         boolean ready(long island,PassiveNetwork graph,long start);
         Map<Long,com.wormzjl.icheme.science.fluid.network.PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice);
         void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result);
+        /**
+         * The read of coupled side {@code side} whose other side {@code partner} a running column holds (C6b), at a slice from
+         * {@code start} of {@code seconds} s, the pair's heat in transit now {@code transit} (J): a column's condenser water
+         * side reads the heat the column owes it, a side of a held member moves no heat; null where no column holds the partner.
+         */
+        default com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit){return null;}
         Ports NONE=new Ports(){
             public boolean ready(long island,PassiveNetwork graph,long start){return true;}
             public Map<Long,com.wormzjl.icheme.science.fluid.network.PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice){return Map.of();}
@@ -1021,6 +1027,8 @@ public final class IslandCoordinator {
         var reads=new HashMap<Long,ExchangerRelay.Read>();long start=slice.startTick(),end=slice.endTick();
         for(long pipe:island.sides) {
             var side=coupled.get(pipe);if(side==null||side.kind==SideKind.RADIANT)continue;
+            var held=ports.heatRead(pipe,side.partner,start,slice.seconds(),transits.getOrDefault(side.pair(),0.));
+            if(held!=null){reads.put(pipe,held);continue;}
             var other=other(side);var otherSide=coupled.get(side.partner);
             if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)materialise(other);
             // A convection coil reads its radiant coil's heat as of the slice start (F1); one in this island plans it per step.
@@ -1044,7 +1052,7 @@ public final class IslandCoordinator {
             var side=coupled.get(pipe);if(side==null)continue;
             double joule=heat(result,pipe);
             if(joule!=0&&side.kind==SideKind.EXCHANGER)transits.merge(side.pair(),-joule,Double::sum);
-            var other=other(side);side.prune(other==null?end:other.clock.committedTick());side.book(start,end,joule);
+            var other=other(side);side.prune(other==null?end-KEEP_UNREAD_TICKS:other.clock.committedTick());side.book(start,end,joule);
             var read=reads==null?null:reads.get(pipe);
             if(read!=null){if(read.stopped())side.stopped(start,end);side.read=true;side.readUsed=read.partner();side.rateUsed=read.heatRate();side.heatRate=joule/((end-start)/20.0);}
             side.record(new SideRecord(end,stream(island.graph,result.endpointFlows(),pipe),joule/((end-start)/20.0)));
@@ -1123,6 +1131,17 @@ public final class IslandCoordinator {
         return joule+a.bookedPast(behind)+b.bookedPast(behind);
     }
     /** Restores an exchanger's heat in transit, J, from the world's facts (a load). */
+    /** A side whose other side has no island keeps its booked spans this long, for an as-of read of its transit (C6b). */
+    static final long KEEP_UNREAD_TICKS=4000;
+    /** Books {@code joule} more into the heat the pair of {@code side} and {@code partner} holds in transit, J (a running column's condenser, C6b). */
+    public void owe(long side,long partner,double joule) {
+        owned();if(!Double.isFinite(joule))throw new IllegalArgumentException("Invalid heat in transit");
+        long pair=Math.min(side,partner);double next=transits.getOrDefault(pair,0.)+joule;if(next==0)transits.remove(pair);else transits.put(pair,next);
+    }
+    /** The pair's heat in transit as of {@code tick}, as far as {@code side}'s bookings go: now, with the heat it booked past the tick given back, J. */
+    public double transitAsOf(long side,long partner,long tick) {
+        owned();var s=coupled.get(side);return transits.getOrDefault(Math.min(side,partner),0.)+(s==null?0:s.bookedPast(tick));
+    }
     public void transit(long pair,double joule) {
         owned();if(!Double.isFinite(joule))throw new IllegalArgumentException("Invalid heat in transit");
         if(joule==0)transits.remove(pair);else transits.put(pair,joule);
