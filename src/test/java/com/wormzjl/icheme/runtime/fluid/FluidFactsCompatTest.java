@@ -360,14 +360,16 @@ class FluidFactsCompatTest {
      * 2026-10-28-old-mover-removal (image under {@code compat/removed-movers/}, writer in
      * {@code tools/old-mover-removal/image-writer/}). The owner removed them whole (decision 2026-10-28), so the world
      * opens without them: its islands rebuild from the other facts, every vessel keeps its stock (a mover holds none),
-     * and the rebuilt world saves as an exact checkpoint.
+     * and the rebuilt world saves as an exact checkpoint. The image predates the virial steam of
+     * {@code separate-free-water-v3}, so the load names the property data's change, its first reason; the movers go all
+     * the same, logged by {@code FluidFacts}.
      */
     @Test void aWorldWithOneBlockMoversOpensWithoutThemAndKeepsEveryVessel() throws IOException {
         var folder=Path.of("src/test/resources/compat/removed-movers");var image=read(folder);
         var expected=new Properties();try(var in=Files.newBufferedReader(folder.resolve("expected.properties"))){expected.load(in);}
         var loaded=load(image,key->model,CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,loaded.route());
-        assertTrue(loaded.reason().contains("one-block movers"),loaded.reason());
+        assertTrue(loaded.reason().contains("property data of package "+PACKAGE+" changed"),loaded.reason());
         var ledger=loaded.world().orElseThrow();
         assertEquals(Integer.parseInt(expected.getProperty("registrations"))-Integer.parseInt(expected.getProperty("movers")),ledger.active().size(),"every other registration kept");
         assertTrue(ledger.active().values().stream().noneMatch(r->r.device().kind()==Kind.PUMP||r.device().kind()==Kind.COMPRESSOR),"no mover left");
