@@ -11,6 +11,7 @@ Batch 2026-10-28-gui-toolkit, 2026-10-28, branch `claude/gui-toolkit`. Owner: "R
 5. New, owner 2026-10-28: display keys (a unit, a basis) change what the screens show, not the plant. They are flat black keys in a tray engraved into the door, at the footer's right (owner: "C looks better"); Close, Apply and the other push buttons stay raised (plan section 12).
 6. New, owner 2026-10-28: the theme and the units are the client's, one switch for every screen, kept in `icheme-client.toml`; no unit reaches the server. The theme key is a sign, not a word (plan section 12).
 7. Every screen draws through the kit and the light or dark theme.
+8. New, owner 2026-10-28: alignment ("make alignment a rule for GUI creating"). In a column, every box has one width and one place, every unit one place after it; a group's labels stand all beside their boxes or all above. Kept in the `gui-creation` skill (plan section 14).
 
 ## Findings
 
@@ -29,7 +30,7 @@ The prototypes are in `tmp/gui-prototypes/` (both doors on each sheet), drawn th
 
 - The column calculator's tray dP field is gone (owner: "outdated"). The draft keeps the base value (`V3EditorDraft`, `unchanged("s8")`); its hover text is removed, while the profile button still uses the label key.
 - The fluid screen's basis and unit keys are 40 px display keys on their strip (rule 5); flows also per minute; Celsius reads "°C". The units, the basis and the theme are the client's config; the column calculator reads its °C or K from it; the theme key shows a contrast sign (rule 6).
-- Units stay whole beside a meter: a wider unit narrows the box by 8 px at most (`Column.UNIT`, `UNIT_STEAL`), wider still it is the label's last line (plan section 14).
+- Units stay whole beside a meter: a unit wider than its place is the label's last line (`Column.UNIT`, plan section 14).
 
 ## Owner choices
 

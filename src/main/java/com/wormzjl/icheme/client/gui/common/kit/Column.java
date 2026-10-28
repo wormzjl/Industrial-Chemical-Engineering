@@ -45,9 +45,10 @@ public final class Column {
 
     /**
      * A labelled entry, a value the player types: its key, label, unit and hint; its box ({@link #BOX} px) at the row's
-     * right, the unit after the box. A label wider than its share of the row wraps beside the box in two lines, its words
-     * whole; one that needs more lines, or holds a word wider than its share, goes above the box, wrapped to the row (the
-     * box where it always is; owner: "This Arrangement is not good", GUI_TOOLKIT_PLAN.md section 13).
+     * right, the unit after the box in its {@link #UNIT} px. A label wider than its share of the row wraps beside the box in
+     * two lines, its words whole; where a label of its group needs more lines, or holds a word wider than its share, the
+     * group's labels go above their boxes, wrapped to the row (the box where it always is; owner: "This Arrangement is not
+     * good", GUI_TOOLKIT_PLAN.md sections 13 and 14).
      */
     public record Field(String key, String label, String unit, @Nullable String hint) implements Row {
     }
@@ -111,8 +112,8 @@ public final class Column {
         }
     }
 
-    /** A field's box (six 7-segment digits); a widget's height; the gap between buttons side by side. */
-    public static final int BOX = 54, WIDGET = 18, BUTTON_GAP = 4;
+    /** A field's or a meter's box, the same in every row (five 7-segment digits); a widget's height; the gap between buttons side by side. */
+    public static final int BOX = 46, WIDGET = 18, BUTTON_GAP = 4;
     /** A group: its rows' inset from the frame, its plate's height over the plate's lines, the gap under the frame. */
     public static final int INSET = 4, PLATE_PAD = 4, GROUP_GAP = 4;
 
@@ -132,12 +133,13 @@ public final class Column {
             if (line < Measure.LINE || field < WIDGET || buttons < WIDGET || bar < 8) throw new IllegalArgumentException("Rows lower than what they draw");
         }
     }
-    /** A field row's label width: the row less the box, the unit and their gaps. */
+    /** A field row's label width: the row less the box, the unit and their gaps (4 + {@link #BOX} + 3 + {@link #UNIT}). */
     public static final int FIELD_TAIL = 76;
-    /** A unit's own width after the box; a wider unit narrows the box, by {@link #UNIT_STEAL} at most. */
-    public static final int UNIT = 15;
-    /** The most a unit takes from its box, which keeps five 7-segment digits; a unit wider still is the label's last line. */
-    public static final int UNIT_STEAL = 8;
+    /**
+     * A unit's place after the box, the same in every row (°C, bar, kPa, m/s, kg/s, m³/h): boxes and units stand in line
+     * down a column (owner: "Try to align them somehow", "make alignment a rule"). A wider unit is the label's last line.
+     */
+    public static final int UNIT = 23;
 
     /**
      * A row as placed: its rect, its widget slots by key, the lines it draws, how many of them lead (a field's label;
@@ -178,12 +180,11 @@ public final class Column {
     /**
      * Places {@code rows} into {@code out}, a group before its own rows; returns the bottom. The entries and meters of one
      * group share one arrangement (owner: "This Arrangement is not good", "Try to align them somehow"): every label
-     * beside its box, or every label above it; and one box width, so their units start in line.
+     * beside its box, or every label above it. Every box has one width and one place in its row, so boxes and units stand
+     * in line down the column whatever the rows hold.
      */
     private static int place(List<? extends Row> rows, int x, int y, int w, Measure m, Metrics h, List<Placed> out) {
-        var labelled = rows.stream().filter(row -> row instanceof Field || row instanceof Reading).toList();
-        boolean beside = labelled.stream().allMatch(row -> beside(label(row), unit(row), w, m));
-        int steal = Math.clamp(labelled.stream().map(Column::unit).filter(unit -> !under(unit, m)).mapToInt(unit -> m.width(unit) - UNIT).max().orElse(0), 0, UNIT_STEAL);
+        boolean beside = rows.stream().filter(row -> row instanceof Field || row instanceof Reading).allMatch(row -> beside(label(row), unit(row), w, m));
         int at = y;
         for (var row : rows) {
             if (row instanceof Group g) {
@@ -195,7 +196,7 @@ public final class Column {
                 out.set(index, new Placed(g, new Rect(x, at, w, bottom + GROUP_GAP - at), Map.of(), title, title.size(), g.hint()));
                 at = bottom + GROUP_GAP;
             } else {
-                var p = place(row, x, at, w, m, h, beside, steal);
+                var p = place(row, x, at, w, m, h, beside);
                 out.add(p);
                 at = p.rect().bottom();
             }
@@ -211,9 +212,9 @@ public final class Column {
         return row instanceof Field f ? f.unit() : ((Reading) row).unit();
     }
 
-    /** Whether {@code unit} is wider than its place and what a box can spare: then it is the label's last line. */
+    /** Whether {@code unit} is wider than its place after the box: then it is the label's last line. */
     private static boolean under(String unit, Measure m) {
-        return m.width(unit) > UNIT + UNIT_STEAL;
+        return m.width(unit) > UNIT;
     }
 
     /** Whether a label (and a unit under it) fits beside its box: two lines at most, every word whole in the share. */
@@ -228,7 +229,7 @@ public final class Column {
         return lines <= 2 && words.stream().allMatch(word -> m.width(word) <= share);
     }
 
-    private static Placed place(Row row, int x, int y, int w, Measure m, Metrics h, boolean beside, int steal) {
+    private static Placed place(Row row, int x, int y, int w, Measure m, Metrics h, boolean beside) {
         var slots = new LinkedHashMap<String, Rect>();
         return switch (row) {
             case Line l -> {
@@ -244,8 +245,8 @@ public final class Column {
                 var lines = m.wrap(c.title(), w - 12);
                 yield new Placed(row, new Rect(x, y, w, h.line() + (lines.size() - 1) * Measure.LINE), slots, lines, lines.size(), c.hint());
             }
-            case Field f -> labelled(row, f.key(), f.label(), f.unit(), f.hint(), x, y, w, m, h, beside, steal);
-            case Reading r -> labelled(row, r.key(), r.label(), r.unit(), r.hint(), x, y, w, m, h, beside, steal);
+            case Field f -> labelled(row, f.key(), f.label(), f.unit(), f.hint(), x, y, w, m, h, beside);
+            case Reading r -> labelled(row, r.key(), r.label(), r.unit(), r.hint(), x, y, w, m, h, beside);
             case Buttons b -> {
                 // Side by side while every text fits its button; else one button a row, each the whole width.
                 int n = b.buttons().size(), bw = (w - BUTTON_GAP * (n - 1)) / n;
@@ -268,20 +269,20 @@ public final class Column {
     }
 
     /**
-     * An entry's or a meter's row, as its group arranges them ({@code beside}, {@code steal}). Its label beside the box,
-     * wrapped to two lines; or above the box, wrapped to the row. Every box of the group starts where the others do and
-     * gives its unit {@code steal} px past the unit's own 15 px, up to {@link #UNIT_STEAL} (m/s, kPa); a unit wider still
+     * An entry's or a meter's row, as its group arranges them ({@code beside}). Its label beside the box, wrapped to
+     * two lines; or above the box, wrapped to the row. Its box is {@link #BOX} px at the same place in every row, its unit
+     * after it in {@link #UNIT} px, so boxes and units stand in line down the column; a unit wider than that place
      * (kmol/min, m³/min) is the label's last line, as a meter's legend plate reads "Flow, kmol/min".
      */
     private static Placed labelled(Row row, String key, String label, String unit, @Nullable String hint, int x, int y, int w, Measure m, Metrics h,
-                                   boolean beside, int steal) {
+                                   boolean beside) {
         boolean under = under(unit, m);
         var lines = new ArrayList<>(m.wrap(label, beside ? w - FIELD_TAIL : w));
         if (under) lines.add(unit);
         int above = beside ? 0 : h.line() + (lines.size() - 1) * Measure.LINE;
         var texts = new ArrayList<>(lines);
         texts.add(under ? "" : unit);
-        return new Placed(row, new Rect(x, y, w, above + h.field()), Map.of(key, new Rect(x + w - FIELD_TAIL + 4, y + above, BOX - steal, WIDGET)), texts,
+        return new Placed(row, new Rect(x, y, w, above + h.field()), Map.of(key, new Rect(x + w - FIELD_TAIL + 4, y + above, BOX, WIDGET)), texts,
                 lines.size(), hint != null ? label + "\n" + hint : null);
     }
 

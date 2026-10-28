@@ -91,13 +91,29 @@ class DeviceColumnTest {
                 for (var p : column.rows()) {
                     assertTrue(p.rect().x() >= bounds.x() && p.rect().right() <= bounds.right(), c.name() + " at " + width);
                     for (var t : p.texts()) assertTrue(M.width(t) <= p.rect().w(), c.name() + " a text cut at " + width + ": " + t);
-                    for (var s : p.slots().values()) assertTrue(s.inside(p.rect()) && s.w() >= (p.row() instanceof Column.Buttons ? 40 : 30), c.name() + " a box at " + width + ": " + s);
+                    for (var s : p.slots().values()) assertTrue(s.inside(p.rect()) && s.w() >= 40, c.name() + " a box at " + width + ": " + s);
                     if (p.row() instanceof Column.Group g) assertEquals(1, p.texts().size(), c.name() + " a plate in one line at " + width + ": " + g.title());
                     if (p.row() instanceof Column.Reading r) assertTrue(p.texts().contains(r.unit()), c.name() + " a unit whole at " + width + ": " + r.unit());
                     if (p.row() instanceof Column.Field f) assertTrue(p.texts().contains(f.unit()), c.name() + " a unit whole at " + width + ": " + f.unit());
                 }
                 column.slots();
+                assertInLine(column, c.name() + " at " + width);
             }
+    }
+
+    /**
+     * Owner: "Try to align them somehow", "make alignment a rule for GUI creating": in a column, every entry's and meter's
+     * box has one place and one width, and every unit after a box fits its one place, so they stand in line.
+     */
+    static void assertInLine(Column column, String what) {
+        var boxes = new java.util.HashSet<List<Integer>>();
+        for (var p : column.rows())
+            if (p.row() instanceof Column.Field || p.row() instanceof Column.Reading) {
+                var box = p.slots().values().iterator().next();
+                boxes.add(List.of(box.x(), box.w()));
+                assertTrue(M.width(p.texts().getLast()) <= Column.UNIT, what + ": a unit wider than its place after the box: " + p.texts().getLast());
+            }
+        assertTrue(boxes.size() <= 1, what + ": boxes out of line " + boxes);
     }
 
     /** The widgets' slots, by key: a field's and a button's, not a meter's. */

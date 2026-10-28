@@ -325,26 +325,26 @@ class KitLayoutTest {
     }
 
     /**
-     * A wide unit narrows its group's boxes by 8 px at most, which keeps five 7-segment digits, so the units start in line;
-     * wider still, it is the label's last line (GUI_TOOLKIT_PLAN.md section 14). No unit is cut.
+     * Owner: "Try to align them somehow", "make alignment a rule for GUI creating" (GUI_TOOLKIT_PLAN.md section 14): every
+     * box of a column has one width and one place, its unit after it in one place, whatever unit a row holds; a unit wider
+     * than its place is the label's last line. No unit is cut.
      */
     @Test
-    void aWideUnitNarrowsItsGroupsBoxesALittleThenGoesUnderItsLabel() {
-        var rows = List.<Column.Row>of(new Column.Reading("v", "Speed", "1.6", "m/s", null), new Column.Reading("f", "Flow", "120.0", "kmol/min", null),
-                new Column.Reading("t", "Outlet", "45.0", "C", null));
-        var column = Column.place(rows, 0, 0, 150, M);
-        int boxX = 150 - Column.FIELD_TAIL + 4;
-        var speed = column.rows().get(0);
-        assertEquals(new Rect(boxX, 0, Column.BOX - 3, Column.WIDGET), speed.slots().get("v"), "18 px of unit: 3 px from the box");
-        assertEquals("m/s", speed.texts().getLast());
-        var flow = column.rows().get(1);
-        assertEquals(new Rect(boxX, 24, Column.BOX - 3, Column.WIDGET), flow.slots().get("f"), "48 px of unit: under the label, the box as wide as the others");
-        assertEquals(List.of("Flow", "kmol/min"), flow.texts().subList(0, flow.lead()));
+    void everyBoxAndUnitStandsInLineAndAWideUnitGoesUnderItsLabel() {
+        var column = Column.place(List.of(
+                new Column.Group("Set point", null, List.of(new Column.Field("q", "Flow", "m3/h", null), new Column.Field("t", "Outlet", "C", null))),
+                new Column.Group("Readings", null, List.of(new Column.Reading("v", "Speed", "1.6", "m/s", null), new Column.Reading("f", "Flow", "120.0", "kmol/min", null)))),
+                0, 0, 150, M);
+        int boxX = 150 - Column.INSET - Column.FIELD_TAIL + 4;
+        var boxes = column.rows().stream().filter(p -> p.row() instanceof Column.Field || p.row() instanceof Column.Reading).map(p -> p.slots().values().iterator().next()).toList();
+        assertEquals(4, boxes.size());
+        for (var box : boxes) assertEquals(List.of(boxX, Column.BOX), List.of(box.x(), box.w()), "one width and one place down the column: " + box);
+        var flow = column.rows().get(5);
+        assertEquals(List.of("Flow", "kmol/min"), flow.texts().subList(0, flow.lead()), "48 px of unit in a 23 px place: under the label");
         assertEquals("", flow.texts().getLast(), "nothing after the box");
-        assertEquals(new Rect(boxX, 48, Column.BOX - 3, Column.WIDGET), column.rows().get(2).slots().get("t"), "a narrow unit's box in line: the units start together");
+        assertEquals("m/s", column.rows().get(4).texts().getLast(), "18 px of unit: after the box");
         var flows = Column.place(List.of(new Column.Reading("f", "Mass flow", "2.5", "kg/min", null)), 0, 0, 150, M).rows().getFirst();
         assertEquals(List.of("Mass flow", "kg/min"), flows.texts().subList(0, flows.lead()), "the label's words and the unit, each whole");
-        assertEquals(Column.BOX, flows.slots().get("f").w(), "no unit after the box: the box whole");
     }
 
     /** Owner: "need to differentiate editable value fields with non-editable"; GUI_TOOLKIT_PLAN.md section 13. */

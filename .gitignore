@@ -51,7 +51,8 @@ docs/
 # Claude × Codex collaboration runtime files
 .collab/
 CLAUDE.md
-.claude/
+/.claude/*
+!/.claude/skills/
 
 # Local branch handoffs and standalone diagnostic tools
 /BRANCH_HANDOFF.md

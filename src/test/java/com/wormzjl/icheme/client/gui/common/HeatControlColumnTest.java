@@ -137,6 +137,7 @@ class HeatControlColumnTest {
                         if (p.row() instanceof Column.Group g) assertEquals(1, p.texts().size(), c.name() + " a plate in one line at " + width + ": " + g.title());
                     }
                     for (var key : column.slots().keySet()) assertTrue(keys.add(key), c.name() + " one widget per key: " + key);
+                    DeviceColumnTest.assertInLine(column, c.name() + " at " + width);
                 }
             }
         }

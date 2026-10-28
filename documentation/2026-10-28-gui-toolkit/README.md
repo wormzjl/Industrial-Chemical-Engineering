@@ -69,6 +69,11 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
   - Render tool: the device pages through the shipped column, opened and scrolled to the end, and a pipe page.
   - Gates: quick suite 1741, no failures (`DeviceColumnTest` 5, new; `KitLayoutTest` 14, one new; `HeatDiagramTest` 5, its key list without the rail's keys). The group alignment came after the suite; the GUI gates ran again (`KitLayoutTest` 14 with the label test rewritten, `DeviceColumnTest` 5, `HeatControlColumnTest` 5, `HeatDiagramTest` 5, `FluidGuiConsistencyTest` 5, `FlowsheetPainterTest` 3): no failures.
 
+- 2026-10-28: alignment as a rule for every GUI (owner: "align" on the Set point and Limit boxes, "make alignment a rule for GUI creating", "make a skill when job is done"; plan section 14), in the alignment commit.
+  - Kit: every box `Column.BOX` (46 px) at one place, every unit in `Column.UNIT` (23 px) after it; a wider unit is the label's last line. `UNIT_STEAL` and the per-group box width are gone.
+  - Gate: `DeviceColumnTest.assertInLine`, run by `DeviceColumnTest` and `HeatControlColumnTest` on every case at every width; `KitLayoutTest` 14 (the wide-unit test now checks the line). The GUI gates ran (`KitLayoutTest` 14, `DeviceColumnTest` 5, `HeatControlColumnTest` 5, `HeatDiagramTest` 5, `FluidGuiConsistencyTest` 5, `FlowsheetPainterTest` 3): no failures.
+  - The GUI rules are a project skill, `.claude/skills/gui-creation` (owner: not in `AGENTS.md`).
+
 ## Open
 
 - T1 to T3 (plan section 6) await the owner; built as (a).
