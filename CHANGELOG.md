@@ -15,9 +15,18 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Added
+
+- Heat exchangers (commits `dc493256`, `84eaf017`, `6cd7b8d1`, `f97e2317`, `5281f53e`, `2f170a24`, `6a96b09a`, `d47c80dc`, `4840441d`, `28ab7ee4`, `94f77273`, `38e29917`, `61de6055`, `19cf5006`, `7b84b7c3`, `2493ad16`, `d967e748`, `7607f1b7`, `8f78119b`, `1a339b18`, `968a6bf7`, `627d4c47`, `cef28f4a`, `e8465a72`, `8190466a`; merges `0b3922bd`, `acc6cddf`, main 0.16.2 `342c6d22`; batch `2026-10-27-heat-exchanger-design`, plan `HEAT_EXCHANGER_PLAN.md`, reviews `OWNER_TEST_REVIEW.md`, `MERGE_REVIEW.md`): a heat side is a fluid device whose UA scales with its unit's size. Shell-and-tube exchangers with an internal bypass or a real bypass assembly; the kettle, whose shell is a vessel with a pool the tubes boil; air coolers with fans and louvers; fired heaters, whose radiant coil fires to a set point and whose convection coil is a counterflow exchanger against the flue gas from an 800 °C bridgewall. An exchanger's two sides couple across islands through a fence relay. Built-in control holds an outlet temperature or a duty with the bypass, the fans or the burners. The units' Control tab shows the flowsheet, a stream switch and the line temperatures. A heat side's passage holds no fluid, so its ends hold up as their lines. Formats: fluid facts schema 5 (heat units; corpus `compat/fluid/schema-5`), checkpoint state 29, certificate graph identity 8, protocol `fluid-16`.
+
 ### Changed
 
+- An own GUI toolkit for the mod's screens (commits `c434dbb8`, `b6659c07`, `a779ce89`, `dd5b2cd5`, `55cfacd6`, `547ffe25`, `117fda23`, `940be0a9`, `9807336a`, `0d75e071`, `ffb64681`, `d8158bab`, `69560c5f`, `d301eb93`, `7f394f30`, `d365e786`, `e50707a8`, `709dee11`, `ccf7c5f1`, `3d777743`, `407688f7`, `8ec86fd4`, `c266a36c`; merge `09e84a81`; batches `2026-10-28-gui-toolkit-evaluation` (LDLib2 or an own kit, `GUI_TOOLKIT_REVIEW.md`) and `2026-10-28-gui-toolkit`, plan `GUI_TOOLKIT_PLAN.md`, review `GUI_REVIEW.md`): the device pages, the equipment constructor, the assembly screen, the column calculator and the small dialogs are drawn as control-panel doors with fixed boxes, units and display keys. Each screen takes its own whole GUI scale, the largest at which the window holds it. The calculator and its server request refuse a column diameter of 0, and the tray pressure drop is no longer an input: presets stop writing it and old files still load.
 - Water steam as a second-virial gas from IAPWS-IF97 Region 2 (option B of the owner test review; commits `3a527f1e`, `4521b65c`; batch `2026-10-27-heat-exchanger-design`, review `WATER_STEAM_VIRIAL_REVIEW.md`): the free water's steam has v = RT/p + B(T), h = h_ig + p(B - T dB/dT) and p_w = n_w RT/(V - n_w B), in the network state, the velocity stiffness and the phase engine alike (`SteamVirial`). The volume is within 1.05 % of Region 2 at 10 bar saturation (ideal 7.6 %). The steam's qualified partial pressure is the virial's own computed 2 % table: 1.8 MPa below 500 K up to 65 MPa from 875 K (ideal 0.125 to 2 MPa), so water at 10 bar no longer raises the "water vapour partial pressure" notice. Identity `separate-free-water-v3`: a world with free water restates once on load and keeps its facts (corpus `compat/fluid/steam-v2`).
+
+### Removed
+
+- The Holland Example 3-2 column preset, its server template and its separate solve path; its benchmark data and solver test stay (commit `c266a36c`, batch `2026-10-28-gui-toolkit`). A calculator block that saved it starts from the default column.
 
 ## [0.16.2] - 2026-10-28
 
