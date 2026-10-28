@@ -806,8 +806,8 @@ class ShapeRasterizerTest {
         // arrangement): the outlets leave at the front end, the feed enters at the far end. The boot hangs inboard of the
         // front saddle; the liquid outlet faces down from the bottom centre line beyond that saddle, on the shell or on the
         // head's bottom within 0.6 of its depth from the tangent line, its root inside the drum, its face on a block face
-        // under the shell with a block for its pipe above the ground. Its largest flange (0.8 m, at most D / 2) stands
-        // 0.15 m clear of both saddles; the boot stands whole cells behind it, at least two (one free block between their
+        // under the shell with a block for its pipe above the ground. Its largest flange (0.8 m, at most D / 2, or a
+        // smaller line's on the cell beside the saddle's column, owner decision 2026-10-28) stands 0.15 m clear of both saddles; the boot stands whole cells behind it, at least two (one free block between their
         // pipes), its shell clear of that flange. The vapour outlet stands on top nearer the front head than the default
         // inlet. Owner request 2026-10-25: every drum from 6 m long takes a boot; where the outlet has no room beyond the
         // front saddle it stays low on the front head (a 0.5 m drum has room on neither). The boot's and the outlet's pipes
@@ -818,7 +818,7 @@ class ShapeRasterizerTest {
             for (int length = 1; length <= 40; length++) {
                 var b = EquipmentShape.bootFor(d, length);
                 if (length >= 6 && d >= 1) assertNotNull(b, d + " x " + length);
-                double size = d, flange = PipeSizes.flange(Math.min(PipeSizes.MAX_OUTSIDE, d / 2)) / 2;
+                double size = d;
                 int tangent = length;
                 if (b == null) {
                     assertThrows(IllegalArgumentException.class, () -> drum(size, tangent, Orientation.HORIZONTAL, Heading.NORTH, EquipmentShape.MAX_SUPPORT, List.of(), true),
@@ -837,6 +837,13 @@ class ShapeRasterizerTest {
                     continue;
                 }
                 assertArrayEquals(new double[]{0, -1, b.outlet(), drum.axis()}, new double[]{outlet.axis(), outlet.sign(), outlet.base()[1], outlet.base()[2]}, 0, at);
+                // Its largest line: the drum's, or less beside the saddle (owner decision 2026-10-28), what a pipe laid on it may take.
+                var nozzles = drum.nozzles();
+                int k = 0;
+                while (nozzles.get(k).role() != EquipmentShape.Role.LIQUID_OUTLET) k++;
+                assertEquals(b.largest(), NozzleBore.largest(drum, k), 1e-12, at);
+                assertTrue(b.largest() >= NozzleBore.STEP && outlet.defaultOd() <= PipeSizes.outside(b.largest()) + 1e-9, at);
+                double flange = PipeSizes.flange(Math.min(Math.min(PipeSizes.MAX_OUTSIDE, d / 2), PipeSizes.outside(b.largest()))) / 2;
                 double face = outlet.face()[0];
                 assertEquals(Math.rint(face), face, 1e-9, at);
                 assertTrue(face <= drum.axis() - drum.radius() - EquipmentShape.STAND_OUT + 1e-9 && face - 1 >= -support - 1e-9, at + " face at " + face);
@@ -863,12 +870,15 @@ class ShapeRasterizerTest {
         // Owner decision 2026-10-25 (a reflux drum's drawing: saddles 500 mm inside the tangent lines of a 4000 mm drum, the
         // boot leaning to the outlet end, its centre about a quarter of T/T from the tangent line): the 3 x 9 drum's boot
         // hangs 2.75 m from its front tangent line, its oil outlet on its head's bottom beyond the saddle at 1.875 m; the
-        // 2 x 7 drum's 2 m (0.29 T/T), its outlet on the tangent line; the 2 x 6 drum's outlet stays on the front head; a
+        // 2 x 7 drum's 2 m (0.29 T/T), its outlet on the tangent line; the 2 x 6 drum's beside its saddle (below); a
         // 3 x 2 drum has no room for a boot between its saddles.
         assertArrayEquals(new double[]{3.5, .5}, new double[]{EquipmentShape.bootFor(3, 9).station(), EquipmentShape.bootFor(3, 9).outlet()}, 1e-12);
         assertArrayEquals(new double[]{2.5, .5}, new double[]{EquipmentShape.bootFor(2, 7).station(), EquipmentShape.bootFor(2, 7).outlet()}, 1e-12);
         assertEquals(2.5, EquipmentShape.bootFor(2, 6).station(), 1e-12);
-        assertTrue(Double.isNaN(EquipmentShape.bootFor(2, 6).outlet()));
+        // Owner decision 2026-10-28 (option A of batch 2026-10-28-drum-outlet-placement): the 2 x 6 drum's oil left its front
+        // head on the axis row; it faces down on its tangent line beside the saddle's column, a 0.5 m bore at most there.
+        assertArrayEquals(new double[]{.5, .5}, new double[]{EquipmentShape.bootFor(2, 6).outlet(), EquipmentShape.bootFor(2, 6).largest()}, 1e-12);
+        assertEquals(PipeSizes.MAX_BORE, EquipmentShape.bootFor(2, 7).largest(), 1e-12);
         assertNull(EquipmentShape.bootFor(3, 2));
         // Owner request 2026-10-25: a boot stops short of the block line its preferred depth (0.9 m or 0.6 D) would reach,
         // so its drum stands a block lower: 3 x 9 on 3 m saddles (were 4), 2 x 6 on 2 m (were 3).

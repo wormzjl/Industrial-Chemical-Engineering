@@ -11,8 +11,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * NOZZLE_ROOM_GATE_REVIEW). A column's nozzle takes a pipe up to the largest bore, in {@link #STEP}s, whose neck stands
  * clear of the rest of the column (its shell and head, decks, rails, ladders, davit and the other nozzles) beyond
  * {@link #SURFACE} from where it leaves the vessel, and never less than the pipe it was designed for: a column's access
- * stands round its nozzles, so the nozzle takes what its place allows. Every other kind takes a pipe's largest, as its
- * parts give way to it (owner decision 2026-10-21). Computed from the shape, never saved.
+ * stands round its nozzles, so the nozzle takes what its place allows. A boot drum's oil outlet beside its front saddle
+ * takes the bore that keeps its flange clear of the saddle ({@link EquipmentShape.Boot#largest}, owner decision
+ * 2026-10-28). Every other nozzle takes a pipe's largest, as its parts give way to it (owner decision 2026-10-21).
+ * Computed from the shape, never saved.
  */
 public final class NozzleBore {
     /** The bores tried, m. */
@@ -29,7 +31,11 @@ public final class NozzleBore {
 
     /** The largest bore of a pipe on nozzle {@code k} of {@code shape}, m. */
     public static double largest(EquipmentShape shape, int k) {
-        if (shape.kind() != EquipmentShape.Kind.COLUMN) return PipeSizes.MAX_BORE;
+        if (shape.kind() != EquipmentShape.Kind.COLUMN) {
+            // A boot drum's oil outlet beside its front saddle keeps its flange clear of it (EquipmentShape.bootFor).
+            var boot = shape.bootPlace();
+            return boot != null && !Double.isNaN(boot.outlet()) && shape.nozzles().get(k).role() == EquipmentShape.Role.LIQUID_OUTLET ? boot.largest() : PipeSizes.MAX_BORE;
+        }
         var bores = BORES.get(shape);
         if (bores == null) {
             if (BORES.size() >= CACHE) BORES.clear();

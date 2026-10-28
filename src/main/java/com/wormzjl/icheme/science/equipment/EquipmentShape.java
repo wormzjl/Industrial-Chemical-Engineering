@@ -554,9 +554,10 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * {@code length} under the shell, centred at frame height {@code station} along the drum. It hangs from the shell with
      * no support of its own. Its drum's liquid outlet stands underneath at frame height {@code outlet}, between the boot
      * and the front head (owner decision 2026-10-25), or, where {@code outlet} is NaN, low on the front head as a drum's
-     * without a boot.
+     * without a boot. {@code largest}: the largest bore that outlet takes, {@link PipeSizes#MAX_BORE} unless its flange
+     * must stay clear of the saddle ({@link #bootFor}).
      */
-    public record Boot(double station, double diameter, double length, double outlet) {
+    public record Boot(double station, double diameter, double length, double outlet, double largest) {
     }
 
     /**
@@ -575,8 +576,12 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * flange as clear of it (survey A: bottom nozzles clear the saddle by 0.15 m); the saddle between them keeps their
      * pipes a free block apart (owner rule 2026-10-17). The outlet may stand on the head's bottom near the tangent line,
      * its centre at most 0.6 of the head's depth beyond it, where the head's bottom is within 0.2 R of the shell's, and
-     * its largest neck short of the head's apex. Without that room it stays low on the front head (owner request
-     * 2026-10-25: every drum from 6 m long takes a boot). Each pipe drops through a block column clear of the saddles'
+     * its largest neck short of the head's apex. Where no such cell keeps a pipe's largest flange clear, the outlet
+     * stands on the cell centre next to the saddle's block column and takes a smaller largest bore, in
+     * {@link NozzleBore#STEP}s, whose flange stays as clear (owner decision 2026-10-28, option A of batch
+     * 2026-10-28-drum-outlet-placement: a 2 x 6 drum's oil left mid-height from its front head, on the axis row). Without
+     * that room it stays low on the front head (owner request 2026-10-25: every drum from 6 m long takes a boot). Each
+     * pipe drops through a block column clear of the saddles'
      * blocks. A drum whose saddles cannot keep the boot clear has none, nor one whose oil has room neither beyond the
      * saddle nor on its front head (a 0.5 m drum under 9 m).
      */
@@ -593,12 +598,22 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         double near = bT + SADDLE_POSITION * tangentLength, far = tT - SADDLE_POSITION * tangentLength;
         // Each pipe drops through a block column clear of the saddles' blocks.
         double half = SADDLE_WIDTH / 2;
-        double outlet = Math.min(Math.floor(near - saddle - flange - .5) + .5, Math.floor(near - half) - .5);
+        double beside = Math.floor(near - half) - .5, outlet = Math.min(Math.floor(near - saddle - flange - .5) + .5, beside);
         double station = Math.max(Math.ceil(near + clear - .5) + .5, Math.floor(near + half - 1e-9) + 1.5);
         if (station > Math.min(far - clear + 1e-9, Math.floor(far - half) - .5)) return null;
+        double largest = PipeSizes.MAX_BORE;
         boolean under = bT - outlet <= .6 * bT + 1e-9 && outlet > od / 2;
+        if (!under && bT - beside <= .6 * bT + 1e-9) {
+            // The cell beside the saddle's column, its largest flange (1.25 OD + 0.085 m, OD 1.1 bore) as clear of the saddle.
+            double room = near - saddle - beside, bore = Math.floor((2 * room - .085) / 1.25 / 1.1 / NozzleBore.STEP + 1e-9) * NozzleBore.STEP;
+            if (bore >= NozzleBore.STEP && beside > PipeSizes.outside(bore) / 2) {
+                outlet = beside;
+                largest = bore;
+                under = true;
+            }
+        }
         if (!under && headOutletLargest(diameter) <= .05) return null;
-        return new Boot(station, size, length, under ? outlet : Double.NaN);
+        return new Boot(station, size, length, under ? outlet : Double.NaN, under ? largest : PipeSizes.MAX_BORE);
     }
 
     /**
@@ -958,11 +973,12 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
             // A three-phase drum's oil leaves behind the overflow baffle beyond the boot (owner decision 2026-10-25, bootFor):
             // on the bottom centre line facing down, its root buried for its largest neck under the shell or, near the
             // tangent line, under the head's bottom where the neck's far edge meets it, its face on the next block face
-            // under the shell.
-            double rn = topOd / 2, s = bT - b.outlet() + rn, h = headDepth();
+            // under the shell. Its largest line may be smaller than the drum's (Boot.largest).
+            double oilOd = Math.min(topOd, PipeSizes.outside(b.largest()));
+            double rn = oilOd / 2, s = bT - b.outlet() + rn, h = headDepth();
             double under = s <= 0 ? apothem : apothem * Math.sqrt(Math.max(0, 1 - s * s / (h * h)));
             double root = a - Math.sqrt(Math.max(0, under * under - rn * rn)) + .03;
-            out.add(new Nozzle(Role.LIQUID_OUTLET, new double[]{root, b.outlet(), a}, 0, -1, root - Math.floor(a - r - STAND_OUT), clampOd(.1 * diameter, topOd), 0));
+            out.add(new Nozzle(Role.LIQUID_OUTLET, new double[]{root, b.outlet(), a}, 0, -1, root - Math.floor(a - r - STAND_OUT), clampOd(.1 * diameter, oilOd), 0));
         } else {
             // Low on the front head (a boot drum's too where it has no room under the shell beyond its front saddle): the
             // lowest cell centre at least 0.3 m above the shell's bottom.
