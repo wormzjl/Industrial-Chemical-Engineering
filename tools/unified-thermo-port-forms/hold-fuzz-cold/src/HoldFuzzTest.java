@@ -70,7 +70,7 @@ class HoldFuzzTest {
             String what=switch(kind){case RESERVOIR->"tank";case GENERATOR->"gen["+fluid+" "+Math.round(spec.temperature())+"K "+Math.round(spec.pressure()/1000)+"kPa]";case VOID->"void";case PIPE->"pipe"+bore;
                 case PUMP->"pump["+((FlowControl.Pump)control).targetVolumeFlow()+","+Math.round(((FlowControl.Pump)control).maximumAddedPressure()/1000)+"kPa]";
                 case COMPRESSOR->"comp["+((FlowControl.Compressor)control).targetVolumeFlow()+","+((FlowControl.Compressor)control).maximumPressureRatio()+"]";
-                case VALVE->"valve["+Math.round(((FlowControl.PressureValve)control).targetPressure()/1000)+"kPa]";case FILTER->"filter";};
+                case VALVE->"valve["+Math.round(((FlowControl.PressureValve)control).targetPressure()/1000)+"kPa]";case FILTER->"filter";default->kind.name().toLowerCase(java.util.Locale.ROOT);};
             return what+"@"+x+","+y+","+z+(kind==Kind.PUMP||kind==Kind.COMPRESSOR||kind==Kind.VALVE||kind==Kind.FILTER?">"+facing:"");
         }
     }
