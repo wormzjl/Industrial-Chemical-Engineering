@@ -2,7 +2,7 @@
 
 Purpose: owner question 2026-10-28: can LDLib make the mod's GUI better, or should similar tools be built into the code?
 
-Status: Concluded 2026-10-28 (evaluation only, no code). Options A to D await the owner; C (an own small toolkit) recommended. Index: [../INDEX.md](../INDEX.md).
+Status: Concluded 2026-10-28 (evaluation only, no code). The owner chose C (an own small toolkit) on 2026-10-28. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -18,5 +18,5 @@ None changed. Read: `client/gui/common` (`ProcessUi`, `AssemblyDiagram`, `HeatDi
 
 ## Open
 
-- The owner's choice of A to D.
+- Option C chosen by the owner 2026-10-28; built in batch [2026-10-28-gui-toolkit](../2026-10-28-gui-toolkit/README.md).
 - If B: whether LDLib2 must be on a dedicated server, and whether it runs beside Create 6.0.10, are not verified.
