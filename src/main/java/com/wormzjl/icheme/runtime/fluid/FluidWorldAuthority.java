@@ -44,6 +44,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final MinecraftFluidRuntime runtime;
     /** Island ownership, compiler diagnostics and chunk membership of the registered devices, and the event path. */
     private final PhysicalRegistry registry;
+    /** The running columns (batch 2026-10-28-column-operation): their ports' plans and bookings, and their cycles. */
+    private final ColumnOperation columns;
     /**
      * Queued topology events apply as one batch at the next tick's hook, or earlier when something reads what they
      * change (a view, a capture, a filter recovery). A run of events inside one tick (a command placing thousands of
@@ -100,6 +102,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         logLoad();
         registry.flowmeters(accessories.allSensors().stream().filter(s->s.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).map(s->s.key().host()).toList());
         registry.load();data.bindCapture(this::capture);
+        columns=new ColumnOperation(topology,registry,runtime.coordinator(),model.molecularWeights());runtime.coordinator().ports(columns);
         instruments=new com.wormzjl.icheme.runtime.instrument.InstrumentService(server,this,accessories);
         instruments.reconcileLegacyValves();
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
@@ -409,7 +412,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(existing!=null)for(var s:existing.stations())if(stations.stream().noneMatch(t->t.port()==s.port()&&t.index()==s.index()))
             return "the column's ports changed while it was stopped";
         topology.column(new ColumnUnit(unit,request.master(),true,request.setpoints(),stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m)));
-        submit(edits,id);
+        submit(edits,id);columns.refresh();
         IChemE.LOGGER.info("column status=STARTED master={},{},{} unit={} held={} ports={}",request.master().x(),request.master().y(),request.master().z(),unit,inside.size(),stations.size());
         return null;
     }
@@ -422,7 +425,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             edits.add(new WorldTopologyLedger.Edit(r.device().id(),new WorldTopologyLedger.Registration(r.device().withSuspendedBy(0),r.spec(),Math.addExact(r.revision(),1))));
         for(var s:u.stations())if(s.device()!=0&&registrations().containsKey(s.device()))edits.add(new WorldTopologyLedger.Edit(s.device(),null));
         topology.column(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()));
-        if(!edits.isEmpty())submit(edits,topology.nextIdentity());
+        if(!edits.isEmpty())submit(edits,topology.nextIdentity());columns.refresh();
         IChemE.LOGGER.info("column status=STOPPED master={},{},{} unit={}",u.master().x(),u.master().y(),u.master().z(),unit);
     }
     /** The column at {@code master} is gone (plan section 12): it stops, and its accounts leave the world, booked as destroyed. */

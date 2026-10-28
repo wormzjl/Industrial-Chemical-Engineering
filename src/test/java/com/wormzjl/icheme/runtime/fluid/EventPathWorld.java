@@ -37,6 +37,9 @@ class EventPathWorld {
     final List<Set<Long>> committedRemovals=new ArrayList<>();
     /** Run in each tick between the topology events and the solves, where a placed island is installed and not yet solved. */
     Runnable beforeSolves=()->{};
+    /** Online ticks a job takes to complete: 0, within the tick it was dispatched in (a worker timing, batch 2026-10-28-column-operation). */
+    int lag;
+    private final Map<Long,Long> submitted=new HashMap<>();
 
     /** A world with one synchronous worker. */
     EventPathWorld(){this(1);}
@@ -61,7 +64,7 @@ class EventPathWorld {
         coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
             public int availableWorkers(){return workers-attempts.size();}
             public long nextRequestId(){return ++requests;}
-            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);submitted.put(attempt.slice().requestId(),ledger.onlineTick());commands.put(attempt.slice().requestId(),command);return true;}
             public void cancel(long request){}
         },changed->{for(var s:changed)if(s.status().startsWith("HELD"))held.add(new Held(ledger.onlineTick(),s.id(),s.clock().committedTick(),s.status()));},
                 ()->0L,new IslandCoordinator.Settings(2_000_000_000L,1_500_000_000L,64,false,100,CertificatePolicy.defaults()),ledger::onlineTick);
@@ -139,6 +142,7 @@ class EventPathWorld {
         if(ledger.hasPendingEvents()){registry.applyPending();coordinator.pumpIfUseful();}
         beforeSolves.run();
         for(long request:List.copyOf(attempts.keySet())) {
+            if(ledger.onlineTick()-submitted.getOrDefault(request,0L)<lag)continue;submitted.remove(request);
             var attempt=attempts.remove(request);var command=commands.remove(request);
             var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
             coordinator.completed(attempt,Optional.of(result));

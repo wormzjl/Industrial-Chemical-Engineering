@@ -27,6 +27,8 @@ public final class IslandScheduler {
         ALLOCATOR_SHRINK,
         /** An undelivered solid recovery (offline player, full inventory, unloaded chunk) is retried. */
         RECOVERY_RETRY,
+        /** The running columns' next cycle (batch 2026-10-28-column-operation, plan section 5). */
+        COLUMN_CYCLE,
         /** A certified island's horizon (rest and steady-flow certificates). */
         CERTIFICATE_HORIZON
         // Presentation buckets are not entries here: FluidPresentation keeps its one next-bucket tick, checked in

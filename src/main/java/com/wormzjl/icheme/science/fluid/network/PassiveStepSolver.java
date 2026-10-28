@@ -1883,6 +1883,51 @@ public final class PassiveStepSolver {
     }
     /** A planned valve target within this share of the valve's stands (W8): a steady plant keeps its graph, so it certifies. */
     public static final double VALVE_DEADBAND=1e-3;
+    /**
+     * Batch 2026-10-28-column-operation (plan 4.2 and 4.3): {@code graph} with each running column's port planned for the
+     * slice ({@link PortPlan}). An outlet's generator stands at its account's composition and the planned temperature, at
+     * the port's pressure and its own volume; each port's boundary valve regulates the mass flow planned for it, measured
+     * by the column ({@link PortPlan#COLUMN_SENSOR}; a valve the column works is never bare). A generator already at the
+     * planned state and a target within {@link #VALVE_DEADBAND} of the valve's stand, so a steady plant keeps its graph.
+     */
+    public PassiveNetwork ports(PassiveNetwork graph,Map<Long,PortPlan> plans,Runnable checkpoint) {
+        if(plans.isEmpty())return graph;
+        List<PassiveNetwork.Reservoir> nodes=null;List<PassiveNetwork.Pipe> pipes=null;
+        for(var plan:plans.values()) {
+            int node=-1;for(int i=0;i<graph.reservoirs().size();i++)if(graph.reservoirs().get(i).id()==plan.node()){node=i;break;}
+            if(node<0)continue;
+            var n=graph.reservoirs().get(node);
+            if(plan.moles()!=null) {
+                if(n.kind()!=PassiveNetwork.NodeKind.GENERATOR)throw new IllegalArgumentException("An outlet port is a generator");
+                double t=plan.temperature(),p=n.state().pressure();var x=plan.moles();
+                if(!(t==n.state().temperature()&&sameShares(PhaseLayout.totalAmounts(n.state()),x))) {
+                    var unit=model.flashTP(t,p,x,checkpoint);double factor=n.inventory().volume()/unit.volume();
+                    for(int c=0;c<x.length;c++)x[c]*=factor;
+                    var state=model.flashTP(t,p,x,checkpoint);
+                    if(nodes==null)nodes=new ArrayList<>(graph.reservoirs());
+                    nodes.set(node,new PassiveNetwork.Reservoir(n.id(),n.elevation(),state,n.kind(),new PassiveNetwork.Inventory(n.inventory().volume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids())));
+                }
+            }
+            int valve=-1;
+            for(int e=0;e<graph.pipes().size();e++){var pipe=graph.pipes().get(e);if(pipe.control() instanceof FlowControl.Valve&&graph.reservoirs().get(pipe.first()).id()==plan.valve()){valve=e;break;}}
+            if(valve<0)continue;
+            var driven=pipes==null?graph.pipes().get(valve):pipes.get(valve);var law=(FlowControl.Valve)driven.control();
+            double target=plan.massTarget();
+            if(law instanceof FlowControl.ControlValve c&&c.source()==FlowControl.ValveSource.MASS_FLOW&&PortPlan.COLUMN_SENSOR.equals(c.sensor())
+                    &&Math.abs(target-c.massTarget())<=VALVE_DEADBAND*Math.max(c.massTarget(),target)+1e-6)continue;
+            var volume=law instanceof FlowControl.ControlValve c?c.volumeTarget():.01;long revision=law instanceof FlowControl.ControlValve c?c.revision():0;
+            if(pipes==null)pipes=new ArrayList<>(graph.pipes());
+            pipes.set(valve,driven.withControl(new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,law.targetPressure(),target,volume,PortPlan.COLUMN_SENSOR,revision)));
+        }
+        return nodes==null&&pipes==null?graph:new PassiveNetwork(nodes==null?graph.reservoirs():nodes,pipes==null?graph.pipes():pipes,graph.scheduledTransfers());
+    }
+    /** Whether {@code a} and {@code b} hold the same shares of their totals, to 1e-12. */
+    private static boolean sameShares(double[] a,double[] b) {
+        double ta=0,tb=0;for(double v:a)ta+=v;for(double v:b)tb+=v;
+        if(!(ta>0)||!(tb>0)||a.length!=b.length)return false;
+        for(int c=0;c<a.length;c++)if(Math.abs(a[c]/ta-b[c]/tb)>1e-12)return false;
+        return true;
+    }
     /** The index of the connection the control valve at node {@code valve} drives, or -1 where the island has none. */
     private static int valvePipe(PassiveNetwork graph,long valve) {
         for(int e=0;e<graph.pipes().size();e++) {
