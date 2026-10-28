@@ -15,10 +15,7 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
 import com.wormzjl.icheme.science.column.v3.V3NeuralRegistry;
 import com.wormzjl.icheme.science.column.v3.V3NeuralInitializer;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.item.CreativeModeTab;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -27,8 +24,6 @@ import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
-import net.neoforged.neoforge.registries.DeferredHolder;
-import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -40,39 +35,6 @@ import java.time.Duration;
 public final class IChemE {
     public static final String MOD_ID = "icheme";
     public static final Logger LOGGER = LogUtils.getLogger();
-    private static final DeferredRegister<CreativeModeTab> CREATIVE_TABS =
-            DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID);
-    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> CREATIVE_TAB = CREATIVE_TABS.register("main", () -> CreativeModeTab.builder()
-            .title(Component.translatable("itemGroup.icheme"))
-            .icon(() -> ModItems.PRESSURE_CONTROL_VALVE.get().getDefaultInstance())
-            .displayItems((parameters, output) -> {
-                output.accept(ModItems.COLUMN_CALCULATOR_V3.get());
-                output.accept(ModItems.PRESSURE_PROBE.get());
-                output.accept(ModItems.TEMPERATURE_PROBE.get());
-                output.accept(ModItems.FLOWMETER.get());
-                output.accept(ModItems.DIGITAL_LEVEL_METER.get());
-                output.accept(ModItems.PRESSURE_GAUGE.get());
-                output.accept(ModItems.TEMPERATURE_GAUGE.get());
-                output.accept(ModItems.ACCESSORY_WRENCH.get());
-                output.accept(ModItems.PIPELINE_TOOL.get());
-                output.accept(ModItems.PIPE_LAYING_TOOL.get());
-                output.accept(ModItems.PIPE_RACK.get());
-                output.accept(ModItems.PIPELINE_SIGHT_GLASS.get());
-                output.accept(ModItems.PIPELINE_SHUTOFF_VALVE.get());
-                output.accept(ModItems.PIPELINE_CHECK_VALVE.get());
-                output.accept(ModItems.FLUID_RESERVOIR.get());
-                output.accept(ModItems.FLUID_PIPE.get());
-                output.accept(ModItems.FLUID_PUMP.get());
-                output.accept(ModItems.FLUID_COMPRESSOR.get());
-                output.accept(ModItems.PRESSURE_CONTROL_VALVE.get());
-                output.accept(ModItems.FLUID_GENERATOR.get());
-                output.accept(ModItems.FLUID_VOID.get());
-                output.accept(ModItems.INLINE_FILTER.get());
-                output.accept(ModItems.RECOVERED_SOLIDS.get());
-                output.accept(ModItems.FLUID_DEBUGGER.get());
-                output.accept(ModItems.EQUIPMENT_CONSTRUCTOR.get());
-            })
-            .build());
     private static final ModConfigSpec CONFIG_SPEC;
     private static final ModConfigSpec.BooleanValue CALCULATION_LOGGING;
     private static final ModConfigSpec.IntValue SOLVER_WORKERS;
@@ -235,7 +197,7 @@ public final class IChemE {
     public IChemE(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
-        CREATIVE_TABS.register(modEventBus);
+        com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
         ModBlockEntities.register(modEventBus);
         ModMenus.register(modEventBus);
         modEventBus.addListener(ColumnV3Network::register);
