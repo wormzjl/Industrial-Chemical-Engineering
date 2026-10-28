@@ -524,4 +524,24 @@ class KitLayoutTest {
         assertEquals(columns.getFirst(), door.column());
         assertThrows(IllegalArgumentException.class, () -> door.layout(areas, 448, List.of(tall), M), "one row list an area");
     }
+
+    @Test
+    void aScreenTakesTheLargestWholeScaleAtWhichTheWindowHoldsTheDesignSize() {
+        assertEquals(4, WindowScale.of(1920, 1080, false), "480 by 270, as the automatic scale");
+        assertEquals(3, WindowScale.of(1600, 840, false), "533 by 280, not 800 by 420 at scale 2");
+        assertEquals(5, WindowScale.of(2560, 1440, false), "512 by 288, not 426 by 240 at the automatic 6");
+        assertEquals(2, WindowScale.of(1366, 768, false));
+        assertEquals(1, WindowScale.of(800, 600, false));
+        assertEquals(1, WindowScale.of(300, 200, false), "never below 1");
+        assertEquals(2, WindowScale.of(1600, 840, true), "the forced Unicode font takes an even scale");
+        assertEquals(4, WindowScale.of(1920, 1080, true));
+        assertEquals(2, WindowScale.of(800, 600, true), "as the game's own, even where the window is short of it");
+        for (int w = WindowScale.WIDTH; w <= 3840; w += 37) {
+            for (int h = WindowScale.HEIGHT; h <= 2160; h += 29) {
+                int s = WindowScale.of(w, h, false);
+                assertTrue(w / s >= WindowScale.WIDTH && h / s >= WindowScale.HEIGHT, w + " by " + h + " holds the design at " + s);
+                assertFalse(w / (s + 1) >= WindowScale.WIDTH && h / (s + 1) >= WindowScale.HEIGHT, w + " by " + h + " holds it at " + (s + 1));
+            }
+        }
+    }
 }

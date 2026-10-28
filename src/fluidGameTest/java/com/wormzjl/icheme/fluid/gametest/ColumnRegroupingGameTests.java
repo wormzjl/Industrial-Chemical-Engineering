@@ -20,7 +20,7 @@ public final class ColumnRegroupingGameTests {
         var level=helper.getLevel();var server=level.getServer();var pos=helper.absolutePos(new BlockPos(0,1,0));
         level.setBlock(pos,ModBlocks.COLUMN_CALCULATOR_V3.get().defaultBlockState(),3);
         var block=(ColumnCalculatorV3BlockEntity)level.getBlockEntity(pos);
-        var presets=java.util.Arrays.stream(ColumnInputPreset.values()).filter(p->p!=ColumnInputPreset.HOLLAND).toList();
+        var presets=java.util.Arrays.asList(ColumnInputPreset.values());
         int[] next={0};boolean[] waiting={false},done={false};long deadline=System.nanoTime()+180_000_000_000L;
         helper.onEachTick(()->{
             if(done[0])return;

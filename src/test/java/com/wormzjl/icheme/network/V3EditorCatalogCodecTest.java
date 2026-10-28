@@ -20,7 +20,7 @@ class V3EditorCatalogCodecTest {
         var c=catalog();var bytes=V3EditorCatalogCodec.encode(c);
         assertEquals(c,V3EditorCatalogCodec.decode(bytes));assertTrue(bytes.length<V3EditorCatalogCodec.MAX_BYTES);
         for(var input:c.templates().values())assertEquals(input.componentBasis().componentCount(),c.weightsFor(input).size());
-        assertTrue(c.templates().containsKey("holland_3_2"));
+        assertFalse(c.templates().containsKey("holland_3_2"),"the Holland benchmark is the solver's test, not a player template");
     }
     @Test void realStatePacketCarriesTemplatesAndPreciseMolecularWeights() throws Exception {
         var c=catalog();var input=c.templates().values().iterator().next();

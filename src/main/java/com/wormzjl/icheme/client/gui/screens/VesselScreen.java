@@ -11,6 +11,7 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
+import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
@@ -147,7 +148,14 @@ public final class VesselScreen extends Screen {
     }
 
     @Override
+    public void removed() {
+        super.removed();
+        WindowScale.restore(minecraft);
+    }
+
+    @Override
     protected void init() {
+        WindowScale.apply(minecraft, this);
         panelWidth = Math.min(WIDTH, width - 8);
         panelHeight = Math.min(HEIGHT, height - 8);
         left = (width - panelWidth) / 2;

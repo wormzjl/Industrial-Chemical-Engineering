@@ -20,7 +20,6 @@ class ColumnInputPresetTest {
             assertTrue(choice.matches(input));
             V3ColumnProblemResolver.validateInput(input);
             assertEquals(input,ColumnCodecs.readInputNbt(ColumnCodecs.writeInputNbt(input)));
-            if (choice==ColumnInputPreset.HOLLAND) continue;
             var thermo=V3PengRobinsonThermo.fromRegisteredPackage(input.packageId());
             double[] expected=thermo.crudeFeed(input.assayId()).moleFractions();
             double total=Arrays.stream(input.feedComponentMolarFlowsMolPerSecond()).sum();

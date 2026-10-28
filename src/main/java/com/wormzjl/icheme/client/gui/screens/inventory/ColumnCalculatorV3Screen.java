@@ -24,6 +24,7 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
+import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.ColumnV3Network;
 import com.wormzjl.icheme.science.column.v3.*;
 import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
@@ -107,7 +108,9 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
         super(menu,inventory,title);imageWidth=840;imageHeight=460;
     }
     private static Skin skin(){return ClientConfig.skin();}
+    @Override public void removed(){super.removed();WindowScale.restore(minecraft);}
     @Override protected void init(){
+        WindowScale.apply(minecraft,this);
         imageWidth=CalculatorColumn.width(width);imageHeight=CalculatorColumn.height(height);
         super.init();titleLabelY=inventoryLabelY=-1000;
         if(library==null)library=new V3ClientPresets(minecraft.gameDirectory.toPath(),name->{
@@ -347,7 +350,7 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
     private List<V3ClientPresets.Entry> presetEntries(){return presetSnapshot==null?List.of():presetSnapshot.entries();}
     private String presetName(V3ClientPresets.Preset preset){return preset.translationKey().isBlank()?preset.name():Component.translatable(preset.translationKey()).getString();}
     private String presetHint(V3ClientPresets.Entry entry){
-        return tr(entry.file().equals("holland_3_2.json")?"benchmark_hint":presetKind==V3ClientPresets.Kind.COLUMN?"column_templates.hint":"mixture_templates.hint");
+        return tr(presetKind==V3ClientPresets.Kind.COLUMN?"column_templates.hint":"mixture_templates.hint");
     }
     private void loadPreset(V3ClientPresets.Preset preset){
         if(busy())return;

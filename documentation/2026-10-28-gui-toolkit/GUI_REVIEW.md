@@ -10,7 +10,7 @@ Batch 2026-10-28-gui-toolkit, 2026-10-28, branch `claude/gui-toolkit`. Owner: "R
 4. The door holds switches, set points and indicating meters; the HMI glass holds tables and drawings. A label stands beside its box, in two lines where it must (plan section 13). What the player types is an LCD entry; what the plant reads is an LED meter (`Column.Reading`).
 5. New, owner 2026-10-28: display keys (a unit, a basis) change what the screens show, not the plant. They are flat black keys in a tray engraved into the door, at the footer's right (owner: "C looks better"); Close, Apply and the other push buttons stay raised (plan section 12).
 6. New, owner 2026-10-28: the theme and the units are the client's, one switch for every screen, kept in `icheme-client.toml`; no unit reaches the server. The theme key is a sign, not a word (plan section 12).
-7. Every screen draws through the kit and the light or dark theme.
+7. Every screen draws through the kit and the light or dark theme, at its own whole scale: the largest at which the window holds 464 by 254 GUI px (owner: "This should be scaled to window size"; `kit/WindowScale`, plan section 19).
 8. New, owner 2026-10-28: alignment ("make alignment a rule for GUI creating"). In a column, every box has one width and one place, every unit one place after it; a group's labels stand all beside their boxes or all above. Kept in the `gui-creation` skill (plan section 14).
 
 ## Findings
@@ -32,13 +32,13 @@ The prototypes are in `tmp/gui-prototypes/` (both doors on each sheet), drawn th
 - The fluid screen's basis and unit keys are 40 px display keys on their strip (rule 5); flows also per minute; Celsius reads "°C". The units, the basis and the theme are the client's config; the column calculator reads its °C or K from it; the theme key shows a contrast sign (rule 6).
 - Units stay whole beside a meter: a unit wider than its place is the label's last line (`Column.UNIT`, plan section 14).
 
-## Owner choices
+## Owner choices (decided 2026-10-28, plan section 19)
 
-- (a) Column presets still read and write `stage_pressure_drop_kpa` (`V3ClientPresets`). Option 1: keep it as the hidden value that a preset carries. Option 2: drop it from new presets and read old ones without it.
-- (b) A diameter of 0 (the prescribed-drop mode) now runs on a hidden tray dP. Option 1: require a diameter above 0. Option 2: keep the mode with the base value.
-- (c) "Duty ratio" on the air cooler was read as the fans' speed (plan section 11).
-- (d) A fired heater's duty target needs the heat engine (`FiredCoil`, `HeatControl`, heat session).
-- (e) A gauge's unit is saved on the gauge (`GaugeSettings.unit`, its dial in the world). Option 1: keep it. Option 2: the dial follows each player's config (plan section 12).
+- (a) `stage_pressure_drop_kpa` in column presets: option 2, no longer written; an old file's is ignored.
+- (b) A diameter of 0: option 1, the calculator and its server request need a diameter above 0. Holland Example 3-2, the one preset at 0, is removed from the game (owner: "Remove the preset"); its benchmark stays in the solver's tests.
+- (c) "Duty ratio" is the air cooler's fan speed (owner: "Fans' speed, keep it").
+- (d) A fired heater's duty target needs the heat engine (`FiredCoil`, `HeatControl`): moved to the heat batch.
+- (e) A gauge's unit stays saved on the gauge (owner: "Keep on the gauge").
 
 ## Implementation order (owner: "Good, proceed")
 

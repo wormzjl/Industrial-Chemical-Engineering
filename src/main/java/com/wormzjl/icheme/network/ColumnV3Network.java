@@ -18,7 +18,6 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification;
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification.ControlledQuantity;
 import com.wormzjl.icheme.science.column.v3.V3ColumnStreamProperties;
 import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
-import com.wormzjl.icheme.science.column.v3.V3HollandExample32;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
@@ -246,11 +245,8 @@ public final class ColumnV3Network {
 
     private static void validateResolvedInput(V3ColumnInput input) {
         input = Objects.requireNonNull(input, "input");
-        if (V3HollandExample32.isPackage(input.packageId())) {
-            // The fixed benchmark preset: equality with it and the resolver validation are checked there.
-            V3HollandExample32.validateInput(input);
-            return;
-        }
+        // A player's column has a diameter; the tray hydraulics give its pressure profile (owner choice (b), 2026-10-28).
+        if (!(input.columnDiameterMetres() > 0.0)) throw new IllegalArgumentException("Set the column diameter");
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(input.packageId());
         if (!thermo.componentBasis().equals(input.componentBasis())) {
             throw new IllegalArgumentException("V3 component axis does not match the server property package");

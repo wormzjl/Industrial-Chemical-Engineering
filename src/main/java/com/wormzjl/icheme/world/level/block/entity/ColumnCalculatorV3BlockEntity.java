@@ -15,7 +15,6 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification.ControlledQuan
 import com.wormzjl.icheme.science.column.v3.V3ColumnStreamProperties;
 import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
 import com.wormzjl.icheme.science.column.v3.V3ConvergenceEvidence;
-import com.wormzjl.icheme.science.column.v3.V3HollandExample32;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.column.v3.thermo.V3CrudeFeed;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
@@ -117,9 +116,7 @@ public final class ColumnCalculatorV3BlockEntity extends BlockEntity implements 
             displayResult = V3ColumnDisplayResult.fromAccepted(success);
             resultRevision = Math.incrementExact(resultRevision);
             status = V3Status.SUCCESS;
-            detail = V3HollandExample32.isPackage(operation.input().packageId())
-                    ? "Success: Holland oracle and V3 audit agree; seven printed-table conflicts remain advisory"
-                    : successDetail(success);
+            detail = successDetail(success);
             refreshMaterialFreshness();
         } else if (outcome instanceof V3ColumnOutcome.Failure failure) {
             status = V3Status.FAILED;
@@ -247,8 +244,7 @@ public final class ColumnCalculatorV3BlockEntity extends BlockEntity implements 
     }
 
     private void refreshMaterialFreshness() {
-        if (displayResult == null || currentInput == null || activeOperation != null
-                || V3HollandExample32.isPackage(currentInput.packageId())) return;
+        if (displayResult == null || currentInput == null || activeOperation != null) return;
         if (!com.wormzjl.icheme.science.material.MaterialRuntime.isCurrent(currentInput.packageId(),displayResult.datasetRevision())) {
             if (status != V3Status.STALE) {
                 status = V3Status.STALE;
@@ -396,7 +392,6 @@ public final class ColumnCalculatorV3BlockEntity extends BlockEntity implements 
      * axis. No legacy aliases, additive padding or saved-axis migration.
      */
     public static V3ColumnInput requireCurrent(V3ColumnInput input, MaterialCatalog catalog) {
-        if (V3HollandExample32.isPackage(input.packageId())) return input;
         if (!catalog.requirePackage(input.packageId()).components().equals(input.componentBasis().componentIds()))
             throw new IllegalArgumentException("Unsupported persisted component axis");
         return input;

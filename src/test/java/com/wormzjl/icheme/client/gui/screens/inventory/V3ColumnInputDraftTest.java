@@ -127,6 +127,7 @@ class V3ColumnInputDraftTest {
         assertInvalid(6, "-0.01", "Reflux ratio");
         assertInvalid(7, "0", "Top pressure");
         assertInvalid(9, "-1", "Column diameter");
+        assertInvalid(9, "0", "Column diameter");
         assertInvalid(9, "16", "Column diameter");
     }
 
@@ -140,13 +141,13 @@ class V3ColumnInputDraftTest {
                 fields.set(6, Double.toString(reflux));
                 fields.set(7, stages == 2 ? "1" : "3");
                 fields.set(8, "0");
-                fields.set(9, "0");
+                fields.set(9, stages == 2 ? "0.1" : "15");
                 V3EditorDraft.ColumnScalarDraft.Values values = V3EditorDraft.ColumnScalarDraft.parse(fields);
                 assertEquals(stages, values.stageCount());
                 assertEquals(reflux, values.refluxRatio());
                 assertEquals(stages == 2 ? 100_000.0 : 300_000.0, values.topPressurePascal());
                 assertEquals(0.0, values.pressureDropPascal());
-                assertEquals(0.0, values.columnDiameterMetres());
+                assertEquals(stages == 2 ? 0.1 : 15.0, values.columnDiameterMetres());
             }
         }
     }

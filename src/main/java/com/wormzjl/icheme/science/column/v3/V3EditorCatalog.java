@@ -37,13 +37,10 @@ public record V3EditorCatalog(Map<String,V3ColumnInput> templates, Map<String,Li
             templates.put(descriptor.id(),input);
             weights.put(input.packageId(),weights(catalog,input));
         }
-        templates.put("holland_3_2",V3HollandExample32.input());
-        weights.put(V3HollandExample32.PACKAGE_ID,Arrays.stream(V3HollandExample32.molecularWeights()).boxed().toList());
         weights.put(current.packageId(),weights(catalog,current));
         return new V3EditorCatalog(templates,weights);
     }
     private static List<Double> weights(MaterialCatalog catalog,V3ColumnInput input) {
-        if(V3HollandExample32.isPackage(input.packageId()))return Arrays.stream(V3HollandExample32.molecularWeights()).boxed().toList();
         return catalog.requirePackage(input.packageId()).properties().stream().map(MaterialCatalog.Property::molecularWeight).toList();
     }
     public List<Double> weightsFor(V3ColumnInput input) {

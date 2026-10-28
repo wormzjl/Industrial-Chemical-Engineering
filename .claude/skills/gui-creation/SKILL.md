@@ -56,6 +56,11 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
 7. The theme and the units are the client's (`icheme-client.toml`, `ClientConfig`), one switch for every screen, never
    sent to the server. Controls cross the network in SI. The theme key shows a sign (`Skin.Icon.THEME`), not a word.
 8. Every screen draws through the kit and the light or dark theme.
+9. Every screen takes its own whole scale (owner: "This should be scaled to window size"): `WindowScale.apply(minecraft,
+   this)` first in `init()`, `WindowScale.restore(minecraft)` in `removed()` (after `super.removed()`). The scale is the
+   largest at which the window holds 464 by 254 GUI px, so design and render every screen at 464 by 254, and check it
+   up to 1.5 times that (from scale 2; 533 by 280 is a 1600 by 840 window). Only a window under 928 by 508 screen px
+   (scale 1) reaches twice. Never size a widget from the player's GUI scale.
 
 ## Alignment (owner: "make alignment a rule for GUI creating")
 

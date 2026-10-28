@@ -18,6 +18,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
+import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.EquipmentNetwork;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
@@ -274,6 +275,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     @Override
     protected void init() {
+        WindowScale.apply(minecraft, this);
         build = null;
         custom = null;
         var m = GuiCanvas.measure(font);
@@ -718,6 +720,7 @@ public final class EquipmentConstructorScreen extends Screen {
     public void removed() {
         if (!sent && !design().equals(saved)) EquipmentNetwork.send(position, design(), false);
         sent = true;
+        WindowScale.restore(minecraft);
     }
 
     @Override

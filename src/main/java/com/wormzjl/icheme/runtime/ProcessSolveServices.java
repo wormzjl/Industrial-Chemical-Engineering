@@ -4,7 +4,6 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
-import com.wormzjl.icheme.science.column.v3.V3HollandExample32;
 import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
 import com.wormzjl.icheme.science.column.v3.V3NeuralInitializer;
 import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity.V3Operation;
@@ -477,12 +476,9 @@ public final class ProcessSolveServices {
         }
         private ProcessSolveResult solveInCatalog(BoundedCpuSolveService.CancellationToken cancellationToken) {
             cancellationToken.throwIfCancellationRequested();
-            V3ColumnOutcome outcome = V3HollandExample32.isPackage(input.packageId())
-                    && initialization.mode() != V3InitializationOptions.Mode.LNN_ONLY
-                    ? V3HollandExample32.calculate(input, cancellationToken::throwIfCancellationRequested)
-                    : V3ColumnCalculator.calculate(input, cancellationToken::throwIfCancellationRequested,
-                            stageTraceCutoffMoleFraction, convergenceClosureFraction, initialization, model,
-                            liquidSupplyScreenRatio);
+            V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input, cancellationToken::throwIfCancellationRequested,
+                    stageTraceCutoffMoleFraction, convergenceClosureFraction, initialization, model,
+                    liquidSupplyScreenRatio);
             cancellationToken.throwIfCancellationRequested();
             return new V3ColumnSolveResult(outcome);
         }

@@ -16,6 +16,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
+import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.AssemblyNetwork;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.PortState;
@@ -135,7 +136,14 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     }
 
     @Override
+    public void removed() {
+        super.removed();
+        WindowScale.restore(minecraft);
+    }
+
+    @Override
     protected void init() {
+        WindowScale.apply(minecraft, this);
         imageWidth = Math.max(320, Math.min(760, width - 16));
         imageHeight = Math.max(220, height - 16);
         super.init();

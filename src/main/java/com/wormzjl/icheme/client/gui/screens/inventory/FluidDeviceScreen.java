@@ -15,6 +15,7 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
+import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
 import com.wormzjl.icheme.runtime.fluid.SlurryFeed;
@@ -63,7 +64,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
 
     public FluidDeviceScreen(FluidDeviceMenu menu,Inventory inventory,Component title){super(menu,inventory,title);}
     private static String tr(String key,Object...args){return Component.translatable("gui.icheme.fluid."+key,args).getString();}
+    @Override public void removed(){super.removed();WindowScale.restore(minecraft);}
     @Override protected void init(){
+        WindowScale.apply(minecraft,this);
         imageWidth=Math.max(300,Math.min(790,width-16));imageHeight=Math.max(250,height-16);
         super.init();titleLabelY=inventoryLabelY=-1000;
         if(library==null)library=new V3ClientPresets(minecraft.gameDirectory.toPath(),name->{

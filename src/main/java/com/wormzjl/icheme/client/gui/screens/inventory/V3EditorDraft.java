@@ -106,8 +106,10 @@ final class V3EditorDraft {
         return -1;
     }
     void removeSteam(int i){set("t"+i+"stage","");set("t"+i+"rate","");set("t"+i+"T","");}
+    /** A column preset's fields: every field but the tray drop {@code s8}, which stays the base's (owner choice (a), 2026-10-28). */
     void loadColumn(Map<String,String> data){
-        if(!data.keySet().equals(fields.keySet()))throw new IllegalArgumentException("Invalid column preset fields");
+        var expected=new HashSet<>(fields.keySet());expected.remove("s8");
+        if(!data.keySet().equals(expected))throw new IllegalArgumentException("Invalid column preset fields");
         data.forEach((key,value)->{
             fields.put(key,value);exact.remove(key);
             if(!value.isBlank()&&!key.endsWith("split")){
@@ -143,32 +145,14 @@ final class V3EditorDraft {
         var precise=new V3ColumnInput(base.schemaVersion(),source.packageId(),source.assayId(),source.componentBasis(),flows,
             !columnChanged&&fields.get("s1").equals(original.get("s1"))?base.feedTemperatureKelvin():parsed.feedTemperatureKelvin(),
             parsed.stageCount(),parsed.feedStageNumber(),unchanged("s7")?base.topPressurePascal():parsed.topPressurePascal(),
-            unchanged("s8")?base.stagePressureDropPascal():parsed.stagePressureDropPascal(),
+            base.stagePressureDropPascal(),
             List.of(new V3ColumnSpecification.CondenserOutletTemperature(unchanged("s4")?value(base,ControlledQuantity.CONDENSER_OUTLET_TEMPERATURE):value(parsed,ControlledQuantity.CONDENSER_OUTLET_TEMPERATURE)),
                 new V3ColumnSpecification.OrganicRefluxRatio(unchanged("s6")?value(base,ControlledQuantity.ORGANIC_REFLUX_RATIO):value(parsed,ControlledQuantity.ORGANIC_REFLUX_RATIO)),
                 new V3ColumnSpecification.ReboilerDuty(unchanged("s5")?value(base,ControlledQuantity.REBOILER_DUTY):value(parsed,ControlledQuantity.REBOILER_DUTY))),
             parsed.sideDraws(),steam,parsed.pumparounds(),unchanged("s9")?base.columnDiameterMetres():parsed.columnDiameterMetres());
         V3ColumnProblemResolver.validateInput(precise);
-        return withComposition&&V3HollandExample32.isPackage(precise.packageId())?canonicalBenchmark(precise):precise;
+        return precise;
     }
-    /** Independent JSON unit/relative conversions must not turn roundoff into a changed fixed benchmark. */
-    private static V3ColumnInput canonicalBenchmark(V3ColumnInput input){
-        var fixed=V3HollandExample32.input();
-        if(input.stageCount()!=fixed.stageCount()||input.feedStageNumber()!=fixed.feedStageNumber()
-                ||!input.componentBasis().equals(fixed.componentBasis())||!input.steamFeeds().isEmpty()||!input.pumparounds().isEmpty()
-                ||input.sideDraws().size()!=fixed.sideDraws().size())return input;
-        if(!roundoff(input.feedTemperatureKelvin(),fixed.feedTemperatureKelvin())||!roundoff(input.topPressurePascal(),fixed.topPressurePascal())
-                ||!roundoff(input.stagePressureDropPascal(),fixed.stagePressureDropPascal())||!roundoff(input.columnDiameterMetres(),fixed.columnDiameterMetres()))return input;
-        for(var quantity:ControlledQuantity.values())if(!roundoff(value(input,quantity),value(fixed,quantity)))return input;
-        double[] actual=input.feedComponentMolarFlowsMolPerSecond(),expected=fixed.feedComponentMolarFlowsMolPerSecond();
-        for(int i=0;i<actual.length;i++)if(!roundoff(actual[i],expected[i]))return input;
-        for(int i=0;i<input.sideDraws().size();i++){
-            var a=input.sideDraws().get(i);var b=fixed.sideDraws().get(i);
-            if(a.trayNumber()!=b.trayNumber()||!roundoff(a.molarFlowMolPerSecond(),b.molarFlowMolPerSecond()))return input;
-        }
-        return fixed;
-    }
-    private static boolean roundoff(double actual,double expected){return actual==expected||Math.abs(actual-expected)<=16*Math.ulp(expected);}
     private boolean unchanged(String key){return !columnChanged&&Objects.equals(fields.get(key),original.get(key));}
     static double value(V3ColumnInput input,ControlledQuantity quantity){
         return input.specifications().stream().filter(s->s.controlledQuantity()==quantity).mapToDouble(s->switch(s){
@@ -357,10 +341,10 @@ final class V3EditorDraft {
             if (reflux < 0.0) throw invalid("Reflux ratio", "must be nonnegative");
             if (!(pressure > 0.0)) throw invalid("Top pressure", "must be positive");
             if (pressureDrop < 0.0) throw invalid("Pressure drop", "must be nonnegative");
-            // Zero is the prescribed-drop column this contract has always had; anything positive asks for
-            // flow-dependent sieve-tray hydraulics and is bounded by the schema's diameter range.
-            if (diameter < 0.0 || diameter > V3ColumnInput.MAX_COLUMN_DIAMETER_METRES) {
-                throw invalid("Column diameter", "must be within 0.." + V3ColumnInput.MAX_COLUMN_DIAMETER_METRES + " m");
+            // A column has a diameter, and the tray hydraulics give its pressure profile (owner choice (b), 2026-10-28,
+            // as the constructor's ColumnDesign); the input's zero diameter, the prescribed drop, stays for the solver's tests.
+            if (!(diameter > 0.0) || diameter > V3ColumnInput.MAX_COLUMN_DIAMETER_METRES) {
+                throw invalid("Column diameter", "must be above 0 and at most " + V3ColumnInput.MAX_COLUMN_DIAMETER_METRES + " m");
             }
             return new Values(feed, feedTemperature, stages, feedStage, condenserTemperature,
                     duty, reflux, pressure, pressureDrop, diameter);
