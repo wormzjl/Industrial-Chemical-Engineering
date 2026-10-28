@@ -9,7 +9,7 @@ Purpose: offline study harnesses behind the heat exchanger design (batch [`2026-
 - how the sides couple when the wall holds no heat (a relay of the heat in transit);
 - how a side reads its partner on the game's clock (dispatch after the slice end, job latency, adaptive cadence).
 
-No game code, no Gradle, except `review-probe/`: the owner-test probe of the review world, detached from the tracked paths at the batch's tooling cleanup (`f20ceefa`). Its own [README](review-probe/README.md) says how to re-attach and run it.
+No game code, no Gradle, except `review-probe/`: the owner-test probe of the review world, detached from the tracked paths at the batch's tooling cleanup (`f20ceefa`). Its own [README](review-probe/README.md) says how to re-attach and run it. And `merge-lane/`: the final lane of the merge to main and its baseline on main ([README](merge-lane/README.md)).
 
 ## How to run
 
