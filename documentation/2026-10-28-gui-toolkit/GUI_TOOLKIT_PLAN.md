@@ -177,3 +177,19 @@ Owner: "these buttons should distinguish themselves from the left ones" (the foo
   - The phase ratio's basis (the rail's own key) stays a session setting; it goes with the rail (`GUI_REVIEW.md`, order 1).
   - The column calculator shows pressures in bar and flows in kmol/h whatever the config says; it takes the units when it moves onto the kit.
   - A gauge's unit is the gauge's own, a fact the item saves (`GaugeSettings.unit`): it is the dial's scale in the world, the same for every player. Option 1: keep it (as built). Option 2: the dial follows each player's config, and the saved unit is only a default.
+
+## 13. Labels beside their boxes; entries against readings (2026-10-28)
+
+Owner, on the Set point group: "This Arrangement is not good, also need to differentiate editable value fields with non-editable / toggled". Of the options rendered: "B with E".
+
+- **Expected.** On a panel door every legend of one group stands in the same place, left of its instrument. A set point the operator dials in and a value the plant measures are different devices: a set-point display (here a reflective LCD) and a lit indicator (the LED meter). An operator tells them apart at a glance, without colour alone.
+- **What the code did.** A label that did not fit its 40 px share went above its box, so "Feed ratio" stood above while "Low limit" stood beside. Every box was the same LED meter, whether the player typed it or the plant read it; an empty optional entry showed "OFF" like a reading.
+- **Options rendered.** Labels: A above every box, B beside in two lines, C all above in a group. Fields: E an LCD for entries and the LED for readings, F the LED in a light entry frame, G green set-point LEDs.
+- **As built (B and E).**
+  - `Column.Field`: a label wider than its share wraps beside the box in two lines, its words whole, in the same 24 px row; a label needing three lines, or holding a word wider than the share, goes above the box. Gate: `KitLayoutTest.aFieldLabelWrapsBesideItsBoxInTwoLinesElseGoesAboveIt`.
+  - `Column.Reading` (new): an indicating meter laid out as a field, with no widget; its hover over its box too. `Skin.meter` draws it. Gate: `KitLayoutTest.aReadingIsPlacedAsAFieldAndDrawnAsAMeter`.
+  - `PanelSkin.field` draws entries as an LCD (grey-green glass, near-black segments, the same on both doors); `PanelSkin.meter` keeps the door's LED meter for readings; `fieldText` is the LCD's ink, so typed text is dark on the glass.
+  - The Control tab's feed-ratio column is 11 px shorter (136 to 125 px): Feed ratio no longer stacks.
+- **Open.**
+  - While a value is edited, the game draws the cursor bar inside the text in its own light grey, faint on the LCD; the cursor at the end ("_") takes the LCD's ink. Not checked in game.
+  - The door's readings so far are in the prototypes only (a tank's pressures, a vessel's volume); the Control tab has none.

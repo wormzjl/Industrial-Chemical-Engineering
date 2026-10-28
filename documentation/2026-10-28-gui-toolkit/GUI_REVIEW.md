@@ -7,7 +7,7 @@ Batch 2026-10-28-gui-toolkit, 2026-10-28, branch `claude/gui-toolkit`. Owner: "R
 1. Function groups in engraved frames under flat plates of one or two words; a plate never looks like a button. Sentences go to hovers.
 2. A device that runs has an Off and On switch, then its target; selector positions are latched.
 3. No cut text: wrap, stack, keep units whole. No noise: no timestamps, raw engine lines or a status said twice.
-4. The door holds switches, set points and indicating meters (7-segment, bar graphs); the HMI glass holds tables and drawings.
+4. The door holds switches, set points and indicating meters; the HMI glass holds tables and drawings. A label stands beside its box, in two lines where it must (plan section 13). What the player types is an LCD entry; what the plant reads is an LED meter (`Column.Reading`).
 5. New, owner 2026-10-28: display keys (a unit, a basis) change what the screens show, not the plant. They are flat black keys in a tray engraved into the door, at the footer's right (owner: "C looks better"); Close, Apply and the other push buttons stay raised (plan section 12).
 6. New, owner 2026-10-28: the theme and the units are the client's, one switch for every screen, kept in `icheme-client.toml`; no unit reaches the server. The theme key is a sign, not a word (plan section 12).
 7. Every screen draws through the kit and the light or dark theme.

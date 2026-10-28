@@ -103,8 +103,16 @@ public interface Skin {
     }
 
     /**
-     * A field {@code r} showing {@code value}, or {@code hint} when it is empty. While {@code editing} the game draws the
-     * text and the cursor ({@link #fieldText()}, 4 px in), so the skin draws only the box.
+     * An indicating meter {@code r} showing {@code value}: a value the plant reads, which the player cannot type
+     * ({@link Column.Reading}). Here a field's box at rest.
+     */
+    default void meter(Canvas c, Rect r, String value) {
+        field(c, r, value, "", false);
+    }
+
+    /**
+     * An entry field {@code r}, a value the player types, showing {@code value}, or {@code hint} when it is empty. While
+     * {@code editing} the game draws the text and the cursor ({@link #fieldText()}, 4 px in), so the skin draws only the box.
      */
     default void field(Canvas c, Rect r, String value, String hint, boolean editing) {
         c.fill(r.x(), r.y(), r.right(), r.bottom(), editing ? 0xFFFFFFFF : 0xFFA0A0A0);

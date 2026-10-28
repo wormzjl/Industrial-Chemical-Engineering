@@ -6,7 +6,7 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
 
 ## Documents
 
-- [GUI_TOOLKIT_PLAN.md](GUI_TOOLKIT_PLAN.md): the kit, the pilot, the shared flowsheet painter, the gates, the as-built notes (section 5), choices T1 to T3 (section 6), the Control tab styles tried (section 7), the industrial looks (section 8), look 3 refined (section 9), the light and dark panels shipped with layout C, whole texts and fuller drawings (section 10), function groups, plates and the On and Off switch (section 11), display keys, the client's units and the theme sign (section 12).
+- [GUI_TOOLKIT_PLAN.md](GUI_TOOLKIT_PLAN.md): the kit, the pilot, the shared flowsheet painter, the gates, the as-built notes (section 5), choices T1 to T3 (section 6), the Control tab styles tried (section 7), the industrial looks (section 8), look 3 refined (section 9), the light and dark panels shipped with layout C, whole texts and fuller drawings (section 10), function groups, plates and the On and Off switch (section 11), display keys, the client's units and the theme sign (section 12), labels beside their boxes and LCD entries against LED readings (section 13).
 - [GUI_REVIEW.md](GUI_REVIEW.md): the other screens against the panel rules, their prototypes, the owner's choices (a) to (e) and the order to build them.
 - The evaluation that chose it: [../2026-10-28-gui-toolkit-evaluation/GUI_TOOLKIT_REVIEW.md](../2026-10-28-gui-toolkit-evaluation/GUI_TOOLKIT_REVIEW.md).
 
@@ -58,6 +58,9 @@ Status: In progress since 2026-10-28, on branch `claude/gui-toolkit` (stacked on
   - Prototypes: `tools/heat-gui-renders/GuiPrototypes.java` (ten screens).
   - Gates: quick suite 1734, no failures (`FluidGuiConsistencyTest` 5, the footer gate widened to the keys and their strip; `ProcessPresentationTest` 5, its Celsius symbol now "°C"; `KitLayoutTest` 12). The first run failed the new strip check at 300 px (the strip came 2 px from Apply); the 40 px keys fixed it.
 - 2026-10-28: the display keys are flat black keys in a tray engraved into the door (owner: the mint on glass "feels slightly out of place"; of three colours rendered, "C looks better"; plan section 12), in the tray commit. The options' sheet left the prototypes tool. Drawing only: judged on the renders; `KitLayoutTest` and `FluidGuiConsistencyTest` ran again.
+- 2026-10-28: field labels beside their boxes in two lines, LCD entries and LED readings (owner: "This Arrangement is not good, also need to differentiate editable value fields with non-editable / toggled"; of the options rendered, "B with E"; plan section 13), in the fields commit.
+  - Kit: `Column.Reading`, `Skin.meter`; `Column.Field` labels wrap beside the box; `PanelSkin.field` an LCD, `PanelSkin.meter` the LED. The options' sheets left the prototypes tool; its tank pressures and vessel volume are readings.
+  - Gates: `KitLayoutTest` 13 (the stacked-label test rewritten for labels beside, one new for readings), `HeatControlColumnTest` 5, `FluidGuiConsistencyTest` 5, `HeatDiagramTest` 5, `FlowsheetPainterTest` 3, `ProcessPresentationTest` 5: no failures. The full quick suite did not run again (GUI only).
 
 ## Open
 

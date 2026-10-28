@@ -5,11 +5,12 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * A control panel door (GUI_TOOLKIT_PLAN.md sections 9 to 11; owner: "Both 3a and 3c, configurable as light and dark"):
+ * A control panel door (GUI_TOOLKIT_PLAN.md sections 9 to 13; owner: "Both 3a and 3c, configurable as light and dark"):
  * flat engraved legend plates for the title and the function groups, an engraved line round each group, engraved text,
- * push buttons in a black bezel with a chrome ring (lit from behind when latched), pilot lights with a glow, 7-segment
- * LED panel meters for the fields, an LED bar graph with a top zone, a message display for the status, the HMI screen
- * in its bezel with a power LED, a quarter-turn latch.
+ * push buttons in a black bezel with a chrome ring (lit from behind when latched), flat display keys in an engraved tray,
+ * pilot lights with a glow, 7-segment LCD set-point windows for the entries and LED panel meters for the readings, an LED
+ * bar graph with a top zone, a message display for the status, the HMI screen in its bezel with a power LED, a
+ * quarter-turn latch.
  * Panel legends keep their colour; the lamps show state. Button colours follow IEC 60073: black general, green running
  * (latched), blue confirm. {@link #LIGHT} is door 3a, {@link #DARK} door 3c.
  */
@@ -36,6 +37,8 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
     private static final Face GREEN_LIT = new Face(0xFF2DB34A, 0xFF8BE89A, 0xFF1B7A30, 0xFF06200C);
     private static final Face BLUE_CONFIRM = new Face(0xFF1F5FBF, 0xFF6A9BE8, 0xFF143F80, 0xFFFFFFFF);
     private static final Window SCREEN = new Window(0xFF10161B, 0xFF3BE060, 0);
+    /** The entries' reflective LCD: grey-green glass, near-black segments, faint unlit ones. */
+    private static final Window LCD = new Window(0xFFB3BEA2, 0xFF1A2016, 0xFF9AA58A);
 
     /** Door 3a: RAL 7035 light grey, white legend plates (black ones read as buttons), green lamps, red LED meters, a green bar graph. */
     public static final PanelSkin LIGHT = new PanelSkin(new Door(0xFFC9CCC8, 0xFFE2E5E1, 0xFFA5A8A4, 0xFF6E716D),
@@ -191,22 +194,37 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
     }
 
     /**
-     * A panel meter: numbers in 7-segment LEDs, right-aligned over their unlit segments; other text as text. An empty
-     * meter shows its hint dimmed; in segments a word reads better in capitals (OFF). While edited, only the window.
+     * An entry: a reflective LCD, dark segments on grey-green glass, the same on both doors (owner: "need to differentiate
+     * editable value fields with non-editable"; of three looks, "B with E"). What the player sets reads as a set-point
+     * display; what the plant reads stays a lit LED meter ({@link #meter}). While edited, only the window.
      */
     @Override
     public void field(Canvas c, Rect r, String value, String hint, boolean editing) {
+        window(c, r, LCD.glass());
+        if (!editing) readout(c, r, value, hint, LCD);
+    }
+
+    /** A panel meter: the door's 7-segment LEDs, lit in their glass. */
+    @Override
+    public void meter(Canvas c, Rect r, String value) {
         window(c, r, meter.glass());
-        if (editing) return;
-        String shown = value.isEmpty() ? hint.toUpperCase(Locale.ROOT) : value;
-        int on = value.isEmpty() ? mix(meter.off(), meter.on(), 0.7) : meter.on();
-        if (SEGMENTS.matcher(shown).matches() && segmentsWidth(shown) <= r.w() - 6) segments(c, shown, r.right() - 4, r.y() + (r.h() - 11) / 2, on, mix(meter.glass(), meter.off(), 0.6));
-        else c.text(c.measure().cut(shown, r.w() - 8), r.x() + 4, r.y() + (r.h() - 8) / 2, on);
+        readout(c, r, value, "", meter);
     }
 
     @Override
     public int fieldText() {
-        return meter.on();
+        return LCD.on();
+    }
+
+    /**
+     * Numbers in 7-segment digits of {@code w}, right-aligned over their unlit segments; other text as text. An empty
+     * window shows its hint dimmed; in segments a word reads better in capitals (OFF).
+     */
+    private static void readout(Canvas c, Rect r, String value, String hint, Window w) {
+        String shown = value.isEmpty() ? hint.toUpperCase(Locale.ROOT) : value;
+        int on = value.isEmpty() ? mix(w.off(), w.on(), 0.7) : w.on();
+        if (SEGMENTS.matcher(shown).matches() && segmentsWidth(shown) <= r.w() - 6) segments(c, shown, r.right() - 4, r.y() + (r.h() - 11) / 2, on, mix(w.glass(), w.off(), 0.6));
+        else c.text(c.measure().cut(shown, r.w() - 8), r.x() + 4, r.y() + (r.h() - 8) / 2, on);
     }
 
     /**

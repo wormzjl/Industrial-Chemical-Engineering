@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
  * correctly"): a text wider than its row wraps, and a button row whose texts do not fit side by side stacks its buttons.
  */
 public final class Column {
-    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Buttons, Bar, Gap {
+    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Reading, Buttons, Bar, Gap {
     }
 
     /**
@@ -44,10 +44,20 @@ public final class Column {
     }
 
     /**
-     * A labelled field: its key, label, unit and hint; its box ({@link #BOX} px) at the row's right, the unit after the
-     * box. A label wider than its share of the row goes above the box, wrapped to the row (the box where it always is).
+     * A labelled entry, a value the player types: its key, label, unit and hint; its box ({@link #BOX} px) at the row's
+     * right, the unit after the box. A label wider than its share of the row wraps beside the box in two lines, its words
+     * whole; one that needs more lines, or holds a word wider than its share, goes above the box, wrapped to the row (the
+     * box where it always is; owner: "This Arrangement is not good", GUI_TOOLKIT_PLAN.md section 13).
      */
     public record Field(String key, String label, String unit, @Nullable String hint) implements Row {
+    }
+
+    /**
+     * An indicating meter, a value the plant reads and the player cannot type (owner: "need to differentiate editable value
+     * fields with non-editable"): laid out as a {@link Field}, its box drawn by the skin ({@link Skin#meter}). Its slot,
+     * keyed {@code key}, takes no widget.
+     */
+    public record Reading(String key, String label, String value, String unit, @Nullable String hint) implements Row {
     }
 
     /** Buttons side by side, sharing the width; one a row, each the whole width, where a text does not fit its share. */
@@ -180,17 +190,8 @@ public final class Column {
                 var lines = m.wrap(c.title(), w - 12);
                 yield new Placed(row, new Rect(x, y, w, h.line() + (lines.size() - 1) * Measure.LINE), slots, lines, lines.size(), c.hint());
             }
-            case Field f -> {
-                // A label wider than its share of the row goes above the box, wrapped to the row. A unit wider than its
-                // 15 px takes the rest from the box's right end (m³/s, kg/s), so every box starts where the others do.
-                var label = m.width(f.label()) > w - FIELD_TAIL ? m.wrap(f.label(), w) : List.of(f.label());
-                int above = m.width(f.label()) > w - FIELD_TAIL ? h.line() + (label.size() - 1) * Measure.LINE : 0;
-                int wider = Math.clamp(m.width(f.unit()) - UNIT, 0, BOX - 30);
-                slots.put(f.key(), new Rect(x + w - FIELD_TAIL + 4, y + above, BOX - wider, WIDGET));
-                var texts = new ArrayList<>(label);
-                texts.add(m.width(f.unit()) > UNIT + BOX - 30 ? m.cut(f.unit(), UNIT + BOX - 30) : f.unit());
-                yield new Placed(row, new Rect(x, y, w, above + h.field()), slots, texts, label.size(), f.hint() != null ? f.label() + "\n" + f.hint() : null);
-            }
+            case Field f -> labelled(row, f.key(), f.label(), f.unit(), f.hint(), x, y, w, m, h);
+            case Reading r -> labelled(row, r.key(), r.label(), r.unit(), r.hint(), x, y, w, m, h);
             case Buttons b -> {
                 // Side by side while every text fits its button; else one button a row, each the whole width.
                 int n = b.buttons().size(), bw = (w - BUTTON_GAP * (n - 1)) / n;
@@ -205,6 +206,24 @@ public final class Column {
         };
     }
 
+    /**
+     * An entry's or a meter's row. Its label beside the box, wrapped to two lines where it is wider than its share and
+     * every word fits the share; else above the box, wrapped to the row. A unit wider than its 15 px takes the rest from
+     * the box's right end (m³/s, kg/s), so every box starts where the others do.
+     */
+    private static Placed labelled(Row row, String key, String label, String unit, @Nullable String hint, int x, int y, int w, Measure m, Metrics h) {
+        int share = w - FIELD_TAIL;
+        var lines = m.wrap(label, share);
+        boolean beside = lines.size() <= 2 && java.util.Arrays.stream(label.split(" ")).allMatch(word -> m.width(word) <= share);
+        if (!beside) lines = m.wrap(label, w);
+        int above = beside ? 0 : h.line() + (lines.size() - 1) * Measure.LINE;
+        int wider = Math.clamp(m.width(unit) - UNIT, 0, BOX - 30);
+        var texts = new ArrayList<>(lines);
+        texts.add(m.width(unit) > UNIT + BOX - 30 ? m.cut(unit, UNIT + BOX - 30) : unit);
+        return new Placed(row, new Rect(x, y, w, above + h.field()), Map.of(key, new Rect(x + w - FIELD_TAIL + 4, y + above, BOX - wider, WIDGET)), texts,
+                lines.size(), hint != null ? label + "\n" + hint : null);
+    }
+
     public List<Placed> rows() {
         return rows;
     }
@@ -213,7 +232,7 @@ public final class Column {
         return bounds;
     }
 
-    /** Every widget slot, top to bottom, by key. */
+    /** Every slot, top to bottom, by key: the widgets' and the meters' ({@link Reading}). */
     public Map<String, Rect> slots() {
         var all = new LinkedHashMap<String, Rect>();
         for (var p : rows)
@@ -239,11 +258,11 @@ public final class Column {
         return p != null && p.row() instanceof Choice c ? c.action() : null;
     }
 
-    /** The hover text at content point ({@code px}, {@code py}): a row's, outside its widgets (they have their own). */
+    /** The hover text at content point ({@code px}, {@code py}): a row's, outside its widgets (they have their own); a meter's over its box too. */
     public @Nullable String hover(double px, double py) {
         var p = at(px, py);
         if (p == null) return null;
-        for (var slot : p.slots().values()) if (slot.contains(px, py)) return null;
+        if (!(p.row() instanceof Reading)) for (var slot : p.slots().values()) if (slot.contains(px, py)) return null;
         return p.hover();
     }
 
@@ -269,13 +288,8 @@ public final class Column {
                     skin.mark(c, r.x(), r.y(), ch.selected());
                     for (int i = 0; i < texts.size(); i++) skin.text(c, texts.get(i), r.x() + 12, r.y() + i * Measure.LINE, ch.selected() ? Palette.ACCENT : Palette.TEXT);
                 }
-                case Field ignored -> {
-                    // A stacked label on the lines above its box, else beside it; the unit after the box.
-                    var box = p.slots().values().iterator().next().moved(0, dy);
-                    boolean stacked = box.y() > r.y();
-                    for (int i = 0; i < p.lead(); i++) skin.text(c, texts.get(i), r.x(), stacked ? r.y() + i * Measure.LINE : r.y() + 5, Palette.MUTED);
-                    skin.text(c, texts.getLast(), box.right() + 3, box.y() + 5, Palette.MUTED);
-                }
+                case Field ignored -> labels(c, skin, p, r, dy);
+                case Reading reading -> skin.meter(c, labels(c, skin, p, r, dy), reading.value());
                 case Bar b -> skin.bar(c, new Rect(r.x(), r.y(), r.w(), 8), b.share());
                 case Buttons ignored -> {
                 }
@@ -283,5 +297,18 @@ public final class Column {
                 }
             }
         }
+    }
+
+    /**
+     * An entry's or a meter's label and unit; returns its box, moved by {@code dy}. A label above its box on the lines
+     * above it; beside it, one line centred on the box, two lines along it; the unit after the box.
+     */
+    private static Rect labels(Canvas c, Skin skin, Placed p, Rect r, int dy) {
+        var texts = p.texts();
+        var box = p.slots().values().iterator().next().moved(0, dy);
+        int top = box.y() > r.y() || p.lead() > 1 ? r.y() : r.y() + 5;
+        for (int i = 0; i < p.lead(); i++) skin.text(c, texts.get(i), r.x(), top + i * Measure.LINE, Palette.MUTED);
+        skin.text(c, texts.getLast(), box.right() + 3, box.y() + 5, Palette.MUTED);
+        return box;
     }
 }

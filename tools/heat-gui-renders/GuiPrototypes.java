@@ -199,7 +199,7 @@ public final class GuiPrototypes {
         return new Prototype("vessel-datasheet", 340, 250, (d, s) -> {
             d.skin.title(d.c, 10, 10, "Vertical drum on a skirt");
             var col = d.column(Door.rows(
-                    Door.group("Size", null, Door.field("dia", "Diameter", "m"), Door.field("tt", "Length", "m"), Door.field("vol", "Volume", "m³")),
+                    Door.group("Size", null, Door.field("dia", "Diameter", "m"), Door.field("tt", "Length", "m"), Door.reading("vol", "Volume", "18.8", "m³")),
                     Door.group("Moving parts", "Running turns the units' fans, agitators and impellers; still, they stand. Not saved.",
                             new Column.Buttons(List.of(new Column.Button("still", "Still", true, null), new Column.Button("run", "Running", false, null, true))))),
                     10, 28, 150, Map.of("dia", "2.00", "tt", "6.00", "vol", "18.8"));
@@ -287,7 +287,7 @@ public final class GuiPrototypes {
             var box = split(d, Door.rows(
                     Door.group("Level", "Contents over capacity.", new Column.Bar(0.63), new Column.Line("63 %, 25.2 of 40 m³", Palette.TEXT)),
                     // The net flow in is on the status display: no meter repeats it.
-                    Door.group("Pressure", null, Door.field("top", "Top", "bar"), Door.field("bottom", "Bottom", "bar"))),
+                    Door.group("Pressure", null, Door.reading("top", "Top", "1.01", "bar"), Door.reading("bottom", "Bottom", "1.25", "bar"))),
                     Map.of("top", "1.01", "bottom", "1.25"));
             contents(d, box, new String[]{"Organic", "Aqueous", "Vapor", "Solids"}, 1,
                     List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"Water", "99.2", "1390"}, new String[]{"Salt", "0.8", "11.2"}));
@@ -406,6 +406,11 @@ public final class GuiPrototypes {
 
         static Column.Field field(String key, String label, String unit) {
             return new Column.Field(key, label, unit, null);
+        }
+
+        /** A meter: a value the plant reads, drawn by the skin as an LED meter (an entry is an LCD). */
+        static Column.Reading reading(String key, String label, String value, String unit) {
+            return new Column.Reading(key, label, value, unit, null);
         }
 
         static List<Column.Row> rows(Column.Row... rows) {

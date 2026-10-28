@@ -288,18 +288,85 @@ class KitLayoutTest {
         assertEquals("group " + new Rect(0, 0, 150, Column.plate(1) + 2 + 12 + Column.INSET) + " Mode", calls.getLast(), "the skin draws a group's frame and plate");
     }
 
+    /** Owner: "This Arrangement is not good" (one label beside its box, the next above); GUI_TOOLKIT_PLAN.md section 13. */
     @Test
-    void aFieldWhoseLabelDoesNotFitBesideItsBoxStacksTheLabelAboveIt() {
-        var rows = List.<Column.Row>of(new Column.Field("t", "Set point", "C", null), new Column.Field("r", "Ratio to the other feed", "", null));
+    void aFieldLabelWrapsBesideItsBoxInTwoLinesElseGoesAboveIt() {
+        var rows = List.<Column.Row>of(new Column.Field("t", "Set point", "C", null), new Column.Field("r", "Ratio to the other feed", "", null),
+                new Column.Field("p", "Ratio to the other feed of the pair", "", null), new Column.Field("w", "Interconnection limit", "", null));
         var column = Column.place(rows, 0, 0, 150, M);
+        int boxX = 150 - Column.FIELD_TAIL + 4;
         var inline = column.rows().get(0);
         assertEquals(24, inline.rect().h(), "54 px of label beside the box: one row");
-        assertEquals(new Rect(150 - Column.FIELD_TAIL + 4, 0, Column.BOX, Column.WIDGET), inline.slots().get("t"));
-        var stacked = column.rows().get(1);
-        assertEquals(12 + 24, stacked.rect().h(), "138 px of label in 74 px: the label above the box");
-        assertEquals(new Rect(150 - Column.FIELD_TAIL + 4, 24 + 12, Column.BOX, Column.WIDGET), stacked.slots().get("r"), "the box under its label, in line with the other boxes");
-        assertEquals("Ratio to the other feed", stacked.texts().getFirst(), "the whole label on its own line");
-        assertNull(stacked.hover(), "nothing cut, no hint: no hover");
+        assertEquals(new Rect(boxX, 0, Column.BOX, Column.WIDGET), inline.slots().get("t"));
+        var beside = column.rows().get(1);
+        assertEquals(24, beside.rect().h(), "138 px of label in 74 px: two lines beside the box, the row no taller");
+        assertEquals(new Rect(boxX, 24, Column.BOX, Column.WIDGET), beside.slots().get("r"), "the box in line with the others");
+        assertEquals(List.of("Ratio to the", "other feed"), beside.texts().subList(0, beside.lead()), "words whole");
+        assertNull(beside.hover(), "nothing cut, no hint: no hover");
+        var three = column.rows().get(2);
+        assertEquals(12 + 10 + 24, three.rect().h(), "three lines beside: above the box instead, wrapped to the row");
+        assertEquals(new Rect(boxX, 48 + 22, Column.BOX, Column.WIDGET), three.slots().get("p"));
+        assertEquals(List.of("Ratio to the other feed", "of the pair"), three.texts().subList(0, three.lead()));
+        var word = column.rows().get(3);
+        assertEquals(12 + 24, word.rect().h(), "a 90 px word in a 74 px share is never cut beside the box: above it");
+        assertEquals(List.of("Interconnection limit"), word.texts().subList(0, word.lead()));
+    }
+
+    /** Owner: "need to differentiate editable value fields with non-editable"; GUI_TOOLKIT_PLAN.md section 13. */
+    @Test
+    void aReadingIsPlacedAsAFieldAndDrawnAsAMeter() {
+        var rows = List.<Column.Row>of(new Column.Field("t", "Set point", "C", null), new Column.Reading("now", "Outlet now", "72.6", "C", "What the outlet reads"));
+        var column = Column.place(rows, 0, 0, 150, M);
+        var reading = column.rows().get(1);
+        assertEquals(column.rows().get(0).slots().get("t").moved(0, 24), reading.slots().get("now"), "its box in line with the entry's");
+        assertEquals("Outlet now\nWhat the outlet reads", column.hover(100, 30), "no widget on a meter: its hover over its box too");
+        assertNull(column.hover(100, 6), "an entry's box hovers through its widget");
+        var calls = new ArrayList<String>();
+        var canvas = new Canvas() {
+            @Override
+            public Measure measure() {
+                return M;
+            }
+
+            @Override
+            public void fill(int x0, int y0, int x1, int y1, int argb) {
+            }
+
+            @Override
+            public void text(String text, int x, int y, int argb) {
+            }
+
+            @Override
+            public void text(String text, float x, float y, float scale, int argb) {
+            }
+
+            @Override
+            public void clip(Rect area) {
+            }
+
+            @Override
+            public void unclip() {
+            }
+        };
+        column.draw(canvas, 0, new Skin() {
+            @Override
+            public void meter(Canvas c, Rect r, String value) {
+                calls.add(r + " " + value);
+            }
+
+            @Override
+            public void mark(Canvas c, int x, int y, boolean selected) {
+            }
+
+            @Override
+            public void bar(Canvas c, Rect r, double share) {
+            }
+
+            @Override
+            public void scrollbar(Canvas c, Rect track, Rect thumb, boolean dragging) {
+            }
+        });
+        assertEquals(List.of(reading.slots().get("now") + " 72.6"), calls, "the skin draws the meter; an entry's box is its widget's");
     }
 
     @Test
