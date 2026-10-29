@@ -112,6 +112,7 @@
   "gui.icheme.fluid.status_base.no_flow": "no flow since %s s",
   "gui.icheme.fluid.status_base.full": "solving",
   "gui.icheme.fluid.status.low_limit": "Low limit: the outlet is held at %s",
+  "gui.icheme.fluid.status.column": "Part of the column at %s, %s, %s: running",
   "gui.icheme.fluid.status.duty_short": "Duty insufficient: the outlet is %s below the set point",
   "gui.icheme.fluid.stream": "Stream",
   "gui.icheme.fluid.stream.contents": "Contents",

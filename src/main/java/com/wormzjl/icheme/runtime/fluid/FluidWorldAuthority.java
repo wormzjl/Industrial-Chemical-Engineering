@@ -744,7 +744,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private void publishMover(WorldTopologyLedger.Registration record,net.minecraft.server.level.ServerLevel level,BlockPos pos) {
         if(record.device().ports().isEmpty()||!(record.device().control() instanceof FlowControl.Mover mover))return;
         long id=record.device().id();var target=new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id);
-        var state=new com.wormzjl.icheme.network.FluidNetwork.MoverState(target,mover instanceof FlowControl.Compressor,mover.enabled()&&mover.requestedVolumeFlow()>0);
+        var state=new com.wormzjl.icheme.network.FluidNetwork.MoverState(target,mover instanceof FlowControl.Compressor,
+                // A column holds its pumps and fans only while it runs, and runs them (C7).
+                record.device().suspendedBy()!=0||mover.enabled()&&mover.requestedVolumeFlow()>0);
         publishedMovers.put(id,state);
         for(var uuid:moverWatchers.watchers(id)) {
             var player=server.getPlayerList().getPlayer(uuid);
@@ -899,11 +901,17 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** A device's view, as a presentation read: queued events are not applied (they apply on the engine's tick), and a
      * certified island is materialised to now but never woken by it. */
+    /** A device in no island: the column that holds it and runs it (C7, plan section 13), or why it has none. */
+    private String islandless(PhysicalFluidTopology.Device d,long id){
+        var u=d.suspendedBy()==0?null:topology.column(d.suspendedBy());
+        if(u!=null)return "COLUMN: part of the column at "+u.master().x()+", "+u.master().y()+", "+u.master().z()+", running";
+        return !topology.active().containsKey(id)?"WAITING: topology event":Objects.requireNonNullElse(registry.diagnostic(id),"NO FLOW: no hydraulic boundary");
+    }
     public FluidView view(long id){owned();return view(id,new HashMap<>());}
     /** {@code islands} caches island reads, so one bucket reads each island once however many of its devices it presents. */
     private FluidView view(long id,Map<Long,IslandCoordinator.Snapshot> islands) {
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.viewBuilds);var registration=registrations().get(id);if(registration==null)return new FluidView(id,0,0,topology.onlineTick(),"REMOVED",null,0,List.of());
-        Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),!topology.active().containsKey(id)?"WAITING: topology event":Objects.requireNonNullElse(registry.diagnostic(id),"NO FLOW: no hydraulic boundary"),null,0,List.of(),null,0,List.of(),null);
+        Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);
         var snapshot=islands.computeIfAbsent(owner,runtime.coordinator()::presentation);FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
         for(int i=0;i<snapshot.graph().reservoirs().size();i++)if(snapshot.graph().reservoirs().get(i).id()==id){nodeIndex=i;var node=snapshot.graph().reservoirs().get(i);empty=node.empty();if(!empty)state=FluidView.State.from(node.state(),node.kind()==PassiveNetwork.NodeKind.RESERVOIR?node.inventory().volume():node.state().volume());break;}
         InlineFilter filter=null;if(registration.device().filter()){state=null;for(var p:snapshot.graph().pipes())if(p.id()==PhysicalFluidTopology.filterIdentity(id))filter=p.filter();}
