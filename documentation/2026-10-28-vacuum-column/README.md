@@ -1,6 +1,6 @@
 # Vacuum-column feed and distillation test
 
-Status: In progress since 2026-10-28 (`codex/vacuum-column-test`; fix and offline retest complete, not merged).
+Status: In progress since 2026-10-28; `codex/vacuum-column-test` integrated into `claude/column-operation-5c3005` at `baca269b` on 2026-10-29. Main merge pending.
 
 ## History
 
@@ -8,7 +8,7 @@ Status: In progress since 2026-10-28 (`codex/vacuum-column-test`; fix and offlin
 - 2026-10-29 — follow-up to `8d511f71`: traced the unchanged failure, independently reproduced two accepted startup states containing the same liquid labelled as vapor, measured the projection's energy-defect amplification and located the 900 K range wall. Three collapsed pairs and two valid controls verified; diagnosis only, no production changes.
 - 2026-10-29 — `494d3e45` diagnosis followed by `dba4ba45`: implemented zero-reflux dry upper stages, stronger phase admission, safer startup/projection and caloric continuation; accepted the unchanged CDU-bottoms feed with zero reflux, steam, two cuts and 10+15 MW cooling. Final quick 1810 and slow 188 pass with no failures/errors/skips; historical captured-state analyzer and every-component export checks pass. Exported and independently closed every VDU component to <7.11e-15 mol/s. No GUI/world check or merge.
 - 2026-10-29 — tools `3509f67a`, tested production at `9c0ce21f`: completed full-chain conditioning and 1,000 cold VDU cases (228 pass all checks; heater-pressure correction fails), then 200 old/1,000 updated full positive-reflux CDU cases. Matched CDU acceptance 129→131/200; all four controls pass both; sole lost raw acceptance is a timeout that accepts alone in 11.199 s. Updated CDU accepts 682/1,000. Recorded load caveat; no speed claim, production changes or merge.
-- 2026-10-29 — owner requested integration of `2331e649` into `claude/column-operation-5c3005` at `61955af2`; prepared in the task's worktree on `codex/column-vacuum-integration`. Production merges cleanly; retain both documentation histories. Merged quick **1839** + slow **188** pass with zero failures/errors/skips and the packaged native default loaded. Guarded target delivery is recorded below and in the integration review; no main merge/version bump.
+- 2026-10-29 — owner requested integration of `2331e649` into `claude/column-operation-5c3005` at `61955af2`; prepared in the task's worktree on `codex/column-vacuum-integration`. Production merges cleanly; retain both documentation histories. Merged quick **1839** + slow **188** pass with zero failures/errors/skips and the packaged native default loaded. Delivered merge **`baca269b`** by guarded fast-forward; both ancestries and clean target verified. No main merge/version bump.
 
 ## Documents
 
@@ -23,6 +23,6 @@ Status: In progress since 2026-10-28 (`codex/vacuum-column-test`; fix and offlin
 ## Code areas and open items
 
 Changed: `science/column/v3/` topology, resolution, initialization, continuation, audit, seed transfer, hydraulics and column PR adapter; regression fixtures/tests; code guide column-v3/verification; offline tools. Shared fluid-network EOS arithmetic and material data were not changed.
-Open: owner merge/version choice; packed-column pressure model, general dry middle sections, outer heater-enthalpy coupling and broad VDU convergence. The accepted trial uses 25 MW of authored cooling; earlier 3/8 MW trials did not converge and their feasibility remains unproven. Correcting heater enthalpy at final feed pressure also failed to converge, so no closed heater/VDU chain is claimed. The exported fixed-inlet column says OFFLINE ACCEPTED.
+Open: owner main merge/version choice; packed-column pressure model, general dry middle sections, outer heater-enthalpy coupling and broad VDU convergence. The accepted trial uses 25 MW of authored cooling; earlier 3/8 MW trials did not converge and their feasibility remains unproven. Correcting heater enthalpy at final feed pressure also failed to converge, so no closed heater/VDU chain is claimed. The exported fixed-inlet column says OFFLINE ACCEPTED.
 Raw outputs, loadable exports, frozen populations, revision results and replay are retained in this worktree's indexed `tmp/` folders while the branch remains unmerged; they are not tracked. The reviews name each run; re-run the documented commands to regenerate them.
 Baseline comparison used own clean detached `.claude/worktrees/vacuum-baseline-scratch` at `494d3e45`; its targeted tests passed. Its indexed output is retained; no unmerged output was deleted. No new production probe or one-off Gradle switch remains; measurement helpers live in `tools/vacuum-column-test/`.

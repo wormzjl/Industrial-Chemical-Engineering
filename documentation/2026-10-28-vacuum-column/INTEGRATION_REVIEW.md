@@ -22,7 +22,7 @@ The operating column retains its scheduling, ports, accounts and default native 
 
 ## Delivery and limits
 
-- Target recheck after passing suites: clean at `61955af2`; delivery uses a guarded fast-forward to the prepared integration, without reset or discarded work. Final delivery is recorded in the batch history.
+- Delivered merge **`baca269b`** to `claude/column-operation-5c3005` by guarded fast-forward from the clean `61955af2` checkout. Both source/target ancestries and the clean result were verified; no reset or discarded work.
 - This is a feature-branch integration. Keep the batch In progress until it reaches main; no version bump or release heading.
 - Existing limits remain: broad VDU convergence, heater-pressure/enthalpy coupling, general dry middle sections, packing hydraulics; column-operation's recorded fluid-valve holds and open in-game gates are not resolved by this merge.
 - Preserve all unmerged scratch outputs and downloaded tools. No worktree or branch cleanup was requested.
