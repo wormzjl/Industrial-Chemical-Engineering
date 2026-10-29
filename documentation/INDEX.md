@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-10-28-vacuum-column/](2026-10-28-vacuum-column/README.md) | Zero-reflux vacuum column and CDU-bottoms test | In progress since 2026-10-28 |
+| [2026-10-28-vacuum-column/](2026-10-28-vacuum-column/README.md) | Column convergence and dry-stage support | In progress since 2026-10-28 |
 | [2026-10-28-drum-outlet-placement/](2026-10-28-drum-outlet-placement/README.md) | A lying boot drum's oil outlet at the bottom of its front end, not mid-height on the head | Implemented 2026-10-28 (0.17.1) |
 | [2026-10-28-constructor-templates/](2026-10-28-constructor-templates/README.md) | Constructor: current kind opens its design, column templates, calculator Save kept on close | Implemented 2026-10-28 (0.17.1) |
 | [2026-10-28-gui-toolkit/](2026-10-28-gui-toolkit/README.md) | An own small GUI toolkit, first on the heat Control tab | Implemented 2026-10-28 (0.17.0, 0.17.1) |
