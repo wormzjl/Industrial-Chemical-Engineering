@@ -82,6 +82,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         String status="STARTING: waiting for the first solve";
         /** The status as the Operation tab says it (C7), set with {@link #status}; the solve that gave the table, whether warm; whether the last solve failed. */
         com.wormzjl.icheme.science.column.operation.OperationView.Phase phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.STARTING;DriftBands.Trigger solvedBy;boolean warm,failed;
+        /** Why an inlet demanded nothing at the last cycle (it has no molar mass to meter by), or null. */
+        String unmetered;
         ColumnCycle.Step last;
         /** The solve in flight, the tick of the last one asked, the failures in a row and the earliest retry, the warm seed. */
         Pending pending;long lastSolve=Long.MIN_VALUE/2,retryAt=Long.MIN_VALUE/2;int failures;V3NeuralSeed seed;
@@ -409,6 +411,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(trigger!=null&&step.feedMoles()>0){var source=solves.design(u);if(source!=null)request(r,u,tick,trigger,taken(step,source));}
         if(r.pending!=null)r.status="RE-SOLVING: "+r.pending.trigger.name().toLowerCase(Locale.ROOT)+"; "+r.status;
         if(!r.note.isEmpty())r.status+="; "+r.note;
+        if(r.unmetered!=null)r.status+="; "+r.unmetered;
     }
     /** The state a tripped cycle was given: the feed it holds at the set rate, the steam at its ratios. */
     private ColumnSolve.Taken attempted(ColumnUnit u,Account feed,List<Account> steam,V3ColumnInput design) {
@@ -422,6 +425,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     /** Each inlet's level after the cycle at {@code tick} and the rate the column then demands of it (none: {@code demanding} false);
      * every port's island wakes where the plans this cycle dates take effect, the tick plus the fence. */
     private void levels(Run r,ColumnUnit u,Map<Long,Account> available,long tick,boolean demanding) {
+        r.unmetered=null;
         for(var s:u.stations()) {
             if(s.device()!=0)wakes.computeIfAbsent(tick+FENCE_TICKS,t->new TreeSet<>()).add(s.device());
             if(!s.port().inlet())continue;
@@ -430,6 +434,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             // port's own contents, which before the first arrival are whatever filled the pipe).
             double molarMass=molar(available.get(s.device()).moles());
             if(!(molarMass>0)){int water=axis.indexOf(SplitTable.WATER);molarMass=s.port()==Port.FEED?(r.table==null?0:molar(r.table.reference().feedFractions())):water<0?0:weights[water];}
+            // Nothing to meter by (steam on an axis without water): the inlet demands nothing, and the status line says why.
+            if(rate>0&&!(molarMass>0)){rate=0;r.unmetered=String.format(Locale.ROOT,"the %s inlet takes nothing: no molar mass to meter it by",s.port().name().toLowerCase(Locale.ROOT));}
             r.levels.computeIfAbsent(s.device(),d->new ArrayDeque<>()).addLast(new Level(tick,available.get(s.device()).total(),rate,molarMass));
         }
     }
@@ -480,9 +486,9 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private PortPlan inletPlan(Run r,ColumnUnit.Station s,PassiveNetwork.Reservoir node,IslandClock.Slice slice) {
         double target=0;
         var level=r==null?null:asOf(r.levels.get(s.device()),Level::tick,slice.startTick()-FENCE_TICKS);
-        if(level!=null&&level.rate()>0) {
+        if(level!=null&&level.rate()>0&&level.molarMass()>0) {
             double aim=level.rate()*INLET_AIM_SECONDS,gain=Math.max(0,Math.min(2,1+(aim-level.held())/aim));
-            target=level.rate()*gain*(level.molarMass()>0?level.molarMass():molarMass(new double[0],node));
+            target=level.rate()*gain*level.molarMass();
         }
         return new PortPlan(node.id(),s.valve(),target,0,null);
     }
@@ -509,12 +515,6 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     private double mass(double[] moles){double m=0;for(int i=0;i<moles.length;i++)m+=moles[i]*weights[i];return m;}
     private double molar(double[] moles){double t=0;for(double n:moles)t+=n;return t>0?mass(moles)/t:0;}
-    private double molarMass(double[] moles,PassiveNetwork.Reservoir node) {
-        double total=0,mass=0;for(int i=0;i<moles.length;i++){total+=moles[i];mass+=moles[i]*weights[i];}
-        if(total>0)return mass/total;
-        var n=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state());total=0;mass=0;for(int i=0;i<n.length;i++){total+=n[i];mass+=n[i]*weights[i];}
-        return total>0?mass/total:.1;
-    }
     /** What the island's ports gave and took over {@code start} to {@code end} (plan 4.4). */
     @Override public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
         if(portUnits.isEmpty()||end<=start)return;

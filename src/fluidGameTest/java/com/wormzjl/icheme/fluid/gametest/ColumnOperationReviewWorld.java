@@ -200,9 +200,10 @@ public final class ColumnOperationReviewWorld {
                 plant.route(AssemblyGameTests.Plant.front(pumps.get(j), Role.DISCHARGE), AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_INLET));
                 plant.route(AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_OUTLET), front(column, Role.RETURN, j));
             }
-            // The feed and the steam lines sized for their flows, on both sides of their valves: the least bore (0.05 m) passes
-            // 2.6 kg/s of the 638 K crude at 5 bar (13 kg/m³) at the 100 m/s cap, a quarter of the feed, and the steam (2.1 kg/m³)
-            // at 92 m/s. At 0.25 m the crude runs at 12 m/s, at 0.15 m the steam at 10 m/s.
+            // The feed and the steam lines sized for their flows, on both sides of their valves (the network model's flash): the
+            // crude is 71 % vapour at 638 K and 5 bar (30.2 kg/m³), 79 % at 632 K and 2.5 bar past the valve (13.5 kg/m³); its
+            // start target, 19.9 kg/s, runs at 336 and 750 m/s in the least bore (0.05 m), 13 and 30 m/s at 0.25 m. The steam,
+            // 0.75 kg/s at the start (2.1 and 1.0 kg/m³), runs at 185 and 370 m/s at 0.05 m, 21 and 41 m/s at 0.15 m.
             for (var line : List.of(new Object[]{Role.FEED, FEED_BORE}, new Object[]{Role.STEAM, STEAM_BORE})) {
                 var role = (Role) line[0];
                 for (int k : new int[]{0, 2})
