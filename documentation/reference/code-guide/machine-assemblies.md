@@ -45,7 +45,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | **Client** | | |
 | [`gui/screens/inventory/AssemblyScreen`](../../../src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/AssemblyScreen.java) | The column's screen: the drawing scaled to fit, the parts list, Check parts, Open unit, Datasheet, on the GUI kit's door and glass ([client-gui.md](client-gui.md)); tabs Operation (a placeholder in this stage) and Structure | What the player sees |
 | [`gui/common/AssemblyDiagram`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/AssemblyDiagram.java) | Minecraft-free drawing model on a 680 × 724 grid: `Part` per slot, `Wire`, `Label`, `Pill`, `PortMark` (`SIZE` 8, with its partner slot); `of(trays)`; texts are keys under `gui.icheme.assembly.` | The drawing's layout |
-| [`AssemblyToolClient`](../../../src/main/java/com/wormzjl/icheme/client/AssemblyToolClient.java), [`PortColours`](../../../src/main/java/com/wormzjl/icheme/client/PortColours.java) | The laying tool's watch on the client (`watch`, `received`, `frame`, `line`); the port class colours shared with the drawing | The tool's marks |
+| [`AssemblyToolClient`](../../../src/main/java/com/wormzjl/icheme/client/AssemblyToolClient.java), [`PortColours`](../../../src/main/java/com/wormzjl/icheme/client/PortColours.java) | The laying tool's watch on the client (`watch`, `received`, `frame`, `line`); the laying tool's port class colours | The tool's marks |
 
 ## Main flow
 
@@ -146,7 +146,7 @@ States in rank order (a later one outranks an earlier one on the same slot):
 - An outside line may end in a terminal, a branch, or an open end at least `EXTERNAL_REACH` 16 pipe blocks beyond its last valve; fittings after that boundary valve are outside the assembly and not checked.
 - A fitting's arrow must point with the stream: along the walk downstream, back along it on an upstream link (feed, steam), so those valves point into the column.
 - A tee's branches are assigned by the best score over their permutations: a branch is taken by where it goes (its port 4, outside 2, a valve on it 1). A branch that splits again (an exchanger's bypass) adds 2 for a run ending at a junction and 1 for a valve where its steps ask for one: the feed and the bypass leaving an inlet tee both end outside the tee's own walk.
-- Port states: NEEDED (its class colour), CONNECTED (grey), UTILITY (advice: cooling water, motive steam; its class colour until piped), UNUSED. Every port the blueprint names on a filled slot is NEEDED until a run reaches it (`requireNamed`).
+- Port states: NEEDED, CONNECTED, UTILITY (advice: cooling water, motive steam), UNUSED. Every port the blueprint names on a filled slot is NEEDED until a run reaches it (`requireNamed`). GUI colour snapshot `9cfc3a08` (`claude/column-operation-5c3005`), 2026-10-29: `AssemblyFlowsheet` gives every square its own colour in the design's fixed port order, retained across reports; CONNECTED has a grey edge and UNUSED is hidden. The laying tool uses class colours while a pipe is needed and grey once connected.
 - The same graph always gives the same report (`theSamePipesGiveTheSameReport`).
 </details>
 
