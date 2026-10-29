@@ -429,10 +429,34 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The condenser's water side: of its two sides, the one outside the column, partnered with one inside (C6b).
         long water=0;
         for(long side:request.condenser()){var r=registrations().get(side);if(r!=null&&!inside.containsKey(side)&&r.device().heat()!=null&&inside.containsKey(r.device().heat().partner()))water=side;}
-        topology.column(new ColumnUnit(unit,request.master(),true,request.setpoints(),stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water));
+        // A restart keeps the set points the player applied while they fit the design's ports (C7); else the design's.
+        var setpoints=existing!=null&&compatible(existing.setpoints(),request.setpoints())?existing.setpoints():request.setpoints();
+        topology.column(new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water));
         submit(edits,id);columns.refresh();
         IChemE.LOGGER.info("column status=STARTED master={},{},{} unit={} held={} ports={}",request.master().x(),request.master().y(),request.master().z(),unit,inside.size(),stations.size());
         return null;
+    }
+    /** Whether set points {@code a} fit the design {@code b} was taken from: its rate and as many steam inlets, draws and pumparounds. */
+    static boolean compatible(com.wormzjl.icheme.science.column.operation.Setpoints a,com.wormzjl.icheme.science.column.operation.Setpoints b) {
+        return a.designFeedRate()==b.designFeedRate()&&a.steamPerFeed().length==b.steamPerFeed().length&&a.drawsPerFeed().length==b.drawsPerFeed().length
+                &&a.pumparoundsPerFeed().length==b.pumparoundsPerFeed().length&&(a.reboilerPerFeed()==0)==(b.reboilerPerFeed()==0);
+    }
+    /**
+     * The set points {@code value} for the column at {@code master} (C7, plan section 13): a fact of its unit, the next cycle
+     * reads them and a changed ratio solves. Returns null, or why not: no unit yet (it never ran), or the values do not fit
+     * its design. The feed rate stays at most the design rate (owner Q8).
+     */
+    public @org.jetbrains.annotations.Nullable String editColumn(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints value) {
+        owned();if(closed)return "the fluid world is closed";
+        var u=column(master);if(u==null)return "the column has not run yet";
+        if(!compatible(u.setpoints(),value))return "the set points do not fit the column's design";
+        topology.column(u.withSetpoints(value));
+        IChemE.LOGGER.info("column status=SETPOINTS master={},{},{} unit={}",master.x(),master.y(),master.z(),u.id());
+        return null;
+    }
+    /** The Operation tab's view of the column at {@code master} (C7): cached cycle data, no solve; null where it has no unit. */
+    public com.wormzjl.icheme.science.column.operation.OperationView columnView(PhysicalFluidTopology.Position master,java.util.function.LongToDoubleFunction opening) {
+        owned();var u=column(master);return u==null?null:columns.view(u.id(),topology.onlineTick(),opening);
     }
     /** Stops column unit {@code unit} (plan 4.1), one queued ledger event: its held devices are released as they are and its
      * ports leave. Every account stays with the unit. Nothing when it is not running. */

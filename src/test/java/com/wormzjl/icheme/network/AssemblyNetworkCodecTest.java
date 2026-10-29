@@ -59,6 +59,32 @@ class AssemblyNetworkCodecTest {
         assertEquals(AssemblyView.NO_DESIGN, roundTrip(AssemblyView.NO_DESIGN));
     }
 
+    /** The Operation tab (C7): a view's operation crosses whole, a column never run and a running one; a command with its set points. */
+    @Test
+    void anOperationAndItsCommandsCross() {
+        var report = new AssemblyReport(List.of(new SlotReport(ColumnBlueprint.COLUMN, State.OK, COLUMN, AssemblyReport.NONE, "")), List.of(), Set.of(), List.of(COLUMN));
+        var complete = new AssemblyView(AssemblyView.Status.COMPLETE, report, AssemblyReport.NONE);
+        var s = com.wormzjl.icheme.client.gui.common.OperationColumnTest.setpoints(2, 4, 4, true);
+        for (var operation : List.of(com.wormzjl.icheme.client.gui.common.OperationColumnTest.running(s, com.wormzjl.icheme.science.column.operation.OperationView.Phase.LIMITED),
+                com.wormzjl.icheme.science.column.operation.OperationView.idle(com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY, "a vacuum column cannot run yet", s))) {
+            var view = complete.withOperation(operation);
+            assertEquals(view, roundTrip(view));
+        }
+        // A view with no operation (no design, a watch) crosses with none.
+        assertNull(roundTrip(complete).operation());
+        var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+        try {
+            for (var payload : List.of(new AssemblyNetwork.OperationPayload(3, AssemblyNetwork.Action.APPLY, List.of(33.3, 318.15, 2.5, 0.0, .05, -63000.0)),
+                    new AssemblyNetwork.OperationPayload(3, AssemblyNetwork.Action.START, List.of()), new AssemblyNetwork.OperationPayload(3, AssemblyNetwork.Action.STOP, List.of()))) {
+                AssemblyNetwork.OperationPayload.STREAM_CODEC.encode(buffer, payload);
+                assertEquals(payload, AssemblyNetwork.OperationPayload.STREAM_CODEC.decode(buffer));
+            }
+            assertEquals(0, buffer.readableBytes());
+        } finally {
+            buffer.release();
+        }
+    }
+
     /** The laying tool's watch (W7): a watched column's view, or its end, crosses with its master. */
     @Test
     void aWatchedViewOrItsEndCrossesWithItsMaster() {

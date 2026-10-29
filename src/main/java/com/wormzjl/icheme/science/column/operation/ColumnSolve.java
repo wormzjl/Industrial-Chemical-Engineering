@@ -195,7 +195,7 @@ public final class ColumnSolve {
         // The table on the network's axis, its reference the state taken.
         double[] z = new double[m];
         for (int i = 0; i < m; i++) z[i] = feed[i] / rate;
-        var reference = new SplitTable.Reference(z, h, feedSlope, steamRatios, rate / setpoints.designFeedRate(), setpoints);
+        var reference = new SplitTable.Reference(z, h, feedSlope, steamRatios, rate / setpoints.designFeedRate(), setpoints, t, steamT);
         var solved = SplitTable.of(axis, boilingPoints(catalog, packageId, axis), input, success.result(), reference);
         // Each product's partial molar enthalpies and the closure on the network's basis.
         double[] pooled = feed.clone();

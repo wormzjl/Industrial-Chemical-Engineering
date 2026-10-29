@@ -80,6 +80,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double[][] enthalpy;
         long nextCycle;
         String status="STARTING: waiting for the first solve";
+        /** The status as the Operation tab says it (C7), set with {@link #status}; the solve that gave the table, whether warm; whether the last solve failed. */
+        com.wormzjl.icheme.science.column.operation.OperationView.Phase phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.STARTING;DriftBands.Trigger solvedBy;boolean warm,failed;
         ColumnCycle.Step last;
         /** The solve in flight, the tick of the last one asked, the failures in a row and the earliest retry, the warm seed. */
         Pending pending;long lastSolve=Long.MIN_VALUE/2,retryAt=Long.MIN_VALUE/2;int failures;V3NeuralSeed seed;
@@ -136,7 +138,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private Run restore(ColumnUnit u) {
         var r=new Run(u.id(),firstCycle(u.id()));var s=u.state();
         if(s==null||!s.table().axis().equals(axis)||missingStation(u,s.table())!=null)return r;
-        r.table=s.table();r.enthalpy=s.enthalpy();r.tableTick=s.tableTick();r.applied=s.applied();r.solvedCondenser=s.solvedCondenser();r.status="RUNNING";
+        r.table=s.table();r.enthalpy=s.enthalpy();r.tableTick=s.tableTick();r.applied=s.applied();r.solvedCondenser=s.solvedCondenser();r.status="RUNNING";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING;
         r.lastSolve=s.tableTick();
         for(var l:s.levels())r.levels.computeIfAbsent(l.device(),d->new ArrayDeque<>()).addLast(new Level(l.tick(),l.held(),l.rate(),l.molarMass()));
         for(var c:s.credits())r.credits.computeIfAbsent(c.device(),d->new ArrayDeque<>()).addLast(new Credit(c.tick(),c.product()));
@@ -164,13 +166,63 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     public String status(long unit){var r=runs.get(unit);return r==null?"STOPPED":r.status;}
     /** The last cycle of unit {@code unit}, or null. */
     public ColumnCycle.Step last(long unit){var r=runs.get(unit);return r==null?null:r.last;}
+    /**
+     * The Operation tab's view of unit {@code unit} at online tick {@code now} (C7, plan section 13): a read of its run's last
+     * cycle and table, no solve. Each port's rate over that cycle, its temperature (the table's; the feed's moved along the
+     * table's slope to the enthalpy taken), the pressure its port holds, its account against its aim (an inlet: 30 s of its
+     * set rate; an outlet: its buffer of design production), its valve's opening as {@code opening} reads it (NaN unknown);
+     * the duties booked over the cycle against the table's at the set feed. Null where the ledger has no such unit.
+     */
+    public com.wormzjl.icheme.science.column.operation.OperationView view(long unit,long now,java.util.function.LongToDoubleFunction opening) {
+        var u=topology.column(unit);if(u==null)return null;
+        var r=u.running()?runs.get(unit):null;var set=u.setpoints();
+        if(r==null)return new com.wormzjl.icheme.science.column.operation.OperationView(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,ColumnCycle.Limit.NONE,0,false,null,false,
+                "STOPPED",false,true,set,List.of(),List.of(),null);
+        var t=r.table;var step=r.last!=null&&r.last.trip()==null?r.last:null;double seconds=CYCLE_TICKS/20.0;
+        var stations=new ArrayList<>(u.stations());stations.sort(Comparator.comparing((ColumnUnit.Station s)->s.port()).thenComparingInt(ColumnUnit.Station::index));
+        var streams=new ArrayList<com.wormzjl.icheme.science.column.operation.OperationView.Stream>();
+        for(var s:stations) {
+            var registration=s.device()==0?null:topology.active().get(s.device());
+            double rate=0,temperature=Double.NaN,held=Double.NaN,pressure=registration==null?Double.NaN:registration.spec().pressure();
+            if(s.port().inlet()) {
+                var taken=step==null?null:s.port()==Port.FEED?step.feed():s.index()<step.steam().size()?step.steam().get(s.index()):null;
+                if(taken!=null)rate=taken.total()/seconds;
+                if(t!=null)temperature=s.port()==Port.FEED?t.reference().feedTemperature(taken!=null&&taken.total()>0?taken.energy()/taken.total():Double.NaN)
+                        :s.index()<t.reference().steamTemperatures().length?t.reference().steamTemperatures()[s.index()]:Double.NaN;
+                double aim=INLET_AIM_SECONDS*(s.port()==Port.FEED?set.feedRate():s.index()<set.steamPerFeed().length?set.feedRate()*set.steamPerFeed()[s.index()]:0);
+                if(aim>0)held=s.account().total()/aim;
+            } else if(t!=null) {
+                int k=t.product(s.port(),s.index());
+                if(k>=0) {
+                    var p=t.products().get(k);temperature=p.temperature();
+                    if(step!=null&&k<step.products().size())rate=step.products().get(k).total()/seconds;
+                    double share=0;var z=t.reference().feedFractions();for(int c=0;c<z.length;c++)share+=p.recovery()[c]*z[c];
+                    double capacity=set.designFeedRate()*BUFFER_SECONDS*share;
+                    if(capacity>0)held=s.account().total()/capacity;
+                }
+            }
+            streams.add(new com.wormzjl.icheme.science.column.operation.OperationView.Stream(s.port(),s.index(),rate,temperature,pressure,held,opening.applyAsDouble(s.valve())));
+        }
+        var duties=new ArrayList<com.wormzjl.icheme.science.column.operation.OperationView.Duty>();
+        if(t!=null) {
+            double f=set.feedRate();
+            duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.CONDENSER,0,step==null?0:step.condenser()/seconds,t.condenserPerFeed()*f));
+            if(set.reboilerPerFeed()!=0)duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.REBOILER,0,step==null?0:step.reboiler()/seconds,t.reboilerPerFeed()*f));
+            var pa=t.pumparoundPerFeed();
+            for(int j=0;j<pa.length;j++)duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.PUMPAROUND,j,
+                    step==null||j>=step.pumparounds().length?0:step.pumparounds()[j]/seconds,pa[j]*f));
+        }
+        var solve=t==null?null:new com.wormzjl.icheme.science.column.operation.OperationView.Solve(r.solvedBy,r.warm,Math.max(0,now-r.tableTick)/20.0);
+        return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,step==null?ColumnCycle.Limit.NONE:step.limit(),step==null?0:step.alpha(),r.ruleA,
+                r.pending==null?null:r.pending.trigger,r.failed,r.status,true,true,set,streams,duties,solve);
+    }
     /** Installs a solved split table and its products' partial molar enthalpies (J/mol) for unit {@code unit} (C5). */
     public void table(long unit,SplitTable table,double[][] enthalpy) {
         var r=runs.get(unit);if(r==null)return;
         if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy row per product");
         var u=topology.column(unit);
         for(var p:table.products())if(u.station(p.port(),p.index())==null)throw new IllegalArgumentException("Product "+p.port()+" "+p.index()+" has no station");
-        r.table=table;r.enthalpy=ColumnSolve.copy(enthalpy);r.status="RUNNING";
+        r.table=table;r.enthalpy=ColumnSolve.copy(enthalpy);r.status="RUNNING";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING;
     }
 
     /** The next cycle deadline: the earliest cycle still ahead. A cycle already due waits for its inlets' bookings, which
@@ -207,17 +259,17 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var u=topology.column(r.unit);
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
-            r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();
+            r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");r.failed=false;
             // Only a solve of the short steam itself lifts rule A: one at A's own state says nothing of B's.
             if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=false;
             return true;
         }
         String reason=refused!=null?refused:((ColumnSolve.Failed)p.outcome).reason();
-        r.failures++;r.retryAt=tick+RETRY_TICKS[Math.min(r.failures,RETRY_TICKS.length)-1];
+        r.failures++;r.failed=r.table!=null;r.retryAt=tick+RETRY_TICKS[Math.min(r.failures,RETRY_TICKS.length)-1];
         // A solve of a changed steam ratio failed (zero steam without a reboiler, the draw wall): rule A, the inputs cut together.
         if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=true;
         r.note=r.table==null?"":String.format(Locale.ROOT,"the %s solve failed (%s), the table of %d s ago kept",p.trigger.name().toLowerCase(Locale.ROOT),reason,(tick-r.tableTick)/20);
-        if(r.table==null)r.status="NOT READY: "+reason;
+        if(r.table==null){r.status="NOT READY: "+reason;r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;}
         return true;
     }
     /** A product of {@code table} the unit has no outlet for, as a refusal, or null. */
@@ -234,7 +286,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         boolean urgent=trigger==DriftBands.Trigger.SETPOINT||trigger==DriftBands.Trigger.START;
         if(!urgent&&tick<r.lastSolve+SOLVE_SPACING)return;
         var design=solves.design(u);
-        if(design==null){if(r.table==null)r.status="NOT READY: the design has no operating point";return;}
+        if(design==null){if(r.table==null){r.status="NOT READY: the design has no operating point";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;}return;}
         if(taken==null)taken=designTaken(u,design);
         var pending=new Pending(trigger,tick);
         var job=new ColumnSolve.Job(trigger,design,u.setpoints(),taken,trigger==DriftBands.Trigger.START?null:r.seed);
@@ -242,7 +294,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         r.pending=pending;
         if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.pending=null;return;}
         r.lastSolve=tick;
-        if(r.table==null)r.status="STARTING: the first solve";
+        if(r.table==null){r.status="STARTING: the first solve";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.STARTING;}
     }
     /** A solve's outcome, on the server thread: a cycle waiting for it runs now. */
     private void done(Run r,Pending pending,ColumnSolve.Outcome outcome) {
@@ -331,7 +383,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(step.trip()!=null) {
             // The model has no steady state for this input (a capability limit): the inlets close, a solve of the state the
             // column was given may lift it.
-            r.status="UPSET: "+step.trip();
+            r.status="UPSET: "+step.trip();r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.UPSET;
             if(feedAvailable.total()>0){var source=solves.design(u);if(source!=null)request(r,u,tick,DriftBands.Trigger.CLOSURE,attempted(u,feedAvailable,steam,source));}
             levels(r,u,available,tick,false);return;
         }
@@ -351,6 +403,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(partner!=0)owe(r,u,partner,tick,-step.condenser());
         levels(r,u,available,tick,true);
         r.status=step.limit()==ColumnCycle.Limit.NONE?"RUNNING":String.format(Locale.ROOT,"LIMITED: %s, %.0f %%",step.limit().name().toLowerCase(Locale.ROOT),100*step.alpha());
+        r.phase=step.limit()==ColumnCycle.Limit.NONE?com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING:com.wormzjl.icheme.science.column.operation.OperationView.Phase.LIMITED;
         if(r.ruleA)r.status+=", inputs cut together (rule A)";
         // A new solve where the state taken left the table's bands, or the setpoints moved (plan section 6).
         DriftBands.Trigger trigger=u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT

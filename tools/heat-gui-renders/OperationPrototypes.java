@@ -1,74 +1,67 @@
 import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
-import com.wormzjl.icheme.client.gui.common.DialogColumns;
+import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
+import com.wormzjl.icheme.client.gui.common.OperationColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
-import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.science.column.operation.ColumnCycle;
+import com.wormzjl.icheme.science.column.operation.DriftBands;
+import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.column.operation.Port;
+import com.wormzjl.icheme.science.column.operation.Setpoints;
+import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
+import com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit;
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Prototypes of the column's Operation tab (batch 2026-10-28-column-operation, C7, plan section 13): the assembly screen's
- * frame (title, the Structure and Operation tabs, the status once), the ports and the duties and the last solve as tables on the HMI glass,
- * the door column with the run switch, the set points per unit feed, Close and Apply on the footer.
- * Two options for the page's size: A at the assembly screen's design size (464 by 254; the glass shows the ports or the
- * duties, the door scrolls), B at a taller design height (464 by 360, the 1920 by 1080 and 2560 by 1440 windows' GUI size
- * 640 by 360; everything in one view). The data are illustrative: a crude column at 86 % of its feed, its cooling water short.
+ * The column's Operation tab (batch 2026-10-28-column-operation, C7; the owner chose layout B on 2026-10-29), drawn through
+ * the shipped {@link OperationColumn} in the assembly screen's frame ({@link AssemblyColumn}): the status once, the ports,
+ * duties and last solve on the HMI glass, Control and the set points on the door, Close and Apply on the footer. At the
+ * 1920 by 1080 window's size (scale 3 for the page's 360 px design height: 640 by 360 GUI px, the image 624 by 344), and at
+ * a narrow window's (1024 by 768, scale 2: the image 496 by 368), where the largest design's door scrolls. The data are
+ * illustrative: a crude column at 86 % of its feed, its cooling water short.
  */
 final class OperationPrototypes {
     private OperationPrototypes() {
     }
 
+    static final OperationColumn.Units UNITS = new OperationColumn.Units(TemperatureUnit.CELSIUS, PressureUnit.BAR, FlowRateUnit.PER_HOUR);
+
     static List<GuiPrototypes.Prototype> operation() {
-        return List.of(new GuiPrototypes.Prototype("operation-a-design-size", 464, 254, (d, s) -> door(d, false), true),
-                new GuiPrototypes.Prototype("operation-b-taller-page", 640, 360, (d, s) -> door(d, true)));
+        return List.of(new GuiPrototypes.Prototype("operation-1920x1080", 624, 344, (d, s) -> door(d, crude(1, 2, 2))),
+                new GuiPrototypes.Prototype("operation-narrow-largest", 496, 368, (d, s) -> door(d, crude(2, 4, 4)), true));
     }
 
-    /** The ports: stream, rate, temperature, pressure at the port, its buffer's fill, its valve's opening. */
-    static final List<String[]> PORTS = List.of(new String[]{"Port", "kmol/h", "°C", "bar", "Held %", "Valve %"},
-            new String[]{"Feed", "103.2", "340.0", "2.40", "35", "62"},
-            new String[]{"Steam", "5.2", "400.0", "3.50", "30", "41"},
-            new String[]{"Off-gas", "1.8", "45.0", "1.30", "48", "22"},
-            new String[]{"Distillate", "27.0", "45.0", "1.30", "51", "57"},
-            new String[]{"Sour water", "5.3", "45.0", "1.30", "40", "18"},
-            new String[]{"Kerosene", "16.0", "190.0", "1.62", "55", "46"},
-            new String[]{"Diesel", "19.4", "262.0", "1.75", "52", "49"},
-            new String[]{"Bottoms", "38.9", "331.0", "1.95", "58", "64"});
-
-    /** The duties: what the column booked at its throughput, what the last solve gave at the set feed. */
-    static final List<String[]> DUTIES = List.of(new String[]{"Duty", "Booked MW", "Solved MW"},
-            new String[]{"Condenser", "-7.32", "-8.51"},
-            new String[]{"Pumparound 1", "-1.81", "-2.10"},
-            new String[]{"Pumparound 2", "-2.62", "-3.05"});
-
-    static final Map<String, String> SET = Map.of("feed", "120.0", "condenser", "45.0", "reflux", "2.50", "steam", "0.050",
-            "kerosene", "0.155", "diesel", "0.188", "pa1", "-63.0", "pa2", "-91.5");
-
-    static List<Column.Row> rows() {
-        return GuiPrototypes.Door.rows(
-                GuiPrototypes.Door.group("Control", null, GuiPrototypes.Door.switchRow("Off", "On", true)),
-                GuiPrototypes.Door.group("Set points", null,
-                        GuiPrototypes.Door.field("feed", "Feed", "kmol/h"),
-                        GuiPrototypes.Door.field("condenser", "Condenser", "°C"),
-                        GuiPrototypes.Door.field("reflux", "Reflux ratio", ""),
-                        GuiPrototypes.Door.field("steam", "Steam", "mol/mol"),
-                        GuiPrototypes.Door.field("kerosene", "Kerosene", "mol/mol"),
-                        GuiPrototypes.Door.field("diesel", "Diesel", "mol/mol"),
-                        GuiPrototypes.Door.field("pa1", "Pumparound 1", "kJ/mol"),
-                        GuiPrototypes.Door.field("pa2", "Pumparound 2", "kJ/mol")));
+    /** A crude column with {@code steam} inlets, {@code draws} and {@code pumparounds}, at 86 % of its 120 kmol/h feed. */
+    static OperationView crude(int steam, int draws, int pumparounds) {
+        double design = 120 / 3.6, alpha = .86;
+        double[] s = new double[steam], d = new double[draws], p = new double[pumparounds];
+        for (int j = 0; j < steam; j++) s[j] = .05 / steam;
+        for (int j = 0; j < draws; j++) d[j] = .155 + .033 * j;
+        for (int j = 0; j < pumparounds; j++) p[j] = -63000 - 28500 * j;
+        var set = new Setpoints(design, design, 318.15, 2.5, 0, s, d, p);
+        double f = design * alpha;
+        var streams = new ArrayList<OperationView.Stream>();
+        streams.add(new OperationView.Stream(Port.FEED, 0, f, 613.15, 240000, .35, .62));
+        for (int j = 0; j < steam; j++) streams.add(new OperationView.Stream(Port.STEAM, j, f * s[j], 673.15, 350000, .30, .41));
+        streams.add(new OperationView.Stream(Port.OFF_GAS, 0, f * .0175, 318.15, 130000, .48, .22));
+        streams.add(new OperationView.Stream(Port.SOUR_WATER, 0, f * .051, 318.15, 130000, .40, .18));
+        streams.add(new OperationView.Stream(Port.DISTILLATE, 0, f * .262, 318.15, 130000, .51, .57));
+        for (int j = 0; j < draws; j++) streams.add(new OperationView.Stream(Port.DRAW, j, f * d[j], 463.15 + 72 * j, 162000 + 13000 * j, .55 - .03 * j, .46 + .03 * j));
+        streams.add(new OperationView.Stream(Port.BOTTOMS, 0, f * .377, 604.15, 195000, .58, .64));
+        var duties = new ArrayList<OperationView.Duty>();
+        duties.add(new OperationView.Duty(OperationView.DutyKind.CONDENSER, 0, -8.51e6 * alpha, -8.51e6));
+        for (int j = 0; j < pumparounds; j++) duties.add(new OperationView.Duty(OperationView.DutyKind.PUMPAROUND, j, p[j] * f, p[j] * design));
+        return new OperationView(OperationView.Phase.LIMITED, ColumnCycle.Limit.CONDENSER, alpha, false, null, false,
+                "LIMITED: condenser, 86 %", true, true, set, streams, duties, new OperationView.Solve(DriftBands.Trigger.ENTHALPY, true, 45));
     }
 
-    /** The last solve: its route in its heading, what started it, how long ago, how long it took. */
-    static final List<String[]> SOLVE = List.of(new String[]{"Last solve", "Warm route"}, new String[]{"Trigger", "Feed temperature"},
-            new String[]{"Age", "45 s"}, new String[]{"Took", "0.33 s"});
-
-    /**
-     * The Operation tab: {@code all} draws both tables on the glass (option B); otherwise the glass has its own two tabs,
-     * Ports latched, and Duties latched on the sheet scrolled to its end (option A).
-     */
-    static void door(GuiPrototypes.Door d, boolean all) {
+    /** The Operation page as AssemblyScreen draws it, through the shipped OperationColumn. */
+    static void door(GuiPrototypes.Door d, OperationView view) {
         var t = GuiPrototypes.DIALOG;
         d.title(t.get(AssemblyColumn.KEY + "title"));
         var tabs = AssemblyColumn.tabs(true, true, t);
@@ -77,71 +70,49 @@ final class OperationPrototypes {
             var spec = tabs.get(i);
             d.skin.button(d.c, tabSlots.get(i), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
         }
-        d.skin.status(d.c, AssemblyColumn.display(d.w), "Limited: condenser, 86 % of the feed", Palette.WARN);
+        var status = OperationColumn.status(view, t);
+        d.skin.status(d.c, AssemblyColumn.display(d.w), status.text(), status.palette());
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - AssemblyColumn.DIVIDER);
         var box = d.well(AssemblyColumn.glass(d.w, d.h, true));
+        // The tables, scrolled with the door to their end where they are taller than the glass.
+        int need = OperationColumn.height(view);
+        var glassView = new ScrollView();
+        glassView.layout(box, box.right() - ScrollView.BAR, need);
+        while (d.end && glassView.offset() < glassView.max()) glassView.wheel(box.x() + 2, box.y() + 2, -1);
+        var lines = need > box.h() ? new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()) : box;
         d.c.clip(box);
-        int cell = Math.min(56, (box.w() - 70) / 5);
-        int[] ports = {box.w() - 5 * cell, cell, cell, cell, cell, cell}, duties = {box.w() - 2 * cell - 24, cell + 12, cell + 12},
-                solve = {box.w() - 2 * cell - 24, 2 * cell + 24};
-        if (all) {
-            int y = table(d, new Rect(box.x(), box.y(), box.w(), box.h()), ports, PORTS);
-            y = table(d, new Rect(box.x(), y + 8, box.w(), box.bottom() - y - 8), duties, DUTIES);
-            table(d, new Rect(box.x(), y + 8, box.w(), box.bottom() - y - 8), solve, SOLVE);
-        } else {
-            int tw = (box.w() - 3) / 2;
-            d.skin.button(d.c, new Rect(box.x(), box.y(), tw, 16), "Ports", d.end ? Skin.Press.REST : Skin.Press.CURRENT, false);
-            d.skin.button(d.c, new Rect(box.x() + tw + 3, box.y(), tw, 16), "Duties", d.end ? Skin.Press.CURRENT : Skin.Press.REST, false);
-            var under = new Rect(box.x(), box.y() + 20, box.w(), box.h() - 20);
-            if (d.end) {
-                int y = table(d, under, duties, DUTIES);
-                table(d, new Rect(box.x(), y + 8, box.w(), box.bottom() - y - 8), solve, SOLVE);
-            } else table(d, under, ports, PORTS);
-        }
+        OperationColumn.glass(d.c, lines, glassView.offset(), view, UNITS, t, d.m);
         d.c.unclip();
+        glassView.drawBar(d.c, d.skin);
         // The door column in its view, narrowed for its bar where it is taller than its area (KitDoor).
+        var in = new OperationColumn.Input(view, false, UNITS);
         var area = AssemblyColumn.area(d.w, d.h);
-        var rows = rows();
+        var rows = OperationColumn.rows(in, t);
         int tall = Column.place(rows, area.x(), area.y(), area.w(), d.m, Column.Metrics.COMPACT).bounds().h();
         var column = Column.place(rows, area.x(), area.y(), tall > area.h() ? area.w() - ScrollView.BAR - 4 : area.w(), d.m, Column.Metrics.COMPACT);
-        var view = new ScrollView();
-        view.layout(new Rect(area.x() - 2, area.y(), area.w() + 4, area.h()), area.right() - ScrollView.BAR + 2, column.bounds().h());
-        while (d.end && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
-        d.c.clip(view.viewport());
-        column.draw(d.c, -view.offset(), d.skin);
+        var scroll = new ScrollView();
+        scroll.layout(new Rect(area.x() - 2, area.y(), area.w() + 4, area.h()), area.right() - ScrollView.BAR + 2, column.bounds().h());
+        while (d.end && scroll.offset() < scroll.max()) scroll.wheel(scroll.viewport().x() + 2, scroll.viewport().y() + 2, -1);
+        var values = OperationColumn.values(view.setpoints(), UNITS);
+        d.c.clip(scroll.viewport());
+        column.draw(d.c, -scroll.offset(), d.skin);
         for (var p : column.rows()) {
-            if (p.row() instanceof Column.Field f && view.visible(p.slots().get(f.key())))
-                d.skin.field(d.c, view.onScreen(p.slots().get(f.key())), SET.getOrDefault(f.key(), ""), "", false);
+            if (p.row() instanceof Column.Field f && scroll.visible(p.slots().get(f.key())))
+                d.skin.field(d.c, scroll.onScreen(p.slots().get(f.key())), values.getOrDefault(f.key(), ""), "", false);
             else if (p.row() instanceof Column.Buttons b)
                 for (var spec : b.buttons()) {
                     var r = p.slots().get(spec.key());
-                    if (view.visible(r)) d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
+                    if (scroll.visible(r)) d.skin.button(d.c, scroll.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
                 }
         }
         d.c.unclip();
-        view.drawBar(d.c, d.skin);
+        scroll.drawBar(d.c, d.skin);
         var footer = AssemblyColumn.footer(d.w, d.h);
-        d.skin.button(d.c, footer.get(0), t.get("fluid.close"), Skin.Press.REST, false);
-        d.skin.button(d.c, footer.get(1), "Apply", Skin.Press.PRIMARY, false);
+        var keys = OperationColumn.footerButtons(OperationColumn.applies(in, java.util.Map.of()), t);
+        for (int i = 0; i < keys.size(); i++)
+            d.skin.button(d.c, footer.get(i), keys.get(i).text(), keys.get(i).key().equals("apply") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
         if (!d.end && d.skin == PanelSkin.LIGHT)
-            System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d: door column %d px wide, %d px tall in a %d px view, glass %d by %d px%n", all ? "operation B" : "operation A",
-                    d.w, d.h, area.w(), tall, area.h(), box.w(), box.h());
-    }
-
-    /** A table on the glass: the header muted under a rule, every second entry on a band, numbers right-aligned; returns the bottom of its last line. */
-    static int table(GuiPrototypes.Door d, Rect box, int[] widths, List<String[]> rows) {
-        int y = box.y() + 2, pitch = 12;
-        for (int r = 0; r < rows.size() && y + 10 <= box.bottom(); r++, y += pitch) {
-            if (r > 0 && r % 2 == 0) d.c.fill(box.x(), y - 2, box.right(), y + pitch - 2, DialogColumns.BAND);
-            int x = box.x() + 3;
-            for (int i = 0; i < widths.length; i++) {
-                String text = rows.get(r)[i];
-                int colour = r == 0 ? Palette.MUTED : i == 0 ? Palette.TEXT : Palette.ACCENT;
-                d.c.text(text, i == 0 ? x : x + widths[i] - 6 - d.m.width(text), y, colour);
-                x += widths[i];
-            }
-            if (r == 0) d.c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
-        }
-        return y;
+            System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d: door column %d px wide, %d px tall in a %d px view; tables %d px on a %d px glass; %d keys%n", "operation",
+                    d.w, d.h, area.w(), tall, area.h(), OperationColumn.height(view), box.h(), ConstructorColumn.buttons(rows).size());
     }
 }

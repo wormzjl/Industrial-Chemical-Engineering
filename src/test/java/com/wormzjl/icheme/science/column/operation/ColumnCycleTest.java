@@ -25,7 +25,7 @@ class ColumnCycleTest {
                 new SplitTable.Product(Port.DISTILLATE, 0, new double[] {.39, .3, .001, .01}, 332, 400_000),
                 new SplitTable.Product(Port.DRAW, 0, new double[] {.01, .6, .099, 0}, 480, 270_000),
                 new SplitTable.Product(Port.BOTTOMS, 0, new double[] {0, .09, .9, 0}, 600, 280_000));
-        var reference = new SplitTable.Reference(new double[] {.3, .4, .3, 0}, -1.4e5, 300, new double[] {.4}, 1, setpoints());
+        var reference = new SplitTable.Reference(new double[] {.3, .4, .3, 0}, -1.4e5, 300, new double[] {.4}, 1, setpoints(), 330, new double[] {400});
         var provisional = new SplitTable(AXIS, products, 0, new double[] {-20_000}, -1, reference, new boolean[] {true, true, true, true});
         // The solved condenser duty: the one that closes the reference state's balance, as the solve's own does.
         double[][] split = provisional.split(new double[] {150, 200, 150, 200});

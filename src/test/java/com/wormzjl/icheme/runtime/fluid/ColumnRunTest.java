@@ -119,6 +119,33 @@ class ColumnRunTest {
         assertTrue(world.held.isEmpty(),"no island held: "+world.held);
     }
     /**
+     * The Operation tab's view (C7, plan section 13) is a read of the run's last cycle: reading it again reads the same and
+     * changes no fact or state; it gives each port's rate over that cycle, the feed's temperature on the table's slope, the
+     * valve openings it is handed, and the condenser duty booked against the table's.
+     */
+    @Test void theOperationViewIsAReadOfTheLastCycle() {
+        var r=rig(0);var world=r.world();var ops=r.ops();long unit=r.unit();
+        world.runTo(3000);
+        var before=world.ledger.column(unit);var last=ops.last(unit);long now=world.coordinator.now();
+        var view=ops.view(unit,now,valve->.5);
+        assertEquals(view,ops.view(unit,now,valve->.5),"a read again reads the same");
+        assertSame(before,world.ledger.column(unit),"a read changes no fact or state");
+        assertSame(last,ops.last(unit));
+        assertTrue(view.running()&&view.editable()&&view.solve()!=null,view.toString());
+        var feed=view.streams().stream().filter(s->s.port()==Port.FEED).findFirst().orElseThrow();
+        assertEquals(last.feed().total()/5,feed.rate(),1e-12);
+        assertEquals(.5,feed.opening());
+        assertTrue(feed.temperature()>250&&feed.temperature()<450,"the feed's temperature on the table's slope: "+feed.temperature());
+        var product=view.streams().stream().filter(s->s.port()==Port.DISTILLATE).findFirst().orElseThrow();
+        assertEquals(last.products().getFirst().total()/5,product.rate(),1e-12);
+        assertTrue(product.held()>0,"the outlet's buffer holds product: "+product.held());
+        var condenser=view.duties().getFirst();
+        assertEquals(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.CONDENSER,condenser.kind());
+        assertEquals(last.condenser()/5,condenser.booked(),1e-9*Math.abs(condenser.booked()));
+        world.ledger.column(before.withStations(false,before.stations().stream().map(s->s.withDevice(0)).toList()));
+        assertEquals(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,ops.view(unit,now,valve->.5).phase(),"a stopped unit reads stopped");
+    }
+    /**
      * The determinism gate (plan section 9): the same world with its jobs completing three ticks later books the same feed,
      * the same products and the same duties, bit for bit, and gives the same product downstream.
      */
@@ -145,7 +172,7 @@ class ColumnRunTest {
         var z=new double[m];for(int i=0;i<m;i++)z[i]=n2[i]/sum(n2);
         var all=new double[m];Arrays.fill(all,1);var held=new boolean[m];Arrays.fill(held,true);
         var table=new SplitTable(model.components(),List.of(new SplitTable.Product(Port.DISTILLATE,0,all,330,250000)),0,new double[0],-1000,
-                new SplitTable.Reference(z,h,30,steam,1,setpoints),held);
+                new SplitTable.Reference(z,h,30,steam,1,setpoints,330,new double[steam.length]),held);
         return new ColumnSolve.Solved(table,rows,null,-1000,"test","");
     }
     /** A solver answering every job {@code delay} ticks after it was asked (0: at once): {@link #table}, or a failure where {@code fail} holds. */

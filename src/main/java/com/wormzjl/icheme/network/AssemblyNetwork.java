@@ -12,6 +12,11 @@ import com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.State;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
 import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
+import com.wormzjl.icheme.science.column.operation.ColumnCycle;
+import com.wormzjl.icheme.science.column.operation.DriftBands;
+import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.column.operation.Port;
+import com.wormzjl.icheme.science.column.operation.Setpoints;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
@@ -49,7 +54,7 @@ import java.util.*;
  * {@link WatchPayload}, which replays their stored views, and their changes come with the buckets ({@link WatchedPayload}).
  */
 public final class AssemblyNetwork {
-    public static final String PROTOCOL = "assembly-2";
+    public static final String PROTOCOL = "assembly-3";
     /** Bounds a view's read checks: slots, ports, members, characters of a slot's name or detail. */
     static final int MAX_SLOTS = 256, MAX_PORTS = 1024, MAX_MEMBERS = 256, MAX_TEXT = 1024;
 
@@ -59,8 +64,8 @@ public final class AssemblyNetwork {
     private AssemblyNetwork() {
     }
 
-    /** A view on the wire: its report without the footprint, which no client reads. */
-    public static final StreamCodec<RegistryFriendlyByteBuf, AssemblyView> VIEW = StreamCodec.of(AssemblyNetwork::write, AssemblyNetwork::read);
+    /** A view on the wire: its report without the footprint, which no client reads. The operation goes after it (C7). */
+    public static final StreamCodec<RegistryFriendlyByteBuf, AssemblyView> VIEW = StreamCodec.of(AssemblyNetwork::writeView, AssemblyNetwork::readView);
 
     private static void write(RegistryFriendlyByteBuf b, AssemblyView view) {
         b.writeEnum(view.status());
@@ -85,6 +90,113 @@ public final class AssemblyNetwork {
         }
         b.writeVarInt(report.members().size());
         for (long m : report.members()) b.writeLong(m);
+    }
+
+    private static void writeView(RegistryFriendlyByteBuf b, AssemblyView view) {
+        write(b, view);
+        writeOperation(b, view.operation());
+    }
+
+    private static AssemblyView readView(RegistryFriendlyByteBuf b) {
+        var view = read(b);
+        return view.withOperation(readOperation(b));
+    }
+
+    /** Bounds an operation's read checks: ports, duties, the values of a set point list. */
+    static final int MAX_STREAMS = 32, MAX_VALUES = 64;
+
+    private static void writeOperation(RegistryFriendlyByteBuf b, @Nullable OperationView o) {
+        b.writeBoolean(o != null);
+        if (o == null) return;
+        b.writeEnum(o.phase());
+        b.writeEnum(o.limit());
+        b.writeDouble(o.alpha());
+        b.writeBoolean(o.ruleA());
+        b.writeBoolean(o.resolving() != null);
+        if (o.resolving() != null) b.writeEnum(o.resolving());
+        b.writeBoolean(o.failed());
+        b.writeUtf(o.engine().length() > MAX_TEXT ? o.engine().substring(0, MAX_TEXT) : o.engine(), MAX_TEXT);
+        b.writeBoolean(o.running());
+        b.writeBoolean(o.editable());
+        writeSetpoints(b, o.setpoints());
+        b.writeVarInt(o.streams().size());
+        for (var s : o.streams()) {
+            b.writeEnum(s.port());
+            b.writeVarInt(s.index());
+            b.writeDouble(s.rate());
+            b.writeDouble(s.temperature());
+            b.writeDouble(s.pressure());
+            b.writeDouble(s.held());
+            b.writeDouble(s.opening());
+        }
+        b.writeVarInt(o.duties().size());
+        for (var d : o.duties()) {
+            b.writeEnum(d.kind());
+            b.writeVarInt(d.index());
+            b.writeDouble(d.booked());
+            b.writeDouble(d.solved());
+        }
+        var solve = o.solve();
+        b.writeBoolean(solve != null);
+        if (solve == null) return;
+        b.writeBoolean(solve.trigger() != null);
+        if (solve.trigger() != null) b.writeEnum(solve.trigger());
+        b.writeBoolean(solve.warm());
+        b.writeDouble(solve.age());
+    }
+
+    private static @Nullable OperationView readOperation(RegistryFriendlyByteBuf b) {
+        if (!b.readBoolean()) return null;
+        try {
+            var phase = b.readEnum(OperationView.Phase.class);
+            var limit = b.readEnum(ColumnCycle.Limit.class);
+            double alpha = b.readDouble();
+            boolean ruleA = b.readBoolean();
+            var resolving = b.readBoolean() ? b.readEnum(DriftBands.Trigger.class) : null;
+            boolean failed = b.readBoolean();
+            String engine = b.readUtf(MAX_TEXT);
+            boolean running = b.readBoolean(), editable = b.readBoolean();
+            var setpoints = readSetpoints(b);
+            var streams = new ArrayList<OperationView.Stream>();
+            for (int i = 0, n = count(b, MAX_STREAMS); i < n; i++)
+                streams.add(new OperationView.Stream(b.readEnum(Port.class), b.readVarInt(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble()));
+            var duties = new ArrayList<OperationView.Duty>();
+            for (int i = 0, n = count(b, MAX_STREAMS); i < n; i++)
+                duties.add(new OperationView.Duty(b.readEnum(OperationView.DutyKind.class), b.readVarInt(), b.readDouble(), b.readDouble()));
+            OperationView.Solve solve = null;
+            if (b.readBoolean()) {
+                var trigger = b.readBoolean() ? b.readEnum(DriftBands.Trigger.class) : null;
+                solve = new OperationView.Solve(trigger, b.readBoolean(), b.readDouble());
+            }
+            return new OperationView(phase, limit, alpha, ruleA, resolving, failed, engine, running, editable, setpoints, streams, duties, solve);
+        } catch (IllegalArgumentException invalid) {
+            throw new DecoderException(invalid.getMessage());
+        }
+    }
+
+    private static void writeSetpoints(RegistryFriendlyByteBuf b, Setpoints s) {
+        b.writeDouble(s.designFeedRate());
+        b.writeDouble(s.feedRate());
+        b.writeDouble(s.condenserTemperature());
+        b.writeDouble(s.refluxRatio());
+        b.writeDouble(s.reboilerPerFeed());
+        for (double[] values : List.of(s.steamPerFeed(), s.drawsPerFeed(), s.pumparoundsPerFeed())) writeDoubles(b, values);
+    }
+
+    private static Setpoints readSetpoints(RegistryFriendlyByteBuf b) {
+        double design = b.readDouble(), feed = b.readDouble(), condenser = b.readDouble(), reflux = b.readDouble(), reboiler = b.readDouble();
+        return new Setpoints(design, feed, condenser, reflux, reboiler, readDoubles(b), readDoubles(b), readDoubles(b));
+    }
+
+    private static void writeDoubles(RegistryFriendlyByteBuf b, double[] values) {
+        b.writeVarInt(values.length);
+        for (double v : values) b.writeDouble(v);
+    }
+
+    private static double[] readDoubles(RegistryFriendlyByteBuf b) {
+        var out = new double[count(b, MAX_VALUES)];
+        for (int i = 0; i < out.length; i++) out[i] = b.readDouble();
+        return out;
     }
 
     private static AssemblyView read(RegistryFriendlyByteBuf b) {
@@ -144,6 +256,32 @@ public final class AssemblyNetwork {
         }
     }
 
+    /** An Operation tab command (C7). */
+    public enum Action {
+        START, STOP, APPLY
+    }
+
+    /**
+     * Client to server: an Operation tab command in the GUI of container {@code container}; for Apply, the set points in SI:
+     * the feed rate (mol/s), the condenser temperature (K), the reflux ratio, the reboiler duty per feed (J/mol), then each
+     * steam ratio, draw ratio and pumparound duty per feed (J/mol), as many as the column's set points hold.
+     */
+    public record OperationPayload(int container, Action action, List<Double> values) implements CustomPacketPayload {
+        public static final Type<OperationPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "assembly_operation"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, OperationPayload> STREAM_CODEC = StreamCodec.composite(ByteBufCodecs.VAR_INT, OperationPayload::container,
+                ByteBufCodecs.idMapper(i -> Action.values()[Math.floorMod(i, Action.values().length)], Action::ordinal), OperationPayload::action,
+                ByteBufCodecs.DOUBLE.apply(ByteBufCodecs.list(MAX_VALUES)), OperationPayload::values, OperationPayload::new);
+
+        public OperationPayload {
+            values = List.copyOf(values);
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /** Client to server: open the own screen of the unit at {@code member} (the column, or a unit its report holds). */
     public record OpenUnitPayload(int container, long member) implements CustomPacketPayload {
         public static final Type<OpenUnitPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "assembly_open_unit"));
@@ -195,6 +333,7 @@ public final class AssemblyNetwork {
         var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
         registrar.playToServer(ValidatePayload.TYPE, ValidatePayload.STREAM_CODEC, AssemblyNetwork::validate);
         registrar.playToServer(OpenUnitPayload.TYPE, OpenUnitPayload.STREAM_CODEC, AssemblyNetwork::openUnit);
+        registrar.playToServer(OperationPayload.TYPE, OperationPayload.STREAM_CODEC, AssemblyNetwork::operate);
         registrar.playToServer(WatchPayload.TYPE, WatchPayload.STREAM_CODEC, AssemblyNetwork::watch);
         registrar.playToClient(WatchedPayload.TYPE, WatchedPayload.STREAM_CODEC,
                 (payload, context) -> com.wormzjl.icheme.client.AssemblyToolClient.received(payload.master(), payload.view().orElse(null)));
@@ -220,7 +359,14 @@ public final class AssemblyNetwork {
 
         @Override
         public @Nullable AssemblyView view(AssemblyMenu menu) {
-            return AssemblyService.view(Objects.requireNonNull(menu.serverPlayer()).serverLevel(), menu.cell());
+            var player = Objects.requireNonNull(menu.serverPlayer());
+            var view = AssemblyService.view(player.serverLevel(), menu.cell());
+            if (view == null || view.status() == AssemblyView.Status.NO_DESIGN) return view;
+            var world = FluidWorldAuthority.find(player.server).orElse(null);
+            if (world == null) return view;
+            // The Operation tab's snapshot (C7): the engine's cached cycle, each boundary valve's opening as its own screen reads it.
+            String refusal = refusals(player.server).get(menu.origin().asLong());
+            return view.withOperation(AssemblyService.operation(player.serverLevel(), menu.origin(), refusal, valve -> FluidNetwork.opening(world, valve)));
         }
 
         @Override
@@ -343,6 +489,42 @@ public final class AssemblyNetwork {
         if (engine.isPresent()) presentation(menu.serverPlayer().server).validate(menu, engine.get().onlineTick());
     }
 
+    /** The last refused Start of each column, by master, until the next press: the Operation tab's NOT READY reason. */
+    private static final Map<MinecraftServer, Map<Long, String>> REFUSALS = new IdentityHashMap<>();
+
+    private static Map<Long, String> refusals(MinecraftServer server) {
+        return REFUSALS.computeIfAbsent(server, s -> new HashMap<>());
+    }
+
+    /**
+     * An Operation tab command (C7, plan section 13): queued for the next bucket, which runs it and answers every open GUI
+     * of the column. Start builds the column's request from its complete report; Apply sets the column's set points, the
+     * feed rate held to the design rate (owner Q8).
+     */
+    private static void operate(OperationPayload payload, IPayloadContext context) {
+        var menu = menu(context, payload.container());
+        var engine = menu == null ? Optional.<FluidWorldAuthority>empty() : FluidWorldAuthority.find(menu.serverPlayer().server);
+        if (engine.isEmpty()) return;
+        presentation(menu.serverPlayer().server).act(menu, engine.get().onlineTick(), m -> {
+            var player = Objects.requireNonNull(m.serverPlayer());
+            var level = player.serverLevel();
+            var refusals = refusals(player.server);
+            long master = m.origin().asLong();
+            switch (payload.action()) {
+                case START -> {
+                    String refused = AssemblyService.start(level, m.origin());
+                    if (refused == null) refusals.remove(master);
+                    else refusals.put(master, refused);
+                }
+                case STOP -> AssemblyService.stop(level, m.origin());
+                case APPLY -> {
+                    String refused = AssemblyService.setpoints(level, m.origin(), payload.values());
+                    if (refused != null) IChemE.LOGGER.info("column status=SETPOINTS_REFUSED master={} reason={}", m.origin().toShortString(), refused);
+                }
+            }
+        });
+    }
+
     /** Opens a member's own screen, which replaces the column's GUI. */
     private static void openUnit(OpenUnitPayload payload, IPayloadContext context) {
         var menu = menu(context, payload.container());
@@ -370,6 +552,7 @@ public final class AssemblyNetwork {
 
     public static void forget(MinecraftServer server) {
         SERVERS.remove(server);
+        REFUSALS.remove(server);
         WATCHES.remove(server);
     }
 }

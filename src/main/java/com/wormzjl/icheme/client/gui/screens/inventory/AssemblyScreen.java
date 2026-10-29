@@ -8,6 +8,7 @@ import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.PortMark;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Text;
 import com.wormzjl.icheme.client.gui.common.AssemblyFlowsheet;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
+import com.wormzjl.icheme.client.gui.common.OperationColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
@@ -16,6 +17,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
+import com.wormzjl.icheme.client.gui.common.kit.SkinField;
 import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.AssemblyNetwork;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
@@ -24,6 +26,7 @@ import com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
 import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
+import com.wormzjl.icheme.science.column.operation.OperationView;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.world.inventory.AssemblyMenu;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
@@ -38,8 +41,12 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * A column's GUI (batch 2026-10-26-multi-machine-framework, plan section 8), a panel door on the GUI kit since batch
@@ -58,6 +65,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     private final List<Slot> slots;
     private final KitDoor door = new KitDoor();
     private final ScrollView listView = new ScrollView();
+    /** The Operation page's glass, where its tables are taller than it. */
+    private final ScrollView glassView = new ScrollView();
     private @Nullable Slot selected;
     private boolean selectPending = true, structureTab, queued;
     private @Nullable AssemblyView seen, pressedAt;
@@ -67,6 +76,13 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     private @Nullable AssemblyColumn.PartList list;
     private @Nullable Rect listBox, drawingBox;
     private @Nullable String hovered;
+    /** The Operation page (C7): the entries' texts as typed, the keys the player edited, the entries kept, Apply; an Operation command awaiting its answer. */
+    private final Map<String, String> drafts = new HashMap<>();
+    private final Set<String> edited = new HashSet<>();
+    private final Map<String, SkinField> entries = new HashMap<>();
+    private @Nullable SkinButton apply;
+    private boolean commanded, sentApply;
+    private @Nullable AssemblyView commandedAt;
 
     public AssemblyScreen(AssemblyMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -135,6 +151,33 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return AssemblyColumn.rows(input(), AssemblyScreen::lang);
     }
 
+    /** The Operation page's snapshot where its door shows: a complete structure on its Operation tab, with an operation to show. */
+    private @Nullable OperationView operationView() {
+        return operation() ? view().operation() : null;
+    }
+
+    private static OperationColumn.Units units() {
+        return new OperationColumn.Units(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime());
+    }
+
+    private OperationColumn.Input operationInput(OperationView view) {
+        return new OperationColumn.Input(view, commanded, units());
+    }
+
+    /**
+     * Whether the Operation page fits a window {@code width} by {@code height} GUI px (WindowScale.Fit): its door column in
+     * its area, its tables on the glass.
+     */
+    private boolean fits(int width, int height) {
+        var view = operationView();
+        if (view == null) return true;
+        int w = Math.max(320, Math.min(760, width - 16)), h = Math.max(220, height - 16);
+        var m = GuiCanvas.measure(font);
+        var area = AssemblyColumn.area(w, h);
+        int tall = Column.place(OperationColumn.rows(operationInput(view), AssemblyScreen::lang), area.x(), area.y(), area.w(), m, Column.Metrics.COMPACT).bounds().h();
+        return tall <= area.h() && OperationColumn.height(view) <= AssemblyColumn.glass(w, h, true).h() - 4;
+    }
+
     @Override
     public void removed() {
         super.removed();
@@ -143,17 +186,26 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
 
     @Override
     protected void init() {
-        WindowScale.apply(minecraft, this);
+        follow();
+        // The Operation page is designed taller (owner's choice B), at the scale that holds it; the Structure page at the design size.
+        if (operationView() != null) WindowScale.apply(minecraft, this, OperationColumn.HEIGHT, this::fits);
+        else WindowScale.apply(minecraft, this);
         imageWidth = Math.max(320, Math.min(760, width - 16));
         imageHeight = Math.max(220, height - 16);
         super.init();
-        follow();
         var tabs = AssemblyColumn.tabs(operation(), complete(), AssemblyScreen::lang);
         var tabSlots = AssemblyColumn.tabSlots(imageWidth);
         for (int i = 0; i < tabs.size(); i++) push(tabs.get(i), tabSlots.get(i));
         var footer = AssemblyColumn.footer(imageWidth, imageHeight);
-        var buttons = AssemblyColumn.footerButtons(AssemblyScreen::lang);
-        for (int i = 0; i < buttons.size(); i++) push(buttons.get(i), footer.get(i));
+        var operating = operationView();
+        var buttons = operating != null ? OperationColumn.footerButtons(OperationColumn.applies(operationInput(operating), drafts), AssemblyScreen::lang)
+                : AssemblyColumn.footerButtons(AssemblyScreen::lang);
+        apply = null;
+        for (int i = 0; i < buttons.size(); i++) {
+            var button = SkinButton.of(buttons.get(i), footer.get(i).moved(leftPos, topPos), this::act, AssemblyScreen::skin);
+            addRenderableWidget(button);
+            if (buttons.get(i).key().equals("apply")) apply = button;
+        }
         // The theme key shows the contrast sign; its hover names the panel shown.
         String theme = lang(ClientConfig.theme() == ClientConfig.Theme.DARK ? "fluid.theme.dark" : "fluid.theme.light");
         var at = AssemblyColumn.theme(imageWidth);
@@ -171,7 +223,32 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             }, (spec, slot) -> addRenderableWidget(SkinButton.of(spec, slot, this::act, AssemblyScreen::skin)));
             door.place(leftPos, topPos);
         }
+        entries.clear();
+        if (operating != null) {
+            var rows = OperationColumn.rows(operationInput(operating), AssemblyScreen::lang);
+            door.layout(AssemblyColumn.area(imageWidth, imageHeight), rows, GuiCanvas.measure(font));
+            door.keep(this::entry, (spec, slot) -> addRenderableWidget(SkinButton.of(spec, slot, this::act, AssemblyScreen::skin)));
+            door.place(leftPos, topPos);
+        }
         built = signature();
+    }
+
+    /** A set point's LCD entry: what the player typed, else the set point in force; a typed text is kept until Apply. */
+    private SkinField entry(Column.Field f, Rect slot) {
+        var box = new SkinField(font, slot.x(), slot.y(), slot.w(), slot.h(), Component.literal(f.label()), AssemblyScreen::skin);
+        box.setTooltip(Tooltip.create(Component.literal(f.hint() == null ? f.label() : f.label() + "\n" + f.hint())));
+        box.setMaxLength(12);
+        box.setFilter(text -> text.matches("-?[0-9]*[.,]?[0-9]*"));
+        var view = operationView();
+        String shown = view == null ? "" : OperationColumn.values(view.setpoints(), units()).getOrDefault(f.key(), "");
+        box.setValue(edited.contains(f.key()) ? drafts.getOrDefault(f.key(), shown) : shown);
+        box.setResponder(text -> {
+            if (text.equals(drafts.get(f.key()))) return;
+            drafts.put(f.key(), text);
+            edited.add(f.key());
+        });
+        entries.put(f.key(), box);
+        return addRenderableWidget(box);
     }
 
     /** A push button or a tab at door rect {@code at}, as {@code spec} says. */
@@ -188,6 +265,14 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             var in = input();
             out.add(String.valueOf(in.selected()));
             for (var b : ConstructorColumn.buttons(AssemblyColumn.rows(in, AssemblyScreen::lang))) out.add(b.key() + " " + b.active());
+        }
+        var operating = operationView();
+        if (operating != null) {
+            // The entries' keys and kinds, the switch's states; Apply's state follows the typing without a rebuild (containerTick).
+            for (var row : OperationColumn.rows(operationInput(operating), AssemblyScreen::lang))
+                if (row instanceof Column.Group g) for (var r : g.rows()) out.add(r instanceof Column.Field f ? "field " + f.key() + " " + f.label() + " " + f.unit()
+                        : r instanceof Column.Reading m ? "meter " + m.key() + " " + m.label() + " " + m.unit() : r.getClass().getSimpleName());
+            for (var b : ConstructorColumn.buttons(OperationColumn.rows(operationInput(operating), AssemblyScreen::lang))) out.add(b.key() + " " + b.active() + " " + b.latched());
         }
         return out;
     }
@@ -208,6 +293,16 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             case "datasheet" -> open(menu.origin().asLong());
             case "tab:structure" -> structureTab = true;
             case "tab:operation" -> structureTab = false;
+            case "start" -> command(AssemblyNetwork.Action.START, List.of());
+            case "stop" -> command(AssemblyNetwork.Action.STOP, List.of());
+            case "apply" -> {
+                var view = operationView();
+                var values = view == null ? null : OperationColumn.parse(view.setpoints(), drafts, units());
+                if (values != null) {
+                    command(AssemblyNetwork.Action.APPLY, values);
+                    sentApply = true;
+                }
+            }
             default -> {
             }
         }
@@ -218,6 +313,13 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         PacketDistributor.sendToServer(new AssemblyNetwork.ValidatePayload(menu.containerId));
         queued = true;
         pressedAt = menu.view();
+    }
+
+    /** An Operation command: queued for the engine's next bucket; the switch and Apply stay off until its answer comes. */
+    private void command(AssemblyNetwork.Action action, List<Double> values) {
+        PacketDistributor.sendToServer(new AssemblyNetwork.OperationPayload(menu.containerId, action, values));
+        commanded = true;
+        commandedAt = menu.view();
     }
 
     private void open(long member) {
@@ -238,6 +340,15 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         var view = view();
         if (menu.view() != seen) {
             if (queued && menu.view() != pressedAt) queued = false;
+            if (commanded && menu.view() != commandedAt) {
+                commanded = false;
+                // The answer to Apply shows the set points the column took: the entries follow them again.
+                if (sentApply) {
+                    edited.clear();
+                    drafts.clear();
+                    sentApply = false;
+                }
+            }
             if (view.status() == AssemblyView.Status.COMPLETE && (seen == null || seen.status() != AssemblyView.Status.COMPLETE)) structureTab = false;
             seen = menu.view();
         }
@@ -252,6 +363,13 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         super.containerTick();
         follow();
         refresh();
+        var operating = operationView();
+        if (operating == null) return;
+        // An entry the player has not edited follows the set points in force; Apply follows what is typed, without a rebuild.
+        var values = OperationColumn.values(operating.setpoints(), units());
+        for (var e : entries.entrySet())
+            if (!edited.contains(e.getKey()) && !e.getValue().isFocused() && !e.getValue().getValue().equals(values.get(e.getKey()))) e.getValue().setValue(values.get(e.getKey()));
+        if (apply != null) apply.active = OperationColumn.applies(operationInput(operating), drafts);
     }
 
     @Override
@@ -262,7 +380,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         g.pose().translate(leftPos, topPos, 0);
         skin.page(canvas, new Rect(0, 0, imageWidth, imageHeight));
         skin.hDivider(canvas, 8, imageWidth - 8, imageHeight - AssemblyColumn.DIVIDER);
-        var box = skin.well(canvas, AssemblyColumn.glass(imageWidth, imageHeight, drawing()));
+        var operating = operationView();
+        var box = skin.well(canvas, AssemblyColumn.glass(imageWidth, imageHeight, drawing() || operating != null));
         list = null;
         listBox = null;
         drawingBox = null;
@@ -286,6 +405,15 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             list = parts;
             listBox = lines;
             drawingBox = split.drawing();
+        } else if (operating != null) {
+            // The tables on the glass; where they are taller than it (a large design in a short window), it scrolls.
+            int need = OperationColumn.height(operating);
+            glassView.layout(box, box.right() - ScrollView.BAR, need);
+            var lines = need > box.h() ? new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()) : box;
+            canvas.clip(box);
+            OperationColumn.glass(canvas, lines, glassView.offset(), operating, units(), AssemblyScreen::lang, GuiCanvas.measure(font));
+            canvas.unclip();
+            glassView.drawBar(canvas, skin);
         } else AssemblyColumn.note(canvas, lang(view().status() == AssemblyView.Status.NO_DESIGN ? "assembly.no_design" : "assembly.operation"), box);
         g.pose().popPose();
     }
@@ -299,7 +427,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         skin.title(canvas, 10, 10, shown);
         if (shown.length() < name.length() && x >= 6 && x < AssemblyColumn.title(imageWidth) + 14 && y >= 6 && y < 22) hovered = name;
         // The status once, on the message display; its detail (where the structure changed) on hover.
-        var status = AssemblyColumn.status(view(), AssemblyScreen::position, AssemblyScreen::lang);
+        var operating = operationView();
+        var status = operating != null ? OperationColumn.status(operating, AssemblyScreen::lang) : AssemblyColumn.status(view(), AssemblyScreen::position, AssemblyScreen::lang);
         var line = AssemblyColumn.display(imageWidth);
         String words = font.plainSubstrByWidth(status.text(), line.w());
         skin.status(canvas, line, words, status.palette());
@@ -310,13 +439,22 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             door.place(rows(), GuiCanvas.measure(font));
             var hint = door.draw(canvas, skin, x, y);
             if (hint != null) hovered = hint;
+        } else if (operating != null) {
+            door.place(OperationColumn.rows(operationInput(operating), AssemblyScreen::lang), GuiCanvas.measure(font));
+            var hint = door.draw(canvas, skin, x, y);
+            if (hint != null) hovered = hint;
         }
+    }
+
+    /** Whether a door column shows: the drawing's, or the Operation page's. */
+    private boolean door() {
+        return drawing() || operationView() != null;
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         hovered = null;
-        if (drawing()) door.place(leftPos, topPos);
+        if (door()) door.place(leftPos, topPos);
         super.render(g, mouseX, mouseY, partialTick);
         if (drawing()) glassHover(mouseX - leftPos, mouseY - topPos);
         KitDoor.hint(g, font, hovered, mouseX, mouseY);
@@ -348,7 +486,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         double x = mx - leftPos, y = my - topPos;
-        if (drawing() && (door.press(x, y, button) || listView.press(x, y, button))) return true;
+        if (door() && door.press(x, y, button) || drawing() && listView.press(x, y, button) || operationView() != null && glassView.press(x, y, button)) return true;
         if (drawing() && button == 0) {
             Slot hit = null;
             if (list != null && listBox != null && listBox.contains(x, y)) {
@@ -369,20 +507,21 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
-        return door.drag(my - topPos) || listView.drag(my - topPos) || super.mouseDragged(mx, my, button, dx, dy);
+        return door.drag(my - topPos) || listView.drag(my - topPos) || glassView.drag(my - topPos) || super.mouseDragged(mx, my, button, dx, dy);
     }
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
         door.release();
         listView.release();
+        glassView.release();
         return super.mouseReleased(mx, my, button);
     }
 
     @Override
     public boolean mouseScrolled(double mx, double my, double horizontal, double vertical) {
         double x = mx - leftPos, y = my - topPos;
-        return drawing() && (door.wheel(x, y, vertical) || listView.wheel(x, y, vertical)) || super.mouseScrolled(mx, my, horizontal, vertical);
+        return door() && door.wheel(x, y, vertical) || drawing() && listView.wheel(x, y, vertical) || operationView() != null && glassView.wheel(x, y, vertical) || super.mouseScrolled(mx, my, horizontal, vertical);
     }
 
     // Texts (plan section 5.3).

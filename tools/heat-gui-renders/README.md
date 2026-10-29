@@ -35,7 +35,7 @@ It writes one sheet per screen to `tmp/gui-prototypes/`, both doors side by side
 - `HeatDiagramRender.java`: a single-file Java program (Java2D, headless). It lays the page out as `FluidDeviceScreen` does and draws it with the shipped code: `PanelSkin` for the page and the widgets, `HeatControlColumn` in layout C, `HeatFlowsheet`. Only the page's order of drawing and the illustrative readings are its own. Line parts cycle teal, yellow and red to show the legend's colours.
 - The English texts come from `en_us.json`; a key without a line is drawn as `?` and the key.
 - `GuiPrototypes.java`: proposed screens drawn through the same kit (`Column`, `PanelSkin`) and `HeatDiagramRender`'s font and canvas (the multi-file source launcher, JDK 22 or later). Its layouts are proposals for the owner, not the screens' code, except the fluid device pages: their door column is the shipped `DeviceColumn` at `FluidGuiLayout.side`, at the scale a window takes for them (`WindowScale`, `-Dwindow`), shown as opened and scrolled to its end where it scrolls, and the tool prints each column's height.
-- `OperationPrototypes.java`: the column's Operation tab (batch 2026-10-28-column-operation, C7), proposals for the owner on illustrative data.
+- `OperationPrototypes.java`: the column's Operation tab (batch 2026-10-28-column-operation, C7): the shipped `OperationColumn` on illustrative data, at the 1920 by 1080 window's size and a narrow window's.
 
 ## History
 
@@ -56,3 +56,4 @@ It writes one sheet per screen to `tmp/gui-prototypes/`, both doors side by side
 - 2026-10-28, batch 2026-10-28-gui-toolkit: a compressor's page (`fluid-compressor`, its pressure ratio with the pressure change on hover). An option sheet drew it trimmed three ways at 2560 by 1440; it went with the owner's pick, A (`GUI_TOOLKIT_PLAN.md` section 20).
 - 2026-10-28, batch 2026-10-28-constructor-templates: the constructor's column design page with Import and Templates (`equipment-constructor-column-design`) and its Templates page (`equipment-constructor-templates`); a latched key is drawn latched whether it acts or not, as `SkinButton` draws it (also in `HeatDiagramRender`).
 - 2026-10-29, batch 2026-10-28-column-operation: `OperationPrototypes.java`, the column's Operation tab in two page sizes (`operation-a-design-size`, `operation-b-taller-page`), called from `GuiPrototypes.prototypes()`; `-Donly=<file prefix>` draws only the prototypes whose file starts with it.
+- 2026-10-29, batch 2026-10-28-column-operation: the owner chose option B; `OperationPrototypes.java` now draws the shipped `OperationColumn` (`operation-1920x1080`, `operation-narrow-largest`).

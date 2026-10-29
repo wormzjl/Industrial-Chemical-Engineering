@@ -151,4 +151,30 @@ class AssemblyPresentationTest {
         presentation.tick(3 * BUCKET);
         assertTrue(host.sent.isEmpty());
     }
+
+    /**
+     * An Operation tab command (C7: Start, Stop, Apply) is a queued engine event: it runs on the bucket, not at the press;
+     * one awaits its answer per session; every open GUI of its master gets the answer, changed or not; walks nothing.
+     */
+    @Test
+    void anOperationCommandRunsOnTheBucketAndAnswersEveryGuiOfItsColumn() {
+        var host = new Host();
+        var presentation = new AssemblyPresentation<>(host);
+        var a = new Viewer("a", COLUMN);
+        var b = new Viewer("b", COLUMN);
+        var c = new Viewer("c", OTHER);
+        host.views.put(COLUMN, checked(1));
+        host.views.put(OTHER, checked(1));
+        for (var v : List.of(a, b, c)) presentation.open(v, 1);
+        host.sent.clear();
+        var ran = new ArrayList<Viewer>();
+        assertTrue(presentation.act(a, 2, ran::add));
+        assertFalse(presentation.act(a, 3, ran::add), "one command awaits the engine");
+        presentation.tick(BUCKET - 1);
+        assertTrue(ran.isEmpty(), "nothing runs before the bucket");
+        presentation.tick(BUCKET);
+        assertEquals(List.of(a), ran);
+        assertEquals(List.of(a, b), host.receivers(), "the column's GUIs get the answer, the other column's none");
+        assertTrue(host.validations.isEmpty(), "a command walks nothing");
+    }
 }

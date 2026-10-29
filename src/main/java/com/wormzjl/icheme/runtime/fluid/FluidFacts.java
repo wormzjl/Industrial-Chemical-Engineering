@@ -391,7 +391,7 @@ final class FluidFacts {
         return f.list(t.axis(),(q,id)->q.text(id))
                 .list(t.products(),(q,p)->q.name(p.port()).count(p.index()).doubles(p.recovery()).f64(p.temperature()).f64(p.pressure()))
                 .f64(t.reboilerPerFeed()).doubles(t.pumparoundPerFeed()).f64(t.condenserPerFeed())
-                .record(q->q.doubles(ref.feedFractions()).f64(ref.feedEnthalpy()).f64(ref.enthalpySlope()).doubles(ref.steamRatios()).f64(ref.alpha()).record(p->setpoints(p,ref.setpoints())))
+                .record(q->q.doubles(ref.feedFractions()).f64(ref.feedEnthalpy()).f64(ref.enthalpySlope()).doubles(ref.steamRatios()).f64(ref.alpha()).record(p->setpoints(p,ref.setpoints())).f64(ref.feedTemperature()).doubles(ref.steamTemperatures()))
                 .doubles(held).list(Arrays.asList(s.enthalpy()),(q,row)->q.doubles(row)).i64(s.tableTick()).i64(s.applied()).f64(s.solvedCondenser())
                 .list(s.levels(),(q,l)->q.count(l.device()).i64(l.tick()).f64(l.held()).f64(l.rate()).f64(l.molarMass()))
                 .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())));
@@ -404,8 +404,8 @@ final class FluidFacts {
             try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Product(port,Math.toIntExact(index),recovery,t,p);}catch(RuntimeException invalid){return null;}});
         double reboiler=f.f64(0);var pa=f.doubles(new double[0]);double condenser=f.f64(0);
         var reference=f.record(null,q->{var z=q.doubles(new double[0]);double h=q.f64(0),slope=q.f64(0);var steam=q.doubles(new double[0]);double alpha=q.f64(0);
-            var setpoints=q.record(null,p->{try{return setpoints(p);}catch(IllegalArgumentException invalid){return null;}});
-            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Reference(z,h,slope,steam,alpha,setpoints);}catch(RuntimeException invalid){return null;}});
+            var setpoints=q.record(null,p->{try{return setpoints(p);}catch(IllegalArgumentException invalid){return null;}});double feedT=q.f64(Double.NaN);var steamT=q.doubles(new double[0]);
+            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Reference(z,h,slope,steam,alpha,setpoints,feedT,steamT);}catch(RuntimeException invalid){return null;}});
         var held=f.doubles(new double[0]);var enthalpy=f.list(List.<double[]>of(),q->q.doubles(new double[0])).toArray(new double[0][]);long tableTick=f.i64(0),applied=f.i64(0);double solved=f.f64(0);
         var levels=f.list(List.<ColumnUnit.State.Level>of(),q->{long device=q.count(0),tick=q.i64(0);double amount=q.f64(0),rate=q.f64(0),molar=q.f64(0);return new ColumnUnit.State.Level(device,tick,amount,rate,molar);});
         var credits=f.list(List.<ColumnUnit.State.Credit>of(),q->{long device=q.count(0),tick=q.i64(0);

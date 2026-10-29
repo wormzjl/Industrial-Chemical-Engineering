@@ -54,13 +54,17 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
     /**
      * The intensive state of the solve: the feed's mole fractions on the axis, its specific enthalpy (J/mol, network basis)
      * and its slope (J/mol K) for the enthalpy band, the steam taken per mole of feed per steam inlet, the throughput
-     * relative to the design rate, and the setpoints it solved.
+     * relative to the design rate, the setpoints it solved, and the feed's and each steam's temperature there (K, NaN
+     * unknown; the Operation tab's, C7).
      */
-    public record Reference(double[] feedFractions, double feedEnthalpy, double enthalpySlope, double[] steamRatios, double alpha, Setpoints setpoints) {
+    public record Reference(double[] feedFractions, double feedEnthalpy, double enthalpySlope, double[] steamRatios, double alpha, Setpoints setpoints,
+                            double feedTemperature, double[] steamTemperatures) {
         public Reference {
             feedFractions = feedFractions.clone();
             steamRatios = steamRatios.clone();
+            steamTemperatures = steamTemperatures.clone();
             Objects.requireNonNull(setpoints, "setpoints");
+            if (steamTemperatures.length != steamRatios.length) throw new IllegalArgumentException("One temperature per steam inlet");
         }
 
         @Override
@@ -71,6 +75,16 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         @Override
         public double[] steamRatios() {
             return steamRatios.clone();
+        }
+
+        @Override
+        public double[] steamTemperatures() {
+            return steamTemperatures.clone();
+        }
+
+        /** The feed's temperature at specific enthalpy {@code h}, J/mol: the solved one moved along the slope (NaN unknown). */
+        public double feedTemperature(double h) {
+            return enthalpySlope > 0 && Double.isFinite(h) ? feedTemperature + (h - feedEnthalpy) / enthalpySlope : feedTemperature;
         }
     }
 
