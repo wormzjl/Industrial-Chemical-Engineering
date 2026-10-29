@@ -19,6 +19,7 @@ import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
+import com.wormzjl.icheme.science.fluid.network.PipeResistance;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialAxis;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -63,15 +64,17 @@ public final class ColumnOperationReviewWorld {
             List.of(ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD));
     /** The condenser's shell size, m: larger than the least exchanger, for the overhead's duty. */
     static final double CONDENSER_SIZE = 1.5;
-    /** The feed line's bore, m. */
-    static final double FEED_BORE = .25;
+    /** The feed's and the steam's line bores, m (their generators' too). */
+    static final double FEED_BORE = .25, STEAM_BORE = .15;
     /**
-     * Online ticks between the reports of the running column, and their number. A GameTest server runs its ticks as fast as
-     * it can: the first solve is waited for by its phase, not by a tick count.
+     * The reports of the running column: their number and the online ticks between them. A GameTest server runs its ticks as
+     * fast as it can, far ahead of the solves a cycle and its islands wait for (plan section 9), and an island behind the
+     * clock plans from the column's past: from the start on, the test holds the server to 20 ticks a second, as a game runs.
      */
-    static final int REPORT_TICKS = 600, REPORTS = 4;
+    static final int REPORTS = 4, REPORT_TICKS = 600;
+    static final long PACE_MILLIS = 50;
 
-    @GameTest(template = "empty", timeoutTicks = 200_000, batch = "review-operation")
+    @GameTest(template = "empty", timeoutTicks = Integer.MAX_VALUE, batch = "review-operation")
     public static void aCrudeColumnRuns(GameTestHelper helper) {
         var level = helper.getLevel();
         // North of the column review plant, clear of the test's own structure block, on the ground.
@@ -93,12 +96,14 @@ public final class ColumnOperationReviewWorld {
                 .thenExecute(() -> {
                     if (failure[0] == null) rig.start(failure);
                 })
-                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.past(), "Waiting for the first solve"));
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && rig.past(), "Waiting for the first solve"));
         for (int i = 1; i <= REPORTS; i++) {
             int n = i;
-            sequence = sequence.thenIdle(REPORT_TICKS).thenExecute(() -> {
-                if (failure[0] == null) rig.report(n * REPORT_TICKS);
-            });
+            int[] ticks = {0};
+            sequence = sequence.thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && ++ticks[0] >= REPORT_TICKS, "Waiting for the column"))
+                    .thenExecute(() -> {
+                        if (failure[0] == null) rig.report(n);
+                    });
         }
         sequence.thenExecute(() -> {
             plant.release();
@@ -195,22 +200,38 @@ public final class ColumnOperationReviewWorld {
                 plant.route(AssemblyGameTests.Plant.front(pumps.get(j), Role.DISCHARGE), AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_INLET));
                 plant.route(AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_OUTLET), front(column, Role.RETURN, j));
             }
-            // The feed at 638 K is mostly vapour: 10 kg/s is about 0.6 m³/s, 12 m/s in a 0.25 m line (the least bore runs it at the
-            // 100 m/s cap and holds the column to a quarter of its feed). The line on both sides of its valve.
-            var feedFront = front(column, Role.FEED, 0);
-            for (int k : new int[]{0, 2}) plant.world.resizeLine(id(feedFront.relative(out(column, Role.FEED, 0), k)), FEED_BORE, d -> PipeSizes.MAX_BORE);
+            // The feed and the steam lines sized for their flows, on both sides of their valves: the least bore (0.05 m) passes
+            // 2.6 kg/s of the 638 K crude at 5 bar (13 kg/m³) at the 100 m/s cap, a quarter of the feed, and the steam (2.1 kg/m³)
+            // at 92 m/s. At 0.25 m the crude runs at 12 m/s, at 0.15 m the steam at 10 m/s.
+            for (var line : List.of(new Object[]{Role.FEED, FEED_BORE}, new Object[]{Role.STEAM, STEAM_BORE})) {
+                var role = (Role) line[0];
+                for (int k : new int[]{0, 2})
+                    plant.world.resizeLine(id(front(column, role, 0).relative(out(column, role, 0), k)), (double) line[1], d -> PipeSizes.MAX_BORE);
+            }
             for (var valve : plant.valves.entrySet()) plant.install(valve.getKey(), valve.getValue());
 
             // The supplies and the sinks.
-            TankCharge.run(plant.world, id(feed), new FluidDeviceSpec(1, input.feedTemperatureKelvin(), SUPPLY, crude(catalog)));
+            supply(feed, FEED_BORE, new FluidDeviceSpec(1, input.feedTemperatureKelvin(), SUPPLY, crude(catalog)));
             var waterFluid = FluidDeviceSpec.water(catalog).composition();
-            TankCharge.run(plant.world, id(steam), new FluidDeviceSpec(1, input.steamFeeds().getFirst().temperatureKelvin(), SUPPLY, waterFluid));
+            supply(steam, STEAM_BORE, new FluidDeviceSpec(1, input.steamFeeds().getFirst().temperatureKelvin(), SUPPLY, waterFluid));
             TankCharge.run(plant.world, id(water), new FluidDeviceSpec(1, 303.15, WATER, waterFluid));
             for (var at : sinks) {
                 long id = id(at);
                 var r = plant.world.registrations().get(id);
                 plant.world.edit(id, r.revision(), r.device(), new FluidDeviceSpec(1, 298.15, ATMOSPHERE, waterFluid));
             }
+        }
+
+        /**
+         * The generator at {@code at} at bore {@code bore}, m, set to {@code spec} and switched on, in one edit as its own
+         * screen makes it: a generator's connection is the least bore unless set.
+         */
+        void supply(BlockPos at, double bore, FluidDeviceSpec spec) {
+            long id = id(at);
+            var r = plant.world.registrations().get(id);
+            var g = r.device().geometry();
+            var geometry = new PipeResistance.Geometry(g.length(), bore, g.roughness(), g.minorLoss(), g.channels());
+            plant.world.edit(id, r.revision(), r.device().withGeometry(geometry).withGeneratorEnabled(true), spec);
         }
 
         /** The design's feed on the network's axis, as mole fractions. */
@@ -251,14 +272,29 @@ public final class ColumnOperationReviewWorld {
                     String.format(Locale.ROOT, "%.1f", java.util.Arrays.stream(input.feedComponentMolarFlowsMolPerSecond()).sum() * 3.6));
         }
 
+        long lastTick;
+
+        /** Holds the server to a game's 20 ticks a second ({@link #PACE_MILLIS} a tick); always true. */
+        boolean paced() {
+            long wait = lastTick + PACE_MILLIS - System.currentTimeMillis();
+            if (wait > 0) try {
+                Thread.sleep(wait);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            lastTick = System.currentTimeMillis();
+            return true;
+        }
+
         /** Whether the column is past its first solve: running, limited, upset or not ready. */
         boolean past() {
             var view = plant.world.columnView(plant.position(plant.column.origin()), id -> Double.NaN);
             return view != null && view.phase() != OperationView.Phase.STARTING;
         }
 
-        /** The column's Operation view after {@code ticks} online ticks of running: its phase, its streams and its duties. */
-        void report(int ticks) {
+        /** The column's Operation view at report {@code n}: its phase, its streams and its duties. */
+        void report(int n) {
+            long ticks = plant.world.onlineTick();
             var view = plant.world.columnView(plant.position(plant.column.origin()), id -> Double.NaN);
             if (view == null) {
                 IChemE.LOGGER.info("review_operation t={} view=none", ticks);
@@ -266,6 +302,16 @@ public final class ColumnOperationReviewWorld {
             }
             IChemE.LOGGER.info("review_operation t={} phase={} limit={} alpha={} ruleA={} failed={} engine=\"{}\"", ticks, view.phase(), view.limit(),
                     String.format(Locale.ROOT, "%.3f", view.alpha()), view.ruleA(), view.failed(), view.engine());
+            for (var at : List.of(feed, steam, water)) {
+                var d = plant.world.registrations().get(id(at)).device();
+                IChemE.LOGGER.info("review_operation t={} generator={} bore={} on={} status=\"{}\"", ticks, at.toShortString(), d.geometry().diameter(), d.generatorEnabled(),
+                        plant.world.view(d.id()).status());
+            }
+            var unit = plant.world.column(plant.position(plant.column.origin()));
+            if (unit != null) for (var s : unit.stations())
+                if (s.port().inlet()) IChemE.LOGGER.info("review_operation t={} port={}{} device={} valve={} port_status=\"{}\" valve_status=\"{}\" wakes={}", ticks, s.port(), s.index(),
+                        s.device(), s.valve(), plant.world.view(s.device()).status(), plant.world.view(s.valve()).status(),
+                        com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.couplingWakes.sum());
             IChemE.LOGGER.info("review_operation t={} solver={} feed_line=\"{}\" water_line=\"{}\"", ticks,
                     com.wormzjl.icheme.runtime.ProcessSolveServices.diagnostics(plant.level.getServer()), plant.world.view(id(feed)).status(),
                     plant.world.view(id(water)).status());

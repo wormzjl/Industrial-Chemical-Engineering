@@ -426,7 +426,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             if(s.device()!=0)wakes.computeIfAbsent(tick+FENCE_TICKS,t->new TreeSet<>()).add(s.device());
             if(!s.port().inlet())continue;
             double rate=!demanding?0:s.port()==Port.FEED?u.setpoints().feedRate():u.setpoints().feedRate()*u.setpoints().steamPerFeed()[s.index()];
-            r.levels.computeIfAbsent(s.device(),d->new ArrayDeque<>()).addLast(new Level(tick,available.get(s.device()).total(),rate,molar(available.get(s.device()).moles())));
+            // An empty account has no composition yet: its valve meters the design's feed, or water for the steam (not the
+            // port's own contents, which before the first arrival are whatever filled the pipe).
+            double molarMass=molar(available.get(s.device()).moles());
+            if(!(molarMass>0)){int water=axis.indexOf(SplitTable.WATER);molarMass=s.port()==Port.FEED?(r.table==null?0:molar(r.table.reference().feedFractions())):water<0?0:weights[water];}
+            r.levels.computeIfAbsent(s.device(),d->new ArrayDeque<>()).addLast(new Level(tick,available.get(s.device()).total(),rate,molarMass));
         }
     }
     /** The latest entry of {@code log} at or before {@code through}, after dropping every older one, or null. */
