@@ -228,14 +228,14 @@ class V3PengRobinsonDerivativesTest {
         }
     }
 
-    /** A derivative request outside the package envelope fails exactly as the value request does. */
+    /** Values and derivatives share the numerical box; data-range edges are continuations. */
     @Test
     void derivativesRefuseTheSameStatesTheValuesRefuse() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
         double[] composition = new double[thermo.componentBasis().componentCount()];
         composition[3] = 0.5;
         composition[9] = 0.5;
-        for (double[] outside : new double[][] {{901.0, 250_000.0}, {500.0, 2_100_000.0}, {500.0, 10_000.0}}) {
+        for (double[] outside : new double[][] {{6001.0, 250_000.0}, {500.0, 1.1e9}, {500.0, 0.5}}) {
             assertThrows(V3ThermoException.class, () -> thermo.fugacity(
                     outside[0], outside[1], composition, Root.LIQUID, thermo.newWorkspace()));
             assertThrows(V3ThermoException.class, () -> thermo.fugacityDerivatives(

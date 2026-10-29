@@ -74,7 +74,8 @@ class V3BoundedSolvePathTest {
 
         String path = outcome.diagnostics().solvePath();
         assertTrue(path.length() <= LIMIT, path);
-        assertTrue(path.contains(".."), "fixture no longer writes a path beyond the contract: " + path);
+        assertTrue(path.contains("..") || path.startsWith("cold/stage-continuation/"),
+                "neither a compressed pressure ladder nor a direct stage solve: " + path);
         if (outcome instanceof V3ColumnOutcome.Failure failure) {
             assertNotEquals(V3SolverFailureCode.INVALID_INPUT, failure.code(), failure.summary());
             assertFalse(failure.summary().contains("bounded contract"), failure.summary());

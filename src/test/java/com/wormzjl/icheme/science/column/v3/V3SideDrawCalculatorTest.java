@@ -195,7 +195,10 @@ class V3SideDrawCalculatorTest {
         V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input, V3SolveControl.UNBOUNDED, 0.0, 0.0, 0.0);
         if (outcome instanceof V3ColumnOutcome.Failure failure) {
             assertNotEquals(V3SolverFailureCode.INVALID_INPUT, failure.code());
-            assertTrue(failure.summary().contains("authored tray 2"), failure::summary);
+            if (failure.code() == V3SolverFailureCode.ACCEPTANCE_AUDIT_FAILURE) {
+                assertTrue(failure.diagnostics().acceptanceAudit().checks().stream().anyMatch(c ->
+                        c.family().equals("INTERIOR_PHASE_IDENTITY") && !c.passed()));
+            } else assertTrue(failure.summary().contains("authored tray 2"), failure::summary);
         } else {
             assertTrue(((V3ColumnOutcome.Success) outcome).result().acceptanceAudit().accepted());
         }

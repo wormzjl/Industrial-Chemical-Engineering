@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.column.v3.thermo;
 import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
+import com.wormzjl.icheme.science.thermo.NumericalBox;
 import java.util.List;
 import java.util.Objects;
 
@@ -44,8 +45,8 @@ final class V3PengRobinsonSession {
         }
         return new PengRobinsonKernel(criticalTemperatures, criticalPressures, acentricFactors,
                 propertyPackage.binaryInteractions(),
-                propertyPackage.minimumTemperatureKelvin(), propertyPackage.maximumTemperatureKelvin(),
-                propertyPackage.minimumPressurePascal(), propertyPackage.maximumPressurePascal());
+                NumericalBox.MINIMUM_TEMPERATURE, NumericalBox.MAXIMUM_TEMPERATURE,
+                NumericalBox.MINIMUM_PRESSURE, NumericalBox.MAXIMUM_PRESSURE);
     }
 
     static V3PengRobinsonSession registeredPackage(String packageId) {
@@ -58,6 +59,10 @@ final class V3PengRobinsonSession {
     int componentCount() { return kernel.componentCount(); }
     double minimumPressurePascal() { return propertyPackage.minimumPressurePascal(); }
     double maximumPressurePascal() { return propertyPackage.maximumPressurePascal(); }
+    boolean outsideDataRange(double temperature, double pressure) {
+        return temperature < propertyPackage.minimumTemperatureKelvin() || temperature > propertyPackage.maximumTemperatureKelvin()
+                || pressure < propertyPackage.minimumPressurePascal() || pressure > propertyPackage.maximumPressurePascal();
+    }
     List<String> advisoryEvidence() { return propertyPackage.advisoryEvidence(); }
 
     double componentMolecularWeightKgPerMol(int publicComponent) {
@@ -140,7 +145,7 @@ final class V3PengRobinsonSession {
         double enthalpy = 0.0;
         for (int component = 0; component < componentCount(); component++) {
             enthalpy += normalizedComposition[component]
-                    * propertyPackage.component(component).idealGasEnthalpy(temperatureKelvin);
+                    * componentIdealGasEnthalpy(component, temperatureKelvin);
         }
         return enthalpy;
     }
@@ -151,14 +156,21 @@ final class V3PengRobinsonSession {
         double capacity = 0.0;
         for (int component = 0; component < componentCount(); component++) {
             capacity += normalizedComposition[component]
-                    * propertyPackage.component(component).idealGasHeatCapacity(temperatureKelvin);
+                    * propertyPackage.component(component).idealGasHeatCapacity(caloricTemperature(temperatureKelvin));
         }
         return capacity;
     }
 
     /** Pure-component ideal-gas enthalpy about the shared datum; the ideal-gas half of a partial molar one. */
     double componentIdealGasEnthalpy(int publicComponent, double temperatureKelvin) {
-        return propertyPackage.component(publicComponent).idealGasEnthalpy(temperatureKelvin);
+        var component = propertyPackage.component(publicComponent);
+        double edge = caloricTemperature(temperatureKelvin);
+        double h = component.idealGasEnthalpy(edge);
+        return edge == temperatureKelvin ? h : h + component.idealGasHeatCapacity(edge) * (temperatureKelvin - edge);
+    }
+
+    private double caloricTemperature(double temperatureKelvin) {
+        return Math.clamp(temperatureKelvin, propertyPackage.minimumTemperatureKelvin(), propertyPackage.maximumTemperatureKelvin());
     }
 
     static final class Session {

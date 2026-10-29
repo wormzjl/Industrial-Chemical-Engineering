@@ -97,32 +97,21 @@ class V3SimultaneousColumnSolverTest {
     @Test
     void registeredPrBinaryNumericalTwoPhaseRootCannotPassTheIndependentPhaseGate() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3ColumnProblem problem = V3ColumnProblemResolver.resolve(V3TestInputs.cdu17Binary("test:registered-pr-binary"),V3CondenserPhaseBranch.TWO_PHASE);
+        var base = V3TestInputs.cdu17Binary("test:registered-pr-binary");
+        var input = V3TestInputs.dry(1, base.packageId(), base.assayId(), base.componentBasis(),
+                base.feedComponentMolarFlowsMolPerSecond(), 550, 2, 1, 250000, 750, List.of(
+                        new V3ColumnSpecification.CondenserOutletTemperature(300),
+                        new V3ColumnSpecification.OrganicRefluxRatio(2),
+                        new V3ColumnSpecification.ReboilerDuty(50000)));
+        V3ColumnProblem problem = V3ColumnProblemResolver.resolve(input,V3CondenserPhaseBranch.TWO_PHASE);
         V3FlashResult feedFlash = thermo.flashTP(problem.input().feedTemperatureKelvin(),
                 problem.nodePressurePascal(problem.topology().feedTrayNumber()),
                 problem.input().feedComponentMolarFlowsMolPerSecond(), thermo.newWorkspace());
-        V3ColumnInitializer.Seed seed = V3ColumnInitializer.initialize(problem, thermo, thermo.newWorkspace());
         V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(
                 problem, thermo, feedFlash.molarEnthalpyJoulesPerMol());
-        V3SimultaneousColumnSolver.Attempt attempt = V3SimultaneousColumnSolver.solve(
-                problem, evaluator, new V3DryMeshCoordinateMap(problem), seed.state(), thermo::newWorkspace, V3ConvergenceEvidence.unavailable(), 128, 1.0e-8, V3FiniteDifferenceJacobian.DifferenceScale.FINE, V3SolveControl.UNBOUNDED);
-        // This fixture tests rejection of a numerically converged, physically invalid branch,
-        // not convergence from one particular cold trajectory. Use the same existing recovery
-        // paths as the exact-warm companion and production facade; keep every acceptance gate.
-        if (!(attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged)) {
-            V3DryMeshState prepared = projectedOrNull(problem, thermo, attempt.state());
-            if (prepared != null) {
-                attempt = V3SimultaneousColumnSolver.solveWithContinuationLocalBlocks(
-                        problem, evaluator, new V3DryMeshCoordinateMap(problem), prepared, thermo::newWorkspace,
-                        128, 1.0e-8, V3SolveControl.UNBOUNDED, V3SimultaneousColumnSolver.NewtonTrace.NONE);
-            }
-        }
-        if (!(attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged)) {
-            attempt = V3SimultaneousColumnSolver.solve(
-                    problem, evaluator, new V3DryMeshCoordinateMap(problem), seed.state(), thermo::newWorkspace,
-                    V3ConvergenceEvidence.unavailable(), 128, 1.0e-8,
-                    V3FiniteDifferenceJacobian.DifferenceScale.COARSE, V3SolveControl.UNBOUNDED);
-        }
+        // Re-evaluate a captured numerically certified root; a changed cold trajectory must not erase
+        // this negative coverage of the publication and exact-input warm-start gates.
+        var attempt = V3ExactWarmStartSweepTest.capturedAttempt(input, V3CondenserPhaseBranch.TWO_PHASE).attempt();
         V3SimultaneousColumnSolver.Attempt.Converged converged = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, attempt, attempt::toString);
         V3ConvergenceEvidence convergenceEvidence = converged.evidence().convergenceEvidence();
@@ -132,7 +121,8 @@ class V3SimultaneousColumnSolverTest {
         assertTrue(convergenceEvidence.satisfiesGates());
         // This old numerical fixture can close a two-phase MESH system at a liquid-only outlet.
         // A verified Newton correction must not bypass the independent phase check.
-        assertTrue(audit.checks().stream().filter(check -> !check.family().equals("CONDENSER_PHASE"))
+        assertTrue(audit.checks().stream().filter(check -> !check.family().equals("CONDENSER_PHASE")
+                        && !check.family().equals("INTERIOR_PHASE_IDENTITY"))
                 .allMatch(V3AcceptanceAudit.Check::passed), audit::toString);
         assertFalse(audit.accepted());
         assertTrue(audit.checks().stream().anyMatch(check -> check.family().equals("CONDENSER_PHASE")
@@ -154,14 +144,19 @@ class V3SimultaneousColumnSolverTest {
     void insideOutFrozenPropertyPredictorStillRequiresStrictPrCertification() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(
-                V3TestInputs.cdu17Binary("test:inside-out-gate"), V3CondenserPhaseBranch.TWO_PHASE);
+                V3TestInputs.cdu17BoilingBinary("test:inside-out-gate"), V3CondenserPhaseBranch.LIQUID_ONLY);
         V3FlashResult feedFlash = thermo.flashTP(problem.input().feedTemperatureKelvin(),
                 problem.nodePressurePascal(problem.topology().feedTrayNumber()),
                 problem.input().feedComponentMolarFlowsMolPerSecond(), thermo.newWorkspace());
         V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(
                 problem, thermo, feedFlash.molarEnthalpyJoulesPerMol());
         V3DryMeshCoordinateMap coordinates = new V3DryMeshCoordinateMap(problem);
-        V3DryMeshState seed = V3ColumnInitializer.initialize(problem, thermo, thermo.newWorkspace()).state();
+        var accepted = assertInstanceOf(V3ColumnOutcome.Success.class, V3TestInputs.calculate(problem.input()));
+        var physical = accepted.result().warmSeed().orElseThrow().stateFor(problem);
+        double[] moved = coordinates.encode(physical);
+        for (int i = 0; i < moved.length; i++) moved[i] +=
+                coordinates.unknowns().get(i).id().family() == V3DegreeOfFreedomLedger.UnknownFamily.TEMPERATURE ? 1.0 : 0.01;
+        V3DryMeshState seed = coordinates.decode(moved);
 
         V3SimultaneousColumnSolver.Attempt attempt = V3SimultaneousColumnSolver.solveWithInsideOut(
                 problem, evaluator, coordinates, seed, thermo::newWorkspace, 128, 1.0e-8,
@@ -171,6 +166,9 @@ class V3SimultaneousColumnSolverTest {
                 V3SimultaneousColumnSolver.Attempt.Converged.class, attempt, attempt::toString);
         assertTrue(converged.evidence().convergenceEvidence().satisfiesGates());
         assertTrue(evaluator.evaluate(converged.state(), thermo.newWorkspace()).maximumAbsoluteScaledResidual() <= 1.0e-8);
+        assertTrue(converged.evidence().iterations() > 0);
+        assertTrue(new V3AcceptanceAuditor(problem, thermo, feedFlash.molarEnthalpyJoulesPerMol())
+                .audit(converged.state(), thermo.newWorkspace(), V3SolveControl.UNBOUNDED).accepted());
     }
 
     /**

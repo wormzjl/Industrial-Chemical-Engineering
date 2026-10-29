@@ -19,6 +19,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 - The C++ column library is the default (commit `9c5eb01f`; owner request; batch `2026-10-28-native-column-default`, review `NATIVE_DEFAULT_REVIEW.md`): the build packs it into the jar under `natives/<os>-<arch>/` when CMake is found (PATH, `-PnativeCmake` or Visual Studio), with a static runtime; the column loads it without a switch and runs the inside-out trial's Peng-Robinson outer pass in C++ unless `-Dicheme.native.thermo.batch=false`; without a library the Java path runs. Investigation probes in `tools/native-column-default/`.
 
+### Fixed
+
+- Zero-reflux columns support exactly dry upper stages; phase admission rejects collapsed liquid/vapor startup roots, continuation respects dry layouts, column caloric fits continue beyond data edges, and dry trays lose phantom liquid head; offline bulk CDU/VDU screens qualify convergence and preserve unresolved budget/coupling outcomes (`dba4ba45`, `3509f67a`; batch `2026-10-28-vacuum-column`).
+
 ## [0.17.1] - 2026-10-28
 
 ### Changed

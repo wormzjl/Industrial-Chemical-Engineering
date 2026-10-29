@@ -1,0 +1,35 @@
+{
+  "name": "zero-reflux-vdu",
+  "stages": 10,
+  "feedStage": 8,
+  "feedTemperatureK": 628.5790727093818,
+  "topPressurePa": 2000.0,
+  "nominalDropPa": 0.0,
+  "use400CHeaterEnthalpy": true,
+  "diameterM": 15.0,
+  "condenserTemperatureK": 333.15,
+  "refluxRatio": 0,
+  "steamMassFraction": 0.01,
+  "draws": [
+    {
+      "stage": 3,
+      "feedMoleFraction": 0.1
+    },
+    {
+      "stage": 6,
+      "feedMoleFraction": 0.25
+    }
+  ],
+  "pumparounds": [
+    {
+      "drawStage": 3,
+      "returnStage": 2,
+      "coolingMW": 10
+    },
+    {
+      "drawStage": 6,
+      "returnStage": 5,
+      "coolingMW": 15
+    }
+  ]
+}

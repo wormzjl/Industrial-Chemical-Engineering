@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-10-28-vacuum-column/](2026-10-28-vacuum-column/README.md) | Column convergence and dry-stage support | In progress since 2026-10-28 |
 | [2026-10-28-drum-outlet-placement/](2026-10-28-drum-outlet-placement/README.md) | A lying boot drum's oil outlet at the bottom of its front end, not mid-height on the head | Implemented 2026-10-28 (0.17.1) |
 | [2026-10-28-constructor-templates/](2026-10-28-constructor-templates/README.md) | Constructor: current kind opens its design, column templates, calculator Save kept on close | Implemented 2026-10-28 (0.17.1) |
 | [2026-10-28-native-column-default/](2026-10-28-native-column-default/README.md) | The C++ column library by default, the Java path where it is missing | In progress since 2026-10-28 |
