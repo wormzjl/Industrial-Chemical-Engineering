@@ -255,7 +255,22 @@ class V3TruncationSupportTest {
                         new V3ColumnSpecification.CondenserOutletTemperature(400.0),
                         new V3ColumnSpecification.OrganicRefluxRatio(reflux),
                         new V3ColumnSpecification.ReboilerDuty(0.0)), sideDraws);
-        return V3ColumnProblemResolver.resolve(input, branch);
+        return allPhaseProblem(input, branch);
+    }
+
+    /** Manufactured wet-stage graph for algebra tests, independent of the production liquid-supply compiler. */
+    static V3ColumnProblem allPhaseProblem(V3ColumnInput input, V3CondenserPhaseBranch branch) {
+        var resolved = V3ColumnProblemResolver.resolve(input,branch);
+        var topology = switch (branch) {
+            case TWO_PHASE -> V3ColumnTopology.twoPhase(input.stageCount(),input.feedStageNumber());
+            case LIQUID_ONLY -> V3ColumnTopology.liquidOnly(input.stageCount(),input.feedStageNumber());
+            case VAPOR_ONLY -> V3ColumnTopology.vaporOnly(input.stageCount(),input.feedStageNumber());
+        };
+        var support = V3TruncationSupport.identity(topology,resolved.activeComponentBasis().componentCount());
+        var ledger = V3DegreeOfFreedomLedger.create(topology,resolved.activeComponentBasis().componentCount(),input.specifications(),
+                resolved.condenserComponentPhases(),support,input.sideDraws());
+        return new V3ColumnProblem(input,topology,resolved.activeComponentBasis(),resolved.condenserComponentPhases(),
+                resolved.nodePressuresPascal(),ledger,support,ledger.wetTraySet());
     }
 
     static V3TruncationSupport topTailSupport(V3ColumnProblem problem) {

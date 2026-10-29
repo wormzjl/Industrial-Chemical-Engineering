@@ -22,25 +22,23 @@ class V3LearnedRecoveryTest {
 
     /** A column the classical route solves, with one small authored side draw. */
     private static V3ColumnInput drawInput() {
-        return column(8, 4, List.of(new V3SideDrawSpec(6, 2.0)));
+        return column(2, 1, List.of(new V3SideDrawSpec(1, 2.0)));
     }
 
     /** The same column with no authored feature at all. */
     private static V3ColumnInput plainInput() {
-        return column(8, 4, List.of());
+        return column(2, 1, List.of());
     }
 
     /**
-     * The draw column with a 50 kW reboiler. At zero duty its stripping section is pinched and the accepted root
-     * is nearly singular, so whether a re-seeded accepted state re-certifies is decided by the last bits of the
-     * math library (batch 2026-09-27-jdk-determinism, COLUMN_TESTS_REVIEW.md).
+     * Live boilup keeps this positive recovery fixture away from the old collapsed-phase root.
      */
     private static V3ColumnInput boiledDrawInput() {
-        return column(8, 4, List.of(new V3SideDrawSpec(6, 2.0)), 50_000);
+        return column(2, 1, List.of(new V3SideDrawSpec(1, 2.0)), 500_000);
     }
 
     private static V3ColumnInput column(int stages, int feedStage, List<V3SideDrawSpec> draws) {
-        return column(stages, feedStage, draws, 0);
+        return column(stages, feedStage, draws, 500_000);
     }
 
     private static V3ColumnInput column(int stages, int feedStage, List<V3SideDrawSpec> draws,
@@ -49,7 +47,7 @@ class V3LearnedRecoveryTest {
         double[] feed = new double[thermo.componentBasis().componentCount()];
         feed[7] = 50;
         feed[15] = 50;
-        return new V3ColumnInput(1, thermo.packageId(), "test:recovery", thermo.componentBasis(), feed, 550,
+        return new V3ColumnInput(1, thermo.packageId(), "test:recovery", thermo.componentBasis(), feed, 650,
                 stages, feedStage, 250_000, 750,
                 List.of(new V3ColumnSpecification.CondenserOutletTemperature(300),
                         new V3ColumnSpecification.OrganicRefluxRatio(2),

@@ -87,6 +87,7 @@ final class V3AcceptanceAuditor {
                 "EQUILIBRIUM", closureLimit()));
         checks.add(maximumFamily(residual, V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE,
                 "ENERGY_BALANCE", 1.0));
+        checks.add(interiorPhaseIdentity(state, workspace, control));
         if (problem.truncationSupport().truncatedPointCount() > 0) checks.add(truncationMassDefect(state));
         if (problem.truncationSupport().onePhasePointCount() > 0) {
             checks.add(phaseTruncationDefect(state, workspace));
@@ -110,6 +111,16 @@ final class V3AcceptanceAuditor {
         control.checkpoint();
         List<String> advisoryEvidence = thermo instanceof V3PengRobinsonThermo registeredPackage
                 ? registeredPackage.advisoryEvidence() : List.of();
+        if (thermo instanceof V3PengRobinsonThermo registeredPackage) {
+            for (int node = 0; node < state.nodeCount(); node++) {
+                if (registeredPackage.outsideDataRange(state.temperatureKelvin(node), problem.nodePressurePascal(node))) {
+                    var notices = new ArrayList<>(advisoryEvidence);
+                    notices.add("Warning: tray " + (node + 1) + " uses continued properties outside the package data range");
+                    advisoryEvidence = List.copyOf(notices);
+                    break;
+                }
+            }
+        }
         if (problem.hasPumparounds()) advisoryEvidence = withCooledTrayAdvisory(advisoryEvidence, state);
         advisoryEvidence = withWetTrayAdvisory(advisoryEvidence, state);
         advisoryEvidence = withDewPointAdvisory(advisoryEvidence, checks);
@@ -219,6 +230,50 @@ final class V3AcceptanceAuditor {
                 ? V3AcceptanceAudit.Check.pass("CONDENSER_ENERGY_BALANCE", magnitude, limit, detail)
                 : V3AcceptanceAudit.Check.fail("CONDENSER_ENERGY_BALANCE",
                         Double.isFinite(magnitude) ? magnitude : Double.MAX_VALUE, limit, detail);
+    }
+
+    /** A trivial same-root split satisfies fugacity equality but is not two distinct phases. */
+    V3AcceptanceAudit.Check interiorPhaseIdentity(
+            V3DryMeshState state, V3ThermoWorkspace workspace, V3SolveControl control) {
+        for (int node = 1; node < state.nodeCount(); node++) {
+            control.checkpoint();
+            double liquidTotal = 0.0, vaporTotal = 0.0;
+            for (int c = 0; c < state.componentCount(); c++) {
+                liquidTotal += state.liquidFlow(node, c);
+                vaporTotal += state.vaporFlow(node, c);
+            }
+            if (!(liquidTotal > 0.0 && vaporTotal > 0.0)) continue;
+            double water = problem.waterVaporFlow(state, node);
+            double hydrocarbonShare = vaporTotal / (vaporTotal + water);
+            double distance = 1.0 - hydrocarbonShare;
+            double[] x = new double[problem.input().componentBasis().componentCount()];
+            double[] y = new double[x.length];
+            for (int c = 0; c < state.componentCount(); c++) {
+                int index = problem.activeComponentBasis().publicIndex(c);
+                x[index] = state.liquidFlow(node, c) / liquidTotal;
+                y[index] = state.vaporFlow(node, c) / vaporTotal;
+                distance = Math.max(distance, Math.abs(x[index] - hydrocarbonShare * y[index]));
+            }
+            if (distance > Math.max(1.0e-7, closureLimit())) continue;
+            double t = state.temperatureKelvin(node), p = problem.nodePressurePascal(node);
+            V3FugacityResult liquid = thermo.fugacity(t, p, x, Root.LIQUID, workspace);
+            V3FugacityResult vapor = thermo.fugacity(t, p, y, Root.VAPOR, workspace);
+            double separation = Math.abs(liquid.compressibilityFactor() - vapor.compressibilityFactor());
+            if (separation <= 1.0e-7 * Math.max(liquid.compressibilityFactor(), vapor.compressibilityFactor())) {
+                double enthalpyScale = Math.max(1.0, Math.max(Math.abs(liquid.molarEnthalpyJoulesPerMol()), Math.abs(vapor.molarEnthalpyJoulesPerMol())));
+                if (Math.abs(liquid.molarEnthalpyJoulesPerMol() - vapor.molarEnthalpyJoulesPerMol()) > 1e-7 * enthalpyScale) continue;
+                double[] overall = new double[x.length];
+                for (int c = 0; c < x.length; c++) overall[c] = (liquidTotal * x[c] + vaporTotal * y[c]) / (liquidTotal + vaporTotal);
+                V3FlashResult flash = thermo.flashTP(t, p, overall, workspace);
+                control.checkpoint();
+                if (flash.phase() == V3FeedPhase.TWO_PHASE) continue;
+                return V3AcceptanceAudit.Check.fail("INTERIOR_PHASE_IDENTITY", 1.0, 0.0,
+                        "tray " + (node + 1) + " carries the same phase as both liquid and vapor; x-y=" + distance
+                                + ", Z separation=" + separation);
+            }
+        }
+        return V3AcceptanceAudit.Check.pass("INTERIOR_PHASE_IDENTITY", 0.0, 0.0,
+                "no interior liquid/vapor pair collapses to the same composition and EOS root");
     }
 
     /** Total hydrocarbon phase enthalpy rate of one node from a direct property call on the candidate flows. */

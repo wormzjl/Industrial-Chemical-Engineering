@@ -38,7 +38,11 @@ class V3TruncationNumericsTest {
         assertEquals(0.0, seed.liquidFlow(2, 2));
         for (int node = 0; node < 6; node++) assertEquals(seed.temperatureKelvin(node), projected.temperatureKelvin(node));
         assertDoesNotThrow(() -> new V3DryMeshCoordinateMap(fixture.problem()).encode(projected));
-        assertSame(seed, fixture.original().truncationSupport().projectSeed(fixture.original(), seed));
+        V3DryMeshState identityProjected = fixture.original().truncationSupport().projectSeed(fixture.original(), seed);
+        assertEquals(123.0, identityProjected.liquidFlow(0, 2));
+        assertEquals(1.0e-12, identityProjected.liquidFlow(2, 2), 1.0e-27);
+        assertEquals(0.0, seed.liquidFlow(2, 2));
+        assertSame(identityProjected, fixture.original().truncationSupport().projectSeed(fixture.original(), identityProjected));
     }
 
     @Test
@@ -191,7 +195,7 @@ class V3TruncationNumericsTest {
                 new V3ColumnSpecification.CondenserOutletTemperature(400.0),
                 new V3ColumnSpecification.OrganicRefluxRatio(branch == V3CondenserPhaseBranch.VAPOR_ONLY ? 0.0 : 1.0),
                 new V3ColumnSpecification.ReboilerDuty(0.0)));
-        V3ColumnProblem original = V3ColumnProblemResolver.resolve(input, branch);
+        V3ColumnProblem original = V3TruncationSupportTest.allPhaseProblem(input, branch);
         double[][] liquid = {{10, 10, 0}, {5, 5, 0}, {35, 65, traceFeed * 0.6},
                 {35, 65, 0}, {35, 65, 0}, {17, 53, 0}};
         double[][] vapor = {{8, 2, 0}, {18, 12, 0}, {18, 12, traceFeed * 0.4},

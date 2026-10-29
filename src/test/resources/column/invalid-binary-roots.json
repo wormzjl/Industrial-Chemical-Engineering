@@ -1,0 +1,1242 @@
+[
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 2.3358146034142245E-18,
+      "maximumLogFlowChange": 7.556811176812062E-9,
+      "maximumTemperatureChangeKelvin": 8.571737453166861E-8,
+      "maximumTemperatureStepRatio": 0.06118956057371576,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          146.0257178746231,
+          146.02571787942065
+        ],
+        [
+          1.1961694534676097,
+          1.1961694534980871
+        ],
+        [
+          1.1961692739961516,
+          1.1961692738296472
+        ],
+        [
+          1.1961692738702254,
+          1.1961692738287995
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          0.12859143582792412,
+          0.12859143583214266
+        ],
+        [
+          146.15430930965334,
+          146.1543093131122
+        ],
+        [
+          1.7957351376905088E-7,
+          1.7957351374405573E-7
+        ],
+        [
+          1.2468141478136505E-10,
+          5.6960556029820115E-15
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        400.8502732740059,
+        400.84965029948074,
+        453.788936684891
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 550.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 750.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 50000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "TWO_PHASE"
+  },
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 2.951255575592586E-18,
+      "maximumLogFlowChange": 3.8995230378091605E-9,
+      "maximumTemperatureChangeKelvin": 1.67651592164475E-7,
+      "maximumTemperatureStepRatio": 0.11550110475007874,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          68.57612425130478,
+          68.57514477562803
+        ],
+        [
+          27.142006108803397,
+          27.14161843838447
+        ],
+        [
+          28.101439655921528,
+          27.141662273518897
+        ],
+        [
+          27.141291916221057,
+          27.14161840812964
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          68.57612425130716,
+          68.57514477562522
+        ],
+        [
+          7.141925776866473E-4,
+          3.025369352934501E-8
+        ],
+        [
+          0.960147739698234,
+          4.386538846434546E-5
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        451.51505284074545,
+        452.7974707352101,
+        453.7892840242658
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 550.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 750.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 50000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "LIQUID_ONLY"
+  },
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 2.7575851992677772E-17,
+      "maximumLogFlowChange": 3.7124436857993715E-9,
+      "maximumTemperatureChangeKelvin": 1.8815171642927453E-11,
+      "maximumTemperatureStepRatio": 1.2962603472762043E-5,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          69.19238818929584,
+          69.19238818929601
+        ],
+        [
+          166.04460894729996,
+          166.04460894729996
+        ],
+        [
+          26.935870603568052,
+          26.93587060356802
+        ],
+        [
+          26.935870603568045,
+          26.93587060356802
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          2.4492864644686017E-21,
+          2.449286464468445E-21
+        ],
+        [
+          69.19238818929585,
+          69.19238818929601
+        ],
+        [
+          139.10873834373194,
+          139.108738343732
+        ],
+        [
+          1.6391336869964E-311,
+          7.4883628E-316
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        451.49635121241255,
+        451.495906317869,
+        453.78893668578576
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 551.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 750.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 50000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "TWO_PHASE"
+  },
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 4.68704621041926E-18,
+      "maximumLogFlowChange": 3.737454790098127E-12,
+      "maximumTemperatureChangeKelvin": 2.142996891052462E-11,
+      "maximumTemperatureStepRatio": 1.4799924401409164E-5,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          149.8533180566868,
+          148.9185694707121
+        ],
+        [
+          0.3627486461488815,
+          0.360485908236567
+        ],
+        [
+          0.4541666835177674,
+          0.36561261184849614
+        ],
+        [
+          0.04889398110441164,
+          0.3604768430959694
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          149.8533180566868,
+          148.9185694707121
+        ],
+        [
+          0.3138546650444697,
+          9.065140597557123E-6
+        ],
+        [
+          0.4052727024133556,
+          0.005135768752526687
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        400.00090409538683,
+        447.97826862441156,
+        567.6961312916026
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 551.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 750.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 50000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "LIQUID_ONLY"
+  },
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 2.2942599254799084E-18,
+      "maximumLogFlowChange": 5.38739364230878E-9,
+      "maximumTemperatureChangeKelvin": 5.5301427437370876E-8,
+      "maximumTemperatureStepRatio": 0.03947637609168142,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          145.9711903571301,
+          145.97119036022056
+        ],
+        [
+          1.2023564955390023,
+          1.2023564955587986
+        ],
+        [
+          1.200506851063163,
+          1.2005068510361305
+        ],
+        [
+          1.2005068510623462,
+          1.2005068510355856
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          0.14242969735796743,
+          0.1424296973609769
+        ],
+        [
+          146.11362005397484,
+          146.11362005620353
+        ],
+        [
+          0.0018496444611601857,
+          0.001849644461118537
+        ],
+        [
+          1.5625315577685993E-41,
+          7.082103089627547E-46
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        400.87403026003363,
+        400.8739634290837,
+        453.6256050153924
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 550.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 0.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 50000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "TWO_PHASE"
+  },
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 9.470342769215045E-19,
+      "maximumLogFlowChange": 7.824707992654112E-9,
+      "maximumTemperatureChangeKelvin": 1.91947833627637E-7,
+      "maximumTemperatureStepRatio": 0.11190524753646741,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          150.00000013753336,
+          149.99999985846998
+        ],
+        [
+          0.13618080435353047,
+          0.13618080397842072
+        ],
+        [
+          0.015563856922041049,
+          0.5368022789354667
+        ],
+        [
+          3.019227083303629E-292,
+          1.891168048651553E-289
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          150.00000011915859,
+          149.9999998761996
+        ],
+        [
+          0.13618080442884575,
+          0.13618080166480329
+        ],
+        [
+          0.01556385692304734,
+          0.5368022777788539
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        399.58217971774457,
+        715.2710695276869,
+        757.3381320417436
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 550.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 0.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 50000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "LIQUID_ONLY"
+  },
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 2.6831800055990388E-17,
+      "maximumLogFlowChange": 9.292941527405674E-9,
+      "maximumTemperatureChangeKelvin": 3.862959374600905E-8,
+      "maximumTemperatureStepRatio": 0.027524502196482878,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          140.17985756085943,
+          140.17985756085935
+        ],
+        [
+          2.805658253762345,
+          2.805658253762326
+        ],
+        [
+          0.5026689394711948,
+          0.5026689394711676
+        ],
+        [
+          0.5026689394711948,
+          0.5026689394711676
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          2.770711873575695,
+          2.770711873575766
+        ],
+        [
+          142.95056943443507,
+          142.95056943443493
+        ],
+        [
+          2.3029893142911275,
+          2.302989314291061
+        ],
+        [
+          1.5134089124170957E-41,
+          6.9139906143116515E-46
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        403.46254566156915,
+        403.4620306755339,
+        453.7889366857841
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 550.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 750.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 20000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "TWO_PHASE"
+  },
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 3.437686394518472E-17,
+      "maximumLogFlowChange": 3.047197161265558E-9,
+      "maximumTemperatureChangeKelvin": 2.323361059097806E-9,
+      "maximumTemperatureStepRatio": 0.0015960479452602442,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          65.74124615905112,
+          60.11805852672148
+        ],
+        [
+          32.76330052282277,
+          29.96088655810192
+        ],
+        [
+          28.45328534766944,
+          29.960666495219222
+        ],
+        [
+          28.086251280387124,
+          29.96064715777585
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          65.74124615905265,
+          60.11805852672039
+        ],
+        [
+          4.677049242510193,
+          2.3940033980304466E-4
+        ],
+        [
+          0.3670340673583234,
+          1.9337459443591785E-5
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        460.29939312739896,
+        455.306197361675,
+        455.69628155435504
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 550.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 750.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 20000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "LIQUID_ONLY"
+  },
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 2.0487284012847027E-17,
+      "maximumLogFlowChange": 1.1810632472020188E-9,
+      "maximumTemperatureChangeKelvin": 7.406697477563284E-10,
+      "maximumTemperatureStepRatio": 5.072586514090379E-4,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          74.35976786714296,
+          72.46382798490923
+        ],
+        [
+          87.61850036581409,
+          85.38450456365082
+        ],
+        [
+          6.447169468425068,
+          6.183259825108431
+        ],
+        [
+          5.036735911317833,
+          6.183157532394161
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          20.17667479963454,
+          19.662233139302742
+        ],
+        [
+          94.5364426667775,
+          92.12606112421196
+        ],
+        [
+          82.58176445449627,
+          79.20134703125665
+        ],
+        [
+          1.4104335571072337,
+          1.0229271426827592E-4
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        447.8085151133494,
+        448.45189177624025,
+        460.14216948086073
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 550.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 750.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 100000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "TWO_PHASE"
+  },
+  {
+    "evidence": {
+      "hasFinalNewtonStep": true,
+      "finalLinearBackwardError": 1.1323630686680451E-17,
+      "maximumLogFlowChange": 1.5976375777881913E-10,
+      "maximumTemperatureChangeKelvin": 1.1783640729845501E-10,
+      "maximumTemperatureStepRatio": 8.409709418432007E-5,
+      "closureTolerance": 1.0E-8
+    },
+    "state": {
+      "liquidComponentFlows": [
+        [
+          146.95753189349995,
+          145.21669172105217
+        ],
+        [
+          1.6135584976302848,
+          1.5944444895418124
+        ],
+        [
+          2.885018542967688,
+          1.594682061045881
+        ],
+        [
+          1.014156035500045,
+          1.5944360929826171
+        ]
+      ],
+      "vaporComponentFlows": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          146.95753189349992,
+          145.21669172105217
+        ],
+        [
+          0.5994024621302401,
+          8.396559194668933E-6
+        ],
+        [
+          1.870862507467643,
+          2.459680632640167E-4
+        ]
+      ],
+      "temperaturesKelvin": [
+        300.0,
+        401.1947551979228,
+        439.84592561193875,
+        469.0397277826281
+      ],
+      "freeWaterFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "input": {
+      "schemaVersion": 1,
+      "packageId": "icheme:cdu17_tjl_acs2018",
+      "assayId": "test:registered-pr-binary",
+      "componentBasis": {
+        "componentIds": [
+          "Methane",
+          "Ethane",
+          "Propane",
+          "cdu17_c4",
+          "cdu17_pc01",
+          "cdu17_pc02",
+          "cdu17_pc03",
+          "cdu17_pc04",
+          "cdu17_pc05",
+          "cdu17_pc06",
+          "cdu17_pc07",
+          "cdu17_pc08",
+          "cdu17_pc09",
+          "cdu17_pc10",
+          "cdu17_pc11",
+          "cdu17_pc12"
+        ]
+      },
+      "feedComponentMolarFlowsMolPerSecond": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        50.0,
+        0.0,
+        0.0
+      ],
+      "feedTemperatureKelvin": 550.0,
+      "stageCount": 2,
+      "feedStageNumber": 1,
+      "topPressurePascal": 250000.0,
+      "stagePressureDropPascal": 750.0,
+      "specifications": [
+        {
+          "kelvin": 300.0
+        },
+        {
+          "ratio": 2.0
+        },
+        {
+          "watts": 100000.0
+        }
+      ],
+      "sideDraws": [],
+      "steamFeeds": [],
+      "pumparounds": [],
+      "columnDiameterMetres": 0.0
+    },
+    "branch": "LIQUID_ONLY"
+  }
+]

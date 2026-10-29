@@ -10,10 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exact-input hot-start companion to {@link V3ColdStartSweepTest}.
+ * Exact-input hot-start companion to {@link V3ColdStartTest}.
  *
- * <p>Each source point first converges from a fresh initializer. The hot attempt receives only that numerical
- * solver-owned state and convergence certificate, while problem resolution, evaluator construction, thermodynamic
+ * <p>The negative points are frozen numerical roots captured at 494d3e45; the positive point starts fresh.
+ * The hot attempt receives only the state and convergence certificate, while problem resolution, thermodynamic
  * workspaces, residual recomputation, and acceptance audit are all fresh. Nearby-input reuse is deliberately out of
  * scope for this exact-compatibility test. The original two-phase numerical matrix is retained as negative
  * coverage: neither a cold nor hot certificate may override its independent phase rejection. A separate
@@ -21,10 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3ExactWarmStartSweepTest {
-    // Both cases run a live reboiler (50 kW base duty). At zero duty the two-tray binary has a dead stripping
-    // section (bottom liquid ~1e-8 mol/s, pinched temperatures) and a numerically singular root, so whether a cold
-    // path converges and certifies it is decided by the last bits of the math library (batch
-    // 2026-09-27-jdk-determinism, COLUMN_TESTS_REVIEW.md).
+    // A finite duty made these historical numerical roots reproducible. The new independent phase audit
+    // exposes their collapsed interiors; retain the roots without requiring the current cold path to find them.
     @Test
     void numericalTwoPhaseMatrixRemainsRejectedAfterFreshExactInputHotStarts() {
         for (V3ColumnInput input : List.of(
@@ -39,17 +37,20 @@ class V3ExactWarmStartSweepTest {
 
     @Test
     void physicallyAcceptedLiquidOnlyStatePassesFreshExactInputHotStart() {
-        verifyExactHotStart(binaryInput(100.0, 550.0, 250_000.0, 750.0, 300.0, 2.0, 50_000.0),
+        // The old 550 K / 50 kW fixture contains collapsed interior phases. This live-boilup case
+        // independently passes the stronger physical audit as well as Newton's certificate.
+        verifyExactHotStart(binaryInput(100.0, 600.0, 250_000.0, 750.0, 300.0, 2.0, 500_000.0),
                 V3CondenserPhaseBranch.LIQUID_ONLY, true);
     }
 
     private static void verifyExactHotStart(V3ColumnInput input, V3CondenserPhaseBranch branch, boolean accepted) {
             String label = caseLabel(input);
-            ColdAttempt cold = coldAttempt(input, branch);
+            ColdAttempt cold = accepted ? coldAttempt(input, branch) : capturedAttempt(input, branch);
             V3SimultaneousColumnSolver.Attempt.Converged coldConverged = assertInstanceOf(
                     V3SimultaneousColumnSolver.Attempt.Converged.class, cold.attempt(), () -> label + ": " + cold.attempt());
             assertEquals(accepted, cold.audit().accepted(), () -> label + ": cold audit=" + cold.audit());
-            assertTrue(cold.audit().checks().stream().filter(check -> !check.family().equals("CONDENSER_PHASE"))
+            assertTrue(cold.audit().checks().stream().filter(check -> !check.family().equals("CONDENSER_PHASE")
+                            && !check.family().equals("INTERIOR_PHASE_IDENTITY"))
                     .allMatch(V3AcceptanceAudit.Check::passed));
             assertTrue(coldConverged.evidence().convergenceEvidence().satisfiesGates(),
                     () -> label + ": cold evidence=" + coldConverged.evidence());
@@ -79,8 +80,47 @@ class V3ExactWarmStartSweepTest {
             assertTrue(hotConverged.evidence().convergenceEvidence().satisfiesGates(),
                     () -> label + ": hot evidence=" + hotConverged.evidence());
             assertEquals(accepted, hotAudit.accepted(), () -> label + ": hot audit=" + hotAudit);
-            assertTrue(hotAudit.checks().stream().filter(check -> !check.family().equals("CONDENSER_PHASE"))
+            assertTrue(hotAudit.checks().stream().filter(check -> !check.family().equals("CONDENSER_PHASE")
+                            && !check.family().equals("INTERIOR_PHASE_IDENTITY"))
                     .allMatch(V3AcceptanceAudit.Check::passed));
+    }
+
+    /** Frozen roots at 494d3e45: keep rejection coverage independent of a changed cold trajectory. */
+    static ColdAttempt capturedAttempt(V3ColumnInput input, V3CondenserPhaseBranch branch) {
+        try (var stream = V3ExactWarmStartSweepTest.class.getResourceAsStream("/column/invalid-binary-roots.json")) {
+            var rows = com.google.gson.JsonParser.parseReader(new java.io.InputStreamReader(stream,
+                    java.nio.charset.StandardCharsets.UTF_8)).getAsJsonArray();
+            for (var element : rows) {
+                var row = element.getAsJsonObject();
+                var source = row.getAsJsonObject("input");
+                double duty = source.getAsJsonArray("specifications").get(2).getAsJsonObject().get("watts").getAsDouble();
+                double requestedDuty = input.specifications().stream().filter(V3ColumnSpecification.ReboilerDuty.class::isInstance)
+                        .map(V3ColumnSpecification.ReboilerDuty.class::cast).findFirst().orElseThrow().watts();
+                if (!row.get("branch").getAsString().equals(branch.name())
+                        || source.get("feedTemperatureKelvin").getAsDouble() != input.feedTemperatureKelvin()
+                        || source.get("stagePressureDropPascal").getAsDouble() != input.stagePressureDropPascal()
+                        || duty != requestedDuty) continue;
+                var problem = V3ColumnProblemResolver.resolve(input, branch);
+                var data = row.getAsJsonObject("state");
+                var gson = new com.google.gson.Gson();
+                var state = new V3DryMeshState(problem.topology(), problem.activeComponentBasis().componentCount(),
+                        gson.fromJson(data.get("liquidComponentFlows"), double[][].class),
+                        gson.fromJson(data.get("vaporComponentFlows"), double[][].class),
+                        gson.fromJson(data.get("temperaturesKelvin"), double[].class));
+                var evidence = gson.fromJson(row.get("evidence"), V3ConvergenceEvidence.class);
+                var thermo = V3PengRobinsonThermo.fromRegisteredPackage(input.packageId());
+                double h = thermo.flashTP(input.feedTemperatureKelvin(), problem.nodePressurePascal(problem.topology().feedTrayNumber()),
+                        input.feedComponentMolarFlowsMolPerSecond(), thermo.newWorkspace()).molarEnthalpyJoulesPerMol();
+                var evaluator = new V3MeshResidualEvaluator(problem, thermo, h);
+                var residual = evaluator.evaluate(state, thermo.newWorkspace());
+                assertTrue(residual.maximumAbsoluteScaledResidual() <= 1e-8);
+                var attempt = V3SimultaneousColumnSolver.solve(problem, evaluator, new V3DryMeshCoordinateMap(problem),
+                        state, thermo::newWorkspace, evidence, 128, 1e-8);
+                return new ColdAttempt(attempt, new V3AcceptanceAuditor(problem, thermo, h)
+                        .audit(state, thermo.newWorkspace(), V3SolveControl.UNBOUNDED));
+            }
+            throw new AssertionError("Missing captured binary root");
+        } catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
     }
 
     private static ColdAttempt coldAttempt(V3ColumnInput input, V3CondenserPhaseBranch branch) {
@@ -188,5 +228,5 @@ class V3ExactWarmStartSweepTest {
                         new V3ColumnSpecification.ReboilerDuty(reboilerDuty)));
     }
 
-    private record ColdAttempt(V3SimultaneousColumnSolver.Attempt attempt, V3AcceptanceAudit audit) {}
+    record ColdAttempt(V3SimultaneousColumnSolver.Attempt attempt, V3AcceptanceAudit audit) {}
 }

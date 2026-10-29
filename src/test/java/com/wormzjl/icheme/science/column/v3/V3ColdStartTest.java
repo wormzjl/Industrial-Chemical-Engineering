@@ -55,17 +55,17 @@ class V3ColdStartTest {
         assertEquals(matrix.size(), outcomes.size(), "Every cold-sweep case must have a unique stable name");
     }
 
-    /** A nearby cold input must pass the acceptance gates regardless of which numerical path succeeds. */
+    /** This old accepted root closes MESH by labelling a dense liquid as both phases. */
     @Test
-    void nearby551KelvinColdInputPassesTheSameFreshAcceptanceGate() {
+    void nearby551KelvinCollapsedRootFailsTheFreshPhaseIdentityGate() {
         V3ColumnInput input = binaryPilot(100.0, 551.0, 250.0, 750.0, 300.0, 2.0, 0.0);
 
         V3ColumnOutcome outcome = V3TestInputs.calculate(input);
-        V3ColumnOutcome.Success success = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
-
-        assertTrue(success.result().acceptanceAudit().accepted());
-        assertTrue(success.result().convergenceEvidence().satisfiesGates());
-        assertEquals(551.0, success.result().problem().input().feedTemperatureKelvin());
+        var failure = assertInstanceOf(V3ColumnOutcome.Failure.class, outcome, outcome::toString);
+        assertEquals(V3SolverFailureCode.ACCEPTANCE_AUDIT_FAILURE, failure.code());
+        assertTrue(failure.diagnostics().maximumScaledResidual() < 1e-8);
+        assertTrue(failure.diagnostics().acceptanceAudit().checks().stream().anyMatch(c ->
+                c.family().equals("INTERIOR_PHASE_IDENTITY") && !c.passed()));
     }
 
     /**
