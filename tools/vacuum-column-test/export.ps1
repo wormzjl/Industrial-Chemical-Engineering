@@ -1,4 +1,4 @@
-param([string]$Case = 'wet-vdu')
+param([string]$Case = 'zero-reflux-vdu')
 $ErrorActionPreference = 'Stop'
 $vacuumRepo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $vacuumOutput = Join-Path $vacuumRepo 'tmp/vacuum-test'
@@ -33,6 +33,20 @@ for ($vacuumI = 0; $vacuumI -lt $vacuumInput.componentBasis.componentIds.Count; 
 if ($vacuumComponentError -gt 1e-6) { throw "CDU component balance error $vacuumComponentError mol/s" }
 if ([Math]::Abs($vacuumTotal - $vacuumBottoms.molarFlowMolPerSecond) -gt 1e-9) { throw 'Feed total changed' }
 if (!$vacuumCase.success -and $vacuumCase.PSObject.Properties.Name -contains 'streams') { throw 'Failed case published products' }
+if ($vacuumCase.success -and @($vacuumCase.diagnostics.acceptanceAudit.checks | Where-Object { !$_.passed }).Count) { throw 'VDU lacks a passing certificate' }
+$vacuumVduComponentError = 0.0
+if ($vacuumCase.success) {
+    for ($vacuumI = 0; $vacuumI -lt $vacuumInput.componentBasis.componentIds.Count; $vacuumI++) {
+        $vacuumId = $vacuumInput.componentBasis.componentIds[$vacuumI]
+        $vacuumProductFlow = 0.0
+        foreach ($vacuumStream in $vacuumCase.streams) {
+            $vacuumFraction = $vacuumStream.moleFractions | Where-Object componentId -eq $vacuumId
+            if ($vacuumFraction) { $vacuumProductFlow += $vacuumStream.molarFlowMolPerSecond * $vacuumFraction.moleFraction }
+        }
+        $vacuumVduComponentError = [Math]::Max($vacuumVduComponentError, [Math]::Abs($vacuumProductFlow - $vacuumInput.feedComponentMolarFlowsMolPerSecond[$vacuumI]))
+    }
+    if ($vacuumVduComponentError -gt 1e-6) { throw "VDU component balance error $vacuumVduComponentError mol/s" }
+}
 $vacuumMixture = [ordered]@{
     schema_version = 1
     kind = 'mixture'
@@ -45,7 +59,7 @@ $vacuumMixture = [ordered]@{
 $vacuumColumn = [ordered]@{
     schema_version = 2
     kind = 'column'
-    name = 'Vacuum CDU-bottoms test [UNCONVERGED]'
+    name = if ($vacuumCase.success) { 'Vacuum CDU-bottoms - zero reflux [OFFLINE ACCEPTED]' } else { 'Vacuum CDU-bottoms test [UNCONVERGED]' }
     translation_key = ''
     tray_count = $vacuumInput.stageCount + 2
     feed_tray = $vacuumInput.feedStageNumber + 1
@@ -71,6 +85,8 @@ $vacuumVerification = [ordered]@{
     molarFlowKmolPerHour = $vacuumTotal * 3.6
     massFlowTonnesPerHour = $vacuumBottoms.massFlowKgPerSecond * 3.6
     vduPublished = $vacuumCase.success
+    vduMaximumAbsoluteComponentClosureMolPerSecond = if ($vacuumCase.success) { $vacuumVduComponentError } else { $null }
+    vduClosureTolerance = $vacuumCase.diagnostics.closureTolerance
     vduFailureCode = $vacuumCase.failureCode
 }
 $vacuumVerification | ConvertTo-Json | Set-Content (Join-Path $vacuumOutput 'verification.json')

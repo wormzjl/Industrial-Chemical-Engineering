@@ -124,7 +124,7 @@ public final class VacuumColumnTest {
         var record = new LinkedHashMap<String, Object>();
         record.put("input", input);
         record.put("packageRevision", MaterialRuntime.current().requirePackage(input.packageId()).scientificRevision());
-        record.put("route", strategy + " cold; no cutoff; strict closure; production supply screen");
+        record.put("route", strategy + " cold; default cutoff/closure policy; production supply screen; see certificate for final closure");
         System.out.println("Solving " + input.stageCount() + " interior stages at " + input.topPressurePascal() + " Pa, feed "
                 + Arrays.stream(input.feedComponentMolarFlowsMolPerSecond()).sum() * 3.6 + " kmol/h");
         long deadline = System.nanoTime() + 180_000_000_000L;
@@ -149,6 +149,18 @@ public final class VacuumColumnTest {
             record.put("duties", result.dutyLedger().orElseThrow());
             record.put("inspection", result.inspection().orElseThrow());
             record.put("hydraulics", result.trayHydraulics().orElse(null));
+            var dryPhaseChecks = new java.util.ArrayList<Object>();
+            var thermo = V3PengRobinsonThermo.fromRegisteredPackage(input.packageId());
+            for (var node : result.inspection().orElseThrow().nodes()) {
+                if (node.liquidMolPerSecond() != 0 || node.vaporMolPerSecond() == 0) continue;
+                double p = node.pressurePascal() * node.vaporMolPerSecond()
+                        / (node.vaporMolPerSecond() + node.waterVaporMolPerSecond());
+                var flash = thermo.flashTP(node.temperatureKelvin(),p,
+                        node.vaporFractions().stream().mapToDouble(Double::doubleValue).toArray(),thermo.newWorkspace());
+                dryPhaseChecks.add(Map.of("temperatureK", node.temperatureKelvin(), "hydrocarbonPressurePa", p,
+                        "phase", flash.phase(), "beta", flash.vaporFraction()));
+            }
+            record.put("dryHydrocarbonPhaseChecks", dryPhaseChecks);
             for (var stream : result.streams()) System.out.printf(java.util.Locale.ROOT,
                     "%s: %.6f kmol/h, %.6f t/h, %.3f C, %.3f Pa%n", stream.streamId(),
                     stream.molarFlowMolPerSecond() * 3.6, stream.massFlowKgPerSecond() * 3.6, stream.temperatureKelvin() - 273.15, stream.pressurePascal());

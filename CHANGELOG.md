@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Fixed
+
+- Zero-reflux columns support exactly dry upper stages; phase admission rejects collapsed liquid/vapor startup roots, continuation respects dry layouts, column caloric fits continue beyond data edges, and dry trays lose phantom liquid head (`dba4ba45`; batch `2026-10-28-vacuum-column`).
+
 ## [0.17.1] - 2026-10-28
 
 ### Changed

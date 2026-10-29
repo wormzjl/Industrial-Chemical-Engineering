@@ -8,7 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
-| [vacuum-column-test/](vacuum-column-test/README.md) | CDU-bottoms feed and vacuum startup diagnosis | `2026-10-28-vacuum-column` | Concluded 2026-10-29 |
+| [vacuum-column-test/](vacuum-column-test/README.md) | CDU-bottoms vacuum test and phase checks | `2026-10-28-vacuum-column` | In use since 2026-10-29 |
 | [drum-outlet-sweep/](drum-outlet-sweep/README.md) | Sweep of lying boot drums' oil-outlet placement (head fallbacks, options A and B) | `2026-10-28-drum-outlet-placement` | Implemented 2026-10-28 |
 | [heat-exchanger-design/](heat-exchanger-design/README.md) | Exchanger coupling, cell-count, 1-2 shell, per-phase film, zero-wall relay and game-timing study harnesses; owner-test probe of the review world; the merge lane | `2026-10-27-heat-exchanger-design` | Implemented 2026-10-28 (0.17.0) |
 | [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit` | In use since 2026-10-28 |

@@ -1,12 +1,12 @@
-param([string]$Settings = '', [string]$JavaHome = 'C:/Program Files/Java/jdk-21.0.11')
+param([string]$Settings = '', [string]$JavaHome = 'C:/Program Files/Java/jdk-21.0.11', [ValidatePattern('^[a-z][a-z-]+$')][string]$OutputName = 'vacuum-trace')
 $ErrorActionPreference = 'Stop'
 $traceRepo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$traceOut = Join-Path $traceRepo 'tmp/vacuum-trace'
+$traceOut = Join-Path $traceRepo ('tmp/' + $OutputName)
 $traceSource = Join-Path $traceOut 'source/com/wormzjl/icheme/science/column/v3'
 New-Item -ItemType Directory -Path $traceSource,(Join-Path $traceOut 'classes') -Force | Out-Null
 $traceIndex = Join-Path $traceRepo 'tmp/INDEX.md'
-if (!(Select-String -Path $traceIndex -SimpleMatch '| vacuum-trace/' -Quiet)) {
-    Add-Content $traceIndex '| vacuum-trace/ | Temporary instrumented vacuum solver copies and traces | 2026-10-29 | documentation/2026-10-28-vacuum-column/ |'
+if (!(Select-String -Path $traceIndex -SimpleMatch "| $OutputName/" -Quiet)) {
+    Add-Content $traceIndex "| $OutputName/ | Temporary instrumented vacuum solver copies and traces | 2026-10-29 | documentation/2026-10-28-vacuum-column/ |"
 }
 function Replace-TraceText([string]$Value,[string]$Find,[string]$Replacement) {
     if (!$Value.Contains($Find)) { throw "Instrumentation anchor missing: $Find" }
@@ -14,7 +14,11 @@ function Replace-TraceText([string]$Value,[string]$Find,[string]$Replacement) {
 }
 $traceCalculator = Get-Content (Join-Path $traceRepo 'src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java') -Raw
 $traceCalculator = Replace-TraceText $traceCalculator 'V3DryMeshState interpolated = interpolate(previousState, sourceTopology, targetProblem);' 'V3DryMeshState interpolated = interpolate(previousState, sourceTopology, targetProblem); VacuumTrace.state("interpolated", targetProblem, interpolated, "before material projection");'
-$traceCalculator = Replace-TraceText $traceCalculator 'return isLogCoordinateFeasible(problem, projected) ? projected : previousState;' 'VacuumTrace.state("projected", problem, projected, "material projection candidate"); return isLogCoordinateFeasible(problem, projected) ? projected : previousState;'
+if ($traceCalculator.Contains('return isLogCoordinateFeasible(problem, projected) ? projected : previousState;')) {
+    $traceCalculator = Replace-TraceText $traceCalculator 'return isLogCoordinateFeasible(problem, projected) ? projected : previousState;' 'VacuumTrace.state("projected", problem, projected, "material projection candidate"); return isLogCoordinateFeasible(problem, projected) ? projected : previousState;'
+} else {
+    $traceCalculator = Replace-TraceText $traceCalculator 'if (!isLogCoordinateFeasible(problem, projected)) return previousState;' 'VacuumTrace.state("projected", problem, projected, "material projection candidate"); if (!isLogCoordinateFeasible(problem, projected)) return previousState;'
+}
 $traceCalculator = Replace-TraceText $traceCalculator 'V3DryMeshState recoverySeed = seed;' 'VacuumTrace.state("pass-start", problem, seed, solvePath + "; feed-h=" + feedMolarEnthalpy); V3DryMeshState recoverySeed = seed;'
 $traceCalculator = Replace-TraceText $traceCalculator 'return new V3SolvePass(attempt, audit, feedMolarEnthalpy, solvePath,' 'VacuumTrace.state("pass-end", prepared.problem(), attempt.state(), solvePath + "; " + attempt.evidence()); return new V3SolvePass(attempt, audit, feedMolarEnthalpy, solvePath,'
 Set-Content (Join-Path $traceSource 'V3ColumnCalculator.java') $traceCalculator

@@ -1,4 +1,4 @@
-param([string]$JavaHome = 'C:/Program Files/Java/jdk-21.0.11')
+param([string]$JavaHome = 'C:/Program Files/Java/jdk-21.0.11', [ValidateSet('rejected','accepted')][string]$ExpectedPhaseAudit = 'rejected')
 $ErrorActionPreference = 'Stop'
 $analysisRepo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $analysisOut = Join-Path $analysisRepo 'tmp/vacuum-trace'
@@ -6,16 +6,16 @@ if (!(Test-Path (Join-Path $analysisOut 'trace.jsonl'))) { throw 'Run trace.ps1 
 $analysisGson = (Get-ChildItem 'C:/Users/wormz/.gradle/caches/modules-2/files-2.1/com.google.code.gson/gson/2.10.1' -Filter '*.jar' -Recurse | Select-Object -First 1).FullName
 & (Join-Path $JavaHome 'bin/javac.exe') "-J-Djava.io.tmpdir=$analysisOut" --release 21 -cp $analysisGson -sourcepath "$analysisRepo/src/main/java" -d "$analysisOut/analysis-classes" (Join-Path $PSScriptRoot 'VacuumAnalyze.java')
 if ($LASTEXITCODE) { throw 'Analysis compilation failed' }
-& (Join-Path $JavaHome 'bin/java.exe') "-Djava.io.tmpdir=$analysisOut" -cp "$analysisOut/analysis-classes;$analysisRepo/src/main/resources;$analysisGson" com.wormzjl.icheme.science.column.v3.VacuumAnalyze (Join-Path $analysisOut 'trace.jsonl') (Join-Path $analysisRepo 'tmp/vacuum-test/wet-vdu.json') 1> (Join-Path $analysisOut 'phase-analysis.csv') 2> (Join-Path $analysisOut 'audit-analysis.txt')
+$analysisPhaseFile = Join-Path $analysisOut "phase-analysis-$ExpectedPhaseAudit.csv"
+$analysisAuditFile = Join-Path $analysisOut "audit-analysis-$ExpectedPhaseAudit.txt"
+& (Join-Path $JavaHome 'bin/java.exe') "-Djava.io.tmpdir=$analysisOut" -cp "$analysisOut/analysis-classes;$analysisRepo/src/main/resources;$analysisGson" com.wormzjl.icheme.science.column.v3.VacuumAnalyze (Join-Path $analysisOut 'trace.jsonl') (Join-Path $analysisOut 'wet-vdu.json') 1> $analysisPhaseFile 2> $analysisAuditFile
 if ($LASTEXITCODE) { throw 'Analysis failed' }
-$analysisBaseline = Get-Content (Join-Path $analysisRepo 'tmp/vacuum-test/wet-vdu.json') -Raw | ConvertFrom-Json
-$analysisObserved = Get-Content (Join-Path $analysisOut 'wet-vdu.json') -Raw | ConvertFrom-Json
-if ($analysisBaseline.success -ne $analysisObserved.success -or $analysisBaseline.summary -ne $analysisObserved.summary -or $analysisBaseline.diagnostics.maximumScaledResidual -ne $analysisObserved.diagnostics.maximumScaledResidual) { throw 'Observation changed terminal outcome' }
-$analysisAudit = Get-Content (Join-Path $analysisOut 'audit-analysis.txt') -Raw
+$analysisAudit = Get-Content $analysisAuditFile -Raw
+$analysisExpected = if ($ExpectedPhaseAudit -eq 'rejected') { 'false' } else { 'true' }
 foreach ($analysisSequence in 130,2384) {
-    if ($analysisAudit -notmatch "sequence ${analysisSequence}: fresh audit accepted=true;") { throw 'Expected accepted startup state changed' }
+    if ($analysisAudit -notmatch "sequence ${analysisSequence}: fresh audit accepted=$analysisExpected;") { throw 'Expected captured phase-audit result changed' }
 }
-$analysisPhases = Import-Csv (Join-Path $analysisOut 'phase-analysis.csv')
+$analysisPhases = Import-Csv $analysisPhaseFile
 $analysisCollapsed = @($analysisPhases | Where-Object { $_.sequence -eq '130' -and [int]$_.node -le 3 })
 if ($analysisCollapsed.Count -ne 3) { throw 'Expected three captured collapsed phases' }
 foreach ($analysisPhase in $analysisCollapsed) {
@@ -25,5 +25,5 @@ foreach ($analysisNode in 4,5) {
     $analysisControl = $analysisPhases | Where-Object { $_.sequence -eq '130' -and $_.node -eq "$analysisNode" }
     if ([double]$analysisControl.independent_flash_beta -le 0 -or [double]$analysisControl.independent_flash_beta -ge 1 -or [double]$analysisControl.Z_vapor - [double]$analysisControl.Z_liquid -lt 0.8) { throw 'Valid two-phase control changed' }
 }
-Write-Output 'Verified: unchanged terminal failure; two physically invalid startup states pass the production audit; three collapsed liquid/vapor pairs; two valid two-phase controls.'
-Get-Content (Join-Path $analysisOut 'audit-analysis.txt')
+Write-Output "Verified: captured invalid startup states are $ExpectedPhaseAudit; three collapsed liquid/vapor pairs; two valid two-phase controls."
+Get-Content $analysisAuditFile

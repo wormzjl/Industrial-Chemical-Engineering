@@ -1,46 +1,56 @@
-# Vacuum-column experiment
+# Vacuum-column experiment and regression tools
 
-Batch: [2026-10-28-vacuum-column](../../documentation/2026-10-28-vacuum-column/README.md). Production-code baseline: `79b853e0` (0.17.1).
-Purpose: solve the shipped default CDU, preserve its complete bottoms composition, and try a downstream vacuum column through the production PR78/MESH solver and acceptance gates. No production equations or gates are changed.
+Batch: [2026-10-28-vacuum-column](../../documentation/2026-10-28-vacuum-column/README.md). Original baseline: `79b853e0` (0.17.1); production fix: `dba4ba45`.
+Purpose: transfer every component of the accepted default CDU bottoms into a vacuum column, test zero external reflux with dry upper stages, and independently examine the historical false-phase startup states.
 
-## Run
+## Run and export
 
 From this worktree, with PowerShell and JDK 21:
 
 ```powershell
 ./tools/vacuum-column-test/run.ps1 -Phase cdu
-./tools/vacuum-column-test/run.ps1 -Phase vdu -Settings tools/vacuum-column-test/wet-vdu.json
+./tools/vacuum-column-test/run.ps1 -Phase vdu -Settings tools/vacuum-column-test/zero-reflux-vdu.json
 ./tools/vacuum-column-test/export.ps1
 ```
 
-`run.ps1` accepts `-JavaHome` and `-GsonJar`; defaults use this machine's installed JDK 21 and cached Gson 2.10.1. It compiles the reachable production science code with `javac --release 21`, runs without Minecraft/Gradle/native libraries, sets Java scratch paths inside `tmp/vacuum-test/`, and registers that folder in `tmp/INDEX.md`. Each solve has a cooperative 180 s safety deadline; no timing benchmark is performed. Scientific failures are recorded in JSON and are not converted to process-launch errors: read `success` and `failureCode`.
+For exact replay of the reported feed, retain the original accepted `tmp/vacuum-test/cdu.json` and run only the VDU and export steps. `run.ps1` accepts `-JavaHome` and `-GsonJar`; defaults use this machine's installed JDK 21 and cached Gson 2.10.1. It compiles reachable production science with `javac --release 21`, without Minecraft, Gradle or native libraries. Scratch/classes/results go in registered `tmp/vacuum-test/`. Each solve has a cooperative 180 s safety deadline. A scientific failure is JSON data, so inspect `success` and `failureCode` even when the process exits normally.
 
-Entry points: `VacuumColumnTest.java` (accepted CDU export, direct component transfer, TP flashes, enthalpy-matched heater letdown and column attempts), `run.ps1` (compile/run), `export.ps1` (independent component checks and client-format exports).
-`wet-vdu.json` is the chosen inlet-energy-consistent case. `use400CHeaterEnthalpy` overrides its nominal `feedTemperatureK` using 400 C at the source bottoms pressure, followed by an isenthalpic TP-root search at the nominal column feed pressure. The nominal pressure guess is flat 2 kPa, as the client template authors it. Any accepted hydraulic correction would change this pressure; its inlet energy would need checking again.
-`dry-vdu.json` removes steam, draws and cooling and tests a hotter 400 C flash-zone inlet. `diagnostic-vdu.json` reduces that dry case to two interior stages. These are failure diagnostics, not recommended industrial configurations. An extra DRIFT_SPEC replay of the initial hot wet case returned the same four-stage failure as AGGRESSIVE.
+`zero-reflux-vdu.json` is the accepted test configuration: 10 interior stages, feed stage 8, top 2 kPa(a), 15 m diameter, organic reflux exactly zero, 1 wt% bottom steam, 10%/25% molar side cuts, and 10/15 MW pumparound cooling. The duties are authored test settings; the earlier 1/2 MW trial did not converge. They are not source-reported refinery specifications.
 
-## Outputs and use
+The fixed column inlet is 355.429 C, calculated by isenthalpic letdown of a nominal 400 C heater outlet at the original CDU-bottoms pressure to a flat 2 kPa feed-pressure guess. Hydraulic correction raises actual feed-stage pressure to about 4.603 kPa; the inlet temperature stays fixed, so this is not an enthalpy-matched outer heater/column calculation. The model has sieve-tray hydraulics, not packing. Pumparounds are stage heat sinks without separately solved circulation streams. General dry middle sections and experimentally qualified product cuts remain outside this test.
 
-All generated files stay under `tmp/vacuum-test/`: `cdu.json`, `feed.json`, each named VDU result, `vacuum-feed-mixture.json`, `vacuum-column-template.json`, `vacuum-feed.csv`, and `verification.json`.
-The mixture export carries the existing package ID and every exact bottoms mole fraction, including traces and zeros. The column export carries the matching flow and operating values, and its name explicitly says UNCONVERGED.
-To try them manually in a chosen dev game folder, copy the mixture JSON into `IChemE/mixturepreset/` and the column JSON into `IChemE/columnpreset/`; refresh the calculator library and load **both**. These files were exported and checked offline; no client/world import was tested and no game folder was modified.
-The client counts the condenser and sump: ten interior stages appear as twelve trays; feed stage 8 appears as tray 9. Pumparounds are stage heat sinks in the existing model, without a separately solved circulation rate. The existing positive-diameter setting always uses sieve-tray hydraulics; it cannot be interpreted as a packed VDU.
+Generated files: `cdu.json`, `feed.json`, `zero-reflux-vdu.json`, `vacuum-feed-mixture.json`, `vacuum-column-template.json`, `vacuum-feed.csv`, and `verification.json`. The verification checks every transferred component, both CDU and VDU product balances, and the acceptance certificate. The result includes independent steam-adjusted hydrocarbon TP flashes of dry gas nodes. AGGRESSIVE publication used closure `0.001`; read the actual certificate, not just the residual magnitude.
 
-## History
+For a manual client import, copy the mixture JSON into a chosen game folder's `IChemE/mixturepreset/` and the column JSON into `IChemE/columnpreset/`, refresh the library, and load **both**. Successful exports say `[OFFLINE ACCEPTED]`; failed exports say `[UNCONVERGED]`. No game folder was modified and no client/world import was tested. Ten interior stages display as twelve trays; feed stage 8 displays as tray 9. Stage 1 (display tray 2) is the exactly dry top contact stage; node 0 is the external condenser.
 
-- 2026-10-28: generated the accepted default Tia Juana CDU bottoms, ran hot wet/dry and reduced-stage diagnostics, corrected the chosen inlet to a 400 C heater/isenthalpic-letdown basis, and verified/exported the final failed request. Source balance error < 1.61e-8 mol/s; all VDU attempts failed to publish. No Gradle suite, native build or in-game check; no production changes or source detachment.
-- 2026-10-29: diagnosed the failure through observation-only temporary source copies, fresh production audits and independent PR/TP checks. Confirmed false two-phase startup states, handoff amplification and a package-range rejection wall; no production fix.
+`wet-vdu.json`, `dry-vdu.json` and `diagnostic-vdu.json` preserve the original failed requests. Do not interpret their failed states as product yields. Existing old outputs are retained alongside the new result.
 
-## Reproduce the startup diagnosis
+## Historical trace and current audit
 
-After the original CDU and wet VDU outputs exist, run:
+The historical observation-only capture was made at `494d3e45` with the original wet request. Its sequence IDs 130, 131, 132, 1714 and 2384 are specific to that code and instrumentation. On the retained capture:
 
 ```powershell
-./tools/vacuum-column-test/trace.ps1
 ./tools/vacuum-column-test/analyze.ps1
 ```
 
-`trace.ps1` instruments copies of two source files under `tmp/vacuum-trace/source/`; it does not edit production sources. `VacuumTrace.java` only observes pass states, selected Newton iterates and line-search outcomes. Generated classes, a copy of the CDU input and all traces stay under `tmp/vacuum-trace/`, registered in `tmp/INDEX.md`. The script refuses to overwrite an existing `trace.jsonl`; preserve that capture before a new run.
-`analyze.ps1` compiles `VacuumAnalyze.java` against unmodified production sources. It independently re-evaluates captured states, runs their full production audit, compares liquid/vapor roots and compositions, and TP-flashes their combined flows. It asserts that two startup states pass the existing audit despite three collapsed liquid/vapor pairs, checks two genuine two-phase controls, and verifies that tracing leaves the original terminal failure unchanged.
-The analyzer pins capture sequence IDs 130, 131, 132, 1714 and 2384 for this baseline and instrumentation. They identify reproducible diagnostic observations, not persisted product identities. Changed numerical code or instrumentation requires deliberately selecting the corresponding new capture states; an assertion failure must be investigated rather than bypassed.
-Results: `trace.jsonl`, `phase-analysis.csv` and `audit-analysis.txt`; see [VACUUM_STARTUP_REVIEW.md](../../documentation/2026-10-28-vacuum-column/VACUUM_STARTUP_REVIEW.md). Neither this offline probe nor its assertions are a Gradle gate or a proposed production implementation.
+`VacuumAnalyze.java` re-evaluates roots, combined-flow TP flashes, MESH residuals and the full production audit. The current default asserts that both captured false-phase startup states are rejected, while three collapsed pairs and two genuine two-phase controls retain their independent evidence. It writes `phase-analysis-rejected.csv` and `audit-analysis-rejected.txt` under `tmp/vacuum-trace/`, preserving the original analysis. The historical analyzer at `494d3e45` expects acceptance instead; that version and its captured data reproduce the old admission defect. This analysis does not claim that the changed solver follows the old trajectory.
+
+To capture a new trajectory, use `trace.ps1 -Settings <case.json> -OutputName <short-name>`. It instruments copies of two source files under that registered `tmp/<short-name>/source/`, refuses to overwrite `trace.jsonl`, and never edits production sources. New captures require deliberately selecting their own observations; do not apply the old pinned sequence IDs to them.
+
+## Fixture qualification probe
+
+`BinaryPhaseProbe.java` / `probe.ps1` are offline investigation tools, not production code or a Gradle gate. They need compiled main/test classes (`./gradlew.bat testClasses`). Modes `current`, `pot` and `learned` record the small fixture grids used to distinguish genuine positive phase states from formerly accepted collapsed roots. Outputs/classes stay in registered `tmp/vacuum-gates/`.
+
+```powershell
+./tools/vacuum-column-test/probe.ps1 -Mode current
+./tools/vacuum-column-test/probe.ps1 -Mode baseline -SourceRoot <own-baseline-worktree-at-494d3e45>
+```
+
+`baseline` uses the old test helper through reflection to capture states and actual convergence certificates. It requires the exact historical head. The checked-in `src/test/resources/column/invalid-binary-roots.json` preserves that original capture; current gate tests freshly re-evaluate it and verify that a numerical certificate cannot bypass phase rejection. Positive hot-start/recovery fixtures use live boilup and retain all conservation and acceptance gates.
+
+## Entry points and history
+
+- `VacuumColumnTest.java`, `run.ps1`: accepted CDU, direct component transfer, heater-basis calculation, feed flashes, column solve and inspection.
+- `export.ps1`: component checks and client-format exports; `VacuumTrace.java`, `trace.ps1`: observation-only instrumentation; `VacuumAnalyze.java`, `analyze.ps1`: independent captured-state checks; `BinaryPhaseProbe.java`, `probe.ps1`: fixture qualification.
+- 2026-10-28: exact default Tia Juana CDU-bottoms feed and failed wet/dry/reduced-stage trials; no production changes.
+- 2026-10-29: startup diagnosis (`494d3e45`), then zero-reflux/dry-stage and phase-admission fixes (`dba4ba45`), accepted vacuum retest and reusable exports. One-off fixture code remains here, not in production source or a new Gradle switch. No source was detached from a tracked product path.
