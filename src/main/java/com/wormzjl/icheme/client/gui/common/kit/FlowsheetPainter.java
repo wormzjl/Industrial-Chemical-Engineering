@@ -218,8 +218,13 @@ public final class FlowsheetPainter {
 
     /** A nozzle's or port's square of design size {@code size} at design point ({@code x}, {@code y}), RGB {@code rgb}, edged. */
     public void square(int x, int y, int size, int rgb) {
+        square(x, y, size, rgb, EDGE);
+    }
+
+    /** A port square with an RGB fill and an ARGB edge, so connection state need not replace its identifying colour. */
+    public void square(int x, int y, int size, int rgb, int edge) {
         int half = Math.max(2, px(size / 2)), cx = x(x), cy = y(y);
-        c.fill(cx - half - 1, cy - half - 1, cx + half + 1, cy + half + 1, EDGE);
+        c.fill(cx - half - 1, cy - half - 1, cx + half + 1, cy + half + 1, edge);
         c.fill(cx - half, cy - half, cx + half, cy + half, 0xFF000000 | rgb);
     }
 

@@ -52,7 +52,7 @@ import java.util.Set;
  * A column's GUI (batch 2026-10-26-multi-machine-framework, plan section 8), a panel door on the GUI kit since batch
  * 2026-10-28-gui-toolkit (GUI_REVIEW.md order 4; the door's parts from {@link AssemblyColumn}): on the HMI glass, the plant
  * drawing of its assembly, generated from the column's component design ({@link AssemblyFlowsheet}), each part teal,
- * yellow or red, each port square in its class colour while it still needs a pipe, and the parts list with each part's
+ * yellow or red, each port square in its own colour with a grey edge once connected, and the parts list with each part's
  * state in a word; every part reads what it is and its state on hover. On the door, Check parts, whose answer comes with
  * the engine's next bucket, and the selected part with Open unit. A complete structure opens on its Operation tab (a
  * placeholder in this stage), the drawing on its Structure tab. Before the first view arrives, the drawing shows the design

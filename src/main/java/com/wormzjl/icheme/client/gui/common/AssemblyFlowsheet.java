@@ -22,7 +22,7 @@ import org.jetbrains.annotations.Nullable;
  * A column's assembly drawing on the HMI glass (batch 2026-10-28-gui-toolkit, GUI_REVIEW.md order 4), from its
  * {@link AssemblyDiagram} fitted to the box it is given, through the kit's {@link FlowsheetPainter}: each part teal, yellow
  * or red by its report's state (the column neutral while it is in place; every part red before the first report), the
- * selected part outlined, each port square in its class colour while it still needs a pipe. Its hit tests answer the
+ * selected part outlined, each port square in its own colour, edged grey once connected. Its hit tests answer the
  * screen's clicks and hovers from the same fit. No Minecraft classes: the screen and the render tool draw the same drawing.
  */
 public final class AssemblyFlowsheet {
@@ -101,10 +101,31 @@ public final class AssemblyFlowsheet {
         for (var part : d.parts()) part(p, part, report, selected, text);
         // Free labels only where the font keeps the design's proportion; below it they would cover the parts.
         if (p.labels()) for (var l : d.labels()) p.label(text.apply(l.text()), l.x(), l.y(), anchor(l.align()), Palette.MUTED);
-        for (var m : d.ports()) {
+        for (int i = 0; i < d.ports().size(); i++) {
+            var m = d.ports().get(i);
             var state = port(report, m);
-            if (state != PortState.UNUSED) p.square(m.x(), m.y(), PortMark.SIZE, state == PortState.CONNECTED ? PortColours.CONNECTED : PortColours.of(m.role().port));
+            if (state != PortState.UNUSED) p.square(m.x(), m.y(), PortMark.SIZE, portColour(i),
+                    state == PortState.CONNECTED ? 0xFF000000 | PortColours.CONNECTED : FlowsheetPainter.EDGE);
         }
+    }
+
+    /** A distinct RGB per square in the design's fixed order, independent of its report or connection state. */
+    private static int portColour(int index) {
+        // Spread neighbouring ports around the hue wheel; alternate brightness and saturation for larger designs.
+        double hue = (index * 0.6180339887498949 % 1) * 6;
+        int sector = (int) hue;
+        int high = index / 6 % 2 == 0 ? 242 : 196;
+        int low = index / 12 % 2 == 0 ? high / 3 : high / 6;
+        int rising = low + (int) Math.round((high - low) * (hue - sector));
+        int falling = high + low - rising;
+        return switch (sector) {
+            case 0 -> high << 16 | rising << 8 | low;
+            case 1 -> falling << 16 | high << 8 | low;
+            case 2 -> low << 16 | high << 8 | rising;
+            case 3 -> low << 16 | falling << 8 | high;
+            case 4 -> rising << 16 | low << 8 | high;
+            default -> high << 16 | low << 8 | falling;
+        };
     }
 
     private static void part(FlowsheetPainter p, Part part, @Nullable AssemblyReport report, @Nullable Slot selected, Function<AssemblyDiagram.Text, String> text) {

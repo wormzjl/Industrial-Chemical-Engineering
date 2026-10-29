@@ -3,7 +3,7 @@ package com.wormzjl.icheme.client;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.PortClass;
 
 /**
- * The colour of each nozzle port class, shared by the column GUI's drawing and the pipeline tool's port squares (batch
+ * The colour of each nozzle port class for the pipeline tool's port squares (batch
  * 2026-10-26-multi-machine-framework, plan section 9): a port keeps its class colour while it still needs a pipe and
  * turns grey once connected. A misplaced part's ports take the column GUI's yellow. RGB, without alpha.
  */
