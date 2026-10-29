@@ -18,6 +18,7 @@ Tools: [`tools/column-operation/`](../../tools/column-operation/README.md) (the 
 
 ## History
 
+- 2026-10-29: old-template colour follow-up: the owner's latest `runClient` loaded the main checkout (log 11:40:34), while the update is on this worktree. Recorded the branch-specific `-p` launch command in `PORT_COLOURS_REVIEW.md`. All template ages use the same GUI renderer; no saved colour or migration. Documentation only; no further tests or client launch.
 - 2026-10-29: `9cfc3a08`, owner request on `claude/column-operation-5c3005`: every GUI port square has its own colour in the diagram's fixed order; connected ports keep it with a grey outline. Existing assembly drawing/layout/painter gates: 14 tests green; shipped drawing rendered and checked in both themes. `PORT_COLOURS_REVIEW.md`; C8 remains deferred.
 - 2026-10-28: plan written. Design only: no code, no Gradle run. It answers the 2026-10-26 plan's open next-stage decisions D5 (members suspended with their contents), D7 (the operating point on the design), D14 (inlet voids and outlet buffer vessels; generator ports rejected again for conservation) and D16 (the distillate valve is its port's valve), and gives the heat plan's deferred W9 a place (stage B of the utilities).
 - 2026-10-28: owner decision on Q3: outlets are constant-pressure variable-volume buffers (pressure fixed at the port, inventory free, capacity-bounded) instead of padded vessels; the wall-row change is dropped.

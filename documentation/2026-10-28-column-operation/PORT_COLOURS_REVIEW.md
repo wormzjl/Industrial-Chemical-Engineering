@@ -26,3 +26,20 @@ therefore the colours. The pipeline tool continues using its existing class colo
 - Evidence: `tmp/port-colours/gates.log`, `tmp/port-colours/after/assembly.png`, `tmp/port-colours/after/assembly-selected.png`; indexed in `tmp/INDEX.md`.
 - Drawing-only change: no dev client or solver campaign. No new tools; existing `tools/heat-gui-renders/GuiPrototypes.java` used.
 - Code guide: updated GUI and machine-assembly port-colour contracts. C8/main merge remains deferred.
+
+## Existing templates and the dev client
+
+The owner's follow-up found the old colours under `gradlew runClient`. The main checkout's
+`run/logs/latest.log` records a client starting at 11:40:34 on 2026-10-29, with Minecraft
+artifacts under the main checkout's `build/moddev/artifacts/`. This worktree's `run/`
+contains only `review-world/`: the updated client had not been launched here.
+`AssemblyScreen` builds the same `AssemblyFlowsheet` for every existing column with a
+component design; no port colour is stored in the template. No template migration is needed.
+
+From the main checkout, launch this branch with:
+
+```powershell
+.\gradlew.bat -p .claude/worktrees/column-operation-5c3005 runClient
+```
+
+This task changes GUI squares. World port markers still use the pipeline tool's class colours.
