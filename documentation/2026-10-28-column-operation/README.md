@@ -8,7 +8,7 @@ Status: In progress since 2026-10-29: owner answers recorded, implementation by 
 
 - [COLUMN_OPERATION_PLAN.md](COLUMN_OPERATION_PLAN.md): the expected behaviour and three facts that shape the design (throughput scales exactly, recoveries drift slowly, the condenser closes the energy); what the code has; the column unit (boundary at the valves, void inlets, buffer vessels at product pressure, the master's valve jobs, conservation); the cycle and the split table; new solves (bands, warm route, fixed application, trip); short inputs (rules A and B); drift and the specifications (S1 to S4); timing and determinism; utilities (stages A and B, W9); package, water, nitrogen, solids; saves; the Operation tab; work packages C1 to C8 with C6b (the water-cooled condenser); owner questions Q1 to Q11 and the answers.
 - [C1_MEASUREMENT_REVIEW.md](C1_MEASUREMENT_REVIEW.md): C1: homogeneity, the table's error against drift and the proposed bands, warm solves (dry, wet, kettle), rule B's cost (decision B), S2 or S3.
-- [PORT_COLOURS_REVIEW.md](PORT_COLOURS_REVIEW.md): distinct colours for every assembly GUI port, retained after connection; drawing gates and software renders.
+- [PORT_COLOURS_REVIEW.md](PORT_COLOURS_REVIEW.md): distinct assembly port colours shared by GUI and pipe laying tool, retained after connection; mapping/drawing gates and software renders.
 
 Tools: [`tools/column-operation/`](../../tools/column-operation/README.md) (the C1 bench and its TSV).
 
@@ -18,6 +18,7 @@ Tools: [`tools/column-operation/`](../../tools/column-operation/README.md) (the 
 
 ## History
 
+- 2026-10-29: `645e203d`, owner found the GUI colours differed from the pipe laying tool. Moved the palette to shared `PortColours.assembly` (slot/role/ordinal); the tool maps column nozzles without a report and other equipment through the watched report, with drawing models cached by design. Connected markers retain their identity colour with grey frames; misplaced parts retain yellow frames. 20 focused tests green, including actual GUI fills against physical-nozzle lookups across maximal designs; both theme renders byte-identical. No live marker check; client adapters compile. `PORT_COLOURS_REVIEW.md`; C8 remains deferred.
 - 2026-10-29: old-template colour follow-up: the owner's latest `runClient` loaded the main checkout (log 11:40:34), while the update is on this worktree. Recorded the branch-specific `-p` launch command in `PORT_COLOURS_REVIEW.md`. All template ages use the same GUI renderer; no saved colour or migration. Documentation only; no further tests or client launch.
 - 2026-10-29: `9cfc3a08`, owner request on `claude/column-operation-5c3005`: every GUI port square has its own colour in the diagram's fixed order; connected ports keep it with a grey outline. Existing assembly drawing/layout/painter gates: 14 tests green; shipped drawing rendered and checked in both themes. `PORT_COLOURS_REVIEW.md`; C8 remains deferred.
 - 2026-10-28: plan written. Design only: no code, no Gradle run. It answers the 2026-10-26 plan's open next-stage decisions D5 (members suspended with their contents), D7 (the operating point on the design), D14 (inlet voids and outlet buffer vessels; generator ports rejected again for conservation) and D16 (the distillate valve is its port's valve), and gives the heat plan's deferred W9 a place (stage B of the utilities).

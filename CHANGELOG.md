@@ -17,7 +17,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ### Changed
 
-- Column assembly GUI ports each keep a distinct colour, including after connection; connected ports have grey outlines (`9cfc3a08`; batch `2026-10-28-column-operation`, `PORT_COLOURS_REVIEW.md`).
+- Column assembly ports share distinct colours between the GUI and pipe laying tool, including after connection; connected ports have grey outlines (`9cfc3a08`, `645e203d`; batch `2026-10-28-column-operation`, `PORT_COLOURS_REVIEW.md`).
 - The C++ column library is the default (commit `9c5eb01f`; owner request; batch `2026-10-28-native-column-default`, review `NATIVE_DEFAULT_REVIEW.md`): the build packs it into the jar under `natives/<os>-<arch>/` when CMake is found (PATH, `-PnativeCmake` or Visual Studio), with a static runtime; the column loads it without a switch and runs the inside-out trial's Peng-Robinson outer pass in C++ unless `-Dicheme.native.thermo.batch=false`; without a library the Java path runs. Investigation probes in `tools/native-column-default/`.
 
 ### Fixed
