@@ -243,6 +243,20 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         return -1;
     }
 
+    /**
+     * Product {@code k}'s moles per mole of feed at the reference: its recovery of the feed's components and of the steam
+     * taken with it, which is water (the sour water is mostly condensed stripping steam).
+     */
+    public double perFeed(int k) {
+        var p = products.get(k);
+        var z = reference.feedFractions();
+        double share = 0;
+        for (int c = 0; c < z.length; c++) share += p.share(c) * z[c];
+        int water = axis.indexOf(WATER);
+        if (water >= 0) for (double steam : reference.steamRatios()) share += p.share(water) * steam;
+        return share;
+    }
+
     private static int indexOf(List<Product> products, Port port) {
         for (int k = 0; k < products.size(); k++) if (products.get(k).port() == port) return k;
         return -1;

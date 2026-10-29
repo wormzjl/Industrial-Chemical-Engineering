@@ -479,7 +479,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(!level.dimension().location().toString().equals(master.dimension()))continue;
             var at=new net.minecraft.core.BlockPos(master.x(),master.y(),master.z());
             if(!level.isLoaded(at))return null;
-            var vessel=com.wormzjl.icheme.world.level.block.EquipmentStructure.find(level,at);
+            var vessel=com.wormzjl.icheme.world.level.block.EquipmentStructure.at(level,at);
             if(vessel==null||vessel.shape().trays()==null)return null;
             var trays=vessel.shape().trays();var point=trays.operating();
             return point==null||!point.fits(trays)?null:point.input(trays,vessel.shape().diameter());

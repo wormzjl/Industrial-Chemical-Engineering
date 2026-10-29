@@ -42,7 +42,7 @@ public final class ColumnStarts {
 
     /** The Start of the column at {@code origin}. */
     public static Built build(ServerLevel level, FluidWorldAuthority world, BlockPos origin) {
-        var vessel = EquipmentStructure.find(level, origin);
+        var vessel = EquipmentStructure.at(level, origin);
         if (vessel == null || !AssemblyService.designed(vessel.shape())) return refused("no designed column here");
         var trays = vessel.shape().trays();
         var point = trays.operating();
@@ -60,7 +60,8 @@ public final class ColumnStarts {
             var port = port(s.slot());
             if (port == null) continue;
             int index = s.slot().index() == 0 ? 0 : s.slot().index() - 1;
-            var at = BlockPos.of(s.at());
+            // The fitting that fills the slot (its member; the slot report's at is where a fault lies).
+            var at = BlockPos.of(s.member());
             var valve = world.at(new PhysicalFluidTopology.Position(dimension, at.getX(), at.getY(), at.getZ())).orElse(null);
             if (valve == null) return refused("a boundary valve is not registered");
             // The valve's arrow points along the stream: an inlet's column side is ahead of it, an outlet's behind it.
@@ -77,7 +78,7 @@ public final class ColumnStarts {
         if (trays.components().condenser() != com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.AIR_COOLER)
             for (var s : entry.report().slots())
                 if (s.slot().equals(ColumnBlueprint.CONDENSER)) {
-                    var member = EquipmentStructure.find(level, BlockPos.of(s.at()));
+                    var member = EquipmentStructure.at(level, BlockPos.of(s.member()));
                     if (member != null) condenser.addAll(EquipmentStructure.heatSides(world, level, member));
                 }
         return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser), null);

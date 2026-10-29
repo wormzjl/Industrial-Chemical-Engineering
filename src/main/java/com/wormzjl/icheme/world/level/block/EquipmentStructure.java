@@ -495,6 +495,20 @@ public final class EquipmentStructure {
         return contains(vessel, position) ? vessel : null;
     }
 
+    /**
+     * The vessel whose origin is {@code origin}, or null. A round shell's origin corner is no cell of it: its bottom layer,
+     * which every vessel's cells reach, is searched for one of its shell cells within the widest vessel's reach.
+     */
+    public static @Nullable Vessel at(BlockGetter level, BlockPos origin) {
+        var vessel = find(level, origin);
+        if (vessel != null && vessel.origin().equals(origin)) return vessel;
+        for (int dx = 0; dx <= FIND_STEPS; dx++)
+            for (int dz = 0; dz <= FIND_STEPS; dz++)
+                if (level.getBlockEntity(origin.offset(dx, 0, dz)) instanceof EquipmentShellBlockEntity shell && shell.shape() != null && origin.equals(shell.origin()))
+                    return new Vessel(origin, shell.shape());
+        return null;
+    }
+
     /** The longest walk over interior cells: across the widest body, a column's or a floating-roof tank's. */
     private static final int FIND_STEPS = (int) Math.ceil(Math.max(EquipmentShape.MAX_COLUMN_DIAMETER, UnitDesign.of(EquipmentShape.Kind.TANK).maxSize())) + 2;
 

@@ -349,7 +349,7 @@ public final class AssemblyService {
         if (world == null) return null;
         var view = world.columnView(position(level, origin.asLong()), opening);
         if (view != null && (view.running() || refusal == null)) return view;
-        var vessel = EquipmentStructure.find(level, origin);
+        var vessel = EquipmentStructure.at(level, origin);
         var trays = vessel == null ? null : vessel.shape().trays();
         var point = trays == null ? null : trays.operating();
         var setpoints = view != null ? view.setpoints() : point == null ? null : com.wormzjl.icheme.science.column.operation.Setpoints.of(point);

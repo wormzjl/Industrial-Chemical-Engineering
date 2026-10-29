@@ -196,8 +196,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 if(k>=0) {
                     var p=t.products().get(k);temperature=p.temperature();
                     if(step!=null&&k<step.products().size())rate=step.products().get(k).total()/seconds;
-                    double share=0;var z=t.reference().feedFractions();for(int c=0;c<z.length;c++)share+=p.recovery()[c]*z[c];
-                    double capacity=set.designFeedRate()*BUFFER_SECONDS*share;
+                    double capacity=set.designFeedRate()*BUFFER_SECONDS*t.perFeed(k);
                     if(capacity>0)held=s.account().total()/capacity;
                 }
             }
@@ -369,8 +368,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double design=u.setpoints().designFeedRate()*BUFFER_SECONDS;
         for(int k=0;k<room.length;k++) {
             var p=t.products().get(k);var s=station(stations,p.port(),p.index());
-            double share=0;var z=t.reference().feedFractions();for(int c=0;c<z.length;c++)share+=p.recovery()[c]*z[c];
-            room[k]=Math.max(0,design*share-s.account().total());
+            room[k]=Math.max(0,design*t.perFeed(k)-s.account().total());
         }
         var energy=r.enthalpy;
         // Rule A stays until a solve succeeds; at its retry time the cycle tries B again, and a still short steam asks the solve again.
