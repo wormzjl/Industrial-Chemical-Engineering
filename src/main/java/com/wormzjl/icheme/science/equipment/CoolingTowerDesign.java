@@ -146,7 +146,7 @@ final class CoolingTowerDesign extends UnitDesign {
         u.fluidPoint=new double[]{axis,.1,axis};
         // Attach inside the resized shell wall at the distributor, preserving the external nozzle position.
         double lower=shellRadius(throat,shellScale,zthroat,b,base,base),upper=shellRadius(throat,shellScale,zthroat,b,base,base+4);
-        double inletRadius=lower+(upper-lower)*3.5/4;
+        double inletY=Math.floor(base+3.5)+.5,inletRadius=lower+(upper-lower)*(inletY-base)/4;
         nozzle(u,Role.HOT_WATER_INLET,axis,base+3.5,axis-r,2,-1,r-inletRadius+.1);
         basinOutlet(u,axis,axis+r);
     }
@@ -157,16 +157,11 @@ final class CoolingTowerDesign extends UnitDesign {
     private static void basinOutlet(ProcessUnit u,double x,double z){
         nozzle(u,Role.COLD_WATER_OUTLET,x,.5,z,2,1,-.1);
     }
-    /** The weld ends within the wall; depth is measured inward from the reference used for the external flange. */
+    /** The shared pipe-sized neck starts inside the wall; depth is measured inward from the external flange reference. */
     private static void nozzle(ProcessUnit u,Role role,double x,double y,double z,int axis,int sign,double depth){
         double[] base={x,y,z};for(int k=0;k<3;k++)if(k!=axis)base[k]=Math.floor(base[k])+.5;
-        var root=base.clone();var stub=Frame.of(root,axis,sign);
-        u.mesh.cylinder(stub,.2,-depth,.55,12,Material.PIPE);
-        double low=Math.min(root[axis]-sign*depth,root[axis]+sign*.55),high=Math.max(root[axis]-sign*depth,root[axis]+sign*.55);
-        u.solids.add(ProcessUnit.Solid.rod(root,axis,low,high,.2,0));
         double face=sign<0?Math.floor(base[axis]-1.8):Math.ceil(base[axis]+1.8);
-        // Root outside the hollow basin wall; the pipe-sized stub welds it back to the distributor or pan.
-        base[axis]+=sign*.55;
+        base[axis]-=sign*depth;
         u.nozzles.add(new Nozzle(role,base,axis,sign,sign*(face-base[axis]),.4,0));
     }
 }

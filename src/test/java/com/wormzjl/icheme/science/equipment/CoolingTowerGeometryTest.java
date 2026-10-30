@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
 import org.junit.jupiter.api.Test;
+import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CoolingTowerGeometryTest {
@@ -119,6 +120,15 @@ class CoolingTowerGeometryTest {
         assertTrue(layout.interior().isEmpty());
         assertTrue(layout.shell().size()<shape.sizeX()*shape.sizeY()*shape.sizeZ()/5,"Cost follows surfaces, not chimney volume");
         for(var nozzle:shape.nozzles())for(int k=0;k<3;k++)if(k!=nozzle.axis())assertEquals(.5,nozzle.base()[k]-Math.floor(nozzle.base()[k]),1e-10);
+    }
+    @Test void towerNozzleNecksStartInsideTheirWallsSoConnectedPipeSizesTheWholeNeck(){
+        for(var shape:List.of(
+                EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,4,2,EquipmentShape.Heading.NORTH,0),
+                EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,40,52,EquipmentShape.Heading.NORTH,0))){
+            var unit=ProcessUnit.of(shape);
+            for(var nozzle:shape.nozzles())
+                assertTrue(unit.inside(nozzle.base()),shape.kind()+" "+nozzle.role()+" root is under the wall, with no fixed pipe stub outside it");
+        }
     }
     @Test void naturalChimneysUseOneSurfaceMeshAndNoUpperChunkQuads(){
         var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,40,52,EquipmentShape.Heading.NORTH,0);
