@@ -72,7 +72,7 @@ public final class TowerExchange {
             }
         }
         var fill=TowerTransfer.fill(model,tower,inlet,temperature,speed);
-        var surface=TowerTransfer.surface(model,tower,states.get(node).temperature(),basin.empty()?0:basin.state().mass(),dt);
+        var surface=TowerTransfer.surface(model,tower,states.get(node).temperature(),basin.empty()?0:basin.state().mass());
         String status=unsupported?"WATER_ONLY: pure liquid water required at atmospheric discharge"
             :tower.mode()==CoolingTower.Mode.TARGET_TEMPERATURE&&inlet>0&&Math.abs(fill.outletTemperature()-tower.setPoint())>.1
                 ?"TARGET_LIMIT: leaving-water temperature target unavailable"

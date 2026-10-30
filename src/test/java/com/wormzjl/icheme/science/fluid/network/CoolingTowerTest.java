@@ -52,26 +52,49 @@ class CoolingTowerTest {
         double ho=model.waterLiquid(f.outletTemperature(),101325).molarEnthalpy()/model.waterMolecularWeight;
         assertEquals(water*hi-(water-f.waterLoss())*ho,f.energyWatt(),Math.abs(f.energyWatt())*1e-7);
     }
-    @Test void wetSurfaceExchangesAtZeroSprayAndCanCondense(){
+    @Test void fanPowerDependsOnlyOnSpeedForAGivenTower(){
         var tower=CoolingTower.induced(6,2,1,1);
-        assertTrue(TowerTransfer.surface(model,tower,308.15,10000,1).evaporation()>0);
-        assertTrue(TowerTransfer.surface(model,tower,278.15,10000,1).evaporation()<0);
-        assertEquals(0,TowerTransfer.surface(model,tower,308.15,0,1).waterLoss());
+        double full=TowerTransfer.fill(model,tower,72,308.15,1).fanPowerWatt();
+        for(double water:new double[]{0,7.2,72,720})for(double inlet:new double[]{298.15,308.15,350}){
+            assertEquals(full,TowerTransfer.fill(model,tower,water,inlet,1).fanPowerWatt(),1e-9);
+            assertEquals(full/8,TowerTransfer.fill(model,tower,water,inlet,.5).fanPowerWatt(),1e-9);
+        }
+        assertEquals(0,TowerTransfer.fill(model,tower,72,308.15,0).fanPowerWatt());
+    }
+    @Test void basinSurfaceExchangesHeatWithoutEvaporation(){
+        var tower=CoolingTower.induced(6,2,1,1);
+        var warm=TowerTransfer.surface(model,tower,308.15,10000);
+        var cold=TowerTransfer.surface(model,tower,278.15,10000);
+        assertTrue(warm.sensibleWatt()>0);assertTrue(cold.sensibleWatt()<0);
+        for(var result:new TowerTransfer.Result[]{warm,cold}){
+            assertEquals(0,result.waterLoss());assertEquals(0,result.latentWatt());
+            assertEquals(result.sensibleWatt(),result.energyWatt());
+        }
         assertEquals(0,TowerTransfer.fill(model,tower,0,308.15,1).waterLoss());
+    }
+    @Test void naturalDraftAccepts80CWater(){
+        for(int diameter:new int[]{40,60,80}){
+            var tower=CoolingTower.natural(diameter);
+            for(double loading:new double[]{.001,.02,.2,2,20}){
+                var result=TowerTransfer.fill(model,tower,loading*tower.area(),353.15,0);
+                assertTrue(result.outletTemperature()<353.15,"diameter="+diameter+" loading="+loading);
+                assertTrue(result.evaporation()>0,"diameter="+diameter+" loading="+loading);
+            }
+        }
     }
     private com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State water(double t,double pressure,double volume){
         var amounts=new double[model.componentCount()];amounts[amounts.length-1]=1;
         double scale=volume/model.flashTP(t,pressure,amounts,()->{}).volume();amounts[amounts.length-1]*=scale;
         return model.flashTP(t,pressure,amounts,()->{});
     }
-    @Test void aStandingBasinBooksWaterAndEnergyInTheAcceptedStep(){
+    @Test void aStandingBasinBooksSensibleHeatWithoutWaterLoss(){
         var tower=CoolingTower.induced(4,2,1,1);var state=water(308.15,101325,16);
         var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),2,true).withTower(tower);
         var graph=new PassiveNetwork(java.util.List.of(new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory)),java.util.List.of());
         var result=new PassiveStepSolver(model).solve(graph,.1,()->{});
-        assertTrue(result.externalMoles()[model.componentCount()-1]<0);
+        assertEquals(0,result.externalMoles()[model.componentCount()-1]);
         assertTrue(result.states().getFirst().temperature()<state.temperature());
-        assertEquals(inventory.moles()[model.componentCount()-1]+result.externalMoles()[model.componentCount()-1],result.inventories().getFirst().moles()[model.componentCount()-1],1e-7);
+        assertEquals(inventory.moles()[model.componentCount()-1],result.inventories().getFirst().moles()[model.componentCount()-1],1e-7);
         assertTrue(result.boundaries().stream().anyMatch(v->v.kind()==ConservativeTransport.BoundaryTransfer.Kind.ATMOSPHERE));
     }
     @Test void aSprayInletCoolsItsWaterWithinTheCoupledBalance(){
@@ -84,6 +107,30 @@ class CoolingTowerTest {
         assertTrue(result.massFlows()[0]>0);
         assertTrue(result.towers().get(2L).fill().evaporation()>0);
         assertTrue(result.towers().get(2L).fill().outletTemperature()<source.temperature());
+    }
+    @Test void naturalSprayAdmits80CWaterWithinTheCoupledBalance(){
+        var tower=CoolingTower.natural(60);var state=water(298.15,101325,16);
+        var source=water(353.15,250000,1);
+        assertTrue(TowerExchange.liquidWater(model,source));
+        var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),2,true).withTower(tower);
+        var nodes=java.util.List.of(new PassiveNetwork.Reservoir(1,13.5,source,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory));
+        var pipe=new PassiveNetwork.Pipe(5,0,1,new PipeResistance.Geometry(10,.05,.000045,0)).withPorts(PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.SPRAY);
+        var result=new PassiveStepSolver(model).solve(new PassiveNetwork(nodes,java.util.List.of(pipe)),.1,()->{});
+        assertTrue(result.massFlows()[0]>0);
+        var rates=result.towers().get(2L);
+        assertEquals(source.enthalpy()/source.mass(),model.waterLiquid(rates.inletTemperature(),101325).molarEnthalpy()/model.waterMolecularWeight,.001);
+        assertTrue(rates.fill().evaporation()>0);
+    }
+    @Test void naturalDraftStartsFromAnEmptyBasinWith80CWater(){
+        var tower=CoolingTower.natural(60);
+        var empty=PassiveNetwork.emptyVessel(2,0,tower.basinVolume(),2,true,model);
+        var basin=new PassiveNetwork.Reservoir(2,0,empty.state(),empty.kind(),empty.inventory().withTower(tower));
+        var source=new PassiveNetwork.Reservoir(1,13.5,water(353.15,250000,1),PassiveNetwork.NodeKind.GENERATOR);
+        var feed=new PassiveNetwork.Pipe(5,0,1,new PipeResistance.Geometry(10,.05,.000045,0)).withPorts(PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.SPRAY);
+        var result=new PassiveStepSolver(model).solve(new PassiveNetwork(java.util.List.of(source,basin),java.util.List.of(feed)),.1,()->{});
+        assertTrue(result.massFlows()[0]>0);
+        assertTrue(result.inventories().get(1).moles()[model.componentCount()-1]>0);
+        assertTrue(result.towers().get(2L).fill().evaporation()>0);
     }
     @Test void unsupportedFeedIsStoppedWithoutChangingItsSource(){
         var tower=CoolingTower.induced(4,2,1,1);var state=water(298.15,101325,16);
@@ -127,7 +174,8 @@ class CoolingTowerTest {
         var graph=new PassiveNetwork(java.util.List.of(new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,stock)),java.util.List.of());
         var rates=TowerExchange.at(graph,0,java.util.List.of(state),new double[0],.1,model);
         assertEquals(0,rates.fill().speed());assertEquals(0,rates.fill().fanPowerWatt());
-        assertEquals(0,rates.fill().waterLoss());assertTrue(rates.surface().evaporation()>0);
+        assertEquals(0,rates.fill().waterLoss());assertEquals(0,rates.surface().evaporation());
+        assertTrue(rates.surface().sensibleWatt()>0);assertEquals(0,rates.waterLoss());
     }
     @Test void aBasinTemperatureDifferenceCannotDriveAnAtmosphericInlet(){
         var tower=CoolingTower.induced(4,2,1,1);var state=water(298.15,101325,16);var source=water(308.15,101325,1);

@@ -145,7 +145,6 @@ public final class TowerTransfer {
         while(draught(model,tower,water,inlet,speed,lo,rho).residual()>0)lo*=2;
         while(draught(model,tower,water,inlet,speed,hi,rho).residual()<0)hi*=2;
         Result result=null;
-        double pressure=tower.draft()==CoolingTower.Draft.INDUCED?20*speed*speed:0;
         for(int i=0;i<35;i++) {
             double air=(lo+hi)/2;
             // Evaluate the zero-flow limit from moving air; the exact zero state has no defined exhaust density.
@@ -153,7 +152,9 @@ public final class TowerTransfer {
             var balance=draught(model,tower,water,inlet,speed,air,rho);result=balance.transfer();
             if(balance.residual()>0)hi=air;else lo=air;
         }
-        double power=tower.draft()==CoolingTower.Draft.INDUCED?Math.max(0,pressure*result.dryAirFlow()/rho/.6):0;
+        // Fan laws at the declared 2 kg/(s m²) full-speed air loading: flow ∝ speed and pressure ∝ speed².
+        // Power therefore depends on the tower's geometry and speed, not on its solved water or air state.
+        double power=tower.draft()==CoolingTower.Draft.INDUCED?20*(2*area*speed)/rho/.6*speed*speed:0;
         return new Result(result.outletTemperature(),result.evaporation(),result.sensibleWatt(),result.latentWatt(),result.energyWatt(),result.dryAirFlow(),result.airTemperature(),result.airHumidity(),power,speed).scale(tower.cells());
     }
     private record Draught(Result transfer,double residual) {}
@@ -165,13 +166,10 @@ public final class TowerTransfer {
         double fan=tower.draft()==CoolingTower.Draft.INDUCED?20*speed*speed:0;
         return new Draught(transfer,resistance-fan-buoyancy);
     }
-    /** Wet basin surface, including at zero spray flow. Positive evaporation may be limited to available inventory. */
-    public static Result surface(FluidThermodynamics model,CoolingTower tower,double t,double available,double dt) {
+    /** Sensible exchange at a wet basin surface, including at zero spray; the basin itself does not evaporate. */
+    public static Result surface(FluidThermodynamics model,CoolingTower tower,double t,double available) {
         if(available<=0)return new Result(t,0,0,0,0,0,CoolingTower.AIR_TEMPERATURE,0,0,0);
-        double h=5*tower.area(),ke=h/(CP_AIR+humidity(model,CoolingTower.AIR_TEMPERATURE,.5)*CP_VAPOR);
-        double dm=ke*(humidity(model,t,1)-humidity(model,CoolingTower.AIR_TEMPERATURE,.5));
-        dm=Math.min(dm,.1*available/Math.max(dt,1e-9));
-        double q=h*(t-CoolingTower.AIR_TEMPERATURE),hv=vapor(model,t),hl=liquid(model,t);
-        return new Result(t,dm,q,dm*(hv-hl),q+dm*hv,0,CoolingTower.AIR_TEMPERATURE,0,0,0);
+        double h=5*tower.area(),q=h*(t-CoolingTower.AIR_TEMPERATURE);
+        return new Result(t,0,q,0,q,0,CoolingTower.AIR_TEMPERATURE,0,0,0);
     }
 }

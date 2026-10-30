@@ -563,6 +563,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             var rate=view.tower().rates();
             rows.add(meter("inlet_temperature",rate==null||rate.inletFlow()==0?"—":temperatureValue(rate.inletTemperature()),t));
             rows.add(meter("tower_basin_temperature",state==null?"—":temperatureValue(state.temperature()),t));
+            rows.add(new DeviceColumn.Meter("bottom_pressure",pressureValue(view.tank()==null?null:view.tank().bottomPressure()),p,tr("bottom_pressure.hint")));
             rows.add(meter("tower_cooling_duty",rate==null?"—":value(rate.coolingDutyWatt()/1000),"kW"));
             rows.add(meter("tower_return",rate==null?"—":value(flowRateUnit.display(rate.inletFlow())),flowRateUnit.unit("kg")));
             rows.add(meter("tower_evaporation",rate==null?"—":value(flowRateUnit.display(rate.waterLoss())),flowRateUnit.unit("kg")));

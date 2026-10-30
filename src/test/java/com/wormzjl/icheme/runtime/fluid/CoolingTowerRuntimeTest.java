@@ -38,6 +38,17 @@ class CoolingTowerRuntimeTest {
         }
     }
 
+    @Test void bothTowerTypesPublishTheirAcceptedBottomPressure(){
+        for(var tower:new CoolingTower[]{CoolingTower.induced(4,2,1,1),CoolingTower.natural(40)}){
+            var state=basin().reservoirs().getFirst().state();
+            var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),2,true).withTower(tower);
+            var node=new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory);
+            var view=TankOutlets.tank(model,node,null);
+            assertEquals(state.pressure()+PassiveStepSolver.portHead(model,node,PassiveNetwork.PhasePort.LIQUID,state),view.bottomPressure());
+            assertTrue(view.bottomPressure()>view.topPressure());
+        }
+    }
+
     @Test void populatedBasinAndAcceptedAtmosphericReadingsSurviveAnExactCheckpoint(){
         var solved=new PassiveIntervalSolver(model).solve(basin(),.1,new PassiveIntervalSolver.Settings(.1,.1,32),()->{});
         var snapshot=new IslandCoordinator.Snapshot(1,0,solved.graph(),new IslandClock.Snapshot(2,2,4,20),Optional.of(solved),"FULL");
