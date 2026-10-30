@@ -8,6 +8,7 @@ The constructor adds induced-draft banks of bounded parallel cells and passive n
 - [Implementation and verification](COOLING_TOWER_REVIEW.md): owning code, conservation, formats, evidence and remaining qualification.
 - [Cooler defect follow-up](COOLING_TOWER_FIX_REVIEW.md): fan power, bottom pressure, basin exchange and 80 °C natural-feed evidence.
 - [Tower geometry follow-up](INDUCED_TOWER_GEOMETRY_REVIEW.md): basin-floor legs, fan collision, smaller basins, enclosed single-layer fill and natural-support evidence.
+- [Natural support and mesh review](NATURAL_TOWER_SUPPORT_REVIEW.md): reference-matched scale, concrete V-struts, internal grillage and geometry-cost evidence.
 - [Code guide](../reference/code-guide/cooling-towers.md).
 - [Verification tools](../../tools/cooling-towers/README.md).
 
@@ -26,3 +27,5 @@ History: 2026-10-30 — `98789eaa` extends induced-tower legs to the basin floor
 History: 2026-10-30 — after the owner's fan screenshot, `44044ff2` makes the rotor/grille volume solid throughout the cowl. Main and test compilation pass and occupied-cell layouts are unchanged; test execution is deferred while the owner's dev client is running. No merge or version bump.
 
 History: 2026-10-30 — `aa8381cb` reduces both basins to 2 m walls and 4/3 m working depth, scales default induced fill to half cell width, encloses one packing layer and replaces natural posts with 32 X-braced perimeter bays. No compatibility code was added by owner choice; the current schema-6 fixture was regenerated. Forty-four focused checks and independent slow gates pass; 1,838 quick tests have only the older outlet-golden failure. Software renders were inspected, with no client launched, merge or version bump.
+
+History: 2026-10-30 — `0491f75d` rebuilds the natural support with concrete V-struts, a ring and internal grillage. The clear inlet now scales to 12–24 m above the basin rim; packing, distributor and inlet follow it. An 80 m tower uses 7,004 triangles instead of 23,016 (69.6% fewer), without a measured-FPS claim. Thirty-five focused checks pass and two software views were inspected. Only natural shell/stamp/inlet golden fields changed; the older outlet mismatch remains. No client check, merge or version bump.
