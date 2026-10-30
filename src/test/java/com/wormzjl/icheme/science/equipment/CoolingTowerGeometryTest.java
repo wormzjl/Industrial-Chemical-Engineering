@@ -45,7 +45,8 @@ class CoolingTowerGeometryTest {
         assertTrue(unit.inside(new double[]{centre+.425*4,deck+.01,centre}),"The square fan deck collides outside the cowl");
         assertTrue(unit.inside(new double[]{3.95,deck+.01,3.95}),"The fan deck reaches the square cell's corners");
         assertFalse(unit.inside(new double[]{-.05,deck+.01,centre}),"Its collision does not project beyond the cell");
-        assertFalse(unit.inside(new double[]{centre,deck+.01,centre}),"The central fan opening stays hollow");
+        assertTrue(unit.inside(new double[]{centre,deck+.01,centre}),"The fan rotor collides at the bottom of its cowl");
+        assertTrue(unit.inside(new double[]{centre,deck+.99,centre}),"The fan grille collides at the top of its cowl");
     }
     @Test void aFullHeightChimneyStaysHollowAndHasEveryConnection(){
         var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,160,EquipmentShape.Heading.NORTH,0);

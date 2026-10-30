@@ -70,11 +70,13 @@ final class CoolingTowerDesign extends UnitDesign {
                 double[] inner1={a+d/2+.35*d*DeterministicMath.cos(last),top+3,b+d/2+.35*d*DeterministicMath.sin(last)};
                 u.mesh.flat(List.of(inner1,outer1,outer0,inner0),new double[]{0,1,0},Material.AC_PLENUM);
             }
-            // Match the square deck, not its circular bound: the corners collide and the fan opening stays clear.
+            // Match the square deck, not its circular bound: the corners collide without projecting beyond the cell.
             u.solids.add(ProcessUnit.Solid.ring(a+d/2,b+d/2,top+3,top+3+Access.DECK,.35*d,d/2*Math.sqrt(2),0,0)
                     .clip(new double[]{a,top+3,b},new double[]{a+d,top+3+Access.DECK,b+d}));
             var frame=Frame.of(new double[]{a+d/2,0,b+d/2},1,1);
             u.axialFan(frame,.35*d,top+4,1,32,ProcessUnit.FAN_SPEED);
+            // The guarded rotor fills the cowl for collision; neither its blades nor its grille can be walked through.
+            u.solids.add(ProcessUnit.Solid.rod(new double[]{a+d/2,0,b+d/2},1,top+3,top+4,.35*d,0));
             u.solids.add(ProcessUnit.Solid.ring(a+d/2,b+d/2,top+3,top+4,.35*d,.35*d+.08,0,2*Math.PI));
         }
         nozzle(u,Role.HOT_WATER_INLET,w/2,5+fill,0,2,-1,.05);
