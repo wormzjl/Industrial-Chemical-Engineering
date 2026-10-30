@@ -14,7 +14,7 @@ class CoolingTowerGeometryTest {
             assertEquals(1,ProcessUnit.of(shape).motions.size());
         }
         for(int diameter=40;diameter<=80;diameter+=10){
-            int height=2*diameter;
+            int height=(int)(1.3*diameter);
             var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,height,EquipmentShape.Heading.NORTH,0);
             assertEquals(Math.PI*diameter*diameter/4,shape.coolingTower().area());
             assertEquals(4.0/3*shape.coolingTower().area(),shape.volume(),1e-9);
@@ -37,7 +37,7 @@ class CoolingTowerGeometryTest {
         var basin=induced.mesh().facets().stream().filter(f->f.material()==Mesh.Material.SUPPORT).toList();
         assertTrue(basin.stream().anyMatch(f->f.max()[1]==2));
         assertTrue(basin.stream().allMatch(f->f.max()[1]<=2));
-        var natural=ProcessUnit.of(EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,40,80,EquipmentShape.Heading.NORTH,0));
+        var natural=ProcessUnit.of(EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,40,52,EquipmentShape.Heading.NORTH,0));
         assertTrue(natural.mesh().facets().stream().anyMatch(f->f.material()==Mesh.Material.CONCRETE&&f.min()[1]==.2&&f.max()[1]==2));
         assertFalse(natural.mesh().facets().stream().anyMatch(f->f.material()==Mesh.Material.CONCRETE&&f.min()[1]==.2&&f.max()[1]==3));
     }
@@ -73,7 +73,7 @@ class CoolingTowerGeometryTest {
     }
     @Test void naturalSupportScalesWithDiameterAndIncludesAnInternalGrillage(){
         for(int diameter:new int[]{40,80}){
-            var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,2*diameter,EquipmentShape.Heading.NORTH,0);
+            var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,(int)(1.3*diameter),EquipmentShape.Heading.NORTH,0);
             var tower=shape.coolingTower();var unit=ProcessUnit.of(shape);
             double axis=diameter/2.0+.5,foot=diameter/2.0-.5,ring=.9*diameter/2.0-diameter/200.0,base=tower.shellBaseHeight(),strut=diameter/100.0;
             assertEquals(diameter/5.0,tower.airInletHeight());
@@ -92,9 +92,9 @@ class CoolingTowerGeometryTest {
         }
     }
     @Test void naturalShellHasOneQuarterOfItsFormerGpuGeometry(){
-        var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,160,EquipmentShape.Heading.NORTH,0);
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,104,EquipmentShape.Heading.NORTH,0);
         var unit=ProcessUnit.of(shape);var shell=ShapeRasterizer.towerShell(shape);
-        int facets=Math.max(48,(int)Math.ceil(Math.PI*80/4)),bands=(int)Math.ceil((160-shape.coolingTower().shellBaseHeight())/8);
+        int facets=Math.max(48,(int)Math.ceil(Math.PI*80/4)),bands=(int)Math.ceil((104-shape.coolingTower().shellBaseHeight())/8);
         assertEquals(2*facets*bands,shell.size(),"Only chimney bands join the static shell VBO, not concrete supports");
         assertEquals(4*facets*bands,shell.stream().mapToInt(p->p.size()-2).sum());
         int triangles=unit.mesh().facets().stream().mapToInt(f->f.positions().size()-2).sum();
@@ -108,7 +108,7 @@ class CoolingTowerGeometryTest {
         assertFalse(ShapeRasterizer.chunkSurface(ShapeRasterizer.key(shape,cell.x(),cell.y(),cell.z())).isEmpty());
     }
     @Test void aFullHeightChimneyStaysHollowAndHasEveryConnection(){
-        var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,160,EquipmentShape.Heading.NORTH,0);
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,104,EquipmentShape.Heading.NORTH,0);
         var unit=ProcessUnit.of(shape);double axis=40.5;
         assertFalse(unit.inside(new double[]{axis,80,axis}));
         assertFalse(unit.filled(new double[]{axis,80,axis}));
@@ -121,7 +121,7 @@ class CoolingTowerGeometryTest {
         for(var nozzle:shape.nozzles())for(int k=0;k<3;k++)if(k!=nozzle.axis())assertEquals(.5,nozzle.base()[k]-Math.floor(nozzle.base()[k]),1e-10);
     }
     @Test void naturalChimneysUseOneSurfaceMeshAndNoUpperChunkQuads(){
-        var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,40,80,EquipmentShape.Heading.NORTH,0);
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,40,52,EquipmentShape.Heading.NORTH,0);
         var shell=ShapeRasterizer.towerShell(shape);
         assertFalse(shell.isEmpty());assertTrue(shell.size()<4000);
         int upperCells=0;

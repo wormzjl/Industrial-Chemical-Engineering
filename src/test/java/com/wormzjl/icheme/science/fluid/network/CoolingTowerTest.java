@@ -20,7 +20,7 @@ class CoolingTowerTest {
         }
     }
     @Test void buoyancyReversesForColdWaterAndFansOffStillAllowNaturalCooling(){
-        var tower=CoolingTower.natural(60,120);
+        var tower=CoolingTower.natural(60);
         var warm=TowerTransfer.fill(model,tower,2*tower.area(),308.15,0);
         var cold=TowerTransfer.fill(model,tower,2*tower.area(),278.15,0);
         assertTrue(warm.dryAirFlow()>0);assertTrue(cold.dryAirFlow()<0);

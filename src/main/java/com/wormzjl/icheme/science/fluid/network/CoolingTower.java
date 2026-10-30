@@ -18,8 +18,8 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
         if (draft == Draft.INDUCED) {
             if (width < 4 || width > 8 || width % 2 != 0 || fillDepth < 2 || fillDepth > 6 || fillDepth != Math.rint(fillDepth) || height != fillDepth + 8)
                 throw new IllegalArgumentException("A fan cell is 4–8 m wide with 2–6 m fill");
-        } else if (width < 40 || width > 80 || width % 10 != 0 || height != 2*width || fillDepth != 2 || columns != 1 || rows != 1 || mode != Mode.FAN_SPEED || speed != 0)
-            throw new IllegalArgumentException("A natural tower is 40–80 m across, with height twice its diameter");
+        } else if (width < 40 || width > 80 || width % 10 != 0 || height != naturalHeight(width) || fillDepth != 2 || columns != 1 || rows != 1 || mode != Mode.FAN_SPEED || speed != 0)
+            throw new IllegalArgumentException("A natural tower is 40–80 m across, with height 1.3 times its diameter");
     }
     public static CoolingTower induced(double width, double fill, int columns, int rows) {
         return new CoolingTower(Draft.INDUCED, width, fill, fill + 8, columns, rows, Mode.FAN_SPEED, 1, 298.15);
@@ -27,7 +27,9 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
     public static CoolingTower natural(double diameter, double height) {
         return new CoolingTower(Draft.NATURAL, diameter, 2, height, 1, 1, Mode.FAN_SPEED, 0, 298.15);
     }
-    public static CoolingTower natural(double diameter) { return natural(diameter,2*diameter); }
+    /** Typical hyperbolic towers are much stockier than a 2:1 cylinder; 1.3 lies within the published 1.2–1.55 H/D range. */
+    public static int naturalHeight(double diameter) { return (int)Math.rint(1.3*diameter); }
+    public static CoolingTower natural(double diameter) { return natural(diameter,naturalHeight(diameter)); }
     public int cells() { return columns * rows; }
     public double cellArea() { return draft == Draft.INDUCED ? width * width : Math.PI * width * width / 4; }
     public double area() { return cells() * cellArea(); }

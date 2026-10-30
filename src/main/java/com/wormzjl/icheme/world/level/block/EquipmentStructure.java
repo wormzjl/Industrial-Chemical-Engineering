@@ -978,7 +978,7 @@ public final class EquipmentStructure {
 
     private static int placeNaturalTower(CommandContext<CommandSourceStack> context,EquipmentShape.Heading front)throws CommandSyntaxException{
         double diameter=DoubleArgumentType.getDouble(context,"size");
-        try{return place(context,EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,2*diameter,front,0),Integer.MAX_VALUE,"natural-draft tower");}
+        try{return place(context,EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,com.wormzjl.icheme.science.fluid.network.CoolingTower.naturalHeight(diameter),front,0),Integer.MAX_VALUE,"natural-draft tower");}
         catch(IllegalArgumentException invalid){context.getSource().sendFailure(Component.literal(invalid.getMessage()));return 0;}
     }
 

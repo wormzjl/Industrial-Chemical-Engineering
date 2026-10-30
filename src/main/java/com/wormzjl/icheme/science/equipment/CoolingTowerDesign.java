@@ -14,9 +14,9 @@ final class CoolingTowerDesign extends UnitDesign {
     @Override public double minSize(){return natural?40:4;}
     @Override public double maxSize(){return natural?80:8;}
     @Override public double sizeStep(){return natural?10:2;}
-    @Override public int minLength(double d){return natural?(int)(2*d):2;}
-    @Override public int maxLength(double d){return natural?(int)(2*d):6;}
-    @Override public int defaultLength(double d){return natural?(int)(2*d):(int)(d/2);}
+    @Override public int minLength(double d){return natural?CoolingTower.naturalHeight(d):2;}
+    @Override public int maxLength(double d){return natural?CoolingTower.naturalHeight(d):6;}
+    @Override public int defaultLength(double d){return natural?CoolingTower.naturalHeight(d):(int)(d/2);}
     @Override public int lengthStep(){return natural?10:1;}
     @Override public int minSupport(double d,int l){return 0;}
     @Override public int maxSupport(){return 0;}
