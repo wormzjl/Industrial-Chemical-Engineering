@@ -12,11 +12,11 @@ The original chimney used 4 m vertical bands and roughly 2 m circumferential cho
 
 ## Correction for owner validation
 
-Commits `0491f75d` and `0fd07699` derive the shell base, packing, distributor and hot-water inlet from the corrected support height. Thirty-two concrete V-strut stations join a concrete ring. Six steel grillage beams on nine posts carry the packing; strut and beam sections scale with diameter. Buried bar ends omit faces without removing oriented collision.
+Commits `0491f75d` and `0fd07699` derive the shell base, packing, distributor and hot-water inlet from the corrected support height. Commit `d97ca7db` continues the same inclined V-struts through the basin rim to the floor at `y = 0`, without vertical lower extensions. Thirty-two concrete V-strut stations join a concrete ring. Six steel grillage beams on nine vertical internal posts carry the packing; strut and beam sections scale with diameter. Buried bar ends omit faces without removing oriented collision.
 
 The chimney uses 8 m bands and roughly 4 m chords. Only chimney facets above the derived shell base enter the static VBO; supports and ordinary equipment retain chunk rendering. The final 80 m model contains 7,256 triangles, 68.5% fewer than before, with 4,536 in the static chimney. This is a geometry-count reduction, not a measured FPS result.
 
-Thirty-five focused checks passed for `0491f75d` before its support-height adjustment. For `0fd07699`, standalone compilation and layout/mesh reports completed and two offline software views were inspected. Gradle tests were not run because the owner's dev client is active; no in-game check was performed.
+Thirty-five focused checks passed for `0491f75d` before its support-height adjustment. For `0fd07699` and `d97ca7db`, standalone compilation and layout/mesh reports completed and offline software views were inspected. Standalone collision checks confirm inclined support contact at the basin floor for 40 m and 80 m towers. Gradle tests were not run because the owner's dev client is active; no in-game check was performed.
 
 Only natural-tower shell counts, stamps and inlet elevations changed in the layout golden. Existing natural outlet `y = 13` and induced outlet `y = 7` entries remain despite generated `y = 0`; that older unrelated mismatch is intentionally not refreshed without owner approval. Induced rows are unchanged.
 
