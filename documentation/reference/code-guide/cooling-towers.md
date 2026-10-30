@@ -1,6 +1,6 @@
 # Water cooling towers
 
-**Branch snapshot:** `e79dfb53` (`kimi/water-cooler-fixes`), based on `bd1444ee` and main `79b853e0d`, mod 0.17.1, 2026-10-30. Unmerged. Batch: [2026-10-30-water-cooling-tower](../../2026-10-30-water-cooling-tower/README.md). Up: [code guide](README.md).
+**Branch snapshot:** `f22a4f3c` (`kimi/water-cooler-fixes`), based on `e79dfb53` and main `79b853e0d`, mod 0.17.1, 2026-10-31. Unmerged. Batch: [2026-10-30-water-cooling-tower](../../2026-10-30-water-cooling-tower/README.md). Up: [code guide](README.md).
 
 ## Geometry and placement
 
@@ -30,9 +30,9 @@ Airflow balances signed quadratic resistance with `20 speed²` Pa fan pressure a
 
 Fan banks default to manual speed 1. Target-temperature control solves fan share for the water leaving the fill before basin mixing, independently of basin holdup, and saturates at its endpoint when unreachable. With no spray it stops the fans. Natural towers stay passive. Capability and target-limit statuses do not hold supported operation.
 
-`PassiveStepSolver.Result.towers` and `PassiveIntervalSolver.Result.towers` hold accepted rates. `FluidWorldAuthority` copies these into scheduled `FluidView.Tower` snapshots. The compact device screen starts with inlet temperature, basin temperature and the tank snapshot's bottom pressure, and combines sensible/evaporative duty as cooling duty. It retains inlet flow, fill evaporation and fan power/speed, omitting ambient pressure, mass, net flow, airflow, separate makeup/supply rates, drift and phase composition. `CoolingTowerBasinRenderer` draws cached level snapshots with two triangles for a bank or 64 for a natural basin; the same display carries accepted fan speed for `MachineAnimation`. A lower `InstrumentGeometry.levelSockets` mount accepts the drum-style level sensor; valve linking is deferred. Menu opening does not solve contact. Server control edits retain existing geometry and inventory.
+`PassiveStepSolver.Result.towers` and `PassiveIntervalSolver.Result.towers` hold accepted rates. `FluidWorldAuthority` copies these into scheduled `FluidView.Tower` snapshots. The compact device screen starts with inlet temperature, basin temperature and the tank snapshot's bottom pressure, and combines sensible/evaporative duty as cooling duty. It retains inlet flow, fill evaporation and fan power/speed, omitting ambient pressure, mass, net flow, airflow, separate makeup/supply rates, drift and phase composition. `CoolingTowerBasinRenderer` draws cached level snapshots with two triangles for a bank; a natural basin shares the model's facet count, frame and inner-wall vertices. The same display carries accepted fan speed for `MachineAnimation`. A lower `InstrumentGeometry.levelSockets` mount accepts the drum-style level sensor; valve linking is deferred. Menu opening does not solve contact. Server control edits retain existing geometry and inventory.
 
-`CoolingTowerBasinRenderer` and the floating tank gauge use the same `LiquidRenderer` for their texture, translucent layer and vertices. Basin surfaces preserve the water material's opacity (currently about 25%), removing the earlier minimum of 160/255. The tank gauge keeps its existing readability minimum. Both still use scheduled cached displays after block entities; no new process calculation or payload is introduced.
+`CoolingTowerBasinRenderer` and the floating tank gauge use the same `LiquidRenderer` for their texture, translucent layer and vertices. Basin surfaces preserve the water material's opacity (currently about 25%), removing the earlier minimum of 160/255. `CoolingTowerBasin.height` retains the published level and a 0.205 m minimum height (5 mm above the floor), capped at the 2 m rim. The tank gauge keeps its existing readability minimum. Both still use scheduled cached displays after block entities; no new process calculation or payload is introduced.
 
 ## Persistence and verification
 

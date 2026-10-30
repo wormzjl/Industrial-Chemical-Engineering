@@ -9,6 +9,7 @@ The constructor adds induced-draft banks of bounded parallel cells and passive n
 - [Cooler defect follow-up](COOLING_TOWER_FIX_REVIEW.md): fan power, bottom pressure, basin exchange and 80 °C natural-feed evidence.
 - [Tower geometry follow-up](INDUCED_TOWER_GEOMETRY_REVIEW.md): basin-floor legs, fan collision, smaller basins, enclosed single-layer fill and natural-support evidence.
 - [Natural support and mesh review](NATURAL_TOWER_SUPPORT_REVIEW.md): reference-matched scale, concrete V-struts, internal grillage and geometry-cost evidence.
+- [Basin surface review](BASIN_SURFACE_REVIEW.md): shared wall/water perimeter, height clamp and alignment evidence.
 - [Code guide](../reference/code-guide/cooling-towers.md).
 - [Verification tools](../../tools/cooling-towers/README.md).
 
@@ -43,3 +44,5 @@ History: 2026-10-30 — `59fb5df6` corrects natural-tower overall height from `2
 History: 2026-10-30 — `bd1444ee` reduces clear natural-tower support height by 30%, from `0.20 × diameter` to `0.14 × diameter` (5.6–11.2 m), with shell base at 7.6–13.2 m. Packing, internal posts, distributor and inlet follow the lower shell; inclined V geometry, basin and total height stay unchanged. Standalone 40/80 m collision, ring and shell-band checks pass, final 40/80 m software renders were inspected, and the final 80 m model has 5,744 triangles including 3,024 static chimney triangles. No Gradle tests, in-game check, merge or version bump.
 
 History: 2026-10-30 — `e79dfb53` removes both towers' separate fixed 0.4 m nozzle stubs so the shared renderer sizes the full wall-to-flange neck from the connected pipe. Natural inlet shell attachment now uses the snapped nozzle elevation. Standalone small/large neck checks pass for induced and 40/80 m natural towers; natural inlet/outlet close-up renders were inspected, and all six layout shell counts/stamps and flange positions are unchanged. A geometry regression pins roots inside the walls. The older outlet-elevation golden mismatch remains; no Gradle tests, in-game check, compatibility work, merge or version bump.
+
+History: 2026-10-31 — `f22a4f3c` aligns natural basin water with the model's exact inner-wall frame, facet count and radius, replacing the inset, phase-mismatched fixed 64-sided surface. The drawn level retains 4/3 m operation and now clamps at the 2 m rim. The induced rectangular surface remains unchanged. A standalone probe passed 1,824 perimeter, rotation, winding and height checks with 0.0 m perimeter error; natural and induced software top/close-up renders were inspected. No Gradle tests, in-game check, layout/format change, compatibility work, merge or version bump.
