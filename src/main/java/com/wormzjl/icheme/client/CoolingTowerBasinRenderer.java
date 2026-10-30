@@ -34,7 +34,7 @@ public final class CoolingTowerBasinRenderer {
             var shape=cell.shape();var origin=cell.origin();
             if(cell.isRemoved()||cell.getLevel()!=mc.level||shape==null||origin==null||!shape.kind().coolingTower())continue;
             var display=TankRenderer.get(cell.getBlockPos(),ticks);if(display==null||display.waterLevel()<=0)continue;
-            double height=Math.min(2.99,Math.max(.205,display.waterLevel()));
+            double height=CoolingTowerBasin.height(display.waterLevel());
             if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+3,origin.getZ()+shape.sizeZ())))continue;
             if(SURFACES.size()>64)SURFACES.clear();
             var surface=SURFACES.computeIfAbsent(shape,CoolingTowerBasin::surface);

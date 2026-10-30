@@ -87,11 +87,14 @@ final class CoolingTowerDesign extends UnitDesign {
         var climb=new Access.Line(new double[]{w+Access.MIN_DECK,0,0},access.direction(),access.out(),l);
         u.climb(climb,0,landing,.85,upper,.15);
     }
+    /** The chimney, basin and water triangulation share one polygon and angular reference. */
+    static int naturalFacets(double diameter){return Math.max(48,(int)Math.ceil(Math.PI*diameter/4));}
+    static Frame naturalFrame(double diameter){double axis=diameter/2+.5;return Frame.of(new double[]{axis,0,axis},1,1);}
     private static void natural(ProcessUnit u,double d,double height){
         // Four-metre chords and eight-metre bands keep the shell smooth without sub-block GPU facets.
         double r=d/2,axis=r+.5,base=u.shape.coolingTower().shellBaseHeight();
-        int facets=Math.max(48,(int)Math.ceil(Math.PI*d/4));
-        var frame=Frame.of(new double[]{axis,0,axis},1,1);
+        int facets=naturalFacets(d);
+        var frame=naturalFrame(d);
         u.mesh.cylinder(frame,r,0,.2,facets,Material.CONCRETE);
         u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,0,.2,r,0));
         u.mesh.ring(frame,r,r+.2,.2,CoolingTower.BASIN_HEIGHT,facets,3,Material.CONCRETE);

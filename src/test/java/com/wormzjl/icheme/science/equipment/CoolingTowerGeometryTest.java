@@ -24,10 +24,53 @@ class CoolingTowerGeometryTest {
             var unit=ProcessUnit.of(shape);double axis=diameter/2.0+.5;
             assertFalse(unit.inside(new double[]{axis,height*.75,axis}));
             assertTrue(unit.mesh().facets().size()<15000,"The shell has a bounded surface mesh");
-            assertEquals(64,CoolingTowerBasin.surface(shape).size());
+            assertEquals(CoolingTowerDesign.naturalFacets(diameter),CoolingTowerBasin.surface(shape).size());
             assertEquals(1,InstrumentGeometry.levelSockets(shape).size());
             assertEquals(1,InstrumentGeometry.levelSockets(shape).getFirst().y());
         }
+    }
+    @Test void naturalWaterSharesTheBasinInnerWallAtBothDiameterExtremesAndEveryRotation(){
+        for(int diameter:new int[]{40,80})for(var heading:EquipmentShape.Heading.values()){
+            var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,(int)(1.3*diameter),heading,0);
+            double radius=diameter/2.0,axis=radius+.5;
+            var wall=ProcessUnit.of(shape).mesh().facets().stream()
+                    .filter(f->f.material()==Mesh.Material.CONCRETE&&f.min()[1]==.2&&f.max()[1]==2)
+                    .filter(f->f.positions().stream().allMatch(p->Math.abs(Math.hypot(p[0]-axis,p[2]-axis)-radius)<1e-9)).toList();
+            var water=CoolingTowerBasin.surface(shape);
+            assertEquals(wall.size(),water.size());
+            for(int segment=0;segment<wall.size();segment++){
+                var corners=wall.get(segment).positions();var triangle=water.get(segment);
+                double[] centre=shape.transform().point(new double[]{axis,0,axis});
+                double[] first=shape.transform().point(corners.get(0)),last=shape.transform().point(corners.get(1));
+                assertEquals(centre[0],triangle.a().x(),1e-9);assertEquals(centre[2],triangle.a().z(),1e-9);
+                assertEquals(first[0],triangle.b().x(),1e-9);assertEquals(first[2],triangle.b().z(),1e-9);
+                assertEquals(last[0],triangle.c().x(),1e-9);assertEquals(last[2],triangle.c().z(),1e-9);
+                double bx=triangle.b().x()-triangle.a().x(),bz=triangle.b().z()-triangle.a().z();
+                double cx=triangle.c().x()-triangle.a().x(),cz=triangle.c().z()-triangle.a().z();
+                assertTrue(bz*cx-bx*cz>0,"The water triangles face upward");
+            }
+        }
+    }
+    @Test void inducedBankWaterCoversItsWholeRectangularBasinAtEveryRotation(){
+        for(var heading:EquipmentShape.Heading.values()){
+            var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,8,2,heading,0).withTowerBank(new TowerBank(6,4));
+            double width=8*6.0,length=8*4.0;
+            var expected=List.of(new double[]{0,0},new double[]{0,length},new double[]{width,length},new double[]{width,0},
+                    new double[]{0,0},new double[]{width,length},new double[]{width,0});
+            var water=CoolingTowerBasin.surface(shape);
+            var actual=List.of(water.get(0).a(),water.get(0).b(),water.get(0).c(),
+                    water.get(1).a(),water.get(1).b(),water.get(1).c());
+            assertEquals(2,water.size());
+            for(int corner=0;corner<expected.size();corner++){
+                double[] point=shape.transform().point(new double[]{expected.get(corner)[0],0,expected.get(corner)[1]});
+                assertEquals(point[0],actual.get(corner).x(),1e-9);assertEquals(point[2],actual.get(corner).z(),1e-9);
+            }
+        }
+    }
+    @Test void waterHeightStaysAboveTheFloorAndAtOrBelowTheTwoMetreRim(){
+        assertEquals(.205,CoolingTowerBasin.height(0));
+        assertEquals(4.0/3,CoolingTowerBasin.height(4.0/3));
+        assertEquals(2,CoolingTowerBasin.height(2.99));
     }
     @Test void inducedFillDepthDefaultsToHalfTheCellWidth(){
         for(int width=4;width<=8;width+=2)
