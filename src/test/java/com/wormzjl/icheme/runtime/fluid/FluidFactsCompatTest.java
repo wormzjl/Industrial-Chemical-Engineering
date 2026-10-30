@@ -71,7 +71,7 @@ class FluidFactsCompatTest {
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(tube,new WorldTopologyLedger.Registration(tubeSide,spec,0)),new WorldTopologyLedger.Edit(shell,new WorldTopologyLedger.Registration(shellSide,spec,0))),shell+1,null);
         var tower=CoolingTower.induced(6,2,2,3).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,.4,299);
         world.place(50,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(tower.basinVolume(),298.15,101325,
-            FluidDeviceSpec.water(CATALOG).composition(),SlurryFeed.NONE,2,true).withTower(tower),.05);
+            FluidDeviceSpec.water(CATALOG).composition(),SlurryFeed.NONE,CoolingTower.BASIN_DEPTH,true).withTower(tower),.05);
         world.runTo(700);return world;
     }
     private static PhysicalFluidTopology.Device heatSide(long id,int x,int z,PipeResistance.Geometry passage,HeatUnit heat) {

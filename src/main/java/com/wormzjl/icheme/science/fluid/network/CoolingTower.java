@@ -8,7 +8,7 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
     public enum Draft { INDUCED, NATURAL }
     public enum Mode { FAN_SPEED, TARGET_TEMPERATURE }
     public static final double AIR_TEMPERATURE = 298.15, RELATIVE_HUMIDITY = .5, PRESSURE = 101325;
-    public static final double BASIN_DEPTH = 2;
+    public static final double BASIN_HEIGHT = 2, BASIN_DEPTH = 2 * BASIN_HEIGHT / 3;
     public CoolingTower {
         Objects.requireNonNull(draft); Objects.requireNonNull(mode);
         for (double v : new double[]{width, fillDepth, height, speed, setPoint})

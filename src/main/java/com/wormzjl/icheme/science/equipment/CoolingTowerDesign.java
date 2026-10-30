@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.equipment;
 import com.wormzjl.icheme.science.math.DeterministicMath;
+import com.wormzjl.icheme.science.fluid.network.CoolingTower;
 
 import com.wormzjl.icheme.science.equipment.Mesh.Frame;
 import com.wormzjl.icheme.science.equipment.Mesh.Material;
@@ -15,7 +16,7 @@ final class CoolingTowerDesign extends UnitDesign {
     @Override public double sizeStep(){return natural?10:2;}
     @Override public int minLength(double d){return natural?(int)(2*d):2;}
     @Override public int maxLength(double d){return natural?(int)(2*d):6;}
-    @Override public int defaultLength(double d){return natural?(int)(2*d):2;}
+    @Override public int defaultLength(double d){return natural?(int)(2*d):(int)(d/2);}
     @Override public int lengthStep(){return natural?10:1;}
     @Override public int minSupport(double d,int l){return 0;}
     @Override public int maxSupport(){return 0;}
@@ -39,26 +40,25 @@ final class CoolingTowerDesign extends UnitDesign {
         if(natural)natural(u,d,t.height());else bank(u,d,t.fillDepth(),u.shape.towerBank());
     }
     private static void bank(ProcessUnit u,double d,double fill,TowerBank bank){
-        double w=d*bank.columns(),l=d*bank.rows();
+        double w=d*bank.columns(),l=d*bank.rows(),rim=CoolingTower.BASIN_HEIGHT;
         // A shared metal basin at grade, carried by the steel frame; no concrete plinth.
         u.box(new double[]{0,0,0},new double[]{w,.2,l},Material.SUPPORT,true);
-        u.box(new double[]{-.2,.2,-.2},new double[]{0,3,l+.2},Material.SUPPORT,true);
-        u.box(new double[]{w,.2,-.2},new double[]{w+.2,3,l+.2},Material.SUPPORT,true);
-        u.box(new double[]{0,.2,-.2},new double[]{w,3,0},Material.SUPPORT,true);
-        u.box(new double[]{0,.2,l},new double[]{w,3,l+.2},Material.SUPPORT,true);
+        u.box(new double[]{-.2,.2,-.2},new double[]{0,rim,l+.2},Material.SUPPORT,true);
+        u.box(new double[]{w,.2,-.2},new double[]{w+.2,rim,l+.2},Material.SUPPORT,true);
+        u.box(new double[]{0,.2,-.2},new double[]{w,rim,0},Material.SUPPORT,true);
+        u.box(new double[]{0,.2,l},new double[]{w,rim,l+.2},Material.SUPPORT,true);
         u.fluidPoint=new double[]{.1,.1,.1};
         for(int x=0;x<bank.columns();x++)for(int z=0;z<bank.rows();z++){
             double a=x*d,b=z*d,top=4+fill;
             for(double xx:new double[]{a+.2,a+d-.2})for(double zz:new double[]{b+.2,b+d-.2})
                 u.box(new double[]{xx-.1,0,zz-.1},new double[]{xx+.1,top+3,zz+.1},Material.STEELWORK,true);
+            // One packing layer and its distributor, enclosed by casing from the fill to the fan deck.
             u.box(new double[]{a+.15,4,b+.15},new double[]{a+d-.15,top,b+d-.15},Material.AC_FINS,true);
-            // Distributor and eliminator are repeated once per cell, never stretched across a bank.
             u.box(new double[]{a+.1,top+.3,b+.1},new double[]{a+d-.1,top+.45,b+d-.1},Material.PIPE,true);
-            u.box(new double[]{a+.1,top+1,b+.1},new double[]{a+d-.1,top+1.2,b+d-.1},Material.AC_FINS,true);
-            u.box(new double[]{a,top+.45,b},new double[]{a+.1,top+3,b+d},Material.AC_PLENUM,true);
-            u.box(new double[]{a+d-.1,top+.45,b},new double[]{a+d,top+3,b+d},Material.AC_PLENUM,true);
-            u.box(new double[]{a+.1,top+.45,b},new double[]{a+d-.1,top+3,b+.1},Material.AC_PLENUM,true);
-            u.box(new double[]{a+.1,top+.45,b+d-.1},new double[]{a+d-.1,top+3,b+d},Material.AC_PLENUM,true);
+            u.box(new double[]{a,4,b},new double[]{a+.1,top+3,b+d},Material.AC_PLENUM,true);
+            u.box(new double[]{a+d-.1,4,b},new double[]{a+d,top+3,b+d},Material.AC_PLENUM,true);
+            u.box(new double[]{a+.1,4,b},new double[]{a+d-.1,top+3,b+.1},Material.AC_PLENUM,true);
+            u.box(new double[]{a+.1,4,b+d-.1},new double[]{a+d-.1,top+3,b+d},Material.AC_PLENUM,true);
             // A square fan deck with a circular opening seals the plenum against air bypass.
             for(int j=0;j<32;j++){
                 double first=2*Math.PI*j/32,last=2*Math.PI*(j+1)/32;
@@ -93,8 +93,8 @@ final class CoolingTowerDesign extends UnitDesign {
         var frame=Frame.of(new double[]{axis,0,axis},1,1);
         u.mesh.cylinder(frame,r,0,.2,facets,Material.CONCRETE);
         u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,0,.2,r,0));
-        u.mesh.ring(frame,r,r+.2,.2,3,facets,3,Material.CONCRETE);
-        u.solids.add(ProcessUnit.Solid.ring(axis,axis,.2,3,r,r+.2,0,2*Math.PI));
+        u.mesh.ring(frame,r,r+.2,.2,CoolingTower.BASIN_HEIGHT,facets,3,Material.CONCRETE);
+        u.solids.add(ProcessUnit.Solid.ring(axis,axis,.2,CoolingTower.BASIN_HEIGHT,r,r+.2,0,2*Math.PI));
         // Ring segments approximate one hyperbola; thin collision shells leave the chimney hollow.
         double throat=.55*r,zthroat=.75*(height-10),b=zthroat/Math.sqrt(r*r/(throat*throat)-1);
         for(double y=10;y<height;y+=4){
@@ -111,9 +111,13 @@ final class CoolingTowerDesign extends UnitDesign {
             }
             u.solids.add(ProcessUnit.Solid.hollowCone(axis,axis,y,hi,ra,rb,.25));
         }
+        // Thirty-two perimeter bays carry the shell on crossed diagonal steel ties above the basin rim.
         for(int i=0;i<32;i++){
-            double a=2*Math.PI*i/32,x=axis+(r-.5)*DeterministicMath.cos(a),z=axis+(r-.5)*DeterministicMath.sin(a);
-            u.box(new double[]{x-.2,3,z-.2},new double[]{x+.2,10,z+.2},Material.CONCRETE,true);
+            double a=2*Math.PI*i/32,c=2*Math.PI*(i+1)/32,supportRadius=r-.5;
+            double[] p={axis+supportRadius*DeterministicMath.cos(a),axis+supportRadius*DeterministicMath.sin(a)};
+            double[] q={axis+supportRadius*DeterministicMath.cos(c),axis+supportRadius*DeterministicMath.sin(c)};
+            u.bar(new double[]{p[0],CoolingTower.BASIN_HEIGHT,p[1]},new double[]{q[0],10,q[1]},.15,new double[]{0,1,0},Material.STEELWORK,true);
+            u.bar(new double[]{p[0],10,p[1]},new double[]{q[0],CoolingTower.BASIN_HEIGHT,q[1]},.15,new double[]{0,1,0},Material.STEELWORK,true);
         }
         u.mesh.cylinder(frame,r-.5,10,12,facets,Material.AC_FINS);
         u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,10,12,r-.5,0));

@@ -24,7 +24,7 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
     public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition){this(volume,temperature,pressure,composition,SlurryFeed.NONE);}
     public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids){this(volume,temperature,pressure,composition,solids,com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT);}
     public FluidDeviceSpec {
-        if(tower!=null&&(!open||Math.abs(tower.basinVolume()-volume)>1e-8*volume||levelHeight!=2))throw new IllegalArgumentException("A cooling tower needs its own open basin geometry");
+        if(tower!=null&&(!open||Math.abs(tower.basinVolume()-volume)>1e-8*volume||levelHeight!=com.wormzjl.icheme.science.fluid.network.CoolingTower.BASIN_DEPTH))throw new IllegalArgumentException("A cooling tower needs its own open basin geometry");
         Objects.requireNonNull(solids);Objects.requireNonNull(geometry);if(Math.abs(geometry.capacity()-volume)>volume*1e-8||Math.abs(geometry.height()-levelHeight)>levelHeight*1e-8)throw new IllegalArgumentException("Geometry differs from vessel capacity");composition=composition.clone();
         // Structural bounds only. The input box a setting must lie in is the property package's envelope, so it is checked
         // against the model (validate, initialize), not against constants here.

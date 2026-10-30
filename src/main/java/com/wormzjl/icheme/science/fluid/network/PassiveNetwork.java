@@ -195,7 +195,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids){this(volume,moles,internalEnergy,solids,PassiveStepSolver.LEVEL_HEAD_HEIGHT);}
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight){this(volume,moles,internalEnergy,solids,levelHeight,false);}
         public Inventory {
-            if(tower!=null&&(!open||pool!=null||levelHeight!=2||Math.abs(volume-tower.basinVolume())>volume*1e-8))throw new IllegalArgumentException("Invalid cooling tower basin");
+            if(tower!=null&&(!open||pool!=null||levelHeight!=CoolingTower.BASIN_DEPTH||Math.abs(volume-tower.basinVolume())>volume*1e-8))throw new IllegalArgumentException("Invalid cooling tower basin");
             Objects.requireNonNull(solids);Objects.requireNonNull(geometry);
             moles=moles.clone();if(!Double.isFinite(volume)||volume<=0||!Double.isFinite(internalEnergy)||!Double.isFinite(levelHeight)||levelHeight<=0)throw new IllegalArgumentException("Invalid inventory volume/energy/level height");
             double total=0;for(double n:moles){if(!Double.isFinite(n)||n<0)throw new IllegalArgumentException("Negative/nonfinite inventory");total+=n;}

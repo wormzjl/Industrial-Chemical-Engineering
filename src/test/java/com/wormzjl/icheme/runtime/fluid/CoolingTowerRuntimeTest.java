@@ -16,21 +16,21 @@ class CoolingTowerRuntimeTest {
         var amounts=new double[model.componentCount()];amounts[amounts.length-1]=1;
         double scale=32/model.flashTP(308.15,101325,amounts,()->{}).volume();amounts[amounts.length-1]*=scale;
         var state=model.flashTP(308.15,101325,amounts,()->{});
-        var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),2,true).withTower(tower);
+        var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),CoolingTower.BASIN_DEPTH,true).withTower(tower);
         return new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory)),List.of());
     }
 
     @Test void anEmptyBasinPublishesItsFansThroughTheScheduledDisplay(){
         for(var mode:CoolingTower.Mode.values()){
             var tower=CoolingTower.induced(4,2,1,1).withControl(mode,1,298.15);
-            var empty=PassiveNetwork.emptyVessel(1,0,tower.basinVolume(),2,true,model);
+            var empty=PassiveNetwork.emptyVessel(1,0,tower.basinVolume(),CoolingTower.BASIN_DEPTH,true,model);
             var node=new PassiveNetwork.Reservoir(1,0,empty.state(),empty.kind(),empty.inventory().withTower(tower));
             var result=new PassiveIntervalSolver(model).solve(new PassiveNetwork(List.of(node),List.of()),1,PassiveIntervalSolver.Settings.defaults(),()->{});
             var rates=result.towers().get(1L);assertNotNull(rates);
             assertEquals(mode==CoolingTower.Mode.FAN_SPEED?1:0,rates.fill().speed());
             assertEquals(0,rates.waterLoss());
             if(mode==CoolingTower.Mode.FAN_SPEED)assertTrue(rates.fill().fanPowerWatt()>0);
-            var view=new FluidView(1,0,0,0,"EMPTY",null,0,List.of()).withTank(new FluidView.Tank(2,true,0,0,tower.basinVolume(),null,null))
+            var view=new FluidView(1,0,0,0,"EMPTY",null,0,List.of()).withTank(new FluidView.Tank(CoolingTower.BASIN_DEPTH,true,0,0,tower.basinVolume(),null,null))
                 .withTower(new FluidView.Tower(tower,rates));
             var display=TankDisplay.of(view,model.components(),model.molecularWeights(),EventPathWorld.CATALOG,
                 com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(EventPathWorld.CATALOG));
@@ -41,7 +41,7 @@ class CoolingTowerRuntimeTest {
     @Test void bothTowerTypesPublishTheirAcceptedBottomPressure(){
         for(var tower:new CoolingTower[]{CoolingTower.induced(4,2,1,1),CoolingTower.natural(40)}){
             var state=basin().reservoirs().getFirst().state();
-            var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),2,true).withTower(tower);
+            var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),CoolingTower.BASIN_DEPTH,true).withTower(tower);
             var node=new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory);
             var view=TankOutlets.tank(model,node,null);
             assertEquals(state.pressure()+PassiveStepSolver.portHead(model,node,PassiveNetwork.PhasePort.LIQUID,state),view.bottomPressure());

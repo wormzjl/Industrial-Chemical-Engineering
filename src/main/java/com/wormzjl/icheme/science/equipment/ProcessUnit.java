@@ -3796,6 +3796,22 @@ public final class ProcessUnit {
         return Solid.box(new double[]{Math.min(p[0], q[0]), Math.min(p[1], q[1]), Math.min(p[2], q[2])}, new double[]{Math.max(p[0], q[0]), Math.max(p[1], q[1]), Math.max(p[2], q[2])});
     }
 
+    /** A square bar with the same oriented collision box as its rendered section when {@code solid}. */
+    void bar(double[] a, double[] b, double width, double[] up, Material material, boolean solid) {
+        mesh.bar(a, b, width, up, material);
+        if (!solid) return;
+        var axis = sub(b, a);
+        double length = Math.sqrt(dot(axis, axis));
+        if (length < EPS) return;
+        var dir = scale(axis, 1 / length);
+        var side = cross(dir, up);
+        if (dot(side, side) < EPS) side = cross(dir, Math.abs(dir[0]) < .9 ? new double[]{1, 0, 0} : new double[]{0, 1, 0});
+        side = unit(side);
+        var normal = cross(side, dir);
+        double h = width / 2;
+        solids.add(Solid.block(scale(plus(a, b), .5), scale(dir, length / 2), scale(side, h), scale(normal, h)));
+    }
+
     /** An axis-aligned box, every face drawn; {@code solid} for one a player collides with. */
     void box(double[] lo, double[] hi, Material material, boolean solid) {
         box(lo, hi, ALL_FACES, material, solid);
