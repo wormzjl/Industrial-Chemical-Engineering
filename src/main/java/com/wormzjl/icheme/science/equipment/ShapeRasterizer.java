@@ -190,7 +190,9 @@ public final class ShapeRasterizer {
     }
 
     private static boolean towerShell(EquipmentShape shape,Facet facet){
-        return shape.kind()==EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER&&facet.material()==Material.CONCRETE&&facet.min()[1]>=10-EPS;
+        if(shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER||facet.material()!=Material.CONCRETE)return false;
+        double base=shape.coolingTower().shellBaseHeight();
+        return facet.min()[1]>=base-EPS&&facet.max()[1]>base+EPS;
     }
 
     /**

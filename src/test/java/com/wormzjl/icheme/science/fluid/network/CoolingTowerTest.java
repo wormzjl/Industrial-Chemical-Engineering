@@ -113,7 +113,7 @@ class CoolingTowerTest {
         var source=water(353.15,250000,1);
         assertTrue(TowerExchange.liquidWater(model,source));
         var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),CoolingTower.BASIN_DEPTH,true).withTower(tower);
-        var nodes=java.util.List.of(new PassiveNetwork.Reservoir(1,13.5,source,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory));
+        var nodes=java.util.List.of(new PassiveNetwork.Reservoir(1,tower.distributorHeight(),source,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory));
         var pipe=new PassiveNetwork.Pipe(5,0,1,new PipeResistance.Geometry(10,.05,.000045,0)).withPorts(PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.SPRAY);
         var result=new PassiveStepSolver(model).solve(new PassiveNetwork(nodes,java.util.List.of(pipe)),.1,()->{});
         assertTrue(result.massFlows()[0]>0);
@@ -125,7 +125,7 @@ class CoolingTowerTest {
         var tower=CoolingTower.natural(60);
         var empty=PassiveNetwork.emptyVessel(2,0,tower.basinVolume(),CoolingTower.BASIN_DEPTH,true,model);
         var basin=new PassiveNetwork.Reservoir(2,0,empty.state(),empty.kind(),empty.inventory().withTower(tower));
-        var source=new PassiveNetwork.Reservoir(1,13.5,water(353.15,250000,1),PassiveNetwork.NodeKind.GENERATOR);
+        var source=new PassiveNetwork.Reservoir(1,tower.distributorHeight(),water(353.15,250000,1),PassiveNetwork.NodeKind.GENERATOR);
         var feed=new PassiveNetwork.Pipe(5,0,1,new PipeResistance.Geometry(10,.05,.000045,0)).withPorts(PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.SPRAY);
         var result=new PassiveStepSolver(model).solve(new PassiveNetwork(java.util.List.of(source,basin),java.util.List.of(feed)),.1,()->{});
         assertTrue(result.massFlows()[0]>0);

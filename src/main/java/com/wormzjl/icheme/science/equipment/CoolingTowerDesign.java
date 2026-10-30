@@ -88,17 +88,18 @@ final class CoolingTowerDesign extends UnitDesign {
         u.climb(climb,0,landing,.85,upper,.15);
     }
     private static void natural(ProcessUnit u,double d,double height){
-        // About 2 m chords keep radial error below 2 cm while avoiding sub-block shell facets.
-        double r=d/2,axis=r+.5;int facets=Math.max(48,(int)Math.ceil(Math.PI*d/2));
+        // Four-metre chords and eight-metre bands keep the shell smooth without sub-block GPU facets.
+        double r=d/2,axis=r+.5,base=u.shape.coolingTower().shellBaseHeight();
+        int facets=Math.max(48,(int)Math.ceil(Math.PI*d/4));
         var frame=Frame.of(new double[]{axis,0,axis},1,1);
         u.mesh.cylinder(frame,r,0,.2,facets,Material.CONCRETE);
         u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,0,.2,r,0));
         u.mesh.ring(frame,r,r+.2,.2,CoolingTower.BASIN_HEIGHT,facets,3,Material.CONCRETE);
         u.solids.add(ProcessUnit.Solid.ring(axis,axis,.2,CoolingTower.BASIN_HEIGHT,r,r+.2,0,2*Math.PI));
-        // Ring segments approximate one hyperbola; thin collision shells leave the chimney hollow.
-        double throat=.55*r,zthroat=.75*(height-10),b=zthroat/Math.sqrt(r*r/(throat*throat)-1);
-        for(double y=10;y<height;y+=4){
-            double hi=Math.min(height,y+4),ra=shellRadius(throat,zthroat,b,y),rb=shellRadius(throat,zthroat,b,hi);
+        // The throat stays at three quarters of total height; collision uses the same hyperbolic bands as the mesh.
+        double throat=.55*r,zthroat=.75*height-base,b=zthroat/Math.sqrt(r*r/(throat*throat)-1);
+        for(double y=base;y<height;y+=8){
+            double hi=Math.min(height,y+8),ra=shellRadius(throat,zthroat,b,base,y),rb=shellRadius(throat,zthroat,b,base,hi);
             u.mesh.frustum(frame,ra,rb,y,hi,facets,Material.CONCRETE);
             // Reverse inner face, interpolated with the same radial samples.
             for(int j=0;j<facets;j++){
@@ -111,27 +112,44 @@ final class CoolingTowerDesign extends UnitDesign {
             }
             u.solids.add(ProcessUnit.Solid.hollowCone(axis,axis,y,hi,ra,rb,.25));
         }
-        // Thirty-two perimeter bays carry the shell on crossed diagonal steel ties above the basin rim.
-        for(int i=0;i<32;i++){
-            double a=2*Math.PI*i/32,c=2*Math.PI*(i+1)/32,supportRadius=r-.5;
-            double[] p={axis+supportRadius*DeterministicMath.cos(a),axis+supportRadius*DeterministicMath.sin(a)};
-            double[] q={axis+supportRadius*DeterministicMath.cos(c),axis+supportRadius*DeterministicMath.sin(c)};
-            u.bar(new double[]{p[0],CoolingTower.BASIN_HEIGHT,p[1]},new double[]{q[0],10,q[1]},.15,new double[]{0,1,0},Material.STEELWORK,true);
-            u.bar(new double[]{p[0],10,p[1]},new double[]{q[0],CoolingTower.BASIN_HEIGHT,q[1]},.15,new double[]{0,1,0},Material.STEELWORK,true);
+        // Each perimeter station is a concrete V, buried in the basin rim and the shell's ring beam.
+        double supportRadius=r-.5,strut=d/100;int bays=32;
+        for(int i=0;i<bays;i++){
+            double a=2*Math.PI*i/bays;
+            double[] bottom={axis+supportRadius*DeterministicMath.cos(a),CoolingTower.BASIN_HEIGHT,axis+supportRadius*DeterministicMath.sin(a)};
+            for(int sign:new int[]{-1,1}){
+                double top=a+sign*Math.PI/bays;
+                double[] end={axis+supportRadius*DeterministicMath.cos(top),base,axis+supportRadius*DeterministicMath.sin(top)};
+                u.bar(bottom,end,strut,new double[]{0,1,0},Mesh.NO_ENDS,Material.CONCRETE,true);
+            }
         }
-        u.mesh.cylinder(frame,r-.5,10,12,facets,Material.AC_FINS);
-        u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,10,12,r-.5,0));
-        u.mesh.cylinder(frame,r-.5,13,13.15,facets,Material.PIPE);
-        u.mesh.cylinder(frame,r-.5,14,14.2,facets,Material.AC_FINS);
+        u.mesh.ring(frame,supportRadius-strut/2,supportRadius+strut/2,base-strut,base,facets,3,Material.CONCRETE);
+        u.solids.add(ProcessUnit.Solid.ring(axis,axis,base-strut,base,supportRadius-strut/2,supportRadius+strut/2,0,2*Math.PI));
+        // A steel grillage and nine internal posts carry the fill, leaving the air inlet open between them.
+        double beam=d/160;
+        for(int direction=0;direction<2;direction++)for(int line=-1;line<=1;line++){
+            double offset=line*r/2,reach=Math.sqrt(supportRadius*supportRadius-offset*offset),y=base-beam/2;
+            double[] a={axis-reach,y,axis+offset},end={axis+reach,y,axis+offset};
+            if(direction==1){a=new double[]{axis+offset,y,axis-reach};end=new double[]{axis+offset,y,axis+reach};}
+            u.bar(a,end,beam,new double[]{0,1,0},Mesh.NO_ENDS,Material.STEELWORK,true);
+        }
+        for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++){
+            double px=axis+x*r/2,pz=axis+z*r/2;
+            u.bar(new double[]{px,.2,pz},new double[]{px,base-beam,pz},beam,new double[]{0,1,0},Mesh.NO_ENDS,Material.STEELWORK,true);
+        }
+        u.mesh.cylinder(frame,r-.5,base,base+2,facets,Material.AC_FINS);
+        u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,base,base+2,r-.5,0));
+        u.mesh.cylinder(frame,r-.5,base+3,base+3.15,facets,Material.PIPE);
+        u.mesh.cylinder(frame,r-.5,base+4,base+4.2,facets,Material.AC_FINS);
         u.fluidPoint=new double[]{axis,.1,axis};
         // Attach inside the shell wall at the distributor, using the same straight band as the mesh and collision.
-        double lower=shellRadius(throat,zthroat,b,10),upper=shellRadius(throat,zthroat,b,14);
+        double lower=shellRadius(throat,zthroat,b,base,base),upper=shellRadius(throat,zthroat,b,base,base+4);
         double inletRadius=lower+(upper-lower)*3.5/4;
-        nozzle(u,Role.HOT_WATER_INLET,axis,13.5,axis-r,2,-1,r-inletRadius+.1);
+        nozzle(u,Role.HOT_WATER_INLET,axis,base+3.5,axis-r,2,-1,r-inletRadius+.1);
         basinOutlet(u,axis,axis+r);
     }
-    private static double shellRadius(double throat,double zthroat,double b,double y){
-        return throat*Math.sqrt(1+DeterministicMath.pow((y-10-zthroat)/b,2));
+    private static double shellRadius(double throat,double zthroat,double b,double base,double y){
+        return throat*Math.sqrt(1+DeterministicMath.pow((y-base-zthroat)/b,2));
     }
     /** Both tower kinds draw and register their only outlet in the bottom basin wall. */
     private static void basinOutlet(ProcessUnit u,double x,double z){

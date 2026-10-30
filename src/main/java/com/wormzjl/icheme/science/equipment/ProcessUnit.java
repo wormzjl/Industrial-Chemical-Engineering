@@ -3798,7 +3798,12 @@ public final class ProcessUnit {
 
     /** A square bar with the same oriented collision box as its rendered section when {@code solid}. */
     void bar(double[] a, double[] b, double width, double[] up, Material material, boolean solid) {
-        mesh.bar(a, b, width, up, material);
+        bar(a, b, width, up, Mesh.BOTH_ENDS, material, solid);
+    }
+
+    /** A square bar with selected end faces; buried ends need no polygons. */
+    void bar(double[] a, double[] b, double width, double[] up, int ends, Material material, boolean solid) {
+        mesh.bar(a, b, width, up, ends, material);
         if (!solid) return;
         var axis = sub(b, a);
         double length = Math.sqrt(dot(axis, axis));

@@ -71,13 +71,39 @@ class CoolingTowerGeometryTest {
         assertTrue(unit.inside(new double[]{.05,5,2}),"The casing collides beside the packing");
         assertFalse(unit.inside(new double[]{2,7.1,2}),"The removed upper packing layer leaves open plenum air");
     }
-    @Test void naturalSupportIsAXBracedPerimeterRing(){
-        var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,40,80,EquipmentShape.Heading.NORTH,0);
-        var unit=ProcessUnit.of(shape);double axis=20.5,r=19.5,a=2*Math.PI/32;
-        double[] p={axis+r,2,axis},q={axis+r*Math.cos(a),10,axis+r*Math.sin(a)};
-        assertTrue(unit.inside(new double[]{(p[0]+q[0])/2,6,(p[2]+q[2])/2}),"A diagonal support has matching collision");
-        assertTrue(unit.mesh().facets().stream().anyMatch(f->f.material()==Mesh.Material.STEELWORK&&f.max()[1]-f.min()[1]>4));
-        assertFalse(unit.inside(new double[]{axis,6,axis}),"The support ring leaves the tower's central air open");
+    @Test void naturalSupportScalesWithDiameterAndIncludesAnInternalGrillage(){
+        for(int diameter:new int[]{40,80}){
+            var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,2*diameter,EquipmentShape.Heading.NORTH,0);
+            var tower=shape.coolingTower();var unit=ProcessUnit.of(shape);
+            double axis=diameter/2.0+.5,r=diameter/2.0-.5,base=tower.shellBaseHeight(),strut=diameter/100.0;
+            assertEquals(diameter*3/10.0,tower.airInletHeight());
+            assertEquals(base+3.5,tower.distributorHeight());
+            double a=Math.PI/32;
+            double[] bottom={axis+r,2,axis},top={axis+r*Math.cos(a),base,axis+r*Math.sin(a)};
+            assertTrue(unit.inside(new double[]{(bottom[0]+top[0])/2,(bottom[1]+top[1])/2,(bottom[2]+top[2])/2}),
+                    "A concrete V-strut has matching collision");
+            assertTrue(unit.mesh().facets().stream().anyMatch(f->f.material()==Mesh.Material.CONCRETE&&f.max()[1]-f.min()[1]>=tower.airInletHeight()));
+            assertTrue(unit.inside(new double[]{axis+r,base-strut/2,axis}),"The ring beam joins the V-struts to the shell");
+            assertTrue(unit.inside(new double[]{axis,base/2,axis}),"An internal post reaches the basin floor");
+            assertTrue(unit.inside(new double[]{axis+r/4,base-diameter/320.0,axis}),"A grillage beam carries the fill");
+            assertFalse(unit.inside(new double[]{axis+r/4,base/2,axis+r/4}),"Air passes between the internal supports");
+        }
+    }
+    @Test void naturalShellHasOneQuarterOfItsFormerGpuGeometry(){
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,160,EquipmentShape.Heading.NORTH,0);
+        var unit=ProcessUnit.of(shape);var shell=ShapeRasterizer.towerShell(shape);
+        int facets=Math.max(48,(int)Math.ceil(Math.PI*80/4)),bands=(int)Math.ceil((160-shape.coolingTower().shellBaseHeight())/8);
+        assertEquals(2*facets*bands,shell.size(),"Only chimney bands join the static shell VBO, not concrete supports");
+        assertEquals(4*facets*bands,shell.stream().mapToInt(p->p.size()-2).sum());
+        int triangles=unit.mesh().facets().stream().mapToInt(f->f.positions().size()-2).sum();
+        assertTrue(triangles<8000,"The whole 80 m tower stays below one third of its former 23,016 triangles: "+triangles);
+        for(var polygon:shell)for(int i=1;i<polygon.positions().length;i+=3)
+            assertTrue(polygon.positions()[i]>=shape.coolingTower().shellBaseHeight()-1e-9);
+    }
+    @Test void towerMeshBatchingDoesNotAffectOrdinaryEquipment(){
+        var shape=EquipmentShape.drum(5,10,EquipmentShape.Orientation.VERTICAL,EquipmentShape.Heading.NORTH,3);
+        var cell=ShapeRasterizer.layout(shape).shell().getFirst();
+        assertFalse(ShapeRasterizer.chunkSurface(ShapeRasterizer.key(shape,cell.x(),cell.y(),cell.z())).isEmpty());
     }
     @Test void aFullHeightChimneyStaysHollowAndHasEveryConnection(){
         var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,160,EquipmentShape.Heading.NORTH,0);

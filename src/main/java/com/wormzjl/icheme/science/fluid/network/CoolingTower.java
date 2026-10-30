@@ -32,7 +32,11 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
     public double cellArea() { return draft == Draft.INDUCED ? width * width : Math.PI * width * width / 4; }
     public double area() { return cells() * cellArea(); }
     public double basinVolume() { return BASIN_DEPTH * area(); }
-    public double distributorHeight() { return draft == Draft.INDUCED ? 5.5 + fillDepth : 13.5; }
+    /** Clear air-inlet height above the basin rim; a natural tower scales it with diameter. */
+    public double airInletHeight() { return draft == Draft.NATURAL ? 3 * width / 10 : 2; }
+    /** Bottom of the natural shell or induced casing, above grade. */
+    public double shellBaseHeight() { return BASIN_HEIGHT + airInletHeight(); }
+    public double distributorHeight() { return draft == Draft.INDUCED ? 5.5 + fillDepth : shellBaseHeight() + 3.5; }
     public CoolingTower withControl(Mode mode, double speed, double setPoint) {
         return new CoolingTower(draft, width, fillDepth, height, columns, rows, mode, speed, setPoint);
     }

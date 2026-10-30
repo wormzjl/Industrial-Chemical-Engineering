@@ -40,7 +40,7 @@ public final class NaturalTowerRenderer {
         for(var cell:EquipmentShellBlockEntity.clientTankCells()){
             var shape=cell.shape();var origin=cell.origin();
             if(cell.isRemoved()||cell.getLevel()!=mc.level||shape==null||origin==null||shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER)continue;
-            if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY()+10,origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ())))continue;
+            if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY()+shape.coolingTower().shellBaseHeight(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ())))continue;
             int light=LevelRenderer.getLightColor(mc.level,BlockPos.containing(origin.getX()+shape.sizeX()/2.0,origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ()/2.0));
             var key=new Key(shape,light);var buffer=BUFFERS.get(key);
             if(buffer==null){
