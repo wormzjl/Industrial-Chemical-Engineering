@@ -40,3 +40,10 @@ Final lane results will be recorded here after the run. The reproducible command
 The owner’s second revision removes makeup/overflow nozzles, the float valve and drift; natural height follows diameter at 2:1. A basin level-gauge mount is present, with control linking explicitly deferred. Water levels and accepted fan speed use scheduled open-basin display packets. Natural chimneys upload one cached GPU mesh; chunk surfaces omit that shell and previews use whole coarse facets. Collision and layout occupancy remain independent of render batching.
 
 Native verification is pending completion of the local bridge lane. Direct tools are not exposed in this chat, so the repository’s installed MCP CLI is used over one persistent stdio session, with one Minecraft client. Logs and images stay in `tmp/tower-native/`. No merge or release-version bump has been performed.
+
+## Nozzle size correction
+
+- Expected: each tower's complete wall-to-flange neck follows the connected pipe's outside diameter, while its flange face stays fixed.
+- What the code did instead: both towers drew a separate fixed 0.4 m OD stub behind the shared resizable nozzle, producing the owner's narrow-tube/large-pipe step. The natural inlet also sampled its shell radius before snapping the nozzle elevation to a cell centre.
+- Correction for owner validation: `e79dfb53` removes the fixed mesh/collision stubs and starts each shared nozzle inside its wall, so `ShapeRasterizer` sizes the entire neck. The natural shell attachment now uses the actual cell-centred inlet elevation. `CoolingTowerGeometryTest` pins roots inside both tower walls.
+- Verification: standalone compilation and small/maximum-size root-neck checks passed for induced and 40/80 m natural towers. All six shell counts and layout stamps are unchanged, flange positions are preserved, and natural inlet/outlet close-up software renders were inspected. The older outlet-elevation golden mismatch remains untouched. No Gradle tests or in-game check were run; no compatibility work, merge or version bump.
