@@ -112,11 +112,11 @@ final class CoolingTowerDesign extends UnitDesign {
             }
             u.solids.add(ProcessUnit.Solid.hollowCone(axis,axis,y,hi,ra,rb,.25));
         }
-        // Each perimeter station is a concrete V, buried in the basin rim and the shell's ring beam.
+        // Each perimeter station is a concrete V, anchored in the basin floor and the shell's ring beam.
         double supportRadius=r-.5,strut=d/100;int bays=32;
         for(int i=0;i<bays;i++){
             double a=2*Math.PI*i/bays;
-            double[] bottom={axis+supportRadius*DeterministicMath.cos(a),CoolingTower.BASIN_HEIGHT,axis+supportRadius*DeterministicMath.sin(a)};
+            double[] bottom={axis+supportRadius*DeterministicMath.cos(a),0,axis+supportRadius*DeterministicMath.sin(a)};
             for(int sign:new int[]{-1,1}){
                 double top=a+sign*Math.PI/bays;
                 double[] end={axis+supportRadius*DeterministicMath.cos(top),base,axis+supportRadius*DeterministicMath.sin(top)};

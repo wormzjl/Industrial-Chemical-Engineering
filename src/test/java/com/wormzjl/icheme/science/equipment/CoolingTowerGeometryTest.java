@@ -79,7 +79,8 @@ class CoolingTowerGeometryTest {
             assertEquals(diameter/5.0,tower.airInletHeight());
             assertEquals(base+3.5,tower.distributorHeight());
             double a=Math.PI/32;
-            double[] bottom={axis+r,2,axis},top={axis+r*Math.cos(a),base,axis+r*Math.sin(a)};
+            double[] bottom={axis+r,0,axis},top={axis+r*Math.cos(a),base,axis+r*Math.sin(a)};
+            assertTrue(unit.inside(new double[]{axis+r,.1,axis}),"The V-strut foot reaches the basin floor");
             assertTrue(unit.inside(new double[]{(bottom[0]+top[0])/2,(bottom[1]+top[1])/2,(bottom[2]+top[2])/2}),
                     "A concrete V-strut has matching collision");
             assertTrue(unit.mesh().facets().stream().anyMatch(f->f.material()==Mesh.Material.CONCRETE&&f.max()[1]-f.min()[1]>=tower.airInletHeight()));
