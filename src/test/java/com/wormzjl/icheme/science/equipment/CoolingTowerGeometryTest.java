@@ -75,19 +75,20 @@ class CoolingTowerGeometryTest {
         for(int diameter:new int[]{40,80}){
             var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,2*diameter,EquipmentShape.Heading.NORTH,0);
             var tower=shape.coolingTower();var unit=ProcessUnit.of(shape);
-            double axis=diameter/2.0+.5,r=diameter/2.0-.5,base=tower.shellBaseHeight(),strut=diameter/100.0;
+            double axis=diameter/2.0+.5,foot=diameter/2.0-.5,ring=.9*diameter/2.0-diameter/200.0,base=tower.shellBaseHeight(),strut=diameter/100.0;
             assertEquals(diameter/5.0,tower.airInletHeight());
             assertEquals(base+3.5,tower.distributorHeight());
             double a=Math.PI/32;
-            double[] bottom={axis+r,0,axis},top={axis+r*Math.cos(a),base,axis+r*Math.sin(a)};
-            assertTrue(unit.inside(new double[]{axis+r,.1,axis}),"The V-strut foot reaches the basin floor");
+            double[] bottom={axis+foot,0,axis},top={axis+ring*Math.cos(a),base,axis+ring*Math.sin(a)};
+            assertTrue(ring<foot-strut,"Every perimeter member leans radially inward, not just around the circumference");
+            assertTrue(unit.inside(new double[]{axis+foot,.1,axis}),"The V-strut foot reaches the basin floor");
             assertTrue(unit.inside(new double[]{(bottom[0]+top[0])/2,(bottom[1]+top[1])/2,(bottom[2]+top[2])/2}),
-                    "A concrete V-strut has matching collision");
+                    "The inclined concrete V-strut has matching collision");
             assertTrue(unit.mesh().facets().stream().anyMatch(f->f.material()==Mesh.Material.CONCRETE&&f.max()[1]-f.min()[1]>=tower.airInletHeight()));
-            assertTrue(unit.inside(new double[]{axis+r,base-strut/2,axis}),"The ring beam joins the V-struts to the shell");
+            assertTrue(unit.inside(new double[]{axis+ring,base-strut/2,axis}),"Every V-strut top meets the resized chimney's ring");
             assertTrue(unit.inside(new double[]{axis,base/2,axis}),"An internal post reaches the basin floor");
-            assertTrue(unit.inside(new double[]{axis+r/4,base-diameter/320.0,axis}),"A grillage beam carries the fill");
-            assertFalse(unit.inside(new double[]{axis+r/4,base/2,axis+r/4}),"Air passes between the internal supports");
+            assertTrue(unit.inside(new double[]{axis+foot/4,base-diameter/320.0,axis}),"A grillage beam carries the fill");
+            assertFalse(unit.inside(new double[]{axis+foot/4,base/2,axis+foot/4}),"Air passes between the internal supports");
         }
     }
     @Test void naturalShellHasOneQuarterOfItsFormerGpuGeometry(){
