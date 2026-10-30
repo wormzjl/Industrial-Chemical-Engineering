@@ -7,6 +7,7 @@ The constructor adds induced-draft banks of bounded parallel cells and passive n
 - [Accepted design](COOLING_TOWER_PLAN.md): dimensions, physics, controls and exclusions.
 - [Implementation and verification](COOLING_TOWER_REVIEW.md): owning code, conservation, formats, evidence and remaining qualification.
 - [Cooler defect follow-up](COOLING_TOWER_FIX_REVIEW.md): fan power, bottom pressure, basin exchange and 80 °C natural-feed evidence.
+- [Induced-tower geometry follow-up](INDUCED_TOWER_GEOMETRY_REVIEW.md): basin-floor legs, fan-deck collision and geometry evidence.
 - [Code guide](../reference/code-guide/cooling-towers.md).
 - [Verification tools](../../tools/cooling-towers/README.md).
 
@@ -19,3 +20,5 @@ History: 2026-10-30 — shortened both designs' nozzle welds to the walls, attac
 History: 2026-10-30 — extracted the tank gauge's translucent drawing into `LiquidRenderer` and reused it for both tower basin surfaces. Water now retains its material transparency instead of the basin's forced minimum opacity; tank gauge readability is preserved. Source/whitespace review only, with no tests, builds or client checks under the owner's standing instruction.
 
 History: 2026-10-30 — `kimi/water-cooler-fixes` (`dd71de17`, based on `2433b1355`) made fan power speed-only for a fixed tower, added bottom pressure to both GUIs and removed basin evaporation. Natural 80 °C operation was already accepted on the base and is now pinned by direct, coupled and empty-startup regressions. Focused tests and slow gates pass; the quick suite's sole failure is the pre-existing stale equipment-layout golden. The owner will perform the native GUI check. No merge or version bump.
+
+History: 2026-10-30 — `98789eaa` extends induced-tower legs to the basin floor and adds square fan-deck collision without closing the fan opening. Focused geometry checks and slow gates pass; software `iso`/`top` renders were inspected. The quick suite retains only the known older tower layout-golden mismatch. No merge, client check or version bump.

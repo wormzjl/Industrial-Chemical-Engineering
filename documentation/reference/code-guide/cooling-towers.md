@@ -1,6 +1,6 @@
 # Water cooling towers
 
-**Branch snapshot:** `dd71de17` (`kimi/water-cooler-fixes`), based on `codex/water-cooling-tower` at `2433b1355` and main `79b853e0d`, mod 0.17.1, 2026-10-30. Unmerged. Batch: [2026-10-30-water-cooling-tower](../../2026-10-30-water-cooling-tower/README.md). Up: [code guide](README.md).
+**Branch snapshot:** `98789eaa` (`kimi/water-cooler-fixes`), based on `codex/water-cooling-tower` at `2433b1355` and main `79b853e0d`, mod 0.17.1, 2026-10-30. Unmerged. Batch: [2026-10-30-water-cooling-tower](../../2026-10-30-water-cooling-tower/README.md). Up: [code guide](README.md).
 
 ## Geometry and placement
 
@@ -8,7 +8,7 @@
 
 `CoolingTowerDesign` uses width 4, 6 or 8 m and fill 2–6 m for each fan cell. It repeats each fan, fill, distributor and eliminator at cell pitch; it builds one shared metal basin, steel frame and bank access. Concrete is not used in this structure. Each tower has one water inlet at distributor height and one basin outlet centred 0.5 m above the base, without an internal riser. Makeup shares the inlet. Natural towers have diameter 40–80 m in 10 m increments; height follows automatically at twice diameter, default 60 × 120 m. `CoolingTower` derives nominal contact area and the 2 m basin volume from these dimensions.
 
-Both designs use the same bottom-outlet builder. Nozzle welds end within their wall instead of projecting into the interior; the natural inlet follows the shell band's radius at distributor height while keeping its external flange position. Each fan cell uses `ProcessUnit.axialFan`, an open metal cowl with a rotor and grille. The shared rotor builder places the animation pivot inside the hub so its owning shell cell exists below the top grille.
+Both designs use the same bottom-outlet builder. Nozzle welds end within their wall instead of projecting into the interior; the natural inlet follows the shell band's radius at distributor height while keeping its external flange position. Each fan cell uses `ProcessUnit.axialFan`, an open metal cowl with a rotor and grille. The shared rotor builder places the animation pivot inside the hub so its owning shell cell exists below the top grille. Induced-tower legs run from the basin floor at `y = 0` to the fan deck. The square deck has an `Access.DECK`-thick annular solid clipped to the cell bounds; its `0.35 × width` central opening stays clear, with the cowl collision registered separately.
 
 The natural shell is made of 4 m hyperbolic bands with about 2 m circumferential chords. Matching `Solid.hollowCone` bands leave the chimney air empty. `ShapeRasterizer` adds only cells touched by facets, nozzles or climbs and sorts the result; it does not scan/fill the entire bounding volume. `NaturalTowerRenderer` uploads one static shell VBO and draws it once; `chunkSurface` omits the same facets from chunk quads. `EquipmentGhost` uses whole tower facets for its preview. Ordinary placement checks every occupied cell against world height and blocks. Existing refresh logic restores cells and ports when chunks load.
 
