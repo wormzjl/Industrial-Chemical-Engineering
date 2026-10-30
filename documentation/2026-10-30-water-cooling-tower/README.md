@@ -7,11 +7,11 @@ The constructor adds induced-draft banks of bounded parallel cells and passive n
 - [Accepted design](COOLING_TOWER_PLAN.md): dimensions, physics, controls and exclusions.
 - [Implementation and verification](COOLING_TOWER_REVIEW.md): owning code, conservation, formats, evidence and remaining qualification.
 - [Cooler defect follow-up](COOLING_TOWER_FIX_REVIEW.md): fan power, bottom pressure, basin exchange and 80 °C natural-feed evidence.
-- [Induced-tower geometry follow-up](INDUCED_TOWER_GEOMETRY_REVIEW.md): basin-floor legs, fan-deck collision and geometry evidence.
+- [Tower geometry follow-up](INDUCED_TOWER_GEOMETRY_REVIEW.md): basin-floor legs, fan collision, smaller basins, enclosed single-layer fill and natural-support evidence.
 - [Code guide](../reference/code-guide/cooling-towers.md).
 - [Verification tools](../../tools/cooling-towers/README.md).
 
-The owned worktree is `<main repo>/.claude/worktrees/water-cooling-tower/`. Scratch scripts and renders are indexed in its `tmp/tower-dev/`; final lane output and its fresh GameTest world are in `tmp/tower-verification/`. Do not remove these unmerged results as cleanup.
+The original worktree is `<main repo>/.claude/worktrees/water-cooling-tower/`; this follow-up branch uses `<main repo>/.claude/worktrees/water-cooler-fixes-kimi/`. Scratch scripts and renders are indexed in the owning worktree's `tmp/tower-dev/`; final lane output and its fresh GameTest world are in `tmp/tower-verification/`. Do not remove these unmerged results as cleanup.
 
 History: 2026-10-30 — implemented the accepted plan; removed concrete from the induced-draft bank at the owner's request. The revised two-nozzle model, target-temperature control, basin water and optimized natural chimney replace the initial proposal. Native checks use the repository’s local MCP bridge launcher in one client session; valve linking is deferred by owner choice.
 
@@ -24,3 +24,5 @@ History: 2026-10-30 — `kimi/water-cooler-fixes` (`dd71de17`, based on `2433b13
 History: 2026-10-30 — `98789eaa` extends induced-tower legs to the basin floor and adds square fan-deck collision without closing the fan opening. Focused geometry checks and slow gates pass; software `iso`/`top` renders were inspected. The quick suite retains only the known older tower layout-golden mismatch. No merge, client check or version bump.
 
 History: 2026-10-30 — after the owner's fan screenshot, `44044ff2` makes the rotor/grille volume solid throughout the cowl. Main and test compilation pass and occupied-cell layouts are unchanged; test execution is deferred while the owner's dev client is running. No merge or version bump.
+
+History: 2026-10-30 — `aa8381cb` reduces both basins to 2 m walls and 4/3 m working depth, scales default induced fill to half cell width, encloses one packing layer and replaces natural posts with 32 X-braced perimeter bays. No compatibility code was added by owner choice; the current schema-6 fixture was regenerated. Forty-four focused checks and independent slow gates pass; 1,838 quick tests have only the older outlet-golden failure. Software renders were inspected, with no client launched, merge or version bump.
