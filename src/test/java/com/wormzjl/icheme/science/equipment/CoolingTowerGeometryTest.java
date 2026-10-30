@@ -76,7 +76,7 @@ class CoolingTowerGeometryTest {
             var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,2*diameter,EquipmentShape.Heading.NORTH,0);
             var tower=shape.coolingTower();var unit=ProcessUnit.of(shape);
             double axis=diameter/2.0+.5,r=diameter/2.0-.5,base=tower.shellBaseHeight(),strut=diameter/100.0;
-            assertEquals(diameter*3/10.0,tower.airInletHeight());
+            assertEquals(diameter/5.0,tower.airInletHeight());
             assertEquals(base+3.5,tower.distributorHeight());
             double a=Math.PI/32;
             double[] bottom={axis+r,2,axis},top={axis+r*Math.cos(a),base,axis+r*Math.sin(a)};
