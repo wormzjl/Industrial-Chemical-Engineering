@@ -50,7 +50,7 @@ final class CoolingTowerDesign extends UnitDesign {
         for(int x=0;x<bank.columns();x++)for(int z=0;z<bank.rows();z++){
             double a=x*d,b=z*d,top=4+fill;
             for(double xx:new double[]{a+.2,a+d-.2})for(double zz:new double[]{b+.2,b+d-.2})
-                u.box(new double[]{xx-.1,3,zz-.1},new double[]{xx+.1,top+3,zz+.1},Material.STEELWORK,true);
+                u.box(new double[]{xx-.1,0,zz-.1},new double[]{xx+.1,top+3,zz+.1},Material.STEELWORK,true);
             u.box(new double[]{a+.15,4,b+.15},new double[]{a+d-.15,top,b+d-.15},Material.AC_FINS,true);
             // Distributor and eliminator are repeated once per cell, never stretched across a bank.
             u.box(new double[]{a+.1,top+.3,b+.1},new double[]{a+d-.1,top+.45,b+d-.1},Material.PIPE,true);
@@ -70,6 +70,9 @@ final class CoolingTowerDesign extends UnitDesign {
                 double[] inner1={a+d/2+.35*d*DeterministicMath.cos(last),top+3,b+d/2+.35*d*DeterministicMath.sin(last)};
                 u.mesh.flat(List.of(inner1,outer1,outer0,inner0),new double[]{0,1,0},Material.AC_PLENUM);
             }
+            // Match the square deck, not its circular bound: the corners collide and the fan opening stays clear.
+            u.solids.add(ProcessUnit.Solid.ring(a+d/2,b+d/2,top+3,top+3+Access.DECK,.35*d,d/2*Math.sqrt(2),0,0)
+                    .clip(new double[]{a,top+3,b},new double[]{a+d,top+3+Access.DECK,b+d}));
             var frame=Frame.of(new double[]{a+d/2,0,b+d/2},1,1);
             u.axialFan(frame,.35*d,top+4,1,32,ProcessUnit.FAN_SPEED);
             u.solids.add(ProcessUnit.Solid.ring(a+d/2,b+d/2,top+3,top+4,.35*d,.35*d+.08,0,2*Math.PI));

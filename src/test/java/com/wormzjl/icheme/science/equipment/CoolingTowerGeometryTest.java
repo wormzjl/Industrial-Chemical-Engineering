@@ -34,6 +34,19 @@ class CoolingTowerGeometryTest {
         assertTrue(ShapeRasterizer.layout(shape).interior().isEmpty());
         assertThrows(IllegalArgumentException.class,()->EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,10,2,EquipmentShape.Heading.NORTH,0));
     }
+    @Test void inducedFrameReachesBasinFloorAndFanDeckCollides(){
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,4,2,EquipmentShape.Heading.NORTH,0);
+        var unit=ProcessUnit.of(shape);
+        assertTrue(unit.mesh().facets().stream().anyMatch(f->f.material()==Mesh.Material.STEELWORK
+                && f.min()[0]>=.1-1e-9&&f.max()[0]<=.3+1e-9&&f.min()[2]>=.1-1e-9&&f.max()[2]<=.3+1e-9
+                && f.min()[1]==0&&f.max()[1]==9),"A leg is drawn from the basin floor to the fan deck");
+        assertTrue(unit.inside(new double[]{.2,.5,.2}),"The leg also collides below the basin rim");
+        double deck=9,centre=2;
+        assertTrue(unit.inside(new double[]{centre+.425*4,deck+.01,centre}),"The square fan deck collides outside the cowl");
+        assertTrue(unit.inside(new double[]{3.95,deck+.01,3.95}),"The fan deck reaches the square cell's corners");
+        assertFalse(unit.inside(new double[]{-.05,deck+.01,centre}),"Its collision does not project beyond the cell");
+        assertFalse(unit.inside(new double[]{centre,deck+.01,centre}),"The central fan opening stays hollow");
+    }
     @Test void aFullHeightChimneyStaysHollowAndHasEveryConnection(){
         var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,160,EquipmentShape.Heading.NORTH,0);
         var unit=ProcessUnit.of(shape);double axis=40.5;
