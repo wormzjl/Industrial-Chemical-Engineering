@@ -21,3 +21,5 @@ Thirty-five focused checks passed for `0491f75d` before its support-height adjus
 Only natural-tower shell counts, stamps and inlet elevations changed in the layout golden. Existing natural outlet `y = 13` and induced outlet `y = 7` entries remain despite generated `y = 0`; that older unrelated mismatch is intentionally not refreshed without owner approval. Induced rows are unchanged.
 
 No compatibility fields, migration, merge or version bump were added. The owner's remaining check is visual scale and collision in game at 40 m and 80 m diameters. Scratch census and renders stay under the owning worktree's ignored `tmp/tower-dev/`; no tool-folder change was needed.
+
+The owner selected the native 32 × 32 pixel-art concrete texture after comparing 16 × 16, 32 × 32 and 64 × 64 mockups. It replaces the earlier coarse speckling with restrained warm-grey clusters. Only the texture asset changed; the approved swatch and tower comparisons were inspected, with no build, test or client check for this asset-only update. Code guide: no change.
