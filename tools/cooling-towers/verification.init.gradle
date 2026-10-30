@@ -1,0 +1,7 @@
+// Keep this batch's fresh GameTest world and server logs in its indexed scratch folder.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    project.extensions.getByName('neoForge').runs.named('fluidGameTestServer') {
+        gameDirectory = project.layout.projectDirectory.dir('tmp/tower-verification/gametest-final')
+    }
+}

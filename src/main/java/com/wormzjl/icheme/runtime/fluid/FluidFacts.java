@@ -42,7 +42,7 @@ final class FluidFacts {
      *  4 (batch 2026-10-26-multi-machine-framework): the world's basis retires its hash of the package data (written empty)
      *  and appends the data's identity, the declared revision of every record it reads (owner decisions 2026-10-26).
      *  5 (batch 2026-10-27-heat-exchanger-design): a geometry's channel count, a heat side's unit on its registration. */
-    static final int SCHEMA=5;
+    static final int SCHEMA=6;
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 5. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
@@ -221,6 +221,17 @@ final class FluidFacts {
         for(var e:f.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))if(solids.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate solid total");
         required(moles,f,"total moles");return valid(f,"total",()->new WorldTopologyLedger.MaterialTotal(moles,energy,solids));
     }
+    private static void tower(Fields f,com.wormzjl.icheme.science.fluid.network.CoolingTower t) {
+        f.name(t.draft()).f64(t.width()).f64(t.fillDepth()).f64(t.height()).count(t.columns()).count(t.rows())
+            .name(t.mode()).f64(t.speed()).f64(t.setPoint());
+    }
+    private static com.wormzjl.icheme.science.fluid.network.CoolingTower tower(Record f) {
+        var draft=f.name(com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.class,null);
+        double w=f.f64(0),fill=f.f64(0),height=f.f64(0);int columns=(int)f.count(0),rows=(int)f.count(0);
+        var mode=f.name(com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.class,null);
+        double speed=f.f64(0),target=f.f64(298.15);
+        return valid(f,"cooling tower",()->new com.wormzjl.icheme.science.fluid.network.CoolingTower(draft,w,fill,height,columns,rows,mode,speed,target));
+    }
     private static void registration(Fields f,WorldTopologyLedger.Registration r) {
         var d=r.device();var g=d.geometry();var s=r.spec();
         f.count(d.id());position(f,d.position());f.name(d.kind()).name(d.facing())
@@ -229,7 +240,7 @@ final class FluidFacts {
                 .list(d.ports(),(q,p)->{position(q,p.cell());q.name(p.face()).name(p.port()).name(p.role());})
                 .record(q->q.f64(s.volume()).f64(s.temperature()).f64(s.pressure()).doubles(s.composition())
                         .record(feed->feed.f64(s.solids().volumeFraction()).list(s.solids().grades(),(e,grade)->e.text(grade.material()).text(grade.size().metres()).f64(grade.massShare())))
-                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())))
+                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower))
                 .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points())
                 .list(d.heat()==null?List.<HeatUnit>of():List.of(d.heat()),FluidFacts::heatUnit);
     }
@@ -255,7 +266,8 @@ final class FluidFacts {
                 return valid(g,"slurry grade",()->new SlurryFeed.Grade(material,new ParticleSize(size),share));});return valid(e,"slurry feed",()->new SlurryFeed(fraction,grades));});
             double levelHeight=q.f64(com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT);boolean open=q.bool(false);
             var shape=q.record(com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(volume,levelHeight),FluidFacts::geometry);
-            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape));});
+            var towers=q.list(List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of(),FluidFacts::tower);if(towers.size()>1)throw q.invalid("Multiple cooling towers");
+            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst()));});
         long revision=f.count(0);
         // Schema 2: a record written before joints existed connects through every face, as every pipe did then.
         long joints=f.count(PhysicalFluidTopology.ALL_FACES);if(joints>PhysicalFluidTopology.ALL_FACES)throw f.invalid("joints "+joints);
@@ -459,7 +471,7 @@ final class FluidFacts {
         for(var r:world.registrations) {
             var spec=r.spec();var composition=axis.map(spec.composition(),null);
             if(Arrays.stream(composition).sum()<=0){composition=FluidDeviceSpec.nitrogen(catalog).composition();warn("device "+r.device().id()+": its spec holds only components the data no longer has; it now holds nitrogen");}
-            if(restate)spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),spec.pressure(),composition,spec.solids(),spec.levelHeight(),spec.open(),spec.geometry());
+            if(restate)spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),spec.pressure(),composition,spec.solids(),spec.levelHeight(),spec.open(),spec.geometry(),spec.tower());
             registrations.put(r.device().id(),new WorldTopologyLedger.Registration(r.device(),spec,r.revision()));
         }
         // Vessel contents and filter cakes, by device identity.
@@ -474,13 +486,13 @@ final class FluidFacts {
                 PassiveNetwork.Reservoir node;
                 if(!restate&&from.identity()) {
                     var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?model.solidState(v.temperature,v.pressure,solids):model.state(v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure).withSolids(solids);
-                    node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry()));
+                    node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower()));
                 } else {
                     var moles=from.map(v.moles,removed);restated++;
                     if(Arrays.stream(moles).sum()==0&&solids.empty())node=r.spec().initialize(r.device(),model,()->{});
                     else {
                         var state=Arrays.stream(moles).sum()==0?model.solidState(v.temperature,v.pressure,solids):model.flashTP(v.temperature,v.pressure,moles,()->{}).withSolids(solids);
-                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry()));
+                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower()));
                     }
                     energy+=node.inventory().internalEnergy()-v.energy;
                 }
@@ -526,7 +538,7 @@ final class FluidFacts {
             double t=Math.min(box.maximumTemperature(),Math.max(box.minimumTemperature(),spec.temperature())),p=Math.min(box.maximumPressure(),Math.max(box.minimumPressure(),spec.pressure()));
             if(t!=spec.temperature()||p!=spec.pressure()) {
                 warn("device "+d.id()+": its spec "+spec.temperature()+" K, "+spec.pressure()+" Pa lies outside the package's input box; it now reads "+t+" K, "+p+" Pa");
-                spec=new FluidDeviceSpec(spec.volume(),t,p,spec.composition(),spec.solids(),spec.levelHeight(),spec.open(),spec.geometry());
+                spec=new FluidDeviceSpec(spec.volume(),t,p,spec.composition(),spec.solids(),spec.levelHeight(),spec.open(),spec.geometry(),spec.tower());
             }
         }
         return spec.initialize(d,model,()->{});

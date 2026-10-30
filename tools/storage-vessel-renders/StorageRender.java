@@ -47,7 +47,9 @@ public class StorageRender {
         double level = Double.parseDouble(args[4]);
         String out = args[5];
         var views = args.length > 6 ? args[6].split(",") : new String[]{"iso", "front", "right", "top"};
-        var shape = EquipmentShape.storage(kind, size, length, Heading.NORTH, support);
+        var shape = kind.storage()?EquipmentShape.storage(kind, size, length, Heading.NORTH, support)
+                :EquipmentShape.unit(kind,size,length,Heading.NORTH,support);
+        if(kind==Kind.INDUCED_DRAFT_COOLING_TOWER&&args.length>8)shape=shape.withTowerBank(new TowerBank(Integer.parseInt(args[7]),Integer.parseInt(args[8])));
         var sprites = sprites();
         var triangles = new ArrayList<Triangle>();
         for (var cell : ShapeRasterizer.layout(shape).shell())

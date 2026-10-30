@@ -69,6 +69,9 @@ class FluidFactsCompatTest {
                 new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,330,280,.25),1234.5));
         var shellSide=heatSide(shell,30,4,HeatSides.shellPassage(1,6),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,450,tube));
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(tube,new WorldTopologyLedger.Registration(tubeSide,spec,0)),new WorldTopologyLedger.Edit(shell,new WorldTopologyLedger.Registration(shellSide,spec,0))),shell+1,null);
+        var tower=CoolingTower.induced(6,2,2,3).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,.4,299);
+        world.place(50,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(tower.basinVolume(),298.15,101325,
+            FluidDeviceSpec.water(CATALOG).composition(),SlurryFeed.NONE,2,true).withTower(tower),.05);
         world.runTo(700);return world;
     }
     private static PhysicalFluidTopology.Device heatSide(long id,int x,int z,PipeResistance.Geometry passage,HeatUnit heat) {
@@ -234,6 +237,13 @@ class FluidFactsCompatTest {
     // ---------------- the corpus: one image per facts schema ----------------
 
     private static final Path CORPUS=Path.of("src/test/resources/compat/fluid");
+    @Test void towerSettingsSurviveBothExactAndFactsOnlyLoads(){
+        var world=corpusWorld();var saved=image(world);
+        for(var restored:List.of(load(saved,key->model,CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->model,CATALOG))){
+            var towers=restored.world().orElseThrow().active().values().stream().map(r->r.spec().tower()).filter(java.util.Objects::nonNull).toList();
+            assertEquals(List.of(CoolingTower.induced(6,2,2,3).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,.4,299)),towers);
+        }
+    }
 
     /**
      * Every corpus image rebuilds from its facts to the registry, vessel count and stock it was written with. The image

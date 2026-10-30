@@ -1,5 +1,7 @@
 # Fluid network science
 
+**Water cooling towers — branch update 2026-10-30:** `codex/water-cooling-tower`, based on main `79b853e0d` (0.17.1), unmerged. `CoolingTower`, `TowerTransfer` and `TowerExchange` couple eight fill segments and signed draft with water and energy residuals. Atmospheric mass exchange is outside `HeatLaw`, and conservative reconstruction books the same boundary. Basin surface contact continues without spray. Details: [cooling-towers.md](cooling-towers.md).
+
 **Process control (batch 2026-10-26-process-control, 0.14.1):** vessel geometry, control valves and conditional outlet streams; the contracts are in [process-control.md](process-control.md).
 
 `VesselGeometry` supplies cumulative condensed volume, inverse body-relative height, boot datum and stacked-phase hydrostatic head. The head (`head`) stands over the body bottom, z = 0, the vessel node's elevation: a boot's column is the line below its nozzle, which the connection's column carries. `PassiveStepSolver.portHead` weighs each round-vessel layer's liquid and its volume share of the solids (`phaseSolidShare`); a vessel holding solids and no liquid stands them as one bed. Existing constructed capacities stay unchanged; prism geometry is the legacy registration default. Height percentage is height/span, with raw out-of-span telemetry.

@@ -1,5 +1,7 @@
 # Equipment: parametric vessels, columns and units on the block grid
 
+**Water cooling towers — branch update 2026-10-30:** `codex/water-cooling-tower`, based on main `79b853e0d` (0.17.1), unmerged. `CoolingTowerDesign`, `TowerBank` and appended tower kinds/nozzle roles add repeated fan cells and a hollow natural chimney. Sparse tower layouts preserve air volume. Fan banks have a metal basin and steel frame without concrete support. Equipment shape fields are 4 and protocol is `equipment-15`. Details: [cooling-towers.md](cooling-towers.md).
+
 **Process control (batch 2026-10-26-process-control, 0.14.1):** a vessel's fluid geometry and the sensor sockets; the contracts are in [process-control.md](process-control.md).
 
 `EquipmentShape.fluidGeometry()` derives cylinder, sphere, vertical/horizontal 2:1-head drum and boot geometry from existing saved dimensions. It preserves `volume()`, fill height, origin, paint, nozzles and layout. Spheres pass zero tangent length to the sphere geometry. `EquipmentStructure` registers geometry and boot-specific outlet roles; on load a legacy registration queues an edit without forcing neighboring chunks.

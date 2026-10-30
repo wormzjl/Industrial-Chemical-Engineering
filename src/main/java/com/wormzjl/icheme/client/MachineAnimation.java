@@ -92,6 +92,11 @@ public final class MachineAnimation {
             var origin = cell.origin();
             if (cell.isRemoved() || cell.getLevel() != level || shape == null || origin == null) continue;
             double motionSeconds = running && MoverSounds.running(cell) ? seconds : 0;
+            if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER){
+                var node=ShapeRasterizer.fluidCell(shape);
+                var display=TankRenderer.get(origin.offset(node.x(),node.y(),node.z()),level.getGameTime()+event.getPartialTick().getGameTimeDeltaPartialTick(false));
+                motionSeconds*=display==null?0:display.fanSpeed();
+            }
             var parts = ShapeRasterizer.moving(shape);
             double unitPhase = Math.floorMod(31L * origin.getX() + 7L * origin.getY() + origin.getZ(), 97) / 97.0;
             for (int index : cell.moving()) {

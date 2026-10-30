@@ -167,6 +167,32 @@ public final class ShapeRasterizer {
         return surface(key.shape(), c[0], c[1], c[2], key.nozzles(), false);
     }
 
+    /** Chunk geometry excludes the natural chimney rendered as one cached GPU mesh. Layout and collision stay intact. */
+    public static List<Polygon> chunkSurface(CellKey key) {
+        int[] c=cell(key);
+        return surface(key.shape(),c[0],c[1],c[2],key.nozzles(),false,true);
+    }
+
+    public static List<Polygon> towerShell(EquipmentShape shape){
+        if(shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER)return List.of();
+        var g=geometry(shape);var polygons=new ArrayList<Polygon>();
+        for(var facet:g.mesh.facets())if(towerShell(shape,facet))polygons.add(Mesh.whole(facet));
+        return List.copyOf(polygons);
+    }
+
+    /** A tower preview uses whole facets instead of repeating the per-block clipping and baked vertices. */
+    public static List<Polygon> towerPreview(EquipmentShape shape){
+        if(!shape.kind().coolingTower())throw new IllegalArgumentException("A tower is required");
+        var g=geometry(shape);var polygons=new ArrayList<Polygon>();
+        for(var facet:g.mesh.facets())polygons.add(Mesh.whole(facet));
+        for(int nozzle=0;nozzle<g.nozzles.size();nozzle++)for(var facet:g.nozzle(nozzle,0).facets())polygons.add(Mesh.whole(facet));
+        return List.copyOf(polygons);
+    }
+
+    private static boolean towerShell(EquipmentShape shape,Facet facet){
+        return shape.kind()==EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER&&facet.material()==Material.CONCRETE&&facet.min()[1]>=10-EPS;
+    }
+
     /**
      * A unit's moving part in the box: its motion (pivot and axis in box coordinates), its polygons relative to the pivot,
      * cut at the cell grid as the chunk mesh cuts them (the moving part shows the still one's texels), and its farthest
@@ -397,11 +423,14 @@ public final class ShapeRasterizer {
 
     /** Surface polygons of the cell, with or without the {@code moving} parts' facets. */
     private static List<Polygon> surface(EquipmentShape shape, int x, int y, int z, long codes, boolean moving) {
+        return surface(shape,x,y,z,codes,moving,false);
+    }
+    private static List<Polygon> surface(EquipmentShape shape, int x, int y, int z, long codes, boolean moving,boolean batchTower) {
         if (!drawing) throw new IllegalStateException("A dedicated server keeps no surfaces");
         var g = geometry(shape);
         var out = new ArrayList<Polygon>();
         var cell = new Cell(x, y, z);
-        for (var facet : g.facetsIn(cell)) if (moving || facet.part() < 0) g.mesh.cell(facet, x, y, z, out);
+        for (var facet : g.facetsIn(cell)) if ((moving || facet.part() < 0)&&(!batchTower||!towerShell(shape,facet))) g.mesh.cell(facet, x, y, z, out);
         var reaching = g.reaching(cell);
         for (int j = 0; j < reaching.length; j++) {
             var mesh = g.nozzle(reaching[j], code(codes, j));
@@ -1172,6 +1201,12 @@ public final class ShapeRasterizer {
             climbCells(cells);
             var shellCells = new ArrayList<Cell>();
             var interiorCells = new ArrayList<Cell>();
+            if(shape.kind().coolingTower()) {
+                // Towers contain air, not a closed process volume. Visit occupied surface cells only.
+                shellCells.addAll(cells.stream().filter(c->c.x()>=0&&c.x()<sx&&c.y()>=0&&c.y()<sy&&c.z()>=0&&c.z()<sz)
+                    .sorted(java.util.Comparator.comparingInt(Cell::x).thenComparingInt(Cell::y).thenComparingInt(Cell::z)).toList());
+                return new Layout(shape,shellCells,List.of());
+            }
             for (int x = 0; x < sx; x++)
                 for (int y = 0; y < sy; y++)
                     for (int z = 0; z < sz; z++) {

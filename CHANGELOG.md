@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+- Scalable water cooling towers: induced-draft banks of up to 24 bounded parallel cells with a metal basin and steel frame, and hollow natural-draft towers; coupled convective/evaporative cooling, water-only atmospheric inlets, real basin storage, fan speed/target-temperature controls and conserved atmospheric exchange. Branch `codex/water-cooling-tower`; batch `2026-10-30-water-cooling-tower`.
+
 ## [0.17.1] - 2026-10-28
 
 ### Changed

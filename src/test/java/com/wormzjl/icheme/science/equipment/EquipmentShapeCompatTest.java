@@ -30,6 +30,7 @@ class EquipmentShapeCompatTest {
     /** One shape of every kind at its default size, and a lying drum. */
     static List<EquipmentShape> everyKind() {
         var shapes = new ArrayList<EquipmentShape>();
+        shapes.add(EquipmentShape.unit(Kind.INDUCED_DRAFT_COOLING_TOWER,8,6,Heading.NORTH,0).withTowerBank(new TowerBank(6,4)));
         shapes.add(EquipmentShape.drum(2, 4, Orientation.VERTICAL, Heading.NORTH, EquipmentShape.defaultSupport(2, Orientation.VERTICAL)));
         shapes.add(EquipmentShape.drum(2, 6, Orientation.HORIZONTAL, Heading.EAST, EquipmentShape.defaultSupport(2, Orientation.HORIZONTAL)));
         shapes.add(EquipmentShape.column(2, ColumnTrays.simple(20, 10), Heading.SOUTH, EquipmentShape.minimumSkirt(2)));
@@ -247,7 +248,7 @@ class EquipmentShapeCompatTest {
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
      * column's components; 3: a column's turned nozzles).
      */
-    private static final int SHAPE_FIELDS = 3;
+    private static final int SHAPE_FIELDS = 4;
 
     /**
      * Every corpus file's saved shell tags read with no repair, to the shapes recorded beside them. The file of this
@@ -275,6 +276,7 @@ class EquipmentShapeCompatTest {
                     // A column's length is no fact: it follows its trays and diameter by the current layout rule
                     // (ColumnTrays.tangentLength; batch 2026-10-27-column-sump), and a placed column refreshes to it.
                     var expected = entry.getString("Expected");
+                    if(!expected.contains("towerBank="))expected=expected.substring(0,expected.length()-1)+", towerBank=TowerBank[columns=1, rows=1]]";
                     if (read.shape().column()) expected = expected.replaceFirst("tangentLength=[0-9.]+", "tangentLength=" + read.shape().tangentLength());
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }

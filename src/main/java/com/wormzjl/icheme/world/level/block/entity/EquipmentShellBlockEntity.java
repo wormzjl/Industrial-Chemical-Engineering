@@ -177,7 +177,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
         if (shape == null || level == null || !level.isClientSide) return;
-        if (shape.kind() == EquipmentShape.Kind.TANK && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
+        if ((shape.kind() == EquipmentShape.Kind.TANK || shape.kind().coolingTower()) && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
         for (var port : ShapeRasterizer.ports(shape))
             if (port.cell().equals(cell())) {
                 CLIENT_PORTS.add(this);
@@ -517,6 +517,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
             tag.putInt("Outlet", shape.outlet());
         }
         if (shape.kind() == EquipmentShape.Kind.AIR_COOLER) tag.putIntArray("Bank", shape.bank().encode());
+        if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)tag.putIntArray("TowerBank",shape.towerBank().encode());
     }
 
     /**
@@ -524,7 +525,10 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      * default, a refused one repaired, a kind this build no longer has named as retired. Never throws.
      */
     public static ShapeRepair.Read readShape(CompoundTag tag) {
-        return ShapeRepair.read(saved(tag));
+        var read=ShapeRepair.read(saved(tag));
+        if(read.shape()==null||read.shape().kind()!=EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER||!tag.contains("TowerBank"))return read;
+        try{return new ShapeRepair.Read(read.shape().withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank"))),null,read.repairs());}
+        catch(IllegalArgumentException invalid){var repairs=new java.util.ArrayList<>(read.repairs());repairs.add("tower bank -> one cell: "+invalid.getMessage());return new ShapeRepair.Read(read.shape(),null,repairs);}
     }
 
     /** The shape fields of {@code tag} as written, before any rule reads them. */

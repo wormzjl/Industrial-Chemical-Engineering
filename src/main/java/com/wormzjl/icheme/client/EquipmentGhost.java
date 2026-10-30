@@ -190,6 +190,18 @@ public final class EquipmentGhost {
         var mesh = MESHES.get(shape);
         if (mesh != null && mesh.sprite == sprite) return mesh;
         var out = new ArrayList<float[]>();
+        if(shape.kind().coolingTower()){
+            for(var polygon:ShapeRasterizer.towerPreview(shape))
+                for(int first=1;first+1<polygon.size();first+=2)
+                    for(int corner:new int[]{0,first,first+1,Math.min(first+2,polygon.size()-1)}){
+                        var p=polygon.positions();var uv=polygon.uvs();var n=polygon.normals();
+                        out.add(new float[]{(float)p[3*corner],(float)p[3*corner+1],(float)p[3*corner+2],sprite.getU((float)uv[2*corner]),sprite.getV((float)uv[2*corner+1]),
+                            (float)n[3*corner],(float)n[3*corner+1],(float)n[3*corner+2],polygon.material().channel()});
+                    }
+            var vertices=new float[out.size()*Mesh.STRIDE];
+            for(int i=0;i<out.size();i++)System.arraycopy(out.get(i),0,vertices,i*Mesh.STRIDE,Mesh.STRIDE);
+            mesh=new Mesh(shape,sprite,vertices);MESHES.put(shape,mesh);return mesh;
+        }
         for (var cell : layout(shape).shell())
             for (var polygon : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z())))
                 // A fan of quads, as the chunk model bakes it; a last single triangle repeats its final vertex.

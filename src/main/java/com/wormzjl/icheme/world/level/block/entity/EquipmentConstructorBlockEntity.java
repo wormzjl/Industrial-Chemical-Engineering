@@ -53,7 +53,15 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
      */
     public record Design(double diameter, int tangentLength, VesselPlacement.Form form, int support, VesselPlacement placement, ColumnTrays trays,
                          List<EquipmentShape.Connection> connections, Paint paint, ProcessUnit.Bank bank, boolean boot, int outlet,
-                         @org.jetbrains.annotations.Nullable ColumnDesign column, List<ColumnTrays.Turn> turns) {
+                         @org.jetbrains.annotations.Nullable ColumnDesign column, List<ColumnTrays.Turn> turns, com.wormzjl.icheme.science.equipment.TowerBank towerBank) {
+        public Design(double diameter,int tangentLength,VesselPlacement.Form form,int support,VesselPlacement placement,ColumnTrays trays,
+                      List<EquipmentShape.Connection> connections,Paint paint,ProcessUnit.Bank bank,boolean boot,int outlet,
+                      ColumnDesign column,List<ColumnTrays.Turn> turns) {
+            this(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,com.wormzjl.icheme.science.equipment.TowerBank.ONE);
+        }
+        public Design withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank value) {
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,value);
+        }
         /** A new column's trays: twenty, fed in the middle. */
         public static final ColumnTrays TRAYS = ColumnTrays.simple(20, 10);
         /**
@@ -89,7 +97,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
             Objects.requireNonNull(placement, "placement");
             Objects.requireNonNull(trays, "trays");
             Objects.requireNonNull(paint, "paint");
-            Objects.requireNonNull(bank, "bank");
+            Objects.requireNonNull(bank, "bank");Objects.requireNonNull(towerBank,"towerBank");
             connections = List.copyOf(connections);
             turns = List.copyOf(turns);
             // Validates the shape from the parameters (a compact constructor assigns the fields after its body); the
@@ -98,12 +106,12 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         }
 
         public EquipmentShape shape(Direction facing) {
-            return shape(diameter, tangentLength, form, support, trays, connections, bank, boot, outlet, column, turns, form.front(facing.getStepX(), facing.getStepZ()));
+            return shape(diameter, tangentLength, form, support, trays, connections, bank, boot, outlet, column, turns, form.front(facing.getStepX(), facing.getStepZ())).withTowerBank(form.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?towerBank:com.wormzjl.icheme.science.equipment.TowerBank.ONE);
         }
 
         /** This design with the column's side nozzles turned as {@code next}. */
         public Design withTurns(List<ColumnTrays.Turn> next) {
-            return new Design(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, next);
+            return new Design(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, next,towerBank);
         }
 
         /** Whether this design builds: anything but a column without an imported design. */
@@ -118,13 +126,13 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         public Design imported(ColumnDesign imported) {
             double d = imported.diameter();
             return new Design(d, tangentLength, VesselPlacement.Form.COLUMN, Math.max(support, EquipmentShape.minimumSkirt(d)), placement, trays, connections, paint,
-                    bank, boot, 0, imported, turns);
+                    bank, boot, 0, imported, turns,towerBank);
         }
 
         /** {@code edited}, a design the player sent, with this design's imported column: only an import sets it. */
         public Design keepingColumn(Design edited) {
             return new Design(edited.diameter, edited.tangentLength, edited.form, edited.support, edited.placement, edited.trays, edited.connections, edited.paint,
-                    edited.bank, edited.boot, edited.outlet, column, edited.turns);
+                    edited.bank, edited.boot, edited.outlet, column, edited.turns,edited.towerBank);
         }
 
         /** The shape; an outlet the form does not turn to is refused ({@link EquipmentShape#outlets}). */
@@ -230,6 +238,12 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
      * {@code repairs}.
      */
     public static Design readDesign(CompoundTag tag, Design fresh, java.util.function.Consumer<String> repairs) {
+        var design=readBaseDesign(tag,fresh,repairs);
+        if(!tag.contains("TowerBank"))return design;
+        try{return design.withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank")));}
+        catch(IllegalArgumentException invalid){repairs.accept("tower bank -> one cell: "+invalid.getMessage());return design;}
+    }
+    private static Design readBaseDesign(CompoundTag tag, Design fresh, java.util.function.Consumer<String> repairs) {
         var placement = fresh.placement();
         int[] offsets = tag.getIntArray("Offsets");
         try {
@@ -318,6 +332,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         tag.putIntArray("Connections", EquipmentShape.Connection.encode(design.connections()));
         tag.putIntArray("Paint", design.paint().encode());
         tag.putIntArray("Bank", design.bank().encode());
+        tag.putIntArray("TowerBank",design.towerBank().encode());
         tag.putBoolean("Boot", design.boot());
         tag.putInt("Outlet", design.outlet());
         if (design.column() != null) tag.put("Column", ColumnDesignTags.write(design.column()));

@@ -52,7 +52,19 @@ import java.util.Objects;
  * trickle-bed reactor's effluent on the sides its design leaves free ({@link #outlets}); 0 for every other shape.
  */
 public record EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
-                             @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet) {
+                             @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank) {
+    public EquipmentShape(Kind kind,double diameter,double tangentLength,Orientation orientation,Heading front,int support,
+                          ColumnTrays trays,List<Connection> connections,ProcessUnit.Bank bank,boolean boot,int outlet) {
+        this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,TowerBank.ONE);
+    }
+    public EquipmentShape withTowerBank(TowerBank value) {
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value);
+    }
+    public com.wormzjl.icheme.science.fluid.network.CoolingTower coolingTower() {
+        return kind==Kind.INDUCED_DRAFT_COOLING_TOWER
+            ? com.wormzjl.icheme.science.fluid.network.CoolingTower.induced(diameter,tangentLength,towerBank.columns(),towerBank.rows())
+            : com.wormzjl.icheme.science.fluid.network.CoolingTower.natural(diameter,tangentLength);
+    }
     public static final double MIN_DIAMETER = .5, MAX_DIAMETER = 10, MAX_COLUMN_DIAMETER = 15, MAX_TANGENT_LENGTH = 64;
     public static final int MAX_SUPPORT = 16;
     /**
@@ -124,7 +136,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         EXCHANGER, KETTLE, AIR_COOLER, EJECTOR, PUMP, COMPRESSOR, VERTICAL_HEATER, CABIN_HEATER,
         // New units (owner request 2026-10-18, NEW_UNITS_PLAN.md).
         STIRRED_REACTOR, ADSORBER, TRICKLE_BED_REACTOR, EBULLATED_BED_REACTOR, CENTRIFUGAL_COMPRESSOR, STEAM_TURBINE, CONDENSING_TURBINE, CYCLONE,
-        FCC_CONVERTER, DELAYED_COKER, FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER;
+        FCC_CONVERTER, DELAYED_COKER, FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER, INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER;
+
+        public boolean coolingTower() { return this==INDUCED_DRAFT_COOLING_TOWER || this==NATURAL_DRAFT_COOLING_TOWER; }
 
         /** A standalone unit, built from its parts ({@link ProcessUnit}); a drum and a column are vessels of revolution. */
         public boolean unit() {
@@ -146,7 +160,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
         /** A fluid reservoir: one node, a port per nozzle, its design volume and level height. */
         public boolean reservoir() {
-            return this == DRUM || storage();
+            return this == DRUM || storage() || coolingTower();
         }
 
         /** A self-powered fluid mover, with one suction and one discharge nozzle. */
@@ -216,7 +230,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         VENT(PortClass.VAPOUR), EXHAUST(PortClass.VAPOUR), FLUE_GAS(PortClass.VAPOUR), RELIEF(PortClass.VAPOUR), SYNGAS(PortClass.VAPOUR),
         DRAIN(PortClass.LIQUID), CONDENSATE(PortClass.LIQUID), CATALYST_OUTLET(PortClass.LIQUID), SOLIDS_OUTLET(PortClass.LIQUID),
         // A floating-roof tank: centered front/back bottom nozzles, and the front overflow at the fill height.
-        BOTTOM(PortClass.LIQUID), OVERFLOW(PortClass.OVERFLOW);
+        BOTTOM(PortClass.LIQUID), OVERFLOW(PortClass.OVERFLOW), HOT_WATER_INLET(PortClass.BULK), COLD_WATER_OUTLET(PortClass.LIQUID);
 
         public final PortClass port;
 
@@ -485,6 +499,8 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         Objects.requireNonNull(orientation, "orientation");
         Objects.requireNonNull(front, "front");
         Objects.requireNonNull(bank, "bank");
+        Objects.requireNonNull(towerBank,"towerBank");
+        if(kind!=Kind.INDUCED_DRAFT_COOLING_TOWER && !towerBank.equals(TowerBank.ONE)) throw new IllegalArgumentException("Only induced-draft towers have a cell bank");
         connections = List.copyOf(connections);
         if (outlet < 0 || outlet >= SIDES.length) throw new IllegalArgumentException("A bottom outlet turns 0 to 3 quarter turns from the front, not " + outlet);
         if (kind.designed()) {
@@ -805,12 +821,14 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * cylinder up to its fill height, π D²/4 · H, and a sphere's π D³/6. Supports and nozzles hold no volume.
      */
     public com.wormzjl.icheme.science.fluid.network.VesselGeometry fluidGeometry() {
+        if(kind.coolingTower())return com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(coolingTower().basinVolume(),2);
         if(kind==Kind.KETTLE)return HeatSides.kettleShell(diameter,tangentLength);
         var form=kind==Kind.TANK?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.CYLINDER:kind==Kind.SPHERE?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.SPHERE:orientation.horizontal()?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.HORIZONTAL_DRUM:com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.VERTICAL_DRUM;
         var b=bootPlace();return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(form,diameter,kind==Kind.TANK?fillHeight():kind==Kind.SPHERE?0:tangentLength,b==null?0:b.diameter(),b==null?0:b.length());
     }
 
     public double volume() {
+        if (kind.coolingTower()) return coolingTower().basinVolume();
         if (kind == Kind.KETTLE) return fluidGeometry().capacity();
         if (kind == Kind.TANK) return Math.PI * diameter * diameter / 4 * fillHeight();
         if (kind == Kind.SPHERE) return Math.PI * diameter * diameter * diameter / 6;
@@ -836,6 +854,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * drum's).
      */
     public double levelHeight() {
+        if (kind.coolingTower()) return 2;
         if (kind == Kind.KETTLE) return fluidGeometry().height();
         if (kind == Kind.TANK) return fillHeight();
         if (kind == Kind.SPHERE) return diameter;

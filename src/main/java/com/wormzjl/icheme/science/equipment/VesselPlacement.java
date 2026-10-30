@@ -29,7 +29,9 @@ public record VesselPlacement(int forward, int right, int up) {
         CONDENSING_TURBINE(EquipmentShape.Kind.CONDENSING_TURBINE), CYCLONE(EquipmentShape.Kind.CYCLONE), FCC_CONVERTER(EquipmentShape.Kind.FCC_CONVERTER),
         DELAYED_COKER(EquipmentShape.Kind.DELAYED_COKER), FLUIDIZED_BED_BOILER(EquipmentShape.Kind.FLUIDIZED_BED_BOILER),
         FLUIDIZED_BED_GASIFIER(EquipmentShape.Kind.FLUIDIZED_BED_GASIFIER), GRATE_BOILER(EquipmentShape.Kind.GRATE_BOILER),
-        FIXED_BED_GASIFIER(EquipmentShape.Kind.FIXED_BED_GASIFIER);
+        FIXED_BED_GASIFIER(EquipmentShape.Kind.FIXED_BED_GASIFIER),
+        INDUCED_DRAFT_COOLING_TOWER(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER),
+        NATURAL_DRAFT_COOLING_TOWER(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER);
 
         private final EquipmentShape.Kind kind;
 

@@ -22,11 +22,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShaderInstance;
-import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -73,8 +70,6 @@ public final class TankRenderer {
      */
     private static final double BAND = TankGaugeGeometry.BAND_HALF, MARKER = TankGaugeGeometry.MARKER_HEIGHT;
     private static final int LEAST_ALPHA = 200, FLOAT = 0xFFB84432;
-    private static final ResourceLocation WHITE = ResourceLocation.withDefaultNamespace("block/white_concrete");
-    private static final RenderType BANDS = RenderType.entityTranslucentCull(InventoryMenu.BLOCK_ATLAS);
     private static final Map<Key, VertexBuffer> BUFFERS = new HashMap<>();
     private static @Nullable TextureAtlasSprite builtWith;
     private static int age;
@@ -172,7 +167,7 @@ public final class TankRenderer {
         if (level == null) return;
         var cells = EquipmentShellBlockEntity.clientTankCells();
         if (cells.isEmpty()) return;
-        var sprite = mc.getModelManager().getAtlas(InventoryMenu.BLOCK_ATLAS).getSprite(WHITE);
+        var sprite = LiquidRenderer.sprite();
         float u = sprite.getU(.5F), v = sprite.getV(.5F);
         var camera = event.getCamera().getPosition();
         double ticks = level.getGameTime() + event.getPartialTick().getGameTimeDeltaPartialTick(false);
@@ -192,7 +187,7 @@ public final class TankRenderer {
             if (!event.getFrustum().isVisible(new AABB(origin.getX() + g[0] - BAND, origin.getY() + low, origin.getZ() + g[1] - BAND, origin.getX() + g[0] + BAND, origin.getY() + high, origin.getZ() + g[1] + BAND)))
                 continue;
             int light = LevelRenderer.getLightColor(level, BlockPos.containing(origin.getX() + g[0], origin.getY() + (low + high) / 2, origin.getZ() + g[1]));
-            if (consumer == null) consumer = buffers.getBuffer(BANDS);
+            if (consumer == null) consumer = buffers.getBuffer(LiquidRenderer.TYPE);
             pose.pushPose();
             pose.translate(origin.getX() + g[0] - camera.x, origin.getY() - camera.y, origin.getZ() + g[1] - camera.z);
             var last = pose.last();
@@ -204,7 +199,7 @@ public final class TankRenderer {
                     TankGaugeGeometry.MARKER_HALF, TankGaugeGeometry.markerFaces());
             pose.popPose();
         }
-        if (consumer != null) buffers.endBatch(BANDS);
+        if (consumer != null) buffers.endBatch(LiquidRenderer.TYPE);
     }
 
     /** The liquid's depth over the tank's floor at game time {@code ticks}, m, where the level's roofs stand ({@link FloatingRoofs}): the tank's glide, or the level its node cell saved before the first one. */
@@ -222,18 +217,13 @@ public final class TankRenderer {
     private static void column(VertexConsumer consumer, com.mojang.blaze3d.vertex.PoseStack.Pose last, double y0, double y1, int argb, int light, float u, float v,
                                double half, java.util.List<Mesh.Polygon> faces) {
         if (y1 <= y0) return;
-        int r = argb >> 16 & 255, g = argb >> 8 & 255, b = argb & 255, alpha = Math.max(argb >>> 24, LEAST_ALPHA);
+        int tint = (argb & 0xFFFFFF) | (Math.max(argb >>> 24, LEAST_ALPHA) << 24);
         for (var face : faces) {
             var p = face.positions();var n = face.normals();
             for (int i = 0; i < p.length; i += 3)
-                vertex(consumer, last, (float) (half * (2 * p[i] - 1)), (float) (y0 + (y1 - y0) * p[i + 1]), (float) (half * (2 * p[i + 2] - 1)),
-                        r, g, b, alpha, u, v, light, (float) n[i], (float) n[i + 1], (float) n[i + 2]);
+                LiquidRenderer.vertex(consumer, last, (float) (half * (2 * p[i] - 1)), (float) (y0 + (y1 - y0) * p[i + 1]), (float) (half * (2 * p[i + 2] - 1)),
+                        tint, u, v, light, (float) n[i], (float) n[i + 1], (float) n[i + 2]);
         }
-    }
-
-    private static void vertex(VertexConsumer consumer, com.mojang.blaze3d.vertex.PoseStack.Pose last, float x, float y, float z, int r, int g, int b, int a, float u, float v, int light,
-                               float nx, float ny, float nz) {
-        consumer.addVertex(last, x, y, z).setColor(r, g, b, a).setUv(u, v).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(last, nx, ny, nz);
     }
 
     private static VertexBuffer draw(ShaderInstance shader, @Nullable VertexBuffer buffer, Matrix4f pose, @Nullable VertexBuffer bound) {

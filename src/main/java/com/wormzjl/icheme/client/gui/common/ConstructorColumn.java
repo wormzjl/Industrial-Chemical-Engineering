@@ -73,7 +73,7 @@ public final class ConstructorColumn {
     public enum Equipment {
         VERTICAL_DRUM(Category.VESSELS), HORIZONTAL_DRUM(Category.VESSELS), COLUMN(Category.VESSELS), FLOATING_ROOF_TANK(Category.VESSELS), SPHERE(Category.VESSELS),
         ADSORBER(Category.VESSELS), CYCLONE(Category.VESSELS),
-        EXCHANGER(Category.HEAT), KETTLE(Category.HEAT), AIR_COOLER(Category.HEAT), VERTICAL_HEATER(Category.HEAT), CABIN_HEATER(Category.HEAT),
+        EXCHANGER(Category.HEAT), KETTLE(Category.HEAT), AIR_COOLER(Category.HEAT), VERTICAL_HEATER(Category.HEAT), CABIN_HEATER(Category.HEAT), INDUCED_DRAFT_COOLING_TOWER(Category.HEAT), NATURAL_DRAFT_COOLING_TOWER(Category.HEAT),
         PUMP(Category.MACHINES), COMPRESSOR(Category.MACHINES), CENTRIFUGAL_COMPRESSOR(Category.MACHINES), EJECTOR(Category.MACHINES),
         STEAM_TURBINE(Category.MACHINES), CONDENSING_TURBINE(Category.MACHINES),
         STIRRED_REACTOR(Category.REACTORS), TRICKLE_BED_REACTOR(Category.REACTORS), EBULLATED_BED_REACTOR(Category.REACTORS), FCC_CONVERTER(Category.REACTORS),
@@ -237,7 +237,10 @@ public final class ConstructorColumn {
      * and the reach of a column's import in blocks.
      */
     public record Design(VesselPlacement.Form form, double diameter, int length, int support, int forward, int right, int up, ProcessUnit.Bank bank,
-                         @Nullable Imported column, Outlet outlet, int reach) {
+                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank) {
+        public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,Imported column,Outlet outlet,int reach) {
+            this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,com.wormzjl.icheme.science.equipment.TowerBank.ONE);
+        }
     }
 
     /**
@@ -268,6 +271,22 @@ public final class ConstructorColumn {
                 size.add(step("support", "skirt", support, "m", t));
                 size.add(new Column.Buttons(List.of(new Column.Button("import", t.get(KEY + "import"), true, t.get(KEY + "import.hint", in.reach())),
                         new Column.Button("templates", t.get(KEY + "templates"), true, t.get(KEY + "templates.hint")))));
+            }
+            case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> {
+                var design=UnitDesign.of(form.kind());
+                size.add(step("size",design.sizeRow(),size(in.diameter()),"m",t));
+                if(form.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER)size.add(step("length",design.lengthRow(),length,"m",t));
+                boolean fan=form.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER;
+                if(fan){
+                    size.add(step("tower_columns","tower_columns",Integer.toString(in.towerBank().columns()),"",t));
+                    size.add(step("tower_rows","tower_rows",Integer.toString(in.towerBank().rows()),"",t));
+                }
+                double cells=fan?in.towerBank().cells():1;
+                double area=fan?cells*in.diameter()*in.diameter():Math.PI*in.diameter()*in.diameter()/4;
+                var towerShape=EquipmentShape.unit(form.kind(),in.diameter(),in.length(),EquipmentShape.Heading.NORTH,0)
+                    .withTowerBank(fan?in.towerBank():com.wormzjl.icheme.science.equipment.TowerBank.ONE);
+                size.add(new Column.Paragraph(t.get(KEY+"tower_summary",(int)cells,towerShape.sizeX(),towerShape.sizeY(),towerShape.sizeZ(),
+                    UnitDesign.number(area),UnitDesign.number(area*2*4.18*10/1000),UnitDesign.number(fan?20*2*area/1.18/.6/1000:0)),Palette.MUTED));
             }
             case AIR_COOLER -> {
                 // A bay's width × length in m, without spaces: it stands whole in the box.

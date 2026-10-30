@@ -1,5 +1,7 @@
 # Fluid runtime: the Minecraft side of the fluid system
 
+**Water cooling towers — branch update 2026-10-30:** `codex/water-cooling-tower`, based on main `79b853e0d` (0.17.1), unmerged. Optional tower facts and accepted cached readings propagate through registry, snapshots and certificate replay. Fluid state format is 30, facts schema 6, protocol `fluid-17`, certificate graph identity 9. Populated basin inventories and atmospheric totals survive checkpoints; computed transfer can be rebuilt. Details: [cooling-towers.md](cooling-towers.md).
+
 **Process control (batch 2026-10-26-process-control, 0.14.1):** sensors, control valves and vessel geometry; the contracts are in [process-control.md](process-control.md).
 
 `FluidDeviceSpec` and `PassiveNetwork.Inventory` retain immutable vessel geometry, so unloaded islands need no shape/chunk lookup. Physical registry edits preserve amounts, energy and solids when geometry changes. Loaded legacy shapes queue registration reconciliation. Fluid facts schema 3 appends, after schema 2's joints and lanes, a device spec's vessel geometry record and the `control_valve` control; absent geometry defaults to the old prism. Solved state format 22 discards incompatible caches, retaining facts. The schema-1, schema-2 and schema-3 corpus images are gated. A sensor-configured valve is one registry edit through `PhysicalFluidTopology.Device.withControl`, which keeps a laid pipe's joints and lane (`InstrumentService.editSensorValve`).

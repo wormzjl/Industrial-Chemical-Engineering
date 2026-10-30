@@ -309,13 +309,21 @@ public final class PassiveStepSolver {
     }
     public record Result(List<FluidThermodynamics.State> states,double[] massFlows,double deltaTime,SparseNewton.Result numerical,
                          List<FlowControl.Mode> modes,double[] devicePressureChanges,double pumpWorkJoule,double[] externalMoles,double externalEnergyJoule,
-                         List<PassiveNetwork.Inventory> inventories,List<ConservativeTransport.BoundaryTransfer> boundaries,List<PipeTransfer> pipeTransfers,Map<Long,InlineFilter> filters,List<PipeObservation> observations) {
+                         List<PassiveNetwork.Inventory> inventories,List<ConservativeTransport.BoundaryTransfer> boundaries,List<PipeTransfer> pipeTransfers,Map<Long,InlineFilter> filters,List<PipeObservation> observations,Map<Long,TowerExchange.Rates> towers) {
+        public Result(List<FluidThermodynamics.State> states,double[] massFlows,double deltaTime,SparseNewton.Result numerical,List<FlowControl.Mode> modes,double[] devicePressureChanges,double pumpWorkJoule,double[] externalMoles,double externalEnergyJoule,List<PassiveNetwork.Inventory> inventories,List<ConservativeTransport.BoundaryTransfer> boundaries,List<PipeTransfer> pipeTransfers,Map<Long,InlineFilter> filters,List<PipeObservation> observations){this(states,massFlows,deltaTime,numerical,modes,devicePressureChanges,pumpWorkJoule,externalMoles,externalEnergyJoule,inventories,boundaries,pipeTransfers,filters,observations,Map.of());}
         public Result(List<FluidThermodynamics.State> states,double[] massFlows,double deltaTime,SparseNewton.Result numerical,List<FlowControl.Mode> modes,double[] devicePressureChanges,double pumpWorkJoule,double[] externalMoles,double externalEnergyJoule,List<PassiveNetwork.Inventory> inventories,List<ConservativeTransport.BoundaryTransfer> boundaries,List<PipeTransfer> pipeTransfers,Map<Long,InlineFilter> filters){this(states,massFlows,deltaTime,numerical,modes,devicePressureChanges,pumpWorkJoule,externalMoles,externalEnergyJoule,inventories,boundaries,pipeTransfers,filters,List.of());}
         public Result(List<FluidThermodynamics.State> states,double[] massFlows,double deltaTime,SparseNewton.Result numerical,List<FlowControl.Mode> modes,double[] devicePressureChanges,double pumpWorkJoule,double[] externalMoles,double externalEnergyJoule,List<PassiveNetwork.Inventory> inventories,List<ConservativeTransport.BoundaryTransfer> boundaries,List<PipeTransfer> pipeTransfers){this(states,massFlows,deltaTime,numerical,modes,devicePressureChanges,pumpWorkJoule,externalMoles,externalEnergyJoule,inventories,boundaries,pipeTransfers,Map.of());}
-        public Result {observations=List.copyOf(observations);filters=Map.copyOf(filters);states=List.copyOf(states);massFlows=massFlows.clone();modes=List.copyOf(modes);devicePressureChanges=devicePressureChanges.clone();externalMoles=externalMoles.clone();inventories=List.copyOf(inventories);boundaries=List.copyOf(boundaries);pipeTransfers=List.copyOf(pipeTransfers);}
+        public Result {towers=Map.copyOf(towers);observations=List.copyOf(observations);filters=Map.copyOf(filters);states=List.copyOf(states);massFlows=massFlows.clone();modes=List.copyOf(modes);devicePressureChanges=devicePressureChanges.clone();externalMoles=externalMoles.clone();inventories=List.copyOf(inventories);boundaries=List.copyOf(boundaries);pipeTransfers=List.copyOf(pipeTransfers);}
         @Override public double[] massFlows(){return massFlows.clone();}
         @Override public double[] devicePressureChanges(){return devicePressureChanges.clone();}
         @Override public double[] externalMoles(){return externalMoles.clone();}
+    }
+    private Map<Long,TowerExchange.Rates> towerReadings(PassiveNetwork graph,List<FluidThermodynamics.State> states,double[] flows,double dt){
+        Map<Long,TowerExchange.Rates> readings=null;
+        for(int n=0;n<graph.reservoirs().size();n++)if(graph.reservoirs().get(n).inventory().tower()!=null){
+            if(readings==null)readings=new HashMap<>();readings.put(graph.reservoirs().get(n).id(),TowerExchange.at(graph,n,states,flows,dt,model));
+        }
+        return readings==null?Map.of():readings;
     }
     public Result solve(PassiveNetwork graph,double dt,Runnable checkpoint){return solve(graph,dt,checkpoint,false,null);}
     /** The interval controller supplies only modes of its matching accepted endpoint, never a rejected attempt. */
@@ -351,7 +359,7 @@ public final class PassiveStepSolver {
         for(int e=conflicts.nextSetBit(0);e>=0;e=conflicts.nextSetBit(e+1))heldOpenings[e]=acceptedOpenings.getOrDefault(graph.pipes().get(e).identity(),1.0);
         // An island of unconnected nodes changes nothing in a step, unless an open vessel in it gives the atmosphere its gas
         // or its spill (OpenVessel).
-        if(graph.pipes().isEmpty()&&graph.scheduledTransfers().isEmpty()&&(rateOnly||graph.reservoirs().stream().noneMatch(node->OpenVessel.releasing(node)||poolHeat(node)!=0)))return new Result(graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),new double[0],dt,
+        if(graph.pipes().isEmpty()&&graph.scheduledTransfers().isEmpty()&&(rateOnly||graph.reservoirs().stream().noneMatch(node->OpenVessel.releasing(node)||poolHeat(node)!=0||node.inventory().tower()!=null&&!node.empty())))return new Result(graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),new double[0],dt,
                 new SparseNewton.Result(new double[0],0,0,0,0,0),List.of(),new double[0],0,new double[model.hydrocarbon.componentCount()+1],0,
                 graph.reservoirs().stream().map(PassiveNetwork.Reservoir::inventory).toList(),List.of(),List.of());
         var modes=new ArrayList<FlowControl.Mode>();
@@ -405,6 +413,14 @@ public final class PassiveStepSolver {
         // produces, actuator included: an actuator left on its setpoint across a closed edge is a second equation for a
         // flow the closure has decided, and on a junction whose other edges are closed the factorization is singular.
         boolean[] boundaryClosed=new boolean[graph.pipes().size()];
+        for(int e=0;e<graph.pipes().size();e++) {
+            var pipe=graph.pipes().get(e);
+            for(int end=0;end<2;end++) {
+                int n=end==0?pipe.first():pipe.second();var port=pipe.portAt(n);
+                if(graph.reservoirs().get(n).inventory().tower()!=null&&(port==PassiveNetwork.PhasePort.SPRAY)
+                    &&!TowerExchange.liquidWater(model,inputStates.get(end==0?pipe.second():pipe.first())))boundaryClosed[e]=true;
+            }
+        }
         for(int i=0;i<boundaryClosed.length;i++)if(graph.pipes().get(i).effectiveBlockedDirections()==3) {
             boundaryClosed[i]=true;
             if(!(graph.pipes().get(i).control() instanceof FlowControl.Passive))modes.set(i,FlowControl.Mode.CLOSED);
@@ -594,6 +610,12 @@ public final class PassiveStepSolver {
             // test never fires again, and the pump is left at its head limit where the Newton cannot converge). The device
             // is decided first; the boundary closure waits for a pass where every device holds a mode it can.
             if(!changed&&illegalDirection>=0){closeBoundary(graph,illegalDirection,boundaryClosed,modes);changed=true;}
+            if(!changed)for(int e=0;e<graph.pipes().size()&&!changed;e++)if(!boundaryClosed[e]&&flows[e]!=0) {
+                var pipe=graph.pipes().get(e);int receiver=flows[e]>0?pipe.second():pipe.first(),donor=flows[e]>0?pipe.first():pipe.second();
+                var port=pipe.portAt(receiver);
+                if(graph.reservoirs().get(receiver).inventory().tower()!=null&&(port==PassiveNetwork.PhasePort.SPRAY)
+                    &&!TowerExchange.liquidWater(model,states.get(donor))){closeBoundary(graph,e,boundaryClosed,modes);changed=true;}
+            }
             // A confirmed emptying (keptEmptying) was decided on the network this active set states, so a mode or closure
             // change decides it again.
             if(changed)Arrays.fill(emptied,false);
@@ -665,7 +687,7 @@ public final class PassiveStepSolver {
                 shown.set(i,NetworkReduction.ambient(model));
             }
             if(shown!=null)endStates=shown;
-            var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observe(equations,states,flows,lawFlows,heads,checkpoint));
+            var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observe(equations,states,flows,lawFlows,heads,checkpoint),towerReadings(original,states,flows,dt));
             // The retained last solve keeps its equations and point, not their per-node decode caches (states, transport
             // rows, prepared temperature workspaces): a later reader re-decodes (review 8.7 (c) E2).
             equations.releaseDecodeCache();
@@ -1540,7 +1562,19 @@ public final class PassiveStepSolver {
         return List.copyOf(samples);
     }
     double endPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port,FluidThermodynamics.State state) {
+        if(node.inventory().tower()!=null&&(port==PassiveNetwork.PhasePort.SPRAY)) {
+            var tower=node.inventory().tower();double height=tower.distributorHeight();
+            double density=model.waterMolecularWeight/model.waterLiquid(state.temperature(),CoolingTower.PRESSURE).molarVolume();
+            return CoolingTower.PRESSURE+density*GRAVITY*height;
+        }
         return state.pressure()+portHead(node,port,state);
+    }
+    /** State a spray boundary at the incoming column's density, so a basin temperature cannot create an inlet head. */
+    private double atmosphericEndPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port,FluidThermodynamics.State state,double column) {
+        var tower=node.inventory().tower();
+        if(tower!=null&&(port==PassiveNetwork.PhasePort.SPRAY))
+            return CoolingTower.PRESSURE+column*GRAVITY*tower.distributorHeight();
+        return endPressure(node,port,state);
     }
     /** {@link #endPressure} of the end of {@code pipe} at {@code node}, on that node's own state in {@code graph}. */
     double endPressure(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node) {
@@ -3258,6 +3292,8 @@ public final class PassiveStepSolver {
     static boolean holdsNoFluid(PassiveNetwork.Inventory inventory,FluidThermodynamics.State state) {
         boolean none=true;for(double n:inventory.moles())if(n!=0){none=false;break;}
         if(none)return true;
+        // A pure-water basin exchanges at its surface until its actual inventory is empty.
+        if(inventory.tower()!=null)return false;
         double capacity=inventory.volume(),bag=PhaseLayout.bagVolume(state,inventory.wallCapacity());
         return (inventory.solids().empty()?bag:bag-inventory.solids().volume())<=HOLDS_NOTHING*capacity;
     }
@@ -3299,7 +3335,7 @@ public final class PassiveStepSolver {
         }
         var pipes=new ArrayList<PassiveNetwork.Pipe>(graph.pipes().size());
         for(var pipe:graph.pipes())pipes.add(emptying[pipe.first()]||emptying[pipe.second()]
-                ?pipe.withPorts(emptying[pipe.first()]?PassiveNetwork.PhasePort.BULK:pipe.firstPort(),emptying[pipe.second()]?PassiveNetwork.PhasePort.BULK:pipe.secondPort()):pipe);
+                ?pipe.withPorts(emptying[pipe.first()]&&pipe.firstPort()!=PassiveNetwork.PhasePort.SPRAY?PassiveNetwork.PhasePort.BULK:pipe.firstPort(),emptying[pipe.second()]&&pipe.secondPort()!=PassiveNetwork.PhasePort.SPRAY?PassiveNetwork.PhasePort.BULK:pipe.secondPort()):pipe);
         return new PassiveNetwork(nodes,pipes,graph.scheduledTransfers());
     }
     /** Per node of {@code graph}, the stock an emptying vessel passes over the step and the ambient's work on its bag. */
@@ -3391,7 +3427,7 @@ public final class PassiveStepSolver {
         for(var p:melted.solids().populations())solidBalance.computeIfAbsent(p.key(),k->new double[6])[2]-=p.massKg();
         for(var b:solidBalance.values())if(Math.abs(b[0]+b[2]-b[1]-(b[4]-b[3]+b[5]))>1e-10+1e-8*Math.max(Math.max(b[0]+b[3],b[1]+b[4]),Math.abs(b[2]-b[5])))throw new SparseNewton.Nonconvergence("Solid population balance failed");
         var external=projection.externalMoles();var meltedMoles=melted.moles();
-        for(int i=0;i<count;i++)if(Math.abs(before[i]+external[i]+meltedMoles[i]-after[i]-junction[i])>1e-10+1e-8*Math.max(turnover[i],Math.max(before[i]+bufferedBefore[i],after[i]+bufferedAfter[i])))throw new SparseNewton.Nonconvergence("Component balance failed: "+i);
+        for(int i=0;i<count;i++)if(Math.abs(before[i]+external[i]+meltedMoles[i]-after[i]-junction[i])>1e-10+1e-8*Math.max(turnover[i],Math.max(before[i]+bufferedBefore[i],after[i]+bufferedAfter[i])))throw new SparseNewton.Nonconvergence("Component balance failed: "+i+" before="+before[i]+" after="+after[i]+" external="+external[i]+" junction="+junction[i]);
         if(Math.abs(ea-eb+junctionEnergy-projection.pumpWork()-projection.externalEnergy()-melted.energyJoule())>1e-4+1e-6*(energyScale+Math.abs(projection.pumpWork())+Math.abs(melted.energyJoule())))throw new SparseNewton.Nonconvergence("Total energy balance failed");
     }
     private double carrierViscosity(FluidThermodynamics.State s) {
@@ -4365,6 +4401,12 @@ public final class PassiveStepSolver {
             }
             // A kettle's pool (W7): the bundle's heat into the vessel over the step, on its start state.
             double pooled=poolHeat(graph.reservoirs().get(node));stored+=dt*pooled;heat+=pooled;
+            if(graph.reservoirs().get(node).inventory().tower()!=null) {
+                var flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);
+                var exchange=TowerExchange.at(graph,node,Arrays.asList(st),flows,dt,model);
+                target[target.length-1]-=dt*exchange.waterLoss()/model.waterMolecularWeight;
+                stored-=dt*exchange.energyWatt();heat-=exchange.energyWatt();net-=exchange.waterLoss();
+            }
             for(int edge:nodeEdges[node]) {
                 var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flow(edge,x[edgeOffset+edge],tr);
                 // The donor terms read the stream of the end the flow leaves: the donor's bulk at a BULK end (the same
@@ -4473,7 +4515,7 @@ public final class PassiveStepSolver {
             // column that end's port stands in the connection ({@link #columnDensity}, owner decision D34).
             double column=pipe.control() instanceof FlowControl.Mover?suction.density
                     :columnEnds[edge]==0?columnDensity(st[a],pipe.firstPort(),pipe.volume()):columnDensity(st[b],pipe.secondPort(),pipe.volume());
-            double driving=endPressure(graph.reservoirs().get(a),pipe.firstPort(),st[a])-endPressure(graph.reservoirs().get(b),pipe.secondPort(),st[b])-column*GRAVITY*dz+signedHead;
+            double driving=atmosphericEndPressure(graph.reservoirs().get(a),pipe.firstPort(),st[a],column)-atmosphericEndPressure(graph.reservoirs().get(b),pipe.secondPort(),st[b],column)-column*GRAVITY*dz+signedHead;
             // Every pressure-dimensioned row of this edge is stated in the island's own pressure,
             // never in a fixed 1e5 Pa unit; see {@link #pressureScales}. The throttled-inlet row
             // below and the closed-edge row are mass flows and keep their own flow scale, and the
@@ -4481,6 +4523,14 @@ public final class PassiveStepSolver {
             double pressureScale=pressureScales[edge];
             f[edgeOffset+edge]=(driving-loss)/pressureScale;
             if(boundaryClosed[edge]&&control<0)f[edgeOffset+edge]=flow;
+            // The spray and float inlets are atmospheric air breaks with one-way admission.
+            for(int end=0;end<2;end++) {
+                int n=end==0?a:b;var tower=graph.reservoirs().get(n).inventory().tower();if(tower==null)continue;
+                var port=pipe.portAt(n);double incoming=end==0?-flow:flow;
+                if(port==PassiveNetwork.PhasePort.SPRAY) {
+                    if(incoming<0)f[edgeOffset+edge]=flow;
+                } else if(incoming>0)f[edgeOffset+edge]=flow;
+            }
             if(control>=0)f[control]=switch(modes.get(edge)) {
                 case PUMP_TARGET->(flow/suction.density-((FlowControl.Mover)pipe.control()).targetVolumeFlow())/.01;
                 // The limit reads the suction's density at this trial, so the row carries it into the Jacobian: the block
