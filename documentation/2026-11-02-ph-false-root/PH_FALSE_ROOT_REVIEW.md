@@ -43,7 +43,7 @@ Cold seed 118, the one new budget hold (one wall deadline while another test JVM
 
 ## 4. Options for the owner
 
-1. Keep the bound at 1e-3 (recommended). The physics does not force it: it is the smallest measured value that loses no target. Where it applies T is at most 30 mK off at 1 bar, 90 mK at 60 bar, and T(H) jumps by that much where the check flips.
+1. Keep the bound at 1e-3 (the owner's choice, 2026-11-02). The physics does not force it: it is the smallest measured value that loses no target. Where it applies T is at most 30 mK off at 1 bar, 90 mK at 60 bar, and T(H) jumps by that much where the check flips.
 2. 1e-4: a tenth of those errors, and 2 clean heavy cut targets at 30 and 60 bar become typed failures.
 3. No bound, not built: a step at the wet bubble point and a lever rule between a closed bracket's ends, about 40 lines. It deletes the hydrocarbon branch of `waterBoiling` and answers main's "lies in a step" failures. It needs its own lane.
 4. Whichever is chosen: 5 of 50 targets on a pure hydrocarbon with water change from a false answer to a typed failure until flash finding 3 is fixed. Version: patch, 0.18.1. Main is now 0.18.0; no source file of the fix overlaps, and only `CHANGELOG.md` and the two indexes conflict.
