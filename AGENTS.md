@@ -71,9 +71,11 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 
 ### GUI and in-game checks
 
-- Verify GUI work in the dev client through the langyo/minecraft-mod-mcp bridge. Use the `runMcpClient` lane: copy the pinned jar from `tools/minecraft-mcp-bridge/` into `<worktree>/run/mcp-client-mods/`, and put `.mcp.json` in the worktree root.
+- Before any GUI work, read `.claude/skills/gui-creation/SKILL.md` and the reference it names for the job. It holds the GUI rules and build recipes. An agent with no skill loader reads it as a plain file.
+- Do not start a dev-client check on your own. Judge GUI work by the gates, the compile and the software renders of `tools/heat-gui-renders/`. Where nothing else can judge (rendering, lighting, chunk sync), offer a check and let the owner start it.
+- A check the owner asks for runs through the langyo/minecraft-mod-mcp bridge. Use the `runMcpClient` lane: copy the pinned jar from `tools/minecraft-mcp-bridge/` into `<worktree>/run/mcp-client-mods/`, and put `.mcp.json` in the worktree root.
 - Never send real desktop keyboard or mouse input (`robot.ps1`, SendKeys) unless the owner is watching. If a check needs typed values and only desktop input can supply them, stop and report.
-- Make at most one in-game check per task, and only where the client is the only judge (rendering, lighting, chunk sync, GUI). Judge drawing-only changes by gates, sweeps and software renders.
+- Make at most one in-game check per task. Judge drawing-only changes by gates, sweeps and software renders.
 
 ## Git and worktrees
 
@@ -87,7 +89,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - `research/` is local and git-ignored. Its canonical copy is in the main checkout, `D:/Minecraft/Modding/1.21/CreateChemE/research/`. Write research material there.
 - The folders:
   - `documentation/`: one folder per batch of work, `YYYY-MM-DD-topic/` (the date the batch started), plus `reference/` and `repository/`. `documentation/INDEX.md` lists every batch with its status; `documentation/README.md` explains the layout.
-  - `research/`: datasets, literature, study harnesses and journals, grouped by batch, indexed in `research/INDEX.md`.
+  - `research/`: datasets, literature, study harnesses, journals and the large files of `documentation/`, grouped by batch, indexed in `research/INDEX.md`.
   - `tools/`: offline scripts and harnesses, one folder per tool, indexed in `tools/INDEX.md`. `tools/development.gradle` stays at that path.
 - Do not add top-level folders for documents or scripts. Leave `examples/` (tracked, used by the build and tests) where it is.
 - Write each review or audit to `documentation/<batch>/<TOPIC>_REVIEW.md` and each plan to `documentation/<batch>/<TOPIC>_PLAN.md`.
@@ -99,6 +101,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
   - Commit the documents and tool folders on the task's branch.
 - Work that never merges (research only, abandoned) brings its documents and tool folders to `main` in a documentation-only merge.
 - Index files change row by row. When a merge conflicts in `documentation/INDEX.md` or `tools/INDEX.md`, keep every row of both sides. Patch the main checkout's `research/INDEX.md` in place; never copy it whole.
+- Keep large files out of `documentation/`. It holds text documents, each under 1 MB. Screenshots and other images, PDFs, world region files and `*-logs/` folders are git-ignored there. Store them in the main checkout at the same path under `research/` (`documentation/<batch>/shots/a.png` goes to `research/<batch>/shots/a.png`) and link them there. Treat any other file over 1 MB the same way, and add a `.gitignore` line for a new large file type.
 - Logs stay git-ignored (`logs/`, `*.log`). Store them compressed in the main checkout, `tools/<tool-folder>/logs/<name>-logs-<date>.tar.gz`. These archives stay local; never stage them.
 
 ## Merging to main

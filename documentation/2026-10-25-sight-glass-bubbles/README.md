@@ -6,13 +6,13 @@ Status: Implemented 2026-10-26 (0.12.0). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
-- [bubble-flow.gif](bubble-flow.gif)
-- [bubble-orientations.png](bubble-orientations.png)
-- [bubble-preview.png](bubble-preview.png)
-- [bubble-sizes.png](bubble-sizes.png)
+- [bubble-flow.gif](../../research/2026-10-25-sight-glass-bubbles/bubble-flow.gif)
+- [bubble-orientations.png](../../research/2026-10-25-sight-glass-bubbles/bubble-orientations.png)
+- [bubble-preview.png](../../research/2026-10-25-sight-glass-bubbles/bubble-preview.png)
+- [bubble-sizes.png](../../research/2026-10-25-sight-glass-bubbles/bubble-sizes.png)
 - [frames/](frames/)
 - [nbp-palette.json](nbp-palette.json)
-- [nbp-palette.png](nbp-palette.png)
+- [nbp-palette.png](../../research/2026-10-25-sight-glass-bubbles/nbp-palette.png)
 - [SIGHT_GLASS_BUBBLES_PLAN.md](SIGHT_GLASS_BUBBLES_PLAN.md)
 - [SIGHT_GLASS_BUBBLES_REVIEW.md](SIGHT_GLASS_BUBBLES_REVIEW.md)
 
