@@ -125,7 +125,7 @@ public final class GuiPrototypes {
      */
     static void calculatorDoor(Door d, CalculatorColumn.Page page, CalculatorColumn.Metric metric) {
         var t = DIALOG;
-        d.skin.title(d.c, 10, 10, d.m.cut(HeatDiagramRender.tr("block.icheme.column_calculator_v3"), CalculatorColumn.title(d.w)));
+        d.skin.title(d.c, 10, 10, d.m.cut(HeatDiagramRender.tr("block.icheme.process_simulator"), CalculatorColumn.title(d.w)));
         d.skin.iconKey(d.c, CalculatorColumn.theme(d.w), Skin.Icon.THEME, false);
         var tabs = CalculatorColumn.tabs(page, t);
         var tabSlots = CalculatorColumn.tabSlots(d.w);

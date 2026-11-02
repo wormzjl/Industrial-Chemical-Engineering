@@ -16,6 +16,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.DoorFrame;
 import com.wormzjl.icheme.client.gui.flowsheet.FileColumns;
 import com.wormzjl.icheme.client.gui.flowsheet.ResultsPage;
 import com.wormzjl.icheme.client.gui.flowsheet.SelectionColumn;
+import com.wormzjl.icheme.client.gui.flowsheet.SheetClipboard;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetContext;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetEditor;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetGestures;
@@ -160,8 +161,16 @@ public final class SimulatorRender {
 
     // ---- A state of the screen ----
 
-    /** A host as W7 and W8 will be: a run in hand or not, a block or not. */
-    private record Host(boolean reads, SheetState.Running now) implements SimulatorHost {
+    /** A host on a block: a run in hand or not, the player editing or reading, what the block said last. */
+    private record Host(boolean reads, SheetState.Running now, SimulatorHost.Said spoken) implements SimulatorHost {
+        Host(boolean reads, SheetState.Running now) {
+            this(reads, now, null);
+        }
+
+        @Override public SimulatorHost.Said said() {
+            return spoken;
+        }
+
         @Override public String holder() {
             return reads ? "Alex" : null;
         }
@@ -247,7 +256,7 @@ public final class SimulatorRender {
         var x = s.context();
         var frame = new SimulatorFrame(d.w, d.h);
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE;
-        SimulatorPage.back(d.c, d.skin, SimulatorPage.status(x, s.tab, s.results, s.gestures, s.editor, narrow, s.host.holder()), T.get("flowsheet.frame.title", "CDU train"), frame, d.w, d.h);
+        SimulatorPage.back(d.c, d.skin, SimulatorPage.status(x, s.tab, s.results, s.gestures, s.editor, narrow, s.host.holder()), HeatDiagramRender.tr("block.icheme.process_simulator"), frame, d.w, d.h);
         keys(d, SimulatorPage.frameKeys(x, s.tab, frame, s.host, s.editor));
         d.skin.iconKey(d.c, frame.theme(), Skin.Icon.THEME, false);
         switch (s.tab) {
@@ -382,6 +391,35 @@ public final class SimulatorRender {
         };
     }
 
+    /** A feed's Composition tab after Paste with T and P from what the clipboard holds: the door says what it placed and what it could not. */
+    private static BiConsumer<GuiPrototypes.Door, Skin> pasted(Flowsheet sheet, FlowsheetRun run, String id, SheetClipboard.Held held, boolean paste) {
+        return (d, skin) -> {
+            SheetClipboard.copy(held);
+            var view = new Door.View();
+            view.tab = 1;
+            var x = new Scene(sheet, run, 3.6, new Host(false, null)).context();
+            if (paste) StreamDoors.door(x, id, view).actions().button("paste_state");
+            door(d, StreamDoors.door(x, id, view));
+            SheetClipboard.copy(null);
+        };
+    }
+
+    /** A dialog that asks for a name, with the keys the screen gives it. */
+    private static void naming(GuiPrototypes.Door d, String title, String typed, String... keys) {
+        d.skin.title(d.c, 10, 10, title);
+        d.skin.field(d.c, new Rect(12, 40, d.w - 24, 18), typed, T.get("flowsheet.file.name"), false);
+        var slots = com.wormzjl.icheme.client.gui.common.DialogColumns.footer(d.w, d.h, keys.length);
+        for (int i = 0; i < keys.length; i++) d.skin.button(d.c, slots.get(i), keys[i], i == keys.length - 1 ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+    }
+
+    private static void unsavedPrompt(GuiPrototypes.Door d) {
+        FileColumns.drawChanges(d.c, d.skin, T.get("flowsheet.file.unsaved_title"), FileColumns.unsaved(T), T.get("flowsheet.file.unsaved_foot"), d.w, d.h);
+        var slots = com.wormzjl.icheme.client.gui.common.DialogColumns.footer(d.w, d.h, 3);
+        d.skin.button(d.c, slots.get(0), T.get("flowsheet.file.cancel"), Skin.Press.REST, false);
+        d.skin.button(d.c, slots.get(1), T.get("flowsheet.file.discard"), Skin.Press.REST, false);
+        d.skin.button(d.c, slots.get(2), T.get("flowsheet.file.save"), Skin.Press.PRIMARY, false);
+    }
+
     private static BiConsumer<GuiPrototypes.Door, Skin> columnResults(Flowsheet sheet, FlowsheetRun run) {
         return (d, skin) -> {
             var view = new Door.View();
@@ -483,6 +521,7 @@ public final class SimulatorRender {
         var removed = withType(sheet, "H-101", "old_heater");
         FlowsheetFile.save(folder.resolve("Gas plant inlet.json"), removed);
         Files.writeString(folder.resolve("Broken.json"), "{ not a flowsheet");
+        FlowsheetFile.save(FileColumns.autosave(folder, "CDU train"), sheet);
         var entries = FileColumns.entries(folder, T);
         var pages = new ArrayList<BufferedImage>();
         for (var skin : SKINS) {
@@ -497,7 +536,13 @@ public final class SimulatorRender {
                 d.skin.button(d.c, slots.get(1), T.get("flowsheet.file.open"), Skin.Press.PRIMARY, false);
             }));
         }
-        SimulatorPrototypes.grid(out, "17-file-and-repair", List.of("Open: the player's own files (light door)", "After an update: what changed (light door)", "Open (dark door)", "After an update (dark door)"), pages);
+        SimulatorPrototypes.grid(out, "17-file-and-repair", List.of("Open: the player's own files, an autosave beside its file (light door)", "After an update: what changed (light door)", "Open (dark door)", "After an update (dark door)"), pages);
+        var prompts = new ArrayList<BufferedImage>();
+        for (var skin : SKINS) {
+            prompts.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> unsavedPrompt(d)));
+            prompts.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> naming(d, T.get("flowsheet.file.save_title"), "CDU train", T.get("flowsheet.file.cancel"), T.get("flowsheet.file.to_clipboard"), T.get("flowsheet.file.save"))));
+        }
+        SimulatorPrototypes.grid(out, "25-unsaved-and-save-as", List.of("Open or Close with changes the block has not taken (light door)", "Save as: a file, or the clipboard as text (light door)", "Unsaved changes (dark door)", "Save as (dark door)"), prompts);
     }
 
     private static Flowsheet withType(Flowsheet sheet, String id, String type) {
@@ -566,8 +611,20 @@ public final class SimulatorRender {
         var running = new Host(false, new SheetState.Running(3.1, 2, 30, "T-101", com.wormzjl.icheme.science.flowsheet.Report.Start.LAST));
         sheet(out, "06-run-in-progress", W, H, List.of("A run in progress", "An edit refused during the run", "A second player, read only"), List.of(
                 scene(sheet, run, seconds, running, nothing()), scene(sheet, run, seconds, running, s -> s.editor.moveUnit("P-101", 92, 84, null)), scene(sheet, run, seconds, new Host(true, null), nothing())));
+        var empty = new Flowsheet(sheet.basis(), List.of(), List.of(), sheet.settings());
+        sheet(out, "24-block-words", W, H, List.of("Saved on the block", "A stored sheet this version cannot read: the block opens empty and keeps it", "The data changed: the sheet stands, its results went"), List.of(
+                scene(sheet, run, seconds, new Host(false, null, new SimulatorHost.Said("store.saved", List.of(), false)), nothing()),
+                scene(empty, null, 0, new Host(false, null, new SimulatorHost.Said("store.kept", List.of(), true)), nothing()),
+                scene(sheet, null, 0, new Host(false, null, new SimulatorHost.Said("store.results_dropped", List.of(), false)), nothing())));
         sheet(out, "07-feed-stream", DW, DH, List.of("A feed stream's door"), List.of(stream(sheet, run, "CRUDE", 0)));
-        sheet(out, "08-feed-composition", DW, DH, List.of("A feed stream's Composition tab"), List.of(stream(sheet, run, "CRUDE", 1)));
+        var tank = new LinkedHashMap<String, Double>();
+        tank.putAll(crude(298.15, 8e5).amounts());
+        tank.put("Bitumen", 12.0);
+        tank.put("Sulfolane", 3.0);
+        var held = new SheetClipboard.Held("Tank at 120, 64, -310", tank, 313.15, 1.013e5);
+        sheet(out, "08-feed-composition", DW, DH, List.of("A feed stream's Composition tab, nothing copied yet", "Something copied: Paste is live, and the clipboard's contents show", "Paste with T and P: it says what it could not place"), List.of(stream(sheet, run, "CRUDE", 1), pasted(sheet, run, "CRUDE", held, false), pasted(sheet, run, "CRUDE", held, true)));
+        SimulatorPrototypes.both(out, "09-reservoir-copy", DW, DH, (d, s) -> SimulatorPrototypes.reservoirCopy(d), "Copy on the tank's own page",
+                List.of("1. Copy takes the composition, temperature and pressure the page already shows, from the last published snapshot: no packet, no solve. Paste on a feed's Composition tab takes it from there."));
         sheet(out, "10-product-stream", DW, DH, List.of("A product stream's door"), List.of(stream(sheet, run, "NAPHTHA", 0)));
         grid(out, "11-unit-doors", DW, DH, List.of("Heat exchanger", "Fired heater", "Pump", "Drum", "Control valve", "Splitter"), List.of(unit(sheet, run, "E-101", 0), unit(sheet, run, "H-101", 0), unit(sheet, run, "P-101", 0), unit(more, moreRun, "D-101", 0), unit(sheet, run, "V-101", 0), unit(more, moreRun, "TEE-1", 0)));
         grid(out, "12-column-door", DW, DH, List.of("The Column page, D1 open", "The Feed page: read from S-7", "The Results page, T-101's real profile", "The Equipment page"), List.of(unit(sheet, run, "T-101", 0), unit(sheet, run, "T-101", 1), columnResults(sheet, run), unit(sheet, run, "T-101", 3)));
@@ -577,16 +634,25 @@ public final class SimulatorRender {
             for (var file : com.google.gson.JsonParser.parseReader(index).getAsJsonArray())
                 try (var in = Files.newBufferedReader(Path.of("src/main/resources/assets/icheme/columnpreset/" + file.getAsString()))) {
                     var o = com.google.gson.JsonParser.parseReader(in).getAsJsonObject();
-                    bundled.add(new FileColumns.ColumnTemplate(o.get("name").getAsString(), com.wormzjl.icheme.science.column.v3.V3ColumnTemplate.read(o), true));
+                    bundled.add(new FileColumns.ColumnTemplate(o.get("name").getAsString(), com.wormzjl.icheme.science.column.v3.V3ColumnTemplate.read(o), true, file.getAsString()));
                 }
         }
-        var presets = com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog.resolve(CATALOG);
+        var streams = new ArrayList<FileColumns.StreamTemplate>();
+        for (var preset : com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog.resolve(CATALOG)) {
+            var amounts = new LinkedHashMap<String, Double>();
+            double[] shares = preset.moleFractions();
+            for (int i = 0; i < shares.length && i < FLUIDS.axis().size(); i++) if (shares[i] > 0) amounts.put(FLUIDS.axis().get(i), shares[i]);
+            streams.add(new FileColumns.StreamTemplate(preset.name(), amounts, Double.NaN, Double.NaN, Double.NaN));
+        }
+        streams.add(new FileColumns.StreamTemplate("Boiler feed", Map.of("Water", 1.0), 393.15, 40e5, 27.8));
         var templates = new ArrayList<BufferedImage>();
         for (var skin : List.of(PanelSkin.LIGHT, PanelSkin.DARK)) {
             templates.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> list(d, FileColumns.columnTemplates(bundled, 0, SheetUnits.DEFAULT, T))));
-            templates.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> list(d, SimulatorPage.listing("TEMPLATES", new Scene(sheet, run, seconds, host).context(), List.of(), presets, List.of(), 0))));
+            templates.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> list(d, SimulatorPage.listing("TEMPLATES", new Scene(sheet, run, seconds, host).context(), List.of(), streams, List.of(), 0))));
+            templates.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> naming(d, T.get("flowsheet.file.template_title"), "Boiler feed", T.get("flowsheet.file.cancel"), T.get("flowsheet.file.save"))));
+            templates.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> naming(d, T.get("flowsheet.file.column_title"), "CDU two draws", T.get("flowsheet.file.cancel"), T.get("flowsheet.file.save"))));
         }
-        SimulatorPrototypes.stack(out.resolve("13-templates.png"), List.of("Column templates, a column's door", "Stream templates, a feed's door"), templates.subList(0, 2), List.of());
+        SimulatorPrototypes.stack(out.resolve("13-templates.png"), List.of("Column templates, a column's door", "Stream templates, a feed's door: a saved one shows its conditions", "Save as template, a feed's door", "Save current, the Templates dialog"), templates.subList(0, 4), List.of());
         sheet(out, "14-results-streams", W, H, List.of("The Results tab"), List.of(scene(sheet, run, seconds, host, s -> {
             s.tab = SimulatorFrame.Tab.RESULTS;
             s.results.ticked.addAll(ticks);
