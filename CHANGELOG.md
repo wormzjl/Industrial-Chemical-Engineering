@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-11-03
+
 ### Changed
 
 - `columnGates` and `equipmentGates` run only when something their tests load changed, the column GameTest waits for solves instead of sleeping, and one tracked lane replaces a copy per batch (`c123e20d9`, batch `2026-11-02-test-suite-optimization`).
