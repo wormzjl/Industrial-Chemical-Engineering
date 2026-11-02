@@ -14,6 +14,8 @@ Software renders reuse `tools/storage-vessel-renders/StorageRender.java`. Compil
 java tools/cooling-towers/fill-forms/Fit.java tools/cooling-towers/fill-forms/table.csv
 ```
 
+`relief/Relief.java` draws one 4 m louver panel three ways, real slats, a baked sprite and a normal-map shader, and writes the sprite, the normal map and a comparison sheet: `java -Djava.awt.headless=true tools/cooling-towers/relief/Relief.java tmp/relief/louver`.
+
 History: 2026-11-02 — added `fill-forms/` in the branch review; the marched fill was detached from `TowerTransfer`.
 
 History: 2026-10-30 — added the verification lane and wet-tower support to the existing software renderer. No product code was detached into this folder.
