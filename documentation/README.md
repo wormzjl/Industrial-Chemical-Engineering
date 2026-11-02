@@ -10,7 +10,8 @@ Start with [INDEX.md](INDEX.md): one short row per batch of work with its purpos
 - Inside a batch folder:
   - `README.md`: the batch record, with the sections Purpose, Status, Documents, Code areas, History (one line per step, newest last) and Notes (evidence and open items).
   - `<TOPIC>_PLAN.md` for plans and `<TOPIC>_REVIEW.md` for reviews and audits; results, progress logs, diagnoses and handoffs keep their descriptive names.
-  - `screenshots/` for GUI evidence, `sources/` for literature PDFs and OCR excerpts, `archive/` for frozen probe code and raw results, `codex-branch/` for copies taken from Codex worktrees.
+  - `sources/` for OCR excerpts, `archive/` for frozen probe code and raw results, `codex-branch/` for copies taken from Codex worktrees.
+- Large files stay out of this folder (rule in `AGENTS.md`). Screenshots and other images, PDFs, world region files, `*-logs/` folders and any other file over 1 MB live in the main checkout at the same path under `research/`, so `documentation/<batch>/screenshots/a.png` is `research/<batch>/screenshots/a.png`. A document cited by an older path resolves the same way.
 - `reference/`: living guides that span batches.
 - `repository/`: repository hygiene records (this organization, deleted-branch lists, the old-name lookup, the archived one-file index).
 
@@ -21,7 +22,7 @@ File names were kept unchanged when the flat folder was split on 2026-09-23, so 
 | Folder | Holds | Tracked |
 |---|---|---|
 | `documentation/` | Markdown documents per batch (this folder) | yes |
-| `research/` | Datasets, literature sources, study harnesses and journals; see [research/INDEX.md](../research/INDEX.md) | no |
+| `research/` | Datasets, literature sources, study harnesses, journals and the large files of `documentation/`; see [research/INDEX.md](../research/INDEX.md) | no |
 | `tools/` | Offline scripts, training/evaluation tooling, DWSIM automation and `tools/development.gradle`; see [tools/INDEX.md](../tools/INDEX.md); log archives in `tools/<folder>/logs/` stay local | yes |
 | `examples/` | Example datapack and fluid reference/benchmark scripts used by the build and tests | yes |
 | `benchmarks/` | Large benchmark outputs (about 2 GB) cited by `tools/development.gradle` defaults; left in place | no |

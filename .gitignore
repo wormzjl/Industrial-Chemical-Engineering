@@ -82,6 +82,17 @@ CLAUDE.md
 /examples/crude-assays/source-quality.json
 /examples/crude-assays/test_quality.py
 
+# Large files stay out of documentation/ (AGENTS.md): they live in the main checkout's research/<batch>/.
+/documentation/**/*.png
+/documentation/**/*.jpg
+/documentation/**/*.jpeg
+/documentation/**/*.gif
+/documentation/**/*.webp
+/documentation/**/*.bmp
+/documentation/**/*.pdf
+/documentation/**/*.mca
+/documentation/**/*-logs/
+
 # Local JDK installation
 /oracleJdk-25/
 # Scratch output (owner rule: <repo root>/tmp/<name>/, indexed in tmp/INDEX.md)

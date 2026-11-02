@@ -1,3 +1,0 @@
-viewers-wp3-on-r01 viewers true
-viewers-wp3-off-r01 viewers false
-mixed100-wp3-on-r01 mixed100 true

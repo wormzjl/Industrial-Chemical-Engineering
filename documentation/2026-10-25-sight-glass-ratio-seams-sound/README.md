@@ -7,17 +7,17 @@ Status: Implemented 2026-10-26 (0.12.0). Index: [../INDEX.md](../INDEX.md).
 ## Documents
 
 - [before/](before/)
-- [bubble-orientations.png](bubble-orientations.png)
-- [bubble-sizes.png](bubble-sizes.png)
+- [bubble-orientations.png](../../research/2026-10-25-sight-glass-ratio-seams-sound/bubble-orientations.png)
+- [bubble-sizes.png](../../research/2026-10-25-sight-glass-ratio-seams-sound/bubble-sizes.png)
 - [frames/](frames/)
-- [gas-ratio.gif](gas-ratio.gif)
-- [gas-ratio.png](gas-ratio.png)
+- [gas-ratio.gif](../../research/2026-10-25-sight-glass-ratio-seams-sound/gas-ratio.gif)
+- [gas-ratio.png](../../research/2026-10-25-sight-glass-ratio-seams-sound/gas-ratio.png)
 - [MERGE_PLAN.md](MERGE_PLAN.md)
 - [MERGE_REVIEW.md](MERGE_REVIEW.md)
 - [REFINEMENTS_PLAN.md](REFINEMENTS_PLAN.md)
 - [REFINEMENTS_REVIEW.md](REFINEMENTS_REVIEW.md)
-- [seam-comparison.png](seam-comparison.png)
-- [seams.png](seams.png)
+- [seam-comparison.png](../../research/2026-10-25-sight-glass-ratio-seams-sound/seam-comparison.png)
+- [seams.png](../../research/2026-10-25-sight-glass-ratio-seams-sound/seams.png)
 
 ## History
 
