@@ -56,23 +56,33 @@ public final class SimulatorPrototypes {
         var jar = Path.of(args.length > 2 ? args[2] : "build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar");
         HeatDiagramRender.font = Files.exists(jar) ? HeatDiagramRender.GameFont.load(jar) : null;
 
-        both(out, "01-main-layout-A", W, H, (d, s) -> screen(d, Layout.A, Show.NOTES),
-                "Layout A: the door column at the right holds the selection and the run",
-                List.of("1 Tabs: Flowsheet, Results, Basis, always shown. 2 File keys: the flowsheet is a client file in .minecraft/IChemE/flowsheets. 3 The one status display, yellow when a warning stands.",
-                        "4 The canvas on the HMI glass: pan by dragging the grid, zoom by the wheel or the keys. 5 A stream is a named line; a pill starts it (teal, a feed) or ends it (a product).",
-                        "6 The loop's tear, chosen by the solver, marked T. 7 A unit's colour is its state: teal solved, yellow warning, red failed, grey not solved. 8 A connection point: T-101 is one block, and its condenser, its three pumparound coolers and its steam feed each gave it ports from the door's settings (sheet 19). A free port has the laying tool's colours, grey once connected.",
-                        "9 The selection's name is typed here or on its label. 10 The palette, the list of items below: category keys over the tiles. Drag a tile to the canvas. An unlit tile has no process model yet.",
-                        "11 Run is the confirming key; Stop cancels a run. This flowsheet's numbers are a real solve by the mod's own thermo and column code, on a plain JVM with no game classes."));
-        both(out, "02-main-layout-B", W, H, (d, s) -> screen(d, Layout.B, Show.PLAIN),
-                "Layout B: the canvas takes the width; a card follows the selection, the run reads on the status display",
-                List.of("The canvas gains 174 px (22 %). What the door column of layout A shows moves to a card beside the selection. Double click opens the door in both layouts."));
-        single(out, "03-interaction", W, H, (d, s) -> screen(d, Layout.A, Show.INTERACTION),
-                "Dragging, connecting and renaming (light door shown)",
+        both(out, "01-main-screen", W, H, (d, s) -> screen(d, Layout.WIDE, Show.NOTES),
+                "The main screen with nothing selected: the canvas takes the whole width, the run reads on the status display",
+                List.of("1 Tabs: Flowsheet, Results, Sizing, Basis, always shown; Sizing lights once the sheet reaches a steady state. 2 File keys: the block keeps this flowsheet and its last results, on the server, so it is there for every player and after a restart. Save stores it on the block now; Save as and Open use the player's own files in .minecraft/IChemE/flowsheets.",
+                        "3 The one status display: the run's result and its gaps, yellow when a warning stands. 4 The canvas on the HMI glass: pan by dragging the grid, zoom by the wheel or the keys.",
+                        "5 A stream is a named line; a pill starts it (teal, a feed) or ends it (a product). 6 The loop's tear, chosen by the solver, marked T. 7 A unit's colour is its state: teal solved, yellow warning, red failed, grey not solved.",
+                        "8 A connection point: T-101 is one block, and its condenser, its three pumparound coolers and its steam feed each gave it ports from the door's settings (sheet 19). Any stream may use a pair, not only the feed. A free port has the laying tool's colours, grey once connected.",
+                        "9 The palette, the list of items below: category keys over the tiles. Drag a tile to the canvas. An unlit tile has no process model yet.",
+                        "10 Run is the confirming key; Stop cancels a run. The run is on the client; this flowsheet's numbers are a real solve by the mod's own thermo and column code, on a plain JVM with no game classes."));
+        var selections = new ArrayList<BufferedImage>();
+        selections.add(page(W, H, (d, s) -> screen(d, Layout.WIDE, Show.UNIT)));
+        selections.add(page(W, H, (d, s) -> screen(d, Layout.WIDE, Show.FEED)));
+        selections.add(page(W, H, (d, s) -> screen(d, Layout.WIDE, Show.STREAM)));
+        stack(out.resolve("02-selection-panel.png"), List.of("A unit selected: the panel opens over the canvas's right end, and the sheet does not move",
+                        "A feed stream selected: left click shows its settings, because the player sets it", "A stream a unit makes selected: left click shows its properties"), selections,
+                List.of("Decision D1: layout A, with the right panel only while something is selected. It opens over the empty end of the glass, so no wire, tile or key moves, and closes on a click on empty canvas.",
+                        "Left click selects. On a stream the panel depends on the situation: a feed shows its settings, as entries that take effect as typed; any other stream shows its properties, as meters. Double click opens the full door, in both cases."));
+        var gestures = new ArrayList<BufferedImage>();
+        gestures.add(page(W, H, (d, s) -> screen(d, Layout.WIDE, Show.INTERACTION)));
+        gestures.add(page(W, H, (d, s) -> screen(d, Layout.WIDE, Show.RECONNECT)));
+        stack(out.resolve("03-interaction.png"), List.of("Dragging, connecting and renaming", "Right click a stream to reconnect it: S-8 moves from P-102 to the new pump P-103"), gestures,
                 List.of("1 A tile dragged from the palette: its symbol follows the cursor, snapped to the grid, and it lands with its next free tag (D-101).",
                         "2 Dragging from a port draws a stream that follows the cursor. Ports that can take it are ringed; a port that cannot stays dark (an outlet to an outlet, a second stream on a one-stream port). This free port is a fourth draw just added on T-101's door.",
                         "3 Dropping on empty canvas ends the stream in a product pill; dragging from a free inlet port makes a feed pill. So every open end is a named stream.",
                         "4 Double click a name to type it in place, on a stream or a unit. A used name is refused on the status display. Tags come from the kind: T, E, H, P, K, V, D.",
-                        "5 Double click a symbol or a pill to open its door.", "6 A port's hover names it and says what happens if it stays free."));
+                        "5 Double click a symbol, a pill or a line to open its door. 6 A port's hover names it and says what happens if it stays free.",
+                        "7 Right click a stream: the end nearer the click lifts off its port and follows the cursor, with no key held. The stream keeps its name and every setting. Its old port shows free.",
+                        "8 Ports that can take that end are ringed. Left click one to land it. Left click on empty canvas ends it in a new pill. Right click or Esc puts it back. What lies downstream greys until the next run. Undo restores it."));
         single(out, "04-palette", 760, 462, (d, s) -> paletteSheet(d), "The palette: every category, from the constructor's equipment list plus streams and piping",
                 List.of("Lit tiles have a process model on day one. Unlit tiles are drawn so the list stays whole: their hover says no process model yet, and the coverage gate forces a choice for every new equipment."));
         var small = new ArrayList<BufferedImage>();
@@ -80,9 +90,13 @@ public final class SimulatorPrototypes {
         small.add(GuiPrototypes.render(new GuiPrototypes.Prototype("x", 464, 254, (d, s) -> screen(d, Layout.TINY, Show.PLAIN)), PanelSkin.DARK, false));
         stack(out.resolve("05-small-windows.png"), List.of("1280 by 720 window, scale 2: 624 by 344 GUI px; the door column folds, tiles lose their captions",
                 "The design minimum, 464 by 254 GUI px: the palette is one strip; both are shown at the Fit key's zoom"), small, List.of());
-        single(out, "06-run-in-progress", W, H, (d, s) -> screen(d, Layout.A, Show.RUNNING), "A run in progress: the screen stays usable, the run is a background thread on the client",
+        var runs = new ArrayList<BufferedImage>();
+        runs.add(page(W, H, (d, s) -> screen(d, Layout.WIDE, Show.RUNNING)));
+        runs.add(page(W, H, (d, s) -> screen(d, Layout.WIDE, Show.VIEWER)));
+        stack(out.resolve("06-run-in-progress.png"), List.of("A run in progress: the screen stays usable, the run is a background thread on the client", "A second player at the same block, read only while another edits"), runs,
                 List.of("The ringed unit is the one being solved, the grey ones wait for it. The crude's pass through T-101's coolers is solved already: their duties are the door's, so it is no loop. Run is off and Stop is live; Stop reaches the column's own cancel check, so a long column stops too.",
-                        "Editing during a run is refused on the status display. The run's result replaces the shown results only when the run ends; a stopped run keeps every unit it finished."));
+                        "Editing during a run is refused on the status display. The run's result replaces the shown results only when the run ends; a stopped run keeps every unit it finished.",
+                        "Decision D2: the run stays on the client, and the flowsheet with its last results stays on the block, on the server. The first player to open the block edits; a second one reads the last saved sheet, its tiles and keys off, and may Save as to a file of their own. The server stores what it is sent and never solves it."));
 
         both(out, "07-feed-stream", DW, DH, (d, s) -> feedOverview(d), "A feed stream's door: the Fluid Generator's page, with its flow and name",
                 List.of("The same frame, groups and display keys as the world's Fluid Generator. Set point, then Flow, then Phases. Double click on the CRUDE pill opens it. Entries take effect as they are typed: nothing goes to a server."));
@@ -108,31 +122,70 @@ public final class SimulatorPrototypes {
         stack(out.resolve("15-results-units-log.png"), List.of("The Units view: what each unit did, and the flowsheet's balance", "The Log view: the solver's order and passes"), views, List.of());
         both(out, "16-basis", W, H, (d, s) -> basis(d), "The Basis tab: the flowsheet's package and components",
                 List.of("The package fixes the component list every stream carries; the crude-specific packages are gone (a crude is now a stream template). Solver holds the flowsheet's tolerance and passes; threads are the client's own."));
-        grid(out, "17-file-and-repair", List.of("Open: the player's flowsheets", "After an update: what changed, nothing lost"),
+        grid(out, "17-file-and-repair", List.of("Open: the player's own files, which replace the sheet on this block", "After an update: what changed, nothing lost"),
                 List.of(page(533, 280, (d, s) -> openDialog(d)), page(533, 280, (d, s) -> repairDialog(d))));
-        single(out, "18-missing-unit", W, H, (d, s) -> screen(d, Layout.A, Show.MISSING), "A flowsheet after an update removed a unit (light door shown)",
+        single(out, "18-missing-unit", W, H, (d, s) -> screen(d, Layout.WIDE, Show.MISSING), "A flowsheet after an update removed a unit (light door shown)",
                 List.of("1 A removed equipment stays on the sheet as a hatched placeholder, its name, ports, streams and settings kept. Replace offers the units with the same ports. Everything upstream solves; the rest stays grey until then.",
                         "2 The status display names the first thing to fix. A removed component is parked the same way: the Basis tab lists it with its amounts, and Results says which streams lost it."));
         single(out, "19-block-ports", W, 442, (d, s) -> blockPorts(d), "One block: the door's settings add the connection points on the main flowsheet",
                 List.of("The same column block in four configurations, as dropped on the canvas: free ports in the laying tool's colours, each port's name shown on hover. Cyan names are what that configuration added.",
                         "Condenser set to Exchanger: Condenser in and out, for cooling water; Air cooler: none. Reboiler duty above zero: Reboiler in and out, for steam. A pumparound row: PA in and out, the cold side of its cooler. A steam row: Steam. A draw row: Draw. Top below ambient pressure: Motive steam for the ejector.",
                         "These are the utility sides the shipped assembly already has: ColumnBlueprint's condenser, kettle and PA cooler tube sides, steam valves and ejector. So the ports come from the same design the constructor builds.",
-                        "A pair left free means a utility takes the heat, as the calculator does today: no warning. A wired pair puts the heat into the stream on the sheet.",
+                        "A pair left free means a utility takes the heat, as the calculator does today: no warning. A wired pair puts the heat into whatever stream the player runs through it, not only the feed: crude, boiler feed water, another unit's stream.",
                         "Removing a row removes its ports: their streams stay, each ending in an open pill, and the status says so. Ports are saved by the row's own id, so removing PA 1 does not move PA 2's wires."));
-        single(out, "20-pa-options", W, 462, (d, s) -> paOptions(d), "Pumparound heat exchangers: two ways to connect them (option A recommended)",
-                List.of("Both on the sample's real numbers. A keeps the column's model as it is: a pumparound is a heat sink on its trays, with no circulating stream. The cooler stays in the block, and the crude goes through its tube side.",
-                        "In A the duties are the door's, so the column never reads the crude's ports. The crude's pass through the block is no loop, and the sample closes in 2 passes. The hot side is checked against the draw tray's temperature; with no circulation rate, the cold end is not checked.",
+        single(out, "20-pa-options", W, 462, (d, s) -> paOptions(d), "Pumparound heat exchangers: two ways to connect them (option A chosen, D11)",
+                List.of("Both on the sample's real numbers. A keeps the column's model as it is: a pumparound is a heat sink on its trays, with no circulating stream. The cooler stays in the block, and a stream goes through its tube side. The crude is the sample's; any stream may take the pair (D7).",
+                        "In A the duties are the door's, so the column never reads the crude's ports. The crude's pass through the block is no loop, and the sample closes in 2 passes. The hot side is checked against the draw tray's temperature; with no circulation rate, the cold end is not checked until the sizing stage sets one.",
                         "B makes a real stream: circulation set on the door, its state from the draw tray. It allows two exchangers on one pumparound. The price is 3 more units, 6 more streams, and a duty that comes back as a result: the column solves again whenever a return temperature moves, and a broken loop must be caught."));
         single(out, "21-other-blocks", W, 402, (d, s) -> otherBlocks(d), "The same rule for every block: ports come from its configuration",
                 List.of("Each is one tile and one door. An exchanger's bypass or ratio station stays inside its block, as in ExchangerBlueprint. A heater's coils in series are one pair; set apart, the convection coil can take other duty, such as superheating the stripping steam.",
                         "Fuel stays off the sheet: the mod has no combustion model, so a heater is set by its outlet or its duty. Unlit tiles take their ports from their nozzles when a process model lights them, so a new unit brings its ports with it."));
+        for (var option : SimulatorIcons.Style.values()) {
+            String file = "23-icons-" + switch (option) {
+                case SOLID -> "A-silhouette";
+                case FRAMED -> "B-framed";
+                case LINE -> "C-line";
+            };
+            single(out, file, W, 540, (d, s) -> iconSheet(d, option), switch (option) {
+                        case SOLID -> "Symbols, option A: flat silhouettes in the state's colour, details cut out";
+                        case FRAMED -> "Symbols, option B: dark fill, outline and details in the state's colour, as the shipped door drawings";
+                        case LINE -> "Symbols, option C: outlines only, with a process drawing's schematic marks";
+                    },
+                    List.of("All three share one geometry, true to the mod's equipment: straight corners, only heads and domes round, no gradients and no light. Each symbol is its own: piston and turbo compressors differ, a column's trays stop short of one wall in turn as downcomers do, a heater has its radiant box, convection bank and stack.",
+                            "Drawn at true size for a 1920 by 1080 window, with the zoomed views at twice that. In the game each symbol is a baked mask in a texture, tinted by the unit's state, so its edges stay smooth at every window scale and zoom."));
+        }
         var loops = new ArrayList<BufferedImage>();
-        loops.add(page(W, H, (d, s) -> screen(d, Layout.A, Show.RECYCLE)));
+        loops.add(page(W, H, (d, s) -> screen(d, Layout.WIDE, Show.RECYCLE)));
         loops.add(page(W, H, (d, s) -> loopLog(d, false)));
         loops.add(page(W, H, (d, s) -> loopLog(d, true)));
         stack(out.resolve("22-loops.png"), List.of("A material recycle: 15 % of the residue back to the crude, one tear closes both loops", "An energy loop that moves the column: the furnace on a fixed duty, 8 MW short", "No steady state: all of the residue back, so its heavy ends have no way out"), loops,
                 List.of("Every number is the real column and flash code (LoopProbe). The furnace that holds 365.0 °C decouples the column, so the sample closes in 2 passes. A furnace on duty does not: the feed falls, the bottoms fall, the residue preheats less, and the loop's gain is about 0.5.",
                         "The status says Steady state only when every tear has stopped moving and mass closes. Otherwise it says Not steady, the last pass stays on show, and the Log names the tear and what grew. A trial step that fails a column falls back to a plain pass."));
+        var sizing = new ArrayList<BufferedImage>();
+        var shells = List.<Column.Row>of(entry("shells", "Shells", ""), entry("shell", "Shell", "m"), entry("tubes", "Tubes", "m"));
+        sizing.add(page(W, H, (d, s) -> SimulatorSizing.units(d, "E-101", shells, Map.of("shells", "1", "shell", "1.00", "tubes", "6"), false)));
+        sizing.add(page(W, H, (d, s) -> SimulatorSizing.units(d, "T-101", List.of(entry("diameter", "Diameter", "m"), meter("Trays", "40", "")), Map.of("diameter", "8.0"), false)));
+        sizing.add(page(W, H, (d, s) -> SimulatorSizing.units(d, "E-101", shells, Map.of("shells", "1", "shell", "0.75", "tubes", "6"), true)));
+        stack(out.resolve("24-sizing-units.png"), List.of("The Sizing tab, Units: every unit, its size and the limit closest to it", "T-101 selected: its block's members are rows under it", "A size the player keeps: Fixed rates it, and a red row stops Send to block"), sizing,
+                List.of("1 Sizing lights once the sheet reaches a steady state. Size all sizes every unit and line at the Design flow, 110 % of the steady flow. Every number here is a real run of SizingProbe on the sample, with the mod's own laws and the world's films.",
+                        "2 The lamps. Green meets every limit. Yellow is a Should: outside good practice, and it still runs. Red is a Must: the world will not run it or the constructor cannot build it. E-102 is yellow: no bank of the catalogue reaches the 0.6 m/s tube speed at the surface it needs.",
+                        "3 Auto takes the smallest size that meets every limit. Fixed keeps the player's size and rates it against the same limits, so one stage both sizes and rates. A kept shell of 0.75 m holds 253 of the 444 m² the duty needs: red, and the status says why.",
+                        "4 A block is one row with its members under it, as its door builds them. A pumparound has no circulation until here: PA fall gives it, so its pump, lines and cooler get real flows.",
+                        "5 Sizing moves no process number, with one exception: a new column diameter moves the tray drops, so Size all runs the sheet again. Here the door's 8.0 m is what Auto picks: 7.5 m floods at 80.9 %, over the 80 % limit."));
+        single(out, "25-sizing-lines", W, H, (d, s) -> SimulatorSizing.lines(d, "S-7"), "The Sizing tab, Lines: each line's service gives its limits",
+                List.of("1 The service comes from the stream's phase, pressure and place: what feeds a pump, what leaves a tray, and so on. The key changes it, as the player may know better. It gives the limits: speed, drop per 100 m, ρv².",
+                        "2 S-7 is the transfer line, two-phase at 359.5 °C: ρv² decides it, 8144 of 10000. That takes the pipe tool's largest bore, 0.80 m. Over that a line goes to two parallel runs, with a yellow lamp. The block's own lines follow the sheet's."));
+        var budget = new ArrayList<BufferedImage>();
+        budget.add(page(W, H, (d, s) -> SimulatorSizing.pressure(d, 0)));
+        budget.add(page(W, H, (d, s) -> SimulatorSizing.pressure(d, 1)));
+        stack(out.resolve("26-sizing-pressure.png"), List.of("The Sizing tab, Pressure: P-101's rise against what the sized train loses", "The residue line has no pump: the column's pressure and its sump must push it"), budget,
+                List.of("A path runs from a machine's outlet to the next pressure the sheet sets. The door's drops were the player's estimates; this view adds up the sized ones at design flow, with the lines at the Line length. Sheet says is the door's own drop.",
+                        "Spare under zero is red: the built plant cannot reach the sheet's pressure at this flow. Spare over zero is what a valve takes. Here H-101's door took 7.60 bar and its coils lose 1.95, so 5.34 bar stays spare."));
+        var build = new ArrayList<BufferedImage>();
+        build.add(page(W, H, (d, s) -> SimulatorSizing.build(d)));
+        build.add(page(533, 280, (d, s) -> SimulatorSizing.constructor(d)));
+        stack(out.resolve("27-build-list.png"), List.of("The Sizing tab, Build: what Send to block stores on the block", "The constructor's Import lists every unit of the flowsheet"), build,
+                List.of("Send to block stores each unit's design on the block, as Save design does for a column today. The equipment constructor's Import then lists them all, with the block's members. The line list stays with the player, who lays each line with the pipe tool at its bore."));
     }
 
     // ---- The sample's numbers: tools/process-simulator/SampleFlowsheetProbe.java on the shipped science, 2026-11-02 ----
@@ -265,9 +318,19 @@ public final class SimulatorPrototypes {
 
     // ---- The main screen ----
 
-    enum Layout { A, B, COMPACT, TINY }
+    enum Layout { WIDE, COMPACT, TINY }
 
-    enum Show { PLAIN, NOTES, INTERACTION, MISSING, RUNNING, RECYCLE }
+    enum Show {
+        PLAIN, NOTES, UNIT, FEED, STREAM, INTERACTION, RECONNECT, MISSING, RUNNING, RECYCLE, VIEWER;
+
+        /** Whether something is selected, so the panel stands open over the canvas. */
+        boolean panel() {
+            return switch (this) {
+                case UNIT, FEED, STREAM, MISSING, RECYCLE -> true;
+                default -> false;
+            };
+        }
+    }
 
     /** A numbered note on the drawing: not part of the screen. */
     static void note(Canvas c, int x, int y, int n) {
@@ -279,29 +342,34 @@ public final class SimulatorPrototypes {
 
     /** The frame every page of the screen shares: title, tabs, file keys, the status once. */
     static void frame(GuiPrototypes.Door d, int tab, String status, int tone, boolean narrow) {
+        frame(d, tab, status, tone, narrow, false);
+    }
+
+    /** {@code reader}: a second player's frame, which can only save a copy. */
+    static void frame(GuiPrototypes.Door d, int tab, String status, int tone, boolean narrow, boolean reader) {
         d.title("Process simulator: CDU train");
-        String[] tabs = {"Flowsheet", "Results", "Basis"};
-        int tw = narrow ? 62 : 84;
-        for (int i = 0; i < 3; i++) d.skin.button(d.c, new Rect(10 + i * (tw + 4), 29, tw, 18), tabs[i], i == tab ? Skin.Press.CURRENT : Skin.Press.REST, false);
+        String[] tabs = {"Flowsheet", "Results", "Sizing", "Basis"};
+        int tw = narrow ? 56 : 84;
+        for (int i = 0; i < tabs.length; i++) d.skin.button(d.c, new Rect(10 + i * (tw + 4), 29, tw, 18), tabs[i], i == tab ? Skin.Press.CURRENT : Skin.Press.REST, false);
         String[] file = {"New", "Open", "Save", "Save as"};
         int kw = narrow ? 36 : 48, x = d.w - 10 - file.length * kw - (file.length - 1) * 4;
-        for (int i = 0; i < file.length; i++) d.skin.button(d.c, new Rect(x + i * (kw + 4), 29, kw, 18), narrow && i == 3 ? "As.." : file[i], Skin.Press.REST, false);
+        for (int i = 0; i < file.length; i++) d.skin.button(d.c, new Rect(x + i * (kw + 4), 29, kw, 18), narrow && i == 3 ? "As.." : file[i], reader && i < 3 ? Skin.Press.OFF : Skin.Press.REST, false);
         d.skin.status(d.c, new Rect(10, 59, d.w - 20, 9), d.m.cut(status, d.w - 24), tone);
     }
 
     /** The footer: Close, Run, Stop, Undo and Redo; the display keys on their tray at the right. */
     static void footer(GuiPrototypes.Door d, Show show, boolean tiny) {
-        boolean running = show == Show.RUNNING;
+        boolean running = show == Show.RUNNING, reader = show == Show.VIEWER;
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - 35);
         int x = 10, y = d.h - 27;
         d.skin.button(d.c, new Rect(x, y, 50, 18), "Close", Skin.Press.REST, false);
         x += 54;
-        d.skin.button(d.c, new Rect(x, y, 60, 18), "Run", running ? Skin.Press.OFF : Skin.Press.PRIMARY, false);
+        d.skin.button(d.c, new Rect(x, y, 60, 18), "Run", running || reader ? Skin.Press.OFF : Skin.Press.PRIMARY, false);
         x += 64;
         d.skin.button(d.c, new Rect(x, y, 50, 18), "Stop", running ? Skin.Press.REST : Skin.Press.OFF, false);
         x += 54;
         if (!tiny) for (var o : List.of("Undo", "Redo")) {
-            d.skin.button(d.c, new Rect(x, y, 50, 18), o, Skin.Press.REST, false);
+            d.skin.button(d.c, new Rect(x, y, 50, 18), o, reader ? Skin.Press.OFF : Skin.Press.REST, false);
             x += 54;
         }
         String[] keys = {"Mole", "°C", "bar", "/h"};
@@ -311,27 +379,24 @@ public final class SimulatorPrototypes {
     }
 
     static void screen(GuiPrototypes.Door d, Layout layout, Show show) {
-        boolean side = layout == Layout.A, tiny = layout == Layout.TINY, compact = layout == Layout.COMPACT || tiny;
+        boolean tiny = layout == Layout.TINY, compact = layout == Layout.COMPACT || tiny;
         String warning = "1 warning: P-102 takes its liquid at the bubble point.";
         String status = switch (show) {
             case MISSING -> "H-101: this version has no such equipment. Replace it to solve what lies downstream.";
-            case RUNNING -> "Running pass 2 of at most 30: T-101 from its last state.";
-            case RECYCLE -> "Steady state in 4 passes, 2.3 s: 25 streams, 10 units. " + warning;
-            default -> layout == Layout.B ? "Steady state in 2 passes, 3.6 s. Mass gap 0.00 %, heat gap 0.00 %. " + warning : "Steady state: 21 streams, 7 units. " + warning;
+            case RUNNING -> "Running, 3.1 s: pass 2 of at most 30, T-101 from its last state.";
+            case RECYCLE -> "Steady state in 4 passes, 2.3 s: 25 streams, 10 units, mass gap 0.00 %, H-101 84.50 MW. " + warning;
+            case VIEWER -> "Read only: Alex is editing this flowsheet. Shown: the last run saved on the block, steady state in 2 passes.";
+            case RECONNECT -> "S-8: pick a port for this end. Right click or Esc puts it back.";
+            default -> compact ? "Steady state in 2 passes, 3.6 s. " + warning : "Steady state in 2 passes, 3.6 s: 21 streams, 7 units, mass gap 0.00 %, heat gap 0.00 %. " + warning;
         };
-        frame(d, 0, status, show == Show.RUNNING ? Palette.ACCENT : Palette.WARN, compact);
-        int doorW = side ? 168 : 0, paletteH = tiny ? 40 : compact ? 58 : 80;
-        int right = d.w - 5 - (side ? doorW + 11 : 0), bottom = d.h - 38;
-        var box = d.well(new Rect(5, 71, right - 5, bottom - paletteH - 4 - 71));
+        int tone = show == Show.RUNNING || show == Show.RECONNECT || show == Show.VIEWER ? Palette.ACCENT : Palette.WARN;
+        frame(d, 0, status, tone, compact, show == Show.VIEWER);
+        int paletteH = tiny ? 40 : compact ? 58 : 80, bottom = d.h - 38;
+        var box = d.well(new Rect(5, 71, d.w - 10, bottom - paletteH - 4 - 71));
         double scale = compact ? Math.min((box.w() - 4) / 700.0, (box.h() - 4) / 300.0) : 1;
         canvas(d, box, scale, show);
-        palette(d, new Rect(5, bottom - paletteH, right - 5, paletteH), layout, show, 2);
-        if (side) {
-            int dx = d.w - 10 - doorW;
-            d.skin.vDivider(d.c, dx - 5, 74, bottom);
-            selection(d, dx, 74, doorW, show);
-        }
-        if (layout == Layout.B) card(d, box);
+        palette(d, new Rect(5, bottom - paletteH, d.w - 10, paletteH), layout, show, 2);
+        if (show.panel()) panel(d, box, show);
         footer(d, show, tiny);
         int ox = box.x() + 2, oy = box.y() + 2;
         if (show == Show.INTERACTION) {
@@ -340,7 +405,7 @@ public final class SimulatorPrototypes {
             dashes(d.c, tile, top, ox + 124, oy + 126, Palette.TEXT);
         }
         if (show == Show.NOTES) {
-            note(d.c, 282, 38, 1);
+            note(d.c, 372, 38, 1);
             note(d.c, 718, 38, 2);
             note(d.c, d.w - 22, 64, 3);
             note(d.c, ox + 200, oy + 128, 4);
@@ -348,9 +413,8 @@ public final class SimulatorPrototypes {
             note(d.c, ox + 338, oy + 282, 6);
             note(d.c, ox + 304, oy + 200, 7);
             note(d.c, ox + 400, oy + 106, 8);
-            note(d.c, d.w - 22, 100, 9);
-            note(d.c, right - 24, bottom - 30, 10);
-            note(d.c, 298, d.h - 18, 11);
+            note(d.c, d.w - 30, bottom - 30, 9);
+            note(d.c, 298, d.h - 18, 10);
         }
         if (show == Show.MISSING) {
             note(d.c, ox + 304, oy + 200, 1);
@@ -383,54 +447,96 @@ public final class SimulatorPrototypes {
         for (int i = 0; i < 3; i++) d.skin.softKey(c, new Rect(x + i * (kw + 4), box.y() + 5, kw, 15), keys[i], false);
     }
 
-    /** The layout A door column: the selection, the run, the flowsheet's counts. */
+    /** The panel's width over the canvas: a door column and its margins. */
+    static final int PANEL = 182;
+
+    /** The selection's panel: a door over the glass's right end, so the sheet under it does not move. */
+    static void panel(GuiPrototypes.Door d, Rect box, Show show) {
+        int x = box.right() + 3 - PANEL, y = box.y() - 3;
+        d.c.fill(x, y, box.right() + 3, box.bottom() + 3, 0xFF000000);
+        d.skin.page(d.c, new Rect(x + 1, y, PANEL - 1, box.h() + 6));
+        selection(d, x + 7, y + 5, PANEL - 18, show);
+    }
+
+    /** What the panel holds: a unit's readings, a feed's settings, a made stream's properties, or a placeholder's keys. */
     static void selection(GuiPrototypes.Door d, int x, int y, int w, Show show) {
-        boolean missing = show == Show.MISSING, running = show == Show.RUNNING, recycle = show == Show.RECYCLE;
         var selected = new ArrayList<Column.Row>();
         selected.add(new Column.Gap(20));
-        if (missing) {
-            selected.add(new Column.Line("Removed equipment", Palette.WARN));
-            selected.add(new Column.Buttons(List.of(new Column.Button("replace", "Replace", true, null), new Column.Button("delete", "Delete", true, null))));
-        } else if (recycle) {
-            selected.add(new Column.Line("Splitter", Palette.MUTED));
-            selected.add(meter("To S-12", "15.0", "%"));
-            selected.add(meter("S-12 kmol/h", "136.9", ""));
-            selected.add(meter("RESIDUE kmol/h", "775.7", ""));
-            selected.add(new Column.Buttons(List.of(new Column.Button("open", "Open", true, null), new Column.Button("delete", "Delete", true, null))));
-        } else {
-            selected.add(new Column.Line("Heat exchanger", Palette.MUTED));
-            selected.add(meter("Duty", "25.26", "MW"));
-            selected.add(meter("Tube out", "218.4", "°C"));
-            selected.add(meter("Shell out", "200.0", "°C"));
-            selected.add(meter("Approach", "46.7", "K"));
-            selected.add(new Column.Buttons(List.of(new Column.Button("open", "Open", true, null), new Column.Button("delete", "Delete", true, null))));
+        String name = "E-101";
+        var values = Map.<String, String>of();
+        switch (show) {
+            case MISSING -> {
+                name = "H-101";
+                selected.add(new Column.Line("Removed equipment", Palette.WARN));
+                selected.add(new Column.Buttons(List.of(new Column.Button("replace", "Replace", true, null), new Column.Button("delete", "Delete", true, null))));
+            }
+            case RECYCLE -> {
+                name = "TEE-1";
+                selected.add(new Column.Line("Splitter", Palette.MUTED));
+                selected.add(meter("To S-12", "15.0", "%"));
+                selected.add(meter("S-12 kmol/h", "136.9", ""));
+                selected.add(meter("RESIDUE kmol/h", "775.7", ""));
+                selected.add(new Column.Buttons(List.of(new Column.Button("open", "Open", true, null), new Column.Button("delete", "Delete", true, null))));
+            }
+            case FEED -> {
+                name = "CRUDE";
+                selected.add(new Column.Line("Feed stream, to P-101", Palette.MUTED));
+                selected.add(entry("t", "Temperature", "°C"));
+                selected.add(entry("p", "Pressure", "bar"));
+                selected.add(entry("f", "Flow", "kmol/h"));
+                selected.add(new Column.Line("Crude oil, 19 components", Palette.MUTED));
+                selected.add(new Column.Buttons(List.of(new Column.Button("open", "Open", true, null), new Column.Button("delete", "Delete", true, null))));
+                values = Map.of("t", "25.0", "p", "8.00", "f", "2652.3");
+            }
+            case STREAM -> {
+                name = "S-5";
+                var s = stream("S-5");
+                selected.add(new Column.Line("From E-101 to H-101", Palette.MUTED));
+                selected.add(meter("Temperature", s.t(), "°C"));
+                selected.add(meter("Pressure", s.p(), "bar"));
+                selected.add(meter("Vapour", s.vapour(), "%"));
+                selected.add(meter("Flow", s.kmol(), "kmol/h"));
+                selected.add(meter("Mass flow", s.tonnes(), "t/h"));
+                selected.add(meter("Density", s.density(), "kg/m³"));
+                selected.add(new Column.Buttons(List.of(new Column.Button("open", "Open", true, null), new Column.Button("copy", "Copy", true, null))));
+            }
+            default -> {
+                selected.add(new Column.Line("Heat exchanger", Palette.MUTED));
+                selected.add(meter("Duty", "25.26", "MW"));
+                selected.add(meter("Tube out", "218.4", "°C"));
+                selected.add(meter("Shell out", "200.0", "°C"));
+                selected.add(meter("Approach", "46.7", "K"));
+                selected.add(new Column.Buttons(List.of(new Column.Button("open", "Open", true, null), new Column.Button("delete", "Delete", true, null))));
+            }
         }
-        var run = new Column.Group("Run", "The last run", running
-                ? List.of(meter("Time", "3.1", "s"), meter("Pass", "2", ""), meter("Solving", "T-101", ""))
-                : missing ? List.of(meter("Time", "0.1", "s"), meter("Solved", "1", ""), meter("Waiting", "6", ""))
-                : recycle ? List.of(meter("Time", "2.3", "s"), meter("Loop passes", "4", ""), meter("Mass gap", "0.00", "%"), meter("H-101", "84.50", "MW"))
-                : List.of(meter("Time", "3.6", "s"), meter("Loop passes", "2", ""), meter("Mass gap", "0.00", "%"), meter("Heat gap", "0.00", "%")));
-        var column = d.column(List.of(new Column.Group("Selected", "What is selected on the canvas: a unit or a stream", selected), run,
-                new Column.Group("Flowsheet", null, List.of(meter("Units", recycle ? "10" : "7", ""), meter("Streams", recycle ? "25" : "21", ""), meter("Not set", "0", "")))), x, y, w, Map.of());
+        var column = d.column(List.of(new Column.Group("Selected", "What is selected on the canvas: a unit or a stream", selected)), x, y, w, values);
         // The name's box across the column: the kit's text row, still to build (the row left for it here is a gap).
         for (var q : column.rows()) if (q.row() instanceof Column.Gap) {
-            d.skin.field(d.c, new Rect(q.rect().x(), q.rect().y(), q.rect().w(), 18), missing ? "H-101" : recycle ? "TEE-1" : "E-101", "", false);
+            d.skin.field(d.c, new Rect(q.rect().x(), q.rect().y(), q.rect().w(), 18), name, "", false);
             return;
         }
     }
 
-    /** Layout B: the card beside the selection. */
-    static void card(GuiPrototypes.Door d, Rect box) {
-        int x = box.x() + 124, y = box.y() + 94, w = 138, h = 72;
-        d.c.fill(x, y, x + w, y + h, 0xF01C2630);
-        d.c.outline(x, y, w, h, Palette.ACCENT);
-        d.c.text("E-101  Heat exchanger", x + 5, y + 4, Palette.TEXT);
-        String[][] rows = {{"Duty", "25.26 MW"}, {"Tube out", "218.4 °C"}, {"Shell out", "200.0 °C"}, {"Approach", "46.7 K"}};
-        for (int i = 0; i < rows.length; i++) {
-            d.c.text(rows[i][0], x + 5, y + 16 + i * 10, Palette.MUTED);
-            d.c.text(rows[i][1], x + w - 5 - d.m.width(rows[i][1]), y + 16 + i * 10, Palette.ACCENT);
-        }
-        d.c.text("Double click to open", x + 5, y + 62, Palette.MUTED);
+    /** An option sheet: the sample at true size, a few symbols at twice that, every tile. */
+    static void iconSheet(GuiPrototypes.Door d, SimulatorIcons.Style option) {
+        var before = SimulatorIcons.style;
+        SimulatorIcons.style = option;
+        d.skin.title(d.c, 10, 8, "Sample at true size, zoomed symbols, every tile");
+        var box = d.well(new Rect(5, 26, d.w - 10, 318));
+        canvas(d, box, 1, Show.PLAIN);
+        var zoom = new FlowsheetPainter(d.c, box.x() + 716, box.y() + 8, 2, 1);
+        glyph(zoom, Glyph.EXCHANGER, 0, 0, 64, 28, Look.TEAL);
+        glyph(zoom, Glyph.AIR_COOLER, 0, 38, 60, 32, Look.YELLOW);
+        glyph(zoom, Glyph.PUMP, 0, 80, 30, 34, Look.TEAL);
+        glyph(zoom, Glyph.BOOT_DRUM, 38, 84, 64, 28, Look.TEAL);
+        var tiles = d.well(new Rect(5, 346, d.w - 10, 188));
+        int k = 0, across = (tiles.w() - 4) / 68;
+        for (var row : TILES)
+            for (var t : row) {
+                tile(d, tiles.x() + 2 + k % across * 68, tiles.y() + k / across * 60, 66, 58, t, true, false);
+                k++;
+            }
+        SimulatorIcons.style = before;
     }
 
     // ---- The palette ----
@@ -445,15 +551,15 @@ public final class SimulatorPrototypes {
                     new Tile(Glyph.SPHERE, "Sphere", true), new Tile(Glyph.ADSORBER, "Adsorber", false), new Tile(Glyph.CYCLONE, "Cyclone", false)),
             List.of(new Tile(Glyph.EXCHANGER, "Heat exchanger", true), new Tile(Glyph.KETTLE, "Kettle reboiler", true), new Tile(Glyph.AIR_COOLER, "Air cooler", true), new Tile(Glyph.HEATER, "Vertical heater", true),
                     new Tile(Glyph.CABIN, "Cabin heater", true)),
-            List.of(new Tile(Glyph.PUMP, "Pump", true), new Tile(Glyph.COMPRESSOR, "Piston compressor", true), new Tile(Glyph.COMPRESSOR, "Turbo compressor", true), new Tile(Glyph.EJECTOR, "Steam ejector", false),
-                    new Tile(Glyph.TURBINE, "Steam turbine", false), new Tile(Glyph.TURBINE, "Condensing turbine", false)),
-            List.of(new Tile(Glyph.REACTOR, "Stirred reactor", false), new Tile(Glyph.ADSORBER, "Trickle bed", false), new Tile(Glyph.ADSORBER, "Ebullated bed", false), new Tile(Glyph.FCC, "FCC converter", false),
+            List.of(new Tile(Glyph.PUMP, "Pump", true), new Tile(Glyph.COMPRESSOR, "Piston compressor", true), new Tile(Glyph.TURBO, "Turbo compressor", true), new Tile(Glyph.EJECTOR, "Steam ejector", false),
+                    new Tile(Glyph.TURBINE, "Steam turbine", false), new Tile(Glyph.CONDENSING, "Condensing turbine", false)),
+            List.of(new Tile(Glyph.REACTOR, "Stirred reactor", false), new Tile(Glyph.TRICKLE, "Trickle bed", false), new Tile(Glyph.EBULLATED, "Ebullated bed", false), new Tile(Glyph.FCC, "FCC converter", false),
                     new Tile(Glyph.COKER, "Delayed coker", false)),
-            List.of(new Tile(Glyph.BOILER, "CFB boiler", false), new Tile(Glyph.GASIFIER, "Fluid-bed gasifier", false), new Tile(Glyph.BOILER, "Grate boiler", false), new Tile(Glyph.GASIFIER, "Fixed-bed gasifier", false)));
+            List.of(new Tile(Glyph.CFB, "CFB boiler", false), new Tile(Glyph.FLUID_GAS, "Fluid-bed gasifier", false), new Tile(Glyph.GRATE, "Grate boiler", false), new Tile(Glyph.FIXED_GAS, "Fixed-bed gasifier", false)));
 
     static void palette(GuiPrototypes.Door d, Rect r, Layout layout, Show show, int selected) {
         boolean tiny = layout == Layout.TINY, compact = layout == Layout.COMPACT || tiny;
-        var tiles = TILES.get(selected);
+        var tiles = show == Show.VIEWER ? TILES.get(selected).stream().map(t -> new Tile(t.glyph(), t.name(), false)).toList() : TILES.get(selected);
         if (tiny) {
             // One strip: the category as one key that steps, then symbols only.
             d.skin.button(d.c, new Rect(r.x() + 5, r.y() + 3, 54, 18), CATEGORIES.get(selected), Skin.Press.CURRENT, false);
@@ -504,9 +610,9 @@ public final class SimulatorPrototypes {
     // ---- The symbols: drawn in a box, at any size, through the shipped painter ----
 
     enum Glyph {
-        FEED(40, 18), PRODUCT(40, 18), PUMP(30, 34), COMPRESSOR(34, 34), VALVE(24, 24), MIXER(22, 26), SPLITTER(22, 26), FILTER(30, 26), EXCHANGER(64, 28), KETTLE(70, 34), AIR_COOLER(60, 32),
-        HEATER(58, 88), CABIN(74, 74), DRUM(28, 60), LYING(64, 28), TANK(54, 42), SPHERE(44, 44), ADSORBER(26, 60), CYCLONE(26, 60), COLUMN(44, 248), EJECTOR(50, 20), TURBINE(34, 34),
-        REACTOR(34, 52), FCC(48, 56), COKER(44, 56), BOILER(50, 60), GASIFIER(30, 60), MISSING(58, 88);
+        FEED(40, 18), PRODUCT(40, 18), PUMP(30, 34), COMPRESSOR(34, 34), TURBO(34, 34), VALVE(24, 24), MIXER(22, 26), SPLITTER(22, 26), FILTER(30, 26), EXCHANGER(64, 28), KETTLE(70, 34), AIR_COOLER(60, 32),
+        HEATER(58, 88), CABIN(74, 74), DRUM(28, 60), LYING(64, 28), BOOT_DRUM(64, 28), TANK(54, 42), SPHERE(44, 44), ADSORBER(26, 60), CYCLONE(26, 60), COLUMN(44, 248), EJECTOR(50, 20), TURBINE(34, 34), CONDENSING(34, 34),
+        REACTOR(34, 52), TRICKLE(26, 60), EBULLATED(26, 60), FCC(48, 56), COKER(44, 56), CFB(50, 60), GRATE(50, 60), FLUID_GAS(30, 60), FIXED_GAS(30, 60), MISSING(58, 88);
 
         final int w, h;
 
@@ -523,157 +629,18 @@ public final class SimulatorPrototypes {
         }
     }
 
-    /** {@code g} in the design box from ({@code x}, {@code y}), {@code w} by {@code h}. */
+    /** {@code g} in the design box from ({@code x}, {@code y}), {@code w} by {@code h}: vector shapes, painted straight onto the image. */
     static void glyph(FlowsheetPainter p, Glyph g, int x, int y, int w, int h, Look look) {
         var c = p.canvas();
-        int x0 = p.x(x), y0 = p.y(y), x1 = p.x(x + w), y1 = p.y(y + h), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, pw = x1 - x0, ph = y1 - y0;
-        int detail = look.stroke();
-        switch (g) {
-            case FEED -> {
-                p.box(x0, y0, x1 - pw / 3, y1, look);
-                triangle(c, x1 - pw / 3, y0, x1, y1, true, detail);
-            }
-            case PRODUCT -> {
-                triangle(c, x0, y0, x0 + pw / 3, y1, true, detail);
-                p.box(x0 + pw / 3, y0, x1, y1, look);
-            }
-            case PUMP -> {
-                int r = Math.max(3, Math.min(pw, ph) * 2 / 5);
-                c.fill(cx - r / 2, y1 - Math.max(2, ph / 8), cx + r / 2, y1, detail);
-                p.circle(cx, y0 + r + 1, r, look);
-                triangle(c, cx - r / 2 + 1, y0 + r + 1 - r / 2, cx + r / 2 + 1, y0 + r + 1 + r / 2, true, detail);
-            }
-            case COMPRESSOR, TURBINE -> {
-                for (int yy = y0; yy < y1; yy++) {
-                    int down = g == Glyph.COMPRESSOR ? yy - y0 : y1 - 1 - yy;
-                    int hw = (int) Math.round(pw / 2.0 - (pw / 4.0) * down / (double) Math.max(1, ph - 1));
-                    c.hLine(cx - hw, cx + hw, yy, look.fill());
-                    c.fill(cx - hw, yy, cx - hw + 1, yy + 1, detail);
-                    c.fill(cx + hw, yy, cx + hw + 1, yy + 1, detail);
-                }
-                c.hLine(g == Glyph.COMPRESSOR ? cx - pw / 2 : cx - pw / 4, g == Glyph.COMPRESSOR ? cx + pw / 2 : cx + pw / 4, y0, detail);
-                c.hLine(g == Glyph.COMPRESSOR ? cx - pw / 4 : cx - pw / 2, g == Glyph.COMPRESSOR ? cx + pw / 4 : cx + pw / 2, y1 - 1, detail);
-            }
-            case VALVE -> {
-                triangle(c, x0, y0 + ph / 5, cx + 1, y1 - ph / 5, true, detail);
-                triangle(c, cx, y0 + ph / 5, x1, y1 - ph / 5, false, detail);
-            }
-            case MIXER, SPLITTER -> {
-                triangle(c, x0, y0, x1, y1, g == Glyph.MIXER, look.fill());
-                triangleEdge(c, x0, y0, x1, y1, g == Glyph.MIXER, detail);
-            }
-            case FILTER -> {
-                p.box(x0, y0, x1, y1, look);
-                for (int i = 1; i < 6; i++) c.vLine(x0 + i * pw / 6, y0 + ph / 5, y1 - ph / 5, detail);
-            }
-            case EXCHANGER -> {
-                int head = Math.max(2, ph / 2);
-                p.vessel(x0, y0, x1, y1, head, head, look);
-                c.vLine(x0 + head, y0, y1, detail);
-                c.vLine(x1 - head - 1, y0, y1, detail);
-                for (int i = 1; i <= 4; i++) {
-                    int bx = x0 + head + i * (pw - 2 * head) / 5;
-                    c.vLine(bx, i % 2 == 0 ? y0 : cy - ph / 6, i % 2 == 0 ? cy + ph / 6 : y1, detail);
-                }
-                c.hLine(x0 + head, x1 - head, cy, detail);
-            }
-            case KETTLE -> {
-                int head = Math.max(2, ph / 3);
-                p.vessel(x0 + pw / 5, y0, x1, y1, 0, head, look);
-                p.vessel(x0, y0 + ph / 4, x0 + pw / 5 + 2, y1 - ph / 4, head, 0, look);
-                c.hLine(x0 + head, x1 - head - 6, cy + ph / 8, detail);
-                c.hLine(x0 + pw / 5, x1 - head, y0 + ph / 3, 0x90FFFFFF & detail);
-            }
-            case AIR_COOLER -> {
-                p.box(x0, y0, x1, y0 + ph / 2, look);
-                for (int i = 1; i < 8; i++) c.vLine(x0 + i * pw / 8, y0, y0 + ph / 2, detail);
-                int rx = pw / 6;
-                c.hLine(cx - rx, cx + rx, y1 - ph / 4, detail);
-                c.vLine(cx, y0 + ph / 2, y1, detail);
-                c.hLine(cx - rx, cx + rx, y1 - ph / 4 + 1, detail);
-            }
-            case HEATER, CABIN -> {
-                int stack = pw / 6, conv = ph / 4, neck = ph / 10;
-                p.box(cx - stack / 2, y0, cx + stack / 2, y0 + neck, look);
-                p.box(x0 + pw / 8, y0 + neck, x1 - pw / 8, y0 + neck + conv, look);
-                for (int i = 1; i < 6; i++) c.hLine(x0 + pw / 8 + 2, x1 - pw / 8 - 2, y0 + neck + i * conv / 6, detail);
-                p.box(x0, y0 + neck + conv, x1, y1, look);
-                for (int i = 0; i < 3; i++) {
-                    int fx = x0 + (2 * i + 1) * pw / 6, fh = (y1 - y0 - neck - conv) / 3;
-                    triangle(c, fx - pw / 16, y1 - 2 - fh, fx + pw / 16 + 1, y1 - 2, false, 0xFFEF9F27, true);
-                }
-            }
-            case DRUM -> {
-                p.rounded(x0, y0, x1, y1, pw / 2, look);
-                c.hLine(x0 + 2, x1 - 3, y0 + ph * 3 / 5, detail);
-            }
-            case LYING -> {
-                int head = ph / 2;
-                c.fill(cx - pw / 8, y1 - 1, cx + pw / 8, y1 + Math.max(2, ph / 4), detail);
-                p.vessel(x0, y0, x1, y1, head, head, look);
-                c.hLine(x0 + 3, x1 - 4, y0 + ph * 3 / 5, detail);
-            }
-            case TANK -> {
-                p.box(x0, y0, x1, y1, look);
-                c.hLine(x0 + 1, x1 - 2, y0 + ph / 3, detail);
-                c.hLine(x0 + 1, x1 - 2, y0 + ph / 3 + 1, detail);
-            }
-            case SPHERE -> {
-                int r = Math.min(pw, ph) / 2;
-                c.fill(cx - r * 2 / 3, cy, cx - r * 2 / 3 + 1, y1 + 1, detail);
-                c.fill(cx + r * 2 / 3, cy, cx + r * 2 / 3 + 1, y1 + 1, detail);
-                p.circle(cx, cy, r, look);
-            }
-            case ADSORBER -> {
-                p.rounded(x0, y0, x1, y1, pw / 2, look);
-                for (int i = 1; i < 6; i++) for (int j = 0; j < 4; j++) c.fill(x0 + 3 + j * (pw - 6) / 4, y0 + i * ph / 6, x0 + 4 + j * (pw - 6) / 4, y0 + i * ph / 6 + 1, detail);
-            }
-            case CYCLONE -> {
-                p.box(x0, y0, x1, y0 + ph / 3, look);
-                p.trapezoid(x0, y0 + ph / 3, x1, y1, 0, pw / 2 - 2, look);
-            }
-            case COLUMN -> {
-                p.rounded(x0, y0, x1, y1, pw / 2, look);
-                int trays = Math.max(4, ph / 10);
-                for (int i = 1; i < trays; i++) c.hLine(x0 + 2, x1 - 3, y0 + pw / 2 + i * (ph - pw) / trays, detail);
-            }
-            case EJECTOR -> {
-                triangle(c, x0, y0, cx + 1, y1, true, look.fill());
-                triangleEdge(c, x0, y0, cx + 1, y1, true, detail);
-                triangle(c, cx, y0 + ph / 4, x1, y1 - ph / 4, false, look.fill());
-                triangleEdge(c, cx, y0 + ph / 4, x1, y1 - ph / 4, false, detail);
-            }
-            case REACTOR -> {
-                p.rounded(x0, y0, x1, y1, pw / 3, look);
-                c.vLine(cx, y0 + 2, y1 - ph / 4, detail);
-                c.hLine(cx - pw / 4, cx + pw / 4, y1 - ph / 4, detail);
-            }
-            case FCC -> {
-                p.rounded(x0, y0 + ph / 4, cx - 1, y1, pw / 6, look);
-                p.rounded(cx + 1, y0, x1, y1, pw / 6, look);
-            }
-            case COKER -> {
-                p.rounded(x0, y0, cx - 1, y1 - ph / 6, pw / 6, look);
-                p.rounded(cx + 1, y0, x1, y1 - ph / 6, pw / 6, look);
-            }
-            case BOILER -> {
-                p.box(x0, y0, x1, y1, look);
-                for (int i = 0; i < 3; i++) {
-                    int fx = x0 + (2 * i + 1) * pw / 6, fh = ph / 3;
-                    triangle(c, fx - pw / 12, y1 - 2 - fh, fx + pw / 12 + 1, y1 - 2, false, detail, true);
-                }
-            }
-            case GASIFIER -> {
-                p.rounded(x0, y0, x1, y1, pw / 3, look);
-                triangle(c, cx - pw / 5, y1 - 2 - ph / 3, cx + pw / 5 + 1, y1 - 2, false, detail, true);
-            }
-            case MISSING -> {
-                p.box(x0, y0, x1, y1, Look.RED);
-                c.clip(new Rect(x0 + 1, y0 + 1, pw - 2, ph - 2));
-                for (int k = -ph; k < pw; k += 8) p.line(x0 + k, y1, x0 + k + ph, y0, 0xFF7A2A2A);
-                c.unclip();
-            }
+        int x0 = p.x(x), y0 = p.y(y), x1 = p.x(x + w), y1 = p.y(y + h), pw = x1 - x0, ph = y1 - y0;
+        if (g == Glyph.MISSING) {
+            p.box(x0, y0, x1, y1, Look.RED);
+            c.clip(new Rect(x0 + 1, y0 + 1, pw - 2, ph - 2));
+            for (int k = -ph; k < pw; k += 8) p.line(x0 + k, y1, x0 + k + ph, y0, 0xFF7A2A2A);
+            c.unclip();
+            return;
         }
+        SimulatorIcons.paint(((HeatDiagramRender.Java2dCanvas) c).graphics(), g, x0, y0, pw, ph, look);
     }
 
     /** A triangle filling its box, its point right ({@code right}) or left. */
@@ -732,7 +699,7 @@ public final class SimulatorPrototypes {
             Look done = missing ? NONE : SOLVED, later = missing || running ? NONE : SOLVED;
             var units = new ArrayList<>(List.of(new Unit("P-101", Glyph.PUMP, 84, 75, 30, 34, SOLVED, 99, 68), new Unit("E-101", Glyph.EXCHANGER, 130, 216, 64, 28, done, 162, 209),
                     new Unit("H-101", missing ? Glyph.MISSING : Glyph.HEATER, 232, 186, 58, 88, done, 261, 179), new Unit("V-101", Glyph.VALVE, 340, 216, 24, 24, done, 352, 209),
-                    new Unit("T-101", Glyph.COLUMN, 438, 24, 44, 248, running ? ACTIVE : done, 508, 262), new Unit("P-102", Glyph.PUMP, 560, 160, 30, 34, missing || running ? NONE : WARN, 575, 153),
+                    new Unit("T-101", Glyph.COLUMN, 438, 24, 44, 248, running ? ACTIVE : done, 508, 262), new Unit("P-102", Glyph.PUMP, 560, 160, 30, 34, missing || running ? NONE : WARN, 575, 201),
                     new Unit("E-102", Glyph.AIR_COOLER, 62, 266, 60, 32, later, 92, 259)));
             var wires = new ArrayList<>(List.of(new Wire("S-1", new int[]{114, 88, 438, 88}, 276, 80), new Wire("S-2", new int[]{438, 102, 420, 102, 420, 122, 438, 122}, 420, 112),
                     new Wire("S-3", new int[]{438, 136, 420, 136, 420, 156, 438, 156}, 420, 146), new Wire("S-4", new int[]{438, 170, 114, 170, 114, 230, 130, 230}, 276, 162),
@@ -758,10 +725,14 @@ public final class SimulatorPrototypes {
                 pills.add(new Pill("CRUDE", 10, 88, 52, true));
                 pills.add(new Pill("RESIDUE", 4, 274, 50, false));
             }
-            for (var w : wires) p.wire(w.points(), true, false, w.name().equals("S-9") ? Palette.ACCENT : Palette.MUTED);
+            for (var w : wires) {
+                // The stream being reconnected is drawn by the gesture, from its port to the cursor.
+                if (show == Show.RECONNECT && w.name().equals("S-8")) continue;
+                p.wire(w.points(), true, false, w.name().equals("S-9") ? Palette.ACCENT : show == Show.STREAM && w.name().equals("S-5") ? 0xFFFFFFFF : Palette.MUTED);
+            }
             for (var u : units) {
                 glyph(p, u.glyph(), u.x(), u.y(), u.w(), u.h(), u.look());
-                boolean ringed = u.name().equals(running ? "T-101" : missing ? "H-101" : recycle ? "TEE-1" : "E-101");
+                boolean ringed = u.name().equals(running ? "T-101" : missing ? "H-101" : recycle ? "TEE-1" : show == Show.UNIT ? "E-101" : "");
                 if (ringed) p.canvas().outline(p.x(u.x()) - 3, p.y(u.y()) - 3, p.px(u.w()) + 6, p.px(u.h()) + 6, Palette.TEXT);
                 if (u.glyph() == Glyph.MISSING && p.labels()) {
                     p.fitted("Old heater", u.x() + u.w() / 2, u.y() + u.h() / 2 - 6, u.w(), Look.RED.text());
@@ -771,9 +742,12 @@ public final class SimulatorPrototypes {
             }
             // Each wire's ends are ports, greyed because connected; a mixer's and a splitter's arms are their own.
             for (var w : wires) {
+                if (show == Show.RECONNECT && w.name().equals("S-8")) continue;
                 int[] q = w.points();
                 p.square(q[0], q[1], 5, PortColours.CONNECTED);
                 p.square(q[q.length - 2], q[q.length - 1], 5, PortColours.CONNECTED);
+                if (show == Show.STREAM && w.name().equals("S-5"))
+                    for (int k : new int[]{0, q.length - 2}) p.canvas().outline(p.x(q[k]) - 4, p.y(q[k + 1]) - 4, 9, 9, 0xFFFFFFFF);
             }
             // The block's connection points, named on the block.
             if (p.labels())
@@ -781,10 +755,15 @@ public final class SimulatorPrototypes {
                     p.tag((String) mark[0], 460, (Integer) mark[1], 0.5f, Palette.TEXT, PLATE);
             if (p.labels())
                 for (var w : wires)
-                    if (!w.name().isEmpty() && !w.name().equals("S-14") && !(show == Show.INTERACTION && w.name().equals("S-9"))) p.tag(w.name(), w.lx(), w.ly(), 0.5f, w.name().equals("S-9") ? Palette.ACCENT : Palette.MUTED, PLATE);
+                    if (!w.name().isEmpty() && !w.name().equals("S-14") && !(show == Show.INTERACTION && w.name().equals("S-9")) && !(show == Show.RECONNECT && w.name().equals("S-8"))) p.tag(w.name(), w.lx(), w.ly(), 0.5f, w.name().equals("S-9") ? Palette.ACCENT : Palette.MUTED, PLATE);
             tear(p, 320, 292);
             for (var e : pills) pill(p, e.name(), e.x(), e.y(), e.w(), e.feed(), missing && !e.feed() ? Palette.MUTED : Palette.TEXT);
+            if (show == Show.FEED) {
+                // The selected feed: its line and its pill ringed.
+                p.canvas().outline(p.x(10) - 3, p.y(88) - 12, p.px(52) + 6, 24, 0xFFFFFFFF);
+            }
             if (show == Show.INTERACTION) interaction(d, p);
+            if (show == Show.RECONNECT) reconnect(d, p);
         }
 
         /** The loop's tear: a small diamond with a T on its line. */
@@ -793,6 +772,26 @@ public final class SimulatorPrototypes {
             int cx = p.x(x), cy = p.y(y), r = Math.max(4, p.px(7));
             for (int dy = -r; dy <= r; dy++) c.hLine(cx - (r - Math.abs(dy)), cx + (r - Math.abs(dy)), cy + dy, Palette.ACCENT);
             if (p.labels()) c.text("T", cx - 2, cy - 3, 0xFF0B1216);
+        }
+
+        /** Right click on S-8 near P-102: its end follows the cursor, the old port shows free, the port that can take it is ringed. */
+        static void reconnect(GuiPrototypes.Door d, FlowsheetPainter p) {
+            var c = p.canvas();
+            // The fixed end stays on T-101's draw; the lifted end follows the cursor, up towards the spare pump.
+            p.square(482, 173, 5, PortColours.CONNECTED);
+            p.wire(new int[]{482, 173, 530, 173, 530, 146, 586, 146}, false, false, 0xFFFFFFFF);
+            c.outline(p.x(586) - 3, p.y(146) - 3, 7, 7, 0xFFFFFFFF);
+            p.tag("S-8", 506, 165, 0.5f, 0xFFFFFFFF, PLATE);
+            // P-102's suction is free again; its pump stays, with DIESEL on its outlet.
+            p.square(560, 173, 5, PortColours.LIQUID);
+            // The new pump: its suction takes the end, so it is ringed; its discharge cannot, so it is not.
+            glyph(p, Glyph.PUMP, 600, 133, 30, 34, NONE);
+            p.tag("P-103", 616, 164, 0.5f, Palette.TEXT, PLATE);
+            c.outline(p.x(600) - 7, p.y(146) - 7, 15, 15, 0xFFFFFFFF);
+            p.square(600, 146, 5, PortColours.LIQUID);
+            p.square(630, 146, 5, PortColours.LIQUID);
+            note(c, p.x(512), p.y(188), 7);
+            note(c, p.x(652), p.y(146), 8);
         }
 
         /** The sheet of gestures: a dragged tile, a stream being drawn with the port that can take it, a name being typed, a port's hover. */
@@ -1654,7 +1653,7 @@ public final class SimulatorPrototypes {
     // ---- Basis ----
 
     static void basis(GuiPrototypes.Door d) {
-        frame(d, 2, "Package: crude oil, methane and nitrogen, as the world's network. 20 components and water.", Palette.ACCENT, false);
+        frame(d, 3, "Package: crude oil, methane and nitrogen, as the world's network. 20 components and water.", Palette.ACCENT, false);
         int doorW = 200, bottom = d.h - 38;
         var rows = List.<Column.Row>of(new Column.Group("Package", null, List.of(new Column.Choice("Crude oil, methane, nitrogen", null, true, "a"), new Column.Choice("Crude oil, methane", null, false, "b"),
                         new Column.Choice("Crude oil, no methane", null, false, "c"), new Column.Choice("Cryogenic pilot (no column)", null, false, "d"))),

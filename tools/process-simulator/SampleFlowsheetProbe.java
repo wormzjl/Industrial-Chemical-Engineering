@@ -32,6 +32,11 @@ public final class SampleFlowsheetProbe {
     static final double[] DENSITY = new double[32];
     static final double[] WEIGHT = new double[32];
     static final LinkedHashMap<String, FluidThermodynamics.State> STREAMS = new LinkedHashMap<>();
+    /** What {@code SizingProbe} reads after a run: the column's input and result, its warm start and its feed temperature. */
+    static V3ColumnInput base;
+    static V3ColumnResult solved;
+    static V3NeuralSeed warm;
+    static double feedKelvin;
 
     static FluidThermodynamics.State tp(double t, double p, double[] n) {
         return MaterialRuntime.with(catalog, network, () -> thermo.flashTP(t, p, n, () -> {}));
@@ -62,7 +67,7 @@ public final class SampleFlowsheetProbe {
     public static void main(String[] args) {
         long start = System.nanoTime();
         catalog = MaterialCatalog.bundled();
-        var base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
         network = catalog.presets().network().packageId();
         thermo = MaterialRuntime.with(catalog, network, () -> FluidThermodynamics.forNetwork(catalog, network));
         axis = thermo.components();
@@ -88,7 +93,6 @@ public final class SampleFlowsheetProbe {
 
         FluidThermodynamics.State tear = null, s5 = null, s6 = null, s7 = null, s10 = null;
         V3ColumnResult column = null;
-        V3NeuralSeed warm = null;
         double q101 = 0, qHeater = 0;
         int passes = 0;
         long[] passTime = new long[32];
@@ -109,6 +113,7 @@ public final class SampleFlowsheetProbe {
             // V-101, isenthalpic to the feed tray's pressure.
             s7 = ph(s6.temperature() - 6, 2.72e5, s6.enthalpy(), overall);
             double feedT = s7.temperature();
+            feedKelvin = feedT;
             var in = new V3ColumnInput(base.schemaVersion(), base.packageId(), base.assayId(), base.componentBasis(), base.feedComponentMolarFlowsMolPerSecond(), feedT, base.stageCount(),
                     base.feedStageNumber(), base.topPressurePascal(), base.stagePressureDropPascal(), base.specifications(), base.sideDraws(), base.steamFeeds(), base.pumparounds(), base.columnDiameterMetres());
             final var seed = warm;
@@ -157,6 +162,7 @@ public final class SampleFlowsheetProbe {
         STREAMS.put("S-10", s10);
         STREAMS.put("RESIDUE", residue);
         STREAMS.put("CWR", cwr);
+        solved = column;
         long total = System.nanoTime() - start;
         var scratch = new MixtureViscosity.Workspace();
         System.out.println("stream   T,C   P,bar  vap%  kmol/h   t/h   Lm3/h  rho  mu,mPas  MW  h,kJ/kg");

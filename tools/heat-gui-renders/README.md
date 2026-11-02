@@ -41,7 +41,9 @@ java -Dfile.encoding=UTF-8 -Duser.language=en -Djava.awt.headless=true -cp build
 - `HeatDiagramRender.java`: a single-file Java program (Java2D, headless). It lays the page out as `FluidDeviceScreen` does and draws it with the shipped code: `PanelSkin` for the page and the widgets, `HeatControlColumn` in layout C, `HeatFlowsheet`. Only the page's order of drawing and the illustrative readings are its own. Line parts cycle teal, yellow and red to show the legend's colours.
 - The English texts come from `en_us.json`; a key without a line is drawn as `?` and the key.
 - `GuiPrototypes.java`: proposed screens drawn through the same kit (`Column`, `PanelSkin`) and `HeatDiagramRender`'s font and canvas (the multi-file source launcher, JDK 22 or later). Its layouts are proposals for the owner, not the screens' code, except the fluid device pages: their door column is the shipped `DeviceColumn` at `FluidGuiLayout.side`, at the scale a window takes for them (`WindowScale`, `-Dwindow`), shown as opened and scrolled to its end where it scrolls, and the tool prints each column's height.
-- `SimulatorPrototypes.java`: the proposed simulator screens, 22 sheets, through the same kit, `GuiPrototypes` and `HeatDiagramRender`. Nothing it draws is built yet.
+- `SimulatorPrototypes.java`: the proposed simulator screens, 29 sheets, through the same kit, `GuiPrototypes` and `HeatDiagramRender`. Nothing it draws is built yet.
+- `SimulatorIcons.java`: the simulator's equipment symbols as vector shapes, in three styles, drawn at any size.
+- `SimulatorSizing.java`: the Sizing tab. Its numbers come from `tools/process-simulator/sizing-sample.tsv`, which `SizingProbe` writes, so a sheet cannot drift from the probe.
 
 ## History
 
@@ -62,3 +64,4 @@ java -Dfile.encoding=UTF-8 -Duser.language=en -Djava.awt.headless=true -cp build
 - 2026-10-28, batch 2026-10-28-gui-toolkit: a compressor's page (`fluid-compressor`, its pressure ratio with the pressure change on hover). An option sheet drew it trimmed three ways at 2560 by 1440; it went with the owner's pick, A (`GUI_TOOLKIT_PLAN.md` section 20).
 - 2026-10-28, batch 2026-10-28-constructor-templates: the constructor's column design page with Import and Templates (`equipment-constructor-column-design`) and its Templates page (`equipment-constructor-templates`); a latched key is drawn latched whether it acts or not, as `SkinButton` draws it (also in `HeatDiagramRender`).
 - 2026-11-02, batch 2026-11-02-process-simulator: `SimulatorPrototypes.java`, 18 design sheets of the in-game process simulator, for the owner to approve before any build. Its numbers are copied from `tools/process-simulator/SampleFlowsheetProbe.java`.
+- 2026-11-02, batch 2026-11-02-process-simulator: the owner's decisions redrew the main screen and the selection panel, with the reconnect page. `SimulatorIcons.java`: vector symbols in three options. `SimulatorSizing.java`: the Sizing tab, sheets 24 to 27, drawn from `SizingProbe`'s table. 29 sheets. `HeatDiagramRender.Java2dCanvas.graphics()` gives them the canvas's `Graphics2D`.

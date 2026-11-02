@@ -1,13 +1,13 @@
 # In-game process simulator: design plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: design for the owner's approval. Nothing here is built.
+Batch [2026-11-02-process-simulator](README.md). Status: decisions D1 to D11 taken on 2026-11-02 (section 5); the symbols and the sizing stage await the owner. Nothing here is built.
 The drawings are in [research/2026-11-02-process-simulator/renders/](../../research/2026-11-02-process-simulator/renders/), in the main checkout. Every number comes from the shipped code at `79b853e0`, run by the tools in
 `tools/process-simulator/`.
 
 ## 1. Expected behaviour
 
-The simulator is a paper plant. It reads nothing from the world and writes nothing to it. The player draws a flowsheet, sets
-the feeds and the units, and presses Run. Each unit closes its mass and energy balance at steady state. A loop in the sheet
+The simulator is a paper plant. Its calculations read nothing from the world and write nothing to it. The player draws a
+flowsheet, sets the feeds and the units, and presses Run. Each unit closes its mass and energy balance at steady state. A loop in the sheet
 has no first unit, so the solver guesses one stream, the tear, and repeats the loop until that stream stops moving.
 
 A multi-machine is one block. A column with its condenser, pumparound coolers and reboiler is one tile, and its settings put
@@ -33,6 +33,7 @@ pumparounds heat the crude, the residue next, and a furnace sets the final tempe
   recovered, 46 %.
 - Every crude outlet stays under its hot side: 72.1, 91.4 and 120.5 K under the draw trays.
 - P-102 is the sheets' warning, and it is real: a side draw leaves at its bubble point, so a pump needs static head above it.
+  The sheet knows no heights, so the run warns; the sizing stage clears it with the draw nozzle's height.
 
 Loops reach steady state on the real column and flash code (`LoopProbe`, one warm column a pass):
 
@@ -139,31 +140,65 @@ settings (section 3.11).
 - The learned start declines a package with nitrogen. The unit takes the package without nitrogen when the feed holds none.
 - `Solve alone` runs this unit on the stream it has now. Run is the only other way to solve it.
 
-### 3.4 Where a run happens: on the client
+### 3.4 Where a run happens and where the sheet lives
 
-Results are information only. No world state changes, so the server has nothing to trust and pays nothing.
+A run happens on the client. The flowsheet and its last results stay on the block, on the server (D2), the way the column
+calculator's input and result do today. So a sheet survives a restart, and every player who opens the block sees the same one.
+The server stores what it is sent. It never solves it, and nothing in it reaches the engine.
 
 - A run is one low-priority background thread. Stop goes through `V3SolveControl`, which reaches inside a column.
-- `AGENTS.md` gets one clause: the simulator is a client tool outside the engine schedule, reading and writing no world state.
+- Opening the block replays the stored sheet and results at once: a read, with no solve. Closing ends it. The sheet is sent to
+  no one who did not ask.
+- The client sends the sheet when the player presses Save, when a run ends and when the screen closes, not on each edit. It
+  goes as one gzip body, at most 1 MiB unpacked, in parts if a packet needs them.
+- The first player to open the block edits it. Another reads the last saved sheet, with tiles and keys off, and may Save as to a
+  file (sheet 06). The block frees the sheet when the editor closes the screen or leaves.
+- The server checks the upload's size, its format number and that it parses. A bad upload is refused with a message, and the
+  stored sheet stands.
+- Results are state. A changed package revision drops them, and the next run rebuilds them. A column's warm start is client
+  memory only, so the first run after opening a sheet starts cold.
+- The sheet sits in the block entity as a byte array, in no update tag. A damaged stored sheet never refuses a world: the block
+  opens empty, says so, and keeps the bytes for a later version.
+- `AGENTS.md` gets one clause: the simulator's run is a client tool outside the engine schedule, and reads and writes no process
+  state.
 - A client on a dedicated server uses the bundled catalog, not the server's datapacks. When the block opens, the server sends
   its revision tokens. A mismatch is a notice on the status line. Nothing is blocked.
 - Save design still goes to the server, which validates it with `ColumnDesign.of`. Server solves stay for column operation.
 
 ### 3.5 Screen
 
-The whole window, `WindowScale` design height 480: 2 at 1920 by 1080, 3 at 2560 by 1440. Tabs Flowsheet, Results, Basis. The
-palette lies below the canvas, with category keys over tiles. Doors use the 790 by 524 device frame (sheets 01 to 18).
+The whole window, `WindowScale` design height 480: 2 at 1920 by 1080, 3 at 2560 by 1440. Tabs Flowsheet, Results, Sizing, Basis.
+Sizing is off, with a hover saying why, until the sheet reaches a steady state. The palette lies below the canvas, with category
+keys over tiles. Doors use the 790 by 524 device frame.
+
+With nothing selected the canvas takes the whole width, and the run's result reads on the status display (sheet 01). A selection
+opens a panel over the right end of the glass (D1, sheet 02). The sheet under it does not move or re-zoom; the kit's rule is that
+a widget never moves. A click on empty canvas closes it.
+
+| Gesture | On a unit | On a stream |
+|---|---|---|
+| Left click | Selects; the panel shows its readings | Selects; a feed's panel shows its settings as entries, any other stream's its properties as meters |
+| Double click | Opens its door | Opens its door |
+| Double click on a name | Renames in place | Renames in place |
+| Drag | Moves it | Moves a route's segment |
+| Right click | Nothing | Lifts the end nearer the click, to reconnect it |
+
+Reconnecting (sheet 03): the lifted end follows the cursor with no key held. The stream keeps its name and every setting. Its
+old port shows free, and the ports that can take that end are ringed. A left click on one lands it. A left click on empty canvas
+ends it in a new pill. Right click or Esc puts it back. A landed end greys what lies downstream, and Undo restores it.
 
 - New kit parts: a wide text row, a Minecraft-free `FlowsheetCanvas` with hit tests, a builder class per door, each with gates.
-- Double click a symbol or a pill to open its door, a name to rename it. Tags come from the kind; a used name is refused.
-- Door entries take effect as typed, so doors have no Apply. A change greys what lies downstream. Undo and Redo sit in the
+- Tags come from the kind; a used name is refused.
+- Door entries take effect as typed, so doors have no Apply (D6). A change greys what lies downstream. Undo and Redo sit in the
   footer.
+- Symbols are vector shapes in one Minecraft-free class, true to the mod's equipment (sheets 23). A tool bakes each to a mask pair,
+  body and marks, in a texture atlas, tinted by the unit's state, so edges stay smooth at every window scale and zoom.
 
 ### 3.6 Block
 
-`process_simulator`, on the calculator's model at first. It only opens the screen. Its block entity keeps saved column designs,
-so the constructor's Import (`IMPORT_REACH` 16) works as now. The column block needs no save compatibility, so an alias takes
-`column_calculator_v3` to it.
+`process_simulator` replaces the column calculator block (D3), with no recipe (D9), as the calculator has none. Its block entity
+holds the sheet and its results (section 3.4) and the saved designs, so the constructor's Import (`IMPORT_REACH` 16) works as now.
+The column block needs no save compatibility, so an alias takes `column_calculator_v3` to it.
 
 ### 3.7 Streams and columns standalone
 
@@ -181,8 +216,9 @@ the last published snapshot: no packet, no solve (sheet 09). A feed's Compositio
 
 ### 3.9 Files and backward compatibility
 
-`.minecraft/IChemE/flowsheets/<name>.json`, written whole and renamed into place, with an autosave beside it. The same rule as
-world saves: facts survive, state rebuilds.
+The block holds the working sheet. Files are the player's own library: Save as and Open use
+`.minecraft/IChemE/flowsheets/<name>.json`, written whole and renamed into place, with an autosave beside it. One format serves
+both, under the same rule as world saves: facts survive, state rebuilds.
 
 - Facts: basis (package id, revision, component ids), units (id, stable type string, name, position, params), streams (id, name,
   from and to as stable port strings, spec, route). Unknown fields are kept and written back.
@@ -193,7 +229,7 @@ world saves: facts survive, state rebuilds.
   rest stays grey, and Replace offers units with the same ports (sheet 18).
 - A removed component is parked: its amounts stay in the file, out of the solve, and the Basis tab and Results name them. An
   added component starts at zero everywhere. A removed package asks for another, and maps by component id.
-- A newer format or a damaged file is refused and left untouched (sheet 17). Opening never rewrites a file; Save does.
+- A newer format or a damaged file is refused and left untouched (sheet 17). Opening never rewrites a file; Save as does.
 - Corpus images under `src/test/resources/compat/`, read by a gate, at every format change.
 
 ### 3.10 New equipment joins the simulator
@@ -211,7 +247,7 @@ A multi-machine is one tile, one door, one block (sheets 19, 21). Its ports are 
 | Always | Feed, Overhead, Distillate, Free water, Bottoms | The column's own streams |
 | Condenser: Exchanger | Condenser in, out | Cooling water. Air cooler adds none |
 | Reboiler duty above zero | Reboiler in, out | Steam through the kettle's tube side |
-| A pumparound row | PA in, out | The cold side of its cooler, under option A of D11 |
+| A pumparound row | PA in, out | The cold side of its cooler, under option A of D11. Any stream may use it |
 | A steam row | Steam | Stripping steam |
 | A draw row | Draw | A side product |
 | Top below ambient pressure | Motive steam | The ejector's motive side |
@@ -220,7 +256,8 @@ A multi-machine is one tile, one door, one block (sheets 19, 21). Its ports are 
 
 - The column's list comes from `ColumnDesign` and `ColumnBlueprint`, so a port on the sheet is the nozzle the constructor builds.
 - There is no energy stream type. A heat link is an ordinary stream through a port pair, and that stream gains or gives the
-  block's duty at the door's drop: `h_out = h_in + Q / F`, then a PH flash. The sample's condenser puts 39.23 MW into 3423 t/h of
+  block's duty at the door's drop. The pair does not care what the stream is (D7): crude, boiler feed water, another column's
+  bottoms: `h_out = h_in + Q / F`, then a PH flash. The sample's condenser puts 39.23 MW into 3423 t/h of
   water, 30.0 to 39.9 °C. Water is on every stream's axis, so nothing else is needed.
 - A wired steam port replaces the door's steam entries, which turn to meters. It must be water, because `V3SteamFeedSpec` holds
   water alone. A column inlet under its tray's pressure is a warning: no pressure network pushes it in.
@@ -235,7 +272,8 @@ A multi-machine is one tile, one door, one block (sheets 19, 21). Its ports are 
 
 ## 4. Work packages
 
-Each ends with the quick suite and a commit. W1 to W4 have no GUI and no Minecraft classes.
+Each ends with the quick suite and a commit. W1 to W4 have no GUI and no Minecraft classes. W1 to W4 can start now; the rest
+follow the merge of column operation (D10).
 
 | WP | Content | Gate |
 |---|---|---|
@@ -244,26 +282,36 @@ Each ends with the quick suite and a commit. W1 to W4 have no GUI and no Minecra
 | W3 | Column block: ports from `ColumnDesign`, heat sides, steam port | Matches the calculator on the default preset to the last digit; the sample in 2 passes, gap under 0.05 %; the furnace on duty and the 15 % recycle close |
 | W4 | Files, aliases, placeholders, parked components, port ids by row | Corpus, round trip, damaged file refused, a removed row leaves open pills |
 | W5 | Standalone templates: schema 3, split presets, packages removed | Old presets load; column and stream gates hold |
-| W6 | Screen: canvas with block ports and hovers, palette, doors, Results, Basis | Column-builder gates; sheets rendered from shipped code |
+| W6 | Screen: canvas with block ports and hovers, selection panel, reconnect, baked symbols, palette, doors, Results, Basis | Column-builder gates; sheets rendered from shipped code |
 | W7 | Client run: thread, Stop, progress, revision notice | Stop mid-column; nothing on the render thread |
-| W8 | Block swap, Save design, clipboard, reservoir Copy | Constructor import; no packet on Copy |
+| W8 | Block swap, the sheet on the block (upload, replay, read only for a second player), Save design, clipboard, reservoir Copy | Constructor import; no packet on Copy; a sheet survives a reload; a bad upload is refused; no solve on the server |
 | W9 | Coverage gate, `AGENTS.md` rule, code guide chapter, zh_cn, cleanup, final lane | `test slowGates` |
+| S1 to S5 | The sizing stage, after the main flowsheet: [SIZING_PLAN.md](SIZING_PLAN.md) | There |
 
-## 5. Decisions for the owner
+## 5. Decisions
+
+The owner's answers of 2026-11-02.
+
+| # | Decision | Answer |
+|---|---|---|
+| D1 | Screen layout | A, with the right panel only while something is selected (section 3.5) |
+| D2 | Where a run happens | On the client, with its state persisted on the server (section 3.4) |
+| D3 | The calculator block | Replaced |
+| D4 | Column template flows | Scale with the feed |
+| D5 | Crude-specific packages | Removed |
+| D6 | Doors | Apply as typed |
+| D7 | What goes through a pair port | Any stream the player likes, not only the feed. No energy stream type (section 3.11) |
+| D8 | A plain heater or cooler tile | None |
+| D9 | Recipe for the block | None |
+| D10 | When it starts | After column operation merges; W1 to W4 can start now |
+| D11 | Pumparound exchangers | Option A: the cooler stays in the block, a stream through its tube side |
+
+Open:
 
 | # | Decision | Recommended | Why |
 |---|---|---|---|
-| D1 | Layout A (door column) or B (card, sheet 02) | A | The run and selection stay in view; B gains 22 % of the width |
-| D2 | Runs on the client only, or also on the server | Client only | Section 3.4 |
-| D3 | Replace the calculator block, or keep it beside the new block | Replace | One way to design a column |
-| D4 | Column template flows scale with the feed, or stay fixed | Scale | A template then fits any crude rate |
-| D5 | Remove the crude-specific packages | Remove | They are the combined packages you asked to remove |
-| D6 | Doors apply as typed, or keep an Apply key | As typed | Nothing crosses a network; Undo covers a mistake |
-| D7 | Energy streams | Answered by your note: a pumparound must heat the feed. No separate type: heat reaches the sheet through stream ports | Section 3.11 |
-| D8 | A plain heater/cooler tile with no equipment behind it | No | The tiles stay the mod's own equipment |
-| D9 | Recipe for the block | Your call | The calculator has none today |
-| D10 | Start on main now, or after column operation merges | After it merges | `claude/column-operation-5c3005` changes `ProcessSolveServices`, `V3ColumnCalculator`, `FlowsheetPainter`; W1 to W4 can start now |
-| D11 | Pumparound exchangers: A, the cooler stays in the block and the crude runs through its tube side, or B, a real pumparound stream leaves the block (sheet 20) | A | The physics does not force one. A is your list's "PA HX connections", keeps the column's model, adds no loop. B costs 3 units, 6 streams and a column solve per moved return |
+| D12 | Symbols: A silhouette, B framed, or C line (sheets 23) | B | It matches the shipped door drawings, and its dark fill leaves the eye on the streams. A reads best at tile size and follows your logo rule, and a big column turns into a solid block of colour |
+| D13 to D17 | The sizing stage | [SIZING_PLAN.md](SIZING_PLAN.md), section 6 | |
 
 ## 6. What you did not mention
 
@@ -286,9 +334,11 @@ Taken as defaults unless you say otherwise. Items marked D are in section 5.
 - **Editing basics**: undo, multi-select, copying units, autosave, an unsaved-changes prompt.
 - **Names**: unique within a sheet.
 - **Results extras**: Units and Log views (sheet 15), CSV export. Plots are a later step.
-- **Multiplayer**: files are per player. A flowsheet can go through the clipboard as text (Open, From clipboard).
+- **Multiplayer**: one sheet per block, one editor at a time; a second player reads (section 3.4). Files are per player. A
+  flowsheet can go through the clipboard as text (Open, From clipboard).
+- **Breaking the block**: its sheet goes with it. The editor's autosave file stays on their computer.
 - **Data mismatch** with a server's datapacks: a notice only.
-- **Link to the world**: Save design covers columns only. Other units have no build link in this batch.
+- **Link to the world**: the sizing stage hands every unit to the constructor ([SIZING_PLAN.md](SIZING_PLAN.md)).
 - **Cold start**: the first run is cold, later runs warm. A Reset key is needed so a result can be reproduced.
 - **Limits**: 200 units, 1 MiB a file, so a bad file cannot stall a client.
 - **Languages**: en_us and zh_cn, as the mod ships.

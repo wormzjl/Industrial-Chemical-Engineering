@@ -291,6 +291,11 @@ public final class HeatDiagramRender {
         private final FontMetrics metrics;
         private final Measure measure;
 
+        /** The graphics under this canvas: the simulator sheets paint their vector symbols on it. */
+        Graphics2D graphics() {
+            return g;
+        }
+
         Java2dCanvas(Graphics2D g) {
             this.g = g;
             g.setFont(sans);
