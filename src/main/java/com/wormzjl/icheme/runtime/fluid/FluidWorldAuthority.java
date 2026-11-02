@@ -268,7 +268,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var device=new PhysicalFluidTopology.Device(id,vessel.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
                     new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),vessel.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,
                     PhysicalFluidTopology.ALL_FACES,0,0,vessel.heat().withPartner(first));
-            var spec=new FluidDeviceSpec(vessel.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,vessel.levelHeight(),false,vessel.geometry());
+            var spec=new FluidDeviceSpec(vessel.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,vessel.levelHeight(),false,vessel.geometry(),null);
             var record=new WorldTopologyLedger.Registration(device,spec,0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(id,record));
         }
         submit(edits,Math.addExact(first,count));return placed;
@@ -327,11 +327,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return placeVessel(node,ports,volume,levelHeight,open,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(volume,levelHeight));
     }
     public WorldTopologyLedger.Registration placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry) {
+        return placeVessel(node,ports,volume,levelHeight,open,geometry,null);
+    }
+    public WorldTopologyLedger.Registration placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,com.wormzjl.icheme.science.fluid.network.CoolingTower tower) {
         owned();
         long id=topology.nextIdentity();
         var device=new PhysicalFluidTopology.Device(id,node,TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
                 new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
-        var spec=new FluidDeviceSpec(volume,298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,levelHeight,open,geometry);
+        var spec=new FluidDeviceSpec(volume,298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,levelHeight,open,geometry,tower);
         var record=new WorldTopologyLedger.Registration(device,spec,0);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
@@ -985,6 +988,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
             view=view.withPipeInfo(PipePresentation.withBulkSpeed(
                 PipePresentation.inspect(registration.device(),snapshot.graph(),mappings,history,seconds,componentNames.size()),
                 runtime.coordinator().bulkVolumeRates(owner),registration.device().geometry().area()));
+        if(registration.spec().tower()!=null) {
+            var rates=snapshot.lastResult().map(result->result.towers().get(id)).orElse(null);
+            view=view.withTower(new FluidView.Tower(registration.spec().tower(),rates));
+            if(rates!=null&&!rates.status().equals("RUNNING"))view=view.withStatus(view.status()+" / "+rates.status());
+        }
         // A heat side (batch 2026-10-27-heat-exchanger-design): its outlet junction's temperature, the heat its HEAT boundaries
         // booked over the interval, an air cooler's fans and an exchanger side's bypass as planned, a fired heater's burners,
         // set point and most heat.

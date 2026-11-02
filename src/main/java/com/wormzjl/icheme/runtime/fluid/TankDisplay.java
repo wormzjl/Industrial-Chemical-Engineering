@@ -14,15 +14,15 @@ import java.util.List;
  * (Beer-Lambert: per colour channel the transmittance {@code T = prod T_i^{w_i}}, {@code T_i} the channel over 255), and
  * its transparency the same way. Free water takes water's appearance.</p>
  */
-public record TankDisplay(float level,float waterLevel,float height,int oilArgb,int waterArgb) {
+public record TankDisplay(float level,float waterLevel,float height,int oilArgb,int waterArgb,float fanSpeed) {
     public TankDisplay {
-        if(!Float.isFinite(level)||!Float.isFinite(waterLevel)||!Float.isFinite(height)||level<0||waterLevel<0||waterLevel>level||!(height>0))
+        if(!Float.isFinite(level)||!Float.isFinite(waterLevel)||!Float.isFinite(height)||!Float.isFinite(fanSpeed)||fanSpeed<0||fanSpeed>1||level<0||waterLevel<0||waterLevel>level||!(height>0))
             throw new IllegalArgumentException("Invalid tank display");
     }
     /** An empty tank of fill height {@code height}. */
-    public static TankDisplay empty(float height){return new TankDisplay(0,0,height,0,0);}
+    public static TankDisplay empty(float height){return new TankDisplay(0,0,height,0,0,0);}
     /** This display with its liquid at {@code level} m and its free water no higher; this display itself for a level that is NaN, infinite or negative. */
-    private TankDisplay standingAt(double level){return !Double.isFinite(level)||level<0?this:new TankDisplay((float)level,Math.min(waterLevel,(float)level),height,oilArgb,waterArgb);}
+    private TankDisplay standingAt(double level){return !Double.isFinite(level)||level<0?this:new TankDisplay((float)level,Math.min(waterLevel,(float)level),height,oilArgb,waterArgb,fanSpeed);}
 
     /**
      * A tank's display gliding to its latest one (owner requests 2026-10-21: the roof moves, and a player on it rides it): a
@@ -37,7 +37,7 @@ public record TankDisplay(float level,float waterLevel,float height,int oilArgb,
         public TankDisplay at(double ticks) {
             double t=Math.max(0,Math.min(1,(ticks-tick)/FluidPresentation.BUCKET_TICKS));
             if(t>=1)return to;
-            return new TankDisplay((float)(from.level+(to.level-from.level)*t),(float)(from.waterLevel+(to.waterLevel-from.waterLevel)*t),to.height,to.oilArgb,to.waterArgb);
+            return new TankDisplay((float)(from.level+(to.level-from.level)*t),(float)(from.waterLevel+(to.waterLevel-from.waterLevel)*t),to.height,to.oilArgb,to.waterArgb,(float)(from.fanSpeed+(to.fanSpeed-from.fanSpeed)*t));
         }
         /** The liquid's level at game time {@code ticks}, m. */
         public double level(double ticks){return at(ticks).level;}
@@ -61,13 +61,15 @@ public record TankDisplay(float level,float waterLevel,float height,int oilArgb,
     public static TankDisplay of(FluidView view,List<String> components,double[] molecularWeights,MaterialCatalog catalog,String packageId) {
         var tank=view.tank();if(tank==null)return null;
         float height=(float)tank.levelHeight();
-        var state=view.state();if(state==null)return empty(height);
+        var tower=view.tower();
+        float fan=tower==null?0:(float)(tower.rates()!=null?tower.rates().fill().speed():tower.specification().mode()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.TARGET_TEMPERATURE?0:tower.specification().speed());
+        var state=view.state();if(state==null)return new TankDisplay(0,0,height,0,0,fan);
         var volumes=state.phaseVolumes();double footprint=state.capacity()/tank.levelHeight();
         float level=(float)(tank.level(state));float water=(float)Math.min(level,tank.geometry().heightAt(volumes[1]));
         var moles=state.phaseMoles();
         int oil=volumes[0]>0?mix(moles[0],components,molecularWeights,catalog,packageId):0;
         int free=volumes[1]>0?catalog.componentAppearance(packageId,"Water").argb():0;
-        return new TankDisplay(level,water,height,oil,free);
+        return new TankDisplay(level,water,height,oil,free,fan);
     }
     /** The subtractive mix (Beer-Lambert) of the components of {@code moles} by mass fraction, as AARRGGBB. */
     static int mix(double[] moles,List<String> components,double[] molecularWeights,MaterialCatalog catalog,String packageId) {

@@ -79,6 +79,27 @@ class DeviceColumnTest {
         assertTrue(texts.asked.size() > 60, "the cases ask for the column's texts: " + texts.asked.size());
     }
 
+    /** A fan tower's control keeps its words whole and in line at every width, for an editor and a reader, and a natural tower shows none. */
+    @Test
+    void aTowersControlFitsTheDoorAtEverySupportedWidth() {
+        var texts = new HeatControlColumnTest.Recording();
+        assertTrue(DeviceColumn.towerControl(false, false, true, "K", texts).isEmpty());
+        for (boolean target : new boolean[]{false, true})
+            for (boolean edit : new boolean[]{false, true})
+                for (int width = 300; width <= 790; width += 7) {
+                    var column = Column.place(DeviceColumn.towerControl(true, target, edit, "K", texts), 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT);
+                    for (var p : column.rows()) {
+                        assertTrue(p.rect().right() <= column.bounds().right(), "a row at " + width);
+                        for (var t : p.texts()) assertTrue(M.width(t) <= p.rect().w(), "a text cut at " + width + ": " + t);
+                        for (var slot : p.slots().values()) assertTrue(slot.inside(p.rect()) && slot.w() >= 40, "a box at " + width + ": " + slot);
+                    }
+                    column.slots();
+                    assertInLine(column, "tower at " + width);
+                }
+        for (var key : List.of("inlet_temperature", "tower_basin_temperature", "bottom_pressure.hint", "tower_cooling_duty", "tower_return", "tower_evaporation", "fan_power", "tower_speed")) texts.get(key);
+        assertEquals(Set.of(), texts.missing);
+    }
+
     /** Every plate is one line at every width; nothing is cut; every widget lies inside its row, one per key. */
     @Test
     void theColumnFitsTheDoorAtEverySupportedWidth() {

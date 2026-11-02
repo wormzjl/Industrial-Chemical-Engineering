@@ -393,6 +393,6 @@ final class SolidEventIntegrator {
         if(elapsed<duration||last==null)throw new SparseNewton.Nonconvergence("Solid event limit exhausted; no partial interval may commit");
         for(int i=0;i<transported.length;i++)transported[i]/=duration;
         return new PassiveIntervalSolver.Result(graph,duration,transported,accepted,rejected,work,boundaries,reasons,
-                last.endpointModes(),last.endpointHeads(),last.endpointFlows(),histories.snapshot(),last.observations());
+                last.endpointModes(),last.endpointHeads(),last.endpointFlows(),histories.snapshot(),last.observations(),last.towers());
     }
 }

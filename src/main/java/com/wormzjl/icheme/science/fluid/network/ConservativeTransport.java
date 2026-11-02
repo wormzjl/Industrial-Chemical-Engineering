@@ -69,7 +69,7 @@ public final class ConservativeTransport {
         /** {@code HEAT}: the heat a heat-exchanging connection ({@link HeatSide}) took up over the step, energy alone,
          * booked at the connection's id: what crossed its wall (batch 2026-10-27-heat-exchanger-design); and a kettle's pool's
          * ({@link Pool}), booked at its key (W7). */
-        public enum Kind { EXCHANGE, FLUSH, VENT, SPILL, HEAT }
+        public enum Kind { EXCHANGE, FLUSH, VENT, SPILL, HEAT, ATMOSPHERE }
         public BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule){this(nodeId,moles,totalEnergyJoule,SolidInventory.EMPTY,0);}
         public BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule,SolidInventory solids,int solidDirection){this(nodeId,moles,totalEnergyJoule,solids,solidDirection,Kind.EXCHANGE);}
         public BoundaryTransfer{moles=moles.clone();Objects.requireNonNull(solids);Objects.requireNonNull(kind);if(solidDirection < -1||solidDirection > 1||!solids.empty()&&solidDirection==0)throw new IllegalArgumentException("Invalid solid boundary direction");}
@@ -243,6 +243,11 @@ public final class ConservativeTransport {
         // The flows this reconstruction books: the solved flows with every junction's mass held (an emptying vessel's taken
         // to zero); see pinnedFlows.
         final double[] flows=pinnedFlows(graph,candidate,solvedFlows,model,draws,emptying);
+        TowerExchange.Rates[] towerExchanges=null;
+        for(int n=0;n<nodes;n++)if(graph.reservoirs().get(n).inventory().tower()!=null){
+            if(towerExchanges==null)towerExchanges=new TowerExchange.Rates[nodes];
+            towerExchanges[n]=TowerExchange.at(graph,n,candidate,flows,model);
+        }
         var populationBasis=new TreeMap<SolidInventory.Key,SolidInventory.Population>();
         for(var node:graph.reservoirs())for(var population:node.inventory().solids().populations())populationBasis.merge(population.key(),population,(a,b)->{if(!a.material().equals(b.material()))throw new IllegalArgumentException("Conflicting solid material definitions");return a;});
         for(var transfer:graph.scheduledTransfers())if(transfer instanceof ScheduledTransfer.Injection in)for(var population:in.solidsPerSecond().populations())populationBasis.merge(population.key(),population,(a,b)->{if(!a.material().equals(b.material()))throw new IllegalArgumentException("Conflicting solid material definitions");return a;});
@@ -315,6 +320,7 @@ public final class ConservativeTransport {
             if(transfer instanceof ScheduledTransfer.Withdrawal out){outgoing[node]+=out.massKgPerSecond();endMass[node]-=dt*out.massKgPerSecond();}
             else if(transfer instanceof ScheduledTransfer.Injection in){var n=in.molesPerSecond();for(int c=0;c<components;c++)endMass[node]+=dt*n[c]*molecularWeight[c];endMass[node]+=dt*in.solidsPerSecond().massKg();}
         }
+        if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null)endMass[n]-=dt*towerExchanges[n].waterLoss();
         // An open vessel's vent and spill leave it as fixed amounts (OpenVessel), off its right-hand side below.
         if(releases!=null)for(int node=0;node<nodes;node++)if(releases[node]!=null)for(var released:releases[node].each())endMass[node]-=released.mass(molecularWeight);
         // Owner decision D61 (JunctionCrystals): per solved junction, the crystal each population is if it melts there (else
@@ -381,6 +387,8 @@ public final class ConservativeTransport {
             var n=released.moles();for(int c=0;c<components;c++)rhs[c][index[node]]-=n[c]*molecularWeight[c];
             for(int c=0;c<populationKeys.size();c++)rhs[components+c][index[node]]-=released.solids().mass(populationKeys.get(c));
         }
+        if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null&&index[n]>=0)
+            rhs[components-1][index[n]]-=dt*towerExchanges[n].waterLoss();
         double[][] solved;
         // One backward-error check on the first component vector qualifies this factorization; the
         // remaining component columns are bounded by the junction continuity and conservation
@@ -480,6 +488,12 @@ public final class ConservativeTransport {
             meltedRecord=new Melted(meltedMoles,meltedEnergy,new SolidInventory(meltedSolids));
         }
         double[] external=new double[components];double externalEnergy=0,pumpWork=0;var boundaries=new ArrayList<BoundaryTransfer>();
+        if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null) {
+            var exchange=towerExchanges[n];double moved=-dt*exchange.waterLoss()/model.waterMolecularWeight,heatMoved=-dt*exchange.energyWatt();
+            energy[n]+=heatMoved;externalEnergy+=heatMoved;external[components-1]+=moved;
+            var amounts=new double[components];amounts[components-1]=moved;
+            boundaries.add(new BoundaryTransfer(graph.reservoirs().get(n).id(),amounts,heatMoved,SolidInventory.EMPTY,0,BoundaryTransfer.Kind.ATMOSPHERE));
+        }
         for(var transfer:graph.scheduledTransfers()) {
             checkpoint.run();int node=transfer.node();var state=states.get(node);double[] moved=new double[components];double movedEnergy,mass=0;
             if(transfer instanceof ScheduledTransfer.Withdrawal out) {
@@ -745,7 +759,8 @@ public final class ConservativeTransport {
                 if(donor==node)out+=rate;
             }
             // An emptying vessel (decision D54) passes what reaches it and its whole stock: dt (In' - Out') = -m_stock.
-            double outflow=emptying!=null&&emptying[node]!=null?fromJunctions+fromOthers+emptying[node].drain():fromJunctions+fromOthers,inflow=out-fromJunctions;
+            double atmospheric=graph.reservoirs().get(node).inventory().tower()==null?0:TowerExchange.at(graph,node,candidate,flows,model).waterLoss();
+            double outflow=fromJunctions+fromOthers-atmospheric+(emptying!=null&&emptying[node]!=null?emptying[node].drain():0),inflow=out-fromJunctions+atmospheric;
             if(out>0&&Double.isFinite(outflow)){double f=outflow/out;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);if((flows[edge]>0?pipe.first():pipe.second())==node)factor[edge]=f;}}
             else if(fromOthers>0&&inflow>=0&&inflow<=fromOthers){double g=inflow/fromOthers;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);int donor=flows[edge]>0?pipe.first():pipe.second(),receiver=flows[edge]>0?pipe.second():pipe.first();if(receiver==node&&!junction[donor])factor[edge]=g;}}
             for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);int donor=flows[edge]>0?pipe.first():pipe.second(),receiver=flows[edge]>0?pipe.second():pipe.first();if(donor==node&&junction[receiver]&&--indegree[receiver]==0)queue.add(receiver);}

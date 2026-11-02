@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-10-30-water-cooling-tower/](2026-10-30-water-cooling-tower/README.md) | Bounded parallel water-cooling cells and hollow natural-draft towers, coupled heat/mass transfer and real basins | Implemented 2026-11-02 |
 | [2026-11-02-tp-steam-refusal/](2026-11-02-tp-steam-refusal/README.md) | TP flash of one hydrocarbon beside steam, and PH and UV at its true step | Implemented 2026-11-02 (0.18.1) |
 | [2026-11-02-ph-false-root/](2026-11-02-ph-false-root/README.md) | PH and UV false root on wet oil: free water boils alone only where the hydrocarbons hold next to none of the gas | Implemented 2026-11-02 (0.18.1) |
 | [2026-10-28-vacuum-column/](2026-10-28-vacuum-column/README.md) | Column convergence and dry-stage support | Implemented 2026-11-02 |

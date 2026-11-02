@@ -38,7 +38,7 @@ class EquipmentNetworkCodecTest {
     /** The open screen's draft: the player moved the column, repainted it and turned its sump steam to the front. */
     private static final Design DRAFT = new Design(STORED.diameter(), STORED.tangentLength(), STORED.form(), STORED.support(), new VesselPlacement(5, -2, 1),
             STORED.trays(), STORED.connections(), new Paint(0x123456, 0x654321), STORED.bank(), STORED.boot(), STORED.outlet(), STORED.column(),
-            List.of(new ColumnTrays.Turn(EquipmentShape.Role.STEAM, 1, 0)));
+            List.of(new ColumnTrays.Turn(EquipmentShape.Role.STEAM, 1, 0)), com.wormzjl.icheme.science.equipment.TowerBank.ONE);
 
     private static <T> T roundTrip(StreamCodec<RegistryFriendlyByteBuf, T> codec, T payload) {
         var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);

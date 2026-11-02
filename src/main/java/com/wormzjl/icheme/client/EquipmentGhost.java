@@ -190,21 +190,27 @@ public final class EquipmentGhost {
         var mesh = MESHES.get(shape);
         if (mesh != null && mesh.sprite == sprite) return mesh;
         var out = new ArrayList<float[]>();
-        for (var cell : layout(shape).shell())
+        // A tower's preview is its whole facets; anything else, its cells as the chunks draw them.
+        if (shape.kind().coolingTower())
+            for (var polygon : ShapeRasterizer.towerPreview(shape)) quads(out, polygon, 0, 0, 0, sprite);
+        else for (var cell : layout(shape).shell())
             for (var polygon : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z())))
-                // A fan of quads, as the chunk model bakes it; a last single triangle repeats its final vertex.
-                for (int first = 1; first + 1 < polygon.size(); first += 2)
-                    for (int corner : new int[]{0, first, first + 1, Math.min(first + 2, polygon.size() - 1)}) {
-                        double[] p = polygon.positions(), uv = polygon.uvs(), n = polygon.normals();
-                        out.add(new float[]{(float) (cell.x() + p[3 * corner]), (float) (cell.y() + p[3 * corner + 1]), (float) (cell.z() + p[3 * corner + 2]),
-                                sprite.getU((float) uv[2 * corner]), sprite.getV((float) uv[2 * corner + 1]),
-                                (float) n[3 * corner], (float) n[3 * corner + 1], (float) n[3 * corner + 2], polygon.material().channel()});
-                    }
+                quads(out, polygon, cell.x(), cell.y(), cell.z(), sprite);
         var vertices = new float[out.size() * Mesh.STRIDE];
         for (int i = 0; i < out.size(); i++) System.arraycopy(out.get(i), 0, vertices, i * Mesh.STRIDE, Mesh.STRIDE);
         mesh = new Mesh(shape, sprite, vertices);
         MESHES.put(shape, mesh);
         return mesh;
+    }
+
+    /** A fan of quads, as the chunk model bakes it; a last single triangle repeats its final vertex. */
+    private static void quads(List<float[]> out, com.wormzjl.icheme.science.equipment.Mesh.Polygon polygon, int x, int y, int z, TextureAtlasSprite sprite) {
+        double[] p = polygon.positions(), uv = polygon.uvs(), n = polygon.normals();
+        for (int first = 1; first + 1 < polygon.size(); first += 2)
+            for (int corner : new int[]{0, first, first + 1, Math.min(first + 2, polygon.size() - 1)})
+                out.add(new float[]{(float) (x + p[3 * corner]), (float) (y + p[3 * corner + 1]), (float) (z + p[3 * corner + 2]),
+                        sprite.getU((float) uv[2 * corner]), sprite.getV((float) uv[2 * corner + 1]),
+                        (float) n[3 * corner], (float) n[3 * corner + 1], (float) n[3 * corner + 2], polygon.material().channel()});
     }
 
     /** A ghost: the vessel a design would build, and its paint. */

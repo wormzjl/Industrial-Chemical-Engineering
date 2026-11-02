@@ -41,7 +41,9 @@ public final class Mesh {
          */
         HEATER(2, Paint.BODY), CONCRETE(2, -1), GUARD(1, -1), GLASS(1, -1),
         /** Neutral, unpainted level-instrument scale. */
-        GAUGE_SCALE(1, -1);
+        GAUGE_SCALE(1, -1),
+        /** A tower's baked sprites, each a whole panel: casing, louvers, fan stack, deck, the spray seen through a fan, a natural shell's concrete. */
+        TOWER_PANEL(4, Paint.BODY), TOWER_LOUVER(4, Paint.BODY), TOWER_STACK(2, Paint.BODY), TOWER_DECK(4, -1), TOWER_DRIFT(4, -1), TOWER_CONCRETE(16, -1), TOWER_FILL(64, -1), TOWER_FLOOR(80, -1);
 
         private final double period;
         private final int channel;
@@ -279,6 +281,25 @@ public final class Mesh {
      * is the moving part it belongs to ({@link ProcessUnit.Motion}, by index), -1 for the still parts.
      */
     record Facet(List<double[]> positions, double[] normal, double[] min, double[] max, Shading shading, Material material, Uv u, Uv v, int part) {
+    }
+
+    /** Whole facet for a large static mesh, with one sprite tile per facet and the same smooth normals. */
+    static Polygon whole(Facet facet){
+        int count=facet.positions().size();var positions=new double[3*count];var normals=new double[3*count];var uv=new double[2*count];
+        double minU=Double.POSITIVE_INFINITY,minV=minU,maxU=Double.NEGATIVE_INFINITY,maxV=maxU;
+        for(var point:facet.positions()){
+            double u=facet.u.at(point),v=facet.v.at(point);
+            minU=Math.min(minU,u);maxU=Math.max(maxU,u);minV=Math.min(minV,v);maxV=Math.max(maxV,v);
+        }
+        for(int index=0;index<count;index++){
+            var point=facet.positions().get(index);System.arraycopy(point,0,positions,3*index,3);
+            var normal=facet.shading.at(point);
+            if(normal==null||dot(normal,normal)<EPS*EPS||dot(normal,facet.normal)<=0)normal=facet.normal;
+            System.arraycopy(unit(normal),0,normals,3*index,3);
+            uv[2*index]=(facet.u.at(point)-minU)/Math.max(EPS,maxU-minU);
+            uv[2*index+1]=1-(facet.v.at(point)-minV)/Math.max(EPS,maxV-minV);
+        }
+        return new Polygon(positions,uv,normals,facet.material);
     }
 
     /**

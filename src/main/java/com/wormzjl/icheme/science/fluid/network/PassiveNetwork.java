@@ -26,7 +26,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
      * LIQUID port's: the line below the nozzle stands full of the same liquid, so the level head over the bottom is the
      * nozzle's head over the line's datum.</p>
      */
-    public enum PhasePort { BULK, VAPOR, LIQUID, OVERFLOW, BOOT_WATER, BOOT_HC }
+    public enum PhasePort { BULK, VAPOR, LIQUID, OVERFLOW, BOOT_WATER, BOOT_HC, SPRAY }
     public PassiveNetwork {
         reservoirs=List.copyOf(reservoirs);pipes=List.copyOf(pipes);scheduledTransfers=List.copyOf(scheduledTransfers);
         if(reservoirs.isEmpty())throw new IllegalArgumentException("Empty island");
@@ -47,7 +47,8 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
     }
     /** Whether this end may carry {@code port}: BULK anywhere, a phase port only on a vessel or its rate-solve copy. */
     private static boolean phaseSelectable(Reservoir node,PhasePort port) {
-        return port==PhasePort.BULK||node.kind==NodeKind.RESERVOIR||node.kind==NodeKind.PORT;
+        return port==PhasePort.BULK||node.kind==NodeKind.RESERVOIR||node.kind==NodeKind.PORT
+            ||node.junction()&&node.inventory().tower()!=null&&port==PhasePort.SPRAY;
     }
     /**
      * The record a junction is built with from a property state: nothing yet. A junction's buffer, the state of its
@@ -187,22 +188,24 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
      * contents, whose heat enters the vessel's energy row ({@link Pool#heat}); null for every other vessel and node. Like the
      * opening it is the vessel's, so {@link #with} keeps it.</p>
      */
-    public record Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool) {
-        public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry){this(volume,moles,internalEnergy,solids,levelHeight,open,geometry,null);}
+    public record Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool, @org.jetbrains.annotations.Nullable CoolingTower tower) {
+        public Inventory withTower(CoolingTower value) {return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,value);}
+        public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry){this(volume,moles,internalEnergy,solids,levelHeight,open,geometry,null,null);}
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open){this(volume,moles,internalEnergy,solids,levelHeight,open,VesselGeometry.prism(volume,levelHeight));}
         public Inventory(double volume,double[] moles,double internalEnergy){this(volume,moles,internalEnergy,SolidInventory.EMPTY);}
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids){this(volume,moles,internalEnergy,solids,PassiveStepSolver.LEVEL_HEAD_HEIGHT);}
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight){this(volume,moles,internalEnergy,solids,levelHeight,false);}
         public Inventory {
+            if(tower!=null&&(!open||pool!=null||levelHeight!=CoolingTower.BASIN_DEPTH||Math.abs(volume-tower.basinVolume())>volume*1e-8))throw new IllegalArgumentException("Invalid cooling tower basin");
             Objects.requireNonNull(solids);Objects.requireNonNull(geometry);
             moles=moles.clone();if(!Double.isFinite(volume)||volume<=0||!Double.isFinite(internalEnergy)||!Double.isFinite(levelHeight)||levelHeight<=0)throw new IllegalArgumentException("Invalid inventory volume/energy/level height");
             double total=0;for(double n:moles){if(!Double.isFinite(n)||n<0)throw new IllegalArgumentException("Negative/nonfinite inventory");total+=n;}
             if(moles.length==0||!Double.isFinite(total)||(total==0&&solids.empty()&&internalEnergy!=0))throw new IllegalArgumentException("Invalid empty/overflowed inventory");
         }
         /** The same vessel (volume, level height, opening and pool) holding these contents. */
-        public Inventory with(double[] moles,double internalEnergy,SolidInventory solids){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool);}
+        public Inventory with(double[] moles,double internalEnergy,SolidInventory solids){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower);}
         /** The same vessel and contents with {@code value} as its pool (W7: a kettle's, planned or compiled). */
-        public Inventory withPool(@org.jetbrains.annotations.Nullable Pool value){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,value);}
+        public Inventory withPool(@org.jetbrains.annotations.Nullable Pool value){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,value,tower);}
         /** Whether {@code other} holds the same contents, bit for bit: its moles, energy and solids, whatever the vessel's
          * geometry. A topology event conserves these; a layout refresh may rebuild the vessel around them (batch
          * 2026-10-26-backward-compat). */
@@ -215,8 +218,8 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
          */
         public double wallCapacity(){return open?Double.POSITIVE_INFINITY:volume;}
         @Override public double[] moles(){return moles.clone();}
-        @Override public boolean equals(Object other){return other instanceof Inventory value&&geometry.equals(value.geometry)&&open==value.open&&Objects.equals(pool,value.pool)&&Double.doubleToLongBits(volume)==Double.doubleToLongBits(value.volume)&&Double.doubleToLongBits(levelHeight)==Double.doubleToLongBits(value.levelHeight)&&Double.doubleToLongBits(internalEnergy)==Double.doubleToLongBits(value.internalEnergy)&&Arrays.equals(moles,value.moles)&&solids.equals(value.solids);}
-        @Override public int hashCode(){return 31*Objects.hash(volume,levelHeight,internalEnergy,solids,open,geometry,pool)+Arrays.hashCode(moles);}
+        @Override public boolean equals(Object other){return other instanceof Inventory value&&geometry.equals(value.geometry)&&open==value.open&&Objects.equals(pool,value.pool)&&Objects.equals(tower,value.tower)&&Double.doubleToLongBits(volume)==Double.doubleToLongBits(value.volume)&&Double.doubleToLongBits(levelHeight)==Double.doubleToLongBits(value.levelHeight)&&Double.doubleToLongBits(internalEnergy)==Double.doubleToLongBits(value.internalEnergy)&&Arrays.equals(moles,value.moles)&&solids.equals(value.solids);}
+        @Override public int hashCode(){return 31*Objects.hash(volume,levelHeight,internalEnergy,solids,open,geometry,pool,tower)+Arrays.hashCode(moles);}
     }
     /**
      * {@code blockedDirections} is a two-bit mask (1 forbids flow from {@link #first} to {@link #second}, 2 the reverse),
