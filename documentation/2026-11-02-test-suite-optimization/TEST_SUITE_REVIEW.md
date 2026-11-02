@@ -11,7 +11,6 @@ Each step of the head side's lane, for every merge, whatever it touched (lanes o
 | Fluid GameTests | 249 to 270 s | one test took 226 s: it slept each tick to hold the server to 20 ticks a second |
 | Campaign | 402 to 494 s | run for every merge, even one that changes nothing it loads |
 | **Total** | **15 to 19 min** | the base side adds about 11 min when no archived baseline fits |
-
 The time is not in the test count. 20 tests took 197 s of the 361 s of test time; 1857 tests took 20 s.
 
 ## What changed
