@@ -46,5 +46,5 @@ Five Opus reviews of the 558 methods added since the last review ([parts/](parts
 - Geometry caches hold 64 entries, and `everySize()` overflows them, so each sweep rebuilds what the last one built: about 20 s when the group runs. It needs a production switch, so it is left.
 - `HoldClassWorldsTest` keeps a real 2 s wall budget (`EventPathWorld`), so a heavily loaded machine can still hold it. `ExchangerCouplingTest` uses 30 s.
 - Open branches: a new test in a group that loads a class outside its list fails loudly until the list is extended. The cooling tower branch will need this.
-- Test-only classes left `src/main` in `0c88691e5` (22 affected tests, 0 failures; `main-reach.pl` finds none left). Still there: `FlowsheetPainter.rounded`, no caller; the 12-argument `V3ColumnInput` constructor, 16 test callers and no main caller.
+- Test-only classes left `src/main` in `0c88691e5` (22 affected tests, 0 failures; `main-reach.pl` finds none left). Final lane at `65f8dbb78`, 2 min 38 s: 2094 runs, 0 failures, chain-100 exact 0, GameTests 39/39, campaign skipped. Still there: `FlowsheetPainter.rounded`, no caller; the 12-argument `V3ColumnInput` constructor, 16 test callers and no main caller.
 - Code guide: verification, fluid-runtime, equipment, pipe-laying, column-v3, process-control. Tool folders: `tools/merge-lane/`, `tools/test-archive-2026-11-02/`.
