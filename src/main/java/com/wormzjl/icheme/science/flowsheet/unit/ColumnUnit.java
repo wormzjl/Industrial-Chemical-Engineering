@@ -1,0 +1,341 @@
+package com.wormzjl.icheme.science.flowsheet.unit;
+
+import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
+import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
+import com.wormzjl.icheme.science.column.v3.V3ColumnResult;
+import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
+import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
+import com.wormzjl.icheme.science.column.v3.V3NeuralRegistry;
+import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
+import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
+import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
+import com.wormzjl.icheme.science.column.v3.V3SolveStrategy;
+import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.flowsheet.Board;
+import com.wormzjl.icheme.science.flowsheet.Calculation;
+import com.wormzjl.icheme.science.flowsheet.FlowStream;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
+import com.wormzjl.icheme.science.flowsheet.Note;
+import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.Port;
+import com.wormzjl.icheme.science.flowsheet.Report;
+import com.wormzjl.icheme.science.flowsheet.UnitModel;
+import com.wormzjl.icheme.science.flowsheet.WiredUnit;
+import com.wormzjl.icheme.science.fluid.state.SolidInventory;
+import com.wormzjl.icheme.science.material.MaterialRuntime;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * The column as one block (batch 2026-11-02-process-simulator, plan sections 3.3 and 3.11): the calculator's own solve, with its
+ * ports a pure function of its door. The block's solve reads its inlets and writes its products, so a loop tears there, and each
+ * pass after the first starts from the last state. A heat side is a calculation of its own. A pumparound or the reboiler has its
+ * duty on the door, so what passes through its cold side depends on nothing the column solves, and heating the feed of the same
+ * column is no loop. The condenser's duty is an answer, and reaches its side by a link. A free side leaves the heat to a utility.
+ * Each pair is checked once the sheet stands, for heat that cannot flow that way.
+ *
+ * <p>V3 has no feed pressure, so the stream is flashed at its own enthalpy to the feed tray's solved pressure, which gives V3's
+ * feed temperature. V3's feed is hydrocarbons: water joins as steam if it is vapour there. The products come back through the world's
+ * flash at V3's temperature and pressure; what the two thermo models then differ by is read out as the block's energy gap.
+ */
+public final class ColumnUnit implements UnitModel {
+    private static final String FEED = "feed", OVERHEAD = "overhead", DISTILLATE = "distillate", WATER = "water", BOTTOMS = "bottoms";
+    private static final String CONDENSER_IN = "condenser_in", CONDENSER_OUT = "condenser_out", REBOILER_IN = "reboiler_in", REBOILER_OUT = "reboiler_out";
+    /**
+     * The feed is flashed to its tray's pressure, which only a solve can say, so it starts at the stream's own and goes round
+     * while that moves the feed by more than this (K), at most this often. A stream at its tray's pressure solves once.
+     */
+    private static final double FEED_TEMPERATURE = .01;
+    private static final int FEED_ROUNDS = 3;
+    /** Liquid water up to this share of a stream's moles is a trace, not a phase. */
+    private static final double TRACE = 1e-9;
+    /** The calculator's learned start, on the budget the game ships with. */
+    private static final V3InitializationOptions START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
+
+    private static String drawPort(ColumnDoor.Draw draw) {
+        return "draw/" + draw.id();
+    }
+
+    private static String steamPort(ColumnDoor.Steam steam) {
+        return "steam/" + steam.id();
+    }
+
+    private static String pumparoundIn(ColumnDoor.Pumparound pumparound) {
+        return "pa/" + pumparound.id() + "/in";
+    }
+
+    private static String pumparoundOut(ColumnDoor.Pumparound pumparound) {
+        return "pa/" + pumparound.id() + "/out";
+    }
+
+    private static boolean exchanger(ColumnDoor door) {
+        return door.condenser() == ColumnComponents.Condenser.EXCHANGER;
+    }
+
+    @Override public List<Port> ports(Params params) {
+        var door = ColumnDoor.of(params);
+        var ports = new ArrayList<>(List.of(Port.in(FEED), Port.out(OVERHEAD), Port.out(DISTILLATE), Port.out(WATER), Port.out(BOTTOMS)));
+        if (exchanger(door)) ports.addAll(List.of(Port.optionalIn(CONDENSER_IN), Port.out(CONDENSER_OUT)));
+        if (ColumnComponents.kettleRequired(door.reboilerDuty())) ports.addAll(List.of(Port.optionalIn(REBOILER_IN), Port.out(REBOILER_OUT)));
+        for (var pumparound : door.pumparounds()) ports.addAll(List.of(Port.optionalIn(pumparoundIn(pumparound)), Port.out(pumparoundOut(pumparound))));
+        for (var steam : door.steam()) ports.add(Port.optionalIn(steamPort(steam)));
+        for (var draw : door.draws()) ports.add(Port.out(drawPort(draw)));
+        return ports;
+    }
+
+    @Override public List<Calculation> calculations(WiredUnit u) {
+        var door = ColumnDoor.of(u.params());
+        var solve = new Solve(u, door);
+        var calculations = new ArrayList<Calculation>();
+        calculations.add(solve.calculation());
+        if (u.wire(CONDENSER_IN) != null) {
+            calculations.add(side(u, "condenser", CONDENSER_IN, CONDENSER_OUT, door.condenserDrop(), solve.condenserHeat(), null));
+            calculations.add(check(u, "condenser check", u.out(CONDENSER_OUT), null, (board, report) -> {
+                if (!board.stream(u.out(CONDENSER_OUT)).empty() && board.stream(u.out(CONDENSER_OUT)).temperature() >= door.condenserTemperature()) report.note(Note.warning(u.id(), "column.condenser_hot"));
+            }));
+        } else if (u.wire(CONDENSER_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", CONDENSER_IN);
+        if (u.wire(REBOILER_IN) != null) {
+            calculations.add(side(u, "reboiler", REBOILER_IN, REBOILER_OUT, door.reboilerDrop(), null, -door.reboilerDuty()));
+            calculations.add(check(u, "reboiler check", u.out(REBOILER_OUT), u.out(BOTTOMS), (board, report) -> {
+                var steam = board.stream(u.out(REBOILER_OUT));
+                var bottoms = board.stream(u.out(BOTTOMS));
+                if (!steam.empty() && !bottoms.empty() && steam.temperature() <= bottoms.temperature()) report.note(Note.warning(u.id(), "column.reboiler_cold"));
+            }));
+        } else if (u.wire(REBOILER_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", REBOILER_IN);
+        for (var pumparound : door.pumparounds()) {
+            String in = pumparoundIn(pumparound), out = pumparoundOut(pumparound);
+            if (u.wire(in) == null) {
+                if (u.wire(out) != null) throw new FlowsheetFailure("unit.free_inlet", in);
+                continue;
+            }
+            calculations.add(side(u, "pa " + pumparound.id(), in, out, pumparound.drop(), null, -pumparound.duty()));
+            String tray = solve.drawTemperature(pumparound);
+            calculations.add(new Calculation(u.part("pa " + pumparound.id() + " check"), u.id(), List.of(u.out(out)), List.of(), List.of(tray), List.of(), Calculation.Kind.CHECK, (board, report) -> {
+                var cold = board.stream(u.out(out));
+                if (!cold.empty() && cold.temperature() >= board.link(tray)) report.note(Note.warning(u.id(), "column.pa_hot", pumparound.id()));
+            }));
+        }
+        return calculations;
+    }
+
+    /** The utility side of a heat pair: {@code heat} W into it, from the door, or from {@code link} once the column has said. The column's duty carries the column's sign, so this side takes its negative. */
+    private static Calculation side(WiredUnit u, String name, String in, String out, double drop, @Nullable String link, @Nullable Double heat) {
+        return new Calculation(u.part(name), u.id(), List.of(u.wire(in)), List.of(u.out(out)), link == null ? List.of() : List.of(link), List.of(), Calculation.Kind.STEP, (board, report) -> {
+            var stream = board.stream(u.wire(in));
+            if (stream.empty()) {
+                u.write(board, report, out, stream);
+                return;
+            }
+            double pressure = stream.pressure() - drop;
+            if (!(pressure > 0)) throw new FlowsheetFailure("unit.pressure");
+            double watts = link == null ? heat : board.link(link);
+            u.write(board, report, out, u.thermo().heated(stream, watts, pressure));
+            report.reading("duty", watts);
+        });
+    }
+
+    private static Calculation check(WiredUnit u, String name, String read, @Nullable String other, Calculation.Law law) {
+        return new Calculation(u.part(name), u.id(), other == null ? List.of(read) : List.of(read, other), List.of(), List.of(), List.of(), Calculation.Kind.CHECK, law);
+    }
+
+    /** The block's own solve. It keeps the last state, so each pass starts from it. */
+    private static final class Solve implements Calculation.Law {
+        private final WiredUnit u;
+        private final ColumnDoor door;
+        private final int components;
+        private @Nullable V3NeuralSeed warm;
+        /** The feed tray's pressure the last solve left (Pa): tray hydraulics march it from the column's own traffic. */
+        private double feedTray = Double.NaN;
+
+        Solve(WiredUnit u, ColumnDoor door) {
+            this.u = u;
+            this.door = door;
+            components = u.thermo().axis().size();
+        }
+
+        String condenserHeat() {
+            return u.part("condenser heat");
+        }
+
+        String drawTemperature(ColumnDoor.Pumparound pumparound) {
+            return u.part("draw tray " + pumparound.id());
+        }
+
+        Calculation calculation() {
+            var reads = new ArrayList<String>();
+            reads.add(u.wire(FEED));
+            for (var steam : door.steam()) if (u.wire(steamPort(steam)) != null) reads.add(u.wire(steamPort(steam)));
+            var writes = new ArrayList<>(List.of(u.out(OVERHEAD), u.out(DISTILLATE), u.out(WATER), u.out(BOTTOMS)));
+            for (var draw : door.draws()) writes.add(u.out(drawPort(draw)));
+            var gives = new ArrayList<String>();
+            if (u.wire(CONDENSER_IN) != null) gives.add(condenserHeat());
+            for (var pumparound : door.pumparounds()) if (u.wire(pumparoundIn(pumparound)) != null) gives.add(drawTemperature(pumparound));
+            return new Calculation(u.id(), u.id(), reads, writes, List.of(), gives, Calculation.Kind.BLOCK, this);
+        }
+
+        @Override public void solve(Board board, Report report) {
+            var thermo = u.thermo();
+            var feed = board.stream(u.wire(FEED));
+            if (feed.empty()) {
+                write(board, report, null);
+                return;
+            }
+            if (!feed.solids().empty()) throw new FlowsheetFailure("column.solids");
+            double heatIn = 0;
+            var steam = new ArrayList<V3SteamFeedSpec>();
+            for (var row : door.steam()) {
+                var stream = steamOf(row, board, report);
+                steam.add(new V3SteamFeedSpec(row.stage(), stream.total(), stream.temperature()));
+                heatIn += stream.enthalpy();
+            }
+            if (Double.isNaN(feedTray)) feedTray = feed.pressure();
+            FlowStream flashed;
+            V3ColumnResult result;
+            int round = 0;
+            double moved;
+            do {
+                flashed = thermo.heated(feed, 0, feedTray);
+                result = run(flashed, steam);
+                warm = result.warmSeed().orElse(warm);
+                feedTray = result.inspection().orElseThrow().nodes().get(door.feedStage()).pressurePascal();
+                moved = Math.abs(thermo.heated(feed, 0, feedTray).temperature() - flashed.temperature());
+            } while (moved > FEED_TEMPERATURE && ++round < FEED_ROUNDS);
+            if (feed.pressure() < feedTray) report.note(Note.warning(u.id(), "column.inlet_pressure", FEED));
+            var nodes = result.inspection().orElseThrow().nodes();
+            for (var row : door.steam()) {
+                String wire = u.wire(steamPort(row));
+                if (wire != null && !board.stream(wire).empty() && board.stream(wire).pressure() < nodes.get(row.stage()).pressurePascal()) report.note(Note.warning(u.id(), "column.inlet_pressure", steamPort(row)));
+            }
+            write(board, report, result);
+            var ledger = result.dutyLedger().orElseThrow();
+            report.reading("condenser", -ledger.condenserWatts());
+            report.reading("reboiler", ledger.reboilerWatts());
+            report.reading("feed_temperature", flashed.temperature());
+            heatIn += flashed.enthalpy();
+            double heatOut = 0;
+            for (var product : result.streams()) heatOut += product(product.streamId(), result).enthalpy();
+            report.reading("energy_gap", heatIn + ledger.condenserWatts() + ledger.reboilerWatts() + ledger.stageHeatTotalWatts() - heatOut);
+        }
+
+        /** V3 on the stream as flashed: its hydrocarbons are the feed, its water a steam feed if it is vapour there. */
+        private V3ColumnResult run(FlowStream flashed, List<V3SteamFeedSpec> rows) {
+            if (flashed.state().waterLiquid() > TRACE * flashed.total()) throw new FlowsheetFailure("column.liquid_water");
+            double[] amounts = flashed.amounts();
+            double water = amounts[components - 1];
+            amounts[components - 1] = 0;
+            var steam = new ArrayList<>(rows);
+            if (water > 0) join(steam, new V3SteamFeedSpec(door.feedStage(), water, flashed.temperature()));
+            return run(input(amounts, flashed.temperature(), steam));
+        }
+
+        /** A steam row's stream: what its wire brings, or the door's entries, which enter the sheet as a utility. */
+        private FlowStream steamOf(ColumnDoor.Steam row, Board board, Report report) {
+            var thermo = u.thermo();
+            double pressure = door.pressure(row.stage());
+            String wire = u.wire(steamPort(row));
+            var wired = wire == null ? null : board.stream(wire);
+            if (wired == null || wired.empty()) {
+                double[] amounts = new double[components];
+                amounts[components - 1] = row.flow();
+                var entered = thermo.atTemperature(row.temperature(), pressure, amounts, SolidInventory.EMPTY);
+                if (wired == null) report.enters(entered.mass(), entered.enthalpy());
+                return entered;
+            }
+            if (wired.amountsView()[components - 1] != wired.total()) throw new FlowsheetFailure("column.steam_water", row.id());
+            if (wired.state().waterLiquid() > TRACE * wired.total()) throw new FlowsheetFailure("column.steam_wet", row.id());
+            return wired;
+        }
+
+        /** V3 takes one steam feed a stage, so two on one stage join at their mixed temperature. */
+        private static void join(List<V3SteamFeedSpec> steam, V3SteamFeedSpec added) {
+            for (int i = 0; i < steam.size(); i++) {
+                var there = steam.get(i);
+                if (there.stageNumber() != added.stageNumber()) continue;
+                double flow = there.molarFlowMolPerSecond() + added.molarFlowMolPerSecond();
+                steam.set(i, new V3SteamFeedSpec(there.stageNumber(), flow, (there.molarFlowMolPerSecond() * there.temperatureKelvin() + added.molarFlowMolPerSecond() * added.temperatureKelvin()) / flow));
+                return;
+            }
+            steam.add(added);
+        }
+
+        /** The door's package while it holds the feed, else the sheet's. The learned start declines nitrogen, so the narrower one stands while it can. */
+        private V3ColumnInput input(double[] amounts, double temperature, List<V3SteamFeedSpec> steam) {
+            var thermo = u.thermo();
+            var pack = thermo.catalog().requirePackage(door.packageId().isEmpty() ? thermo.packageId() : door.packageId());
+            if (!holds(pack.components(), amounts)) pack = thermo.catalog().requirePackage(thermo.packageId());
+            if (!holds(pack.components(), amounts)) throw new FlowsheetFailure("column.component");
+            var axis = thermo.axis();
+            double[] flows = new double[pack.components().size()];
+            for (int i = 0; i < flows.length; i++) {
+                int at = axis.indexOf(pack.components().get(i));
+                if (at >= 0) flows[i] = amounts[at];
+            }
+            try {
+                return new V3ColumnInput(V3ColumnInput.SCHEMA_VERSION, pack.id(), door.assayId().isEmpty() ? pack.id() : door.assayId(), new V3ComponentBasis(pack.components()), flows, temperature,
+                        door.stages(), door.feedStage(), door.topPressure(), door.stageDrop(), door.specifications(), door.draws().stream().map(d -> new V3SideDrawSpec(d.tray(), d.flow())).toList(), steam,
+                        door.pumparounds().stream().map(p -> new V3PumparoundSpec(p.returnTray(), p.drawTray(), p.duty(), p.split())).toList(), door.diameter());
+            } catch (IllegalArgumentException refused) {
+                throw new FlowsheetFailure("column.failed", String.valueOf(refused.getMessage()));
+            }
+        }
+
+        private boolean holds(List<String> basis, double[] amounts) {
+            var axis = u.thermo().axis();
+            for (int i = 0; i < amounts.length; i++) if (amounts[i] > 0 && !basis.contains(axis.get(i))) return false;
+            return true;
+        }
+
+        /** Warm from the last state when there is one, and cold if that does not answer: a pass's change can leave the warm start behind. */
+        private V3ColumnResult run(V3ColumnInput input) {
+            var catalog = u.thermo().catalog();
+            Runnable checkpoint = u.thermo().checkpoint();
+            var seed = warm;
+            double screen = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
+            return MaterialRuntime.with(catalog, input.packageId(), () -> {
+                var outcome = seed == null ? null : V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
+                if (!(outcome instanceof V3ColumnOutcome.Success)) outcome = V3ColumnCalculator.calculate(input, checkpoint::run, 0, 0, START, V3NeuralRegistry.bundled().bind(catalog, input), screen);
+                if (outcome instanceof V3ColumnOutcome.Success success) return success.result();
+                throw new FlowsheetFailure("column.failed", ((V3ColumnOutcome.Failure) outcome).summary());
+            });
+        }
+
+        /** The outlets and links of {@code result}, or of no flow. Free sides book their heat here, because only a solved column has any. */
+        private void write(Board board, Report report, @Nullable V3ColumnResult result) {
+            u.write(board, report, OVERHEAD, product("overhead_vapor", result));
+            u.write(board, report, DISTILLATE, product("distillate_liquid", result));
+            u.write(board, report, WATER, product("free_water", result));
+            u.write(board, report, BOTTOMS, product("bottoms_liquid", result));
+            for (var draw : door.draws()) u.write(board, report, drawPort(draw), product(String.format(Locale.ROOT, "side_liquid_tray_%02d", draw.tray()), result));
+            var ledger = result == null ? null : result.dutyLedger().orElseThrow();
+            if (u.wire(CONDENSER_IN) != null) board.link(condenserHeat(), ledger == null ? 0 : -ledger.condenserWatts());
+            else if (ledger != null) report.duty(ledger.condenserWatts());
+            if (ledger != null && u.wire(REBOILER_IN) == null) report.duty(ledger.reboilerWatts());
+            for (var pumparound : door.pumparounds()) {
+                if (u.wire(pumparoundIn(pumparound)) != null) board.link(drawTemperature(pumparound), result == null ? Double.POSITIVE_INFINITY : result.inspection().orElseThrow().nodes().get(pumparound.drawTray()).temperatureKelvin());
+                else if (ledger != null) report.duty(pumparound.duty());
+            }
+        }
+
+        /** A published stream through the world's flash, on the sheet's axis; a stream the column does not make carries no flow. */
+        private FlowStream product(String id, @Nullable V3ColumnResult result) {
+            if (result != null) for (var stream : result.streams()) {
+                if (!stream.streamId().equals(id)) continue;
+                var axis = u.thermo().axis();
+                double[] amounts = new double[components];
+                for (var fraction : stream.moleFractions()) {
+                    if (fraction.moleFraction() == 0) continue;
+                    int at = axis.indexOf(fraction.componentId());
+                    if (at < 0) throw new FlowsheetFailure("column.component");
+                    amounts[at] += fraction.moleFraction() * stream.molarFlowMolPerSecond();
+                }
+                return u.thermo().atTemperature(stream.temperatureKelvin(), stream.pressurePascal(), amounts, SolidInventory.EMPTY);
+            }
+            return FlowStream.empty(components);
+        }
+    }
+}

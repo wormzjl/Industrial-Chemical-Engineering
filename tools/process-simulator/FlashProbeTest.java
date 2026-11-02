@@ -63,7 +63,7 @@ final class FlashProbeTest {
                 double[] n = feeds[k].clone();
                 double sum = Arrays.stream(n).sum();
                 for (int i = 0; i < size; i++) n[i] *= 100 / sum;
-                var thermo = new FlowThermo(m, () -> {});
+                var thermo = new FlowThermo(m, CATALOG, PACKAGE, () -> {});
                 int tried = 0, failed = 0, noState = 0, off = 0, refused = 0; long flashes = 0; double worst = 0;
                 var seen = new java.util.TreeMap<String, Integer>();
                 for (double t : ts) for (double p : ps) {

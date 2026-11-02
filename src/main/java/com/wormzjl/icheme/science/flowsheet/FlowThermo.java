@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.flowsheet;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
 
 import java.util.Arrays;
@@ -33,15 +34,28 @@ public final class FlowThermo implements StreamThermo {
     private static final double STEP_WIDTH = 1e-7, ON_THE_STEP = 1e-3;
 
     private final FluidThermodynamics model;
+    private final MaterialCatalog catalog;
+    private final String packageId;
     private final Runnable checkpoint;
 
-    public FlowThermo(FluidThermodynamics model, Runnable checkpoint) {
+    public FlowThermo(FluidThermodynamics model, MaterialCatalog catalog, String packageId, Runnable checkpoint) {
         this.model = model;
+        this.catalog = catalog;
+        this.packageId = packageId;
         this.checkpoint = checkpoint;
     }
 
     public FluidThermodynamics model() {
         return model;
+    }
+
+    public MaterialCatalog catalog() {
+        return catalog;
+    }
+
+    /** The sheet's package. */
+    public String packageId() {
+        return packageId;
     }
 
     public Runnable checkpoint() {

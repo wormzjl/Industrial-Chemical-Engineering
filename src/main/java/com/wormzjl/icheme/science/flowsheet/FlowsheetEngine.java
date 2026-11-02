@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.flowsheet;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Runs a sheet (batch 2026-11-02-process-simulator, plan section 3.4): a client tool outside the engine schedule. It reads and
@@ -13,10 +14,15 @@ public final class FlowsheetEngine {
     }
 
     public static FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint) {
+        return run(sheet, catalog, checkpoint, null);
+    }
+
+    /** {@code last}, this sheet's last run if it has one, starts its loops; see {@link FlowsheetCompiler#estimates}. */
+    public static FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, @Nullable FlowsheetRun last) {
         String network = sheet.basis().packageId();
         return MaterialRuntime.with(catalog, network, () -> {
-            var thermo = new FlowThermo(FluidThermodynamics.forNetwork(catalog, network), checkpoint);
-            return FlowsheetSolver.run(FlowsheetCompiler.compile(sheet, thermo), thermo.axis(), thermo, sheet.settings(), checkpoint);
+            var thermo = new FlowThermo(FluidThermodynamics.forNetwork(catalog, network), catalog, network, checkpoint);
+            return FlowsheetSolver.run(FlowsheetCompiler.compile(sheet, thermo), thermo.axis(), thermo, sheet.settings(), checkpoint, FlowsheetCompiler.estimates(sheet, thermo, last));
         });
     }
 }

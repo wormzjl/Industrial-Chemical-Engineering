@@ -49,6 +49,7 @@ public final class FlowsheetSolver {
     private final StreamThermo thermo;
     private final Settings settings;
     private final Runnable checkpoint;
+    private final Map<String, FlowStream> estimates;
     private final Board board = new Board();
     private final Map<String, FlowsheetRun.Outcome> outcomes = new LinkedHashMap<>();
     private final Map<String, Report> reports = new HashMap<>();
@@ -59,7 +60,8 @@ public final class FlowsheetSolver {
     /** What the tears carried at the end (kg/s). A loop that closed to its tolerance still holds its last step, so mass may miss by that much. */
     private double tornMass;
 
-    private FlowsheetSolver(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint) {
+    private FlowsheetSolver(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint, Map<String, FlowStream> estimates) {
+        this.estimates = estimates;
         this.calculations = calculations;
         this.axis = axis;
         this.components = axis.size();
@@ -70,10 +72,15 @@ public final class FlowsheetSolver {
 
     /**
      * Runs {@code calculations} on the component axis {@code axis}, water last. {@code checkpoint} runs at each calculation's
-     * start, and may throw a {@link CancellationException} to stop the run, which keeps what it has.
+     * start, and may throw a {@link CancellationException} to stop the run, which keeps what it has. A tear starts from no flow,
+     * or from its stream in {@code estimates}.
      */
+    public static FlowsheetRun run(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint, Map<String, FlowStream> estimates) {
+        return new FlowsheetSolver(calculations, List.copyOf(axis), thermo, settings, checkpoint, estimates).run();
+    }
+
     public static FlowsheetRun run(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint) {
-        return new FlowsheetSolver(calculations, List.copyOf(axis), thermo, settings, checkpoint).run();
+        return run(calculations, axis, thermo, settings, checkpoint, Map.of());
     }
 
     private FlowsheetRun run() {
@@ -177,7 +184,7 @@ public final class FlowsheetSolver {
             group.order().forEach(this::block);
             return;
         }
-        var tears = group.tears().stream().map(id -> new Tear(id, FlowStream.empty(components))).toList();
+        var tears = group.tears().stream().map(id -> new Tear(id, estimates.getOrDefault(id, FlowStream.empty(components)))).toList();
         boolean accelerate = true;
         for (int pass = 1; pass <= settings.maxPasses(); pass++) {
             for (var tear : tears) board.stream(tear.id, tear.guess);
@@ -193,6 +200,7 @@ public final class FlowsheetSolver {
             if (failure != null) {
                 if (tears.stream().noneMatch(t -> t.trial)) {
                     fail(failing, failure);
+                    if (pass == 1) log.add(Note.info(group.tears().getFirst(), "loop.first_estimate", failing.unit()));
                     group.order().forEach(this::block);
                     loops.add(new FlowsheetRun.Loop(group.tears(), pass, false));
                     return;

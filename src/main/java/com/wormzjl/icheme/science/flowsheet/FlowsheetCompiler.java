@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 
 /**
  * A sheet's facts to a run's calculations (batch 2026-11-02-process-simulator, plan sections 3.1 and 3.9). What cannot run stays
@@ -32,6 +33,30 @@ public final class FlowsheetCompiler {
         }
         for (var unit : sheet.units()) calculations.addAll(unit(unit, wires.getOrDefault(unit.id(), Map.of()), outlets.getOrDefault(unit.id(), List.of()), thermo));
         return calculations;
+    }
+
+    /**
+     * What a loop's tears start from. A run that stood steady left the best start there is. Else a line's own spec is its first
+     * estimate, which a loop that cannot start from no flow needs: a column under a furnace on a fixed duty, with the heat of its
+     * own bottoms still to come.
+     */
+    public static Map<String, FlowStream> estimates(Flowsheet sheet, FlowThermo thermo, @Nullable FlowsheetRun last) {
+        var estimates = new HashMap<String, FlowStream>();
+        for (var stream : sheet.streams()) {
+            if (stream.feed() != null && stream.from() != null) {
+                try {
+                    estimates.put(stream.id(), thermo.atTemperature(stream.feed().temperature(), stream.feed().pressure(), amounts(stream.feed(), thermo), solids(stream.feed(), thermo)));
+                } catch (CancellationException stop) {
+                    throw stop;
+                } catch (RuntimeException noState) {
+                    // An estimate with no state is no estimate: the tear starts from no flow.
+                }
+            }
+            if (last == null || last.status() != FlowsheetRun.Status.STEADY) continue;
+            var solved = last.streams().get(stream.id());
+            if (solved != null && solved.amountsView().length == thermo.axis().size()) estimates.put(stream.id(), solved);
+        }
+        return estimates;
     }
 
     /** A port holds one stream: whether {@code end} is a live port that {@code stream} now holds. */
