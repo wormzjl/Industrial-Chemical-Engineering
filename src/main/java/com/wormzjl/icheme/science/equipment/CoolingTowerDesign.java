@@ -26,14 +26,14 @@ final class CoolingTowerDesign extends UnitDesign {
     @Override public String lengthRow(){return natural?"tower_height":"tower_fill_depth";}
     @Override public String supportRow(){return null;}
     @Override void check(double d,int l,int s,ProcessUnit.Bank bank){
-        if(natural)com.wormzjl.icheme.science.fluid.network.CoolingTower.natural(d,l);
-        else com.wormzjl.icheme.science.fluid.network.CoolingTower.induced(d,l,1,1);
+        if(natural)CoolingTower.natural(d,l);
+        else CoolingTower.induced(d,l,1,1);
     }
     @Override public Line held(EquipmentShape s){return new Line("tower_cells",s.coolingTower().cells());}
     @Override public List<Line> datasheet(EquipmentShape s){
         var t=s.coolingTower();
         return List.of(new Line("tower_cells",t.cells()),new Line("tower_fill_area",number(t.area())),
-                new Line("tower_basin",number(t.basinVolume())),new Line("tower_reference",number(2*t.area())));
+                new Line("tower_basin",number(t.basinVolume())),new Line("tower_reference",number(t.referenceWater())));
     }
     @Override void build(ProcessUnit u){
         var t=u.shape.coolingTower();double d=t.width();

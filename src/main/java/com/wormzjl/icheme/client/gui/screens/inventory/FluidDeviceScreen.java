@@ -394,10 +394,6 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             FluidNetwork.sendEdit(menu,revision,controls);message=tr("waiting");
         }catch(IllegalArgumentException e){message=tr("invalid_input");}
     }
-    /** A controllable heat side's control as drafted (W4), null for another device: the set point of its mode (K, or the
-     * duty in kW as W), the low limit (blank for none) and the manual share: an exchanger side's bypass in %; an air
-     * cooler's fans, still while Off, at the fixed fan speed in % with no controller. A controller starts from the
-     * applied share. An invalid draft throws, which the caller reports. */
     private com.wormzjl.icheme.science.fluid.network.CoolingTower towerControl(){
         if(!tower())return null;var t=menu.clientData().controls().tower();
         return t.withControl(towerAuto?com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.TARGET_TEMPERATURE:com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.FAN_SPEED,
@@ -411,6 +407,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         }
         return rows.isEmpty()?List.of():List.of(new Column.Group(tr("tower_control"),null,rows));
     }
+    /** A controllable heat side's control as drafted (W4), null for another device: the set point of its mode (K, or the
+     * duty in kW as W), the low limit (blank for none) and the manual share: an exchanger side's bypass in %; an air
+     * cooler's fans, still while Off, at the fixed fan speed in % with no controller. A controller starts from the
+     * applied share. An invalid draft throws, which the caller reports. */
     private HeatUnit.Control heatControl(){
         if(!controllable())return null;
         double target=switch(heatMode){case OUTLET_TEMPERATURE->fields.get("heatTemperature").si();case DUTY->fields.get("heatDuty").value()*1000;case RATIO->fields.get("heatRatio").value();default->0;};

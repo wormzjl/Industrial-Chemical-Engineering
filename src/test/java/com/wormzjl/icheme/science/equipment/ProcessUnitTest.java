@@ -266,8 +266,7 @@ class ProcessUnitTest {
             assertEquals(sides.keySet(), new HashSet<>(nozzles.stream().map(EquipmentShape.Nozzle::role).toList()), shape.toString());
             assertEquals(sides.size(), nozzles.size(), shape.toString());
             for (var nozzle : nozzles) {
-                String direction=nozzle.axis()+(nozzle.sign()>0?"+":"-");
-                assertEquals(sides.get(nozzle.role()), direction, shape + " " + nozzle.role());
+                assertEquals(sides.get(nozzle.role()), nozzle.axis() + (nozzle.sign() > 0 ? "+" : "-"), shape + " " + nozzle.role());
                 assertTrue(nozzle.defaultOd() > 0 && nozzle.defaultOd() <= PipeSizes.MAX_OUTSIDE, shape + " " + nozzle.role());
             }
         }

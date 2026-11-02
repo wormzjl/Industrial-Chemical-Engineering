@@ -463,8 +463,8 @@ public final class EquipmentConstructorScreen extends Screen {
                 } else tangentLength = clamp(tangentLength + step, 1, (int) EquipmentShape.MAX_TANGENT_LENGTH);
             }
             case "support" -> support = clamp(support + step, minimumSupport(), form.designed() ? ProcessUnit.maxSupport(kind) : EquipmentShape.MAX_SUPPORT);
-            case "tower_columns" -> towerBank=new com.wormzjl.icheme.science.equipment.TowerBank(clamp(towerBank.columns()+step,1,6),towerBank.rows());
-            case "tower_rows" -> towerBank=new com.wormzjl.icheme.science.equipment.TowerBank(towerBank.columns(),clamp(towerBank.rows()+step,1,4));
+            case "tower_columns" -> towerBank=new com.wormzjl.icheme.science.equipment.TowerBank(clamp(towerBank.columns()+step,1,com.wormzjl.icheme.science.equipment.TowerBank.MAX_COLUMNS),towerBank.rows());
+            case "tower_rows" -> towerBank=new com.wormzjl.icheme.science.equipment.TowerBank(towerBank.columns(),clamp(towerBank.rows()+step,1,com.wormzjl.icheme.science.equipment.TowerBank.MAX_ROWS));
             case "parallel" -> bank = new ProcessUnit.Bank(clamp(bank.parallel() + step, 1, ProcessUnit.Bank.MAX_PARALLEL), bank.series());
             case "series" -> bank = new ProcessUnit.Bank(bank.parallel(), clamp(bank.series() + step, 1, ProcessUnit.Bank.MAX_SERIES));
             case "forward" -> forward = clamp(forward + step, 1, VesselPlacement.MAX_FORWARD);

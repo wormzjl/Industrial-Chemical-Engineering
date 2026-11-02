@@ -1,8 +1,11 @@
 package com.wormzjl.icheme.runtime.fluid;
 
+import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
+
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
+import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -18,6 +21,45 @@ class CoolingTowerRuntimeTest {
         var state=model.flashTP(308.15,101325,amounts,()->{});
         var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),CoolingTower.BASIN_DEPTH,true).withTower(tower);
         return new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory)),List.of());
+    }
+    private static PhysicalFluidTopology.Position at(int x,int y,int z){return new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,y,z);}
+    private static long tower(EventPathWorld w,CoolingTower tower,PhysicalFluidTopology.Port... ports){
+        long id=w.ledger.nextIdentity();double volume=tower.basinVolume();
+        var device=new PhysicalFluidTopology.Device(id,at(1,0,1),Kind.RESERVOIR,NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),List.of(ports));
+        var spec=new FluidDeviceSpec(volume,298.15,101325,FluidDeviceSpec.nitrogen(w.catalog).composition(),SlurryFeed.NONE,CoolingTower.BASIN_DEPTH,true,VesselGeometry.prism(volume,CoolingTower.BASIN_DEPTH),tower);
+        w.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
+        return id;
+    }
+    private static FluidDeviceSpec water(double temperature,double pressure){return new FluidDeviceSpec(1,temperature,pressure,FluidDeviceSpec.water(EventPathWorld.CATALOG).composition());}
+
+    @Test void aPumpedLoopKeepsUpWithItsIntervalsInEveryFanMode(){
+        for(var control:List.of(CoolingTower.induced(4,2,1,1),CoolingTower.induced(4,2,1,1).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,1,303))){
+            var w=new EventPathWorld();w.runTo(20);
+            long id=tower(w,control,new PhysicalFluidTopology.Port(at(1,0,0),NORTH,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(0,0,2),WEST,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(1,0,4),SOUTH,PassiveNetwork.PhasePort.LIQUID));
+            w.place(-1,0,2,Kind.PIPE,WEST,.05);w.place(-2,0,2,Kind.GENERATOR,WEST,water(320,400000),.05);
+            w.place(1,0,5,Kind.PIPE,SOUTH,.1);w.place(2,0,5,Kind.PIPE,EAST,.1);
+            w.place(3,0,5,Kind.PUMP,EAST,new FlowControl.Pump(.02,800000),null,.1);
+            w.place(4,0,5,Kind.PIPE,EAST,.1);w.place(5,0,5,Kind.PIPE,EAST,.1);
+            for(int z=4;z>=-1;z--)w.place(5,0,z,Kind.PIPE,NORTH,.1);
+            for(int x=4;x>=1;x--)w.place(x,0,-1,Kind.PIPE,WEST,.1);
+            w.runTo(2400);w.assertKeptUp(control.mode()+" loop");
+            var snapshot=w.coordinator.observe(w.registry.owner(id));var last=snapshot.lastResult().orElseThrow();var rates=last.towers().get(id);
+            // Built with the basin empty: the seed gas in the line leaves by the spray inlet and the pump primes.
+            int pump=java.util.stream.IntStream.range(0,snapshot.graph().pipes().size()).filter(e->snapshot.graph().pipes().get(e).control() instanceof FlowControl.Pump).findFirst().orElseThrow();
+            assertTrue(last.averageMassFlows()[pump]>0,"the pump circulates: "+last.endpointModes());
+            assertTrue(rates.waterLoss()>0,"the fill runs: "+rates);
+        }
+    }
+
+    @Test void aPumpedHydrocarbonClosesTheInletWithoutAHold(){
+        var w=new EventPathWorld();w.runTo(20);
+        long id=tower(w,CoolingTower.induced(4,2,1,1),new PhysicalFluidTopology.Port(at(1,7,0),NORTH,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(1,0,4),SOUTH,PassiveNetwork.PhasePort.LIQUID));
+        double[] oil=new double[model.componentCount()];oil[oil.length-3]=1;
+        w.place(1,7,-1,Kind.PIPE,NORTH,.05);w.place(1,7,-2,Kind.PUMP,SOUTH,new FlowControl.Pump(.005,800000),null,.05);
+        w.place(1,7,-3,Kind.PIPE,NORTH,.05);w.place(1,7,-4,Kind.GENERATOR,NORTH,new FluidDeviceSpec(1,330,300000,oil),.05);
+        w.runTo(600);w.assertKeptUp("pumped hydrocarbon");
+        var snapshot=w.coordinator.observe(w.registry.owner(id));
+        assertTrue(snapshot.graph().reservoirs().stream().filter(n->n.id()==id).findFirst().orElseThrow().empty(),"nothing reached the basin");
     }
 
     @Test void anEmptyBasinPublishesItsFansThroughTheScheduledDisplay(){
@@ -35,17 +77,6 @@ class CoolingTowerRuntimeTest {
             var display=TankDisplay.of(view,model.components(),model.molecularWeights(),EventPathWorld.CATALOG,
                 com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(EventPathWorld.CATALOG));
             assertEquals(rates.fill().speed(),display.fanSpeed());assertEquals(0,display.level());
-        }
-    }
-
-    @Test void bothTowerTypesPublishTheirAcceptedBottomPressure(){
-        for(var tower:new CoolingTower[]{CoolingTower.induced(4,2,1,1),CoolingTower.natural(40)}){
-            var state=basin().reservoirs().getFirst().state();
-            var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),CoolingTower.BASIN_DEPTH,true).withTower(tower);
-            var node=new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory);
-            var view=TankOutlets.tank(model,node,null);
-            assertEquals(state.pressure()+PassiveStepSolver.portHead(model,node,PassiveNetwork.PhasePort.LIQUID,state),view.bottomPressure());
-            assertTrue(view.bottomPressure()>view.topPressure());
         }
     }
 

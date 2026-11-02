@@ -7,8 +7,10 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
                            Mode mode, double speed, double setPoint) {
     public enum Draft { INDUCED, NATURAL }
     public enum Mode { FAN_SPEED, TARGET_TEMPERATURE }
-    public static final double AIR_TEMPERATURE = 298.15, RELATIVE_HUMIDITY = .5, PRESSURE = 101325;
+    public static final double AIR_TEMPERATURE = 298.15, WET_BULB = 291, PRESSURE = 101325;
     public static final double BASIN_HEIGHT = 2, BASIN_DEPTH = 2 * BASIN_HEIGHT / 3;
+    /** Full-speed fan pressure, Pa; declared air and water loading, kg/(s m²); the fan laws' efficiency and air density, kg/m³. */
+    public static final double FAN_PRESSURE = 20, DESIGN_LOADING = 2, FAN_EFFICIENCY = .6, AIR_DENSITY = 1.18;
     public CoolingTower {
         Objects.requireNonNull(draft); Objects.requireNonNull(mode);
         for (double v : new double[]{width, fillDepth, height, speed, setPoint})
@@ -34,7 +36,15 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
     public double cellArea() { return draft == Draft.INDUCED ? width * width : Math.PI * width * width / 4; }
     public double area() { return cells() * cellArea(); }
     public double basinVolume() { return BASIN_DEPTH * area(); }
-    /** Clear air-inlet height above the basin rim; the natural support band is 70% of its former 0.2 × diameter. */
+    /** All fans at {@code speed}, W: flow follows speed and pressure its square at the declared loading. */
+    public double fanPower(double speed) {
+        return draft == Draft.INDUCED ? FAN_PRESSURE * speed * speed * DESIGN_LOADING * area() * speed / AIR_DENSITY / FAN_EFFICIENCY : 0;
+    }
+    /** The water flow of the declared calibration point, kg/s. */
+    public double referenceWater() { return DESIGN_LOADING * area(); }
+    /** The duty of that point at its 10 K range, W. */
+    public double referenceDuty() { return referenceWater() * 4180 * 10; }
+    /** Clear air-inlet height above the basin rim. */
     public double airInletHeight() { return draft == Draft.NATURAL ? .14 * width : 2; }
     /** Bottom of the natural shell or induced casing, above grade. */
     public double shellBaseHeight() { return BASIN_HEIGHT + airInletHeight(); }

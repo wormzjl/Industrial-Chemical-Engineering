@@ -3796,12 +3796,7 @@ public final class ProcessUnit {
         return Solid.box(new double[]{Math.min(p[0], q[0]), Math.min(p[1], q[1]), Math.min(p[2], q[2])}, new double[]{Math.max(p[0], q[0]), Math.max(p[1], q[1]), Math.max(p[2], q[2])});
     }
 
-    /** A square bar with the same oriented collision box as its rendered section when {@code solid}. */
-    void bar(double[] a, double[] b, double width, double[] up, Material material, boolean solid) {
-        bar(a, b, width, up, Mesh.BOTH_ENDS, material, solid);
-    }
-
-    /** A square bar with selected end faces; buried ends need no polygons. */
+    /** A square bar with selected end faces, buried ends needing no polygons, and the oriented collision box of its section when {@code solid}. */
     void bar(double[] a, double[] b, double width, double[] up, int ends, Material material, boolean solid) {
         mesh.bar(a, b, width, up, ends, material);
         if (!solid) return;

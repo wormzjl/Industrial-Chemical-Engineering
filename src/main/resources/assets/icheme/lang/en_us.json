@@ -1633,8 +1633,6 @@
   "gui.icheme.equipment_constructor.tower_cells.hint": "Cooling cells",
   "gui.icheme.equipment_constructor.tower_fill_area": "Fill plan area",
   "gui.icheme.equipment_constructor.tower_fill_area.hint": "Fill plan area",
-  "gui.icheme.equipment_constructor.tower_capacity": "Reference duty",
-  "gui.icheme.equipment_constructor.tower_capacity.hint": "Reference duty",
   "gui.icheme.fluid.tower_manual": "Fans control mode",
   "gui.icheme.fluid.tower_auto": "Target temperature mode",
   "gui.icheme.fluid.tower_temperature": "Target temperature",

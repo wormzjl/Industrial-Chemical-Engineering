@@ -301,14 +301,13 @@ public final class FluidCheckpointCodec {
     private static void geometry(Writer w,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){w.text(g.form().name());w.f64(g.capacity());w.f64(g.height());w.f64(g.diameter());w.f64(g.length());w.f64(g.bootDiameter());w.f64(g.bootLength());}
     /** A kettle's pool (format 28, W7): absent, or its facts and slice inputs. */
     private static void transfer(Writer w,com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result t){
-        w.f64(t.outletTemperature());w.f64(t.evaporation());w.f64(t.sensibleWatt());w.f64(t.latentWatt());w.f64(t.energyWatt());
-        w.f64(t.dryAirFlow());w.f64(t.airTemperature());w.f64(t.airHumidity());w.f64(t.fanPowerWatt());w.f64(t.speed());
+        w.f64(t.outletTemperature());w.f64(t.evaporation());w.f64(t.dutyWatt());w.f64(t.energyWatt());w.f64(t.dryAirFlow());w.f64(t.fanPowerWatt());w.f64(t.speed());
     }
     private static com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result transfer(Reader r){
-        return new com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result(r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64());
+        return new com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result(r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64());
     }
-    private static void towerRates(Writer w,com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates t){w.f64(t.waterLoss());w.f64(t.energyWatt());transfer(w,t.fill());transfer(w,t.surface());w.f64(t.inletTemperature());w.f64(t.inletFlow());w.f64(t.outletFlow());w.text(t.status());}
-    private static com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates towerRates(Reader r){return new com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates(r.f64(),r.f64(),transfer(r),transfer(r),r.f64(),r.f64(),r.f64(),r.text());}
+    private static void towerRates(Writer w,com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates t){transfer(w,t.fill());w.f64(t.surfaceWatt());w.f64(t.inletTemperature());w.f64(t.inletFlow());w.text(t.status());}
+    private static com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates towerRates(Reader r){return new com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates(transfer(r),r.f64(),r.f64(),r.f64(),r.text());}
     private static void tower(Writer w,com.wormzjl.icheme.science.fluid.network.CoolingTower t) {
         w.bool(t!=null);if(t==null)return;
         w.text(t.draft().name());w.f64(t.width());w.f64(t.fillDepth());w.f64(t.height());w.varint(t.columns());w.varint(t.rows());

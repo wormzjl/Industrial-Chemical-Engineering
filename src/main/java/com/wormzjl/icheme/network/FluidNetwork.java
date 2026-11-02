@@ -46,9 +46,10 @@ import java.util.*;
  * way it faces.</p>
  * <p>{@code fluid-13}: power also controls generators; void contents are accepted incoming transport, normalized to one second.</p>
  * <p>{@code fluid-14}: a tank publishes capacity and separate top/bottom absolute pressures, including empty capacity.</p>
- * <p>{@code fluid-17} (the heat GUI, batch 2026-10-27-heat-exchanger-design, HEAT_GUI_PLAN.md): a heat side's view carries
+ * <p>{@code fluid-16} (the heat GUI, batch 2026-10-27-heat-exchanger-design, HEAT_GUI_PLAN.md): a heat side's view carries
  * its control's actuator, effort and limit, the stream at every port of its unit and an exchanger's lines part by part;
  * a pipe's inspection carries the line reading of the stream it carries.</p>
+ * <p>{@code fluid-17}: a cooling tower's controls and accepted readings, and a basin display's fan speed.</p>
  */
 public final class FluidNetwork {
     public static final String PROTOCOL="fluid-17";

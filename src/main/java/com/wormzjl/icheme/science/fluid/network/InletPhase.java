@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.fluid.network;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
+import java.util.function.BiConsumer;
 
 import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.GAS;
 import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL;
@@ -110,8 +111,13 @@ public final class InletPhase {
     static double held(PassiveNetwork graph,int edge) {
         var device=graph.pipes().get(edge);var first=graph.reservoirs().get(device.first());
         if(!first.junction())return heldShare(first,device.firstPort());
-        boolean[] seen=new boolean[graph.reservoirs().size()];var queue=new ArrayDeque<Integer>();double best=0;
-        seen[device.first()]=true;queue.add(device.first());
+        double[] best={0};feeders(graph,device.first(),edge,(node,port)->best[0]=Math.max(best[0],heldShare(node,port)));
+        return best[0];
+    }
+    /** Every node reached from junction {@code start} through junctions by a connection that may carry flow towards it, with its port; connection {@code edge} apart. */
+    private static void feeders(PassiveNetwork graph,int start,int edge,BiConsumer<PassiveNetwork.Reservoir,PassiveNetwork.PhasePort> visit) {
+        boolean[] seen=new boolean[graph.reservoirs().size()];var queue=new ArrayDeque<Integer>();
+        seen[start]=true;queue.add(start);
         while(!queue.isEmpty()) {
             int at=queue.remove();
             for(int e=0;e<graph.pipes().size();e++) {
@@ -120,11 +126,21 @@ public final class InletPhase {
                 // A pump, compressor or valve passes only from its first end to its second.
                 if(!(pipe.control() instanceof FlowControl.Passive)&&towards<0||!PassiveStepSolver.boundaryAllowed(graph,pipe,towards))continue;
                 var node=graph.reservoirs().get(from);
-                if(!node.junction())best=Math.max(best,heldShare(node,pipe.portAt(from)));
+                if(!node.junction())visit.accept(node,pipe.portAt(from));
                 else if(!seen[from]){seen[from]=true;queue.add(from);}
             }
         }
-        return best;
+    }
+    /**
+     * Whether {@code node}, which is no liquid water itself, is a junction still priming a tower's spray inlet through
+     * connection {@code edge}: what can feed it gives water alone, so what stands in the line leaves by the atmospheric
+     * inlet ahead of that water, as it does from a real line. A plain vessel's suction primes the same way ({@link #held}).
+     */
+    static boolean priming(FluidThermodynamics model,PassiveNetwork graph,int node,int edge) {
+        if(!graph.reservoirs().get(node).junction())return false;
+        boolean[] water={false},other={false};
+        feeders(graph,node,edge,(feeder,port)->{if(heldShare(feeder,port)>0){if(TowerExchange.liquidWater(model,feeder.state()))water[0]=true;else other[0]=true;}});
+        return water[0]&&!other[0];
     }
     /** The share of its capacity {@code node} feeds through {@code port}: a vessel's contents over its capacity (zero at a
      * dry end), infinite for a generator, zero for a void or a junction. */

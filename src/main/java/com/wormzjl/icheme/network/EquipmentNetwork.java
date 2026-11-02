@@ -34,7 +34,7 @@ import java.util.Optional;
  * screen closes), build it (Build) or import the nearest column calculator's design onto it (Import). Placing a vessel is
  * a world edit, like placing blocks; it involves no process state, so the server answers at once in chat. An import reads
  * the calculator's saved design (nothing is solved) and always answers the requesting player ({@link ImportAnswer}); so
- * does a column template ({@link TemplatePayload}, protocol 14).
+ * does a column template ({@link TemplatePayload}, protocol 14). A cooling tower's cell bank rides on the form (protocol 15).
  */
 public final class EquipmentNetwork {
     public static final String PROTOCOL = "equipment-15";

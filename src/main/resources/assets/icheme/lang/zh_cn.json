@@ -1141,8 +1141,6 @@
   "gui.icheme.equipment_constructor.tower_cells.hint": "冷却单元",
   "gui.icheme.equipment_constructor.tower_fill_area": "填料占地面积",
   "gui.icheme.equipment_constructor.tower_fill_area.hint": "填料占地面积",
-  "gui.icheme.equipment_constructor.tower_capacity": "参考热负荷",
-  "gui.icheme.equipment_constructor.tower_capacity.hint": "参考热负荷",
   "gui.icheme.fluid.tower_manual": "风机控制模式",
   "gui.icheme.fluid.tower_auto": "目标温度模式",
   "gui.icheme.fluid.tower_temperature": "目标温度",

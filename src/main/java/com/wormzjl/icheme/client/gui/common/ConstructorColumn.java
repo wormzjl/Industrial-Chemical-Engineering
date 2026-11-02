@@ -273,20 +273,18 @@ public final class ConstructorColumn {
                         new Column.Button("templates", t.get(KEY + "templates"), true, t.get(KEY + "templates.hint")))));
             }
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> {
-                var design=UnitDesign.of(form.kind());
+                var design=UnitDesign.of(form.kind());boolean fan=form.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER;
                 size.add(step("size",design.sizeRow(),size(in.diameter()),"m",t));
-                if(form.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER)size.add(step("length",design.lengthRow(),length,"m",t));
-                boolean fan=form.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER;
                 if(fan){
+                    size.add(step("length",design.lengthRow(),length,"m",t));
                     size.add(step("tower_columns","tower_columns",Integer.toString(in.towerBank().columns()),"",t));
                     size.add(step("tower_rows","tower_rows",Integer.toString(in.towerBank().rows()),"",t));
                 }
-                double cells=fan?in.towerBank().cells():1;
-                double area=fan?cells*in.diameter()*in.diameter():Math.PI*in.diameter()*in.diameter()/4;
                 var towerShape=EquipmentShape.unit(form.kind(),in.diameter(),in.length(),EquipmentShape.Heading.NORTH,0)
                     .withTowerBank(fan?in.towerBank():com.wormzjl.icheme.science.equipment.TowerBank.ONE);
-                size.add(new Column.Paragraph(t.get(KEY+"tower_summary",(int)cells,towerShape.sizeX(),towerShape.sizeY(),towerShape.sizeZ(),
-                    UnitDesign.number(area),UnitDesign.number(area*2*4.18*10/1000),UnitDesign.number(fan?20*2*area/1.18/.6/1000:0)),Palette.MUTED));
+                var tower=towerShape.coolingTower();
+                size.add(new Column.Paragraph(t.get(KEY+"tower_summary",tower.cells(),towerShape.sizeX(),towerShape.sizeY(),towerShape.sizeZ(),
+                    UnitDesign.number(tower.area()),UnitDesign.number(tower.referenceDuty()/1e6),UnitDesign.number(tower.fanPower(1)/1000)),Palette.MUTED));
             }
             case AIR_COOLER -> {
                 // A bay's width × length in m, without spaces: it stands whole in the box.

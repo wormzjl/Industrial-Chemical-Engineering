@@ -340,7 +340,7 @@ public final class NetworkReduction {
         return new PassiveIntervalSolver.Result(graph,duration,zero,1,0,0,List.of(),Map.of(),modes,new double[pipes],zero,
                 PipeTransfer.sample(graph,states,zero,duration));
     }
-    static PassiveIntervalSolver.Result observedRestInterval(PassiveNetwork graph,double duration,boolean[] refused,FluidThermodynamics model){var r=restInterval(graph,duration,refused);return new PassiveIntervalSolver.Result(r.graph(),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),r.boundaries(),r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),r.pipeTransfers(),PassiveStepSolver.PipeObservation.atRest(graph,model),TowerExchange.atRest(graph,duration,model));}
+    static PassiveIntervalSolver.Result observedRestInterval(PassiveNetwork graph,double duration,boolean[] refused,FluidThermodynamics model){var r=restInterval(graph,duration,refused);return new PassiveIntervalSolver.Result(r.graph(),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),r.boundaries(),r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),r.pipeTransfers(),PassiveStepSolver.PipeObservation.atRest(graph,model),TowerExchange.atRest(graph,model));}
     /** The game's ambient: air (the network's nitrogen) at 298.15 K and {@link PhaseLayout#AMBIENT_PRESSURE} (A280). The
      * state an empty vessel shows (decision D54: its pressure, nothing it holds) and the ports of a disconnected filter. */
     public static FluidThermodynamics.State ambient(FluidThermodynamics model){return model.initialNitrogenCharge(1,298.15,PhaseLayout.AMBIENT_PRESSURE,()->{});}
