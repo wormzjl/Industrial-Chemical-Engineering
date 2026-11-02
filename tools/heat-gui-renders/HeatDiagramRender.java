@@ -10,6 +10,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.client.gui.common.kit.Sprite;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.runtime.fluid.FluidView;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
@@ -294,6 +295,45 @@ public final class HeatDiagramRender {
         /** The graphics under this canvas: the simulator sheets paint their vector symbols on it. */
         Graphics2D graphics() {
             return g;
+        }
+
+        private static final Map<String, BufferedImage> ATLASES = new HashMap<>(), TINTED = new HashMap<>();
+
+        /** The PNG the game's texture names, from the sources, white masks in alpha. */
+        private static BufferedImage atlas(String texture) {
+            return ATLASES.computeIfAbsent(texture, t -> {
+                try {
+                    var at = t.split(":");
+                    return ImageIO.read(Path.of("src/main/resources/assets", at[0], at[1]).toFile());
+                } catch (IOException missing) {
+                    throw new java.io.UncheckedIOException(missing);
+                }
+            });
+        }
+
+        /** The sprite's cell, tinted as the game's {@code setColor} does. */
+        private static BufferedImage tinted(Sprite s, int argb) {
+            return TINTED.computeIfAbsent(s + " " + argb, k -> {
+                var out = new BufferedImage(s.w(), s.h(), BufferedImage.TYPE_INT_ARGB);
+                var atlas = atlas(s.texture());
+                int a = argb >>> 24;
+                for (int y = 0; y < s.h(); y++)
+                    for (int x = 0; x < s.w(); x++) {
+                        int mask = atlas.getRGB(s.u() + x, s.v() + y) >>> 24;
+                        out.setRGB(x, y, (mask * a / 255) << 24 | argb & 0xFFFFFF);
+                    }
+                return out;
+            });
+        }
+
+        @Override
+        public void sprite(Sprite s, float x0, float y0, float x1, float y1, int argb) {
+            var hint = g.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            var at = java.awt.geom.AffineTransform.getTranslateInstance(x0, y0);
+            at.scale((x1 - x0) / s.w(), (y1 - y0) / s.h());
+            g.drawImage(tinted(s, argb), at, null);
+            if (hint != null) g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, hint);
         }
 
         Java2dCanvas(Graphics2D g) {

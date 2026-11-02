@@ -195,6 +195,42 @@ final class SimulatorIcons {
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, aa);
     }
 
+    /** The masks {@link SymbolAtlas} bakes: a symbol's framed look, split as the game tints it. */
+    enum Layer {
+        BODY, MARKS, HOT
+    }
+
+    /**
+     * One layer of {@code g}'s framed look, white, in its own design units on {@code graphics}: the body's fill, or its outline, solids, marks and fine lines at the
+     * framed strokes, or its fire. A box {@code w} by {@code h}: a column sets its own proportions.
+     */
+    static void layer(Graphics2D graphics, SimulatorPrototypes.Glyph g, double w, double h, Layer layer) {
+        var pen = new Pen();
+        draw(pen, g, w, h, false);
+        var all = new Area();
+        for (var body : pen.bodies) all.add(new Area(body));
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+        graphics.setColor(Color.WHITE);
+        switch (layer) {
+            case BODY -> graphics.fill(all);
+            case HOT -> {
+                for (var s : pen.hot) graphics.fill(s);
+            }
+            case MARKS -> {
+                graphics.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+                graphics.draw(all);
+                for (var s : pen.solid) graphics.fill(s);
+                graphics.setStroke(new BasicStroke(.75f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+                for (var s : pen.marks) graphics.draw(s);
+                graphics.setStroke(new BasicStroke(.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+                for (var s : pen.fine) graphics.draw(s);
+                graphics.setStroke(new BasicStroke(.75f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 4f, new float[]{2.5f, 1.5f}, 0));
+                for (var s : pen.dash) graphics.draw(s);
+            }
+        }
+    }
+
     /** The parts of {@code g} in a box {@code w} by {@code h}; {@code schematic}: a process drawing's marks in place of the equipment's own. */
     private static void draw(Pen p, SimulatorPrototypes.Glyph g, double w, double h, boolean schematic) {
         switch (g) {

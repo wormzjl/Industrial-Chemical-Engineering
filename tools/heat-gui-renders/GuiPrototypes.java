@@ -320,8 +320,8 @@ public final class GuiPrototypes {
 
     static List<Prototype> constructor() {
         var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
-        var drum = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.VERTICAL, 2, 6, 3, 3, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
-        var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
+        var drum = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.VERTICAL, 2, 6, 3, 3, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
+        var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var connections = ConstructorColumn.connections(new ConstructorColumn.Connections(2, 1, 1, STANDING, "4.5", false, -1, "back", true, false, false,
                 new ConstructorColumn.Outlet(0b1011, 0, STANDING)), DIALOG);
         var nozzles = ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(7, 2, new ConstructorColumn.Nozzle("pumparound_draw", 1, true, "18.5",
@@ -329,7 +329,7 @@ public final class GuiPrototypes {
         String volume = DIALOG.get(CONSTRUCTOR + "volume", "20.9", "46.4");
         // A column's design page with Import and Templates, and its Templates page: the bundled templates, the pot off, one of the player's.
         var columnDesign = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.COLUMN, 8, 6, 10, 3, 0, 0, new ProcessUnit.Bank(1, 1),
-                new ConstructorColumn.Imported(8, 42, 38), outlet, 16), DIALOG);
+                new ConstructorColumn.Imported(8, 42, 38), outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var templates = new ArrayList<ConstructorColumn.Template>();
         for (var name : List.of("Bonga", "Cold Lake Blend", "Dalia", "Tia Juana Light (default)", "Upper Zakum", "WTI Light - Export"))
             templates.add(new ConstructorColumn.Template(name, true, DIALOG.get(CONSTRUCTOR + "template.bundled", name)));
