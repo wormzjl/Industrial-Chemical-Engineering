@@ -31,6 +31,10 @@ public interface Canvas {
     /** {@code text} at ({@code x}, {@code y}) in the font scaled by {@code scale}. */
     void text(String text, float x, float y, float scale, int argb);
 
+    /** {@code sprite} stretched to the box from ({@code x0}, {@code y0}) to ({@code x1}, {@code y1}), its colours multiplied by {@code argb}. A canvas with no textures draws nothing. */
+    default void sprite(Sprite sprite, float x0, float y0, float x1, float y1, int argb) {
+    }
+
     /** Draws only inside {@code area} until {@link #unclip}. */
     void clip(Rect area);
 

@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
  * correctly"): a text wider than its row wraps, and a button row whose texts do not fit side by side stacks its buttons.
  */
 public final class Column {
-    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Reading, Setting, Buttons, Bar, Split, Gap {
+    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Wide, Reading, Setting, Buttons, Bar, Split, Gap {
     }
 
     /**
@@ -51,6 +51,10 @@ public final class Column {
      * good", GUI_TOOLKIT_PLAN.md sections 13 and 14).
      */
     public record Field(String key, String label, String unit, @Nullable String hint) implements Row {
+    }
+
+    /** An entry across the whole row, with no label or unit: a name. Its slot, keyed {@code key}, takes the same widget as a {@link Field}'s. */
+    public record Wide(String key, @Nullable String hint) implements Row {
     }
 
     /**
@@ -284,6 +288,10 @@ public final class Column {
                 yield new Placed(row, new Rect(x, y, w, h.line() + (lines.size() - 1) * Measure.LINE), slots, lines, lines.size(), c.hint());
             }
             case Field f -> labelled(row, f.key(), f.label(), f.unit(), f.hint(), x, y, w, m, h, beside);
+            case Wide wide -> {
+                slots.put(wide.key(), new Rect(x, y, w, WIDGET));
+                yield new Placed(row, new Rect(x, y, w, h.field()), slots, List.of(), 0, wide.hint());
+            }
             case Reading r -> labelled(row, r.key(), r.label(), r.unit(), r.hint(), x, y, w, m, h, beside);
             case Setting s -> labelled(row, s.key(), s.label(), s.unit(), s.hint(), x, y, w, m, h, beside);
             case Buttons b -> {
@@ -373,7 +381,7 @@ public final class Column {
     public @Nullable String hover(double px, double py) {
         var p = at(px, py);
         if (p == null) return null;
-        if (p.row() instanceof Field || p.row() instanceof Buttons) for (var slot : p.slots().values()) if (slot.contains(px, py)) return null;
+        if (p.row() instanceof Field || p.row() instanceof Wide || p.row() instanceof Buttons) for (var slot : p.slots().values()) if (slot.contains(px, py)) return null;
         if (p.row() instanceof Setting s)
             for (var e : p.slots().entrySet()) if (!e.getKey().equals(s.key()) && e.getValue().contains(px, py)) return null;
         return p.hover();
@@ -402,6 +410,8 @@ public final class Column {
                     for (int i = 0; i < texts.size(); i++) skin.text(c, texts.get(i), r.x() + 12, r.y() + i * Measure.LINE, ch.selected() ? Palette.ACCENT : Palette.TEXT);
                 }
                 case Field ignored -> labels(c, skin, p, r, dy);
+                case Wide ignored -> {
+                }
                 case Reading reading -> skin.meter(c, labels(c, skin, p, r, dy), reading.value());
                 case Setting setting -> skin.field(c, labels(c, skin, p, r, dy), setting.value(), "", false);
                 case Bar b -> skin.bar(c, new Rect(r.x(), r.y(), r.w(), 8), b.share());
