@@ -212,21 +212,27 @@ class FluidFactsCompatTest {
         java.util.function.BiFunction<double[],Double,double[]> widen=(n,held)->{var w=new double[n.length+1];System.arraycopy(n,0,w,0,retired);w[retired]=held;w[n.length]=n[retired];return w;};
         var registrations=new ArrayList<WorldTopologyLedger.Registration>();
         for(var r:world.registrations()){var s=r.spec();registrations.add(new WorldTopologyLedger.Registration(r.device(),new FluidDeviceSpec(s.volume(),s.temperature(),s.pressure(),widen.apply(s.composition(),0.),s.solids(),s.levelHeight(),s.open(),s.geometry()),r.revision()));}
-        var columns=new ArrayList<ColumnUnit>();double energy=0;
-        for(var u:world.columns()) {
-            columns.add(new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),u.stations().stream().map(s->s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(s.account().moles(),1.5),s.account().energy()))).toList(),
-                    new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().taken().moles(),0.),u.totals().taken().energy()),
-                            new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().produced().moles(),0.),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds()),u.condenser()));
-            energy+=u.stations().getFirst().account().energy();
-        }
         java.util.function.Function<WorldTopologyLedger.MaterialTotal,WorldTopologyLedger.MaterialTotal> total=m->new WorldTopologyLedger.MaterialTotal(widen.apply(m.moles(),0.),m.totalEnergy(),m.solidMasses());
-        var wide=new FluidFacts.World(world.nextIdentity(),new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision()),registrations,total.apply(world.constructed()),total.apply(world.destroyed()),world.recoveries(),world.restated(),world.removedMovers(),columns);
         var placed=new ArrayList<FluidFacts.Placed>();
         for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());placed.add(new FluidFacts.Placed(FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id()),row.committed()));}
-        var rebuilt=FluidFacts.rebuild(wide,placed,core.epoch(),key->model,CATALOG,true,"test");
+        // The same world with and without the retired component in its account: what the ledger books for it is the difference.
+        java.util.function.DoubleFunction<FluidFacts.Rebuilt> restated=retiring->{
+        var columns=new ArrayList<ColumnUnit>();
+        for(var u:world.columns()) {
+            columns.add(new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),u.stations().stream().map(s->s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(s.account().moles(),retiring),s.account().energy()))).toList(),
+                    new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().taken().moles(),0.),u.totals().taken().energy()),
+                            new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().produced().moles(),0.),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds()),u.condenser()));
+        }
+        var wide=new FluidFacts.World(world.nextIdentity(),new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision()),registrations,total.apply(world.constructed()),total.apply(world.destroyed()),world.recoveries(),world.restated(),world.removedMovers(),columns);
+        return FluidFacts.rebuild(wide,placed,core.epoch(),key->model,CATALOG,true,"test");
+        };
+        var rebuilt=restated.apply(1.5);
         assertEquals(Map.of("Retired",1.5),rebuilt.world().restated().removedMoles(),"the ledger books the removed component by id");
         for(var entry:rebuilt.checkpoint().islands())assertTrue(entry.snapshot().status().contains("Retired 1.5 mol"),entry.snapshot().status());
-        for(var u:rebuilt.world().columns().values())assertEquals(energy,u.stations().getFirst().account().energy(),"an account has no temperature: its energy stands");
+        // An account has no temperature, so the component leaves with its molar share of the energy (owner 2026-11-02, finding 5, option A).
+        var before=world.columns().iterator().next().stations().getFirst().account();double share=1.5/(before.total()+1.5),leaves=share*before.energy();
+        for(var u:rebuilt.world().columns().values())assertEquals(before.energy()-leaves,u.stations().getFirst().account().energy(),1e-9*Math.abs(before.energy()),"the rest keeps its specific energy");
+        assertEquals(-leaves,rebuilt.world().restated().energy()-restated.apply(0).world().restated().energy(),1e-6,"the ledger books what left");
     }
     /** Queued events do not survive the facts path: a unit's queued Start, Stop or removal settles on what stands (merge review, finding 15). */
     @Test void aColumnsQueuedEventsSettleOnWhatStands() {

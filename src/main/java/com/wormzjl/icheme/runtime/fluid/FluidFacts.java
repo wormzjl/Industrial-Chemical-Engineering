@@ -555,13 +555,20 @@ final class FluidFacts {
             if(restate)spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),spec.pressure(),composition,spec.solids(),spec.levelHeight(),spec.open(),spec.geometry());
             registrations.put(r.device().id(),new WorldTopologyLedger.Registration(r.device(),spec,r.revision()));
         }
-        // The column units, their accounts on the current axis (a component the data no longer has leaves, booked as removed), and
-        // their queued Starts and Stops, which do not survive this path, settled on what stands.
+        // The column units, their accounts on the current axis, and their queued Starts and Stops, which do not survive this
+        // path, settled on what stands. A component the data no longer has leaves, booked as removed, with its molar share of
+        // the account's energy: an account has no temperature to restate at (owner 2026-11-02, merge review finding 5, option A).
+        double energy=0;
         var columns=new HashMap<Long,ColumnUnit>();
         for(var saved:world.columns) {
             var u=restate?saved.withStations(saved.running(),saved.stations().stream().map(s->s.withSolids(inventory(Solid.of(s.solids()),solid))).toList()):saved;
             if(!axis.identity()) {
-                var stations=u.stations().stream().map(s->s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(s.account().moles(),removed),s.account().energy()))).toList();
+                var stations=new ArrayList<ColumnUnit.Station>();
+                for(var s:u.stations()) {
+                    var held=s.account();var kept=axis.map(held.moles(),removed);
+                    double left=held.total()>0?held.energy()*Arrays.stream(kept).sum()/held.total():held.energy();
+                    energy+=left-held.energy();stations.add(s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(kept,left)));
+                }
                 var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
                         new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
                 u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condenser(),null,u.leaving());
@@ -573,7 +580,6 @@ final class FluidFacts {
         registrations.values().removeIf(r->r.device().port()&&!ports.contains(r.device().id()));
         // Vessel contents and filter cakes, by device identity.
         var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var cakes=new HashMap<Long,InlineFilter>();int restated=0,vessels=0;
-        double energy=0;
         for(var placed:islands) {
             var island=placed.island;var from=new Axis(island.components,basis.components(),restate?catalog.requirePackage(basis.packageId()):null);
             for(var v:island.at(placed.committed)) {
