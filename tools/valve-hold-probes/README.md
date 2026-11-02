@@ -13,8 +13,6 @@ In a scratch worktree that merges `claude/valve-hold` and the column branch, fro
 3. Run `perl trace/add.pl`, then `perl trace/add2.pl`.
 4. Run `./gradlew runReviewWorldServer --offline > tmp/trace/run.log`, about 3 minutes.
 
-To try the outlet fix, run `perl trace/bulk.pl` (closure on the largest component) and `perl trace/door.pl` (a new target keeps the committed interval). `trace/matrix.sh <worktree>` runs `RegulatingValveHoldTest` with each rule on and off.
-
 ## Entry points
 
 - `TraceDump.write`: each singular matrix, with its unknowns, node states and a full-pivot elimination. Writes `tmp/trace/singular.txt`.
@@ -26,5 +24,5 @@ The sources need the column branch's `PortPlan`, so they do not compile on `main
 ## History
 
 - 2026-11-02: written for the valve hold as `OutletProbeTest`, which found the liquid outlets held and that a set point was read as a new network. It ran one solver with no `replayStart`, off the production path, and is removed; `git show 75833c66c:tools/valve-hold-probes/OutletProbeTest.java` has it.
-- 2026-11-02: `TraceDump` and `LeadProbe` found the outlet holds' cause (`OUTLET_HOLD_REVIEW.md`).
-- Logs: `valve-hold-logs-2026-11-02.tar.gz` in the main checkout's `tools/valve-hold-probes/logs/`, local only. The first review world's logs were lost at cleanup.
+- 2026-11-02: `TraceDump` and `LeadProbe` found the outlet holds' cause (`OUTLET_HOLD_REVIEW.md`). The scripts that tried the fix and its rule-off gate runs are in `git show 59080795c:tools/valve-hold-probes/trace/`; the fix is on the branch as c39e2bcd3.
+- Logs: `valve-hold-logs-2026-11-02.tar.gz` and `valve-hold-fix-logs-2026-11-02.tar.gz` in the main checkout's `tools/valve-hold-probes/logs/`, local only. The first review world's logs were lost at cleanup.

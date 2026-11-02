@@ -1,6 +1,6 @@
 # Outlet holds: a closure row that cannot see its trace
 
-Batch `2026-11-02-valve-hold`. Diagnosed 2026-11-02 on a scratch merge of `claude/valve-hold` and the column branch. No solver behaviour changed on the branch.
+Batch `2026-11-02-valve-hold`. Diagnosed 2026-11-02 on a scratch merge of `claude/valve-hold` and the column branch. The owner chose option A on 2026-11-02; c39e2bcd3 applies it with the door fix.
 
 ## 1. Expected behaviour
 
@@ -36,15 +36,15 @@ The trace decides; the bubble point does not. The controls agree: sour water's n
 `replayStart` still compared the strict identity, so a new target in the graph lost the committed interval and restarted cold: the same defect 2, 546 K liquid at 176 kPa. A column escapes it, because `ports` sets its target after the replay. A hand-set valve does not.
 A new case runs nine slices, past the trace level. Scratch results: both changes below, 5 of 5 pass. No bulk closure: the new case fails as the world did (carried, nitrogen 1.9e-11, zero column). Set point back in the identity: 2 fail.
 
-## 4. Proposal for the owner
+## 4. Options and decision
 
 Physics forces none of these; each is numerics. The door fix is not optional: it finishes defect 2 (`sameLines` in `PassiveIntervalSolver.replayStart`).
 
 | Option | Change | Measured | Risk |
 |---|---|---|---|
-| A, recommended | The closure row reads the junction's largest component; every trace keeps its own mixing row | World, bulk closure alone: 54 jobs, nine lines, no hold, nitrogen to exactly 0 by job 26. Quick suite with the door fix: 1845 green | Touches every dry junction: `slowGates`, the final lane and a campaign must show it |
+| A, chosen | The closure row reads the junction's largest component; every trace keeps its own mixing row | World, bulk closure alone: 54 jobs, nine lines, no hold, nitrogen to exactly 0 by job 26. Quick suite with the door fix: 1845 green | Touches every dry junction: `slowGates`, the final lane and a campaign must show it |
 | B | Floor the difference step of the closure's unknown near 1e-8 | Not run | The share stays 1 minus the rest, rounding noise at 1e-16; it cuts against the measured comment on `differenceStepScale` |
 | C | Drop a junction trace under 1e-10, ledger booked | Nitrogen-removed replay: 10 of 10 | A new threshold rule for a problem of arithmetic |
 
 Open, separate: a cold start seeds a junction with the delivered mixture. A component its stock holds and the mixture lacks gets x = 0 and a step of 1e-36, also a zero column. The door fix keeps running lines away from it; a cold start can still reach it.
-`RegulatingValveHoldTest` is on the production path and two of its tests are red on the branch until the owner chooses. Tools: `tools/valve-hold-probes`. Logs: main checkout's `tools/valve-hold-probes/logs/`. Code guide: no change, no merge asked.
+Results with option A and the door fix: branch quick suite 1808 green, `RegulatingValveHoldTest` on the production path with 5 tests. Clean merge of both branches: review world no hold, RUNNING, limit NONE at tick 2776, each stream and duty on plan; quick suite 1846 green. `slowGates`, the final lane and a campaign not run. Tools: `tools/valve-hold-probes`. Logs: main checkout's `tools/valve-hold-probes/logs/`. Code guide: no change, no merge asked.
