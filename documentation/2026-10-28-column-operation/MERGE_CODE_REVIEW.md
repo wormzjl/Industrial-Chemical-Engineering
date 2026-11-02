@@ -70,7 +70,7 @@ Each fix has a test that failed first, or a mutation that makes it fail; "mutati
 | 2 | Fixed. Only a pressure valve anchors; a regulating flow valve prescribes a flow. A pump in line goes to its head limit, or to shutoff behind a closed valve; a closed flow valve with a target opens. Above the pump's rate nothing changes. Targets 5, 0, 50 kg/s give HEAD_LIMIT + REGULATING, CLOSED + CLOSED, TARGET + OPEN | 56b083702 | `PumpAheadOfFlowValveTest` (5); `aPumpOnTheFeedLineRidesBehindItsValve` |
 | 3 | Fixed. Stop has two phases: the unit stays until its release event commits. A dismantled column carries a `leaving` fact and goes then | 460a98836 | `aDismantledColumnLeavesWithItsPorts` (mutation) |
 | 4 | Fixed, same change. The ports stay mapped until the event commits, so what they take and give is booked | 460a98836 | `aStopBooksWhatItsPortsCarryUntilTheyLeave` (mutation) |
-| 5 | Moles fixed: columns map first, so removed components reach the ledger and the status line. Energy open, with options below | 460a98836 | `aComponentRemovedFromAColumnAccountIsBooked` |
+| 5 | Moles fixed: columns map first, so removed components reach the ledger and the status line. Energy: owner chose option A, below | 460a98836, 27faf5da9 | `aComponentRemovedFromAColumnAccountIsBooked` |
 | 6 | Fixed: `Identity.sameLine` at `IslandCoordinator` replacement, `withJunctionStates`, `replayStart`, and, last, `closeIllegalStarts`. A port's worked valve compares equal to its registry valve. `OUTLET_HOLD_REVIEW` corrected | 56b083702, 88600d64d | `aHandSetTargetKeepsTheCommittedInterval` |
 | 7(a) | Fixed. A per-solve flag, `lawFlowsFromBalance`, replaces clearing the carried point | 56b083702 | `RegulatingValveHoldTest` |
 | 7(b) | Fixed. The regulated pass hands `balanceStart` a copy of `modes` | 56b083702 | `RegulatingValveHoldTest` |
@@ -96,15 +96,15 @@ No finding proved wrong. Finding 14 was narrower than written: see its row.
 - The clamp and its ERROR line stay as a guard. The gates close every component and the energy, so nothing is given that the account did not hold.
 - The status line reads `STANDING_OPEN`; the valve screen reads "Standing open; a lower flow target on this line regulates".
 
-**Finding 5, energy: options for the owner.** Expected: a removed component leaves with its energy. An account has no temperature, so its share is not forced by the physics. An account of 100 mol that loses 3 mol of one component:
+**Finding 5, energy: owner chose A (2026-11-02), built in 27faf5da9.** Expected: a removed component leaves with its energy. An account has no temperature, so its share is not forced by the physics. An account of 100 mol that loses 3 mol of one component:
 
 | Option | What it does | Rests on |
 | --- | --- | --- |
-| A, recommended | Book 3 % of the account's energy as removed; about three lines | Uniform specific energy over components |
-| B, as built | Leave the energy; the next cycle's closure gives the condenser that 3 % once | Nothing, but specific energy shifts for one cycle |
+| A, chosen | Book 3 % of the account's energy as removed; about three lines | Uniform specific energy over components |
+| B, as first built | Leave the energy; the next cycle's closure gives the condenser that 3 % once | Nothing, but specific energy shifts for one cycle |
 | C | Restate at the table's product temperature, or save a temperature on the account | A table, which the same change may drop, or a new fact |
 
-Conservation holds in all three. The case needs a data change that drops a held component.
+Conservation holds in all three. The case needs a data change that drops a held component. In the gate 1.5 of 5.25 mol leaves: the account goes from -1.2 MJ to -857 kJ, and the Restated line takes the difference.
 
 **Finding 10, size.** About 100 lines over seven files, so it went in without a stop. A station gained `solids`, schema 6 being unreleased; `PortPlan` gained `solids`. Crystals melt on arrival, each its component, with its stored energy made true by its offset. An inert solid waits at its inlet, a cycle moves what arrived by its tick, and the bottoms' generator gives it at its ratio to the moles.
 

@@ -1,6 +1,6 @@
 # Column operation: the column running in the built plant
 
-**Snapshot:** 88600d64 (branch `claude/column-operation-5c3005`), 2026-11-02 · **Updated:** 2026-11-02 (new chapter, batches 2026-10-28-column-operation and 2026-11-02-valve-hold)
+**Snapshot:** 27faf5da (branch `claude/column-operation-5c3005`), 2026-11-02 · **Updated:** 2026-11-02 (new chapter, batches 2026-10-28-column-operation and 2026-11-02-valve-hold)
 Up: [code guide](README.md)
 
 ## Read this when
@@ -169,7 +169,7 @@ Steam short of its set ratio:
 
 - **Facts** (`FluidFacts`, schema 6): a registration's `suspendedBy`, and the world's column units by identity: id, master, running, set points, stations (port by name, index, device, valve, account, solids), totals, condenser, leaving. Corpus: `src/test/resources/compat/fluid/schema-6/`.
 - **State** (state format 29, `FluidFacts.topologyState`): each running unit's `ColumnUnit.State`, after the queued events: table, enthalpies, `tableTick`, `applied`, `solvedCondenser`, levels and credits. It holds windows from the last `FENCE + KEEP` ticks. A state that does not validate is dropped; that unit solves again.
-- On a rebuild, accounts and totals map onto the current axis, and solids onto the current records; a removed component or solid is booked. Queued events do not survive this path, so `FluidFacts.settled` settles each unit on what stands: orphan port devices go, a `leaving` unit goes, booked. `refresh` then restores a run if the state's axis equals the current one and every product has a station; otherwise it starts over.
+- On a rebuild, accounts and totals map onto the current axis, and solids onto the current records; a removed component or solid is booked. A component removed from a station's account takes its molar share of the account's energy, booked in `Restated`: an account has no temperature to restate at. Queued events do not survive this path, so `FluidFacts.settled` settles each unit on what stands: orphan port devices go, a `leaving` unit goes, booked. `refresh` then restores a run if the state's axis equals the current one and every product has a station; otherwise it starts over.
 - Not saved: arrival spans, the condenser's `owed` entries, the seed, the pending solve, `solvedBy` and the wakes.
 - **Shape** (`ColumnTrays.operating`, shape field 4): saved under `Operating` by `ColumnDesignTags.writeOperating`, read by `ShapeRepair.SavedOperating.resolve`. An unreadable one repairs to none (`operating point (…) -> none`). Corpus: `src/test/resources/compat/equipment/shapes-4.snbt`. A column with no point says "save it from the calculator again".
 - `ColumnDesign.of` fills it from the input at Save design. The calculator's `Design`, the constructor's `Column` tag and the shell's tag carry it. `ColumnV3Network.writeDesign` sends it as an optional section; wire schema 17 and protocol `"13"` did not change.
