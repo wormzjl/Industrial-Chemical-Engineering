@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-02-process-simulator/](2026-11-02-process-simulator/README.md) | In-game process simulator: design sheets, client-side runs, flowsheet files and compatibility | Planned |
 | [2026-10-28-drum-outlet-placement/](2026-10-28-drum-outlet-placement/README.md) | A lying boot drum's oil outlet at the bottom of its front end, not mid-height on the head | Implemented 2026-10-28 (0.17.1) |
 | [2026-10-28-constructor-templates/](2026-10-28-constructor-templates/README.md) | Constructor: current kind opens its design, column templates, calculator Save kept on close | Implemented 2026-10-28 (0.17.1) |
 | [2026-10-28-gui-toolkit/](2026-10-28-gui-toolkit/README.md) | An own small GUI toolkit, first on the heat Control tab | Implemented 2026-10-28 (0.17.0, 0.17.1) |

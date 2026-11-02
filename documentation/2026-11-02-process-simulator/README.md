@@ -1,0 +1,40 @@
+# 2026-11-02-process-simulator
+
+Purpose: an in-game process simulator: a dedicated block, a drag-and-drop flowsheet with a palette below, feed streams from the Fluid Generator's page, every unit including the column, Run on the client, a Results tab, flowsheet files under `.minecraft/IChemE`, and a compatibility system (owner request 2026-11-02: "make some design drawings for me to approve before moving to implementation").
+
+Status: Planned. Design sheets and plan await the owner's approval; no game code changed (branch `claude/in-game-process-simulator-93dd9a`, base `79b853e0`). Index: [../INDEX.md](../INDEX.md).
+
+## Documents
+
+- [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md): expected behaviour with the sample's numbers, what exists, the proposal (solver, units, column unit, client run, screen, block, standalone templates, clipboard, files and compatibility, new equipment rule), work packages, the owner's decisions, what the request did not mention, risks.
+- [renders/](renders/): the 18 design sheets, drawn with the shipped kit in the game font, numbers from the real solve.
+
+| Sheet | Shows |
+|---|---|
+| 01, 02 | Main screen, layouts A and B, both doors |
+| 03 | Dragging, connecting, renaming |
+| 04 | The palette, every category, lit and unlit |
+| 05 | Small windows: 1280 by 720, and the design minimum |
+| 06 | A run in progress |
+| 07, 08, 09, 10 | Feed stream, its Composition tab, reservoir Copy, product stream |
+| 11, 12 | Unit doors; the column's door |
+| 13 | Stream templates and column templates, standalone |
+| 14, 15 | Results: Streams, Units, Log |
+| 16 | Basis: package and components |
+| 17, 18 | Open, repair after an update, a removed unit on the sheet |
+
+## Code areas
+
+None changed yet. The plan names `science/flowsheet` (new), `client/gui/common` (new canvas and door builders), the calculator's block, menu, screen and `network/ColumnV3Network`, `V3ClientPresets` and the bundled presets and packages.
+
+Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md) (the feasibility probes), `tools/heat-gui-renders/SimulatorPrototypes.java` (the sheets).
+
+## History
+
+- 2026-11-02: sheets and plan written. `ClientRunProbe` showed a plain JVM runs the column and flashes with no Minecraft classes. `SampleFlowsheetProbe` solved the sample with its recycle by hand: 2 passes, mass closed, heat gap 0.001 MW of 211 MW. Waiting for the owner's choices D1 to D10.
+
+## Open items
+
+- The owner's decisions D1 to D10 (plan section 5) and the defaults of plan section 6.
+- Order against `claude/column-operation-5c3005`, `claude/valve-hold` and the native column default (`9c5eb01f`), none merged.
+- Not measured: a heater set by duty or a material recycle in the loop, a column with nitrogen on the plain start, a run's peak heap.
