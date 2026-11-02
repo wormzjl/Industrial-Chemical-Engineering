@@ -495,6 +495,105 @@ class NetworkPhaseEngineTest {
         assertTrue(hydrocarbonVapour(shared) > 0, shared.detail());
     }
 
+    /**
+     * One hydrocarbon with too little water to saturate the gas, the textbook steam distillation: the gas holds the
+     * hydrocarbon at its own vapour pressure and the steam at the rest of the pressure, under water's saturation, and the
+     * rest of the hydrocarbon stays liquid, n_V = n_w P_v / (P - P_v). The gas volume has no root in the hydrocarbon's
+     * partial pressure, all of the hydrocarbon under P_v and none over it, so the steam's own volume closes it. These states
+     * come back from their enthalpy, and from their energy and volume, at their own temperature and pressure.
+     */
+    @Test
+    void aPureHydrocarbonDistilsWithItsSteam() {
+        record Point(double t, double p) {}
+        var engine = model.phaseEngine();
+        int cut = model.components().indexOf("crude_pc03");
+        double[] feed = pure(cut, 100, 30);
+        for (var at : List.of(new Point(320, 5e3), new Point(370, 1e5), new Point(382, 1e5))) {
+            var tp = engine.tp(at.t(), at.p(), feed, false);
+            assertTrue(tp.converged(), at + ": " + tp.detail());
+            var split = tp.freeWater();
+            assertEquals(30, split.waterVapor(), 1e-12, at + " all of the water is steam");
+            double pc = split.hydrocarbonPressure();
+            double vapourPressure = saturationPressure(cut, at.t(), 1e2, 3e6);
+            assertEquals(vapourPressure, pc, .01 * vapourPressure, at + " at the hydrocarbon's own vapour pressure");
+            assertEquals(at.p() - pc, split.waterPartialPressure(), 1e-9 * at.p(), at + " the steam at the rest");
+            assertTrue(split.waterPartialPressure() < split.saturationPressure(), at + " under water's saturation");
+            double vapour = hydrocarbonVapour(tp);
+            assertEquals(30 * pc / (at.p() - pc), vapour, .01 * vapour, at + " the two gases fill one volume");
+            assertEquals(100 - vapour, hydrocarbonLiquid(tp), 1e-9, at + " the rest stays liquid");
+            var ph = engine.ph(at.p(), tp.enthalpy(), feed, false);
+            var uv = engine.crystalUv(tp.internalEnergy(), tp.volume(), feed, false, Double.NaN, Double.NaN);
+            for (var answer : List.of(ph, uv)) {
+                assertTrue(answer.converged(), at + ": " + answer.detail());
+                var state = answer.phases().get(0);
+                assertEquals(at.t(), state.temperature(), 1e-6, at + " " + answer.specification());
+                assertEquals(at.p(), state.pressure(), 1e-6 * at.p(), at + " " + answer.specification());
+                assertEquals(vapour, hydrocarbonVapour(answer), 1e-6 * vapour, at + " " + answer.specification());
+            }
+        }
+    }
+
+    /**
+     * Where water's vapour pressure and one hydrocarbon's add up to the state pressure the two boil together at one
+     * temperature, and H(T) steps there by the heat of what the gas takes: no gas below it, and above it the water is gone
+     * (ratio .3) or the hydrocarbon liquid is (ratio 30). A target inside the step is all three phases at that temperature,
+     * the steam and the vapour in the ratio of their pressures, and comes back from its energy and volume.
+     */
+    @Test
+    void aPureHydrocarbonBoilsWithItsWaterAtOneTemperature() {
+        var engine = model.phaseEngine();
+        int cut = model.components().indexOf("crude_pc03");
+        double p = 1e5;
+        for (double ratio : new double[] {.3, 30}) {
+            double[] feed = pure(cut, 100, 100 * ratio);
+            double target = .5 * (engine.tp(367, p, feed, false).enthalpy() + engine.tp(369, p, feed, false).enthalpy());
+            var ph = engine.ph(p, target, feed, false);
+            assertTrue(ph.converged(), ph.detail());
+            assertTrue(ph.diagnostics().coexistenceFromBalance(), ph.detail());
+            assertEquals(target, ph.enthalpy(), 1e-8 * Math.abs(target), "the energy balance");
+            var split = ph.freeWater();
+            assertEquals(p, split.saturationPressure() + split.hydrocarbonPressure(), 1e-9 * p, "the two vapour pressures add up");
+            assertTrue(split.condensed() > 0 && split.waterVapor() > 0, ph.detail());
+            double vapour = hydrocarbonVapour(ph);
+            assertTrue(hydrocarbonLiquid(ph) > 0 && vapour > 0, ph.detail());
+            double ideal = split.hydrocarbonPressure() / split.saturationPressure();
+            assertEquals(ideal, vapour / split.waterVapor(), .01 * ideal, "the gas holds them as their pressures");
+            double t = ph.phases().get(0).temperature();
+            assertTrue(t > 367 && t < 369, ph.detail());
+            assertEquals(0, hydrocarbonVapour(engine.tp(t - 1e-6, p, feed, false)), "no gas under it");
+            assertTrue(hydrocarbonVapour(engine.tp(t + 1e-6, p, feed, false)) > vapour, "over it the step's top end");
+            var uv = engine.crystalUv(ph.internalEnergy(), ph.volume(), feed, false, Double.NaN, Double.NaN);
+            assertTrue(uv.converged(), uv.detail());
+            assertEquals(t, uv.phases().get(0).temperature(), 1e-6, "UV");
+            assertEquals(p, uv.phases().get(0).pressure(), 1e-6 * p, "UV");
+            assertEquals(vapour, hydrocarbonVapour(uv), 1e-5 * vapour, "UV");
+            assertEquals(split.waterVapor(), uv.freeWater().waterVapor(), 1e-5 * split.waterVapor(), "UV");
+        }
+    }
+
+    /**
+     * Water short of a heavy oil at a stripper's temperature: all of it is steam at the state pressure, the oil stays liquid
+     * with next to no vapour pressure. The vapour fraction that fills the gas lies under the flash's resolution, about 5e-9, so
+     * the oil's gas volume jumps from that to none at its bubble point, and the steam closes that step as it closes a pure
+     * hydrocarbon's. The vapour's own energy is nothing beside the steam's, and the state comes back at its temperature.
+     */
+    @Test
+    void aHeavyOilBesideSteamStaysLiquid() {
+        var engine = model.phaseEngine();
+        int heavy = model.components().indexOf("crude_pc12");
+        double t = 550, p = 1e5;
+        double[] feed = pure(heavy, 100, 30);
+        feed[heavy - 1] = .01;
+        var tp = engine.tp(t, p, feed, false);
+        assertTrue(tp.converged(), tp.detail());
+        assertEquals(30, tp.freeWater().waterVapor(), 1e-12, "all of the water is steam");
+        assertEquals(p, tp.freeWater().waterPartialPressure(), 1e-6 * p, "at the state pressure");
+        assertTrue(hydrocarbonVapour(tp) < 1e-6, tp.detail());
+        var ph = engine.ph(p, tp.enthalpy(), feed, false);
+        assertTrue(ph.converged(), ph.detail());
+        assertEquals(t, ph.phases().get(0).temperature(), 1e-6, ph.detail());
+    }
+
     /** The enthalpy halfway between 12 K under water's boiling at 2 bar and 12 K over it. */
     private double midway(double[] feed, double p) {
         var engine = model.phaseEngine();
@@ -525,17 +624,31 @@ class NetworkPhaseEngineTest {
         return vapour;
     }
 
+    /** The hydrocarbons of an answer's liquid, mol. */
+    private double hydrocarbonLiquid(EquilibriumResult answer) {
+        double liquid = 0;
+        for (var phase : answer.phases()) {
+            if (phase.kind() != PhaseKind.LIQUID) continue;
+            for (int i = 0; i < n; i++) if (i != water) liquid += phase.amount(i);
+        }
+        return liquid;
+    }
+
     /** The model's own saturation pressure of pure nitrogen, where its liquid and vapour fugacities agree. */
     private double saturationPressure(double t) {
-        double[] pure = new double[n - 1];pure[nitrogen] = 1;
+        return saturationPressure(nitrogen, t, 1e4, 3.3e6);
+    }
+
+    /** The model's own saturation pressure of a pure hydrocarbon inside {@code [low, high]}. */
+    private double saturationPressure(int component, double t, double low, double high) {
+        double[] pure = new double[n - 1];pure[component] = 1;
         var terms = model.hydrocarbon.prepare(t);
-        double low = 1e4, high = 3.3e6;
         for (int k = 0; k < 200 && high - low > 1e-14 * high; k++) {
             double mid = Math.sqrt(low * high);
             var l = model.hydrocarbon.phase(t, mid, pure, Root.LIQUID, terms);
             var v = model.hydrocarbon.phase(t, mid, pure, Root.VAPOR, terms);
             // Below the saturation pressure the vapour has the lower fugacity.
-            if (l.logFugacityView()[nitrogen] > v.logFugacityView()[nitrogen]) low = mid; else high = mid;
+            if (l.logFugacityView()[component] > v.logFugacityView()[component]) low = mid; else high = mid;
         }
         return 0.5 * (low + high);
     }
