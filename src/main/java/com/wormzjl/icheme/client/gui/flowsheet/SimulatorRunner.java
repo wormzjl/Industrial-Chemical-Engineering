@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Report;
+import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
@@ -91,6 +92,14 @@ public final class SimulatorRunner {
         stop();
     }
 
+    /**
+     * What a block held, which stands as the last run until the next. A column's warm start lives only in this client's memory, so {@link #steady} stays as it is: the first run
+     * after opening starts cold.
+     */
+    public void restore(SimulatorHost.Finished stored) {
+        if (!closed && job == null) last = stored;
+    }
+
     /** The run in hand, or null. */
     public SheetState.@Nullable Running running() {
         var running = job;
@@ -159,7 +168,7 @@ public final class SimulatorRunner {
             var run = engine.run(sheet, catalog, this::checkpoint, steady, this);
             if (run.status() == FlowsheetRun.Status.STEADY) steady = run;
             if (run.status() == FlowsheetRun.Status.STOPPED && run.reports().isEmpty()) return null;
-            return new SimulatorHost.Finished(sheet, run, seconds());
+            return new SimulatorHost.Finished(sheet, run, seconds(), null, RevisionNotice.tokens(sheet, catalog));
         }
 
         /**
@@ -173,7 +182,7 @@ public final class SimulatorRunner {
             double took = shown == null ? 0 : shown.seconds();
             var run = engine.alone(sheet, id, catalog, this::checkpoint, base.streams(), this);
             boolean solved = run.status() != FlowsheetRun.Status.FAILED && run.status() != FlowsheetRun.Status.STOPPED;
-            return new SimulatorHost.Finished(ran, solved ? base.with(run) : base, took, new SimulatorHost.Alone(id, sheet, run.status(), solved ? null : error(run), seconds()));
+            return new SimulatorHost.Finished(ran, solved ? base.with(run) : base, took, new SimulatorHost.Alone(id, sheet, run.status(), solved ? null : error(run), seconds()), RevisionNotice.tokens(sheet, catalog));
         }
     }
 

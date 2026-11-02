@@ -96,6 +96,12 @@ final class V3ClientPresets {
         }
         throw new IOException("No available preset filename");
     }
+    /** Deletes a player's own file; a bundled one is no file here, so a name is all it takes and only that folder is reached. */
+    void delete(Kind kind,String file)throws IOException{
+        Path directory=directory(kind),path=directory.resolve(file).normalize();
+        if(!directory.equals(path.getParent()))throw new IOException("Invalid preset path");
+        Files.deleteIfExists(path);
+    }
     private static String read(InputStream stream)throws IOException{
         byte[] bytes=stream.readNBytes(MAX_BYTES+1);
         if(bytes.length>MAX_BYTES)throw new IOException("Preset exceeds size limit");
@@ -140,6 +146,15 @@ final class V3ClientPresets {
         o.addProperty("basis",composition.mass()?"mass":"mole");JsonArray rows=new JsonArray();
         composition.relativeAmounts().forEach((id,amount)->{var c=new JsonObject();c.addProperty("id",id);c.addProperty("amount",amount);rows.add(c);});
         o.add("components",rows);return JSON.toJson(o);
+    }
+    /** A stream as a template (plan section 3.7): its mixture by mole, and its conditions: {@code temperature} K, {@code pressure} bar, {@code flow} kmol/h. */
+    static String streamJson(String name,Map<String,Double> amounts,double temperature,double pressure,double flow){
+        JsonObject o=header(name,Kind.MIXTURE);
+        o.addProperty("basis","mole");JsonArray rows=new JsonArray();
+        amounts.forEach((id,amount)->{var c=new JsonObject();c.addProperty("id",id);c.addProperty("amount",amount);rows.add(c);});
+        o.add("components",rows);
+        o.addProperty("temperature_kelvin",temperature);o.addProperty("pressure_bar",pressure);o.addProperty("flow_kmol_h",flow);
+        return JSON.toJson(o);
     }
     static String columnJson(String name,V3ColumnInput input){
         JsonObject o=header(name,Kind.COLUMN);template(input).write(o);return JSON.toJson(o);

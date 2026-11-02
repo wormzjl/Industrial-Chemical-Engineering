@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.registry;
 
 import com.wormzjl.icheme.IChemE;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.ProcessSimulatorBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.IEventBus;
@@ -14,12 +14,12 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity>> FLUID_DEVICE=BLOCK_ENTITY_TYPES.register("fluid_device",()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity::new,
             ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get(),ModBlocks.INLINE_FILTER.get()).build(null));
 
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ColumnCalculatorV3BlockEntity>>
-            COLUMN_CALCULATOR_V3 = BLOCK_ENTITY_TYPES.register(
-                    "column_calculator_v3",
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ProcessSimulatorBlockEntity>>
+            PROCESS_SIMULATOR = BLOCK_ENTITY_TYPES.register(
+                    "process_simulator",
                     () -> BlockEntityType.Builder.of(
-                            ColumnCalculatorV3BlockEntity::new,
-                            ModBlocks.COLUMN_CALCULATOR_V3.get()
+                            ProcessSimulatorBlockEntity::new,
+                            ModBlocks.PROCESS_SIMULATOR.get()
                     ).build(null)
             );
 
@@ -48,6 +48,7 @@ public final class ModBlockEntities {
                     () -> BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity::new, ModBlocks.PIPE_RACK.get()).build(null));
 
     public static void register(IEventBus modEventBus) {
+        BLOCK_ENTITY_TYPES.addAlias(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "column_calculator_v3"), PROCESS_SIMULATOR.getId());
         BLOCK_ENTITY_TYPES.register(modEventBus);
     }
 }

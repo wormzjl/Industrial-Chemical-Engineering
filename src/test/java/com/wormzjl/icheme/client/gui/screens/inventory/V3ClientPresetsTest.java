@@ -14,7 +14,16 @@ class V3ClientPresetsTest {
     private V3ClientPresets library(){return new V3ClientPresets(game,n->getClass().getClassLoader().getResourceAsStream(n));}
     private static V3ColumnInput reference(){var c=MaterialCatalog.bundled();return c.presets().column("tia_juana").input(c);}
     private static V3EditorDraft draft(){
-        var input=reference();return new V3EditorDraft(input,V3EditorCatalog.from(MaterialCatalog.bundled(),input).weightsFor(input));
+        var input=reference();return new V3EditorDraft(input,weights(input));
+    }
+    private static java.util.List<Double> weights(V3ColumnInput input){
+        return MaterialCatalog.bundled().requirePackage(input.packageId()).properties().stream().map(MaterialCatalog.Property::molecularWeight).toList();
+    }
+    /** The column a stream of {@code parts} sits on: the one with the fewest components that holds them. */
+    private static V3ColumnInput sourceFor(java.util.Collection<String> parts){
+        var c=MaterialCatalog.bundled();
+        return c.presets().columns().keySet().stream().sorted().map(id->c.presets().column(id)).filter(p->p.visible()).map(p->p.input(c))
+                .filter(i->i.componentBasis().componentIds().containsAll(parts)).min(java.util.Comparator.comparingInt(i->i.componentBasis().componentCount())).orElseThrow();
     }
     @Test void bundledLibrariesAreIndependentAndPreserveAuthoredOperatingData(){
         var l=library();var columns=l.refresh(V3ClientPresets.Kind.COLUMN);var mixtures=l.refresh(V3ClientPresets.Kind.MIXTURE);
@@ -24,8 +33,8 @@ class V3ClientPresetsTest {
             if(entry.file().equals("pot.json"))continue;
             // A crude is two files now: the stream, then the tower on it, as the calculator's Templates load them.
             var stream=(V3ClientPresets.Mixture)mixtures.entries().stream().filter(e->e.file().equals(entry.file())).findFirst().orElseThrow().preset();
-            var d=draft();var editor=V3EditorCatalog.from(MaterialCatalog.bundled(),reference());var on=editor.sourceFor(stream.amounts().keySet());
-            d.loadMixture(stream,on,editor.weightsFor(on));d.loadColumn(((V3ClientPresets.Column)entry.preset()).template());
+            var d=draft();var on=sourceFor(stream.amounts().keySet());
+            d.loadMixture(stream,on,weights(on));d.loadColumn(((V3ClientPresets.Column)entry.preset()).template());
             var changed=d.assemble();assertEquals(reference().packageId(),changed.packageId());
             var crude=V3TestInputs.crude(MaterialCatalog.bundled(),entry.file().replace(".json",""));
             assertEquals(crude.stageCount(),changed.stageCount());assertEquals(crude.feedStageNumber(),changed.feedStageNumber());
@@ -38,12 +47,12 @@ class V3ClientPresetsTest {
     }
     /** A stream sits on the fewest components that hold it (a file names no package), and a part nothing holds finds nothing. */
     @Test void aStreamFindsItsComponentsByTheirIds(){
-        var mixtures=library().refresh(V3ClientPresets.Kind.MIXTURE).entries();var editor=V3EditorCatalog.from(MaterialCatalog.bundled(),reference());
+        var mixtures=library().refresh(V3ClientPresets.Kind.MIXTURE).entries();
         for(var entry:mixtures){
             var mixture=(V3ClientPresets.Mixture)entry.preset();
-            assertEquals(entry.file().equals("tia_juana_nitrogen.json")?"icheme:tjl20_methane_nitrogen":"icheme:tjl20_methane",editor.sourceFor(mixture.amounts().keySet()).packageId(),entry.file());
+            assertEquals(entry.file().equals("tia_juana_nitrogen.json")?"icheme:tjl20_methane_nitrogen":"icheme:tjl20_methane",sourceFor(mixture.amounts().keySet()).packageId(),entry.file());
         }
-        assertThrows(NoSuchElementException.class,()->editor.sourceFor(Set.of("Unobtainium")));
+        assertThrows(NoSuchElementException.class,()->sourceFor(Set.of("Unobtainium")));
     }
     /** Old files (process simulator plan, section 3.7): a column's feed flow is its design feed, and a mixture's package, gone or not, decides nothing. */
     @Test void filesOfTheOlderBuildsLoad()throws Exception{
@@ -60,8 +69,8 @@ class V3ClientPresetsTest {
         assertTrue(columns.problems().isEmpty()&&mixtures.problems().isEmpty(),()->columns.problems()+" "+mixtures.problems());
         assertEquals(8,columns.entries().size());assertEquals(9,mixtures.entries().size());
         // On the default feed: the feed and its temperature stay, the mixture changes, and the tower's flows scale to the feed they meet.
-        var editor=V3EditorCatalog.from(MaterialCatalog.bundled(),reference());var on=editor.sourceFor(m.amounts().keySet());assertEquals(reference().packageId(),on.packageId());
-        var d=draft();d.loadMixture(m,on,editor.weightsFor(on));d.loadColumn(c.template());var loaded=d.assemble();
+        var on=sourceFor(m.amounts().keySet());assertEquals(reference().packageId(),on.packageId());
+        var d=draft();d.loadMixture(m,on,weights(on));d.loadColumn(c.template());var loaded=d.assemble();
         double feed=Arrays.stream(reference().feedComponentMolarFlowsMolPerSecond()).sum(),k=feed*3.6/c.template().designFeed();
         assertEquals(feed,Arrays.stream(loaded.feedComponentMolarFlowsMolPerSecond()).sum(),1e-9);assertEquals(reference().feedTemperatureKelvin(),loaded.feedTemperatureKelvin(),1e-9);
         assertFalse(Arrays.equals(reference().feedComponentMolarFlowsMolPerSecond(),loaded.feedComponentMolarFlowsMolPerSecond()),"the mixture is the old file's");
@@ -80,7 +89,7 @@ class V3ClientPresetsTest {
         var m=(V3ClientPresets.Mixture)V3ClientPresets.decode(json,V3ClientPresets.Kind.MIXTURE);
         assertEquals(313.15,m.temperature().orElseThrow());assertEquals(1.01,m.pressure().orElseThrow());assertEquals(5000,m.flow().orElseThrow());
         assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(json.replace("\"flow_kmol_h\":5000","\"flow_kmol_h\":-1"),V3ClientPresets.Kind.MIXTURE));
-        var loaded=draft();var editor=V3EditorCatalog.from(MaterialCatalog.bundled(),reference());var on=editor.sourceFor(m.amounts().keySet());loaded.loadMixture(m,on,editor.weightsFor(on));
+        var loaded=draft();var on=sourceFor(m.amounts().keySet());loaded.loadMixture(m,on,weights(on));
         assertEquals(5000/3.6,Arrays.stream(loaded.assemble().feedComponentMolarFlowsMolPerSecond()).sum(),1e-9);assertEquals(313.15,loaded.assemble().feedTemperatureKelvin(),1e-9);
         for(var entry:library().refresh(V3ClientPresets.Kind.MIXTURE).entries()){
             var stream=(V3ClientPresets.Mixture)entry.preset();boolean residue=entry.file().equals("tia_juana_residue.json");

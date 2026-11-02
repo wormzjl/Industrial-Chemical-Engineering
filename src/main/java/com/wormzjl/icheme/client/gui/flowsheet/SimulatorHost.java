@@ -3,6 +3,7 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.Note;
+import java.util.List;
 import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
@@ -22,17 +23,25 @@ public interface SimulatorHost {
     record Alone(String unit, Flowsheet sheet, FlowsheetRun.Status status, @Nullable Note why, double seconds) {
     }
 
-    /** A run that ended: the sheet it ran on, what it left, how long it took, and what a unit solved alone has done since. */
-    record Finished(Flowsheet sheet, FlowsheetRun run, double seconds, @Nullable Alone alone) {
+    /** A run that ended: the sheet it ran on, what it left, how long it took, what a unit solved alone has done since, and the revision tokens of what it ran on. */
+    record Finished(Flowsheet sheet, FlowsheetRun run, double seconds, @Nullable Alone alone, Map<String, String> ranOn) {
+        public Finished(Flowsheet sheet, FlowsheetRun run, double seconds, @Nullable Alone alone) {
+            this(sheet, run, seconds, alone, Map.of());
+        }
+
         public Finished(Flowsheet sheet, FlowsheetRun run, double seconds) {
             this(sheet, run, seconds, null);
         }
     }
 
+    /** What the block or the host has to tell the player: a translation key suffix, its arguments, and whether it warns. */
+    record Said(String key, List<String> arguments, boolean warn) {
+    }
+
     SimulatorHost NONE = new SimulatorHost() {
     };
 
-    /** The run half, which W8's block joins to its store; null where nothing runs. */
+    /** The run half; null where nothing runs. */
     default @Nullable SimulatorRunner runner() {
         return null;
     }
@@ -84,7 +93,7 @@ public interface SimulatorHost {
         editor.lock(reader || running() != null, reader ? SheetEditor.LOCKED : SheetEditor.RUNNING);
     }
 
-    /** The server's revision tokens ({@link RevisionNotice}), or null with no word from one. W8's packet brings them. */
+    /** The server's revision tokens ({@code RevisionNotice}), or null with no word from one. */
     default @Nullable Map<String, String> serverRevisions() {
         return null;
     }
@@ -96,6 +105,14 @@ public interface SimulatorHost {
 
     /** Stores the sheet on its block. */
     default void store(Flowsheet sheet) {
+    }
+
+    /** What stands on the status line until something else is said, or null. */
+    default @Nullable Said said() {
+        return null;
+    }
+
+    default void say(@Nullable Said what) {
     }
 
     /** Whether this player only reads: a second player at a block another edits. */

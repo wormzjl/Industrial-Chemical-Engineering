@@ -257,6 +257,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var rate=footer.get(5);doorButton(flowRateUnit.suffix(),rate.x(),by,rate.width(),this::toggleFlowRate).soft(true)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.flow_unit.hint")));
         if(data==null)return;
+        if(tank()&&!tower()&&data.view().state()!=null){var copy=footer.get(1);doorAction("copy",copy.x(),by,copy.width(),this::copyContents);}
         // A heat side applies its control from its Control tab only.
         if(canEdit()&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()))){var apply=footer.get(1);doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);}
         if(page==CONTROL){
@@ -318,11 +319,25 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             String name=mixture.translationKey().isBlank()?mixture.name():Component.translatable(mixture.translationKey()).getString();
             list.add(new Choice(name+" · "+tr(entry.bundled()?"bundled":"custom"),()->{
                 var replacement=new RelativeComposition(data.components(),data.molecularWeights(),new double[data.components().size()]);
-                replacement.load(mixture.amounts(),mixture.mass());loadMixture(replacement,mixture.solids());
+                replacement.load(mixture.amounts(),mixture.mass());
+                // A template's conditions are the set point's draft, as its parts are; the flow here is by volume, which a mixture's kmol/h does not fix.
+                mixture.temperature().ifPresent(k->fields.put("temperature",new NumericDraft(k,temperatureUnit)));
+                mixture.pressure().ifPresent(bar->fields.put("pressure",new NumericDraft(bar*1e5,pressureUnit)));
+                loadMixture(replacement,mixture.solids());
             }));
         }
         return List.copyOf(list);
     }
+    /** Copies what this page shows from the last published snapshot, to the one clipboard: it reads the menu's data, sends no packet and solves nothing. */
+    private void copyContents(){
+        var data=menu.clientData();var state=data==null?null:data.view().state();
+        if(state==null)return;
+        var pos=menu.position();
+        var held=com.wormzjl.icheme.client.gui.flowsheet.SheetClipboard.vessel(trFlowsheet("clipboard.tank",pos.getX(),pos.getY(),pos.getZ()),data.components(),state.phaseMoles(),state.temperature(),state.pressure());
+        com.wormzjl.icheme.client.gui.flowsheet.SheetClipboard.copy(held);
+        message=trFlowsheet("door.copied",held.amounts().size(),temperatureValue(state.temperature()),temperatureUnit.symbol(),pressureValue(state.pressure()),pressureUnit.symbol());
+    }
+    private static String trFlowsheet(String key,Object... args){return Component.translatable("gui.icheme.flowsheet."+key,args).getString();}
     /** Every preset choice loads a whole feed: its fluid composition and its solids (none clears the previous grades). */
     private void loadMixture(RelativeComposition replacement,SlurryFeed solids){
         composition=replacement;mass=replacement.mass();loadSolids(solids);

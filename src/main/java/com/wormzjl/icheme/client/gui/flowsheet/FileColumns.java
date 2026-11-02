@@ -18,8 +18,10 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,6 +31,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class FileColumns {
     public static final int W = 533, H = 280;
+    private static final String AUTOSAVE = "autosave", AUTOSAVE_OF = ".autosave";
     /** The longest name a file takes. */
     private static final int LONGEST = 64;
     private static final Set<String> RESERVED = Set.of("CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9");
@@ -59,12 +62,18 @@ public final class FileColumns {
         if (name.isBlank() || name.length() > LONGEST || name.endsWith(".") || name.endsWith(" ")) return false;
         for (char c : name.toCharArray()) if (c < ' ' || "/\\:*?\"<>|".indexOf(c) >= 0) return false;
         String stem = name.contains(".") ? name.substring(0, name.indexOf('.')) : name;
-        return !RESERVED.contains(stem.toUpperCase(Locale.ROOT)) && !name.equals("..");
+        String lower = name.toLowerCase(Locale.ROOT);
+        return !RESERVED.contains(stem.toUpperCase(Locale.ROOT)) && !name.equals("..") && !lower.equals(AUTOSAVE) && !lower.endsWith(AUTOSAVE_OF);
     }
 
     /** The file of {@code name} in {@code folder}. */
     public static Path file(Path folder, String name) {
         return folder.resolve(name + ".json");
+    }
+
+    /** The autosave beside {@code name}'s file, or the folder's own for a sheet that has none. A name holds no dot, so no file a player names is one. */
+    public static Path autosave(Path folder, @Nullable String name) {
+        return file(folder, name == null ? AUTOSAVE : name + AUTOSAVE_OF);
     }
 
     /** The folder's flowsheets, newest first. A file that does not read is listed, and says why. */
@@ -86,7 +95,8 @@ public final class FileColumns {
     }
 
     private static Entry entry(Path file, HeatControlColumn.Texts t) {
-        String name = file.getFileName().toString().replaceFirst("\\.json$", ""), when = WHEN.format(Instant.ofEpochMilli(modified(file)));
+        String stem = file.getFileName().toString().replaceFirst("\\.json$", ""), when = WHEN.format(Instant.ofEpochMilli(modified(file)));
+        String name = stem.equals(AUTOSAVE) ? t.get("flowsheet.file.autosave") : stem.endsWith(AUTOSAVE_OF) ? t.get("flowsheet.file.autosave_of", stem.substring(0, stem.length() - AUTOSAVE_OF.length())) : stem;
         try {
             var sheet = FlowsheetFile.open(file);
             long unknown = sheet.units().stream().filter(u -> Tiles.symbol(u.type()) == null).count();
@@ -104,7 +114,12 @@ public final class FileColumns {
         var rows = new ArrayList<Row>();
         for (var entry : entries) rows.add(new Row(new String[]{entry.name(), entry.size(), entry.saved(), entry.state()}, entry.warn()));
         return new Listing(t.get("flowsheet.file.open_title"), new String[]{t.get("flowsheet.file.name"), t.get("flowsheet.file.size"), t.get("flowsheet.file.saved"), t.get("flowsheet.file.state")}, new int[]{0, 170, 226, 330}, rows, chosen,
-                new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.folder"), t.get("flowsheet.file.open")}, 2);
+                new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.folder"), t.get("flowsheet.file.from_clipboard"), t.get("flowsheet.file.open")}, 3);
+    }
+
+    /** What the unsaved-changes prompt says. */
+    public static List<String[]> unsaved(HeatControlColumn.Texts t) {
+        return List.<String[]>of(new String[]{t.get("flowsheet.file.unsaved_kind"), t.get("flowsheet.file.unsaved_line")});
     }
 
     /** The stream templates a feed loads, each a mixture. */
@@ -114,8 +129,35 @@ public final class FileColumns {
         return new Listing(t.get("flowsheet.file.templates_title"), new String[]{t.get("flowsheet.file.name"), t.get("flowsheet.file.parts")}, new int[]{0, 460}, rows, chosen, new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.load")}, 1);
     }
 
-    /** A column template as the door lists it: {@code bundled} with the mod, or the player's own. */
-    public record ColumnTemplate(String name, V3ColumnTemplate template, boolean bundled) {
+    /**
+     * A stream template as a feed's door lists it: a mixture by mole, with its conditions where it has them, NaN where it has not.
+     *
+     * @param amounts     parts by component id
+     * @param temperature K
+     * @param pressure    Pa
+     * @param flow        mol/s
+     */
+    public record StreamTemplate(String name, Map<String, Double> amounts, double temperature, double pressure, double flow) {
+        public StreamTemplate {
+            amounts = Map.copyOf(new LinkedHashMap<>(amounts));
+        }
+    }
+
+    /** The stream templates a feed loads, with their conditions. */
+    public static Listing streamTemplates(List<StreamTemplate> templates, int chosen, SheetUnits units, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Row>();
+        for (var template : templates) {
+            var conditions = new ArrayList<String>();
+            if (!Double.isNaN(template.temperature())) conditions.add(units.t(template.temperature()) + " " + units.temperature().symbol());
+            if (!Double.isNaN(template.pressure())) conditions.add(units.p(template.pressure()) + " " + units.pressure().symbol());
+            if (!Double.isNaN(template.flow())) conditions.add(units.moles(template.flow()) + " " + units.molesUnit());
+            rows.add(new Row(new String[]{template.name(), Integer.toString(template.amounts().size()), String.join(", ", conditions)}, false));
+        }
+        return new Listing(t.get("flowsheet.file.templates_title"), new String[]{t.get("flowsheet.file.name"), t.get("flowsheet.file.parts"), t.get("flowsheet.file.conditions")}, new int[]{0, 250, 300}, rows, chosen, new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.load")}, 1);
+    }
+
+    /** A column template as the door lists it: {@code bundled} with the mod, or the player's own, in {@code file}. */
+    public record ColumnTemplate(String name, V3ColumnTemplate template, boolean bundled, String file) {
     }
 
     /** The column templates a column's door loads. */
@@ -127,7 +169,7 @@ public final class FileColumns {
             rows.add(new Row(new String[]{template.name(), Integer.toString(column.trays()), connections(column, t), feed, t.get(template.bundled() ? "flowsheet.file.bundled" : "flowsheet.file.yours")}, false));
         }
         return new Listing(t.get("flowsheet.file.column_templates_title"), new String[]{t.get("flowsheet.file.name"), t.get("flowsheet.file.trays"), t.get("flowsheet.file.connections"), t.get("flowsheet.file.design_feed"), t.get("flowsheet.file.from")},
-                new int[]{0, 170, 212, 352, 460}, rows, chosen, new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.load")}, 1);
+                new int[]{0, 170, 212, 352, 460}, rows, chosen, new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.delete"), t.get("flowsheet.file.save_current"), t.get("flowsheet.file.load")}, 3);
     }
 
     private static String connections(V3ColumnTemplate column, HeatControlColumn.Texts t) {

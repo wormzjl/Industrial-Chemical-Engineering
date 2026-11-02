@@ -1,7 +1,8 @@
 package com.wormzjl.icheme.world.level.block;
 
 import com.mojang.serialization.MapCodec;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
+import com.wormzjl.icheme.network.ProcessSimulatorNetwork;
+import com.wormzjl.icheme.world.level.block.entity.ProcessSimulatorBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
@@ -19,16 +20,16 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
-/** Calculator block with server-authoritative V3 solve admission and result state. */
-public final class ColumnCalculatorV3Block extends BaseEntityBlock {
-    public static final MapCodec<ColumnCalculatorV3Block> CODEC = simpleCodec(ColumnCalculatorV3Block::new);
+/** The process simulator's block (batch 2026-11-02-process-simulator, plan section 3.6): it holds a sheet and opens the screen. It solves nothing, as a run is the client's. */
+public final class ProcessSimulatorBlock extends BaseEntityBlock {
+    public static final MapCodec<ProcessSimulatorBlock> CODEC = simpleCodec(ProcessSimulatorBlock::new);
 
-    public ColumnCalculatorV3Block(BlockBehaviour.Properties properties) {
+    public ProcessSimulatorBlock(BlockBehaviour.Properties properties) {
         super(properties);
     }
 
     @Override
-    public MapCodec<ColumnCalculatorV3Block> codec() {
+    public MapCodec<ProcessSimulatorBlock> codec() {
         return CODEC;
     }
 
@@ -58,22 +59,17 @@ public final class ColumnCalculatorV3Block extends BaseEntityBlock {
 
     @Override
     public @Nullable BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new ColumnCalculatorV3BlockEntity(pos, state);
+        return new ProcessSimulatorBlockEntity(pos, state);
     }
 
     @Override
     public @Nullable MenuProvider getMenuProvider(BlockState state, Level level, BlockPos pos) {
-        BlockEntity blockEntity = level.getBlockEntity(pos);
-        return blockEntity instanceof ColumnCalculatorV3BlockEntity calculator ? calculator : null;
+        return level.getBlockEntity(pos) instanceof ProcessSimulatorBlockEntity simulator ? simulator : null;
     }
 
     @Override
-    protected InteractionResult useWithoutItem(
-            BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
-        if (!level.isClientSide() && player instanceof ServerPlayer serverPlayer) {
-            MenuProvider menuProvider = state.getMenuProvider(level, pos);
-            if (menuProvider != null) serverPlayer.openMenu(menuProvider, buffer -> buffer.writeBlockPos(pos));
-        }
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
+        if (!level.isClientSide() && player instanceof ServerPlayer serverPlayer && level.getBlockEntity(pos) instanceof ProcessSimulatorBlockEntity simulator) ProcessSimulatorNetwork.open(serverPlayer, simulator);
         return InteractionResult.sidedSuccess(level.isClientSide());
     }
 }

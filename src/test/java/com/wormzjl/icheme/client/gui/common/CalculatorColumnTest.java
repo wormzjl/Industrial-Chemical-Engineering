@@ -50,13 +50,13 @@ class CalculatorColumnTest {
     private static final Measure M = Measure.fixed(6);
     private static final int[] HEIGHTS = {220, 254, 400, 600};
     private static final List<String> UNITS = List.of("°C", "°F", "K");
-    private static final Path SCREEN = Path.of("src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/ColumnCalculatorV3Screen.java");
+    private static final Path SCREEN = Path.of("src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/ProcessSimulatorScreen.java");
 
     /** The screen's title, the block's English name. */
     private static String blockName() {
         try (var in = CalculatorColumnTest.class.getResourceAsStream("/assets/icheme/lang/en_us.json")) {
             var json = com.google.gson.JsonParser.parseReader(new java.io.InputStreamReader(java.util.Objects.requireNonNull(in), java.nio.charset.StandardCharsets.UTF_8));
-            return json.getAsJsonObject().get("block.icheme.column_calculator_v3").getAsString();
+            return json.getAsJsonObject().get("block.icheme.process_simulator").getAsString();
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
@@ -206,10 +206,10 @@ class CalculatorColumnTest {
             CalculatorColumn.draw(new Recording(), d, t);
         }
         var keys = screenKeys();
-        assertTrue(keys.size() > 60 && keys.contains("column.reading.pressure") && keys.contains("fluid.theme.dark"), "the screen's own keys found: " + keys);
+        assertTrue(keys.size() > 15 && keys.contains("flowsheet.file.cancel") && keys.contains("fluid.theme.dark"), "the screen's own keys found: " + keys);
         for (var key : keys) t.get(key);
         assertEquals(Set.of(), t.missing);
-        assertTrue(t.asked.size() > 180, "the cases ask for the screen's texts: " + t.asked.size());
+        assertTrue(t.asked.size() > 170, "the cases ask for the screen's texts: " + t.asked.size());
     }
 
     /** A plate in one line, no text cut (a key's text in its key too), widgets at least 40 px (a stepper its own width) inside their rows, one per key, boxes in line. */

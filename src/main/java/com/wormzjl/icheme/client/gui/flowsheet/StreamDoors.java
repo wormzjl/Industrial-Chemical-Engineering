@@ -18,7 +18,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * A stream's door (batch 2026-11-02-process-simulator, sheets 07, 08, 10). A feed is the Fluid Generator's page: set point, flow, phases; its Composition tab
  * is the calculator's feed table, Amount a part of the whole, and the flow holds as a part changes. A stream a unit makes is a reader, every value a
- * meter. Copy and Paste wait for the clipboard of W8.
+ * meter. Copy and Paste use {@link SheetClipboard}.
  */
 public final class StreamDoors {
     private static final double KMOL_PER_HOUR = 1000 / 3600.0;
@@ -99,16 +99,18 @@ public final class StreamDoors {
                     Door.meter(x.text("door.mean_weight"), props == null ? "" : SheetUnits.number(1, props.weight()), "kg/kmol")));
             glass = contents(x, stream, view);
         } else if (view.tab == 1) {
-            rows.add(Door.group(x.text("door.group.mixture"), new Column.Buttons(List.of(Door.key("templates", x.text("door.templates"), true, null), Door.key("save", x.text("file.save_as"), false, x.text("hint.clipboard"))))));
-            rows.add(Door.group(x.text("door.group.clipboard"), new Column.Line(x.text("door.clipboard_empty"), Palette.MUTED), new Column.Buttons(List.of(Door.key("copy", x.text("door.copy"), false, x.text("hint.clipboard")), Door.key("paste", x.text("door.paste"), false, x.text("hint.clipboard")))),
-                    new Column.Buttons(List.of(Door.key("paste_state", x.text("door.paste_state"), false, x.text("hint.clipboard"))))));
+            rows.add(Door.group(x.text("door.group.mixture"), new Column.Buttons(List.of(Door.key("templates", x.text("door.templates"), true, null), Door.key("save", x.text("file.save_as"), total(feed) > 0, x.text("hint.clipboard"))))));
+            var held = SheetClipboard.held();
+            boolean full = held != null;
+            rows.add(Door.group(x.text("door.group.clipboard"), new Column.Line(full ? held.source() : x.text("door.clipboard_empty"), full ? Palette.ACCENT : Palette.MUTED), new Column.Line(full ? x.text("door.clipboard_holds", u.t(held.temperature()), u.temperature().symbol(), u.p(held.pressure()), u.pressure().symbol(), held.amounts().size()) : "", Palette.MUTED), new Column.Buttons(List.of(Door.key("copy", x.text("door.copy"), total(feed) > 0, null), Door.key("paste", x.text("door.paste"), full, x.text("hint.clipboard")))),
+                    new Column.Buttons(List.of(Door.key("paste_state", x.text("door.paste_state"), full, x.text("hint.clipboard"))))));
             rows.add(Door.group(x.text("door.group.total"), Door.meter(x.text("door.parts"), Integer.toString(feed.amounts().size()), ""), Door.meter(x.text("door.share"), feed.amounts().isEmpty() ? "" : "100.0", "%")));
             glass = table(x, stream);
         } else {
             rows.add(Door.group(x.text("door.group.solids"), new Column.Line(feed.solids().isEmpty() ? x.text("door.no_solids") : x.text("door.solids_count", feed.solids().size()), Palette.MUTED)));
             glass = solids(x, feed.solids());
         }
-        var status = feedStatus(x, stream);
+        var status = view.said != null ? view.said : feedStatus(x, stream);
         return new Door(x.text("door.feed"), Door.tabs(view.tab, x.t().get("fluid.overview"), x.t().get("fluid.composition"), x.t().get("fluid.solids")), view.tab, status, Palette.ACCENT, false, List.of(rows), values, glass, List.of(), new Door.Actions() {
             @Override public void entry(String key, String text) {
                 writeFeed(x, stream.id(), key, text, view);
@@ -119,6 +121,9 @@ public final class StreamDoors {
                 else if (key.startsWith("phase/")) view.phase = Integer.parseInt(key.substring(6));
                 else if (key.startsWith("basis/")) view.basis = key.substring(6);
                 else if (key.startsWith("remove/")) removePart(x, stream.id(), key.substring(7));
+                else if (key.equals("copy")) view.said = copy(x, stream);
+                else if (key.equals("paste")) view.said = paste(x, stream.id(), false);
+                else if (key.equals("paste_state")) view.said = paste(x, stream.id(), true);
             }
         });
     }
@@ -215,14 +220,43 @@ public final class StreamDoors {
     }
 
     /** Loads a template's mixture: its fractions on the axis, the flow held, 100 kmol/h with none yet. */
-    public static void template(SheetContext x, String id, double[] fractions) {
+    /** Loads a stream template: its mixture, at its flow or the feed's, and its T and P where it has them. */
+    public static void template(SheetContext x, String id, FileColumns.StreamTemplate template) {
         var feed = x.editor().stream(id).feed();
-        double total = total(feed);
+        double total = Double.isNaN(template.flow()) ? total(feed) : template.flow();
         if (total == 0) total = 100 * KMOL_PER_HOUR;
-        var axis = x.fluids().axis();
+        double parts = template.amounts().values().stream().mapToDouble(Double::doubleValue).sum();
         var amounts = new LinkedHashMap<String, Double>();
-        for (int i = 0; i < fractions.length && i < axis.size(); i++) if (fractions[i] > 0) amounts.put(axis.get(i), fractions[i] * total);
-        x.editor().setFeed(id, new Flowsheet.Feed(feed.temperature(), feed.pressure(), amounts, feed.solids(), feed.unknown()), null);
+        for (var component : x.fluids().axis()) {
+            var part = template.amounts().get(component);
+            if (part != null && part > 0) amounts.put(component, part / parts * total);
+        }
+        double temperature = Double.isNaN(template.temperature()) ? feed.temperature() : template.temperature(), pressure = Double.isNaN(template.pressure()) ? feed.pressure() : template.pressure();
+        x.editor().setFeed(id, new Flowsheet.Feed(temperature, pressure, amounts, feed.solids(), feed.unknown()), null);
+    }
+
+    /** Puts a stream on the clipboard, and says what went: a feed as set, any other as solved. */
+    public static @Nullable String copy(SheetContext x, Flowsheet.Stream stream) {
+        var u = x.units();
+        var solved = x.solved(stream);
+        boolean set = stream.feed() != null && stream.from() == null;
+        if (!set && solved == null) return null;
+        var held = set ? SheetClipboard.feed(x.text("door.clipboard_stream", stream.name()), stream.feed()) : SheetClipboard.stream(x.text("door.clipboard_stream", stream.name()), solved, x.fluids().axis());
+        SheetClipboard.copy(held);
+        return x.text("door.copied", held.amounts().size(), u.t(held.temperature()), u.temperature().symbol(), u.p(held.pressure()), u.pressure().symbol());
+    }
+
+    /** Lays the clipboard on a feed, and says what happened: what it placed, where it came from, and what it could not place, by name. */
+    private static @Nullable String paste(SheetContext x, String id, boolean conditions) {
+        var held = SheetClipboard.held();
+        if (held == null) return null;
+        var pasted = SheetClipboard.paste(held, x.editor().stream(id).feed(), x.fluids().axis(), conditions);
+        if (!x.editor().setFeed(id, pasted.feed(), null)) return null;
+        String said = x.text(conditions ? "door.pasted_state" : "door.pasted", pasted.placed(), held.source());
+        if (pasted.left().isEmpty()) return said;
+        var left = new ArrayList<String>();
+        for (var component : pasted.left()) left.add(x.fluids().names().apply(component));
+        return said + " " + x.text("door.paste_left", String.join(", ", left));
     }
 
     private record Table(CalculatorColumn.FeedTable table, Map<Integer, String> components, Rect area) {
@@ -317,10 +351,10 @@ public final class StreamDoors {
         rows.add(Door.group(x.text("door.group.readings"), Door.meter(x.text("door.density"), p == null ? "" : SheetUnits.number(1, p.density()), "kg/m³"), Door.meter(x.text("door.viscosity"), p == null ? "" : SheetUnits.number(2, p.liquidMu() * 1e3), "mPa s"),
                 Door.meter(x.text("door.mean_weight"), p == null ? "" : SheetUnits.number(1, p.weight()), "kg/kmol"), Door.meter(x.text("door.enthalpy"), p == null ? "" : SheetUnits.number(1, p.enthalpy() / 1e3), "kJ/kg")));
         String origin = from(x, stream);
-        String status = p == null ? x.text("door.status.not_solved") : origin == null ? x.text("door.status.open") : origin;
+        String status = view.said != null ? view.said : p == null ? x.text("door.status.not_solved") : origin == null ? x.text("door.status.open") : origin;
         boolean wired = stream.to() != null;
         return new Door(x.text(wired ? "door.stream" : "door.product"), Door.tabs(Math.min(view.tab, 1), x.t().get("fluid.overview"), x.t().get("fluid.solids")), Math.min(view.tab, 1), status, p == null ? Palette.MUTED : Palette.ACCENT, false, List.of(rows), Map.of("name", stream.name()),
-                view.tab == 0 ? contents(x, stream, view) : solids(x, List.of()), List.of(Door.key("copy", x.text("door.copy"), false, x.text("hint.clipboard"))), new Door.Actions() {
+                view.tab == 0 ? contents(x, stream, view) : solids(x, List.of()), List.of(Door.key("copy", x.text("door.copy"), p != null, x.text("hint.clipboard"))), new Door.Actions() {
             @Override public void entry(String key, String text) {
                 if (key.equals("name")) x.editor().rename(stream.id(), text);
             }
@@ -328,6 +362,7 @@ public final class StreamDoors {
             @Override public void button(String key) {
                 if (key.startsWith("tab/")) view.tab = Integer.parseInt(key.substring(4));
                 else if (key.startsWith("phase/")) view.phase = Integer.parseInt(key.substring(6));
+                else if (key.equals("copy")) view.said = copy(x, stream);
             }
         });
     }

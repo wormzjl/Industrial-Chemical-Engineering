@@ -20,7 +20,6 @@ import com.wormzjl.icheme.client.gui.flowsheet.Door;
 import com.wormzjl.icheme.client.gui.flowsheet.DoorFrame;
 import com.wormzjl.icheme.client.gui.flowsheet.FileColumns;
 import com.wormzjl.icheme.client.gui.flowsheet.ResultsPage;
-import com.wormzjl.icheme.client.gui.flowsheet.RevisionNotice;
 import com.wormzjl.icheme.client.gui.flowsheet.SelectionColumn;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetContext;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetEditor;
@@ -35,18 +34,23 @@ import com.wormzjl.icheme.client.gui.flowsheet.SimulatorPage;
 import com.wormzjl.icheme.client.gui.flowsheet.StreamDoors;
 import com.wormzjl.icheme.client.gui.flowsheet.StreamProps;
 import com.wormzjl.icheme.client.gui.flowsheet.UnitDoors;
-import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
+import com.wormzjl.icheme.network.ProcessSimulatorNetwork;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFile;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
+import com.wormzjl.icheme.science.flowsheet.SheetBody;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
+import com.wormzjl.icheme.world.inventory.ProcessSimulatorMenu;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -59,21 +63,41 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.MenuAccess;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /**
  * The process simulator (batch 2026-11-02-process-simulator, W6_SCREEN_PLAN.md section 2): the whole window at {@link WindowScale}'s design height 480, with tabs, the canvas, the palette,
- * the doors. It only forwards events and draws: the sheet, its gestures and every page are Minecraft-free in {@code client.gui.flowsheet}, and {@link SimulatorHost} holds what
- * W7 and W8 fill in. A change of what stands on screen rebuilds the widgets; the door's rows are placed again each frame for their texts.
+ * the doors. It only forwards events and draws: the sheet, its gestures and every page are Minecraft-free in {@code client.gui.flowsheet}, and {@link SimulatorHost} is the run and the
+ * block. A change of what stands on screen rebuilds the widgets; the door's rows are placed again each frame for their texts. It stands on a menu, so a close, a disconnect and the block
+ * going all end it, and it is no {@code AbstractContainerScreen}: a typed E is text here, and it has no slots.
  */
-public final class ProcessSimulatorScreen extends Screen {
+public final class ProcessSimulatorScreen extends Screen implements MenuAccess<ProcessSimulatorMenu> {
     private static final int DESIGN_HEIGHT = 480;
     private static final String FOLDER = "IChemE/flowsheets";
+    /** An edited sheet goes to its autosave at most this often, in client ticks: a minute at 20 TPS. */
+    private static final int AUTOSAVE_TICKS = 1200;
+    /** How long a word that is no warning stays on the status line. */
+    private static final int SAID_TICKS = 160;
 
-    private enum Dialog {NONE, OPEN, SAVE_AS, TEMPLATES, COLUMN_TEMPLATES, REPLACE, CHANGES}
+    private enum Dialog {
+        NONE, OPEN, SAVE_AS, TEMPLATES, COLUMN_TEMPLATES, REPLACE, CHANGES, SAVE_TEMPLATE, SAVE_COLUMN, UNSAVED;
 
+        /** Whether it asks for a name. */
+        boolean names() {
+            return this == SAVE_AS || this == SAVE_TEMPLATE || this == SAVE_COLUMN;
+        }
+
+        /** Whether it lists rows to choose from. */
+        boolean lists() {
+            return this == OPEN || this == TEMPLATES || this == COLUMN_TEMPLATES || this == REPLACE;
+        }
+    }
+
+    private final ProcessSimulatorMenu menu;
     private final SimulatorHost host;
     private final SheetEditor editor;
     private final SheetView view = new SheetView();
@@ -95,7 +119,7 @@ public final class ProcessSimulatorScreen extends Screen {
     private Rect canvasBox = new Rect(0, 0, 0, 0);
     private boolean placed;
     private List<FileColumns.ColumnTemplate> columnTemplates = List.of();
-    private List<FluidPresetCatalog.Preset> presets = List.of();
+    private List<FileColumns.StreamTemplate> streamTemplates = List.of();
     /** A folder being read away from the frame, and what to do with it once it has been. */
     private @Nullable CompletableFuture<Runnable> reading;
     private @Nullable SheetState stated;
@@ -106,19 +130,62 @@ public final class ProcessSimulatorScreen extends Screen {
     private final Map<String, String> clientRevisions;
     private @Nullable Flowsheet opening;
     private String openingName = "";
+    /** What a prompt holds back until the player answers it. */
+    private @Nullable Runnable pending;
+    /** The file this sheet last came from or went to, which its autosave stands beside. */
+    private @Nullable String fileName;
+    private @Nullable Flowsheet autosaved;
+    private int ticks, savedAt;
+    private SimulatorHost.@Nullable Said said;
+    private int saidAt;
+    private boolean saving;
 
-    public ProcessSimulatorScreen(Component title, Flowsheet sheet, SimulatorHost host) {
+    public ProcessSimulatorScreen(ProcessSimulatorMenu menu, Inventory inventory, Component title) {
         super(title);
-        this.host = host;
+        this.menu = menu;
+        var opened = menu.opening();
+        var block = new SimulatorBlockHost(MaterialRuntime::active, opened.reader(), opened.holder().isEmpty() ? null : opened.holder(), opened.stored(), opened.tokens(), body -> ProcessSimulatorNetwork.sendBody(menu.containerId, body));
+        host = block;
         var catalog = MaterialRuntime.active();
-        String network = sheet.basis().packageId();
+        // A sheet flashes on the world's own package, whatever it names: a stream's page reads that thermo.
+        String network = catalog.presets().network().packageId();
         var pack = catalog.requirePackage(network);
         String packName = Component.translatableWithFallback("gui.icheme.flowsheet.basis.pack." + MaterialCatalog.Package.label(pack.id()).replace(':', '.'), MaterialCatalog.Package.label(pack.id())).getString();
         fluids = new StreamProps.Fluids(FluidThermodynamics.forNetwork(catalog, network), pack, id -> ProcessUi.materialName(catalog.name(id)), packName);
+        var sheet = new Flowsheet(new Flowsheet.Basis(network, pack.revision(), fluids.axis()), List.of(), List.of(), FlowsheetSolver.Settings.DEFAULT);
         editor = new SheetEditor(sheet, measure(), ProcessSimulatorScreen::columnDefaults);
         clientRevisions = RevisionNotice.tokens(catalog);
         host.lock(editor);
         gestures = new SheetGestures(editor, view, this::open);
+        block.opened(sheet);
+        autosaved = sheet;
+        if (opened.damaged()) block.say(new SimulatorHost.Said("store.kept", List.of(), true));
+        menu.listen(this::replayed, this::answered);
+    }
+
+    @Override public ProcessSimulatorMenu getMenu() {
+        return menu;
+    }
+
+    /** What the block held lands. Its parts follow the opening, so nothing has been edited yet. */
+    private void replayed(byte[] packed) {
+        if (host instanceof SimulatorBlockHost block) {
+            var sheet = block.replayed(packed, fluids.model());
+            if (sheet != null) {
+                load(sheet);
+                autosaved = sheet;
+            }
+        }
+        if (minecraft != null) rebuildWidgets();
+    }
+
+    /** What the server made of a body or a design. A body it took silently, unless the player asked for it by Save. */
+    private void answered(String key, String detail) {
+        boolean ok = key.equals(ProcessSimulatorNetwork.SAVED) || key.equals(ProcessSimulatorNetwork.DESIGN_SAVED);
+        if (key.equals(ProcessSimulatorNetwork.SAVED) && !saving) return;
+        if (key.equals(ProcessSimulatorNetwork.SAVED)) saving = false;
+        if (door != null) doorView.said = lang("flowsheet." + key, detail);
+        else host.say(new SimulatorHost.Said(key, List.of(detail), !ok));
     }
 
     private static Measure measure() {
@@ -178,10 +245,47 @@ public final class ProcessSimulatorScreen extends Screen {
 
     // ---- Widgets ----
 
+    /** Esc and Close end here: the block takes what is new first, for the close that follows must find it stored. */
+    @Override public void onClose() {
+        if (host instanceof SimulatorBlockHost block) block.settle(editor.sheet());
+        minecraft.player.closeContainer();
+    }
+
     @Override public void removed() {
         super.removed();
+        autosave();
         host.close();
         WindowScale.restore(minecraft);
+    }
+
+    @Override public void tick() {
+        ticks++;
+        if (minecraft.player == null || !minecraft.player.isAlive()) {
+            minecraft.player.closeContainer();
+            return;
+        }
+        if (host instanceof SimulatorBlockHost block) block.ranOut(editor.sheet());
+        if (ticks - savedAt >= AUTOSAVE_TICKS) {
+            savedAt = ticks;
+            autosave();
+        }
+        var now = host.said();
+        if (now != said) {
+            said = now;
+            saidAt = ticks;
+        }
+        if (now != null && !now.warn() && ticks - saidAt >= SAID_TICKS) host.say(null);
+    }
+
+    /** The editor's own copy, beside its file: what stays when the block goes. It takes the sheet as it stands, and a reader has nothing of its own to keep. */
+    private void autosave() {
+        if (host.reader() || editor.sheet() == autosaved) return;
+        try {
+            FlowsheetFile.save(FileColumns.autosave(folder(), fileName), editor.sheet());
+            autosaved = editor.sheet();
+        } catch (IOException unwritable) {
+            host.say(new SimulatorHost.Said("store.autosave_failed", List.of(), true));
+        }
     }
 
     @Override protected void init() {
@@ -322,15 +426,24 @@ public final class ProcessSimulatorScreen extends Screen {
     private void dialogWidgets() {
         int w = FileColumns.W, h = FileColumns.H, left = (width - w) / 2, top = (height - h) / 2;
         var x = context();
-        if (dialog == Dialog.SAVE_AS) {
+        if (dialog.names()) {
             var name = new SkinField(font, left + 12, top + 40, w - 24, 18, Component.literal("name"), ProcessSimulatorScreen::skin);
             name.setHint(Component.literal(lang("flowsheet.file.name")));
             entries.put("file", name);
             addRenderableWidget(name);
             setFocused(name);
-            var slots = DialogColumns.footer(w, h, 2);
+            boolean text = dialog == Dialog.SAVE_AS;
+            var slots = DialogColumns.footer(w, h, text ? 3 : 2);
             add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
-            add(new Column.Button("dialog/save", lang("flowsheet.file.save"), true, null), slots.get(1).moved(left, top));
+            if (text) add(new Column.Button("dialog/to_clipboard", lang("flowsheet.file.to_clipboard"), true, null), slots.get(1).moved(left, top));
+            add(new Column.Button("dialog/save", lang("flowsheet.file.save"), true, null), slots.get(text ? 2 : 1).moved(left, top));
+            return;
+        }
+        if (dialog == Dialog.UNSAVED) {
+            var slots = DialogColumns.footer(w, h, 3);
+            add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
+            add(new Column.Button("dialog/discard", lang("flowsheet.file.discard"), true, null), slots.get(1).moved(left, top));
+            add(new Column.Button("dialog/store", lang("flowsheet.file.save"), true, null), slots.get(2).moved(left, top));
             return;
         }
         if (dialog == Dialog.CHANGES) {
@@ -358,6 +471,7 @@ public final class ProcessSimulatorScreen extends Screen {
 
     private void act(String key) {
         var x = context();
+        if (host.said() != null && !key.startsWith("dialog/")) host.say(null);
         switch (key) {
             case "close" -> onClose();
             case "run" -> host.run(editor.sheet());
@@ -369,7 +483,10 @@ public final class ProcessSimulatorScreen extends Screen {
             case "zoom/fit" -> view.fit(editor.layout().bounds());
             case "file/new" -> newSheet();
             case "file/open" -> openDialog();
-            case "file/save" -> host.store(editor.sheet());
+            case "file/save" -> {
+                saving = true;
+                host.store(editor.sheet());
+            }
             case "file/save_as" -> dialog = Dialog.SAVE_AS;
             case "export" -> export(x);
             default -> {
@@ -407,22 +524,38 @@ public final class ProcessSimulatorScreen extends Screen {
         if (shown == null) return;
         if (key.equals("close_door")) door = null;
         else if (key.equals("templates") && !door.unit()) {
-            presets = FluidPresetCatalog.resolve(MaterialRuntime.active());
             chosen = -1;
+            streamTemplates = List.of();
             dialog = Dialog.TEMPLATES;
-        } else if (key.equals("templates")) {
-            chosen = -1;
-            columnTemplates = List.of();
-            dialog = Dialog.COLUMN_TEMPLATES;
             read(() -> {
-                var listed = ColumnTemplates.listed(minecraft);
-                return () -> columnTemplates = listed;
+                var listed = ColumnTemplates.streams(minecraft, MaterialRuntime.active(), fluids);
+                return () -> streamTemplates = listed;
             });
-        } else if (key.equals("solve")) host.alone(editor.sheet(), door.id());
+        } else if (key.equals("templates")) {
+            readColumnTemplates();
+            dialog = Dialog.COLUMN_TEMPLATES;
+        } else if (key.equals("save") && !door.unit()) dialog = Dialog.SAVE_TEMPLATE;
+        else if (key.equals("save_design")) saveDesign(x);
+        else if (key.equals("solve")) host.alone(editor.sheet(), door.id());
         else if (key.startsWith("unit/")) unitKey(key.substring(5));
         else if (key.equals("temperature") || key.equals("basis")) unitKey(key);
         else shown.actions().button(key);
         rebuild();
+    }
+
+    /** Sends the column as its door stands; the server checks it again ({@code ColumnDesign.of}) and stores it, and its answer comes back to this door. */
+    private void saveDesign(SheetContext x) {
+        var input = ColumnDoors.input(x, door.id());
+        if (input != null) ProcessSimulatorNetwork.sendDesign(menu.containerId, input, ColumnDoors.choices(editor.unit(door.id())));
+    }
+
+    private void readColumnTemplates() {
+        chosen = -1;
+        columnTemplates = List.of();
+        read(() -> {
+            var listed = ColumnTemplates.listed(minecraft);
+            return () -> columnTemplates = listed;
+        });
     }
 
     private void actPanel(String key) {
@@ -430,6 +563,11 @@ public final class ProcessSimulatorScreen extends Screen {
         if (selected == null) return;
         switch (key) {
             case "open" -> open(selected);
+            case "copy" -> {
+                var stream = editor.stream(selected.id());
+                var words = stream == null ? null : StreamDoors.copy(context(), stream);
+                if (words != null) host.say(new SimulatorHost.Said("panel.copied", List.of(words), false));
+            }
             case "delete" -> gestures.delete();
             case "replace" -> {
                 dialog = Dialog.REPLACE;
@@ -452,9 +590,20 @@ public final class ProcessSimulatorScreen extends Screen {
 
     private void newSheet() {
         var sheet = editor.sheet();
-        editor.load(new Flowsheet(sheet.basis(), List.of(), List.of(), FlowsheetSolver.Settings.DEFAULT));
-        gestures.select(null);
-        door = null;
+        fileName = null;
+        replaceWith(new Flowsheet(sheet.basis(), List.of(), List.of(), FlowsheetSolver.Settings.DEFAULT));
+    }
+
+    /** Puts {@code sheet} in place of this one, once the player has said what becomes of an edit the block has not taken. */
+    private void replaceWith(Flowsheet sheet) {
+        boolean blank = editor.sheet().units().isEmpty() && editor.sheet().streams().isEmpty();
+        if (!blank && host instanceof SimulatorBlockHost block && block.unsaved(editor.sheet())) {
+            pending = () -> load(sheet);
+            dialog = Dialog.UNSAVED;
+            return;
+        }
+        load(sheet);
+        dialog = Dialog.NONE;
     }
 
     private Path folder() {
@@ -481,7 +630,54 @@ public final class ProcessSimulatorScreen extends Screen {
     }
 
     private FileColumns.Listing listing(SheetContext x) {
-        return SimulatorPage.listing(dialog.name(), x, files, presets, columnTemplates, chosen);
+        return SimulatorPage.listing(dialog.name(), x, files, streamTemplates, columnTemplates, chosen);
+    }
+
+    /** The sheet a player keeps as text, for another player: the file's own format. */
+    private void fromClipboard() {
+        byte[] text = minecraft.keyboardHandler.getClipboard().getBytes(StandardCharsets.UTF_8);
+        try {
+            if (text.length > SheetBody.MAX_UNPACKED) throw new FlowsheetFailure("file.damaged", "text");
+            fileName = null;
+            replaceWith(FlowsheetFile.read(text));
+        } catch (FlowsheetFailure refused) {
+            dialog = Dialog.NONE;
+            host.say(new SimulatorHost.Said("file.clipboard_refused", List.of(), true));
+        }
+    }
+
+    /** A dialog's name given: where it goes depends on what asked. */
+    private void saveNamed(SheetContext x) {
+        var name = entries.get("file").getValue().strip();
+        if (!FileColumns.nameAllowed(name)) return;
+        try {
+            switch (dialog) {
+                case SAVE_TEMPLATE -> {
+                    var stream = editor.stream(door.id());
+                    ColumnTemplates.saveStream(minecraft, name, stream.feed());
+                    doorView.said = lang("flowsheet.file.template_saved", name);
+                    dialog = Dialog.NONE;
+                }
+                case SAVE_COLUMN -> {
+                    var input = ColumnDoors.input(x, door.id());
+                    if (input == null) doorView.said = lang("flowsheet.file.column_no_feed");
+                    else {
+                        ColumnTemplates.saveColumn(minecraft, name, input);
+                        doorView.said = lang("flowsheet.file.template_saved", name);
+                    }
+                    dialog = Dialog.NONE;
+                }
+                default -> {
+                    Files.createDirectories(folder());
+                    FlowsheetFile.save(FileColumns.file(folder(), name), editor.sheet());
+                    fileName = name;
+                    dialog = Dialog.NONE;
+                }
+            }
+        } catch (IOException | IllegalArgumentException unwritable) {
+            dialog = Dialog.NONE;
+            host.say(new SimulatorHost.Said("file.save_failed", List.of(), true));
+        }
     }
 
     private void dialogKey(String key) {
@@ -491,19 +687,27 @@ public final class ProcessSimulatorScreen extends Screen {
             return;
         }
         if (key.equals("save")) {
-            var name = entries.get("file").getValue().strip();
-            if (!FileColumns.nameAllowed(name)) return;
-            try {
-                Files.createDirectories(folder());
-                FlowsheetFile.save(FileColumns.file(folder(), name), editor.sheet());
-                dialog = Dialog.NONE;
-            } catch (IOException unwritable) {
-                dialog = Dialog.NONE;
-            }
+            saveNamed(x);
+            return;
+        }
+        if (key.equals("to_clipboard")) {
+            minecraft.keyboardHandler.setClipboard(new String(FlowsheetFile.write(editor.sheet()), StandardCharsets.UTF_8));
+            dialog = Dialog.NONE;
+            host.say(new SimulatorHost.Said("file.on_clipboard", List.of(), false));
             return;
         }
         if (key.equals("load")) {
-            if (opening != null) load(opening);
+            dialog = Dialog.NONE;
+            if (opening != null) {
+                fileName = openingName;
+                replaceWith(opening);
+            }
+            return;
+        }
+        if (key.equals("discard") || key.equals("store")) {
+            if (key.equals("store")) host.store(editor.sheet());
+            if (pending != null) pending.run();
+            pending = null;
             dialog = Dialog.NONE;
             return;
         }
@@ -515,6 +719,25 @@ public final class ProcessSimulatorScreen extends Screen {
         }
         if (dialog == Dialog.OPEN && index == 1) {
             Util.getPlatform().openPath(folder());
+            return;
+        }
+        if (dialog == Dialog.OPEN && index == 2) {
+            fromClipboard();
+            return;
+        }
+        if (dialog == Dialog.COLUMN_TEMPLATES && index == 2) {
+            dialog = Dialog.SAVE_COLUMN;
+            return;
+        }
+        if (dialog == Dialog.COLUMN_TEMPLATES && index == 1) {
+            if (chosen >= 0 && !columnTemplates.get(chosen).bundled()) {
+                try {
+                    ColumnTemplates.deleteColumn(minecraft, columnTemplates.get(chosen).file());
+                    readColumnTemplates();
+                } catch (IOException gone) {
+                    host.say(new SimulatorHost.Said("file.save_failed", List.of(), true));
+                }
+            }
             return;
         }
         if (index != list.primary() || chosen < 0) return;
@@ -530,12 +753,14 @@ public final class ProcessSimulatorScreen extends Screen {
                         dialog = Dialog.CHANGES;
                         return;
                     }
-                    load(sheet);
+                    fileName = entry.name();
+                    replaceWith(sheet);
+                    return;
                 } catch (IOException gone) {
                     return;
                 }
             }
-            case TEMPLATES -> StreamDoors.template(x, door.id(), presets.get(chosen).moleFractions());
+            case TEMPLATES -> StreamDoors.template(x, door.id(), streamTemplates.get(chosen));
             case COLUMN_TEMPLATES -> ColumnDoors.template(x, door.id(), columnTemplates.get(chosen).template());
             case REPLACE -> editor.replaceUnit(gestures.selected().id(), SimulatorPage.litTypes().get(chosen));
             default -> {
@@ -563,7 +788,7 @@ public final class ProcessSimulatorScreen extends Screen {
 
     @Override public boolean mouseClicked(double x, double y, int button) {
         if (dialog != Dialog.NONE) {
-            var list = dialog == Dialog.SAVE_AS || dialog == Dialog.CHANGES ? null : listing(context());
+            var list = dialog.lists() ? listing(context()) : null;
             if (list != null) {
                 int row = FileColumns.rowAt(list, FileColumns.W, FileColumns.H, x - (width - FileColumns.W) / 2.0, y - (height - FileColumns.H) / 2.0);
                 if (row >= 0) chosen = row;
@@ -687,7 +912,8 @@ public final class ProcessSimulatorScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(left, top, 0);
         skin().page(canvas, new Rect(0, 0, w, h));
-        if (dialog == Dialog.SAVE_AS) skin().title(canvas, 10, 10, lang("flowsheet.file.save_title"));
+        if (dialog.names()) skin().title(canvas, 10, 10, lang(dialog == Dialog.SAVE_AS ? "flowsheet.file.save_title" : dialog == Dialog.SAVE_TEMPLATE ? "flowsheet.file.template_title" : "flowsheet.file.column_title"));
+        else if (dialog == Dialog.UNSAVED) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.unsaved_title"), FileColumns.unsaved(ProcessSimulatorScreen::lang), lang("flowsheet.file.unsaved_foot"), w, h);
         else if (dialog == Dialog.CHANGES && opening != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.changes_title", openingName), FileColumns.changes(opening, ProcessSimulatorScreen::lang), lang("flowsheet.file.changes_foot"), w, h);
         else FileColumns.draw(canvas, skin(), listing(x), w, h);
         g.pose().popPose();

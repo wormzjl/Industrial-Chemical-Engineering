@@ -130,7 +130,7 @@ public final class SelectionColumn {
         rows.add(Door.meter(x.text("door.flow"), p == null ? "" : u.moles(p.moles()), u.molesUnit()));
         rows.add(Door.meter(x.text("door.mass_flow"), p == null ? "" : u.tonnes(p.mass()), u.tonnesUnit()));
         rows.add(Door.meter(x.text("door.density"), p == null ? "" : SheetUnits.number(1, p.density()), "kg/m³"));
-        rows.add(new Column.Buttons(List.of(Door.key("open", x.text("panel.open"), true, null), Door.key("copy", x.text("door.copy"), false, x.text("hint.clipboard")))));
+        rows.add(new Column.Buttons(List.of(Door.key("open", x.text("panel.open"), true, null), Door.key("copy", x.text("door.copy"), p != null, x.text("hint.clipboard")))));
         return wrap(x, stream.name(), rows, Map.of());
     }
 

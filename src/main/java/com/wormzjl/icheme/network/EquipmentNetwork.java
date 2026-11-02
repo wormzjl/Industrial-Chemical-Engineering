@@ -141,13 +141,13 @@ public final class EquipmentNetwork {
         public static final Type<TemplatePayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_template"));
         public static final StreamCodec<RegistryFriendlyByteBuf, TemplatePayload> STREAM_CODEC = new StreamCodec<>() {
             public TemplatePayload decode(RegistryFriendlyByteBuf b) {
-                return new TemplatePayload(b.readBlockPos(), b.readUtf(MAX_NAME), ColumnV3Network.readInput(b));
+                return new TemplatePayload(b.readBlockPos(), b.readUtf(MAX_NAME), ColumnWire.readInput(b));
             }
 
             public void encode(RegistryFriendlyByteBuf b, TemplatePayload p) {
                 b.writeBlockPos(p.position);
                 b.writeUtf(p.name, MAX_NAME);
-                ColumnV3Network.writeInput(b, p.input);
+                ColumnWire.writeInput(b, p.input);
             }
         };
 

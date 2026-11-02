@@ -58,9 +58,9 @@ public final class ModItems {
     public static final DeferredItem<PipelineFittingItem> PIPELINE_SHUTOFF_VALVE=fitting("pipeline_shutoff_valve",Instrument.Type.SHUTOFF);
     public static final DeferredItem<PipelineFittingItem> PIPELINE_CHECK_VALVE=fitting("pipeline_check_valve",Instrument.Type.CHECK);
 
-    public static final DeferredItem<BlockItem> COLUMN_CALCULATOR_V3 = ITEMS.registerSimpleBlockItem(
-            "column_calculator_v3",
-            ModBlocks.COLUMN_CALCULATOR_V3
+    public static final DeferredItem<BlockItem> PROCESS_SIMULATOR = ITEMS.registerSimpleBlockItem(
+            "process_simulator",
+            ModBlocks.PROCESS_SIMULATOR
     );
 
     public static final DeferredItem<com.wormzjl.icheme.world.item.GaugeItem> PRESSURE_GAUGE = ITEMS.registerItem("pressure_gauge", p -> new com.wormzjl.icheme.world.item.GaugeItem(p, GaugeSettings.PRESSURE));
@@ -81,6 +81,7 @@ public final class ModItems {
     /** Registers the item settings components and the items. */
     public static void register(IEventBus modEventBus) {
         COMPONENTS.register(modEventBus);
+        ITEMS.addAlias(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "column_calculator_v3"), PROCESS_SIMULATOR.getId());
         ITEMS.register(modEventBus);
     }
 }

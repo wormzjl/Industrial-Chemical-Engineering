@@ -1,6 +1,5 @@
-package com.wormzjl.icheme.client.gui.flowsheet;
+package com.wormzjl.icheme.science.flowsheet;
 
-import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.ArrayList;
 import java.util.List;

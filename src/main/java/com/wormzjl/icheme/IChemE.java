@@ -1,7 +1,7 @@
 package com.wormzjl.icheme;
 
 import com.mojang.logging.LogUtils;
-import com.wormzjl.icheme.network.ColumnV3Network;
+import com.wormzjl.icheme.network.ProcessSimulatorNetwork;
 import com.wormzjl.icheme.network.ProcessSolveCoordinator;
 import com.wormzjl.icheme.registry.ModBlockEntities;
 import com.wormzjl.icheme.registry.ModBlocks;
@@ -200,7 +200,7 @@ public final class IChemE {
         com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
         ModBlockEntities.register(modEventBus);
         ModMenus.register(modEventBus);
-        modEventBus.addListener(ColumnV3Network::register);
+        modEventBus.addListener(ProcessSimulatorNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.FluidNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.EquipmentNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.AssemblyNetwork::register);
@@ -323,11 +323,6 @@ public final class IChemE {
     private static void onServerTickPost(ServerTickEvent.Post event) {
         com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.Meter.enter(event.getServer());
         try {
-            var materialCatalog=com.wormzjl.icheme.science.material.MaterialRuntime.active();
-            if (lastMaterialCatalog != materialCatalog) {
-                lastMaterialCatalog=materialCatalog;
-                ColumnV3Network.refreshMaterialViewers(event.getServer());
-            }
             ProcessSolveCoordinator.drainCompletedCalculations(event.getServer());
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.tick(event.getServer());
             com.wormzjl.icheme.runtime.assembly.AssemblyService.tick(event.getServer());
@@ -349,7 +344,6 @@ public final class IChemE {
         }
     }
 
-    private static com.wormzjl.icheme.science.material.MaterialCatalog lastMaterialCatalog;
 
     private static void onServerStopped(ServerStoppedEvent event) {
         try {

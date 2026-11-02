@@ -8,7 +8,6 @@ import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.Port;
@@ -95,19 +94,11 @@ public final class SimulatorPage {
     }
 
     /** A dialog's list, by its name. */
-    public static FileColumns.Listing listing(String dialog, SheetContext x, List<FileColumns.Entry> files, List<FluidPresetCatalog.Preset> presets, List<FileColumns.ColumnTemplate> columns, int chosen) {
+    public static FileColumns.Listing listing(String dialog, SheetContext x, List<FileColumns.Entry> files, List<FileColumns.StreamTemplate> streams, List<FileColumns.ColumnTemplate> columns, int chosen) {
         return switch (dialog) {
             case "OPEN" -> FileColumns.open(files, chosen, x.t());
             case "COLUMN_TEMPLATES" -> FileColumns.columnTemplates(columns, chosen, x.units(), x.t());
-            case "TEMPLATES" -> {
-                var rows = new ArrayList<String[]>();
-                for (var preset : presets) {
-                    int parts = 0;
-                    for (double share : preset.moleFractions()) if (share > 0) parts++;
-                    rows.add(new String[]{preset.name(), Integer.toString(parts)});
-                }
-                yield FileColumns.templates(rows, chosen, x.t());
-            }
+            case "TEMPLATES" -> FileColumns.streamTemplates(streams, chosen, x.units(), x.t());
             default -> {
                 var rows = new ArrayList<String[]>();
                 for (var type : litTypes()) rows.add(new String[]{x.t().get(Tiles.name(type)), ""});
@@ -226,6 +217,8 @@ public final class SimulatorPage {
             return new SheetState.Status(x.state().running() ? x.state().status(x.t(), x.units(), compact).text() + " " + why : why, Palette.WARN);
         }
         if (x.state().running()) return x.state().status(x.t(), x.units(), compact);
+        var told = x.host().said();
+        if (told != null) return new SheetState.Status(x.text(told.key(), told.arguments().toArray()), told.warn() ? Palette.WARN : Palette.ACCENT);
         String lifted = gestures.lifted();
         if (lifted != null) return new SheetState.Status(x.text("status.reconnect", editor.stream(lifted).name()), Palette.ACCENT);
         if (tab == SimulatorFrame.Tab.RESULTS) return new SheetState.Status(ResultsPage.status(x, results), Palette.ACCENT);

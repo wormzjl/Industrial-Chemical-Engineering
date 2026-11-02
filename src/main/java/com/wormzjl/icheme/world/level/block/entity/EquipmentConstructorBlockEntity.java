@@ -335,20 +335,20 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
     }
 
     /**
-     * Server: the column calculator nearest this constructor within {@code reach} blocks (empty when there is none), and
+     * Server: the process simulator nearest this constructor within {@code reach} blocks (empty when there is none), and
      * this design with its saved design imported ({@link Design#imported}; empty when it has none). A read: nothing is
      * solved.
      */
     public java.util.Optional<java.util.Optional<Design>> importColumn(int reach) {
         if (level == null) return java.util.Optional.empty();
-        ColumnCalculatorV3BlockEntity nearest = null;
+        ProcessSimulatorBlockEntity nearest = null;
         double best = Double.MAX_VALUE;
         for (var at : BlockPos.betweenClosed(worldPosition.offset(-reach, -reach, -reach), worldPosition.offset(reach, reach, reach))) {
-            if (!level.isLoaded(at) || !(level.getBlockEntity(at) instanceof ColumnCalculatorV3BlockEntity calculator)) continue;
+            if (!level.isLoaded(at) || !(level.getBlockEntity(at) instanceof ProcessSimulatorBlockEntity simulator)) continue;
             double distance = at.distSqr(worldPosition);
             if (distance < best) {
                 best = distance;
-                nearest = calculator;
+                nearest = simulator;
             }
         }
         if (nearest == null) return java.util.Optional.empty();

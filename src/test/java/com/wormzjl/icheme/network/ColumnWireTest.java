@@ -3,37 +3,28 @@ package com.wormzjl.icheme.network;
 import static com.wormzjl.icheme.network.ColumnCodecs.buffer;
 import static com.wormzjl.icheme.network.ColumnCodecs.failure;
 import static com.wormzjl.icheme.network.ColumnCodecs.readInput;
-import static com.wormzjl.icheme.network.ColumnCodecs.readInputNbt;
 import static com.wormzjl.icheme.network.ColumnCodecs.readResult;
-import static com.wormzjl.icheme.network.ColumnCodecs.readResultNbt;
 import static com.wormzjl.icheme.network.ColumnCodecs.wireRoundTrip;
 import static com.wormzjl.icheme.network.ColumnCodecs.writeInput;
-import static com.wormzjl.icheme.network.ColumnCodecs.writeInputNbt;
 import static com.wormzjl.icheme.network.ColumnCodecs.writeResult;
-import static com.wormzjl.icheme.network.ColumnCodecs.writeResultNbt;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.wormzjl.icheme.science.column.v3.*;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
 import io.netty.handler.codec.DecoderException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.StringTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import org.junit.jupiter.api.Test;
 
 /**
  * Transport contract of the column input and the accepted-result certificate, over the wire codec of
- * {@link ColumnV3Network} and the NBT codec of {@link ColumnCalculatorV3BlockEntity}: side draws, steam feeds,
+ * {@link ColumnWire}: side draws, steam feeds,
  * pumparounds and the duty ledger, the convergence closure, the column diameter and the tray hydraulics.
  */
 @org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
-class ColumnV3NetworkCodecTest {
+class ColumnWireTest {
     private static final List<V3PumparoundSpec> PUMPAROUNDS = List.of(
             new V3PumparoundSpec(1, 1, -2_500_000.0, V3PumparoundSpec.Split.RETURN_TRAY),
             new V3PumparoundSpec(2, 3, -900_000.0, V3PumparoundSpec.Split.UNIFORM),
@@ -65,19 +56,15 @@ class ColumnV3NetworkCodecTest {
     }
 
     @Test
-    void wireAndNbtRoundTripZeroThroughThreeDrawsAndRejectMissingList() throws Exception {
+    void wireRoundTripsZeroThroughThreeDrawsAndRejectMissingList() throws Exception {
         for (int count = 0; count <= 3; count++) {
             V3ColumnInput input = sideDrawInput(count);
             assertEquals(input, wireRoundTrip(input));
-            CompoundTag tag = writeInputNbt(input);
-            assertEquals(input, readInputNbt(tag));
-            tag.remove("SideDraws");
-            assertThrows(InvocationTargetException.class, () -> readInputNbt(tag));
         }
     }
 
     @Test
-    void wireAndNbtRoundTripSteamFeedsAndRejectMissingList() throws Exception {
+    void wireRoundTripsSteamFeedsAndRejectMissingList() throws Exception {
         V3ColumnInput base = sideDrawInput(1);
         V3ColumnInput steam = new V3ColumnInput(base.schemaVersion(), base.packageId(), base.assayId(), base.componentBasis(),
                 base.feedComponentMolarFlowsMolPerSecond(), base.feedTemperatureKelvin(), base.stageCount(), base.feedStageNumber(),
@@ -85,25 +72,16 @@ class ColumnV3NetworkCodecTest {
                 List.of(new V3SteamFeedSpec(5, 3.0, 450.0), new V3SteamFeedSpec(2, 1.0, 450.0)), List.of(),
                 V3ColumnInput.PRESCRIBED_DROP_DIAMETER);
         assertEquals(steam, wireRoundTrip(steam));
-        CompoundTag tag = writeInputNbt(steam);
-        assertEquals(steam, readInputNbt(tag));
-        tag.remove("SteamFeeds");
-        assertThrows(InvocationTargetException.class, () -> readInputNbt(tag));
     }
 
     @Test
-    void aFullStreamCertificateRoundTripsThroughWireAndNbtAndRejectsOneMoreStream() throws Exception {
+    void aFullStreamCertificateRoundTripsThroughTheWireAndRejectsOneMoreStream() throws Exception {
         List<V3ColumnStreamProperties> streams = java.util.stream.IntStream.range(0, V3ColumnStreamProperties.MAX_STREAMS).mapToObj(index ->
                 new V3ColumnStreamProperties("product_" + index, "Product " + index, "LIQUID", 10, 1, 400, 250_000, 0,
                         List.of(new V3ColumnStreamProperties.ComponentFraction("a", 1, 1)))).toList();
         V3ColumnDisplayResult result = new V3ColumnDisplayResult("0".repeat(64), "mesh", "assumptions", "data", 2, 0, 6,
                 streams, Optional.empty(), V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE, Optional.empty(), Optional.empty());
         assertEquals(result, wireRoundTrip(result));
-        CompoundTag tag = writeResultNbt(result);
-        assertEquals(result, readResultNbt(tag));
-        ListTag streamTags = tag.getList("Streams", Tag.TAG_COMPOUND);
-        streamTags.add(streamTags.getCompound(0).copy());
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readResultNbt(tag)));
     }
 
     @Test
@@ -116,23 +94,16 @@ class ColumnV3NetworkCodecTest {
         assertForgedCountIsRejected(1, V3ColumnInput.MAX_PUMPAROUNDS + 1, "pumparound");
         // In bound but with no payload behind it: still the decoder's to refuse, never a read off the end.
         assertForgedCountIsRejected(1, V3ColumnInput.MAX_PUMPAROUNDS, "truncated pumparound");
-
-        CompoundTag tag = writeInputNbt(sideDrawInput(1));
-        ListTag invalid = new ListTag();
-        invalid.add(StringTag.valueOf("not a draw"));
-        tag.put("SideDraws", invalid);
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readInputNbt(tag)));
     }
 
     // ---- Pumparounds and the duty ledger
 
     @Test
-    void wireAndNbtRoundTripZeroThroughFourPumparoundsAcrossBothSplits() throws Exception {
+    void wireRoundTripsZeroThroughFourPumparoundsAcrossBothSplits() throws Exception {
         for (int count = 0; count <= V3ColumnInput.MAX_PUMPAROUNDS; count++) {
             V3ColumnInput input = pumparoundInput(count, 4.17);
             assertEquals(count, input.pumparounds().size());
             assertEquals(input, wireRoundTrip(input));
-            assertEquals(input, readInputNbt(writeInputNbt(input)));
         }
     }
 
@@ -140,22 +111,12 @@ class ColumnV3NetworkCodecTest {
     void fourPumparoundsAndExactZeroRefluxSurviveBothTransports() throws Exception {
         V3ColumnInput input = pumparoundInput(4, 0.0);
         assertEquals(input, wireRoundTrip(input));
-        assertEquals(input, readInputNbt(writeInputNbt(input)));
         assertTrue(V3ColumnProblemResolver.resolve(input, V3CondenserPhaseBranch.VAPOR_ONLY)
                 .degreeOfFreedomLedger().isValid());
     }
 
     @Test
-    void currentInputRequiresExplicitPumparoundListAndResultCanBeLedgerless() throws Exception {
-        CompoundTag inputTag = writeInputNbt(pumparoundInput(3, 4.17));
-        inputTag.remove("Pumparounds");
-        assertThrows(InvocationTargetException.class, () -> readInputNbt(inputTag));
-        var withoutLedger = certificate(Optional.empty(), V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE, Optional.empty());
-        assertEquals(withoutLedger, readResultNbt(writeResultNbt(withoutLedger)));
-    }
-
-    @Test
-    void wireAndNbtRejectAFifthPumparoundANonFiniteDutyAndAnUnknownSplit() throws Exception {
+    void wireRejectsAFifthPumparoundANonFiniteDutyAndAnUnknownSplit() throws Exception {
         RegistryFriendlyByteBuf buffer = buffer();
         try {
             writeInput(buffer, pumparoundInput(0, 4.17));
@@ -184,33 +145,10 @@ class ColumnV3NetworkCodecTest {
         } finally {
             buffer.release();
         }
-
-        CompoundTag oversized = writeInputNbt(pumparoundInput(4, 4.17));
-        ListTag entries = oversized.getList("Pumparounds", Tag.TAG_COMPOUND);
-        entries.add(entries.getCompound(0).copy());
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readInputNbt(oversized)));
-
-        CompoundTag nonFinite = writeInputNbt(pumparoundInput(1, 4.17));
-        nonFinite.getList("Pumparounds", Tag.TAG_COMPOUND).getCompound(0).putDouble("DutyWatts", Double.NaN);
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readInputNbt(nonFinite)));
-
-        CompoundTag unknownSplit = writeInputNbt(pumparoundInput(1, 4.17));
-        unknownSplit.getList("Pumparounds", Tag.TAG_COMPOUND).getCompound(0).putString("Split", "SIDEWAYS");
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readInputNbt(unknownSplit)));
-
-        CompoundTag notAList = writeInputNbt(pumparoundInput(1, 4.17));
-        notAList.putString("Pumparounds", "not a list");
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readInputNbt(notAList)));
-
-        CompoundTag wrongElements = writeInputNbt(pumparoundInput(1, 4.17));
-        ListTag strings = new ListTag();
-        strings.add(StringTag.valueOf("not a pumparound"));
-        wrongElements.put("Pumparounds", strings);
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readInputNbt(wrongElements)));
     }
 
     @Test
-    void displayResultCarriesAnAbsentAndAFullyPopulatedDutyLedgerThroughWireAndNbt() throws Exception {
+    void displayResultCarriesAnAbsentAndAFullyPopulatedDutyLedgerThroughTheWire() throws Exception {
         for (Optional<V3ColumnDutyLedger> ledger :
                 List.of(Optional.<V3ColumnDutyLedger>empty(), Optional.of(ledger(1)),
                         Optional.of(ledger(V3ColumnDutyLedger.MAX_STAGE_DUTIES)))) {
@@ -218,7 +156,6 @@ class ColumnV3NetworkCodecTest {
             V3ColumnDisplayResult decoded = wireRoundTrip(result);
             assertEquals(result, decoded);
             assertEquals(ledger, decoded.dutyLedger());
-            assertEquals(result, readResultNbt(writeResultNbt(result)));
         }
     }
 
@@ -237,22 +174,13 @@ class ColumnV3NetworkCodecTest {
         } finally {
             buffer.release();
         }
-
-        CompoundTag tag = writeResultNbt(result);
-        ListTag duties = tag.getCompound("DutyLedger").getList("StageDuties", Tag.TAG_COMPOUND);
-        duties.add(duties.getCompound(0).copy());
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readResultNbt(tag)));
-
-        CompoundTag malformed = writeResultNbt(result);
-        malformed.putString("DutyLedger", "not a ledger");
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readResultNbt(malformed)));
     }
 
     @Test
     void coolingDutiesStayNegativeThroughEveryTransportHop() throws Exception {
         V3ColumnInput input = pumparoundInput(2, 4.17);
         assertTrue(input.pumparounds().stream().allMatch(pumparound -> pumparound.dutyWatts() < 0.0));
-        for (V3ColumnInput decoded : List.of(wireRoundTrip(input), readInputNbt(writeInputNbt(input)))) {
+        for (V3ColumnInput decoded : List.of(wireRoundTrip(input))) {
             assertEquals(input.pumparounds(), decoded.pumparounds());
             for (int index = 0; index < decoded.pumparounds().size(); index++) {
                 double duty = decoded.pumparounds().get(index).dutyWatts();
@@ -265,10 +193,6 @@ class ColumnV3NetworkCodecTest {
                 List.of(new V3ColumnDutyLedger.StageDuty(3, -3_400_000.0)), 1_200_000.0, 0.0);
         V3ColumnDisplayResult result = certificate(Optional.of(cooling), V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE,
                 Optional.empty());
-        V3ColumnDutyLedger persisted = readResultNbt(writeResultNbt(result)).dutyLedger().orElseThrow();
-        assertEquals(-4_000_000.0, persisted.condenserWatts(), 0.0);
-        assertEquals(-3_400_000.0, persisted.stageDuties().get(0).dutyWatts(), 0.0);
-
         V3ColumnDutyLedger sent = wireRoundTrip(result).dutyLedger().orElseThrow();
         assertEquals(cooling, sent);
         assertEquals(-3_400_000.0, sent.stageHeatTotalWatts(), 0.0);
@@ -277,7 +201,7 @@ class ColumnV3NetworkCodecTest {
     // ---- Convergence closure
 
     @Test
-    void everyAdmittedClosureRoundTripsThroughWireAndNbt() throws Exception {
+    void everyAdmittedClosureRoundTripsThroughTheWire() throws Exception {
         for (double closure : new double[] {V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE, 1.0e-6, 5.0e-4,
                 V3ConvergenceEvidence.MAXIMUM_CLOSURE_TOLERANCE}) {
             for (Optional<V3ColumnDutyLedger> ledger : List.of(Optional.<V3ColumnDutyLedger>empty(),
@@ -289,23 +213,8 @@ class ColumnV3NetworkCodecTest {
                 assertEquals(result, decoded);
                 assertEquals(closure, decoded.closureTolerance(), 0.0);
                 assertEquals(ledger, decoded.dutyLedger());
-
-                CompoundTag tag = writeResultNbt(result);
-                assertEquals(closure, tag.getDouble("ClosureTolerance"), 0.0);
-                V3ColumnDisplayResult persisted = readResultNbt(tag);
-                assertEquals(result, persisted);
-                assertEquals(closure, persisted.closureTolerance(), 0.0);
             }
         }
-    }
-
-    @Test
-    void currentResultRequiresItsRecordedClosure() throws Exception {
-        assertEquals(12, ColumnCalculatorV3BlockEntity.DATA_VERSION);
-        assertEquals(18, ColumnV3Network.WIRE_SCHEMA_VERSION);
-        CompoundTag tag = writeResultNbt(certificate(Optional.of(closureLedger()), 1.0e-3, Optional.empty()));
-        tag.remove("ClosureTolerance");
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readResultNbt(tag)));
     }
 
     @Test
@@ -328,16 +237,12 @@ class ColumnV3NetworkCodecTest {
         } finally {
             tooLoose.release();
         }
-
-        CompoundTag tooTight = writeResultNbt(certificate(Optional.empty(), 1.0e-3, Optional.empty()));
-        tooTight.putDouble("ClosureTolerance", 1.0e-9);
-        assertInstanceOf(IllegalArgumentException.class, failure(() -> readResultNbt(tooTight)));
     }
 
     // ---- Column diameter and tray hydraulics
 
     @Test
-    void bothModesOfTheInputRoundTripThroughWireAndNbt() throws Exception {
+    void bothModesOfTheInputRoundTripThroughTheWire() throws Exception {
         for (double diameter : new double[] {V3ColumnInput.PRESCRIBED_DROP_DIAMETER, 0.5,
                 V3ColumnInput.DEFAULT_COLUMN_DIAMETER_METRES, V3ColumnInput.MAX_COLUMN_DIAMETER_METRES}) {
             V3ColumnInput input = diameterInput(diameter);
@@ -345,18 +250,7 @@ class ColumnV3NetworkCodecTest {
             V3ColumnInput decoded = wireRoundTrip(input);
             assertEquals(diameter, decoded.columnDiameterMetres());
             assertEquals(input, decoded);
-
-            CompoundTag tag = writeInputNbt(input);
-            assertEquals(diameter, tag.getDouble("ColumnDiameter"));
-            assertEquals(input, readInputNbt(tag));
         }
-    }
-
-    @Test
-    void currentInputRequiresAnExplicitDiameter() throws Exception {
-        CompoundTag tag = writeInputNbt(diameterInput(V3ColumnInput.DEFAULT_COLUMN_DIAMETER_METRES));
-        tag.remove("ColumnDiameter");
-        assertThrows(Exception.class, () -> readInputNbt(tag));
     }
 
     @Test
@@ -369,12 +263,6 @@ class ColumnV3NetworkCodecTest {
             V3ColumnDisplayResult decoded = wireRoundTrip(result);
             assertEquals(hydraulics, decoded.trayHydraulics());
             assertEquals(result, decoded);
-
-            CompoundTag tag = writeResultNbt(result);
-            assertEquals(hydraulics.isPresent(), tag.contains("Hydraulics", Tag.TAG_COMPOUND));
-            V3ColumnDisplayResult persisted = readResultNbt(tag);
-            assertEquals(hydraulics, persisted.trayHydraulics());
-            assertEquals(result, persisted);
         }
     }
 

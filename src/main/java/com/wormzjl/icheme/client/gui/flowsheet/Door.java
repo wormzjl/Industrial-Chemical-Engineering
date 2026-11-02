@@ -81,6 +81,8 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
         public CalculatorColumn.View results = CalculatorColumn.View.PROFILES;
         public CalculatorColumn.Metric metric = CalculatorColumn.Metric.TEMPERATURE;
         public int index, stream, tray;
+        /** What a key just did, which the door's status says until its next change of tab. */
+        public @Nullable String said;
 
         /** Whether the selected pumparound spreads its heat; a row's own setting. */
         public boolean spread(com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor door) {

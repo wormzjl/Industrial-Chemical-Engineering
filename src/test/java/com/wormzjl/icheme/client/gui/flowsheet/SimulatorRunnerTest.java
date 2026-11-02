@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.Report;
+import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.io.InputStreamReader;
@@ -536,7 +537,7 @@ class SimulatorRunnerTest {
             for (var file : JsonParser.parseReader(new InputStreamReader(index, StandardCharsets.UTF_8)).getAsJsonArray())
                 try (var in = getClass().getResourceAsStream("/assets/icheme/columnpreset/" + file.getAsString())) {
                     var o = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
-                    listed.add(new FileColumns.ColumnTemplate(file.getAsString(), V3ColumnTemplate.read(o), true));
+                    listed.add(new FileColumns.ColumnTemplate(file.getAsString(), V3ColumnTemplate.read(o), true, file.getAsString()));
                 }
         }
         assertFalse(listed.isEmpty());
@@ -551,8 +552,8 @@ class SimulatorRunnerTest {
         assertEquals(listed.size(), listing.rows().size());
         assertEquals(5, listing.head().length);
         assertEquals(5, listing.at().length);
-        assertEquals(2, listing.keys().length);
-        assertEquals(1, listing.primary());
+        assertEquals(4, listing.keys().length);
+        assertEquals(3, listing.primary());
         assertTrue(listing.rows().stream().anyMatch(r -> r.cells()[2].equals("none")) || listing.rows().stream().allMatch(r -> r.cells()[2].contains("draws")), "the Connections column reads");
         assertTrue(texts.missing.isEmpty(), texts.missing.toString());
     }

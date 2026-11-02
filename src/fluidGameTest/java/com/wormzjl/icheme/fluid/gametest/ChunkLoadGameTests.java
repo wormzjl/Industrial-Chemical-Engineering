@@ -4,7 +4,6 @@ import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.BoundedCpuSolveService;
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
@@ -54,40 +53,6 @@ public final class ChunkLoadGameTests {
         var stale=FluidDeviceBlock.connectedState(pipe.setValue(FluidDeviceBlock.connection(Direction.UP),true),level,position);
         helper.assertTrue(!stale.getValue(FluidDeviceBlock.connection(Direction.UP)),"A joint to loaded air was kept");
         helper.succeed();
-    }
-
-    /**
-     * D3: a calculator's operation is not saved, so a solve that outlives its block can only be dropped. Breaking (or
-     * unloading) the block cancels the solve at once, which frees the worker and the block's solve slot.
-     */
-    @GameTest(template="empty",timeoutTicks=10000000,batch="chunk-load-column-cancel")
-    public static void aCalculatorRemovedWhileItCalculatesCancelsItsSolve(GameTestHelper helper) {
-        var level=helper.getLevel();var server=level.getServer();var pos=helper.absolutePos(new BlockPos(0,1,0));
-        level.setBlock(pos,ModBlocks.COLUMN_CALCULATOR_V3.get().defaultBlockState(),3);
-        var block=(ColumnCalculatorV3BlockEntity)level.getBlockEntity(pos);
-        long id=ProcessSolveServices.nextRequestId();
-        var operation=block.tryBegin(block.state(0).inputRevision(),id,block.currentInput()).orElseThrow();
-        var target=new ProcessSolveServices.ColumnTarget(level.dimension(),pos);
-        var admission=ProcessSolveServices.submitV3Column(server,new ProcessSolveServices.V3ColumnRequest(id,target,operation,System.nanoTime()));
-        helper.assertTrue(admission.accepted(),"Column admission failed: "+admission.admission());
-        level.removeBlock(pos,false);
-        // The job was admitted this tick and is not dispatched before the tick hook: a cancel now finds it cancelled
-        // (ALREADY_TERMINAL once its cancellation completion is published, ALREADY_REQUESTED while a worker still runs it)
-        // only if the removal asked first. Without that, this call would be the first and answer REQUESTED.
-        var again=ProcessSolveServices.cancelRequest(server,id);
-        helper.assertTrue(again==BoundedCpuSolveService.CancellationResult.ALREADY_TERMINAL||again==BoundedCpuSolveService.CancellationResult.ALREADY_REQUESTED,
-                "Removing the calculator did not cancel its solve: "+again);
-        long deadline=System.nanoTime()+60_000_000_000L;boolean[] done={false};
-        helper.onEachTick(()->{
-            if(done[0])return;
-            helper.assertTrue(System.nanoTime()<deadline,"The cancelled solve did not end within its wall deadline");
-            if(ProcessSolveServices.cancelRequest(server,id)!=BoundedCpuSolveService.CancellationResult.NOT_FOUND){
-                // The GameTest server ticks unpaced; yield while the worker reaches its cancellation point.
-                java.util.concurrent.locks.LockSupport.parkNanos(1_000_000L);
-                return;
-            }
-            done[0]=true;helper.succeed();
-        });
     }
 
     /**

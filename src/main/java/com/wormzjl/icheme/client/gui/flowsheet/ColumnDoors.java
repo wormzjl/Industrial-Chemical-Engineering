@@ -49,6 +49,45 @@ public final class ColumnDoors {
         return x.t().get(KEY + key, args);
     }
 
+    /**
+     * The column as its door stands, on its feed: what Save design and a template take of it, with no solve. Null with no feed yet, or with a door {@code V3ColumnInput} refuses, whose
+     * Run says why. A feed's parts are what its line last held, or what the sheet sets.
+     */
+    public static @Nullable V3ColumnInput input(SheetContext x, String id) {
+        var stream = x.into(id, "feed");
+        if (stream == null) return null;
+        var axis = x.fluids().axis();
+        var flows = new double[x.fluids().pack().components().size()];
+        var components = x.fluids().pack().components();
+        var last = x.last(stream);
+        var feed = stream.feed();
+        double temperature;
+        if (stream.from() == null && feed != null) {
+            for (int i = 0; i < flows.length; i++) flows[i] = feed.amounts().getOrDefault(components.get(i), 0.0);
+            temperature = feed.temperature();
+        } else if (last != null) {
+            var parts = last.amountsView();
+            for (int i = 0; i < flows.length; i++) {
+                int at = axis.indexOf(components.get(i));
+                if (at >= 0 && at < parts.length) flows[i] = parts[at];
+            }
+            temperature = last.temperature();
+        } else return null;
+        try {
+            return ColumnDoor.of(x.editor().unit(id).params()).input(x.fluids().pack(), flows, temperature);
+        } catch (IllegalArgumentException refused) {
+            return null;
+        }
+    }
+
+    /** What the Equipment page has chosen. */
+    public static ColumnComponents.Choices choices(Flowsheet.Unit unit) {
+        var door = ColumnDoor.of(unit.params());
+        var pumps = new ArrayList<ColumnComponents.Pump>();
+        for (var row : unit.params().rows("pumparounds")) pumps.add(pump(row.text("pump", ColumnComponents.Pump.STANDARD.name())));
+        return new ColumnComponents.Choices(door.condenser(), pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps);
+    }
+
     private static @Nullable V3ColumnDisplayResult display(SheetContext x, String id) {
         var results = x.state().shown(id);
         var report = results == null ? null : results.report(id);
@@ -92,7 +131,7 @@ public final class ColumnDoors {
             case EQUIPMENT -> {
                 var pumps = new ArrayList<ColumnComponents.Pump>();
                 for (var row : unit.params().rows("pumparounds")) pumps.add(pump(row.text("pump", ColumnComponents.Pump.STANDARD.name())));
-                var rows = CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, door.condenser(), pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps, false), x.t());
+                var rows = CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, door.condenser(), pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps, x.host().stores() && !x.host().reader() && input(x, id) != null), x.t());
                 var right = new ArrayList<>(rows.right());
                 right.add(right.size() - 1, Door.group(x.text("door.group.tube_sides"), Door.entry("tube", x.text("door.drop"), x.units().pressure().symbol())));
                 columns = List.of(right);
