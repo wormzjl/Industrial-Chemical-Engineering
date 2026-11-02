@@ -1,6 +1,6 @@
 ---
 name: gui-creation
-description: Rules, workflow and build recipes for every IChemE GUI, from one new key or label to a whole screen: pages, tabs, dialogs, panel columns, fields, meters, buttons, drawings on the glass, GuiPrototypes renders and option sheets, window scale, and the GUI side of a server action (client/gui/**, FluidDeviceScreen, the column calculator, the equipment constructor, the assembly screen). Use before designing, prototyping, building, fixing or reviewing any of these, and whenever the owner comments on how a screen looks or works ("align", "cut", "too big", "should scale", "looks weird", "cannot click").
+description: Rules, workflow and build recipes for every IChemE GUI, from one new key or label to a whole screen, including pages, tabs, dialogs, panel columns, fields, meters, buttons, drawings on the glass, GuiPrototypes renders and option sheets, window scale, and the GUI side of a server action (client/gui/**, FluidDeviceScreen, the column calculator, the equipment constructor, the assembly screen). Use before designing, prototyping, building, fixing or reviewing any of these, and whenever the owner comments on how a screen looks or works ("align", "cut", "too big", "should scale", "looks weird", "cannot click").
 ---
 
 # GUI creation (IChemE)
