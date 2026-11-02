@@ -260,7 +260,7 @@ public final class PassiveStepSolver {
     void markBackwardEulerAccepted(PassiveNetwork graph,Result result){beAcceptedPipes=identities(graph);beAcceptedNodeIds=nodeIds(graph);rememberOpenings(graph,result.massFlows(),result.devicePressureChanges(),result.modes());}
     /** Whether no step of this structure has been accepted yet: the cold start after compile, a topology change, or a job
      * start with no committed interval on this structure. */
-    boolean backwardEulerCold(PassiveNetwork graph){return !(beAcceptedPipes.equals(identities(graph))&&Arrays.equals(beAcceptedNodeIds,nodeIds(graph)));}
+    boolean backwardEulerCold(PassiveNetwork graph){return !(sameLines(beAcceptedPipes,identities(graph))&&Arrays.equals(beAcceptedNodeIds,nodeIds(graph)));}
     /**
      * Puts this solver, at the start of an island job, in the state a fresh solver would be in given only the island's
      * committed interval {@code committed} (null without one on this structure), so a job's solves depend on the committed
@@ -293,6 +293,14 @@ public final class PassiveStepSolver {
     }
     /** The same pipe identities and node ids. */
     static boolean sameStructure(PassiveNetwork a,PassiveNetwork b){return identities(a).equals(identities(b))&&Arrays.equals(nodeIds(a),nodeIds(b));}
+    /** {@link #sameStructure} whatever a flow valve's set point: a job on a new target starts from the committed interval too. */
+    static boolean sameLines(PassiveNetwork a,PassiveNetwork b){return sameLines(identities(a),identities(b))&&Arrays.equals(nodeIds(a),nodeIds(b));}
+    /** The same connections, whatever a flow valve's set point (a column plans one each slice). */
+    private static boolean sameLines(List<PassiveNetwork.Pipe.Identity> a,List<PassiveNetwork.Pipe.Identity> b) {
+        if(a.size()!=b.size())return false;
+        for(int i=0;i<a.size();i++)if(!a.get(i).line().equals(b.get(i).line()))return false;
+        return true;
+    }
     /** The last successful solve, for the block Jacobian check; see {@link #acceptedEquations}. */
     record LastSolve(Equations equations,double[] variables) {}
     private LastSolve lastSolve;
@@ -355,7 +363,7 @@ public final class PassiveStepSolver {
                 new SparseNewton.Result(new double[0],0,0,0,0,0),List.of(),new double[0],0,new double[model.hydrocarbon.componentCount()+1],0,
                 graph.reservoirs().stream().map(PassiveNetwork.Reservoir::inventory).toList(),List.of(),List.of());
         var modes=new ArrayList<FlowControl.Mode>();
-        boolean carryModes=previousModes.size()==graph.pipes().size()&&previousPipes.equals(identities(graph))&&Arrays.equals(previousNodeIds,nodeIds(graph));
+        boolean carryModes=previousModes.size()==graph.pipes().size()&&sameLines(previousPipes,identities(graph))&&Arrays.equals(previousNodeIds,nodeIds(graph));
         // Pumps this solve has recognized as standing at their own shutoff corner; see
         // {@link #shutoffBand}. Not part of any workspace or cycle key: it changes no equation, it
         // only forbids one transition from being taken back within this solve.
@@ -597,6 +605,14 @@ public final class PassiveStepSolver {
             // A confirmed emptying (keptEmptying) was decided on the network this active set states, so a mode or closure
             // change decides it again.
             if(changed)Arrays.fill(emptied,false);
+            // A flow valve leaving its open pass for regulation leaves that pass's flows behind: a choked line's law flow stands on the
+            // saturated law's plateau, where the full Newton step to the target crosses zero and lands further out (steam at 3.65 kg/s
+            // through a valve set to 0.75: law flow 5.25, -75.9, then 48, slope 1e-11, at every step size). The regulated pass takes its
+            // law flows from the balance on these modes ({@link #balanceStart}) and keeps its seeds: a junction still holding its old
+            // charge is laid out on that, not on the mixture the balance sends it (a liquid reaching a gas junction went singular).
+            if(deviceChange>=0&&deviceNext==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(deviceChange).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()) {
+                seeds=states;balanceLawFlows=balanceStart(graph,modes,boundaryClosed,keep,checkpoint).lawFlows();previousPipes=List.of();previousNodeIds=new long[0];previousFlows=new double[0];previousLawFlows=new double[0];previousHeads=new double[0];previousModes=List.copyOf(modes);continue;
+            }
             if(changed){seeds=states;previousPipes=pipeIdentities;previousNodeIds=nodeIds;previousInputStates=inputStates;previousOutputStates=states;previousRateOnly=rateOnly;previousFlows=flows.clone();previousLawFlows=lawFlows;previousHeads=heads.clone();previousModes=List.copyOf(modes);continue;}
             // Decision D11: the phase-port segments this pass froze must be the ones its own converged flows land in
             // (which phases a port draws at its capacity and which one carries the rest); otherwise the pass is solved
@@ -2495,7 +2511,7 @@ public final class PassiveStepSolver {
      * fallback), so a step whose rate seed failed, or any solve on other states, starts from the balance instead.
      */
     private boolean carriedPoint(PassiveNetwork graph,List<PassiveNetwork.Pipe.Identity> pipeIdentities) {
-        if(!(previousPipes.equals(pipeIdentities)&&Arrays.equals(previousNodeIds,nodeIds(graph))&&previousFlows.length==graph.pipes().size()&&previousLawFlows.length==graph.pipes().size()))return false;
+        if(!(sameLines(previousPipes,pipeIdentities)&&Arrays.equals(previousNodeIds,nodeIds(graph))&&previousFlows.length==graph.pipes().size()&&previousLawFlows.length==graph.pipes().size()))return false;
         if(rateOnly&&!sameStates(previousInputStates,inputStates))return false;
         if(previousRateOnly&&!rateOnly&&!sameFluidStates(previousOutputStates,inputStates))return false;
         return true;
@@ -2705,7 +2721,9 @@ public final class PassiveStepSolver {
             var pipe=current.pipes().get(e);
             if(boundaryClosed[e]||modes.get(e)==FlowControl.Mode.CLOSED||modes.get(e)==FlowControl.Mode.INLET_WRONG_PHASE)continue;
             double pa=endPressure(current,pipe,pipe.first()),pb=endPressure(current,pipe,pipe.second());
-            law[e]=net.suctionLimited[e]?net.prescribed[e]:lawFlow(current,pipe,pa,pb);
+            // A valve whose flow or opening the balance states starts at what the balance gave it, not at its pipe's unthrottled law.
+            boolean stated=pipe.control() instanceof FlowControl.Valve&&(!Double.isNaN(net.prescribed[e])||!Double.isNaN(net.fixedOpenings[e]));
+            law[e]=net.suctionLimited[e]?net.prescribed[e]:stated?net.flow(e,pa,pb):lawFlow(current,pipe,pa,pb);
             if(!(pipe.control() instanceof FlowControl.Passive)||keep!=null&&keep[e]||!converged)continue;
             // A passive connection the balanced ends can only drive the way its boundary forbids carries nothing this solve
             // (the closure the one-way estimate and the start closures stated by hand). Only ends that balance state it: an

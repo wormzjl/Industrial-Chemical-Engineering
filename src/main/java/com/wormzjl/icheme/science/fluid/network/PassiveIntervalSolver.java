@@ -423,7 +423,7 @@ public final class PassiveIntervalSolver {
     public void replayStart(PassiveNetwork graph,Result committed) {
         graph=PassiveNetwork.sizeJunctionHoldups(graph,model);
         coldSeed=null;coldSeedFor=null;
-        boolean continued=committed!=null&&PassiveStepSolver.sameStructure(graph,committed.graph())
+        boolean continued=committed!=null&&PassiveStepSolver.sameLines(graph,committed.graph())
                 &&committed.endpointModes().size()==graph.pipes().size()&&committed.endpointFlows().length==graph.pipes().size();
         implicit.replayStart(graph,continued?committed:null);
         // The start-of-step guard and the inlet check's hysteresis (decision D6) read the committed endpoint.

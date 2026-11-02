@@ -23,6 +23,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 ### Fixed
 
 - Zero-reflux columns support exactly dry upper stages; phase admission rejects collapsed liquid/vapor startup roots, continuation respects dry layouts, column caloric fits continue beyond data edges, and dry trays lose phantom liquid head; offline bulk CDU/VDU screens qualify convergence and preserve unresolved budget/coupling outcomes (`dba4ba45`, `3509f67a`; batch `2026-10-28-vacuum-column`).
+- A flow valve no longer holds its island when it regulates a line its open pass chokes, when a new set point meets a hot liquid, or when a trace washes out of a dry junction: fluid solver (f730d61de, 83802e11e, 22fd0d2e4, c39e2bcd3; batch 2026-11-02-valve-hold).
 
 ## [0.17.1] - 2026-10-28
 
