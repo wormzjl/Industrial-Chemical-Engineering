@@ -2,7 +2,7 @@
 
 Purpose: a regulating flow valve held its island; the column review world took no feed.
 
-Status: In progress since 2026-11-02, on branch `claude/valve-hold`, not merged. Later outlet holds fixed.
+Status: Implemented 2026-11-02, released as 0.18.0 with `2026-10-28-column-operation` (branch `claude/valve-hold`, merged into that branch at 548456d5c). Later outlet holds fixed.
 
 ## History
 
@@ -28,4 +28,4 @@ Status: In progress since 2026-11-02, on branch `claude/valve-hold`, not merged.
 
 - A cold start seeds a junction without a component its stock holds: a zero column, same review.
 - The merge: `documentation/2026-10-28-column-operation/MERGE_REVIEW.md`; the version and the word are the owner's.
-- Cold 431 and 475 hold more often than on base, first holds unchanged; a wall budget near the heaviest cold seeds' jobs reads a slow machine as holds (`FINAL_LANE_REVIEW.md`). A pump's head limit to target transition carries its point the same way; not shown to hold.
+- Cold 431 and 475 hold more often than on base, first holds unchanged; cold LNG and CO2-ice worlds near the 2 s wall budget hold on a slow machine; the owner takes it to another task (`FINAL_LANE_REVIEW.md`). A pump's head limit to target transition carries its point the same way; not shown to hold.

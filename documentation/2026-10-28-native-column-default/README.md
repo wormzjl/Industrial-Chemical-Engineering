@@ -2,7 +2,7 @@
 
 Purpose: use the C++ column library by default, with the Java path wherever the library is missing (owner request 2026-10-28: "Use C++ solver as default").
 
-Status: In progress since 2026-10-28 (branch `claude/distillation-column-integration-fef62f`, base `ac572f12`, beside the column operation plan); the owner chose option A (keep the C++ default) on 2026-10-29. Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-11-02, released as 0.18.0 with `2026-10-28-column-operation` (branch `claude/distillation-column-integration-fef62f`, base `ac572f12`); the owner chose option A (keep the C++ default) on 2026-10-29. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 

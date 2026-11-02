@@ -1,6 +1,6 @@
 # Merge review: column operation with its neighbours (2026-11-02)
 
-Batches in this merge: `2026-10-28-column-operation`, `2026-11-02-valve-hold`, `2026-10-28-native-column-default`, the vacuum column test. Branch `claude/column-operation-5c3005`. Nothing is merged, pushed or bumped: the owner gives the word and the version.
+Batches in this merge: `2026-10-28-column-operation`, `2026-11-02-valve-hold`, `2026-10-28-native-column-default`, the vacuum column test. Branch `claude/column-operation-5c3005`. Version 0.18.0 on the owner's word to merge. Main moves by the orchestrator; nothing is pushed.
 
 ## Tool folders
 
@@ -24,9 +24,9 @@ Batches in this merge: `2026-10-28-column-operation`, `2026-11-02-valve-hold`, `
 
 ## Open items for the owner
 
-1. Version: `mod_version` stays. Proposal: 0.18.0, a new feature and a solver batch.
+1. Dry ice cases: cold LNG and CO2-ice worlds sit near the 2 s wall budget and hold on a slow machine: seeds 183, 555, 673, 768. Alone, one worker, main against head: 183 147 s and 118 s, 555 153 s and 150 s, 673 58 s and 58 s, 768 111 s and 110 s, 0 holds on both. Identical work on 183 took 115 to 219 s today. The owner takes it to another task.
 
-Findings 1 and 5 are the owner's, decided and built, "Lower target wins" and option A: `MERGE_CODE_REVIEW.md`.
+Findings 1 and 5 are the owner's, decided and built, "Lower target wins" and option A: `MERGE_CODE_REVIEW.md`. Version: 0.18.0, a new feature and a solver batch.
 
 Decided by the orchestrator; the owner can overrule them:
 

@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-02
+
 ### Added
 
 - Column operation: a built column runs in the plant from its assembly screen. Ports split the islands at the boundary valves, a split table from the last accepted solve turns the feed taken into products every 5 s, a new solve runs only when the input drifts, short inputs follow rule B (rule A where a solve fails), a water-cooled condenser gives its duty to its cooling water, and the Operation tab shows and sets it; ports share their colours between the GUI and the pipe laying tool, connected ports with grey outlines; facts schema 6, shape fields 4, protocol assembly-3 (C1 `d222c3cd3`, C2 `5199ab276`, core `805756de3`, C3 `df2dab397`, C4 `1834c0510`, C5 `97ca2d9c3`, C6 `de8f5c534`, C6b `6769f178d`, C7 `153ebe7c1`, `ae13f22d3`, test world `1f653486e`, `1352b8858`, `61955af21`, port colours `9cfc3a088`, `645e203d3`; batch `2026-10-28-column-operation`).

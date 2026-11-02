@@ -1,6 +1,6 @@
 # Heat exchangers: heat sides, the coupling across islands and built-in control
 
-**Snapshot:** 548456d5 (branch `claude/column-operation-5c3005`), 2026-11-02 · **Updated:** 2026-11-02 (batch 2026-10-28-column-operation: a running column's condenser as a side's partner, `ExchangerRelay.Read.ceiling` and `Read.column`, sides a column holds) · earlier: 2026-10-28 at f20ceefa (new chapter, batch 2026-10-27-heat-exchanger-design: work packages W1 to W8, the owner-test fixes (louvers, the settled-transit wake, junction holdups that skip a heat side's passage) and F1, the convection coil against the flue gas; W9, the column hook, deferred)
+**Snapshot:** 321b8d1d (branch `claude/column-operation-5c3005`), 2026-11-02 · **Updated:** 2026-11-02 (batch 2026-10-28-column-operation: a running column's condenser as a side's partner, `ExchangerRelay.Read.ceiling` and `Read.column`, sides a column holds) · earlier: 2026-10-28 at f20ceefa (new chapter, batch 2026-10-27-heat-exchanger-design: work packages W1 to W8, the owner-test fixes (louvers, the settled-transit wake, junction holdups that skip a heat side's passage) and F1, the convection coil against the flue gas; W9, the column hook, deferred)
 Up: [code guide](README.md)
 
 ## Read this when

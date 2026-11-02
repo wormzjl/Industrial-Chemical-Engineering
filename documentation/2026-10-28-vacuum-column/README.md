@@ -1,6 +1,6 @@
 # Vacuum-column feed and distillation test
 
-Status: In progress since 2026-10-28; `codex/vacuum-column-test` integrated into `claude/column-operation-5c3005` at `baca269b` on 2026-10-29. Main merge pending.
+Status: Implemented 2026-11-02, released as 0.18.0 with `2026-10-28-column-operation` (`codex/vacuum-column-test` integrated at `baca269b` on 2026-10-29).
 
 ## History
 
