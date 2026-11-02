@@ -36,13 +36,27 @@ The process simulator's design sheets (`SimulatorPrototypes.java`, batch 2026-11
 java -Dfile.encoding=UTF-8 -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/SimulatorPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/sim-prototypes
 ```
 
+The built simulator screen (`SimulatorRender.java`, batch 2026-11-02-process-simulator): sheets 01 to 21 from shipped code on a real `FlowsheetEngine` run, one file per door. It needs the resources and gson on the class path, so run it from PowerShell (Git Bash mangles `;`), after `./gradlew compileJava processResources`; `$g` is the gson jar in the Gradle cache. Finished sheets go to the main checkout's `research/2026-11-02-process-simulator/renders-w6/`:
+
+```bash
+java -Dfile.encoding=UTF-8 -Duser.language=en -Djava.awt.headless=true -cp "build\classes\java\main;build\resources\main;$g" tools\heat-gui-renders\SimulatorRender.java src\main\resources\assets\icheme\lang\en_us.json tmp\sim-render
+```
+
+The symbol atlas (`SymbolAtlas.java`) is committed baked; run it again only when `SimulatorIcons` changes, and `SimulatorFrameTest` holds its size to `Symbol`:
+
+```bash
+java -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/SymbolAtlas.java src/main/resources/assets/icheme/textures/gui/flowsheet/symbols.png
+```
+
 ## Entry points
 
 - `HeatDiagramRender.java`: a single-file Java program (Java2D, headless). It lays the page out as `FluidDeviceScreen` does and draws it with the shipped code: `PanelSkin` for the page and the widgets, `HeatControlColumn` in layout C, `HeatFlowsheet`. Only the page's order of drawing and the illustrative readings are its own. Line parts cycle teal, yellow and red to show the legend's colours.
 - The English texts come from `en_us.json`; a key without a line is drawn as `?` and the key.
 - `GuiPrototypes.java`: proposed screens drawn through the same kit (`Column`, `PanelSkin`) and `HeatDiagramRender`'s font and canvas (the multi-file source launcher, JDK 22 or later). Its layouts are proposals for the owner, not the screens' code, except the fluid device pages: their door column is the shipped `DeviceColumn` at `FluidGuiLayout.side`, at the scale a window takes for them (`WindowScale`, `-Dwindow`), shown as opened and scrolled to its end where it scrolls, and the tool prints each column's height.
 - `OperationPrototypes.java`: the column's Operation tab (batch 2026-10-28-column-operation, C7): the shipped `OperationColumn` on illustrative data, at the 1920 by 1080 window's size and a narrow window's.
-- `SimulatorPrototypes.java`: the proposed simulator screens, 30 sheets, through the same kit, `GuiPrototypes` and `HeatDiagramRender`. Nothing it draws is built yet.
+- `SimulatorPrototypes.java`: the proposed simulator screens, 30 sheets, through the same kit, `GuiPrototypes` and `HeatDiagramRender`. The approved look; W6 built what its sheets 01 to 21 show, and the sizing, template and loop sheets wait for their work packages.
+- `SimulatorRender.java`: the built screen. `Scene` holds an editor, view and gestures as the screen does, `screen` and `door` draw through `SimulatorPage`, `DoorFrame` and `SheetPainter`, and only the hover box is its own, because the game draws that. It runs the sample, a sheet of vessels and a sheet with a removed unit.
+- `SymbolAtlas.java`: bakes `SimulatorIcons`' shapes into `textures/gui/flowsheet/symbols.png`, the layers `Symbol` names.
 - `SimulatorIcons.java`: the simulator's equipment symbols as vector shapes, in three styles, drawn at any size.
 - `SimulatorSizing.java`: the Sizing tab. Its numbers come from `tools/process-simulator/sizing-sample.tsv`, which `SizingProbe` writes, so a sheet cannot drift from the probe.
 
@@ -69,3 +83,4 @@ java -Dfile.encoding=UTF-8 -Duser.language=en -Djava.awt.headless=true -cp build
 - 2026-11-02, batch 2026-11-02-process-simulator: `SimulatorPrototypes.java`, 18 design sheets of the in-game process simulator, for the owner to approve before any build. Its numbers are copied from `tools/process-simulator/SampleFlowsheetProbe.java`.
 - 2026-11-02, batch 2026-11-02-process-simulator: the owner's decisions redrew the main screen and the selection panel, with the reconnect page. `SimulatorIcons.java`: vector symbols in three options. `SimulatorSizing.java`: the Sizing tab, sheets 24 to 27, drawn from `SizingProbe`'s table. 29 sheets. `HeatDiagramRender.Java2dCanvas.graphics()` gives them the canvas's `Graphics2D`.
 - 2026-11-02, batch 2026-11-02-process-simulator: one palette tile for each function, sheet 28 for the type proposals and an exchanger's door after sizing. 30 sheets.
+- 2026-11-03, batch 2026-11-02-process-simulator: W6. `SimulatorRender.java` draws the built screen from shipped code, `SymbolAtlas.java` bakes its symbols, and `GuiPrototypes.java` passes `TowerBank.ONE`, which the cooling tower merge asked for. The source launcher compiles tool files lazily, so a stale tool file fails only when it is reached.
