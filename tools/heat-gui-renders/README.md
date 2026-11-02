@@ -30,7 +30,7 @@ java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main too
 
 It writes one sheet per screen to `tmp/gui-prototypes/`, both doors side by side: the fluid device pages (pump, generator, valve, tank), the column calculator, the assembly, the equipment constructor, the pipeline tool, the gauge and the vessel datasheet.
 
-The process simulator's design sheets (`SimulatorPrototypes.java`, batch 2026-11-02-process-simulator, numbers from `tools/process-simulator/SampleFlowsheetProbe.java`):
+The process simulator's design sheets (`SimulatorPrototypes.java`, batch 2026-11-02-process-simulator, numbers from `tools/process-simulator/SampleFlowsheetProbe.java` and `LoopProbe.java`):
 
 ```bash
 java -Dfile.encoding=UTF-8 -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/SimulatorPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/sim-prototypes
@@ -41,7 +41,7 @@ java -Dfile.encoding=UTF-8 -Duser.language=en -Djava.awt.headless=true -cp build
 - `HeatDiagramRender.java`: a single-file Java program (Java2D, headless). It lays the page out as `FluidDeviceScreen` does and draws it with the shipped code: `PanelSkin` for the page and the widgets, `HeatControlColumn` in layout C, `HeatFlowsheet`. Only the page's order of drawing and the illustrative readings are its own. Line parts cycle teal, yellow and red to show the legend's colours.
 - The English texts come from `en_us.json`; a key without a line is drawn as `?` and the key.
 - `GuiPrototypes.java`: proposed screens drawn through the same kit (`Column`, `PanelSkin`) and `HeatDiagramRender`'s font and canvas (the multi-file source launcher, JDK 22 or later). Its layouts are proposals for the owner, not the screens' code, except the fluid device pages: their door column is the shipped `DeviceColumn` at `FluidGuiLayout.side`, at the scale a window takes for them (`WindowScale`, `-Dwindow`), shown as opened and scrolled to its end where it scrolls, and the tool prints each column's height.
-- `SimulatorPrototypes.java`: the proposed simulator screens, 18 sheets, through the same kit, `GuiPrototypes` and `HeatDiagramRender`. Nothing it draws is built yet.
+- `SimulatorPrototypes.java`: the proposed simulator screens, 22 sheets, through the same kit, `GuiPrototypes` and `HeatDiagramRender`. Nothing it draws is built yet.
 
 ## History
 

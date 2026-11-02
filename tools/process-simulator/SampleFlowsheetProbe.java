@@ -17,11 +17,12 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The design's sample flowsheet (batch 2026-11-02-process-simulator) solved by hand on the shipped science: the sequential
- * pass the simulator would make, with one recycle through the preheat exchanger, torn at the column's bottoms. Crude from
- * 25 C through a pump, the exchanger, a fired heater and a valve into the default crude column, its residue back through
- * the exchanger and an air cooler. It proves the plan's stream thermo plus block column on real numbers and prints what the
- * design sheets show. Run as {@code ClientRunProbe}.
+ * The design's sample flowsheet (batch 2026-11-02-process-simulator) solved by hand on the shipped science: the owner's example
+ * of 2026-11-02. Crude from 25 C through a pump, the tube sides of the column block's three pumparound coolers, the residue
+ * exchanger, a fired heater that holds its outlet and a valve into the default crude column; the residue back through the
+ * exchanger and an air cooler; cooling water through the condenser's tube side. The pumparound duties are the door's, so the
+ * crude's pass through the block is no loop; one loop stays, torn at the column's bottoms. It prints what the design sheets
+ * show. Run as {@code ClientRunProbe}.
  */
 public final class SampleFlowsheetProbe {
     static FluidThermodynamics thermo;
@@ -79,8 +80,13 @@ public final class SampleFlowsheetProbe {
         double[] steamIn = new double[axis.size()];
         steamIn[axis.indexOf("Water")] = base.steamFeeds().getFirst().molarFlowMolPerSecond();
         var steam = tp(base.steamFeeds().getFirst().temperatureKelvin(), 3.5e5, steamIn);
+        // The pumparound coolers' tube sides: each door duty into the crude, 0.3 bar a side. No loop: the column does not read them.
+        double[] pa = base.pumparounds().stream().mapToDouble(p -> -p.dutyWatts()).toArray();
+        var s2 = ph(s1.temperature() + 40, s1.pressure() - 0.3e5, s1.enthalpy() + pa[0], overall);
+        var s3 = ph(s2.temperature() + 50, s2.pressure() - 0.3e5, s2.enthalpy() + pa[1], overall);
+        var s4 = ph(s3.temperature() + 30, s3.pressure() - 0.3e5, s3.enthalpy() + pa[2], overall);
 
-        FluidThermodynamics.State tear = null, s2 = null, s3 = null, s4 = null, s7 = null;
+        FluidThermodynamics.State tear = null, s5 = null, s6 = null, s7 = null, s10 = null;
         V3ColumnResult column = null;
         V3NeuralSeed warm = null;
         double q101 = 0, qHeater = 0;
@@ -89,20 +95,20 @@ public final class SampleFlowsheetProbe {
         for (int pass = 1; pass <= 30; pass++) {
             long t0 = System.nanoTime();
             passes = pass;
-            // E-101: the shell side's outlet set at 160 C, the duty into the tube side; no heat on the first pass, the tear not known yet.
+            // E-101: the shell side's outlet set at 200 C, the duty into the tube side; no heat on the first pass, the tear not known yet.
             q101 = 0;
             if (tear != null) {
                 var hot = amounts(tear);
-                s7 = tp(433.15, tear.pressure() - 0.3e5, hot);
-                q101 = tear.enthalpy() - s7.enthalpy();
+                s10 = tp(473.15, tear.pressure() - 0.3e5, hot);
+                q101 = tear.enthalpy() - s10.enthalpy();
             }
-            s2 = ph(s1.temperature() + q101 / 3e5, s1.pressure() - 0.5e5, s1.enthalpy() + q101, overall);
+            s5 = ph(s4.temperature() + q101 / 3e5, s4.pressure() - 0.5e5, s4.enthalpy() + q101, overall);
             // H-101: the coil's outlet set at 365 C, 5 bar.
-            s3 = tp(638.15, 5e5, overall);
-            qHeater = s3.enthalpy() - s2.enthalpy();
+            s6 = tp(638.15, 5e5, overall);
+            qHeater = s6.enthalpy() - s5.enthalpy();
             // V-101, isenthalpic to the feed tray's pressure.
-            s4 = ph(s3.temperature() - 6, 2.72e5, s3.enthalpy(), overall);
-            double feedT = s4.temperature();
+            s7 = ph(s6.temperature() - 6, 2.72e5, s6.enthalpy(), overall);
+            double feedT = s7.temperature();
             var in = new V3ColumnInput(base.schemaVersion(), base.packageId(), base.assayId(), base.componentBasis(), base.feedComponentMolarFlowsMolPerSecond(), feedT, base.stageCount(),
                     base.feedStageNumber(), base.topPressurePascal(), base.stagePressureDropPascal(), base.specifications(), base.sideDraws(), base.steamFeeds(), base.pumparounds(), base.columnDiameterMetres());
             final var seed = warm;
@@ -120,26 +126,37 @@ public final class SampleFlowsheetProbe {
             tear = next;
             if (done) break;
         }
-        var s5 = product(column, "Side draw (tray 19)");
-        var dieselOut = ph(s5.temperature(), 6e5, s5.enthalpy() + s5.mass() * (6e5 - s5.pressure()) / (s5.mass() / s5.volume()), amounts(s5));
-        var residue = tp(343.15, s7.pressure() - 0.2e5, amounts(s7));
-        double qE102 = residue.enthalpy() - s7.enthalpy();
+        var s8 = product(column, "Side draw (tray 19)");
+        var dieselOut = ph(s8.temperature(), 6e5, s8.enthalpy() + s8.mass() * (6e5 - s8.pressure()) / (s8.mass() / s8.volume()), amounts(s8));
+        var residue = tp(343.15, s10.pressure() - 0.2e5, amounts(s10));
+        double qE102 = residue.enthalpy() - s10.enthalpy();
+        // The condenser's tube side: 190000 kmol/h of cooling water takes the column's condenser duty.
+        double condenser = column.dutyLedger().orElseThrow().condenserWatts();
+        double[] water = new double[axis.size()];
+        water[axis.indexOf("Water")] = 190000 / 3.6;
+        var cws = tp(303.15, 4e5, water);
+        var cwr = ph(313.15, 3.7e5, cws.enthalpy() - condenser, water);
         STREAMS.put("CRUDE", crude);
         STREAMS.put("STEAM", steam);
+        STREAMS.put("CWS", cws);
         STREAMS.put("S-1", s1);
         STREAMS.put("S-2", s2);
         STREAMS.put("S-3", s3);
         STREAMS.put("S-4", s4);
+        STREAMS.put("S-5", s5);
+        STREAMS.put("S-6", s6);
+        STREAMS.put("S-7", s7);
         STREAMS.put("OFFGAS", product(column, "Overhead"));
         STREAMS.put("NAPHTHA", product(column, "Liquid distillate"));
         STREAMS.put("WATER", product(column, "Free water"));
         STREAMS.put("KERO", product(column, "Side draw (tray 11)"));
-        STREAMS.put("S-5", s5);
+        STREAMS.put("S-8", s8);
         STREAMS.put("DIESEL", dieselOut);
         STREAMS.put("AGO", product(column, "Side draw (tray 29)"));
-        STREAMS.put("S-6", tear);
-        STREAMS.put("S-7", s7);
+        STREAMS.put("S-9", tear);
+        STREAMS.put("S-10", s10);
         STREAMS.put("RESIDUE", residue);
+        STREAMS.put("CWR", cwr);
         long total = System.nanoTime() - start;
         var scratch = new MixtureViscosity.Workspace();
         System.out.println("stream   T,C   P,bar  vap%  kmol/h   t/h   Lm3/h  rho  mu,mPas  MW  h,kJ/kg");
@@ -158,15 +175,17 @@ public final class SampleFlowsheetProbe {
         }
         var ledger = column.dutyLedger().orElseThrow();
         double duties = ledger.condenserWatts() + ledger.reboilerWatts() + ledger.stageHeatTotalWatts();
-        double massIn = crude.mass() + steam.mass(), massOut = 0, hOut = 0;
-        for (var name : List.of("OFFGAS", "NAPHTHA", "WATER", "KERO", "DIESEL", "AGO", "RESIDUE")) {
+        double massIn = crude.mass() + steam.mass() + cws.mass(), massOut = 0, hOut = 0;
+        for (var name : List.of("OFFGAS", "NAPHTHA", "WATER", "KERO", "DIESEL", "AGO", "RESIDUE", "CWR")) {
             massOut += STREAMS.get(name).mass();
             hOut += STREAMS.get(name).enthalpy();
         }
-        double pumpP102 = dieselOut.enthalpy() - s5.enthalpy();
-        double hIn = crude.enthalpy() + steam.enthalpy() + work + pumpP102 + qHeater + qE102 + duties;
+        double pumpP102 = dieselOut.enthalpy() - s8.enthalpy();
+        double hIn = crude.enthalpy() + steam.enthalpy() + cws.enthalpy() + work + pumpP102 + qHeater + qE102;
         System.out.printf(Locale.ROOT, "units: P-101 %.1f kW, E-101 %.2f MW, H-101 %.2f MW, column condenser %.2f MW, PA %.2f MW, P-102 %.1f kW, E-102 %.2f MW%n", work / 1e3, q101 / 1e6, qHeater / 1e6,
                 ledger.condenserWatts() / 1e6, ledger.stageHeatTotalWatts() / 1e6, pumpP102 / 1e3, qE102 / 1e6);
+        double near = s10.temperature() - s4.temperature(), far = tear.temperature() - s5.temperature(), lmtd = (far - near) / Math.log(far / near);
+        System.out.printf(Locale.ROOT, "E-101: approach %.1f K, LMTD %.1f K, UA %.1f kW/K%n", Math.min(near, far), lmtd, q101 / lmtd / 1e3);
         System.out.printf(Locale.ROOT, "closure: mass in %.3f, out %.3f t/h (%.1e %%); heat in %.3f, out %.3f MW, gap %.3f MW (%.3f %% of %.1f MW of duty)%n", massIn * 3.6, massOut * 3.6, 100 * Math.abs(massIn - massOut) / massIn,
                 hIn / 1e6, hOut / 1e6, (hIn - hOut) / 1e6, 100 * Math.abs(hIn - hOut) / (Math.abs(duties) + Math.abs(qHeater) + Math.abs(qE102)), (Math.abs(duties) + Math.abs(qHeater) + Math.abs(qE102)) / 1e6);
         System.out.printf(Locale.ROOT, "passes %d, whole run %.0f ms from a cold JVM, one thread%n", passes, total / 1e6);
@@ -183,15 +202,15 @@ public final class SampleFlowsheetProbe {
         var profile = new StringBuilder("profile T,C:");
         for (var node : column.inspection().orElseThrow().nodes()) profile.append(String.format(Locale.ROOT, " %.1f", node.temperatureKelvin() - 273.15));
         System.out.println(profile);
-        for (var name : List.of("S-3", "S-4")) {
+        for (var name : List.of("S-6", "S-7")) {
             var s = STREAMS.get(name);
             double gasMoles = Arrays.stream(s.vaporView()).sum() + s.waterVapor(), oilMoles = Arrays.stream(s.liquidView()).sum() + s.waterLiquid();
             System.out.printf(Locale.ROOT, "%s phases: gas %.1f kmol/h %.2f t/h, oil %.1f kmol/h %.2f t/h%n", name, gasMoles * 3.6, thermo.vaporMass(s) * 3.6, oilMoles * 3.6, (s.mass() - thermo.vaporMass(s)) * 3.6);
         }
-        System.out.println("composition, mole %: " + List.of("CRUDE", "S-4", "OFFGAS", "NAPHTHA", "KERO", "RESIDUE"));
+        System.out.println("composition, mole %: " + List.of("CRUDE", "S-7", "OFFGAS", "NAPHTHA", "KERO", "RESIDUE"));
         for (int i = 0; i < axis.size(); i++) {
             var row = new ArrayList<String>();
-            for (var name : List.of("CRUDE", "S-4", "OFFGAS", "NAPHTHA", "KERO", "RESIDUE")) {
+            for (var name : List.of("CRUDE", "S-7", "OFFGAS", "NAPHTHA", "KERO", "RESIDUE")) {
                 double[] n = amounts(STREAMS.get(name));
                 row.add(String.format(Locale.ROOT, "%.2f", 100 * n[i] / Arrays.stream(n).sum()));
             }

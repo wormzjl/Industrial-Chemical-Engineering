@@ -16,6 +16,7 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.assembly.ExchangerBlueprint;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import java.awt.Color;
@@ -36,8 +37,8 @@ import javax.imageio.ImageIO;
  * me to approve before moving to implementation"). Nothing here is built yet: the doors, entries, meters, glass, plates and
  * keys are the shipped kit's ({@code Column}, {@code PanelSkin}, {@code FlowsheetPainter}, {@code CalculatorColumn},
  * {@code HeatFlowsheet}, {@code DeviceColumn}), in the game font and both doors. The sample flowsheet's numbers are the
- * shipped science's, from {@code tools/process-simulator/SampleFlowsheetProbe.java}. Magenta numbers are notes for the owner,
- * not part of the screens. Run from the worktree root (JDK 22+ compiles the folder's three files):
+ * shipped science's, from {@code tools/process-simulator/SampleFlowsheetProbe.java}, the loops' from {@code LoopProbe.java} there.
+ * Magenta numbers are notes for the owner, not part of the screens. Run from the worktree root (JDK 22+ compiles the folder's three files):
  * <pre>java -Dfile.encoding=UTF-8 -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/SimulatorPrototypes.java
  *     src/main/resources/assets/icheme/lang/en_us.json tmp/sim-prototypes [minecraft resources jar]</pre>
  */
@@ -59,7 +60,7 @@ public final class SimulatorPrototypes {
                 "Layout A: the door column at the right holds the selection and the run",
                 List.of("1 Tabs: Flowsheet, Results, Basis, always shown. 2 File keys: the flowsheet is a client file in .minecraft/IChemE/flowsheets. 3 The one status display, yellow when a warning stands.",
                         "4 The canvas on the HMI glass: pan by dragging the grid, zoom by the wheel or the keys. 5 A stream is a named line; a pill starts it (teal, a feed) or ends it (a product).",
-                        "6 The recycle's tear, chosen by the solver, marked T. 7 A unit's colour is its state: teal solved, yellow warning, red failed, grey not solved. 8 A free port, in the laying tool's colours; grey once connected.",
+                        "6 The loop's tear, chosen by the solver, marked T. 7 A unit's colour is its state: teal solved, yellow warning, red failed, grey not solved. 8 A connection point: T-101 is one block, and its condenser, its three pumparound coolers and its steam feed each gave it ports from the door's settings (sheet 19). A free port has the laying tool's colours, grey once connected.",
                         "9 The selection's name is typed here or on its label. 10 The palette, the list of items below: category keys over the tiles. Drag a tile to the canvas. An unlit tile has no process model yet.",
                         "11 Run is the confirming key; Stop cancels a run. This flowsheet's numbers are a real solve by the mod's own thermo and column code, on a plain JVM with no game classes."));
         both(out, "02-main-layout-B", W, H, (d, s) -> screen(d, Layout.B, Show.PLAIN),
@@ -68,10 +69,10 @@ public final class SimulatorPrototypes {
         single(out, "03-interaction", W, H, (d, s) -> screen(d, Layout.A, Show.INTERACTION),
                 "Dragging, connecting and renaming (light door shown)",
                 List.of("1 A tile dragged from the palette: its symbol follows the cursor, snapped to the grid, and it lands with its next free tag (D-101).",
-                        "2 Dragging from a port draws a stream that follows the cursor. Ports that can take it are ringed; a port that cannot stays dark (an outlet to an outlet, a second stream on a one-stream port).",
+                        "2 Dragging from a port draws a stream that follows the cursor. Ports that can take it are ringed; a port that cannot stays dark (an outlet to an outlet, a second stream on a one-stream port). This free port is a fourth draw just added on T-101's door.",
                         "3 Dropping on empty canvas ends the stream in a product pill; dragging from a free inlet port makes a feed pill. So every open end is a named stream.",
                         "4 Double click a name to type it in place, on a stream or a unit. A used name is refused on the status display. Tags come from the kind: T, E, H, P, K, V, D.",
-                        "5 Double click a symbol or a pill to open its door."));
+                        "5 Double click a symbol or a pill to open its door.", "6 A port's hover names it and says what happens if it stays free."));
         single(out, "04-palette", 760, 462, (d, s) -> paletteSheet(d), "The palette: every category, from the constructor's equipment list plus streams and piping",
                 List.of("Lit tiles have a process model on day one. Unlit tiles are drawn so the list stays whole: their hover says no process model yet, and the coverage gate forces a choice for every new equipment."));
         var small = new ArrayList<BufferedImage>();
@@ -80,7 +81,7 @@ public final class SimulatorPrototypes {
         stack(out.resolve("05-small-windows.png"), List.of("1280 by 720 window, scale 2: 624 by 344 GUI px; the door column folds, tiles lose their captions",
                 "The design minimum, 464 by 254 GUI px: the palette is one strip; both are shown at the Fit key's zoom"), small, List.of());
         single(out, "06-run-in-progress", W, H, (d, s) -> screen(d, Layout.A, Show.RUNNING), "A run in progress: the screen stays usable, the run is a background thread on the client",
-                List.of("The ringed unit is the one being solved, the grey ones wait for it. Run is off and Stop is live; Stop reaches the column's own cancel check, so a long column stops too.",
+                List.of("The ringed unit is the one being solved, the grey ones wait for it. The crude's pass through T-101's coolers is solved already: their duties are the door's, so it is no loop. Run is off and Stop is live; Stop reaches the column's own cancel check, so a long column stops too.",
                         "Editing during a run is refused on the status display. The run's result replaces the shown results only when the run ends; a stopped run keeps every unit it finished."));
 
         both(out, "07-feed-stream", DW, DH, (d, s) -> feedOverview(d), "A feed stream's door: the Fluid Generator's page, with its flow and name",
@@ -94,8 +95,9 @@ public final class SimulatorPrototypes {
         grid(out, "11-unit-doors", List.of("Heat exchanger: the shipped drawing on the glass", "Vertical heater: the shipped drawing on the glass", "Pump", "Drum: outlets per phase", "Control valve", "Splitter"),
                 List.of(page(DW, DH, (d, s) -> exchangerDoor(d)), page(DW, DH, (d, s) -> heaterDoor(d)), page(DW, DH, (d, s) -> pumpDoor(d)), page(DW, DH, (d, s) -> drumDoor(d)),
                         page(DW, DH, (d, s) -> valveDoor(d)), page(DW, DH, (d, s) -> splitterDoor(d))));
-        grid(out, "12-column-door", List.of("The column's door: the calculator's Column page; flow and temperature are meters read from S-4", "The calculator's Results page, T-101's real profile"),
-                List.of(page(DW, DH, (d, s) -> columnDoor(d, CalculatorColumn.Page.COLUMN)), page(DW, DH, (d, s) -> columnDoor(d, CalculatorColumn.Page.RESULTS))));
+        grid(out, "12-column-door", List.of("The column's door: the calculator's Column page; flow and temperature are meters read from S-7", "The calculator's Results page, T-101's real profile",
+                        "The Equipment page: the door's settings add the block's connection points, listed on the glass"),
+                List.of(page(DW, DH, (d, s) -> columnDoor(d, CalculatorColumn.Page.COLUMN)), page(DW, DH, (d, s) -> columnDoor(d, CalculatorColumn.Page.RESULTS)), page(DW, DH, (d, s) -> columnDoor(d, CalculatorColumn.Page.EQUIPMENT))));
         grid(out, "13-templates", List.of("Stream templates: a mixture, with conditions if it has them", "Column templates: the column alone, no feed in it"),
                 List.of(page(533, 280, (d, s) -> streamTemplates(d)), page(533, 280, (d, s) -> columnTemplates(d))));
         both(out, "14-results-streams", W, H, (d, s) -> results(d), "The Results tab: pick streams, read their properties",
@@ -111,6 +113,26 @@ public final class SimulatorPrototypes {
         single(out, "18-missing-unit", W, H, (d, s) -> screen(d, Layout.A, Show.MISSING), "A flowsheet after an update removed a unit (light door shown)",
                 List.of("1 A removed equipment stays on the sheet as a hatched placeholder, its name, ports, streams and settings kept. Replace offers the units with the same ports. Everything upstream solves; the rest stays grey until then.",
                         "2 The status display names the first thing to fix. A removed component is parked the same way: the Basis tab lists it with its amounts, and Results says which streams lost it."));
+        single(out, "19-block-ports", W, 442, (d, s) -> blockPorts(d), "One block: the door's settings add the connection points on the main flowsheet",
+                List.of("The same column block in four configurations, as dropped on the canvas: free ports in the laying tool's colours, each port's name shown on hover. Cyan names are what that configuration added.",
+                        "Condenser set to Exchanger: Condenser in and out, for cooling water; Air cooler: none. Reboiler duty above zero: Reboiler in and out, for steam. A pumparound row: PA in and out, the cold side of its cooler. A steam row: Steam. A draw row: Draw. Top below ambient pressure: Motive steam for the ejector.",
+                        "These are the utility sides the shipped assembly already has: ColumnBlueprint's condenser, kettle and PA cooler tube sides, steam valves and ejector. So the ports come from the same design the constructor builds.",
+                        "A pair left free means a utility takes the heat, as the calculator does today: no warning. A wired pair puts the heat into the stream on the sheet.",
+                        "Removing a row removes its ports: their streams stay, each ending in an open pill, and the status says so. Ports are saved by the row's own id, so removing PA 1 does not move PA 2's wires."));
+        single(out, "20-pa-options", W, 462, (d, s) -> paOptions(d), "Pumparound heat exchangers: two ways to connect them (option A recommended)",
+                List.of("Both on the sample's real numbers. A keeps the column's model as it is: a pumparound is a heat sink on its trays, with no circulating stream. The cooler stays in the block, and the crude goes through its tube side.",
+                        "In A the duties are the door's, so the column never reads the crude's ports. The crude's pass through the block is no loop, and the sample closes in 2 passes. The hot side is checked against the draw tray's temperature; with no circulation rate, the cold end is not checked.",
+                        "B makes a real stream: circulation set on the door, its state from the draw tray. It allows two exchangers on one pumparound. The price is 3 more units, 6 more streams, and a duty that comes back as a result: the column solves again whenever a return temperature moves, and a broken loop must be caught."));
+        single(out, "21-other-blocks", W, 402, (d, s) -> otherBlocks(d), "The same rule for every block: ports come from its configuration",
+                List.of("Each is one tile and one door. An exchanger's bypass or ratio station stays inside its block, as in ExchangerBlueprint. A heater's coils in series are one pair; set apart, the convection coil can take other duty, such as superheating the stripping steam.",
+                        "Fuel stays off the sheet: the mod has no combustion model, so a heater is set by its outlet or its duty. Unlit tiles take their ports from their nozzles when a process model lights them, so a new unit brings its ports with it."));
+        var loops = new ArrayList<BufferedImage>();
+        loops.add(page(W, H, (d, s) -> screen(d, Layout.A, Show.RECYCLE)));
+        loops.add(page(W, H, (d, s) -> loopLog(d, false)));
+        loops.add(page(W, H, (d, s) -> loopLog(d, true)));
+        stack(out.resolve("22-loops.png"), List.of("A material recycle: 15 % of the residue back to the crude, one tear closes both loops", "An energy loop that moves the column: the furnace on a fixed duty, 8 MW short", "No steady state: all of the residue back, so its heavy ends have no way out"), loops,
+                List.of("Every number is the real column and flash code (LoopProbe). The furnace that holds 365.0 °C decouples the column, so the sample closes in 2 passes. A furnace on duty does not: the feed falls, the bottoms fall, the residue preheats less, and the loop's gain is about 0.5.",
+                        "The status says Steady state only when every tear has stopped moving and mass closes. Otherwise it says Not steady, the last pass stays on show, and the Log names the tear and what grew. A trial step that fails a column falls back to a plain pass."));
     }
 
     // ---- The sample's numbers: tools/process-simulator/SampleFlowsheetProbe.java on the shipped science, 2026-11-02 ----
@@ -121,20 +143,25 @@ public final class SimulatorPrototypes {
     static final List<Stream> STREAMS = List.of(
             new Stream("CRUDE", "25.0", "8.00", "0.0", "2652.3", "572.09", "659.7", "861.1", "9.80", "", "215.7", "-301.3"),
             new Stream("STEAM", "260.0", "3.50", "100.0", "1200.0", "21.62", "21.7", "1.4", "", "0.019", "18.0", "438.9"),
+            new Stream("CWS", "30.0", "4.00", "0.0", "190000.0", "3422.90", "3429.7", "995.8", "0.80", "", "18.0", "-2453.1"),
             new Stream("S-1", "25.1", "14.00", "0.0", "2652.3", "572.09", "659.7", "861.5", "9.78", "", "215.7", "-300.6"),
-            new Stream("S-2", "132.5", "13.50", "0.0", "2652.3", "572.09", "659.7", "805.8", "0.97", "", "215.7", "-83.9"),
-            new Stream("S-3", "365.0", "5.00", "71.1", "2652.3", "572.09", "659.7", "30.2", "0.58", "0.012", "215.7", "615.4"),
-            new Stream("S-4", "359.5", "2.72", "77.9", "2652.3", "572.09", "659.7", "14.8", "0.73", "0.012", "215.7", "615.4"),
+            new Stream("S-2", "67.9", "13.70", "0.0", "2652.3", "572.09", "659.7", "841.7", "2.84", "", "215.7", "-219.8"),
+            new Stream("S-3", "122.0", "13.40", "0.0", "2652.3", "572.09", "659.7", "812.2", "1.11", "", "215.7", "-107.2"),
+            new Stream("S-4", "153.3", "13.10", "0.0", "2652.3", "572.09", "659.7", "792.4", "0.77", "", "215.7", "-36.7"),
+            new Stream("S-5", "218.4", "12.60", "0.0", "2652.3", "572.09", "659.7", "742.8", "0.41", "", "215.7", "122.3"),
+            new Stream("S-6", "365.0", "5.00", "71.1", "2652.3", "572.09", "659.7", "30.2", "0.58", "0.012", "215.7", "615.4"),
+            new Stream("S-7", "359.5", "2.72", "77.9", "2652.3", "572.09", "659.7", "14.8", "0.73", "0.012", "215.7", "615.4"),
             new Stream("OFFGAS", "59.0", "2.50", "99.3", "115.2", "6.55", "10.6", "5.4", "0.23", "0.009", "56.9", "44.1"),
             new Stream("NAPHTHA", "59.0", "2.50", "0.0", "585.5", "46.40", "67.1", "652.1", "0.23", "", "79.2", "-294.2"),
             new Stream("WATER", "59.0", "2.50", "0.0", "1191.2", "21.46", "21.5", "983.8", "0.47", "", "18.0", "-2332.1"),
             new Stream("KERO", "140.1", "2.54", "0.0", "491.3", "56.65", "73.5", "671.2", "0.35", "", "115.3", "-109.0"),
-            new Stream("S-5", "213.4", "2.58", "0.0", "515.4", "83.45", "101.6", "679.2", "0.37", "", "161.9", "85.7"),
+            new Stream("S-8", "213.4", "2.58", "0.0", "515.4", "83.45", "101.6", "679.2", "0.37", "", "161.9", "85.7"),
             new Stream("DIESEL", "213.5", "6.00", "0.0", "515.4", "83.45", "101.6", "680.5", "0.37", "", "161.9", "86.2"),
             new Stream("AGO", "273.8", "2.64", "0.0", "165.2", "33.63", "39.5", "674.4", "0.34", "", "203.6", "255.9"),
-            new Stream("S-6", "300.2", "2.72", "0.0", "788.5", "345.56", "367.5", "829.7", "1.01", "", "438.3", "356.6"),
-            new Stream("S-7", "160.0", "2.42", "0.0", "788.5", "345.56", "367.5", "896.6", "5.10", "", "438.3", "-2.1"),
-            new Stream("RESIDUE", "70.0", "2.22", "0.0", "788.5", "345.56", "367.5", "926.3", "76.70", "", "438.3", "-195.5"));
+            new Stream("S-9", "300.2", "2.72", "0.0", "788.5", "345.56", "367.5", "829.7", "1.01", "", "438.3", "356.6"),
+            new Stream("S-10", "200.0", "2.42", "0.0", "788.5", "345.56", "367.5", "880.5", "2.75", "", "438.3", "93.4"),
+            new Stream("RESIDUE", "70.0", "2.22", "0.0", "788.5", "345.56", "367.5", "926.3", "76.70", "", "438.3", "-195.5"),
+            new Stream("CWR", "39.9", "3.70", "0.0", "190000.0", "3422.90", "3429.7", "992.4", "0.65", "", "18.0", "-2411.9"));
 
     static Stream stream(String name) {
         return STREAMS.stream().filter(s -> s.name().equals(name)).findFirst().orElseThrow();
@@ -240,7 +267,7 @@ public final class SimulatorPrototypes {
 
     enum Layout { A, B, COMPACT, TINY }
 
-    enum Show { PLAIN, NOTES, INTERACTION, MISSING, RUNNING }
+    enum Show { PLAIN, NOTES, INTERACTION, MISSING, RUNNING, RECYCLE }
 
     /** A numbered note on the drawing: not part of the screen. */
     static void note(Canvas c, int x, int y, int n) {
@@ -289,7 +316,8 @@ public final class SimulatorPrototypes {
         String status = switch (show) {
             case MISSING -> "H-101: this version has no such equipment. Replace it to solve what lies downstream.";
             case RUNNING -> "Running pass 2 of at most 30: T-101 from its last state.";
-            default -> layout == Layout.B ? "Converged in 2 passes, 3.4 s. Mass gap 0.00 %, heat gap 0.00 %. " + warning : "Converged: 16 streams, 7 units. " + warning;
+            case RECYCLE -> "Steady state in 4 passes, 2.3 s: 25 streams, 10 units. " + warning;
+            default -> layout == Layout.B ? "Steady state in 2 passes, 3.6 s. Mass gap 0.00 %, heat gap 0.00 %. " + warning : "Steady state: 21 streams, 7 units. " + warning;
         };
         frame(d, 0, status, show == Show.RUNNING ? Palette.ACCENT : Palette.WARN, compact);
         int doorW = side ? 168 : 0, paletteH = tiny ? 40 : compact ? 58 : 80;
@@ -309,23 +337,23 @@ public final class SimulatorPrototypes {
         if (show == Show.INTERACTION) {
             // The drag's path from the tile to the symbol it carries.
             int tile = box.x() + 2 + 2 * 68 + 33, top = bottom - paletteH + 22;
-            dashes(d.c, tile, top, ox + 162, oy + 239, Palette.TEXT);
+            dashes(d.c, tile, top, ox + 124, oy + 126, Palette.TEXT);
         }
         if (show == Show.NOTES) {
             note(d.c, 282, 38, 1);
             note(d.c, 718, 38, 2);
             note(d.c, d.w - 22, 64, 3);
-            note(d.c, ox + 90, oy + 110, 4);
-            note(d.c, ox + 36, oy + 154, 5);
+            note(d.c, ox + 200, oy + 128, 4);
+            note(d.c, ox + 36, oy + 68, 5);
             note(d.c, ox + 338, oy + 282, 6);
-            note(d.c, ox + 326, oy + 74, 7);
-            note(d.c, ox + 498, oy + 146, 8);
+            note(d.c, ox + 304, oy + 200, 7);
+            note(d.c, ox + 400, oy + 106, 8);
             note(d.c, d.w - 22, 100, 9);
             note(d.c, right - 24, bottom - 30, 10);
             note(d.c, 298, d.h - 18, 11);
         }
         if (show == Show.MISSING) {
-            note(d.c, ox + 342, oy + 128, 1);
+            note(d.c, ox + 304, oy + 200, 1);
             note(d.c, d.w - 22, 64, 2);
         }
     }
@@ -357,40 +385,47 @@ public final class SimulatorPrototypes {
 
     /** The layout A door column: the selection, the run, the flowsheet's counts. */
     static void selection(GuiPrototypes.Door d, int x, int y, int w, Show show) {
-        boolean missing = show == Show.MISSING, running = show == Show.RUNNING;
+        boolean missing = show == Show.MISSING, running = show == Show.RUNNING, recycle = show == Show.RECYCLE;
         var selected = new ArrayList<Column.Row>();
         selected.add(new Column.Gap(20));
         if (missing) {
             selected.add(new Column.Line("Removed equipment", Palette.WARN));
             selected.add(new Column.Buttons(List.of(new Column.Button("replace", "Replace", true, null), new Column.Button("delete", "Delete", true, null))));
+        } else if (recycle) {
+            selected.add(new Column.Line("Splitter", Palette.MUTED));
+            selected.add(meter("To S-12", "15.0", "%"));
+            selected.add(meter("S-12 kmol/h", "136.9", ""));
+            selected.add(meter("RESIDUE kmol/h", "775.7", ""));
+            selected.add(new Column.Buttons(List.of(new Column.Button("open", "Open", true, null), new Column.Button("delete", "Delete", true, null))));
         } else {
             selected.add(new Column.Line("Heat exchanger", Palette.MUTED));
-            selected.add(meter("Duty", "34.43", "MW"));
-            selected.add(meter("Tube out", "132.5", "°C"));
-            selected.add(meter("Shell out", "160.0", "°C"));
-            selected.add(meter("Approach", "134.9", "K"));
+            selected.add(meter("Duty", "25.26", "MW"));
+            selected.add(meter("Tube out", "218.4", "°C"));
+            selected.add(meter("Shell out", "200.0", "°C"));
+            selected.add(meter("Approach", "46.7", "K"));
             selected.add(new Column.Buttons(List.of(new Column.Button("open", "Open", true, null), new Column.Button("delete", "Delete", true, null))));
         }
         var run = new Column.Group("Run", "The last run", running
                 ? List.of(meter("Time", "3.1", "s"), meter("Pass", "2", ""), meter("Solving", "T-101", ""))
                 : missing ? List.of(meter("Time", "0.1", "s"), meter("Solved", "1", ""), meter("Waiting", "6", ""))
-                : List.of(meter("Time", "3.4", "s"), meter("Recycle passes", "2", ""), meter("Mass gap", "0.00", "%"), meter("Heat gap", "0.00", "%")));
+                : recycle ? List.of(meter("Time", "2.3", "s"), meter("Loop passes", "4", ""), meter("Mass gap", "0.00", "%"), meter("H-101", "84.50", "MW"))
+                : List.of(meter("Time", "3.6", "s"), meter("Loop passes", "2", ""), meter("Mass gap", "0.00", "%"), meter("Heat gap", "0.00", "%")));
         var column = d.column(List.of(new Column.Group("Selected", "What is selected on the canvas: a unit or a stream", selected), run,
-                new Column.Group("Flowsheet", null, List.of(meter("Units", "7", ""), meter("Streams", "16", ""), meter("Not set", "0", "")))), x, y, w, Map.of());
+                new Column.Group("Flowsheet", null, List.of(meter("Units", recycle ? "10" : "7", ""), meter("Streams", recycle ? "25" : "21", ""), meter("Not set", "0", "")))), x, y, w, Map.of());
         // The name's box across the column: the kit's text row, still to build (the row left for it here is a gap).
         for (var q : column.rows()) if (q.row() instanceof Column.Gap) {
-            d.skin.field(d.c, new Rect(q.rect().x(), q.rect().y(), q.rect().w(), 18), missing ? "H-101" : "E-101", "", false);
+            d.skin.field(d.c, new Rect(q.rect().x(), q.rect().y(), q.rect().w(), 18), missing ? "H-101" : recycle ? "TEE-1" : "E-101", "", false);
             return;
         }
     }
 
     /** Layout B: the card beside the selection. */
     static void card(GuiPrototypes.Door d, Rect box) {
-        int x = box.x() + 32, y = box.y() + 206, w = 138, h = 74;
+        int x = box.x() + 124, y = box.y() + 94, w = 138, h = 72;
         d.c.fill(x, y, x + w, y + h, 0xF01C2630);
         d.c.outline(x, y, w, h, Palette.ACCENT);
         d.c.text("E-101  Heat exchanger", x + 5, y + 4, Palette.TEXT);
-        String[][] rows = {{"Duty", "34.43 MW"}, {"Tube out", "132.5 °C"}, {"Shell out", "160.0 °C"}, {"Approach", "134.9 K"}};
+        String[][] rows = {{"Duty", "25.26 MW"}, {"Tube out", "218.4 °C"}, {"Shell out", "200.0 °C"}, {"Approach", "46.7 K"}};
         for (int i = 0; i < rows.length; i++) {
             d.c.text(rows[i][0], x + 5, y + 16 + i * 10, Palette.MUTED);
             d.c.text(rows[i][1], x + w - 5 - d.m.width(rows[i][1]), y + 16 + i * 10, Palette.ACCENT);
@@ -672,7 +707,7 @@ public final class SimulatorPrototypes {
         c.fill(right ? x0 : x1 - 1, y0, (right ? x0 : x1 - 1) + 1, y1, colour);
     }
 
-    // ---- The sample flowsheet: a crude unit with one recycle through its preheat exchanger ----
+    // ---- The sample flowsheet: the owner's crude unit, the pumparounds heat the crude, the residue next, the furnace sets the final temperature ----
 
     /** A stream's end as a pill: a feed's in teal, a product's plain. */
     static void pill(FlowsheetPainter p, String name, int x, int y, int w, boolean feed, int colour) {
@@ -692,25 +727,41 @@ public final class SimulatorPrototypes {
 
         record Pill(String name, int x, int y, int w, boolean feed) {}
 
-        record Port(int x, int y, int rgb) {}
-
         static void draw(GuiPrototypes.Door d, FlowsheetPainter p, Show show) {
-            boolean missing = show == Show.MISSING, running = show == Show.RUNNING;
+            boolean missing = show == Show.MISSING, running = show == Show.RUNNING, recycle = show == Show.RECYCLE;
             Look done = missing ? NONE : SOLVED, later = missing || running ? NONE : SOLVED;
-            var units = List.of(new Unit("P-101", Glyph.PUMP, 86, 163, 30, 34, SOLVED, 101, 156), new Unit("E-101", Glyph.EXCHANGER, 150, 162, 64, 28, done, 164, 155),
-                    new Unit("H-101", missing ? Glyph.MISSING : Glyph.HEATER, 268, 134, 58, 88, done, 297, 127), new Unit("V-101", Glyph.VALVE, 370, 164, 24, 24, done, 382, 157),
+            var units = new ArrayList<>(List.of(new Unit("P-101", Glyph.PUMP, 84, 75, 30, 34, SOLVED, 99, 68), new Unit("E-101", Glyph.EXCHANGER, 130, 216, 64, 28, done, 162, 209),
+                    new Unit("H-101", missing ? Glyph.MISSING : Glyph.HEATER, 232, 186, 58, 88, done, 261, 179), new Unit("V-101", Glyph.VALVE, 340, 216, 24, 24, done, 352, 209),
                     new Unit("T-101", Glyph.COLUMN, 438, 24, 44, 248, running ? ACTIVE : done, 508, 262), new Unit("P-102", Glyph.PUMP, 560, 160, 30, 34, missing || running ? NONE : WARN, 575, 153),
-                    new Unit("E-102", Glyph.AIR_COOLER, 252, 42, 60, 32, later, 282, 35));
-            var wires = List.of(new Wire("", new int[]{62, 176, 86, 176}, 0, 0), new Wire("S-1", new int[]{116, 176, 150, 176}, 133, 168),
-                    new Wire("S-2", new int[]{214, 176, 240, 176, 240, 200, 268, 200}, 240, 188), new Wire("S-3", new int[]{326, 176, 370, 176}, 348, 168),
-                    new Wire("S-4", new int[]{394, 176, 438, 176}, 416, 168), new Wire("", new int[]{372, 256, 438, 256}, 0, 0), new Wire("", new int[]{460, 24, 460, 12, 642, 12}, 0, 0),
-                    new Wire("", new int[]{482, 46, 642, 46}, 0, 0), new Wire("", new int[]{482, 80, 642, 80}, 0, 0), new Wire("", new int[]{482, 126, 642, 126}, 0, 0),
-                    new Wire("S-5", new int[]{482, 173, 560, 173}, 521, 165), new Wire("", new int[]{590, 173, 642, 173}, 0, 0), new Wire("", new int[]{482, 226, 642, 226}, 0, 0),
-                    new Wire("S-6", new int[]{460, 272, 460, 292, 182, 292, 182, 190}, 236, 292), new Wire("S-7", new int[]{182, 162, 182, 50, 252, 50}, 182, 105), new Wire("", new int[]{312, 50, 356, 50}, 0, 0));
-            for (var w : wires) p.wire(w.points(), true, false, w.name().equals("S-6") ? Palette.ACCENT : Palette.MUTED);
+                    new Unit("E-102", Glyph.AIR_COOLER, 62, 266, 60, 32, later, 92, 259)));
+            var wires = new ArrayList<>(List.of(new Wire("S-1", new int[]{114, 88, 438, 88}, 276, 80), new Wire("S-2", new int[]{438, 102, 420, 102, 420, 122, 438, 122}, 420, 112),
+                    new Wire("S-3", new int[]{438, 136, 420, 136, 420, 156, 438, 156}, 420, 146), new Wire("S-4", new int[]{438, 170, 114, 170, 114, 230, 130, 230}, 276, 162),
+                    new Wire("S-5", new int[]{194, 230, 212, 230, 212, 252, 232, 252}, 212, 241), new Wire("S-6", new int[]{290, 228, 340, 228}, 315, 220), new Wire("S-7", new int[]{364, 228, 438, 228}, 401, 220),
+                    new Wire("", new int[]{384, 252, 438, 252}, 0, 0), new Wire("", new int[]{376, 38, 410, 38, 410, 52, 438, 52}, 0, 0), new Wire("", new int[]{438, 66, 376, 66}, 0, 0),
+                    new Wire("", new int[]{460, 24, 460, 12, 642, 12}, 0, 0), new Wire("", new int[]{482, 46, 642, 46}, 0, 0), new Wire("", new int[]{482, 80, 642, 80}, 0, 0), new Wire("", new int[]{482, 126, 642, 126}, 0, 0),
+                    new Wire("S-8", new int[]{482, 173, 560, 173}, 521, 165), new Wire("", new int[]{590, 173, 642, 173}, 0, 0), new Wire("", new int[]{482, 226, 642, 226}, 0, 0),
+                    new Wire("S-9", new int[]{460, 272, 460, 292, 178, 292, 178, 244}, 236, 292), new Wire("S-10", new int[]{146, 244, 146, 274, 122, 274}, 146, 258)));
+            var pills = new ArrayList<>(List.of(new Pill("STEAM", 332, 252, 52, true), new Pill("CWS", 330, 38, 46, true), new Pill("CWR", 330, 66, 46, false), new Pill("OFFGAS", 642, 12, 56, false),
+                    new Pill("NAPHTHA", 642, 46, 56, false), new Pill("WATER", 642, 80, 56, false), new Pill("KERO", 642, 126, 56, false), new Pill("DIESEL", 642, 173, 56, false), new Pill("AGO", 642, 226, 56, false)));
+            if (recycle) {
+                // The material loop: a share of the cooled residue, up the sheet's left edge and back to the crude ahead of P-101.
+                units.add(new Unit("M-101", Glyph.MIXER, 50, 75, 22, 26, SOLVED, 61, 68));
+                units.add(new Unit("TEE-1", Glyph.SPLITTER, 30, 196, 22, 26, SOLVED, 41, 189));
+                units.add(new Unit("P-103", Glyph.PUMP, 62, 137, 30, 34, SOLVED, 77, 130));
+                wires.addAll(List.of(new Wire("", new int[]{42, 81, 50, 81}, 0, 0), new Wire("S-14", new int[]{72, 88, 84, 88}, 0, 0), new Wire("S-11", new int[]{62, 274, 18, 274, 18, 209, 30, 209}, 18, 241),
+                        new Wire("", new int[]{52, 215, 60, 215}, 0, 0), new Wire("S-12", new int[]{52, 203, 56, 203, 56, 150, 62, 150}, 56, 178),
+                        new Wire("S-13", new int[]{92, 150, 100, 150, 100, 118, 38, 118, 38, 95, 50, 95}, 68, 118)));
+                pills.add(new Pill("CRUDE", 4, 81, 38, true));
+                pills.add(new Pill("RESIDUE", 60, 215, 48, false));
+            } else {
+                wires.addAll(List.of(new Wire("", new int[]{62, 88, 84, 88}, 0, 0), new Wire("", new int[]{62, 274, 54, 274}, 0, 0)));
+                pills.add(new Pill("CRUDE", 10, 88, 52, true));
+                pills.add(new Pill("RESIDUE", 4, 274, 50, false));
+            }
+            for (var w : wires) p.wire(w.points(), true, false, w.name().equals("S-9") ? Palette.ACCENT : Palette.MUTED);
             for (var u : units) {
                 glyph(p, u.glyph(), u.x(), u.y(), u.w(), u.h(), u.look());
-                boolean ringed = u.name().equals(missing ? "H-101" : "E-101") || running && u.name().equals("T-101");
+                boolean ringed = u.name().equals(running ? "T-101" : missing ? "H-101" : recycle ? "TEE-1" : "E-101");
                 if (ringed) p.canvas().outline(p.x(u.x()) - 3, p.y(u.y()) - 3, p.px(u.w()) + 6, p.px(u.h()) + 6, Palette.TEXT);
                 if (u.glyph() == Glyph.MISSING && p.labels()) {
                     p.fitted("Old heater", u.x() + u.w() / 2, u.y() + u.h() / 2 - 6, u.w(), Look.RED.text());
@@ -718,23 +769,25 @@ public final class SimulatorPrototypes {
                 }
                 if (p.labels()) p.tag(u.name(), u.tagX(), u.tagY(), 0.5f, u.look() == WARN ? Palette.WARN : Palette.TEXT, PLATE);
             }
-            int done2 = PortColours.CONNECTED;
-            for (var port : List.of(new Port(86, 176, done2), new Port(116, 176, done2), new Port(150, 176, done2), new Port(214, 176, done2), new Port(182, 162, done2), new Port(182, 190, done2),
-                    new Port(268, 200, done2), new Port(326, 176, done2), new Port(370, 176, done2), new Port(394, 176, done2), new Port(438, 176, done2), new Port(438, 256, done2), new Port(460, 24, done2),
-                    new Port(460, 272, done2), new Port(482, 46, done2), new Port(482, 80, done2), new Port(482, 126, done2), new Port(482, 173, done2), new Port(482, 226, done2), new Port(560, 173, done2),
-                    new Port(590, 173, done2), new Port(252, 50, done2), new Port(312, 50, done2), new Port(482, 146, PortColours.LIQUID), new Port(438, 236, PortColours.VAPOUR)))
-                p.square(port.x(), port.y(), 5, port.rgb());
+            // Each wire's ends are ports, greyed because connected; a mixer's and a splitter's arms are their own.
+            for (var w : wires) {
+                int[] q = w.points();
+                p.square(q[0], q[1], 5, PortColours.CONNECTED);
+                p.square(q[q.length - 2], q[q.length - 1], 5, PortColours.CONNECTED);
+            }
+            // The block's connection points, named on the block.
+            if (p.labels())
+                for (var mark : List.of(new Object[]{"Cond.", 59}, new Object[]{"PA 1", 95}, new Object[]{"PA 2", 129}, new Object[]{"PA 3", 163}, new Object[]{"Feed", 228}, new Object[]{"Steam", 252}))
+                    p.tag((String) mark[0], 460, (Integer) mark[1], 0.5f, Palette.TEXT, PLATE);
             if (p.labels())
                 for (var w : wires)
-                    if (!w.name().isEmpty() && !(show == Show.INTERACTION && w.name().equals("S-6"))) p.tag(w.name(), w.lx(), w.ly(), 0.5f, w.name().equals("S-6") ? Palette.ACCENT : Palette.MUTED, PLATE);
+                    if (!w.name().isEmpty() && !w.name().equals("S-14") && !(show == Show.INTERACTION && w.name().equals("S-9"))) p.tag(w.name(), w.lx(), w.ly(), 0.5f, w.name().equals("S-9") ? Palette.ACCENT : Palette.MUTED, PLATE);
             tear(p, 320, 292);
-            for (var e : List.of(new Pill("CRUDE", 10, 176, 52, true), new Pill("STEAM", 320, 256, 52, true), new Pill("RESIDUE", 356, 50, 56, false), new Pill("OFFGAS", 642, 12, 56, false),
-                    new Pill("NAPHTHA", 642, 46, 56, false), new Pill("WATER", 642, 80, 56, false), new Pill("KERO", 642, 126, 56, false), new Pill("DIESEL", 642, 173, 56, false), new Pill("AGO", 642, 226, 56, false)))
-                pill(p, e.name(), e.x(), e.y(), e.w(), e.feed(), missing && !e.feed() ? Palette.MUTED : Palette.TEXT);
+            for (var e : pills) pill(p, e.name(), e.x(), e.y(), e.w(), e.feed(), missing && !e.feed() ? Palette.MUTED : Palette.TEXT);
             if (show == Show.INTERACTION) interaction(d, p);
         }
 
-        /** The recycle's tear: a small diamond with a T on its line. */
+        /** The loop's tear: a small diamond with a T on its line. */
         static void tear(FlowsheetPainter p, int x, int y) {
             var c = p.canvas();
             int cx = p.x(x), cy = p.y(y), r = Math.max(4, p.px(7));
@@ -742,14 +795,15 @@ public final class SimulatorPrototypes {
             if (p.labels()) c.text("T", cx - 2, cy - 3, 0xFF0B1216);
         }
 
-        /** The sheet of gestures: a dragged tile, a stream being drawn with the port that can take it, a name being typed. */
+        /** The sheet of gestures: a dragged tile, a stream being drawn with the port that can take it, a name being typed, a port's hover. */
         static void interaction(GuiPrototypes.Door d, FlowsheetPainter p) {
             var c = p.canvas();
             // 1: a horizontal drum dragged out of the palette, over the canvas; its tag in place.
-            glyph(p, Glyph.LYING, 96, 225, 64, 28, new Look(0x6033434D, Palette.TEXT, Palette.TEXT));
-            p.tag("D-101", 128, 218, 0.5f, Palette.TEXT, PLATE);
-            note(c, p.x(84), p.y(232), 1);
+            glyph(p, Glyph.LYING, 120, 112, 64, 28, new Look(0x6033434D, Palette.TEXT, Palette.TEXT));
+            p.tag("D-101", 152, 105, 0.5f, Palette.TEXT, PLATE);
+            note(c, p.x(106), p.y(126), 1);
             // 2: a stream drawn from T-101's free draw port to the cursor; a pump that is not connected yet has its inlet ringed.
+            p.square(482, 146, 5, PortColours.BULK);
             glyph(p, Glyph.PUMP, 600, 133, 30, 34, NONE);
             p.tag("P-103", 616, 164, 0.5f, Palette.TEXT, PLATE);
             p.wire(new int[]{482, 146, 578, 146}, false, false, Palette.TEXT);
@@ -757,7 +811,7 @@ public final class SimulatorPrototypes {
             c.outline(p.x(600) - 7, p.y(146) - 7, 15, 15, 0xFFFFFFFF);
             p.square(600, 146, 5, PortColours.LIQUID);
             p.square(630, 146, 5, PortColours.LIQUID);
-            p.tag("S-8", 530, 138, 0.5f, Palette.TEXT, PLATE);
+            p.tag("S-11", 530, 138, 0.5f, Palette.TEXT, PLATE);
             note(c, p.x(556), p.y(136), 2);
             // 3: dropping on empty canvas makes a product pill, as AGO is.
             note(c, p.x(708), p.y(226), 3);
@@ -768,7 +822,16 @@ public final class SimulatorPrototypes {
             c.fill(nx + 4 + d.m.width("RES-HOT"), ny + 2, nx + 5 + d.m.width("RES-HOT"), ny + 12, 0xFF000000);
             note(c, nx + 78, ny - 4, 4);
             // 5: double click.
-            note(c, p.x(250), p.y(130), 5);
+            note(c, p.x(304), p.y(200), 5);
+            // 6: the hover on the crude's port on PA 1.
+            c.outline(p.x(438) - 5, p.y(88) - 5, 11, 11, 0xFFFFFFFF);
+            int hx = p.x(232), hy = p.y(98), hw = 176;
+            c.fill(hx, hy, hx + hw, hy + 42, 0xF01C2630);
+            c.outline(hx, hy, hw, 42, Palette.ACCENT);
+            c.text("T-101, PA 1 cooler, tube inlet", hx + 5, hy + 4, Palette.TEXT);
+            c.text("Heat into this stream: 12.84 MW", hx + 5, hy + 16, Palette.MUTED);
+            c.text("Left free, a utility takes it", hx + 5, hy + 28, Palette.MUTED);
+            note(c, hx - 11, hy + 20, 6);
         }
     }
 
@@ -913,8 +976,8 @@ public final class SimulatorPrototypes {
 
     // ---- Unit doors ----
 
-    static final Map<String, String> PORTS = Map.ofEntries(Map.entry("port:TUBE_INLET", "25.1 °C"), Map.entry("port:TUBE_OUTLET", "132.5 °C"), Map.entry("port:SHELL_INLET", "300.2 °C"), Map.entry("port:SHELL_OUTLET", "160.0 °C"),
-            Map.entry("port:CONVECTION_INLET", "132.5 °C"), Map.entry("port:RADIANT_OUTLET", "365.0 °C"));
+    static final Map<String, String> PORTS = Map.ofEntries(Map.entry("port:TUBE_INLET", "153.3 °C"), Map.entry("port:TUBE_OUTLET", "218.4 °C"), Map.entry("port:SHELL_INLET", "300.2 °C"), Map.entry("port:SHELL_OUTLET", "200.0 °C"),
+            Map.entry("port:CONVECTION_INLET", "218.4 °C"), Map.entry("port:RADIANT_OUTLET", "365.0 °C"));
 
     static HeatFlowsheet.Data data(String duty) {
         return new HeatFlowsheet.Data() {
@@ -955,12 +1018,12 @@ public final class SimulatorPrototypes {
                         new Column.Buttons(List.of(key("tube", "Tube side", false), key("shell", "Shell side", true))))),
                 new Column.Group("Set point", null, List.of(entry("temperature", "Outlet", "°C"))),
                 new Column.Group("Drops", null, List.of(entry("tube", "Tube", "bar"), entry("shell", "Shell", "bar"))),
-                new Column.Group("Readings", null, List.of(meter("Duty", "34.43", "MW"), meter("Approach", "134.9", "K"), meter("UA needed", "228.5", "kW/K"))));
-        var box = door(d, "Heat exchanger", new String[]{"Design", "Streams"}, 0, "Solved. Duty 34.43 MW, smallest approach 134.9 K.", Palette.ACCENT, rows, Map.of("temperature", "160.0", "tube", "0.50", "shell", "0.30"));
+                new Column.Group("Readings", null, List.of(meter("Duty", "25.26", "MW"), meter("Approach", "46.7", "K"), meter("UA needed", "403.3", "kW/K"))));
+        var box = door(d, "Heat exchanger", new String[]{"Design", "Streams"}, 0, "Solved. Duty 25.26 MW, smallest approach 46.7 K.", Palette.ACCENT, rows, Map.of("temperature", "200.0", "tube", "0.50", "shell", "0.30"));
         name(d, "E-101");
         var sheet = new HeatFlowsheet(HeatDiagram.of(HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE, ExchangerBlueprint.Design.NONE), HeatDiagram.roles(HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE));
         sheet.fit(box.x(), box.y(), box.w(), box.h());
-        sheet.draw(d.c, data("34.43 MW"));
+        sheet.draw(d.c, data("25.26 MW"));
         unitFooter(d);
     }
 
@@ -969,12 +1032,12 @@ public final class SimulatorPrototypes {
                 new Column.Group("Target", null, List.of(new Column.Buttons(List.of(key("t", "Outlet", true), key("q", "Duty", false))))),
                 new Column.Group("Set point", null, List.of(entry("temperature", "Coil outlet", "°C"), entry("duty", "Duty limit", "MW"))),
                 new Column.Group("Drops", null, List.of(entry("radiant", "Radiant", "bar"), entry("convection", "Convection", "bar"))),
-                new Column.Group("Readings", null, List.of(meter("Duty", "111.13", "MW"), meter("Vapour out", "71.1", "%"))));
-        var box = door(d, "Vertical heater", new String[]{"Design", "Streams"}, 0, "Solved. Duty 111.13 MW of the 120.0 MW limit.", Palette.ACCENT, rows, Map.of("temperature", "365.0", "duty", "120.0", "radiant", "6.00", "convection", "2.50"));
+                new Column.Group("Readings", null, List.of(meter("Duty", "78.37", "MW"), meter("Vapour out", "71.1", "%"))));
+        var box = door(d, "Vertical heater", new String[]{"Design", "Streams"}, 0, "Solved. Duty 78.37 MW of the 90.0 MW limit.", Palette.ACCENT, rows, Map.of("temperature", "365.0", "duty", "90.0", "radiant", "5.10", "convection", "2.50"));
         name(d, "H-101");
         var sheet = new HeatFlowsheet(HeatDiagram.of(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.RADIANT, ExchangerBlueprint.Design.NONE), HeatDiagram.roles(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.RADIANT));
         sheet.fit(box.x(), box.y(), box.w(), box.h());
-        sheet.draw(d.c, data("111.13 MW"));
+        sheet.draw(d.c, data("78.37 MW"));
         unitFooter(d);
     }
 
@@ -1031,8 +1094,8 @@ public final class SimulatorPrototypes {
                 new Column.Group("Readings", null, List.of(meter("Temperature", "365.0", "°C"), meter("Pressure", "5.00", "bar"))));
         var box = door(d, "Horizontal drum", new String[]{"Design", "Streams"}, 0, "Solved. Two phases: gas and organic.", Palette.ACCENT, rows, Map.of("drop", "0.00"));
         name(d, "D-101");
-        var rest = sketch(d, box, Glyph.LYING, "D-101", "S-3", List.of("S-8", "S-9", "none"));
-        streams(d, rest, new String[]{"", "Inlet S-3", "Gas S-8", "Oil S-9", "Water"}, new String[][]{{"Temperature, °C", "365.0", "365.0", "365.0", ""}, {"Pressure, bar", "5.00", "5.00", "5.00", ""},
+        var rest = sketch(d, box, Glyph.LYING, "D-101", "S-6", List.of("S-14", "S-15", "none"));
+        streams(d, rest, new String[]{"", "Inlet S-6", "Gas S-14", "Oil S-15", "Water"}, new String[][]{{"Temperature, °C", "365.0", "365.0", "365.0", ""}, {"Pressure, bar", "5.00", "5.00", "5.00", ""},
                 {"Flow, kmol/h", "2652.3", "1885.3", "767.0", "0.0"}, {"Flow, t/h", "572.09", "255.15", "316.94", "0.00"}});
         unitFooter(d);
     }
@@ -1044,8 +1107,8 @@ public final class SimulatorPrototypes {
                 phases(22.1, 0, 77.9, 0), new Column.Group("Readings", null, List.of(meter("Drop", "2.28", "bar"), meter("Cooled", "5.5", "K"))));
         var box = door(d, "Control valve", new String[]{"Design", "Streams"}, 0, "Solved. Isenthalpic; the outlet holds 77.9 % vapour by mole.", Palette.ACCENT, rows, Map.of("pressure", "2.72"));
         name(d, "V-101");
-        var rest = sketch(d, box, Glyph.VALVE, "V-101", "S-3", List.of("S-4"));
-        streams(d, rest, new String[]{"", "Inlet S-3", "Outlet S-4"}, new String[][]{{"Temperature, °C", "365.0", "359.5"}, {"Pressure, bar", "5.00", "2.72"}, {"Flow, kmol/h", "2652.3", "2652.3"},
+        var rest = sketch(d, box, Glyph.VALVE, "V-101", "S-6", List.of("S-7"));
+        streams(d, rest, new String[]{"", "Inlet S-6", "Outlet S-7"}, new String[][]{{"Temperature, °C", "365.0", "359.5"}, {"Pressure, bar", "5.00", "2.72"}, {"Flow, kmol/h", "2652.3", "2652.3"},
                 {"Vapour, mole %", "71.1", "77.9"}, {"Density, kg/m³", "30.2", "14.8"}});
         unitFooter(d);
     }
@@ -1075,7 +1138,25 @@ public final class SimulatorPrototypes {
 
     /** T-101's entries, by the calculator's keys. */
     static final Map<String, String> COLUMN = Map.ofEntries(Map.entry("s2", "42"), Map.entry("s9", "8.00"), Map.entry("s7", "2.50"), Map.entry("s3", "38"), Map.entry("s4", "59.0"), Map.entry("s6", "4.17"),
-            Map.entry("s5", "0.0"), Map.entry("d0rate", "491.3"), Map.entry("d0stage", "11"));
+            Map.entry("s5", "0.0"), Map.entry("d0rate", "491.3"), Map.entry("d0stage", "11"), Map.entry("tube", "0.30"));
+
+    /** The block's connection points on the Equipment page's glass: what each carries, read from the last run. */
+    static void connections(GuiPrototypes.Door d, Rect box) {
+        String[][] rows = {{"Feed, tray 38", "S-7", "359.5 °C", ""}, {"Steam, tray 42", "STEAM", "260.0 °C", ""}, {"Condenser in", "CWS", "30.0 °C", "39.23 MW"}, {"Condenser out", "CWR", "39.9 °C", ""},
+                {"PA 1 in", "S-1", "25.1 °C", "12.84 MW"}, {"PA 1 out", "S-2", "67.9 °C", ""}, {"PA 2 in", "S-2", "67.9 °C", "17.89 MW"}, {"PA 2 out", "S-3", "122.0 °C", ""}, {"PA 3 in", "S-3", "122.0 °C", "11.20 MW"},
+                {"PA 3 out", "S-4", "153.3 °C", ""}, {"Overhead", "OFFGAS", "59.0 °C", ""}, {"Distillate", "NAPHTHA", "59.0 °C", ""}, {"Free water", "WATER", "59.0 °C", ""}, {"Draw 1, tray 11", "KERO", "140.1 °C", ""},
+                {"Draw 2, tray 19", "S-8", "213.4 °C", ""}, {"Draw 3, tray 29", "AGO", "273.8 °C", ""}, {"Bottoms", "S-9", "300.2 °C", ""}};
+        int x0 = box.x() + 4, y = box.y() + 4;
+        String[] head = {"Connection point", "Stream", "Temperature", "Heat"};
+        int[] at = {0, 124, 200, 280};
+        for (int i = 0; i < head.length; i++) d.c.text(head[i], x0 + at[i], y, Palette.MUTED);
+        d.c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
+        y += 14;
+        for (int r = 0; r < rows.length; r++, y += 14) {
+            if (r % 2 == 1) d.c.fill(box.x(), y - 3, box.right(), y + 11, DialogColumns.BAND);
+            for (int i = 0; i < head.length; i++) d.c.text(rows[r][i], x0 + at[i], y, i == 0 ? Palette.TEXT : i == 1 ? Palette.MUTED : Palette.ACCENT);
+        }
+    }
 
     /**
      * The column's door: the calculator's frame, tabs, columns and glass as {@code GuiPrototypes.calculatorDoor} draws them, with
@@ -1083,7 +1164,7 @@ public final class SimulatorPrototypes {
      */
     static void columnDoor(GuiPrototypes.Door d, CalculatorColumn.Page page) {
         var t = GuiPrototypes.DIALOG;
-        boolean drawing = page == CalculatorColumn.Page.COLUMN;
+        boolean drawing = page == CalculatorColumn.Page.COLUMN, equipment = page == CalculatorColumn.Page.EQUIPMENT;
         d.skin.title(d.c, 10, 10, "Distillation column");
         d.skin.iconKey(d.c, CalculatorColumn.theme(d.w), Skin.Icon.THEME, false);
         var tabs = CalculatorColumn.tabs(page, t);
@@ -1092,8 +1173,9 @@ public final class SimulatorPrototypes {
             var spec = tabs.get(i);
             d.skin.button(d.c, tabSlots.get(i), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
         }
-        d.skin.status(d.c, CalculatorColumn.display(d.w), drawing ? "Solved: 3 draws, 3 pumparounds, 1 steam feed." : "Solved. Drop 21.5 kPa, flooding at most 64.8 % at tray 33.", Palette.ACCENT);
+        d.skin.status(d.c, CalculatorColumn.display(d.w), drawing ? "Solved: 3 draws, 3 pumparounds, 1 steam feed." : equipment ? "17 connection points, all connected." : "Solved. Drop 21.5 kPa, flooding at most 64.8 % at tray 33.", Palette.ACCENT);
         var rows = drawing ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
+                : equipment ? CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD), true), t)
                 : CalculatorColumn.results(new CalculatorColumn.ResultsInput(false, CalculatorColumn.View.PROFILES, CalculatorColumn.Metric.TEMPERATURE, List.of(), 0, 10, 40), t);
         boolean two = rows.two();
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - CalculatorColumn.DIVIDER);
@@ -1108,13 +1190,17 @@ public final class SimulatorPrototypes {
                     List.of(new CalculatorColumn.Mark(0, 10, 8), new CalculatorColumn.Mark(1, 18, 16), new CalculatorColumn.Mark(2, 28, 26)), List.of(new CalculatorColumn.Mark(0, 41, 0)), 10,
                     CalculatorColumn.Connection.DRAW, 0, shares);
             CalculatorColumn.draw(d.c, CalculatorColumn.drawing(in, box, 0, d.m, t, node -> ""), t);
+        } else if (equipment) {
+            connections(d, box);
         } else {
             int head = CalculatorColumn.heading(d.c, box, t.get("column.temperature", "°C"), List.of(), d.m);
             CalculatorColumn.profile(d.c, CalculatorColumn.plot(box, head), new double[][]{PROFILE}, new int[]{Palette.ACCENT});
         }
         d.c.unclip();
         // The left column: the name; the calculator's Column group; the feed from the stream, its tray still the player's.
-        List<List<Column.Row>> lists = !two ? List.of(rows.right()) : !drawing ? List.of(rows.left(), rows.right())
+        var right = new ArrayList<>(rows.right());
+        if (equipment) right.add(right.size() - 1, new Column.Group("Tube sides", null, List.of(entry("tube", "Drop", "bar"))));
+        List<List<Column.Row>> lists = !two ? List.of(right) : !drawing ? List.of(rows.left(), rows.right())
                 : List.of(List.of(nameGroup(), rows.left().getFirst(), new Column.Group("Feed", null, List.of(meter("Flow", "2652.3", "kmol/h"), meter("Temperature", "359.5", "°C"), new Column.Field("s3", "Tray", "", null)))), rows.right());
         var areas = CalculatorColumn.door(d.w, d.h, two);
         for (int i = 0; i < areas.size(); i++) {
@@ -1173,11 +1259,267 @@ public final class SimulatorPrototypes {
                 new String[]{"Cancel", "Delete", "Save current", "Load"}, 3);
     }
 
+    // ---- Connection points: what a block's configuration adds to the main flowsheet ----
+
+    /** Names in this colour are what a configuration added; the port classes' colours are the laying tool's. */
+    static final int ADDED = 0xFF000000 | PortColours.BULK;
+
+    /** A connection point: its name, its class's colour, whether this configuration added it. */
+    record Point(String name, int rgb, boolean added) {
+        static Point vapour(String name) {
+            return new Point(name, PortColours.VAPOUR, false);
+        }
+
+        static Point liquid(String name) {
+            return new Point(name, PortColours.LIQUID, false);
+        }
+
+        static Point bulk(String name) {
+            return new Point(name, PortColours.BULK, false);
+        }
+
+        Point marked() {
+            return new Point(name, rgb, true);
+        }
+    }
+
+    /** A port at ({@code x}, {@code y}) on a block's edge: its square, a stub towards ({@code dx}, {@code dy}), its name at the stub's end. */
+    static void point(FlowsheetPainter p, int x, int y, int dx, int dy, Point port) {
+        p.wire(new int[]{x, y, x + dx, y + dy}, false, false, Palette.MUTED);
+        p.square(x, y, 5, port.rgb());
+        int colour = port.added() ? ADDED : Palette.MUTED;
+        if (dy == 0) p.label(port.name(), x + dx + (dx < 0 ? -3 : 3), y, dx < 0 ? 1f : 0f, colour);
+        else p.label(port.name(), x, y + dy + (dy < 0 ? -6 : 7), 0.5f, colour);
+    }
+
+    /** Ports down a block's side, spaced to fill {@code y0} to {@code y1}. */
+    static void side(FlowsheetPainter p, int x, int y0, int y1, int dx, List<Point> ports) {
+        for (int i = 0; i < ports.size(); i++) {
+            int y = ports.size() == 1 ? (y0 + y1) / 2 : y0 + i * (y1 - y0) / (ports.size() - 1);
+            point(p, x, y, dx, 0, ports.get(i));
+        }
+    }
+
+    /** A column block as dropped on the canvas, under its door's settings. */
+    static void columnPanel(GuiPrototypes.Door d, Rect box, String title, List<String> door, List<Point> left, List<Point> right) {
+        var c = d.c;
+        c.text(title, box.x() + 5, box.y() + 5, Palette.TEXT);
+        for (int i = 0; i < door.size(); i++) c.text(door.get(i), box.x() + 5, box.y() + 18 + i * 10, Palette.MUTED);
+        var p = new FlowsheetPainter(c, box.x(), box.y(), 1, 1);
+        int cx = box.w() / 2, top = 84, bottom = box.h() - 24;
+        glyph(p, Glyph.COLUMN, cx - 14, top, 28, bottom - top, Sample.NONE);
+        p.tag("T-101", cx, bottom + 9, 0.5f, Palette.TEXT, Sample.PLATE);
+        side(p, cx - 14, top + 24, bottom - 18, -12, left);
+        side(p, cx + 14, top + 24, bottom - 18, 12, right);
+    }
+
+    static void blockPorts(GuiPrototypes.Door d) {
+        int gap = 4, n = 4, w = (d.w - 10 - (n - 1) * gap) / n;
+        var overhead = Point.vapour("Overhead");
+        var distillate = Point.liquid("Distillate");
+        var water = Point.liquid("Free water");
+        var bottoms = Point.liquid("Bottoms");
+        var feed = Point.bulk("Feed");
+        var in = Point.bulk("Condenser in").marked();
+        var out = Point.bulk("Condenser out").marked();
+        List<List<String>> doors = List.of(List.of("Condenser: Air cooler", "Reboiler duty: 0", "Pumparounds: none", "Steam: none", "Draws: none", "Top: 2.50 bar"),
+                List.of("Condenser: Exchanger", "Reboiler duty: 18.00 MW", "Pumparounds: none", "Steam: none", "Draws: none", "Top: 2.50 bar"),
+                List.of("Condenser: Exchanger", "Reboiler duty: 0", "Pumparounds: 3", "Steam: 1", "Draws: 3", "Top: 2.50 bar"),
+                List.of("Condenser: Exchanger", "Reboiler duty: 0", "Pumparounds: 2", "Steam: 1", "Draws: 2", "Top: 0.10 bar"));
+        List<String> titles = List.of("Air cooler, no reboiler", "Exchanger and kettle", "The sample's T-101", "Vacuum tower");
+        List<List<Point>> lefts = List.of(List.of(feed),
+                List.of(in, out, feed, Point.bulk("Reboiler in").marked(), Point.bulk("Reboiler out").marked()),
+                List.of(in, out, Point.bulk("PA 1 in").marked(), Point.bulk("PA 1 out").marked(), Point.bulk("PA 2 in").marked(), Point.bulk("PA 2 out").marked(), Point.bulk("PA 3 in").marked(), Point.bulk("PA 3 out").marked(), feed, Point.bulk("Steam 1").marked()),
+                List.of(Point.bulk("Motive steam").marked(), in, out, Point.bulk("PA 1 in").marked(), Point.bulk("PA 1 out").marked(), Point.bulk("PA 2 in").marked(), Point.bulk("PA 2 out").marked(), feed, Point.bulk("Steam 1").marked()));
+        List<List<Point>> rights = List.of(List.of(overhead, distillate, water, bottoms), List.of(overhead, distillate, water, bottoms),
+                List.of(overhead, distillate, water, Point.bulk("Draw 1").marked(), Point.bulk("Draw 2").marked(), Point.bulk("Draw 3").marked(), bottoms),
+                List.of(overhead, distillate, water, Point.bulk("Draw 1").marked(), Point.bulk("Draw 2").marked(), bottoms));
+        for (int i = 0; i < n; i++) columnPanel(d, d.well(new Rect(5 + i * (w + gap), 5, w, d.h - 10)), titles.get(i), doors.get(i), lefts.get(i), rights.get(i));
+    }
+
+    /** Text lines on the glass from ({@code x}, {@code y}), every second line's band across {@code box}. */
+    static void lines(GuiPrototypes.Door d, Rect box, int x, int y, List<String> lines) {
+        for (int i = 0; i < lines.size(); i++, y += 13) {
+            if (i % 2 == 1) d.c.fill(box.x(), y - 2, box.right(), y + 11, DialogColumns.BAND);
+            d.c.text(lines.get(i), x, y, Palette.TEXT);
+        }
+    }
+
+    /** A hot side's reading beside a block: its tray, its heat. */
+    static void hot(FlowsheetPainter p, int x, int y, String first, String second) {
+        p.label(first, x, y - 5, 0f, Palette.TEXT);
+        p.label(second, x, y + 6, 0f, Palette.ACCENT);
+    }
+
+    static void paOptions(GuiPrototypes.Door d) {
+        int gap = 4, w = (d.w - 10 - gap) / 2;
+        // A: the crude through the block.
+        var a = d.well(new Rect(5, 5, w, d.h - 10));
+        var p = new FlowsheetPainter(d.c, a.x(), a.y(), 1, 1);
+        d.c.text("A: the cooler stays in the block, the crude runs through it", a.x() + 5, a.y() + 5, Palette.TEXT);
+        p.wire(new int[]{64, 76, 300, 76}, true, false, Palette.MUTED);
+        p.wire(new int[]{300, 92, 276, 92, 276, 148, 300, 148}, true, false, Palette.MUTED);
+        p.wire(new int[]{300, 164, 276, 164, 276, 220, 300, 220}, true, false, Palette.MUTED);
+        p.wire(new int[]{300, 236, 64, 236}, true, false, Palette.MUTED);
+        p.wire(new int[]{64, 296, 300, 296}, true, false, Palette.MUTED);
+        glyph(p, Glyph.COLUMN, 300, 28, 44, 312, Sample.SOLVED);
+        for (var y : new int[]{76, 92, 148, 164, 220, 236, 296}) p.square(300, y, 5, PortColours.CONNECTED);
+        for (var e : new Object[][]{{"S-1", 76}, {"S-4", 236}}) pill(p, (String) e[0], 12, (Integer) e[1], 52, e[0].equals("S-1"), Palette.TEXT);
+        pill(p, "S-7", 12, 296, 52, true, Palette.TEXT);
+        p.tag("25.1 °C", 170, 68, 0.5f, Palette.MUTED, Sample.PLATE);
+        p.tag("S-2 67.9 °C", 234, 120, 0.5f, Palette.MUTED, Sample.PLATE);
+        p.tag("S-3 122.0 °C", 234, 192, 0.5f, Palette.MUTED, Sample.PLATE);
+        p.tag("153.3 °C, to E-101", 170, 228, 0.5f, Palette.MUTED, Sample.PLATE);
+        p.tag("359.5 °C, from V-101", 170, 288, 0.5f, Palette.MUTED, Sample.PLATE);
+        for (var e : new Object[][]{{"PA 1", 84}, {"PA 2", 156}, {"PA 3", 228}, {"Feed", 296}}) p.tag((String) e[0], 322, (Integer) e[1], 0.5f, Palette.TEXT, Sample.PLATE);
+        hot(p, 352, 84, "Tray 11, 140.1 °C", "12.84 MW");
+        hot(p, 352, 156, "Tray 19, 213.4 °C", "17.89 MW");
+        hot(p, 352, 228, "Tray 29, 273.8 °C", "11.20 MW");
+        lines(d, a, a.x() + 5, a.y() + 352, List.of("Ports: 3 pairs on T-101. No units or streams added.", "Duty: a door entry. The crude's outlet is the result.", "Solver: the column does not read these ports, so no loop.",
+                "Model: as today, a heat sink on the trays. No new column code.", "Check: the crude stays under the draw tray's temperature.", "Sample: 2 passes, H-101 78.37 MW.", "Later: a target on the crude's outlet, the duty then a result."));
+        // B: a pumparound stream out of the block, an exchanger on the sheet.
+        var b = d.well(new Rect(5 + w + gap, 5, w, d.h - 10));
+        p = new FlowsheetPainter(d.c, b.x(), b.y(), 1, 1);
+        d.c.text("B: a real pumparound stream leaves the block and comes back", b.x() + 5, b.y() + 5, Palette.TEXT);
+        int[] rows = {84, 164, 244};
+        String[] names = {"E-201", "E-202", "E-203"};
+        for (int i = 0; i < 3; i++) {
+            int y = rows[i];
+            p.wire(new int[]{320, y - 30, 188, y - 30, 188, y - 14}, true, false, Palette.ACCENT);
+            p.wire(new int[]{216, y - 14, 216, y - 20, 320, y - 20}, true, false, Palette.ACCENT);
+            glyph(p, Glyph.EXCHANGER, 170, y - 14, 64, 28, Sample.SOLVED);
+            p.tag(names[i], 202, y + 21, 0.5f, Palette.TEXT, Sample.PLATE);
+            for (var q : new int[][]{{188, y - 14}, {216, y - 14}, {170, y}, {234, y}, {320, y - 30}, {320, y - 20}}) p.square(q[0], q[1], 5, PortColours.CONNECTED);
+        }
+        p.wire(new int[]{64, 84, 170, 84}, true, false, Palette.MUTED);
+        p.wire(new int[]{234, 84, 250, 84, 250, 122, 150, 122, 150, 164, 170, 164}, true, false, Palette.MUTED);
+        p.wire(new int[]{234, 164, 250, 164, 250, 202, 150, 202, 150, 244, 170, 244}, true, false, Palette.MUTED);
+        p.wire(new int[]{234, 244, 250, 244, 250, 278, 64, 278}, true, false, Palette.MUTED);
+        p.wire(new int[]{64, 310, 320, 310}, true, false, Palette.MUTED);
+        glyph(p, Glyph.COLUMN, 320, 28, 44, 312, Sample.SOLVED);
+        for (var y : new int[]{54, 64, 134, 144, 214, 224}) p.square(320, y, 5, PortColours.CONNECTED);
+        p.square(320, 310, 5, PortColours.CONNECTED);
+        pill(p, "S-1", 12, 84, 52, true, Palette.TEXT);
+        pill(p, "S-4", 12, 278, 52, false, Palette.TEXT);
+        pill(p, "S-7", 12, 310, 52, true, Palette.TEXT);
+        p.tag("25.1 °C", 112, 76, 0.5f, Palette.MUTED, Sample.PLATE);
+        p.tag("S-2 67.9 °C", 200, 122, 0.5f, Palette.MUTED, Sample.PLATE);
+        p.tag("S-3 122.0 °C", 200, 202, 0.5f, Palette.MUTED, Sample.PLATE);
+        p.tag("153.3 °C", 112, 270, 0.5f, Palette.MUTED, Sample.PLATE);
+        p.tag("359.5 °C", 112, 302, 0.5f, Palette.MUTED, Sample.PLATE);
+        for (var e : new Object[][]{{"PA 1", 59}, {"PA 2", 139}, {"PA 3", 219}, {"Feed", 310}}) p.tag((String) e[0], 342, (Integer) e[1], 0.5f, Palette.TEXT, Sample.PLATE);
+        hot(p, 370, 54, "346.0 t/h", "140.1 to 78.3 °C");
+        hot(p, 370, 134, "323.8 t/h", "213.4 to 130.6 °C");
+        hot(p, 370, 214, "203.6 t/h", "273.8 to 198.4 °C");
+        lines(d, b, b.x() + 5, b.y() + 352, List.of("Ports: 3 pairs on T-101, 3 exchangers, 6 more streams.", "Circulation: a door entry. The duty comes back as a result.", "Solver: every moved return re-solves the column, a loop per PA.",
+                "Model: the same heat sink; the stream is what the door shows.", "Check: what returns must equal what left.", "Not measured: passes on this form.", "Allows two exchangers on one pumparound."));
+    }
+
+    /** A panel for one block: its name, its glyph at the middle, its lines at the foot. */
+    static FlowsheetPainter blockPanel(GuiPrototypes.Door d, Rect box, String title, List<String> foot) {
+        d.c.text(title, box.x() + 5, box.y() + 5, Palette.TEXT);
+        lines(d, box, box.x() + 5, box.bottom() - 4 - foot.size() * 13, foot);
+        return new FlowsheetPainter(d.c, box.x(), box.y(), 1, 1);
+    }
+
+    static void otherBlocks(GuiPrototypes.Door d) {
+        int gap = 4, w = (d.w - 10 - 2 * gap) / 3, h = (d.h - 10 - gap) / 2;
+        var tubeIn = Point.bulk("Tube in");
+        var tubeOut = Point.bulk("Tube out");
+        // The exchanger.
+        var box = d.well(new Rect(5, 5, w, h));
+        var p = blockPanel(d, box, "Heat exchanger", List.of("Bypass and ratio lines stay inside the block."));
+        int cx = box.w() / 2, cy = box.h() / 2 - 8;
+        glyph(p, Glyph.EXCHANGER, cx - 32, cy - 14, 64, 28, Sample.NONE);
+        point(p, cx - 32, cy, -16, 0, tubeIn);
+        point(p, cx + 32, cy, 16, 0, tubeOut);
+        point(p, cx + 14, cy - 14, 0, -18, Point.bulk("Shell in"));
+        point(p, cx - 14, cy + 14, 0, 18, Point.bulk("Shell out"));
+        // The kettle.
+        box = d.well(new Rect(5 + w + gap, 5, w, h));
+        p = blockPanel(d, box, "Kettle", List.of("Gas and liquid outlets, a tube side for the heat."));
+        glyph(p, Glyph.KETTLE, cx - 35, cy - 17, 70, 34, Sample.NONE);
+        side(p, cx - 35, cy - 6, cy + 6, -16, List.of(tubeIn, tubeOut));
+        point(p, cx - 8, cy + 17, 0, 18, Point.bulk("Feed"));
+        point(p, cx + 8, cy - 17, 0, -18, Point.vapour("Vapour out"));
+        point(p, cx + 35, cy + 6, 16, 0, Point.liquid("Liquid out"));
+        // The ejector.
+        box = d.well(new Rect(5 + 2 * (w + gap), 5, w, h));
+        p = blockPanel(d, box, "Ejector, later", List.of("Unlit until it has a process model."));
+        glyph(p, Glyph.EJECTOR, cx - 25, cy - 10, 50, 20, new Look(0xFF2A333A, Palette.LINE, Palette.MUTED));
+        point(p, cx - 25, cy, -16, 0, Point.bulk("Suction"));
+        point(p, cx - 8, cy - 8, 0, -22, Point.bulk("Motive"));
+        point(p, cx + 25, cy, 16, 0, Point.bulk("Discharge"));
+        // The heater, coils in series.
+        box = d.well(new Rect(5, 5 + h + gap, w, h));
+        p = blockPanel(d, box, "Vertical heater, coils in series", List.of("One pair: the sample's H-101."));
+        glyph(p, Glyph.HEATER, cx - 29, cy - 44, 58, 88, Sample.NONE);
+        point(p, cx - 29, cy + 22, -16, 0, Point.bulk("Process in"));
+        point(p, cx + 29, cy - 2, 16, 0, Point.bulk("Process out"));
+        // The heater, coils apart.
+        box = d.well(new Rect(5 + w + gap, 5 + h + gap, w, h));
+        p = blockPanel(d, box, "Vertical heater, coils apart", List.of("Two pairs: steam can superheat in the convection coil."));
+        glyph(p, Glyph.HEATER, cx - 29, cy - 44, 58, 88, Sample.NONE);
+        point(p, cx - 22, cy - 24, -23, 0, Point.bulk("Convection in").marked());
+        point(p, cx + 22, cy - 24, 23, 0, Point.bulk("Convection out").marked());
+        point(p, cx - 29, cy + 22, -16, 0, Point.bulk("Radiant in").marked());
+        point(p, cx + 29, cy - 2, 16, 0, Point.bulk("Radiant out").marked());
+        // A later unit.
+        box = d.well(new Rect(5 + 2 * (w + gap), 5 + h + gap, w, h));
+        p = blockPanel(d, box, "Trickle-bed reactor, later", List.of("Unlit until it has a reaction model."));
+        glyph(p, Glyph.REACTOR, cx - 17, cy - 26, 34, 52, new Look(0xFF2A333A, Palette.LINE, Palette.MUTED));
+        point(p, cx - 6, cy - 26, 0, -14, Point.bulk("Feed"));
+        point(p, cx + 17, cy - 12, 16, 0, Point.bulk("Hydrogen"));
+        point(p, cx - 17, cy, -16, 0, Point.bulk("Quench"));
+        point(p, cx, cy + 26, 0, 14, Point.bulk("Effluent"));
+    }
+
+    // ---- Loops ----
+
+    /** The Log view of a loop's run: the furnace on a fixed duty, or, with {@code stuck}, the recycle with no way out. */
+    static void loopLog(GuiPrototypes.Door d, boolean stuck) {
+        int doorW = 168, bottom = d.h - 38;
+        var more = stuck ? List.<Column.Row>of(new Column.Group("Run", null, List.of(meter("Passes", "4", ""))), new Column.Group("Tear", null, List.of(meter("S-9", "2975.4", "kmol/h"), meter("Rises by", "724.3", "kmol/h"))))
+                : List.<Column.Row>of(new Column.Group("Run", null, List.of(meter("Time", "4.7", "s"), meter("Loop passes", "7", ""), meter("Mass gap", "0.00", "%"))),
+                        new Column.Group("Moved", null, List.of(meter("S-7", "336.4", "°C"), meter("S-9", "281.0", "°C"), meter("E-101", "21.25", "MW"))));
+        resultsFrame(d, stuck ? "Not steady after 4 passes: S-9 gains the same amount each pass. What enters this loop has no way out." : "Steady state in 7 passes, 4.7 s. H-101 fixed at 70.37 MW, 8.00 MW under the sample's.", stuck ? Palette.WARN : Palette.ACCENT, 2, more);
+        var box = d.well(new Rect(doorW + 9, 71, d.w - doorW - 14, bottom - 71));
+        String[] head = stuck ? new String[]{"Pass", "S-9 in, kmol/h", "S-9 out, kmol/h", "Largest change, kmol/h", "Component"} : new String[]{"Pass", "S-9 in, °C", "S-9 out, °C", "Change, K", "Step"};
+        int[] at = stuck ? new int[]{0, 44, 140, 240, 372} : new int[]{0, 44, 140, 240, 320};
+        String[][] rows = stuck ? new String[][]{{"1", "none yet", "789.2", "175.2", "Crude oil, NBP 450–550°C"}, {"2", "789.2", "1524.2", "175.2", "Crude oil, NBP 450–550°C"}, {"3", "1524.2", "2251.0", "175.2", "Crude oil, NBP 450–550°C"},
+                {"4", "2251.0", "2975.4", "175.2", "Crude oil, NBP 450–550°C"}}
+                : new String[][]{{"1", "300.22", "289.77", "10.45", "Plain"}, {"2", "289.77", "285.79", "3.98", "Plain"}, {"3", "283.34", "282.18", "1.16", "Accelerated"}, {"4", "280.70", "280.87", "0.17", "Accelerated"},
+                {"5", "281.04", "280.98", "0.06", "Accelerated"}, {"6", "280.95", "280.98", "0.03", "Accelerated"}, {"7", "280.98", "280.98", "0.00", "Accelerated"}};
+        List<String> before = stuck ? List.of("Order: tear S-9, E-101's shell, E-102, TEE-1, P-103, M-101, P-101, T-101's PA 1 to 3, E-101's tube, H-101, V-101, T-101.") : List.of("Order: P-101, T-101's PA 1 to 3, then the loop E-101, H-101, V-101, T-101 with tear S-9.");
+        List<String> after = stuck ? List.of("Each pass adds the same 175.2 kmol/h of this cut, all the crude holds of it. The loop's slope is 1.00, so more passes cannot close it.", "Results on show are pass 4, not a steady state.",
+                "To close it: give the loop a way out. Lower TEE-1's share, or add a purge.")
+                : List.of("Steady state in 7 passes, 4.7 s. Mass gap 0.00 %. Plain passes alone take 12, 8.1 s.", "The feed fell from 359.5 to 336.4 °C, the bottoms from 300.2 to 281.0 °C, E-101 from 25.26 to 21.25 MW.");
+        int y = box.y() + 5, x0 = box.x() + 4;
+        d.c.text(before.getFirst(), x0, y, Palette.TEXT);
+        y += 16;
+        for (int i = 0; i < head.length; i++) d.c.text(head[i], x0 + at[i], y, Palette.MUTED);
+        d.c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
+        y += 14;
+        for (int r = 0; r < rows.length; r++, y += 14) {
+            if (r % 2 == 1) d.c.fill(box.x(), y - 3, box.right(), y + 11, DialogColumns.BAND);
+            for (int i = 0; i < head.length; i++) d.c.text(rows[r][i], x0 + at[i], y, i == 0 ? Palette.TEXT : i == 4 ? Palette.MUTED : Palette.ACCENT);
+        }
+        y += 8;
+        for (int i = 0; i < after.size(); i++, y += 14) {
+            if (i % 2 == 1) d.c.fill(box.x(), y - 3, box.right(), y + 11, DialogColumns.BAND);
+            d.c.text(after.get(i), x0, y, stuck && i == 0 ? Palette.WARN : Palette.TEXT);
+        }
+    }
+
     // ---- Results ----
 
     /** The Results tab's door column and footer; returns the door's lower edge. */
     static int resultsFrame(GuiPrototypes.Door d, String status, int view, List<Column.Row> more) {
-        frame(d, 1, status, Palette.ACCENT, false);
+        return resultsFrame(d, status, Palette.ACCENT, view, more);
+    }
+
+    static int resultsFrame(GuiPrototypes.Door d, String status, int tone, int view, List<Column.Row> more) {
+        frame(d, 1, status, tone, false);
         int doorW = 168, bottom = d.h - 38;
         var rows = new ArrayList<Column.Row>();
         rows.add(new Column.Group("View", null, List.of(new Column.Buttons(List.of(key("streams", "Streams", view == 0), key("units", "Units", view == 1), key("log", "Log", view == 2))))));
@@ -1190,9 +1532,9 @@ public final class SimulatorPrototypes {
     }
 
     static void results(GuiPrototypes.Door d) {
-        var shown = List.of("CRUDE", "S-4", "OFFGAS", "NAPHTHA", "KERO", "RESIDUE");
+        var shown = List.of("CRUDE", "S-7", "OFFGAS", "NAPHTHA", "KERO", "RESIDUE");
         int doorW = 168, bottom = d.h - 38;
-        int listTop = resultsFrame(d, "Showing 6 of 16 streams. Converged in 2 passes.", 0, List.of()) + 4;
+        int listTop = resultsFrame(d, "Showing 6 of 21 streams. Steady state in 2 passes.", 0, List.of()) + 4;
         var list = d.well(new Rect(5, listTop, doorW - 2, bottom - listTop));
         d.c.text("Streams", list.x() + 4, list.y() + 3, Palette.MUTED);
         for (int i = 0; i < STREAMS.size(); i++) {
@@ -1266,8 +1608,8 @@ public final class SimulatorPrototypes {
 
     static void resultsUnits(GuiPrototypes.Door d) {
         int doorW = 168, bottom = d.h - 38;
-        resultsFrame(d, "7 units solved, 1 warning.", 1, List.of(new Column.Group("Mass", null, List.of(meter("In", "593.71", "t/h"), meter("Out", "593.71", "t/h"), meter("Gap", "0.00", "%"))),
-                new Column.Group("Heat", null, List.of(meter("Fired", "111.13", "MW"), meter("Removed", "99.72", "MW"), meter("Gap", "0.00", "%")))));
+        resultsFrame(d, "7 units solved, steady state, 1 warning.", 1, List.of(new Column.Group("Mass", null, List.of(meter("In", "4016.61", "t/h"), meter("Out", "4016.61", "t/h"), meter("Gap", "0.00", "%"))),
+                new Column.Group("Heat", null, List.of(meter("Fired", "78.37", "MW"), meter("Recovered", "67.19", "MW"), meter("Cooled", "66.96", "MW"), meter("Gap", "0.00", "%")))));
         var box = d.well(new Rect(doorW + 9, 71, d.w - doorW - 14, bottom - 71));
         String[] head = {"Unit", "Kind", "Heat or work", "Streams"};
         int[] at = {0, 46, 150, 250};
@@ -1276,14 +1618,16 @@ public final class SimulatorPrototypes {
         d.c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
         y += 14;
         String[][] rows = {{"P-101", "Pump", "110.7 kW", "CRUDE to S-1: 25.0 to 25.1 °C, 8.00 to 14.00 bar"},
-                {"E-101", "Heat exchanger", "34.43 MW", "Tube S-1 to S-2: 25.1 to 132.5 °C. Shell S-6 to S-7: 300.2 to 160.0 °C"},
-                {"H-101", "Vertical heater", "111.13 MW", "S-2 to S-3: 132.5 to 365.0 °C, 13.50 to 5.00 bar"},
-                {"V-101", "Control valve", "0", "S-3 to S-4: 365.0 to 359.5 °C, 5.00 to 2.72 bar"},
-                {"T-101", "Column", "-39.23 MW", "Condenser, to OFFGAS, NAPHTHA, WATER at 59.0 °C"},
-                {"", "", "-41.93 MW", "Three pumparounds, trays 11, 19, 29"},
-                {"", "", "0", "S-4 and STEAM in; KERO, S-5, AGO, S-6 out; bottoms 300.2 °C"},
-                {"P-102", "Pump", "11.7 kW", "S-5 to DIESEL: 213.4 to 213.5 °C, 2.58 to 6.00 bar. Liquid at its bubble point"},
-                {"E-102", "Air cooler", "-18.56 MW", "S-7 to RESIDUE: 160.0 to 70.0 °C, 2.42 to 2.22 bar"}};
+                {"T-101", "Column", "12.84 MW", "PA 1, tube S-1 to S-2: 25.1 to 67.9 °C. Hot side tray 11, 140.1 °C"},
+                {"", "", "17.89 MW", "PA 2, tube S-2 to S-3: 67.9 to 122.0 °C. Hot side tray 19, 213.4 °C"},
+                {"", "", "11.20 MW", "PA 3, tube S-3 to S-4: 122.0 to 153.3 °C. Hot side tray 29, 273.8 °C"},
+                {"E-101", "Heat exchanger", "25.26 MW", "Tube S-4 to S-5: 153.3 to 218.4 °C. Shell S-9 to S-10: 300.2 to 200.0 °C"},
+                {"H-101", "Vertical heater", "78.37 MW", "S-5 to S-6: 218.4 to 365.0 °C, 12.60 to 5.00 bar"},
+                {"V-101", "Control valve", "0", "S-6 to S-7: 365.0 to 359.5 °C, 5.00 to 2.72 bar"},
+                {"T-101", "Column", "39.23 MW", "Condenser, tube CWS to CWR: 30.0 to 39.9 °C; products at 59.0 °C"},
+                {"", "", "0", "S-7 and STEAM in; KERO, S-8, AGO, S-9 out; bottoms 300.2 °C"},
+                {"P-102", "Pump", "11.7 kW", "S-8 to DIESEL: 213.4 to 213.5 °C, 2.58 to 6.00 bar. Liquid at its bubble point"},
+                {"E-102", "Air cooler", "-27.73 MW", "S-10 to RESIDUE: 200.0 to 70.0 °C, 2.42 to 2.22 bar"}};
         for (int r = 0; r < rows.length; r++, y += 14) {
             if (r % 2 == 1) d.c.fill(box.x(), y - 3, box.right(), y + 11, DialogColumns.BAND);
             boolean warn = rows[r][0].equals("P-102");
@@ -1295,8 +1639,10 @@ public final class SimulatorPrototypes {
         int doorW = 168, bottom = d.h - 38;
         resultsFrame(d, "Log of the last run.", 2, List.of());
         var box = d.well(new Rect(doorW + 9, 71, d.w - doorW - 14, bottom - 71));
-        String[] lines = {"Order: P-101, then the recycle E-101, H-101, V-101, T-101 with tear S-6, then P-102, E-102.", "Pass 1: E-101 no duty yet, H-101 145.56 MW, T-101 from its learned start, 2.4 s. Bottoms 300.2 °C.",
-                "Pass 2: E-101 34.43 MW, H-101 111.13 MW, T-101 from its last state, 0.7 s. S-6 moved 0.00 %.", "Converged in 2 passes, 3.4 s. Mass gap 0.00 %, heat gap 0.00 %.",
+        String[] lines = {"Order: P-101, T-101's PA 1 to 3 (their duties are the door's, so no loop), then the loop E-101, H-101, V-101, T-101 with tear S-9,",
+                "then T-101's condenser, P-102, E-102.", "Pass 1: E-101 no duty yet, H-101 103.63 MW, T-101 from its learned start, 2.6 s. Bottoms 300.2 °C.",
+                "Pass 2: E-101 25.26 MW, H-101 78.37 MW, T-101 from its last state, 0.6 s. S-9 moved 0.00 %.", "Steady state in 2 passes, 3.6 s. Mass gap 0.00 %, heat gap 0.00 %.",
+                "Hot sides checked: the crude leaves PA 1, 2, 3 at 72.1, 91.4, 120.5 K under their draw trays. Water leaves the condenser 19.1 K under its 59.0 °C.",
                 "Warning: P-102 takes its liquid at the bubble point; a real pump needs a static head above it."};
         int y = box.y() + 5;
         for (int i = 0; i < lines.length; i++, y += 14) {
