@@ -1,8 +1,8 @@
 # dry-ice-cost
 
-Purpose: measure the cold hold-fuzz worlds job by job and stage by stage, without Gradle, and try a step-level flash without the crystal competition.
+Purpose: measure the cold hold-fuzz worlds job by job and stage by stage, without Gradle, try a step-level flash without the crystal competition, and trace the step controller attempt by attempt.
 
-Batch: `documentation/2026-11-02-dry-ice-cost/` (review `DRY_ICE_COST_REVIEW.md`).
+Batch: `documentation/2026-11-02-dry-ice-cost/` (reviews `DRY_ICE_COST_REVIEW.md` and `STEP_CONTROL_REVIEW.md`).
 
 ## How to run
 
@@ -32,7 +32,15 @@ perl summaryB.pl out/base-673-jobs.tsv out/raised-651-jobs.tsv
 | `proto-bplus.patch` | Form (b+): (b) plus a fold of a crystal-rich `LIQUID_LIQUID` split into the liquid slot |
 | `runB3.sh`, `gates.sh` | The pairs of the review; the three crystal gates on a patch, by Gradle |
 | `jfrstages.pl` | JFR samples per solver stage |
+| `step/hook.pl` | Writes instrumented copies of the solver classes to an overlay: read-only trace hooks, plus the closure forms behind switches (`step.late`, `step.tolerance=<s>`, `step.lateBound`). Every substitution must match exactly once or it dies, so it fails loudly on moved code |
+| `step/extra/.../StepTrace.java` | The trace: one line per attempt, solve, Newton, pass, phase check and flash, for the jobs named in `step.jobs` |
+| `step/env.sh` | `stepbuild <classes> [patched FluidThermodynamics.java]` and `sprobe <seed> <name> <jobs> <stop after job> [java options]`, on top of the scratch `env.sh` |
+| `step/runS1.sh` to `step/runS5.sh` | The runs of the review, serial, at the raised budget, no JFR. `runS4.sh` runs forms F and G on (b+), `runS5.sh` runs form F on today's thermo |
+| `step/runner/RunClosure.java` | One test class without Gradle, for a gate on a switched form |
+| `step/attempts.pl`, `tally.pl`, `split.pl` | One job of a trace: attempts by outcome, phase check and repeat tallies, kernel by outcome and by site |
+| `step/top.pl`, `col.pl`, `sum4.pl`, `fin.pl` | Job tables and states: worst jobs, run counters, the forms' table, final nodes side by side |
 
 ## History
 
 - 2026-11-02: written for the dry ice analysis. Results and limits: the review. `runB3.sh` and `gates.sh` name the worktree they ran in. The output is in the main checkout's `tools/dry-ice-cost/logs/dry-ice-cost-logs-2026-11-02.tar.gz`, local only, without the JFR text dumps.
+- 2026-11-03: `step/` added for `STEP_CONTROL_REVIEW.md`. To run it, copy `step/` to `<scratch>/step/` beside the scratch `env.sh`, build with `stepbuild "$RUN/classes-forms" <FluidThermodynamics.java with proto-bplus.patch applied>` for (b+), or with no second argument for today's thermo. `hook.pl` and the scripts name the worktree and the scratch folder they ran in. The output is in the main checkout's `tools/dry-ice-cost/logs/step-control-logs-2026-11-03.tar.gz`, local only.
