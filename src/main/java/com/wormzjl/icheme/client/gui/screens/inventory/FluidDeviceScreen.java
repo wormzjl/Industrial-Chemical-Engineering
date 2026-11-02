@@ -399,14 +399,6 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         return t.withControl(towerAuto?com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.TARGET_TEMPERATURE:com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.FAN_SPEED,
             fields.get("towerSpeed").value()/100,fields.get("towerTemperature").si());
     }
-    private List<Column.Row> towerSettings(){
-        var rows=new ArrayList<Column.Row>();var t=menu.clientData().controls().tower();
-        if(t.draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED){
-            rows.add(new Column.Buttons(List.of(new Column.Button("tower:manual",tr("tower_manual"),canEdit(),null,!towerAuto,false),new Column.Button("tower:auto",tr("tower_auto"),canEdit(),null,towerAuto,false))));
-            rows.add(new Column.Field(towerAuto?"towerTemperature":"towerSpeed",tr(towerAuto?"tower_temperature":"tower_speed"),towerAuto?temperatureUnit.symbol():"%",null));
-        }
-        return rows.isEmpty()?List.of():List.of(new Column.Group(tr("tower_control"),null,rows));
-    }
     /** A controllable heat side's control as drafted (W4), null for another device: the set point of its mode (K, or the
      * duty in kW as W), the low limit (blank for none) and the manual share: an exchanger side's bypass in %; an air
      * cooler's fans, still while Off, at the fixed fan speed in % with no controller. A controller starts from the
@@ -669,7 +661,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var opening=data.valve()==null?null:new DeviceColumn.Opening(data.valve().opening(),data.valve().status());
         String junction=pipe()&&view.pipeInfo().junction()?tr("junction",view.pipeInfo().connections().size()):null;
         // A paired heat side leads with its side selector, as its Control tab does.
-        var lead=tower()?towerSettings():heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
+        var lead=tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
         return new DeviceColumn.Input(data.kind(),canEdit(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
             view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters());
     }

@@ -92,7 +92,7 @@ public final class IslandCertificate {
             for(var boundary:result.boundaries()){for(double n:boundary.moles())if(n!=0)zero=false;if(boundary.totalEnergyJoule()!=0||!boundary.solids().empty())zero=false;}
             boolean flush=false;
             // A boundary transfer at a vessel is a flush when it carries material; the wall's work on the ambient (decision
-            // D54) is booked there as energy alone, and an open vessel's vent and spill are rates a steady island repeats.
+            // D54) is booked there as energy alone, and an open vessel's vent and spill and a tower's exchange with the air are rates a steady island repeats.
             for(var boundary:result.boundaries())for(var node:after.reservoirs())if(node.id()==boundary.nodeId()&&!node.fixed()&&carriesMaterial(boundary)&&!rate(boundary))flush=true;
             flushed=flush;
             boolean closures=true,filter=false;
@@ -117,7 +117,8 @@ public final class IslandCertificate {
         }
         private static boolean rate(com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer boundary) {
             var kind=boundary.kind();
-            return kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.VENT||kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.SPILL;
+            return kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.VENT||kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.SPILL
+                ||kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.ATMOSPHERE;
         }
         private static boolean carriesMaterial(com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer boundary) {
             if(!boundary.solids().empty())return true;

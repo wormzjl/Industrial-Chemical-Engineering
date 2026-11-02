@@ -48,6 +48,7 @@ class CoolingTowerRuntimeTest {
             int pump=java.util.stream.IntStream.range(0,snapshot.graph().pipes().size()).filter(e->snapshot.graph().pipes().get(e).control() instanceof FlowControl.Pump).findFirst().orElseThrow();
             assertTrue(last.averageMassFlows()[pump]>0,"the pump circulates: "+last.endpointModes());
             assertTrue(rates.waterLoss()>0,"the fill runs: "+rates);
+            assertFalse(new IslandCertificate.Summary(new IslandCertificate.Interval(0,100,snapshot.graph(),last),w.model.molecularWeights()).flushed,"Evaporation is a rate a steady tower repeats, not a flush");
         }
     }
 

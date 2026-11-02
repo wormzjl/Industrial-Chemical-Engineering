@@ -29,6 +29,8 @@ import org.joml.Matrix4f;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
+import java.util.Map;
 
 /**
  * Units' moving parts (owner requests 2026-10-16, "add a working animation for AC (can be switched on and off) and check
@@ -48,6 +50,8 @@ public final class MachineAnimation {
     public static final double RANGE = 96;
     /** Part buffers kept, by unit, part and light; all are dropped when it fills. */
     private static final int MAX_BUFFERS = 256;
+    /** Each fan block's running seconds and the frame they were read at. */
+    private static final Map<EquipmentShellBlockEntity, double[]> FANS = new WeakHashMap<>();
     private static boolean running = true;
     private static final Map<Key, VertexBuffer> BUFFERS = new HashMap<>();
     /** A sprite the buffers hold texture coordinates of: a resource reload makes them stale. */
@@ -91,11 +95,13 @@ public final class MachineAnimation {
             var shape = cell.shape();
             var origin = cell.origin();
             if (cell.isRemoved() || cell.getLevel() != level || shape == null || origin == null) continue;
-            double motionSeconds = running && MoverSounds.running(cell) ? seconds : 0;
+            boolean moving = running && MoverSounds.running(cell);
+            double motionSeconds = moving ? seconds : 0;
             if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER){
                 var node=ShapeRasterizer.fluidCell(shape);
-                var display=TankRenderer.get(origin.offset(node.x(),node.y(),node.z()),level.getGameTime()+event.getPartialTick().getGameTimeDeltaPartialTick(false));
-                motionSeconds*=display==null?0:display.fanSpeed();
+                double ticks=level.getGameTime()+event.getPartialTick().getGameTimeDeltaPartialTick(false);
+                var display=TankRenderer.get(origin.offset(node.x(),node.y(),node.z()),ticks);
+                motionSeconds=fanSeconds(cell,ticks/20,moving&&display!=null?display.fanSpeed():0);
             }
             var parts = ShapeRasterizer.moving(shape);
             double unitPhase = Math.floorMod(31L * origin.getX() + 7L * origin.getY() + origin.getZ(), 97) / 97.0;
@@ -193,5 +199,13 @@ public final class MachineAnimation {
     private static void release() {
         BUFFERS.values().forEach(VertexBuffer::close);
         BUFFERS.clear();
+    }
+
+    /** A fan's own running seconds at {@code now}: its speed scales the time since the last frame, so a change of speed cannot jump the blades. */
+    private static double fanSeconds(EquipmentShellBlockEntity cell, double now, double speed) {
+        var fan = FANS.computeIfAbsent(cell, c -> new double[]{0, now});
+        fan[0] = (fan[0] + (now - fan[1]) * speed) % (ProcessUnit.MOTION_PERIOD / 20.0);
+        fan[1] = now;
+        return fan[0];
     }
 }

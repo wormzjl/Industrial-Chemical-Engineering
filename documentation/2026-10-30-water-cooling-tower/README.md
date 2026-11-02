@@ -11,6 +11,7 @@ The constructor adds induced-draft banks of bounded parallel cells and passive n
 - [Natural support and mesh review](NATURAL_TOWER_SUPPORT_REVIEW.md): reference-matched scale, concrete V-struts, internal grillage and geometry-cost evidence.
 - [Basin surface review](BASIN_SURFACE_REVIEW.md): shared wall/water perimeter, height clamp and alignment evidence.
 - [Branch review and consolidation](BRANCH_REVIEW.md): the wall-deadline blocker, priming, the correlation model and the owner's options.
+- [Fan tower model plan](INDUCED_TOWER_MODEL_PLAN.md): real photos and sizes, proposed dimensions and the owner's decisions; not built.
 - [Code guide](../reference/code-guide/cooling-towers.md).
 - [Verification tools](../../tools/cooling-towers/README.md).
 
@@ -51,3 +52,5 @@ History: 2026-10-31 — `f22a4f3c` aligns natural basin water with the model's e
 History: 2026-11-02 — review on `claude/codex-water-cooling-tower-review-09c170` (from `a2e9a478e`): the marched fill became a Merkel rating, the owner's choice after measuring a correlation against it (`tools/cooling-towers/fill-forms/`), taking a fill from about 60 ms to 0.05 ms and ending the wall-deadline holds. A spray inlet passes gas to the basin vent and a line built with an empty basin primes itself; a pumped wrong material closes without a hold; a gas the vent takes whole is no trace for a vessel's rows. Layout rows and the natural `shapes-4` row are refreshed; tower tests go from 39 to 31. Quick suite 1836 of 1836. Slow gates 188 of 188 at one fork. With `-PtestForks=4` one wall-budgeted gate held, which is not a defect. No merge, push, version bump or client check.
 
 History: 2026-11-02 — owner decision: gas in a spray stream keeps passing to the basin vent, replacing the plan's pure liquid water. Documents only.
+
+History: 2026-11-02 — owner went with the review: `IslandCertificate.rate()` counts a tower's atmospheric exchange, the fan integrates its own phase, the tower control moved to `DeviceColumn` with a gate at every width. Dribble evaporation stays as it is. The fan tower model plan is written and waits for the owner. Quick suite 1837 of 1837, slow gates 188 of 188.
