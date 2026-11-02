@@ -1,12 +1,14 @@
 package com.wormzjl.icheme.science.fluid.thermo;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
+import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import com.wormzjl.icheme.science.thermo.phase.PhaseIdentification;
+import com.wormzjl.icheme.science.thermo.phase.PhaseKind;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -404,6 +406,99 @@ class NetworkPhaseEngineTest {
         assertEquals(FluidThermodynamics.UnsupportedPhases.Kind.THREE_PHASES, hold.kind());
         assertTrue(hold.getMessage().contains("not excluded"), hold.getMessage());
         assertEquals(22, hold.at(22).node(), "a caller that knows the node names it");
+    }
+
+    /**
+     * Free water boils alone only beside a liquid with next to no vapour pressure of its own. Crude's light ends share the
+     * gas, so H(T) and U(T) of wet crude are continuous through its three-phase zone: a state comes back from its enthalpy,
+     * and from its energy and volume, at its own temperature and pressure, with its hydrocarbon vapour. The balance at
+     * water's saturation also met the enthalpy, with no hydrocarbon vapour and 7 to 17 K off, so nothing flagged it; the
+     * last state is UV's: 2 bar instead of 5.
+     */
+    @Test
+    void wetCrudeComesBackWithItsHydrocarbonVapour() {
+        record Point(double waterRatio, double t, double p) {}
+        var engine = model.phaseEngine();
+        for (var at : List.of(new Point(.2, 376, 2e5), new Point(.2, 379, 2e5), new Point(.2, 382, 2e5), new Point(.2, 500, 30e5),
+                new Point(.01, 390, 2e5), new Point(.01, 393, 5e5))) {
+            double[] feed = crudeWith(at.waterRatio());
+            var tp = engine.tp(at.t(), at.p(), feed, false);
+            assertTrue(tp.converged(), at + ": " + tp.detail());
+            double vapour = hydrocarbonVapour(tp);
+            assertTrue(vapour > 1, at + " holds hydrocarbon vapour: " + vapour);
+            var ph = engine.ph(at.p(), tp.enthalpy(), feed, false);
+            var uv = engine.crystalUv(tp.internalEnergy(), tp.volume(), feed, false, Double.NaN, Double.NaN);
+            for (var answer : List.of(ph, uv)) {
+                assertTrue(answer.converged(), at + ": " + answer.detail());
+                assertFalse(answer.diagnostics().coexistenceFromBalance(), at + ": " + answer.detail());
+                var state = answer.phases().get(0);
+                assertEquals(at.t(), state.temperature(), 1e-6, at + " " + answer.specification());
+                assertEquals(at.p(), state.pressure(), 1e-6 * at.p(), at + " " + answer.specification());
+                assertEquals(vapour, hydrocarbonVapour(answer), 1e-6 * vapour, at + " " + answer.specification());
+            }
+        }
+    }
+
+    /**
+     * A clean heavy cut has next to no vapour pressure, so its water's boiling stays a step: the balance answers it at
+     * water's saturation with no hydrocarbon vapour, from the bracket's first two TP answers, where waiting for a closed
+     * bracket costs 35 and can end on no state at all (the wet liquid's bubble point lies off the saturation). A trace of
+     * methane gives the liquid a vapour pressure, about 1 % of the state pressure here, and ends that: the gas holds it.
+     */
+    @Test
+    void aHeavyCutsWaterBoilsAloneUntilTheLiquidHasAVapourPressure() {
+        var engine = model.phaseEngine();
+        double p = 2e5;
+        double[] clean = new double[n];
+        double[] crude = bundledCrude();
+        for (int i = n - 7; i < n - 2; i++) clean[i] = crude[i];
+        double total = sum(clean);
+        for (int i = 0; i < n; i++) clean[i] *= 100 / total;
+        clean[water] = 30;
+        var alone = engine.ph(p, midway(clean, p), clean, false);
+        assertTrue(alone.converged(), alone.detail());
+        assertTrue(alone.diagnostics().coexistenceFromBalance(), alone.detail());
+        assertEquals(p, alone.freeWater().saturationPressure(), 1e-6 * p, "at water's saturation");
+        assertEquals(0, hydrocarbonVapour(alone), "no hydrocarbon vapour");
+        assertTrue(alone.freeWater().waterVapor() > 0 && alone.freeWater().condensed() > 0, alone.detail());
+        assertTrue(alone.diagnostics().outerIterations() <= 4, "TP answers: " + alone.diagnostics().outerIterations());
+
+        double[] traced = clean.clone();
+        traced[methane] = .1;
+        var shared = engine.ph(p, midway(traced, p), traced, false);
+        assertTrue(shared.converged(), shared.detail());
+        assertFalse(shared.diagnostics().coexistenceFromBalance(), shared.detail());
+        assertTrue(hydrocarbonVapour(shared) > 0, shared.detail());
+    }
+
+    /** The enthalpy halfway between 12 K under water's boiling at 2 bar and 12 K over it. */
+    private double midway(double[] feed, double p) {
+        var engine = model.phaseEngine();
+        return .5 * (engine.tp(381, p, feed, false).enthalpy() + engine.tp(405, p, feed, false).enthalpy());
+    }
+
+    private double[] bundledCrude() {
+        return Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(FluidMaterialCatalog.NETWORK_PACKAGE)
+                .crudeFeed("icheme:tia_juana_light_methane").moleFractions(), n);
+    }
+
+    /** The bundled crude with {@code ratio} mol of water per mol of crude, 100 mol in all. */
+    private double[] crudeWith(double ratio) {
+        double[] feed = bundledCrude();
+        feed[water] = ratio;
+        double total = sum(feed);
+        for (int i = 0; i < n; i++) feed[i] *= 100 / total;
+        return feed;
+    }
+
+    /** The hydrocarbons of an answer's gas, mol. */
+    private double hydrocarbonVapour(EquilibriumResult answer) {
+        double vapour = 0;
+        for (var phase : answer.phases()) {
+            if (phase.kind() != PhaseKind.VAPOR) continue;
+            for (int i = 0; i < n; i++) if (i != water) vapour += phase.amount(i);
+        }
+        return vapour;
     }
 
     /** The model's own saturation pressure of pure nitrogen, where its liquid and vapour fugacities agree. */
