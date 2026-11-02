@@ -344,7 +344,7 @@ public final class EquipmentStructure {
         var shape = vessel.shape();
         var moved = device.withPlacement(position(level, node), ports(level, vessel)).withHeat(device.heat().withArea(sides.getFirst().area()));
         var spec = record.spec();
-        var respec = new FluidDeviceSpec(shape.volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), shape.levelHeight(), false, shape.fluidGeometry());
+        var respec = new FluidDeviceSpec(shape.volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), shape.levelHeight(), false, shape.fluidGeometry(), null);
         if (!moved.equals(device) || !respec.equals(spec)) world.edit(device.id(), record.revision(), moved, respec);
         for (var other : nodes)
             if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();

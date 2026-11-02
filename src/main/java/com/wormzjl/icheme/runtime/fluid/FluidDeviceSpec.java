@@ -13,9 +13,8 @@ import java.util.*;
  * 2026-10-21-floating-roof-tanks).
  */
 public record FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry, com.wormzjl.icheme.science.fluid.network.CoolingTower tower) {
-    public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry) {this(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,null);}
     public FluidDeviceSpec withTower(com.wormzjl.icheme.science.fluid.network.CoolingTower value) {return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,value);}
-    public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open){this(volume,temperature,pressure,composition,solids,levelHeight,open,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(volume,levelHeight));}
+    public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open){this(volume,temperature,pressure,composition,solids,levelHeight,open,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(volume,levelHeight),null);}
     public FluidDeviceSpec withGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry){return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower);}
     /** The largest vessel volume, m³ (a floating-roof tank 40 m across with 23 m of fill holds about 28,900 m³, owner
      * decision FR6), and the tallest level height, m. */
@@ -84,5 +83,5 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
         return new PassiveNetwork.Reservoir(device.id(),device.position().y(),state,kind,new PassiveNetwork.Inventory(volume,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids()));
     }
     @Override public boolean equals(Object value){return value instanceof FluidDeviceSpec other&&Objects.equals(tower,other.tower)&&geometry.equals(other.geometry)&&volume==other.volume&&levelHeight==other.levelHeight&&open==other.open&&temperature==other.temperature&&pressure==other.pressure&&Arrays.equals(composition,other.composition)&&solids.equals(other.solids);}
-    @Override public int hashCode(){int legacy=31*Objects.hash(volume,levelHeight,open,temperature,pressure,solids,geometry)+Arrays.hashCode(composition);return tower==null?legacy:31*legacy+tower.hashCode();}
+    @Override public int hashCode(){return 31*Objects.hash(volume,levelHeight,open,temperature,pressure,solids,geometry,tower)+Arrays.hashCode(composition);}
 }

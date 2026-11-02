@@ -214,4 +214,9 @@ class CoolingTowerGeometryTest {
                 assertTrue(unit.inside(nozzle.base()),shape.kind()+" "+nozzle.role()+" root is under the wall, with no fixed pipe stub outside it");
         }
     }
+    @Test void aCopiedShapeKeepsItsTowerBank(){
+        var bank=new TowerBank(6,2);
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,8,3,EquipmentShape.Heading.NORTH,0).withTowerBank(bank);
+        assertEquals(bank,shape.withConnections(List.of()).towerBank());
+    }
 }

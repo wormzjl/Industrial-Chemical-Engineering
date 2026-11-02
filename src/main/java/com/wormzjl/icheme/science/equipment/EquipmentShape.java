@@ -53,10 +53,6 @@ import java.util.Objects;
  */
 public record EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
                              @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank) {
-    public EquipmentShape(Kind kind,double diameter,double tangentLength,Orientation orientation,Heading front,int support,
-                          ColumnTrays trays,List<Connection> connections,ProcessUnit.Bank bank,boolean boot,int outlet) {
-        this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,TowerBank.ONE);
-    }
     public EquipmentShape withTowerBank(TowerBank value) {
         return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value);
     }
@@ -347,7 +343,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** A bare vertical drum resting on its lower head, front to the north: the debug command's form. */
     public EquipmentShape(double diameter, double tangentLength) {
-        this(Kind.DRUM, diameter, tangentLength, Orientation.VERTICAL, Heading.NORTH, 0, null, defaultConnections(diameter, tangentLength, Orientation.VERTICAL, 0, false), ProcessUnit.Bank.ONE, false, 0);
+        this(Kind.DRUM, diameter, tangentLength, Orientation.VERTICAL, Heading.NORTH, 0, null, defaultConnections(diameter, tangentLength, Orientation.VERTICAL, 0, false), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE);
     }
 
     /** A drum with a new drum's side connection ({@link #defaultConnections}). */
@@ -367,17 +363,17 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     /** A drum as {@link #drum(double, double, Orientation, Heading, int, List, boolean)}, a skirted one's bottom outlet turned {@code outlet} quarter turns from the front. */
     public static EquipmentShape drum(double diameter, double tangentLength, Orientation orientation, Heading front, int support, List<Connection> connections, boolean boot,
                                       int outlet) {
-        return new EquipmentShape(Kind.DRUM, diameter, tangentLength, orientation, front, support, null, connections, ProcessUnit.Bank.ONE, boot, outlet);
+        return new EquipmentShape(Kind.DRUM, diameter, tangentLength, orientation, front, support, null, connections, ProcessUnit.Bank.ONE, boot, outlet, TowerBank.ONE);
     }
 
     /** This drum with {@code connections} instead of its own. */
     public EquipmentShape withConnections(List<Connection> connections) {
-        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet);
+        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank);
     }
 
     /** A column: its bottoms leave through its skirt to the front (the owner leaves columns alone, 2026-10-25). */
     public static EquipmentShape column(double diameter, ColumnTrays trays, Heading front, int skirt) {
-        return new EquipmentShape(Kind.COLUMN, diameter, trays.tangentLength(diameter), Orientation.VERTICAL, front, skirt, trays, List.of(), ProcessUnit.Bank.ONE, false, 0);
+        return new EquipmentShape(Kind.COLUMN, diameter, trays.tangentLength(diameter), Orientation.VERTICAL, front, skirt, trays, List.of(), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE);
     }
 
     /** A standalone unit of kind {@code kind}, its sizes as {@link ProcessUnit} reads them; it lies or stands as its kind does. */
@@ -393,7 +389,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     /** A unit as {@link #unit(Kind, double, double, Heading, int, ProcessUnit.Bank)}, its bottom outlet turned {@code outlet} quarter turns from the front where its design turns it. */
     public static EquipmentShape unit(Kind kind, double diameter, double tangentLength, Heading front, int support, ProcessUnit.Bank bank, int outlet) {
         if (!kind.unit()) throw new IllegalArgumentException(kind + " is not a unit");
-        return new EquipmentShape(kind, diameter, tangentLength, ProcessUnit.orientation(kind), front, support, null, List.of(), bank, false, outlet);
+        return new EquipmentShape(kind, diameter, tangentLength, ProcessUnit.orientation(kind), front, support, null, List.of(), bank, false, outlet, TowerBank.ONE);
     }
 
     /**
@@ -402,7 +398,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      */
     public static EquipmentShape storage(Kind kind, double diameter, double shell, Heading front, int support) {
         if (!kind.storage()) throw new IllegalArgumentException(kind + " is not a storage vessel");
-        return new EquipmentShape(kind, diameter, shell, ProcessUnit.orientation(kind), front, support, null, List.of(), ProcessUnit.Bank.ONE, false, 0);
+        return new EquipmentShape(kind, diameter, shell, ProcessUnit.orientation(kind), front, support, null, List.of(), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE);
     }
 
     /** A shape of any designed kind ({@link Kind#designed()}): a storage vessel, or a unit in {@code bank} (an air cooler's). */
@@ -413,7 +409,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     /** A designed shape as {@link #designed(Kind, double, double, Heading, int, ProcessUnit.Bank)}, its bottom outlet turned {@code outlet} quarter turns ({@link #outlets}). */
     public static EquipmentShape designed(Kind kind, double diameter, double length, Heading front, int support, ProcessUnit.Bank bank, int outlet) {
         if (!kind.designed()) throw new IllegalArgumentException(kind + " is not drawn from a design");
-        return new EquipmentShape(kind, diameter, length, ProcessUnit.orientation(kind), front, support, null, List.of(), kind.storage() ? ProcessUnit.Bank.ONE : bank, false, outlet);
+        return new EquipmentShape(kind, diameter, length, ProcessUnit.orientation(kind), front, support, null, List.of(), kind.storage() ? ProcessUnit.Bank.ONE : bank, false, outlet, TowerBank.ONE);
     }
 
     /**
@@ -427,7 +423,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** A new drum's side connections ({@link #defaultConnections(double, double, Orientation, int, boolean)}) fitted round its bottom outlet turned {@code outlet}. */
     public static List<Connection> defaultConnections(double diameter, double tangentLength, Orientation orientation, int support, boolean boot, int outlet) {
-        var drum = new EquipmentShape(Kind.DRUM, diameter, tangentLength, orientation, Heading.NORTH, support, null, List.of(), ProcessUnit.Bank.ONE, boot, outlet);
+        var drum = new EquipmentShape(Kind.DRUM, diameter, tangentLength, orientation, Heading.NORTH, support, null, List.of(), ProcessUnit.Bank.ONE, boot, outlet, TowerBank.ONE);
         double bT = orientation.horizontal() || support == 0 ? diameter / 4 : support, tT = bT + tangentLength;
         if (orientation.horizontal()) {
             double near = Math.ceil(bT) + .5, far = Math.floor(tT - 1) + .5;

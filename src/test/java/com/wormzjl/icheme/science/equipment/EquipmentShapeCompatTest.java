@@ -282,9 +282,9 @@ class EquipmentShapeCompatTest {
     private static final Path CORPUS = Path.of("src/test/resources/compat/equipment");
     /**
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
-     * column's components; 3: a column's turned nozzles; 4: a column's operating point).
+     * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank).
      */
-    private static final int SHAPE_FIELDS = 4;
+    private static final int SHAPE_FIELDS = 5;
 
     /**
      * Every corpus file's saved shell tags read with no repair, to the shapes recorded beside them. The file of this

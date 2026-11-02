@@ -238,9 +238,6 @@ public final class ConstructorColumn {
      */
     public record Design(VesselPlacement.Form form, double diameter, int length, int support, int forward, int right, int up, ProcessUnit.Bank bank,
                          @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank) {
-        public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,Imported column,Outlet outlet,int reach) {
-            this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,com.wormzjl.icheme.science.equipment.TowerBank.ONE);
-        }
     }
 
     /**

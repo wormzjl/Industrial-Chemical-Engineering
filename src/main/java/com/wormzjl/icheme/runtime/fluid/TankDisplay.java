@@ -15,13 +15,12 @@ import java.util.List;
  * its transparency the same way. Free water takes water's appearance.</p>
  */
 public record TankDisplay(float level,float waterLevel,float height,int oilArgb,int waterArgb,float fanSpeed) {
-    public TankDisplay(float level,float waterLevel,float height,int oilArgb,int waterArgb){this(level,waterLevel,height,oilArgb,waterArgb,0);}
     public TankDisplay {
         if(!Float.isFinite(level)||!Float.isFinite(waterLevel)||!Float.isFinite(height)||!Float.isFinite(fanSpeed)||fanSpeed<0||fanSpeed>1||level<0||waterLevel<0||waterLevel>level||!(height>0))
             throw new IllegalArgumentException("Invalid tank display");
     }
     /** An empty tank of fill height {@code height}. */
-    public static TankDisplay empty(float height){return new TankDisplay(0,0,height,0,0);}
+    public static TankDisplay empty(float height){return new TankDisplay(0,0,height,0,0,0);}
     /** This display with its liquid at {@code level} m and its free water no higher; this display itself for a level that is NaN, infinite or negative. */
     private TankDisplay standingAt(double level){return !Double.isFinite(level)||level<0?this:new TankDisplay((float)level,Math.min(waterLevel,(float)level),height,oilArgb,waterArgb,fanSpeed);}
 
