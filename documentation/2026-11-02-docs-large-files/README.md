@@ -2,7 +2,7 @@
 
 Purpose: keep large files out of `documentation/` and git-ignore them (owner 2026-11-02: "Keep large files like screenshots out of the documentations folder and gitignore them. Make this a rule in agent.md").
 
-Status: In progress since 2026-11-02 (branch `claude/docs-file-size-rules-5d5496`); not merged. Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-11-02 (documentation-only merge of `claude/docs-file-size-rules-5d5496`); not pushed. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -15,7 +15,8 @@ Status: In progress since 2026-11-02 (branch `claude/docs-file-size-rules-5d5496
 ## History
 
 - 2026-11-02: rule, ignore patterns and move. `documentation/` went from 4266 tracked files (327 MB) to 951 (13 MB); the largest left is 0.86 MB.
-- 2026-11-02: moved 3315 files of 30 batches to `research/<batch>/` in the main checkout, at the same relative paths: images, PDFs, `.mca` region files, the `*-logs/` folders of the fluid scheduling and fluid follow-up batches, and `wp2-settling-probe.json` (2.6 MB). SHA-256 of both copies identical, no collisions. 46 markdown links in 7 documents now point to `research/`.
+- 2026-11-02: moved 3315 files of 30 batches to `research/<batch>/` in the main checkout, at the same relative paths: images, PDFs, `.mca` region files, the `*-logs/` folders of the fluid scheduling and fluid follow-up batches, and `wp2-settling-probe.json` (2.6 MB). SHA-256 of both copies identical, no collisions. 46 markdown links in 7 documents now point to `research/`. Move `62eb1899`, rule `0ee0f19b`.
+- 2026-11-02: merged into `main` as a documentation-only merge (owner: "Yes, merge"), with no CHANGELOG line or version bump. No `test` or `slowGates` run, because no code changed and nothing in the build reads the moved files. Not pushed.
 
 ## Notes
 
