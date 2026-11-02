@@ -26,6 +26,6 @@ Status: In progress since 2026-11-02 on `claude/focused-raman-3bbde7`. Built and
 
 - Merge, push and version wait for the owner. The proposal is 0.18.1.
 - Main moved to 0.18.0 (`c9e5ed09`) after the lane. The merge brings it in; the fix touches none of its source files. `test slowGates` runs again at the merge.
-- Flash findings 2 (PH under the melting line) and 3 (TP refusing a heavy cut with steam) stay open. Finding 3 is what the 5 typed failures on a pure hydrocarbon with water show.
+- Flash finding 2 (PH under the melting line) stays open. Finding 3 (TP refusing a heavy cut with steam), which the 5 typed failures on a pure hydrocarbon with water showed, is fixed on this branch: batch [`2026-11-02-tp-steam-refusal`](../2026-11-02-tp-steam-refusal/README.md).
 - On main and unchanged: "lies in a step" closures at 30 to 60 bar on a clean cut, and 9 failures of a middle cut near its critical band at 60 bar.
 - `FlowThermo` on the simulator branch searches along the TP flash because of this defect. After this merge it can return to PH; that batch decides.
