@@ -5,12 +5,15 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
+import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver;
+import com.wormzjl.icheme.science.fluid.network.PortPlan;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialTestBasis;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
@@ -100,6 +103,39 @@ class RegulatingValveHoldTest {
     @Test void aDryLineKeepsRunningWhileItsOldGasWashesOut() {
         var last=assertTakesTargets(9,546.3,new double[]{0,0,0,1.87,.83,0,1.66,53.1,0,0,531,0,2549,.104});
         for(var n:last.graph().reservoirs())if(n.junction()){var held=PhaseLayout.totalAmounts(n.state());double total=Arrays.stream(held).sum();assertTrue(held[MaterialTestBasis.NITROGEN]/total<1e-12);}
+    }
+    /** A hand-set target arrives as a topology event; the island it replaces carries its committed interval, so a hot line does not start cold (merge review, finding 6). */
+    @Test void aHandSetTargetKeepsTheCommittedInterval() {
+        var w=new EventPathWorld();double[] steam=pure(MaterialTestBasis.NETWORK);double bore=.15;
+        w.place(0,0,0,Kind.GENERATOR,EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,533,500000,steam),bore);
+        w.place(1,0,0,Kind.PIPE,EAST,bore);
+        long id=w.place(2,0,0,Kind.PIPE,EAST,valve(.75),null,bore);
+        w.place(3,0,0,Kind.PIPE,EAST,bore);
+        w.place(4,0,0,Kind.VOID,EAST,sink(250000,533),bore);
+        w.runTo(800);
+        var registration=w.ledger.snapshot().active().get(id);
+        w.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(registration.device().withControl(valve(.5)),registration.spec(),registration.revision()+1))),w.ledger.nextIdentity(),null);
+        w.registry.applyPending();
+        var island=w.coordinator.snapshots().getFirst();
+        assertTrue(island.lastResult().isPresent(),"the replaced island carries its interval: "+island.status());
+        w.runTo(1200);w.assertKeptUp("a hand-set target");
+        for(double flow:w.coordinator.snapshots().getFirst().lastResult().orElseThrow().averageMassFlows())assertEquals(.5,flow,5e-7);
+    }
+    /** A column's plan of zero stands however small the target before it (merge review, finding 11). */
+    @Test void aPlannedZeroAlwaysApplies() {
+        var model=FluidTestSupport.networkModel();var w=new EventPathWorld();double bore=.05;
+        w.place(0,0,0,Kind.GENERATOR,EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,638.15,250000,pure(MaterialTestBasis.NITROGEN)),bore);
+        w.place(1,0,0,Kind.PIPE,EAST,bore);
+        w.place(2,0,0,Kind.PIPE,EAST,new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,200000,5e-7,.01,PortPlan.COLUMN_SENSOR,0),null,bore);
+        w.place(3,0,0,Kind.PIPE,EAST,bore);
+        w.place(4,0,0,Kind.VOID,EAST,sink(101325,298.15),bore);
+        w.runTo(200);
+        var graph=w.coordinator.snapshots().getFirst().graph();
+        long valve=-1,port=-1;
+        for(var pipe:graph.pipes())if(pipe.control() instanceof FlowControl.ControlValve)valve=graph.reservoirs().get(pipe.first()).id();
+        for(var node:graph.reservoirs())if(node.kind()==PassiveNetwork.NodeKind.VOID)port=node.id();
+        var planned=new PassiveStepSolver(model).ports(graph,Map.of(port,new PortPlan(port,valve,0,0,null)),()->{});
+        for(var pipe:planned.pipes())if(pipe.control() instanceof FlowControl.ControlValve c)assertEquals(0,c.massTarget());
     }
     private static PassiveIntervalSolver.Result assertTakesTargets(int slices,double temperature,double[] amounts) {
         var model=FluidTestSupport.networkModel();var w=new EventPathWorld();double bore=.05,first=.25,second=.32;

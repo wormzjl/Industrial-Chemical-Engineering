@@ -102,6 +102,8 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
     }
     /** Whether {@code a} and {@code b} are one structure: the same pipe identities and node ids, in order. */
     public static boolean sameStructure(PassiveNetwork a,PassiveNetwork b){return PassiveStepSolver.sameStructure(a,b);}
+    /** {@link #sameStructure} whatever a flow valve's set point or a column's plan on its boundary valves. */
+    public static boolean sameLines(PassiveNetwork a,PassiveNetwork b){return PassiveStepSolver.sameLines(a,b);}
     /**
      * {@code graph} with every junction's state taken from the node of the same id in {@code from}, one structure with it,
      * and its buffer sized on that state ({@link #sizeJunctionHoldups}): an island replaced by one of the same graph carries
@@ -112,7 +114,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
      * 0.011 kg, was carried while 21.5 kg/s of water passed, a 0.5 ms lag, and the island held).
      */
     public static PassiveNetwork withJunctionStates(PassiveNetwork graph,PassiveNetwork from,FluidThermodynamics model) {
-        if(!sameStructure(graph,from))throw new IllegalArgumentException("Not one structure");
+        if(!sameLines(graph,from))throw new IllegalArgumentException("Not one structure");
         List<Reservoir> nodes=null;
         for(int i=0;i<graph.reservoirs.size();i++) {
             var node=graph.reservoirs.get(i);if(!node.junction())continue;var old=from.reservoirs.get(i);
@@ -247,6 +249,15 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
         public record Identity(long id,int first,int second,List<PipeResistance.Geometry> sections,FlowControl control,
                                int blockedDirections,FilterSettings filter,PhasePort firstPort,PhasePort secondPort,int forbiddenDirections,double actuatorArea,
                                Record heat) {
+            /** The same line as {@code other}: whatever a flow valve's set point, and whichever way a column works a boundary valve (its plan against the valve's own control). */
+            boolean sameLine(Identity other) {
+                var a=line();var b=other.line();
+                if(a.equals(b))return true;
+                return a.control() instanceof FlowControl.Valve x&&b.control() instanceof FlowControl.Valve y&&x.targetPressure()==y.targetPressure()
+                        &&(worked(x)||worked(y))&&a.controlled(y).equals(b);
+            }
+            private static boolean worked(FlowControl.Valve valve){return valve instanceof FlowControl.ControlValve c&&PortPlan.COLUMN_SENSOR.equals(c.sensor());}
+            private Identity controlled(FlowControl value){return new Identity(id,first,second,sections,value,blockedDirections,filter,firstPort,secondPort,forbiddenDirections,actuatorArea,heat);}
             /** This connection without a flow valve's set point: a new target on a running valve is the same line, and its point carries. */
             Identity line(){return control instanceof FlowControl.ControlValve valve&&!valve.pressureControl()?new Identity(id,first,second,sections,valve.withTarget(0),blockedDirections,filter,firstPort,secondPort,forbiddenDirections,actuatorArea,heat):this;}
         }

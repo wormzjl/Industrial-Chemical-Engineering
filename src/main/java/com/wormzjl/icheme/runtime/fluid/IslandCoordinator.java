@@ -807,7 +807,7 @@ public final class IslandCoordinator {
             // line beyond its tank. The mint's states are discarded; each carried junction's buffer is sized on its carried
             // state by the mint's rule (t48's trace of bundled 145).
             PassiveNetwork graph=replacement.graph;Optional<PassiveIntervalSolver.Result> carried=Optional.empty();
-            var same=originals.stream().filter(old->old.lastResult.isPresent()&&PassiveNetwork.sameStructure(old.graph,replacement.graph)).toList();
+            var same=originals.stream().filter(old->old.lastResult.isPresent()&&PassiveNetwork.sameLines(old.graph,replacement.graph)).toList();
             if(same.size()==1){var old=same.get(0);graph=PassiveNetwork.withJunctionStates(replacement.graph,old.graph,model);carried=old.lastResult;}
             var island=new Island(new Snapshot(replacement.id,revision,graph,new IslandClock.Snapshot(online,committed,0,cadence),carried,"WAITING: full solve after topology change",fences),model,epoch);
             // A topology change starts the island cold: its first slice is one tick and each accepted full interval
