@@ -1,6 +1,6 @@
 # Column operation: the column running in the built plant
 
-**Snapshot:** 27faf5da (branch `claude/column-operation-5c3005`), 2026-11-02 · **Updated:** 2026-11-02 (new chapter, batches 2026-10-28-column-operation and 2026-11-02-valve-hold)
+**Snapshot:** 321b8d1d (branch `claude/column-operation-5c3005`), 2026-11-02 · **Updated:** 2026-11-02 (new chapter, batches 2026-10-28-column-operation and 2026-11-02-valve-hold)
 Up: [code guide](README.md)
 
 ## Read this when
@@ -61,7 +61,7 @@ flowchart TD
 2. **Hold.** The event walks from the column's nozzles to the boundary valves. It marks each device on the way `withSuspendedBy(unit)` and adds one port device per station. It saves a `ColumnUnit`. Stations keep their accounts across a restart, and a restart keeps the player's set points if they are `compatible` with the design.
 3. **First solve.** `ColumnOperation.refresh` makes a `Run` with status `STARTING`, and the first cycle asks for a START solve of the design. No seed goes in, and nothing moves until the table applies.
 4. **Run.** See the steps of a cycle below. `RUNNING` means no limit acted. `LIMITED: <limit>, N %` means a cycle took less than the set feed. `UPSET: …` means the cycle took nothing. `RE-SOLVING: <trigger>; …` is added while a solve is pending.
-5. **Stop.** Two phases. `ColumnOperation.stop` queues one event: the held devices are released and the ports go. The unit keeps running until that event commits (`committed`, from `Host.committed`), so what its ports take and give to the last slice is booked. Then it stops: the accounts stay on the unit, and the unit forgets its engine state. Contents of the held vessels are as they were.
+5. **Stop.** Two phases. `ColumnOperation.stop` queues one event: the held devices are released and the ports go. The unit keeps running until that event commits (`committed`, from `Host.committed`), so what its ports take and give to the last slice is booked. A Start still queued goes first, the event queues behind it; a stop already queued has nothing left to edit. `standing` asks whether a port is in the active registry or named by a queued event (`WorldTopologyLedger.queued`), so a port placed and removed again in the queue still counts. Then it stops: the accounts stay on the unit, and the unit forgets its engine state. Contents of the held vessels are as they were.
 6. **Removal.** `EquipmentStructure` dismantling calls `AssemblyService.removed` and `dismantled`; `columnRemoved` marks the unit `leaving` and stops it; when the stop commits, the unit goes and the ledger books its accounts and solids as destroyed. A layout refresh calls `removed` alone and keeps the unit. Reverting a report stops the column too.
 
 <details>
@@ -72,7 +72,7 @@ flowchart TD
 - A port device is a VOID (inlet) or GENERATOR (outlet) in the cell on the valve's column side, on `PhysicalFluidTopology.PORT_LANE` (15, one past the rack places), facing the valve, with the valve's geometry, one BULK port and spec `FluidDeviceSpec(1, T, P, nitrogen)`. The spec's composition means nothing: `PortPlan` states an outlet's product each slice.
 - A port stands in for the held pipe block next to its valve, and joins the valve as that pipe did. `across` finds a port at `next.withLane(PORT_LANE)` first, so the valve's island ends on it.
 - A held device joins nothing (`joins` is false if either end is `suspended()`). As built it still joins (`mechanicallyJoins`), so Stop needs no rebuild of the line. A held pipe has no island, and its status reads `COLUMN: part of the column at x, y, z, running`. A held vessel stands alone in a one-node island and keeps its contents (`ColumnSuspensionTest`).
-- A port's pressure is `PortConditions.estimate` and stays there: top pressure plus the stage drop to the port's tray (the condenser's ports at the top pressure), at the feed's, the steam's or the condenser's temperature. The ledger keeps it; a solve does not move it. Only a product's temperature comes from the table.
+- A port's pressure is `PortConditions.estimate` and stays there: V3's stage pressure, top pressure plus (j − 1) stage drops for tray j, the sump at the bottom tray's (the condenser's ports at the top pressure), at the feed's, the steam's or the condenser's temperature. The ledger keeps it; a solve does not move it. Only a product's temperature comes from the table.
 - `OFF_GAS`, `SOUR_WATER`, `DISTILLATE`, `DRAW` and `BOTTOMS` are outlets. `ColumnStarts.port` maps the blueprint's `*_valve` slots to ports; a slot's index counts from 1 where a part repeats (`index==0?0:index-1`).
 
 </details>
@@ -136,7 +136,7 @@ Booking (`booked`, at island commit): an inlet's EXCHANGE arrivals go into its a
 | THROUGHPUT | the fed share of the design rate over 0.2 from the table's `alpha` |
 | CLOSURE | the closed condenser duty over 3 % from the solved one |
 
-`SETPOINT` comes first in `cycle`: `Setpoints.intensivelyDiffers` against the reference's set points. A change of feed rate alone is not a set-point trigger, because the column's equations are homogeneous in their extensive inputs; only THROUGHPUT reads the rate. `START` is the first solve. `PACKAGE` has no user in the code.
+`SETPOINT` comes first in `cycle`: `Setpoints.intensivelyDiffers` against the reference's set points. A change of feed rate alone is not a set-point trigger, because the column's equations are homogeneous in their extensive inputs; only THROUGHPUT reads the rate. `START` is the first solve.
 
 </details>
 
@@ -217,7 +217,8 @@ Steam short of its set ratio:
 
 - `science/column/operation/ColumnCycleTest` (6): components and energy close over a thousand cycles of drifting feed; rules A and B; a full buffer; the trip; the bands; the split's sum.
 - `ColumnSolveTest` (2): a START solve's table closes a cycle on the network's basis; half the feed at a prescribed drop gives the same table.
-- `runtime/fluid/ColumnRunTest` (22): conservation through a running column downstream; the view is a read; products independent of job timing, also at a full buffer with one slow island; a table applies at the second cycle; set-point solves and failed solves; a reload resumes without a solve; a blocked product; rules A and B; the condenser's duty and a shortage of cooling water; Stop and dismantling; a pump on the feed line; a held port; solids and crystals; a station its design lost; a second flow valve on a product line; one column's outlet into another's inlet.
+- `science/column/operation/PortConditionsTest` (3): a port stands at V3's stage pressure, the sump at the bottom tray's, the condenser's ports at the top.
+- `runtime/fluid/ColumnRunTest` (25, three on a Stop or a dismantle while another event is queued): conservation through a running column downstream; the view is a read; products independent of job timing, also at a full buffer with one slow island; a table applies at the second cycle; set-point solves and failed solves; a reload resumes without a solve; a blocked product; rules A and B; the condenser's duty and a shortage of cooling water; Stop and dismantling; a pump on the feed line; a held port; solids and crystals; a station its design lost; a second flow valve on a product line; one column's outlet into another's inlet.
 - `runtime/fluid/ColumnSuspensionTest` (2): a port splits the line; Stop joins it with every vessel as it was; two ports cannot share a place.
 - `runtime/fluid/RegulatingValveHoldTest` (7): the column's boundary lines regulate at any ratio; targets on running islands; a liquid product into its line's gas ([fluid-science.md](fluid-science.md)).
 - `FluidFactsCompatTest`, `EquipmentShapeCompatTest`, `AssemblyNetworkCodecTest`, `AssemblyPresentationTest`, `OperationColumnTest`: formats, commands, the page.

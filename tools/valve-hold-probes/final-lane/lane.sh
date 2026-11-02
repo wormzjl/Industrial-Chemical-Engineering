@@ -5,7 +5,7 @@
 # Usage: bash lane.sh <base|head> [steps...]   steps: test regression gametest campaign (default: all for head,
 # test campaign for base). Logs and reports in tmp/merge-lane/<side>/.
 set -u
-HEAD_WT=D:/Minecraft/Modding/1.21/CreateChemE/.claude/worktrees/gates-head-scratch
+HEAD_WT=${HEAD_WT:-D:/Minecraft/Modding/1.21/CreateChemE/.claude/worktrees/gates-head-scratch}
 BASE_WT=D:/Minecraft/Modding/1.21/CreateChemE/.claude/worktrees/gates-base-scratch
 side=${1:?usage: lane.sh <base|head> [steps]}; shift
 case $side in base) WT=$BASE_WT; steps=${*:-test campaign};; head) WT=$HEAD_WT; steps=${*:-test regression gametest campaign};; *) exit 2;; esac
@@ -31,7 +31,7 @@ for s in $steps; do
           grep -hoE '<testsuite [^>]*>' "$OUT"/results/*.xml | grep -oE '(tests|failures|errors|skipped)="[0-9]+"' | awk -F'"' '{s[$1]+=$2} END{for(k in s) printf "%s%d ", k, s[k]; print ""}'
           bash "$PRINTED" "$OUT/results" "$OUT/printed.txt"; grep -E '^(LiquidJunctionTransientTest|MixedGasJunctionTransientTest) ' "$OUT/printed.txt" > "$OUT/junction.txt"; wc -l < "$OUT/junction.txt";;
     regression) gradle "$OUT/chain-100.gradle.txt" --no-configuration-cache fluidSolverRegression -PfluidRegressionMode=exact; grep -iE "max|differ|exact|BUILD" "$OUT/chain-100.gradle.txt" | tail -5;;
-    gametest) gradle "$OUT/gametests.gradle.txt" --no-configuration-cache runFluidGameTestServer -PfluidGameTestRunId=valve-hold-final; grep -E "required tests|failed" "$OUT/gametests.gradle.txt" | tail -3;;
+    gametest) gradle "$OUT/gametests.gradle.txt" --no-configuration-cache runFluidGameTestServer -PfluidGameTestRunId=${RUNID:-valve-hold-final}; grep -E "required tests|failed" "$OUT/gametests.gradle.txt" | tail -3;;
     campaign) fuzz campaign-cold "$FORMS/hold-fuzz-cold" random -PholdFuzzCold=true; fuzz campaign-bundled "$FORMS/hold-fuzz-bundled" "random defaults" "";;
     *) echo "unknown step $s"; exit 2;;
   esac

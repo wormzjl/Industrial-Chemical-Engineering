@@ -20,16 +20,19 @@ Batches in this merge: `2026-10-28-column-operation`, `2026-11-02-valve-hold`, `
 - Fluid facts schema 6, unreleased: `suspendedBy`, the column units, `condenser`, `leaving`, a station's `solids`. Corpus `compat/fluid/schema-6/` regenerated: a nonzero `condenser`, a station with solids.
 - State format 29: `ColumnUnit.State` in the topology unit. A credit's solids and a gift are not saved.
 - Shape fields 4: the operating point on a column design. Corpus `shapes-4.snbt`.
-- Wire: the column design payload gained the operating point with no bump of wire schema 17 or protocol "13". No compatibility work is owed; see item 2.
+- Wire: the column design payload gained the operating point: wire schema 18, protocol "14". No compatibility work is owed.
 
 ## Open items for the owner
 
-1. Condenser approach: at 30 C supply the 5 K approach leaves 24 K of a 27 K rise, and the column limits after about 5.5 min. The review plant's water is 25 C. Change the approach, the water rate, or leave it.
-2. Wire protocol: bump schema 17 and protocol "13" at this merge, or not. Proposal: bump, since the payload changed.
-3. Version: `mod_version` stays. Proposal: 0.18.0, a new feature and a solver batch.
-4. Vacuum column outputs, 261 MB, sit in the codex worktree's `tmp/` with no log archive. Keep or drop them.
+1. Version: `mod_version` stays. Proposal: 0.18.0, a new feature and a solver batch.
 
-Findings 1 and 5 are decided and built, "Lower target wins" and option A: `MERGE_CODE_REVIEW.md`.
+Findings 1 and 5 are the owner's, decided and built, "Lower target wins" and option A: `MERGE_CODE_REVIEW.md`.
+
+Decided by the orchestrator; the owner can overrule them:
+
+- Condenser approach: left at 5 K. At 30 C supply it leaves 24 K of a 27 K rise and the column limits after about 5.5 min: water too short to take the duty should limit the column. The review plant's water is 25 C.
+- Wire protocol: bumped, the payload changed.
+- Vacuum column outputs, 261 MB, stay in the codex worktree's `tmp/` with no log archive. That is not this worktree; the `tmp/` cleanup rule covers them after the merge.
 
 ## At the merge
 
@@ -41,9 +44,7 @@ Findings 1 and 5 are decided and built, "Lower target wins" and option A: `MERGE
 ## Lower, not in this merge
 
 - Finding 16: `EquipmentStructure.at` may sync-load a neighbouring chunk; cycles keep running during a property suspension.
-- Plan against code, from the guide: `ScheduledTransfer` has no producer; port pressures stay the `PortConditions` estimate; `Read.column` gives back instead of W9/DUTY; the warm seed is not saved; `DriftBands.Trigger.PACKAGE` is unused; `PortConditions` uses top + stage × drop where the plan has (j − 1) × drop.
-- Stale comments: `AssemblyScreen` placeholder, `Device.withSuspendedBy` parameter, `ColumnUnit.MAXIMUM_STATIONS`, `Port` "constant-pressure buffers", `ColumnOperation` "specific enthalpy".
-- Two broken `tools/` links in `verification.md` predate this batch.
+- Plan against code, from the guide: `ScheduledTransfer` has no producer; port pressures stay the `PortConditions` estimate; `Read.column` gives back instead of W9/DUTY; the warm seed is not saved.
 - Cold 431 and 475 may move with findings 7(a) and 7(b): the lane's campaign reads them.
 
 Code guide: `column-operation` (new), `fluid-science`, `fluid-runtime`, `verification`, `equipment`, `machine-assemblies`.

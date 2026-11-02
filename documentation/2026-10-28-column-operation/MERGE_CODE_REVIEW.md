@@ -116,6 +116,8 @@ Conservation holds in all three. The case needs a data change that drops a held 
 
 **Found in this round.**
 
+- A Stop while the Start was queued (the orchestrator's read of the fix round). Expected: it takes effect once that Start has committed. A port is pending until its Start commits and `stop` returned on any pending port, so a Stop was dropped and a dismantle left a running unit with no structure. Fixed in 7f0b151a1: the event queues behind the Start, and `committed` asks whether a port stands or a queued event names it. Tests `aStopWhileTheStartIsQueuedTakesEffectBehindIt`, `aDismantleWhileTheStartIsQueuedTakesTheUnitWithIt`; both failed first.
+- `PortConditions` stood one stage drop high at every tray port: V3 has tray j at top + (j − 1) × drop and the sump at the bottom tray's. Fixed in 5f8853d5c with `PortConditionsTest`, which failed first. At 1 kPa a stage that is 0.5 % at 2 bar.
 - Any change of the axis refused the world ("Column totals on the accounts' axis"): `withStations` then `withTotals` validated between the two. Fixed in 460a98836; the finding 5 test exposed it.
 - Orphan port devices on the facts path: fixed in 460a98836; the finding 15 test exposed it.
 - Heat beat, not a defect. Water slices run 4.05 to 4.5 s against 5 s cycles, so one slice in 5 to 10 takes little heat and the outlet swings: four slices 29 K, one about 19 K, mean 27 K. Energy closes. The GameTest reads a time-weighted mean.
