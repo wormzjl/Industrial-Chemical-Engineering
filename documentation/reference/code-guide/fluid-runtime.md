@@ -328,7 +328,7 @@ flowchart TD
   - `test`: the quick suite; it leaves out the slow gate classes (`slowGateClasses` in build.gradle, `HoldClassWorldsTest` among them).
   - Run configuration `fluidGameTestServer` (task `runFluidGameTestServer`): game dir `run/fluid-gametest[-<fluidGameTestRunId>]`, scheduler verify on.
   - `fluidServerBenchmark` (via `fluidBenchmarkServer`, `-PfluidBenchmarkRunId`, `-PfluidRestDetection`).
-  - `fluidSolverRegression`; `slowGates` (the slow gate classes; `check` runs `test` and `slowGates`).
+  - `fluidSolverRegression`; `slowGates` (`holdGates`, `columnGates` and `equipmentGates`; `check` runs `test` and `slowGates`).
   - Under AGENTS.md, timing runs run alone, and the GameTests run inside the one final `gates.sh` run.
 - **Design background**:
   - [2026-09-15-fluid-network](../../2026-09-15-fluid-network/): engine design and implementation.

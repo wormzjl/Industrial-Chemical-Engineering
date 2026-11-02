@@ -2,6 +2,7 @@ package com.wormzjl.icheme.fluid.gametest;
 
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
+import com.wormzjl.icheme.runtime.ProcessSolveServices;
 import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.assembly.AssemblyStore;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
@@ -74,7 +75,6 @@ public final class ColumnOperationReviewWorld {
      * clock plans from the column's past: from the start on, the test holds the server to 20 ticks a second, as a game runs.
      */
     static final int REPORTS = 4, REPORT_TICKS = 600;
-    static final long PACE_MILLIS = 50;
 
     @GameTest(template = "empty", timeoutTicks = Integer.MAX_VALUE, batch = "review-operation")
     public static void aCrudeColumnRuns(GameTestHelper helper) {
@@ -283,18 +283,24 @@ public final class ColumnOperationReviewWorld {
             plant.level.setDayTime(6000);
         }
 
-        long lastTick;
-
-        /** Holds the server to a game's 20 ticks a second ({@link #PACE_MILLIS} a tick); always true. */
+        /**
+         * Holds the tick until no solve runs on a worker: a GameTest server ticks flat out and would run far ahead of the solves
+         * a cycle waits for. A ready job waits for this thread to dispatch it, and a finished one to drain it, so neither counts.
+         * Always true.
+         */
         boolean paced() {
-            long wait = lastTick + PACE_MILLIS - System.currentTimeMillis();
-            if (wait > 0) try {
-                Thread.sleep(wait);
+            var server = plant.level.getServer();
+            while (running(ProcessSolveServices.diagnostics(server)) > 0) try {
+                Thread.sleep(1);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                break;
             }
-            lastTick = System.currentTimeMillis();
             return true;
+        }
+
+        private static int running(ProcessSolveServices.Diagnostics d) {
+            return d.outstandingJobs() - d.readyJobs() - d.pendingCompletions();
         }
 
         /** Whether the column is past its first solve: running, limited, upset or not ready. */
