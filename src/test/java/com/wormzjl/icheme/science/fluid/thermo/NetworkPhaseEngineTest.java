@@ -99,7 +99,7 @@ class NetworkPhaseEngineTest {
             var reused = model.flashTP(c.t(), c.p(), c.overall(), () -> {});
             // A fresh workspace: a new model's engine, whose per-thread workspace this first request creates.
             var fresh = model.adopt(c.t(), c.p(), c.overall(), FluidTestSupport.networkModel().phaseEngine().tp(c.t(), c.p(), c.overall(),
-                    model.crystalsCompete(c.t(), c.overall())), null);
+                    model.stepCompetition(c.t(), c.overall())), null);
             var other = FluidTestSupport.networkModel().flashTP(c.t(), c.p(), c.overall(), () -> {});
             for (var candidate : List.of(fresh, other)) {
                 assertArrayEquals(bits(reused.liquidView()), bits(candidate.liquidView()), c.name());
@@ -391,18 +391,20 @@ class NetworkPhaseEngineTest {
      * engine converges a two-phase split, but the stability re-check leaves both products unresolved: a third fluid phase is
      * not excluded, so the split is no answer. That is the proved indication's typed hold short of the proof
      * ({@code THREE_PHASES}), never a plain refusal: a seed that meets it keeps its guess, a substep counts it under its key,
-     * and an island holding on it names the node.
+     * and an island holding on it names the node. The third phase there is a crystal's stand-in, so a step, which carries its
+     * crystals, answers vapour and one liquid; the fluid phases alone still reach the hold.
      */
     @Test
     void aSplitWhoseProductStabilityIsUnresolvedIsHeldTyped() {
         var pilot = FluidTestSupport.model(MaterialCatalog.bundled(), PILOT);
         double t = 185.98296668278303, p = 2861811.264201872;
         double[] arrival = {0.3324767803012572, 17.82807635831462, 0.2742249567265616, 5.342048217743187, 0};
-        var answer = pilot.phaseEngine().tp(t, p, arrival, pilot.crystalsCompete(t, arrival));
+        var answer = pilot.phaseEngine().tp(t, p, arrival, false);
         assertEquals(EquilibriumResult.Status.NOT_CONVERGED, answer.status(), answer.toString());
         assertFalse(answer.diagnostics().criticalBand(), "outside the band");
         assertTrue(answer.detail().startsWith(EquilibriumResult.UNRESOLVED_PRODUCT), answer.detail());
-        var hold = assertThrows(FluidThermodynamics.UnsupportedPhases.class, () -> pilot.flashTP(t, p, arrival, () -> {}));
+        assertEquals(EquilibriumResult.Classification.VAPOR_LIQUID, pilot.phaseEngine().tp(t, p, arrival, pilot.stepCompetition(t, arrival)).classification());
+        var hold = assertThrows(FluidThermodynamics.UnsupportedPhases.class, () -> pilot.adopt(t, p, arrival, answer, null));
         assertEquals(FluidThermodynamics.UnsupportedPhases.Kind.THREE_PHASES, hold.kind());
         assertTrue(hold.getMessage().contains("not excluded"), hold.getMessage());
         assertEquals(22, hold.at(22).node(), "a caller that knows the node names it");

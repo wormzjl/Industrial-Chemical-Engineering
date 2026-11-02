@@ -107,6 +107,21 @@ public final class TangentPlaneStability {
         @Override public double[] trialComposition() { return trialComposition.clone(); }
     }
 
+    /**
+     * A caller's statement that a stationary trial is no phase of the fluid it tests. An excluded trial proves nothing and
+     * seeds nothing, and the test goes on to its next trial. Arrays are read-only and valid during the call.
+     */
+    @FunctionalInterface
+    public interface TrialFilter {
+        /**
+         * @param feed the tested phase's shares over the kernel's basis
+         * @param feedRoot its root
+         * @param trial the trial's shares at its stationary point
+         * @param trialRoot its root
+         */
+        boolean excludes(double[] feed, PengRobinsonKernel.Root feedRoot, double[] trial, PengRobinsonKernel.Root trialRoot);
+    }
+
     private enum Outcome { TRIVIAL, CONVERGED, PROVEN, UNRESOLVED }
 
     private static final int NOT_COMPUTED = 0;
@@ -137,7 +152,7 @@ public final class TangentPlaneStability {
      * @throws IllegalArgumentException for such a feed, or a state outside the kernel's domain
      */
     public Result test(double temperatureKelvin, double pressurePascal, double[] feed, Workspace workspace) {
-        return run(temperatureKelvin, pressurePascal, pressurePascal, false, feed, workspace);
+        return run(temperatureKelvin, pressurePascal, pressurePascal, false, feed, null, workspace);
     }
 
     /**
@@ -163,6 +178,16 @@ public final class TangentPlaneStability {
      */
     public Result test(double temperatureKelvin, double liquidPressurePascal, double vaporPressurePascal,
                        double[] translations, double[] feed, Workspace workspace) {
+        return test(temperatureKelvin, liquidPressurePascal, vaporPressurePascal, translations, feed, null, workspace);
+    }
+
+    /**
+     * {@link #test(double, double, double, double[], double[], Workspace)} with {@code filter} (may be {@code null})
+     * judging each trial that proved instability or ran out of its budget. With a filter and no surviving trial the
+     * result reports distance 0 and the feed, as a trivial trial does.
+     */
+    public Result test(double temperatureKelvin, double liquidPressurePascal, double vaporPressurePascal,
+                       double[] translations, double[] feed, TrialFilter filter, Workspace workspace) {
         if (!(liquidPressurePascal > 0.0) || !(vaporPressurePascal > 0.0) || !Double.isFinite(liquidPressurePascal)
                 || !Double.isFinite(vaporPressurePascal)) {
             throw new IllegalArgumentException("Branch pressures must be positive and finite");
@@ -180,11 +205,11 @@ public final class TangentPlaneStability {
                 workspace.vaporShifts[i] = translations == null ? logRatio : logRatio + scale * translations[i];
             }
         }
-        return run(temperatureKelvin, liquidPressurePascal, vaporPressurePascal, branched, feed, workspace);
+        return run(temperatureKelvin, liquidPressurePascal, vaporPressurePascal, branched, feed, filter, workspace);
     }
 
     private Result run(double temperatureKelvin, double pressurePascal, double vaporPressurePascal, boolean branched,
-                       double[] feed, Workspace workspace) {
+                       double[] feed, TrialFilter filter, Workspace workspace) {
         Objects.requireNonNull(workspace, "workspace");
         if (workspace.owner != kernel) throw new IllegalArgumentException("Workspace belongs to another kernel");
         Workspace w = workspace;
@@ -251,6 +276,11 @@ public final class TangentPlaneStability {
             Outcome outcome = runTrial(w, trial);
             trials++;
             Point end = w.current;
+            if (filter != null && (outcome == Outcome.PROVEN || outcome == Outcome.UNRESOLVED)) {
+                // runTrial ends such a trial at its stationary point or its budget, so the current point is the trial's.
+                for (int i = 0; i < w.count; i++) w.shares[i] = end.amounts[i] / end.total;
+                if (filter.excludes(w.feed, w.feedRoot, w.shares, end.root)) continue;
+            }
             if (outcome == Outcome.TRIVIAL) {
                 if (0.0 < bestDistance) {
                     bestDistance = 0.0;
@@ -275,6 +305,7 @@ public final class TangentPlaneStability {
         if (proven || w.localStability == LOCALLY_UNSTABLE) verdict = Verdict.UNSTABLE;
         else if (unresolved) verdict = Verdict.UNRESOLVED;
         else verdict = Verdict.STABLE;
+        if (filter != null && bestDistance == Double.POSITIVE_INFINITY) bestDistance = 0.0;
         return new Result(verdict, bestDistance, w.best, bestRoot, w.feedRoot, trials, w.iterations,
                 w.evaluations, w.derivativeEvaluations, w.nearestStationary);
     }
@@ -705,6 +736,8 @@ public final class TangentPlaneStability {
         private final double[] reference;
         private final double[] wilson;
         private final double[] best;
+        /** A trial's shares, as a {@link TrialFilter} reads them. */
+        private final double[] shares;
         private final double[] step;
         private final double[] previousStep;
         private final double[] alpha;
@@ -746,6 +779,7 @@ public final class TangentPlaneStability {
             reference = new double[count];
             wilson = new double[count];
             best = new double[count];
+            shares = new double[count];
             step = new double[count];
             previousStep = new double[count];
             vaporShifts = new double[count];

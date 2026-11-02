@@ -1237,7 +1237,7 @@ public final class PassiveStepSolver {
                 double scale=seed.mass()/mass,enthalpy=(stock+heat)*scale;
                 for(int c=0;c<n.length;c++)n[c]*=scale;
                 FluidThermodynamics.State engine;
-                try{var split=model.equilibriumPH(weighted/mass,seed.pressure(),enthalpy,n,false,checkpoint);engine=split!=null?split:model.flashTP(weighted/mass,seed.pressure(),n,checkpoint);}
+                try{var split=model.equilibriumPH(weighted/mass,seed.pressure(),enthalpy,n,checkpoint);engine=split!=null?split:model.flashTP(weighted/mass,seed.pressure(),n,checkpoint);}
                 catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold outside){continue;}
                 if(laidOutFor(phaseCode(model.folded(engine,true)),phaseCode(seed)))continue;
                 // The engine's answer is the start of the junction's own split, not its verdict (D26): its rows decide the phase.
@@ -2858,10 +2858,10 @@ public final class PassiveStepSolver {
                 double[] held=PhaseLayout.totalAmounts(s);double h=s.enthalpy();double[] tp=new double[TABLE],tr=new double[TABLE],tv=new double[TABLE];boolean ok=true;
                 for(int k=0;k<TABLE&&ok;k++) {
                     tp[k]=low*DeterministicMath.exp(DeterministicMath.log(high/low)*k/(TABLE-1));
-                    // Fluid-only: a crystal the competition would book at a table point moves the density by the crystal's share, nothing
-                    // a starting guess needs; the junction's final mixture ({@link #mixed}) keeps the competition. On the cold package the
-                    // competition was the tables' cost (about 1.4 ms a flash, t44's probe).
-                    try{var at=model.equilibriumPH(s.temperature(),tp[k],h,held.clone(),false,checkpoint);
+                    // The fluid phases alone: a table point in the two-liquid window is refused and the junction keeps its stated
+                    // density. With the crystals carried here cold seed 244 held 20 times with a 12 s job, on the rows of junctions
+                    // holding vapour and near-pure carbon dioxide at 1 atm (0 holds, 422 ms fluid-only); seed 907 holds 19 and 10.
+                    try{var at=model.fluidPH(s.temperature(),tp[k],h,held.clone(),checkpoint);
                         if(at==null||!FluidThermodynamics.holdsFluid(at)){ok=false;break;}
                         tr[k]=at.mass()/at.volume();tv[k]=tr[k]*model.velocityLimit(at);}
                     catch(IllegalArgumentException refused){ok=false;}

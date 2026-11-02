@@ -39,8 +39,17 @@ perl summaryB.pl out/base-673-jobs.tsv out/raised-651-jobs.tsv
 | `step/runner/RunClosure.java` | One test class without Gradle, for a gate on a switched form |
 | `step/attempts.pl`, `tally.pl`, `split.pl` | One job of a trace: attempts by outcome, phase check and repeat tallies, kernel by outcome and by site |
 | `step/top.pl`, `col.pl`, `sum4.pl`, `fin.pl` | Job tables and states: worst jobs, run counters, the forms' table, final nodes side by side |
+| `carried/runW.sh`, `sum.pl` | The nine worlds serial at the raised budget, one classes folder; their table. `SEEDS` narrows the list |
+| `carried/runT.sh`, `tally.pl`, `track.pl`, `src/.../CarriedTally.java` | The refusals per site: `CarriedTally.record` goes at the engine's three entry points of an overlay |
+| `carried/src/.../CarriedProbe.java`, `CarriedWindow.java`, `CarriedWindow2.java`, `CarriedGrid.java`, `CarriedWet.java` | Mode (a) on the plan's probe states, the three-fluid window, 244's refused states, the spine grid, the ethane-rich window |
+| `carried/src/.../CarriedRefresh.java` | The refresh's crystal answers in full digits, to compare two builds |
+| `carried/series.pl`, `closures.pl` | With `-Dprobe.describeMs=0`: a world's tanks over time, each pipe's first closure |
+| `carried/hook-a.pl` | `step/hook.pl` for the engine with a `PhaseCompetition` argument |
+| `carried/gates.sh` | The named affected tests, by Gradle; `TESTS` narrows the list |
+| `carried/a0-plan-form.patch`, `a1-prototype.patch` | The plan's form as written, and the rejected third attempt from the vapour's trial, both against 59b69d873 |
 
 ## History
 
 - 2026-11-02: written for the dry ice analysis. Results and limits: the review. `runB3.sh` and `gates.sh` name the worktree they ran in. The output is in the main checkout's `tools/dry-ice-cost/logs/dry-ice-cost-logs-2026-11-02.tar.gz`, local only, without the JFR text dumps.
 - 2026-11-03: `step/` added for `STEP_CONTROL_REVIEW.md`. To run it, copy `step/` to `<scratch>/step/` beside the scratch `env.sh`, build with `stepbuild "$RUN/classes-forms" <FluidThermodynamics.java with proto-bplus.patch applied>` for (b+), or with no second argument for today's thermo. `hook.pl` and the scripts name the worktree and the scratch folder they ran in. The output is in the main checkout's `tools/dry-ice-cost/logs/step-control-logs-2026-11-03.tar.gz`, local only.
+- 2026-11-03: `carried/` added for `CARRIED_CRYSTALS_REVIEW.md`. Copy its scripts to `<scratch>/carried/` and its sources to `<scratch>/src/`, and set the path at the top of `runW.sh`, `runT.sh` and `gates.sh`. `src/.../PhFlashCost.java` and `EngineAccess.java` use the boolean `.ph` and `.tp`; `PhFlashCost` also uses the six-argument `equilibriumPH`, removed on the branch, so move it out of a build on that code (`fluidPH` is the fluid-only call). Logs: `carried-crystals-logs-2026-11-03.tar.gz`.
