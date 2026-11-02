@@ -409,11 +409,11 @@ class NetworkPhaseEngineTest {
     }
 
     /**
-     * Free water boils alone only beside a liquid with next to no vapour pressure of its own. Crude's light ends share the
-     * gas, so H(T) and U(T) of wet crude are continuous through its three-phase zone: a state comes back from its enthalpy,
-     * and from its energy and volume, at its own temperature and pressure, with its hydrocarbon vapour. The balance at
-     * water's saturation also met the enthalpy, with no hydrocarbon vapour and 7 to 17 K off, so nothing flagged it; the
-     * last state is UV's: 2 bar instead of 5.
+     * Free water boils alone only where the hydrocarbons hold next to none of the gas. Crude's light ends share it, so H(T)
+     * and U(T) of wet crude are continuous through its three-phase zone: a state comes back from its enthalpy, and from its
+     * energy and volume, at its own temperature and pressure, with its hydrocarbon vapour. The balance at water's saturation
+     * also met the enthalpy, with no hydrocarbon vapour and 7 to 17 K off, so nothing flagged it; the last state is UV's:
+     * 2 bar instead of 5.
      */
     @Test
     void wetCrudeComesBackWithItsHydrocarbonVapour() {
@@ -466,6 +466,30 @@ class NetworkPhaseEngineTest {
         double[] traced = clean.clone();
         traced[methane] = .1;
         var shared = engine.ph(p, midway(traced, p), traced, false);
+        assertTrue(shared.converged(), shared.detail());
+        assertFalse(shared.diagnostics().coexistenceFromBalance(), shared.detail());
+        assertTrue(hydrocarbonVapour(shared) > 0, shared.detail());
+    }
+
+    /**
+     * Water holding a trace of crude boils alone as well, whatever the crude's vapour pressure: the gas cannot hold more
+     * hydrocarbon than there is, 2e-4 of it here, so the balance at water's saturation stands, 5 mK over the exact answer,
+     * from two TP answers where the search takes 25. With 100 mol of water per mol of crude the gas is 2 % hydrocarbon and
+     * the search answers.
+     */
+    @Test
+    void waterWithATraceOfCrudeBoilsAlone() {
+        var engine = model.phaseEngine();
+        double p = 2e5;
+        double[] trace = crudeWith(1e4);
+        var alone = engine.ph(p, midway(trace, p), trace, false);
+        assertTrue(alone.converged(), alone.detail());
+        assertTrue(alone.diagnostics().coexistenceFromBalance(), alone.detail());
+        assertEquals(p, alone.freeWater().saturationPressure(), 1e-6 * p, "at water's saturation");
+        assertTrue(alone.diagnostics().outerIterations() <= 4, "TP answers: " + alone.diagnostics().outerIterations());
+
+        double[] more = crudeWith(100);
+        var shared = engine.ph(p, midway(more, p), more, false);
         assertTrue(shared.converged(), shared.detail());
         assertFalse(shared.diagnostics().coexistenceFromBalance(), shared.detail());
         assertTrue(hydrocarbonVapour(shared) > 0, shared.detail());

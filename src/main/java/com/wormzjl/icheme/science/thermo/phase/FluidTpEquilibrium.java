@@ -90,8 +90,8 @@ import java.util.Objects;
  * specified volume; when Newton stalls, a nested search in {@code T} at the specified volume, each temperature solving
  * {@code V(P) = V_spec} in {@code ln P}; a bracket that closes at the box's pressure bound with the energy still short is
  * {@code NOT_CONVERGED} naming that bound. Steps the TP answer leaves undetermined (a pure hydrocarbon at its
- * equal-fugacity point, free water boiling or subliming at the state pressure, with no hydrocarbons or beside a liquid
- * with next to no vapour pressure of its own, {@link #BOILS_ALONE_SHARE}, free water freezing at its melting line)
+ * equal-fugacity point, free water boiling or subliming at the state pressure where the hydrocarbons hold next to none
+ * of the gas, {@link #BOILS_ALONE_SHARE}, free water freezing at its melting line)
  * are determined from the balance once a bracket straddles the jump, {@code target = (1 - beta) x_1 + beta x_2}, at the
  * kernel's equal-fugacity temperature or pressure, the water model's saturation or the melting line
  * ({@link #freezingAtVolume} at a fixed volume and energy; pure water inside its triple point's triangle at that point,
@@ -165,13 +165,13 @@ public final class FluidTpEquilibrium {
      */
     public static final double SPECIFICATION_TOLERANCE = 1.0e-6;
     /**
-     * The largest share of the pressure a hydrocarbon liquid's own vapour pressure may hold for the free water beside it to
-     * boil alone, at water's saturation with no hydrocarbon vapour ({@link #waterBoiling}). Above it the hydrocarbons share
-     * the gas and the water leaves through the three-phase zone the TP answers resolve (crude with water at 2 bar: 8 to 14
-     * mol of hydrocarbon vapour per 100, 11 to 17 K under the saturation). Below it the water boils at the wet liquid's
-     * bubble point, {@code y R T^2 / L} under the saturation (at this bound 30 mK at 1 bar, 90 mK at 60 bar), over a zone
-     * that can be narrower than the search's bracket: the step stays the water's. At 1e-4 the targets of a clean heavy cut
-     * were lost at 30 and 60 bar, its bracket closing on a step off the saturation that no balance answers.
+     * The largest share of the gas the hydrocarbons may hold for the free water beside them to boil alone, at water's
+     * saturation with no hydrocarbon vapour ({@link #waterBoiling}). Above it they share the gas and the water leaves through
+     * the three-phase zone the TP answers resolve (crude with water at 2 bar: 8 to 14 mol of hydrocarbon vapour per 100,
+     * 11 to 17 K under the saturation). Below it the water boils at the wet liquid's bubble point, {@code y R T^2 / L} under
+     * the saturation (at this bound 30 mK at 1 bar, 90 mK at 60 bar), over a zone that can be narrower than the search's
+     * bracket: the step stays the water's. At 1e-4 the targets of a clean heavy cut were lost at 30 and 60 bar, its bracket
+     * closing on a step off the saturation that no balance answers.
      */
     private static final double BOILS_ALONE_SHARE = 1.0e-3;
     /** Consecutive halvings back toward the last evaluated state when a trial state has no TP answer. */
@@ -2413,9 +2413,9 @@ public final class FluidTpEquilibrium {
      * into steam at {@code p_w = p} and condensed water (liquid, or ice below the melting line), the steam fraction from
      * the energy (PH) or volume (UV) balance. Null when the balance puts the fraction outside [0, 1] by more than the
      * specification tolerance (the target lies in a part of the step no state of the rule spans, which the caller types
-     * as not converged), beside a competing crystal, whose hydrocarbons are not one liquid, and where that liquid's own
-     * vapour pressure holds more than {@link #BOILS_ALONE_SHARE} of {@code p}: its vapour shares the gas, so no state of
-     * the rule has this split and no step lies at the saturation, whatever a wide bracket's ends read.
+     * as not converged), beside a competing crystal, whose hydrocarbons are not one liquid, and where the hydrocarbons would
+     * hold more than {@link #BOILS_ALONE_SHARE} of this split's gas: no state of the rule has the split and no step lies at
+     * the saturation, whatever a wide bracket's ends read.
      */
     private EquilibriumResult waterBoiling(Specification specification, double t, double p, double target,
                                            EquilibriumResult condensedSide, PhaseCompetition competition, Workspace w) {
@@ -2428,7 +2428,6 @@ public final class FluidTpEquilibrium {
         if (w.hydrocarbonTotal > 0.0) {
             liquid = evaluator.evaluate(t, p, w.feed, Root.LIQUID, w.phases, w.liquidState);
             w.outerKernel++;
-            if (vapourShare(liquid) > BOILS_ALONE_SHARE) return null;
             hydrocarbonValue = w.hydrocarbonTotal * (energy ? liquid.molarEnthalpy() : liquid.molarVolume());
         }
         double waterValue;
@@ -2455,6 +2454,7 @@ public final class FluidTpEquilibrium {
             condensed = (1.0 - beta) * water;
             steam = water - condensed;
         }
+        if (liquid != null && hydrocarbonGasShare(liquid, steam, w) > BOILS_ALONE_SHARE) return null;
         List<PhaseAmounts> phases = new ArrayList<>(3);
         if (steam > 0.0) phases.add(gasPhase(t, p, p, 0.0, steam, null, w));
         if (liquid != null) phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t, p, expand(w.feed), liquid.copy()));
@@ -2468,16 +2468,17 @@ public final class FluidTpEquilibrium {
     }
 
     /**
-     * A liquid's vapour pressure as a share of its pressure, {@code sum_i x_i phi_i}: the mole fraction of the hydrocarbons
-     * in a gas beside it, whose own fugacity coefficients are one at a low partial pressure.
+     * The most of a gas of {@code steam} the hydrocarbons beside it can hold, as a mole fraction: their liquid's vapour
+     * pressure as a share of its pressure, {@code sum_i x_i phi_i} (the gas's own fugacity coefficients are one at a low
+     * partial pressure), or all of them in that steam where they are too few to reach it.
      */
-    private double vapourShare(PhaseState liquid) {
+    private double hydrocarbonGasShare(PhaseState liquid, double steam, Workspace w) {
         double share = 0.0;
         for (int i = 0; i < count; i++) {
             double x = liquid.moleFraction(i);
             if (x > 0.0) share += x * DeterministicMath.exp(liquid.logFugacityCoefficient(i));
         }
-        return share;
+        return Math.min(share, w.hydrocarbonTotal / (w.hydrocarbonTotal + steam));
     }
 
     /**
