@@ -61,7 +61,7 @@ public final class SimulatorPrototypes {
                         "4 The canvas on the HMI glass: pan by dragging the grid, zoom by the wheel or the keys. 5 A stream is a named line; a pill starts it (teal, a feed) or ends it (a product).",
                         "6 The recycle's tear, chosen by the solver, marked T. 7 A unit's colour is its state: teal solved, yellow warning, red failed, grey not solved. 8 A free port, in the laying tool's colours; grey once connected.",
                         "9 The selection's name is typed here or on its label. 10 The palette, the list of items below: category keys over the tiles. Drag a tile to the canvas. An unlit tile has no process model yet.",
-                        "11 Run is the confirming key; Stop cancels a run. Every number on these sheets is a real solve of this flowsheet by the mod's own thermo and column code, on a plain JVM with no game classes."));
+                        "11 Run is the confirming key; Stop cancels a run. This flowsheet's numbers are a real solve by the mod's own thermo and column code, on a plain JVM with no game classes."));
         both(out, "02-main-layout-B", W, H, (d, s) -> screen(d, Layout.B, Show.PLAIN),
                 "Layout B: the canvas takes the width; a card follows the selection, the run reads on the status display",
                 List.of("The canvas gains 174 px (22 %). What the door column of layout A shows moves to a card beside the selection. Double click opens the door in both layouts."));
