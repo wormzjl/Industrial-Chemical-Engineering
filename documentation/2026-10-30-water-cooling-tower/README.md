@@ -54,3 +54,5 @@ History: 2026-11-02 — review on `claude/codex-water-cooling-tower-review-09c17
 History: 2026-11-02 — owner decision: gas in a spray stream keeps passing to the basin vent, replacing the plan's pure liquid water. Documents only.
 
 History: 2026-11-02 — owner went with the review: `IslandCertificate.rate()` counts a tower's atmospheric exchange, the fan integrates its own phase, the tower control moved to `DeviceColumn` with a gate at every width. Dribble evaporation stays as it is. The fan tower model plan is written and waits for the owner. Quick suite 1837 of 1837, slow gates 188 of 188.
+
+History: 2026-11-02 — owner comments on the fan tower model plan: no motor outside the stack, keep the real scale, simplify the inside to lower polygons. Plan revised with a polygon budget from today's counts. Documents only.

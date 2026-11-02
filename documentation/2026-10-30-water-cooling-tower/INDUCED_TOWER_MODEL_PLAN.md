@@ -30,16 +30,16 @@ Stacks run 2–5.5 m, about 0.3 to 0.45 fan diameters ([listing](https://zhonghu
 | Height / width | 2.2 | 1.5 | 1.5 | 1.2 | 1.2 | 1.2 |
 
 - **Shell.** The casing comes down to the rim on pilasters, so the box stops floating on legs. The inlet band is louvers in bays of about 2 m, slats sloping in. Long faces take louvers; end walls of a bank are solid. Vertical panel ribs and bolted seams above the inlet. A single cell takes louvers on four faces.
-- **Top.** A flared stack: a `frustum` bell mouth at the deck, a straight throat, a band at the rim, 24 panels. A new `towerFan` with no guard, 5 narrow blades, the hub and gearbox on a beam across the throat, a drive shaft through the stack wall to a `motor` on the deck.
-- **Deck and access.** Grating deck with a handrail round the whole edge; the ladder lands on the deck itself and the hanging platform goes. A rest platform stays where the ladder needs one.
-- **Water.** The hot water pipe enters at the spray zone, drawn as a flanged spool and elbow, with a header line along the distributor. A drift eliminator layer sits above the spray, inside the casing.
-- **Removed:** the four legs per cell, the literals above, the guard, the outboard top platform.
+- **Top.** A flared stack: a `frustum` bell mouth at the deck, a straight throat, a band at the rim, 24 panels. A new `towerFan` with no guard: 5 narrow blades and a plain hub. No motor, shaft or gearbox outside the stack (owner, 2026-11-02).
+- **Deck and access.** Grating deck with a square-bar handrail round the whole edge; the ladder lands on the deck itself and the hanging platform goes. A rest platform stays where the ladder needs one.
+- **Water.** The hot water pipe enters at the spray zone, drawn outside as a flanged spool and elbow.
+- **Inside: nothing drawn (owner, 2026-11-02).** A player cannot see in, so the casing is one closed shell: outer faces only, a dark `OPENING` plate behind the louvers and under the fan, no fill, distributor, drift layer or legs, and no basin water on a fan cell. Heights stay in the model. Collision is one box per cell. Today's 8 m cell draws 5172 fixed polygons; fill, distributor, legs and guard are about 1600 of them, and the handrails 1826. Budget: no fan cell above today's count at its width, and a gate holds it.
 
 ## Effect on the model
 Merkel constants stay. `distributorHeight` falls from `5.5 + fill` to the new spray level, so the pump lifts less (w = 6, default fill: 8.5 to 6 m). The fans-off draft reads `height − distributorHeight`, which rises from 2.5 to about 3.2 m; measure it. Tower references move; a layout table, `shapes-4.snbt` and the schema-6 image update. The tower is unreleased, so no alias work.
 
 ## Decisions for the owner
-1. **Width** 4–14 m (recommended) or stay 4–8 m. Bank size must be checked: 6 × 14 m is 84 m long.
+1. **Width: decided, real scale** 4–14 m (owner, 2026-11-02). Bank size must be checked: 6 × 14 m is 84 m long.
 2. **Rows** 1–2 (recommended; matches the Marbach and Neckarwestheim banks) and columns 1–8. A third row has no louver face.
 3. **Hot water nozzle** moves in height with the spray level, same face and x. `AGENTS.md` asks your approval for a moved nozzle pipe block.
 4. **Rim 1.5 m** for both tower kinds (recommended, one constant), or natural towers stay at 2 m.
@@ -47,4 +47,4 @@ Merkel constants stay. `distributorHeight` falls from `5.5 + fill` to the new sp
 6. **Forced draft** as its own kind: not recommended now. It adds a side fan and a sealed plenum for a small unit, with the same fill.
 
 ## Build, once approved
-W1 dimensions and validation. W2 stack, fan and drive. W3 casing, louvers, deck and access. W4 pipe and spool. Show renders of one 8 m cell and a 3 × 2 bank after W3, before gates. Then `EquipmentLayoutGoldenTest`, `CoolingTowerGeometryTest`, the corpus and the suites. No client check.
+W1 dimensions and validation. W2 stack and fan. W3 closed casing, louvers, deck and access. W4 pipe and spool. Show renders and polygon counts of one 8 m cell, one 14 m cell and a 3 × 2 bank after W3, before gates. Then `EquipmentLayoutGoldenTest`, `CoolingTowerGeometryTest` with the polygon budget, the corpus and the suites. No client check.
