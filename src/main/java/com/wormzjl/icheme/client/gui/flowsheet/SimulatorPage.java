@@ -1,0 +1,247 @@
+package com.wormzjl.icheme.client.gui.flowsheet;
+
+import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
+import com.wormzjl.icheme.client.gui.common.kit.Canvas;
+import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.FlowsheetPainter.Look;
+import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
+import com.wormzjl.icheme.client.gui.common.kit.Palette;
+import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
+import com.wormzjl.icheme.science.material.MaterialRuntime;
+import java.util.ArrayList;
+import java.util.List;
+import org.jetbrains.annotations.Nullable;
+
+/**
+ * The simulator's pages under their widgets (batch 2026-11-02-process-simulator, sheets 01, 05, 14, 16): which keys stand where, and what draws, so the screen forwards and the
+ * render tool draws one page.
+ */
+public final class SimulatorPage {
+    /** A key at its place. */
+    public record Slot(Column.Button button, Rect rect) {
+    }
+
+    private SimulatorPage() {
+    }
+
+    private static Column.Button off(String key, String text, @Nullable String hint) {
+        return new Column.Button(key, text, false, hint);
+    }
+
+    /** The frame's keys: tabs, file keys, the footer and the display keys. */
+    public static List<Slot> frameKeys(SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SimulatorHost host, SheetEditor editor) {
+        var slots = new ArrayList<Slot>();
+        var tabs = frame.tabs();
+        for (var t : SimulatorFrame.Tab.values()) {
+            boolean sizing = t == SimulatorFrame.Tab.SIZING;
+            String label = x.text("tab." + t.name().toLowerCase(java.util.Locale.ROOT));
+            slots.add(new Slot(sizing ? off("tab/" + t.ordinal(), label, x.text(x.state().steady() ? "hint.sizing_later" : "hint.sizing")) : Door.position("tab/" + t.ordinal(), label, t == tab), tabs.get(t.ordinal())));
+        }
+        boolean narrow = frame.size() != SimulatorFrame.Size.WIDE, reader = host.reader();
+        var file = frame.fileKeys();
+        slots.add(new Slot(new Column.Button("file/new", x.text("file.new"), !reader, null), file.get(0)));
+        slots.add(new Slot(new Column.Button("file/open", x.text("file.open"), !reader, null), file.get(1)));
+        slots.add(new Slot(new Column.Button("file/save", x.text("file.save"), host.stores() && !reader, host.stores() ? null : x.text("hint.block")), file.get(2)));
+        slots.add(new Slot(new Column.Button("file/save_as", x.text(narrow ? "file.save_as_short" : "file.save_as"), true, null), file.get(3)));
+        var foot = frame.footer();
+        boolean running = host.running() != null;
+        slots.add(new Slot(new Column.Button("close", x.t().get("fluid.close"), true, null), foot.get(0)));
+        slots.add(new Slot(new Column.Button("run", x.text("frame.run"), host.canRun() && !running && !reader, host.canRun() ? null : x.text("hint.run")), foot.get(1)));
+        slots.add(new Slot(new Column.Button("stop", x.text("frame.stop"), running, null), foot.get(2)));
+        if (foot.size() > 3) {
+            slots.add(new Slot(new Column.Button("undo", x.text("frame.undo"), editor.canUndo(), null), foot.get(3)));
+            slots.add(new Slot(new Column.Button("redo", x.text("frame.redo"), editor.canRedo(), null), foot.get(4)));
+        }
+        var soft = softKeys(x.units(), x.t());
+        var at = frame.softKeys();
+        for (int i = 0; i < 4; i++) slots.add(new Slot(soft.get(i), at.get(i)));
+        return slots;
+    }
+
+    /** The display keys. */
+    public static List<Column.Button> softKeys(SheetUnits u, HeatControlColumn.Texts t) {
+        return List.of(new Column.Button("unit/basis", t.get(u.mass() ? "fluid.mass_basis_short" : "fluid.mole_basis_short"), true, null, false, true), new Column.Button("unit/temperature", u.temperature().symbol(), true, null, false, true),
+                new Column.Button("unit/pressure", u.pressure().symbol(), true, null, false, true), new Column.Button("unit/time", u.time().suffix(), true, null, false, true));
+    }
+
+    /** The keys on the canvas and the palette. */
+    public static List<Slot> canvasKeys(SheetContext x, SimulatorFrame frame, Rect box, int category) {
+        var slots = new ArrayList<Slot>();
+        var zoom = SimulatorFrame.zoomKeys(box);
+        String[] keys = {"out", "in", "fit"};
+        String[] texts = {"-", "+", x.text("frame.fit")};
+        for (int i = 0; i < 3; i++) slots.add(new Slot(new Column.Button("zoom/" + keys[i], texts[i], true, null, false, true), zoom.get(i)));
+        var categories = frame.categories();
+        if (frame.size() == SimulatorFrame.Size.TINY) {
+            slots.add(new Slot(Door.position("category/" + category, x.t().get(Tiles.CATEGORIES.get(category).name()), true), categories.get(0)));
+            slots.add(new Slot(Door.key("category-", "<", true, null), categories.get(1)));
+            slots.add(new Slot(Door.key("category+", ">", true, null), categories.get(2)));
+            return slots;
+        }
+        for (int i = 0; i < categories.size(); i++) slots.add(new Slot(Door.position("category/" + i, x.t().get(Tiles.CATEGORIES.get(i).name()), i == category), categories.get(i)));
+        return slots;
+    }
+
+    /** The lit unit types a placeholder may turn into. */
+    public static List<String> litTypes() {
+        var types = new ArrayList<String>();
+        for (var tile : Tiles.all()) if (tile.lit() && !tile.type().equals(Tiles.FEED) && !tile.type().equals(Tiles.PRODUCT)) types.add(tile.type());
+        return types;
+    }
+
+    /** A dialog's list, by its name. */
+    public static FileColumns.Listing listing(String dialog, SheetContext x, List<FileColumns.Entry> files, int chosen) {
+        return switch (dialog) {
+            case "OPEN" -> FileColumns.open(files, chosen, x.t());
+            case "TEMPLATES" -> {
+                var rows = new ArrayList<String[]>();
+                for (var preset : FluidPresetCatalog.resolve(MaterialRuntime.active())) {
+                    int parts = 0;
+                    for (double share : preset.moleFractions()) if (share > 0) parts++;
+                    rows.add(new String[]{preset.name(), Integer.toString(parts)});
+                }
+                yield FileColumns.templates(rows, chosen, x.t());
+            }
+            default -> {
+                var rows = new ArrayList<String[]>();
+                for (var type : litTypes()) rows.add(new String[]{x.t().get(Tiles.name(type)), ""});
+                yield FileColumns.templates(rows, chosen, x.t());
+            }
+        };
+    }
+
+    /** Every widget key rows hold. */
+    public static List<String> keys(List<? extends Column.Row> rows) {
+        var keys = new ArrayList<String>();
+        for (var row : rows) {
+            switch (row) {
+                case Column.Group group -> keys.addAll(keys(group.rows()));
+                case Column.Field field -> keys.add(field.key());
+                case Column.Wide wide -> keys.add(wide.key());
+                case Column.Buttons buttons -> {
+                    for (var button : buttons.buttons()) keys.add(button.key());
+                }
+                case Column.Setting setting -> keys.add(setting.key());
+                default -> {
+                }
+            }
+        }
+        return keys;
+    }
+
+    /** A tile: its symbol, its name in two lines at most; an unlit tile has no process model yet; a carried tile shows ringed. */
+    public static void tile(Canvas c, SimulatorFrame.TileSlot slot, boolean lit, boolean carried, HeatControlColumn.Texts t) {
+        var m = c.measure();
+        var r = slot.rect();
+        var symbol = slot.tile().symbol();
+        Look look = lit ? SheetPainter.LIT : SheetPainter.UNLIT;
+        if (carried) c.outline(r.x(), r.y() + 1, r.w(), r.h() - 2, Palette.TEXT);
+        int top = r.y() + 2, room = slot.captions() ? r.h() - 24 : r.h() - 6;
+        int[] size = SimulatorFrame.tileSize(symbol, r.w() - 10, room);
+        int x = r.x() + (r.w() - size[0]) / 2, y = top + (room - size[1]) / 2;
+        if (symbol == Symbol.COLUMN_TOP) SheetPainter.columnTile(c, x, y, size[0], size[1], look);
+        else SheetPainter.sprite(c, symbol, x, y, size[0], size[1], look);
+        if (!slot.captions()) return;
+        var lines = m.wrap(t.get(slot.tile().name()), r.w() - 2);
+        int ty = r.y() + r.h() - 1 - lines.size() * 9;
+        for (var line : lines) {
+            c.text(line, r.x() + (r.w() - m.width(line)) / 2, ty, lit ? Palette.TEXT : SheetPainter.UNLIT.text());
+            ty += 9;
+        }
+    }
+
+    /** A placed key's look, for a page that draws it itself. */
+    public static Skin.Press press(Column.Button b) {
+        return b.latched() ? Skin.Press.CURRENT : !b.active() ? Skin.Press.OFF : Skin.Press.REST;
+    }
+
+    /** The frame under its keys: the page, the title, the status once, the footer's rule and tray. */
+    public static void back(Canvas c, Skin skin, SheetState.Status status, String title, SimulatorFrame frame, int w, int h) {
+        skin.page(c, new Rect(0, 0, w, h));
+        skin.title(c, 10, 8, title);
+        var line = frame.status();
+        skin.status(c, line, c.measure().cut(status.text(), line.w() - 4), status.tone());
+        skin.hDivider(c, 8, w - 8, h - 35);
+        skin.softKeys(c, frame.softTray());
+    }
+
+    /** The Flowsheet tab's canvas, palette and panel; the zoom keys' tray. Returns the canvas's inner box. */
+    public static Rect flowsheet(Canvas c, Skin skin, SheetContext x, SimulatorFrame frame, SheetView view, SheetGestures gestures, SheetEditor editor, int category) {
+        var box = skin.well(c, frame.well());
+        view.layout(box);
+        SheetPainter.draw(c, editor.layout(), x.state(), view, gestures.selected(), gestures.overlay(), x.t());
+        skin.softKeys(c, SimulatorFrame.zoomTray(box));
+        var well = skin.well(c, frame.tileWell());
+        boolean locked = editor.locked();
+        var overlay = gestures.overlay();
+        for (var slot : frame.tiles(category, well)) tile(c, slot, slot.tile().lit() && !locked, overlay != null && overlay.tile() != null && overlay.tile().equals(slot.tile()), x.t());
+        return box;
+    }
+
+    /** The panel's page over the canvas's right end. */
+    public static void panel(Canvas c, Skin skin, Rect box) {
+        var r = SimulatorFrame.panel(box);
+        c.fill(r.x(), r.y(), r.right(), r.bottom(), 0xFF000000);
+        skin.page(c, new Rect(r.x() + 1, r.y(), r.w() - 1, r.h()));
+    }
+
+    /** The Results tab under its widgets. */
+    public static void results(Canvas c, Skin skin, SheetContext x, ResultsPage.State state, SimulatorFrame frame, int w) {
+        int bottom = frame.bottom(), door = SimulatorFrame.RESULT_DOOR;
+        skin.vDivider(c, door + 3, SimulatorFrame.DOOR_TOP, bottom);
+        var column = SimulatorFrame.doorColumn(ResultsPage.rows(x, state), door, x.m());
+        var list = skin.well(c, ResultsPage.list(column, bottom));
+        ResultsPage.drawList(c, skin, x, state, list);
+        var box = skin.well(c, new Rect(door + 9, 71, w - door - 14, bottom - 71));
+        ResultsPage.draw(c, skin, x, state, box);
+    }
+
+    /** The Basis tab under its widgets. */
+    public static void basis(Canvas c, Skin skin, SheetContext x, SimulatorFrame frame, int w) {
+        int bottom = frame.bottom(), door = SimulatorFrame.BASIS_DOOR;
+        skin.vDivider(c, door + 3, SimulatorFrame.DOOR_TOP, bottom);
+        BasisPage.draw(c, x, skin.well(c, new Rect(door + 9, 71, w - door - 14, bottom - 71)));
+    }
+
+    /** What the status says on a tab, a refusal or a gesture's prompt first. */
+    public static SheetState.Status status(SheetContext x, SimulatorFrame.Tab tab, SheetGestures gestures, SheetEditor editor, boolean compact) {
+        var refusal = editor.refusal();
+        if (refusal != null) return new SheetState.Status(x.t().get(refusal.key(), refusal.arguments().toArray()), Palette.WARN);
+        String lifted = gestures.lifted();
+        if (lifted != null) return new SheetState.Status(x.text("status.reconnect", editor.stream(lifted).name()), Palette.ACCENT);
+        return x.state().status(x.t(), x.units(), compact);
+    }
+
+    /** Draws the page the screen stands on; returns the hover. */
+    public static @Nullable String draw(Canvas c, Skin skin, SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SheetView view, SheetGestures gestures, ResultsPage.State results, int category, SheetEditor editor, KitDoor kit, String title, double mouseX, double mouseY) {
+        int w = frame.status().w() + 20, h = frame.bottom() + SimulatorFrame.BOTTOM;
+        back(c, skin, status(x, tab, gestures, editor, frame.size() != SimulatorFrame.Size.WIDE), title, frame, w, h);
+        switch (tab) {
+            case FLOWSHEET -> {
+                var box = flowsheet(c, skin, x, frame, view, gestures, editor, category);
+                var selected = gestures.selected();
+                if (selected != null) {
+                    panel(c, skin, box);
+                    kit.place(SelectionColumn.of(x, selected).rows(), x.m());
+                    return kit.draw(c, skin, mouseX, mouseY);
+                }
+                return null;
+            }
+            case RESULTS -> {
+                results(c, skin, x, results, frame, w);
+                kit.place(ResultsPage.rows(x, results), x.m());
+                return kit.draw(c, skin, mouseX, mouseY);
+            }
+            case BASIS -> {
+                basis(c, skin, x, frame, w);
+                kit.place(BasisPage.rows(x), x.m());
+                return kit.draw(c, skin, mouseX, mouseY);
+            }
+            default -> {
+                return null;
+            }
+        }
+    }
+}

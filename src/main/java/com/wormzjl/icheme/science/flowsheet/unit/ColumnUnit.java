@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.flowsheet.unit;
 
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
 import com.wormzjl.icheme.science.column.v3.V3ColumnResult;
 import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
@@ -149,6 +150,7 @@ public final class ColumnUnit implements UnitModel {
         private final ColumnDoor door;
         private final int components;
         private @Nullable V3NeuralSeed warm;
+        private @Nullable V3ColumnDisplayResult display;
         /** The feed tray's pressure the last solve left (Pa): tray hydraulics march it from the column's own traffic. */
         private double feedTray = Double.NaN;
 
@@ -212,6 +214,7 @@ public final class ColumnUnit implements UnitModel {
                 if (wire != null && !board.stream(wire).empty() && board.stream(wire).pressure() < nodes.get(row.stage()).pressurePascal()) report.note(Note.warning(u.id(), "column.inlet_pressure", steamPort(row)));
             }
             write(board, report, result);
+            report.display(display);
             var ledger = result.dutyLedger().orElseThrow();
             report.reading("condenser", -ledger.condenserWatts());
             report.reading("reboiler", ledger.reboilerWatts());
@@ -299,7 +302,10 @@ public final class ColumnUnit implements UnitModel {
             return MaterialRuntime.with(catalog, input.packageId(), () -> {
                 var outcome = seed == null ? null : V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
                 if (!(outcome instanceof V3ColumnOutcome.Success)) outcome = V3ColumnCalculator.calculate(input, checkpoint::run, 0, 0, START, V3NeuralRegistry.bundled().bind(catalog, input), screen);
-                if (outcome instanceof V3ColumnOutcome.Success success) return success.result();
+                if (outcome instanceof V3ColumnOutcome.Success success) {
+                    display = V3ColumnDisplayResult.fromAccepted(success);
+                    return success.result();
+                }
                 throw new FlowsheetFailure("column.failed", ((V3ColumnOutcome.Failure) outcome).summary());
             });
         }

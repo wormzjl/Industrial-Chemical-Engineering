@@ -1,5 +1,8 @@
 package com.wormzjl.icheme.science.flowsheet;
 
+import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
+import org.jetbrains.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,9 +19,19 @@ public final class Report {
     private final Map<String, Double> readings = new LinkedHashMap<>();
     private final List<Note> notes = new ArrayList<>();
     private double duty, massIn, enthalpyIn, massOut, enthalpyOut;
+    private @Nullable V3ColumnDisplayResult display;
 
     public void reading(String key, double value) {
         readings.put(key, value);
+    }
+
+    /** What a column's last solve shows on its door's Results pages: a state, kept here because a stream or reading cannot hold a profile. */
+    public void display(V3ColumnDisplayResult display) {
+        this.display = display;
+    }
+
+    public @Nullable V3ColumnDisplayResult display() {
+        return display;
     }
 
     public void note(Note note) {
