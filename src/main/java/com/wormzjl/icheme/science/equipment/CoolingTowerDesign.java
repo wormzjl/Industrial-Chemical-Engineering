@@ -120,7 +120,7 @@ final class CoolingTowerDesign extends UnitDesign {
         double r=d/2,axis=r+.5,base=u.shape.coolingTower().shellBaseHeight();
         int facets=naturalFacets(d);
         var frame=naturalFrame(d);
-        u.mesh.cylinder(frame,r,0,.2,facets,Material.CONCRETE);
+        u.mesh.annulus(frame,0,r,.2,facets,1,Material.TOWER_FLOOR);
         u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,0,.2,r,0));
         u.mesh.ring(frame,r,r+.2,.2,CoolingTower.BASIN_HEIGHT,facets,3,Material.CONCRETE);
         u.solids.add(ProcessUnit.Solid.ring(axis,axis,.2,CoolingTower.BASIN_HEIGHT,r,r+.2,0,2*Math.PI));
@@ -165,12 +165,12 @@ final class CoolingTowerDesign extends UnitDesign {
             double px=axis+x*r/2,pz=axis+z*r/2;
             u.bar(new double[]{px,.2,pz},new double[]{px,base-beam,pz},beam,new double[]{0,1,0},Mesh.NO_ENDS,Material.STEELWORK,true);
         }
-        // The packing and distributor follow the resized shell, bounded by its inner radius at the packing top.
-        double fillRadius=shellRadius(throat,shellScale,zthroat,b,base,base+2)-.25;
-        u.mesh.cylinder(frame,fillRadius,base,base+2,facets,Material.AC_FINS);
-        u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,base,base+2,fillRadius,0));
-        u.mesh.cylinder(frame,fillRadius,base+3,base+3.15,facets,Material.PIPE);
-        u.mesh.cylinder(frame,fillRadius,base+4,base+4.2,facets,Material.AC_FINS);
+        // The fill shows only its underside from the air inlet and its top down the throat, each a deck to the shell's inner wall.
+        double under=shellRadius(throat,shellScale,zthroat,b,base,base)-.25,over=shellRadius(throat,shellScale,zthroat,b,base,base+4.2)-.25;
+        u.mesh.annulus(frame,0,under,base,facets,-1,Material.TOWER_FILL);
+        u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,base,base+.2,under,0));
+        u.mesh.annulus(frame,0,over,base+4.2,facets,1,Material.TOWER_FILL);
+        u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,base+4,base+4.2,over,0));
         u.fluidPoint=new double[]{axis,.1,axis};
         // Attach inside the resized shell wall at the distributor, preserving the external nozzle position.
         double lower=shellRadius(throat,shellScale,zthroat,b,base,base),upper=shellRadius(throat,shellScale,zthroat,b,base,base+4);

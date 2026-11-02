@@ -1117,7 +1117,7 @@
   "tooltip.icheme.recovered_solids.grade": "%s · %s µm · %s kg",
   "gui.icheme.equipment_constructor.equipment.induced_draft_cooling_tower": "机械通风冷却塔",
   "gui.icheme.equipment_constructor.equipment.induced_draft_cooling_tower.short": "机械通风塔",
-  "gui.icheme.equipment_constructor.equipment.induced_draft_cooling_tower.hint": "每个并联冷却单元宽 4–8 米，顶部设引风机。更大负荷通过增加单元实现。",
+  "gui.icheme.equipment_constructor.equipment.induced_draft_cooling_tower.hint": "每个并联冷却单元宽 8–14 米，顶部设引风机。更大负荷通过增加单元实现。",
   "gui.icheme.vessel.title.induced_draft_cooling_tower": "机械通风冷却塔",
   "gui.icheme.vessel.kind.induced_draft_cooling_tower": "机械通风冷却塔",
   "gui.icheme.equipment_constructor.equipment.natural_draft_cooling_tower": "自然通风冷却塔",

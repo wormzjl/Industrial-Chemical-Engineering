@@ -132,10 +132,7 @@ class CoolingTowerGeometryTest {
         var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,104,EquipmentShape.Heading.NORTH,0);
         var shell=ShapeRasterizer.towerShell(shape);
         assertFalse(shell.isEmpty());
-        for(var polygon:shell){
-            assertEquals(Mesh.Material.TOWER_CONCRETE,polygon.material());
-            for(double uv:polygon.uvs())assertTrue(uv>=-1e-9&&uv<=1+1e-9,"A window stays in the sprite");
-        }
+        for(var polygon:shell)for(double uv:polygon.uvs())assertTrue(uv>=-1e-9&&uv<=1+1e-9,"A window stays in the sprite");
         double centre=40.5,far=-1;
         for(double y=30;y<90;y++){
             double[] behind={centre-30,y,centre-1e-4},ahead={centre-30,y,centre+1e-4};
@@ -164,16 +161,22 @@ class CoolingTowerGeometryTest {
             assertFalse(unit.inside(new double[]{axis+foot/4,base/2,axis+foot/4}),"Air passes between the internal supports");
         }
     }
-    @Test void theChimneyIsOneBoundedMeshOutsideTheChunkMeshes(){
+    /** A natural tower spans dozens of sections: its still parts are one mesh, and what it costs follows what shows. */
+    @Test void aNaturalTowerIsOneBoundedMeshOutsideTheChunkMeshes(){
         var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,104,EquipmentShape.Heading.NORTH,0);
         var unit=ProcessUnit.of(shape);var shell=ShapeRasterizer.towerShell(shape);
         int facets=Math.max(48,(int)Math.ceil(Math.PI*80/4)),bands=(int)Math.ceil((104-shape.coolingTower().shellBaseHeight())/8);
-        assertEquals(2*facets*bands,shell.size(),"Only chimney bands join the static shell VBO, not concrete supports");
-        assertEquals(4*facets*bands,shell.stream().mapToInt(p->p.size()-2).sum());
+        var chimney=shell.stream().filter(p->p.material()==Mesh.Material.TOWER_CONCRETE).toList();
+        assertEquals(2*facets*bands,chimney.size(),"Each chimney band is its facets, inside and outside");
+        assertTrue(shell.size()<=3000,"The whole tower: "+shell.size());
+        assertEquals(4*facets*bands,chimney.stream().mapToInt(p->p.size()-2).sum());
         int triangles=unit.mesh().facets().stream().mapToInt(f->f.positions().size()-2).sum();
         assertTrue(triangles<8000,"A bounded whole tower: "+triangles);
-        for(var cell:ShapeRasterizer.layout(shape).shell())if(cell.y()==60)assertTrue(ShapeRasterizer.chunkSurface(ShapeRasterizer.key(shape,cell.x(),cell.y(),cell.z())).isEmpty(),"The chunks draw none of the chimney");
-        for(var polygon:shell)for(int i=1;i<polygon.positions().length;i+=3)
+        long chunks=0;var cells=ShapeRasterizer.layout(shape).shell();
+        for(var cell:cells)chunks+=ShapeRasterizer.chunkSurface(ShapeRasterizer.key(shape,cell.x(),cell.y(),cell.z())).size();
+        assertTrue(chunks<=520,"Only the nozzles stay in the chunks: "+chunks);
+        assertTrue(cells.size()<=42000,"A cell for what collides, none for hidden packing: "+cells.size());
+        for(var polygon:chimney)for(int i=1;i<polygon.positions().length;i+=3)
             assertTrue(polygon.positions()[i]>=shape.coolingTower().shellBaseHeight()-1e-9);
     }
     @Test void aFullHeightChimneyStaysHollowAndHasEveryConnection(){

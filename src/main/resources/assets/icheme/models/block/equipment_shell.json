@@ -29,6 +29,8 @@
     "tower_deck": "icheme:block/tower_deck",
     "tower_drift": "icheme:block/tower_drift",
     "tower_concrete": "icheme:block/tower_concrete",
+    "tower_fill": "icheme:block/tower_fill",
+    "tower_floor": "icheme:block/tower_floor",
     "heater": "icheme:block/painted_heater",
     "concrete": "icheme:block/equipment_concrete",
     "guard": "icheme:block/equipment_guard",

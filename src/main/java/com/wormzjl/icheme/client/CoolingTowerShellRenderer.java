@@ -38,14 +38,13 @@ public final class CoolingTowerShellRenderer {
         if(marker!=atlasMarker){release();atlasMarker=marker;}
         var camera=event.getCamera().getPosition();var type=RenderType.solid();
         net.minecraft.client.renderer.ShaderInstance shader=null;
-        for(var cell:EquipmentShellBlockEntity.clientTankCells()){
-            var shape=cell.shape();var origin=cell.origin();
-            if(cell.isRemoved()||cell.getLevel()!=mc.level||shape==null||origin==null||!shape.kind().coolingTower())continue;
+        for(var tower:EquipmentShellBlockEntity.clientTowers(mc.level)){
+            var shape=tower.shape();var origin=tower.origin();
             if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ())))continue;
             int light=LevelRenderer.getLightColor(mc.level,BlockPos.containing(origin.getX()+shape.sizeX()/2.0,origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ()/2.0));
-            var key=new Key(shape,cell.paint(),light);var buffer=BUFFERS.get(key);
+            var key=new Key(shape,tower.paint(),light);var buffer=BUFFERS.get(key);
             if(buffer==null){
-                buffer=build(shape,cell.paint(),light);if(buffer==null)continue;
+                buffer=build(shape,tower.paint(),light);if(buffer==null)continue;
                 if(BUFFERS.size()>=64){var oldest=BUFFERS.entrySet().iterator();oldest.next().getValue().close();oldest.remove();}
                 BUFFERS.put(key,buffer);
             }

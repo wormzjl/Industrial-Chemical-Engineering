@@ -100,6 +100,32 @@ public class TowerSprites {
         return out;
     }
 
+    /** A natural tower's fill seen across its whole disc, 66 m at most: eliminator rows 2 m wide, a 2.5 m trunk and laterals, dark at the wall. */
+    static double[][] fill() {
+        var out = new double[256][256];
+        for (int y = 0; y < 256; y++) for (int x = 0; x < 256; x++) {
+            double v = y % 8 < 3 ? .24 : y % 8 < 6 ? .38 : .31;
+            int lateral = Math.abs(y % 64 - 32), main = Math.abs(x - 128);
+            if (lateral <= 2) v = .56 + .04 * (2 - lateral);
+            if (lateral == 3) v = .14;
+            if (main <= 5) v = .66 - .02 * main;
+            if (main == 6) v = .12;
+            double r = Math.hypot(x - 127.5, y - 127.5) / 128;
+            out[y][x] = v * (1 - .45 * Math.max(0, (r - .75) / .25));
+        }
+        return out;
+    }
+
+    /** A natural basin's floor: a whole 80 m disc stretches it, so it holds a soft tone and no marks. */
+    static double[][] floor() {
+        var out = new double[SMALL][SMALL];
+        for (int y = 0; y < SMALL; y++) for (int x = 0; x < SMALL; x++) {
+            double a = 2 * Math.PI * x / SMALL, b = 2 * Math.PI * y / SMALL;
+            out[y][x] = .60 + .012 * Math.sin(a + 2 * b) + .01 * Math.sin(2 * a - b + 1);
+        }
+        return out;
+    }
+
     /** 16 m of a natural shell's concrete, seamless: a slip-formed shell shows lifts 2 m high and tie holes, no vertical joints. */
     static double[][] concrete() {
         var out = new double[256][256];
@@ -123,5 +149,7 @@ public class TowerSprites {
         write(folder, "tower_deck", deck());
         write(folder, "tower_drift", drift());
         write(folder, "tower_concrete", concrete());
+        write(folder, "tower_fill", fill());
+        write(folder, "tower_floor", floor());
     }
 }

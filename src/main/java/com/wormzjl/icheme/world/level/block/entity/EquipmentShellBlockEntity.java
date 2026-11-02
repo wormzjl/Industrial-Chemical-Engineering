@@ -104,6 +104,11 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      * 2026-10-26-pipe-laying-system). Render thread only; weak, as above.
      */
     private static final Set<EquipmentShellBlockEntity> CLIENT_PORTS = Collections.newSetFromMap(new WeakHashMap<>());
+    /** Client: the cooling towers with a cell loaded, by level. Render thread only; weak, as above. */
+    private static final java.util.Map<Level, LoadedTowers> CLIENT_TOWERS = new WeakHashMap<>();
+    /** Client: the tower this cell counts towards, and the level's index it counts in. */
+    private LoadedTowers.@Nullable Tower tower;
+    private @Nullable LoadedTowers towers;
 
     public EquipmentShellBlockEntity(BlockPos position, BlockState state) {
         super(ModBlockEntities.EQUIPMENT_SHELL.get(), position, state);
@@ -161,6 +166,17 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         return List.copyOf(CLIENT_TANKS);
     }
 
+    /** Client: the cooling towers of {@code level} with a cell loaded. */
+    public static java.util.Collection<LoadedTowers.Tower> clientTowers(Level level) {
+        var index = CLIENT_TOWERS.get(level);
+        return index == null ? List.of() : index.all();
+    }
+
+    private void leaveTower() {
+        if (tower != null) towers.remove(tower);
+        tower = null;
+    }
+
     /** Client: the cells holding a nozzle's flange face in the client's level. */
     public static List<EquipmentShellBlockEntity> clientPortCells() {
         return List.copyOf(CLIENT_PORTS);
@@ -176,8 +192,13 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
+        leaveTower();
         if (shape == null || level == null || !level.isClientSide) return;
         if ((shape.kind() == EquipmentShape.Kind.TANK || shape.kind().coolingTower()) && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
+        if (shape.kind().coolingTower()) {
+            towers = CLIENT_TOWERS.computeIfAbsent(level, k -> new LoadedTowers());
+            tower = towers.add(origin(), shape, paint);
+        }
         for (var port : ShapeRasterizer.ports(shape))
             if (port.cell().equals(cell())) {
                 CLIENT_PORTS.add(this);
@@ -253,6 +274,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
+        leaveTower();
         if (level != null) FloatingRoofs.of(level).remove(worldPosition);
         if (identity != 0 && level instanceof ServerLevel serverLevel && serverLevel.getServer().isSameThread())
             FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world -> world.deviceUnloaded(identity));

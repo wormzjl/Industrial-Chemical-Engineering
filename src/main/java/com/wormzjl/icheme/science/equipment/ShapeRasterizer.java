@@ -167,8 +167,7 @@ public final class ShapeRasterizer {
         return surface(key.shape(), c[0], c[1], c[2], key.nozzles(), false);
     }
 
-    /** A fan tower's shell, rail and ladder are whole; only grating keeps its metre tile in the chunks. */
-    /** Chunk geometry excludes a tower's shell rendered as one cached GPU mesh. Layout and collision stay intact. */
+    /** Chunk geometry excludes a tower's still parts, one cached GPU mesh; only grating keeps its metre tile in the chunks. Layout and collision stay intact. */
     public static List<Polygon> chunkSurface(CellKey key) {
         int[] c=cell(key);
         return surface(key.shape(),c[0],c[1],c[2],key.nozzles(),false,true);
@@ -177,7 +176,7 @@ public final class ShapeRasterizer {
     public static List<Polygon> towerShell(EquipmentShape shape){
         if(!shape.kind().coolingTower())return List.of();
         var g=geometry(shape);var polygons=new ArrayList<Polygon>();
-        for(var facet:g.mesh.facets())if(towerShell(shape,facet))polygons.add(shape.kind()==EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER?window(shape,facet):Mesh.whole(facet));
+        for(var facet:g.mesh.facets())if(towerShell(shape,facet))polygons.add(facet.material()==Material.TOWER_CONCRETE?window(shape,facet):Mesh.whole(facet));
         return List.copyOf(polygons);
     }
 
@@ -191,8 +190,7 @@ public final class ShapeRasterizer {
     }
 
     private static boolean towerShell(EquipmentShape shape,Facet facet){
-        if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)return facet.part()<0&&facet.material()!=Material.GRATING;
-        return shape.kind()==EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER&&facet.material()==Material.TOWER_CONCRETE;
+        return shape.kind().coolingTower()&&facet.part()<0&&facet.material()!=Material.GRATING;
     }
 
     /** Facets round and up a natural shell before its sprite repeats: the boards run on from facet to facet. */
