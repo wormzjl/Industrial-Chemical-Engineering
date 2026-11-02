@@ -9,6 +9,10 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
+import com.wormzjl.icheme.science.flowsheet.Flowsheet;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
+import com.wormzjl.icheme.science.flowsheet.Port;
+import com.wormzjl.icheme.science.flowsheet.UnitTypes;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import java.util.ArrayList;
 import java.util.List;
@@ -219,6 +223,49 @@ public final class SimulatorPage {
         return holder == null ? status : new SheetState.Status(x.text("status.reader", holder, Door.lower(status.text())), status.tone());
     }
 
+    /** What the mouse stands on says: a port, a tile; nothing while a gesture runs. */
+    private static @Nullable String hover(SheetContext x, SimulatorFrame frame, SheetView view, SheetGestures gestures, SheetEditor editor, Rect box, int category, double mouseX, double mouseY) {
+        if (gestures.mode() != SheetGestures.Mode.IDLE) return null;
+        var tile = frame.tileAt(category, SimulatorFrame.inner(frame.tileWell()), mouseX, mouseY);
+        if (tile != null) return tile.lit() ? x.t().get(tile.name()) : x.t().get(tile.name()) + "\n" + x.text("tile.unlit");
+        if (!box.contains(mouseX, mouseY)) return null;
+        var hit = editor.layout().at(view.designX(mouseX), view.designY(mouseY), view.zoom());
+        return hit != null && hit.kind() == SheetLayout.Kind.PORT ? portHover(x, hit.place()) : null;
+    }
+
+    /** A port's hover (plan section 3.11): its full name, the stream it holds, what happens if it stays free. */
+    public static String portHover(SheetContext x, SheetLayout.Place place) {
+        var unit = x.editor().unit(place.unit());
+        var lines = new ArrayList<String>();
+        lines.add(x.text("port.hover", unit.name(), StreamDoors.portName(x, place.port())));
+        for (var stream : x.editor().sheet().streams()) {
+            var end = place.direction() == Port.Direction.OUT ? stream.from() : stream.to();
+            if (end != null && end.unit().equals(unit.id()) && end.port().equals(place.port())) lines.add(x.text("port.holds", stream.name()));
+        }
+        var port = port(unit, place.port());
+        if (port != null) lines.add(x.text(left(port)));
+        return String.join("\n", lines);
+    }
+
+    private static String left(Port port) {
+        if (port.direction() == Port.Direction.OUT) return "port.left_open";
+        if (port.required()) return "port.left_required";
+        boolean nothing = port.id().startsWith("in/") || port.id().startsWith("steam/") || port.id().equals("convection_in");
+        return nothing ? "port.left_empty" : "port.left_utility";
+    }
+
+    /** The unit's port, or null: a removed type's, or a removed row's. */
+    private static @Nullable Port port(Flowsheet.Unit unit, String id) {
+        var model = UnitTypes.model(unit.type());
+        if (model == null) return null;
+        try {
+            for (var port : model.ports(unit.params())) if (port.id().equals(id)) return port;
+        } catch (FlowsheetFailure noPorts) {
+            return null;
+        }
+        return null;
+    }
+
     /** Draws the page the screen stands on; returns the hover. */
     public static @Nullable String draw(Canvas c, Skin skin, SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SheetView view, SheetGestures gestures, ResultsPage.State results, int category, SheetEditor editor, KitDoor kit, String title, @Nullable String holder, double mouseX, double mouseY) {
         int w = frame.status().w() + 20, h = frame.bottom() + SimulatorFrame.BOTTOM;
@@ -230,9 +277,10 @@ public final class SimulatorPage {
                 if (selected != null) {
                     panel(c, skin, box);
                     kit.place(SelectionColumn.of(x, selected).rows(), x.m());
-                    return kit.draw(c, skin, mouseX, mouseY);
+                    String hover = kit.draw(c, skin, mouseX, mouseY);
+                    if (SimulatorFrame.panel(box).contains(mouseX, mouseY)) return hover;
                 }
-                return null;
+                return hover(x, frame, view, gestures, editor, box, category, mouseX, mouseY);
             }
             case RESULTS -> {
                 results(c, skin, x, results, frame, w);

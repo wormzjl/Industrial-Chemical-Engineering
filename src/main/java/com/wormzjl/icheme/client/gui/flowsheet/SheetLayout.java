@@ -411,7 +411,7 @@ public final class SheetLayout {
         boolean openStart = stream.from() == null, openEnd = stream.to() == null;
         int w = pillWidth(stream.name());
         int[] startAt = openStart && !route.isEmpty() ? route.removeFirst() : null;
-        int[] endAt = openEnd && !route.isEmpty() && !(openStart && route.isEmpty()) ? route.removeLast() : null;
+        int[] endAt = openEnd && !route.isEmpty() ? route.removeLast() : null;
         if (openStart && openEnd && endAt == null && startAt != null) {
             // Both ends open on one point: one pill, a feed's if it holds a feed.
             boolean feed = stream.feed() != null;

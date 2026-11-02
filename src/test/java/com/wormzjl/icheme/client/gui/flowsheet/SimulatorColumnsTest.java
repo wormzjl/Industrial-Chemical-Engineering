@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
@@ -169,6 +170,37 @@ class SimulatorColumnsTest {
             var slots = Column.place(door.columns().getFirst(), 10, 74, 180, SheetFixture.M, Column.Metrics.COMPACT).slots().keySet();
             for (var key : keys) assertTrue(slots.contains(key), type + " sets " + key + ": " + slots);
         });
+    }
+
+    /** Plan section 3.11: a port's hover gives its full name and what happens if it stays free. */
+    @Test
+    void aPortsHoverNamesItAndSaysWhatFreeMeans() {
+        var texts = new SheetFixture.Texts();
+        var kinds = new java.util.LinkedHashMap<String, String>();
+        kinds.put("pump in", "cannot run");
+        kinds.put("pump out", "leaves the sheet");
+        kinds.put("mixer in/1", "nothing enters");
+        kinds.put("exchanger tube_in", "a utility");
+        kinds.put("column condenser_in", "a utility");
+        kinds.put("column feed", "cannot run");
+        for (var tile : Tiles.all()) {
+            if (!tile.lit() || tile.type().equals(Tiles.FEED) || tile.type().equals(Tiles.PRODUCT)) continue;
+            var units = List.of(new Flowsheet.Unit("u", tile.type(), "U-101", 100, 60, SheetEditor.defaults(tile.type(), SheetFixture::column)));
+            var editor = SheetFixture.editor(new Flowsheet(SheetFixture.basis(), units, List.of(), FlowsheetSolver.Settings.DEFAULT));
+            var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS);
+            for (var place : editor.layout().box("u").places()) {
+                var lines = SimulatorPage.portHover(x, place).split("\n");
+                assertEquals(2, lines.length, tile.type() + " " + place.port());
+                assertTrue(lines[0].startsWith("U-101, "), lines[0]);
+                var want = kinds.remove(tile.type() + " " + place.port());
+                if (want != null) assertTrue(lines[1].contains(want), tile.type() + " " + place.port() + ": " + lines[1]);
+            }
+        }
+        assertEquals(Map.of(), kinds, "every case met");
+        assertEquals(Set.of(), texts.missing);
+        var editor = SheetFixture.editor(SheetFixture.line());
+        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS);
+        assertTrue(SimulatorPage.portHover(x, editor.layout().place("p", "out")).contains("Holds S-1."));
     }
 
     @Test

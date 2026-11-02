@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.client.gui.flowsheet;
 
-import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -421,10 +420,5 @@ public final class SheetGestures {
                 return null;
             }
         }
-    }
-
-    /** The name's box on the canvas, in design units, for the screen's field. */
-    public static Rect nameBox(Naming naming, int width) {
-        return new Rect(naming.x(), naming.y() - 2, width, 15);
     }
 }

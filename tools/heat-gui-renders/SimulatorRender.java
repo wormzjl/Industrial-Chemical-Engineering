@@ -196,6 +196,7 @@ public final class SimulatorRender {
         SimulatorFrame.Tab tab = SimulatorFrame.Tab.FLOWSHEET;
         ResultsPage.State results = new ResultsPage.State();
         int category = 2;
+        SheetLayout.Place hover;
 
         Scene(Flowsheet sheet, FlowsheetRun run, double seconds, SimulatorHost host) {
             editor = new SheetEditor(sheet, FONT, SimulatorRender::columnDoor);
@@ -227,6 +228,17 @@ public final class SimulatorRender {
         return column;
     }
 
+    /** The hover as the game draws it, left of the mouse where the canvas ends. */
+    private static void tooltip(GuiPrototypes.Door d, String text, int x, int y) {
+        var lines = text.split("\n");
+        int w = 0;
+        for (var line : lines) w = Math.max(w, d.m.width(line));
+        int left = x - w - 18, top = y - 6, h = lines.length * 11 + 6;
+        d.c.fill(left, top, left + w + 10, top + h, 0xF0100010);
+        d.c.outline(left, top, w + 10, h, 0xFF5000FF);
+        for (int i = 0; i < lines.length; i++) d.c.text(lines[i], left + 5, top + 4 + i * 11, i == 0 ? 0xFFFFFFFF : 0xFFAAAAAA);
+    }
+
     private static void screen(GuiPrototypes.Door d, Scene s) {
         var x = s.context();
         var frame = new SimulatorFrame(d.w, d.h);
@@ -250,6 +262,7 @@ public final class SimulatorRender {
                     int nx = (int) s.view.canvasX(naming.x()), ny = (int) s.view.canvasY(naming.y()) - 2;
                     d.skin.field(d.c, new Rect(nx, ny, 66, 15), naming.text() + "_", "", false);
                 }
+                if (s.hover != null) tooltip(d, SimulatorPage.portHover(x, s.hover), (int) s.view.canvasX(s.hover.x()), (int) s.view.canvasY(s.hover.y()));
             }
             case RESULTS -> {
                 SimulatorPage.results(d.c, d.skin, x, s.results, frame, d.w);
@@ -501,7 +514,7 @@ public final class SimulatorRender {
                 scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(true, "E-101"))),
                 scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(false, "CRUDE"))),
                 scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(false, "S-5")))));
-        sheet(out, "03-interaction", W, H, List.of("A tile dragged from the palette", "A stream drawn from a free port: what can take it is ringed", "A name typed in place", "Right click S-8: its end follows the cursor"), List.of(
+        sheet(out, "03-interaction", W, H, List.of("A tile dragged from the palette", "A stream drawn from a free port: what can take it is ringed", "A name typed in place", "Right click S-8: its end follows the cursor", "A port's hover"), List.of(
                 scene(sheet, run, seconds, host, s -> {
                     s.gestures.carry(Tiles.tile("drum"));
                     s.gestures.move(cx(s, 138), cy(s, 140));
@@ -522,6 +535,9 @@ public final class SimulatorRender {
                     var p = s.editor.layout().line("S-8").points();
                     s.gestures.press(cx(s, p[p.length - 2] - 8), cy(s, p[p.length - 1]), 1, 1000);
                     s.gestures.move(cx(s, 596), cy(s, 179));
+                }),
+                scene(sheet, run, seconds, host, s -> {
+                    for (var place : s.editor.layout().box("T-101").places()) if (place.port().startsWith("pa/") && place.direction() == com.wormzjl.icheme.science.flowsheet.Port.Direction.IN && s.hover == null) s.hover = place;
                 })));
         var small = new ArrayList<BufferedImage>();
         small.add(page(624, 344, PanelSkin.LIGHT, scene(sheet, run, seconds, host, nothing())));
