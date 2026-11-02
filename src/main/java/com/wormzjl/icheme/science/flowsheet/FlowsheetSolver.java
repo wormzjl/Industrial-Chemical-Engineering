@@ -93,7 +93,7 @@ public final class FlowsheetSolver {
     private FlowsheetRun result(boolean stopped) {
         double massIn = 0, massOut = 0, heatIn = 0, heatOut = 0, duties = 0;
         var read = new HashSet<String>();
-        for (var c : calculations) read.addAll(c.reads());
+        for (var c : calculations) if (c.kind() != Calculation.Kind.CHECK) read.addAll(c.reads());
         for (var c : calculations) {
             var report = reports.get(c.id());
             if (report == null) continue;
@@ -124,6 +124,10 @@ public final class FlowsheetSolver {
         }
         var failure = attempt(c);
         if (failure == null) return;
+        if (c.kind() == Calculation.Kind.CHECK) {
+            log.add(new Note(Note.Severity.WARNING, failure.subject(), failure.key(), failure.arguments()));
+            return;
+        }
         fail(c, failure);
         block(c);
     }
@@ -338,7 +342,7 @@ public final class FlowsheetSolver {
             }
             double molar = q * guess.molarEnthalpy() + (1 - q) * result.molarEnthalpy();
             try {
-                return thermo.atEnthalpy(result.pressure(), molar * total, amounts, result.temperature());
+                return thermo.atEnthalpy(result.pressure(), molar * total, amounts, result.temperature(), result.solids());
             } catch (CancellationException stop) {
                 throw stop;
             } catch (RuntimeException noState) {

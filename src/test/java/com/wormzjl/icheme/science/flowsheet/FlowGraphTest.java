@@ -56,18 +56,18 @@ class FlowGraphTest {
 
     /** Among equal tears the loop cuts at a block's outlet, so every pass feeds the block a stream it has worked out. */
     @Test void aLoopTearsAtABlocksOutlet() {
-        var loop = new ArrayList<>(List.of(unit("a", "s3", "s1"), unit("b", "s1", "s2"), unit("column", "s2", "s3").asHeavy()));
+        var loop = new ArrayList<>(List.of(unit("a", "s3", "s1"), unit("b", "s1", "s2"), unit("column", "s2", "s3").asBlock()));
         assertEquals(List.of("s3"), FlowGraph.plan(loop).getFirst().tears());
         loop.set(2, unit("column", "s2", "s3"));
-        loop.set(1, unit("b", "s1", "s2").asHeavy());
+        loop.set(1, unit("b", "s1", "s2").asBlock());
         assertEquals(List.of("s2"), FlowGraph.plan(loop).getFirst().tears());
     }
 
     /** A tear comes from the streams; a link between a unit's sides stays whole. */
     @Test void aLinkIsNeverTorn() {
-        var hot = new Calculation("hot", "E", List.of("h"), List.of("h2"), List.of(), List.of("duty"), false, (board, report) -> {
+        var hot = new Calculation("hot", "E", List.of("h"), List.of("h2"), List.of(), List.of("duty"), Calculation.Kind.STEP, (board, report) -> {
         });
-        var cold = new Calculation("cold", "E", List.of("c"), List.of("h"), List.of("duty"), List.of(), false, (board, report) -> {
+        var cold = new Calculation("cold", "E", List.of("c"), List.of("h"), List.of("duty"), List.of(), Calculation.Kind.STEP, (board, report) -> {
         });
         var plan = FlowGraph.plan(List.of(hot, cold));
         assertEquals(List.of("h"), plan.getFirst().tears());

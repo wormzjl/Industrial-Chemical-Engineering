@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet;
 
+import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import org.jetbrains.annotations.Nullable;
 
@@ -8,7 +9,8 @@ import java.util.Arrays;
 /**
  * A stream in a run (batch 2026-11-02-process-simulator, plan section 3.1): its temperature (K), pressure (Pa), amounts
  * (mol/s on the flowsheet's one axis, water last), enthalpy (W, on the network's datum) and mass (kg/s), and the phases the
- * stream thermo found, which a stub law leaves null. A stream holds its own array. Minecraft-free.
+ * stream thermo found, which a stub law leaves null. Solids ride in those phases, per second, and the enthalpy and the mass
+ * count them. A stream holds its own array. Minecraft-free.
  *
  * <p>An {@linkplain #empty empty} stream is what a loop's first pass reads from a tear it does not know yet. No flow in means
  * no flow out, so every law passes it on, and an exchanger with an empty side moves no heat.
@@ -32,7 +34,7 @@ public record FlowStream(double temperature, double pressure, double[] amounts, 
     }
 
     /** The amounts themselves, for this package's laws. The caller must not change them. */
-    double[] amountsView() {
+    public double[] amountsView() {
         return amounts;
     }
 
@@ -42,6 +44,11 @@ public record FlowStream(double temperature, double pressure, double[] amounts, 
 
     public boolean empty() {
         return total() == 0;
+    }
+
+    /** The solids it carries, per second. */
+    public SolidInventory solids() {
+        return state == null ? SolidInventory.EMPTY : state.solids();
     }
 
     /** Enthalpy per mole (J/mol); 0 for an empty stream. */

@@ -27,6 +27,7 @@ Git Bash mangles the `;` class path; use PowerShell.
 - `SampleFlowsheetProbe.java`: the sheets' crude unit, the owner's example, solved by hand in the order the plan's solver would take: P-101, the crude through T-101's three pumparound coolers at their door duties, then the loop E-101, H-101, V-101, T-101 torn at the bottoms, then the condenser's cooling water, P-102, E-102. Prints each pass, the 21 streams, the units' duties, the closures, the column's preset and tray profile, the phase splits and the compositions.
 - `LoopProbe.java`: the loops. A, the sample with each pumparound's hot side at an assumed circulation (option B of decision D11). B, the furnace on a fixed duty 8 MW short, plain and with Wegstein, then torn at the bottoms. C, 15 and 30 % of the residue back to the crude through a mixer ahead of P-101, cooled to 70 C first. D, all of the residue back, where no steady state exists.
 - `SizingProbe.java`: runs `SampleFlowsheetProbe`, then sizes each line and unit by `SIZING_PLAN.md`: the real column at each trial diameter, the world's laws for every drop and surface, bubble pressure by bisection on the flash, the two pressure paths. Prints each choice and the rules the plan's decisions rest on, and writes `sizing-sample.tsv` for the sheets. Its limits are the plan's, in one place. It also prints Kern's drop on each exchanger, the baffle pitch at which Kern equals the law, and the storage what-if.
+- `FlashProbeTest.java`: the stream thermo's sweep: TP and PH across wet crude, dry crude, a heavy cut with water, a residue with water, water, nitrogen and light ends. Copy it into `src/test/java/com/wormzjl/icheme/science/flowsheet/` and run `./gradlew test --tests "com.wormzjl.icheme.science.flowsheet.FlashProbeTest" -i`. Remove the copy afterwards; no gate runs it.
 - `EjectorProbe.java`: the ejector law of `SIZING_PLAN.md` section 3.12, with no game classes: steam per kg by suction, molar mass and motive pressure, the vendors' load factors, a vacuum column's top.
 
 ## Results, 2026-11-02, at `79b853e0`
@@ -50,9 +51,20 @@ Shell drops: Kern at 0.4 D is 10 times the law on all five exchangers; the law e
 
 The probes stand in for the plan's solver and sizing code: they are not them. `LoopProbe` lags nothing but the tear, and it has no fallback after a failed trial step.
 
+## Flash findings, 2026-11-02
+
+Taken while W2 built `FlowThermo`, which is why a stream searches along the TP flash. All on the bundled network package. These three are engine findings, reported to the owner; the engine is unchanged.
+
+1. The PH flash has a false root on wet oil with volatile components. `FluidTpEquilibrium.solvePh` calls `closedPh` as soon as a bracket's ends read as `condensedStep`, however wide, and `waterBoiling` answers at pure water's saturation with no hydrocarbon vapour. Crude with 20 mole % water: at 2 bar every TP state from 376 to 382 K answers 393.36 K; at 30 bar, 500 K answers 507.00 K. The TP flash there holds 8 to 14 mol of hydrocarbon vapour per 100, and its three-phase zone (482.5 to 488.7 K at 30 bar) is continuous, so no step exists. The answer's enthalpy is the target, so nothing flags it.
+2. Under the melting line the PH flash answers ice, and `adopt` carries that ice as the liquid stand-in (D23), so the state's enthalpy misses the target by up to the latent heat. 100 mol/s at 5 bar: 273.12 K, 400 kW off. The TP flash holds a smooth supercooled stand-in there.
+3. The TP flash refuses a heavy cut with steam: "the hydrocarbon partial pressure closing the gas volume was not found", at about 1e-6 Pa. 12 of 216 grid points on one heavy pseudo-component with water, 2 of 216 on a residue with water. The PH flash answers 10 of 11 such targets.
+
+The search answers every grid target the fluid can reach within 0.06 W on 100 mol/s; a TP flash takes about a third of a PH flash, 1.6 against 5.8 ms in a test JVM.
+
 ## History
 
 - 2026-11-02: written for the batch's design phase. The numbers in `tools/heat-gui-renders/SimulatorPrototypes.java` are copied from `SampleFlowsheetProbe`'s and `LoopProbe`'s output; a change in the sample changes both.
 - 2026-11-02: the owner's note on blocks and loops. `SampleFlowsheetProbe` moved to the owner's example, `LoopProbe` added.
 - 2026-11-02: the owner asked for a sizing stage. `SizingProbe` added; `SampleFlowsheetProbe` keeps its column input and result for it.
 - 2026-11-02: the owner's note on types, drops and the ejector. `SizingProbe` goes by surface and drops, proposes the heater's type and writes the storage what-if and the door's drops; `EjectorProbe` added.
+- 2026-11-02: W2. `FlashProbeTest` added, with the flash findings above.

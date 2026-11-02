@@ -15,9 +15,17 @@ import java.util.Objects;
  * @param writes the streams it writes
  * @param needs  the links it reads, which no loop tears
  * @param gives  the links it writes
- * @param heavy  a block's own solve: a loop tears at its outlet, so each pass feeds it a stream the pass has worked out
  */
-public record Calculation(String id, String unit, List<String> reads, List<String> writes, List<String> needs, List<String> gives, boolean heavy, Law law) {
+public record Calculation(String id, String unit, List<String> reads, List<String> writes, List<String> needs, List<String> gives, Kind kind, Law law) {
+    public enum Kind {
+        /** A unit's law. */
+        STEP,
+        /** A block's own solve: a loop tears at its outlet, so each pass feeds it a stream the pass has worked out. */
+        BLOCK,
+        /** A rating: it reads what is solved and writes nothing. Its reads use up no stream, and its failure stops nothing. */
+        CHECK
+    }
+
     /** The law of a calculation: it reads and writes through {@code board} and says what it found in {@code report}. */
     @FunctionalInterface
     public interface Law {
@@ -27,6 +35,7 @@ public record Calculation(String id, String unit, List<String> reads, List<Strin
     public Calculation {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(unit, "unit");
+        Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(law, "law");
         reads = List.copyOf(reads);
         writes = List.copyOf(writes);
@@ -36,11 +45,11 @@ public record Calculation(String id, String unit, List<String> reads, List<Strin
 
     /** A calculation of streams alone. */
     public static Calculation of(String id, List<String> reads, List<String> writes, Law law) {
-        return new Calculation(id, id, reads, writes, List.of(), List.of(), false, law);
+        return new Calculation(id, id, reads, writes, List.of(), List.of(), Kind.STEP, law);
     }
 
     /** This calculation as a block's own solve. */
-    public Calculation asHeavy() {
-        return new Calculation(id, unit, reads, writes, needs, gives, true, law);
+    public Calculation asBlock() {
+        return new Calculation(id, unit, reads, writes, needs, gives, Kind.BLOCK, law);
     }
 }

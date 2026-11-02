@@ -130,7 +130,7 @@ final class FlowGraph {
                 for (int i : choice) trial.add(candidates.get(i));
                 if (order(nodes, edges, trial).size() == nodes.size()) {
                     int score = 0;
-                    for (var tear : trial) if (!calculations.get(tear.from()).heavy()) score++;
+                    for (var tear : trial) if (calculations.get(tear.from()).kind() != Calculation.Kind.BLOCK) score++;
                     if (score < bestScore) {
                         best = trial;
                         bestScore = score;

@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FlowsheetSolverTest {
     private static final double CP = 100, DATUM = 298.15, MOLAR_MASS = .1, BAR = 1e5;
     private static final List<String> AXIS = List.of("X");
-    private static final StreamThermo THERMO = (pressure, enthalpy, amounts, guess) -> stream(DATUM + (amounts[0] == 0 ? 0 : enthalpy / (CP * amounts[0])), pressure, amounts[0]);
+    private static final StreamThermo THERMO = (pressure, enthalpy, amounts, guess, solids) -> stream(DATUM + (amounts[0] == 0 ? 0 : enthalpy / (CP * amounts[0])), pressure, amounts[0]);
 
     private static FlowStream stream(double temperature, double pressure, double amount) {
         return new FlowStream(temperature, pressure, new double[]{amount}, amount * CP * (temperature - DATUM), amount * MOLAR_MASS, null);
@@ -119,7 +119,7 @@ class FlowsheetSolverTest {
             var s = board.stream("fired");
             board.stream("bottoms", stream(s.temperature() - drop, BAR, s.total()));
             report.duty(-drop * CP * s.total());
-        }).asHeavy();
+        }).asBlock();
         var run = run(List.of(feed("cold", amount, 300), exchanger, heat("preheated", "fired", furnace), column));
         assertEquals(Status.STEADY, run.status());
         assertEquals(300 + (rise - drop) / (1 - effectiveness), run.streams().get("bottoms").temperature(), .02);
@@ -232,7 +232,7 @@ class FlowsheetSolverTest {
     /** The same stream through a block's two calculations is no loop: a heat side reads the door's duty, not the block's solve. */
     @Test void aBlocksHeatSideIsNoLoop() {
         double duty = 2000;
-        var block = Calculation.of("T-101", List.of("feed"), List.of("bottoms"), (board, report) -> board.stream("bottoms", board.stream("feed"))).asHeavy();
+        var block = Calculation.of("T-101", List.of("feed"), List.of("bottoms"), (board, report) -> board.stream("bottoms", board.stream("feed"))).asBlock();
         var side = heat("cold", "feed", duty);
         var run = run(List.of(feed("cold", 10, 300), side, block));
         assertEquals(Status.STEADY, run.status());
@@ -240,16 +240,28 @@ class FlowsheetSolverTest {
         assertEquals(300 + duty / (CP * 10), run.streams().get("bottoms").temperature(), 1e-9);
     }
 
+    /** A rating reads a stream without using it up, and its failure stops nothing. */
+    @Test void aCheckUsesNothingUp() {
+        var check = new Calculation("rating", "E", List.of("a"), List.of(), List.of(), List.of(), Calculation.Kind.CHECK, (board, report) -> {
+            throw new FlowsheetFailure("test.refused");
+        });
+        var run = run(List.of(feed("a", 10, 300), check));
+        assertEquals(Status.STEADY, run.status(), run.log().toString());
+        assertEquals(run.massIn(), run.massOut(), 1e-12, "the stream still leaves the sheet");
+        assertEquals("test.refused", run.log().getLast().key());
+        assertEquals(Note.Severity.WARNING, run.log().getLast().severity());
+    }
+
     /** A link hands a duty from one side to the other, and the run takes the sides in that order. */
     @Test void aLinkOrdersAnExchangersSides() {
         double outlet = 310;
         var order = new ArrayList<String>();
-        var cold = new Calculation("E/cold", "E", List.of("c"), List.of("c out"), List.of("E duty"), List.of(), false, (board, report) -> {
+        var cold = new Calculation("E/cold", "E", List.of("c"), List.of("c out"), List.of("E duty"), List.of(), Calculation.Kind.STEP, (board, report) -> {
             order.add("cold");
             var s = board.stream("c");
             board.stream("c out", stream(s.temperature() + board.link("E duty") / (CP * s.total()), s.pressure(), s.total()));
         });
-        var hot = new Calculation("E/hot", "E", List.of("h"), List.of("h out"), List.of(), List.of("E duty"), false, (board, report) -> {
+        var hot = new Calculation("E/hot", "E", List.of("h"), List.of("h out"), List.of(), List.of("E duty"), Calculation.Kind.STEP, (board, report) -> {
             order.add("hot");
             var s = board.stream("h");
             board.link("E duty", CP * s.total() * (s.temperature() - outlet));
