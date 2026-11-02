@@ -246,7 +246,7 @@ Sizes, Auto or Fixed, are facts of the sheet: new fields with defaults, under th
 Three results went against what the sheet's author would guess.
 
 - The boot's 5 min, not the oil's, sets the receiver: D 3.0 m holds the oil, and the water needs D 4.0 m.
-- H-101's door took 7.60 bar, and its coils lose 1.95 bar at design flow. So 5.34 bar stays spare, and P-101's outlet could fall to 8.66 bar.
+- H-101's door took 7.60 bar, and its coils lose 1.95 bar at design flow. So 5.34 bar stays spare, for a valve or a smaller rise on P-101. A lower rise needs a new run, as the coils lose more at a lower pressure.
 - P-102's warning clears. The run warns because a tray draw leaves at its bubble point and the sheet knows no heights. Here the draw nozzle's 21 m of static head and the steam's share of the tray pressure give 31 m of NPSH.
 
 ## 5. Work packages
