@@ -11,8 +11,8 @@ Batches in this merge: `2026-10-28-column-operation`, `2026-11-02-valve-hold`, `
 
 ## Gates
 
-- Final lane: [FINAL_LANE_REVIEW.md](../2026-11-02-valve-hold/FINAL_LANE_REVIEW.md), a scratch merge at a89294fef. Superseded: solver code changed in the review round, so one lane reruns on the final commit and replaces it.
-- Gates after the cleanup: to fill in from that lane.
+- Final lane: [FINAL_LANE_REVIEW.md](../2026-11-02-valve-hold/FINAL_LANE_REVIEW.md), on this branch at 90d3341fa, code as of 321b8d1d3. It replaces the lane of a89294fef. Base main 3ffeb0519; its `src/main` has not moved.
+- Gates after the cleanup: `test slowGates` 2065 tests, 0 failures; chain-100 deviation 0; fluid GameTests 38 of 38; campaign 975 / 993 / 1000 against 975 / 993 / 1000 once six budget holds are replayed, `refused=0`. The review round added no solver work on the traced worlds.
 - Review round: [MERGE_CODE_REVIEW.md](MERGE_CODE_REVIEW.md), one disposition per finding. Affected tests only, by the lean rule: 516 tests over the column, facts, checkpoint, island, valve and control classes on 88600d64d; fluid GameTests 38 of 38 on 0ada03253, before finding 1. Finding 5's energy on 27faf5da9: 253 tests over the column, facts and checkpoint classes.
 
 ## Formats
