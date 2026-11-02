@@ -10,6 +10,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.flowsheet.BasisPage;
+import com.wormzjl.icheme.client.gui.flowsheet.ColumnBlock;
 import com.wormzjl.icheme.client.gui.flowsheet.ColumnDoors;
 import com.wormzjl.icheme.client.gui.flowsheet.Door;
 import com.wormzjl.icheme.client.gui.flowsheet.DoorFrame;
@@ -138,19 +139,19 @@ public final class SimulatorRender {
 
     static Flowsheet sample() {
         var steam = BASE.steamFeeds().getFirst();
-        return new Sheet().unit("P-101", "pump", 84, 76, "{\"target\":\"outlet\",\"pressure\":14e5,\"rise\":2e5}").unit("T-101", "column", 438, 24, columnDoor())
-                .unit("E-101", "exchanger", 130, 216, "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":473.15,\"duty\":1e6,\"area\":100,\"tube_drop\":0.5e5,\"shell_drop\":0.3e5}")
-                .unit("H-101", "fired_heater", 232, 194, "{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"duty\":1e7,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}")
-                .unit("V-101", "valve", 340, 224, "{\"target\":\"outlet\",\"pressure\":2.72e5,\"drop\":1e5}").unit("E-102", "air_cooler", 70, 266, "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}")
-                .unit("P-102", "pump", 560, 193, "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}")
-                .feed("CRUDE", "P-101", "in", crude(298.15, 8e5), 28, 89).line("S-1", "P-101", "out", "T-101", "pa/1/in").line("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in").line("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in")
-                .line("S-4", "T-101", "pa/3/out", "E-101", "tube_in", new Flowsheet.Point(392, 212), new Flowsheet.Point(392, 176), new Flowsheet.Point(116, 176), new Flowsheet.Point(116, 230))
+        return new Sheet().unit("P-101", "pump", 84, 117, "{\"target\":\"outlet\",\"pressure\":14e5,\"rise\":2e5}").unit("T-101", "column", 372, 20, columnDoor())
+                .unit("E-101", "exchanger", 130, 309, "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":473.15,\"duty\":1e6,\"area\":100,\"tube_drop\":0.5e5,\"shell_drop\":0.3e5}")
+                .unit("H-101", "fired_heater", 214, 257, "{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"duty\":1e7,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}")
+                .unit("V-101", "valve", 306, 287, "{\"target\":\"outlet\",\"pressure\":2.72e5,\"drop\":1e5}").unit("E-102", "air_cooler", 40, 359, "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}")
+                .unit("P-102", "pump", 600, 182, "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}")
+                .feed("CRUDE", "P-101", "in", crude(298.15, 8e5), 28, 130).line("S-1", "P-101", "out", "T-101", "pa/1/in").line("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in").line("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in")
+                .line("S-4", "T-101", "pa/3/out", "E-101", "tube_in", new Flowsheet.Point(362, 258), new Flowsheet.Point(362, 238), new Flowsheet.Point(116, 238), new Flowsheet.Point(116, 323))
                 .line("S-5", "E-101", "tube_out", "H-101", "in").line("S-6", "H-101", "out", "V-101", "in").line("S-7", "V-101", "out", "T-101", "feed")
-                .feed("STEAM", "T-101", "steam/1", water(steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond()), 356, 261)
-                .feed("CWS", "T-101", "condenser_in", water(303.15, 4e5, 190000 / 3.6), 353, 41).product("CWR", "T-101", "condenser_out", 353, 65)
-                .product("OFFGAS", "T-101", "overhead", 670, 12).product("NAPHTHA", "T-101", "distillate", 670, 41).product("WATER", "T-101", "water", 670, 96).product("KERO", "T-101", "draw/1", 670, 151)
-                .line("S-8", "T-101", "draw/2", "P-102", "in").product("DIESEL", "P-102", "out", 670, 206).product("AGO", "T-101", "draw/3", 670, 261)
-                .line("S-9", "T-101", "bottoms", "E-101", "shell_in").line("S-10", "E-101", "shell_out", "E-102", "in").product("RESIDUE", "E-102", "out", 28, 274).build();
+                .feed("STEAM", "T-101", "steam/1", water(steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond()), 316, 319)
+                .feed("CWS", "T-101", "condenser_in", water(303.15, 4e5, 190000 / 3.6), 316, 28).product("CWR", "T-101", "condenser_out", 316, 48)
+                .product("OFFGAS", "T-101", "overhead", 690, 8).product("NAPHTHA", "T-101", "distillate", 690, 97).product("WATER", "T-101", "water", 690, 76).product("KERO", "T-101", "draw/1", 690, 151)
+                .line("S-8", "T-101", "draw/2", "P-102", "in").product("DIESEL", "P-102", "out", 690, 195).product("AGO", "T-101", "draw/3", 690, 249)
+                .line("S-9", "T-101", "bottoms", "E-101", "shell_in").line("S-10", "E-101", "shell_out", "E-102", "in", new Flowsheet.Point(146, 343), new Flowsheet.Point(24, 343), new Flowsheet.Point(24, 372)).product("RESIDUE", "E-102", "out", 146, 372).build();
     }
 
     /** The doors the crude unit does not hold: the same crude through a drum, its oil split three ways. */
@@ -352,7 +353,7 @@ public final class SimulatorRender {
             var s = new Scene(sheet, run, seconds, host);
             var frame = new SimulatorFrame(d.w, d.h);
             s.view.layout(SimulatorFrame.inner(frame.well()));
-            if (frame.size() != SimulatorFrame.Size.WIDE) s.view.fit(s.editor.layout().bounds());
+            s.view.fit(s.editor.layout().bounds());
             player.accept(s);
             screen(d, s);
         };
@@ -498,10 +499,65 @@ public final class SimulatorRender {
             j.getAsJsonArray("pumparounds").remove(2);
             j.getAsJsonArray("draws").remove(2);
         });
-        block(d, d.well(new Rect(5, 5, w, d.h - 10)), "Air cooler, no reboiler", List.of("Condenser: Air cooler", "Rows: none"), "T-101", "column", plain, w / 2 - 22, 92);
-        block(d, d.well(new Rect(5 + w + gap, 5, w, d.h - 10)), "Exchanger and kettle", List.of("Condenser: Exchanger", "Reboiler duty: 18.00 MW"), "T-101", "column", kettle, w / 2 - 22, 92);
-        block(d, d.well(new Rect(5 + 2 * (w + gap), 5, w, d.h - 10)), "The sample's T-101", List.of("Pumparounds 3, steam 1, draws 3"), "T-101", "column", full, w / 2 - 22, 92);
-        block(d, d.well(new Rect(5 + 3 * (w + gap), 5, w, d.h - 10)), "Two rows fewer", List.of("Pumparounds 2, steam 1, draws 2"), "T-101", "column", vacuum, w / 2 - 22, 92);
+        int x = (w - ColumnBlock.WIDTH) / 2, y = 76;
+        block(d, d.well(new Rect(5, 5, w, d.h - 10)), "Air cooler, no reboiler", List.of("Condenser: Air cooler", "Rows: none"), "T-101", "column", plain, x, y);
+        block(d, d.well(new Rect(5 + w + gap, 5, w, d.h - 10)), "Exchanger and kettle", List.of("Condenser: Exchanger", "Reboiler duty: 18.00 MW"), "T-101", "column", kettle, x, y);
+        block(d, d.well(new Rect(5 + 2 * (w + gap), 5, w, d.h - 10)), "The sample's T-101", List.of("Pumparounds 3, steam 1, draws 3"), "T-101", "column", full, x, y);
+        block(d, d.well(new Rect(5 + 3 * (w + gap), 5, w, d.h - 10)), "Two rows fewer", List.of("Pumparounds 2, steam 1, draws 2"), "T-101", "column", vacuum, x, y);
+    }
+
+    private static com.google.gson.JsonArray pumparounds(int... trays) {
+        var rows = new com.google.gson.JsonArray();
+        for (int i = 0; i + 1 < trays.length; i += 2) {
+            var row = new JsonObject();
+            row.addProperty("id", Integer.toString(i / 2 + 1));
+            row.addProperty("return_tray", trays[i]);
+            row.addProperty("draw_tray", trays[i + 1]);
+            row.addProperty("duty", 1e7);
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    /** What the sample does not show: the door's other settings, each on the block's own drawing. No stream is on any of them, so every pair here is free. */
+    private static void blockVariants(GuiPrototypes.Door d) {
+        int gap = 4, n = 4, w = (d.w - 10 - (n - 1) * gap) / n, h = (d.h - 10 - gap) / 2, x = (w - ColumnBlock.WIDTH) / 2, y = 76;
+        var full = columnDoor();
+        var air = edited(full, j -> j.addProperty("condenser", ColumnComponents.Condenser.AIR_COOLER.name()));
+        var kettle = edited(full, j -> j.addProperty("reboiler_duty", 18e6));
+        var vacuum = edited(kettle, j -> j.addProperty("top_pressure", .3e5));
+        var inline = edited(full, j -> {
+            j.addProperty("reflux_pump", ColumnComponents.Pump.IN_LINE.name());
+            for (var row : j.getAsJsonArray("pumparounds")) row.getAsJsonObject().addProperty("pump", ColumnComponents.Pump.IN_LINE.name());
+        });
+        var near = edited(full, j -> j.add("pumparounds", pumparounds(8, 10, 9, 11, 10, 12)));
+        var nested = edited(full, j -> j.add("pumparounds", pumparounds(4, 24, 8, 12, 15, 20, 26, 28)));
+        var rows = edited(vacuum, j -> {
+            j.addProperty("condenser", ColumnComponents.Condenser.AIR_COOLER.name());
+            j.add("pumparounds", pumparounds(3, 5, 4, 6, 5, 7, 6, 8));
+            var steam = j.getAsJsonArray("steam").get(0).getAsJsonObject().deepCopy();
+            steam.addProperty("id", "2");
+            steam.addProperty("stage", 39);
+            j.getAsJsonArray("steam").add(steam);
+            var draw = j.getAsJsonArray("draws").get(0).getAsJsonObject().deepCopy();
+            draw.addProperty("id", "4");
+            draw.addProperty("tray", 9);
+            j.getAsJsonArray("draws").add(draw);
+        });
+        block(d, d.well(new Rect(5, 5, w, h)), "Air-cooled condenser", List.of("No ports, a part all the same"), "T-101", "column", air, x, y);
+        block(d, d.well(new Rect(5 + w + gap, 5, w, h)), "Kettle", List.of("Bottom left, its pair left"), "T-101", "column", kettle, x, y);
+        block(d, d.well(new Rect(5 + 2 * (w + gap), 5, w, h)), "Vacuum: the ejector", List.of("Top 0.3 bar, ahead of the condenser"), "T-101", "column", vacuum, x, y);
+        block(d, d.well(new Rect(5 + 3 * (w + gap), 5, w, h)), "In-line pumps", List.of("Smaller, no motor"), "T-101", "column", inline, x, y);
+        block(d, d.well(new Rect(5, 5 + h + gap, w, h)), "Free pairs", List.of("No stream: a utility takes the heat, the cooler stays"), "T-101", "column", full, x, y);
+        block(d, d.well(new Rect(5 + w + gap, 5 + h + gap, w, h)), "PAs on near trays", List.of("Returns 8, 9, 10; draws 10, 11, 12"), "T-101", "column", near, x, y);
+        block(d, d.well(new Rect(5 + 2 * (w + gap), 5 + h + gap, w, h)), "One PA round two others", List.of("Elbows keep each loop whole"), "T-101", "column", nested, x, y);
+        block(d, d.well(new Rect(5 + 3 * (w + gap), 5 + h + gap, w, h)), "Every row", List.of("4 PAs, 2 steam, 4 draws, kettle, ejector, air"), "T-101", "column", rows, x, y);
+    }
+
+    private static Flowsheet withDoor(Flowsheet sheet, Consumer<JsonObject> change) {
+        var units = new ArrayList<Flowsheet.Unit>();
+        for (var unit : sheet.units()) units.add(unit.id().equals("T-101") ? new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), edited(unit.params(), change), unit.unknown()) : unit);
+        return new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), sheet.unknown());
     }
 
     private static void otherBlocks(GuiPrototypes.Door d) {
@@ -585,10 +641,10 @@ public final class SimulatorRender {
                     s.gestures.move(cx(s, 138), cy(s, 140));
                 }), scene(sheet, run, seconds, host, s -> {
                     s.editor.removeStream("KERO");
-                    s.editor.addUnit("pump", 610, 165);
+                    s.editor.addUnit("pump", 640, 138);
                     var port = s.editor.layout().place("T-101", "draw/1");
                     s.gestures.press(cx(s, port.x()), cy(s, port.y()), 0, 1000);
-                    s.gestures.drag(cx(s, 596), cy(s, 179));
+                    s.gestures.drag(cx(s, 626), cy(s, 152));
                 }), scene(sheet, run, seconds, host, s -> {
                     var tag = s.editor.layout().name(s.editor.layout().line("S-9"));
                     s.gestures.press(cx(s, tag.x() + 2), cy(s, tag.y() + 2), 0, 1000);
@@ -596,10 +652,10 @@ public final class SimulatorRender {
                     s.gestures.press(cx(s, tag.x() + 2), cy(s, tag.y() + 2), 0, 1100);
                     s.gestures.typed("RES-HOT");
                 }), scene(sheet, run, seconds, host, s -> {
-                    s.editor.addUnit("pump", 610, 165);
+                    s.editor.addUnit("pump", 640, 138);
                     var p = s.editor.layout().line("S-8").points();
                     s.gestures.press(cx(s, p[p.length - 2] - 8), cy(s, p[p.length - 1]), 1, 1000);
-                    s.gestures.move(cx(s, 596), cy(s, 179));
+                    s.gestures.move(cx(s, 626), cy(s, 152));
                 }),
                 scene(sheet, run, seconds, host, s -> {
                     for (var place : s.editor.layout().box("T-101").places()) if (place.port().startsWith("pa/") && place.direction() == com.wormzjl.icheme.science.flowsheet.Port.Direction.IN && s.hover == null) s.hover = place;
@@ -695,8 +751,17 @@ public final class SimulatorRender {
         grid(out, "22-column-door-keys", DW, DH, List.of("Solve alone and Templates live", "No stream yet: the hover says why", "During a run"), List.of(doorKeys(sheet, run, host, "T-101", false), doorKeys(columnOnly(sheet), null, host, "T-101", true), doorKeys(sheet, run, running, "T-101", false)));
         sheet(out, "23-revision-notice", W, H, List.of("A client on a dedicated server whose data differ: a notice, and nothing blocked"), List.of(scene(sheet, run, seconds, host, s -> s.differing = List.of(com.wormzjl.icheme.science.material.MaterialCatalog.Package.label(NETWORK)))));
         sheet(out, "18-missing-unit", W, H, List.of("A sheet after an update removed a unit"), List.of(scene(missing, missingRun, 1.2, host, s -> s.gestures.select(new SheetGestures.Selection(true, "H-101")))));
-        sheet(out, "19-block-ports", W, 442, List.of("One block: the door's settings add the connection points"), List.of((d, s) -> blockPorts(d)));
+        sheet(out, "19-block-ports", 1450, 500, List.of("One block: the door's settings add the connection points"), List.of((d, s) -> blockPorts(d)));
         sheet(out, "21-other-blocks", W, 402, List.of("The same rule for every block"), List.of((d, s) -> otherBlocks(d)));
+        sheet(out, "26-block-variants", 1450, 1020, List.of("What the door can ask of the block"), List.of((d, s) -> blockVariants(d)));
+        var warned = withDoor(sheet, j -> j.addProperty("condenser_temperature", 300));
+        var warnedRun = FlowsheetEngine.run(warned, CATALOG, () -> {
+        });
+        var failed = withDoor(sheet, j -> j.addProperty("top_pressure", 1e3));
+        var failedRun = FlowsheetEngine.run(failed, CATALOG, () -> {
+        });
+        System.out.printf("tones: warned %s %s; failed %s %s%n", warnedRun.status(), warnedRun.log(), failedRun.status(), failedRun.log());
+        sheet(out, "27-block-tones", W, H, List.of("Not solved: every line greys", "A warning", "Failed"), List.of(scene(sheet, null, 0, host, nothing()), scene(warned, warnedRun, 1.2, host, nothing()), scene(failed, failedRun, 1.2, host, nothing())));
         System.out.println("sheets in " + out);
     }
 }
