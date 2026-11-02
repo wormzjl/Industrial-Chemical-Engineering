@@ -2,7 +2,7 @@
 
 Purpose: shorten what a merge costs. Tests that cannot be affected by a change do not run, the fluid GameTests stop sleeping, and one tracked lane replaces a copy per batch.
 
-Status: Implemented 2026-11-03, merged to main as 0.19.1, not pushed. Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-11-03, merged to main as 0.19.1 (`ceb9e54bd`), not pushed. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
