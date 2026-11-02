@@ -143,7 +143,7 @@ public final class SimulatorRender {
                 .unit("V-101", "valve", 340, 224, "{\"target\":\"outlet\",\"pressure\":2.72e5,\"drop\":1e5}").unit("E-102", "air_cooler", 70, 266, "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}")
                 .unit("P-102", "pump", 560, 193, "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}")
                 .feed("CRUDE", "P-101", "in", crude(298.15, 8e5), 28, 89).line("S-1", "P-101", "out", "T-101", "pa/1/in").line("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in").line("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in")
-                .line("S-4", "T-101", "pa/3/out", "E-101", "tube_in", new Flowsheet.Point(408, 212), new Flowsheet.Point(408, 176), new Flowsheet.Point(116, 176), new Flowsheet.Point(116, 230))
+                .line("S-4", "T-101", "pa/3/out", "E-101", "tube_in", new Flowsheet.Point(392, 212), new Flowsheet.Point(392, 176), new Flowsheet.Point(116, 176), new Flowsheet.Point(116, 230))
                 .line("S-5", "E-101", "tube_out", "H-101", "in").line("S-6", "H-101", "out", "V-101", "in").line("S-7", "V-101", "out", "T-101", "feed")
                 .feed("STEAM", "T-101", "steam/1", water(steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond()), 356, 261)
                 .feed("CWS", "T-101", "condenser_in", water(303.15, 4e5, 190000 / 3.6), 353, 41).product("CWR", "T-101", "condenser_out", 353, 65)

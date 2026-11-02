@@ -30,7 +30,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class SheetLayout {
     /** A pill's half height, least width and text room; how far a line leaves a port; a port's square. */
-    public static final int PILL_HALF = 9, PILL_LEAST = 38, PILL_PAD = 12, STUB = 10, PORT = 5;
+    public static final int PILL_HALF = 9, PILL_LEAST = 38, PILL_PAD = 12, STUB = 10, LOOP = 30, PORT = 5;
     /** The least pitch of a column's ports; the room a column's ports leave at each end of its side; a column's fewest tray slices: the height the owner approved. */
     public static final int PITCH = 14, END = 17, SLICES = 14;
     /** How many canvas pixels off a thing a click still finds it. */
@@ -468,7 +468,7 @@ public final class SheetLayout {
         return new Anchor(pill.x() + (left ? -1 : 1) * pill.w() / 2, pill.y(), left ? Side.LEFT : Side.RIGHT);
     }
 
-    /** An orthogonal line: with no corners, out of each end by {@link #STUB}, then one or two bends; with corners, through them, an elbow where two points share neither x nor y. */
+    /** An orthogonal line: with no corners, out of each end by {@link #STUB}, then one or two bends, a line between two ports on one face standing {@link #LOOP} off it so it reads as a line and not as the box's edge; with corners, through them, an elbow where two points share neither x nor y. */
     private static int[] points(Anchor a, Anchor b, List<int[]> corners) {
         var out = new ArrayList<int[]>();
         out.add(new int[]{a.x(), a.y()});
@@ -484,11 +484,11 @@ public final class SheetLayout {
             }
             out.add(new int[]{ax, ay});
             if (a.side().across() && b.side().across()) {
-                int mid = a.side() == b.side() ? a.side().dx < 0 ? Math.min(ax, bx) : Math.max(ax, bx) : (ax + bx) / 2;
+                int mid = a.side() != b.side() ? (ax + bx) / 2 : a.x() == b.x() ? a.x() + a.side().dx * LOOP : a.side().dx < 0 ? Math.min(ax, bx) : Math.max(ax, bx);
                 out.add(new int[]{mid, ay});
                 out.add(new int[]{mid, by});
             } else if (!a.side().across() && !b.side().across()) {
-                int mid = a.side() == b.side() ? a.side().dy < 0 ? Math.min(ay, by) : Math.max(ay, by) : (ay + by) / 2;
+                int mid = a.side() != b.side() ? (ay + by) / 2 : a.y() == b.y() ? a.y() + a.side().dy * LOOP : a.side().dy < 0 ? Math.min(ay, by) : Math.max(ay, by);
                 out.add(new int[]{ax, mid});
                 out.add(new int[]{bx, mid});
             } else if (a.side().across()) out.add(new int[]{bx, ay});
