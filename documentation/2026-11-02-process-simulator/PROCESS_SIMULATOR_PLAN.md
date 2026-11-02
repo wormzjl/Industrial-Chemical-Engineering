@@ -1,6 +1,6 @@
 # In-game process simulator: design plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner took decisions D1 to D21 on 2026-11-02 (section 5). W1 to W4 in progress; the rest follows column operation's merge (D10).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner took decisions D1 to D21 on 2026-11-02 (section 5). W1 to W4 are built on the branch, not merged; the rest follows column operation's merge (D10).
 The drawings are in [research/2026-11-02-process-simulator/renders/](../../research/2026-11-02-process-simulator/renders/), in the main checkout. Every number comes from the shipped code at `79b853e0`, run by the tools in
 `tools/process-simulator/`.
 
@@ -91,8 +91,8 @@ A new Minecraft-free package, `science/flowsheet`. Sequential modular at steady 
    side's outlet splits the same way.
 2. Split the graph into strongly connected parts, and solve them in order.
 3. In each loop, tear the fewest streams. Mark them T on the sheet.
-4. Repeat with plain passes, then bounded Wegstein: one factor per tear, from the variable that moved most, in [-5, 0].
-   Tolerance 0.01 % on flows, 0.01 K on temperature, at most 30 passes, all in the flowsheet file.
+4. Repeat with plain passes, then bounded Wegstein: one factor per tear, from the variable that moved most in its tolerances, in [-5, 0].
+   Tolerance 0.01 % on flows and pressures, 0.01 K on temperature, at most 30 passes, all in the flowsheet file.
 5. Every pass after the first starts each column from its last state.
 6. A trial step that fails a column falls back to a plain pass. Measured: on a loop of slope 1, the bounded step failed the column
    on pass 3, and plain passes went on to pass 30.
@@ -101,8 +101,14 @@ A new Minecraft-free package, `science/flowsheet`. Sequential modular at steady 
 The status says Steady state only when every tear has stopped moving and mass closes. Otherwise it says Not steady, the last
 pass stays on show, and the Log names the tear and what grew (sheet 22).
 
+A tear starts from no flow, or from an estimate: the last steady run's stream, else a line's own spec. A column under a furnace on
+a fixed duty needs one: with no bottoms yet there is no preheat, the feed comes in far colder than at steady state, and the column
+does not solve. A fresh sheet with neither fails at the block, and the Log says the loop needs a first estimate.
+
 A stream carries T, P, amounts on the flowsheet's one axis, and solids. Pressure runs forward only: each unit sets its outlet,
-and no pressure network is solved. A failed unit stops what lies after it. What was solved stays, and the status names the
+and no pressure network is solved. A stream's state is what the world's TP flash says at the
+temperature that holds its enthalpy; the engine's PH answers only on a true step of H(T), or where the TP flash refuses a trial
+(flash findings, `tools/process-simulator/README.md`). A failed unit stops what lies after it. What was solved stays, and the status names the
 first thing to fix. Leaving a data range never stops a run; it is a notice, as on the world's islands.
 
 ### 3.2 Units on day one
@@ -141,10 +147,12 @@ A heat unit's drops are typed until it has a size. From then on the run takes th
   and temperature become meters read from the stream. The feed tray stays an entry. The Equipment page's glass lists the
   connection points and what each carries.
 - V3 has no feed pressure, so the unit flashes the stream at its own enthalpy to the feed tray's pressure. That gives V3's
-  feed temperature.
+  feed temperature. Tray hydraulics march that pressure from the column's traffic, so only a solve can say it. The unit starts at
+  the stream's own pressure and goes round, at most 3 times, while the answer moves the feed by over 0.01 K. A stream at its tray's
+  pressure solves once and matches the calculator to the last digit.
 - V3's feed is hydrocarbons only. Water in the feed joins as a steam feed if it is vapour. Liquid water is refused with a
   message.
-- The learned start declines a package with nitrogen. The unit takes the package without nitrogen when the feed holds none.
+- The learned start declines a package with nitrogen. The unit takes the door's package, the one without nitrogen, while it exists and holds the feed, else the sheet's.
 - `Solve alone` runs this unit on the stream it has now. Run is the only other way to solve it.
 
 ### 3.4 Where a run happens and where the sheet lives
@@ -229,14 +237,17 @@ The block holds the working sheet. Files are the player's own library: Save as a
 both, under the same rule as world saves: facts survive, state rebuilds.
 
 - Facts: basis (package id, revision, component ids), units (id, stable type string, name, position, params), streams (id, name,
-  from and to as stable port strings, spec, route). Unknown fields are kept and written back.
+  from and to as stable port strings, spec, route). Unknown fields are kept and written back, at every level. `FlowsheetFile`
+  is the format, number 1.
 - State: results. A changed package revision drops them, and the player runs again.
 - Fields are append-only, with a default equal to the old behaviour. Enums go by name. A renamed type or port gets an alias.
 - A port string names a block's row by the row's own id, never its position. So removing PA 1 does not move PA 2's wires.
 - A removed unit type becomes a hatched placeholder that keeps its ports, streams and settings. Everything upstream solves, the
   rest stays grey, and Replace offers units with the same ports (sheet 18).
 - A removed component is parked: its amounts stay in the file, out of the solve, and the Basis tab and Results name them. An
-  added component starts at zero everywhere. A removed package asks for another, and maps by component id.
+  added component starts at zero everywhere. A removed solid is parked the same way, and a package's alias of a component is
+  followed. A removed package asks for another, and maps by component id: a stream flashes on the world's own package, so a sheet
+  on any other asks the same. A door's removed package falls to the sheet's.
 - A newer format or a damaged file is refused and left untouched (sheet 17). Opening never rewrites a file; Save as does.
 - Corpus images under `src/test/resources/compat/`, read by a gate, at every format change.
 

@@ -68,3 +68,4 @@ The search answers every grid target the fluid can reach within 0.06 W on 100 mo
 - 2026-11-02: the owner asked for a sizing stage. `SizingProbe` added; `SampleFlowsheetProbe` keeps its column input and result for it.
 - 2026-11-02: the owner's note on types, drops and the ejector. `SizingProbe` goes by surface and drops, proposes the heater's type and writes the storage what-if and the door's drops; `EjectorProbe` added.
 - 2026-11-02: W2. `FlashProbeTest` added, with the flash findings above.
+- 2026-11-02: W3. `FlashProbeTest` follows `FlowThermo`'s constructor.
