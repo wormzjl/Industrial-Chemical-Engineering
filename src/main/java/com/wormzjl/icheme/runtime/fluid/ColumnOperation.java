@@ -62,12 +62,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         long applyAt(){return tick+APPLY_TICKS;}
     }
 
-    /** Heat the cycle at {@code tick} put in transit to the condenser's water, J. */
-    record Owed(long tick,double joule) {}
+    /** Heat put in transit to the condenser's water at {@code tick}, J: by a cycle, or {@code booked} by an outlet's island, whose job decides when it lands. */
+    record Owed(long tick,double joule,boolean booked) {}
     /** The condenser holds at most this many seconds of its design duty its water has not taken, and its water leaves at least this far below the condensate (C6b, plan section 10). */
     static final double CONDENSER_HOLD_SECONDS=60,APPROACH_KELVIN=5;
     /** Arrivals at an inlet over online ticks {@code start} to {@code end}: already in the account, a cycle takes none of it before its time. */
     record Span(long start,long end,Account arrived) {}
+    /** What an outlet gave over online ticks {@code start} to {@code end}, mol: already off the account. */
+    record Gift(long start,long end,double moles) {}
     /** A cycle's product credited to an outlet at {@code tick}. */
     record Credit(long tick,Account product) {}
     /** An inlet account's level after the cycle at {@code tick}, mol, and the rate the column demanded there, mol/s (0: nothing). */
@@ -94,9 +96,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         /** The heat booked into the condenser's transit, dated: what the water side reads through the fence (C6b). */
         final ArrayDeque<Owed> owed=new ArrayDeque<>();
         final Map<Long,ArrayDeque<Span>> spans=new HashMap<>();
+        final Map<Long,ArrayDeque<Gift>> gifts=new HashMap<>();
         final Map<Long,ArrayDeque<Credit>> credits=new HashMap<>();
         final Map<Long,ArrayDeque<Level>> levels=new HashMap<>();
+        /** The table the last applied one replaced, for plans dated before it applied. */
+        SplitTable before;
         Run(long unit,long nextCycle){this.unit=unit;this.nextCycle=nextCycle;}
+        /** The table in force at {@code tick}. */
+        SplitTable tableAt(long tick){return before!=null&&tick<applied?before:table;}
     }
 
     private final WorldTopologyLedger topology;
@@ -261,10 +268,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         r.table=table;r.enthalpy=ColumnSolve.copy(enthalpy);r.status="RUNNING";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING;
     }
 
-    /** The next cycle deadline: the earliest cycle still ahead. A cycle already due waits for its inlets' bookings, which
-     * run it ({@link #booked}), never a deadline that fires again at once. */
+    /** The next cycle deadline: the earliest cycle still ahead. A cycle already due waits for its ports' bookings, which run it
+     * ({@link #booked}); one a cycle later looks again, since a port's island that stopped (a hold) books nothing. */
     private void schedule() {
-        long now=coordinator.now(),next=wakes.isEmpty()?Long.MAX_VALUE:Math.max(now+1,wakes.firstKey());for(var r:runs.values())if(r.nextCycle>now)next=Math.min(next,r.nextCycle);
+        long now=coordinator.now(),next=wakes.isEmpty()?Long.MAX_VALUE:Math.max(now+1,wakes.firstKey());for(var r:runs.values())next=Math.min(next,r.nextCycle>now?r.nextCycle:now+CYCLE_TICKS);
         coordinator.schedule(IslandScheduler.Kind.COLUMN_CYCLE,next,this::due);
     }
     /** Runs every cycle that is due and whose inlets have booked through its tick, then schedules the next. */
@@ -273,7 +280,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(cycling)return;cycling=true;
         try {
             long now=coordinator.now();
-            for(var r:List.copyOf(runs.values()))while(r.nextCycle<=now&&inletsThrough(r,r.nextCycle)&&applied(r,r.nextCycle)){cycle(r,r.nextCycle);r.nextCycle+=CYCLE_TICKS;save(r);}
+            for(var r:List.copyOf(runs.values()))while(r.nextCycle<=now&&portsThrough(r,r.nextCycle)&&applied(r,r.nextCycle)){cycle(r,r.nextCycle);r.nextCycle+=CYCLE_TICKS;save(r);}
             // A certified port island rests on its old plan: wake it where the new one starts.
             while(!wakes.isEmpty()&&wakes.firstKey()<=now)for(long device:wakes.pollFirstEntry().getValue()){Long owner=registry.owner(device);if(owner!=null)coordinator.portsMoved(owner);}
         } finally{cycling=false;}
@@ -295,7 +302,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var u=topology.column(r.unit);
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
-            r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");r.failed=false;
+            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");r.failed=false;
             // Only a solve of the short steam itself lifts rule A: one at A's own state says nothing of B's.
             if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=false;
             return true;
@@ -365,13 +372,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         for(int i=0;i<feed.length;i++)feed[i]/=seconds;
         return new ColumnSolve.Taken(feed,total>0?energy/step.feed().total():Double.NaN,steam);
     }
-    /** Whether every inlet island of {@code r} has booked through {@code tick} (plan section 9). */
-    private boolean inletsThrough(Run r,long tick) {
+    /** Whether every inlet island of {@code r} has booked through {@code tick} and every outlet's through the fence the cycle reads its room at (plan section 9). */
+    private boolean portsThrough(Run r,long tick) {
         var u=topology.column(r.unit);
         for(var s:u.stations()) {
-            if(!s.port().inlet()||s.device()==0)continue;
+            if(s.device()==0)continue;
             Long owner=registry.owner(s.device());
-            if(owner!=null&&!coordinator.through(owner,tick))return false;
+            if(owner!=null&&!coordinator.through(owner,s.port().inlet()?tick:tick-FENCE_TICKS))return false;
         }
         // The condenser's water side, through the fence the cycle reads its transit at.
         if(u.condenser()!=0){Long owner=registry.owner(u.condenser());if(owner!=null&&!coordinator.through(owner,tick-FENCE_TICKS))return false;}
@@ -405,14 +412,19 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double design=u.setpoints().designFeedRate()*BUFFER_SECONDS;
         for(int k=0;k<room.length;k++) {
             var p=t.products().get(k);var s=station(stations,p.port(),p.index());
-            room[k]=Math.max(0,design*t.perFeed(k)-s.account().total());
+            // Gifts through the fence only: a slow island's booking lands after the cycle or before it, the room is the same.
+            room[k]=Math.max(0,design*t.perFeed(k)-s.account().total()-givenSince(r,s.device(),tick-FENCE_TICKS));
         }
         var energy=r.enthalpy;
         // Rule A stays until a solve succeeds; at its retry time the cycle tries B again, and a still short steam asks the solve again.
         if(r.ruleA&&r.pending==null&&tick>=r.retryAt)r.ruleA=false;
         // A water-cooled condenser rejects no more than its water has room for: the heat owed as of the fence against its hold.
         double condenserRoom=Double.POSITIVE_INFINITY;long partner=partnerOf(u.condenser());
-        if(partner!=0)condenserRoom=CONDENSER_HOLD_SECONDS*Math.abs(t.condenserPerFeed())*u.setpoints().designFeedRate()-coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(u.condenser()),PhysicalFluidTopology.sideIdentity(partner),tick-FENCE_TICKS);
+        if(partner!=0) {
+            double owed=coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(u.condenser()),PhysicalFluidTopology.sideIdentity(partner),tick-FENCE_TICKS);
+            for(var o:r.owed)if(o.booked()&&o.tick()>tick-FENCE_TICKS)owed-=o.joule();
+            condenserRoom=CONDENSER_HOLD_SECONDS*Math.abs(t.condenserPerFeed())*u.setpoints().designFeedRate()-owed;
+        }
         var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;},r.ruleA);
         r.last=step;
         if(step.trip()!=null) {
@@ -435,7 +447,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double pumparounds=0;for(double q:step.pumparounds())pumparounds+=q;
         totals=new ColumnUnit.Totals(totals.taken().plus(in),totals.produced().plus(out),totals.reboiler()+step.reboiler(),totals.condenser()+step.condenser(),totals.pumparounds()+pumparounds);
         topology.column(u.withStations(true,stations).withTotals(totals));
-        if(partner!=0)owe(r,u,partner,tick,-step.condenser());
+        if(partner!=0)owe(r,u,partner,tick,-step.condenser(),false);
         levels(r,u,available,tick,true);
         r.status=step.limit()==ColumnCycle.Limit.NONE?"RUNNING":String.format(Locale.ROOT,"LIMITED: %s, %.0f %%",step.limit().name().toLowerCase(Locale.ROOT),100*step.alpha());
         r.phase=step.limit()==ColumnCycle.Limit.NONE?com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING:com.wormzjl.icheme.science.column.operation.OperationView.Phase.LIMITED;
@@ -540,7 +552,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(log!=null)for(var c:log)if(c.tick()>fence){var n=c.product().moles();for(int i=0;i<available.length;i++)available[i]=Math.max(0,available[i]-n[i]);}
         double total=0;for(double n:available)total+=n;
         double temperature=node.state().temperature();
-        if(r!=null&&r.table!=null)for(var p:r.table.products())if(p.port()==s.port()&&p.index()==s.index())temperature=p.temperature();
+        var table=r==null?null:r.tableAt(fence);
+        if(table!=null)for(var p:table.products())if(p.port()==s.port()&&p.index()==s.index())temperature=p.temperature();
         if(!(total>0))return new PortPlan(node.id(),s.valve(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
         double mass=mass(available),cap=mass/slice.seconds()*TAKE_MARGIN,rate=cap;
         if(made!=null) {
@@ -588,9 +601,17 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 var account=new Account(held,s.account().energy()-debited);
                 var t=u.totals();u=withAccount(u,s,account).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
                 topology.column(u);
-                long partner=partnerOf(u.condenser());if(partner!=0&&r!=null)owe(r,u,partner,end,-(joule-debited));
+                if(r!=null)r.gifts.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Gift(start,end,given));
+                long partner=partnerOf(u.condenser());if(partner!=0&&r!=null)owe(r,u,partner,end,-(joule-debited),true);
             }
         }
+    }
+    /** What outlet {@code device} gave after {@code fence}, mol: a span across the fence by time; what is older is dropped. State: a reload starts it empty. */
+    private double givenSince(Run r,long device,long fence) {
+        var queue=r.gifts.get(device);if(queue==null)return 0;
+        while(!queue.isEmpty()&&queue.peekFirst().end()<=fence)queue.removeFirst();
+        double later=0;for(var g:queue)later+=g.start()>=fence?g.moles():g.moles()*(g.end()-fence)/(double)(g.end()-g.start());
+        return later;
     }
     /** The heat partner of the registered side {@code side}, or 0. */
     private long partnerOf(long side) {
@@ -598,9 +619,9 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return r==null||r.device().heat()==null?0:r.device().heat().partner();
     }
     /** Books {@code joule} (J) into the condenser's transit to its water at {@code tick}, and wakes the water side where it reads it. */
-    private void owe(Run r,ColumnUnit u,long partner,long tick,double joule) {
+    private void owe(Run r,ColumnUnit u,long partner,long tick,double joule,boolean booked) {
         if(joule==0)return;
-        coordinator.owe(PhysicalFluidTopology.sideIdentity(u.condenser()),PhysicalFluidTopology.sideIdentity(partner),joule);r.owed.addLast(new Owed(tick,joule));
+        coordinator.owe(PhysicalFluidTopology.sideIdentity(u.condenser()),PhysicalFluidTopology.sideIdentity(partner),joule);r.owed.addLast(new Owed(tick,joule,booked));
         while(r.owed.size()>1&&r.owed.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)r.owed.removeFirst();
         wakes.computeIfAbsent(tick+FENCE_TICKS,k->new TreeSet<>()).add(u.condenser());
     }

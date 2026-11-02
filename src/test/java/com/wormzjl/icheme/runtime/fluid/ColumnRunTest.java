@@ -66,11 +66,12 @@ class ColumnRunTest {
     private Rig rig(int lag,Fake solves,boolean steam,boolean blocked,boolean condenser) {
         var world=new EventPathWorld();world.lag=lag;var model=world.model;int m=model.componentCount();
         var n2=EventPathWorld.nitrogen().composition();
-        long generator=world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,n2),.05);
-        world.place(1,64,0,Kind.PIPE,Direction.EAST,.05);long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST);
-        long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST),tank=0,steamSource=0,steamValve=0;
-        if(!blocked){world.place(12,64,0,Kind.PIPE,Direction.EAST,.05);tank=world.place(13,64,0,Kind.RESERVOIR,Direction.EAST);}
         var water=new double[m];water[m-1]=1;
+        long generator=pumped?world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,300,300000,water),.05):world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,n2),.05);
+        if(pumped)world.place(1,64,0,Kind.PUMP,Direction.EAST,new FlowControl.Pump(.01,500000),null,.05);else world.place(1,64,0,Kind.PIPE,Direction.EAST,.05);
+        long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST);
+        long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST),tank=0,steamSource=0,steamValve=0;
+        if(!blocked){world.place(12,64,0,Kind.PIPE,Direction.EAST,productBore);tank=world.place(13,64,0,Kind.RESERVOIR,Direction.EAST);}
         long waterSource=0;
         if(condenser){waterSource=world.place(0,64,4,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,300,300000,water),.05);world.place(1,64,4,Kind.PIPE,Direction.EAST,.05);world.place(5,64,4,Kind.PIPE,Direction.EAST,.05);world.place(6,64,4,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,200000,water),.05);}
         // The steam line is sized for its 0.1 mol/s (1 cm): a 5 cm valve regulating 6 g/s from 3 to 1.5 bar holds its island (README, open items).
@@ -95,8 +96,21 @@ class ColumnRunTest {
         world.registry.submit(edits,Math.max(steamPort,shell)+1,null);
         if(solves!=null){solves.model=model;ops.solves(solves);}
         ops.refresh();world.columns=ops;
-        if(solves==null){var s=table(model,setpoints);ops.table(unit,s.table(),s.enthalpy());}
+        if(solves==null){var s=pumped?waterTable(model,setpoints):table(model,setpoints);ops.table(unit,s.table(),s.enthalpy());}
         return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell);
+    }
+    /** A liquid water feed on the rig's line through a pump, ahead of its boundary valve. */
+    private boolean pumped;
+    /** The bore of the rig's product line, m. */
+    private double productBore=.05;
+    /** The rig's table for a water feed: everything to the distillate, 1 kJ/mol cooler. */
+    private static ColumnSolve.Solved waterTable(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints) {
+        int m=model.componentCount();var water=new double[m];water[m-1]=1;double h=model.flashTP(300,300000,water.clone(),()->{}).enthalpy();
+        var rows=new double[1][m];Arrays.fill(rows[0],h-1000);
+        var all=new double[m];Arrays.fill(all,1);var held=new boolean[m];Arrays.fill(held,true);
+        var table=new SplitTable(model.components(),List.of(new SplitTable.Product(Port.DISTILLATE,0,all,330,250000)),0,new double[0],-1000,
+                new SplitTable.Reference(water,h,30,new double[0],1,setpoints,330,new double[0]),held);
+        return new ColumnSolve.Solved(table,rows,null,-1000,"test","");
     }
 
     @Test void aRunningColumnTakesItsFeedAndGivesItsProductDownstreamConservingEveryComponent() {
@@ -148,6 +162,40 @@ class ColumnRunTest {
         double[] after=world.ledger.snapshot().destroyed().moles();
         for(int i=0;i<after.length;i++)accounts+=after[i]-before[i];
         assertTrue(accounts>0,"its accounts are booked as destroyed: "+held.stations());
+    }
+    /** A pump on the feed line, ahead of the boundary valve: the valve meters its small flow with the pump on its head limit, closed before the first demand (merge review, finding 2). */
+    @Test void aPumpOnTheFeedLineRidesBehindItsValve() {
+        pumped=true;var r=rig(0);var world=r.world();long unit=r.unit();
+        world.runTo(3000);
+        assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+        var u=world.ledger.column(unit);
+        assertTrue(u.totals().taken().total()>40,"the column took its feed: "+u.totals().taken().total()+" mol, "+r.ops().status(unit));
+        var island=world.coordinator.snapshots().stream().filter(s->s.graph().pipes().stream().anyMatch(p->p.control() instanceof FlowControl.Pump)).findFirst().orElseThrow();
+        var result=island.lastResult().orElseThrow();
+        for(int e=0;e<island.graph().pipes().size();e++)if(island.graph().pipes().get(e).control() instanceof FlowControl.Pump)assertEquals(FlowControl.Mode.PUMP_HEAD_LIMIT,result.endpointModes().get(e));
+    }
+    /** A hold tells nobody: an island whose job runs past the last wake and then holds books nothing, and a look a cycle later runs the overdue cycle (merge review, finding 14). */
+    @Test void heldPortsDoNotFreezeTheColumn() {
+        var r=rig(0);var world=r.world();long unit=r.unit();
+        world.runTo(2000);
+        world.lag=700;world.failing.add(world.registry.owner(r.feed()));world.failing.add(world.registry.owner(r.product()));
+        world.runTo(5000);
+        assertFalse(world.held.isEmpty(),"the islands held");
+        assertTrue(r.ops().status(unit).startsWith("LIMITED: feed"),r.ops().status(unit));
+    }
+    /** A product line too narrow for the column's rate fills the outlet's buffer: the cut does not depend on when the jobs complete (merge review, finding 9). */
+    @Test void aFullBufferDoesNotDependOnWhenItsIslandsJobsComplete() {
+        for(double bore:new double[]{.003,.005}) {
+            productBore=bore;var a=rig(0);var b=rig(0);
+            b.world().runTo(100);b.world().lags.put(b.world().registry.owner(b.product()),60);
+            a.world().runTo(6000);b.world().runTo(6000);
+            // The slow world's cycles wait for its islands: the two are compared after the same cycle.
+            long cycle=a.ops().run(a.unit()).nextCycle;while(b.ops().run(b.unit()).nextCycle<cycle)b.world().tick();
+            var x=a.world().ledger.column(a.unit());var y=b.world().ledger.column(b.unit());
+            assertTrue(a.ops().status(a.unit()).startsWith("LIMITED: outlet"),a.ops().status(a.unit()));
+            assertArrayEquals(x.totals().taken().moles(),y.totals().taken().moles(),"what the column took at "+bore);
+            assertArrayEquals(x.totals().produced().moles(),y.totals().produced().moles(),"what it made at "+bore);
+        }
     }
     /** A port its design lost keeps its account and takes no part in the cycle (merge review, finding 16). */
     @Test void aStationItsDesignLostKeepsItsAccount() {

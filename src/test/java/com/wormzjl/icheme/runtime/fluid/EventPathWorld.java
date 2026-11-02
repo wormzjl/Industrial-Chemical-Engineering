@@ -81,6 +81,11 @@ class EventPathWorld {
         for(var island:islands)coordinator.register(island,model);
         registry.flowmeters(flowmeters);registry.load();
     }
+    /** Online ticks more that one island's jobs take: a slow island beside quick ones. */
+    final Map<Long,Integer> lags=new HashMap<>();
+
+    /** The islands whose jobs fail, as a worker's failure does: they hold. */
+    final Set<Long> failing=new HashSet<>();
     /** The running columns the events' commits report to, where a test runs one. */
     ColumnOperation columns;
     /** The world's default control of a device kind (FluidWorldAuthority.place). */
@@ -144,8 +149,10 @@ class EventPathWorld {
         if(ledger.hasPendingEvents()){registry.applyPending();coordinator.pumpIfUseful();}
         beforeSolves.run();
         for(long request:List.copyOf(attempts.keySet())) {
-            if(ledger.onlineTick()-submitted.getOrDefault(request,0L)<lag)continue;submitted.remove(request);
+            if(ledger.onlineTick()-submitted.getOrDefault(request,0L)<lag+lags.getOrDefault(attempts.get(request).islandId(),0))continue;submitted.remove(request);
             var attempt=attempts.remove(request);var command=commands.remove(request);
+
+            if(failing.contains(attempt.islandId())){coordinator.completed(attempt,Optional.empty());continue;}
             var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
             coordinator.completed(attempt,Optional.of(result));
         }
