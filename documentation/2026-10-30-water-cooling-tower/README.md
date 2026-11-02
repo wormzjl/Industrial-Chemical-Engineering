@@ -1,6 +1,6 @@
 # Scalable water cooling towers
 
-Implemented 2026-11-02 as 0.19.0 on `claude/codex-water-cooling-tower-review-09c170`, which holds main 0.18.1; the merge waits for the owner.
+Implemented 2026-11-02, merged to main as 0.19.0 (`339872bc1`), not pushed.
 
 The constructor adds induced-draft banks of bounded parallel cells and passive natural-draft towers. Both store water only in a real open basin and exchange heat and water with fixed ambient air. The induced-draft structure uses a metal basin and steel frame, without concrete support, following the owner's final revision.
 
@@ -70,3 +70,5 @@ History: 2026-11-02 — owner reported lag and asked for a chunk loading check o
 History: 2026-11-02 — owner's client check: the shell's top was a knife edge, its two faces with nothing between them. A stiffening ring closes it, d/100 proud of the wall on both sides, 2 d/100 deep, drawn and colliding (`aNaturalShellEndsInAThickRing`). 252 polygons and 214 cells; the wall stays 0.25 m. Layout table updated. Quick suite 1845 of 1845. Slow gates not re-run for this drawing change.
 
 History: 2026-11-02 — owner: "remove the backward compat and prepare for merge". Main 0.18.0 and 0.18.1 merged in (`119624a65`, `d5be9da6d`). Eleven old-signature constructors, two legacy hash branches and a shell's tolerance of a missing bank removed (`5b44dbaa3`); that found `withConnections` resetting a tower's bank, fixed and gated. Facts schema 7, shape fields 5, version 0.19.0. Final lane: 2114 tests, chain-100 deviation 0, 39 GameTests, campaign 975, 994, 1000, `refused=0`. Details in [MERGE_REVIEW.md](MERGE_REVIEW.md).
+
+History: 2026-11-02 — owner: "Merge as 0.19.0". Merged to main as `339872bc1`, whose tree equals the branch's at the final lane's code plus documents. Not pushed.

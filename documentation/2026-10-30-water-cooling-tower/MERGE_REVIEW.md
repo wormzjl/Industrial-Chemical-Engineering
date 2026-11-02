@@ -1,6 +1,6 @@
 # Water cooling tower merge review
 
-Owner, 2026-11-02: "remove the backward compat and prepare for merge". Branch `claude/codex-water-cooling-tower-review-09c170`, code as of `d5be9da6d`, which holds main `a3720726c` (0.18.1). Proposed version 0.19.0: a new feature and a model batch. Not merged, not pushed.
+Owner, 2026-11-02: "remove the backward compat and prepare for merge". Branch `claude/codex-water-cooling-tower-review-09c170`, code as of `d5be9da6d`, which holds main `a3720726c` (0.18.1). Version 0.19.0: a new feature and a model batch. Merged as `339872bc1` (owner: "Merge as 0.19.0"), not pushed.
 
 ## Backward compatibility
 
