@@ -293,6 +293,8 @@ public final class PassiveStepSolver {
     }
     /** The same pipe identities and node ids. */
     static boolean sameStructure(PassiveNetwork a,PassiveNetwork b){return identities(a).equals(identities(b))&&Arrays.equals(nodeIds(a),nodeIds(b));}
+    /** {@link #sameStructure} whatever a flow valve's set point: a job on a new target starts from the committed interval too. */
+    static boolean sameLines(PassiveNetwork a,PassiveNetwork b){return sameLines(identities(a),identities(b))&&Arrays.equals(nodeIds(a),nodeIds(b));}
     /** The same connections, whatever a flow valve's set point (a column plans one each slice). */
     private static boolean sameLines(List<PassiveNetwork.Pipe.Identity> a,List<PassiveNetwork.Pipe.Identity> b) {
         if(a.size()!=b.size())return false;
