@@ -23,4 +23,4 @@ It needs the column branch's `PassiveStepSolver.ports` and `PortPlan`, so it doe
 ## History
 
 - 2026-11-02: written for the valve hold; found that the liquid outlets held, and that the cause was a set point read as a new network. Never a tracked test.
-- Logs: `tools/valve-hold-probes/logs/valve-hold-logs-2026-11-02.tar.gz` in the main checkout.
+- Logs: none kept. The review world logs were lost at cleanup; step 2 above makes them again in about 3 minutes.
