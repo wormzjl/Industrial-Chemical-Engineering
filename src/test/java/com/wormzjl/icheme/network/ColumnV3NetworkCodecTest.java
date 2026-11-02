@@ -302,7 +302,7 @@ class ColumnV3NetworkCodecTest {
     @Test
     void currentResultRequiresItsRecordedClosure() throws Exception {
         assertEquals(12, ColumnCalculatorV3BlockEntity.DATA_VERSION);
-        assertEquals(17, ColumnV3Network.WIRE_SCHEMA_VERSION);
+        assertEquals(18, ColumnV3Network.WIRE_SCHEMA_VERSION);
         CompoundTag tag = writeResultNbt(certificate(Optional.of(closureLedger()), 1.0e-3, Optional.empty()));
         tag.remove("ClosureTolerance");
         assertInstanceOf(IllegalArgumentException.class, failure(() -> readResultNbt(tag)));

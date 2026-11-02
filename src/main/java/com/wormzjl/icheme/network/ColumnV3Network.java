@@ -56,12 +56,14 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  * payload delivery observes the most recent screen registration.</p>
  */
 public final class ColumnV3Network {
-    // Version 15 supports two-terminal-stage pots and total-tray presentation; 17 carries the saved column design.
-    public static final int WIRE_SCHEMA_VERSION = 17;
+    // Version 15 supports two-terminal-stage pots and total-tray presentation; 17 carries the saved column design;
+    // 18 its operating point.
+    public static final int WIRE_SCHEMA_VERSION = 18;
 
     // Both peers must use the same engine-scheduled inspection protocol. 12: the dataset revision is the package's data
     // identity, every record's declared revision (up to MaterialCatalog.MAX_IDENTITY characters). 13: Save design.
-    private static final String PROTOCOL_VERSION = "13";
+    // 14: a saved design's operating point.
+    private static final String PROTOCOL_VERSION = "14";
 
     private static final int MAX_IDENTIFIER_LENGTH = 128;
     private static final int MAX_COMPONENT_IDENTIFIER_LENGTH = 64;
