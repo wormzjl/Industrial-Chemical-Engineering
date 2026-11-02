@@ -26,6 +26,8 @@ import java.util.TreeSet;
 /** The simulator gates' sheet, measure and texts: no Minecraft class, as the screen's own builders need none. */
 final class SheetFixture {
     static final Measure M = Measure.fixed(6);
+    /** What a Chinese line takes in the game's font: 9 px a glyph, a Latin character as {@link #M}. */
+    static final Measure CHINESE = text -> text.codePoints().map(c -> c >= 0x2E80 ? 9 : 6).sum();
     static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
     static final String NETWORK = CATALOG.presets().network().packageId();
     static final StreamProps.Fluids FLUIDS = new StreamProps.Fluids(MaterialRuntime.with(CATALOG, NETWORK, () -> FluidThermodynamics.forNetwork(CATALOG, NETWORK)), CATALOG.requirePackage(NETWORK),
@@ -36,11 +38,26 @@ final class SheetFixture {
 
     /** Every key asked, every key the language file lacks; a line reads as the game shows it. */
     static final class Texts implements HeatControlColumn.Texts {
-        private static final JsonObject ENGLISH = english();
-        final Set<String> asked = new TreeSet<>(), missing = new TreeSet<>();
+        private static final JsonObject ENGLISH = language("en_us");
+        final Set<String> asked = new TreeSet<>(), missing = new TreeSet<>(), inEnglish = new TreeSet<>();
+        final Measure measure;
+        private final JsonObject lines;
 
-        private static JsonObject english() {
-            try (var in = SheetFixture.class.getResourceAsStream("/assets/icheme/lang/en_us.json")) {
+        Texts() {
+            this(ENGLISH, M);
+        }
+
+        private Texts(JsonObject lines, Measure measure) {
+            this.lines = lines;
+            this.measure = measure;
+        }
+
+        static Texts chinese() {
+            return new Texts(language("zh_cn"), CHINESE);
+        }
+
+        private static JsonObject language(String name) {
+            try (var in = SheetFixture.class.getResourceAsStream("/assets/icheme/lang/" + name + ".json")) {
                 return JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
             } catch (IOException e) {
                 throw new IllegalStateException(e);
@@ -54,11 +71,13 @@ final class SheetFixture {
         @Override public String get(String key, Object... args) {
             String full = "gui.icheme." + key;
             asked.add(full);
-            if (!ENGLISH.has(full)) {
+            var source = lines.has(full) ? lines : ENGLISH;
+            if (!source.has(full)) {
                 missing.add(full);
                 return key;
             }
-            String line = ENGLISH.get(full).getAsString();
+            if (source != lines) inEnglish.add(full);
+            String line = source.get(full).getAsString();
             return args.length == 0 ? line.replace("%%", "%") : String.format(java.util.Locale.ROOT, line, args);
         }
     }
