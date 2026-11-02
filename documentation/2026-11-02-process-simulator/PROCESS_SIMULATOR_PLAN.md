@@ -1,7 +1,7 @@
 # In-game process simulator: design plan
 
 Batch [2026-11-02-process-simulator](README.md). Status: design for the owner's approval. Nothing here is built.
-The drawings are in [renders/](renders/). Every number comes from the shipped code at `79b853e0`, run by the tools in
+The drawings are in [research/2026-11-02-process-simulator/renders/](../../research/2026-11-02-process-simulator/renders/), in the main checkout. Every number comes from the shipped code at `79b853e0`, run by the tools in
 `tools/process-simulator/`.
 
 ## 1. Expected behaviour

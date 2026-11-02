@@ -7,7 +7,7 @@ Status: Planned. Design sheets and plan await the owner's approval; no game code
 ## Documents
 
 - [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md): expected behaviour with the sample's and the loops' numbers, what exists, the proposal (solver, units, column unit, client run, screen, block, standalone templates, clipboard, files and compatibility, new equipment rule, blocks and connection points), work packages, the owner's decisions, what the request did not mention, risks.
-- [renders/](renders/): the 22 design sheets, drawn with the shipped kit in the game font, numbers from the real solve.
+- [renders/](../../research/2026-11-02-process-simulator/renders/): the 22 design sheets in the main checkout's `research/`, drawn with the shipped kit in the game font, numbers from the real solve.
 
 | Sheet | Shows |
 |---|---|

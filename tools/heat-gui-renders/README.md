@@ -30,7 +30,7 @@ java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main too
 
 It writes one sheet per screen to `tmp/gui-prototypes/`, both doors side by side: the fluid device pages (pump, generator, valve, tank), the column calculator, the assembly, the equipment constructor, the pipeline tool, the gauge and the vessel datasheet.
 
-The process simulator's design sheets (`SimulatorPrototypes.java`, batch 2026-11-02-process-simulator, numbers from `tools/process-simulator/SampleFlowsheetProbe.java` and `LoopProbe.java`):
+The process simulator's design sheets (`SimulatorPrototypes.java`, batch 2026-11-02-process-simulator, numbers from `tools/process-simulator/SampleFlowsheetProbe.java` and `LoopProbe.java`; finished sheets go to the main checkout's `research/2026-11-02-process-simulator/renders/`):
 
 ```bash
 java -Dfile.encoding=UTF-8 -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/SimulatorPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/sim-prototypes
