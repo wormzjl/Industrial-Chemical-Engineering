@@ -325,7 +325,7 @@ follow the merge of column operation (D10).
 | W6 | Screen: canvas with block ports and hovers, selection panel, reconnect, baked symbols, palette, doors, Results, Basis | Column-builder gates; sheets rendered from shipped code |
 | W7 | Client run: thread, Stop, progress, revision notice | Stop mid-column; nothing on the render thread |
 | W8 | Block swap, the sheet on the block (upload, replay, read only for a second player), Save design, clipboard, reservoir Copy | Constructor import; no packet on Copy; a sheet survives a reload; a bad upload is refused; no solve on the server |
-| W9 | Coverage gate, `AGENTS.md` rule, code guide chapter, zh_cn, cleanup | The coverage gate |
+| W9 | Coverage gate, `AGENTS.md` rule, zh_cn, the small items the last packages left. The code guide chapter and the tooling cleanup wait for the merge package: the owner's rule is no merge preparation until they say so, and S1 to W10 would make both stale | The coverage gate |
 | S1 to S5 | The sizing stage, after the main flowsheet: [SIZING_PLAN.md](SIZING_PLAN.md) | There |
 | W10 | Ejector, last: the law in `science/flowsheet`, the tile lit, the block's Motive steam port, the steam's heat on the condenser, its sizing ([SIZING_PLAN.md](SIZING_PLAN.md), section 3.12) | Reproduces the correlation's points; closes mass and energy; a wired motive short of the need is red |
 

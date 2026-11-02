@@ -432,6 +432,11 @@ final class SimulatorIcons {
                 p.fine(line(0, 20, 30, 20));
                 p.hot(flame(15, 34, 10, 8));
             }
+            case COOLING_TOWER -> {
+                p.body(poly(11, 0, 39, 0, 37, 14, 37, 24, 40, 38, 46, 54, 4, 54, 10, 38, 13, 24, 13, 14), rect(6, 54, 9, 60), rect(23, 54, 27, 60), rect(41, 54, 44, 60));
+                p.mark(line(9, 42, 41, 42));
+                p.dash(line(8, 47, 42, 47));
+            }
             case MISSING -> p.body(rect(0, 0, w, h));
         }
     }

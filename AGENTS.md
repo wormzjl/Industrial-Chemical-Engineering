@@ -24,6 +24,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - Player inputs and network changes are queued engine events. Their acknowledgements and results arrive on the engine schedule. Packet handlers, block-entity loads and menu opens never force a process update.
 - Do not calculate process state on Minecraft's per-tick loop. Due simulation deadlines, dependency changes and worker completions drive the work. The tick hook only checks what is due, drains completions and flushes a presentation bucket.
 - Simulated time is online ticks at a nominal 20 TPS. There is no wall-clock or offline advancement.
+- The process simulator's run is a client tool outside this schedule. It runs on the client and reads and writes no process state. The server only stores the sheet and its results, and the block opens them as a replay.
 
 ## Physics and defects
 
@@ -90,6 +91,11 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - A check the owner asks for runs through the langyo/minecraft-mod-mcp bridge. Use the `runMcpClient` lane: copy the pinned jar from `tools/minecraft-mcp-bridge/` into `<worktree>/run/mcp-client-mods/`, and put `.mcp.json` in the worktree root.
 - Never send real desktop keyboard or mouse input (`robot.ps1`, SendKeys) unless the owner is watching. If a check needs typed values and only desktop input can supply them, stop and report.
 - Make at most one in-game check per task. Judge drawing-only changes by gates, sweeps and software renders.
+
+## New equipment
+
+- Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyCompiler.Kind` constant joins the process simulator. Add its case to `FlowsheetCatalog`: MODELLED, or DRAWING_ONLY while no model exists.
+- `FlowsheetPaletteCoverageTest` checks that each has a tile, a port rule and a lang line. One tile may hold several kinds.
 
 ## Git and worktrees
 
