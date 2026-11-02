@@ -143,6 +143,7 @@ A documentation-only merge changes only `documentation/`, `tools/`, `AGENTS.md` 
 ### Tooling cleanup
 
 - Before a batch merges, sort everything it created for measurement or investigation. Keep in the code only tests that a gate task runs, code the product needs, and harnesses that a documented Gradle task runs.
+- `src/main` holds only code the game reaches. Move code that only tests use to `src/test`, with the data only it reads, whichever batch wrote it. A gate test that needs it does not keep it in `src/main`, and neither does a small link from production code: remove the link. `perl tools/merge-lane/main-reach.pl .` lists such classes; check a method by its callers.
 - Move everything else (one-off probes, campaign and analysis scripts, in-game rigs, instrumentation, baseline patches, run configurations and Gradle switches that only served them) to `tools/<tool-folder>/` on the batch's branch, with a row in `tools/INDEX.md`. Do not leave it in `documentation/` batch folders or in `tmp/`.
 - The folder's row in `tools/INDEX.md` holds only the folder, the purpose in a few words, the batch and the status with its date.
 - Each tool folder has a `README.md` with its purpose, the batch it served, how to run it, its entry points and its history. For code removed from a tracked path, the README also gives the removing commit and how to re-attach it: source files plus a patch against that commit, so that `git show <sha>:<path>` and the stored copy agree.
