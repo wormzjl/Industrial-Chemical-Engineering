@@ -62,6 +62,11 @@ final class FlowsheetColumnTest {
             return this;
         }
 
+        Sheet without(String stream) {
+            assertTrue(streams.removeIf(line -> line.id().equals(stream)), stream);
+            return this;
+        }
+
         Sheet estimate(String stream, Flowsheet.Feed estimate) {
             for (int i = 0; i < streams.size(); i++) {
                 var line = streams.get(i);
@@ -212,6 +217,26 @@ final class FlowsheetColumnTest {
         assertTrue(run.streams().get("S-4").temperature() < run.streams().get("S-5").temperature(), "the residue heats it further");
         assertEquals(run.reports().get("T-101").readings().get("condenser"), run.streams().get("CWR").enthalpy() - run.streams().get("CWS").enthalpy(), 1, "the cooling water takes the condenser's duty");
         for (var report : run.reports().values()) for (var note : report.notes()) assertFalse(note.key().startsWith("column.pa_hot") || note.key().equals("column.condenser_hot"), () -> "a sound sheet: " + note);
+    }
+
+    /** PA 2 on cooling water of its own: the water takes the duty the door sets, the crude arrives colder, and the furnace that makes it up runs into its limit and says so. */
+    @Test void aPumparoundOnAStreamOfItsOwnTakesItsDutyFromIt() {
+        var run = sample("{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}")
+                .without("S-2").without("S-3").line("S-2", "T-101", "pa/1/out", "T-101", "pa/3/in")
+                .feed("CW", "T-101", "pa/2/in", water(303.15, 4e5, 16000)).product("CW back", "T-101", "pa/2/out")
+                .feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "out").run();
+        closed(run, 5e-4);
+        var in = run.streams().get("CW");
+        var out = run.streams().get("CW back");
+        assertEquals(288.2, in.mass(), .1, "kg/s");
+        assertEquals(in.mass(), out.mass(), 1e-9, "the water stays on its side");
+        assertEquals(44.9 + 273.15, out.temperature(), .05);
+        assertEquals(Math.abs(BASE.pumparounds().get(1).dutyWatts()), out.enthalpy() - in.enthalpy(), 1e3, "the duty as set");
+        assertTrue(Math.abs(run.heatGap()) < 50e3, () -> "heat gap " + run.heatGap());
+        assertEquals(102.4 + 273.15, run.streams().get("S-4").temperature(), .05, "the crude reaches E-101 two coolers warm, not three");
+        var limit = run.reports().get("H-101").notes().stream().filter(note -> note.key().equals("heater.limit")).findFirst().orElseThrow();
+        assertEquals(98.07e6, Double.parseDouble(limit.arguments().getFirst()), .01e6, "what the furnace asks");
+        assertEquals(90e6, Double.parseDouble(limit.arguments().get(1)), 1, "and what it may give");
     }
 
     @Test void aFurnaceOnAFixedDutyCloses() {
