@@ -17,6 +17,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInspection;
+import com.wormzjl.icheme.science.column.v3.V3ColumnTemplate;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.Params;
@@ -112,7 +113,8 @@ public final class ColumnDoors {
         }
         var status = status(x, id, door, display, page);
         var foot = CalculatorColumn.footerButtons(new CalculatorColumn.Footer(false, false, true, false, symbol), x.t());
-        var footer = List.of(Door.key("solve", x.text("door.solve_alone"), false, x.text("hint.run")), Door.key("templates", c(x, "templates"), false, x.text("hint.block")), foot.get(3), foot.get(4));
+        String aloneOff = aloneOff(x, id, door);
+        var footer = List.of(Door.key("solve", x.text("door.solve_alone"), aloneOff == null, aloneOff), Door.key("templates", c(x, "templates"), !x.editor().locked(), x.editor().locked() ? x.text("door.locked") : null), foot.get(3), foot.get(4));
         return new Door(x.text("door.column_title"), tabs(x, page), view.tab, status.text(), status.tone(), true, columns, values, glass, footer, new Door.Actions() {
             @Override public void entry(String key, String text) {
                 write(x, id, key, text);
@@ -147,6 +149,38 @@ public final class ColumnDoors {
             out.add(new Column.Group(group.title(), group.hint(), inner));
         }
         return out;
+    }
+
+    /** Why Solve alone is off, or null where it may go: it needs a run thread, a free sheet and the stream of every inlet the unit reads. */
+    private static @Nullable String aloneOff(SheetContext x, String id, ColumnDoor door) {
+        if (!x.host().canRun()) return x.text("hint.run");
+        if (x.editor().locked()) return x.text("door.locked");
+        if (!hasStream(x, x.into(id, "feed"))) return x.text("door.solve_no_stream");
+        for (var steam : door.steam()) {
+            var wired = x.into(id, "steam/" + steam.id());
+            if (wired != null && !hasStream(x, wired)) return x.text("door.solve_no_stream");
+        }
+        return null;
+    }
+
+    /**
+     * Whether {@code stream} has a state now: fed on the sheet itself, which needs no run, or left by a run. A grey line counts, as what it
+     * last held: in a loop, the edit that brings a player to Solve alone greys the column's own feed.
+     */
+    private static boolean hasStream(SheetContext x, Flowsheet.@Nullable Stream stream) {
+        if (stream == null) return false;
+        if (stream.from() == null && stream.feed() != null) return stream.feed().amounts().values().stream().anyMatch(amount -> amount > 0);
+        var last = x.last(stream);
+        return last != null && !last.empty();
+    }
+
+    /** Applies {@code template} on the feed the column has now (decision D4), as one edit Undo takes back. With no feed it applies as written. */
+    public static boolean template(SheetContext x, String id, V3ColumnTemplate template) {
+        var stream = x.into(id, "feed");
+        var last = x.last(stream);
+        double feed = last != null ? last.total() : 0;
+        if (last == null && stream != null && stream.feed() != null) for (double amount : stream.feed().amounts().values()) feed += amount;
+        return x.editor().setParams(id, ColumnDoor.template(x.editor().unit(id).params(), template.scaledTo(feed * 3.6)), null);
     }
 
     private static ColumnComponents.Pump pump(String name) {

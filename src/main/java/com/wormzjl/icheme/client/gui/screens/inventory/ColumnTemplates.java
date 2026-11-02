@@ -47,19 +47,34 @@ public final class ColumnTemplates {
         return ColumnComponents.Choices.DEFAULT.fit(input.pumparounds().size());
     }
 
+    /** The templates as they stand on disk, not yet on any input: what the simulator's column door lists. */
+    public static List<com.wormzjl.icheme.client.gui.flowsheet.FileColumns.ColumnTemplate> listed(Minecraft minecraft) {
+        var out = new ArrayList<com.wormzjl.icheme.client.gui.flowsheet.FileColumns.ColumnTemplate>();
+        for (var entry : library(minecraft).refresh(V3ClientPresets.Kind.COLUMN).entries())
+            if (entry.preset() instanceof V3ClientPresets.Column column) out.add(new com.wormzjl.icheme.client.gui.flowsheet.FileColumns.ColumnTemplate(name(column), column.template(), entry.bundled()));
+        return out;
+    }
+
+    private static String name(V3ClientPresets.Preset preset) {
+        return preset.translationKey().isBlank() ? preset.name() : Component.translatable(preset.translationKey()).getString();
+    }
+
     /** The library as it stands on disk now: read again each time, as the calculator's Refresh reads it. */
     public static Library load(Minecraft minecraft) {
-        var library = new V3ClientPresets(minecraft.gameDirectory.toPath(), name -> {
+        var library = library(minecraft);
+        var catalog = MaterialRuntime.current();
+        var base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        return of(library.refresh(V3ClientPresets.Kind.COLUMN), base, ColumnTemplates::name);
+    }
+
+    private static V3ClientPresets library(Minecraft minecraft) {
+        return new V3ClientPresets(minecraft.gameDirectory.toPath(), name -> {
             try {
                 return minecraft.getResourceManager().getResource(ResourceLocation.fromNamespaceAndPath("icheme", name.substring("assets/icheme/".length()))).orElseThrow().open();
             } catch (IOException | NoSuchElementException e) {
                 return null;
             }
         });
-        var catalog = MaterialRuntime.current();
-        var base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
-        return of(library.refresh(V3ClientPresets.Kind.COLUMN), base,
-                preset -> preset.translationKey().isBlank() ? preset.name() : Component.translatable(preset.translationKey()).getString());
     }
 
     /** The column templates of {@code snapshot} applied to {@code base}, named by {@code names}. */

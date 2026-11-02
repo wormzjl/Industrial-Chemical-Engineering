@@ -28,7 +28,7 @@ public final class SheetEditor {
     public record Refusal(String key, List<String> arguments) {
     }
 
-    public static final String LOCKED = "flowsheet.refused.locked", NAME_USED = "flowsheet.refused.name_used", NAME_EMPTY = "flowsheet.refused.name_empty",
+    public static final String LOCKED = "flowsheet.refused.locked", RUNNING = "flowsheet.refused.running", NAME_USED = "flowsheet.refused.name_used", NAME_EMPTY = "flowsheet.refused.name_empty",
             PORT_HELD = "flowsheet.refused.port_held", PORT_SIDE = "flowsheet.refused.port_side";
     private static final int HISTORY = 256;
 
@@ -39,6 +39,7 @@ public final class SheetEditor {
     private @Nullable String step;
     private @Nullable Refusal refusal;
     private boolean locked;
+    private String lockedBy = LOCKED;
     private @Nullable SheetLayout layout;
 
     /** @param column a dropped column's settings, {@code ColumnDoor.from} on the default input */
@@ -58,9 +59,16 @@ public final class SheetEditor {
         return layout;
     }
 
-    /** A read-only sheet, or one in a run, takes no edit. */
+    /** A read-only sheet takes no edit. */
     public void lock(boolean locked) {
+        lock(locked, LOCKED);
+    }
+
+    /** A sheet takes no edit while {@code locked}, and {@code why} is what a refused gesture says. Lifting the lock lifts what it refused. */
+    public void lock(boolean locked, String why) {
+        if (this.locked && !locked && refusal != null && refusal.key().equals(lockedBy)) refusal = null;
         this.locked = locked;
+        lockedBy = why;
     }
 
     public boolean locked() {
@@ -69,7 +77,7 @@ public final class SheetEditor {
 
     /** Whether an edit may begin; a gesture on a locked sheet says why on the status line. */
     public boolean editable() {
-        return !locked || refuse(LOCKED);
+        return !locked || refuse(lockedBy);
     }
 
     /** Why the last edit was refused, or null if it stood. */
@@ -129,7 +137,7 @@ public final class SheetEditor {
 
     /** Applies {@code next}: one undo step, or part of the last where {@code key} is the step in hand. */
     private boolean apply(Flowsheet next, @Nullable String key) {
-        if (locked) return refuse(LOCKED);
+        if (locked) return refuse(lockedBy);
         refusal = null;
         if (key == null || !key.equals(step)) {
             undo.push(sheet);

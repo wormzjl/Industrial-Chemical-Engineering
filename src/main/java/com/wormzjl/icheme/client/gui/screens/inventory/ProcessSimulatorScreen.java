@@ -20,6 +20,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.Door;
 import com.wormzjl.icheme.client.gui.flowsheet.DoorFrame;
 import com.wormzjl.icheme.client.gui.flowsheet.FileColumns;
 import com.wormzjl.icheme.client.gui.flowsheet.ResultsPage;
+import com.wormzjl.icheme.client.gui.flowsheet.RevisionNotice;
 import com.wormzjl.icheme.client.gui.flowsheet.SelectionColumn;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetContext;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetEditor;
@@ -51,6 +52,8 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -69,9 +72,7 @@ public final class ProcessSimulatorScreen extends Screen {
     private static final int DESIGN_HEIGHT = 480;
     private static final String FOLDER = "IChemE/flowsheets";
 
-    private enum Dialog {
-        NONE, OPEN, SAVE_AS, TEMPLATES, REPLACE, CHANGES
-    }
+    private enum Dialog {NONE, OPEN, SAVE_AS, TEMPLATES, COLUMN_TEMPLATES, REPLACE, CHANGES}
 
     private final SimulatorHost host;
     private final SheetEditor editor;
@@ -93,6 +94,16 @@ public final class ProcessSimulatorScreen extends Screen {
     private @Nullable String hovered;
     private Rect canvasBox = new Rect(0, 0, 0, 0);
     private boolean placed;
+    private List<FileColumns.ColumnTemplate> columnTemplates = List.of();
+    private List<FluidPresetCatalog.Preset> presets = List.of();
+    /** A folder being read away from the frame, and what to do with it once it has been. */
+    private @Nullable CompletableFuture<Runnable> reading;
+    private @Nullable SheetState stated;
+    private @Nullable Flowsheet statedSheet;
+    private SimulatorHost.@Nullable Finished statedRun;
+    private @Nullable Map<String, String> statedServer;
+    private List<String> differing = List.of();
+    private final Map<String, String> clientRevisions;
     private @Nullable Flowsheet opening;
     private String openingName = "";
 
@@ -105,7 +116,8 @@ public final class ProcessSimulatorScreen extends Screen {
         String packName = Component.translatableWithFallback("gui.icheme.flowsheet.basis.pack." + MaterialCatalog.Package.label(pack.id()).replace(':', '.'), MaterialCatalog.Package.label(pack.id())).getString();
         fluids = new StreamProps.Fluids(FluidThermodynamics.forNetwork(catalog, network), pack, id -> ProcessUi.materialName(catalog.name(id)), packName);
         editor = new SheetEditor(sheet, measure(), ProcessSimulatorScreen::columnDefaults);
-        editor.lock(host.reader());
+        clientRevisions = RevisionNotice.tokens(catalog);
+        host.lock(editor);
         gestures = new SheetGestures(editor, view, this::open);
     }
 
@@ -132,10 +144,21 @@ public final class ProcessSimulatorScreen extends Screen {
         return new SheetUnits(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime(), ClientConfig.basis() == ClientConfig.Basis.MASS);
     }
 
+    /** What the frame and every key read: worked out once for a sheet and a run, since a sheet's signature strings are not a frame's work. Only the run's clock is new each time. */
     private SheetContext context() {
+        host.lock(editor);
         var last = host.last();
-        var state = new SheetState(editor.sheet(), last == null ? null : last.sheet(), last == null ? null : last.run(), last == null ? 0 : last.seconds(), host.running());
-        return new SheetContext(editor, state, units(), ProcessSimulatorScreen::lang, GuiCanvas.measure(font), fluids);
+        if (stated == null || statedSheet != editor.sheet() || statedRun != last) {
+            statedSheet = editor.sheet();
+            statedRun = last;
+            stated = SheetState.of(statedSheet, last);
+        }
+        var server = host.serverRevisions();
+        if (server != statedServer) {
+            statedServer = server;
+            differing = RevisionNotice.differing(clientRevisions, server);
+        }
+        return new SheetContext(editor, stated.running(host.running()), units(), ProcessSimulatorScreen::lang, GuiCanvas.measure(font), fluids, host, differing);
     }
 
     private void open(SheetGestures.Selection target) {
@@ -157,6 +180,7 @@ public final class ProcessSimulatorScreen extends Screen {
 
     @Override public void removed() {
         super.removed();
+        host.close();
         WindowScale.restore(minecraft);
     }
 
@@ -315,7 +339,7 @@ public final class ProcessSimulatorScreen extends Screen {
             add(new Column.Button("dialog/load", lang("flowsheet.file.open"), true, null), slots.get(1).moved(left, top));
             return;
         }
-        var list = SimulatorPage.listing(dialog.name(), x, files, chosen);
+        var list = listing(x);
         var slots = DialogColumns.footer(w, h, list.keys().length);
         for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], true, null), slots.get(i).moved(left, top));
     }
@@ -382,7 +406,19 @@ public final class ProcessSimulatorScreen extends Screen {
         var shown = shownDoor(x);
         if (shown == null) return;
         if (key.equals("close_door")) door = null;
-        else if (key.equals("templates") && !door.unit()) dialog = Dialog.TEMPLATES;
+        else if (key.equals("templates") && !door.unit()) {
+            presets = FluidPresetCatalog.resolve(MaterialRuntime.active());
+            chosen = -1;
+            dialog = Dialog.TEMPLATES;
+        } else if (key.equals("templates")) {
+            chosen = -1;
+            columnTemplates = List.of();
+            dialog = Dialog.COLUMN_TEMPLATES;
+            read(() -> {
+                var listed = ColumnTemplates.listed(minecraft);
+                return () -> columnTemplates = listed;
+            });
+        } else if (key.equals("solve")) host.alone(editor.sheet(), door.id());
         else if (key.startsWith("unit/")) unitKey(key.substring(5));
         else if (key.equals("temperature") || key.equals("basis")) unitKey(key);
         else shown.actions().button(key);
@@ -426,14 +462,26 @@ public final class ProcessSimulatorScreen extends Screen {
     }
 
     private void openDialog() {
-        try {
-            files = FileColumns.entries(folder(), ProcessSimulatorScreen::lang);
-            chosen = -1;
-            dialog = Dialog.OPEN;
-        } catch (IOException unreadable) {
-            files = List.of();
-            dialog = Dialog.OPEN;
-        }
+        files = List.of();
+        chosen = -1;
+        dialog = Dialog.OPEN;
+        read(() -> {
+            try {
+                var listed = FileColumns.entries(folder(), ProcessSimulatorScreen::lang);
+                return () -> files = listed;
+            } catch (IOException unreadable) {
+                return () -> files = List.of();
+            }
+        });
+    }
+
+    /** Reads a folder away from the frame. The dialog stands empty until the read lands, which the next frame sees. */
+    private void read(Supplier<Runnable> read) {
+        reading = CompletableFuture.supplyAsync(read);
+    }
+
+    private FileColumns.Listing listing(SheetContext x) {
+        return SimulatorPage.listing(dialog.name(), x, files, presets, columnTemplates, chosen);
     }
 
     private void dialogKey(String key) {
@@ -460,7 +508,7 @@ public final class ProcessSimulatorScreen extends Screen {
             return;
         }
         int index = Integer.parseInt(key);
-        var list = SimulatorPage.listing(dialog.name(), x, files, chosen);
+        var list = listing(x);
         if (index == 0) {
             dialog = Dialog.NONE;
             return;
@@ -487,7 +535,8 @@ public final class ProcessSimulatorScreen extends Screen {
                     return;
                 }
             }
-            case TEMPLATES -> StreamDoors.template(x, door.id(), FluidPresetCatalog.resolve(MaterialRuntime.active()).get(chosen).moleFractions());
+            case TEMPLATES -> StreamDoors.template(x, door.id(), presets.get(chosen).moleFractions());
+            case COLUMN_TEMPLATES -> ColumnDoors.template(x, door.id(), columnTemplates.get(chosen).template());
             case REPLACE -> editor.replaceUnit(gestures.selected().id(), SimulatorPage.litTypes().get(chosen));
             default -> {
             }
@@ -514,7 +563,7 @@ public final class ProcessSimulatorScreen extends Screen {
 
     @Override public boolean mouseClicked(double x, double y, int button) {
         if (dialog != Dialog.NONE) {
-            var list = dialog == Dialog.SAVE_AS || dialog == Dialog.CHANGES ? null : SimulatorPage.listing(dialog.name(), context(), files, chosen);
+            var list = dialog == Dialog.SAVE_AS || dialog == Dialog.CHANGES ? null : listing(context());
             if (list != null) {
                 int row = FileColumns.rowAt(list, FileColumns.W, FileColumns.H, x - (width - FileColumns.W) / 2.0, y - (height - FileColumns.H) / 2.0);
                 if (row >= 0) chosen = row;
@@ -602,6 +651,11 @@ public final class ProcessSimulatorScreen extends Screen {
     // ---- Drawing ----
 
     @Override public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+        if (reading != null && reading.isDone()) {
+            reading.join().run();
+            reading = null;
+            rebuildWidgets();
+        }
         var x = context();
         if (!signature(x).equals(signature)) rebuildWidgets();
         hovered = null;
@@ -635,7 +689,7 @@ public final class ProcessSimulatorScreen extends Screen {
         skin().page(canvas, new Rect(0, 0, w, h));
         if (dialog == Dialog.SAVE_AS) skin().title(canvas, 10, 10, lang("flowsheet.file.save_title"));
         else if (dialog == Dialog.CHANGES && opening != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.changes_title", openingName), FileColumns.changes(opening, ProcessSimulatorScreen::lang), lang("flowsheet.file.changes_foot"), w, h);
-        else FileColumns.draw(canvas, skin(), SimulatorPage.listing(dialog.name(), x, files, chosen), w, h);
+        else FileColumns.draw(canvas, skin(), listing(x), w, h);
         g.pose().popPose();
     }
 

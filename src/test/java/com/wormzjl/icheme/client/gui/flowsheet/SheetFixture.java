@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
+import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
@@ -60,6 +61,54 @@ final class SheetFixture {
             String line = ENGLISH.get(full).getAsString();
             return args.length == 0 ? line.replace("%%", "%") : String.format(java.util.Locale.ROOT, line, args);
         }
+    }
+
+    private static final V3ColumnInput BASE = CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG);
+
+    private static Flowsheet.Unit unit(String id, String type, String settings) {
+        return new Flowsheet.Unit(id, type, id, 0, 0, new Params(JsonParser.parseString(settings).getAsJsonObject()));
+    }
+
+    private static Flowsheet.Stream stream(String id, @org.jetbrains.annotations.Nullable String from, String fromPort, @org.jetbrains.annotations.Nullable String to, String toPort, @org.jetbrains.annotations.Nullable Flowsheet.Feed feed) {
+        return new Flowsheet.Stream(id, id, from == null ? null : new Flowsheet.End(from, fromPort), to == null ? null : new Flowsheet.End(to, toPort), feed);
+    }
+
+    private static Flowsheet.Feed fluid(String component, double temperature, double pressure, double flow) {
+        var amounts = new LinkedHashMap<String, Double>();
+        amounts.put(component, flow);
+        return new Flowsheet.Feed(temperature, pressure, amounts, List.of());
+    }
+
+    /** The design sheets' crude unit, as `SimulatorRender` draws it. */
+    static Flowsheet sample() {
+        var door = ColumnDoor.from(BASE, ColumnComponents.Condenser.EXCHANGER);
+        door.json().addProperty("condenser_drop", .3e5);
+        for (var row : door.rows("pumparounds")) row.json().addProperty("drop", .3e5);
+        var ids = BASE.componentBasis().componentIds();
+        var crude = new LinkedHashMap<String, Double>();
+        double[] flows = BASE.feedComponentMolarFlowsMolPerSecond();
+        for (int i = 0; i < flows.length; i++) if (flows[i] > 0) crude.put(ids.get(i), flows[i]);
+        var steam = BASE.steamFeeds().getFirst();
+        var units = List.of(unit("P-101", "pump", "{\"target\":\"outlet\",\"pressure\":14e5,\"rise\":2e5}"), new Flowsheet.Unit("T-101", "column", "T-101", 0, 0, door),
+                unit("E-101", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":473.15,\"duty\":1e6,\"area\":100,\"tube_drop\":0.5e5,\"shell_drop\":0.3e5}"),
+                unit("H-101", "fired_heater", "{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"duty\":1e7,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}"),
+                unit("V-101", "valve", "{\"target\":\"outlet\",\"pressure\":2.72e5,\"drop\":1e5}"), unit("E-102", "air_cooler", "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}"),
+                unit("P-102", "pump", "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}"));
+        var streams = List.of(stream("CRUDE", null, "", "P-101", "in", new Flowsheet.Feed(298.15, 8e5, crude, List.of())), stream("S-1", "P-101", "out", "T-101", "pa/1/in", null), stream("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in", null),
+                stream("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in", null), stream("S-4", "T-101", "pa/3/out", "E-101", "tube_in", null), stream("S-5", "E-101", "tube_out", "H-101", "in", null), stream("S-6", "H-101", "out", "V-101", "in", null),
+                stream("S-7", "V-101", "out", "T-101", "feed", null), stream("STEAM", null, "", "T-101", "steam/1", fluid("Water", steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond())),
+                stream("CWS", null, "", "T-101", "condenser_in", fluid("Water", 303.15, 4e5, 190000 / 3.6)), stream("CWR", "T-101", "condenser_out", null, "", null), stream("OFFGAS", "T-101", "overhead", null, "", null),
+                stream("NAPHTHA", "T-101", "distillate", null, "", null), stream("WATER", "T-101", "water", null, "", null), stream("KERO", "T-101", "draw/1", null, "", null), stream("S-8", "T-101", "draw/2", "P-102", "in", null),
+                stream("DIESEL", "P-102", "out", null, "", null), stream("AGO", "T-101", "draw/3", null, "", null), stream("S-9", "T-101", "bottoms", "E-101", "shell_in", null), stream("S-10", "E-101", "shell_out", "E-102", "in", null),
+                stream("RESIDUE", "E-102", "out", null, "", null));
+        return new Flowsheet(basis(), units, streams, FlowsheetSolver.Settings.DEFAULT);
+    }
+
+    /** Water through three units in a line, which runs in no time: FEED, P-1, A, V-1, B, P-2, OUT. */
+    static Flowsheet water() {
+        var units = List.of(unit("P-1", "pump", "{\"target\":\"rise\",\"rise\":2e5}"), unit("V-1", "valve", "{\"target\":\"drop\",\"drop\":1e5}"), unit("P-2", "pump", "{\"target\":\"rise\",\"rise\":2e5}"));
+        var streams = List.of(stream("FEED", null, "", "P-1", "in", water(100)), stream("A", "P-1", "out", "V-1", "in", null), stream("B", "V-1", "out", "P-2", "in", null), stream("OUT", "P-2", "out", null, "", null));
+        return new Flowsheet(basis(), units, streams, FlowsheetSolver.Settings.DEFAULT);
     }
 
     static Params column() {

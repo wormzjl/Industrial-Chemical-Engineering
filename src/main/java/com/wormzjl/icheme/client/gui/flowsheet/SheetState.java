@@ -5,12 +5,14 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.Note;
+import com.wormzjl.icheme.science.flowsheet.Report;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -23,15 +25,23 @@ public final class SheetState {
         SOLVED, WARNING, FAILED, NONE, ACTIVE
     }
 
-    /** A run in hand, as its host reports it. */
-    public record Running(double seconds, int pass, int passes, @Nullable String unit) {
+    /**
+     * A run in hand, as its host reports it.
+     *
+     * @param pass  which pass of a loop, 0 outside one
+     * @param unit  what it is solving, or null before the first calculation
+     * @param start where that block's solve set out from, or null
+     */
+    public record Running(double seconds, int pass, int passes, @Nullable String unit, Report.@Nullable Start start) {
     }
 
     private final Flowsheet sheet;
     private final @Nullable SheetResults results;
     private final @Nullable Running running;
     private final double seconds;
-    private final Set<String> stale = new HashSet<>();
+    private final SimulatorHost.@Nullable Alone alone;
+    private final Set<String> stale;
+    private final Map<String, StreamProps> props;
 
     /**
      * @param ran     the sheet the run was made from, or null with no run
@@ -39,11 +49,48 @@ public final class SheetState {
      * @param running a run in hand, or null
      */
     public SheetState(Flowsheet sheet, @Nullable Flowsheet ran, @Nullable FlowsheetRun run, double seconds, @Nullable Running running) {
+        this(sheet, ran, run, seconds, running, null);
+    }
+
+    /** @param alone what a unit solved alone has done since the run, or null */
+    public SheetState(Flowsheet sheet, @Nullable Flowsheet ran, @Nullable FlowsheetRun run, double seconds, @Nullable Running running, SimulatorHost.@Nullable Alone alone) {
         this.sheet = sheet;
         this.results = run == null || ran == null ? null : new SheetResults(ran, run);
         this.seconds = seconds;
         this.running = running;
-        if (results != null) stale(ran);
+        this.alone = alone;
+        stale = results == null ? new HashSet<>() : greyed(sheet, ran);
+        props = new HashMap<>();
+        if (alone != null && results != null && alone.status() != FlowsheetRun.Status.FAILED && alone.status() != FlowsheetRun.Status.STOPPED) settle(alone);
+    }
+
+    private SheetState(SheetState base, @Nullable Running running) {
+        sheet = base.sheet;
+        results = base.results;
+        seconds = base.seconds;
+        alone = base.alone;
+        stale = base.stale;
+        props = base.props;
+        this.running = running;
+    }
+
+    /** {@code sheet} against {@code last}, its host's last run. */
+    public static SheetState of(Flowsheet sheet, SimulatorHost.@Nullable Finished last) {
+        return last == null ? new SheetState(sheet, null, null, 0, null) : new SheetState(sheet, last.sheet(), last.run(), last.seconds(), null, last.alone());
+    }
+
+    /** This state with {@code running} in hand. It shares all the rest, so a state the screen keeps need not be worked out again for each frame's clock. */
+    public SheetState running(@Nullable Running running) {
+        return new SheetState(this, running);
+    }
+
+    public boolean running() {
+        return running != null;
+    }
+
+    /** What a shown stream reads as, worked out once for this state: a frame asks for it again and again. */
+    StreamProps props(String stream, Supplier<StreamProps> worked) {
+        return props.computeIfAbsent(stream, id -> worked.get());
     }
 
     private static String unit(Flowsheet.Unit unit) {
@@ -64,8 +111,26 @@ public final class SheetState {
         return text.toString();
     }
 
-    /** Marks what changed since {@code ran}, and all that lies downstream of it in this sheet. */
-    private void stale(Flowsheet ran) {
+    /** A unit solved alone stands on what it had, however grey that was, until it or what feeds it changes. What lies after it has not run on what it now leaves, and a loop back to it does not grey it. */
+    private void settle(SimulatorHost.Alone alone) {
+        if (greyed(sheet, alone.sheet()).contains(alone.unit())) return;
+        var work = new ArrayDeque<String>();
+        var out = streamsFrom(sheet).getOrDefault(alone.unit(), Set.of());
+        for (var stream : out) if (stream.to() != null) work.add(stream.to().unit());
+        walk(stale, work, streamsFrom(sheet), alone.unit());
+        stale.remove(alone.unit());
+        for (var stream : out) stale.remove(stream.id());
+    }
+
+    private static Map<String, Set<Flowsheet.Stream>> streamsFrom(Flowsheet sheet) {
+        var from = new HashMap<String, Set<Flowsheet.Stream>>();
+        for (var stream : sheet.streams()) if (stream.from() != null) from.computeIfAbsent(stream.from().unit(), k -> new HashSet<>()).add(stream);
+        return from;
+    }
+
+    /** What changed since {@code ran}, and all that lies downstream of it in {@code sheet}. */
+    private static Set<String> greyed(Flowsheet sheet, Flowsheet ran) {
+        var stale = new HashSet<String>();
         var units = new HashMap<String, String>();
         var streams = new HashMap<String, String>();
         var was = new HashMap<String, Flowsheet.Stream>();
@@ -76,9 +141,7 @@ public final class SheetState {
         }
         var work = new ArrayDeque<String>();
         for (var unit : sheet.units()) if (!unit(unit).equals(units.get(unit.id()))) work.add(unit.id());
-        var downstream = new HashMap<String, Set<Flowsheet.Stream>>();
         for (var stream : sheet.streams()) {
-            if (stream.from() != null) downstream.computeIfAbsent(stream.from().unit(), k -> new HashSet<>()).add(stream);
             if (stream(stream).equals(streams.get(stream.id()))) continue;
             stale.add(stream.id());
             if (stream.to() != null) work.add(stream.to().unit());
@@ -88,9 +151,14 @@ public final class SheetState {
         }
         for (var stream : ran.streams())
             if (sheet.streams().stream().noneMatch(s -> s.id().equals(stream.id())) && stream.to() != null) work.add(stream.to().unit());
+        walk(stale, work, streamsFrom(sheet), null);
+        return stale;
+    }
+
+    private static void walk(Set<String> stale, ArrayDeque<String> work, Map<String, Set<Flowsheet.Stream>> downstream, @Nullable String stays) {
         while (!work.isEmpty()) {
             String id = work.remove();
-            if (!stale.add(id)) continue;
+            if (id.equals(stays) || !stale.add(id)) continue;
             for (var stream : downstream.getOrDefault(id, Set.of())) {
                 stale.add(stream.id());
                 if (stream.to() != null) work.add(stream.to().unit());
@@ -142,7 +210,9 @@ public final class SheetState {
         if (running != null) {
             String seconds = SheetUnits.number(1, running.seconds());
             if (running.unit() == null) return new Status(t.get(key + "starting", seconds), Palette.ACCENT);
-            return new Status(t.get(key + "running", seconds, running.pass(), running.passes(), NoteText.subject(running.unit(), sheet)), Palette.ACCENT);
+            String unit = NoteText.subject(running.unit(), sheet);
+            if (running.start() != null) unit = t.get(key + (running.start() == Report.Start.LEARNED ? "from_learned" : "from_last"), unit);
+            return new Status(running.pass() == 0 ? t.get(key + "running_step", seconds, unit) : t.get(key + "running", seconds, running.pass(), running.passes(), unit), Palette.ACCENT);
         }
         if (results == null) return new Status(t.get(key + "ready"), Palette.MUTED);
         var run = results.run();
@@ -160,6 +230,15 @@ public final class SheetState {
                     : t.get(key + "steady", results.passes(), time, sheet.streams().size(), sheet.units().size(), SheetUnits.number(2, results.massGap()), SheetUnits.number(2, results.heatGap()));
         };
         int tone = run.status() == FlowsheetRun.Status.FAILED || run.status() == FlowsheetRun.Status.NOT_STEADY || !warnings.isEmpty() ? Palette.WARN : Palette.ACCENT;
+        if (alone != null) {
+            String unit = NoteText.subject(alone.unit(), sheet);
+            head = switch (alone.status()) {
+                case FAILED -> t.get(key + "alone_failed", unit, alone.why() == null ? t.get(key + "failed") : NoteText.text(alone.why(), t, sheet, units));
+                case STOPPED -> t.get(key + "alone_stopped", unit);
+                default -> t.get(key + "alone", unit, SheetUnits.number(1, alone.seconds()));
+            };
+            tone = alone.status() == FlowsheetRun.Status.FAILED ? Palette.WARN : Palette.ACCENT;
+        }
         if (!warnings.isEmpty()) {
             String first = NoteText.text(warnings.getFirst(), t, sheet, units);
             head += " " + t.get(warnings.size() == 1 ? key + "warning" : key + "warnings", warnings.size(), first);

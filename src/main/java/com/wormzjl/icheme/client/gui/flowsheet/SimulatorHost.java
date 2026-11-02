@@ -2,6 +2,8 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
+import com.wormzjl.icheme.science.flowsheet.Note;
+import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -9,33 +11,81 @@ import org.jetbrains.annotations.Nullable;
  * its block, which W8 does. The screen keeps no thread and no packet of its own. {@link #NONE} runs nothing and stores nothing, as the screen stands until then.
  */
 public interface SimulatorHost {
-    /** A run that ended: the sheet it ran on, what it left, how long it took. */
-    record Finished(Flowsheet sheet, FlowsheetRun run, double seconds) {
+    /**
+     * What Solve alone last did, until the next run.
+     *
+     * @param sheet   the sheet it solved on
+     * @param status  how it ended
+     * @param why     why it failed, or null
+     * @param seconds how long it took
+     */
+    record Alone(String unit, Flowsheet sheet, FlowsheetRun.Status status, @Nullable Note why, double seconds) {
+    }
+
+    /** A run that ended: the sheet it ran on, what it left, how long it took, and what a unit solved alone has done since. */
+    record Finished(Flowsheet sheet, FlowsheetRun run, double seconds, @Nullable Alone alone) {
+        public Finished(Flowsheet sheet, FlowsheetRun run, double seconds) {
+            this(sheet, run, seconds, null);
+        }
     }
 
     SimulatorHost NONE = new SimulatorHost() {
     };
 
+    /** The run half, which W8's block joins to its store; null where nothing runs. */
+    default @Nullable SimulatorRunner runner() {
+        return null;
+    }
+
     /** Whether Run can start. */
     default boolean canRun() {
-        return false;
+        return runner() != null;
     }
 
     /** Starts a run of {@code sheet} in the background. */
     default void run(Flowsheet sheet) {
+        var runner = runner();
+        if (runner != null) runner.run(sheet);
+    }
+
+    /** Solves {@code unit} alone in the background, on the streams it has now. */
+    default void alone(Flowsheet sheet, String unit) {
+        var runner = runner();
+        if (runner != null) runner.alone(sheet, unit);
     }
 
     /** Stops the run in hand. */
     default void stop() {
+        var runner = runner();
+        if (runner != null) runner.stop();
+    }
+
+    /** The screen is gone: the run in hand stops, leaves no thread and drops its result. */
+    default void close() {
+        var runner = runner();
+        if (runner != null) runner.close();
     }
 
     /** The run in hand, or null. */
     default SheetState.@Nullable Running running() {
-        return null;
+        var runner = runner();
+        return runner == null ? null : runner.running();
     }
 
     /** The last run, or null. */
     default @Nullable Finished last() {
+        var runner = runner();
+        return runner == null ? null : runner.last();
+    }
+
+    /** A run or a reader takes no edit; the end of a run lifts the lock, unless this player only reads. */
+    default void lock(SheetEditor editor) {
+        boolean reader = reader();
+        editor.lock(reader || running() != null, reader ? SheetEditor.LOCKED : SheetEditor.RUNNING);
+    }
+
+    /** The server's revision tokens ({@link RevisionNotice}), or null with no word from one. W8's packet brings them. */
+    default @Nullable Map<String, String> serverRevisions() {
         return null;
     }
 

@@ -10,11 +10,15 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.Note;
+import com.wormzjl.icheme.science.flowsheet.Report;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import org.jetbrains.annotations.Nullable;
 
@@ -334,29 +338,83 @@ public final class ResultsPage {
         return rows;
     }
 
-    private static void log(Canvas c, SheetContext x, Rect box) {
-        var m = c.measure();
-        var results = x.state().results();
+    /** One line of the Log. */
+    public record Line(String text, int tone) {
+    }
+
+    /** The Log: the solver's order, each loop's passes and how it ended, the status, the hot sides, the notes. */
+    public static List<Line> logLines(SheetContext x) {
+        var run = x.state().results().run();
         var sheet = x.editor().sheet();
-        int y = box.y() + 5, i = 0, width = box.w() - 8;
-        var lines = new ArrayList<String>();
-        var tones = new ArrayList<Integer>();
-        for (var loop : results.run().loops()) {
+        var lines = new ArrayList<Line>();
+        var order = order(x, run, sheet);
+        if (order != null) lines.add(new Line(order, Palette.TEXT));
+        for (var loop : run.loops()) {
+            for (var pass : run.passes()) if (pass.tears().equals(loop.tears())) lines.add(new Line(pass(x, pass, sheet), Palette.TEXT));
             var tears = new ArrayList<String>();
             for (var tear : loop.tears()) tears.add(NoteText.subject(tear, sheet));
-            lines.add(x.text(loop.closed() ? "results.loop_closed" : "results.loop_open", String.join(", ", tears), loop.passes()));
-            tones.add(Palette.TEXT);
+            lines.add(new Line(x.text(loop.closed() ? "results.loop_closed" : "results.loop_open", String.join(", ", tears), loop.passes()), Palette.TEXT));
         }
-        lines.add(x.state().status(x.t(), x.units(), false).text());
-        tones.add(Palette.TEXT);
-        for (var note : NoteText.all(results.run())) {
-            lines.add(NoteText.text(note, x.t(), sheet, x.units()));
-            tones.add(note.severity() == Note.Severity.ERROR ? Palette.RED : note.severity() == Note.Severity.WARNING ? Palette.WARN : Palette.TEXT);
+        lines.add(new Line(x.state().status(x.t(), x.units(), false).text(), Palette.TEXT));
+        var checked = checked(run, sheet);
+        if (checked != null) lines.add(new Line(x.text("log.checked", checked), Palette.TEXT));
+        for (var note : NoteText.all(run)) lines.add(new Line(NoteText.text(note, x.t(), sheet, x.units()), note.severity() == Note.Severity.ERROR ? Palette.RED : note.severity() == Note.Severity.WARNING ? Palette.WARN : Palette.TEXT));
+        return lines;
+    }
+
+    /** The order the solver planned: steps in a row, then each loop with its tears. A source starts nothing, so it is left out. */
+    private static @Nullable String order(SheetContext x, FlowsheetRun run, Flowsheet sheet) {
+        var parts = new ArrayList<String>();
+        var plain = new ArrayList<String>();
+        for (var stage : run.order()) {
+            var names = stage.calculations().stream().filter(id -> !id.startsWith("feed ")).map(id -> NoteText.subject(id, sheet)).toList();
+            if (stage.tears().isEmpty()) {
+                plain.addAll(names);
+                continue;
+            }
+            if (!plain.isEmpty()) parts.add(String.join(", ", plain));
+            plain.clear();
+            parts.add(x.text("log.loop", String.join(", ", names), String.join(", ", stage.tears().stream().map(id -> NoteText.subject(id, sheet)).toList())));
         }
-        for (int k = 0; k < lines.size(); k++)
-            for (var line : m.wrap(lines.get(k), width)) {
+        if (!plain.isEmpty()) parts.add(String.join(", ", plain));
+        return parts.isEmpty() ? null : x.text("log.order", String.join(x.text("log.then"), parts));
+    }
+
+    /** What a pass did: each duty and where each block set out from, what it took, and how far its tear moved. */
+    private static String pass(SheetContext x, FlowsheetRun.Pass pass, Flowsheet sheet) {
+        var said = new ArrayList<String>();
+        var units = new HashSet<String>();
+        for (var step : pass.steps()) {
+            String name = NoteText.subject(step.unit(), sheet);
+            if (step.failed()) said.add(x.text("log.failed", name));
+            else if (step.start() != null) said.add(x.text(step.start() == Report.Start.LEARNED ? "log.from_learned" : "log.from_last", name));
+            else if (!Double.isNaN(step.duty()) && units.add(step.unit())) said.add(step.duty() == 0 ? x.text("log.no_duty", name) : x.text("log.duty", name, SheetUnits.megawatts(Math.abs(step.duty()))));
+        }
+        String seconds = SheetUnits.number(1, pass.seconds());
+        String line = said.isEmpty() ? x.text("log.pass_plain", pass.pass(), seconds) : x.text("log.pass", pass.pass(), String.join(", ", said), seconds);
+        if (pass.tear() == null) return line;
+        String tear = NoteText.subject(pass.tear(), sheet);
+        if (!Double.isNaN(pass.moved())) return line + " " + x.text("log.tear_moved", tear, SheetUnits.number(2, 100 * pass.moved()));
+        return Double.isNaN(pass.temperature()) ? line : line + " " + x.text("log.tear_out", tear, x.units().t(pass.temperature()), x.units().temperature().symbol());
+    }
+
+    /** Each hot side a column rated, by what it has in hand, or null with none. */
+    private static @Nullable String checked(FlowsheetRun run, Flowsheet sheet) {
+        var margins = new ArrayList<String>();
+        for (var id : new TreeSet<>(run.reports().keySet())) {
+            var margin = run.reports().get(id).readings().get("margin");
+            if (margin != null) margins.add(NoteText.subject(id.replaceFirst(" check$", ""), sheet) + " " + SheetUnits.number(1, margin) + " K");
+        }
+        return margins.isEmpty() ? null : String.join(", ", margins);
+    }
+
+    private static void log(Canvas c, SheetContext x, Rect box) {
+        var m = c.measure();
+        int y = box.y() + 5, i = 0, width = box.w() - 8;
+        for (var line : logLines(x))
+            for (var text : m.wrap(line.text(), width)) {
                 if (i % 2 == 1) c.fill(box.x(), y - 3, box.right(), y + 11, DialogColumns.BAND);
-                c.text(line, box.x() + 4, y, tones.get(k));
+                c.text(text, box.x() + 4, y, line.tone());
                 y += LINE;
                 i++;
             }

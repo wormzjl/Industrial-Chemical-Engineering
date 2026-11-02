@@ -6,6 +6,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.science.column.v3.V3ColumnTemplate;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFile;
@@ -111,6 +112,30 @@ public final class FileColumns {
         var rows = new ArrayList<Row>();
         for (var template : templates) rows.add(new Row(template, false));
         return new Listing(t.get("flowsheet.file.templates_title"), new String[]{t.get("flowsheet.file.name"), t.get("flowsheet.file.parts")}, new int[]{0, 460}, rows, chosen, new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.load")}, 1);
+    }
+
+    /** A column template as the door lists it: {@code bundled} with the mod, or the player's own. */
+    public record ColumnTemplate(String name, V3ColumnTemplate template, boolean bundled) {
+    }
+
+    /** The column templates a column's door loads. */
+    public static Listing columnTemplates(List<ColumnTemplate> templates, int chosen, SheetUnits units, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Row>();
+        for (var template : templates) {
+            var column = template.template();
+            String feed = column.designFeed() > 0 ? units.moles(column.designFeed() / 3.6) + " " + units.molesUnit() : "";
+            rows.add(new Row(new String[]{template.name(), Integer.toString(column.trays()), connections(column, t), feed, t.get(template.bundled() ? "flowsheet.file.bundled" : "flowsheet.file.yours")}, false));
+        }
+        return new Listing(t.get("flowsheet.file.column_templates_title"), new String[]{t.get("flowsheet.file.name"), t.get("flowsheet.file.trays"), t.get("flowsheet.file.connections"), t.get("flowsheet.file.design_feed"), t.get("flowsheet.file.from")},
+                new int[]{0, 170, 212, 352, 460}, rows, chosen, new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.load")}, 1);
+    }
+
+    private static String connections(V3ColumnTemplate column, HeatControlColumn.Texts t) {
+        var parts = new ArrayList<String>();
+        if (!column.draws().isEmpty()) parts.add(t.get("flowsheet.file.connections_draws", column.draws().size()));
+        if (!column.pumparounds().isEmpty()) parts.add(t.get("flowsheet.file.connections_pa", column.pumparounds().size()));
+        if (!column.steam().isEmpty()) parts.add(t.get("flowsheet.file.connections_steam", column.steam().size()));
+        return parts.isEmpty() ? t.get("flowsheet.file.connections_none") : String.join(", ", parts);
     }
 
     /** What changed on opening a sheet. */

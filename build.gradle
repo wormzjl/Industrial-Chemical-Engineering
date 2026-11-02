@@ -464,7 +464,7 @@ def slowGateClasses = ['runtime.fluid.HoldClassWorldsTest', 'science.column.v3.t
         'science.column.v3.V3MethaneColumnTest', 'runtime.fluid.JunctionSeedingGateTest', 'science.column.v3.V3ColumnCalculatorTest',
         'science.column.v3.V3ColumnFeedAndDrawLimitsTest', 'science.column.v3.V3TrayHydraulicsColumnTest',
         'science.column.v3.V3LiteraturePresetTest', 'runtime.fluid.IslandSchedulerTest', 'science.column.v3.V3ColdStartTest',
-        'runtime.fluid.ExtremeTopologyIslandTest', 'science.flowsheet.FlowsheetColumnTest'].collect { "com.wormzjl.icheme.${it}" }
+        'runtime.fluid.ExtremeTopologyIslandTest', 'science.flowsheet.FlowsheetColumnTest', 'client.gui.flowsheet.SimulatorRunTest'].collect { "com.wormzjl.icheme.${it}" }
 tasks.named('test', Test) {
     // The fluid GameTests compile with the quick suite: only their server run compiled them, and a removed block left
     // them uncompilable for two days unseen (batch 2026-10-21-floating-roof-tanks, FINAL_LANE_E8EC6455_REVIEW.md).

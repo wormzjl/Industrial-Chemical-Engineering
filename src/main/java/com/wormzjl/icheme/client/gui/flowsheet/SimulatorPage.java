@@ -13,7 +13,6 @@ import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.UnitTypes;
-import com.wormzjl.icheme.science.material.MaterialRuntime;
 import java.util.ArrayList;
 import java.util.List;
 import org.jetbrains.annotations.Nullable;
@@ -45,8 +44,8 @@ public final class SimulatorPage {
         }
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE, reader = host.reader();
         var file = frame.fileKeys();
-        slots.add(new Slot(new Column.Button("file/new", x.text("file.new"), !reader, null), file.get(0)));
-        slots.add(new Slot(new Column.Button("file/open", x.text("file.open"), !reader, null), file.get(1)));
+        slots.add(new Slot(new Column.Button("file/new", x.text("file.new"), !editor.locked(), null), file.get(0)));
+        slots.add(new Slot(new Column.Button("file/open", x.text("file.open"), !editor.locked(), null), file.get(1)));
         slots.add(new Slot(new Column.Button("file/save", x.text("file.save"), host.stores() && !reader, host.stores() ? null : x.text("hint.block")), file.get(2)));
         slots.add(new Slot(new Column.Button("file/save_as", x.text(narrow ? "file.save_as_short" : "file.save_as"), true, null), file.get(3)));
         var foot = frame.footer();
@@ -96,12 +95,13 @@ public final class SimulatorPage {
     }
 
     /** A dialog's list, by its name. */
-    public static FileColumns.Listing listing(String dialog, SheetContext x, List<FileColumns.Entry> files, int chosen) {
+    public static FileColumns.Listing listing(String dialog, SheetContext x, List<FileColumns.Entry> files, List<FluidPresetCatalog.Preset> presets, List<FileColumns.ColumnTemplate> columns, int chosen) {
         return switch (dialog) {
             case "OPEN" -> FileColumns.open(files, chosen, x.t());
+            case "COLUMN_TEMPLATES" -> FileColumns.columnTemplates(columns, chosen, x.units(), x.t());
             case "TEMPLATES" -> {
                 var rows = new ArrayList<String[]>();
-                for (var preset : FluidPresetCatalog.resolve(MaterialRuntime.active())) {
+                for (var preset : presets) {
                     int parts = 0;
                     for (double share : preset.moleFractions()) if (share > 0) parts++;
                     rows.add(new String[]{preset.name(), Integer.toString(parts)});
@@ -213,8 +213,17 @@ public final class SimulatorPage {
 
     /** What the status says on a tab, a refusal or a gesture's prompt first; {@code holder} is who edits a sheet this player only reads. */
     public static SheetState.Status status(SheetContext x, SimulatorFrame.Tab tab, ResultsPage.State results, SheetGestures gestures, SheetEditor editor, boolean compact, @Nullable String holder) {
+        var said = said(x, tab, results, gestures, editor, compact, holder);
+        return x.differing().isEmpty() ? said : new SheetState.Status(said.text() + " " + x.text("status.data_differs", String.join(", ", x.differing())), said.tone());
+    }
+
+    private static SheetState.Status said(SheetContext x, SimulatorFrame.Tab tab, ResultsPage.State results, SheetGestures gestures, SheetEditor editor, boolean compact, @Nullable String holder) {
         var refusal = editor.refusal();
-        if (refusal != null) return new SheetState.Status(x.t().get(refusal.key(), refusal.arguments().toArray()), Palette.WARN);
+        if (refusal != null) {
+            String why = x.t().get(refusal.key(), refusal.arguments().toArray());
+            return new SheetState.Status(x.state().running() ? x.state().status(x.t(), x.units(), compact).text() + " " + why : why, Palette.WARN);
+        }
+        if (x.state().running()) return x.state().status(x.t(), x.units(), compact);
         String lifted = gestures.lifted();
         if (lifted != null) return new SheetState.Status(x.text("status.reconnect", editor.stream(lifted).name()), Palette.ACCENT);
         if (tab == SimulatorFrame.Tab.RESULTS) return new SheetState.Status(ResultsPage.status(x, results), Palette.ACCENT);
