@@ -7,7 +7,7 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
                            Mode mode, double speed, double setPoint) {
     public enum Draft { INDUCED, NATURAL }
     public enum Mode { FAN_SPEED, TARGET_TEMPERATURE }
-    public static final double AIR_TEMPERATURE = 298.15, WET_BULB = 291, PRESSURE = 101325;
+    public static final double AIR_TEMPERATURE = 298.15, RELATIVE_HUMIDITY = .5, PRESSURE = 101325;
     public static final double BASIN_HEIGHT = 2, BASIN_DEPTH = 2 * BASIN_HEIGHT / 3;
     /** Full-speed fan pressure, Pa; declared air and water loading, kg/(s m²); the fan laws' efficiency and air density, kg/m³. */
     public static final double FAN_PRESSURE = 20, DESIGN_LOADING = 2, FAN_EFFICIENCY = .6, AIR_DENSITY = 1.18;

@@ -30,14 +30,15 @@ class CoolingTowerTest {
     private static PassiveNetwork.Pipe feed(){return new PassiveNetwork.Pipe(5,0,1,LINE).withPorts(PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.SPRAY);}
     private PassiveStepSolver.Result step(PassiveNetwork graph){return new PassiveStepSolver(model).solve(graph,.1,()->{});}
 
-    @Test void theCorrelationsStayNearTheMarchedFillTheyWereFittedTo(){
+    @Test void sharedFillMatchesItsDeclaredCalibrationPoint(){assertEquals(298.15,TowerTransfer.referenceOutlet(model),1e-5);}
+    @Test void theRatingStaysNearTheMarchedFillItReplaced(){
         record Point(CoolingTower tower,double loading,double inlet,double speed,double outlet,double evaporation){}
         var fan=CoolingTower.induced(4,2,1,1);var chimney=CoolingTower.natural(40);
         for(var p:List.of(new Point(fan,2,308.15,1,297.447,.5162),new Point(fan,2,308.15,.5,300.423,.3661),new Point(fan,20,308.15,1,306.533,.7625),
                 new Point(chimney,2,308.15,0,298.734,35.32),new Point(chimney,20,308.15,0,306.650,55.55))){
             var r=TowerTransfer.fill(model,p.tower(),p.loading()*p.tower().area(),p.inlet(),p.speed());
-            assertEquals(p.outlet(),r.outletTemperature(),1,p.toString());
-            assertEquals(p.evaporation(),r.evaporation(),.25*p.evaporation(),p.toString());
+            assertEquals(p.outlet(),r.outletTemperature(),.15,p.toString());
+            assertEquals(p.evaporation(),r.evaporation(),.05*p.evaporation(),p.toString());
         }
     }
     @Test void transferSweepConservesWaterEnergyAndRespectsItsAmbientLimit(){
