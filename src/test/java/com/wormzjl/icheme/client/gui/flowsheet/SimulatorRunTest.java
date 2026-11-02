@@ -86,6 +86,30 @@ class SimulatorRunTest {
         }
     }
 
+    /** The whole sample, a column's display with it, fits a block's body and comes back; the printed times are what a run's end and an opening cost the client. */
+    @Test
+    void theSamplesResultsFitTheBodyAndComeBack() throws Exception {
+        byte[] sheet = com.wormzjl.icheme.science.flowsheet.FlowsheetFile.write(SAMPLE);
+        var finished = new SimulatorHost.Finished(SAMPLE, ONE, 1);
+        long start = System.nanoTime();
+        byte[] results = com.wormzjl.icheme.network.SimulatorResults.fitted(finished, SAMPLE, sheet);
+        long fitted = System.nanoTime();
+        com.wormzjl.icheme.network.SimulatorResults.fitted(finished, SAMPLE, sheet);
+        long warm = System.nanoTime();
+        byte[] body = com.wormzjl.icheme.science.flowsheet.SheetBody.pack(sheet, results);
+        long packed = System.nanoTime();
+        var unpacked = com.wormzjl.icheme.science.flowsheet.SheetBody.unpack(body);
+        var back = com.wormzjl.icheme.network.SimulatorResults.read(unpacked.results(), SAMPLE, SheetFixture.FLUIDS.model());
+        long read = System.nanoTime();
+        System.out.printf("SAMPLE_BODY sheet=%d results=%d packed=%d fit_ms=%.1f again_ms=%.1f pack_ms=%.1f read_ms=%.1f%n", sheet.length, results.length, body.length, (fitted - start) / 1e6, (warm - fitted) / 1e6, (packed - warm) / 1e6, (read - packed) / 1e6);
+        assertTrue(body.length <= com.wormzjl.icheme.science.flowsheet.SheetBody.MAX_PACKED);
+        assertTrue(ONE.reports().values().stream().anyMatch(report -> report.display() != null), "the sample has a column to show");
+        assertEquals(ONE.reports().keySet(), back.run().reports().keySet());
+        for (var id : ONE.reports().keySet()) assertEquals(ONE.reports().get(id).display(), back.run().reports().get(id).display(), id);
+        assertEquals(ONE.status(), back.run().status());
+        assertEquals(ONE.streams().keySet(), back.run().streams().keySet());
+    }
+
     @Test
     void theDigitsAreTheSameOnTheRunThreadAndBesideAnotherRun() throws InterruptedException {
         var one = new SimulatorRunner(() -> SheetFixture.CATALOG);

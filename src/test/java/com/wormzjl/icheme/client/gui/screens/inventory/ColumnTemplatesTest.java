@@ -21,6 +21,37 @@ import static org.junit.jupiter.api.Assertions.*;
 class ColumnTemplatesTest {
     @TempDir Path game;
 
+    /** Save as writes a template's conditions, Templates reads them back, and a mixture by mass comes to moles; one the sheet's axis cannot hold stays out of the list. */
+    @org.junit.jupiter.api.Test
+    void aStreamTemplateKeepsItsConditions() throws Exception {
+        var catalog = MaterialCatalog.bundled();
+        var network = catalog.presets().network().packageId();
+        var fluids = new com.wormzjl.icheme.client.gui.flowsheet.StreamProps.Fluids(com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog, network, () -> com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.forNetwork(catalog, network)), catalog.requirePackage(network), id -> id, network);
+        var library = library();
+        var json = V3ClientPresets.streamJson("My feed", java.util.Map.of("Water", 2.0), 350, 4, 90);
+        library.save(V3ClientPresets.Kind.MIXTURE, "My feed", json);
+        library.save(V3ClientPresets.Kind.MIXTURE, "Elsewhere", V3ClientPresets.streamJson("Elsewhere", java.util.Map.of("Unobtainium", 2.0), 350, 4, 90));
+        var listed = ColumnTemplates.streams(java.util.List.of(), library.refresh(V3ClientPresets.Kind.MIXTURE), fluids, V3ClientPresets.Preset::name);
+        var mine = listed.stream().filter(s -> s.name().equals("My feed")).findFirst().orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals(350, mine.temperature());
+        org.junit.jupiter.api.Assertions.assertEquals(4e5, mine.pressure(), 1e-9);
+        org.junit.jupiter.api.Assertions.assertEquals(25, mine.flow(), 1e-9);
+        org.junit.jupiter.api.Assertions.assertTrue(listed.stream().noneMatch(s -> s.name().equals("Elsewhere")));
+        org.junit.jupiter.api.Assertions.assertTrue(listed.stream().anyMatch(s -> Double.isNaN(s.temperature())), "a bundled mixture with no conditions lists all the same");
+    }
+
+    /** Delete takes a player's own file and can reach nothing else. */
+    @org.junit.jupiter.api.Test
+    void deleteTakesAPlayersOwnTemplateAndNothingOutsideItsFolder() throws Exception {
+        var library = library();
+        var own = library.save(V3ClientPresets.Kind.COLUMN, "Mine", V3ClientPresets.columnJson("Mine", base()));
+        var bundled = library.refresh(V3ClientPresets.Kind.COLUMN).entries().size();
+        library.delete(V3ClientPresets.Kind.COLUMN, own.getFileName().toString());
+        org.junit.jupiter.api.Assertions.assertFalse(java.nio.file.Files.exists(own));
+        org.junit.jupiter.api.Assertions.assertEquals(bundled - 1, library.refresh(V3ClientPresets.Kind.COLUMN).entries().size());
+        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class, () -> library.delete(V3ClientPresets.Kind.COLUMN, "../mixturepreset/x.json"));
+    }
+
     private V3ClientPresets library() {
         return new V3ClientPresets(game, n -> getClass().getClassLoader().getResourceAsStream(n));
     }
