@@ -5,7 +5,7 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
-import com.wormzjl.icheme.science.fluid.network.PipeResistance;
+import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialTestBasis;
 import java.util.ArrayList;
@@ -84,6 +84,32 @@ class RegulatingValveHoldTest {
         var pipes=new ArrayList<PassiveNetwork.Pipe>();
         for(var pipe:rest.graph().pipes())pipes.add(pipe.control() instanceof FlowControl.ControlValve?pipe.withControl(valve(target)):pipe);
         var running=solver.solve(new PassiveNetwork(rest.graph().reservoirs(),List.copyOf(pipes),rest.graph().scheduledTransfers()),5,PassiveIntervalSolver.Settings.defaults(),()->{},1);
+        assertEquals(FlowControl.Mode.VALVE_REGULATING,running.endpointModes().getLast());
+        for(double flow:running.endpointFlows())assertEquals(target,flow,1e-6*target);
+    }
+    /**
+     * An idle line's first flow of a liquid product, as a column's outlet starts: the junction still holds the gas it stood in,
+     * so the regulated pass stays laid out on that gas, not on the liquid the balance sends it (laid out on the liquid, the
+     * Newton was singular at every step size).
+     */
+    @Test void aLiquidProductEntersALineHoldingItsGas() {
+        var model=FluidTestSupport.networkModel();var w=new EventPathWorld();double bore=.05,target=1;
+        w.place(0,0,0,Kind.GENERATOR,EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,638.15,250000,pure(MaterialTestBasis.NITROGEN)),bore);
+        w.place(1,0,0,Kind.PIPE,EAST,bore);
+        w.place(2,0,0,Kind.PIPE,EAST,valve(0),null,bore);
+        w.place(3,0,0,Kind.PIPE,EAST,bore);
+        w.place(4,0,0,Kind.VOID,EAST,sink(101325,298.15),bore);
+        w.runTo(200);
+        var solver=new PassiveIntervalSolver(model);
+        var rest=solver.solve(w.coordinator.snapshots().getFirst().graph(),5,PassiveIntervalSolver.Settings.defaults(),()->{},1);
+        double[] product=Arrays.copyOf(new double[]{.126,0,0,1.26,3.03,0,0,64.7,161.7,1294,2588,258.8},MaterialTestBasis.NETWORK+1);
+        double volume=model.flashTP(486,250000,product,()->{}).volume();for(int c=0;c<product.length;c++)product[c]/=volume;
+        var liquid=model.flashTP(486,250000,product,()->{});assertEquals(0,liquid.vaporVolume());
+        var nodes=new ArrayList<PassiveNetwork.Reservoir>();
+        for(var n:rest.graph().reservoirs())nodes.add(n.kind()==PassiveNetwork.NodeKind.GENERATOR?new PassiveNetwork.Reservoir(n.id(),n.elevation(),liquid,n.kind(),new PassiveNetwork.Inventory(n.inventory().volume(),PhaseLayout.totalAmounts(liquid),liquid.internalEnergy(),liquid.solids())):n);
+        var pipes=new ArrayList<PassiveNetwork.Pipe>();
+        for(var pipe:rest.graph().pipes())pipes.add(pipe.control() instanceof FlowControl.ControlValve?pipe.withControl(valve(target)):pipe);
+        var running=solver.solve(new PassiveNetwork(nodes,pipes,rest.graph().scheduledTransfers()),5,PassiveIntervalSolver.Settings.defaults(),()->{},1);
         assertEquals(FlowControl.Mode.VALVE_REGULATING,running.endpointModes().getLast());
         for(double flow:running.endpointFlows())assertEquals(target,flow,1e-6*target);
     }

@@ -597,14 +597,13 @@ public final class PassiveStepSolver {
             // A confirmed emptying (keptEmptying) was decided on the network this active set states, so a mode or closure
             // change decides it again.
             if(changed)Arrays.fill(emptied,false);
-            // A flow valve leaving its open pass for regulation leaves that pass's point with it: a choked line's law flow stands on the
-            // saturated law's plateau, where the full Newton step to the target crosses zero and lands further out (steam at 3.65 kg/s
-            // through a valve set to 0.75: law flow 5.25, -75.9, then 48, slope 1e-11, at every step size). The regulated pass starts as
-            // a solve without a carried point does, from the balance on these modes ({@link #balanceStart}).
+// A flow valve leaving its open pass for regulation leaves that pass's flows behind: a choked line's law flow stands on the
+// saturated law's plateau, where the full Newton step to the target crosses zero and lands further out (steam at 3.65 kg/s
+// through a valve set to 0.75: law flow 5.25, -75.9, then 48, slope 1e-11, at every step size). The regulated pass takes its
+// law flows from the balance on these modes ({@link #balanceStart}) and keeps its seeds: a junction still holding its old
+// charge is laid out on that, not on the mixture the balance sends it (a liquid reaching a gas junction went singular).
             if(deviceChange>=0&&deviceNext==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(deviceChange).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()) {
-                var start=balanceStart(graph,modes,boundaryClosed,keep,checkpoint);
-                seeds=new ArrayList<>(states);for(int i=0;i<seeds.size();i++)if(graph.reservoirs().get(i).junction())seeds.set(i,start.graph().reservoirs().get(i).state());
-                balanceLawFlows=start.lawFlows();previousPipes=List.of();previousNodeIds=new long[0];previousFlows=new double[0];previousLawFlows=new double[0];previousHeads=new double[0];previousModes=List.copyOf(modes);continue;
+                seeds=states;balanceLawFlows=balanceStart(graph,modes,boundaryClosed,keep,checkpoint).lawFlows();previousPipes=List.of();previousNodeIds=new long[0];previousFlows=new double[0];previousLawFlows=new double[0];previousHeads=new double[0];previousModes=List.copyOf(modes);continue;
             }
             if(changed){seeds=states;previousPipes=pipeIdentities;previousNodeIds=nodeIds;previousInputStates=inputStates;previousOutputStates=states;previousRateOnly=rateOnly;previousFlows=flows.clone();previousLawFlows=lawFlows;previousHeads=heads.clone();previousModes=List.copyOf(modes);continue;}
             // Decision D11: the phase-port segments this pass froze must be the ones its own converged flows land in
@@ -2669,7 +2668,9 @@ public final class PassiveStepSolver {
             var pipe=current.pipes().get(e);
             if(boundaryClosed[e]||modes.get(e)==FlowControl.Mode.CLOSED||modes.get(e)==FlowControl.Mode.INLET_WRONG_PHASE)continue;
             double pa=endPressure(current,pipe,pipe.first()),pb=endPressure(current,pipe,pipe.second());
-            law[e]=net.suctionLimited[e]||modes.get(e)==FlowControl.Mode.VALVE_REGULATING&&!Double.isNaN(net.prescribed[e])?net.prescribed[e]:lawFlow(current,pipe,pa,pb);
+            // A valve whose flow or opening the balance states starts at what the balance gave it, not at its pipe's unthrottled law.
+            boolean stated=pipe.control() instanceof FlowControl.Valve&&(!Double.isNaN(net.prescribed[e])||!Double.isNaN(net.fixedOpenings[e]));
+            law[e]=net.suctionLimited[e]?net.prescribed[e]:stated?net.flow(e,pa,pb):lawFlow(current,pipe,pa,pb);
             if(!(pipe.control() instanceof FlowControl.Passive)||keep!=null&&keep[e]||!converged)continue;
             // A passive connection the balanced ends can only drive the way its boundary forbids carries nothing this solve
             // (the closure the one-way estimate and the start closures stated by hand). Only ends that balance state it: an
