@@ -15,13 +15,21 @@ Status words:
 | Batch | Purpose | Status |
 |---|---|---|
 | [2026-11-02-process-simulator/](2026-11-02-process-simulator/README.md) | In-game process simulator: design sheets, client-side runs, flowsheet files and compatibility | In progress since 2026-11-02 |
+| [2026-10-30-water-cooling-tower/](2026-10-30-water-cooling-tower/README.md) | Bounded parallel water-cooling cells and hollow natural-draft towers, coupled heat/mass transfer and real basins | Implemented 2026-11-02 |
+| [2026-11-02-tp-steam-refusal/](2026-11-02-tp-steam-refusal/README.md) | TP flash of one hydrocarbon beside steam, and PH and UV at its true step | Implemented 2026-11-02 (0.18.1) |
+| [2026-11-02-ph-false-root/](2026-11-02-ph-false-root/README.md) | PH and UV false root on wet oil: free water boils alone only where the hydrocarbons hold next to none of the gas | Implemented 2026-11-02 (0.18.1) |
+| [2026-10-28-vacuum-column/](2026-10-28-vacuum-column/README.md) | Column convergence and dry-stage support | Implemented 2026-11-02 |
+| [2026-11-02-docs-large-files/](2026-11-02-docs-large-files/README.md) | Keep large files out of documentation/: rule, ignore patterns, move to research/ | Implemented 2026-11-02 |
 | [2026-10-28-drum-outlet-placement/](2026-10-28-drum-outlet-placement/README.md) | A lying boot drum's oil outlet at the bottom of its front end, not mid-height on the head | Implemented 2026-10-28 (0.17.1) |
 | [2026-10-28-constructor-templates/](2026-10-28-constructor-templates/README.md) | Constructor: current kind opens its design, column templates, calculator Save kept on close | Implemented 2026-10-28 (0.17.1) |
+| [2026-10-28-native-column-default/](2026-10-28-native-column-default/README.md) | The C++ column library by default, the Java path where it is missing | Implemented 2026-11-02 |
+| [2026-10-28-column-operation/](2026-10-28-column-operation/README.md) | Built column operation and shared GUI/tool port colours | Implemented 2026-11-02 |
 | [2026-10-28-gui-toolkit/](2026-10-28-gui-toolkit/README.md) | An own small GUI toolkit, first on the heat Control tab | Implemented 2026-10-28 (0.17.0, 0.17.1) |
 | [2026-10-28-gui-toolkit-evaluation/](2026-10-28-gui-toolkit-evaluation/README.md) | LDLib2 or an own toolkit for the GUI: evaluation and options | Concluded 2026-10-28 |
 | [2026-10-27-heat-exchanger-design/](2026-10-27-heat-exchanger-design/README.md) | Heat exchanger system: UA from size, coupling of the two sides, built-in control | Implemented 2026-10-28 (0.17.0) |
 | [2026-10-28-main-test-repair](2026-10-28-main-test-repair/README.md) | Fix main's 16 failing quick-suite tests | Implemented 2026-10-28 (0.16.2) |
 | [2026-10-28-old-mover-removal](2026-10-28-old-mover-removal/README.md) | Remove the old one-block pump and compressor and their engine form; in-line movers replace them | Implemented 2026-10-28 (0.16.2) |
+| [2026-11-02-valve-hold](2026-11-02-valve-hold/README.md) | A regulating flow valve held its island: start stage and outlet hold fixes | Implemented 2026-11-02 |
 | [2026-10-27-column-pressure-drop/](2026-10-27-column-pressure-drop/README.md) | Keep published tray pressure profiles consistent on the aggressive solve path | Implemented 2026-10-27 (0.16.0) |
 | [2026-10-27-hold-class-wall-deadline/](2026-10-27-hold-class-wall-deadline/README.md) | Audit an intermittent HoldClassWorldsTest wall deadline | Implemented 2026-10-27 |
 | [2026-10-27-column-bench-audit/](2026-10-27-column-bench-audit/README.md) | Audit main-versus-fork column benchmark data | Implemented 2026-10-27 |

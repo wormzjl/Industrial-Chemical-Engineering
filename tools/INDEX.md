@@ -9,10 +9,16 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
 | [process-simulator/](process-simulator/README.md) | Plain-JVM probes: a client can run the column and flashes; the design sheets' sample flowsheet solved by hand | `2026-11-02-process-simulator` | In use since 2026-11-02 |
+| [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
+| [ph-false-root/](ph-false-root/README.md) | TP, PH and UV sweeps on wet feeds, final lanes of the false root and TP steam fixes | `2026-11-02-ph-false-root`, `2026-11-02-tp-steam-refusal` | Implemented 2026-11-02 |
+| [vacuum-column-test/](vacuum-column-test/README.md) | CDU/VDU convergence screens and feed checks | `2026-10-28-vacuum-column` | Implemented 2026-11-02 |
+| [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |
 | [drum-outlet-sweep/](drum-outlet-sweep/README.md) | Sweep of lying boot drums' oil-outlet placement (head fallbacks, options A and B) | `2026-10-28-drum-outlet-placement` | Implemented 2026-10-28 |
 | [heat-exchanger-design/](heat-exchanger-design/README.md) | Exchanger coupling, cell-count, 1-2 shell, per-phase film, zero-wall relay and game-timing study harnesses; owner-test probe of the review world; the merge lane | `2026-10-27-heat-exchanger-design` | Implemented 2026-10-28 (0.17.0) |
-| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit`, `2026-11-02-process-simulator` | In use since 2026-10-28 |
+| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit`, `2026-10-28-column-operation` | In use since 2026-10-28 |
 | [old-mover-removal/](old-mover-removal/README.md) | Writer of the removed-movers corpus image (a world with one-block movers) | `2026-10-28-old-mover-removal` | Implemented 2026-10-28 |
+| [native-column-default/](native-column-default/README.md) | Probes comparing the C++ and the Java outer pass of the inside-out trial, solver and calculator | `2026-10-28-native-column-default` | Implemented 2026-11-02 |
+| [column-operation/](column-operation/README.md) | C1 bench (the split table against drift, homogeneity, warm solve, rule B cost) and the review world's layout probe | `2026-10-28-column-operation` | Implemented 2026-11-02 |
 | [column-sump/](column-sump/README.md) | Column sump probes, nozzle sweeps and software renders | `2026-10-27-column-sump` | Concluded 2026-10-27 (batch in 0.15.1) |
 | [skirt-shadow/](skirt-shadow/README.md) | Skirt floor renders with the in-game skylight and a skylight probe, before and after; probe of the GameTest's light wait | `2026-10-27-skirt-shadow` | Implemented 2026-10-27 |
 | [multi-machine-framework/](multi-machine-framework/README.md) | Column nozzle-row, nozzle-bore and arrow probes, MCP bridge drivers, review-world NBT tool, in-game evidence and logs | `2026-10-26-multi-machine-framework` | Concluded 2026-10-27 |

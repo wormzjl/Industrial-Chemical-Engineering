@@ -279,11 +279,98 @@ public final class AssemblyService {
     public static void removed(ServerLevel level, Vessel vessel) {
         var store = AssemblyStore.of(level);
         long origin = vessel.origin().asLong();
+        stopColumn(level, origin);
         store.forget(origin);
         FluidWorldAuthority.find(level.getServer()).ifPresent(world -> ExchangerLines.publish(level, world, vessel, null));
         for (long master : store.mastersAt(origin))
             if (store.entry(master) != null && store.entry(master).holds(origin)) revert(level, store, master, vessel.origin(), "removed");
         for (var position : around(vessel)) for (long master : coded(store, position)) revert(level, store, master, BlockPos.of(position), "removed");
+    }
+
+    /**
+     * A structure dismantled (batch 2026-10-28-column-operation, plan section 12): a column's unit leaves the world with it,
+     * its accounts booked as destroyed. A rebuild elsewhere ({@link #removed} alone) keeps the unit: the column stops.
+     */
+    public static void dismantled(ServerLevel level, Vessel vessel) {
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.columnRemoved(position(level, vessel.origin().asLong())));
+    }
+
+    /** A running column at {@code master} stops (plan 4.1): its structure or its assembly changed. */
+    private static void stopColumn(ServerLevel level, long master) {
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+            var unit = world.column(position(level, master));
+            if (unit != null && unit.running()) world.stopColumn(unit.id());
+        });
+    }
+
+    /** The Start of the column at {@code origin} (C7): its request from its complete report ({@link ColumnStarts}); null, or why it did not start. */
+    public static @Nullable String start(ServerLevel level, BlockPos origin) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        if (world == null) return "the fluid world is not running";
+        var built = ColumnStarts.build(level, world, origin);
+        return built.request() == null ? built.refusal() : world.startColumn(built.request());
+    }
+
+    /** The Stop of the column at {@code origin} (C7): nothing where it does not run. */
+    public static void stop(ServerLevel level, BlockPos origin) {
+        stopColumn(level, origin.asLong());
+    }
+
+    /**
+     * The set points {@code values} for the column at {@code origin} (C7; {@code AssemblyNetwork.OperationPayload}'s order):
+     * the column's own set points with these values, the feed rate held to the design rate (owner Q8). Null, or why not.
+     */
+    public static @Nullable String setpoints(ServerLevel level, BlockPos origin, List<Double> values) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        var master = position(level, origin.asLong());
+        var unit = world == null ? null : world.column(master);
+        if (unit == null) return "the column has not run yet";
+        var s = unit.setpoints();
+        int steam = s.steamPerFeed().length, draws = s.drawsPerFeed().length, pa = s.pumparoundsPerFeed().length;
+        if (values.size() != 4 + steam + draws + pa) return "the set points do not fit the column's design";
+        double[] v = values.stream().mapToDouble(Double::doubleValue).toArray();
+        try {
+            var value = new com.wormzjl.icheme.science.column.operation.Setpoints(s.designFeedRate(), Math.max(0, Math.min(s.designFeedRate(), v[0])), v[1], v[2], v[3],
+                    Arrays.copyOfRange(v, 4, 4 + steam), Arrays.copyOfRange(v, 4 + steam, 4 + steam + draws), Arrays.copyOfRange(v, 4 + steam + draws, v.length));
+            return world.editColumn(master, value);
+        } catch (IllegalArgumentException invalid) {
+            return invalid.getMessage();
+        }
+    }
+
+    /**
+     * The Operation tab's snapshot of the column at {@code origin} (C7): its unit's, a read of the engine's last cycle; where
+     * it never ran, stopped on its design's set points, or not ready where it cannot run (a vacuum column, owner Q11) or its
+     * last Start was refused ({@code refusal}). Null where its design has no operating point.
+     */
+    public static @Nullable com.wormzjl.icheme.science.column.operation.OperationView operation(ServerLevel level, BlockPos origin, @Nullable String refusal,
+                                                                                               java.util.function.LongToDoubleFunction opening) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        if (world == null) return null;
+        var view = world.columnView(position(level, origin.asLong()), opening);
+        if (view != null && (view.running() || refusal == null)) return view;
+        var vessel = EquipmentStructure.at(level, origin);
+        var trays = vessel == null ? null : vessel.shape().trays();
+        var point = trays == null ? null : trays.operating();
+        var setpoints = view != null ? view.setpoints() : point == null ? null : com.wormzjl.icheme.science.column.operation.Setpoints.of(point);
+        if (setpoints == null) return null;
+        var phase = com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED;
+        String engine = "STOPPED";
+        if (trays.components() != null && trays.components().ejector()) {
+            phase = com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;
+            engine = "a vacuum column cannot run yet";
+        } else if (refusal != null) {
+            phase = com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;
+            engine = refusal;
+        }
+        var idle = com.wormzjl.icheme.science.column.operation.OperationView.idle(phase, engine, setpoints);
+        return view == null ? idle : new com.wormzjl.icheme.science.column.operation.OperationView(phase, idle.limit(), 0, false, null, false, engine, false, true, setpoints,
+                List.of(), List.of(), null);
+    }
+
+    private static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position position(ServerLevel level, long at) {
+        var p = BlockPos.of(at);
+        return new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(), p.getX(), p.getY(), p.getZ());
     }
 
     /** The masters whose reports coded the block at {@code position}. */
@@ -334,6 +421,7 @@ public final class AssemblyService {
         // Its cell first: a reverted entry codes nothing to find it by.
         var cell = cellOf(level, master, master);
         store.revert(master, at.asLong());
+        stopColumn(level, master);
         published(level, master, cell);
         IChemE.LOGGER.info("assembly status=REVERTED master={} was={} at={} reason={}", BlockPos.of(master).toShortString(), status, at.toShortString(), why);
     }

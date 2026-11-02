@@ -49,9 +49,10 @@ import java.util.*;
  * <p>{@code fluid-16} (the heat GUI, batch 2026-10-27-heat-exchanger-design, HEAT_GUI_PLAN.md): a heat side's view carries
  * its control's actuator, effort and limit, the stream at every port of its unit and an exchanger's lines part by part;
  * a pipe's inspection carries the line reading of the stream it carries.</p>
+ * <p>{@code fluid-17}: a cooling tower's controls and accepted readings, and a basin display's fan speed.</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-16";
+    public static final String PROTOCOL="fluid-17";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -69,8 +70,8 @@ public final class FluidNetwork {
      * A menu's edit form. {@code heat} is a controllable heat side's control (batch 2026-10-27-heat-exchanger-design, W4: an
      * exchanger side's or an air cooler's mode, set point, low limit and manual share), null for any other device.
      */
-    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat) {
-        public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,null);}
+    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower) {
+        public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,null,null);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,FlowControl.ValveSource.NONE,1);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,Power.ON);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,DEFAULT_PRESSURE_RATIO);}
@@ -98,7 +99,7 @@ public final class FluidNetwork {
             var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()||heat!=null&&(heat.fans()||heat.burners())&&heat.control().share()==0?Power.OFF:Power.ON;
             double temperature=heat!=null&&heat.burners()?heat.control().target():record.spec().temperature();
             return new Controls(temperature,pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget(),
-                    heat!=null&&heat.controllable()?heat.control():null);
+                    heat!=null&&heat.controllable()?heat.control():null,record.spec().tower());
         }
     }
     /**
@@ -246,6 +247,9 @@ public final class FluidNetwork {
         return new MenuData(record.device().hydraulicKind(),view,Controls.from(record),world.components(),world.presets(),"",
             world.materialNames(),Arrays.stream(world.model().molecularWeights()).boxed().toList(),world.instruments().sensorReadings(record.device().id(),view),valveData(world,record,view));
     }
+    /** The opening of valve {@code id} as its screen reads it, 0 to 1, or NaN where it has none or no signal (the column's Operation tab, C7). */
+    public static double opening(FluidWorldAuthority world,long id){return world.stored(()->storedOpening(world,id));}
+    private static double storedOpening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
     private static ValveData valveData(FluidWorldAuthority world,WorldTopologyLedger.Registration record,FluidView view){
         if(!(record.device().control() instanceof FlowControl.Valve valve))return null;
         if(valve.bare())return new ValveData(false,1,"Lacking components");
@@ -254,6 +258,7 @@ public final class FluidNetwork {
         var reading=world.instrumentPipeReading(record.device().id());double flow=reading==null?view.massFlow():reading.massFlow();if(reading!=null&&reading.volumeFlow()!=null&&reading.volumeFlow()!=0)rho=reading.massFlow()/reading.volumeFlow();
         double d=record.device().geometry().diameter(),u=view.status().contains("/ CLOSED")?0:view.status().contains("/ VALVE_OPEN")?1:FlowControl.opening(flow,head,rho,Math.PI*d*d/4);
         if(view.status().contains("CONTROL_CONFLICT")||view.status().contains("VALVE_CONFLICT"))return new ValveData(true,u,"Control conflict; holding opening");
+        if(view.status().contains("STANDING_OPEN"))return new ValveData(true,u,"Standing open; a lower flow target on this line regulates");
         if(view.committedTick()==0&&view.state()==null&&reading==null)return new ValveData(true,u,"Signal unavailable");
         boolean limited;
         if(valve.pressureControl())limited=view.state()==null||Math.abs(view.state().pressure()-valve.targetPressure())>Math.max(.01,1e-6*valve.targetPressure());
@@ -353,7 +358,12 @@ public final class FluidNetwork {
                     }
                     case GENERATOR->spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);
                     case VOID->spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());
-                    case RESERVOIR->throw new IllegalArgumentException("Reservoir initialization is fixed; existing fluid is conserved.");
+                    case RESERVOIR->{
+                        if(spec.tower()==null||controls.tower==null)throw new IllegalArgumentException("Reservoir contents are conserved; only cooling tower controls can be edited.");
+                        var t=controls.tower;
+                        world.model().domain().requireInputTemperature(t.setPoint());
+                        spec=spec.withTower(spec.tower().withControl(t.mode(),t.speed(),t.setPoint()));
+                    }
                     // A heat side's passage is its unit's datasheet; a fired heater's burners switch and fire to its set point
                     // (batch 2026-10-27-heat-exchanger-design; the edit moves both coils, FluidWorldAuthority.edit). An
                     // exchanger side and an air cooler take a control (W4): a mode, its set point inside the package's
@@ -435,8 +445,8 @@ public final class FluidNetwork {
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
-    private static TankDisplay display(RegistryFriendlyByteBuf b){return new TankDisplay(b.readFloat(),b.readFloat(),b.readFloat(),b.readInt(),b.readInt());}
-    private static void display(RegistryFriendlyByteBuf b,TankDisplay d){b.writeFloat(d.level());b.writeFloat(d.waterLevel());b.writeFloat(d.height());b.writeInt(d.oilArgb());b.writeInt(d.waterArgb());}
+    private static TankDisplay display(RegistryFriendlyByteBuf b){return new TankDisplay(b.readFloat(),b.readFloat(),b.readFloat(),b.readInt(),b.readInt(),b.readFloat());}
+    private static void display(RegistryFriendlyByteBuf b,TankDisplay d){b.writeFloat(d.level());b.writeFloat(d.waterLevel());b.writeFloat(d.height());b.writeInt(d.oilArgb());b.writeInt(d.waterArgb());b.writeFloat(d.fanSpeed());}
     private static List<BlockPos> positions(RegistryFriendlyByteBuf b) {
         int count=b.readVarInt();if(count<0||count>MAXIMUM_WATCHED)throw new IllegalArgumentException("Too many tanks in one watch request");
         var list=new ArrayList<BlockPos>(count);for(int i=0;i<count;i++)list.add(b.readBlockPos());

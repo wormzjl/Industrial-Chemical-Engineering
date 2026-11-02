@@ -11,7 +11,7 @@ Status: Implemented 2026-09-08. Index: [../INDEX.md](../INDEX.md).
 - [V3_HANDOFF_2026-09-08.md](V3_HANDOFF_2026-09-08.md)
 - [V3_THESIS_PUMPAROUND_ARRANGEMENT.md](V3_THESIS_PUMPAROUND_ARRANGEMENT.md)
 - [V3_RAMP_PREDICTOR_REVIEW.md](V3_RAMP_PREDICTOR_REVIEW.md)
-- [sources/FULL_TEXT.pdf](sources/FULL_TEXT.pdf)
+- [sources/FULL_TEXT.pdf](../../research/2026-09-06-v3-literature-cdu-pumparounds/sources/FULL_TEXT.pdf)
 - [screenshots/](screenshots/)
 
 ## Code areas

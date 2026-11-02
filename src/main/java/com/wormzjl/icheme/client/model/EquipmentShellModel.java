@@ -100,7 +100,7 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
      * quads carry its paint channel as their tint index, so the cell's paint colours them as the chunk is meshed.
      */
     private Layers bake(ShapeRasterizer.CellKey key) {
-        return layers(ShapeRasterizer.fixedSurface(key), bake(PortMarkings.surface(key), sprites, true));
+        return layers(ShapeRasterizer.chunkSurface(key), bake(PortMarkings.surface(key), sprites, true));
     }
 
     private Layers layers(List<Mesh.Polygon> polygons, List<BakedQuad> markings) {

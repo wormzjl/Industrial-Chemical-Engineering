@@ -91,6 +91,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean controllable(){var data=menu.clientData();return data!=null&&data.controls().heat()!=null;}
     /** The control mode as drafted, OFF while the switch stands at Off; the set points, low limit and bypass are drafts in {@link #fields}. */
     private HeatUnit.Mode heatMode=HeatUnit.Mode.OFF;
+    private boolean towerAuto;
+    private boolean tower(){return menu.clientData()!=null&&menu.clientData().controls().tower()!=null;}
     /** The target the switch's On holds: the drafted mode while On (OFF: an air cooler's fixed fan speed); for a side loaded Off, the outlet temperature. */
     private HeatUnit.Mode heatTarget=HeatUnit.Mode.OUTLET_TEMPERATURE;
     /** The door column's Off and On switch: a generator's or a built mover's. A heat unit's fans and burners are on its Control tab. */
@@ -147,6 +149,11 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         fields.clear();fields.put("temperature",new NumericDraft(c.temperature(),temperatureUnit));
         fields.put("pressure",new NumericDraft(c.pressure(),pressureUnit));fields.put("diameter",new NumericDraft(c.diameter()));
         fields.put("volumeFlow",new NumericDraft(c.volumeFlow(),flowRateUnit));fields.put("maximumAddedPressure",new NumericDraft(c.maximumAddedPressure(),pressureUnit));
+        if(c.tower()!=null){
+            towerAuto=c.tower().mode()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.TARGET_TEMPERATURE;
+            fields.put("towerSpeed",new NumericDraft(c.tower().speed()*100));
+            fields.put("towerTemperature",new NumericDraft(c.tower().setPoint(),temperatureUnit));
+        }
         fields.put("maximumPressureRatio",new NumericDraft(c.maximumPressureRatio()));fields.put("massFlow",new NumericDraft(c.massFlow(),flowRateUnit));
         // A controllable heat side's control (W4): the set point of the other mode starts at 40 °C or 0 kW; no low limit is blank.
         var heat=c.heat();heatMode=heat==null?HeatUnit.Mode.OFF:heat.mode();heatTarget=heatMode==HeatUnit.Mode.OFF?HeatUnit.Mode.OUTLET_TEMPERATURE:heatMode;
@@ -251,7 +258,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.flow_unit.hint")));
         if(data==null)return;
         // A heat side applies its control from its Control tab only.
-        if(canEdit()&&data.kind()!=TopologyCompiler.Kind.RESERVOIR&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()))){var apply=footer.get(1);doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);}
+        if(canEdit()&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()))){var apply=footer.get(1);doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);}
         if(page==CONTROL){
             buildControl();
             if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
@@ -383,9 +390,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             var controls=new FluidNetwork.Controls(fields.get("temperature").si(),fields.get("pressure").si(),
                 fields.get("diameter").value(),PipeResistance.DEFAULT_ROUGHNESS_METRES,fields.get("volumeFlow").si(),
                 fields.get("maximumAddedPressure").si(),composition.moleFractions(),solids(),fields.get("maximumPressureRatio").value(),powerOn?FluidNetwork.Power.ON:FluidNetwork.Power.OFF,valveSource,fields.get("massFlow").si(),
-                heatControl());
+                heatControl(),towerControl());
             FluidNetwork.sendEdit(menu,revision,controls);message=tr("waiting");
         }catch(IllegalArgumentException e){message=tr("invalid_input");}
+    }
+    private com.wormzjl.icheme.science.fluid.network.CoolingTower towerControl(){
+        if(!tower())return null;var t=menu.clientData().controls().tower();
+        return t.withControl(towerAuto?com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.TARGET_TEMPERATURE:com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.FAN_SPEED,
+            fields.get("towerSpeed").value()/100,fields.get("towerTemperature").si());
     }
     /** A controllable heat side's control as drafted (W4), null for another device: the set point of its mode (K, or the
      * duty in kW as W), the low limit (blank for none) and the manual share: an exchanger side's bypass in %; an air
@@ -539,6 +551,20 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private List<DeviceColumn.Meter> meters(){
         var data=menu.clientData();var view=data.view();var state=view.state();var rows=new ArrayList<DeviceColumn.Meter>();
         String t=temperatureUnit.symbol(),p=pressureUnit.symbol();
+        if(view.tower()!=null){
+            var rate=view.tower().rates();
+            rows.add(meter("inlet_temperature",rate==null||rate.inletFlow()==0?"—":temperatureValue(rate.inletTemperature()),t));
+            rows.add(meter("tower_basin_temperature",state==null?"—":temperatureValue(state.temperature()),t));
+            rows.add(new DeviceColumn.Meter("bottom_pressure",pressureValue(view.tank()==null?null:view.tank().bottomPressure()),p,tr("bottom_pressure.hint")));
+            rows.add(meter("tower_cooling_duty",rate==null?"—":value(rate.coolingDutyWatt()/1000),"kW"));
+            rows.add(meter("tower_return",rate==null?"—":value(flowRateUnit.display(rate.inletFlow())),flowRateUnit.unit("kg")));
+            rows.add(meter("tower_evaporation",rate==null?"—":value(flowRateUnit.display(rate.waterLoss())),flowRateUnit.unit("kg")));
+            if(view.tower().specification().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED){
+                rows.add(meter("fan_power",rate==null?"—":value(rate.fill().fanPowerWatt()/1000),"kW"));
+                rows.add(meter("tower_speed",rate==null?"—":value(rate.fill().speed()*100),"%"));
+            }
+            return List.copyOf(rows);
+        }
         // A heat side's burners and fans switch on its Control tab.
         if(fans()||burners())rows.add(meter(fans()?"fans_state":"burners_state",tr(data.controls().power()==FluidNetwork.Power.ON?"state_on":"state_off"),""));
         // A plain pipe's line reading (OWNER_TEST_REVIEW.md section 6): the stream it carries, as its gauge reads it.
@@ -611,6 +637,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** The Phases group: accepted passing material, stored vessel contents, configured generator feed, or the Overview's stream. */
     private DeviceColumn.Phases phases(){
+        if(tower())return null;
         var data=menu.clientData();var view=data.view();var state=view.state();var info=view.pipeInfo();var port=selectedPort();
         // A heat unit's selected stream (the Overview's switch) sets the phase split shown.
         double[] volumes=port!=null?port.phaseVolumes():info!=null?info.contents().phaseVolumes():state!=null?state.phaseVolumes():new double[3];
@@ -634,7 +661,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var opening=data.valve()==null?null:new DeviceColumn.Opening(data.valve().opening(),data.valve().status());
         String junction=pipe()&&view.pipeInfo().junction()?tr("junction",view.pipeInfo().connections().size()):null;
         // A paired heat side leads with its side selector, as its Control tab does.
-        var lead=heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
+        var lead=tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
         return new DeviceColumn.Input(data.kind(),canEdit(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
             view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters());
     }
@@ -671,7 +698,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         String face=tr("face."+outlet.face().name().toLowerCase(Locale.ROOT));
         return switch(outlet.port()){
             case VAPOR->tr("outlet.top",face);
-            case BULK->tr("outlet.side",face);
+            case SPRAY,BULK->tr("outlet.side",face);
             case LIQUID,BOOT_WATER,BOOT_HC->outlet.head()>0?tr("outlet.bottom_head",face,pressureUnit.format(outlet.head())):tr("outlet.bottom",face);
             case OVERFLOW->tr("outlet.overflow",face);
         };
@@ -700,11 +727,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** A held low limit and a heater's shortfall, as {@code FluidWorldAuthority} writes them (K). */
     private static final java.util.regex.Pattern LOW_LIMIT=java.util.regex.Pattern.compile("LOW LIMIT: the outlet is held at ([0-9.]+) K"),
-        DUTY_SHORT=java.util.regex.Pattern.compile("DUTY INSUFFICIENT: outlet ([0-9.]+) K below the set point"),SINCE=java.util.regex.Pattern.compile("since ([0-9.]+) s");
+        DUTY_SHORT=java.util.regex.Pattern.compile("DUTY INSUFFICIENT: outlet ([0-9.]+) K below the set point"),SINCE=java.util.regex.Pattern.compile("since ([0-9.]+) s"),
+        COLUMN=java.util.regex.Pattern.compile("COLUMN: part of the column at (-?[0-9]+), (-?[0-9]+), (-?[0-9]+), running");
     private String clauseText(String clause){
         if(clause.startsWith("STEADY: no flow"))return tr("no_flow");
         if(clause.startsWith("STEADY:"))return tr("flowing");
         if(clause.equals("FULL")||clause.equals("READY"))return tr("ready");
+        // A unit a running column holds (C7): the column runs it.
+        var column=COLUMN.matcher(clause);if(column.matches())return tr("status.column",column.group(1),column.group(2),column.group(3));
         var low=LOW_LIMIT.matcher(clause);if(low.matches())return tr("status.low_limit",quantity(temperatureUnit.display(Double.parseDouble(low.group(1))),temperatureUnit.symbol()));
         // A difference: the same number in kelvin and in degrees Celsius.
         var short_=DUTY_SHORT.matcher(clause);if(short_.matches())return tr("status.duty_short",quantity(Double.parseDouble(short_.group(1)),temperatureUnit.symbol()));
@@ -892,6 +922,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         else if(action.equals("recover")){FluidNetwork.recoverSolids(menu,revision);message=tr("waiting");}
         else{
             switch(action){
+                case "tower:manual","tower:auto"->towerAuto=action.endsWith(":auto");
                 case "phase_basis"->phaseBasis=preferredPhaseBasis=phaseBasis.next();
                 case "power:off","power:on"->powerOn=action.endsWith(":on");
                 case "valve:mass"->valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW;

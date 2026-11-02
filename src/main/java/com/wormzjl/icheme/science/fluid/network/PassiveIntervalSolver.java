@@ -45,9 +45,9 @@ public final class PassiveIntervalSolver {
     }
     public record Result(PassiveNetwork graph,double advancedSeconds,double[] averageMassFlows,int acceptedSubsteps,int rejectedSubsteps,
                          double pumpWorkJoule,List<ConservativeTransport.BoundaryTransfer> boundaries,Map<String,Integer> rejectionReasons,
-                         List<FlowControl.Mode> endpointModes,double[] endpointHeads,double[] endpointFlows,List<PipeTransfer> pipeTransfers,List<PassiveStepSolver.PipeObservation> observations) {
-        public Result(PassiveNetwork graph,double advancedSeconds,double[] averageMassFlows,int acceptedSubsteps,int rejectedSubsteps,double pumpWorkJoule,List<ConservativeTransport.BoundaryTransfer> boundaries,Map<String,Integer> rejectionReasons,List<FlowControl.Mode> endpointModes,double[] endpointHeads,double[] endpointFlows,List<PipeTransfer> pipeTransfers){this(graph,advancedSeconds,averageMassFlows,acceptedSubsteps,rejectedSubsteps,pumpWorkJoule,boundaries,rejectionReasons,endpointModes,endpointHeads,endpointFlows,pipeTransfers,List.of());}
-        public Result {observations=List.copyOf(observations);averageMassFlows=averageMassFlows.clone();boundaries=List.copyOf(boundaries);rejectionReasons=Collections.unmodifiableMap(new LinkedHashMap<>(rejectionReasons));endpointModes=List.copyOf(endpointModes);endpointHeads=endpointHeads.clone();endpointFlows=endpointFlows.clone();pipeTransfers=List.copyOf(pipeTransfers);}
+                         List<FlowControl.Mode> endpointModes,double[] endpointHeads,double[] endpointFlows,List<PipeTransfer> pipeTransfers,List<PassiveStepSolver.PipeObservation> observations,Map<Long,TowerExchange.Rates> towers) {
+        public Result(PassiveNetwork graph,double advancedSeconds,double[] averageMassFlows,int acceptedSubsteps,int rejectedSubsteps,double pumpWorkJoule,List<ConservativeTransport.BoundaryTransfer> boundaries,Map<String,Integer> rejectionReasons,List<FlowControl.Mode> endpointModes,double[] endpointHeads,double[] endpointFlows,List<PipeTransfer> pipeTransfers){this(graph,advancedSeconds,averageMassFlows,acceptedSubsteps,rejectedSubsteps,pumpWorkJoule,boundaries,rejectionReasons,endpointModes,endpointHeads,endpointFlows,pipeTransfers,List.of(),Map.of());}
+        public Result {towers=Map.copyOf(towers);observations=List.copyOf(observations);averageMassFlows=averageMassFlows.clone();boundaries=List.copyOf(boundaries);rejectionReasons=Collections.unmodifiableMap(new LinkedHashMap<>(rejectionReasons));endpointModes=List.copyOf(endpointModes);endpointHeads=endpointHeads.clone();endpointFlows=endpointFlows.clone();pipeTransfers=List.copyOf(pipeTransfers);}
         @Override public double[] averageMassFlows(){return averageMassFlows.clone();}
         @Override public double[] endpointHeads(){return endpointHeads.clone();}
         /** The mass flows (kg/s) of the interval's last accepted step: the flows at its end state, which the next job's first
@@ -74,7 +74,12 @@ public final class PassiveIntervalSolver {
      * without a read moves no heat.
      */
     public Result solve(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads) {
+        return solve(initial,duration,settings,checkpoint,startingStep,reads,Map.of());
+    }
+    /** That solve with each running column's port planned for the interval first ({@link PassiveStepSolver#ports}, batch 2026-10-28-column-operation). */
+    public Result solve(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads,Map<Long,PortPlan> ports) {
         var committed=PassiveNetwork.sizeJunctionHoldups(initial,model);
+        committed=implicit.ports(committed,ports,checkpoint);
         committed=implicit.couple(committed,reads,carriedFlows(committed),duration,checkpoint);
         // Owner decision D33, amended by D62: a transport closure is reconsidered at each interval start, so the interval
         // starts with every one read open, and every path reads that start: the rest test, the slice's inlet decision, the
@@ -316,7 +321,7 @@ public final class PassiveIntervalSolver {
         // transported mass.
         double normalizer=declared==null?duration:elapsed;
         for(int i=0;i<transferred.length;i++)transferred[i]/=normalizer;
-        return new Prefix(new Result(accepted,elapsed,transferred,acceptedCount,rejectedCount,work,boundaries,rejectionReasons,last.modes(),last.devicePressureChanges(),last.massFlows(),pipeTransfers.snapshot(),last.observations()),declared);
+        return new Prefix(new Result(accepted,elapsed,transferred,acceptedCount,rejectedCount,work,boundaries,rejectionReasons,last.modes(),last.devicePressureChanges(),last.massFlows(),pipeTransfers.snapshot(),last.observations(),last.towers()),declared);
     }
     /**
      * The share of a node's total amount below which a component is flushed at an accepted step (owner decision
@@ -418,7 +423,7 @@ public final class PassiveIntervalSolver {
     public void replayStart(PassiveNetwork graph,Result committed) {
         graph=PassiveNetwork.sizeJunctionHoldups(graph,model);
         coldSeed=null;coldSeedFor=null;
-        boolean continued=committed!=null&&PassiveStepSolver.sameStructure(graph,committed.graph())
+        boolean continued=committed!=null&&PassiveStepSolver.sameLines(graph,committed.graph())
                 &&committed.endpointModes().size()==graph.pipes().size()&&committed.endpointFlows().length==graph.pipes().size();
         implicit.replayStart(graph,continued?committed:null);
         // The start-of-step guard and the inlet check's hysteresis (decision D6) read the committed endpoint.

@@ -60,8 +60,8 @@ class V3PengRobinsonKernelTest {
     @Test
     void packageEnvelopeBoundsBothWilsonAndRigorousPaths() {
         PengRobinsonKernel kernel = V3PengRobinsonSession.kernelFor(V3Cdu17TiaJuanaPackage.INSTANCE);
-        assertThrows(IllegalArgumentException.class, () -> kernel.wilsonK(901.0, 250_000.0, new double[16]));
-        assertThrows(IllegalArgumentException.class, () -> kernel.wilsonK(500.0, 2_100_000.0, new double[16]));
+        assertThrows(IllegalArgumentException.class, () -> kernel.wilsonK(6001.0, 250_000.0, new double[16]));
+        assertThrows(IllegalArgumentException.class, () -> kernel.wilsonK(500.0, 1.1e9, new double[16]));
     }
 
     @Test

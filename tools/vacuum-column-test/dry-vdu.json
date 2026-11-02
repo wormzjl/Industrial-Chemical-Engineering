@@ -1,0 +1,14 @@
+{
+  "name": "dry-vdu",
+  "stages": 10,
+  "feedStage": 8,
+  "feedTemperatureK": 673.15,
+  "topPressurePa": 2000.0,
+  "nominalDropPa": 250.0,
+  "diameterM": 15.0,
+  "condenserTemperatureK": 333.15,
+  "refluxRatio": 0.5,
+  "steamMassFraction": 0.0,
+  "draws": [],
+  "pumparounds": []
+}

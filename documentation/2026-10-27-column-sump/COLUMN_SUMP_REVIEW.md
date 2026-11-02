@@ -1,6 +1,6 @@
 # Column sump enlargement: review
 
-Batch `2026-10-27-column-sump` · 2026-10-27 · owner request: "Enlarge the bottom sump of the distillation column so it looks more real, find some engineering drawings for reference". References: [COLUMN_SUMP_SURVEY.md](COLUMN_SUMP_SURVEY.md). Pictures: [figures/sump-before-after.png](figures/sump-before-after.png) (front, one scale), `sump-before-iso.png`, `sump-after-iso.png`.
+Batch `2026-10-27-column-sump` · 2026-10-27 · owner request: "Enlarge the bottom sump of the distillation column so it looks more real, find some engineering drawings for reference". References: [COLUMN_SUMP_SURVEY.md](COLUMN_SUMP_SURVEY.md). Pictures: [figures/sump-before-after.png](../../research/2026-10-27-column-sump/figures/sump-before-after.png) (front, one scale), `sump-before-iso.png`, `sump-after-iso.png`.
 
 ## 1. Expected behaviour
 

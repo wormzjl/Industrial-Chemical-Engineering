@@ -185,7 +185,7 @@ public final class EquipmentStructure {
             return;
         }
         FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
-            var record = world.placeVessel(position(level, node), ports(level, vessel), vessel.shape().volume(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry());
+            var record = world.placeVessel(position(level, node), ports(level, vessel), vessel.shape().volume(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),vessel.shape().kind().coolingTower()?vessel.shape().coolingTower():null);
             if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
         });
     }
@@ -288,6 +288,16 @@ public final class EquipmentStructure {
         return found;
     }
 
+    /** The heat sides registered at {@code vessel}'s nodes, by registry identity: a heat unit's sides (a column's condenser, C6b). */
+    public static List<Long> heatSides(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+        var sides = new ArrayList<Long>();
+        for (long id : heldAtNodes(world, level, vessel)) {
+            var r = world.registrations().get(id);
+            if (r != null && r.device().heat() != null) sides.add(id);
+        }
+        return sides;
+    }
+
     /** The identities registered at {@code vessel}'s nodes. */
     private static List<Long> heldAtNodes(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
         var ids = new ArrayList<Long>();
@@ -334,7 +344,7 @@ public final class EquipmentStructure {
         var shape = vessel.shape();
         var moved = device.withPlacement(position(level, node), ports(level, vessel)).withHeat(device.heat().withArea(sides.getFirst().area()));
         var spec = record.spec();
-        var respec = new FluidDeviceSpec(shape.volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), shape.levelHeight(), false, shape.fluidGeometry());
+        var respec = new FluidDeviceSpec(shape.volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), shape.levelHeight(), false, shape.fluidGeometry(), null);
         if (!moved.equals(device) || !respec.equals(spec)) world.edit(device.id(), record.revision(), moved, respec);
         for (var other : nodes)
             if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();
@@ -365,7 +375,7 @@ public final class EquipmentStructure {
 
     /** A floating-roof tank registers open to the atmosphere (batch 2026-10-21-floating-roof-tanks); a drum and a sphere closed. */
     private static boolean open(Vessel vessel) {
-        return vessel.shape().kind() == EquipmentShape.Kind.TANK;
+        return vessel.shape().kind() == EquipmentShape.Kind.TANK || vessel.shape().kind().coolingTower();
     }
 
     /** A reservoir's lowest inside cell, or a mover's suction nozzle cell ({@link ShapeRasterizer#fluidCell}). */
@@ -404,6 +414,7 @@ public final class EquipmentStructure {
                 case BULK -> PassiveNetwork.PhasePort.BULK;
                 case OVERFLOW -> PassiveNetwork.PhasePort.OVERFLOW;
             };
+            if(vessel.shape().kind().coolingTower())phase=switch(nozzles.get(port.nozzle()).role()){case HOT_WATER_INLET->PassiveNetwork.PhasePort.SPRAY;default->phase;};
             if(vessel.shape().boot())phase=switch(nozzles.get(port.nozzle()).role()){case BOOT_DRAIN->PassiveNetwork.PhasePort.BOOT_WATER;case LIQUID_OUTLET->PassiveNetwork.PhasePort.BOOT_HC;default->phase;};
             ports.add(new PhysicalFluidTopology.Port(position(level, cell), face, phase, role));
         }
@@ -485,6 +496,20 @@ public final class EquipmentStructure {
         return contains(vessel, position) ? vessel : null;
     }
 
+    /**
+     * The vessel whose origin is {@code origin}, or null. A round shell's origin corner is no cell of it: its bottom layer,
+     * which every vessel's cells reach, is searched for one of its shell cells within the widest vessel's reach.
+     */
+    public static @Nullable Vessel at(BlockGetter level, BlockPos origin) {
+        var vessel = find(level, origin);
+        if (vessel != null && vessel.origin().equals(origin)) return vessel;
+        for (int dx = 0; dx <= FIND_STEPS; dx++)
+            for (int dz = 0; dz <= FIND_STEPS; dz++)
+                if (level.getBlockEntity(origin.offset(dx, 0, dz)) instanceof EquipmentShellBlockEntity shell && shell.shape() != null && origin.equals(shell.origin()))
+                    return new Vessel(origin, shell.shape());
+        return null;
+    }
+
     /** The longest walk over interior cells: across the widest body, a column's or a floating-roof tank's. */
     private static final int FIND_STEPS = (int) Math.ceil(Math.max(EquipmentShape.MAX_COLUMN_DIAMETER, UnitDesign.of(EquipmentShape.Kind.TANK).maxSize())) + 2;
 
@@ -561,6 +586,7 @@ public final class EquipmentStructure {
         dismantling = true;
         try {
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(server, vessel);
+            if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.dismantled(server, vessel);
             if (level instanceof ServerLevel server && vessel.shape().fluidDevice()) unregister(server, vessel);
             var layout = ShapeRasterizer.layout(vessel.shape());
             for (var list : java.util.List.of(layout.shell(), layout.interior()))
@@ -842,7 +868,7 @@ public final class EquipmentStructure {
         var device = record.device();
         var spec = record.spec();
         world.edit(device.id(), record.revision(), device.withPlacement(position(level, node), ports(level, vessel)),
-                vessel.shape().kind().mover() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry()));
+                vessel.shape().kind().mover() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
     }
@@ -910,6 +936,12 @@ public final class EquipmentStructure {
         var at = Commands.argument("position", BlockPosArgument.blockPos());
         for (var kind : EquipmentShape.Kind.values()) {
             if (!kind.designed()) continue;
+            if(kind==EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER){
+                var size=Commands.argument("size",DoubleArgumentType.doubleArg(40,80)).executes(context->placeNaturalTower(context,EquipmentShape.Heading.NORTH));
+                for(var front:EquipmentShape.Heading.values())size.then(Commands.literal(front.name().toLowerCase(Locale.ROOT)).executes(context->placeNaturalTower(context,front)));
+                at.then(Commands.literal(kind.name().toLowerCase(Locale.ROOT)).then(size));
+                continue;
+            }
             var support = Commands.argument("support", IntegerArgumentType.integer(0, EquipmentShape.MAX_SUPPORT))
                     .executes(context -> placeUnit(context, kind, EquipmentShape.Heading.NORTH, false, 0));
             for (var front : EquipmentShape.Heading.values())
@@ -958,13 +990,21 @@ public final class EquipmentStructure {
         EquipmentShape shape;
         try {
             shape = EquipmentShape.designed(kind, DoubleArgumentType.getDouble(context, "size"), IntegerArgumentType.getInteger(context, "length"), front,
-                    IntegerArgumentType.getInteger(context, "support"), banked ? new ProcessUnit.Bank(IntegerArgumentType.getInteger(context, "parallel"),
+                    IntegerArgumentType.getInteger(context, "support"), banked&&!kind.coolingTower() ? new ProcessUnit.Bank(IntegerArgumentType.getInteger(context, "parallel"),
                             IntegerArgumentType.getInteger(context, "series")) : ProcessUnit.Bank.ONE, outlet);
+            if(banked&&kind==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)
+                shape=shape.withTowerBank(new com.wormzjl.icheme.science.equipment.TowerBank(IntegerArgumentType.getInteger(context,"parallel"),IntegerArgumentType.getInteger(context,"series")));
         } catch (IllegalArgumentException invalid) {
             context.getSource().sendFailure(Component.literal(invalid.getMessage()));
             return 0;
         }
         return place(context, shape, Integer.MAX_VALUE, kind.name().toLowerCase(Locale.ROOT) + " of " + shape.diameter() + " m");
+    }
+
+    private static int placeNaturalTower(CommandContext<CommandSourceStack> context,EquipmentShape.Heading front)throws CommandSyntaxException{
+        double diameter=DoubleArgumentType.getDouble(context,"size");
+        try{return place(context,EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,com.wormzjl.icheme.science.fluid.network.CoolingTower.naturalHeight(diameter),front,0),Integer.MAX_VALUE,"natural-draft tower");}
+        catch(IllegalArgumentException invalid){context.getSource().sendFailure(Component.literal(invalid.getMessage()));return 0;}
     }
 
     private static int place(CommandContext<CommandSourceStack> context, EquipmentShape shape, int rows, String name) throws CommandSyntaxException {

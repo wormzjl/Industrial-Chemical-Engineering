@@ -205,7 +205,7 @@ class V3ColumnInitializerTest {
         public V3FugacityResult fugacity(
                 double temperatureKelvin, double pressurePascal, double[] composition, Root phase,
                 V3ThermoWorkspace workspace) {
-            return new V3FugacityResult(phase, new double[] {0.0, 0.0}, 1.0, 0.0, 1, 0.0);
+            return new V3FugacityResult(phase, new double[] {0.0, 0.0}, phase == Root.LIQUID ? 0.01 : 1.0, 0.0, 1, 0.0);
         }
 
         @Override

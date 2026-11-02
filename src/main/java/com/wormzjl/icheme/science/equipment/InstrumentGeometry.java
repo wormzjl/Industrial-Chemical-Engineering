@@ -94,6 +94,13 @@ public final class InstrumentGeometry {
     /** Body and boot transmitter pads on the rear shell, separate from the existing front service taps. */
     public static List<Socket> levelSockets(EquipmentShape s){
         if(!s.reservoir())return List.of();
+        if(s.kind().coolingTower()){
+            var tower=s.coolingTower();boolean natural=tower.draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.NATURAL;
+            double x=natural?tower.width()/2+.5:tower.width()*tower.columns()/2;
+            double z=natural?tower.width()+.84:tower.width()*tower.rows()+.34;
+            var p=s.transform().point(new double[]{x,1,z});
+            return List.of(new Socket("level_body",p[0],p[1],p[2],false,false));
+        }
         double a=s.axis(),r=s.radius(),x=a,y=s.bottomTangent()+s.tangentLength()/2,z=a+r+.14;
         if(s.kind()==EquipmentShape.Kind.TANK){var plan=TankDesign.Plan.of(s.diameter(),(int)s.tangentLength());a=plan.a();x=a;y=s.fillHeight()/2;z=a+r+.14;}
         else if(s.kind()==EquipmentShape.Kind.SPHERE){var plan=SphereDesign.Plan.of(s.diameter(),s.support());a=plan.a();x=a;y=plan.yc();z=a+r+.14;}

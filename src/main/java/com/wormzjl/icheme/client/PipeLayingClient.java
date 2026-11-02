@@ -416,8 +416,8 @@ public final class PipeLayingClient {
     }
 
     /**
-     * Marks the ports of the equipment around the player: a square on each nozzle's flange face in its port class's
-     * colour, grey when a pipe is on it. Re-shown each tick from the client's index of port cells; at most
+     * Marks the ports of the equipment around the player: assembly nozzles keep their GUI colour with a grey frame when
+     * connected; other nozzles use their class colour, grey when connected. Re-shown from the client's port cells; at most
      * {@link #MAX_MARKS}, nearest first.
      */
     private static void ports(Level level, LocalPlayer player, Outliner outliner, Set<Object> shown) {
@@ -436,10 +436,14 @@ public final class PipeLayingClient {
         for (var mark : marks.subList(0, Math.min(MAX_MARKS, marks.size()))) {
             var slot = "icheme:port:" + mark.cell.asLong() + ":" + mark.face.ordinal();
             shown.add(slot);
-            int colour = connected(level, mark.cell, mark.face) ? PortColours.CONNECTED : PortColours.of(mark.port);
+            var shell = level.getBlockEntity(mark.cell) instanceof EquipmentShellBlockEntity cell ? cell : null;
+            boolean connected = connected(level, mark.cell, mark.face);
+            int assemblyColour = shell == null ? -1 : AssemblyToolClient.colour(shell, mark.face);
+            int colour = assemblyColour >= 0 ? assemblyColour : connected ? PortColours.CONNECTED : PortColours.of(mark.port);
             outliner.showAABB(slot, square(mark.cell, mark.face, faceCentre(mark.face), .3)).colored(colour).lineWidth(1 / 32F);
             // A watched assembly's port: a frame round the square (AssemblyToolClient).
-            int frame = level.getBlockEntity(mark.cell) instanceof EquipmentShellBlockEntity shell ? AssemblyToolClient.frame(shell, mark.face) : -1;
+            int frame = shell == null ? -1 : AssemblyToolClient.frame(shell, mark.face);
+            if (frame < 0 && assemblyColour >= 0 && connected) frame = PortColours.CONNECTED;
             if (frame < 0) continue;
             var framed = slot + ":frame";
             shown.add(framed);

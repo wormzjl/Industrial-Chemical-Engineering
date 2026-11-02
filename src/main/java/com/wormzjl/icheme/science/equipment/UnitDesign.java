@@ -149,6 +149,8 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.FLUIDIZED_BED_GASIFIER, new FluidizedBedGasifierDesign());
         DESIGNS.put(Kind.GRATE_BOILER, new GrateBoilerDesign());
         DESIGNS.put(Kind.FIXED_BED_GASIFIER, new FixedBedGasifierDesign());
+        DESIGNS.put(Kind.INDUCED_DRAFT_COOLING_TOWER,new CoolingTowerDesign(false));
+        DESIGNS.put(Kind.NATURAL_DRAFT_COOLING_TOWER,new CoolingTowerDesign(true));
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */

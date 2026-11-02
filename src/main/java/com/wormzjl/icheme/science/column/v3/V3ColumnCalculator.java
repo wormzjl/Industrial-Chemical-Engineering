@@ -26,8 +26,8 @@ import java.util.concurrent.CancellationException;
  * {@link V3ColumnOutcome.Success} can be returned.</p>
  */
 public final class V3ColumnCalculator {
-    /** Cutoff-enabled formulation; the exact-off path retains the legacy revision in its digest. */
-    public static final String FORMULATION_REVISION = "v3-dry-mesh-r24-flash-trace";
+    /** Cutoff-enabled publication identity, including physical phase admission and dry upper sections. */
+    public static final String FORMULATION_REVISION = "v3-dry-mesh-r24-flash-trace-phase-r1";
     private static final String LEGACY_FORMULATION_REVISION = "v3-dry-mesh-r23";
     public static final String ASSUMPTIONS_REVISION = "v3-dry-assumptions-r4";
     /** r2: free water is allowed on a tray, is immiscible with the hydrocarbon liquid, and is not side-drawn. */
@@ -923,6 +923,9 @@ public final class V3ColumnCalculator {
      */
     private static V3ColumnOutcome.Failure liquidSupplyScreen(V3ColumnInput input, double liquidSupplyScreenRatio) {
         V3LiquidSupplyScreen.Verdict verdict = V3LiquidSupplyScreen.evaluate(input);
+        // The measured wet-tray startup envelope does not cover the dry upper section of a zero-reflux
+        // column. Its exact liquid-supply bound still applies; the newly supported topology is solved.
+        if (specValue(input, V3ColumnSpecification.OrganicRefluxRatio.class) == 0.0) liquidSupplyScreenRatio = 0.0;
         if (!verdict.fires(liquidSupplyScreenRatio)) return null;
         return terminalFailure(V3SolverFailureCode.INFEASIBLE_SPECIFICATION,
                 V3LiquidSupplyScreen.detail(verdict, liquidSupplyScreenRatio),
@@ -1001,7 +1004,33 @@ public final class V3ColumnCalculator {
             }
             admitted = true;
             V3SolvePass pass;
+            V3SolvePass requestedColdFailure = null;
             pass = warmStartPass(input, problem, thermo, control, policy, strategy, warmStart);
+            // Preserve the authored phase layout before trying an auxiliary column. A pot has no
+            // smaller tray grid; a zero-reflux tower can lose its dry upper section in that auxiliary.
+            if (pass == null && (problem.topology().dryTopTrayCount() > 0 || input.stageCount() < 2)) {
+                pass = solveSingleProblem(problem, thermo,
+                        initializeForSolve(problem, thermo, V3ColumnInitializer.Mode.MATERIAL_CLOSED), control,
+                        "cold/phase-available/fine-fd", policy);
+                pass = correctCondenserPhase(pass, thermo, control, policy, condenserAttempts).pass();
+                if (!publishesSuccess(pass.attempt(), pass.audit())
+                        && (!input.sideDraws().isEmpty() || !input.pumparounds().isEmpty())) {
+                    V3ColumnInput baseInput = withoutPumparounds(withoutSideDraws(input));
+                    V3ColumnProblem baseProblem = V3ColumnProblemResolver.resolve(baseInput, condenserBranch);
+                    V3SolvePass base = solveSingleProblem(baseProblem, thermo,
+                            initializeForSolve(baseProblem, thermo, V3ColumnInitializer.Mode.MATERIAL_CLOSED), control,
+                            "cold/phase-available-base/fine-fd", policy);
+                    base = correctCondenserPhase(base, thermo, control, policy, condenserAttempts).pass();
+                    if (publishesSuccess(base.attempt(), base.audit())) {
+                        V3ColumnProblem target = V3ColumnProblemResolver.resolve(input, base.prepared().problem().topology().condenserPhaseBranch());
+                        pass = recoverWithDrawRamp(target, thermo, base, control, policy, condenserAttempts, true);
+                    }
+                }
+                if (!publishesSuccess(pass.attempt(), pass.audit())) {
+                    requestedColdFailure = pass;
+                    pass = null;
+                }
+            }
             if (pass == null) {
                 pass = requiresPressureContinuation(admission)
                         ? solvePressureContinuation(input, thermo, control, condenserBranch, policy, condenserAttempts,
@@ -1009,6 +1038,7 @@ public final class V3ColumnCalculator {
                         : solveStageContinuation(input, thermo, control, condenserBranch, policy, condenserAttempts,
                                 strategy);
             }
+            if (requestedColdFailure != null && !publishesSuccess(pass.attempt(), pass.audit())) pass = requestedColdFailure;
             if (!publishesSuccess(pass.attempt(), pass.audit())
                     && !hasCondenserPhaseMismatch(pass)
                     && condenserAttempts.allowsColdRecovery()
@@ -1339,6 +1369,11 @@ public final class V3ColumnCalculator {
         if (input.topPressurePascal() > PRESSURE_CONTINUATION_TRIGGER_PASCAL) {
             throw new IllegalArgumentException("V3 pressure continuation was requested outside its low-pressure lane");
         }
+        // A high-pressure auxiliary column can have a different phase topology from the vacuum request.
+        // Give the authored pressure its own cold solve before asking that auxiliary problem for a seed.
+        V3SolvePass direct = solveStageContinuation(input, thermo, control, condenserBranch, policy,
+                condenserAttempts, strategy);
+        if (publishesSuccess(direct.attempt(), direct.audit())) return direct;
         boolean steamRampRequired = !input.steamFeeds().isEmpty() || !input.pumparounds().isEmpty();
         V3ColumnInput continuationInput = steamRampRequired
                 ? withoutPumparounds(withoutSideDraws(withoutSteamWithSurrogateDuty(input))) : input;
@@ -1431,7 +1466,31 @@ public final class V3ColumnCalculator {
         } catch (V3ThermoException | IllegalArgumentException failure) {
             return previousState;
         }
-        return isLogCoordinateFeasible(problem, projected) ? projected : previousState;
+        if (!isLogCoordinateFeasible(problem, projected)) return previousState;
+        try {
+            double h = feedFlash(problem, thermo, control, SolvePolicy.OFF).referenceMolarEnthalpyJoulesPerMol();
+            if (!new V3AcceptanceAuditor(problem, thermo, h).interiorPhaseIdentity(previousState, workspace, control).passed()) return previousState;
+            if (problem.topology().dryTopTrayCount() == 0) return projected;
+            V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(problem, thermo, h);
+            V3MeshResidual before = evaluator.evaluate(previousState, workspace);
+            V3MeshResidual after = evaluator.evaluate(projected, workspace);
+            double beforeMerit = 0.0, afterMerit = 0.0;
+            double beforeEnergy = 0.0, afterEnergy = 0.0;
+            for (int row = 0; row < before.rows().size(); row++) {
+                double scale = before.rows().get(row).scale();
+                double a = before.rows().get(row).physicalValue() / scale;
+                double b = after.rows().get(row).physicalValue() / scale;
+                beforeMerit += a * a;
+                afterMerit += b * b;
+                if (before.rows().get(row).equation().family() == V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE) {
+                    beforeEnergy = Math.max(beforeEnergy, Math.abs(a));
+                    afterEnergy = Math.max(afterEnergy, Math.abs(b));
+                }
+            }
+            return afterMerit < beforeMerit && afterEnergy <= beforeEnergy ? projected : previousState;
+        } catch (V3ThermoException | IllegalArgumentException invalidEvaluation) {
+            return previousState;
+        }
     }
 
     private static boolean isLogCoordinateFeasible(V3ColumnProblem problem, V3DryMeshState state) {
@@ -1849,9 +1908,11 @@ public final class V3ColumnCalculator {
         V3ColumnInput input = requested.input();
         seedBase = Objects.requireNonNull(seedBase, "seedBase");
         if (!publishesSuccess(seedBase.attempt(), seedBase.audit())
-                || seedBase.prepared().problem().hasSideDraws() || seedBase.prepared().problem().hasSteamFeeds()
+                || seedBase.prepared().problem().hasSideDraws()
+                || (seedBase.prepared().problem().hasSteamFeeds()
+                        && !seedBase.prepared().problem().input().steamFeeds().equals(input.steamFeeds()))
                 || seedBase.prepared().problem().hasPumparounds()) {
-            throw new IllegalArgumentException("V3 feature ramp requires an accepted dry no-draw seed at requested geometry");
+            throw new IllegalArgumentException("V3 feature ramp requires an accepted no-draw, no-pumparound seed with matching steam");
         }
         String rampPath = seedBase.solvePath();
         V3SolvePass previous = seedBase;
@@ -1873,23 +1934,25 @@ public final class V3ColumnCalculator {
         int steamRampSteps = Math.max(4, Math.min(24, (int) Math.ceil(totalSteamMolPerSecond / 4.0)));
         List<RampStep> rampSteps = new ArrayList<>(rampSteps(input, steamRampSteps));
         if (policy.fastPublication()) rampSteps = new ArrayList<>(fastRampSteps(input, rampSteps));
+        boolean steamAnchored = !input.steamFeeds().isEmpty()
+                && seedBase.prepared().problem().input().steamFeeds().equals(input.steamFeeds());
         if (coupled) {
             // A different bounded homotopy from the same freshly accepted dry state. This
             // avoids an intermediate steam-only or heat-only state becoming a path barrier.
             rampSteps.clear();
             for(int step=1;step<=16;step++) {
                 double fraction=step/16.0;
-                rampSteps.add(new RampStep(input.steamFeeds().isEmpty()?0:fraction,
+                rampSteps.add(new RampStep(input.steamFeeds().isEmpty()?0:steamAnchored?1.0:fraction,
                         input.pumparounds().isEmpty()?0:fraction,input.sideDraws().isEmpty()?0:fraction,
                         fraction,"coupled-ramp","coupled feature ramp"));
             }
         }
         HeatSubdivisions subdivisions = new HeatSubdivisions();
         EnergyShiftLog energyShift = new EnergyShiftLog();
-        // The heat and steam fractions the seed profile currently belongs to. The dry surrogate seed carries
-        // no stage heat and no water, so both start at zero, and it is accepted by this method's precondition.
+        // A dry surrogate starts without heat or steam. A steam-anchored seed already carries the exact
+        // authored water source and only needs the side cuts and cooling ramped in.
         double seedHeatFraction = 0.0;
-        double seedSteamFraction = 0.0;
+        double seedSteamFraction = steamAnchored ? 1.0 : 0.0;
         boolean seedAccepted = true;
         double[] rungFeedEnthalpy = {Double.NaN, Double.NaN};
         double acceptedHeatFraction = 0.0;
@@ -2508,9 +2571,9 @@ public final class V3ColumnCalculator {
                 + ", residual=" + evidence.maximumScaledResidual();
     }
 
-    static String formulationRevision(double requestedCutoff) {
+    private static String legacyFormulationRevision(double requestedCutoff) {
         V3TruncationSupport.requireCutoff(requestedCutoff);
-        return requestedCutoff == 0.0 ? LEGACY_FORMULATION_REVISION : FORMULATION_REVISION;
+        return requestedCutoff == 0.0 ? LEGACY_FORMULATION_REVISION : "v3-dry-mesh-r24-flash-trace";
     }
 
     /**
@@ -2534,10 +2597,16 @@ public final class V3ColumnCalculator {
      * <p>A closure above the frozen default appends {@code -closure<mantissa>e<exponent>} (for example
      * {@code -closure1e-3}). Accepted states differ between closures — the whole point of the knob is that a
      * looser one accepts a state the default rejects — so the label, and therefore the digest, must differ.
-     * The default closure appends nothing and keeps every historical label byte for byte.</p>
+     * The physical phase revision precedes this optional closure suffix.</p>
      */
     static String formulationRevision(V3ColumnInput input, double requestedCutoff, double closureTolerance) {
-        return formulationRevisionWithoutClosure(input, requestedCutoff) + closureSuffix(closureTolerance);
+        return formulationRevisionWithoutClosure(input, requestedCutoff) + "-phase-r1" + closureSuffix(closureTolerance);
+    }
+
+    /** The trained wet-stage seed equations are unchanged; dry-stage layouts need a newly qualified model. */
+    static String initializationFormulationRevision(V3ColumnInput input) {
+        return specValue(input, V3ColumnSpecification.OrganicRefluxRatio.class) > 0.0
+                ? formulationRevisionWithoutClosure(input, 0.0) : formulationRevision(input, 0.0);
     }
 
     /** Canonical {@code -closureMeN} suffix, or the empty string at the frozen default closure. */
@@ -2567,7 +2636,7 @@ public final class V3ColumnCalculator {
             return (heat ? "v3-dry-mesh-r26-side-draws" : "v3-dry-mesh-r25-side-draws") + trace
                     + (heat ? HEAT_FORMULATION_SUFFIX : "");
         }
-        if (!heat) return formulationRevision(requestedCutoff);
+        if (!heat) return legacyFormulationRevision(requestedCutoff);
         return "v3-dry-mesh-r27" + trace + HEAT_FORMULATION_SUFFIX;
     }
 
@@ -2667,6 +2736,7 @@ public final class V3ColumnCalculator {
     private static PreparedAttempt prepareAttempt(
             V3ColumnProblem original, V3PengRobinsonThermo thermo, V3DryMeshState seed, SolvePolicy policy,
             V3WetTraySet currentWetTrays, boolean deriveWetTrays) {
+        seed = seedForTopology(original, seed);
         V3DryMeshState lifted = liftFloorSupport(original, thermo, seed);
         V3TruncationSupport support = V3TruncationSupport.derive(original, policy.attemptCutoff(), lifted);
         V3WetTraySet wetTrays = deriveWetTrays
@@ -2682,6 +2752,39 @@ public final class V3ColumnCalculator {
         }
         return new PreparedAttempt(problem, support, wetTrays,
                 wetTrays.seed(problem, support.projectSeed(original, lifted)));
+    }
+
+    /** Phase availability can change when a cooling rung wets a previously dry upper section. */
+    private static V3DryMeshState seedForTopology(V3ColumnProblem problem, V3DryMeshState seed) {
+        V3ColumnTopology topology = problem.topology();
+        double[][] liquid = V3ColumnInitializer.flows(seed, true);
+        double[][] vapor = V3ColumnInitializer.flows(seed, false);
+        boolean changed = false;
+        for (int node = 0; node < seed.nodeCount(); node++) {
+            double liquidTotal = 0.0;
+            for (double flow : liquid[node]) liquidTotal += flow;
+            double vaporTotal = 0.0, downstreamDraws = 0.0;
+            for (double flow : vapor[node]) vaporTotal += flow;
+            for (V3SideDrawSpec draw : problem.input().sideDraws()) if (draw.trayNumber() >= node) downstreamDraws += draw.molarFlowMolPerSecond();
+            double appearingLiquid = downstreamDraws + 0.01 * vaporTotal;
+            for (int c = 0; c < seed.componentCount(); c++) {
+                if (!topology.hasLiquidPhase(node) && liquid[node][c] != 0.0) {
+                    liquid[node][c] = 0.0;
+                    changed = true;
+                } else if (topology.hasLiquidPhase(node) && liquidTotal == 0.0
+                        && problem.condenserComponentPhases().hasLiquid(topology, node, c)) {
+                    liquid[node][c] = Math.max(componentFloor(problem, c),
+                            vaporTotal > 0.0 ? appearingLiquid * vapor[node][c] / vaporTotal : componentFloor(problem, c));
+                    changed = true;
+                }
+                if (!topology.hasVaporPhase(node) && vapor[node][c] != 0.0) {
+                    vapor[node][c] = 0.0;
+                    changed = true;
+                }
+            }
+        }
+        return changed ? new V3DryMeshState(topology, seed.componentCount(), liquid, vapor,
+                V3ColumnInitializer.temperatures(seed), V3ColumnInitializer.freeWaterFlows(seed)) : seed;
     }
 
     /**
@@ -3180,8 +3283,8 @@ public final class V3ColumnCalculator {
             temperatures[node] = source.temperatureKelvin(lower)
                     + fraction * (source.temperatureKelvin(upper) - source.temperatureKelvin(lower));
             for (int component = 0; component < components; component++) {
-                liquid[node][component] = source.liquidFlow(lower, component)
-                        + fraction * (source.liquidFlow(upper, component) - source.liquidFlow(lower, component));
+                liquid[node][component] = target.topology().hasLiquidPhase(node) ? source.liquidFlow(lower, component)
+                        + fraction * (source.liquidFlow(upper, component) - source.liquidFlow(lower, component)) : 0.0;
                 vapor[node][component] = source.vaporFlow(lower, component)
                         + fraction * (source.vaporFlow(upper, component) - source.vaporFlow(lower, component));
             }

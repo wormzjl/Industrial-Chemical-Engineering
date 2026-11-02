@@ -140,7 +140,8 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
                 || !catalog.samePhysics(input.packageId(),model.packageId,model.components)) return false;
         if (!input.componentBasis().componentIds().equals(model.components)                || input.stageCount() < 2 || input.stageCount() > 64 || input.feedStageNumber() < 1 || input.feedStageNumber() > input.stageCount()
                 || input.pumparounds().size() > 4 || input.sideDraws().size() > 3 || input.steamFeeds().size() > 2
-                || !model.formulationRevisions.contains(V3ColumnCalculator.formulationRevision(input, 0, V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE))) return false;
+                || !(model.formulationRevisions.contains(V3ColumnCalculator.initializationFormulationRevision(input))
+                        || model.formulationRevisions.contains(V3ColumnCalculator.formulationRevision(input, 0)))) return false;
         if (!compositionSupported(input.feedComponentMolarFlowsMolPerSecond())) return false;
         Design d = model.designConstraints;
         double bottom = input.topPressurePascal() + (input.stageCount() - 1) * input.stagePressureDropPascal();

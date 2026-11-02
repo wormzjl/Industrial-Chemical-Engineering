@@ -55,7 +55,7 @@ class PaintTest {
     @Test
     void bodyAndStructureMaterialsArePaintedTheRestKeepTheirColours() {
         var body = EnumSet.of(Mesh.Material.SHELL, Mesh.Material.HEAD, Mesh.Material.CLADDING, Mesh.Material.MACHINE, Mesh.Material.AC_RING,
-                Mesh.Material.AC_HEADER, Mesh.Material.AC_PLENUM, Mesh.Material.HEATER);
+                Mesh.Material.AC_HEADER, Mesh.Material.AC_PLENUM, Mesh.Material.HEATER, Mesh.Material.TOWER_PANEL, Mesh.Material.TOWER_LOUVER, Mesh.Material.TOWER_STACK);
         var structure = EnumSet.of(Mesh.Material.SUPPORT, Mesh.Material.STEELWORK);
         for (var material : Mesh.Material.values())
             assertEquals(body.contains(material) ? Paint.BODY : structure.contains(material) ? Paint.STRUCTURE : -1, material.channel(), material.name());

@@ -50,10 +50,17 @@ public final class RetainedSolver {
     public PassiveIntervalSolver.Result solve(FluidThermodynamics model,PassiveNetwork snapshot,double duration,
                                               PassiveIntervalSolver.Settings settings,Runnable checkpoint,
                                               java.util.Map<Long,com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read> reads) {
+        return solve(model,snapshot,duration,settings,checkpoint,reads,java.util.Map.of());
+    }
+    /** {@code ports}: each running column's port planned for the slice (batch 2026-10-28-column-operation). */
+    public PassiveIntervalSolver.Result solve(FluidThermodynamics model,PassiveNetwork snapshot,double duration,
+                                              PassiveIntervalSolver.Settings settings,Runnable checkpoint,
+                                              java.util.Map<Long,com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read> reads,
+                                              java.util.Map<Long,com.wormzjl.icheme.science.fluid.network.PortPlan> ports) {
         var solver=acquire(model);
         try {
             solver.replayStart(snapshot,committed);
-            return solver.solve(snapshot,duration,settings,checkpoint,Math.min(settings.initialStep(),duration),reads);
+            return solver.solve(snapshot,duration,settings,checkpoint,Math.min(settings.initialStep(),duration),reads,ports);
         }
         finally{ownership.release();}
     }

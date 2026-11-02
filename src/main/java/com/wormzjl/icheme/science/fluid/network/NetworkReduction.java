@@ -145,7 +145,7 @@ public final class NetworkReduction {
             stock|=node.kind()==PassiveNetwork.NodeKind.GENERATOR||node.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!PassiveStepSolver.holdsNoFluid(node);
             if(!node.fixed()&&flushable(node))return false;
             // An open vessel holding gas or liquid above its fill height gives it to the atmosphere (OpenVessel).
-            if(OpenVessel.releasing(node))return false;
+            if(OpenVessel.releasing(node)||node.inventory().tower()!=null&&!node.empty())return false;
             // A kettle's pool heated by its bundle (W7) moves heat whatever the hydraulics do.
             if(PassiveStepSolver.poolHeat(node)!=0)return false;
             if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!PassiveStepSolver.holdsNoFluid(node)&&Math.abs(PhaseLayout.wallRow(node.state(),node.inventory().wallCapacity()))>WALL_RESOLUTION)return false;
@@ -340,7 +340,7 @@ public final class NetworkReduction {
         return new PassiveIntervalSolver.Result(graph,duration,zero,1,0,0,List.of(),Map.of(),modes,new double[pipes],zero,
                 PipeTransfer.sample(graph,states,zero,duration));
     }
-    static PassiveIntervalSolver.Result observedRestInterval(PassiveNetwork graph,double duration,boolean[] refused,FluidThermodynamics model){var r=restInterval(graph,duration,refused);return new PassiveIntervalSolver.Result(r.graph(),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),r.boundaries(),r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),r.pipeTransfers(),PassiveStepSolver.PipeObservation.atRest(graph,model));}
+    static PassiveIntervalSolver.Result observedRestInterval(PassiveNetwork graph,double duration,boolean[] refused,FluidThermodynamics model){var r=restInterval(graph,duration,refused);return new PassiveIntervalSolver.Result(r.graph(),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),r.boundaries(),r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),r.pipeTransfers(),PassiveStepSolver.PipeObservation.atRest(graph,model),TowerExchange.atRest(graph,model));}
     /** The game's ambient: air (the network's nitrogen) at 298.15 K and {@link PhaseLayout#AMBIENT_PRESSURE} (A280). The
      * state an empty vessel shows (decision D54: its pressure, nothing it holds) and the ports of a disconnected filter. */
     public static FluidThermodynamics.State ambient(FluidThermodynamics model){return model.initialNitrogenCharge(1,298.15,PhaseLayout.AMBIENT_PRESSURE,()->{});}

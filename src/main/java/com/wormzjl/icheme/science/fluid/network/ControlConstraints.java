@@ -2,37 +2,80 @@ package com.wormzjl.icheme.science.fluid.network;
 
 import java.util.*;
 
-/** Structural dependence of local regulation rows and junction mass balances, without presentation data. */
+/**
+ * Which regulation rows a connection's junction mass balances leave free, without presentation data. Flow valves are
+ * settled by {@link #standing}, pressure valves on one node by {@link #dependent}.
+ */
 public final class ControlConstraints {
     private ControlConstraints(){}
-    private record Row(double[] values,BitSet controls){}
+    /** A plain series: the flow valves that junction balances make one flow, and that flow's row. */
+    private record Line(double[] row,List<Integer> valves){}
+    /** The pressure valves that share a node: each would set that node, so they hold their accepted openings. */
     public static BitSet dependent(PassiveNetwork graph){
-        int edges=graph.pipes().size();var result=new BitSet(edges);
-        if(graph.pipes().stream().filter(p->p.control() instanceof FlowControl.Valve v&&!v.bare()).count()<2)return result;
-        var basis=new Row[edges];
+        var result=new BitSet(graph.pipes().size());var shared=new HashMap<Integer,List<Integer>>();
+        for(int e=0;e<graph.pipes().size();e++){var p=graph.pipes().get(e);if(p.control() instanceof FlowControl.Valve valve&&!valve.bare()&&valve.pressureControl())shared.computeIfAbsent(p.first(),ignored->new ArrayList<>()).add(e);}
+        for(var group:shared.values())if(group.size()>1)for(int e:group)result.set(e);
+        return result;
+    }
+    /**
+     * The flow valves that stand fully open (owner decision 2026-11-02, "Lower target wins"). Flow valves in series carry one
+     * flow, so the lowest target regulates and the others stand open; a target of 0 is the lowest, and closes the line. The
+     * series' rows then go in ranked: a series holding a column's outlet port, one holding an inlet port, the others, each
+     * ascending by target. A row its predecessors already fix stands open too, and only that one, so in a branched group a
+     * port keeps its row. An outlet ranks first because only its valve bounds what its account gives; an inlet given more
+     * only holds more. Actual-volume rows depend on the local density, so they fix no constant mass flow and stay out.
+     */
+    public static BitSet standing(PassiveNetwork graph){
+        int edges=graph.pipes().size();var result=new BitSet(edges);var valves=new ArrayList<Integer>();
+        for(int e=0;e<edges;e++)if(graph.pipes().get(e).control() instanceof FlowControl.ControlValve v&&!v.bare()&&v.source()==FlowControl.ValveSource.MASS_FLOW)valves.add(e);
+        if(valves.size()<2)return result;
+        var basis=new double[edges][];
         for(int node=0;node<graph.reservoirs().size();node++)if(graph.reservoirs().get(node).junction()){
             double[] row=new double[edges];
             for(int e=0;e<edges;e++){var p=graph.pipes().get(e);if(p.first()==node)row[e]--;if(p.second()==node)row[e]++;}
-            insert(basis,row,new BitSet(edges));
+            insert(basis,row);
         }
-        var pressure=new HashMap<Integer,List<Integer>>();
-        for(int e=0;e<edges;e++){
-            var p=graph.pipes().get(e);if(!(p.control() instanceof FlowControl.Valve valve)||valve.bare())continue;
-            if(valve.pressureControl()){pressure.computeIfAbsent(p.first(),ignored->new ArrayList<>()).add(e);continue;}
-            // Actual-volume rows also depend on local density/pressure and are not constant mass constraints.
-            if(!(valve instanceof FlowControl.ControlValve v)||v.source()!=FlowControl.ValveSource.MASS_FLOW)continue;
-            double[] row=new double[edges];row[e]=1;var sources=new BitSet(edges);sources.set(e);
-            var dependent=insert(basis,row,sources);if(dependent!=null)result.or(dependent);
+        var lines=new ArrayList<Line>();
+        for(int e:valves){
+            double[] row=reduced(basis,unit(edges,e));Line line=null;
+            for(var l:lines)if(same(l.row(),row)){line=l;break;}
+            if(line==null)lines.add(line=new Line(row,new ArrayList<>()));
+            line.valves().add(e);
         }
-        for(var group:pressure.values())if(group.size()>1)for(int e:group)result.set(e);
+        Comparator<Integer> lowest=Comparator.comparingDouble(e->target(graph,e));lowest=lowest.thenComparingInt(e->rank(graph,e)).thenComparingInt(e->e);
+        var regulators=new ArrayList<Integer>();var ranks=new HashMap<Integer,Integer>();
+        for(var line:lines){
+            int regulator=Collections.min(line.valves(),lowest);regulators.add(regulator);
+            ranks.put(regulator,line.valves().stream().mapToInt(e->rank(graph,e)).min().orElseThrow());
+            for(int e:line.valves())if(e!=regulator)result.set(e);
+        }
+        regulators.sort(Comparator.<Integer>comparingInt(ranks::get).thenComparing(lowest));
+        for(int e:regulators)if(!insert(basis,unit(edges,e)))result.set(e);
         return result;
     }
-    private static BitSet insert(Row[] basis,double[] row,BitSet controls){
+    private static double target(PassiveNetwork graph,int e){return ((FlowControl.ControlValve)graph.pipes().get(e).control()).massTarget();}
+    /** 0 a column's outlet valve (a generator feeds the node it stands on), 1 its inlet valve, 2 any other. */
+    private static int rank(PassiveNetwork graph,int e){
+        var pipe=graph.pipes().get(e);
+        if(!(pipe.control() instanceof FlowControl.ControlValve v)||!PortPlan.COLUMN_SENSOR.equals(v.sensor()))return 2;
+        for(var p:graph.pipes())if(p.second()==pipe.first()&&graph.reservoirs().get(p.first()).kind()==PassiveNetwork.NodeKind.GENERATOR)return 0;
+        return 1;
+    }
+    private static double[] unit(int edges,int e){double[] row=new double[edges];row[e]=1;return row;}
+    /** Puts {@code row} in the basis. False: the basis already fixes it. */
+    private static boolean insert(double[][] basis,double[] row){
         for(int col=0;col<row.length;col++){
             if(Math.abs(row[col])<1e-10)continue;
-            if(basis[col]==null){double scale=row[col];for(int j=col;j<row.length;j++)row[j]/=scale;basis[col]=new Row(row,(BitSet)controls.clone());return null;}
-            double factor=row[col];for(int j=col;j<row.length;j++)row[j]-=factor*basis[col].values()[j];controls.or(basis[col].controls());
+            if(basis[col]==null){double scale=row[col];for(int j=col;j<row.length;j++)row[j]/=scale;basis[col]=row;return true;}
+            double factor=row[col];for(int j=col;j<row.length;j++)row[j]-=factor*basis[col][j];
         }
-        return controls;
+        return false;
     }
+    /** {@code row} with the basis taken out, its sign fixed: rows equal here carry one flow. */
+    private static double[] reduced(double[][] basis,double[] row){
+        for(int col=0;col<row.length;col++)if(basis[col]!=null&&Math.abs(row[col])>=1e-10){double factor=row[col];for(int j=col;j<row.length;j++)row[j]-=factor*basis[col][j];}
+        for(double value:row)if(Math.abs(value)>=1e-10){if(value<0)for(int j=0;j<row.length;j++)row[j]=-row[j];break;}
+        return row;
+    }
+    private static boolean same(double[] a,double[] b){for(int j=0;j<a.length;j++)if(Math.abs(a[j]-b[j])>=1e-10)return false;return true;}
 }

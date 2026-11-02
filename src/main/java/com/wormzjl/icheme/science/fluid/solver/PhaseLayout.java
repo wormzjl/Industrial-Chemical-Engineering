@@ -72,6 +72,12 @@ public final class PhaseLayout {
         junctionBasis=new int[components.length+(water?1:0)];
         System.arraycopy(components,0,junctionBasis,0,components.length);
         if(water)junctionBasis[components.length]=l.length;
+        // The last of this basis has no mixing row: the closure row alone states it. That row's sum stands near 1, where the
+        // Newton's difference step of a share under 1.1e-10 rounds away and leaves its column empty, so the largest share takes
+        // that place and every trace keeps a row of its own (a dry outlet line's old nitrogen, batch 2026-11-02-valve-hold).
+        int bulk=junctionBasis.length-1;double most=-1;
+        for(int index=0;index<junctionBasis.length;index++){int held=junctionBasis[index];double amount=held==l.length?seed.waterLiquid()+seed.waterVapor():l[held]+v[held];if(amount>=most){most=amount;bulk=index;}}
+        if(bulk>=0){int held=junctionBasis[bulk];junctionBasis[bulk]=junctionBasis[junctionBasis.length-1];junctionBasis[junctionBasis.length-1]=held;}
         liquidIndex=new int[l.length];vaporIndex=new int[l.length];amountIndex=new int[l.length];
         Arrays.fill(liquidIndex,-1);Arrays.fill(vaporIndex,-1);Arrays.fill(amountIndex,-1);
         int offset=0;

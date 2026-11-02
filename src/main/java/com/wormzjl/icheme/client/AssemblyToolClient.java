@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.assembly.AssemblyReport.PortReport;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.PortState;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
+import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
@@ -17,6 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -24,12 +26,14 @@ import java.util.TreeMap;
  * The laying tool's view of the column assemblies around the player (batch 2026-10-26-multi-machine-framework, plan
  * section 9, W7). While the player holds the tool the client watches them ({@link AssemblyNetwork.WatchPayload}): the
  * server sends each column's stored view and its changes on the engine's buckets. A watched port gets a frame around the
- * tool's square: in its class colour while its assembly still needs it, yellow on a misplaced part's ports; aiming at it
- * names its line. Render thread only.
+ * tool's square: its GUI colour while needed, grey once connected, yellow on a misplaced part's ports. The square itself
+ * keeps the GUI colour; aiming at it names its line. Render thread only.
  */
 public final class AssemblyToolClient {
     /** The watched columns' views, by master. */
     private static final Map<Long, AssemblyView> VIEWS = new TreeMap<>();
+    /** Drawing models only, shared by equal loaded designs; discarded with the watch or its next view. */
+    private static final Map<ColumnTrays, AssemblyDiagram> DIAGRAMS = new HashMap<>();
     /** The player who watches, or null: a new player (a respawn, another world) starts a new watch. */
     private static @Nullable LocalPlayer watching;
 
@@ -41,12 +45,14 @@ public final class AssemblyToolClient {
         if (player != null && holding) {
             if (watching == player) return;
             VIEWS.clear();
+            DIAGRAMS.clear();
             watching = player;
             PacketDistributor.sendToServer(new AssemblyNetwork.WatchPayload(true));
         } else if (watching != null) {
             boolean connected = player != null && player == watching;
             watching = null;
             VIEWS.clear();
+            DIAGRAMS.clear();
             if (connected) PacketDistributor.sendToServer(new AssemblyNetwork.WatchPayload(false));
         }
     }
@@ -56,6 +62,7 @@ public final class AssemblyToolClient {
         if (watching == null) return;
         if (view == null) VIEWS.remove(master);
         else VIEWS.put(master, view);
+        DIAGRAMS.clear();
     }
 
     /** What a watched report says of a port: its master and report, the slot its unit fills, and the port's own state. */
@@ -87,14 +94,38 @@ public final class AssemblyToolClient {
 
     /**
      * The frame around the tool's square on the port of {@code shell} facing {@code face}: yellow on a misplaced part,
-     * its class colour while its assembly still needs a pipe on it, or -1 for none.
+     * grey once connected, its GUI colour while needed (class colour for utilities without a GUI square), or -1 for none.
      */
     static int frame(EquipmentShellBlockEntity shell, Direction face) {
         var seen = seen(shell, face);
         if (seen == null) return -1;
         if (seen.slot.state().colour == AssemblyReport.Colour.YELLOW) return PortColours.MISPLACED;
+        if (seen.port != null && seen.port.state() == PortState.CONNECTED) return PortColours.CONNECTED;
         var port = shell.port(face);
-        return seen.port != null && (seen.port.state() == PortState.NEEDED || seen.port.state() == PortState.UTILITY) && port != null ? PortColours.of(port.port()) : -1;
+        if (seen.port == null || seen.port.state() != PortState.NEEDED && seen.port.state() != PortState.UTILITY || port == null) return -1;
+        int colour = colour(shell, face);
+        return colour >= 0 ? colour : PortColours.of(port.port());
+    }
+
+    /** The GUI colour of this nozzle, or -1 when it has no assembly square. The column's own ports need no report. */
+    static int colour(EquipmentShellBlockEntity shell, Direction face) {
+        var shape = shell.shape();
+        var port = shell.port(face);
+        var origin = shell.origin();
+        if (shape == null || port == null || origin == null) return -1;
+        if (shape.trays() != null && shape.trays().components() != null) {
+            var role = shape.nozzles().get(port.nozzle()).role();
+            int ordinal = 0;
+            for (int k = 0; k < port.nozzle(); k++) if (shape.nozzles().get(k).role() == role) ordinal++;
+            return PortColours.assembly(diagram(shape.trays()), ColumnBlueprint.COLUMN, role, ordinal);
+        }
+        var seen = seen(shell, face);
+        var trays = seen == null ? null : trays(seen.master, shell);
+        return trays == null || trays.components() == null ? -1 : PortColours.assembly(diagram(trays), seen.slot.slot(), seen.role, seen.ordinal);
+    }
+
+    private static AssemblyDiagram diagram(ColumnTrays trays) {
+        return DIAGRAMS.computeIfAbsent(trays, AssemblyDiagram::of);
     }
 
     /**
@@ -107,7 +138,7 @@ public final class AssemblyToolClient {
         var seen = seen(shell, face);
         var trays = seen == null ? null : trays(seen.master, shell);
         if (trays == null) return null;
-        var diagram = AssemblyDiagram.of(trays);
+        var diagram = diagram(trays);
         var mark = diagram.ports().stream().filter(m -> m.slot().equals(seen.slot.slot()) && m.role() == seen.role && (m.ordinal() < 0 || m.ordinal() == seen.ordinal))
                 .findFirst().orElse(null);
         var partner = mark == null ? null : diagram.part(mark.partner());

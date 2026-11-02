@@ -73,7 +73,10 @@ import java.util.Objects;
  * solves {@code pc + n_w R T / (V_gas(pc) - n_w B) = P}: up to {@link #PARTIAL_PRESSURE_FIXED_POINT_STEPS} fixed-point steps, each
  * accepted only on the bisection's stop test, else a bisection on {@code [1e-6 Pa, P]}
  * ({@link #PARTIAL_PRESSURE_BISECTIONS} halvings, stop at {@link #PARTIAL_PRESSURE_TOLERANCE}, accepted within
- * {@link #PARTIAL_PRESSURE_ACCEPTANCE}). Steam above the model's qualified partial pressure is answered and graded
+ * {@link #PARTIAL_PRESSURE_ACCEPTANCE}). {@code V_gas(pc)} can step over that root: one hydrocarbon is all vapour under its
+ * own vapour pressure and all liquid over it, and a mixture's vapour fraction ends at the flash's resolution. There the
+ * steam's own volume at {@code P - pc} closes the gas: the vapour of the step's open end, scaled to that volume, beside
+ * the rest as liquid. Steam above the model's qualified partial pressure is answered and graded
  * {@link EquilibriumResult.CoverageGrade#EXTRAPOLATED}. The split with branch pressures uses the stability test's
  * per-branch form and the vapour branch's shift {@code ln(pc/P) + (pc - P) c_i/(R T)} in the flash (the translation does
  * not cancel between two pressures). Ice ({@link FreeWaterIce}): below the melting line {@code T_m(P)} the condensed
@@ -90,7 +93,8 @@ import java.util.Objects;
  * specified volume; when Newton stalls, a nested search in {@code T} at the specified volume, each temperature solving
  * {@code V(P) = V_spec} in {@code ln P}; a bracket that closes at the box's pressure bound with the energy still short is
  * {@code NOT_CONVERGED} naming that bound. Steps the TP answer leaves undetermined (a pure hydrocarbon at its
- * equal-fugacity point, free water boiling or subliming at the state pressure, free water freezing at its melting line)
+ * equal-fugacity point, free water boiling or subliming at the state pressure where the hydrocarbons hold next to none
+ * of the gas, {@link #BOILS_ALONE_SHARE}, free water freezing at its melting line)
  * are determined from the balance once a bracket straddles the jump, {@code target = (1 - beta) x_1 + beta x_2}, at the
  * kernel's equal-fugacity temperature or pressure, the water model's saturation or the melting line
  * ({@link #freezingAtVolume} at a fixed volume and energy; pure water inside its triple point's triangle at that point,
@@ -163,6 +167,16 @@ public final class FluidTpEquilibrium {
      * bracket that closed on a larger jump of the residual found a step of the function, not its root.
      */
     public static final double SPECIFICATION_TOLERANCE = 1.0e-6;
+    /**
+     * The largest share of the gas the hydrocarbons may hold for the free water beside them to boil alone, at water's
+     * saturation with no hydrocarbon vapour ({@link #waterBoiling}). Above it they share the gas and the water leaves through
+     * the three-phase zone the TP answers resolve (crude with water at 2 bar: 12 to 14 mol of hydrocarbon vapour per 100,
+     * 11 to 17 K under the saturation). Below it the water boils at the wet liquid's bubble point, {@code y R T^2 / L} under
+     * the saturation (at this bound 30 mK at 1 bar, 90 mK at 60 bar), over a zone that can be narrower than the search's
+     * bracket: the step stays the water's. At 1e-4 the targets of a clean heavy cut were lost at 30 and 60 bar, its bracket
+     * closing on a step off the saturation that no balance answers.
+     */
+    private static final double BOILS_ALONE_SHARE = 1.0e-3;
     /** Consecutive halvings back toward the last evaluated state when a trial state has no TP answer. */
     private static final int MAXIMUM_RETREATS = 8;
     /** Largest step of an unbracketed pressure search, and of one UV Newton step, in {@code ln P}; in {@code ln T}. */
@@ -1404,8 +1418,8 @@ public final class FluidTpEquilibrium {
                     && Math.abs(step) <= tolerance * t) {
                 return outerAnswer(Specification.PH, result, target, Double.NaN, false, null, w);
             }
-            if (s.bracketed() && (s.width() <= tolerance * t || !w.wet && (w.presentCount == 1 && s.straddlesPureCoexistence()
-                    || pureCrystal(w) != null && s.straddlesCrystalStep())
+            if (s.bracketed() && (s.width() <= tolerance * t || w.presentCount == 1 && s.straddlesPureCoexistence()
+                    || !w.wet && pureCrystal(w) != null && s.straddlesCrystalStep()
                     || w.wet && (condensedStep(s.lowerResult, s.upperResult) || freezeStep(s.lowerResult, s.upperResult))
                     || binaryCrystal(w) != null && threePhaseDue(s, s.width() / t))) {
                 EquilibriumResult closed = closedPh(p, target, competition, w);
@@ -1452,8 +1466,9 @@ public final class FluidTpEquilibrium {
             return outerAnswer(Specification.PH, s.best(), target, Double.NaN, s.bestCoexistence(), null, w);
         }
         boolean crystalStep = !w.wet && pureCrystal(w) != null && s.endHoldsSolid();
-        if (crystalStep || !w.wet && w.presentCount == 1) {
+        if (crystalStep || w.presentCount == 1 && (!w.wet || s.straddlesPureCoexistence())) {
             EquilibriumResult answer = crystalStep ? pureCrystalStep(Specification.PH, t, p, target, closed, competition, w)
+                    : w.wet ? wetCoexistence(Specification.PH, s.lower, p, target, closed, competition, w)
                     : pureCoexistence(Specification.PH, t, p, target, closed, competition, w);
             if (answer != null) return outerAnswer(Specification.PH, answer, target, Double.NaN, true, null, w);
             if (!Double.isNaN(w.coexistenceX) || !closed) return null;
@@ -1464,10 +1479,13 @@ public final class FluidTpEquilibrium {
             if (!Double.isNaN(w.coexistenceX) || !closed) return null;
         } else if (w.wet && condensedStep(s.lowerResult, s.upperResult)) {
             double saturation = saturationTemperature(p, s.lower, s.upper, w);
-            if (!Double.isNaN(saturation)) {
-                EquilibriumResult answer = waterBoiling(Specification.PH, saturation, p, target, s.lowerResult, competition, w);
-                if (answer != null) return outerAnswer(Specification.PH, answer, target, Double.NaN, true, null, w);
+            EquilibriumResult answer = Double.isNaN(saturation) ? null
+                    : waterBoiling(Specification.PH, saturation, p, target, s.lowerResult, competition, w);
+            if (answer == null && w.presentCount == 1) {
+                answer = wetCoexistence(Specification.PH, s.lower, p, target, closed, competition, w);
+                if (answer == null && (!Double.isNaN(w.coexistenceX) || !closed)) return null;
             }
+            if (answer != null) return outerAnswer(Specification.PH, answer, target, Double.NaN, true, null, w);
         } else if (w.wet && freezeStep(s.lowerResult, s.upperResult)) {
             // WP4: the free water freezes at its melting temperature at this pressure, on the line itself.
             double melting = freeWater.ice().meltingTemperature(p);
@@ -2053,7 +2071,7 @@ public final class FluidTpEquilibrium {
         // beside the same free water (D40 H4; the water's own boiling and freezing are the cases below).
         if (crystalStep || w.presentCount == 1 && (!w.wet || s.straddlesPureCoexistence())) {
             EquilibriumResult answer = crystalStep ? pureCrystalStep(Specification.UV, t, p, v, closed, competition, w)
-                    : w.wet ? wetCoexistence(t, p, v, closed, competition, w)
+                    : w.wet ? wetCoexistence(Specification.UV, t, p, v, closed, competition, w)
                     : pureCoexistence(Specification.UV, t, p, v, closed, competition, w);
             if (answer != null) return foundOrHeld(answer, w);
             if (!Double.isNaN(w.coexistenceX) || !closed) return INNER_BELOW;
@@ -2070,6 +2088,11 @@ public final class FluidTpEquilibrium {
                     && y >= Math.min(s.lower, s.upper) - 1.0e-6 && y <= Math.max(s.lower, s.upper) + 1.0e-6) {
                 EquilibriumResult answer = waterBoiling(Specification.UV, t, saturation, v, s.upperResult, competition, w);
                 if (answer != null) return found(answer, true, w);
+            }
+            if (w.presentCount == 1) {
+                EquilibriumResult answer = wetCoexistence(Specification.UV, t, p, v, closed, competition, w);
+                if (answer != null) return foundOrHeld(answer, w);
+                if (!Double.isNaN(w.coexistenceX) || !closed) return INNER_BELOW;
             }
         } else if (w.wet && freezeStep(s.lowerResult, s.upperResult)) {
             // WP4: at fixed temperature below the triple point the ice lies at the low-pressure end, the liquid at the high
@@ -2169,50 +2192,61 @@ public final class FluidTpEquilibrium {
     }
 
     /**
-     * The one hydrocarbon of a wet feed at its equal-fugacity pressure at temperature {@code t} (UV, owner decision
-     * D40 A): the dry pure coexistence ({@link #pureCoexistence}) beside the free water as the rule's TP answers on both
-     * sides of the jump hold it, condensed at the state pressure (ice below the melting line), its steam in the gas at
-     * the condensed water's fugacity {@code p_w}, the hydrocarbon's vapour at {@code P - p_w}
-     * ({@link #coexistencePressure}). The vapour fraction from the volume balance
-     * {@code V = n [(1 - beta) v_L + beta v_V] + (n_w - beta n s) v_c}, {@code s = p_w v_V/(R T)}. Returns the answer when
-     * {@code beta} lies in [0, 1] (within the tolerance, or always when {@code clamp}); otherwise null with the jump's end
-     * on the target's side in {@code coexistenceX} ({@code ln P}) and {@code coexistenceResidual}, NaN when no
-     * equal-fugacity pressure was found or the gas would take all of the water as steam.
+     * The one hydrocarbon of a wet feed where its vapour pressure and the condensed water's fugacity {@code p_w} add up to
+     * the state pressure (UV, owner decision D40 A; PH): at temperature {@code t} the equal-fugacity pressure
+     * ({@link #coexistencePressure}), at pressure {@code p} the equal-fugacity temperature ({@link #coexistenceTemperature}),
+     * both from {@code t} and {@code p}. The dry pure coexistence ({@link #pureCoexistence}) beside the free water as the
+     * rule's TP answers on both sides of the jump hold it, condensed at the state pressure (ice below the melting line),
+     * its steam in the gas at {@code p_w}, the hydrocarbon's vapour at {@code P - p_w}. The vapour fraction from the energy
+     * or volume balance {@code X = n [(1 - beta) x_L + beta x_V] + (n_w - beta n s) x_c + beta n s x_s}, with
+     * {@code s = p_w v_V/(R T + p_w B)} and no volume of the steam's own: it fills the gas's. The gas takes all of the
+     * hydrocarbon or, up to {@code beta = n_w/(n s)}, all of the water if that runs out first. Returns the answer when
+     * {@code beta} lies in that span (within the tolerance, or always when {@code clamp}); otherwise null with the jump's
+     * end on the target's side in {@code coexistenceX} ({@code T} for PH, {@code ln P} for UV) and
+     * {@code coexistenceResidual}, NaN when no equal-fugacity point was found.
      */
-    private EquilibriumResult wetCoexistence(double t, double p, double v, boolean clamp, PhaseCompetition competition,
-                                             Workspace w) {
+    private EquilibriumResult wetCoexistence(Specification specification, double t, double p, double target, boolean clamp,
+                                             PhaseCompetition competition, Workspace w) {
         w.coexistenceX = Double.NaN;
-        p = coexistencePressure(t, p, w);
-        if (Double.isNaN(p)) return null;
+        boolean energy = specification == Specification.PH;
+        if (energy) t = coexistenceTemperature(t, p, w); else p = coexistencePressure(t, p, w);
+        if (Double.isNaN(t) || Double.isNaN(p)) return null;
         boolean frozen = frozen(t, p);
         double saturation = condensedPressure(t, p);
         double pc = p - saturation;
+        if (!(pc > 0.0)) return null;
         PhaseState liquid = evaluator.evaluate(t, p, w.feed, Root.LIQUID, w.phases, w.liquidState);
         PhaseState vapour = evaluator.evaluate(t, pc, w.feed, Root.VAPOR, w.phases, w.vaporState);
         w.outerKernel += 2;
-        double condensedVolume;
+        double condensedValue;
         if (frozen) {
-            condensedVolume = freeWater.ice().properties(t, p).volume();
+            CrystalReference.State ice = freeWater.ice().properties(t, p);
+            condensedValue = energy ? ice.enthalpy() : ice.volume();
         } else {
             freeWater.liquid(t, p, w.waterProperties);
-            condensedVolume = w.waterProperties[0];
+            condensedValue = energy ? w.waterProperties[1] : w.waterProperties[0];
         }
         double n = w.hydrocarbonTotal;
         double water = w.waterTotal;
         double steamPerMole = SteamVirial.moles(saturation, t, vapour.molarVolume());
-        double liquidEnd = n * liquid.molarVolume() + water * condensedVolume;
-        double vapourEnd = n * vapour.molarVolume() + (water - n * steamPerMole) * condensedVolume;
+        double steamValue = energy ? freeWater.vapor().enthalpy(t) + SteamVirial.residualEnthalpy(t, saturation) : 0.0;
+        double liquidValue = energy ? liquid.molarEnthalpy() : liquid.molarVolume();
+        double vapourValue = energy ? vapour.molarEnthalpy() : vapour.molarVolume();
+        double most = Math.min(1.0, water / (n * steamPerMole));
+        double liquidEnd = n * liquidValue + water * condensedValue;
+        double vapourEnd = liquidEnd + most * n * (vapourValue - liquidValue + steamPerMole * (steamValue - condensedValue));
         double gap = vapourEnd - liquidEnd;
-        double beta = (v - liquidEnd) / gap;
+        double beta = most * (target - liquidEnd) / gap;
         // The specification tolerance as a phase fraction.
-        double belowAllowance = SPECIFICATION_TOLERANCE * liquidEnd / gap;
-        double aboveAllowance = SPECIFICATION_TOLERANCE * vapourEnd / gap;
-        if (!clamp && (beta < -belowAllowance || beta > 1.0 + aboveAllowance) || !Double.isFinite(beta)) {
-            w.coexistenceX = DeterministicMath.log(p);
-            w.coexistenceResidual = DeterministicMath.log(v / (beta < 0.0 ? liquidEnd : vapourEnd));
+        double belowAllowance = SPECIFICATION_TOLERANCE * (energy ? w.total * R * t : liquidEnd) * most / gap;
+        double aboveAllowance = SPECIFICATION_TOLERANCE * (energy ? w.total * R * t : vapourEnd) * most / gap;
+        if (!clamp && (beta < -belowAllowance || beta > most + aboveAllowance) || !Double.isFinite(beta)) {
+            double end = beta < 0.0 ? liquidEnd : vapourEnd;
+            w.coexistenceX = energy ? t : DeterministicMath.log(p);
+            w.coexistenceResidual = energy ? end - target : DeterministicMath.log(target / end);
             return null;
         }
-        beta = Math.clamp(beta, 0.0, 1.0);
+        beta = Math.clamp(beta, 0.0, most);
         int only = w.present[0];
         double amount = w.feed[only];
         double vapourMoles;
@@ -2225,8 +2259,7 @@ public final class FluidTpEquilibrium {
             liquidMoles = (1.0 - beta) * amount;
             vapourMoles = amount - liquidMoles;
         }
-        double steam = vapourMoles * steamPerMole;
-        if (!(steam < water)) return null;
+        double steam = Math.min(vapourMoles * steamPerMole, water);
         double condensed = water - steam;
         List<PhaseAmounts> phases = new ArrayList<>(3);
         if (vapourMoles > 0.0) {
@@ -2239,7 +2272,7 @@ public final class FluidTpEquilibrium {
             amounts[basisOfComponent[only]] = liquidMoles;
             phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t, p, amounts, liquid.copy()));
         }
-        phases.add(condensedPhase(t, p, saturation, condensed, frozen, w));
+        if (condensed > 0.0) phases.add(condensedPhase(t, p, saturation, condensed, frozen, w));
         Classification hydrocarbon = liquidMoles == 0.0 ? Classification.SINGLE_VAPOR
                 : vapourMoles == 0.0 ? Classification.SINGLE_LIQUID : Classification.VAPOR_LIQUID;
         var split = freeWaterSplit(hydrocarbon, saturation, pc, steam > 0.0 ? saturation : 0.0, condensed, steam, frozen);
@@ -2247,34 +2280,51 @@ public final class FluidTpEquilibrium {
         String why = band ? bandReason(t, p, w, Double.NaN) : null;
         String note = "pure coexistence beside free water at the equal-fugacity point (" + t + " K, " + p + " Pa, the "
                 + (frozen ? "ice's" : "water's") + " fugacity " + saturation + " Pa): vapour fraction " + beta
-                + " from the volume balance";
+                + " from the " + (energy ? "energy" : "volume") + " balance";
         return converged(competition, Classification.FREE_WATER, phases, List.of(), diagnostics(w, null, band), why, split, note);
     }
 
     /**
      * The pure component's equal-fugacity temperature at {@code p}, from {@code t}: Newton on
      * {@code g = ln phi_L - ln phi_V}, {@code dg/dT = (h^R_V - h^R_L)/(R T^2)} (the translation cancels), bisection once
-     * both signs are seen; NaN when no liquid-vapour root pair is met or it does not converge.
+     * both signs are seen; NaN when no liquid-vapour root pair is met or it does not converge. Beside free water on the
+     * same condition as {@link #coexistencePressure}, with {@code dg/dT} gaining {@code Z_V (dp_w/dT)/P_c}.
      */
     private double coexistenceTemperature(double t, double p, Workspace w) {
         int only = w.present[0];
         double below = Double.NaN;
         double above = Double.NaN;
         for (int k = 0; k < COEXISTENCE_ITERATIONS; k++) {
+            double water = w.wet ? condensedPressure(t, p) : 0.0;
+            double partial = p - water;
+            if (!(partial > 0.0)) {
+                // At or over the water's boiling: no vapour beside it.
+                above = t;
+                if (Double.isNaN(below)) return Double.NaN;
+                t = 0.5 * (below + above);
+                continue;
+            }
             kernel.evaluate(t, p, w.feed, Root.LIQUID, w.mixture, w.first);
-            kernel.evaluate(t, p, w.feed, Root.VAPOR, w.mixture, w.second);
+            kernel.evaluate(t, partial, w.feed, Root.VAPOR, w.mixture, w.second);
             w.outerKernel += 2;
             double next;
-            if (w.first.physicalRootCount() < 2) {
+            boolean liquidRoot = w.first.physicalRootCount() > 1 || PhaseIdentification.liquidLike(w.first, t, p);
+            boolean vapourRoot = w.second.physicalRootCount() > 1 || !PhaseIdentification.liquidLike(w.second, t, partial);
+            if (!liquidRoot || !vapourRoot) {
                 // One root: the liquid-like one lies below the equal-fugacity temperature.
-                if (PhaseIdentification.liquidLike(w.first, t, p)) below = t; else above = t;
+                if (liquidRoot) below = t; else above = t;
                 if (Double.isNaN(below) || Double.isNaN(above)) return Double.NaN;
                 next = 0.5 * (below + above);
             } else {
                 double g = w.first.logFugacityCoefficient(only) - w.second.logFugacityCoefficient(only);
+                double slope = (w.second.residualEnthalpyJoulesPerMol() - w.first.residualEnthalpyJoulesPerMol()) / (R * t * t);
+                if (w.wet) {
+                    double rise = (condensedPressure(t * (1.0 + 1.0e-6), p) - water) / (1.0e-6 * t);
+                    g += water * translations[only] / (R * t) - DeterministicMath.log(partial / p);
+                    slope += w.second.compressibility() * rise / partial;
+                }
                 if (g == 0.0) return t;
                 if (g < 0.0) below = t; else above = t;
-                double slope = (w.second.residualEnthalpyJoulesPerMol() - w.first.residualEnthalpyJoulesPerMol()) / (R * t * t);
                 next = t - g / slope;
                 boolean bracketed = !Double.isNaN(below) && !Double.isNaN(above);
                 if (!(slope > 0.0) || !Double.isFinite(next) || bracketed && !(next > below && next < above)) {
@@ -2341,7 +2391,8 @@ public final class FluidTpEquilibrium {
     /**
      * A step of the free-water rule where the water boils (or, below its melting line, sublimes) at the state pressure:
      * one side has all water condensed (liquid or ice) and no gas at all (no hydrocarbons, or a hydrocarbon liquid
-     * without vapour), the other all water as steam.
+     * without vapour), the other all water as steam. With hydrocarbons this is what a bracket's ends read, step or no step
+     * between them: {@link #waterBoiling} decides, then {@link #wetCoexistence} for one hydrocarbon boiling with the water.
      */
     private static boolean condensedStep(EquilibriumResult condensedSide, EquilibriumResult steamSide) {
         if (condensedSide == null || steamSide == null) return false;
@@ -2367,10 +2418,9 @@ public final class FluidTpEquilibrium {
     }
 
     /**
-     * Water's saturation temperature at {@code p} near the closed bracket {@code [low, high]}, by bisection on the
-     * condensed water's vapour pressure ({@link #condensedPressure}: the ice's below the melting line, the liquid's above);
-     * NaN unless it lies within 1e-6 (relative) of the bracket, where the step is then water boiling (or subliming) at the
-     * state pressure.
+     * Water's saturation temperature at {@code p} near the bracket {@code [low, high]}, by bisection on the condensed
+     * water's vapour pressure ({@link #condensedPressure}: the ice's below the melting line, the liquid's above); NaN unless
+     * it lies within 1e-6 (relative) of the bracket.
      */
     private double saturationTemperature(double p, double low, double high, Workspace w) {
         double margin = 1.0e-6 * high;
@@ -2402,7 +2452,9 @@ public final class FluidTpEquilibrium {
      * into steam at {@code p_w = p} and condensed water (liquid, or ice below the melting line), the steam fraction from
      * the energy (PH) or volume (UV) balance. Null when the balance puts the fraction outside [0, 1] by more than the
      * specification tolerance (the target lies in a part of the step no state of the rule spans, which the caller types
-     * as not converged), and beside a competing crystal, whose hydrocarbons are not one liquid.
+     * as not converged), beside a competing crystal, whose hydrocarbons are not one liquid, and where the hydrocarbons would
+     * hold more than {@link #BOILS_ALONE_SHARE} of this split's gas: no state of the rule has the split and no step lies at
+     * the saturation, whatever a wide bracket's ends read.
      */
     private EquilibriumResult waterBoiling(Specification specification, double t, double p, double target,
                                            EquilibriumResult condensedSide, PhaseCompetition competition, Workspace w) {
@@ -2441,6 +2493,7 @@ public final class FluidTpEquilibrium {
             condensed = (1.0 - beta) * water;
             steam = water - condensed;
         }
+        if (liquid != null && hydrocarbonGasShare(liquid, steam, w) > BOILS_ALONE_SHARE) return null;
         List<PhaseAmounts> phases = new ArrayList<>(3);
         if (steam > 0.0) phases.add(gasPhase(t, p, p, 0.0, steam, null, w));
         if (liquid != null) phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t, p, expand(w.feed), liquid.copy()));
@@ -2451,6 +2504,20 @@ public final class FluidTpEquilibrium {
                 + (frozen ? "f_ice " : "p_sat ") + saturation + " Pa): steam fraction " + beta + " from the "
                 + (energy ? "energy" : "volume") + " balance";
         return converged(competition, Classification.FREE_WATER, phases, List.of(), diagnostics(w, null, false), null, split, note);
+    }
+
+    /**
+     * The most of a gas of {@code steam} the hydrocarbons beside it can hold, as a mole fraction: their liquid's vapour
+     * pressure as a share of its pressure, {@code sum_i x_i phi_i} (the gas's own fugacity coefficients are one at a low
+     * partial pressure), or all of them in that steam where they are too few to reach it.
+     */
+    private double hydrocarbonGasShare(PhaseState liquid, double steam, Workspace w) {
+        double share = 0.0;
+        for (int i = 0; i < count; i++) {
+            double x = liquid.moleFraction(i);
+            if (x > 0.0) share += x * DeterministicMath.exp(liquid.logFugacityCoefficient(i));
+        }
+        return Math.min(share, w.hydrocarbonTotal / (w.hydrocarbonTotal + steam));
     }
 
     /**
@@ -5443,7 +5510,8 @@ public final class FluidTpEquilibrium {
         double pc = high;
         int outcome = FAILED;
         double gasVolume = 0.0;
-        for (int iteration = 0; iteration < PARTIAL_PRESSURE_BISECTIONS; iteration++) {
+        boolean root = false;
+        for (int iteration = 0; iteration < PARTIAL_PRESSURE_BISECTIONS && !root; iteration++) {
             pc = (low + high) * 0.5;
             setBranches(t, p, pc, w);
             outcome = hydrocarbon(t, w);
@@ -5451,8 +5519,27 @@ public final class FluidTpEquilibrium {
             gasVolume = hydrocarbonVapour(t, outcome, w);
             // A gas volume the steam's co-volume fills (V <= n_w B, a positive B) is too small: infinite, pc too high.
             double residual = gasVolume > 0.0 ? pc + SteamVirial.partialPressure(water, t, gasVolume) - p : Double.POSITIVE_INFINITY;
-            if (Math.abs(residual) < PARTIAL_PRESSURE_TOLERANCE * p) break;
+            root = Math.abs(residual) < PARTIAL_PRESSURE_TOLERANCE * p;
             if (residual > 0.0) high = pc; else low = pc;
+        }
+        if (!root) {
+            // The bracket closed on a step of V_gas(pc): the steam's own volume closes the gas, in the vapour of its open end.
+            pc = low;
+            setBranches(t, p, pc, w);
+            outcome = hydrocarbon(t, w);
+            if (outcome == FAILED) return failed(t, p, competition, w);
+            gasVolume = hydrocarbonVapour(t, outcome, w);
+            double steamVolume = water * SteamVirial.molarVolume(t, p - pc);
+            if (steamVolume > 0.0 && steamVolume < gasVolume) {
+                double share = steamVolume / gasVolume;
+                for (int i = 0; i < count; i++) {
+                    w.vaporAmounts[i] *= share;
+                    w.liquidAmounts[i] = w.feed[i] - w.vaporAmounts[i];
+                }
+                evaluator.evaluate(t, p, w.liquidAmounts, Root.LIQUID, w.phases, w.liquidState);
+                w.kernelEvaluations++;
+                return wetResult(t, p, pc, SPLIT, water, 0.0, saturation, p - pc, frozen, competition, w);
+            }
         }
         double partial = gasVolume > 0.0 ? SteamVirial.partialPressure(water, t, gasVolume) : p;
         if (Math.abs(pc + partial - p) > PARTIAL_PRESSURE_ACCEPTANCE * p) {

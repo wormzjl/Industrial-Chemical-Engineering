@@ -24,7 +24,7 @@ Individual pipes connected on all six faces and had no manual cutoff accessory o
 
 - `gradlew.bat test --tests '*PipelineShutoffValveTest' jar --max-workers=4`: PASS, four tests, zero failures/errors/skips; dev client closed. Test time 0.264 s; Gradle reported 4 s. No full suite, GameTests, GUI or in-game checks.
 - Tests cover three axes, isolation/reopening, bypasses, unchanged charged equipment stock/id, queued toggles plus resizing, full checkpoint/unit round-trip of active/pending state, clocks/material and invalid-state rejection. Edits issue no forced solver command.
-- Actual production-mesh software sheets reviewed: [preview](renders/preview.png), [axes/sizes](renders/axes-and-sizes.png), [accessory/reducer details](renders/details.png). Eighteen axis/size/state cases plus preview/details; flat material lighting, not Minecraft shaders.
+- Actual production-mesh software sheets reviewed: [preview](../../research/2026-10-23-pipeline-shutoff-valve/renders/preview.png), [axes/sizes](../../research/2026-10-23-pipeline-shutoff-valve/renders/axes-and-sizes.png), [accessory/reducer details](../../research/2026-10-23-pipeline-shutoff-valve/renders/details.png). Eighteen axis/size/state cases plus preview/details; flat material lighting, not Minecraft shaders.
 - Offline harness/evidence: `tools/pipeline-shutoff-valve/`; no temporary tracked tooling. Code-guide contracts updated in fluid-runtime, equipment, client-gui, verification and README. Fluid constitutive science unchanged.
 
 ## Owner in-game checklist

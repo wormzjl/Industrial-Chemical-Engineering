@@ -15,6 +15,46 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-02
+
+### Added
+
+- Scalable water cooling towers: induced-draft banks of up to 16 bounded parallel cells with a metal basin and a closed casing, and hollow natural-draft towers; coupled convective/evaporative cooling, water-only atmospheric inlets, real basin storage, fan speed/target-temperature controls and conserved atmospheric exchange. Branch `codex/water-cooling-tower`; follow-up `kimi/water-cooler-fixes` (`dd71de17`, `98789eaa`, `44044ff2`, `aa8381cb`, `0491f75d`, `0fd07699`, `d97ca7db`) makes fan power speed-only for fixed geometry, displays both basin bottom pressures, removes basin evaporation, pins 80 °C natural-feed operation, extends induced-tower legs to the basin floor and gives the square fan deck and guarded fan full collision; it also reduces both basins to 2 m walls and 4/3 m working depth, scales default induced fill with cell width and encloses one packing layer. Natural towers use continuous inclined concrete V-struts anchored in the basin floor, a ring and internal grillage, an 8–16 m clear air inlet and a coarser shell mesh (68.5% fewer triangles at 80 m diameter); batch `2026-10-30-water-cooling-tower`.
+- Fan cell rebuilt from real towers: 8–14 m cells, a louvered inlet, a flared stack with a walkway round it, the drive and eliminators in view under the fan and a ladder on the wall, drawn as whole panels with baked sprites at about a quarter of the polygons; natural shells show lift lines and weathering instead of a repeating tile; a natural tower draws as one mesh of about 3,100 polygons, a twentieth of before, closes its top with a stiffening ring and stays standing while any of it is loaded (`2026-10-30-water-cooling-tower`).
+- Cooling tower review: the marched fill becomes a Merkel rating, with the marched and correlation forms detached to `tools/cooling-towers/fill-forms/`; a spray inlet passes gas to the basin vent so a line built with an empty basin primes itself, a pumped wrong material closes without a hold, unused tests and language keys removed (`2026-10-30-water-cooling-tower`, `BRANCH_REVIEW.md`).
+
+### Removed
+
+- Detached to tools: the marched fill, its table and the correlation (`tools/cooling-towers/fill-forms/`, re-attach steps in its README), the polygon counts (`tools/cooling-towers/poly-counts/`).
+
+## [0.18.1] - 2026-11-02
+
+### Fixed
+
+- TP flash of one hydrocarbon beside steam (commits `9b62a7ee`, `60e13ca5`; batch `2026-11-02-tp-steam-refusal`, review `TP_STEAM_REFUSAL_REVIEW.md`): a hydrocarbon's gas volume steps at its vapour pressure, so no partial pressure closed the gas where the water could not saturate it, and these ordinary steam distillation states were refused, as were a heavy oil's with a trace of the next cut. The steam's own volume now closes that step, and PH and UV answer the pair's one true step, where its vapour pressure and water's add up to the state pressure, up to where the water or the hydrocarbon liquid runs out.
+- PH and UV flashes on wet oil (commits `5e9fd2b9`, `be052e63`; batch `2026-11-02-ph-false-root`, review `PH_FALSE_ROOT_REVIEW.md`): free water boils alone, at its saturation with no hydrocarbon vapour, only where the hydrocarbons would hold at most 1e-3 of its gas. Crude with water no longer answers its energy at water's saturation, up to 20 K off with the enthalpy met; its hydrocarbon vapour and three-phase zone come back. Sweeps and lane in `tools/ph-false-root/`.
+
+## [0.18.0] - 2026-11-02
+
+### Added
+
+- Column operation: a built column runs in the plant from its assembly screen. Ports split the islands at the boundary valves, a split table from the last accepted solve turns the feed taken into products every 5 s, a new solve runs only when the input drifts, short inputs follow rule B (rule A where a solve fails), a water-cooled condenser gives its duty to its cooling water, and the Operation tab shows and sets it; ports share their colours between the GUI and the pipe laying tool, connected ports with grey outlines; facts schema 6, shape fields 4, protocol assembly-3 (C1 `d222c3cd3`, C2 `5199ab276`, core `805756de3`, C3 `df2dab397`, C4 `1834c0510`, C5 `97ca2d9c3`, C6 `de8f5c534`, C6b `6769f178d`, C7 `153ebe7c1`, `ae13f22d3`, test world `1f653486e`, `1352b8858`, `61955af21`, port colours `9cfc3a088`, `645e203d3`; batch `2026-10-28-column-operation`).
+
+### Changed
+
+- The C++ column library is the default (commit `9c5eb01f`; owner request; batch `2026-10-28-native-column-default`, review `NATIVE_DEFAULT_REVIEW.md`): the build packs it into the jar under `natives/<os>-<arch>/` when CMake is found (PATH, `-PnativeCmake` or Visual Studio), with a static runtime; the column loads it without a switch and runs the inside-out trial's Peng-Robinson outer pass in C++ unless `-Dicheme.native.thermo.batch=false`; without a library the Java path runs. Investigation probes in `tools/native-column-default/`.
+
+### Fixed
+
+- Zero-reflux columns support exactly dry upper stages; phase admission rejects collapsed liquid/vapor startup roots, continuation respects dry layouts, column caloric fits continue beyond data edges, and dry trays lose phantom liquid head; offline bulk CDU/VDU screens qualify convergence and preserve unresolved budget/coupling outcomes (`dba4ba45`, `3509f67a`; batch `2026-10-28-vacuum-column`).
+- A pump in line with a flow valve no longer holds its island: the valve keeps its target and the pump rides to its head limit, or stands at shutoff behind a closed valve. This reaches every plant with such a pair, not only a column (56b083702; merge code review, finding 2; batch `2026-10-28-column-operation`).
+- Flow valves in series carry the lower target and the others stand fully open; a column's port keeps its row in a branched group. Before, both lost their targets and held openings, so a second valve could drain a column's outlet (88600d64d; owner decision "Lower target wins"; merge code review, finding 1; batch `2026-10-28-column-operation`).
+- A flow valve no longer holds its island when it regulates a line its open pass chokes, when a new set point meets a hot liquid, or when a trace washes out of a dry junction: fluid solver (f730d61de, 83802e11e, 22fd0d2e4, c39e2bcd3; batch 2026-11-02-valve-hold).
+
+### Removed
+
+- Detached to tools: the outlet probe test and the trace instrumentation of the valve hold (`tools/valve-hold-probes/`, re-attach steps in its README).
+
 ## [0.17.1] - 2026-10-28
 
 ### Changed

@@ -41,9 +41,11 @@ final class FluidFacts {
      *  3 (batch 2026-10-26-process-control): a device spec's vessel geometry, the {@code control_valve} control.
      *  4 (batch 2026-10-26-multi-machine-framework): the world's basis retires its hash of the package data (written empty)
      *  and appends the data's identity, the declared revision of every record it reads (owner decisions 2026-10-26).
-     *  5 (batch 2026-10-27-heat-exchanger-design): a geometry's channel count, a heat side's unit on its registration. */
-    static final int SCHEMA=5;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 5. */
+     *  5 (batch 2026-10-27-heat-exchanger-design): a geometry's channel count, a heat side's unit on its registration.
+     *  6 (batch 2026-10-28-column-operation): a registration's column unit (the running column that holds it), the column units.
+     *  7 (batch 2026-10-30-water-cooling-tower): a device spec's cooling tower. */
+    static final int SCHEMA=7;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 7. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -166,13 +168,14 @@ final class FluidFacts {
      */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
                  WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
-                 List<String> removedMovers) {
+                 List<String> removedMovers,List<ColumnUnit> columns) {
         /** The ledger these facts and {@code events} make at {@code onlineTick}, its recoveries' solids named by {@code record}. */
         WorldTopologyLedger.Snapshot snapshot(long onlineTick,List<WorldTopologyLedger.Event> events,Function<Solid,SolidMaterial> record) {            var active=new HashMap<Long,WorldTopologyLedger.Registration>();
             for(var r:registrations)if(active.put(r.device().id(),r)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate device "+r.device().id());
             var pending=new HashMap<UUID,WorldTopologyLedger.RecoveredSolid>();
             for(var r:recoveries)if(pending.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,inventory(r.solids,record),r.energy))!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate recovery "+r.id);
-            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated);
+            var units=new HashMap<Long,ColumnUnit>();for(var u:columns)if(units.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate column unit "+u.id());
+            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units);
             new WorldTopologyLedger(snapshot);return snapshot;
         }
     }
@@ -188,6 +191,8 @@ final class FluidFacts {
             var restated=s.restated();
             f.record(q->q.f64(restated.energy()).list(new TreeMap<>(restated.removedMoles()).entrySet(),(e,m)->e.text(m.getKey()).f64(m.getValue()))
                     .list(new TreeMap<>(restated.removedSolids()).entrySet(),(e,m)->e.text(m.getKey()).f64(m.getValue())));
+            // Schema 6: the column units, by identity.
+            f.list(new TreeMap<>(s.columns()).values(),FluidFacts::column);
         });
     }
     static World world(byte[] data,int offset,int length) {
@@ -209,8 +214,9 @@ final class FluidFacts {
                 var moles=new HashMap<String,Double>();for(var e:q.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))moles.put(e.getKey(),e.getValue());
                 var solids=new HashMap<String,Double>();for(var e:q.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))solids.put(e.getKey(),e.getValue());
                 return valid(q,"restated totals",()->new WorldTopologyLedger.Restated(energy,moles,solids));});
+            var columns=f.list(List.<ColumnUnit>of(),FluidFacts::column);
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
-            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers));
+            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns);
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {
@@ -221,6 +227,17 @@ final class FluidFacts {
         for(var e:f.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))if(solids.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate solid total");
         required(moles,f,"total moles");return valid(f,"total",()->new WorldTopologyLedger.MaterialTotal(moles,energy,solids));
     }
+    private static void tower(Fields f,com.wormzjl.icheme.science.fluid.network.CoolingTower t) {
+        f.name(t.draft()).f64(t.width()).f64(t.fillDepth()).f64(t.height()).count(t.columns()).count(t.rows())
+            .name(t.mode()).f64(t.speed()).f64(t.setPoint());
+    }
+    private static com.wormzjl.icheme.science.fluid.network.CoolingTower tower(Record f) {
+        var draft=f.name(com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.class,null);
+        double w=f.f64(0),fill=f.f64(0),height=f.f64(0);int columns=(int)f.count(0),rows=(int)f.count(0);
+        var mode=f.name(com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.class,null);
+        double speed=f.f64(0),target=f.f64(298.15);
+        return valid(f,"cooling tower",()->new com.wormzjl.icheme.science.fluid.network.CoolingTower(draft,w,fill,height,columns,rows,mode,speed,target));
+    }
     private static void registration(Fields f,WorldTopologyLedger.Registration r) {
         var d=r.device();var g=d.geometry();var s=r.spec();
         f.count(d.id());position(f,d.position());f.name(d.kind()).name(d.facing())
@@ -229,9 +246,9 @@ final class FluidFacts {
                 .list(d.ports(),(q,p)->{position(q,p.cell());q.name(p.face()).name(p.port()).name(p.role());})
                 .record(q->q.f64(s.volume()).f64(s.temperature()).f64(s.pressure()).doubles(s.composition())
                         .record(feed->feed.f64(s.solids().volumeFraction()).list(s.solids().grades(),(e,grade)->e.text(grade.material()).text(grade.size().metres()).f64(grade.massShare())))
-                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())))
+                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower))
                 .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points())
-                .list(d.heat()==null?List.<HeatUnit>of():List.of(d.heat()),FluidFacts::heatUnit);
+                .list(d.heat()==null?List.<HeatUnit>of():List.of(d.heat()),FluidFacts::heatUnit).count(d.suspendedBy());
     }
     private static WorldTopologyLedger.Registration registration(Record f){return registration(f,null);}
     /**
@@ -255,7 +272,8 @@ final class FluidFacts {
                 return valid(g,"slurry grade",()->new SlurryFeed.Grade(material,new ParticleSize(size),share));});return valid(e,"slurry feed",()->new SlurryFeed(fraction,grades));});
             double levelHeight=q.f64(com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT);boolean open=q.bool(false);
             var shape=q.record(com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(volume,levelHeight),FluidFacts::geometry);
-            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape));});
+            var towers=q.list(List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of(),FluidFacts::tower);if(towers.size()>1)throw q.invalid("Multiple cooling towers");
+            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst()));});
         long revision=f.count(0);
         // Schema 2: a record written before joints existed connects through every face, as every pipe did then.
         long joints=f.count(PhysicalFluidTopology.ALL_FACES);if(joints>PhysicalFluidTopology.ALL_FACES)throw f.invalid("joints "+joints);
@@ -263,12 +281,55 @@ final class FluidFacts {
         long points=f.count(0);if(points>>>60!=0)throw f.invalid("lane points "+points);
         // Schema 5: a heat side's unit, an optional value; a record written before it has none.
         var heat=f.list(List.<HeatUnit>of(),FluidFacts::heatUnit);if(heat.size()>1)throw f.invalid("heat units "+heat.size());
+        // Schema 6: the column unit that holds the device (its identity); a record written before it is held by none.
+        long suspendedBy=f.count(0);
         required(position,f,"device position");required(kind,f,"device kind");required(facing,f,"device facing");required(geometry,f,"device geometry");required(spec,f,"device spec");
         if((kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR)&&ports.isEmpty()){
             if(removed==null)throw f.invalid("registration "+id+": a one-block "+kind.name().toLowerCase(Locale.ROOT)+", which this build no longer has");
             removed.add(kind.name().toLowerCase(Locale.ROOT)+" "+id+" at "+position.x()+", "+position.y()+", "+position.z());return null;
         }
-        return valid(f,"registration "+id,()->new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,filter,(int)joints,(int)slots,points,heat.isEmpty()?null:heat.getFirst()),spec,revision));
+        return valid(f,"registration "+id,()->new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,filter,(int)joints,(int)slots,points,heat.isEmpty()?null:heat.getFirst(),suspendedBy),spec,revision));
+    }
+    /**
+     * A column unit (schema 6, batch 2026-10-28-column-operation): its identity, origin, run switch, setpoints, stations
+     * (each a port by name, which one, its port device, its valve, its account and its solids) and totals.
+     */
+    private static void column(Fields f,ColumnUnit u) {
+        var s=u.setpoints();var t=u.totals();
+        f.count(u.id());position(f,u.master());f.bool(u.running())
+                .record(q->setpoints(q,s))
+                .list(u.stations(),(q,st)->{q.name(st.port()).count(st.index()).count(st.device()).count(st.valve()).record(a->account(a,st.account()));solids(q,Solid.of(st.solids()));})
+                .record(q->q.record(a->account(a,t.taken())).record(a->account(a,t.produced())).f64(t.reboiler()).f64(t.condenser()).f64(t.pumparounds()))
+                .count(u.condenser()).bool(u.leaving());
+    }
+    private static ColumnUnit column(Record f) {
+        long id=f.count(0);var master=position(f);boolean running=f.bool(false);
+        var setpoints=f.record(null,FluidFacts::setpoints);
+        var stations=f.list(List.of(),q->{var port=q.name(com.wormzjl.icheme.science.column.operation.Port.class,null);long index=q.count(0),device=q.count(0),valve=q.count(0);
+            var account=q.record(null,FluidFacts::account);required(port,q,"station port");required(account,q,"station account");var held=solids(q);
+            if(index>=ColumnUnit.MAXIMUM_STATIONS)throw q.invalid("station index "+index);
+            // Crystals melt where they arrive, so what an account holds is inert: its saved record is the whole material.
+            return valid(q,"column station",()->new ColumnUnit.Station(port,(int)index,device,valve,account,inventory(held,s->new SolidMaterial(s.id,s.revision,s.density,s.heatCapacity,null))));});
+        var totals=f.record(null,q->{var taken=q.record(null,FluidFacts::account);var produced=q.record(null,FluidFacts::account);double reboiler=q.f64(0),condenser=q.f64(0),pumparounds=q.f64(0);
+            required(taken,q,"taken total");required(produced,q,"produced total");
+            return valid(q,"column totals",()->new ColumnUnit.Totals(taken,produced,reboiler,condenser,pumparounds));});
+        long condenser=f.count(0);boolean leaving=f.bool(false);
+        required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
+        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condenser,null,leaving));
+    }
+    private static Fields setpoints(Fields q,com.wormzjl.icheme.science.column.operation.Setpoints s) {
+        return q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())
+                .doubles(s.steamPerFeed()).doubles(s.drawsPerFeed()).doubles(s.pumparoundsPerFeed());
+    }
+    private static com.wormzjl.icheme.science.column.operation.Setpoints setpoints(Record q) {
+        double design=q.f64(0),rate=q.f64(0),condenser=q.f64(0),reflux=q.f64(0),reboiler=q.f64(0);
+        var steam=q.doubles(new double[0]);var draws=q.doubles(new double[0]);var pumparounds=q.doubles(new double[0]);
+        return valid(q,"column setpoints",()->new com.wormzjl.icheme.science.column.operation.Setpoints(design,rate,condenser,reflux,reboiler,steam,draws,pumparounds));
+    }
+    private static void account(Fields f,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account a){f.doubles(a.moles()).f64(a.energy());}
+    private static com.wormzjl.icheme.science.column.operation.ColumnCycle.Account account(Record f) {
+        var moles=f.doubles(null);double energy=f.f64(0);required(moles,f,"account moles");
+        return valid(f,"column account",()->new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(moles,energy));
     }
     /** A heat side's unit (schema 5): its unit and side by name, area, partner, control and heat in transit. */
     private static void heatUnit(Fields f,HeatUnit h) {
@@ -305,24 +366,69 @@ final class FluidFacts {
             default->throw new IllegalArgumentException("unknown control "+kind);
         });
     }
-    /** The topology unit's state: its queued events, each with the registrations it would install. */
-    static byte[] events(List<WorldTopologyLedger.Event> events) {
+    /**
+     * The topology unit's state: its queued events, each with the registrations it would install; then the running column
+     * units' engine state ({@link ColumnUnit.State}), by unit. A checkpoint written before the column states has none.
+     */
+    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns) {
+        var states=new ArrayList<ColumnUnit>();for(var u:columns.values())if(u.state()!=null)states.add(u);states.sort(Comparator.comparingLong(ColumnUnit::id));
         return section(f->f.list(events,(q,event)->{uuid(q,event.id());q.count(event.tick());
             q.list(event.edits(),(e,edit)->e.count(edit.id()).list(edit.replacement()==null?List.<WorldTopologyLedger.Registration>of():List.of(edit.replacement()),FluidFacts::registration));
             var touched=new ArrayList<>(event.touched());Collections.sort(touched);q.list(touched,(t,id)->t.count(id));
             var recovery=event.recovery();
             q.list(recovery==null?List.<WorldTopologyLedger.Recovery>of():List.of(recovery),(r,v)->r.count(v.filterId()).list(v.player()==null?List.<UUID>of():List.of(v.player()),FluidFacts::uuid));
-        }));
+        }).list(states,(q,u)->columnState(q.count(u.id()),u.state())));
     }
-    static List<WorldTopologyLedger.Event> events(byte[] data,int offset,int length) {
-        return read(data,offset,length,"state of the topology unit",f->f.list(List.of(),q->{
-            var id=required(uuid(q),q,"event identity");long tick=q.count(0);
-            var edits=q.list(List.of(),e->{long device=e.count(0);var replacement=e.list(List.of(),FluidFacts::registration);if(replacement.size()>1)throw e.invalid("two replacements");
-                return valid(e,"edit",()->new WorldTopologyLedger.Edit(device,replacement.isEmpty()?null:replacement.getFirst()));});
-            var touched=new HashSet<Long>();for(long t:q.list(List.<Long>of(),t->t.count(0)))if(!touched.add(t))throw q.invalid("duplicate touched device");
-            var recovery=q.list(List.of(),r->{long filter=r.count(0);var player=r.list(List.of(),FluidFacts::uuid);return valid(r,"recovery",()->new WorldTopologyLedger.Recovery(filter,player.isEmpty()?null:player.getFirst()));});
-            return valid(q,"event",()->new WorldTopologyLedger.Event(id,tick,edits,touched,recovery.isEmpty()?null:recovery.getFirst()));
-        }));
+    static byte[] events(List<WorldTopologyLedger.Event> events){return topologyState(events,Map.of());}
+    /** A topology unit's state: its events, and the column states that validate (one that does not is dropped: that unit solves again). */
+    record TopologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit.State> columns) {}
+    static TopologyState topologyState(byte[] data,int offset,int length) {
+        return read(data,offset,length,"state of the topology unit",f->{
+            var events=f.list(List.<WorldTopologyLedger.Event>of(),q->{
+                var id=required(uuid(q),q,"event identity");long tick=q.count(0);
+                var edits=q.list(List.of(),e->{long device=e.count(0);var replacement=e.list(List.of(),FluidFacts::registration);if(replacement.size()>1)throw e.invalid("two replacements");
+                    return valid(e,"edit",()->new WorldTopologyLedger.Edit(device,replacement.isEmpty()?null:replacement.getFirst()));});
+                var touched=new HashSet<Long>();for(long t:q.list(List.<Long>of(),t->t.count(0)))if(!touched.add(t))throw q.invalid("duplicate touched device");
+                var recovery=q.list(List.of(),r->{long filter=r.count(0);var player=r.list(List.of(),FluidFacts::uuid);return valid(r,"recovery",()->new WorldTopologyLedger.Recovery(filter,player.isEmpty()?null:player.getFirst()));});
+                return valid(q,"event",()->new WorldTopologyLedger.Event(id,tick,edits,touched,recovery.isEmpty()?null:recovery.getFirst()));
+            });
+            var columns=new HashMap<Long,ColumnUnit.State>();
+            for(var entry:f.list(List.<Map.Entry<Long,ColumnUnit.State>>of(),q->{long id=q.count(0);var state=columnState(q);return new AbstractMap.SimpleEntry<>(id,state);}))
+                if(entry.getValue()!=null&&columns.put(entry.getKey(),entry.getValue())!=null)throw new IllegalArgumentException("Invalid saved topology state: duplicate column unit "+entry.getKey());
+            return new TopologyState(events,columns);
+        });
+    }
+    static List<WorldTopologyLedger.Event> events(byte[] data,int offset,int length){return topologyState(data,offset,length).events();}
+    private static Fields columnState(Fields f,ColumnUnit.State s) {
+        var t=s.table();var ref=t.reference();
+        var held=new double[t.held().length];for(int i=0;i<held.length;i++)held[i]=t.held()[i]?1:0;
+        return f.list(t.axis(),(q,id)->q.text(id))
+                .list(t.products(),(q,p)->q.name(p.port()).count(p.index()).doubles(p.recovery()).f64(p.temperature()).f64(p.pressure()))
+                .f64(t.reboilerPerFeed()).doubles(t.pumparoundPerFeed()).f64(t.condenserPerFeed())
+                .record(q->q.doubles(ref.feedFractions()).f64(ref.feedEnthalpy()).f64(ref.enthalpySlope()).doubles(ref.steamRatios()).f64(ref.alpha()).record(p->setpoints(p,ref.setpoints())).f64(ref.feedTemperature()).doubles(ref.steamTemperatures()))
+                .doubles(held).list(Arrays.asList(s.enthalpy()),(q,row)->q.doubles(row)).i64(s.tableTick()).i64(s.applied()).f64(s.solvedCondenser())
+                .list(s.levels(),(q,l)->q.count(l.device()).i64(l.tick()).f64(l.held()).f64(l.rate()).f64(l.molarMass()))
+                .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())));
+    }
+    /** A column unit's engine state as saved, or null where it does not validate. */
+    private static ColumnUnit.State columnState(Record f) {
+        var axis=f.list(List.<String>of(),q->q.text(""));
+        var products=f.list(List.<com.wormzjl.icheme.science.column.operation.SplitTable.Product>of(),q->{
+            var port=q.name(com.wormzjl.icheme.science.column.operation.Port.class,null);long index=q.count(0);var recovery=q.doubles(new double[0]);double t=q.f64(0),p=q.f64(0);
+            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Product(port,Math.toIntExact(index),recovery,t,p);}catch(RuntimeException invalid){return null;}});
+        double reboiler=f.f64(0);var pa=f.doubles(new double[0]);double condenser=f.f64(0);
+        var reference=f.record(null,q->{var z=q.doubles(new double[0]);double h=q.f64(0),slope=q.f64(0);var steam=q.doubles(new double[0]);double alpha=q.f64(0);
+            var setpoints=q.record(null,p->{try{return setpoints(p);}catch(IllegalArgumentException invalid){return null;}});double feedT=q.f64(Double.NaN);var steamT=q.doubles(new double[0]);
+            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Reference(z,h,slope,steam,alpha,setpoints,feedT,steamT);}catch(RuntimeException invalid){return null;}});
+        var held=f.doubles(new double[0]);var enthalpy=f.list(List.<double[]>of(),q->q.doubles(new double[0])).toArray(new double[0][]);long tableTick=f.i64(0),applied=f.i64(0);double solved=f.f64(0);
+        var levels=f.list(List.<ColumnUnit.State.Level>of(),q->{long device=q.count(0),tick=q.i64(0);double amount=q.f64(0),rate=q.f64(0),molar=q.f64(0);return new ColumnUnit.State.Level(device,tick,amount,rate,molar);});
+        var credits=f.list(List.<ColumnUnit.State.Credit>of(),q->{long device=q.count(0),tick=q.i64(0);
+            var product=q.record(null,a->{try{return account(a);}catch(IllegalArgumentException invalid){return null;}});return product==null?null:new ColumnUnit.State.Credit(device,tick,product);});
+        try {
+            var kept=new boolean[held.length];for(int i=0;i<kept.length;i++)kept[i]=held[i]!=0;
+            if(products.contains(null)||credits.contains(null))return null;
+            return new ColumnUnit.State(new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept),enthalpy,tableTick,applied,solved,levels,credits);
+        }catch(RuntimeException invalid){return null;}
     }
 
     // ---------------- an island ----------------
@@ -459,12 +565,34 @@ final class FluidFacts {
         for(var r:world.registrations) {
             var spec=r.spec();var composition=axis.map(spec.composition(),null);
             if(Arrays.stream(composition).sum()<=0){composition=FluidDeviceSpec.nitrogen(catalog).composition();warn("device "+r.device().id()+": its spec holds only components the data no longer has; it now holds nitrogen");}
-            if(restate)spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),spec.pressure(),composition,spec.solids(),spec.levelHeight(),spec.open(),spec.geometry());
+            if(restate)spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),spec.pressure(),composition,spec.solids(),spec.levelHeight(),spec.open(),spec.geometry(),spec.tower());
             registrations.put(r.device().id(),new WorldTopologyLedger.Registration(r.device(),spec,r.revision()));
         }
+        // The column units, their accounts on the current axis, and their queued Starts and Stops, which do not survive this
+        // path, settled on what stands. A component the data no longer has leaves, booked as removed, with its molar share of
+        // the account's energy: an account has no temperature to restate at (owner 2026-11-02, merge review finding 5, option A).
+        double energy=0;
+        var columns=new HashMap<Long,ColumnUnit>();
+        for(var saved:world.columns) {
+            var u=restate?saved.withStations(saved.running(),saved.stations().stream().map(s->s.withSolids(inventory(Solid.of(s.solids()),solid))).toList()):saved;
+            if(!axis.identity()) {
+                var stations=new ArrayList<ColumnUnit.Station>();
+                for(var s:u.stations()) {
+                    var held=s.account();var kept=axis.map(held.moles(),removed);
+                    double left=held.total()>0?held.energy()*Arrays.stream(kept).sum()/held.total():held.energy();
+                    energy+=left-held.energy();stations.add(s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(kept,left)));
+                }
+                var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
+                        new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
+                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condenser(),null,u.leaving());
+            }
+            columns.put(u.id(),settled(u,registrations));
+        }
+        var ports=new HashSet<Long>();
+        for(var u:columns.values())for(var s:u.stations())if(s.device()!=0)ports.add(s.device());
+        registrations.values().removeIf(r->r.device().port()&&!ports.contains(r.device().id()));
         // Vessel contents and filter cakes, by device identity.
         var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var cakes=new HashMap<Long,InlineFilter>();int restated=0,vessels=0;
-        double energy=0;
         for(var placed:islands) {
             var island=placed.island;var from=new Axis(island.components,basis.components(),restate?catalog.requirePackage(basis.packageId()):null);
             for(var v:island.at(placed.committed)) {
@@ -474,13 +602,13 @@ final class FluidFacts {
                 PassiveNetwork.Reservoir node;
                 if(!restate&&from.identity()) {
                     var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?model.solidState(v.temperature,v.pressure,solids):model.state(v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure).withSolids(solids);
-                    node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry()));
+                    node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower()));
                 } else {
                     var moles=from.map(v.moles,removed);restated++;
                     if(Arrays.stream(moles).sum()==0&&solids.empty())node=r.spec().initialize(r.device(),model,()->{});
                     else {
                         var state=Arrays.stream(moles).sum()==0?model.solidState(v.temperature,v.pressure,solids):model.flashTP(v.temperature,v.pressure,moles,()->{}).withSolids(solids);
-                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry()));
+                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower()));
                     }
                     energy+=node.inventory().internalEnergy()-v.energy;
                 }
@@ -513,10 +641,26 @@ final class FluidFacts {
             recoveries.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,solids,r.energy));
         }
         var restatedTotal=world.restated.plus(new WorldTopologyLedger.Restated(energy,removed.moles,removed.solids));
-        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal);
-        new WorldTopologyLedger(snapshot);
+        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns);
+        var ledger=new WorldTopologyLedger(snapshot);
+        // A dismantled column whose release was still queued leaves now, its accounts booked as destroyed.
+        for(var u:columns.values())if(u.leaving())ledger.removeColumn(u.id());
+        snapshot=ledger.snapshot();
         if(restate)IChemE.LOGGER.warn("fluid_checkpoint status=RESTATED vessels={} energy_delta_J={} removed={}",restated,energy,removed.empty()?"none":removed.summary());
         return new Rebuilt(new FluidCheckpointCodec.Checkpoint(entries),snapshot,vessels,restated);
+    }
+    /**
+     * Unit {@code u} as what stands in {@code registrations} leaves it, queued events gone: a unit that is stopped, leaves or
+     * misses a port device releases what it holds and its ports leave, so no device stays held by a stopped unit and no
+     * running unit misses a port. A running unit whose devices all stand keeps running.
+     */
+    private static ColumnUnit settled(ColumnUnit u,Map<Long,WorldTopologyLedger.Registration> registrations) {
+        boolean unplaced=u.running()&&u.stations().stream().anyMatch(s->s.device()!=0&&!registrations.containsKey(s.device()));
+        if(u.running()&&!unplaced&&!u.leaving())return u;
+        for(var r:List.copyOf(registrations.values()))if(r.device().suspendedBy()==u.id())
+            registrations.put(r.device().id(),new WorldTopologyLedger.Registration(r.device().withSuspendedBy(0),r.spec(),Math.addExact(r.revision(),1)));
+        for(var s:u.stations())if(s.device()!=0)registrations.remove(s.device());
+        return u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList());
     }
     /** A generator's or void's state from its spec; a spec outside the package's input box is clamped into it first (logged). */
     private static PassiveNetwork.Reservoir initialised(WorldTopologyLedger.Registration r,FluidThermodynamics model,MaterialCatalog catalog) {
@@ -526,7 +670,7 @@ final class FluidFacts {
             double t=Math.min(box.maximumTemperature(),Math.max(box.minimumTemperature(),spec.temperature())),p=Math.min(box.maximumPressure(),Math.max(box.minimumPressure(),spec.pressure()));
             if(t!=spec.temperature()||p!=spec.pressure()) {
                 warn("device "+d.id()+": its spec "+spec.temperature()+" K, "+spec.pressure()+" Pa lies outside the package's input box; it now reads "+t+" K, "+p+" Pa");
-                spec=new FluidDeviceSpec(spec.volume(),t,p,spec.composition(),spec.solids(),spec.levelHeight(),spec.open(),spec.geometry());
+                spec=new FluidDeviceSpec(spec.volume(),t,p,spec.composition(),spec.solids(),spec.levelHeight(),spec.open(),spec.geometry(),spec.tower());
             }
         }
         return spec.initialize(d,model,()->{});

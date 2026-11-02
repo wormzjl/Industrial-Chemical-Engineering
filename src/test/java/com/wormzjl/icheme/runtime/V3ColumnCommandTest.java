@@ -125,6 +125,6 @@ class V3ColumnCommandTest {
     }
 
     private static V3ColumnInput input() {
-        return V3TestInputs.cdu17Binary("test:command-snapshot");
+        return V3TestInputs.cdu17BoilingBinary("test:command-snapshot");
     }
 }
