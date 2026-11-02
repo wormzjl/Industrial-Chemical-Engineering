@@ -72,9 +72,10 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 ### GUI and in-game checks
 
 - Before any GUI work, read `.claude/skills/gui-creation/SKILL.md` and the reference it names for the job. It holds the GUI rules and build recipes. An agent with no skill loader reads it as a plain file.
-- Verify GUI work in the dev client through the langyo/minecraft-mod-mcp bridge. Use the `runMcpClient` lane: copy the pinned jar from `tools/minecraft-mcp-bridge/` into `<worktree>/run/mcp-client-mods/`, and put `.mcp.json` in the worktree root.
+- Do not start a dev-client check on your own. Judge GUI work by the gates, the compile and the software renders of `tools/heat-gui-renders/`. Where nothing else can judge (rendering, lighting, chunk sync), offer a check and let the owner start it.
+- A check the owner asks for runs through the langyo/minecraft-mod-mcp bridge. Use the `runMcpClient` lane: copy the pinned jar from `tools/minecraft-mcp-bridge/` into `<worktree>/run/mcp-client-mods/`, and put `.mcp.json` in the worktree root.
 - Never send real desktop keyboard or mouse input (`robot.ps1`, SendKeys) unless the owner is watching. If a check needs typed values and only desktop input can supply them, stop and report.
-- Make at most one in-game check per task, and only where the client is the only judge (rendering, lighting, chunk sync, GUI). Judge drawing-only changes by gates, sweeps and software renders.
+- Make at most one in-game check per task. Judge drawing-only changes by gates, sweeps and software renders.
 
 ## Git and worktrees
 

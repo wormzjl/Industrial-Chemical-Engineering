@@ -95,6 +95,7 @@ Status: Implemented 2026-10-28, released as 0.17.0 with the heat batch (merged i
 - 2026-10-28: the compressor's page fits at 2560 by 1440 (owner: "Trim the compressor"; of three trims rendered, "A"; plan section 20), commit `685abef2`, on main directly. A compressor with a ratio reads its pressure ratio, the pressure change on that meter's hover (350 to 330 px). Gates: `DeviceColumnTest` 6 (the compressor in the design-view test), `KitLayoutTest` 18, `HeatControlColumnTest` 5, `HeatDiagramTest` 5, `FluidGuiConsistencyTest` 5, no failures.
 - 2026-11-02: the `gui-creation` skill gained build recipes (owner: "generate a skill for this UI building task, and put them into the project folder"): `references/recipes.md`, `server-actions.md` and `fit-and-scale.md`, a table of owner comments, and rule 9 moved to the scale recipe. No code change.
 - 2026-11-02: `AGENTS.md` points to the skill (owner: "Yes, add it"): Codex does not scan `.claude/skills/`, so it reads the skill as plain files. The rules stay in the skill. Its two Claude app tool names are marked as the app's.
+- 2026-11-02: `AGENTS.md` takes the owner's rule on client checks (owner: "Yes, align it"; "that's enough client testing", 2026-10-18 and 2026-10-28): no dev-client check unless the owner starts it. It had said to verify GUI work in the dev client, which agents with no memory of that feedback would follow.
 
 ## Open
 
