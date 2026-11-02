@@ -1,5 +1,5 @@
 # Test suite and merge lane: what a merge costs, and what changed (2026-11-02)
-Owner: "every time a merge lands a full suite is required and it takes too long, test numbers and runtime needs to be minimized"; then "how about not running column test at all when nothing is changed". Tree `a3720726c` (0.18.1): 2071 test runs of 1991 test methods. Code: `c123e20d9`.
+Owner: "every time a merge lands a full suite is required and it takes too long, test numbers and runtime needs to be minimized"; then "how about not running column test at all when nothing is changed". Tree `a3720726c` (0.18.1): 2071 test runs of 1991 test methods. Code: `c123e20d9`; tests archived in `c1b35ce2d`.
 
 ## What a merge cost (head side, every merge, lanes of 2026-11-02)
 | Step | Before | Why |
@@ -38,12 +38,13 @@ Replay of the 21 releases since `f91c992d`: `columnGates` would have run on 7, `
 - Fluid GameTests 38/38. The column's printed values match the 20 tick run to the digits it logs (feed 46.0465, taken 334.399, condenser -2.46955e+06 W, warm 26.7287 K, accounts 7556.47).
 - `holdGates` holds its wall budget beside the groups, with all four tasks side by side.
 
-## Test count: proposal for the owner, not applied
-Five Opus reviews of the 558 methods added since the last review ([parts/](parts/), bar in [CRITERIA.md](CRITERIA.md)) propose 31 removals, 1.5 % of the suite, saving 2.25 s. The list is 20 firm and 11 weak. The weak ones: `aTanksRoofAndLadderAreDrawnApart`, `anOpenRouteCostsTheSearchAboutOneNodePerBlock`, `aPumpKeepsItsArrowsAtEverySize`, `eligibilityAndMeshesCoverBothAxesHeadingsAndDiameterExtremes`, `futureTargetsUseHeightGeometryAndRetainBootDatum`, `housingIsClosedAtObliqueAnglesAndEveryConnectorRemainsFinite`, `aLabelDrawsOnlyWhereItFitsAndIsAnchored`, `thePaletteFillsItsGap`, `aSkinDrawsTheMarksTheBarsAndTheTonesItsRowsName`, `heatingAndEitherFlowSignGiveTheSameMarch`, `bundledCrudeFractionsDarkenWithNormalBoilingPoint`. Several rest on a person reading software renders, which no gate runs. Recommendation: archive the 20 firm ones; the count falls little, and that is the true number.
+## Test count: 20 archived, 11 kept
+Five Opus reviews of the 558 methods added since the last review ([parts/](parts/), bar in [CRITERIA.md](CRITERIA.md)) proposed 31 removals, 1.5 % of the suite, saving 2.25 s. The owner approved the 20 firm ones; `c1b35ce2d` archived them to [tools/test-archive-2026-11-02/](../../tools/test-archive-2026-11-02/README.md). The suite went from 2071 to 2051 runs: exactly those 20 names, none added, 0 failures (`test` 1298, `holdGates` 66, `columnGates` 512 up to date, `equipmentGates` 175). The 11 weak ones stay: `aTanksRoofAndLadderAreDrawnApart`, `anOpenRouteCostsTheSearchAboutOneNodePerBlock`, `aPumpKeepsItsArrowsAtEverySize`, `eligibilityAndMeshesCoverBothAxesHeadingsAndDiameterExtremes`, `futureTargetsUseHeightGeometryAndRetainBootDatum`, `housingIsClosedAtObliqueAnglesAndEveryConnectorRemainsFinite`, `aLabelDrawsOnlyWhereItFitsAndIsAnchored`, `thePaletteFillsItsGap`, `aSkinDrawsTheMarksTheBarsAndTheTonesItsRowsName`, `heatingAndEitherFlowSignGiveTheSameMarch`, `bundledCrudeFractionsDarkenWithNormalBoilingPoint`. Several rest on a person reading software renders, which no gate runs. The count falls little, and that is the true number.
 
 ## Open items
 - Column time, not applied: 12 s SAFE and 26.8 s OWNER in [parts/column-time.md](parts/column-time.md). Skipping saves more; the memo now works, as `columnGates` keeps every column test in one JVM.
 - Geometry caches hold 64 entries, and `everySize()` overflows them, so each sweep rebuilds what the last one built: about 20 s when the group runs. It needs a production switch, so it is left.
 - `HoldClassWorldsTest` keeps a real 2 s wall budget (`EventPathWorld`), so a heavily loaded machine can still hold it. `ExchangerCouplingTest` uses 30 s.
 - Open branches: a new test in a group that loads a class outside its list fails loudly until the list is extended. The cooling tower branch will need this.
-- Code guide: verification, fluid-runtime. Tool folders: `tools/merge-lane/`.
+- `FlowsheetPainter.rounded` has no caller since `c1b35ce2d`. It stays: removing product code was not part of the request.
+- Code guide: verification, fluid-runtime, equipment, pipe-laying. Tool folders: `tools/merge-lane/`, `tools/test-archive-2026-11-02/`.

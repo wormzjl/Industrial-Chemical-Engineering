@@ -57,6 +57,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [pipeline-tool/](pipeline-tool/README.md) | Pipeline tool placement, client-startup and integration evidence; no harness | `2026-10-23-pipeline-tool` | Archived 2026-10-23 |
 | [stale-worktrees-archive/](stale-worktrees-archive/README.md) | Restore kit of the 2026-10-21 branch and worktree cleanup (36 branch tips, 11 dirty worktrees) | housekeeping 2026-10-21 | Archived 2026-10-21 |
 | [test-archive-2026-10-21/](test-archive-2026-10-21/README.md) | Tests archived by the test review, with source copies and a re-attach patch | `2026-10-21-test-review` | Archived 2026-10-21 (`d13e72d1`) |
+| [test-archive-2026-11-02/](test-archive-2026-11-02/README.md) | Tests archived by the test suite review, with source copies and a re-attach patch | `2026-11-02-test-suite-optimization` | Archived 2026-11-02 (`c1b35ce2d`) |
 | [floating-roof-tanks/](floating-roof-tanks/README.md) | Open-vessel solver impact: bundled hold fuzz with open tanks, traces and prototypes | `2026-10-21-floating-roof-tanks` | Concluded 2026-10-26 (batch in 0.12.0) |
 | [storage-vessel-renders/](storage-vessel-renders/README.md) | Software renders of the floating-roof tank and the storage sphere | `2026-10-21-floating-roof-tanks` | Concluded 2026-10-26 (batch in 0.12.0) |
 | [crystal-junction-holds/](crystal-junction-holds/README.md) | Thread t56: rule-off patches, form switch, 743 trace probes and logs | `2026-10-20-crystal-junction-holds` | Implemented 2026-10-20 |
