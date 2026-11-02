@@ -29,12 +29,12 @@ Stacks run 2–5.5 m, about 0.3 to 0.45 fan diameters ([listing](https://zhonghu
 | Top of stack, new | 8.6 | 9.2 | 11.7 | 12.3 | 13.9 | 16.4 |
 | Height / width | 2.2 | 1.5 | 1.5 | 1.2 | 1.2 | 1.2 |
 
-- **Shell.** The casing comes down to the rim on pilasters, so the box stops floating on legs. The inlet band is louvers in bays of about 2 m, slats sloping in. Long faces take louvers; end walls of a bank are solid. Vertical panel ribs and bolted seams above the inlet. A single cell takes louvers on four faces.
-- **Top.** A flared stack: a `frustum` bell mouth at the deck, a straight throat, a band at the rim, 24 panels. A new `towerFan` with no guard: 5 narrow blades and a plain hub. No motor, shaft or gearbox outside the stack (owner, 2026-11-02).
-- **Deck and access.** Grating deck with a square-bar handrail round the whole edge; the ladder lands on the deck itself and the hanging platform goes. A rest platform stays where the ladder needs one.
-- **Water.** The hot water pipe enters at the spray zone, drawn outside as a flanged spool and elbow.
-- **Inside: nothing drawn (owner, 2026-11-02).** A player cannot see in, so the casing is one closed shell: outer faces only, a dark `OPENING` plate behind the louvers and under the fan, no fill, distributor, drift layer or legs, and no basin water on a fan cell. Heights stay in the model. Collision is one box per cell. Today's 8 m cell draws 5172 fixed polygons; fill, distributor, legs and guard are about 1600 of them, and the handrails 1826. Budget: no fan cell above today's count at its width, and a gate holds it.
-
+- **Shell, drawn whole.** Reuse the natural tower's path (`ShapeRasterizer.towerShell`, `NaturalTowerRenderer`): one cached mesh of whole panels about 4 m wide, instead of plates cut at every block. The casing comes down to the rim. Louvers, ribs and seams are texture, not geometry: one new louver texture. Long faces take louvers; end walls of a bank are plain; a single cell takes four louver faces.
+- **Top.** A 16-sided stack in two bands: a bell mouth at the deck and a straight throat. A new `towerFan` with no guard: 5 flat blades and a plain hub. No motor, shaft or gearbox outside the stack (owner, 2026-11-02).
+- **Deck and access.** A flat deck. A rail only where the ladder lands, and the ladder lands on the deck itself. The hanging platform goes. Ladder and rest platform stay shared `Access` code, about 1100 polygons per tower, not per cell.
+- **Water.** The hot water nozzle as drawn today, moved to the spray zone. No spool or elbow.
+- **Inside: nothing drawn (owner, 2026-11-02).** One closed shell, outer faces only, with a dark `OPENING` plate behind the louvers and under the fan. No fill, distributor, drift layer, legs or fan-cell basin water; the heights stay in the model. Collision is one box per cell.
+- **Budget (owner: the first one was too much).** Stack, shell and fan: at most 200 polygons per cell, held by a gate. Estimates until built: 8 m cell about 1300 against 5343 today, 3 × 2 bank about 1900 against 18967. Risk: the whole tower takes one light level, as a natural tower does.
 ## Effect on the model
 Merkel constants stay. `distributorHeight` falls from `5.5 + fill` to the new spray level, so the pump lifts less (w = 6, default fill: 8.5 to 6 m). The fans-off draft reads `height − distributorHeight`, which rises from 2.5 to about 3.2 m; measure it. Tower references move; a layout table, `shapes-4.snbt` and the schema-6 image update. The tower is unreleased, so no alias work.
 
@@ -47,4 +47,4 @@ Merkel constants stay. `distributorHeight` falls from `5.5 + fill` to the new sp
 6. **Forced draft** as its own kind: not recommended now. It adds a side fan and a sealed plenum for a small unit, with the same fill.
 
 ## Build, once approved
-W1 dimensions and validation. W2 stack and fan. W3 closed casing, louvers, deck and access. W4 pipe and spool. Show renders and polygon counts of one 8 m cell, one 14 m cell and a 3 × 2 bank after W3, before gates. Then `EquipmentLayoutGoldenTest`, `CoolingTowerGeometryTest` with the polygon budget, the corpus and the suites. No client check.
+W1 dimensions and validation. W2 stack and fan. W3 closed shell on the whole-panel path, louver texture, deck and access. W4 nozzle. Show renders and polygon counts of one 8 m cell, one 14 m cell and a 3 × 2 bank after W3, before gates. Then `EquipmentLayoutGoldenTest`, `CoolingTowerGeometryTest` with the polygon budget, the corpus and the suites. No client check.
