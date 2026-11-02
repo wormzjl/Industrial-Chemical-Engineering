@@ -11,6 +11,7 @@ Status: In progress since 2026-11-02, on branch `claude/valve-hold`, not merged.
 - 2026-11-02: owner chose option A: closure on the largest component, with `sameLines` in `replayStart` (c39e2bcd3). Quick suite 1808 green. Clean merge of both branches: review world no hold, quick suite 1846 green.
 - 2026-11-02: final lane on a scratch merge of both branches against main 3ffeb0519: `test slowGates` 2034 green, chain-100 exact, GameTests 36 of 36, campaign 975 / 994 / 1000 against 975 / 993 / 1000 once two budget holds are replayed alone (`FINAL_LANE_REVIEW.md`).
 - 2026-11-02: merged into `claude/column-operation-5c3005` (548456d5c) for one merge. Code guide done there (`fluid-science`, `fluid-runtime`, `verification`); tools complete in `tools/valve-hold-probes/`.
+- 2026-11-02: the column batch's merge code review: findings 1, 2, 6, 7 and 11 are in this solver code. Fixed on that branch (56b083702, 88600d64d), with `OUTLET_HOLD_REVIEW` section 3 corrected: the door stayed open in production until then. `FINAL_LANE_REVIEW.md` no longer covers the branch; one lane reruns.
 
 ## Documents
 

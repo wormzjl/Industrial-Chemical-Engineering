@@ -60,6 +60,67 @@ Reader: one Opus subagent that did not write this code, read only. Pinned: d5 = 
     Proposal: reconcile at load.
 16. Lower. `compat/fluid/schema-6` predates `condenser`, so a nonzero value is not round-tripped (never released). `FluidWorldAuthority.java:426-428`: a redesign with fewer ports refuses Start for good while the comment says keep. `EquipmentStructure.at`: `getBlockEntity` over neighbouring chunks may sync-load (PLAUSIBLE). Cycles keep running during a property suspension.
 
+## Dispositions (2026-11-02, the column session)
+
+Each fix has a test that failed first, or a mutation that makes it fail; "mutation" marks the second kind.
+
+| # | Disposition | Commit | Gate |
+| --- | --- | --- | --- |
+| 1 | Fixed. Owner 2026-11-02: "Lower target wins". See below | 88600d64d | `flowValvesInSeriesCarryTheLowerTarget`, `aPortKeepsItsRowInABranchedGroup`, `aValveBoundingTwoColumnsTakesTheLowerPlan`, `aSecondFlowValveAboveThePlanStandsOpen`, `aSecondFlowValveBelowThePlanRegulatesTheLine`, `aColumnsOutletFeedsAnother` (mutation: without the rule the line holds) |
+| 2 | Fixed. Only a pressure valve anchors; a regulating flow valve prescribes a flow. A pump in line goes to its head limit, or to shutoff behind a closed valve; a closed flow valve with a target opens. Above the pump's rate nothing changes. Targets 5, 0, 50 kg/s give HEAD_LIMIT + REGULATING, CLOSED + CLOSED, TARGET + OPEN | 56b083702 | `PumpAheadOfFlowValveTest` (5); `aPumpOnTheFeedLineRidesBehindItsValve` |
+| 3 | Fixed. Stop has two phases: the unit stays until its release event commits. A dismantled column carries a `leaving` fact and goes then | 460a98836 | `aDismantledColumnLeavesWithItsPorts` (mutation) |
+| 4 | Fixed, same change. The ports stay mapped until the event commits, so what they take and give is booked | 460a98836 | `aStopBooksWhatItsPortsCarryUntilTheyLeave` (mutation) |
+| 5 | Moles fixed: columns map first, so removed components reach the ledger and the status line. Energy open, with options below | 460a98836 | `aComponentRemovedFromAColumnAccountIsBooked` |
+| 6 | Fixed: `Identity.sameLine` at `IslandCoordinator` replacement, `withJunctionStates`, `replayStart`, and, last, `closeIllegalStarts`. A port's worked valve compares equal to its registry valve. `OUTLET_HOLD_REVIEW` corrected | 56b083702, 88600d64d | `aHandSetTargetKeepsTheCommittedInterval` |
+| 7(a) | Fixed. A per-solve flag, `lawFlowsFromBalance`, replaces clearing the carried point | 56b083702 | `RegulatingValveHoldTest` |
+| 7(b) | Fixed. The regulated pass hands `balanceStart` a copy of `modes` | 56b083702 | `RegulatingValveHoldTest` |
+| 8 | Fixed. A menu open reads stored islands (`FluidWorldAuthority.stored`). The view stays on the bucket path as it was: the read is what changed | 460a98836, 0ada03253 | GameTest `aMenuReadAdvancesNoIsland`, with a live read as its control |
+| 9 | Fixed. A cycle's room counts gifts through the fence, its heat owed counts outlet bookings through the fence, an outlet's temperature is the table in force at the fence, and a cycle waits for its outlets through the fence | b22f33a2f | `aFullBufferDoesNotDependOnWhenItsIslandsJobsComplete` |
+| 10 | Fixed. See below | 099a4ee23 | `solidsInTheFeedLeaveByTheBottoms` (mutation), `aCrystalMeltsAsTheColumnTakesIt`, corpus |
+| 11 | Fixed. A zero target always applies | 56b083702 | `aPlannedZeroAlwaysApplies` |
+| 12 | Fixed. Start refuses two ports in one cell, and a failed submit restores the unit | 460a98836 | `twoPortsCannotShareAPlace` |
+| 13 | Fixed. `Setpoints` checks finite | 460a98836 | `aCondenserTemperatureMustBeFinite` |
+| 14 | Fixed. A cycle overdue looks again a cycle later. It reproduced only when a job ran past the last wake, then held: with every job done in its tick, no overdue cycle arises | b22f33a2f | `heldPortsDoNotFreezeTheColumn` |
+| 15 | Fixed. Facts settle a unit's queued events on what stands (`FluidFacts.settled`): orphan ports go, a leaving unit goes, booked | 460a98836 | `aColumnsQueuedEventsSettleOnWhatStands` |
+| 16 | Corpus and fewer ports fixed: a nonzero `condenser` in the corpus; a station its design lost keeps its account with device 0 (`ColumnUnit.lost`). `EquipmentStructure.at` sync-load and cycles during a property suspension stay open, lower, not in this round's scope | 460a98836 | `aStationItsDesignLostKeepsItsAccount` |
+
+No finding proved wrong. Finding 14 was narrower than written: see its row.
+
+**Finding 1, the owner's decision: "Lower target wins".** Flow valves in series carry one flow. The lower target regulates, every other valve stands fully open, and a target of 0 closes the line. In a branched group a column port's valve keeps its row. A valve that bounds two columns takes the lower plan.
+
+- `ControlConstraints.standing` first finds the series: rows equal once the junction balances are out. Port rows first over the whole group, the form suggested, would let a port's target beat a player's lower one on a plain series.
+- It then inserts each series' regulator, ranked outlet ports, inlet ports, the others, each ascending by target. A row found dependent stands open, and only that one.
+- Outlets rank before inlets, a small addition to the decision. Only an outlet's valve bounds what its account gives. Outlet 5 into inlets 3 and 4 would otherwise give 7 from a plan of 5.
+- Removed for flow valves: the hold on the last accepted opening, its default of 1.0, and `VALVE_CONFLICT`. A flow valve carrying that mode in old state starts open. Pressure valves on one node keep all three.
+- Actual-volume valves stay out: their rows depend on the local density, so they fix no constant mass flow.
+- The clamp and its ERROR line stay as a guard. The gates close every component and the energy, so nothing is given that the account did not hold.
+- The status line reads `STANDING_OPEN`; the valve screen reads "Standing open; a lower flow target on this line regulates".
+
+**Finding 5, energy: options for the owner.** Expected: a removed component leaves with its energy. An account has no temperature, so its share is not forced by the physics. An account of 100 mol that loses 3 mol of one component:
+
+| Option | What it does | Rests on |
+| --- | --- | --- |
+| A, recommended | Book 3 % of the account's energy as removed; about three lines | Uniform specific energy over components |
+| B, as built | Leave the energy; the next cycle's closure gives the condenser that 3 % once | Nothing, but specific energy shifts for one cycle |
+| C | Restate at the table's product temperature, or save a temperature on the account | A table, which the same change may drop, or a new fact |
+
+Conservation holds in all three. The case needs a data change that drops a held component.
+
+**Finding 10, size.** About 100 lines over seven files, so it went in without a stop. A station gained `solids`, schema 6 being unreleased; `PortPlan` gained `solids`. Crystals melt on arrival, each its component, with its stored energy made true by its offset. An inert solid waits at its inlet, a cycle moves what arrived by its tick, and the bottoms' generator gives it at its ratio to the moles.
+
+- Measured: 0.646 g arrived = 0.005 g at the inlet + 0.179 g in the bottoms + 0.463 g given.
+- A column whose table has no bottoms keeps its solids at the inlet.
+- A bottoms holding solids restates its generator each slice, so that island does not certify while they last.
+- A credit's solids are state, not saved: after a reload, those inside the fence read as already there.
+- Slow lines plug. At 18 g/s in a 5 cm bore the rig's feed reached a solid closure (`SolidMobility`, deposition velocity). That is the model, not a defect; the gate's lines are 5 mm.
+
+**Found in this round.**
+
+- Any change of the axis refused the world ("Column totals on the accounts' axis"): `withStations` then `withTotals` validated between the two. Fixed in 460a98836; the finding 5 test exposed it.
+- Orphan port devices on the facts path: fixed in 460a98836; the finding 15 test exposed it.
+- Heat beat, not a defect. Water slices run 4.05 to 4.5 s against 5 s cycles, so one slice in 5 to 10 takes little heat and the outlet swings: four slices 29 K, one about 19 K, mean 27 K. Energy closes. The GameTest reads a time-weighted mean.
+- At 30 C supply the 5 K approach leaves 24 K of the 27 K rise, and the column reaches `LIMITED: condenser` after about 5.5 min. The review plant's water is now 25 C. An owner item: approach, water rate, or leave it.
+
 ## Checked and clean (the reviewer's text)
 
 - Saves: schema 5 defaults, enums by name, unit and account validation, a missing unit refuses the world, optional column state, planned generator state carried through `PhysicalRegistry.apply`.

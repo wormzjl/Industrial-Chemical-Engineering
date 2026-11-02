@@ -32,6 +32,8 @@ The trace decides; the bubble point does not. The controls agree: sour water's n
 
 ## 3. A door my start fix left open
 
+Correction, 2026-11-02 (merge code review, finding 6): when this was written the door stayed open in production. `sameLines` in `replayStart` alone had no effect, because a hand-set target arrives as a topology event and the replacement compared strictly. 56b083702 closes it at the island replacement, `withJunctionStates` and `replayStart`.
+
 `RegulatingValveHoldTest` and the probes ran one solver with no `replayStart`, so "unit two-slice cases pass" proved nothing. With `RetainedSolver`, and a new target and composition each slice, the gate failed.
 `replayStart` still compared the strict identity, so a new target in the graph lost the committed interval and restarted cold: the same defect 2, 546 K liquid at 176 kPa. A column escapes it, because `ports` sets its target after the replay. A hand-set valve does not.
 A new case runs nine slices, past the trace level. Scratch results: both changes below, 5 of 5 pass. No bulk closure: the new case fails as the world did (carried, nitrogen 1.9e-11, zero column). Set point back in the identity: 2 fail.
