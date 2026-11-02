@@ -7,6 +7,7 @@ import com.wormzjl.icheme.client.gui.common.kit.FlowsheetPainter;
 import com.wormzjl.icheme.client.gui.common.kit.FlowsheetPainter.Look;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
@@ -20,6 +21,8 @@ public final class SheetPainter {
     /** A tile with a process model, and one with none; the carried ghost. */
     public static final Look LIT = new Look(FlowsheetPainter.BODY, Palette.ACCENT, Palette.TEXT), UNLIT = new Look(0xFF20292F, 0xFF46545C, 0xFF72828C), GHOST = new Look(0x6033434D, Palette.TEXT, Palette.TEXT);
     private static final int PLATE = 0xFF10181D, GRID = 0x24FFFFFF, WHITE = 0xFFFFFFFF, HATCH = 0xFF7A2A2A, DESIGN_GRID = 16;
+    /** A column's frame, its fill, and the colour of what runs hot inside it. */
+    private static final int FRAME = 0xFF7F97A5, FRAME_FILL = 0xFF1A252C, HOT = 0xFFE8A23C;
 
     private SheetPainter() {
     }
@@ -90,13 +93,104 @@ public final class SheetPainter {
         var tone = state.tone(box.unit().id());
         var look = look(tone);
         if (box.placeholder()) placeholder(p, box, t);
-        else if (box.column()) column(p.canvas(), p.ox() + r.x() * p.scale(), p.oy() + r.y() * p.scale(), p.scale(), box.slices(), look);
+        else if (box.column()) block(p, box, tone, look, t);
         else sprite(p.canvas(), box.symbol(), p.ox() + r.x() * p.scale(), p.oy() + r.y() * p.scale(), r.w() * p.scale(), r.h() * p.scale(), look);
         boolean ringed = tone == SheetState.Tone.ACTIVE || selected != null && selected.unit() && selected.id().equals(box.unit().id());
         if (ringed) p.canvas().outline(p.x(r.x()) - 3, p.y(r.y()) - 3, p.px(r.w()) + 6, p.px(r.h()) + 6, Palette.TEXT);
         if (!p.labels()) return;
         for (var mark : box.marks()) p.tag(t.get("flowsheet." + mark.key(), mark.argument()), mark.x(), mark.y(), .5f, Palette.TEXT, PLATE);
-        p.tag(box.unit().name(), box.tagX(), box.tagY(), box.tagAnchor(), tone == SheetState.Tone.WARNING ? Palette.WARN : Palette.TEXT, PLATE);
+        if (box.column()) {
+            int room = Math.max(2, p.px(5)), x0 = p.x(box.tagX()) - room, y0 = p.y(box.tagY() - 6), w = (int) Math.ceil(p.canvas().measure().width(box.unit().name()) * p.fontScale()) + 2 * room, h = Math.max(4, p.px(12));
+            p.canvas().fill(x0, y0, x0 + w, y0 + h, PLATE);
+            p.canvas().outline(x0, y0, w, h, frame(tone, look));
+            p.tag(box.unit().name(), box.tagX(), box.tagY(), 0f, tone == SheetState.Tone.WARNING ? Palette.WARN : Palette.TEXT, 0);
+        } else p.tag(box.unit().name(), box.tagX(), box.tagY(), box.tagAnchor(), tone == SheetState.Tone.WARNING ? Palette.WARN : Palette.TEXT, PLATE);
+    }
+
+    private static int frame(SheetState.Tone tone, Look look) {
+        return tone == SheetState.Tone.WARNING || tone == SheetState.Tone.FAILED ? look.stroke() : FRAME;
+    }
+
+    /**
+     * A column's frame and what it holds (decision D23). Amber and teal are a solved block's; any other tone takes them all, so a greyed or failed block reads as one. Too small for labels, the frame, the
+     * tower, its coolers, drum, pumps and pipes stay; valves, a pump's motor, a cooler's coil, the tee and arrows go, for they would only blot.
+     */
+    private static void block(FlowsheetPainter p, SheetLayout.Box box, SheetState.Tone tone, Look look, HeatControlColumn.Texts t) {
+        var c = p.canvas();
+        var f = box.rect();
+        int x0 = p.x(f.x()), y0 = p.y(f.y()), x1 = p.x(f.right()), y1 = p.y(f.bottom());
+        c.fill(x0, y0, x1, y1, FRAME_FILL);
+        c.outline(x0, y0, x1 - x0, y1 - y0, frame(tone, look));
+        boolean solved = tone == SheetState.Tone.SOLVED, fine = p.labels();
+        for (var pipe : box.block().pipes()) {
+            int colour = switch (pipe.service()) {
+                case HOT -> solved ? HOT : look.stroke();
+                case COLD -> solved ? Palette.ACCENT : look.stroke();
+                case PRODUCT -> Palette.MUTED;
+            };
+            p.wire(pipe.points(), pipe.arrow() && fine, false, colour);
+        }
+        var half = new FlowsheetPainter(c, p.ox(), p.oy(), p.scale() / 2, 1);
+        var tower = box.block().tower();
+        column(c, p.ox() + tower.x() * p.scale(), p.oy() + tower.y() * p.scale(), p.scale(), box.slices(), look);
+        int hot = solved ? HOT : look.stroke();
+        for (var part : box.block().parts()) part(p, half, part, look, fine, part.slot().equals(ColumnBlueprint.REFLUX_VALVE) ? hot : Palette.MUTED);
+        if (!fine) return;
+        for (var note : box.block().notes()) {
+            String text = t.get("flowsheet." + note.key(), note.argument());
+            if (note.width() > 0) p.fitted(text, note.x(), note.y(), note.width(), Palette.TEXT);
+            else p.tag(text, note.x(), note.y(), .5f, Palette.MUTED, 0);
+        }
+    }
+
+    /** A part; a valve too small to draw leaves its line whole, in {@code line}'s colour. */
+    private static void part(FlowsheetPainter p, FlowsheetPainter half, ColumnBlock.Part part, Look look, boolean fine, int line) {
+        var c = p.canvas();
+        var r = part.rect();
+        int x = p.x(part.x()), y = p.y(part.y());
+        switch (part.shape()) {
+            case TOWER -> {
+            }
+            case COOLER, CONDENSER -> {
+                int cy = p.y(r.y() + r.h() / 2), radius = p.px(8);
+                p.circle(x, cy, radius, look);
+                if (!fine) return;
+                int a = p.px(4), b = p.px(3), d = p.px(7);
+                if (part.shape() == ColumnBlock.Shape.COOLER) {
+                    p.line(x, cy - radius, x - a, cy - b, Palette.TEXT);
+                    p.line(x - a, cy - b, x + a, cy + b, Palette.TEXT);
+                    p.line(x + a, cy + b, x, cy + radius, Palette.TEXT);
+                } else {
+                    p.line(x - a, cy - d, x - a, cy + b, Palette.TEXT);
+                    p.line(x - a, cy + b, x + a, cy + b, Palette.TEXT);
+                    p.line(x + a, cy + b, x + a, cy - d, Palette.TEXT);
+                }
+            }
+            case AIR_CONDENSER -> sprite(c, Symbol.AIR_COOLER, p.ox() + r.x() * p.scale(), p.oy() + r.y() * p.scale(), r.w() * p.scale(), r.h() * p.scale(), look);
+            case EJECTOR -> sprite(c, Symbol.EJECTOR, p.ox() + r.x() * p.scale(), p.oy() + r.y() * p.scale(), r.w() * p.scale(), r.h() * p.scale(), look);
+            case DRUM -> {
+                p.box(p.x(part.x() - 4), p.y(r.bottom() - 2), p.x(part.x() + 4), p.y(part.y() + 4), look);
+                p.vessel(p.x(r.x()), p.y(r.y()), p.x(r.right()), p.y(r.bottom()), p.px(5), p.px(5), look);
+            }
+            case KETTLE -> p.vessel(p.x(r.x()), p.y(r.y()), p.x(r.right()), p.y(r.bottom()), p.px(5), p.px(5), look);
+            case PUMP_DOWN, PUMP_ACROSS -> {
+                if (fine && part.shape() == ColumnBlock.Shape.PUMP_DOWN) c.fill(x + p.px(5), y - p.px(2), x + p.px(9), y + p.px(2), look.stroke());
+                else if (fine) c.fill(x - p.px(2), y + p.px(5), x + p.px(2), y + p.px(9), look.stroke());
+                p.circle(x, y, p.px(5), look);
+            }
+            case INLINE_PUMP -> p.circle(x, y, p.px(4), look);
+            case TEE -> {
+                if (fine) p.tee(x - p.px(2), y - p.px(2), x + p.px(2), y + p.px(2), look);
+            }
+            case VALVE -> {
+                if (fine) half.valve(x, y, look);
+                else p.wire(new int[]{part.x() - 4, part.y(), part.x() + 4, part.y()}, false, false, line);
+            }
+            case VALVE_DOWN -> {
+                if (fine) half.valveDown(x, y, look);
+                else p.wire(new int[]{part.x(), part.y() - 4, part.x(), part.y() + 4}, false, false, line);
+            }
+        }
     }
 
     private static void placeholder(FlowsheetPainter p, SheetLayout.Box box, HeatControlColumn.Texts t) {

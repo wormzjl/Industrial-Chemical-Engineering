@@ -61,7 +61,6 @@ class SheetLayoutTest {
     void aTagStandsClearOfTheLeadFromATopPort() {
         boolean some = false;
         for (var type : litTypes()) {
-            if (type.equals("column")) continue;
             var layout = SheetLayout.of(one(type, SheetEditor.defaults(type, SheetFixture::column)), SheetFixture.M);
             var box = layout.box("u");
             var tag = layout.tag(box);

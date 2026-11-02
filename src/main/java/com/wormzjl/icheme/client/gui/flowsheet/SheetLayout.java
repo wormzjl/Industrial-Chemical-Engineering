@@ -9,7 +9,6 @@ import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.UnitTypes;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -33,6 +32,8 @@ public final class SheetLayout {
     public static final int PILL_HALF = 9, PILL_LEAST = 38, PILL_PAD = 12, STUB = 10, LOOP = 30, PORT = 5;
     /** The least pitch of a column's ports; the room a column's ports leave at each end of its side; a column's fewest tray slices: the height the owner approved. */
     public static final int PITCH = 14, END = 17, SLICES = 14;
+    /** The room a column's plate leaves round its name. */
+    private static final int PLATE_ROOM = 5;
     /** How many canvas pixels off a thing a click still finds it. */
     public static final double REACH = 3;
 
@@ -60,11 +61,11 @@ public final class SheetLayout {
     }
 
     /**
-     * A unit as placed: its box; its symbol, or null for a placeholder; a column's tray slices; its ports; where its tag stands.
+     * A unit as placed: its box; its symbol, or null for a placeholder; a column's tray slices; its ports; where its tag stands; a column's parts, and its box is their frame.
      *
      * @param tagAnchor as {@code FlowsheetPainter.label}
      */
-    public record Box(Flowsheet.Unit unit, @Nullable Symbol symbol, boolean column, Rect rect, int slices, List<Place> places, List<Mark> marks, int tagX, int tagY, float tagAnchor) {
+    public record Box(Flowsheet.Unit unit, @Nullable Symbol symbol, boolean column, Rect rect, int slices, List<Place> places, List<Mark> marks, int tagX, int tagY, float tagAnchor, @Nullable ColumnBlock block) {
         public Box {
             places = List.copyOf(places);
             marks = List.copyOf(marks);
@@ -232,7 +233,7 @@ public final class SheetLayout {
         // A lead leaves a top port upward, so the tag stands left of it.
         int lead = at.stream().filter(p -> p.side() == Side.TOP).mapToInt(Place::x).min().orElse(-1);
         boolean clear = lead < 0;
-        return new Box(unit, symbol, false, new Rect(unit.x(), unit.y(), w, h), 0, at, List.of(), clear ? unit.x() + w / 2 : lead - 5, unit.y() - 7, clear ? .5f : 1f);
+        return new Box(unit, symbol, false, new Rect(unit.x(), unit.y(), w, h), 0, at, List.of(), clear ? unit.x() + w / 2 : lead - 5, unit.y() - 7, clear ? .5f : 1f, null);
     }
 
     private Place place(Flowsheet.Unit unit, Port port, int x, int y, Side side, Set<Live> held) {
@@ -300,7 +301,7 @@ public final class SheetLayout {
             int y = spaced(inlet ? i++ : o++, inlet ? in : out, h);
             at.add(place(unit, port, unit.x() + (inlet ? 0 : w), unit.y() + y, inlet ? Side.LEFT : Side.RIGHT, held));
         }
-        return new Box(unit, null, false, new Rect(unit.x(), unit.y(), w, h), 0, at, List.of(), unit.x() + w / 2, unit.y() - 7, .5f);
+        return new Box(unit, null, false, new Rect(unit.x(), unit.y(), w, h), 0, at, List.of(), unit.x() + w / 2, unit.y() - 7, .5f, null);
     }
 
     /** The {@code order}th of {@code n} ports spaced to fill a side {@code h} high. */
@@ -308,82 +309,16 @@ public final class SheetLayout {
         return n == 1 ? h / 2 : END + order * (h - 2 * END) / (n - 1);
     }
 
-    /** A connection point of a column in tray order: its port, its tray, its kind's rank at one tray. */
-    private record Row(Port port, int tray, int rank) {
-    }
-
-    /** The first tray a side's rows can be: above every tray. */
-    private static final int TOP_TRAY = -1, FOOT_TRAY = Integer.MAX_VALUE;
-
-    /** Section 3.11's rule: pairs and inlets left, products right, overhead on top, bottoms below, each side in tray order, spaced to fill; the height follows the longer side. */
+    /** Section 3.11's rule, drawn by {@link ColumnBlock}: its frame is the box, and its ports stand on the frame. */
     private Box column(Flowsheet.Unit unit, List<Port> ports, Set<Live> held) {
-        var door = ColumnDoor.of(unit.params());
-        var left = new ArrayList<Row>();
-        var right = new ArrayList<Row>();
+        var block = ColumnBlock.of(unit, ColumnDoor.of(unit.params()));
         var at = new ArrayList<Place>();
         for (var port : ports) {
-            String id = port.id();
-            switch (id) {
-                case "condenser_in" -> left.add(new Row(port, TOP_TRAY, 0));
-                case "condenser_out" -> left.add(new Row(port, TOP_TRAY, 1));
-                case "feed" -> left.add(new Row(port, door.feedStage(), 3));
-                case "reboiler_in" -> left.add(new Row(port, FOOT_TRAY, 0));
-                case "reboiler_out" -> left.add(new Row(port, FOOT_TRAY, 1));
-                case "distillate" -> right.add(new Row(port, TOP_TRAY, 0));
-                case "water" -> right.add(new Row(port, TOP_TRAY, 1));
-                case "overhead", "bottoms" -> {
-                }
-                default -> {
-                    String row = id.split("/")[1];
-                    if (id.startsWith("pa/")) left.add(new Row(port, pumparoundTray(door, row), id.endsWith("/in") ? 1 : 2));
-                    else if (id.startsWith("steam/")) left.add(new Row(port, door.steam().stream().filter(s -> s.id().equals(row)).findFirst().orElseThrow().stage(), 4));
-                    else right.add(new Row(port, door.draws().stream().filter(d -> d.id().equals(row)).findFirst().orElseThrow().tray(), 0));
-                }
-            }
+            var spot = block.spot(port.id());
+            at.add(place(unit, port, spot.x(), spot.y(), spot.side(), held));
         }
-        var order = Comparator.comparingInt(Row::tray).thenComparingInt(Row::rank);
-        left.sort(order);
-        right.sort(order);
-        int slices = slices(Math.max(left.size(), right.size())), w = Symbol.COLUMN_TOP.w, h = 30 + 16 * slices;
-        var marks = new ArrayList<Mark>();
-        for (int i = 0; i < left.size(); i++) {
-            var row = left.get(i);
-            int y = unit.y() + spaced(i, left.size(), h);
-            at.add(place(unit, row.port(), unit.x(), y, Side.LEFT, held));
-        }
-        for (int i = 0; i < right.size(); i++) at.add(place(unit, right.get(i).port(), unit.x() + w, unit.y() + spaced(i, right.size(), h), Side.RIGHT, held));
-        for (var port : ports) {
-            if (port.id().equals("overhead")) at.add(place(unit, port, unit.x() + w / 2, unit.y(), Side.TOP, held));
-            if (port.id().equals("bottoms")) at.add(place(unit, port, unit.x() + w / 2, unit.y() + h, Side.BOTTOM, held));
-        }
-        marks(unit, left, h, marks);
-        return new Box(unit, Symbol.COLUMN_TOP, true, new Rect(unit.x(), unit.y(), w, h), slices, at, marks, unit.x() + w + 26, unit.y() + h - 6, .5f);
-    }
-
-    private static int pumparoundTray(ColumnDoor door, String row) {
-        return door.pumparounds().stream().filter(p -> p.id().equals(row)).findFirst().orElseThrow().returnTray();
-    }
-
-    /** The tray slices a column takes for {@code ports} on its longer side: at least {@link #PITCH} a port. */
-    public static int slices(int ports) {
-        return Math.max(SLICES, ((ports - 1) * PITCH + 2 * END - 30 + 15) / 16);
-    }
-
-    /** A pair's name at the pair's middle, an inlet's at its port. */
-    private static void marks(Flowsheet.Unit unit, List<Row> left, int h, List<Mark> marks) {
-        int cx = unit.x() + Symbol.COLUMN_TOP.w / 2;
-        for (int i = 0; i < left.size(); i++) {
-            String id = left.get(i).port().id();
-            int y = unit.y() + spaced(i, left.size(), h);
-            if (id.equals("feed")) marks.add(new Mark("port.feed", "", cx, y));
-            else if (id.startsWith("steam/")) marks.add(new Mark("mark.steam", "", cx, y));
-            else if (i + 1 < left.size()) {
-                int next = unit.y() + spaced(i + 1, left.size(), h), middle = (y + next) / 2;
-                if (id.equals("condenser_in")) marks.add(new Mark("mark.condenser", "", cx, middle));
-                if (id.equals("reboiler_in")) marks.add(new Mark("mark.reboiler", "", cx, middle));
-                if (id.startsWith("pa/") && id.endsWith("/in")) marks.add(new Mark("mark.pumparound", id.split("/")[1], cx, middle));
-            }
-        }
+        var frame = block.frame();
+        return new Box(unit, Symbol.COLUMN_TOP, true, frame, block.slices(), at, block.marks(), frame.x() + PLATE_ROOM + 6, frame.y(), 0f, block);
     }
 
     // ---- Lines ----
@@ -515,7 +450,7 @@ public final class SheetLayout {
     }
 
     /** {@code points} with repeats and points on a straight run left out. */
-    private static int[] flat(List<int[]> points) {
+    static int[] flat(List<int[]> points) {
         var kept = new ArrayList<int[]>();
         for (var p : points) {
             if (!kept.isEmpty() && kept.getLast()[0] == p[0] && kept.getLast()[1] == p[1]) continue;
@@ -586,10 +521,25 @@ public final class SheetLayout {
         return null;
     }
 
-    /** The box a unit's tag stands in, as the painter places it at full size. */
+    /** The box a unit's tag stands in, as the painter places it at full size: a column's is the plate on its frame's top edge. */
     public Rect tag(Box box) {
         int w = m.width(box.unit().name()) + 2;
+        if (box.column()) return new Rect(box.tagX() - PLATE_ROOM, box.tagY() - 6, w + 2 * PLATE_ROOM - 2, 12);
         return new Rect(box.tagX() - (int) (w * box.tagAnchor()), box.tagY() - 6, w, 11);
+    }
+
+    /** The part of a column at design point ({@code x}, {@code y}), within {@link #REACH} canvas pixels at {@code zoom}, or null. A valve stands before the tower it may touch. */
+    public ColumnBlock.@Nullable Part part(double x, double y, double zoom) {
+        double reach = REACH / zoom;
+        for (var box : boxes.values()) {
+            if (box.block() == null) continue;
+            var parts = box.block().parts();
+            for (int i = parts.size() - 1; i >= 0; i--) {
+                var r = parts.get(i).rect();
+                if (x >= r.x() - reach && x <= r.right() + reach && y >= r.y() - reach && y <= r.bottom() + reach) return parts.get(i);
+            }
+        }
+        return null;
     }
 
     /** The box a stream's name stands in, as the painter places it at full size. */

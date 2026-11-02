@@ -1835,6 +1835,8 @@
   "gui.icheme.flowsheet.mark.reboiler": "Reb.",
   "gui.icheme.flowsheet.mark.pumparound": "PA %s",
   "gui.icheme.flowsheet.mark.steam": "Steam",
+  "gui.icheme.flowsheet.mark.drum": "Drum",
+  "gui.icheme.flowsheet.mark.reflux": "Reflux",
   "gui.icheme.flowsheet.removed_mark": "(removed)",
   "gui.icheme.flowsheet.port.in": "Inlet",
   "gui.icheme.flowsheet.port.out": "Outlet",

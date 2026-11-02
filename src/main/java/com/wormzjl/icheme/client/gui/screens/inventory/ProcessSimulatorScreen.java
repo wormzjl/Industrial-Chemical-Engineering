@@ -315,9 +315,9 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         if (tab == SimulatorFrame.Tab.FLOWSHEET) {
             view.layout(canvasBox);
             if (!placed) {
-                // A small window opens on the whole sheet; a wide one at its own size.
+                // A window opens on the whole sheet, at its own size where it can: fit stops at zoom 1.
                 placed = true;
-                if (frame.size() != SimulatorFrame.Size.WIDE) view.fit(editor.layout().bounds());
+                view.fit(editor.layout().bounds());
             }
             var selected = gestures.selected();
             if (selected != null && !(selected.unit() ? editor.unit(selected.id()) == null : editor.stream(selected.id()) == null)) panelWidgets(x, selected);

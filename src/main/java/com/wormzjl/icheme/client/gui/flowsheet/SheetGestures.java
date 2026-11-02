@@ -261,7 +261,8 @@ public final class SheetGestures {
         else if (tile.type().equals(Tiles.PRODUCT)) made = editor.addProduct(snap(dx), snap(dy));
         else {
             var symbol = tile.symbol();
-            made = editor.addUnit(tile.type(), snap(dx - symbol.w / 2.0), snap(dy - symbol.h / 2.0));
+            boolean column = tile.type().equals("column");
+            made = editor.addUnit(tile.type(), snap(dx - (column ? ColumnBlock.WIDTH : symbol.w) / 2.0), snap(dy - (column ? ColumnBlock.HEIGHT : symbol.h) / 2.0));
             if (made != null) {
                 selected = new Selection(true, made);
                 return;

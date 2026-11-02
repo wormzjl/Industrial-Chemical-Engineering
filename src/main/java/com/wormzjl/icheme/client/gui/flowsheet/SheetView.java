@@ -8,7 +8,7 @@ import org.jetbrains.annotations.Nullable;
  * one zoom step, and fit. A wheel step keeps what is under the cursor where it is.
  */
 public final class SheetView {
-    public static final double LEAST = .25, MOST = 2, STEP = 1.25;
+    public static final double LEAST = .2, MOST = 2, STEP = 1.25;
     /** Fit leaves this much room round a sheet, in canvas pixels. */
     private static final int ROOM = 6;
 

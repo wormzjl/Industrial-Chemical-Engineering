@@ -227,14 +227,22 @@ public final class SimulatorPage {
         return holder == null ? status : new SheetState.Status(x.text("status.reader", holder, Door.lower(status.text())), status.tone());
     }
 
-    /** What the mouse stands on says: a port, a tile; nothing while a gesture runs. */
+    /** What the mouse stands on says: a port, a part of a column, a tile; nothing while a gesture runs. */
     private static @Nullable String hover(SheetContext x, SimulatorFrame frame, SheetView view, SheetGestures gestures, SheetEditor editor, Rect box, int category, double mouseX, double mouseY) {
         if (gestures.mode() != SheetGestures.Mode.IDLE) return null;
         var tile = frame.tileAt(category, SimulatorFrame.inner(frame.tileWell()), mouseX, mouseY);
         if (tile != null) return tile.lit() ? x.t().get(tile.name()) : x.t().get(tile.name()) + "\n" + x.text("tile.unlit");
         if (!box.contains(mouseX, mouseY)) return null;
         var hit = editor.layout().at(view.designX(mouseX), view.designY(mouseY), view.zoom());
-        return hit != null && hit.kind() == SheetLayout.Kind.PORT ? portHover(x, hit.place()) : null;
+        if (hit != null && hit.kind() == SheetLayout.Kind.PORT) return portHover(x, hit.place());
+        if (hit == null || hit.kind() != SheetLayout.Kind.UNIT) return null;
+        var part = editor.layout().part(view.designX(mouseX), view.designY(mouseY), view.zoom());
+        return part == null ? null : partHover(x, part);
+    }
+
+    /** A part's name, the assembly screen's. */
+    public static String partHover(SheetContext x, ColumnBlock.Part part) {
+        return x.t().get("assembly.part." + part.slot().part(), part.argument());
     }
 
     /** A port's hover (plan section 3.11): its full name, the stream it holds, what happens if it stays free. */
