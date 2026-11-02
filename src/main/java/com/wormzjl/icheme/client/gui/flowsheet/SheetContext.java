@@ -4,9 +4,14 @@ import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
+import com.wormzjl.icheme.science.flowsheet.Port;
+import com.wormzjl.icheme.science.flowsheet.UnitTypes;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
 /** What every door and page reads (batch 2026-11-02-process-simulator): the sheet through its editor, the run's state, the display units, the texts. */
@@ -48,6 +53,22 @@ public record SheetContext(SheetEditor editor, SheetState state, SheetUnits unit
         if (stream == null) return null;
         var results = state.shown(stream.id());
         return results == null ? null : results.stream(stream.id());
+    }
+
+    /** What {@code unit}'s open outlets carry, by port: a free outlet has no stream on the sheet, and the run keeps it under the unit's own name for the port. */
+    public Map<String, StreamProps> openOutlets(Flowsheet.Unit unit) {
+        var open = new LinkedHashMap<String, StreamProps>();
+        var model = UnitTypes.model(unit.type());
+        var results = state.shown(unit.id());
+        if (model == null || results == null) return open;
+        var taken = new HashSet<String>();
+        for (var stream : streams(unit.id(), false)) taken.add(stream.from().port());
+        for (var port : model.ports(unit.params())) {
+            if (port.direction() != Port.Direction.OUT || taken.contains(port.id())) continue;
+            var solved = results.stream(unit.id() + ":" + port.id());
+            if (solved != null && !solved.empty()) open.put(port.id(), StreamProps.of(solved, fluids));
+        }
+        return open;
     }
 
     /** A stream's last solved state, greyed or not: what a unit that solves alone has now, or null if no run has solved it. */

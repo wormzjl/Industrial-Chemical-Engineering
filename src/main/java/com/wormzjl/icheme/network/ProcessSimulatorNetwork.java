@@ -115,7 +115,7 @@ public final class ProcessSimulatorNetwork {
             var other = block.getLevel().getServer().getPlayerList().getPlayer(store.holder());
             if (other != null) holder = other.getGameProfile().getName();
         }
-        var opening = new ProcessSimulatorMenu.Opening(block.getBlockPos(), !edits, holder, body.length > 0, store.damaged(), RevisionNotice.tokens(MaterialRuntime.active()));
+        var opening = new ProcessSimulatorMenu.Opening(block.getBlockPos(), block.sheetId(), !edits, holder, body.length > 0, store.damaged(), RevisionNotice.tokens(MaterialRuntime.active()));
         player.openMenu(block, opening::write);
         if (!(player.containerMenu instanceof ProcessSimulatorMenu menu)) {
             store.release(player.getUUID());

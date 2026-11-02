@@ -281,7 +281,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private void autosave() {
         if (host.reader() || editor.sheet() == autosaved) return;
         try {
-            FlowsheetFile.save(FileColumns.autosave(folder(), fileName), editor.sheet());
+            FlowsheetFile.save(FileColumns.autosave(folder(), fileName, menu.opening().sheet().toString()), editor.sheet());
             autosaved = editor.sheet();
         } catch (IOException unwritable) {
             host.say(new SimulatorHost.Said("store.autosave_failed", List.of(), true));
@@ -454,7 +454,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         }
         var list = listing(x);
         var slots = DialogColumns.footer(w, h, list.keys().length);
-        for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], true, null), slots.get(i).moved(left, top));
+        for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], list.off()[i] == null, list.off()[i]), slots.get(i).moved(left, top));
     }
 
     private String signature(SheetContext x) {
@@ -747,7 +747,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
                 if (!entry.opens()) return;
                 try {
                     var sheet = FlowsheetFile.open(entry.file());
-                    if (!FileColumns.changes(sheet, ProcessSimulatorScreen::lang).isEmpty()) {
+                    if (!FileColumns.changes(sheet, fluids, ProcessSimulatorScreen::columnDefaults, ProcessSimulatorScreen::lang).isEmpty()) {
                         opening = sheet;
                         openingName = entry.name();
                         dialog = Dialog.CHANGES;
@@ -791,7 +791,10 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             var list = dialog.lists() ? listing(context()) : null;
             if (list != null) {
                 int row = FileColumns.rowAt(list, FileColumns.W, FileColumns.H, x - (width - FileColumns.W) / 2.0, y - (height - FileColumns.H) / 2.0);
-                if (row >= 0) chosen = row;
+                if (row >= 0 && row != chosen) {
+                    chosen = row;
+                    rebuildWidgets();
+                }
             }
             return super.mouseClicked(x, y, button);
         }
@@ -914,7 +917,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         skin().page(canvas, new Rect(0, 0, w, h));
         if (dialog.names()) skin().title(canvas, 10, 10, lang(dialog == Dialog.SAVE_AS ? "flowsheet.file.save_title" : dialog == Dialog.SAVE_TEMPLATE ? "flowsheet.file.template_title" : "flowsheet.file.column_title"));
         else if (dialog == Dialog.UNSAVED) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.unsaved_title"), FileColumns.unsaved(ProcessSimulatorScreen::lang), lang("flowsheet.file.unsaved_foot"), w, h);
-        else if (dialog == Dialog.CHANGES && opening != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.changes_title", openingName), FileColumns.changes(opening, ProcessSimulatorScreen::lang), lang("flowsheet.file.changes_foot"), w, h);
+        else if (dialog == Dialog.CHANGES && opening != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.changes_title", openingName), FileColumns.changes(opening, fluids, ProcessSimulatorScreen::columnDefaults, ProcessSimulatorScreen::lang), lang("flowsheet.file.changes_foot"), w, h);
         else FileColumns.draw(canvas, skin(), listing(x), w, h);
         g.pose().popPose();
     }

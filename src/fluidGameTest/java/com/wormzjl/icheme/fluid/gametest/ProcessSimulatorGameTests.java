@@ -104,6 +104,7 @@ public final class ProcessSimulatorGameTests {
         helper.assertTrue(java.util.Arrays.equals(body, block.store().body()), "The upload was not stored");
         var registries = helper.getLevel().registryAccess();
         block.saveDesign(design());
+        var id = block.sheetId();
         var saved = block.saveWithFullMetadata(registries);
         helper.assertTrue(block.getUpdateTag(registries).isEmpty() && block.getUpdatePacket() == null, "The sheet rides in an update");
         close(editor);
@@ -111,6 +112,7 @@ public final class ProcessSimulatorGameTests {
         fresh.loadWithComponents(saved, registries);
         helper.assertTrue(java.util.Arrays.equals(body, fresh.store().replay()), "The sheet did not survive");
         helper.assertTrue(fresh.savedDesign().isPresent(), "The design did not survive");
+        helper.assertTrue(id.equals(fresh.sheetId()), "The block's own name did not survive: its autosave would start again");
         helper.assertTrue(fresh.store().holder() == null, "The holder is state and is not saved");
         helper.succeed();
     }

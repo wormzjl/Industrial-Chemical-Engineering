@@ -32,8 +32,9 @@ import org.jetbrains.annotations.Nullable;
  * this entity has none. It stores what it is sent and never solves it; {@link SheetStore} holds the rules. Who edits is state, and is not saved.
  */
 public class ProcessSimulatorBlockEntity extends BlockEntity implements MenuProvider {
-    private static final String TAG_SHEET = "Sheet", TAG_KEPT = "KeptSheets", TAG_DESIGN = "Design";
+    private static final String TAG_SHEET = "Sheet", TAG_KEPT = "KeptSheets", TAG_DESIGN = "Design", TAG_ID = "SheetId";
     private final SheetStore store = new SheetStore();
+    private @Nullable UUID sheetId;
     private Optional<ColumnDesign> savedDesign = Optional.empty();
 
     public ProcessSimulatorBlockEntity(BlockPos pos, BlockState state) {
@@ -42,6 +43,15 @@ public class ProcessSimulatorBlockEntity extends BlockEntity implements MenuProv
 
     public SheetStore store() {
         return store;
+    }
+
+    /** This block's own name, for what a client keeps of its sheet: a position says nothing across worlds. Made at the first opening, and it stays. */
+    public UUID sheetId() {
+        if (sheetId == null) {
+            sheetId = UUID.randomUUID();
+            setChanged();
+        }
+        return sheetId;
     }
 
     /** Whether {@code player} edits, once they open this block. A holder gone without word does not keep it: only a player still at this block's screen does. */
@@ -80,6 +90,7 @@ public class ProcessSimulatorBlockEntity extends BlockEntity implements MenuProv
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        if (sheetId != null) tag.putUUID(TAG_ID, sheetId);
         if (store.body().length > 0) tag.putByteArray(TAG_SHEET, store.body());
         if (!store.kept().isEmpty()) {
             var kept = new ListTag();
@@ -92,6 +103,7 @@ public class ProcessSimulatorBlockEntity extends BlockEntity implements MenuProv
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        sheetId = tag.hasUUID(TAG_ID) ? tag.getUUID(TAG_ID) : null;
         var kept = new ArrayList<byte[]>();
         for (var body : tag.getList(TAG_KEPT, Tag.TAG_BYTE_ARRAY)) kept.add(((ByteArrayTag) body).getAsByteArray());
         store.load(tag.getByteArray(TAG_SHEET), kept);

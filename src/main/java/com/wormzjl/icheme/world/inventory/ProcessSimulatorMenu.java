@@ -7,6 +7,7 @@ import com.wormzjl.icheme.world.level.block.entity.ProcessSimulatorBlockEntity;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import net.minecraft.core.BlockPos;
@@ -37,9 +38,10 @@ public final class ProcessSimulatorMenu extends AbstractContainerMenu {
      * @param damaged whether the block stands empty over a sheet it could not read
      * @param tokens  the server's revision tokens
      */
-    public record Opening(BlockPos pos, boolean reader, String holder, boolean stored, boolean damaged, Map<String, String> tokens) {
+    public record Opening(BlockPos pos, UUID sheet, boolean reader, String holder, boolean stored, boolean damaged, Map<String, String> tokens) {
         public void write(FriendlyByteBuf buffer) {
             buffer.writeBlockPos(pos);
+            buffer.writeUUID(sheet);
             buffer.writeBoolean(reader);
             buffer.writeUtf(holder, MAX_TEXT);
             buffer.writeBoolean(stored);
@@ -49,6 +51,7 @@ public final class ProcessSimulatorMenu extends AbstractContainerMenu {
 
         public static Opening read(FriendlyByteBuf buffer) {
             var pos = buffer.readBlockPos();
+            var sheet = buffer.readUUID();
             boolean reader = buffer.readBoolean();
             String holder = buffer.readUtf(MAX_TEXT);
             boolean stored = buffer.readBoolean(), damaged = buffer.readBoolean();
@@ -56,7 +59,7 @@ public final class ProcessSimulatorMenu extends AbstractContainerMenu {
             if (count < 0 || count > MAX_TOKENS) throw new io.netty.handler.codec.DecoderException("Invalid token count");
             var tokens = new TreeMap<String, String>();
             for (int i = 0; i < count; i++) tokens.put(buffer.readUtf(MAX_TEXT), buffer.readUtf());
-            return new Opening(pos, reader, holder, stored, damaged, tokens);
+            return new Opening(pos, sheet, reader, holder, stored, damaged, tokens);
         }
     }
 

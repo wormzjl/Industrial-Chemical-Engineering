@@ -438,11 +438,16 @@ public final class UnitDoors {
         return (c, skin, box) -> table(c, x, unit, box);
     }
 
+    /** A column of the Streams table. */
+    private record Cell(String head, @Nullable StreamProps props) {
+    }
+
     private static void table(Canvas c, SheetContext x, Flowsheet.Unit unit, Rect box) {
-        var streams = new ArrayList<Flowsheet.Stream>(x.streams(unit.id(), true));
-        int inlets = streams.size();
-        streams.addAll(x.streams(unit.id(), false));
-        int cell = 90, room = Math.max(1, (box.w() - 130) / cell), n = Math.min(room, streams.size());
+        var cells = new ArrayList<Cell>();
+        for (var stream : x.streams(unit.id(), true)) cells.add(new Cell(StreamDoors.portName(x, stream.to().port()) + " " + stream.name(), x.props(stream)));
+        for (var stream : x.streams(unit.id(), false)) cells.add(new Cell(StreamDoors.portName(x, stream.from().port()) + " " + stream.name(), x.props(stream)));
+        x.openOutlets(unit).forEach((port, props) -> cells.add(new Cell(x.text("door.open_outlet", StreamDoors.portName(x, port)), props)));
+        int cell = 90, room = Math.max(1, (box.w() - 130) / cell), n = Math.min(room, cells.size());
         int[] widths = new int[n + 1];
         widths[0] = box.w() - n * cell - 6;
         for (int i = 1; i <= n; i++) widths[i] = cell;
@@ -451,13 +456,13 @@ public final class UnitDoors {
         var head = new String[n + 1];
         head[0] = "";
         var labels = List.of(x.text("label.temperature", u.temperature().symbol()), x.text("label.pressure", u.pressure().symbol()), x.text("label.flow", u.molesUnit()), x.text("label.flow", u.tonnesUnit()), x.text("label.vapour"), x.text("label.density"));
-        for (int i = 0; i < n; i++) head[i + 1] = StreamDoors.portName(x, i < inlets ? streams.get(i).to().port() : streams.get(i).from().port()) + " " + streams.get(i).name();
+        for (int i = 0; i < n; i++) head[i + 1] = cells.get(i).head();
         rows.add(head);
         for (int r = 0; r < labels.size(); r++) {
             var row = new String[n + 1];
             row[0] = labels.get(r);
             for (int i = 0; i < n; i++) {
-                var p = x.props(streams.get(i));
+                var p = cells.get(i).props();
                 row[i + 1] = p == null ? "" : switch (r) {
                     case 0 -> u.t(p.temperature());
                     case 1 -> u.p(p.pressure());

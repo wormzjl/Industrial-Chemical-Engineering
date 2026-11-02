@@ -448,7 +448,7 @@ public final class SimulatorRender {
     private static void list(GuiPrototypes.Door d, FileColumns.Listing l) {
         FileColumns.draw(d.c, d.skin, l, d.w, d.h);
         var slots = com.wormzjl.icheme.client.gui.common.DialogColumns.footer(d.w, d.h, l.keys().length);
-        for (int i = 0; i < slots.size(); i++) d.skin.button(d.c, slots.get(i), l.keys()[i], i == l.primary() ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+        for (int i = 0; i < slots.size(); i++) d.skin.button(d.c, slots.get(i), l.keys()[i], l.off()[i] != null ? Skin.Press.OFF : i == l.primary() ? Skin.Press.PRIMARY : Skin.Press.REST, false);
     }
 
     /** One block as dropped on the canvas, its ports named at the end of a stub. */
@@ -576,8 +576,10 @@ public final class SimulatorRender {
         FlowsheetFile.save(folder.resolve("CDU train.json"), sheet);
         var removed = withType(sheet, "H-101", "old_heater");
         FlowsheetFile.save(folder.resolve("Gas plant inlet.json"), removed);
+        var updated = afterAnUpdate(removed);
         Files.writeString(folder.resolve("Broken.json"), "{ not a flowsheet");
-        FlowsheetFile.save(FileColumns.autosave(folder, "CDU train"), sheet);
+        FlowsheetFile.save(FileColumns.autosave(folder, "CDU train", "unused"), sheet);
+        FlowsheetFile.save(FileColumns.autosave(folder, null, "3f2a1c9e-7b10-4e55-9c1a-0d2f6e8b4a77"), sheet);
         var entries = FileColumns.entries(folder, T);
         var pages = new ArrayList<BufferedImage>();
         for (var skin : SKINS) {
@@ -586,7 +588,7 @@ public final class SimulatorRender {
             int chosen = ready;
             pages.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> list(d, FileColumns.open(entries, chosen, T))));
             pages.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> {
-                FileColumns.drawChanges(d.c, d.skin, T.get("flowsheet.file.changes_title", "Gas plant inlet"), FileColumns.changes(removed, T), T.get("flowsheet.file.changes_foot"), d.w, d.h);
+                FileColumns.drawChanges(d.c, d.skin, T.get("flowsheet.file.changes_title", "Gas plant inlet"), FileColumns.changes(updated, FLUIDS, SimulatorRender::columnDoor, T), T.get("flowsheet.file.changes_foot"), d.w, d.h);
                 var slots = com.wormzjl.icheme.client.gui.common.DialogColumns.footer(d.w, d.h, 2);
                 d.skin.button(d.c, slots.get(0), T.get("flowsheet.file.cancel"), Skin.Press.REST, false);
                 d.skin.button(d.c, slots.get(1), T.get("flowsheet.file.open"), Skin.Press.PRIMARY, false);
@@ -599,6 +601,25 @@ public final class SimulatorRender {
             prompts.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> naming(d, T.get("flowsheet.file.save_title"), "CDU train", T.get("flowsheet.file.cancel"), T.get("flowsheet.file.to_clipboard"), T.get("flowsheet.file.save"))));
         }
         SimulatorPrototypes.grid(out, "25-unsaved-and-save-as", List.of("Open or Close with changes the block has not taken (light door)", "Save as: a file, or the clipboard as text (light door)", "Unsaved changes (dark door)", "Save as (dark door)"), prompts);
+    }
+
+    /** A file older than this version: an older revision, a component the package has lost, and a setting P-101 does not hold. */
+    private static Flowsheet afterAnUpdate(Flowsheet sheet) {
+        var basis = new Flowsheet.Basis(sheet.basis().packageId(), "r1", sheet.basis().components());
+        var units = new ArrayList<Flowsheet.Unit>();
+        for (var unit : sheet.units()) units.add(unit.id().equals("P-101") ? new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), edited(unit.params(), j -> j.remove("rise")), unit.unknown()) : unit);
+        var streams = new ArrayList<Flowsheet.Stream>();
+        for (var stream : sheet.streams()) {
+            if (!stream.name().equals("CRUDE")) {
+                streams.add(stream);
+                continue;
+            }
+            var amounts = new LinkedHashMap<>(stream.feed().amounts());
+            amounts.put("Bitumen", amounts.values().stream().mapToDouble(Double::doubleValue).sum() * .0082);
+            var feed = new Flowsheet.Feed(stream.feed().temperature(), stream.feed().pressure(), amounts, stream.feed().solids());
+            streams.add(new Flowsheet.Stream(stream.id(), stream.name(), stream.from(), stream.to(), feed, stream.route(), stream.unknown()));
+        }
+        return new Flowsheet(basis, units, streams, sheet.settings(), sheet.unknown());
     }
 
     private static Flowsheet withType(Flowsheet sheet, String id, String type) {
@@ -631,8 +652,9 @@ public final class SimulatorRender {
         var host = new Host(false, null);
 
         sheet(out, "01-main-screen", W, H, List.of("The main screen with nothing selected"), List.of(scene(sheet, run, seconds, host, nothing())));
-        sheet(out, "02-selection-panel", W, H, List.of("A unit selected", "A feed selected", "A stream a unit makes selected"), List.of(
+        sheet(out, "02-selection-panel", W, H, List.of("A unit selected", "A column selected: its ring follows the frame", "A feed selected", "A stream a unit makes selected"), List.of(
                 scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(true, "E-101"))),
+                scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(true, "T-101"))),
                 scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(false, "CRUDE"))),
                 scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(false, "S-5")))));
         sheet(out, "03-interaction", W, H, List.of("A tile dragged from the palette", "A stream drawn from a free port: what can take it is ringed", "A name typed in place", "Right click S-8: its end follows the cursor", "A port's hover"), List.of(

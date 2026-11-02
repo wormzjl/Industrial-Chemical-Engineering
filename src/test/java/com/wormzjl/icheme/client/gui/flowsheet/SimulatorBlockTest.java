@@ -2,6 +2,7 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.google.gson.JsonObject;
 import com.wormzjl.icheme.client.gui.screens.inventory.SimulatorBlockHost;
 import com.wormzjl.icheme.network.SimulatorResults;
 import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
@@ -10,6 +11,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFile;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
@@ -101,7 +103,7 @@ class SimulatorBlockTest {
         var tokens = RevisionNotice.tokens(SheetFixture.CATALOG);
         assertTrue(tokens.values().stream().anyMatch(token -> token.length() > 512), "a short token proves nothing here");
         var buffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
-        new ProcessSimulatorMenu.Opening(net.minecraft.core.BlockPos.ZERO, true, "Alex", true, false, tokens).write(buffer);
+        new ProcessSimulatorMenu.Opening(net.minecraft.core.BlockPos.ZERO, java.util.UUID.nameUUIDFromBytes(new byte[3]), true, "Alex", true, false, tokens).write(buffer);
         var back = ProcessSimulatorMenu.Opening.read(buffer);
         assertEquals(tokens, back.tokens());
         assertEquals("Alex", back.holder());
@@ -392,14 +394,101 @@ class SimulatorBlockTest {
             for (var file : old.toList()) Files.delete(file);
         }
         var t = new SheetFixture.Texts();
-        assertEquals(folder.resolve("autosave.json"), FileColumns.autosave(folder, null));
-        assertEquals(folder.resolve("CDU train.autosave.json"), FileColumns.autosave(folder, "CDU train"));
-        FlowsheetFile.save(FileColumns.autosave(folder, "CDU train"), SheetFixture.water());
-        FlowsheetFile.save(FileColumns.autosave(folder, null), SheetFixture.water());
-        assertEquals(List.of("Autosave", "Autosave of CDU train"), FileColumns.entries(folder, t).stream().map(FileColumns.Entry::name).sorted().toList());
+        assertEquals(folder.resolve("autosave-a.json"), FileColumns.autosave(folder, null, "a"));
+        assertNotEquals(FileColumns.autosave(folder, null, "a"), FileColumns.autosave(folder, null, "b"), "a second block keeps the first's");
+        assertEquals(folder.resolve("CDU train.autosave.json"), FileColumns.autosave(folder, "CDU train", "a"));
+        FlowsheetFile.save(FileColumns.autosave(folder, "CDU train", "a"), SheetFixture.water());
+        FlowsheetFile.save(FileColumns.autosave(folder, null, "3f2a1c9e-7b10"), SheetFixture.water());
+        assertEquals(List.of("Autosave of CDU train", "Autosave of block 3f2a1c9e"), FileColumns.entries(folder, t).stream().map(FileColumns.Entry::name).sorted().toList());
         assertFalse(FileColumns.nameAllowed("x.autosave"), "no name a player gives can be overwritten by an autosave");
         assertFalse(FileColumns.nameAllowed("Autosave"));
+        assertFalse(FileColumns.nameAllowed("autosave-a"));
         assertTrue(t.missing.isEmpty(), () -> "missing " + t.missing);
+    }
+
+    private static FileColumns.ColumnTemplate template(boolean bundled) {
+        var column = new com.wormzjl.icheme.science.column.v3.V3ColumnTemplate(0, 42, 38, 300, 0, 1, 1.4e5, 0, List.of(), List.of(), List.of());
+        return new FileColumns.ColumnTemplate("One", column, bundled, "one.json");
+    }
+
+    @Test
+    void deleteIsOffOnABundledTemplateAndSaysWhy() {
+        var t = new SheetFixture.Texts();
+        var list = List.of(template(true), template(false));
+        assertEquals("A bundled template stays: only your own can go.", FileColumns.columnTemplates(list, 0, SheetUnits.DEFAULT, t).off()[1]);
+        assertNull(FileColumns.columnTemplates(list, 1, SheetUnits.DEFAULT, t).off()[1], "your own can go");
+        assertNotNull(FileColumns.columnTemplates(list, -1, SheetUnits.DEFAULT, t).off()[1], "nothing chosen, nothing to delete");
+        assertNull(FileColumns.columnTemplates(list, 0, SheetUnits.DEFAULT, t).off()[3], "Load stays on");
+        assertEquals(4, FileColumns.open(List.of(), -1, t).off().length, "a list with no reasons has a place for each key");
+        assertTrue(t.missing.isEmpty(), () -> "missing " + t.missing);
+    }
+
+    private static Flowsheet current(List<Flowsheet.Unit> units, List<Flowsheet.Stream> streams) {
+        return new Flowsheet(new Flowsheet.Basis(SheetFixture.NETWORK, SheetFixture.FLUIDS.pack().revision(), SheetFixture.FLUIDS.axis()), units, streams, FlowsheetSolver.Settings.DEFAULT);
+    }
+
+    private static List<FileColumns.Change> changes(Flowsheet sheet, SheetFixture.Texts t) {
+        return FileColumns.changes(sheet, SheetFixture.FLUIDS, SheetFixture::column, t);
+    }
+
+    @Test
+    void aSheetOfThisVersionOpensWithNothingToSay() {
+        var t = new SheetFixture.Texts();
+        var units = new ArrayList<Flowsheet.Unit>();
+        int x = 40;
+        for (var type : SimulatorPage.litTypes()) {
+            units.add(new Flowsheet.Unit("u" + x, type, "U-" + x, x, 60, SheetEditor.defaults(type, SheetFixture::column)));
+            x += 80;
+        }
+        var amounts = new LinkedHashMap<String, Double>();
+        amounts.put(SheetFixture.FLUIDS.axis().getFirst(), 1.0);
+        var feed = new Flowsheet.Stream("f", "F", null, null, new Flowsheet.Feed(300, 2e5, amounts, List.of()), List.of(new Flowsheet.Point(10, 70)), new JsonObject());
+        assertEquals(List.of(), changes(current(units, List.of(feed)), t));
+    }
+
+    @Test
+    void aFileOlderThanThisVersionSaysEachKindOfChange() {
+        var t = new SheetFixture.Texts();
+        var pump = SheetEditor.defaults("pump", SheetFixture::column).json().deepCopy();
+        pump.remove("rise");
+        var units = List.of(new Flowsheet.Unit("p", "pump", "P-201", 40, 60, new com.wormzjl.icheme.science.flowsheet.Params(pump)),
+                new Flowsheet.Unit("h", "old_heater", "H-201", 140, 60, new com.wormzjl.icheme.science.flowsheet.Params(new JsonObject())));
+        var amounts = new java.util.LinkedHashMap<String, Double>();
+        amounts.put("Water", 99.0);
+        amounts.put("Bitumen", 1.0);
+        var feed = new Flowsheet.Stream("f", "FEED-2", null, new Flowsheet.End("p", "in"), new Flowsheet.Feed(300, 2e5, amounts, List.of()), List.of(new Flowsheet.Point(10, 70)), new JsonObject());
+        var sheet = new Flowsheet(new Flowsheet.Basis(SheetFixture.NETWORK, "r1", SheetFixture.FLUIDS.axis()), units, List.of(feed), FlowsheetSolver.Settings.DEFAULT);
+        var lines = changes(sheet, t);
+        assertEquals(List.of("Unit", "Component", "Field", "Data"), lines.stream().map(FileColumns.Change::kind).toList());
+        assertTrue(lines.get(0).text().startsWith("H-201 Old heater"), lines.get(0).text());
+        assertEquals("Bitumen left the package: 1.00 mole % of FEED-2 parked, not solved.", lines.get(1).text());
+        assertEquals("P-201 has a new setting, Rise: it starts at its default.", lines.get(2).text());
+        assertTrue(lines.get(3).text().startsWith("Package revision changed from r1 to "), lines.get(3).text());
+        assertEquals(List.of(true, true, false, false), lines.stream().map(FileColumns.Change::warn).toList(), "what left the solve warns; the rest only says");
+        assertTrue(t.missing.isEmpty(), () -> "missing " + t.missing);
+    }
+
+    @Test
+    void theChangesDialogShowsWhatFitsAboveItsFoot() {
+        var line = new FileColumns.Change("Unit", "H-201: kept.", true);
+        assertEquals(3, FileColumns.fits(List.of(line, line, line), SheetFixture.M, 400, 51));
+        assertEquals(2, FileColumns.fits(List.of(line, line, line), SheetFixture.M, 400, 50));
+    }
+
+    @Test
+    void aDrumsStreamsTableHasItsOpenOutlet() {
+        var units = List.of(new Flowsheet.Unit("d", "drum", "D-101", 100, 60, SheetEditor.defaults("drum", SheetFixture::column)));
+        var streams = List.of(new Flowsheet.Stream("f", "F", null, new Flowsheet.End("d", "in"), SheetFixture.water(100), List.of(new Flowsheet.Point(10, 70)), new JsonObject()),
+                new Flowsheet.Stream("g", "G", new Flowsheet.End("d", "gas"), null, null, List.of(new Flowsheet.Point(400, 40)), new JsonObject()));
+        var sheet = new Flowsheet(SheetFixture.basis(), units, streams, FlowsheetSolver.Settings.DEFAULT);
+        var run = com.wormzjl.icheme.science.flowsheet.FlowsheetEngine.run(sheet, SheetFixture.CATALOG, () -> {
+        });
+        var editor = SheetFixture.editor(sheet);
+        var x = new SheetContext(editor, new SheetState(editor.sheet(), sheet, run, 1, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS);
+        var open = x.openOutlets(units.getFirst());
+        assertEquals(java.util.Set.of("water"), open.keySet(), "the water leaves by the port with no stream on it; the empty oil outlet says nothing");
+        assertEquals(100, open.get("water").moles(), 1e-6);
+        assertEquals("Free water (open)", x.text("door.open_outlet", StreamDoors.portName(x, "water")));
     }
 
     @Test
