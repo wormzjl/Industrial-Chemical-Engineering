@@ -179,6 +179,19 @@ class CoolingTowerGeometryTest {
         for(var polygon:chimney)for(int i=1;i<polygon.positions().length;i+=3)
             assertTrue(polygon.positions()[i]>=shape.coolingTower().shellBaseHeight()-1e-9);
     }
+    /** A wall a quarter of a metre thick shows as a knife edge at the top: a ring closes it, drawn and colliding, at every diameter. */
+    @Test void aNaturalShellEndsInAThickRing(){
+        for(int diameter=40;diameter<=80;diameter+=10){
+            int height=(int)(1.3*diameter);double axis=diameter/2.0+.5,edge=diameter/100.0;
+            var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,diameter,height,EquipmentShape.Heading.NORTH,0);
+            var unit=ProcessUnit.of(shape);
+            double lip=unit.mesh().facets().stream().filter(f->f.material()==Mesh.Material.TOWER_CONCRETE).flatMap(f->f.positions().stream())
+                    .filter(p->p[1]==height).mapToDouble(p->Math.hypot(p[0]-axis,p[2]-axis)).max().orElseThrow();
+            assertTrue(unit.mesh().facets().stream().anyMatch(f->f.material()==Mesh.Material.CONCRETE&&f.min()[1]==height&&f.max()[1]==height&&f.normal()[1]>.9),diameter+" m: the top is closed");
+            for(double thick:new double[]{lip+.45*edge,lip-.25-.45*edge})assertTrue(unit.inside(new double[]{axis+thick,height-edge,axis}),diameter+" m: the ring collides at "+thick);
+            assertFalse(unit.inside(new double[]{axis+lip+edge,height-edge,axis}),diameter+" m: it stops outside the wall");
+        }
+    }
     @Test void aFullHeightChimneyStaysHollowAndHasEveryConnection(){
         var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,104,EquipmentShape.Heading.NORTH,0);
         var unit=ProcessUnit.of(shape);double axis=40.5;

@@ -140,6 +140,10 @@ final class CoolingTowerDesign extends UnitDesign {
             }
             u.solids.add(ProcessUnit.Solid.hollowCone(axis,axis,y,hi,ra,rb,.25));
         }
+        // The wall is thin, as a real shell's is: a stiffening ring closes its top and stands proud of it on both sides.
+        double lip=shellRadius(throat,shellScale,zthroat,b,base,height),edge=d/100;
+        u.mesh.ring(frame,lip-.25-edge/2,lip+edge/2,height-2*edge,height,facets,3,Material.CONCRETE);
+        u.solids.add(ProcessUnit.Solid.ring(axis,axis,height-2*edge,height,lip-.25-edge/2,lip+edge/2,0,2*Math.PI));
         // Keep the V-pairs: each basin-floor foot leans inward to two tops on the resized chimney's ring.
         double footRadius=r-.5,strut=d/100,supportRadius=shellScale*r-strut/2;int bays=32;
         for(int i=0;i<bays;i++){
