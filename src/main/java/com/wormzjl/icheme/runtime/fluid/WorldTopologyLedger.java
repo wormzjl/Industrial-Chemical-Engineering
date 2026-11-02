@@ -291,9 +291,12 @@ public final class WorldTopologyLedger {
      */
     public void removeColumn(long id) {
         owned();var unit=columns.remove(id);if(unit==null)return;
-        var moles=destroyed.moles();double energy=destroyed.totalEnergy();
-        for(var s:unit.stations()){var n=s.account().moles();for(int c=0;c<n.length;c++)moles[c]+=n[c];energy+=s.account().energy();}
-        destroyed=new MaterialTotal(moles,energy,destroyed.solidMasses());version++;
+        var moles=destroyed.moles();double energy=destroyed.totalEnergy();var solids=new TreeMap<>(destroyed.solidMasses());
+        for(var s:unit.stations()) {
+            var n=s.account().moles();for(int c=0;c<n.length;c++)moles[c]+=n[c];energy+=s.account().energy();
+            for(var p:s.solids().populations())solids.merge(p.material().id()+"@"+p.size().metres(),p.massKg(),Double::sum);
+        }
+        destroyed=new MaterialTotal(moles,energy,solids);version++;
     }
     /** Reserves {@code count} identities and returns the first. */
     public long reserve(int count){owned();if(count<1)throw new IllegalArgumentException("Reserve at least one identity");long first=nextIdentity;nextIdentity=Math.addExact(nextIdentity,count);version++;return first;}

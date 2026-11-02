@@ -421,7 +421,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
                     PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
             edits.add(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,s.temperature(),s.pressure(),nitrogen),0)));
             var kept=existing==null?null:existing.station(s.port(),s.index());
-            stations.add(new ColumnUnit.Station(s.port(),s.index(),id,s.valve(),kept==null?com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m):kept.account()));
+            stations.add(kept==null?new ColumnUnit.Station(s.port(),s.index(),id,s.valve(),com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m)):new ColumnUnit.Station(s.port(),s.index(),id,s.valve(),kept.account(),kept.solids()));
             id++;
         }
         // Stations a stopped column kept and this start no longer has (the design lost a port) keep their accounts, with no port.

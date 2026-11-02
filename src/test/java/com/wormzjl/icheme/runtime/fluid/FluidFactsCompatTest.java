@@ -80,7 +80,7 @@ class FluidFactsCompatTest {
         var setpoints=new com.wormzjl.icheme.science.column.operation.Setpoints(10,8,320,2.5,1e4,new double[]{.3},new double[]{.1},new double[]{-2e4});
         var account=new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(held,-1.2e6);
         world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,70,0),true,setpoints,
-                List.of(new ColumnUnit.Station(com.wormzjl.icheme.science.column.operation.Port.FEED,0,port,feedValve,account)),
+                List.of(new ColumnUnit.Station(com.wormzjl.icheme.science.column.operation.Port.FEED,0,port,feedValve,account,new com.wormzjl.icheme.science.fluid.state.SolidInventory(List.of(new com.wormzjl.icheme.science.fluid.state.SolidInventory.Population(model.solid("icheme:demo_particle"),com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("100"),1.5))))),
                 new ColumnUnit.Totals(account,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m),2e5,-3e5,-1e4),tube));
         var held0=world.registry.registrations().get(pipe);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(pipe,new WorldTopologyLedger.Registration(held0.device().withSuspendedBy(unit),held0.spec(),held0.revision()+1)),
@@ -249,6 +249,7 @@ class FluidFactsCompatTest {
         assertFalse(left.columns().containsKey(v.id()),"a dismantled column leaves");
         assertEquals(0,suspended(left));
         assertEquals(Arrays.stream(destroyed).sum()+v.stations().getFirst().account().total(),Arrays.stream(left.destroyed().moles()).sum(),1e-9,"its accounts are destroyed");
+        assertEquals(1.5,left.destroyed().solidMasses().values().stream().mapToDouble(Double::doubleValue).sum(),0,"and its solids (merge review, finding 10)");
 
         var running=corpusWorld();var w=running.ledger.columns().values().iterator().next();
         assertTrue(load(edited(image(running),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow().columns().get(w.id()).running(),"a unit whose devices stand keeps running");
@@ -476,13 +477,14 @@ class FluidFactsCompatTest {
         return text.toString();
     }
     private static long suspended(WorldTopologyLedger.Snapshot world){return world.active().values().stream().filter(r->r.device().suspended()).count();}
+
     /** Every column unit, in identity order: what schema 6 carries. */
     private static String columns(WorldTopologyLedger.Snapshot world) {
         var text=new StringBuilder();
         for(var u:new TreeMap<>(world.columns()).values()) {
             if(!text.isEmpty())text.append(";");
             text.append(u.id()).append(":").append(u.running()).append(":").append(u.setpoints().feedRate()).append(":").append(u.totals().taken().total()).append(":condenser=").append(u.condenser());
-            for(var s:u.stations())text.append(":").append(s.port()).append(s.index()).append("=").append(s.device()).append("/").append(s.valve()).append("/").append(s.account().total()).append("/").append(s.account().energy());
+            for(var s:u.stations())text.append(":").append(s.port()).append(s.index()).append("=").append(s.device()).append("/").append(s.valve()).append("/").append(s.account().total()).append("/").append(s.account().energy()).append("/").append(s.solids().massKg());
         }
         return text.toString();
     }

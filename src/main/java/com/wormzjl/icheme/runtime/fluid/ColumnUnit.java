@@ -4,6 +4,7 @@ import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.column.operation.Setpoints;
 import com.wormzjl.icheme.science.column.operation.SplitTable;
+import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -46,13 +47,15 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
      * One port of the column: its kind, which one of that kind (from 0), its registered port device (0 while stopped), the
      * boundary valve it stands inside, and its account.
      */
-    public record Station(Port port,int index,long device,long valve,Account account) {
+    public record Station(Port port,int index,long device,long valve,Account account,SolidInventory solids) {
+        public Station(Port port,int index,long device,long valve,Account account){this(port,index,device,valve,account,SolidInventory.EMPTY);}
         public Station {
-            Objects.requireNonNull(port);Objects.requireNonNull(account);
+            Objects.requireNonNull(port);Objects.requireNonNull(account);Objects.requireNonNull(solids);
             if(index<0||index>=MAXIMUM_STATIONS||device<0||valve<=0)throw new IllegalArgumentException("Invalid column station");
         }
-        public Station withDevice(long value){return new Station(port,index,value,valve,account);}
-        public Station withAccount(Account value){return new Station(port,index,device,valve,value);}
+        public Station withDevice(long value){return new Station(port,index,value,valve,account,solids);}
+        public Station withAccount(Account value){return new Station(port,index,device,valve,value,solids);}
+        public Station withSolids(SolidInventory value){return new Station(port,index,device,valve,account,value);}
     }
 
     /**

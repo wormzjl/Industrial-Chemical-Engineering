@@ -27,14 +27,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class ColumnRunTest {
     /** The ports' bookings, summed by port node, beside the column's own. */
     static final class Counting implements IslandCoordinator.Ports {
-        final IslandCoordinator.Ports inner;final Map<Long,double[]> moles=new HashMap<>();final Map<Long,Double> heat=new HashMap<>();
+        final IslandCoordinator.Ports inner;final Map<Long,double[]> moles=new HashMap<>();final Map<Long,Double> heat=new HashMap<>(),solids=new HashMap<>();
         Counting(IslandCoordinator.Ports inner){this.inner=inner;}
         public boolean ready(long island,PassiveNetwork graph,long start){return inner.ready(island,graph,start);}
         public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice){return inner.plans(island,graph,slice);}
         public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit){return inner.heatRead(side,partner,start,seconds,transit);}
         public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
             for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);
-            for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE){var sum=moles.computeIfAbsent(b.nodeId(),id->new double[b.moles().length]);var n=b.moles();for(int i=0;i<n.length;i++)sum[i]+=n[i];}
+            for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE){var sum=moles.computeIfAbsent(b.nodeId(),id->new double[b.moles().length]);var n=b.moles();for(int i=0;i<n.length;i++)sum[i]+=n[i];solids.merge(b.nodeId(),b.solids().massKg(),Double::sum);}
             inner.booked(island,graph,start,end,result);
         }
     }
@@ -67,10 +67,11 @@ class ColumnRunTest {
         var world=new EventPathWorld();world.lag=lag;var model=world.model;int m=model.componentCount();
         var n2=EventPathWorld.nitrogen().composition();
         var water=new double[m];water[m-1]=1;
-        long generator=pumped?world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,300,300000,water),.05):world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,n2),.05);
-        if(pumped)world.place(1,64,0,Kind.PUMP,Direction.EAST,new FlowControl.Pump(.01,500000),null,.05);else world.place(1,64,0,Kind.PIPE,Direction.EAST,.05);
-        long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST);
-        long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST),tank=0,steamSource=0,steamValve=0;
+        boolean liquid=pumped||feedSolids!=SlurryFeed.NONE;
+        long generator=liquid?world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,300,300000,water,feedSolids),.05):world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,n2),.05);
+        if(pumped)world.place(1,64,0,Kind.PUMP,Direction.EAST,new FlowControl.Pump(.01,500000),null,.05);else world.place(1,64,0,Kind.PIPE,Direction.EAST,lineBore);
+        long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),lineBore);
+        long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),lineBore),tank=0,steamSource=0,steamValve=0;
         if(!blocked){world.place(12,64,0,Kind.PIPE,Direction.EAST,productBore);tank=world.place(13,64,0,Kind.RESERVOIR,Direction.EAST);}
         long waterSource=0;
         if(condenser){waterSource=world.place(0,64,4,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,300,300000,water),.05);world.place(1,64,4,Kind.PIPE,Direction.EAST,.05);world.place(5,64,4,Kind.PIPE,Direction.EAST,.05);world.place(6,64,4,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,200000,water),.05);}
@@ -82,7 +83,7 @@ class ColumnRunTest {
         long unit=world.ledger.reserve(1);long feed=world.ledger.nextIdentity(),product=feed+1,steamPort=feed+2,tube=condenser?feed+3:0,shell=condenser?feed+4:0;
         var g=new PipeResistanceGeometry(world.registry.registrations().get(feedValve).device().geometry());
         var setpoints=new Setpoints(.5,.5,330,1,0,steam?new double[]{.2}:new double[0],new double[0],new double[0]);
-        var stations=new ArrayList<>(List.of(new ColumnUnit.Station(Port.FEED,0,feed,feedValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,product,productValve,Account.empty(m))));
+        var stations=new ArrayList<>(List.of(new ColumnUnit.Station(Port.FEED,0,feed,feedValve,Account.empty(m)),new ColumnUnit.Station(productPort,0,product,productValve,Account.empty(m))));
         if(steam)stations.add(new ColumnUnit.Station(Port.STEAM,0,steamPort,steamValve,Account.empty(m)));
         world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,stations,ColumnUnit.Totals.empty(m),tube));
         var edits=new ArrayList<>(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
@@ -96,19 +97,21 @@ class ColumnRunTest {
         world.registry.submit(edits,Math.max(steamPort,shell)+1,null);
         if(solves!=null){solves.model=model;ops.solves(solves);}
         ops.refresh();world.columns=ops;
-        if(solves==null){var s=pumped?waterTable(model,setpoints):table(model,setpoints);ops.table(unit,s.table(),s.enthalpy());}
+        if(solves==null){var s=liquid?waterTable(model,setpoints,productPort):table(model,setpoints,setpoints.steamPerFeed(),productPort);ops.table(unit,s.table(),s.enthalpy());}
         return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell);
     }
     /** A liquid water feed on the rig's line through a pump, ahead of its boundary valve. */
     private boolean pumped;
-    /** The bore of the rig's product line, m. */
-    private double productBore=.05;
+    /** The bore of the rig's product line and of its feed line and valves, m. */
+    private double productBore=.05,lineBore=.05;
+    /** The solids in the rig's feed, and the port its product leaves by. */
+    private SlurryFeed feedSolids=SlurryFeed.NONE;private Port productPort=Port.DISTILLATE;
     /** The rig's table for a water feed: everything to the distillate, 1 kJ/mol cooler. */
-    private static ColumnSolve.Solved waterTable(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints) {
+    private static ColumnSolve.Solved waterTable(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints,Port port) {
         int m=model.componentCount();var water=new double[m];water[m-1]=1;double h=model.flashTP(300,300000,water.clone(),()->{}).enthalpy();
         var rows=new double[1][m];Arrays.fill(rows[0],h-1000);
         var all=new double[m];Arrays.fill(all,1);var held=new boolean[m];Arrays.fill(held,true);
-        var table=new SplitTable(model.components(),List.of(new SplitTable.Product(Port.DISTILLATE,0,all,330,250000)),0,new double[0],-1000,
+        var table=new SplitTable(model.components(),List.of(new SplitTable.Product(port,0,all,330,250000)),0,new double[0],-1000,
                 new SplitTable.Reference(water,h,30,new double[0],1,setpoints,330,new double[0]),held);
         return new ColumnSolve.Solved(table,rows,null,-1000,"test","");
     }
@@ -197,6 +200,33 @@ class ColumnRunTest {
             assertArrayEquals(x.totals().produced().moles(),y.totals().produced().moles(),"what it made at "+bore);
         }
     }
+    /** Solids in the feed leave by the bottoms, every gram: what arrived is at the inlet, in the bottoms' account or given (merge review, finding 10). */
+    @Test void solidsInTheFeedLeaveByTheBottoms() {
+        // Lines sized for the 18 g/s: slower than its deposition velocity, a line plugs with the solid (SolidMobility).
+        feedSolids=new SlurryFeed(1e-4,List.of(new SlurryFeed.Grade("icheme:demo_particle",com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("10"),1)));productPort=Port.BOTTOMS;lineBore=productBore=.005;
+        var r=rig(0);var world=r.world();world.runTo(6000);
+        var u=world.ledger.column(r.unit());
+        double arrived=r.counting().solids.getOrDefault(r.feed(),0.),given=r.counting().solids.getOrDefault(r.product(),0.);
+        double inlet=u.station(Port.FEED,0).solids().massKg(),bottoms=u.station(Port.BOTTOMS,0).solids().massKg();
+
+        assertTrue(arrived>0,"solids reached the feed port");assertTrue(given>0,"the bottoms gave solids");
+        assertEquals(arrived,inlet+bottoms+given,1e-9*arrived,"inlet "+inlet+", bottoms "+bottoms+", given "+given);
+        var stock=0.0;for(var s:world.coordinator.snapshots())for(var n:s.graph().reservoirs())if(n.id()==r.tank())stock=n.inventory().solids().massKg();
+        assertTrue(stock>0,"the tank downstream holds them");
+    }
+    /** A crystal melts as it is taken: its component, with its stored energy made true by its offset; an inert solid stays solid (plan section 11). */
+    @Test void aCrystalMeltsAsTheColumnTakesIt() {
+        var r=rig(0);var ops=r.ops();int m=r.world().model.componentCount();double[] weights=r.world().model.molecularWeights();
+        var ice=new com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial("icheme:ice","1",917,2100,new com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial.Crystal(r.world().model.components().get(m-1),-3e5));
+        var sand=new com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial("icheme:sand","1",2600,800,null);
+        var size=com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("100");
+        var stock=new com.wormzjl.icheme.science.fluid.state.SolidInventory(List.of(new com.wormzjl.icheme.science.fluid.state.SolidInventory.Population(ice,size,.5),new com.wormzjl.icheme.science.fluid.state.SolidInventory.Population(sand,size,2)));
+        var held=new double[m];held[0]=3;
+        var taken=ops.melted(held,100,stock);
+        assertEquals(.5/weights[m-1],taken.moles()[m-1],1e-12);assertEquals(3,taken.moles()[0],0);
+        assertEquals(100+.5*-3e5,taken.energy(),1e-9);
+        assertEquals(1,stock.withoutCrystals().populations().size());
+    }
     /** A port its design lost keeps its account and takes no part in the cycle (merge review, finding 16). */
     @Test void aStationItsDesignLostKeepsItsAccount() {
         var r=rig(0);var world=r.world();long unit=r.unit();int m=world.model.componentCount();
@@ -257,15 +287,16 @@ class ColumnRunTest {
     private static void assertCycle(long expected,long actual,String message){assertTrue(Math.abs(actual-expected)<ColumnOperation.CYCLE_TICKS/2,message+": expected "+expected+", was "+actual);}
     /** A solve's table: everything to the distillate at 330 K, 1 kJ/mol below what the feed brings, so the condenser removes it. */
     static ColumnSolve.Solved table(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints){return table(model,setpoints,setpoints.steamPerFeed());}
+    static ColumnSolve.Solved table(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints,double[] steam){return table(model,setpoints,steam,Port.DISTILLATE);}
     /** The table at the steam ratios {@code steam}: the water leaves at the steam's own enthalpy, so the closure holds at any ratio. */
-    static ColumnSolve.Solved table(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints,double[] steam) {
+    static ColumnSolve.Solved table(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model,Setpoints setpoints,double[] steam,Port port) {
         int m=model.componentCount();var n2=EventPathWorld.nitrogen().composition();
         double h=model.flashTP(340,300000,n2.clone(),()->{}).enthalpy()/sum(n2);
         var water=new double[m];water[m-1]=1;double hs=model.flashTP(450,300000,water,()->{}).enthalpy();
         var rows=new double[1][m];Arrays.fill(rows[0],h-1000);rows[0][m-1]=hs;
         var z=new double[m];for(int i=0;i<m;i++)z[i]=n2[i]/sum(n2);
         var all=new double[m];Arrays.fill(all,1);var held=new boolean[m];Arrays.fill(held,true);
-        var table=new SplitTable(model.components(),List.of(new SplitTable.Product(Port.DISTILLATE,0,all,330,250000)),0,new double[0],-1000,
+        var table=new SplitTable(model.components(),List.of(new SplitTable.Product(port,0,all,330,250000)),0,new double[0],-1000,
                 new SplitTable.Reference(z,h,30,steam,1,setpoints,330,new double[steam.length]),held);
         return new ColumnSolve.Solved(table,rows,null,-1000,"test","");
     }

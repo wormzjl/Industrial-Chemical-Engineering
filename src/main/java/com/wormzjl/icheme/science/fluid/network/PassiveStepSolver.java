@@ -1905,7 +1905,7 @@ public final class PassiveStepSolver {
     /**
      * Batch 2026-10-28-column-operation (plan 4.2 and 4.3): {@code graph} with each running column's port planned for the
      * slice ({@link PortPlan}). An outlet's generator stands at its account's composition and the planned temperature, at
-     * the port's pressure and its own volume; each port's boundary valve regulates the mass flow planned for it, measured
+     * the port's pressure and its own volume, holding the account's solids in their ratio to the moles; each port's boundary valve regulates the mass flow planned for it, measured
      * by the column ({@link PortPlan#COLUMN_SENSOR}; a valve the column works is never bare). A generator already at the
      * planned state and a target within {@link #VALVE_DEADBAND} of the valve's stand, so a steady plant keeps its graph.
      */
@@ -1919,10 +1919,11 @@ public final class PassiveStepSolver {
             if(plan.moles()!=null) {
                 if(n.kind()!=PassiveNetwork.NodeKind.GENERATOR)throw new IllegalArgumentException("An outlet port is a generator");
                 double t=plan.temperature(),p=n.state().pressure();var x=plan.moles();
-                if(!(t==n.state().temperature()&&sameShares(PhaseLayout.totalAmounts(n.state()),x))) {
+                if(!(t==n.state().temperature()&&sameShares(PhaseLayout.totalAmounts(n.state()),x)&&plan.solids().empty()&&n.state().solids().empty())) {
                     var unit=model.flashTP(t,p,x,checkpoint);double factor=n.inventory().volume()/unit.volume();
                     for(int c=0;c<x.length;c++)x[c]*=factor;
                     var state=model.flashTP(t,p,x,checkpoint);
+                    if(!plan.solids().empty())state=state.withSolids(plan.solids().scale(factor));
                     if(nodes==null)nodes=new ArrayList<>(graph.reservoirs());
                     nodes.set(node,new PassiveNetwork.Reservoir(n.id(),n.elevation(),state,n.kind(),new PassiveNetwork.Inventory(n.inventory().volume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids())));
                 }

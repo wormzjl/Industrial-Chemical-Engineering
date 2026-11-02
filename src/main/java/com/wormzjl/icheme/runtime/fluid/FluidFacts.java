@@ -279,13 +279,13 @@ final class FluidFacts {
     }
     /**
      * A column unit (schema 6, batch 2026-10-28-column-operation): its identity, origin, run switch, setpoints, stations
-     * (each a port by name, which one, its port device, its valve and its account) and totals.
+     * (each a port by name, which one, its port device, its valve, its account and its solids) and totals.
      */
     private static void column(Fields f,ColumnUnit u) {
         var s=u.setpoints();var t=u.totals();
         f.count(u.id());position(f,u.master());f.bool(u.running())
                 .record(q->setpoints(q,s))
-                .list(u.stations(),(q,st)->q.name(st.port()).count(st.index()).count(st.device()).count(st.valve()).record(a->account(a,st.account())))
+                .list(u.stations(),(q,st)->{q.name(st.port()).count(st.index()).count(st.device()).count(st.valve()).record(a->account(a,st.account()));solids(q,Solid.of(st.solids()));})
                 .record(q->q.record(a->account(a,t.taken())).record(a->account(a,t.produced())).f64(t.reboiler()).f64(t.condenser()).f64(t.pumparounds()))
                 .count(u.condenser()).bool(u.leaving());
     }
@@ -293,9 +293,10 @@ final class FluidFacts {
         long id=f.count(0);var master=position(f);boolean running=f.bool(false);
         var setpoints=f.record(null,FluidFacts::setpoints);
         var stations=f.list(List.of(),q->{var port=q.name(com.wormzjl.icheme.science.column.operation.Port.class,null);long index=q.count(0),device=q.count(0),valve=q.count(0);
-            var account=q.record(null,FluidFacts::account);required(port,q,"station port");required(account,q,"station account");
+            var account=q.record(null,FluidFacts::account);required(port,q,"station port");required(account,q,"station account");var held=solids(q);
             if(index>=ColumnUnit.MAXIMUM_STATIONS)throw q.invalid("station index "+index);
-            return valid(q,"column station",()->new ColumnUnit.Station(port,(int)index,device,valve,account));});
+            // Crystals melt where they arrive, so what an account holds is inert: its saved record is the whole material.
+            return valid(q,"column station",()->new ColumnUnit.Station(port,(int)index,device,valve,account,inventory(held,s->new SolidMaterial(s.id,s.revision,s.density,s.heatCapacity,null))));});
         var totals=f.record(null,q->{var taken=q.record(null,FluidFacts::account);var produced=q.record(null,FluidFacts::account);double reboiler=q.f64(0),condenser=q.f64(0),pumparounds=q.f64(0);
             required(taken,q,"taken total");required(produced,q,"produced total");
             return valid(q,"column totals",()->new ColumnUnit.Totals(taken,produced,reboiler,condenser,pumparounds));});
@@ -558,7 +559,7 @@ final class FluidFacts {
         // their queued Starts and Stops, which do not survive this path, settled on what stands.
         var columns=new HashMap<Long,ColumnUnit>();
         for(var saved:world.columns) {
-            var u=saved;
+            var u=restate?saved.withStations(saved.running(),saved.stations().stream().map(s->s.withSolids(inventory(Solid.of(s.solids()),solid))).toList()):saved;
             if(!axis.identity()) {
                 var stations=u.stations().stream().map(s->s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(s.account().moles(),removed),s.account().energy()))).toList();
                 var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),

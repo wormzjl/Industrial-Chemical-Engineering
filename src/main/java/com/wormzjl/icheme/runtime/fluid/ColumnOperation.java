@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.fluid.network.ConservativeTransport;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.PortPlan;
+import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import java.util.*;
 
 /**
@@ -25,7 +26,9 @@ import java.util.*;
  * split, into the outlets' accounts; the energy closes on the condenser. An outlet's generator gives what its plan allows,
  * planned from the account's moles booked through the slice start less {@link #FENCE_TICKS}; the account is debited by
  * exactly what the island booked, component by component, and its energy by the same share; the difference between the
- * energy the island booked and that share is the condenser's (the column brings the product to the port's state).</p>
+ * energy the island booked and that share is the condenser's (the column brings the product to the port's state).
+ * Solids go round the split (plan 5.2 and 11): a crystal melts as it arrives, booked as its component with its true energy;
+ * an inert solid waits at its inlet, a cycle moves what arrived by its tick to the bottoms, and the bottoms' generator gives it.</p>
  */
 public final class ColumnOperation implements IslandCoordinator.Ports {
     /** A cycle each 5 s of online time (plan section 5). */
@@ -66,12 +69,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     record Owed(long tick,double joule,boolean booked) {}
     /** The condenser holds at most this many seconds of its design duty its water has not taken, and its water leaves at least this far below the condensate (C6b, plan section 10). */
     static final double CONDENSER_HOLD_SECONDS=60,APPROACH_KELVIN=5;
-    /** Arrivals at an inlet over online ticks {@code start} to {@code end}: already in the account, a cycle takes none of it before its time. */
-    record Span(long start,long end,Account arrived) {}
+    /** Arrivals at an inlet over online ticks {@code start} to {@code end}, with their solids: already in the account, a cycle takes none of it before its time. */
+    record Span(long start,long end,Account arrived,SolidInventory solids) {}
     /** What an outlet gave over online ticks {@code start} to {@code end}, mol: already off the account. */
     record Gift(long start,long end,double moles) {}
-    /** A cycle's product credited to an outlet at {@code tick}. */
-    record Credit(long tick,Account product) {}
+    /** A cycle's product credited to an outlet at {@code tick}, and the solids it moved there. */
+    record Credit(long tick,Account product,SolidInventory solids) {}
     /** An inlet account's level after the cycle at {@code tick}, mol, and the rate the column demanded there, mol/s (0: nothing). */
     record Level(long tick,double held,double rate,double molarMass) {}
     /** A running column's state (plan section 12: the split table, the cycle clock, the windows). */
@@ -185,7 +188,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         r.table=s.table();r.enthalpy=s.enthalpy();r.tableTick=s.tableTick();r.applied=s.applied();r.solvedCondenser=s.solvedCondenser();r.status="RUNNING";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING;
         r.lastSolve=s.tableTick();
         for(var l:s.levels())r.levels.computeIfAbsent(l.device(),d->new ArrayDeque<>()).addLast(new Level(l.tick(),l.held(),l.rate(),l.molarMass()));
-        for(var c:s.credits())r.credits.computeIfAbsent(c.device(),d->new ArrayDeque<>()).addLast(new Credit(c.tick(),c.product()));
+        for(var c:s.credits())r.credits.computeIfAbsent(c.device(),d->new ArrayDeque<>()).addLast(new Credit(c.tick(),c.product(),SolidInventory.EMPTY));
         return r;
     }
     /** A unit's engine state into the ledger after each cycle, so a save carries it: the windows older than the plans can still read are dropped. */
@@ -389,15 +392,15 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private void cycle(Run r,long tick) {
         var u=topology.column(r.unit);var stations=new ArrayList<>(u.stations());
         // What each inlet had by the tick: its account less what arrived after it, an interval across the tick shared by time.
-        var available=new HashMap<Long,Account>();
+        var available=new HashMap<Long,Account>();var waiting=new HashMap<Long,SolidInventory>();
         for(var s:u.stations()) {
             if(!s.port().inlet()||s.device()==0)continue;
-            var later=Account.empty(weights.length);var queue=r.spans.get(s.device());
+            var later=Account.empty(weights.length);var laterSolids=SolidInventory.EMPTY;var queue=r.spans.get(s.device());
             if(queue!=null) {
                 while(!queue.isEmpty()&&queue.peekFirst().end()<=tick)queue.removeFirst();
-                for(var span:queue)later=later.plus(span.start()>=tick?span.arrived():span.arrived().part((span.end()-tick)/(double)(span.end()-span.start())));
+                for(var span:queue){double share=span.start()>=tick?1:(span.end()-tick)/(double)(span.end()-span.start());later=later.plus(span.arrived().part(share));laterSolids=laterSolids.plus(span.solids().scale(share));}
             }
-            available.put(s.device(),s.account().less(later));
+            available.put(s.device(),s.account().less(later));waiting.put(s.device(),laterSolids);
         }
         var totals=u.totals();
         if(r.table==null) {
@@ -437,10 +440,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         replace(stations,Port.FEED,0,a->a.less(step.feed()));
         for(int j=0;j<steam.size();j++){var taken=step.steam().get(j);replace(stations,Port.STEAM,j,a->a.less(taken));}
         for(var e:available.entrySet()){for(var s:stations)if(s.device()==e.getKey())available.put(e.getKey(),s.port()==Port.FEED?e.getValue().less(step.feed()):s.port()==Port.STEAM?e.getValue().less(step.steam().get(s.index())):e.getValue());}
+        // Every solid that arrived by the tick goes to the bottoms (plan 5.2); a table with no bottoms leaves them at the inlet.
+        var solids=SolidInventory.EMPTY;
+        if(t.product(Port.BOTTOMS,0)>=0)for(int i=0;i<stations.size();i++){var s=stations.get(i);var later=waiting.get(s.device());if(later!=null&&!s.solids().empty()){solids=solids.plus(s.solids().less(later));stations.set(i,s.withSolids(later));}}
         for(int k=0;k<t.products().size();k++) {
-            var p=t.products().get(k);var product=step.products().get(k);
+            var p=t.products().get(k);var product=step.products().get(k);var moved=p.port()==Port.BOTTOMS&&p.index()==0?solids:SolidInventory.EMPTY;
             var s=station(stations,p.port(),p.index());replace(stations,p.port(),p.index(),a->a.plus(product));
-            if(product.total()>0)r.credits.computeIfAbsent(s.device(),d->new ArrayDeque<>()).addLast(new Credit(tick,product));
+            if(!moved.empty())stations.set(stations.indexOf(station(stations,p.port(),p.index())),station(stations,p.port(),p.index()).withSolids(s.solids().plus(moved)));
+            if(product.total()>0||!moved.empty())r.credits.computeIfAbsent(s.device(),d->new ArrayDeque<>()).addLast(new Credit(tick,product,moved));
         }
         var in=step.feed();for(var a:step.steam())in=in.plus(a);
         var out=Account.empty(weights.length);for(var a:step.products())out=out.plus(a);
@@ -547,9 +554,9 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      */
     private PortPlan outletPlan(Run r,ColumnUnit.Station s,PassiveNetwork.Reservoir node,IslandClock.Slice slice) {
         long fence=slice.startTick()-FENCE_TICKS;
-        var available=s.account().moles();var log=r==null?null:r.credits.get(s.device());
+        var available=s.account().moles();var solids=s.solids();var log=r==null?null:r.credits.get(s.device());
         var made=r==null?null:asOf(log,Credit::tick,fence);
-        if(log!=null)for(var c:log)if(c.tick()>fence){var n=c.product().moles();for(int i=0;i<available.length;i++)available[i]=Math.max(0,available[i]-n[i]);}
+        if(log!=null)for(var c:log)if(c.tick()>fence){var n=c.product().moles();for(int i=0;i<available.length;i++)available[i]=Math.max(0,available[i]-n[i]);solids=solids.less(c.solids());}
         double total=0;for(double n:available)total+=n;
         double temperature=node.state().temperature();
         var table=r==null?null:r.tableAt(fence);
@@ -560,51 +567,57 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             double produced=mass(made.product().moles())/(CYCLE_TICKS/20.0),aim=produced*BUFFER_SECONDS/2;
             if(aim>0)rate=produced*Math.max(0,Math.min(2,mass/aim));
         }
-        return new PortPlan(node.id(),s.valve(),Math.min(cap,rate),temperature,available);
+        return new PortPlan(node.id(),s.valve(),Math.min(cap,rate),temperature,available,solids);
     }
     private double mass(double[] moles){double m=0;for(int i=0;i<moles.length;i++)m+=moles[i]*weights[i];return m;}
     private double molar(double[] moles){double t=0;for(double n:moles)t+=n;return t>0?mass(moles)/t:0;}
     /** What the island's ports gave and took over {@code start} to {@code end} (plan 4.4). */
     @Override public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
         if(portUnits.isEmpty()||end<=start)return;
-        Map<Long,double[]> moles=null;Map<Long,Double> energy=null;
+        Map<Long,double[]> moles=null;Map<Long,Double> energy=null;Map<Long,SolidInventory> solids=null;
         for(var b:result.boundaries()) {
             if(b.kind()!=ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE||!portUnits.containsKey(b.nodeId()))continue;
-            if(moles==null){moles=new HashMap<>();energy=new HashMap<>();}
+            if(moles==null){moles=new HashMap<>();energy=new HashMap<>();solids=new HashMap<>();}
             var sum=moles.computeIfAbsent(b.nodeId(),id->new double[weights.length]);var n=b.moles();for(int i=0;i<n.length;i++)sum[i]+=n[i];
-            energy.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);
+            energy.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);solids.merge(b.nodeId(),b.solids(),SolidInventory::plus);
         }
-        if(moles!=null)credit(moles,energy,start,end);
+        if(moles!=null)credit(moles,energy,solids,start,end);
         // A cycle waiting on this island's bookings may run now, whether or not anything moved.
         boolean waiting=false;for(var r:runs.values())waiting|=r.nextCycle<=coordinator.now();
         if(waiting)due();
     }
     /** Books what the ports gave and took over {@code start} to {@code end}: an inlet's arrivals as a span, an outlet's gift as a debit. */
-    private void credit(Map<Long,double[]> moles,Map<Long,Double> energy,long start,long end) {
+    private void credit(Map<Long,double[]> moles,Map<Long,Double> energy,Map<Long,SolidInventory> solids,long start,long end) {
         for(var e:moles.entrySet()) {
             long device=e.getKey();long unit=portUnits.get(device);var u=topology.column(unit);var r=runs.get(unit);
             ColumnUnit.Station s=null;for(var st:u.stations())if(st.device()==device)s=st;
             if(s==null)continue;
-            double joule=energy.get(device);var n=e.getValue();
+            double joule=energy.get(device);var n=e.getValue();var solid=solids.get(device);
             if(s.port().inlet()) {
                 // A void takes: its booking is what left the island, negative.
                 var arrived=new double[n.length];for(int i=0;i<n.length;i++)arrived[i]=Math.max(0,-n[i]);
-                var account=new Account(arrived,-joule);
+                var account=melted(arrived,-joule,solid);var inert=solid.withoutCrystals();
                 // In the account at once (a fact), and a span the cycles take it by (state).
-                topology.column(withAccount(u,s,s.account().plus(account)));
-                if(r!=null)r.spans.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Span(start,end,account));
+                topology.column(withPort(u,s,s.account().plus(account),s.solids().plus(inert)));
+                if(r!=null)r.spans.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Span(start,end,account,inert));
             } else {
                 // A generator gives: debit exactly that, component by component; the energy by the same share of the account.
                 var held=s.account().moles();double before=s.account().total(),given=0;
                 for(int i=0;i<n.length;i++){double g=Math.max(0,n[i]);if(g>held[i]*(1+1e-9)+1e-12)com.wormzjl.icheme.IChemE.LOGGER.error("column status=OVERDRAWN unit={} port={} component={} held={} given={}",unit,s.port(),i,held[i],g);held[i]=Math.max(0,held[i]-g);given+=g;}
                 double share=before>0?Math.min(1,given/before):0,debited=share*s.account().energy();
                 var account=new Account(held,s.account().energy()-debited);
-                var t=u.totals();u=withAccount(u,s,account).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
+                var t=u.totals();u=withPort(u,s,account,s.solids().less(solid)).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
                 topology.column(u);
                 if(r!=null)r.gifts.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Gift(start,end,given));
                 long partner=partnerOf(u.condenser());if(partner!=0&&r!=null)owe(r,u,partner,end,-(joule-debited),true);
             }
         }
+    }
+    /** What an inlet took, {@code moles} and {@code joule}, with the crystals of {@code solids} melted into it: each its component, with a population's stored sensible energy made true by its offset (plan section 11, D61). */
+    Account melted(double[] moles,double joule,SolidInventory solids) {
+        double[] arrived=moles.clone();double energy=joule;
+        for(var p:solids.crystals()){var crystal=p.material().crystal();int c=axis.indexOf(crystal.component());arrived[c]+=p.massKg()/weights[c];energy+=p.massKg()*crystal.energyOffset();}
+        return new Account(arrived,energy);
     }
     /** What outlet {@code device} gave after {@code fence}, mol: a span across the fence by time; what is older is dropped. State: a reload starts it empty. */
     private double givenSince(Run r,long device,long fence) {
@@ -640,8 +653,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var held=registry.registrations().get(partner-PhysicalFluidTopology.sideIdentity(0));
         return held!=null&&held.device().suspended()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.NONE:null;
     }
-    private static ColumnUnit withAccount(ColumnUnit u,ColumnUnit.Station s,Account account) {
-        var next=new ArrayList<ColumnUnit.Station>();for(var st:u.stations())next.add(st==s||st.port()==s.port()&&st.index()==s.index()?st.withAccount(account):st);
+    private static ColumnUnit withPort(ColumnUnit u,ColumnUnit.Station s,Account account,SolidInventory solids) {
+        var next=new ArrayList<ColumnUnit.Station>();for(var st:u.stations())next.add(st==s||st.port()==s.port()&&st.index()==s.index()?st.withAccount(account).withSolids(solids):st);
         return u.withStations(u.running(),next);
     }
 }
