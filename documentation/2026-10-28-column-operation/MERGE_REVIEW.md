@@ -36,8 +36,8 @@ Decided by the orchestrator; the owner can overrule them:
 
 ## At the merge
 
-- `sync_with_base_branch` refused (the pinned origin). As told, main was not merged in here; only `documentation/INDEX.md` conflicts, and every row of both sides stays.
-- `documentation/` on this branch's head holds 51 files over 1 MB, none added here; main holds none, so they clear at the merge.
+- `sync_with_base_branch` refused (the pinned origin), so main came in by a plain merge, 8aca08f99. Only `documentation/INDEX.md` conflicted, and every row of both sides stays.
+- Main's delta holds no code: `git diff 321b8d1d3 HEAD -- src build.gradle` is empty, so the lane stands. `documentation/` holds no file over 1 MB.
 - `git ls-files -i -c --exclude-standard` is empty.
 - `ColumnOperationGameTests` runs in the fluid lane; the review plant stays a hand review (`runReviewWorldServer`).
 
