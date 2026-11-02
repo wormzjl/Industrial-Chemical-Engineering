@@ -32,7 +32,7 @@ public final class CoolingTowerBasinRenderer {
         double ticks=mc.level.getGameTime()+event.getPartialTick().getGameTimeDeltaPartialTick(false);
         for(var cell:EquipmentShellBlockEntity.clientTankCells()){
             var shape=cell.shape();var origin=cell.origin();
-            if(cell.isRemoved()||cell.getLevel()!=mc.level||shape==null||origin==null||!shape.kind().coolingTower())continue;
+            if(cell.isRemoved()||cell.getLevel()!=mc.level||shape==null||origin==null||shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER)continue;
             var display=TankRenderer.get(cell.getBlockPos(),ticks);if(display==null||display.waterLevel()<=0)continue;
             double height=CoolingTowerBasin.height(display.waterLevel());
             if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+3,origin.getZ()+shape.sizeZ())))continue;

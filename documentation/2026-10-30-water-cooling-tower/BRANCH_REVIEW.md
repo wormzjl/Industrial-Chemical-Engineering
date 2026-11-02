@@ -40,7 +40,7 @@ A fill costs 0.05 ms in Merkel, 0.01 ms as a correlation. The running loop reads
 1. **Dribble evaporation.** Merkel reads about 45% RMS low below 0.2 kg/(s m²). A humidification term like the correlation's would fix it; left out for simplicity.
 2. **Gas at the spray: decided.** The owner kept this 2026-11-02: gas in a spray stream passes to the basin vent, which is what lets a loop prime, replacing the plan's pure liquid water. Methane in the water vents the same way.
 3. **Certification: fixed.** `IslandCertificate.rate()` counts `ATMOSPHERE`, so an evaporating tower can certify STEADY. A wet basin still never reaches REST (surface time constant about 13 days).
-4. **Small items, left.** Water spills at 4/3 m under a 2 m rim, so the rim's clamp is unreachable. `distributorHeight()` and the snapped nozzle differ up to 0.4 m on natural towers (about 4 kPa).
+4. **Small items, left.** Water spills at 1 m under a 1.5 m rim, so the rim's clamp is unreachable. `distributorHeight()` and the snapped nozzle differ up to 0.4 m on natural towers (about 4 kPa).
 5. **GUI gates: fixed.** The tower's control moved to `DeviceColumn` with a gate at every width, and the fan integrates its own phase, so a speed change cannot jump it.
 
 Not run here: the final lane (chain-100, fluid GameTests, campaign), and `verify.ps1` never has been. `equipment_concrete.png` is shared with all equipment. The merge may collide on schema 6, state 30 and protocol numbers with the column operation branch. `tools/cooling-towers/native.init.gradle` is undocumented. No merge, push, version bump or client check.

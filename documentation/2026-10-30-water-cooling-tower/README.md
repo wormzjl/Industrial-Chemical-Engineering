@@ -11,7 +11,7 @@ The constructor adds induced-draft banks of bounded parallel cells and passive n
 - [Natural support and mesh review](NATURAL_TOWER_SUPPORT_REVIEW.md): reference-matched scale, concrete V-struts, internal grillage and geometry-cost evidence.
 - [Basin surface review](BASIN_SURFACE_REVIEW.md): shared wall/water perimeter, height clamp and alignment evidence.
 - [Branch review and consolidation](BRANCH_REVIEW.md): the wall-deadline blocker, priming, the correlation model and the owner's options.
-- [Fan tower model plan](INDUCED_TOWER_MODEL_PLAN.md): real photos and sizes, proposed dimensions and the owner's decisions; not built.
+- [Fan tower model plan](INDUCED_TOWER_MODEL_PLAN.md): real photos and sizes, the dimensions and the owner's decisions; built.
 - [Code guide](../reference/code-guide/cooling-towers.md).
 - [Verification tools](../../tools/cooling-towers/README.md).
 
@@ -58,3 +58,5 @@ History: 2026-11-02 — owner went with the review: `IslandCertificate.rate()` c
 History: 2026-11-02 — owner comments on the fan tower model plan: no motor outside the stack, keep the real scale, simplify the inside to lower polygons. Plan revised with a polygon budget from today's counts; the owner found the first budget too much, so the shell moves to the natural tower's whole-panel path and detail moves to texture. Documents only.
 
 History: 2026-11-02 — owner asked for normal mapping. The solid block shader never reads `Normal`; a prototype (`tools/cooling-towers/relief/`) drew a custom normal-map shader and a baked sprite alike, so the plan bakes sprites. Documents and tool only.
+
+History: 2026-11-02 — fan cell rebuilt on the plan: widths 4–14 m, fill 1–3 m, two rows at most, a 1.5 m rim and 1 m water on both tower kinds, a closed shell of whole panels with baked sprites, a flared stack, a new fan, the hot water nozzle at the spray level, a deck rail and a ladder on the wall. `CoolingTowerShellRenderer` replaces `NaturalTowerRenderer`. Layout table, `shapes-4.snbt` row and schema-6 image updated. Quick suite 1839 of 1839, slow gates 188 of 188. No client check.

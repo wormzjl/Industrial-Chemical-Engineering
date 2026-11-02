@@ -167,14 +167,15 @@ public final class ShapeRasterizer {
         return surface(key.shape(), c[0], c[1], c[2], key.nozzles(), false);
     }
 
-    /** Chunk geometry excludes the natural chimney rendered as one cached GPU mesh. Layout and collision stay intact. */
+    /** A fan tower's shell, rail and ladder are whole; only grating keeps its metre tile in the chunks. */
+    /** Chunk geometry excludes a tower's shell rendered as one cached GPU mesh. Layout and collision stay intact. */
     public static List<Polygon> chunkSurface(CellKey key) {
         int[] c=cell(key);
         return surface(key.shape(),c[0],c[1],c[2],key.nozzles(),false,true);
     }
 
     public static List<Polygon> towerShell(EquipmentShape shape){
-        if(shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER)return List.of();
+        if(!shape.kind().coolingTower())return List.of();
         var g=geometry(shape);var polygons=new ArrayList<Polygon>();
         for(var facet:g.mesh.facets())if(towerShell(shape,facet))polygons.add(Mesh.whole(facet));
         return List.copyOf(polygons);
@@ -190,6 +191,7 @@ public final class ShapeRasterizer {
     }
 
     private static boolean towerShell(EquipmentShape shape,Facet facet){
+        if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)return facet.part()<0&&facet.material()!=Material.GRATING;
         if(shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER||facet.material()!=Material.CONCRETE)return false;
         double base=shape.coolingTower().shellBaseHeight();
         return facet.min()[1]>=base-EPS&&facet.max()[1]>base+EPS;
@@ -1289,6 +1291,7 @@ public final class ShapeRasterizer {
             if (out != null) return out;
             var parts = new ArrayList<Moving>();
             var motions = unit != null ? unit.motions() : List.<ProcessUnit.Motion>of();
+            boolean fanTower = shape.kind() == EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER;
             var byPart = new ArrayList<List<Facet>>();
             for (int k = 0; k < motions.size(); k++) byPart.add(new ArrayList<>());
             for (var facet : mesh.facets()) if (facet.part() >= 0) byPart.get(facet.part()).add(facet);
@@ -1296,10 +1299,25 @@ public final class ShapeRasterizer {
                 var motion = motions.get(k).in(transform);
                 var pivot = motion.pivot();
                 var polygons = new ArrayList<Polygon>();
-                double reach = cut(mesh, byPart.get(k), pivot, polygons);
+                double reach = fanTower ? whole(byPart.get(k), pivot, polygons) : cut(mesh, byPart.get(k), pivot, polygons);
                 parts.add(new Moving(motion, List.copyOf(polygons), reach));
             }
             return moving = List.copyOf(parts);
+        }
+
+        /** A tower fan's facets whole, relative to {@code origin}, into {@code out}; their farthest point from it. */
+        private static double whole(List<Facet> facets, double[] origin, List<Polygon> out) {
+            double reach = 0;
+            for (var facet : facets) {
+                var polygon = Mesh.whole(facet);
+                var p = polygon.positions().clone();
+                for (int i = 0; i < p.length; i += 3) {
+                    for (int a = 0; a < 3; a++) p[i + a] -= origin[a];
+                    reach = Math.max(reach, Math.sqrt(p[i] * p[i] + p[i + 1] * p[i + 1] + p[i + 2] * p[i + 2]));
+                }
+                out.add(new Polygon(p, polygon.uvs(), polygon.normals(), polygon.material()));
+            }
+            return reach;
         }
 
         /**

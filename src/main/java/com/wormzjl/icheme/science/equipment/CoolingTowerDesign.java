@@ -7,16 +7,16 @@ import com.wormzjl.icheme.science.equipment.Mesh.Material;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.*;
 import java.util.List;
 
-/** Parametric repeated fan cells and a hollow hyperbolic chimney. No chimney air is a solid volume. */
+/** Parametric repeated fan cells and a hollow hyperbolic chimney. No air is a solid volume. */
 final class CoolingTowerDesign extends UnitDesign {
     private final boolean natural;
     CoolingTowerDesign(boolean natural) { this.natural=natural; }
     @Override public double minSize(){return natural?40:4;}
-    @Override public double maxSize(){return natural?80:8;}
+    @Override public double maxSize(){return natural?80:14;}
     @Override public double sizeStep(){return natural?10:2;}
-    @Override public int minLength(double d){return natural?CoolingTower.naturalHeight(d):2;}
-    @Override public int maxLength(double d){return natural?CoolingTower.naturalHeight(d):6;}
-    @Override public int defaultLength(double d){return natural?CoolingTower.naturalHeight(d):(int)(d/2);}
+    @Override public int minLength(double d){return natural?CoolingTower.naturalHeight(d):1;}
+    @Override public int maxLength(double d){return natural?CoolingTower.naturalHeight(d):3;}
+    @Override public int defaultLength(double d){return natural?CoolingTower.naturalHeight(d):2;}
     @Override public int lengthStep(){return natural?10:1;}
     @Override public int minSupport(double d,int l){return 0;}
     @Override public int maxSupport(){return 0;}
@@ -37,55 +37,77 @@ final class CoolingTowerDesign extends UnitDesign {
     }
     @Override void build(ProcessUnit u){
         var t=u.shape.coolingTower();double d=t.width();
-        if(natural)natural(u,d,t.height());else bank(u,d,t.fillDepth(),u.shape.towerBank());
+        if(natural)natural(u,d,t.height());else bank(u,t,u.shape.towerBank());
     }
-    private static void bank(ProcessUnit u,double d,double fill,TowerBank bank){
-        double w=d*bank.columns(),l=d*bank.rows(),rim=CoolingTower.BASIN_HEIGHT;
-        // A shared metal basin at grade, carried by the steel frame; no concrete plinth.
-        u.box(new double[]{0,0,0},new double[]{w,.2,l},Material.SUPPORT,true);
-        u.box(new double[]{-.2,.2,-.2},new double[]{0,rim,l+.2},Material.SUPPORT,true);
-        u.box(new double[]{w,.2,-.2},new double[]{w+.2,rim,l+.2},Material.SUPPORT,true);
-        u.box(new double[]{0,.2,-.2},new double[]{w,rim,0},Material.SUPPORT,true);
-        u.box(new double[]{0,.2,l},new double[]{w,rim,l+.2},Material.SUPPORT,true);
-        u.fluidPoint=new double[]{.1,.1,.1};
-        for(int x=0;x<bank.columns();x++)for(int z=0;z<bank.rows();z++){
-            double a=x*d,b=z*d,top=4+fill;
-            for(double xx:new double[]{a+.2,a+d-.2})for(double zz:new double[]{b+.2,b+d-.2})
-                u.box(new double[]{xx-.1,0,zz-.1},new double[]{xx+.1,top+3,zz+.1},Material.STEELWORK,true);
-            // One packing layer and its distributor, enclosed by casing from the fill to the fan deck.
-            u.box(new double[]{a+.15,4,b+.15},new double[]{a+d-.15,top,b+d-.15},Material.AC_FINS,true);
-            u.box(new double[]{a+.1,top+.3,b+.1},new double[]{a+d-.1,top+.45,b+d-.1},Material.PIPE,true);
-            u.box(new double[]{a,4,b},new double[]{a+.1,top+3,b+d},Material.AC_PLENUM,true);
-            u.box(new double[]{a+d-.1,4,b},new double[]{a+d,top+3,b+d},Material.AC_PLENUM,true);
-            u.box(new double[]{a+.1,4,b},new double[]{a+d-.1,top+3,b+.1},Material.AC_PLENUM,true);
-            u.box(new double[]{a+.1,4,b+d-.1},new double[]{a+d-.1,top+3,b+d},Material.AC_PLENUM,true);
-            // A square fan deck with a circular opening seals the plenum against air bypass.
-            for(int j=0;j<32;j++){
-                double first=2*Math.PI*j/32,last=2*Math.PI*(j+1)/32;
-                double r0=d/2/Math.max(Math.abs(DeterministicMath.cos(first)),Math.abs(DeterministicMath.sin(first)));
-                double r1=d/2/Math.max(Math.abs(DeterministicMath.cos(last)),Math.abs(DeterministicMath.sin(last)));
-                double[] inner0={a+d/2+.35*d*DeterministicMath.cos(first),top+3,b+d/2+.35*d*DeterministicMath.sin(first)};
-                double[] outer0={a+d/2+r0*DeterministicMath.cos(first),top+3,b+d/2+r0*DeterministicMath.sin(first)};
-                double[] outer1={a+d/2+r1*DeterministicMath.cos(last),top+3,b+d/2+r1*DeterministicMath.sin(last)};
-                double[] inner1={a+d/2+.35*d*DeterministicMath.cos(last),top+3,b+d/2+.35*d*DeterministicMath.sin(last)};
-                u.mesh.flat(List.of(inner1,outer1,outer0,inner0),new double[]{0,1,0},Material.AC_PLENUM);
-            }
-            // Match the square deck, not its circular bound: the corners collide without projecting beyond the cell.
-            u.solids.add(ProcessUnit.Solid.ring(a+d/2,b+d/2,top+3,top+3+Access.DECK,.35*d,d/2*Math.sqrt(2),0,0)
-                    .clip(new double[]{a,top+3,b},new double[]{a+d,top+3+Access.DECK,b+d}));
-            var frame=Frame.of(new double[]{a+d/2,0,b+d/2},1,1);
-            u.axialFan(frame,.35*d,top+4,1,32,ProcessUnit.FAN_SPEED);
-            // The guarded rotor fills the cowl for collision; neither its blades nor its grille can be walked through.
-            u.solids.add(ProcessUnit.Solid.rod(new double[]{a+d/2,0,b+d/2},1,top+3,top+4,.35*d,0));
-            u.solids.add(ProcessUnit.Solid.ring(a+d/2,b+d/2,top+3,top+4,.35*d,.35*d+.08,0,2*Math.PI));
+    private static final int STACK_SIDES=16;
+    private static void bank(ProcessUnit u,CoolingTower t,TowerBank bank){
+        double d=t.width(),w=d*bank.columns(),l=d*bank.rows(),rim=CoolingTower.BASIN_HEIGHT,inlet=t.shellBaseHeight(),deck=t.deckHeight()+Access.DECK;
+        // A closed shell of whole panels with their relief in the sprites: a shared metal basin, then the casing on its rim.
+        // Nothing is drawn inside, and the walls collide as walls.
+        u.solids.add(ProcessUnit.Solid.box(new double[]{0,0,0},new double[]{w,.2,l}));
+        double[][][] faces={{{0,0,0},{1,0,0},{0,0,-1}},{{w,0,l},{-1,0,0},{0,0,1}},{{0,0,l},{0,0,-1},{-1,0,0}},{{w,0,0},{0,0,1},{1,0,0}}};
+        for(var face:faces){
+            double[] start=face[0],along=face[1],out=face[2];double length=along[0]!=0?w:l;
+            boolean air=along[0]!=0?bank.columns()>=bank.rows():bank.rows()>=bank.columns();
+            double[] from=at(start,along,0,0,out,0),to=at(start,along,length,0,out,-.1);
+            u.solids.add(ProcessUnit.Solid.box(min(from,to,rim),max(from,to,deck)));
+            double[] lip=at(start,along,-RIM,0,out,RIM),end=at(start,along,length+RIM,0,out,0);
+            u.solids.add(ProcessUnit.Solid.box(min(lip,end,0),max(lip,end,rim)));
+            panels(u,lip,along,out,length+2*RIM,0,rim,rim,Material.TOWER_PANEL);
+            u.mesh.flat(List.of(at(start,along,-RIM,rim,out,RIM),at(start,along,length+RIM,rim,out,RIM),at(start,along,length,rim,out,0),at(start,along,0,rim,out,0)),new double[]{0,1,0},Material.TOWER_PANEL);
+            panels(u,start,along,out,length,rim,inlet,2,air?Material.TOWER_LOUVER:Material.TOWER_PANEL);
+            panels(u,start,along,out,length,inlet,deck,4,Material.TOWER_PANEL);
         }
-        nozzle(u,Role.HOT_WATER_INLET,w/2,5+fill,0,2,-1,.05);
+        u.fluidPoint=new double[]{.1,.1,.1};
+        double r=t.fanRadius(),flare=1.18*r,mouth=1.06*r,top=t.height(),bell=deck+.25*(top-deck);
+        for(int x=0;x<bank.columns();x++)for(int z=0;z<bank.rows();z++){
+            double a=x*d,b=z*d,cx=a+d/2,cz=b+d/2;
+            var frame=Frame.of(new double[]{cx,0,cz},1,1);
+            // A square deck round the bell mouth, a flared stack, and a dark floor under the fan that hides the empty cell.
+            for(int j=0;j<STACK_SIDES;j++){
+                double first=2*Math.PI*j/STACK_SIDES,last=2*Math.PI*(j+1)/STACK_SIDES;
+                u.mesh.flat(List.of(frame.at(first,flare,deck),frame.at(first,corner(first,d),deck),frame.at(last,corner(last,d),deck),frame.at(last,flare,deck)),new double[]{0,1,0},Material.TOWER_DECK);
+            }
+            u.solids.add(ProcessUnit.Solid.ring(cx,cz,deck-Access.DECK,deck,flare,d/2*Math.sqrt(2),0,0)
+                    .clip(new double[]{a,deck-Access.DECK,b},new double[]{a+d,deck,b+d}));
+            u.mesh.frustum(frame,flare,r,deck,bell,STACK_SIDES,Material.TOWER_STACK);
+            u.mesh.frustum(frame,r,mouth,bell,top,STACK_SIDES,Material.TOWER_STACK);
+            u.mesh.bore(frame,r,bell,top,STACK_SIDES,Material.TOWER_STACK);
+            u.mesh.annulus(frame,r,mouth,top,STACK_SIDES,1,Material.TOWER_STACK);
+            u.mesh.annulus(frame,0,r,bell,STACK_SIDES,1,Material.OPENING);
+            u.towerFan(frame,r,bell+.05,ProcessUnit.FAN_SPEED);
+            u.solids.add(ProcessUnit.Solid.hollowCone(cx,cz,deck,bell,flare,r+.1,.1));
+            u.solids.add(ProcessUnit.Solid.ring(cx,cz,bell,top,r,mouth,0,2*Math.PI));
+            // The fan's floor and rotor collide as one disc: nobody walks through the blades.
+            u.solids.add(ProcessUnit.Solid.rod(new double[]{cx,0,cz},1,bell-.2,bell+.45,r,0));
+        }
+        nozzle(u,Role.HOT_WATER_INLET,w/2,t.distributorHeight(),0,2,-1,.05);
         basinOutlet(u,w/2,l);
-        var access=new Access.Line(new double[]{w,0,0},new double[]{0,0,1},new double[]{1,0,0},l);
-        double landing=fill+7+Access.DECK,upper=landing>10?2.85:.85;
-        u.platform(access,fill+7,Access.MIN_DECK,Access.RAILED|Access.WALL_EDGE,true,true,upper-Access.WALK_THROUGH,upper+Access.WALK_THROUGH);
-        var climb=new Access.Line(new double[]{w+Access.MIN_DECK,0,0},access.direction(),access.out(),l);
-        u.climb(climb,0,landing,.85,upper,.15);
+        // One ladder up the end wall to the deck's corner, where the stack leaves room to step off; a rest hangs off the wall.
+        double level=t.deckHeight(),station=.85;
+        double[] x={1,0,0},z={0,0,1},back={-1,0,0},up={0,0,-1};
+        u.climb(new Access.Line(new double[]{w,0,0},z,x,2*station),0,deck,station,station,0);
+        u.rails(new Access.Line(new double[]{w,0,0},z,x,l),level,0,false,false,station-Access.WALK_THROUGH,station+Access.WALK_THROUGH);
+        u.railing(new Access.Line(new double[]{0,0,0},x,up,w),level,0);
+        u.railing(new Access.Line(new double[]{w,0,l},back,z,w),level,0);
+        u.railing(new Access.Line(new double[]{0,0,l},up,back,l),level,0);
+    }
+    /** The basin's rim stands this far outside the casing, m. */
+    private static final double RIM=.2;
+    private static double[] at(double[] start,double[] along,double s,double y,double[] out,double off){
+        return new double[]{start[0]+along[0]*s+out[0]*off,y,start[2]+along[2]*s+out[2]*off};
+    }
+    private static double[] min(double[] p,double[] q,double y){return new double[]{Math.min(p[0],q[0]),y,Math.min(p[2],q[2])};}
+    private static double[] max(double[] p,double[] q,double y){return new double[]{Math.max(p[0],q[0]),y,Math.max(p[2],q[2])};}
+    /** Where the square cell's edge lies at frame angle {@code a}. */
+    private static double corner(double a,double d){return d/2/Math.max(Math.abs(DeterministicMath.cos(a)),Math.abs(DeterministicMath.sin(a)));}
+    /** A wall facing {@code out} from {@code y0} to {@code y1}, cut into panels of about 4 m by {@code high}, each one sprite. */
+    private static void panels(ProcessUnit u,double[] start,double[] along,double[] out,double length,double y0,double y1,double high,Material material){
+        int across=Math.max(1,(int)Math.rint(length/4)),rows=Math.max(1,(int)Math.rint((y1-y0)/high));
+        for(int i=0;i<across;i++)for(int j=0;j<rows;j++){
+            double s0=length*i/across,s1=length*(i+1)/across,h0=y0+(y1-y0)*j/rows,h1=y0+(y1-y0)*(j+1)/rows;
+            u.mesh.flat(List.of(at(start,along,s0,h0,out,0),at(start,along,s1,h0,out,0),at(start,along,s1,h1,out,0),at(start,along,s0,h1,out,0)),out,material);
+        }
     }
     /** The chimney, basin and water triangulation share one polygon and angular reference. */
     static int naturalFacets(double diameter){return Math.max(48,(int)Math.ceil(Math.PI*diameter/4));}

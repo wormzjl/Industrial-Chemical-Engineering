@@ -42,7 +42,7 @@ class CoolingTowerTest {
         }
     }
     @Test void transferSweepConservesWaterEnergyAndRespectsItsAmbientLimit(){
-        for(double fill:new double[]{2,6})for(double loading:new double[]{.02,.2,2,20})for(double inlet:new double[]{298.15,308.15,350})for(double speed:new double[]{0,1}){
+        for(double fill:new double[]{1,3})for(double loading:new double[]{.02,.2,2,20})for(double inlet:new double[]{298.15,308.15,350})for(double speed:new double[]{0,1}){
             var tower=CoolingTower.induced(6,fill,1,1);double water=tower.area()*loading;
             var r=TowerTransfer.fill(model,tower,water,inlet,speed);
             String point="fill="+fill+" loading="+loading+" inlet="+inlet+" speed="+speed;
@@ -60,22 +60,22 @@ class CoolingTowerTest {
         assertEquals(0,warm.fanPowerWatt());
     }
     @Test void cellSizeAndBankCountsAreBounded(){
-        assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(10,2,1,1));
-        assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(8,2,7,1));
-        assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(8,2,6,5));
-        assertEquals(24,CoolingTower.induced(8,2,6,4).cells());
+        assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(16,2,1,1));
+        assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(8,2,9,1));
+        assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(8,2,6,3));
+        assertEquals(16,CoolingTower.induced(8,2,8,2).cells());
         assertThrows(IllegalArgumentException.class,()->CoolingTower.natural(80,100));
     }
     @Test void parallelBanksRepeatTheirExtensiveResults(){
         var one=TowerTransfer.fill(model,CoolingTower.induced(6,2,1,1),72,308.15,1);
-        var bank=TowerTransfer.fill(model,CoolingTower.induced(6,2,6,4),72*24,308.15,1);
+        var bank=TowerTransfer.fill(model,CoolingTower.induced(6,2,8,2),72*16,308.15,1);
         assertTrue(one.outletTemperature()<308.15);
         assertTrue(one.evaporation()>0);assertTrue(one.fanPowerWatt()>0);
         assertEquals(one.outletTemperature(),bank.outletTemperature(),1e-9);
-        assertEquals(one.energyWatt()*24,bank.energyWatt(),1e-5);
-        assertEquals(one.evaporation()*24,bank.evaporation(),1e-9);
-        assertEquals(one.dryAirFlow()*24,bank.dryAirFlow(),1e-7);
-        assertEquals(one.fanPowerWatt()*24,bank.fanPowerWatt(),1e-7);
+        assertEquals(one.energyWatt()*16,bank.energyWatt(),1e-5);
+        assertEquals(one.evaporation()*16,bank.evaporation(),1e-9);
+        assertEquals(one.dryAirFlow()*16,bank.dryAirFlow(),1e-7);
+        assertEquals(one.fanPowerWatt()*16,bank.fanPowerWatt(),1e-7);
     }
     @Test void fanPowerDependsOnlyOnSpeedForAGivenTower(){
         var tower=CoolingTower.induced(6,2,1,1);
@@ -156,7 +156,7 @@ class CoolingTowerTest {
     }
     @Test void aBasinTemperatureDifferenceCannotDriveAnAtmosphericInlet(){
         var tower=CoolingTower.induced(4,2,1,1);
-        var result=step(new PassiveNetwork(List.of(generator(1,7.5,water(308.15,101325,1)),basin(2,tower,water(298.15,101325,16))),List.of(feed())));
+        var result=step(new PassiveNetwork(List.of(generator(1,tower.distributorHeight(),water(308.15,101325,1)),basin(2,tower,water(298.15,101325,16))),List.of(feed())));
         assertEquals(0,result.massFlows()[0],1e-7);
     }
 

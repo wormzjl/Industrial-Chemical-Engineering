@@ -16,6 +16,8 @@ java tools/cooling-towers/fill-forms/Fit.java tools/cooling-towers/fill-forms/ta
 
 `relief/Relief.java` draws one 4 m louver panel three ways, real slats, a baked sprite and a normal-map shader, and writes the sprite, the normal map and a comparison sheet: `java -Djava.awt.headless=true tools/cooling-towers/relief/Relief.java tmp/relief/louver`.
 
+`relief/TowerSprites.java` bakes the fan tower's four sprites: `java -Djava.awt.headless=true tools/cooling-towers/relief/TowerSprites.java src/main/resources/assets/icheme/textures/block`.
+
 History: 2026-11-02 — added `fill-forms/` in the branch review; the marched fill was detached from `TowerTransfer`.
 
 History: 2026-10-30 — added the verification lane and wet-tower support to the existing software renderer. No product code was detached into this folder.

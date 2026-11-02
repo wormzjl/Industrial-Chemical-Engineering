@@ -52,9 +52,20 @@ public class StorageRender {
         if(kind==Kind.INDUCED_DRAFT_COOLING_TOWER&&args.length>8)shape=shape.withTowerBank(new TowerBank(Integer.parseInt(args[7]),Integer.parseInt(args[8])));
         var sprites = sprites();
         var triangles = new ArrayList<Triangle>();
-        for (var cell : ShapeRasterizer.layout(shape).shell())
-            for (var polygon : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z())))
+        // A tower draws as the game does: the chunk pieces, its whole-panel shell and its fans whole.
+        for (var cell : ShapeRasterizer.layout(shape).shell()) {
+            var key = ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z());
+            for (var polygon : kind.coolingTower() ? ShapeRasterizer.chunkSurface(key) : ShapeRasterizer.surface(key))
                 add(triangles, polygon, cell.x(), cell.y(), cell.z());
+        }
+        if (kind.coolingTower()) {
+            for (var polygon : ShapeRasterizer.towerShell(shape)) add(triangles, polygon, 0, 0, 0);
+            if (kind == Kind.INDUCED_DRAFT_COOLING_TOWER)
+                for (var part : ShapeRasterizer.moving(shape)) {
+                    var pivot = part.motion().pivot();
+                    for (var polygon : part.polygons()) add(triangles, polygon, pivot[0], pivot[1], pivot[2]);
+                }
+        }
         var floating = ShapeRasterizer.floating(shape);
         if (floating != null) {
             // The roof lifted onto the liquid, the ladder turned down about its hinge onto the roof's deck.

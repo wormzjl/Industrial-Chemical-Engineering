@@ -6,6 +6,7 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.client.model.EquipmentShellModel;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Mesh;
+import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import net.minecraft.client.Minecraft;
@@ -22,13 +23,13 @@ import org.joml.Matrix4f;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Render thread only: a natural chimney uploads once and draws once, independent of its occupied block count. */
+/** Render thread only: a tower's shell uploads once and draws once, independent of its occupied block count. */
 @EventBusSubscriber(modid=IChemE.MOD_ID,value=Dist.CLIENT)
-public final class NaturalTowerRenderer {
-    private record Key(EquipmentShape shape,int light) {}
+public final class CoolingTowerShellRenderer {
+    private record Key(EquipmentShape shape,Paint paint,int light) {}
     private static final Map<Key,VertexBuffer> BUFFERS=new LinkedHashMap<>(16,.75f,true);
     private static TextureAtlasSprite atlasMarker;
-    private NaturalTowerRenderer() {}
+    private CoolingTowerShellRenderer() {}
 
     @SubscribeEvent public static void render(RenderLevelStageEvent event){
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_SOLID_BLOCKS)return;
@@ -39,12 +40,12 @@ public final class NaturalTowerRenderer {
         net.minecraft.client.renderer.ShaderInstance shader=null;
         for(var cell:EquipmentShellBlockEntity.clientTankCells()){
             var shape=cell.shape();var origin=cell.origin();
-            if(cell.isRemoved()||cell.getLevel()!=mc.level||shape==null||origin==null||shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER)continue;
-            if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY()+shape.coolingTower().shellBaseHeight(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ())))continue;
+            if(cell.isRemoved()||cell.getLevel()!=mc.level||shape==null||origin==null||!shape.kind().coolingTower())continue;
+            if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ())))continue;
             int light=LevelRenderer.getLightColor(mc.level,BlockPos.containing(origin.getX()+shape.sizeX()/2.0,origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ()/2.0));
-            var key=new Key(shape,light);var buffer=BUFFERS.get(key);
+            var key=new Key(shape,cell.paint(),light);var buffer=BUFFERS.get(key);
             if(buffer==null){
-                buffer=build(shape,light);if(buffer==null)continue;
+                buffer=build(shape,cell.paint(),light);if(buffer==null)continue;
                 if(BUFFERS.size()>=64){var oldest=BUFFERS.entrySet().iterator();oldest.next().getValue().close();oldest.remove();}
                 BUFFERS.put(key,buffer);
             }
@@ -62,19 +63,21 @@ public final class NaturalTowerRenderer {
         if(shader!=null){shader.clear();VertexBuffer.unbind();type.clearRenderState();}
     }
 
-    private static VertexBuffer build(EquipmentShape shape,int light){
+    private static VertexBuffer build(EquipmentShape shape,Paint paint,int light){
         var polygons=ShapeRasterizer.towerShell(shape);int vertices=0;
         for(var polygon:polygons)vertices+=3*(polygon.size()-2);
+        int[] tints={Paint.tint(paint.body()),Paint.tint(paint.structure())};
         if(vertices==0)return null;
         try(var bytes=new ByteBufferBuilder(vertices*DefaultVertexFormat.BLOCK.getVertexSize())){
             var builder=new BufferBuilder(bytes,VertexFormat.Mode.TRIANGLES,DefaultVertexFormat.BLOCK);
             for(var polygon:polygons){
                 var sprite=EquipmentShellModel.sprite(polygon.material());if(sprite==null)return null;
+                int channel=polygon.material().channel(),tint=channel<0||channel>=tints.length?0xFFFFFF:tints[channel];
                 var positions=polygon.positions();var normals=polygon.normals();var uv=polygon.uvs();
                 for(int corner=1;corner+1<polygon.size();corner++)for(int index:new int[]{0,corner,corner+1}){
                     int shade=EquipmentShellModel.shade(polygon,index);
                     builder.addVertex((float)positions[3*index],(float)positions[3*index+1],(float)positions[3*index+2])
-                        .setColor(shade,shade,shade,255).setUv(sprite.getU((float)uv[2*index]),sprite.getV((float)uv[2*index+1]))
+                        .setColor(shade*(tint>>16&255)/255,shade*(tint>>8&255)/255,shade*(tint&255)/255,255).setUv(sprite.getU((float)uv[2*index]),sprite.getV((float)uv[2*index+1]))
                         .setLight(light).setNormal((float)normals[3*index],(float)normals[3*index+1],(float)normals[3*index+2]);
                 }
             }

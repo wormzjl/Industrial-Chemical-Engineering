@@ -30,7 +30,7 @@ class EquipmentShapeCompatTest {
     /** One shape of every kind at its default size, and a lying drum. */
     static List<EquipmentShape> everyKind() {
         var shapes = new ArrayList<EquipmentShape>();
-        shapes.add(EquipmentShape.unit(Kind.INDUCED_DRAFT_COOLING_TOWER,8,6,Heading.NORTH,0).withTowerBank(new TowerBank(6,4)));
+        shapes.add(EquipmentShape.unit(Kind.INDUCED_DRAFT_COOLING_TOWER,8,3,Heading.NORTH,0).withTowerBank(new TowerBank(6,2)));
         shapes.add(EquipmentShape.drum(2, 4, Orientation.VERTICAL, Heading.NORTH, EquipmentShape.defaultSupport(2, Orientation.VERTICAL)));
         shapes.add(EquipmentShape.drum(2, 6, Orientation.HORIZONTAL, Heading.EAST, EquipmentShape.defaultSupport(2, Orientation.HORIZONTAL)));
         shapes.add(EquipmentShape.column(2, ColumnTrays.simple(20, 10), Heading.SOUTH, EquipmentShape.minimumSkirt(2)));

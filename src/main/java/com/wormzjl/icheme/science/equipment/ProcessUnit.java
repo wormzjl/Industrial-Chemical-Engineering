@@ -2029,6 +2029,22 @@ public final class ProcessUnit {
         fanRotorAndGrille(f, r, face, depth, n, speed);
     }
 
+    /** A cooling tower's fan low in its stack: a plain hub and five flat pitched blades, one moving part, seen only from above. */
+    void towerFan(Frame f, double r, double z, double speed) {
+        double hub = .16 * r, chord = .2 * r, tip = .92 * r, rise = .06 * r;
+        mesh.part(motions.size());
+        mesh.cylinder(f, hub, z, z + .3, 8, Material.MOTOR);
+        for (int k = 0; k < 5; k++) {
+            double angle = 2 * Math.PI * k / 5;
+            var across = cross(f.axis(), sub(f.at(angle, 1, 0), f.at(angle, 0, 0)));
+            double[] root = f.at(angle, hub, z + .15), end = f.at(angle, tip, z + .15);
+            var half = plus(scale(across, chord / 2), scale(f.axis(), rise));
+            mesh.flat(List.of(plus(root, half), plus(end, half), sub(end, half), sub(root, half)), f.axis(), Material.MOTOR);
+        }
+        mesh.part(-1);
+        motions.add(Motion.turning(f.along(z + .15), f.axis(), speed, 0));
+    }
+
     private void fanRotorAndGrille(Frame f, double r, double face, double depth, int n, double speed) {
         double hub = .2 * r, t = .01 + .01 * r, deep = face - depth + .01, shallow = face - 2 * t - .005, width = Math.min(.4 * r, 1.6 * (shallow - deep));
         mesh.part(motions.size());
