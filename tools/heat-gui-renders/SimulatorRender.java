@@ -657,11 +657,11 @@ public final class SimulatorRender {
                 scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(true, "T-101"))),
                 scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(false, "CRUDE"))),
                 scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(false, "S-5")))));
-        sheet(out, "03-interaction", W, H, List.of("A tile dragged from the palette", "A stream drawn from a free port: what can take it is ringed", "A name typed in place", "Right click S-8: its end follows the cursor", "A port's hover"), List.of(
+        sheet(out, "03-interaction", W, H, List.of("A tile dragged from the palette", "The Heat tiles: a cooling tower stands drawn, off", "A stream drawn from a free port: what can take it is ringed", "A name typed in place", "Right click S-8: its end follows the cursor", "A port's hover"), List.of(
                 scene(sheet, run, seconds, host, s -> {
                     s.gestures.carry(Tiles.tile("drum"));
                     s.gestures.move(cx(s, 138), cy(s, 140));
-                }), scene(sheet, run, seconds, host, s -> {
+                }), scene(sheet, run, seconds, host, s -> s.category = 3), scene(sheet, run, seconds, host, s -> {
                     s.editor.removeStream("KERO");
                     s.editor.addUnit("pump", 640, 138);
                     var port = s.editor.layout().place("T-101", "draw/1");
