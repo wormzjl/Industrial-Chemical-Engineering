@@ -59,11 +59,12 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - When two runs overlap, judge cost by counters. Replay a wall-clock budget hold alone before you count it.
 - Large solver campaigns use 8 to 10 worker threads and never overlap another campaign of that size. A run on the second Gradle lane uses at most 4 worker threads.
 - `./gradlew test` is the quick suite. `./gradlew test slowGates` (or `check`) runs everything. Run both before a merge.
+- `columnGates` and `equipmentGates` hold the column and equipment tests, which `test` leaves out. Each sees only what its tests load, so it runs only when one of those files changed. An up-to-date or restored group counts as run. Do not pass `--rerun-tasks`. When a group fails with a class or resource missing, add it to the group's list in `build.gradle`.
 - Use the least measurement that decides the task:
   - Compare forms on the 200-seed quick check (all distributions). Compare at most three forms per task, then choose one.
   - Run one full campaign (1000 seeds, all distributions, 8 workers) for the chosen form only. Do not replay worse seeds alone. Replay alone only new budget-class holds (classes C and F not in the baseline), batched in one run.
   - List worse worlds by class with the campaign's classifier. Minimize and trace at most the two smallest new ones.
-  - Read references once, in one final lane (`lane.sh`: `test slowGates` with the 33 junction lines, the printed lines and `MIXED_GAS_COST`; chain-100 exact; the fluid GameTests; the campaign). Do not run a second final lane.
+  - Read references once, in one final lane (`tools/merge-lane/lane.sh`: `test slowGates` with the 33 junction lines, the printed lines and `MIXED_GAS_COST`; chain-100 exact; the fluid GameTests; the campaign, which the lane skips when nothing it loads changed since `main`). Do not run a second final lane. Do not copy the lane into a batch's tool folder.
   - To prove a gate test fails with its rule disabled, run that one test, not the suite.
   - Take counters from the campaign. Do not make separate per-seed Newton runs.
   - Split a hold class by mechanism only when the task targets that class, on the final code, with the existing classifier script.
