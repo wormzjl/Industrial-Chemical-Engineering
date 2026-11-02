@@ -1,6 +1,6 @@
 # PH and UV false root on wet oil: review
 
-Batch `2026-11-02-ph-false-root`, branch `claude/focused-raman-3bbde7`, code `5e9fd2b9`, `be052e63` on main `3ffeb051`. Not merged. Tools: `tools/ph-false-root/`. Code guide: `equilibrium-engine.md`.
+Batch `2026-11-02-ph-false-root`, branch `claude/focused-raman-3bbde7`, code `5e9fd2b9`, `be052e63` on main `3ffeb051`. Released as 0.18.1. Tools: `tools/ph-false-root/`. Code guide: `equilibrium-engine.md`.
 
 ## 1. Expected behaviour
 

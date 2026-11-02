@@ -1,6 +1,6 @@
 # TP flash refusing one hydrocarbon with steam: review
 
-Batch `2026-11-02-tp-steam-refusal`, branch `claude/focused-raman-3bbde7`, code `9b62a7ee`, `60e13ca5` on `a93859b3`, the false root fix. Not merged. Tools: `tools/ph-false-root/`. Code guide: `equilibrium-engine.md`.
+Batch `2026-11-02-tp-steam-refusal`, branch `claude/focused-raman-3bbde7`, code `9b62a7ee`, `60e13ca5` on `a93859b3`, the false root fix. Released as 0.18.1. Tools: `tools/ph-false-root/`. Code guide: `equilibrium-engine.md`.
 
 ## 1. Expected behaviour
 
