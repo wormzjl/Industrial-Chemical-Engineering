@@ -8,6 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | In progress since 2026-11-02 |
 | [vacuum-column-test/](vacuum-column-test/README.md) | CDU/VDU convergence screens and feed checks | `2026-10-28-vacuum-column` | Implemented 2026-11-02 |
 | [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |
 | [drum-outlet-sweep/](drum-outlet-sweep/README.md) | Sweep of lying boot drums' oil-outlet placement (head fallbacks, options A and B) | `2026-10-28-drum-outlet-placement` | Implemented 2026-10-28 |
