@@ -38,7 +38,7 @@ A fill costs 0.05 ms in Merkel, 0.01 ms as a correlation. The running loop reads
 ## For the owner
 
 1. **Dribble evaporation.** Merkel reads about 45% RMS low below 0.2 kg/(s m²). A humidification term like the correlation's would fix it; left out for simplicity.
-2. **Gas at the spray.** The accepted plan said pure liquid water only. Gas now passes and vents, which is what lets a loop prime. Methane in the water vents the same way.
+2. **Gas at the spray: decided.** The owner kept this 2026-11-02: gas in a spray stream passes to the basin vent, which is what lets a loop prime, replacing the plan's pure liquid water. Methane in the water vents the same way.
 3. **Certification.** `IslandCertificate.rate()` omits `ATMOSPHERE`, so an evaporating tower never certifies STEADY, and a wet basin never reaches REST (surface time constant about 13 days). One line fixes the first.
 4. **Small items.** Water spills at 4/3 m under a 2 m rim, so the rim's clamp is unreachable. `motionSeconds*=fanSpeed` scales the absolute phase, so the fan jumps on a speed change. `distributorHeight()` and the snapped nozzle differ up to 0.4 m on natural towers (about 4 kPa).
 5. **GUI gates.** No `DeviceColumnTest` case for the tower column. Long labels need a render.

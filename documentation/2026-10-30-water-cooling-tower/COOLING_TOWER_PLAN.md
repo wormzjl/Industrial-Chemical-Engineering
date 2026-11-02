@@ -1,6 +1,6 @@
 # Revised cooling tower plan
 
-**Status 2026-11-02:** the accepted design as first written. Heights, basin depth, natural sizes and the marched contact model below were revised later; the code guide chapter and `BRANCH_REVIEW.md` hold the current facts.
+**Status 2026-11-02:** the accepted design as first written. Heights, basin depth, natural sizes and the marched contact model below were revised later; the code guide chapter and `BRANCH_REVIEW.md` hold the current facts, including the owner's decision that gas in a spray stream passes to the basin vent.
 
 Owner revisions, 2026-10-30. This supersedes the initial four-nozzle/float/drift proposal. The latest revision keeps the inlet at the top of the water section and places the outlet at the basin bottom, removing the earlier pickup riser. Add the drum-style level-gauge mount; control linking is deferred at the owner's request.
 
