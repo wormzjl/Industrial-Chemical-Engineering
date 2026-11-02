@@ -1,6 +1,6 @@
 # In-game process simulator: design plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner took decisions D1 to D22 on 2026-11-02 (section 5). W1 to W5 are built on the branch, not merged; column operation is on main, so the rest may follow (D10).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner took decisions D1 to D22 on 2026-11-02, and D23 on 2026-11-03 (section 5). W1 to W5 are built on the branch, not merged; column operation is on main, so the rest may follow (D10).
 The drawings are in [research/2026-11-02-process-simulator/renders/](../../research/2026-11-02-process-simulator/renders/), in the main checkout. Every number comes from the shipped code at `79b853e0`, run by the tools in
 `tools/process-simulator/`.
 
@@ -286,9 +286,25 @@ A multi-machine is one tile, one door, one block (sheets 19, 21). Its ports are 
   water alone. A column inlet under its tray's pressure is a warning: no pressure network pushes it in.
 - Each pair is checked after the column solves. A pumparound's cold stream stays under the draw tray, the condenser's under the
   condenser outlet, the reboiler's steam condenses above the bottoms.
-- Ports sit on the block in tray order: pairs and inlets left, products right, overhead on top, bottoms below. They are spaced
-  to fill the side, so two rows on near trays never collide. The canvas shows each pair's name on the block; a port's hover
-  gives its full name and what happens if it stays free.
+- The column's block shows what it holds (D23): one process model, drawn as a solid frame, 202 by 336 at its 14 slices, with the
+  name on a plate on its top edge. The frame is the box: `unit.x` and `unit.y` stay its corner, so a file changes nothing, and
+  ports, hit tests and the selection ring follow it. There is one part per slot of `ColumnBlueprint`, so a drawn part is a part the
+  constructor builds, and a hover names it with the assembly screen's words. A click on a part selects the block.
+- Ports sit on the frame in tray order: pairs and inlets left, products right, overhead on top, bottoms below. Condenser water
+  keeps its left pair and passes over the tower head. On the right `water` stands above `distillate`, because of the boot. At
+  least 14 px stand between ports, and port ids do not change. A port's hover gives its full name and what happens if it stays
+  free.
+- Inside the frame: tower, then the overhead train at the top right as the assembly drawing has it: head, ejector where the top
+  is below ambient, condenser (coil or air cooler), receiver and boot, one reflux pump, the tee, a valve on each leg. Off-gas and
+  water leave through a valve each. Each pumparound runs draw, pump, cooler, return, straight on its true trays, and its cold
+  stream passes through the cooler back to the frame. A free pair still shows its cooler, because a utility takes the heat then.
+  The kettle stands bottom left with its pair left. Every line that crosses the frame has a valve, except the pairs.
+- Near trays move a line off its true tray: a pumparound stays whole, in tray order, and elbows in a channel beside the tower take
+  its two lines to their trays. Two loops on one wall that interleave cannot be drawn without a crossing, so the order is what
+  the gates hold, over the door's settings.
+- Hot lines are amber and cold lines teal on a solved block; product lines stay neutral. Any other tone takes them all, so a
+  greyed or failed block reads as one. Below label scale the frame, tower, coolers, drum, pumps and pipes stay; names, notes,
+  arrows, valves, motors, coil marks and the tee go.
 - Adding a row adds its ports, free. Removing a row removes them: its streams stay, each ending in an open pill, and the status
   says so. Undo restores it.
 
@@ -333,6 +349,7 @@ The owner's answers of 2026-11-02.
 | D12 | Symbols | B, framed (sheets 23): it matches the shipped door drawings, and its dark fill leaves the eye on the streams |
 | D13 to D21 | The sizing stage, the shell's drop, drops in the run, the other tiles, the ejector's scope | As recommended: [SIZING_PLAN.md](SIZING_PLAN.md), section 6 |
 | D22 | A fresh sheet with a furnace on a fixed duty | A first estimate on a line, or a first run with the furnace on its outlet (section 3.1). The column's door gets no start temperature |
+| D23 | The column's block on the sheet (2026-11-03) | Option C rearranged, section 3.11. The owner: "The "block" should expose its internal components to the flowsheet, but with boundary well presented"; "C, but the lines arrangement can be better. Remember that Reflux and naphtha output are split from the same line with a pump boosting, and valve regulating". The rearranged sheet went to the owner and has no answer yet; the orchestrating session decided to build it, because it applies that correction and a drawing is reversible. D11 stands: one block, one process model |
 
 ## 6. What you did not mention
 

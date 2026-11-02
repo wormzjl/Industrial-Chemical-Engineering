@@ -2,7 +2,7 @@
 
 Purpose: an in-game process simulator: a dedicated block, a drag-and-drop flowsheet with a palette below, feed streams from the Fluid Generator's page, every unit including the column, Run on the client, a Results tab, flowsheet files under `.minecraft/IChemE`, and a compatibility system (owner request 2026-11-02: "make some design drawings for me to approve before moving to implementation").
 
-Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026-11-02. W1 to W8 are built on the branch, which carries main 0.19.0, with column operation in it (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026-11-02, and D23 on 2026-11-03. W1 to W8 are built on the branch, which carries main 0.19.0, with column operation in it (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -11,7 +11,7 @@ Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026
 - [W6_SCREEN_PLAN.md](W6_SCREEN_PLAN.md): how to build the screen: the code's shape, the symbol atlas, port places, pills and routes, door keys, what a run gives the screen, gates and renders.
 - [SIZING_SOURCES.md](../../research/2026-11-02-process-simulator/sizing/SIZING_SOURCES.md): the sourced values, 13 classes with provenance, in the main checkout's `research/`.
 - [renders/](../../research/2026-11-02-process-simulator/renders/): the 30 design sheets in the main checkout's `research/`, drawn with the shipped kit in the game font, numbers from the real solve.
-- [renders-w6/](../../research/2026-11-02-process-simulator/renders-w6/): the built screen, sheets 01 to 21 as the W6 plan names them, W7's 13, 22 and 23, W8's 09, 24 and 25, both doors, drawn by `SimulatorRender.java` from shipped code on a real engine run.
+- [renders-w6/](../../research/2026-11-02-process-simulator/renders-w6/): the built screen, sheets 01 to 21 as the W6 plan names them, W7's 13, 22 and 23, W8's 09, 24 and 25, the column block's 26 and 27, both doors, drawn by `SimulatorRender.java` from shipped code on a real engine run.
 
 | Sheet | Shows |
 |---|---|
@@ -43,6 +43,8 @@ Built: `science/flowsheet` (`Flowsheet`, `FlowsheetFile`, `FlowsheetCompiler`, `
 
 Added by W8, with the calculator gone: `world/level/block/ProcessSimulatorBlock`, `entity/ProcessSimulatorBlockEntity`, `world/inventory/ProcessSimulatorMenu`, `network/ProcessSimulatorNetwork`, `network/SimulatorResults`, `network/ColumnWire`, `science/flowsheet/SheetBody` and `SheetStore`, `client/gui/flowsheet/SheetClipboard`, `client/gui/screens/inventory/SimulatorBlockHost`. Removed: `ColumnV3Network`, `ColumnPresentation`, `V3EditorCatalogCodec`, `V3EditorCatalog`, `ColumnInputPreset` and the calculator's block, entity, menu and screen, with the V3 request family of `ProcessSolveServices` and `ProcessSolveCoordinator`.
 
+Added by the column block: `client/gui/flowsheet/ColumnBlock`; `SheetLayout.Box` carries it.
+
 Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md) (the feasibility, sizing and ejector probes), `tools/heat-gui-renders/` (`SimulatorPrototypes.java`, `SimulatorIcons.java`, `SimulatorSizing.java`: the design sheets; `SimulatorRender.java`: the built screen; `SymbolAtlas.java`: bakes the atlas).
 
 ## History
@@ -65,6 +67,27 @@ Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md
 - 2026-11-03: W7 (`334ca349f`, `aacb07baf`, `b29555388`): the client run, from `SimulatorRunner` down to the solver's `Progress` and pass record, Stop on the game's path, the edit lock, the Log's order and passes, Solve alone, the column's Templates, the revision notice and the rule that drops results. Gates: `SimulatorRunnerTest` (27), `SimulatorRunTest` (4, slow), two more in `FlowsheetSolverTest`; filtered, `science.flowsheet.*`, `client.gui.flowsheet.*`, `HeatDiagramTest` and `FlowsheetColumnTest` (9), 0 failures. Results did not move: the sample's digits are the same to the bit on the run thread, with a second run beside it, and with no one listening. The longest gap between two checkpoints in a cold column is 39 ms (`StopGapProbe`). The render found the notice clipped at the status line's end. No dev client ran.
 
 - 2026-11-03: W8 (`cf4ce7d21`, `60ec1f48d`, `ea87a5465`, `1200c3b54`): `process_simulator` replaces `column_calculator_v3` with no recipe, by alias for block, item and block entity, and opens `ProcessSimulatorScreen`, titled by the block. The block stores a gzip body of at most 1 MiB unpacked, sheet and results, in parts of 30 kB at most, and solves nothing. A second player reads; the holder frees on close, on leaving and when the block goes. Results have a state format, `SimulatorResults`, 37 kB of the sample's 46 kB unpacked, 20 kB packed. Save, Save design, the unsaved prompt, autosave; one clipboard: Copy on a tank and a stream, Paste, Paste with T and P, From and To clipboard; Save as template, column Delete and Save current. Gates: `SheetStoreTest` (11), `SimulatorBlockTest` (19), `ColumnTemplatesTest` (2 more), one more in `SimulatorRunTest`, `ProcessSimulatorGameTests` (11, on `runColumnGameTestServer`), `HeatDiagramTest`; 371 quick tests and 50 slow ones of the classes W8 touched. The gates found two bugs of W8's own: a token longer than the text bound broke the opening, and a menu whose block had gone threw on close. The swap, the screen and the clipboard are one commit, since they compile only together. No player has opened the screen in the game.
+
+- 2026-11-03: the column block (`7bfcd29b2`, `948676cd9`, `6214f27c2`), D23: the column shows what it holds inside a solid frame, one drawn part for each `ColumnBlueprint` slot, built from `rearranged` in `tools/heat-gui-renders/BlockOptions.java`. No process model changed and the sample's run stands: STEADY, 21 streams, 3 passes, heat gap 0.04 %. Gates: `ColumnBlockTest` (10) over 7200 doors (no crossing, no line through a part, all in the frame, each slot one part), proved by a run with the elbows off, which fails at the crossing gate; `SheetLayoutTest` (8), the tag gate now holds the column; the gate of a pumparound on a stream of its own, in `FlowsheetColumnTest`: 288.2 kg/s of water, 30.0 to 44.86 °C, 17.89 MW as set, heat gap 44 kW, the crude at E-101 102.42 °C, the furnace asking 98.07 MW against 90, STEADY. Run with `--tests`: 103 quick tests of the classes that load the change, and `SimulatorRunTest` (5) plus that gate on `slowGates`.
+
+## Column block decisions
+
+Taken alone, each reversible:
+
+- Trays come from the door: stage `s` stands at `15 + s (H - 30) / (stages + 1)`, since the door's list counts the condenser as 1. The option sheet's pumparounds on 10/12, 18/20, 27/29 were not the sample's: the door has returns and draws 8/10, 16/18, 26/28, so the frame's pairs stand a few pixels from that sheet.
+- A pumparound's cold ports stand 15 above and 14 below its cooler, not 15 and 15, so two neighbours on their true trays hold 14 px.
+- Parts come from the door, not from `ColumnTrays`, because an edited door may be out of range and must still draw. The gate compares them with `ColumnBlueprint` on valid doors.
+- A loop stays whole and in tray order, which nested or interleaved pumparounds need. So one PA round two others moves its neighbours off their trays, with elbows.
+- The frame widens past three tracks of elbows, and N grows only when the rows do not fit; the sample stays 202 by 336.
+- The ejector stands on the vapour line, ahead of the condenser, with no port until W10 brings Motive. The kettle's liquid leaves under it to a valve and on to `bottoms`.
+- A hover says the row's id, as the port does, not its place in the list.
+- Tone: amber and teal only on a solved block; at any other tone hot and cold lines take the look's stroke, and the frame takes it at a warning or a failure. Product lines stay neutral throughout.
+- Below label scale a hidden valve leaves its line whole.
+- The plate is sized from the text as drawn: the font does not scale with the zoom as the layout's width does.
+- A window opens on the whole sheet at every size, since `fit` stops at zoom 1: a column alone is taller than a wide well. The zoom's floor drops from 0.25 to 0.2, so the sample fits at the 464 px minimum.
+- Dropping a column tile centres its frame on the cursor.
+- The renders' sample moved round the frame: P-102, the right-hand pills, S-4's corners, E-101, E-102, H-101, V-101, with new corners for S-10. Sheets 19 and 26 are 1450 wide, so that port names fit.
+- `BlockOptions.java` moved from `tmp/` to `tools/heat-gui-renders/`, with its two sheets in `renders/`.
 
 ## W8 decisions
 
@@ -129,11 +152,13 @@ Taken alone, each reversible:
 - The simplifications table of `SIZING_PLAN.md` section 6: confirm with the owner before S1.
 - Engine finding 2 of `tools/process-simulator/README.md` is with the owner, and `FlowThermo` keeps its TP search for it. Findings 1 and 3 are fixed on main (0.18.1).
 - Owner to validate: P-102's silence (W7 findings): the proposal is to leave the law.
+- Owner to validate: `option-c-rearranged.png` and the block built from it (D23): built without an answer. The tower moved right by 72 and down by 62 within a stored unit's corner; no released sheet holds one.
+- Column block left: no client has drawn it. At 1280 by 720, scale 2, the sample opens at zoom 0.43, under the label scale of 0.5, because a sheet can be no shorter than its column's frame: names and valves wait for one Zoom in. The gates cover lines and parts, not notes: with four draws on the top trays an elbow can touch `Reflux`, and three inlets close together show two names on the tower, for `tag` refuses an overlap. A hover on the boot finds the frame, not the receiver: its rect is the drum's.
 - W8 left: no client has run it. Not exercised: the real open and replay packets, a real second player, a real disconnect (a mock player cannot log in beside KubeJS, so the gate takes `Entity.remove`, the last step of that path), the liveness check's "still here" answer (a fake player is on no player list), the system clipboard, the autosave tick, Copy on a live tank (a source gate holds it).
 - W8 left: `tia_juana`, `tia_juana_nitrogen` and `literature_tia_juana` stay: `tia_juana` is the default input, and a dozen science gates read the other two. `V3EditorDraft`'s old screen methods and `V3ClientPresets.mixtureJson` have no caller in main, and some `IChemE.columnV3*` config getters lost their reader. Delete on a bundled column template does nothing and says nothing. `autosave.json` is one file for every unnamed sheet, so a second block's overwrites the first's.
 - W8 left: `tools/neural`, `tools/jdk-determinism/perf`, `tools/cloud-science-harness`, `tools/phase-ports-probes/d11` and `tools/dwsim` name calculator classes. Most were stale before W8 (`createcheme` paths, a `methaneCduInput` the entity no longer had); those naming `ColumnInputPreset` lost it now. They are archives of their batches and were left.
 - W7 left: `ColumnTemplates.listed`, the folder reads off the frame and `removed()` closing the runner have run in no client. A second Solve alone greys the first. A Stop pressed leaves the Stop key lit until the thread ends, which on a saturated machine took up to 2.7 s.
 - W6 left: multi-select and copying units are not built; the repair dialog lists removed units only (Component, Field and Data rows need load reports); a drum's Streams table omits a free water outlet; Sizing's tab stays off (S stages); the tile coverage gate is W9.
 - The package line `METHANE_ASSAY` ("synthetic 0.5 mol% methane blend") belongs to the Tia Juana assay alone, and it now also reads on the other crudes. It stays on the package: its text is in a record whose revision the neural sidecar pins.
-- W9: the old `block.icheme.column_calculator_v3` line and every new W8 line in zh_cn; the column block's redrawing follows W8 on its own thread. W9: code guide chapter, including the crude packages `thermo-materials.md` still names; the `AGENTS.md` clause; zh_cn lines for `gui.icheme.column_template.*`. W10: the Motive steam port; the block has none until then.
+- W9: the old `block.icheme.column_calculator_v3` line and every new W8 line in zh_cn. W9: code guide chapter, including the crude packages `thermo-materials.md` still names; the `AGENTS.md` clause; zh_cn lines for `gui.icheme.column_template.*`. W10: the Motive steam port; the block has none until then.
 - Not measured: option B of D11, a reboiler stream, a column with nitrogen on the plain start, a run's peak heap; the sizing rules on any sheet but the sample; the ejector law on a real vacuum column; a compressor's or a drum's type proposal.

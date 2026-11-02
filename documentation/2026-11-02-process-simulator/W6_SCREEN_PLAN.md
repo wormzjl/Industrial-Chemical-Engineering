@@ -77,7 +77,7 @@ Port places, in the symbol's own box, from `model.ports(params)`:
 | kettle | `tube_in` and `tube_out` left, `feed` (46, 34), `gas` (44, 0), `liquid` (70, 24) |
 | air cooler | `in`, `out` at y 8 |
 | fired heater | `in` (0, 66), `out` (58, 42); apart: `convection_in` (7, 20), `convection_out` (51, 20), `radiant_in` (0, 66), `radiant_out` (58, 42) |
-| column | Section 3.11's rule: left in tray order `condenser_in`, `condenser_out`, each `pa/<id>/in` and `out`, `feed`, `steam/<id>`, `reboiler_in`, `reboiler_out`; right `distillate`, `water`, `draw/<id>`; `overhead` top, `bottoms` bottom. Evenly spaced to fill the side; the height's N follows the longer side, at least 14 px a port. A pair's name is on the block, at the pair's middle |
+| column | Section 3.11's rule (D23), laid out by `ColumnBlock`, with `unit.x` the frame's corner: left in tray order `condenser_in`, `condenser_out`, then each `pa/<id>/in` and `out`, `feed` and `steam/<id>` by first tray, `reboiler_in`, `reboiler_out`; right `water`, `distillate`, `draw/<id>`; `overhead` top, `bottoms` bottom. A line stands on its tray where it can, at least 14 px a port, and N grows only when the rows do not fit |
 | removed type, or settings that give no ports | The placeholder keeps what its streams name: inlets left, outlets right |
 
 - A port's square is the laying tool's colour by class (`PortColours`: gas and overhead VAPOUR; oil, water, liquid, distillate, bottoms LIQUID; the rest BULK), `CONNECTED` grey once a stream holds it.
@@ -87,7 +87,7 @@ Port places, in the symbol's own box, from `model.ports(params)`:
 - A pill's line joins the edge nearer the line's other end (the sample's RESIDUE pill lies left of its unit). A feed's outline is `Palette.ACCENT`. A pill is `max(38, text + 12)` wide, half height 9.
 - **Lines** are orthogonal. With no corners: leave each port outward by 10, then one or two bends. Avoid no obstacles. With corners: through them, adding an elbow where two points share neither x nor y.
 - Moving a segment writes the line's inner corners into `route`, then moves that segment's two corners; a segment on a port gets new corners, so the port stays.
-- A name: a unit's tag sits over its box (a column's beside its foot). A stream's name sits over its longest across segment, only where neither end is a pill: a pill says it already.
+- A name: a unit's tag sits over its box (a column's on a plate on its frame's top edge). A stream's name sits over its longest across segment, only where neither end is a pill: a pill says it already.
 - Hit tests in this order: port, pill, name, unit, line, within a few pixels that shrink with zoom.
 
 ## 5. Editor
