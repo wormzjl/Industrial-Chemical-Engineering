@@ -69,10 +69,27 @@ class FluidFactsCompatTest {
                 new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,330,280,.25),1234.5));
         var shellSide=heatSide(shell,30,4,HeatSides.shellPassage(1,6),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,450,tube));
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(tube,new WorldTopologyLedger.Registration(tubeSide,spec,0)),new WorldTopologyLedger.Edit(shell,new WorldTopologyLedger.Registration(shellSide,spec,0))),shell+1,null);
+        world.runTo(700);
+        // Facts schema 6: a running column unit, a pipe it holds, and its feed port, a void inside the feed valve.
+        long pipe=world.place(40,64,0,Kind.PIPE,Direction.EAST,.05);long feedValve=world.place(41,64,0,Kind.VALVE,Direction.EAST);world.runTo(720);
+        long unit=world.ledger.reserve(1);long port=world.ledger.nextIdentity();int m=model.componentCount();
+        var held=new double[m];held[0]=3.5;held[m-1]=.25;
+        var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,64,0,PhysicalFluidTopology.PORT_LANE);
+        var feed=new PhysicalFluidTopology.Device(port,at,Kind.VOID,Direction.EAST,world.registry.registrations().get(feedValve).device().geometry(),new FlowControl.Passive(),
+                List.of(new PhysicalFluidTopology.Port(at,Direction.EAST,PassiveNetwork.PhasePort.BULK)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        var setpoints=new com.wormzjl.icheme.science.column.operation.Setpoints(10,8,320,2.5,1e4,new double[]{.3},new double[]{.1},new double[]{-2e4});
+        var account=new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(held,-1.2e6);
+        world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,70,0),true,setpoints,
+                List.of(new ColumnUnit.Station(com.wormzjl.icheme.science.column.operation.Port.FEED,0,port,feedValve,account,new com.wormzjl.icheme.science.fluid.state.SolidInventory(List.of(new com.wormzjl.icheme.science.fluid.state.SolidInventory.Population(model.solid("icheme:demo_particle"),com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("100"),1.5))))),
+                new ColumnUnit.Totals(account,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m),2e5,-3e5,-1e4),tube));
+        var held0=world.registry.registrations().get(pipe);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(pipe,new WorldTopologyLedger.Registration(held0.device().withSuspendedBy(unit),held0.spec(),held0.revision()+1)),
+                new WorldTopologyLedger.Edit(port,new WorldTopologyLedger.Registration(feed,new FluidDeviceSpec(1,330,260000,FluidDeviceSpec.nitrogen(CATALOG).composition()),0))),port+1,null);
+        // Facts schema 7: a tower's bank and control on a basin.
         var tower=CoolingTower.induced(8,2,3,2).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,.4,299);
         world.place(50,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(tower.basinVolume(),298.15,101325,
             FluidDeviceSpec.water(CATALOG).composition(),SlurryFeed.NONE,CoolingTower.BASIN_DEPTH,true).withTower(tower),.05);
-        world.runTo(700);return world;
+        world.runTo(800);return world;
     }
     private static PhysicalFluidTopology.Device heatSide(long id,int x,int z,PipeResistance.Geometry passage,HeatUnit heat) {
         var inlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,z);var outlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x+2,64,z);
@@ -190,6 +207,63 @@ class FluidFactsCompatTest {
         }
     }
 
+    /** A component the data no longer has leaves a column's account too: the ledger and the status line book it (merge review, finding 5). */
+    @Test void aComponentRemovedFromAColumnAccountIsBooked() {
+        var image=image(corpusWorld());var core=FluidCheckpointCodec.readCore(image.core());
+        var t=core.topology();var topologyPack=image.packs().get(t.pack());
+        var world=FluidCheckpointCodec.worldFacts(topologyPack,FluidCheckpointCodec.topologySections(topologyPack,(int)t.offset(),t.length(),core.topologyGeneration()));
+        var ids=new ArrayList<>(world.basis().components());int retired=ids.size()-1;ids.add(retired,"Retired");
+        java.util.function.BiFunction<double[],Double,double[]> widen=(n,held)->{var w=new double[n.length+1];System.arraycopy(n,0,w,0,retired);w[retired]=held;w[n.length]=n[retired];return w;};
+        var registrations=new ArrayList<WorldTopologyLedger.Registration>();
+        for(var r:world.registrations()){var s=r.spec();registrations.add(new WorldTopologyLedger.Registration(r.device(),new FluidDeviceSpec(s.volume(),s.temperature(),s.pressure(),widen.apply(s.composition(),0.),s.solids(),s.levelHeight(),s.open(),s.geometry()),r.revision()));}
+        java.util.function.Function<WorldTopologyLedger.MaterialTotal,WorldTopologyLedger.MaterialTotal> total=m->new WorldTopologyLedger.MaterialTotal(widen.apply(m.moles(),0.),m.totalEnergy(),m.solidMasses());
+        var placed=new ArrayList<FluidFacts.Placed>();
+        for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());placed.add(new FluidFacts.Placed(FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id()),row.committed()));}
+        // The same world with and without the retired component in its account: what the ledger books for it is the difference.
+        java.util.function.DoubleFunction<FluidFacts.Rebuilt> restated=retiring->{
+        var columns=new ArrayList<ColumnUnit>();
+        for(var u:world.columns()) {
+            columns.add(new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),u.stations().stream().map(s->s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(s.account().moles(),retiring),s.account().energy()))).toList(),
+                    new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().taken().moles(),0.),u.totals().taken().energy()),
+                            new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().produced().moles(),0.),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds()),u.condenser()));
+        }
+        var wide=new FluidFacts.World(world.nextIdentity(),new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision()),registrations,total.apply(world.constructed()),total.apply(world.destroyed()),world.recoveries(),world.restated(),world.removedMovers(),columns);
+        return FluidFacts.rebuild(wide,placed,core.epoch(),key->model,CATALOG,true,"test");
+        };
+        var rebuilt=restated.apply(1.5);
+        assertEquals(Map.of("Retired",1.5),rebuilt.world().restated().removedMoles(),"the ledger books the removed component by id");
+        for(var entry:rebuilt.checkpoint().islands())assertTrue(entry.snapshot().status().contains("Retired 1.5 mol"),entry.snapshot().status());
+        // An account has no temperature, so the component leaves with its molar share of the energy (owner 2026-11-02, finding 5, option A).
+        var before=world.columns().iterator().next().stations().getFirst().account();double share=1.5/(before.total()+1.5),leaves=share*before.energy();
+        for(var u:rebuilt.world().columns().values())assertEquals(before.energy()-leaves,u.stations().getFirst().account().energy(),1e-9*Math.abs(before.energy()),"the rest keeps its specific energy");
+        assertEquals(-leaves,rebuilt.world().restated().energy()-restated.apply(0).world().restated().energy(),1e-6,"the ledger books what left");
+    }
+    /** Queued events do not survive the facts path: a unit's queued Start, Stop or removal settles on what stands (merge review, finding 15). */
+    @Test void aColumnsQueuedEventsSettleOnWhatStands() {
+        var stoppedHolding=corpusWorld();var unit=stoppedHolding.ledger.columns().values().iterator().next();
+        stoppedHolding.ledger.column(unit.withStations(false,unit.stations().stream().map(s->s.withDevice(0)).toList()));
+        var settled=load(edited(image(stoppedHolding),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow();
+        assertEquals(0,suspended(settled),"a stopped unit holds nothing");
+        assertTrue(unit.stations().stream().noneMatch(s->settled.active().containsKey(s.device())),"its ports left");
+        assertFalse(settled.columns().get(unit.id()).running());
+
+        var unplaced=corpusWorld();var u=unplaced.ledger.columns().values().iterator().next();
+        unplaced.ledger.column(u.withStations(true,u.stations().stream().map(s->s.withDevice(s.device()+1000)).toList()));
+        var started=load(edited(image(unplaced),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow();
+        assertEquals(0,suspended(started),"a Start whose ports never stood holds nothing");
+        assertFalse(started.columns().get(u.id()).running());
+
+        var leaving=corpusWorld();var v=leaving.ledger.columns().values().iterator().next();double[] destroyed=leaving.ledger.snapshot().destroyed().moles();
+        leaving.ledger.column(v.leave());
+        var left=load(edited(image(leaving),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow();
+        assertFalse(left.columns().containsKey(v.id()),"a dismantled column leaves");
+        assertEquals(0,suspended(left));
+        assertEquals(Arrays.stream(destroyed).sum()+v.stations().getFirst().account().total(),Arrays.stream(left.destroyed().moles()).sum(),1e-9,"its accounts are destroyed");
+        assertEquals(1.5,left.destroyed().solidMasses().values().stream().mapToDouble(Double::doubleValue).sum(),0,"and its solids (merge review, finding 10)");
+
+        var running=corpusWorld();var w=running.ledger.columns().values().iterator().next();
+        assertTrue(load(edited(image(running),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow().columns().get(w.id()).running(),"a unit whose devices stand keeps running");
+    }
     /** A facts section is read by every later build: one this build cannot read refuses the world, its files kept. */
     /**
      * W3 (plan section 5.2): the heat an exchanger holds in transit is a fact of its sides. A save writes the coordinator's
@@ -265,12 +339,15 @@ class FluidFactsCompatTest {
                 assertEquals(Integer.parseInt(expected.getProperty("registrations")),ledger.active().size(),folder+": registrations");
                 // Schema 2 wrote joints; an image of schema 1 reads every registration with all six faces, as pipes were then.
                 assertEquals(Long.parseLong(expected.getProperty("laid","0")),ledger.active().values().stream().filter(r->r.device().joints()!=PhysicalFluidTopology.ALL_FACES).count(),folder+": laid pipes");
-                assertEquals(Long.parseLong(expected.getProperty("lanes","0")),ledger.active().values().stream().filter(r->r.device().position().lane()!=0).count(),folder+": rack lanes");
+                assertEquals(Long.parseLong(expected.getProperty("lanes","0")),ledger.active().values().stream().filter(r->r.device().position().lane()!=0&&r.device().position().lane()<=PhysicalFluidTopology.RACK_PLACES).count(),folder+": rack lanes");
                 // Schema 3 wrote a spec's vessel geometry and the control valve; an older image reads prisms and no control valve.
                 assertEquals(Long.parseLong(expected.getProperty("shaped","0")),shaped(ledger),folder+": shaped vessels");
                 assertEquals(Long.parseLong(expected.getProperty("controlValves","0")),controlValves(ledger),folder+": control valves");
                 // Schema 5 wrote heat sides and channel counts; an older image reads none and one channel everywhere.
                 assertEquals(expected.getProperty("heatSides",""),heatSides(ledger),folder+": heat sides");
+                // Schema 6 wrote the column units and the devices they hold; an older image reads none.
+                assertEquals(Long.parseLong(expected.getProperty("suspended","0")),suspended(ledger),folder+": suspended devices");
+                assertEquals(expected.getProperty("columns",""),columns(ledger),folder+": column units");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
@@ -395,10 +472,12 @@ class FluidFactsCompatTest {
         var loaded=load(image,key->model,CATALOG);var props=new Properties();
         props.setProperty("registrations",Integer.toString(loaded.world().orElseThrow().active().size()));
         props.setProperty("laid",Long.toString(loaded.world().orElseThrow().active().values().stream().filter(r->r.device().joints()!=PhysicalFluidTopology.ALL_FACES).count()));
-        props.setProperty("lanes",Long.toString(loaded.world().orElseThrow().active().values().stream().filter(r->r.device().position().lane()!=0).count()));
+        props.setProperty("lanes",Long.toString(loaded.world().orElseThrow().active().values().stream().filter(r->r.device().position().lane()!=0&&r.device().position().lane()<=PhysicalFluidTopology.RACK_PLACES).count()));
         props.setProperty("shaped",Long.toString(shaped(loaded.world().orElseThrow())));
         props.setProperty("controlValves",Long.toString(controlValves(loaded.world().orElseThrow())));
         props.setProperty("heatSides",heatSides(loaded.world().orElseThrow()));
+        props.setProperty("suspended",Long.toString(suspended(loaded.world().orElseThrow())));
+        props.setProperty("columns",columns(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
@@ -411,6 +490,18 @@ class FluidFactsCompatTest {
             if(!text.isEmpty())text.append(";");
             text.append(r.device().id()).append(":").append(g.channels());
             if(h!=null)text.append(":").append(h.unit()).append(":").append(h.side()).append(":").append(h.area()).append(":").append(h.partner()).append(":").append(h.control()).append(":").append(h.transitJoule());
+        }
+        return text.toString();
+    }
+    private static long suspended(WorldTopologyLedger.Snapshot world){return world.active().values().stream().filter(r->r.device().suspended()).count();}
+
+    /** Every column unit, in identity order: what schema 6 carries. */
+    private static String columns(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var u:new TreeMap<>(world.columns()).values()) {
+            if(!text.isEmpty())text.append(";");
+            text.append(u.id()).append(":").append(u.running()).append(":").append(u.setpoints().feedRate()).append(":").append(u.totals().taken().total()).append(":condenser=").append(u.condenser());
+            for(var s:u.stations())text.append(":").append(s.port()).append(s.index()).append("=").append(s.device()).append("/").append(s.valve()).append("/").append(s.account().total()).append("/").append(s.account().energy()).append("/").append(s.solids().massKg());
         }
         return text.toString();
     }

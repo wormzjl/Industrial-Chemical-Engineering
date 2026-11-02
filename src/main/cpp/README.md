@@ -1,27 +1,44 @@
-# Native column solver
+# C++ column library
 
-This directory contains the portable C++17 shared-library boundary for the V3 solver. `icheme_column_solver` is a
-shared target only: Windows produces a DLL, Linux an SO, and macOS a DYLIB. There is no native solver executable.
+`icheme_column_solver` is a C++17 shared library behind a C ABI and a JNI adapter: a DLL on Windows, an SO on Linux,
+a DYLIB on macOS. It is never an executable. The column uses it by default and runs on its Java path wherever the
+library is missing.
 
-Configure and build it with:
+## What runs in C++
+
+- `icheme_column_pr_batch_temperature_derivatives`: the strict Peng-Robinson outer pass of the Boston-Sullivan
+  inside-out trial (fugacity coefficients, residual enthalpy, compressibility and their one-sided temperature
+  slopes for every tray in one call). The trial runs on the first rung of a cold solve of a dry column with no side
+  draws, steam or pumparounds, at most two passes per solve. `NativeColumnSolverTest` holds the pass to the Java
+  kernel's values.
+- Everything else stays in Java: the MESH residual, the Jacobian, the Newton solve and the acceptance audit. The
+  strict Java model publishes every result.
+- `icheme_column_solve` (a dense finite-difference Newton with a residual callback) and `icheme_column_pr_batch` are
+  probes for the test only.
+
+## Build and packaging
+
+`processResources` builds the library and packs it into the jar under `natives/<os>-<arch>/`
+(`nativeConfigure`, `nativeBuild`, `nativeResources`). Gradle takes CMake from `-PnativeCmake`, the PATH, or the
+copy Visual Studio (Build Tools included) carries beside MSVC. Without CMake the jar carries no library and a
+message says so. The runtime is linked statically, so the library needs only the operating system.
+
+By hand:
 
 ```text
 cmake -S src/main/cpp -B build/native -DCMAKE_BUILD_TYPE=Release
 cmake --build build/native --config Release
 ```
 
-The Gradle verification lane builds and loads the library through JNI:
+A jar carries the library of the machine that built it. Other platforms run the Java path.
 
-```text
-./gradlew nativeSmoke
-```
+## Loading
 
-The lane passes `build/native` as `icheme.native.path` and runs one scalar Newton probe through the C ABI. A deployed
-installation can set that system property to a shared-library file or directory.
+`NativeColumnSolver` loads, in order: the file or folder `icheme.native.path` names; the jar's library for this
+platform (in place from a folder, else copied once to `<game folder>/IChemE/natives/`); `icheme_column_solver` on
+`java.library.path`. A library without the JNI adapter, or whose version is not the one Java expects, is refused.
+The log says which library loaded, or why none did.
 
-The Java side loads `icheme_column_solver` through JNI when the library is installed and uses the existing Java path
-when it is absent. The exported C ABI owns the Newton scratch buffers and is intentionally independent of JNI, so the
-same core can later be called from Panama or another host without changing the numerical code. JNI also exposes an
-optional residual callback for migration experiments and a batched classical Peng–Robinson outer-property call. The
-batch call is enabled only with `-PnativeThermoBatch=true`; strict Java PR remains the publication and audit authority.
-The full V3 MESH mapping remains on the Java side until its cross-language data contract is completed.
+Switches: `-Dicheme.native.thermo.batch=false` keeps the library loaded and runs the Java outer pass (Gradle
+`-PnativeThermoBatch=false`); `-Dicheme.native.path=<file or folder>` loads another build (Gradle
+`-PnativeLibraryPath=...`). `./gradlew nativeSmoke` loads `build/native` directly and runs the checks.

@@ -1,0 +1,35 @@
+{
+  "name": "wet-vdu",
+  "stages": 10,
+  "feedStage": 8,
+  "feedTemperatureK": 632.1586859216837,
+  "topPressurePa": 2000.0,
+  "nominalDropPa": 0.0,
+  "use400CHeaterEnthalpy": true,
+  "diameterM": 15.0,
+  "condenserTemperatureK": 333.15,
+  "refluxRatio": 0.5,
+  "steamMassFraction": 0.01,
+  "draws": [
+    {
+      "stage": 3,
+      "feedMoleFraction": 0.1
+    },
+    {
+      "stage": 6,
+      "feedMoleFraction": 0.25
+    }
+  ],
+  "pumparounds": [
+    {
+      "drawStage": 3,
+      "returnStage": 2,
+      "coolingMW": 1.0
+    },
+    {
+      "drawStage": 6,
+      "returnStage": 5,
+      "coolingMW": 2.0
+    }
+  ]
+}

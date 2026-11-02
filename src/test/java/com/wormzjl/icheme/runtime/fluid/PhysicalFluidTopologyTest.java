@@ -545,7 +545,9 @@ class PhysicalFluidTopologyTest {
         assertThrows(IllegalArgumentException.class,()->lane(1,0,0,2,1,PhysicalFluidTopology.ALL_FACES),"automatic joints");
         assertThrows(IllegalArgumentException.class,()->lane(1,0,0,0,0,ALONG_X,1),"points without a lane");
         assertThrows(IllegalArgumentException.class,()->lane(1,0,0,2,1,ALONG_X,1L<<60),"points past the six faces");
-        assertThrows(IllegalArgumentException.class,()->new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0,PhysicalFluidTopology.RACK_PLACES+1));
+        assertThrows(IllegalArgumentException.class,()->new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0,PhysicalFluidTopology.PORT_LANE+1));
+        // The place past the rack lanes is a running column's port (batch 2026-10-28-column-operation): no lane stands there.
+        assertThrows(IllegalArgumentException.class,()->lane(1,0,0,PhysicalFluidTopology.PORT_LANE,1,ALONG_X),"a lane on a column port's place");
         var copied=lane(1,0,0,14,1,ALONG_X).withGeometry(new PipeResistance.Geometry(1,.1,.000045,0));
         assertEquals(1,copied.slots());assertEquals(14,copied.position().lane());assertEquals(14*8+1,copied.point(WEST));
     }

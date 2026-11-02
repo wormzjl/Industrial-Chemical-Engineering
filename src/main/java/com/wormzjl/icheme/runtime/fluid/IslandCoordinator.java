@@ -228,6 +228,32 @@ public final class IslandCoordinator {
     private final Set<Long> toWake=new LinkedHashSet<>();
     /** The real valve each coupled side's control works (W8), by the side's connection id: the exchangers whose lines are complete. */
     private Map<Long,ExchangerRelay.Operation> operations=Map.of();
+    /**
+     * The running columns' ports (batch 2026-10-28-column-operation, plan 4.2 and 9): whether an island holding one may start
+     * a slice (the outlet fence), what each port plans for the slice, and what each gave and took over a committed or replayed
+     * span. Arithmetic only, on the server thread.
+     */
+    public interface Ports {
+        boolean ready(long island,PassiveNetwork graph,long start);
+        Map<Long,com.wormzjl.icheme.science.fluid.network.PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice);
+        void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result);
+        /**
+         * The read of coupled side {@code side} whose other side {@code partner} a running column holds (C6b), at a slice from
+         * {@code start} of {@code seconds} s, the pair's heat in transit now {@code transit} (J): a column's condenser water
+         * side reads the heat the column owes it, a side of a held member moves no heat; null where no column holds the partner.
+         */
+        default com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit){return null;}
+        Ports NONE=new Ports(){
+            public boolean ready(long island,PassiveNetwork graph,long start){return true;}
+            public Map<Long,com.wormzjl.icheme.science.fluid.network.PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice){return Map.of();}
+            public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result){}
+        };
+    }
+    private Ports ports=Ports.NONE;
+    /** Installs the running columns' ports. */
+    public void ports(Ports value){owned();ports=Objects.requireNonNull(value);}
+    /** A running column's plan for {@code island} moved: a certified island ends its certificate at the next decision point. */
+    public void portsMoved(long island){owned();if(islands.containsKey(island))toWake.add(island);}
     private boolean reconsideringPartners,waking;
     private record Round(long id,List<Pending> entries,long startedNanos) {}
     private final List<Round> rounds=new ArrayList<>();
@@ -357,6 +383,17 @@ public final class IslandCoordinator {
     public int pendingCount(){owned();return pending.size();}
     /** The shared online epoch this coordinator's clocks read. */
     public long now(){owned();return epoch.getAsLong();}
+    /**
+     * Whether {@code id} has booked what it delivers through {@code tick} (batch 2026-10-28-column-operation, plan section 9):
+     * committed through it, certified that far (materialised here), or held, parked or suspended (it delivers nothing past its
+     * committed tick until it solves again). An island that no longer exists has nothing to book.
+     */
+    public boolean through(long id,long tick) {
+        owned();var island=islands.get(id);if(island==null||island.clock.committedTick()>=tick)return true;
+        if(island.held||island.phaseParked||island.suspended||suspension!=null)return true;
+        if(island.certificate!=null){materialise(island);return island.clock.committedTick()>=tick;}
+        return false;
+    }
     /** O(1): the earliest tick at which a deadline is scheduled, possibly a stale one; see {@link IslandScheduler}. */
     public long nextDue(){owned();return scheduler.nextDue();}
     /** Scheduled deadline entries, live and not yet popped stale ones. */
@@ -374,7 +411,7 @@ public final class IslandCoordinator {
      */
     public void schedule(IslandScheduler.Kind kind,long epochTick,Runnable action) {
         owned();Objects.requireNonNull(action);
-        if(kind!=IslandScheduler.Kind.RECOVERY_RETRY)throw new IllegalArgumentException("Not an external deadline kind: "+kind);
+        if(kind!=IslandScheduler.Kind.RECOVERY_RETRY&&kind!=IslandScheduler.Kind.COLUMN_CYCLE)throw new IllegalArgumentException("Not an external deadline kind: "+kind);
         if(stopped)return;
         externalActions.put(kind,action);
         if(Objects.equals(externalTicks.get(kind),epochTick))return;
@@ -452,7 +489,7 @@ public final class IslandCoordinator {
                     if(shrinkTick!=due.tick())continue;
                     FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.deadlinesFired);shrinkTick=Long.MAX_VALUE;shrinkDue=true;
                 }
-                case RECOVERY_RETRY->{
+                case RECOVERY_RETRY,COLUMN_CYCLE->{
                     var tick=externalTicks.get(due.kind());if(tick==null||tick!=due.tick())continue;
                     FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.deadlinesFired);externalTicks.remove(due.kind());externalActions.get(due.kind()).run();
                 }
@@ -491,7 +528,7 @@ public final class IslandCoordinator {
             if(capacity<=0)return;
             var admitted=new ArrayList<Pending>();long roundStarted=nanoClock.getAsLong();
             for(int slot=0;slot<capacity;slot++) {
-                var next=ready.nextReady(id->{FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.islandVisits);var i=require(id);return i.pendingEntries==0&&i.clock.nextSlice(1,i.fence(),i.maximumSliceTicks).isPresent()&&coupledThrough(i);});
+                var next=ready.nextReady(id->{FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.islandVisits);var i=require(id);return i.pendingEntries==0&&i.clock.nextSlice(1,i.fence(),i.maximumSliceTicks).isPresent()&&coupledThrough(i)&&ports.ready(i.id,i.graph,i.clock.committedTick());});
                 if(next.isEmpty())break;
                 var island=require(next.getAsLong());long request=dispatcher.nextRequestId();
                 var slice=island.clock.nextSlice(request,island.fence(),island.maximumSliceTicks).orElseThrow();
@@ -499,7 +536,7 @@ public final class IslandCoordinator {
                 // The job starts from the committed interval, not from the solver's history; see RetainedSolver.
                 island.retained.committed(island.lastResult.orElse(null));
                 var reads=reads(island,slice);
-                var command=new ProcessSolveServices.FluidIslandCommand(island.model,island.graph,slice.seconds(),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads);
+                var command=new ProcessSolveServices.FluidIslandCommand(island.model,island.graph,slice.seconds(),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,island.graph,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
                 var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong());entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
@@ -659,6 +696,9 @@ public final class IslandCoordinator {
      */
     private static boolean sameControl(FlowControl a,FlowControl b) {
         if(a.equals(b))return true;
+        // A boundary valve a running column works (batch 2026-10-28-column-operation): its planned mass flow, whatever the valve's own control.
+        if(b instanceof FlowControl.ControlValve y&&y.source()==FlowControl.ValveSource.MASS_FLOW&&com.wormzjl.icheme.science.fluid.network.PortPlan.COLUMN_SENSOR.equals(y.sensor())
+                &&a instanceof FlowControl.Valve x)return x.targetPressure()==y.targetPressure();
         return a instanceof FlowControl.ControlValve x&&b instanceof FlowControl.ControlValve y&&y.source()==FlowControl.ValveSource.MASS_FLOW
                 &&x.targetPressure()==y.targetPressure()&&x.volumeTarget()==y.volumeTarget()&&java.util.Objects.equals(x.sensor(),y.sensor())&&x.revision()==y.revision();
     }
@@ -767,7 +807,7 @@ public final class IslandCoordinator {
             // line beyond its tank. The mint's states are discarded; each carried junction's buffer is sized on its carried
             // state by the mint's rule (t48's trace of bundled 145).
             PassiveNetwork graph=replacement.graph;Optional<PassiveIntervalSolver.Result> carried=Optional.empty();
-            var same=originals.stream().filter(old->old.lastResult.isPresent()&&PassiveNetwork.sameStructure(old.graph,replacement.graph)).toList();
+            var same=originals.stream().filter(old->old.lastResult.isPresent()&&PassiveNetwork.sameLines(old.graph,replacement.graph)).toList();
             if(same.size()==1){var old=same.get(0);graph=PassiveNetwork.withJunctionStates(replacement.graph,old.graph,model);carried=old.lastResult;}
             var island=new Island(new Snapshot(replacement.id,revision,graph,new IslandClock.Snapshot(online,committed,0,cadence),carried,"WAITING: full solve after topology change",fences),model,epoch);
             // A topology change starts the island cold: its first slice is one tick and each accepted full interval
@@ -987,6 +1027,8 @@ public final class IslandCoordinator {
         var reads=new HashMap<Long,ExchangerRelay.Read>();long start=slice.startTick(),end=slice.endTick();
         for(long pipe:island.sides) {
             var side=coupled.get(pipe);if(side==null||side.kind==SideKind.RADIANT)continue;
+            var held=ports.heatRead(pipe,side.partner,start,slice.seconds(),transits.getOrDefault(side.pair(),0.));
+            if(held!=null){reads.put(pipe,held);continue;}
             var other=other(side);var otherSide=coupled.get(side.partner);
             if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)materialise(other);
             // A convection coil reads its radiant coil's heat as of the slice start (F1); one in this island plans it per step.
@@ -1005,11 +1047,12 @@ public final class IslandCoordinator {
      * is what a solved slice read (null for a replay). A certified other side whose read of this one moved is then woken.
      */
     private void booked(Island island,long start,long end,PassiveIntervalSolver.Result result,Map<Long,ExchangerRelay.Read> reads) {
+        ports.booked(island.id,island.graph,start,end,result);
         for(long pipe:island.sides) {
             var side=coupled.get(pipe);if(side==null)continue;
             double joule=heat(result,pipe);
             if(joule!=0&&side.kind==SideKind.EXCHANGER)transits.merge(side.pair(),-joule,Double::sum);
-            var other=other(side);side.prune(other==null?end:other.clock.committedTick());side.book(start,end,joule);
+            var other=other(side);side.prune(other==null?end-KEEP_UNREAD_TICKS:other.clock.committedTick());side.book(start,end,joule);
             var read=reads==null?null:reads.get(pipe);
             if(read!=null){if(read.stopped())side.stopped(start,end);side.read=true;side.readUsed=read.partner();side.rateUsed=read.heatRate();side.heatRate=joule/((end-start)/20.0);}
             side.record(new SideRecord(end,stream(island.graph,result.endpointFlows(),pipe),joule/((end-start)/20.0)));
@@ -1088,6 +1131,17 @@ public final class IslandCoordinator {
         return joule+a.bookedPast(behind)+b.bookedPast(behind);
     }
     /** Restores an exchanger's heat in transit, J, from the world's facts (a load). */
+    /** A side whose other side has no island keeps its booked spans this long, for an as-of read of its transit (C6b). */
+    static final long KEEP_UNREAD_TICKS=4000;
+    /** Books {@code joule} more into the heat the pair of {@code side} and {@code partner} holds in transit, J (a running column's condenser, C6b). */
+    public void owe(long side,long partner,double joule) {
+        owned();if(!Double.isFinite(joule))throw new IllegalArgumentException("Invalid heat in transit");
+        long pair=Math.min(side,partner);double next=transits.getOrDefault(pair,0.)+joule;if(next==0)transits.remove(pair);else transits.put(pair,next);
+    }
+    /** The pair's heat in transit as of {@code tick}, as far as {@code side}'s bookings go: now, with the heat it booked past the tick given back, J. */
+    public double transitAsOf(long side,long partner,long tick) {
+        owned();var s=coupled.get(side);return transits.getOrDefault(Math.min(side,partner),0.)+(s==null?0:s.bookedPast(tick));
+    }
     public void transit(long pair,double joule) {
         owned();if(!Double.isFinite(joule))throw new IllegalArgumentException("Invalid heat in transit");
         if(joule==0)transits.remove(pair);else transits.put(pair,joule);
@@ -1214,7 +1268,7 @@ public final class IslandCoordinator {
             case SLICE_DUE,RETRY,CERTIFICATE_HORIZON->{var island=islands.get(entry.id());yield island!=null&&island.generation==entry.generation();}
             case ROUND_TIMEOUT->rounds.stream().anyMatch(round->round.id==entry.id());
             case ALLOCATOR_SHRINK->shrinkTick==entry.tick();
-            case RECOVERY_RETRY->Objects.equals(externalTicks.get(entry.kind()),entry.tick());
+            case RECOVERY_RETRY,COLUMN_CYCLE->Objects.equals(externalTicks.get(entry.kind()),entry.tick());
             default->false;
         };
     }

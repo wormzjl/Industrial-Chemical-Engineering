@@ -90,7 +90,7 @@ class ColumnComponentsTest {
         assertEquals(List.of(Pump.IN_LINE, Pump.STANDARD, Pump.STANDARD), c.pumparoundPumps(), "one pump per pumparound, the rest standard");
         assertEquals(c, ColumnComponents.named("EXCHANGER", "IN_LINE", List.of("IN_LINE", "STANDARD", "STANDARD"), false, false));
         assertEquals(8, design.diameter());
-        assertEquals(ColumnTrays.of(crude()).withComponents(c), design.trays(), "the calculator's trays with their components");
+        assertEquals(ColumnTrays.of(crude()).withComponents(c).withOperating(ColumnOperatingPoint.of(crude())), design.trays(), "the calculator's trays with their components and its operating point");
         var unknown = assertThrows(IllegalArgumentException.class, () -> ColumnComponents.named("AIR_COOLER", "STANDARD", List.of("JET"), false, false));
         assertTrue(unknown.getMessage().startsWith("pumparound pump 1"), unknown.getMessage());
         assertEquals(List.of(Pump.STANDARD, Pump.IN_LINE), Choices.DEFAULT.withPumparoundPump(1, Pump.IN_LINE).pumparoundPumps());

@@ -70,10 +70,15 @@ public final class ExchangerRelay {
      * the exchanger holds: positive is owed to the streams), the other side's slice length ({@code partnerSeconds}, s, for
      * the share) and the share of this slice the other side spent counting this one stopped ({@code sitOut}, 0 to 1). With
      * the exchanger's lines complete (W8, plan section 7), {@code operation} names the valve the side's control works. A fired
-     * heater's convection coil reads only {@code heatRate}: its radiant coil's heat (W) as of the slice start (F1).
+     * heater's convection coil reads only {@code heatRate}: its radiant coil's heat (W) as of the slice start (F1). A side
+     * whose other side is a running column's condenser (batch 2026-10-28-column-operation, C6b) reads no stream but a
+     * {@code ceiling} (K, 0 for none): it takes the heat in transit the column owes it, its outlet no warmer than that.
      */
-    public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate) {
-        public Read {if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1)||!Double.isFinite(heatRate))throw new IllegalArgumentException("Invalid side read");}
+    public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate,double ceiling) {
+        public Read {if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1)||!Double.isFinite(heatRate)||!(ceiling>=0)||!Double.isFinite(ceiling))throw new IllegalArgumentException("Invalid side read");}
+        public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,heatRate,0);}
+        /** A running column's condenser read by its water side: the heat it owes (J) as of the slice start, the outlet's ceiling (K). */
+        public static Read column(double transitDue,double seconds,double ceiling){if(!(ceiling>0))throw new IllegalArgumentException("A column partner has a ceiling");return new Read(null,false,transitDue,seconds,0,null,0,ceiling);}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,0);}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut){this(partner,stopped,transitDue,partnerSeconds,sitOut,null);}
         /** A convection coil's read of its radiant coil in another island (the owner's test of 2026-10-28, F1): the radiant
@@ -237,6 +242,7 @@ public final class ExchangerRelay {
      * a read of the other side.
      */
     public static HeatSide plan(HeatSide own,Stream stream,@Nullable Stream other,Read read,double seconds) {
+        if(other==null&&read.ceiling()>0)return column(own,stream,read,seconds);
         boolean moving=other!=null&&!read.stopped()&&other.through()>0;
         var planned=controlled(own,stream,moving?(at,last)->wall(at,other,last).temperatures():null,moving?other.temperature():0,read);
         double[] wall=planned.wall();double bypass=planned.bypass(),mass=Math.abs(stream.massFlow());var limit=planned.limit();var at=stream.through(planned);
@@ -248,6 +254,21 @@ public final class ExchangerRelay {
         double bound=stream.curve.enthalpyAt(other.temperature()),lo=Math.min(stream.inlet,bound),hi=Math.max(stream.inlet,bound);
         double allowed=Math.clamp(mixed+shift,lo,hi),scale=Math.clamp((allowed-mixed)/shift,0,1);
         return own.withInputs(wall,bypass,scale*shift,planned.active(),limit);
+    }
+    /**
+     * A side whose other side is a running column's condenser (C6b, plan section 10): no cells move (the column is no stream),
+     * and the give-back is all the heat the column owes over the slice, an enthalpy shift on the side's whole flow, scaled
+     * down so that its outlet at the slice start stays at or below the ceiling (the rest stays owed, and the column, finding
+     * its condenser short, cuts its throughput). None without flow.
+     */
+    static HeatSide column(HeatSide own,Stream stream,Read read,double seconds) {
+        var still=controlled(own,stream,null,0,read);double mass=Math.abs(stream.massFlow());
+        if(mass==0||read.transitDue()==0||!(seconds>0))return still;
+        double shift=read.transitDue()/(mass*seconds);
+        double mixed=stream.inlet+still.heat(stream.curve,stream.inlet,stream.massFlow)/mass;
+        double bound=stream.curve.enthalpyAt(read.ceiling()),lo=Math.min(stream.inlet,bound),hi=Math.max(stream.inlet,bound);
+        double allowed=Math.clamp(mixed+shift,lo,hi),scale=Math.clamp((allowed-mixed)/shift,0,1);
+        return own.withInputs(still.wall(),still.bypass(),scale*shift,still.active(),still.limit());
     }
     /**
      * A kettle's tube side planned for a slice (W7, plan section 8): as {@link #plan} against a pool at {@code bath} (null

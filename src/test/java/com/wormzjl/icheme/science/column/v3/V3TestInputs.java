@@ -81,6 +81,16 @@ public final class V3TestInputs {
                         new V3ColumnSpecification.ReboilerDuty(0.0)));
     }
 
+    /** A live-boilup binary whose interior phases pass the independent identity check. */
+    public static V3ColumnInput cdu17BoilingBinary(String assayId) {
+        var original = cdu17Binary(assayId);
+        return dry(original.schemaVersion(), original.packageId(), assayId, original.componentBasis(),
+                original.feedComponentMolarFlowsMolPerSecond(), 600, 2, 1, 250000, 750, List.of(
+                        new V3ColumnSpecification.CondenserOutletTemperature(300),
+                        new V3ColumnSpecification.OrganicRefluxRatio(2),
+                        new V3ColumnSpecification.ReboilerDuty(500000)));
+    }
+
     /** An accepted certificate without a state: no streams, duty ledger, tray hydraulics or inspection. */
     static V3ColumnResult stateless(V3ColumnProblem problem, V3InputDigest digest, V3AcceptanceAudit audit,
             V3ConvergenceEvidence evidence) {

@@ -22,7 +22,7 @@ import org.jetbrains.annotations.Nullable;
  * A column's assembly drawing on the HMI glass (batch 2026-10-28-gui-toolkit, GUI_REVIEW.md order 4), from its
  * {@link AssemblyDiagram} fitted to the box it is given, through the kit's {@link FlowsheetPainter}: each part teal, yellow
  * or red by its report's state (the column neutral while it is in place; every part red before the first report), the
- * selected part outlined, each port square in its class colour while it still needs a pipe. Its hit tests answer the
+ * selected part outlined, each port square in its own colour, edged grey once connected. Its hit tests answer the
  * screen's clicks and hovers from the same fit. No Minecraft classes: the screen and the render tool draw the same drawing.
  */
 public final class AssemblyFlowsheet {
@@ -103,7 +103,8 @@ public final class AssemblyFlowsheet {
         if (p.labels()) for (var l : d.labels()) p.label(text.apply(l.text()), l.x(), l.y(), anchor(l.align()), Palette.MUTED);
         for (var m : d.ports()) {
             var state = port(report, m);
-            if (state != PortState.UNUSED) p.square(m.x(), m.y(), PortMark.SIZE, state == PortState.CONNECTED ? PortColours.CONNECTED : PortColours.of(m.role().port));
+            if (state != PortState.UNUSED) p.square(m.x(), m.y(), PortMark.SIZE, PortColours.assembly(d, m.slot(), m.role(), m.ordinal()),
+                    state == PortState.CONNECTED ? 0xFF000000 | PortColours.CONNECTED : FlowsheetPainter.EDGE);
         }
     }
 

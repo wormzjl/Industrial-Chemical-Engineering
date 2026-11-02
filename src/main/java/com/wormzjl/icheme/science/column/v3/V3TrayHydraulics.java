@@ -231,8 +231,8 @@ public final class V3TrayHydraulics {
         double capacityFactor = bubblingVelocity * Math.sqrt(vaporDensity / densityDifference);
         double aeration = DeterministicMath.exp(-12.55 * DeterministicMath.pow(capacityFactor, 0.91));
         double crestCoefficient = 0.501 + 0.438 * DeterministicMath.exp(-137.8 * WEIR_HEIGHT_METRES);
-        double clearLiquidHeight = aeration * (WEIR_HEIGHT_METRES + crestCoefficient
-                * DeterministicMath.pow(Math.max(0.0, liquidVolumeFlow) / (weirLengthMetres() * aeration), 2.0 / 3.0));
+        double clearLiquidHeight = liquidVolumeFlow > 0.0 ? aeration * (WEIR_HEIGHT_METRES + crestCoefficient
+                * DeterministicMath.pow(liquidVolumeFlow / (weirLengthMetres() * aeration), 2.0 / 3.0)) : 0.0;
         double holeVelocity = bubblingVelocity / HOLE_AREA_FRACTION;
         double dry = vaporDensity * holeVelocity * holeVelocity / (2.0 * ORIFICE_COEFFICIENT * ORIFICE_COEFFICIENT);
         double bubbleDiameter = 1.27 * DeterministicMath.cbrt(HOLE_DIAMETER_METRES * SURFACE_TENSION_NEWTON_PER_METRE
@@ -248,7 +248,7 @@ public final class V3TrayHydraulics {
                 * DeterministicMath.pow(SURFACE_TENSION_NEWTON_PER_METRE / 0.02, 0.2);
         double flood = (vaporVolumeFlow / netArea())
                 / (capacityParameter * Math.sqrt(Math.max(1.0e-9, densityDifference / vaporDensity)));
-        return new Terms(dry, liquidDensity * STANDARD_GRAVITY * clearLiquidHeight, residual, flood);
+        return new Terms(dry, liquidDensity * STANDARD_GRAVITY * clearLiquidHeight, liquidVolumeFlow > 0.0 ? residual : 0.0, flood);
     }
 
     /** The total pressure drop of one tray at one pressure. */

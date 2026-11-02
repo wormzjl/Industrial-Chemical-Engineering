@@ -248,6 +248,9 @@ public final class FluidNetwork {
         return new MenuData(record.device().hydraulicKind(),view,Controls.from(record),world.components(),world.presets(),"",
             world.materialNames(),Arrays.stream(world.model().molecularWeights()).boxed().toList(),world.instruments().sensorReadings(record.device().id(),view),valveData(world,record,view));
     }
+    /** The opening of valve {@code id} as its screen reads it, 0 to 1, or NaN where it has none or no signal (the column's Operation tab, C7). */
+    public static double opening(FluidWorldAuthority world,long id){return world.stored(()->storedOpening(world,id));}
+    private static double storedOpening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
     private static ValveData valveData(FluidWorldAuthority world,WorldTopologyLedger.Registration record,FluidView view){
         if(!(record.device().control() instanceof FlowControl.Valve valve))return null;
         if(valve.bare())return new ValveData(false,1,"Lacking components");
@@ -256,6 +259,7 @@ public final class FluidNetwork {
         var reading=world.instrumentPipeReading(record.device().id());double flow=reading==null?view.massFlow():reading.massFlow();if(reading!=null&&reading.volumeFlow()!=null&&reading.volumeFlow()!=0)rho=reading.massFlow()/reading.volumeFlow();
         double d=record.device().geometry().diameter(),u=view.status().contains("/ CLOSED")?0:view.status().contains("/ VALVE_OPEN")?1:FlowControl.opening(flow,head,rho,Math.PI*d*d/4);
         if(view.status().contains("CONTROL_CONFLICT")||view.status().contains("VALVE_CONFLICT"))return new ValveData(true,u,"Control conflict; holding opening");
+        if(view.status().contains("STANDING_OPEN"))return new ValveData(true,u,"Standing open; a lower flow target on this line regulates");
         if(view.committedTick()==0&&view.state()==null&&reading==null)return new ValveData(true,u,"Signal unavailable");
         boolean limited;
         if(valve.pressureControl())limited=view.state()==null||Math.abs(view.state().pressure()-valve.targetPressure())>Math.max(.01,1e-6*valve.targetPressure());

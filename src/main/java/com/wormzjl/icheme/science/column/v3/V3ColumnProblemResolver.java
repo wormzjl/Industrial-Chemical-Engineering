@@ -40,6 +40,13 @@ public final class V3ColumnProblemResolver {
             case VAPOR_ONLY -> V3ColumnTopology.vaporOnly(input.stageCount(), input.feedStageNumber());
             case LIQUID_ONLY -> V3ColumnTopology.liquidOnly(input.stageCount(), input.feedStageNumber());
         };
+        double reflux = input.specifications().stream().filter(V3ColumnSpecification.OrganicRefluxRatio.class::isInstance)
+                .map(V3ColumnSpecification.OrganicRefluxRatio.class::cast).findFirst().orElseThrow().ratio();
+        if (reflux == 0.0) {
+            int firstLiquid = input.feedStageNumber();
+            for (V3PumparoundSpec cooler : input.pumparounds()) if (cooler.dutyWatts() < 0.0) firstLiquid = Math.min(firstLiquid, cooler.returnTray());
+            topology = topology.withFirstLiquidTray(firstLiquid);
+        }
         V3ActiveComponentBasis activeComponentBasis = V3ActiveComponentBasis.from(input);
         V3CondenserComponentPhases condenserComponentPhases = V3CondenserComponentPhases.from(activeComponentBasis);
         V3DegreeOfFreedomLedger ledger = V3DegreeOfFreedomLedger.create(

@@ -33,6 +33,11 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
         return session.advisoryEvidence();
     }
 
+    /** Data-range status only; evaluations continue within the numerical box. */
+    public boolean outsideDataRange(double temperatureKelvin, double pressurePascal) {
+        return session.outsideDataRange(temperatureKelvin, pressurePascal);
+    }
+
     /** Returns the inclusive lower absolute-pressure bound declared by the selected property package. */
     public double minimumPressurePascal() {
         return session.minimumPressurePascal();
