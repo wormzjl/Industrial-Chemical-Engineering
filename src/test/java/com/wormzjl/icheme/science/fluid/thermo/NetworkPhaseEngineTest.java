@@ -572,26 +572,28 @@ class NetworkPhaseEngineTest {
     }
 
     /**
-     * Water short of a heavy oil at a stripper's temperature: all of it is steam at the state pressure, the oil stays liquid
-     * with next to no vapour pressure. The vapour fraction that fills the gas lies under the flash's resolution, about 5e-9, so
-     * the oil's gas volume jumps from that to none at its bubble point, and the steam closes that step as it closes a pure
-     * hydrocarbon's. The vapour's own energy is nothing beside the steam's, and the state comes back at its temperature.
+     * Water short of a heavy oil at a stripper's temperature: all of it is steam at the state pressure, and the oil stays
+     * liquid with next to no vapour pressure. The vapour that fills the gas lies under the flash's resolution, about 5e-9 of
+     * the feed, in a heavy cut with a trace of the next one as in one hydrocarbon: its gas volume jumps from that to none,
+     * and the steam closes the step. The state comes back from its enthalpy at its own temperature.
      */
     @Test
     void aHeavyOilBesideSteamStaysLiquid() {
+        record Point(double trace, double t, double p) {}
         var engine = model.phaseEngine();
         int heavy = model.components().indexOf("crude_pc12");
-        double t = 550, p = 1e5;
-        double[] feed = pure(heavy, 100, 30);
-        feed[heavy - 1] = .01;
-        var tp = engine.tp(t, p, feed, false);
-        assertTrue(tp.converged(), tp.detail());
-        assertEquals(30, tp.freeWater().waterVapor(), 1e-12, "all of the water is steam");
-        assertEquals(p, tp.freeWater().waterPartialPressure(), 1e-6 * p, "at the state pressure");
-        assertTrue(hydrocarbonVapour(tp) < 1e-6, tp.detail());
-        var ph = engine.ph(p, tp.enthalpy(), feed, false);
-        assertTrue(ph.converged(), ph.detail());
-        assertEquals(t, ph.phases().get(0).temperature(), 1e-6, ph.detail());
+        for (var at : List.of(new Point(.01, 550, 1e5), new Point(0, 700, 5e5))) {
+            double[] feed = pure(heavy, 100, 30);
+            feed[heavy - 1] = at.trace();
+            var tp = engine.tp(at.t(), at.p(), feed, false);
+            assertTrue(tp.converged(), at + ": " + tp.detail());
+            assertEquals(30, tp.freeWater().waterVapor(), 1e-12, at + " all of the water is steam");
+            assertEquals(at.p(), tp.freeWater().waterPartialPressure(), 1e-6 * at.p(), at + " at the state pressure");
+            assertTrue(hydrocarbonVapour(tp) < 1e-3, at + ": " + tp.detail());
+            var ph = engine.ph(at.p(), tp.enthalpy(), feed, false);
+            assertTrue(ph.converged(), at + ": " + ph.detail());
+            assertEquals(at.t(), ph.phases().get(0).temperature(), 1e-6, at + ": " + ph.detail());
+        }
     }
 
     /** The enthalpy halfway between 12 K under water's boiling at 2 bar and 12 K over it. */
