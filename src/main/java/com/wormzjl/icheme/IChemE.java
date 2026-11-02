@@ -50,8 +50,6 @@ public final class IChemE {
     private static final ModConfigSpec.BooleanValue FLUID_REST_DETECTION;
     private static final ModConfigSpec.DoubleValue FLUID_CERTIFICATE_TOLERANCE,FLUID_CERTIFICATE_BUDGET;
     private static final ModConfigSpec.IntValue FLUID_CERTIFICATE_MAXIMUM_INTERVALS,FLUID_REST_CONFIRM_INTERVALS,FLUID_REST_RECHECK_SECONDS;
-    private static final ModConfigSpec.DoubleValue COLUMN_V3_STAGE_TRACE_CUTOFF_MOL_PERCENT;
-    private static final ModConfigSpec.DoubleValue COLUMN_V3_CONVERGENCE_CLOSURE_PERCENT;
     private static final ModConfigSpec.DoubleValue COLUMN_V3_LIQUID_SUPPLY_SCREEN_RATIO;
     private static final ModConfigSpec.EnumValue<V3InitializationOptions.Mode> COLUMN_V3_INITIALIZER_MODE;
     private static final ModConfigSpec.EnumValue<V3InitializationOptions.WetStart> COLUMN_V3_WET_START;
@@ -144,22 +142,6 @@ public final class IChemE {
         COLUMN_V3_LNN_MILLISECONDS = builder
                 .comment("Shared inference/correction allowance in milliseconds; never extends the overall solve deadline.")
                 .defineInRange("lnnBudgetMilliseconds", 2_000, 1, 60_000);
-        COLUMN_V3_STAGE_TRACE_CUTOFF_MOL_PERCENT = builder
-                .comment("V3 stage-level trace cutoff in mol% (not a feed filter).",
-                        "Components below this cutoff in every testable phase at a stage may be structurally removed there.",
-                        "Feed trays are retained; removed inflows form an audited molar defect. Failed truncated solves retry untruncated.",
-                        "0 is the exact off switch. Default remains 0 pending accuracy/performance evaluation.",
-                        "Captured at admission; config reloads do not change in-flight solves.")
-                .defineInRange("stageTraceCutoffMolPercent", 0.0, 0.0, 1.0);
-        COLUMN_V3_CONVERGENCE_CLOSURE_PERCENT = builder
-                .comment("V3 convergence closure in percent: how tightly every residual row must close.",
-                        "A component balance closes to this fraction of its own tray throughput, equilibrium to this",
-                        "difference in log composition, and each tray's energy to this fraction of a reference flow.",
-                        "The acceptance audit's equilibrium, condenser-split and energy-closure limits move with it.",
-                        "0 is the exact off switch and keeps the frozen 1e-8 closure; 0.1 is the loosest admitted.",
-                        "A nonzero value changes the accepted state, so it is part of the result digest and label.",
-                        "Captured at admission; config reloads do not change in-flight solves.")
-                .defineInRange("columnV3ConvergenceClosurePercent", 0.0, 0.0, 0.1);
         COLUMN_V3_LIQUID_SUPPLY_SCREEN_RATIO = builder
                 .comment("Request-only liquid-supply screen: reject a specification whose authored side draws withdraw",
                         "at least this fraction of the liquid that reflux, feed and authored pumparound condensation",
@@ -278,16 +260,6 @@ public final class IChemE {
     /** Resolve the safely published immutable bundled model on the admission thread. */
     public static V3NeuralInitializer columnV3NeuralModel() {
         return V3NeuralRegistry.bundled();
-    }
-
-    /** Read on the server thread when admitting a V3 request, never from its worker. */
-    public static double columnV3StageTraceCutoffMolPercent() {
-        return COLUMN_V3_STAGE_TRACE_CUTOFF_MOL_PERCENT.get();
-    }
-
-    /** Read on the server thread when admitting a V3 request, never from its worker. */
-    public static double columnV3ConvergenceClosurePercent() {
-        return COLUMN_V3_CONVERGENCE_CLOSURE_PERCENT.get();
     }
 
     /** Read on the server thread when admitting a V3 request, never from its worker. */

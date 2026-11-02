@@ -25,6 +25,12 @@ class V3ClientPresetsTest {
         return c.presets().columns().keySet().stream().sorted().map(id->c.presets().column(id)).filter(p->p.visible()).map(p->p.input(c))
                 .filter(i->i.componentBasis().componentIds().containsAll(parts)).min(java.util.Comparator.comparingInt(i->i.componentBasis().componentCount())).orElseThrow();
     }
+    /** A stream template on {@code source}'s components, with the feed flow and temperature where it has them. */
+    private static void load(V3EditorDraft d,V3ClientPresets.Mixture mixture,V3ColumnInput source){
+        d.composition(source,weights(source));d.composition().load(mixture.amounts(),mixture.mass());
+        mixture.flow().ifPresent(flow->d.set("s0",Double.toString(flow)));
+        mixture.temperature().ifPresent(kelvin->d.set("s1",Double.toString(kelvin-273.15)));
+    }
     @Test void bundledLibrariesAreIndependentAndPreserveAuthoredOperatingData(){
         var l=library();var columns=l.refresh(V3ClientPresets.Kind.COLUMN);var mixtures=l.refresh(V3ClientPresets.Kind.MIXTURE);
         assertTrue(columns.problems().isEmpty(),()->columns.problems().toString());assertTrue(mixtures.problems().isEmpty());
@@ -34,7 +40,7 @@ class V3ClientPresetsTest {
             // A crude is two files now: the stream, then the tower on it, as the calculator's Templates load them.
             var stream=(V3ClientPresets.Mixture)mixtures.entries().stream().filter(e->e.file().equals(entry.file())).findFirst().orElseThrow().preset();
             var d=draft();var on=sourceFor(stream.amounts().keySet());
-            d.loadMixture(stream,on,weights(on));d.loadColumn(((V3ClientPresets.Column)entry.preset()).template());
+            load(d,stream,on);d.loadColumn(((V3ClientPresets.Column)entry.preset()).template());
             var changed=d.assemble();assertEquals(reference().packageId(),changed.packageId());
             var crude=V3TestInputs.crude(MaterialCatalog.bundled(),entry.file().replace(".json",""));
             assertEquals(crude.stageCount(),changed.stageCount());assertEquals(crude.feedStageNumber(),changed.feedStageNumber());
@@ -70,7 +76,7 @@ class V3ClientPresetsTest {
         assertEquals(8,columns.entries().size());assertEquals(9,mixtures.entries().size());
         // On the default feed: the feed and its temperature stay, the mixture changes, and the tower's flows scale to the feed they meet.
         var on=sourceFor(m.amounts().keySet());assertEquals(reference().packageId(),on.packageId());
-        var d=draft();d.loadMixture(m,on,weights(on));d.loadColumn(c.template());var loaded=d.assemble();
+        var d=draft();load(d,m,on);d.loadColumn(c.template());var loaded=d.assemble();
         double feed=Arrays.stream(reference().feedComponentMolarFlowsMolPerSecond()).sum(),k=feed*3.6/c.template().designFeed();
         assertEquals(feed,Arrays.stream(loaded.feedComponentMolarFlowsMolPerSecond()).sum(),1e-9);assertEquals(reference().feedTemperatureKelvin(),loaded.feedTemperatureKelvin(),1e-9);
         assertFalse(Arrays.equals(reference().feedComponentMolarFlowsMolPerSecond(),loaded.feedComponentMolarFlowsMolPerSecond()),"the mixture is the old file's");
@@ -89,7 +95,7 @@ class V3ClientPresetsTest {
         var m=(V3ClientPresets.Mixture)V3ClientPresets.decode(json,V3ClientPresets.Kind.MIXTURE);
         assertEquals(313.15,m.temperature().orElseThrow());assertEquals(1.01,m.pressure().orElseThrow());assertEquals(5000,m.flow().orElseThrow());
         assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(json.replace("\"flow_kmol_h\":5000","\"flow_kmol_h\":-1"),V3ClientPresets.Kind.MIXTURE));
-        var loaded=draft();var on=sourceFor(m.amounts().keySet());loaded.loadMixture(m,on,weights(on));
+        var loaded=draft();var on=sourceFor(m.amounts().keySet());load(loaded,m,on);
         assertEquals(5000/3.6,Arrays.stream(loaded.assemble().feedComponentMolarFlowsMolPerSecond()).sum(),1e-9);assertEquals(313.15,loaded.assemble().feedTemperatureKelvin(),1e-9);
         for(var entry:library().refresh(V3ClientPresets.Kind.MIXTURE).entries()){
             var stream=(V3ClientPresets.Mixture)entry.preset();boolean residue=entry.file().equals("tia_juana_residue.json");
@@ -118,7 +124,7 @@ class V3ClientPresetsTest {
     @Test void customFilesRefreshOnlyOnRequestAndNeverOverwriteAnExistingFile()throws Exception{
         var l=library();var first=l.refresh(V3ClientPresets.Kind.MIXTURE);var d=draft();
         d.composition().clear();d.composition().add(0);d.composition().set(0,"27");
-        String json=V3ClientPresets.mixtureJson("custom",d.composition());
+        String json=V3ClientPresets.streamJson("custom",d.composition().relativeAmounts(),300,1.01,10);
         Path file=l.save(V3ClientPresets.Kind.MIXTURE,"custom",json);
         assertEquals(game.resolve("IChemE/mixturepreset/custom.json"),file);
         assertEquals(8,first.entries().size());assertEquals(9,l.refresh(V3ClientPresets.Kind.MIXTURE).entries().size());
@@ -126,7 +132,10 @@ class V3ClientPresetsTest {
         assertThrows(IllegalArgumentException.class,()->l.save(V3ClientPresets.Kind.MIXTURE,"../escape",json));
     }
     @Test void jsonRoundTripRetainsIndependentMixtureAndColumnConfiguration(){
-        var d=draft();for(int i=0;i<V3ColumnInput.MAX_SIDE_DRAWS;i++)d.removeDraw(i);for(int i=0;i<4;i++)d.removePumparound(i);d.set("s2","2");d.set("s3","2");d.set("s8","0.7");
+        var d=draft();
+        for(int i=0;i<V3ColumnInput.MAX_SIDE_DRAWS;i++)for(var field:List.of("stage","rate"))d.set("d"+i+field,"");
+        for(int i=0;i<4;i++)for(var field:List.of("draw","return","duty"))d.set("c"+i+field,"");
+        d.set("s2","2");d.set("s3","2");d.set("s8","0.7");
         // The tray drop is the base's (owner choice (a)): an edit of s8 does not reach the input, and no preset carries it.
         var pot=d.assemble();assertEquals(0,pot.stageCount());assertEquals(1,pot.feedStageNumber());assertEquals(d.base().stagePressureDropPascal(),pot.stagePressureDropPascal(),1e-9);
         assertTrue(pot.sideDraws().isEmpty());assertTrue(pot.pumparounds().isEmpty());assertEquals(1,pot.steamFeeds().getFirst().stageNumber());
@@ -137,9 +146,8 @@ class V3ClientPresetsTest {
         var reloaded=restored.assemble();assertEquals(pot.stageCount(),reloaded.stageCount());assertEquals(pot.steamFeeds(),reloaded.steamFeeds());
         assertEquals(pot.stagePressureDropPascal(),reloaded.stagePressureDropPascal(),1e-9);
         assertArrayEquals(pot.feedComponentMolarFlowsMolPerSecond(),reloaded.feedComponentMolarFlowsMolPerSecond(),1e-12);
-        d.composition().toggleBasis();
-        String mixture=V3ClientPresets.mixtureJson("feed",d.composition());
-        assertFalse(mixture.contains("tray_count"));assertFalse(mixture.contains("flow_kmol_h"));
+        String mixture=V3ClientPresets.streamJson("feed",d.composition().relativeAmounts(),300,1.01,10);
+        assertFalse(mixture.contains("tray_count"));
         var m=(V3ClientPresets.Mixture)V3ClientPresets.decode(mixture,V3ClientPresets.Kind.MIXTURE);
         restored.composition().load(m.amounts(),m.mass());
         assertArrayEquals(d.composition().moleFractions(),restored.composition().moleFractions(),1e-14);

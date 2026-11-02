@@ -141,12 +141,6 @@ final class V3ClientPresets {
         }
         return new SlurryFeed(number(s,"volume_fraction_percent")/100,grades);
     }
-    static String mixtureJson(String name,V3CompositionDraft composition){
-        JsonObject o=header(name,Kind.MIXTURE);
-        o.addProperty("basis",composition.mass()?"mass":"mole");JsonArray rows=new JsonArray();
-        composition.relativeAmounts().forEach((id,amount)->{var c=new JsonObject();c.addProperty("id",id);c.addProperty("amount",amount);rows.add(c);});
-        o.add("components",rows);return JSON.toJson(o);
-    }
     /** A stream as a template (plan section 3.7): its mixture by mole, and its conditions: {@code temperature} K, {@code pressure} bar, {@code flow} kmol/h. */
     static String streamJson(String name,Map<String,Double> amounts,double temperature,double pressure,double flow){
         JsonObject o=header(name,Kind.MIXTURE);
