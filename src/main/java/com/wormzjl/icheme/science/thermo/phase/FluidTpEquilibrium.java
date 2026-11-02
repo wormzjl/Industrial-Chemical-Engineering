@@ -4882,7 +4882,7 @@ public final class FluidTpEquilibrium {
         if (!denserRich && !lighterRich) return SPLIT;
         boolean band = inBand(t, w.liquidPressure, w) || w.tieLine < BAND_TIE_LINE;
         if (!band && w.liquidProductDenseLiquidLike && w.vapourProductDenseLiquidLike) {
-            w.singleRoot = w.feedResult.feedRoot();
+            w.singleRoot = Root.LIQUID;
             return SINGLE;
         }
         if (!denserRich) return SPLIT;
@@ -4925,10 +4925,7 @@ public final class FluidTpEquilibrium {
             return FAILED;
         }
         if (outcome == SINGLE) {
-            if (w.singleRoot == Root.LIQUID) {
-                w.singleRoot = feed.feedRoot();
-                return SINGLE;
-            }
+            if (w.singleRoot == Root.LIQUID) return SINGLE;
             for (int i = 0; i < count; i++) {
                 w.vaporAmounts[i] = w.feed[i] - held[i];
                 w.liquidAmounts[i] = 0.0;

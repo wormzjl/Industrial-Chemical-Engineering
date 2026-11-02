@@ -42,7 +42,9 @@ perl summaryB.pl out/base-673-jobs.tsv out/raised-651-jobs.tsv
 | `carried/runW.sh`, `sum.pl` | The nine worlds serial at the raised budget, one classes folder; their table. `SEEDS` narrows the list |
 | `carried/runT.sh`, `tally.pl`, `track.pl`, `src/.../CarriedTally.java` | The refusals per site: `CarriedTally.record` goes at the engine's three entry points of an overlay |
 | `carried/src/.../CarriedProbe.java`, `CarriedWindow.java`, `CarriedWindow2.java`, `CarriedGrid.java`, `CarriedWet.java` | Mode (a) on the plan's probe states, the three-fluid window, 244's refused states, the spine grid, the ethane-rich window |
-| `carried/src/.../CarriedRefresh.java` | The refresh's crystal answers in full digits, to compare two builds |
+| `carried/src/.../CarriedRefresh.java`, `CarriedRoots.java` | The refresh's crystal answers and a grid of single-phase states in full digits, to compare two builds |
+| `carried/src/.../CarriedBubble.java` | Bubble and dew pressure of a stream at its temperature |
+| `carried/first.pl` | Per run: the first job over 2 s by wall and CPU, the first held job, the last committed tick |
 | `carried/series.pl`, `closures.pl` | With `-Dprobe.describeMs=0`: a world's tanks over time, each pipe's first closure |
 | `carried/hook-a.pl` | `step/hook.pl` for the engine with a `PhaseCompetition` argument |
 | `carried/gates.sh` | The named affected tests, by Gradle; `TESTS` narrows the list |
