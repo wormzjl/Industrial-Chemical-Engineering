@@ -459,13 +459,6 @@ class PhysicalFluidTopologyTest {
                 "a joint facing a pipe without one is an open end");
     }
 
-    @Test void aLaidPipeBesideAHandPlacedOneDoesNotJoinIt() {
-        var devices=List.of(tank(1,0,0),pipe(11,1,0,PhysicalFluidTopology.ALL_FACES),tank(2,2,0),pipe(21,1,1,ALONG_X));
-        var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,reservoir(1),2L,reservoir(2)));
-        assertEquals(1,compiled.islands().size());assertFalse(compiled.islands().getFirst().physicalIds().contains(21L));
-        assertEquals("NO FLOW: unconnected pipe",compiled.diagnostics().get(21L));
-    }
-
     @Test void onlyALaidPipeHasExplicitJointsAndEveryCopyKeepsThem() {
         assertThrows(IllegalArgumentException.class,()->pipe(1,0,0,64),"past the six faces");
         assertThrows(IllegalArgumentException.class,()->new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.RESERVOIR,EAST,

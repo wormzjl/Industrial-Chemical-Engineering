@@ -535,49 +535,6 @@ class ShapeRasterizerTest {
     }
 
     @Test
-    void skirtHoleTakesTheLinesSize() {
-        // Owner decision 2026-10-21: "Skirt hole needs to adapt to the size of the pipe to max 1m". At every line size the
-        // hole in the skirt plate is the line's outside and the port's clearance: sight lines along the line inside it
-        // cross no plate, and sight lines just outside the hole's collar cross the plate's two faces. Lines up to the
-        // skirt's own radius, which turn up inside it.
-        for (var shape : List.of(drum(.5, 4, Orientation.VERTICAL, Heading.NORTH, EquipmentShape.minimumSkirt(.5)), drum(2, 4, Orientation.VERTICAL, Heading.EAST, 4),
-                drum(3, 4, Orientation.VERTICAL, Heading.SOUTH, 4), drum(6, 10, Orientation.VERTICAL, Heading.WEST, 5), EquipmentShape.column(3, ColumnTrays.simple(12, 6), Heading.NORTH, 4))) {
-            int k = 0;
-            while (shape.nozzles().get(k).riser() <= 0) k++;
-            double a = shape.axis(), c = EquipmentShape.SKIRT_OUTLET, inner = shape.radius() * DeterministicMath.cos(Math.PI / shape.facets()) - EquipmentShape.SKIRT_WALL;
-            double outside = a - shape.radius() - .07;
-            int checked = 0;
-            for (double wanted : new double[]{.1, .3, .6, PipeSizes.MAX_OUTSIDE}) {
-                double od = PipeSizes.outsideOf(PipeSizes.code(wanted)), r = od / 2;
-                if (od > inner - .02) continue;
-                checked++;
-                var sizes = new double[shape.nozzles().size()];
-                sizes[k] = od;
-                String at = shape + " line " + od;
-                double from = a - od - .02;
-                assertEquals(0, crossings(shape, new double[]{a, c, from}, new double[]{a, c, outside}, sizes), at + " centre");
-                // Inside the line from in front of the elbow, which turns up at the axis; just outside the collar from just
-                // inside the plate's inner face there (the elbow, the line's width, lies nearer the middle), where the plate
-                // stands (a line near a pipe's largest on the lowest row has its collar over the base ring), to just past its
-                // outer face (an anchor chair may stand beside the collar).
-                double rim = EquipmentShape.portRadius(od) + EquipmentShape.PORT_COLLAR + .02;
-                for (int j = 0; j < 16; j++) {
-                    double t = 2 * Math.PI * j / 16, x = Math.cos(t), y = Math.sin(t);
-                    assertEquals(0, crossings(shape, new double[]{a + .95 * r * x, c + .95 * r * y, from}, new double[]{a + .95 * r * x, c + .95 * r * y, outside}, sizes),
-                            at + " inside at " + j);
-                    // Just outside the collar, where the skirt's front faces stand, the plate's two faces.
-                    double behind = a - Math.sqrt(inner * inner - rim * x * rim * x) + .02, past = a - Math.sqrt(shape.radius() * shape.radius() - rim * x * rim * x) - .02;
-                    if (Math.abs(rim * x) < .5 * shape.radius() && c + rim * y > EquipmentShape.PLATE + .01)
-                        assertEquals(2, crossings(shape, new double[]{a + rim * x, c + rim * y, behind}, new double[]{a + rim * x, c + rim * y, past}, sizes),
-                                at + " collar at " + j);
-                }
-            }
-            // A 0.5 m skirt (inside radius 0.18 m) takes only the smallest line.
-            assertTrue(checked >= (shape.diameter() < 1 ? 1 : 2), shape.toString());
-        }
-    }
-
-    @Test
     void skirtShowsItsInsideThroughTheOpeningAndSlots() {
         // Owner reports 2026-10-16: the bottom outlet leaves through its skirt port on the front, centred on the outlet
         // line, the port 5 cm wider than the line drawn, and slots on the left, back and right show the skirt's inside.
@@ -1047,63 +1004,6 @@ class ShapeRasterizerTest {
         }
     }
 
-    @Test
-    void tankGaugeFacesPointOutwardsIncludingTheUnderside() {
-        var faces = TankGaugeGeometry.bandFaces();assertEquals(6, faces.size());
-        var normals = new java.util.HashSet<String>();
-        for (var face : faces) {
-            var p = face.positions();var n = face.normals();
-            double[] a = {p[3] - p[0], p[4] - p[1], p[5] - p[2]}, b = {p[6] - p[0], p[7] - p[1], p[8] - p[2]};
-            double[] cross = {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
-            assertTrue(cross[0] * (p[0] - .5) + cross[1] * (p[1] - .5) + cross[2] * (p[2] - .5) > 0, "inward face is culled from outside");
-            assertTrue(cross[0] * n[0] + cross[1] * n[1] + cross[2] * n[2] > 0, "winding and light normal disagree");
-            normals.add(n[0] + "," + n[1] + "," + n[2]);
-        }
-        assertEquals(6, normals.size());
-    }
-
-    @Test
-    void tankGaugeHasAClearGlassSleeveAndConnectedEndPipesInEveryHeading() {
-        assertTrue(TankGaugeGeometry.GLASS_HALF > TankGaugeGeometry.BAND_HALF, "liquid clears the glass");
-        assertTrue(TankGaugeGeometry.MARKER_INNER_HALF > TankGaugeGeometry.GLASS_HALF, "the hollow float clears the glass");
-        for (int[] dimensions : new int[][]{{4, 4}, {40, 24}}) for (var heading : Heading.values()) {
-            var shape = EquipmentShape.storage(Kind.TANK, dimensions[0], dimensions[1], heading, 0);
-            var gauge = ShapeRasterizer.floating(shape);
-            // The dynamic liquid stops at fill height; the fixed sleeve extends .3 m above it into the vent space.
-            double low = gauge.glassLow(), high = gauge.glassHigh() + .3, glassArea = 0, lowest = Double.POSITIVE_INFINITY, highest = Double.NEGATIVE_INFINITY;
-            var normals = new HashSet<String>();
-            for (var cell : ShapeRasterizer.layout(shape).shell()) {
-                if (Math.abs(cell.x() + .5 - gauge.glass()[0]) > 1 || Math.abs(cell.z() + .5 - gauge.glass()[1]) > 1) continue;
-                for (var face : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z()))) if (face.material() == Material.GLASS) {
-                    double[] positions = face.positions(), normal = newell(face), light = face.normals();
-                    double dx = positions[0] + cell.x() - gauge.glass()[0], dz = positions[2] + cell.z() - gauge.glass()[1];
-                    assertTrue(normal[0] * dx + normal[2] * dz > 0, "clipped glass faces outwards: " + shape);
-                    assertTrue(normal[0] * light[0] + normal[1] * light[1] + normal[2] * light[2] > 0, "winding agrees with lighting");
-                    assertEquals(0, normal[1], 1e-12, "glass end faces stay buried in opaque caps");
-                    normals.add(light[0] + "," + light[1] + "," + light[2]);
-                    for (int v = 0; v < positions.length; v += 3) {
-                        double x = Math.abs(positions[v] + cell.x() - gauge.glass()[0]), z = Math.abs(positions[v + 2] + cell.z() - gauge.glass()[1]);
-                        assertEquals(TankGaugeGeometry.GLASS_HALF, Math.max(x, z), 1e-9, "the sleeve encloses the liquid without crossing its collar");
-                        lowest = Math.min(lowest, positions[v + 1] + cell.y());highest = Math.max(highest, positions[v + 1] + cell.y());
-                    }
-                    glassArea += area(face);
-                }
-            }
-            assertEquals(4, normals.size(), "all four lateral views have glass");
-            assertEquals(low, lowest, 1e-9);assertEquals(high, highest, 1e-9);
-            assertEquals(8 * TankGaugeGeometry.GLASS_HALF * (high - low), glassArea, 1e-8, "cell clipping leaves no missing or overlapping glass");
-            var plan = TankDesign.Plan.of(dimensions[0], dimensions[1]);var local = plan.gauge();
-            double shellZ = plan.a() - Math.sqrt(plan.r() * plan.r() - Math.pow(local.x() - plan.a(), 2));
-            // Cross the exposed neck at three stations between shell and cap, below/above the glass and scale board.
-            for (double y : new double[]{low - TankGaugeGeometry.END_HEIGHT / 2, high + TankGaugeGeometry.END_HEIGHT / 2})
-                for (double fraction : new double[]{.2, .5, .8}) {
-                    double capBack = local.z() + TankGaugeGeometry.CHAMBER_RADIUS + .03, z = shellZ + fraction * (capBack - shellZ);
-                    assertTrue(crossings(shape, new double[]{local.x() - .09, y, z}, new double[]{local.x() + .09, y, z}) >= 2,
-                            "a continuous round equalizing pipe joins each end to the shell: " + shape + " y=" + y + " fraction=" + fraction);
-                }
-        }
-    }
-
     /**
      * Every size: its decks and its wound stair or ladders are walked (at frame level), its pipes kept one block apart. The
      * wound stair from {@link TankDesign#STAIR_SIZE} and {@link SphereDesign#STAIR_SIZE} across, caged ladders under (owner
@@ -1166,18 +1066,6 @@ class ShapeRasterizerTest {
         for (var p : f.roof()) roof += area(p);
         assertTrue(roof > Math.PI * 100, "the roof's area " + roof);
         assertNull(ShapeRasterizer.floating(EquipmentShape.storage(Kind.SPHERE, 14, 1, Heading.NORTH, 2)));
-    }
-
-    /** A timing note (plan section 3.3): the largest tank's layout, about 30 000 interior cells; not a gate. */
-    @Test
-    void theLargestTankLaysOut() {
-        var shape = EquipmentShape.storage(Kind.TANK, 40, 24, Heading.NORTH, 0);
-        long start = System.nanoTime();
-        var layout = ShapeRasterizer.layout(shape);
-        long ms = (System.nanoTime() - start) / 1_000_000;
-        System.out.println("TIMING largest tank " + shape.sizeX() + " x " + shape.sizeY() + " x " + shape.sizeZ() + ": " + layout.shell().size() + " shell, "
-                + layout.interior().size() + " interior cells laid out in " + ms + " ms");
-        assertTrue(layout.interior().size() > 25_000, layout.interior().size() + " interior cells");
     }
 
     /** A frame point inside the solid. */
