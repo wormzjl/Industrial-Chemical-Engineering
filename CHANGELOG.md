@@ -27,6 +27,13 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 - Detached to tools: the marched fill, its table and the correlation (`tools/cooling-towers/fill-forms/`, re-attach steps in its README), the polygon counts (`tools/cooling-towers/poly-counts/`).
 
+## [0.18.1] - 2026-11-02
+
+### Fixed
+
+- TP flash of one hydrocarbon beside steam (commits `9b62a7ee`, `60e13ca5`; batch `2026-11-02-tp-steam-refusal`, review `TP_STEAM_REFUSAL_REVIEW.md`): a hydrocarbon's gas volume steps at its vapour pressure, so no partial pressure closed the gas where the water could not saturate it, and these ordinary steam distillation states were refused, as were a heavy oil's with a trace of the next cut. The steam's own volume now closes that step, and PH and UV answer the pair's one true step, where its vapour pressure and water's add up to the state pressure, up to where the water or the hydrocarbon liquid runs out.
+- PH and UV flashes on wet oil (commits `5e9fd2b9`, `be052e63`; batch `2026-11-02-ph-false-root`, review `PH_FALSE_ROOT_REVIEW.md`): free water boils alone, at its saturation with no hydrocarbon vapour, only where the hydrocarbons would hold at most 1e-3 of its gas. Crude with water no longer answers its energy at water's saturation, up to 20 K off with the enthalpy met; its hydrocarbon vapour and three-phase zone come back. Sweeps and lane in `tools/ph-false-root/`.
+
 ## [0.18.0] - 2026-11-02
 
 ### Added
