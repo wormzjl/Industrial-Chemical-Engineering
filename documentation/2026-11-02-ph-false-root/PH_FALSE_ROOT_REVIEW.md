@@ -29,7 +29,7 @@ Forms: A (the brief's, no early close with hydrocarbons) and B (a TP trial under
 | Heavy cut + 1e-3 and 1e-2 methane | 5 → 0 | 3 → 0 | 25 → 0 | 2.9 K, 0.74 mol |
 | Clean heavy cut, pure water | 1 → 1 (2.6 mK, inside the bound) | 0 → 0 | 74 → 74 | none |
 
-Water with a trace of crude, steam fraction 0.5: main's balance sat 1.2 to 3.2 K over the true T at 30 mol water per mol crude and 0.05 to 0.15 K at 1000; the search answers both now. At 1e4 the balance stays, 5 to 16 mK off, 2 TP answers against 24. Cost: a right PH answer takes 8 to 11 TP answers where the false one took 2; sweep means rise by at most 0.3, at the step crude + 5 water goes 5.0 → 13.9, and cold UV on residue + water 32 → 83.
+Water with a trace of crude, halfway through its boiling: main's balance sat 1.2 to 3.2 K over the true T at 30 mol water per mol crude and 0.05 to 0.15 K at 1000; the search answers both now. At 1e4 the balance stays, 5 to 16 mK off, 2 TP answers against 24. Cost: a right PH answer takes 8 to 11 TP answers where the false one took 2; sweep means rise by at most 0.3, at the step crude + 5 water goes 5.0 → 13.9, and cold UV on residue + water 32 → 83.
 
 | World references (one lane, at `be052e63`) | main `3ffeb051` | branch |
 |---|---|---|
@@ -39,7 +39,7 @@ Water with a trace of crude, steam fraction 0.5: main's balance sat 1.2 to 3.2 K
 | Campaign clean (cold, random, defaults); holds; refused | 975, 993, 1000; 363; 0 | 974, 993, 1000; 362; 0 |
 | Worlds with another end state; newtonIterations (cold, random) | | 4 of 3000, all with wall-deadline holds; +0.16 %, +0.29 % |
 
-Cold seed 118, the one new budget hold (one wall deadline while another test JVM ran), replayed alone: clean, 48.7 s, end state equal to main's, so cold stands at 975. The other three worlds hold wall deadlines on main too and move from run to run: seed 683 went 7 → 9 holds in form C's campaign, 7 → 13 here. Gates in `NetworkPhaseEngineTest`: `wetCrudeComesBackWithItsHydrocarbonVapour`, `aHeavyCutsWaterBoilsAloneUntilTheLiquidHasAVapourPressure`, `waterWithATraceOfCrudeBoilsAlone`. All three fail with the check removed; the last fails without the amount bound. Saved formats: no change. A saved node at a false root moves to the true state at its next solve, with the same energy and volume.
+Cold seed 118, the one new budget hold (one wall deadline while another test JVM ran), replayed alone: clean, 48.7 s, end state equal to main's, so cold stands at 975. The other three worlds hold wall deadlines on main too and move from run to run: seed 683 went 7 → 9 holds in form C's campaign, 7 → 13 here. Seed 833's new class B hold sits at the interval main held by wall deadline (tick 1240, island 34): the same hard step, ended by the substep limit instead. Gates in `NetworkPhaseEngineTest`: `wetCrudeComesBackWithItsHydrocarbonVapour`, `aHeavyCutsWaterBoilsAloneUntilTheLiquidHasAVapourPressure`, `waterWithATraceOfCrudeBoilsAlone`. All three fail with the check removed; the last fails without the amount bound. Saved formats: no change. A saved node at a false root moves to the true state at its next solve, with the same energy and volume.
 
 ## 4. Options for the owner
 
