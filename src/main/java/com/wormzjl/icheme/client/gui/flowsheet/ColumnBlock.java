@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * A column as the sheet draws it (batch 2026-11-02-process-simulator, decision D23): one block, one process model, its parts on a plate inside a solid frame. The frame is the box, its corner the unit's
@@ -24,7 +25,7 @@ import java.util.Map;
 public final class ColumnBlock {
     /** The frame's bands round the tower; the foot under a kettle; the frame of a column with no elbows. */
     public static final int LEFT = 72, RIGHT = 86, TOP = 62, FOOT = 20, KETTLE_FOOT = 56, WIDTH = LEFT + Symbol.COLUMN_TOP.w + RIGHT, HEIGHT = TOP + 30 + 16 * SheetLayout.SLICES + FOOT;
-    private static final int W = Symbol.COLUMN_TOP.w, HEAD = 15, ATTACH = 5, TRACK = 3, CLEAR = 2, TRACKS = 3, RISER = 12;
+    private static final int W = Symbol.COLUMN_TOP.w, HEAD = 15, ATTACH = 5, TRACK = 3, CLEAR = 2, TRACKS = 2, RISER = 14, UNDER_REFLUX = 16, MARK = 11;
 
     public enum Shape {
         TOWER, COOLER, CONDENSER, AIR_CONDENSER, EJECTOR, DRUM, KETTLE, PUMP_DOWN, PUMP_ACROSS, INLINE_PUMP, TEE, VALVE, VALVE_DOWN
@@ -41,8 +42,17 @@ public final class ColumnBlock {
      * @param x        the point on its line it stands on
      * @param rect     what a hover finds
      * @param argument its row's id, for a part of a row
+     * @param boot     what else a hover finds, which no gate treats as its body: a receiver's boot under its line
      */
-    public record Part(Slot slot, Shape shape, int x, int y, Rect rect, String argument) {
+    public record Part(Slot slot, Shape shape, int x, int y, Rect rect, String argument, @Nullable Rect boot) {
+        /** Whether a hover at ({@code px}, {@code py}) finds it, within {@code reach}. */
+        public boolean at(double px, double py, double reach) {
+            return near(rect, px, py, reach) || boot != null && near(boot, px, py, reach);
+        }
+
+        private static boolean near(Rect r, double px, double py, double reach) {
+            return px >= r.x() - reach && px <= r.right() + reach && py >= r.y() - reach && py <= r.bottom() + reach;
+        }
     }
 
     /** A pipe through {@code points}, with an arrow at its end. */
@@ -250,6 +260,8 @@ public final class ColumnBlock {
         overhead(door, choices, air, ejector, bx, by, tx, wall, br, mid, ty);
 
         int cooler = bx + 18, pump = cooler + 30, valve = bx + 14, line = 0;
+        var inlets = new ArrayList<String>();
+        var inletTrays = new ArrayList<Integer>();
         for (var run : runs) {
             int x0 = tx - 5 - TRACK * (topTrack - inner[line++]);
             if (run.loop()) {
@@ -262,9 +274,13 @@ public final class ColumnBlock {
                 pipe(Service.PRODUCT, false, bx, y, valve - 4, y);
                 pipe(Service.PRODUCT, true, valve + 4, y, x0, y, x0, a, tx, a);
                 spots.put(feed ? "feed" : "steam/" + run.id, new Spot(bx, y, SheetLayout.Side.LEFT));
-                marks.add(new SheetLayout.Mark(feed ? "port.feed" : "mark.steam", "", mid, a));
+                inlets.add(feed ? "port.feed" : "mark.steam");
+                inletTrays.add(run.attach[0]);
             }
         }
+        int[] named = inletTrays.stream().mapToInt(Integer::intValue).toArray();
+        spread(named, MARK, MARK, h - MARK);
+        for (int i = 0; i < named.length; i++) marks.add(new SheetLayout.Mark(inlets.get(i), "", mid, ty + named[i]));
 
         for (int i = 0; i < draws.size(); i++) {
             var row = draws.get(i);
@@ -286,7 +302,7 @@ public final class ColumnBlock {
 
     private static boolean fits(List<Run> runs, ColumnDoor door, List<ColumnDoor.Draw> draws, int[] onTower, int[] onFrame, int h, int last, boolean kettle) {
         for (int i = 0; i < onTower.length; i++) onTower[i] = onFrame[i] = tray(door, draws.get(i).tray(), h);
-        return settle(runs, door, h, kettle ? last - ATTACH : last, kettle ? last - RISER : last) && spread(onTower, ATTACH, HEAD + ATTACH, last) && spread(onFrame, SheetLayout.PITCH, HEAD + SheetLayout.PITCH, last);
+        return settle(runs, door, h, kettle ? last - ATTACH : last, kettle ? last - RISER : last) && spread(onTower, ATTACH, HEAD + UNDER_REFLUX, last) && spread(onFrame, SheetLayout.PITCH, HEAD + UNDER_REFLUX, last);
     }
 
     /** Overhead train at the top right, as the assembly drawing has it: head, ejector, condenser, receiver and its boot, the pump, the tee, a valve on each leg. Cooling water passes over the head to its pair. */
@@ -309,7 +325,7 @@ public final class ColumnBlock {
             spots.put("condenser_out", new Spot(bx, back, SheetLayout.Side.LEFT));
         }
         notes.add(new Note("mark.condenser", "", condenser, vapour + 16, 0));
-        part(ColumnBlueprint.RECEIVER, Shape.DRUM, boot, water, new Rect(d0, vapour - 7, d1 - d0, 14), "");
+        parts.add(new Part(ColumnBlueprint.RECEIVER, Shape.DRUM, boot, water, new Rect(d0, vapour - 7, d1 - d0, 14), "", new Rect(boot - 4, vapour + 7, 8, water + 4 - vapour - 7)));
         notes.add(new Note("mark.drum", "", (d0 + d1) / 2, vapour, d1 - d0));
 
         int valveAt = by + 22;
@@ -371,7 +387,7 @@ public final class ColumnBlock {
     }
 
     private void part(Slot slot, Shape shape, int x, int y, Rect rect, String argument) {
-        parts.add(new Part(slot, shape, x, y, rect, argument));
+        parts.add(new Part(slot, shape, x, y, rect, argument, null));
     }
 
     private void valve(Slot slot, int x, int y, String argument) {

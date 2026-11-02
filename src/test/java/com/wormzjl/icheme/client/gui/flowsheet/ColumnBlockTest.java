@@ -155,6 +155,49 @@ class ColumnBlockTest {
         });
     }
 
+    /** A note as it stands: 8 high, as wide as its text at the gates' width. */
+    private static int[] note(ColumnBlock.Note note, SheetFixture.Texts texts) {
+        String text = texts.get("flowsheet." + note.key(), note.argument());
+        int w = texts.measure.width(text);
+        return new int[]{note.x() - w / 2, note.y() - 4, w, 8};
+    }
+
+    @Test
+    void noNoteSitsOnALineOrAPartAtAnySettingOfTheDoor() {
+        var languages = List.of(new SheetFixture.Texts(), SheetFixture.Texts.chinese());
+        sweep(door -> {
+            var block = block(door);
+            for (var texts : languages)
+                for (var named : block.notes()) {
+                    if (named.width() > 0) continue;
+                    int[] n = note(named, texts);
+                    for (var pipe : block.pipes())
+                        for (var run : runs(pipe))
+                            if (Math.max(run[0], run[2]) >= n[0] && Math.min(run[0], run[2]) <= n[0] + n[2] && Math.max(run[1], run[3]) >= n[1] && Math.min(run[1], run[3]) <= n[1] + n[3])
+                                fail(named.key() + " " + named.argument() + " " + java.util.Arrays.toString(n) + " on " + java.util.Arrays.toString(run) + ": " + label(door));
+                    for (var part : block.parts()) {
+                        var r = part.rect();
+                        if (r.right() > n[0] && r.x() < n[0] + n[2] && r.bottom() > n[1] && r.y() < n[1] + n[3]) fail(named.key() + " " + named.argument() + " on " + part.slot() + ": " + label(door));
+                    }
+                }
+        });
+    }
+
+    @Test
+    void everyInletKeepsItsNameOnTheTower() {
+        sweep(door -> {
+            var block = block(door);
+            var tower = block.tower();
+            var marks = block.marks();
+            assertEquals(1 + ColumnDoor.of(door).steam().size(), marks.size(), label(door));
+            for (int i = 0; i < marks.size(); i++) {
+                int y = marks.get(i).y();
+                assertTrue(y - 5 >= tower.y() && y + 5 <= tower.bottom(), "on the tower: " + label(door));
+                if (i > 0) assertTrue(y - marks.get(i - 1).y() >= 11, "two names clear of each other: " + label(door));
+            }
+        });
+    }
+
     @Test
     void everythingStaysInTheFrameAtAnySettingOfTheDoor() {
         sweep(door -> {
@@ -260,6 +303,9 @@ class ColumnBlockTest {
             String hover = SimulatorPage.partHover(x, part);
             assertFalse(hover.startsWith("?") || hover.contains("assembly.part") || hover.contains("%s"), part.slot() + ": " + hover);
         }
+        var receiver = layout.box("u").block().parts().stream().filter(p -> p.slot().equals(ColumnBlueprint.RECEIVER)).findFirst().orElseThrow();
+        var boot = receiver.boot();
+        assertEquals(ColumnBlueprint.RECEIVER, layout.part(boot.x() + boot.w() / 2.0, boot.y() + boot.h() / 2.0, 1).slot(), "a hover on the boot finds the receiver");
         assertEquals("PA 1 exchanger", SimulatorPage.partHover(x, layout.box("u").block().parts().stream().filter(p -> p.slot().equals(ColumnBlueprint.pumparoundCooler(1))).findFirst().orElseThrow()));
         assertNull(layout.part(10, 10, 1), "off the block");
     }

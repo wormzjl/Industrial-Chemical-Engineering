@@ -269,6 +269,19 @@ class SheetGesturesTest {
     }
 
     @Test
+    void aDroppedColumnCentresItsFrameOnTheCursor() {
+        gestures.carry(Tiles.tile("column"));
+        gestures.drag(cx(400), cy(300));
+        gestures.release(cx(400), cy(300), 0);
+        var made = editor.sheet().units().stream().filter(u -> u.type().equals("column")).findFirst().orElseThrow();
+        var frame = editor.layout().box(made.id()).rect();
+        assertEquals(400, frame.x() + frame.w() / 2.0, SheetGestures.SNAP, "across");
+        assertEquals(300, frame.y() + frame.h() / 2.0, SheetGestures.SNAP, "down");
+        assertEquals(ColumnBlock.WIDTH, frame.w(), "a column's frame, not its top slice");
+        assertEquals(new SheetGestures.Selection(true, made.id()), gestures.selected(), "and it stands selected");
+    }
+
+    @Test
     void aReadOnlySheetRefusesEveryGestureThatEdits() {
         editor.lock(true);
         byte[] before = FlowsheetFile.write(editor.sheet());

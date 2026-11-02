@@ -534,10 +534,7 @@ public final class SheetLayout {
         for (var box : boxes.values()) {
             if (box.block() == null) continue;
             var parts = box.block().parts();
-            for (int i = parts.size() - 1; i >= 0; i--) {
-                var r = parts.get(i).rect();
-                if (x >= r.x() - reach && x <= r.right() + reach && y >= r.y() - reach && y <= r.bottom() + reach) return parts.get(i);
-            }
+            for (int i = parts.size() - 1; i >= 0; i--) if (parts.get(i).at(x, y, reach)) return parts.get(i);
         }
         return null;
     }
