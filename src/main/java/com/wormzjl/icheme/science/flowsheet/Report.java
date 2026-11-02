@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * What one calculation says about its last solve (batch 2026-11-02-process-simulator, plan section 3.1): its readings, its
@@ -16,10 +17,38 @@ import java.util.Map;
  * opposite sign. Each solve starts a new report, so a loop's last pass is what stays.
  */
 public final class Report {
+    /** Where a block's solve sets out from. */
+    public enum Start {
+        /** Nothing of its own yet: the learned start. */
+        LEARNED,
+        /** Its last solve's state. */
+        LAST
+    }
+
     private final Map<String, Double> readings = new LinkedHashMap<>();
     private final List<Note> notes = new ArrayList<>();
     private double duty, massIn, enthalpyIn, massOut, enthalpyOut;
     private @Nullable V3ColumnDisplayResult display;
+    private @Nullable Start start;
+    private final @Nullable Consumer<Start> told;
+
+    public Report() {
+        this(null);
+    }
+
+    /** {@code told} hears a block's start as it sets out, while the solve is still to come. */
+    Report(@Nullable Consumer<Start> told) {
+        this.told = told;
+    }
+
+    public void start(Start start) {
+        this.start = start;
+        if (told != null) told.accept(start);
+    }
+
+    public @Nullable Start start() {
+        return start;
+    }
 
     public void reading(String key, double value) {
         readings.put(key, value);

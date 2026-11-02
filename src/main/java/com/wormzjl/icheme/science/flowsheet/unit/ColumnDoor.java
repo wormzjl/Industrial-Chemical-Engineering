@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification;
+import com.wormzjl.icheme.science.column.v3.V3ColumnTemplate;
 import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
@@ -115,6 +116,68 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
         }
         door.add("pumparounds", pumparounds);
         return new Params(door);
+    }
+
+    /**
+     * {@code door} with {@code template}'s column in it: what the door's own Equipment and Basis settings say stays. The template
+     * names no feed. Rows take the old rows' places in order, so a stream on a row's port stays on it and what a row held but a
+     * template does not name, a cooler's drop or a pump, stands; rows past the template's go, and their streams wait as open pills.
+     */
+    public static Params template(Params door, V3ColumnTemplate template) {
+        var json = door.json().deepCopy();
+        json.addProperty("stages", template.trays() - 2);
+        json.addProperty("feed_stage", template.feedTray() - 1);
+        json.addProperty("top_pressure", template.topPressure() * 1e5);
+        json.addProperty("diameter", template.diameter());
+        json.addProperty("condenser_temperature", template.topTemperature());
+        json.addProperty("reflux", template.refluxRatio());
+        json.addProperty("reboiler_duty", template.reboilerDuty() * 1e6);
+        var draws = new JsonArray();
+        for (var draw : template.draws()) {
+            var row = next(draws, door.rows("draws"));
+            row.addProperty("tray", draw.tray() - 1);
+            row.addProperty("flow", draw.flow() / 3.6);
+        }
+        json.add("draws", draws);
+        var steam = new JsonArray();
+        for (var feed : template.steam()) {
+            var row = next(steam, door.rows("steam"));
+            row.addProperty("stage", feed.tray() - 1);
+            row.addProperty("flow", feed.flow() / 3.6);
+            row.addProperty("temperature", feed.temperature());
+        }
+        json.add("steam", steam);
+        var pumparounds = new JsonArray();
+        for (var pumparound : template.pumparounds()) {
+            var row = next(pumparounds, door.rows("pumparounds"));
+            row.addProperty("return_tray", pumparound.returnTray() - 1);
+            row.addProperty("draw_tray", pumparound.drawTray() - 1);
+            row.addProperty("duty", -pumparound.cooling() * 1e6);
+            row.addProperty("split", pumparound.split().name());
+        }
+        json.add("pumparounds", pumparounds);
+        return new Params(json);
+    }
+
+    /** The next row of {@code rows}: a copy of the old row in its place, or a new one with an id none of the old rows has. */
+    private static JsonObject next(JsonArray rows, List<Params> old) {
+        if (rows.size() < old.size()) {
+            var row = old.get(rows.size()).json().deepCopy();
+            rows.add(row);
+            return row;
+        }
+        int id = rows.size() + 1;
+        for (var row : old) {
+            try {
+                id = Math.max(id, Integer.parseInt(row.text("id", "")) + 1 + rows.size() - old.size());
+            } catch (NumberFormatException named) {
+                // An id that is no number is no clash.
+            }
+        }
+        var row = new JsonObject();
+        row.addProperty("id", String.valueOf(id));
+        rows.add(row);
+        return row;
     }
 
     private static JsonObject row(JsonArray rows) {

@@ -97,6 +97,7 @@ public final class ColumnUnit implements UnitModel {
         if (u.wire(CONDENSER_IN) != null) {
             calculations.add(side(u, "condenser", CONDENSER_IN, CONDENSER_OUT, door.condenserDrop(), solve.condenserHeat(), null));
             calculations.add(check(u, "condenser check", u.out(CONDENSER_OUT), null, (board, report) -> {
+                if (!board.stream(u.out(CONDENSER_OUT)).empty()) report.reading("margin", door.condenserTemperature() - board.stream(u.out(CONDENSER_OUT)).temperature());
                 if (!board.stream(u.out(CONDENSER_OUT)).empty() && board.stream(u.out(CONDENSER_OUT)).temperature() >= door.condenserTemperature()) report.note(Note.warning(u.id(), "column.condenser_hot"));
             }));
         } else if (u.wire(CONDENSER_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", CONDENSER_IN);
@@ -105,6 +106,7 @@ public final class ColumnUnit implements UnitModel {
             calculations.add(check(u, "reboiler check", u.out(REBOILER_OUT), u.out(BOTTOMS), (board, report) -> {
                 var steam = board.stream(u.out(REBOILER_OUT));
                 var bottoms = board.stream(u.out(BOTTOMS));
+                if (!steam.empty() && !bottoms.empty()) report.reading("margin", steam.temperature() - bottoms.temperature());
                 if (!steam.empty() && !bottoms.empty() && steam.temperature() <= bottoms.temperature()) report.note(Note.warning(u.id(), "column.reboiler_cold"));
             }));
         } else if (u.wire(REBOILER_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", REBOILER_IN);
@@ -118,6 +120,7 @@ public final class ColumnUnit implements UnitModel {
             String tray = solve.drawTemperature(pumparound);
             calculations.add(new Calculation(u.part("pa " + pumparound.id() + " check"), u.id(), List.of(u.out(out)), List.of(), List.of(tray), List.of(), Calculation.Kind.CHECK, (board, report) -> {
                 var cold = board.stream(u.out(out));
+                if (!cold.empty()) report.reading("margin", board.link(tray) - cold.temperature());
                 if (!cold.empty() && cold.temperature() >= board.link(tray)) report.note(Note.warning(u.id(), "column.pa_hot", pumparound.id()));
             }));
         }
@@ -196,6 +199,7 @@ public final class ColumnUnit implements UnitModel {
                 heatIn += stream.enthalpy();
             }
             if (Double.isNaN(feedTray)) feedTray = feed.pressure();
+            report.start(warm == null ? Report.Start.LEARNED : Report.Start.LAST);
             FlowStream flashed;
             V3ColumnResult result;
             int round = 0;

@@ -150,4 +150,19 @@ public record Flowsheet(Basis basis, List<Unit> units, List<Stream> streams, Flo
     public Flowsheet(Basis basis, List<Unit> units, List<Stream> streams, FlowsheetSolver.Settings settings) {
         this(basis, units, streams, settings, new JsonObject());
     }
+
+    /** A copy that shares nothing mutable: a {@link Params} and every {@code unknown} wrap a {@link JsonObject}. */
+    public Flowsheet copy() {
+        var units = this.units.stream().map(u -> new Unit(u.id(), u.type(), u.name(), u.x(), u.y(), new Params(u.params().json().deepCopy()), u.unknown().deepCopy())).toList();
+        var streams = this.streams.stream().map(s -> new Stream(s.id(), s.name(), copy(s.from()), copy(s.to()), copy(s.feed()), s.route().stream().map(p -> new Point(p.x(), p.y(), p.unknown().deepCopy())).toList(), s.unknown().deepCopy())).toList();
+        return new Flowsheet(new Basis(basis.packageId(), basis.revision(), basis.components(), basis.unknown().deepCopy()), units, streams, settings, unknown.deepCopy());
+    }
+
+    private static @Nullable End copy(@Nullable End end) {
+        return end == null ? null : new End(end.unit(), end.port(), end.unknown().deepCopy());
+    }
+
+    private static @Nullable Feed copy(@Nullable Feed feed) {
+        return feed == null ? null : new Feed(feed.temperature(), feed.pressure(), feed.amounts(), feed.solids().stream().map(s -> new Solid(s.material(), s.micrometres(), s.massFlow(), s.unknown().deepCopy())).toList(), feed.unknown().deepCopy());
+    }
 }

@@ -222,11 +222,67 @@ class FlowsheetSolverTest {
     @Test void stopKeepsWhatWasSolved() {
         int[] seen = {0};
         var run = FlowsheetSolver.run(List.of(feed("a", 10, 300), heat("a", "b", 100), heat("b", "c", 100)), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, () -> {
-            if (++seen[0] == 3) throw new CancellationException();
+            if (++seen[0] == 5) throw new CancellationException();
         });
         assertEquals(Status.STOPPED, run.status());
         assertTrue(run.streams().containsKey("b"));
         assertFalse(run.streams().containsKey("c"));
+    }
+
+    /** Stop is an IllegalStateException, so a catch inside a law can eat it. It stays set, so the law's answer, or the failure it made of it, does not count. */
+    @Test void aStopALawEatsStillStops() {
+        boolean[] stop = {false};
+        Runnable checkpoint = () -> {
+            if (stop[0]) throw new CancellationException();
+        };
+        Calculation.Law eats = (board, report) -> {
+            stop[0] = true;
+            try {
+                checkpoint.run();
+            } catch (IllegalStateException eaten) {
+                board.stream("b", board.stream("a"));
+            }
+        };
+        var solved = FlowsheetSolver.run(List.of(feed("a", 10, 300), Calculation.of("eats", List.of("a"), List.of("b"), eats)), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, checkpoint);
+        assertEquals(Status.STOPPED, solved.status(), "not STEADY, though the last calculation returned");
+        assertEquals(Outcome.NOT_SOLVED, solved.outcomes().get("eats"));
+        stop[0] = false;
+        Calculation.Law fails = (board, report) -> {
+            stop[0] = true;
+            try {
+                checkpoint.run();
+            } catch (IllegalStateException eaten) {
+                throw new FlowsheetFailure("column.failed", "eaten");
+            }
+        };
+        var failed = FlowsheetSolver.run(List.of(feed("a", 10, 300), Calculation.of("fails", List.of("a"), List.of("b"), fails)), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, checkpoint);
+        assertEquals(Status.STOPPED, failed.status(), "not FAILED");
+        assertTrue(failed.log().isEmpty(), "and no unit is blamed for it");
+    }
+
+    /** A loop's passes and what ran in them, up to Stop; the order holds the plan, ratings left out. */
+    @Test void thePassRecordFollowsTheLoop() {
+        var unit = Calculation.of("step", List.of("back"), List.of("next"), (board, report) -> {
+            report.duty(5);
+            report.reading("duty", 5);
+            board.stream("next", board.stream("back"));
+        });
+        var back = Calculation.of("mix", List.of("a", "next"), List.of("back"), (board, report) -> board.stream("back", board.stream("a")));
+        var run = FlowsheetSolver.run(List.of(feed("a", 10, 300), back, unit), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, () -> {
+        });
+        assertEquals(1, run.loops().size());
+        assertEquals(run.loops().getFirst().passes(), run.passes().size(), "one record a pass");
+        for (int i = 0; i < run.passes().size(); i++) {
+            var pass = run.passes().get(i);
+            assertEquals(i + 1, pass.pass());
+            assertEquals(run.loops().getFirst().tears(), pass.tears());
+            assertEquals(2, pass.steps().size());
+            assertTrue(pass.seconds() >= 0);
+            assertEquals(run.loops().getFirst().tears().getFirst(), pass.tear());
+        }
+        assertEquals(2, run.order().size(), "the source, then the loop");
+        assertEquals(run.loops().getFirst().tears(), run.order().get(1).tears());
+        assertEquals(5.0, run.passes().getFirst().steps().stream().filter(s -> s.calculation().equals("step")).findFirst().orElseThrow().duty());
     }
 
     /** The same stream through a block's two calculations is no loop: a heat side reads the door's duty, not the block's solve. */

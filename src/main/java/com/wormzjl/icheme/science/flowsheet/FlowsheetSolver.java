@@ -58,6 +58,8 @@ public final class FlowsheetSolver {
     private final Settings settings;
     private final Runnable checkpoint;
     private final Map<String, FlowStream> estimates;
+    private final Progress progress;
+    private final Map<String, FlowStream> given;
     private final Board board = new Board();
     private final Map<String, FlowsheetRun.Outcome> outcomes = new LinkedHashMap<>();
     private final Map<String, Report> reports = new HashMap<>();
@@ -67,9 +69,32 @@ public final class FlowsheetSolver {
     private boolean failed, steady = true;
     /** What the tears carried at the end (kg/s). A loop that closed to its tolerance still holds its last step, so mass may miss by that much. */
     private double tornMass;
+    private final List<FlowsheetRun.Stage> order = new ArrayList<>();
+    private final List<FlowsheetRun.Pass> passes = new ArrayList<>();
+    /** The pass in hand, its loop's tears and what has run in it; outside a loop, 0 and null. */
+    private int pass;
+    private List<String> passTears = List.of();
+    private @Nullable List<FlowsheetRun.Step> steps;
+    private long passBegan;
 
-    private FlowsheetSolver(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint, Map<String, FlowStream> estimates) {
+    /** What a run is at, told as it goes. A run reads nothing back from it, so its results are the same with or without one. */
+    public interface Progress {
+        Progress NONE = (pass, passes, unit) -> {
+        };
+
+        /** {@code unit} begins a calculation; {@code pass} counts a loop's passes, at most {@code passes}, and is 0 outside a loop. */
+        void calculation(int pass, int passes, String unit);
+
+        /** The calculation in hand has said where it sets out from. */
+        default void start(Report.Start start) {
+        }
+    }
+
+    private FlowsheetSolver(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint, Map<String, FlowStream> estimates, Progress progress,
+                            Map<String, FlowStream> given) {
         this.estimates = estimates;
+        this.progress = progress;
+        this.given = given;
         this.calculations = calculations;
         this.axis = axis;
         this.components = axis.size();
@@ -79,12 +104,18 @@ public final class FlowsheetSolver {
     }
 
     /**
-     * Runs {@code calculations} on the component axis {@code axis}, water last. {@code checkpoint} runs at each calculation's
-     * start, and may throw a {@link CancellationException} to stop the run, which keeps what it has. A tear starts from no flow,
-     * or from its stream in {@code estimates}.
+     * Runs {@code calculations} on the component axis {@code axis}, water last. {@code checkpoint} runs around each calculation,
+     * and may throw a {@link CancellationException} to stop the run, which keeps what it has. A tear starts from no flow, or from
+     * its stream in {@code estimates}. {@code given} holds streams that come from outside these calculations, as when one unit
+     * solves alone.
      */
     public static FlowsheetRun run(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint, Map<String, FlowStream> estimates) {
-        return new FlowsheetSolver(calculations, List.copyOf(axis), thermo, settings, checkpoint, estimates).run();
+        return run(calculations, axis, thermo, settings, checkpoint, estimates, Progress.NONE, Map.of());
+    }
+
+    public static FlowsheetRun run(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint, Map<String, FlowStream> estimates, Progress progress,
+                                   Map<String, FlowStream> given) {
+        return new FlowsheetSolver(calculations, List.copyOf(axis), thermo, settings, checkpoint, estimates, progress, given).run();
     }
 
     public static FlowsheetRun run(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint) {
@@ -93,14 +124,21 @@ public final class FlowsheetSolver {
 
     private FlowsheetRun run() {
         for (var c : calculations) outcomes.put(c.id(), FlowsheetRun.Outcome.NOT_SOLVED);
+        given.forEach(board::stream);
         boolean stopped = false;
+        var plan = FlowGraph.plan(calculations);
+        for (var group : plan) {
+            var ids = group.order().stream().filter(c -> c.kind() != Calculation.Kind.CHECK).map(Calculation::id).toList();
+            if (!ids.isEmpty()) order.add(new FlowsheetRun.Stage(ids, group.tears()));
+        }
         try {
-            for (var group : FlowGraph.plan(calculations)) {
+            for (var group : plan) {
                 if (group.tears().isEmpty()) once(group.order().getFirst());
                 else loop(group);
             }
         } catch (CancellationException stop) {
             stopped = true;
+            if (steps != null) endPass(null, Double.NaN, Double.NaN);
         }
         return result(stopped);
     }
@@ -109,6 +147,13 @@ public final class FlowsheetSolver {
         double massIn = 0, massOut = 0, heatIn = 0, heatOut = 0, duties = 0;
         var read = new HashSet<String>();
         for (var c : calculations) if (c.kind() != Calculation.Kind.CHECK) read.addAll(c.reads());
+        var written = new HashSet<String>();
+        for (var c : calculations) written.addAll(c.writes());
+        for (var wire : read) {
+            if (written.contains(wire) || !given.containsKey(wire)) continue;
+            massIn += given.get(wire).mass();
+            heatIn += given.get(wire).enthalpy();
+        }
         for (var c : calculations) {
             var report = reports.get(c.id());
             if (report == null) continue;
@@ -129,7 +174,7 @@ public final class FlowsheetSolver {
             steady = false;
         }
         if (status == FlowsheetRun.Status.STEADY && !steady) status = FlowsheetRun.Status.NOT_STEADY;
-        return new FlowsheetRun(status, board.streams(), outcomes, reports, loops, log, massIn, massOut, heatIn, heatOut, duties);
+        return new FlowsheetRun(status, board.streams(), outcomes, reports, loops, log, massIn, massOut, heatIn, heatOut, duties, order, passes);
     }
 
     private void once(Calculation c) {
@@ -167,16 +212,23 @@ public final class FlowsheetSolver {
     /** Runs {@code c}; the note says why it failed, null if it did not. */
     private @Nullable Note attempt(Calculation c) {
         checkpoint.run();
-        var report = new Report();
+        progress.calculation(pass, settings.maxPasses(), c.unit());
+        var report = new Report(progress::start);
+        long began = System.nanoTime();
+        Note failure = null;
         try {
             c.law().solve(board, report);
         } catch (FlowsheetFailure refusal) {
-            return new Note(Note.Severity.ERROR, c.unit(), refusal.key(), refusal.arguments());
+            failure = new Note(Note.Severity.ERROR, c.unit(), refusal.key(), refusal.arguments());
         } catch (CancellationException stop) {
             throw stop;
-        } catch (RuntimeException failure) {
-            return Note.error(c.unit(), "unit.failed", String.valueOf(failure.getMessage()));
+        } catch (RuntimeException broken) {
+            failure = Note.error(c.unit(), "unit.failed", String.valueOf(broken.getMessage()));
         }
+        // A catch inside a law can eat a Stop, which is an IllegalStateException too. Stop stays set, so it comes up here, before the law's answer or failure counts.
+        checkpoint.run();
+        if (steps != null) steps.add(new FlowsheetRun.Step(c.id(), c.unit(), report.readings().getOrDefault("duty", Double.NaN), report.start(), since(began), failure != null));
+        if (failure != null) return failure;
         reports.put(c.id(), report);
         outcomes.put(c.id(), FlowsheetRun.Outcome.SOLVED);
         return null;
@@ -194,7 +246,11 @@ public final class FlowsheetSolver {
         }
         var tears = group.tears().stream().map(id -> new Tear(id, estimates.getOrDefault(id, FlowStream.empty(components)))).toList();
         boolean accelerate = true;
+        passTears = group.tears();
         for (int pass = 1; pass <= settings.maxPasses(); pass++) {
+            this.pass = pass;
+            steps = new ArrayList<>();
+            passBegan = System.nanoTime();
             for (var tear : tears) board.stream(tear.id, tear.guess);
             Calculation failing = null;
             Note failure = null;
@@ -206,6 +262,7 @@ public final class FlowsheetSolver {
                 }
             }
             if (failure != null) {
+                endPass(null, Double.NaN, Double.NaN);
                 if (tears.stream().noneMatch(t -> t.trial)) {
                     fail(failing, failure);
                     if (pass == 1) log.add(Note.info(group.tears().getFirst(), "loop.first_estimate", failing.unit()));
@@ -223,6 +280,8 @@ public final class FlowsheetSolver {
                 tear.result = board.stream(tear.id);
                 closed &= closed(tear.guess, tear.result);
             }
+            var most = tears.stream().max(Comparator.comparingDouble(t -> move(t.guess, t.result).amount)).orElseThrow();
+            endPass(most.id, moved(most.guess, most.result), most.result.empty() ? Double.NaN : most.result.temperature());
             if (closed) {
                 end(group, tears, pass, true);
                 return;
@@ -241,6 +300,24 @@ public final class FlowsheetSolver {
         var move = move(worst.lastGuess, worst.lastResult);
         log.add(Note.error(worst.id, "loop.not_closed", String.valueOf(settings.maxPasses()), move.variable, number(move.size)));
         end(group, tears, settings.maxPasses(), false);
+    }
+
+    private void endPass(@Nullable String tear, double moved, double temperature) {
+        passes.add(new FlowsheetRun.Pass(passTears, pass, steps, since(passBegan), tear, moved, temperature));
+        steps = null;
+        pass = 0;
+    }
+
+    private static double since(long began) {
+        return (System.nanoTime() - began) / 1e9;
+    }
+
+    /** The largest component's move as a share of the flow, NaN with no two states to compare. */
+    private double moved(FlowStream guess, FlowStream result) {
+        if (guess.empty() || result.empty()) return Double.NaN;
+        double most = 0;
+        for (int i = 0; i < components; i++) most = Math.max(most, Math.abs(result.amountsView()[i] - guess.amountsView()[i]));
+        return most / Math.max(guess.total(), result.total());
     }
 
     private void end(FlowGraph.Group group, List<Tear> tears, int passes, boolean closed) {
