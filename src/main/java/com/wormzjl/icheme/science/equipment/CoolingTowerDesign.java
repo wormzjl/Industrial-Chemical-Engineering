@@ -11,7 +11,7 @@ import java.util.List;
 final class CoolingTowerDesign extends UnitDesign {
     private final boolean natural;
     CoolingTowerDesign(boolean natural) { this.natural=natural; }
-    @Override public double minSize(){return natural?40:4;}
+    @Override public double minSize(){return natural?40:8;}
     @Override public double maxSize(){return natural?80:14;}
     @Override public double sizeStep(){return natural?10:2;}
     @Override public int minLength(double d){return natural?CoolingTower.naturalHeight(d):1;}
@@ -59,11 +59,11 @@ final class CoolingTowerDesign extends UnitDesign {
             panels(u,start,along,out,length,inlet,deck,4,Material.TOWER_PANEL);
         }
         u.fluidPoint=new double[]{.1,.1,.1};
-        double r=t.fanRadius(),flare=1.18*r,mouth=1.06*r,top=t.height(),bell=deck+.25*(top-deck);
+        double r=t.fanRadius(),flare=CoolingTower.BELL*r,mouth=1.06*r,top=t.height(),bell=deck+.25*(top-deck),floor=t.distributorHeight()+.4,arm=bell-.5;
         for(int x=0;x<bank.columns();x++)for(int z=0;z<bank.rows();z++){
             double a=x*d,b=z*d,cx=a+d/2,cz=b+d/2;
             var frame=Frame.of(new double[]{cx,0,cz},1,1);
-            // A square deck round the bell mouth, a flared stack, and a dark floor under the fan that hides the empty cell.
+            // A square deck round the bell mouth and a flared stack. Through the fan: its drive on a cross beam, and the spray and drift eliminators baked on one floor.
             for(int j=0;j<STACK_SIDES;j++){
                 double first=2*Math.PI*j/STACK_SIDES,last=2*Math.PI*(j+1)/STACK_SIDES;
                 u.mesh.flat(List.of(frame.at(first,flare,deck),frame.at(first,corner(first,d),deck),frame.at(last,corner(last,d),deck),frame.at(last,flare,deck)),new double[]{0,1,0},Material.TOWER_DECK);
@@ -72,9 +72,12 @@ final class CoolingTowerDesign extends UnitDesign {
                     .clip(new double[]{a,deck-Access.DECK,b},new double[]{a+d,deck,b+d}));
             u.mesh.frustum(frame,flare,r,deck,bell,STACK_SIDES,Material.TOWER_STACK);
             u.mesh.frustum(frame,r,mouth,bell,top,STACK_SIDES,Material.TOWER_STACK);
-            u.mesh.bore(frame,r,bell,top,STACK_SIDES,Material.TOWER_STACK);
+            u.mesh.bore(frame,r,floor,top,STACK_SIDES,Material.TOWER_STACK);
             u.mesh.annulus(frame,r,mouth,top,STACK_SIDES,1,Material.TOWER_STACK);
-            u.mesh.annulus(frame,0,r,bell,STACK_SIDES,1,Material.OPENING);
+            u.mesh.annulus(frame,0,r,floor,STACK_SIDES,1,Material.TOWER_DRIFT);
+            u.box(new double[]{cx-r,arm-.25,cz-.12},new double[]{cx+r,arm,cz+.12},56,Material.SUPPORT,false);
+            u.box(new double[]{cx-.12,arm-.25,cz-r},new double[]{cx+.12,arm,cz+r},11,Material.SUPPORT,false);
+            u.mesh.cylinder(frame,.2*r+.1,arm,bell,6,Material.MOTOR);
             u.towerFan(frame,r,bell+.05,ProcessUnit.FAN_SPEED);
             u.solids.add(ProcessUnit.Solid.hollowCone(cx,cz,deck,bell,flare,r+.1,.1));
             u.solids.add(ProcessUnit.Solid.ring(cx,cz,bell,top,r,mouth,0,2*Math.PI));
@@ -125,7 +128,7 @@ final class CoolingTowerDesign extends UnitDesign {
         double throat=.55*r,shellScale=.9,zthroat=.75*height-base,b=zthroat/Math.sqrt(r*r/(throat*throat)-1);
         for(double y=base;y<height;y+=8){
             double hi=Math.min(height,y+8),ra=shellRadius(throat,shellScale,zthroat,b,base,y),rb=shellRadius(throat,shellScale,zthroat,b,base,hi);
-            u.mesh.frustum(frame,ra,rb,y,hi,facets,Material.CONCRETE);
+            u.mesh.frustum(frame,ra,rb,y,hi,facets,Material.TOWER_CONCRETE);
             // Reverse inner face, interpolated with the same radial samples.
             for(int j=0;j<facets;j++){
                 double a=2*Math.PI*j/facets,c=2*Math.PI*(j+1)/facets;
@@ -133,7 +136,7 @@ final class CoolingTowerDesign extends UnitDesign {
                 double[] q={axis+(rb-.25)*DeterministicMath.cos(a),hi,axis+(rb-.25)*DeterministicMath.sin(a)};
                 double[] s={axis+(rb-.25)*DeterministicMath.cos(c),hi,axis+(rb-.25)*DeterministicMath.sin(c)};
                 double[] v={axis+(ra-.25)*DeterministicMath.cos(c),y,axis+(ra-.25)*DeterministicMath.sin(c)};
-                u.mesh.flat(List.of(p,q,s,v),new double[]{-DeterministicMath.cos(a),0,-DeterministicMath.sin(a)},Material.CONCRETE);
+                u.mesh.flat(List.of(p,q,s,v),new double[]{-DeterministicMath.cos(a),0,-DeterministicMath.sin(a)},Material.TOWER_CONCRETE);
             }
             u.solids.add(ProcessUnit.Solid.hollowCone(axis,axis,y,hi,ra,rb,.25));
         }

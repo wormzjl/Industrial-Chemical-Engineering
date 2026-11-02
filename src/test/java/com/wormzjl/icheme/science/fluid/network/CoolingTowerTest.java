@@ -33,8 +33,8 @@ class CoolingTowerTest {
     @Test void sharedFillMatchesItsDeclaredCalibrationPoint(){assertEquals(298.15,TowerTransfer.referenceOutlet(model),1e-5);}
     @Test void theRatingStaysNearTheMarchedFillItReplaced(){
         record Point(CoolingTower tower,double loading,double inlet,double speed,double outlet,double evaporation){}
-        var fan=CoolingTower.induced(4,2,1,1);var chimney=CoolingTower.natural(40);
-        for(var p:List.of(new Point(fan,2,308.15,1,297.447,.5162),new Point(fan,2,308.15,.5,300.423,.3661),new Point(fan,20,308.15,1,306.533,.7625),
+        var fan=CoolingTower.induced(8,2,1,1);var chimney=CoolingTower.natural(40);
+        for(var p:List.of(new Point(fan,2,308.15,1,297.401,2.0746),new Point(fan,2,308.15,.5,300.200,1.5078),new Point(fan,20,308.15,1,306.511,3.0906),
                 new Point(chimney,2,308.15,0,298.734,35.32),new Point(chimney,20,308.15,0,306.650,55.55))){
             var r=TowerTransfer.fill(model,p.tower(),p.loading()*p.tower().area(),p.inlet(),p.speed());
             assertEquals(p.outlet(),r.outletTemperature(),.15,p.toString());
@@ -43,7 +43,7 @@ class CoolingTowerTest {
     }
     @Test void transferSweepConservesWaterEnergyAndRespectsItsAmbientLimit(){
         for(double fill:new double[]{1,3})for(double loading:new double[]{.02,.2,2,20})for(double inlet:new double[]{298.15,308.15,350})for(double speed:new double[]{0,1}){
-            var tower=CoolingTower.induced(6,fill,1,1);double water=tower.area()*loading;
+            var tower=CoolingTower.induced(8,fill,1,1);double water=tower.area()*loading;
             var r=TowerTransfer.fill(model,tower,water,inlet,speed);
             String point="fill="+fill+" loading="+loading+" inlet="+inlet+" speed="+speed;
             assertTrue(r.outletTemperature()>=290&&r.outletTemperature()<=inlet+.01,point+" T="+r.outletTemperature());
@@ -60,6 +60,7 @@ class CoolingTowerTest {
         assertEquals(0,warm.fanPowerWatt());
     }
     @Test void cellSizeAndBankCountsAreBounded(){
+        assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(6,2,1,1),"No walkway would stay round its fan");
         assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(16,2,1,1));
         assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(8,2,9,1));
         assertThrows(IllegalArgumentException.class,()->CoolingTower.induced(8,2,6,3));
@@ -67,8 +68,8 @@ class CoolingTowerTest {
         assertThrows(IllegalArgumentException.class,()->CoolingTower.natural(80,100));
     }
     @Test void parallelBanksRepeatTheirExtensiveResults(){
-        var one=TowerTransfer.fill(model,CoolingTower.induced(6,2,1,1),72,308.15,1);
-        var bank=TowerTransfer.fill(model,CoolingTower.induced(6,2,8,2),72*16,308.15,1);
+        var one=TowerTransfer.fill(model,CoolingTower.induced(8,2,1,1),128,308.15,1);
+        var bank=TowerTransfer.fill(model,CoolingTower.induced(8,2,8,2),128*16,308.15,1);
         assertTrue(one.outletTemperature()<308.15);
         assertTrue(one.evaporation()>0);assertTrue(one.fanPowerWatt()>0);
         assertEquals(one.outletTemperature(),bank.outletTemperature(),1e-9);
@@ -78,13 +79,13 @@ class CoolingTowerTest {
         assertEquals(one.fanPowerWatt()*16,bank.fanPowerWatt(),1e-7);
     }
     @Test void fanPowerDependsOnlyOnSpeedForAGivenTower(){
-        var tower=CoolingTower.induced(6,2,1,1);
-        double full=TowerTransfer.fill(model,tower,72,308.15,1).fanPowerWatt();
-        for(double water:new double[]{0,7.2,720})for(double inlet:new double[]{298.15,350}){
+        var tower=CoolingTower.induced(8,2,1,1);
+        double full=TowerTransfer.fill(model,tower,128,308.15,1).fanPowerWatt();
+        for(double water:new double[]{0,12.8,1280})for(double inlet:new double[]{298.15,350}){
             assertEquals(full,TowerTransfer.fill(model,tower,water,inlet,1).fanPowerWatt(),1e-9);
             assertEquals(full/8,TowerTransfer.fill(model,tower,water,inlet,.5).fanPowerWatt(),1e-9);
         }
-        assertEquals(0,TowerTransfer.fill(model,tower,72,308.15,0).fanPowerWatt());
+        assertEquals(0,TowerTransfer.fill(model,tower,128,308.15,0).fanPowerWatt());
     }
     @Test void naturalDraftAccepts80CWater(){
         for(int diameter:new int[]{40,60,80}){
@@ -97,7 +98,7 @@ class CoolingTowerTest {
         }
     }
     @Test void aStandingBasinBooksSensibleHeatWithoutWaterLoss(){
-        var tower=CoolingTower.induced(4,2,1,1);var node=basin(1,tower,water(308.15,101325,16));
+        var tower=CoolingTower.induced(8,2,1,1);var node=basin(1,tower,water(308.15,101325,64));
         var result=step(new PassiveNetwork(List.of(node),List.of()));
         assertEquals(0,result.externalMoles()[water()]);
         assertTrue(result.states().getFirst().temperature()<node.state().temperature());
@@ -112,13 +113,13 @@ class CoolingTowerTest {
         assertTrue(result.towers().get(2L).fill().evaporation()>0);
     }
     @Test void unsupportedFeedIsStoppedWithoutChangingItsSource(){
-        var tower=CoolingTower.induced(4,2,1,1);var source=model.initialNitrogenCharge(1,298.15,250000,()->{});
-        var result=step(new PassiveNetwork(List.of(generator(1,7.5,source),basin(2,tower,water(298.15,101325,16))),List.of(feed())));
+        var tower=CoolingTower.induced(8,2,1,1);var source=model.initialNitrogenCharge(1,298.15,250000,()->{});
+        var result=step(new PassiveNetwork(List.of(generator(1,8.5,source),basin(2,tower,water(298.15,101325,64))),List.of(feed())));
         assertEquals(0,result.massFlows()[0],1e-9);
         assertEquals(source,result.states().getFirst());
     }
     @Test void aTowersEndsAreAirBreaks(){
-        var tower=CoolingTower.induced(4,2,1,1);var full=basin(2,tower,water(298.15,101325,16));
+        var tower=CoolingTower.induced(8,2,1,1);var full=basin(2,tower,water(298.15,101325,64));
         // A line pressed against the outlet does not fill the basin, and a low line at the inlet does not siphon it.
         var pressed=new PassiveNetwork.Pipe(5,0,1,LINE).withPorts(PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.LIQUID);
         assertEquals(0,step(new PassiveNetwork(List.of(generator(1,0,water(308.15,300000,1)),full),List.of(pressed))).massFlows()[0],1e-9);
@@ -126,13 +127,13 @@ class CoolingTowerTest {
         assertEquals(0,step(new PassiveNetwork(List.of(sink,full),List.of(feed()))).massFlows()[0],1e-9);
     }
     @Test void targetTemperatureControlsLeavingWaterIndependentlyOfBasinHoldup(){
-        var base=CoolingTower.induced(4,2,1,1);double flow=32,inlet=308.15;
+        var base=CoolingTower.induced(8,2,1,1);double flow=128,inlet=308.15;
         double target=(TowerTransfer.fill(model,base,flow,inlet,0).outletTemperature()+TowerTransfer.fill(model,base,flow,inlet,1).outletTemperature())/2;
         double previous=-1;
         for(double basinTemperature:new double[]{285,308.15}){
             var tower=base.withControl(CoolingTower.Mode.TARGET_TEMPERATURE,1,target);
-            var state=water(basinTemperature,101325,16);var source=water(inlet,250000,1);
-            var rates=TowerExchange.at(new PassiveNetwork(List.of(generator(1,7.5,source),basin(2,tower,state)),List.of(feed())),1,List.of(source,state),new double[]{flow},model);
+            var state=water(basinTemperature,101325,64);var source=water(inlet,250000,1);
+            var rates=TowerExchange.at(new PassiveNetwork(List.of(generator(1,8.5,source),basin(2,tower,state)),List.of(feed())),1,List.of(source,state),new double[]{flow},model);
             assertEquals(target,rates.fill().outletTemperature(),.001);
             assertEquals(inlet,rates.inletTemperature());
             assertTrue(rates.fill().speed()>0&&rates.fill().speed()<1);
@@ -148,21 +149,21 @@ class CoolingTowerTest {
         assertTrue(TowerExchange.liquidWater(model,model.state(300,101325,zero,gas,1,0,101325)),"A stream's gas passes to the basin's vent");
     }
     @Test void targetModeStopsFansWithoutSprayWhileTheWarmBasinStillCools(){
-        var tower=CoolingTower.induced(4,2,1,1).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,1,298.15);
-        var node=basin(1,tower,water(308.15,101325,16));
+        var tower=CoolingTower.induced(8,2,1,1).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,1,298.15);
+        var node=basin(1,tower,water(308.15,101325,64));
         var rates=TowerExchange.at(new PassiveNetwork(List.of(node),List.of()),0,List.of(node.state()),new double[0],model);
         assertEquals(0,rates.fill().speed());assertEquals(0,rates.fill().fanPowerWatt());
         assertEquals(0,rates.waterLoss());assertTrue(rates.surfaceWatt()>0);
     }
     @Test void aBasinTemperatureDifferenceCannotDriveAnAtmosphericInlet(){
-        var tower=CoolingTower.induced(4,2,1,1);
-        var result=step(new PassiveNetwork(List.of(generator(1,tower.distributorHeight(),water(308.15,101325,1)),basin(2,tower,water(298.15,101325,16))),List.of(feed())));
+        var tower=CoolingTower.induced(8,2,1,1);
+        var result=step(new PassiveNetwork(List.of(generator(1,tower.distributorHeight(),water(308.15,101325,1)),basin(2,tower,water(298.15,101325,64))),List.of(feed())));
         assertEquals(0,result.massFlows()[0],1e-7);
     }
 
     @Test void startupCirculationStarvationShutdownAndOverflowKeepTheAcceptedLedger(){
-        var tower=CoolingTower.induced(4,2,1,1);var basin=emptyBasin(2,tower);
-        var source=generator(1,7.5,water(308.15,250000,1));
+        var tower=CoolingTower.induced(8,2,1,1);var basin=emptyBasin(2,tower);
+        var source=generator(1,8.5,water(308.15,250000,1));
         var sink=new PassiveNetwork.Reservoir(3,-2,water(298.15,101325,1),PassiveNetwork.NodeKind.VOID);
         var draw=new PassiveNetwork.Pipe(6,1,2,LINE).withPorts(PassiveNetwork.PhasePort.LIQUID,PassiveNetwork.PhasePort.BULK);
         for(int stage=0;stage<5;stage++){
@@ -181,7 +182,7 @@ class CoolingTowerTest {
             if(stage==3)assertTrue(basin.inventory().moles()[water()]<before,"starvation draws down storage");
             if(stage==4)assertEquals(0,result.towers().get(2L).waterLoss(),"shutdown stops fill transfer");
         }
-        var overflowing=balancedStep(new PassiveNetwork(List.of(basin(2,tower,water(308.15,101325,16*3.2))),List.of()));
+        var overflowing=balancedStep(new PassiveNetwork(List.of(basin(2,tower,water(308.15,101325,64*3.2))),List.of()));
         assertTrue(overflowing.boundaries().stream().anyMatch(b->b.kind()==ConservativeTransport.BoundaryTransfer.Kind.SPILL));
     }
 
@@ -199,7 +200,7 @@ class CoolingTowerTest {
     }
 
     @Test void drawingTheLastWaterLeavesAnEmptyBasinAndBooksItsSurfaceExchange(){
-        var tower=CoolingTower.induced(4,2,1,1);
+        var tower=CoolingTower.induced(8,2,1,1);
         var sink=new PassiveNetwork.Reservoir(2,-2,water(298.15,50000,1),PassiveNetwork.NodeKind.VOID);
         var draw=new PassiveNetwork.Pipe(5,0,1,LINE).withPorts(PassiveNetwork.PhasePort.LIQUID,PassiveNetwork.PhasePort.BULK);
         var result=balancedStep(new PassiveNetwork(List.of(basin(1,tower,water(308.15,101325,.00001)),sink),List.of(draw)));

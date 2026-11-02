@@ -669,7 +669,7 @@ public final class EquipmentConstructorScreen extends Screen {
         };
         if (form.designed()) {
             var kind = form.kind();
-            diameter = ProcessUnit.snap(kind, before.kind()!=kind&&kind.coolingTower()?(kind==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?6:60):diameter);
+            diameter = ProcessUnit.snap(kind, before.kind()!=kind&&kind.coolingTower()?(kind==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?8:60):diameter);
             // A new kind starts at its design's second size and support; the same kind keeps the player's.
             tangentLength = unitLength(kind, before.kind() != kind ? ProcessUnit.defaultLength(kind, diameter) : tangentLength);
             if (before.kind() != kind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);

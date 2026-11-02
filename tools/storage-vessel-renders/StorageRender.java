@@ -227,6 +227,7 @@ public class StorageRender {
                     tb = Math.min(255, (tint & 255) * 255.0 / Paint.SPRITE_VALUE) / 255;
             if (channel < 0) tr = tg = tb = 1;
             double ftr = tr, ftg = tg, ftb = tb;
+            double s0 = ShapeRasterizer.towerStain(shape, t.p[0]), s1 = ShapeRasterizer.towerStain(shape, t.p[1]), s2 = ShapeRasterizer.towerStain(shape, t.p[2]);
             raster.fill(t.p[0], t.p[1], t.p[2], (w0, w1, w2) -> {
                 int texel = 0xFFFF00FF;
                 if (sprite != null) {
@@ -234,8 +235,9 @@ public class StorageRender {
                     texel = sprite.sample(u, v);
                     if ((texel >>> 24) < 128) return -1; // cutout
                 }
-                int r = (int) Math.min(255, (texel >> 16 & 255) * ftr * light), g = (int) Math.min(255, (texel >> 8 & 255) * ftg * light),
-                        b = (int) Math.min(255, (texel & 255) * ftb * light);
+                double lit = light * (w0 * s0 + w1 * s1 + w2 * s2);
+                int r = (int) Math.min(255, (texel >> 16 & 255) * ftr * lit), g = (int) Math.min(255, (texel >> 8 & 255) * ftg * lit),
+                        b = (int) Math.min(255, (texel & 255) * ftb * lit);
                 return r << 16 | g << 8 | b;
             });
         }

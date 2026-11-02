@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CoolingTowerGeometryTest {
     @Test void allowedDimensionsUseTheSameNominalAreasAndBasinVolumes(){
-        for(int width=4;width<=14;width+=2)for(int fill=1;fill<=3;fill++){
+        for(int width=8;width<=14;width+=2)for(int fill=1;fill<=3;fill++){
             var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,width,fill,EquipmentShape.Heading.NORTH,0);
             assertEquals(width*width,shape.coolingTower().area());
             assertEquals(width*width,shape.volume(),1e-9);
@@ -63,12 +63,12 @@ class CoolingTowerGeometryTest {
         assertThrows(IllegalArgumentException.class,()->new TowerBank(1,3),"A middle row would have no face for its air");
     }
     @Test void aFanCellIsAClosedShellWithACollidingDeckAndNoAirSolid(){
-        var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,4,2,EquipmentShape.Heading.NORTH,0);
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,8,2,EquipmentShape.Heading.NORTH,0);
         var unit=ProcessUnit.of(shape);var tower=shape.coolingTower();
         assertTrue(unit.mesh().facets().stream().noneMatch(f->f.material()==Mesh.Material.AC_FINS||f.material()==Mesh.Material.AC_PLENUM),"Nothing is drawn inside the shell");
-        double deck=tower.deckHeight()+Access.DECK-.01,centre=2,bell=deck+.25*(tower.height()-deck);
-        assertTrue(unit.inside(new double[]{centre+.45*4,deck,centre}),"The square fan deck collides outside the stack");
-        assertTrue(unit.inside(new double[]{3.95,deck,3.95}),"The fan deck reaches the square cell's corners");
+        double deck=tower.deckHeight()+Access.DECK-.01,centre=4,bell=deck+.25*(tower.height()-deck);
+        assertTrue(unit.inside(new double[]{centre+.45*8,deck,centre}),"The square fan deck collides outside the stack");
+        assertTrue(unit.inside(new double[]{7.95,deck,7.95}),"The fan deck reaches the square cell's corners");
         assertFalse(unit.inside(new double[]{-.05,deck,centre}),"Its collision does not project beyond the cell");
         assertTrue(unit.inside(new double[]{centre,bell+.2,centre}),"Nobody walks through the blades");
         assertFalse(unit.inside(new double[]{centre,3,centre}),"Air inside the shell is no solid");
@@ -76,7 +76,7 @@ class CoolingTowerGeometryTest {
         assertEquals(tower.distributorHeight(),shape.nozzles().stream().filter(n->n.role()==EquipmentShape.Role.HOT_WATER_INLET).findFirst().orElseThrow().base()[1],1e-9,"The spray head is the nozzle's own height");
     }
     @Test void aFanCellsLadderStandsOnTheWallAndLandsOnTheDeck(){
-        for(int width=4;width<=14;width+=2){
+        for(int width=8;width<=14;width+=2){
             var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,width,2,EquipmentShape.Heading.NORTH,0);
             var unit=ProcessUnit.of(shape);double deck=shape.coolingTower().deckHeight()+Access.DECK;
             var ladders=unit.ladders();
@@ -89,7 +89,7 @@ class CoolingTowerGeometryTest {
     /** Shell, stack and fan at most 200 polygons a cell, whatever its width: nothing is cut at the block grid. */
     @Test void aFanCellDrawsWithinItsPolygonBudget(){
         var access=java.util.EnumSet.of(Mesh.Material.HANDRAIL,Mesh.Material.STEELWORK);
-        for(int width=4;width<=14;width+=2)for(var bank:List.of(TowerBank.ONE,new TowerBank(3,2),new TowerBank(8,2))){
+        for(int width=8;width<=14;width+=2)for(var bank:List.of(TowerBank.ONE,new TowerBank(3,2),new TowerBank(8,2))){
             var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,width,2,EquipmentShape.Heading.NORTH,0).withTowerBank(bank);
             var shell=ShapeRasterizer.towerShell(shape);
             long body=shell.stream().filter(p->!access.contains(p.material())).count()+ShapeRasterizer.moving(shape).stream().mapToLong(m->m.polygons().size()).sum();
@@ -99,6 +99,50 @@ class CoolingTowerGeometryTest {
             assertTrue(ladder<=1000+6*width*(bank.columns()+bank.rows()),width+" m "+bank+": "+ladder);
             assertTrue(chunks<=450,width+" m "+bank+": only the nozzles and the rest's grating stay in the chunks: "+chunks);
         }
+    }
+    /** The deck is a walkway: a vanilla player walks the square round the stack, between the bell and the rail. */
+    @Test void aPlayerWalksRoundAFanStack(){
+        for(int width=8;width<=14;width+=2){
+            var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,width,2,EquipmentShape.Heading.NORTH,0);
+            var transform=shape.transform();var walk=PlayerWalk.in(shape);
+            double half=width/2.0,lane=half-Access.RAIL_BAND-PlayerWalk.HALF-.125,deck=shape.coolingTower().deckHeight()+Access.DECK;
+            walk.p=transform.point(new double[]{half+lane,deck+.01,half+lane});
+            for(double[] corner:new double[][]{{-1,1},{-1,-1},{1,-1},{1,1}}){
+                var goal=transform.point(new double[]{half+corner[0]*lane,deck,half+corner[1]*lane});
+                for(int tick=0;tick<1000&&Math.hypot(goal[0]-walk.p[0],goal[2]-walk.p[2])>.3;tick++)walk.tick(PlayerWalk.unit(new double[]{goal[0]-walk.p[0],0,goal[2]-walk.p[2]}),false);
+                assertTrue(Math.hypot(goal[0]-walk.p[0],goal[2]-walk.p[2])<=.3,width+" m: stopped by "+walk.blocker);
+                assertEquals(goal[1],walk.p[1],.2,width+" m: the walk stays on the deck");
+            }
+        }
+    }
+    /** Looking down the stack shows the drive on its beams over the eliminators, the bore running down to them. */
+    @Test void aFanStandsOnItsDriveOverTheEliminators(){
+        for(int width=8;width<=14;width+=2){
+            var shape=EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,width,2,EquipmentShape.Heading.NORTH,0);
+            var facets=ProcessUnit.of(shape).mesh().facets();var tower=shape.coolingTower();
+            double floor=tower.distributorHeight()+.4;
+            assertTrue(facets.stream().anyMatch(f->f.material()==Mesh.Material.TOWER_DRIFT&&f.max()[1]==floor),width+" m: the eliminators close the bore");
+            assertEquals(floor,facets.stream().filter(f->f.material()==Mesh.Material.TOWER_STACK).mapToDouble(f->f.min()[1]).min().orElseThrow(),1e-9,width+" m: the bore reaches them");
+            assertTrue(facets.stream().anyMatch(f->f.material()==Mesh.Material.MOTOR&&f.part()<0&&f.min()[1]<tower.height()),width+" m: the drive stands under the fan");
+            assertTrue(facets.stream().anyMatch(f->f.material()==Mesh.Material.SUPPORT&&f.max()[1]-f.min()[1]<.3),width+" m: on beams across the bore");
+        }
+    }
+    /** Every facet shows its own window of the sprite, and the stain over it wraps round the shell and does not repeat with it. */
+    @Test void aNaturalShellHasNoVisibleRepeat(){
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,80,104,EquipmentShape.Heading.NORTH,0);
+        var shell=ShapeRasterizer.towerShell(shape);
+        assertFalse(shell.isEmpty());
+        for(var polygon:shell){
+            assertEquals(Mesh.Material.TOWER_CONCRETE,polygon.material());
+            for(double uv:polygon.uvs())assertTrue(uv>=-1e-9&&uv<=1+1e-9,"A window stays in the sprite");
+        }
+        double centre=40.5,far=-1;
+        for(double y=30;y<90;y++){
+            double[] behind={centre-30,y,centre-1e-4},ahead={centre-30,y,centre+1e-4};
+            assertEquals(ShapeRasterizer.towerStain(shape,behind),ShapeRasterizer.towerStain(shape,ahead),1e-3,"The stain closes round the shell");
+            for(double a=0;a<6.2;a+=.3)far=Math.max(far,Math.abs(ShapeRasterizer.towerStain(shape,new double[]{centre+30*Math.cos(a),y,centre+30*Math.sin(a)})-ShapeRasterizer.towerStain(shape,new double[]{centre+30*Math.cos(a),y+16,centre+30*Math.sin(a)})));
+        }
+        assertTrue(far>.03,"One sprite height up is another stain: "+far);
     }
     @Test void naturalSupportScalesWithDiameterAndIncludesAnInternalGrillage(){
         for(int diameter:new int[]{40,80}){
@@ -147,7 +191,7 @@ class CoolingTowerGeometryTest {
     }
     @Test void towerNozzleNecksStartInsideTheirWallsSoConnectedPipeSizesTheWholeNeck(){
         for(var shape:List.of(
-                EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,4,2,EquipmentShape.Heading.NORTH,0),
+                EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,8,2,EquipmentShape.Heading.NORTH,0),
                 EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER,40,52,EquipmentShape.Heading.NORTH,0))){
             var unit=ProcessUnit.of(shape);
             for(var nozzle:shape.nozzles())

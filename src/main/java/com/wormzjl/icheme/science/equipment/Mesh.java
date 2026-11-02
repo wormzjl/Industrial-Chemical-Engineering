@@ -42,8 +42,8 @@ public final class Mesh {
         HEATER(2, Paint.BODY), CONCRETE(2, -1), GUARD(1, -1), GLASS(1, -1),
         /** Neutral, unpainted level-instrument scale. */
         GAUGE_SCALE(1, -1),
-        /** A fan tower's baked sprites, each a whole panel: casing, louvers, fan stack, deck. */
-        TOWER_PANEL(4, Paint.BODY), TOWER_LOUVER(4, Paint.BODY), TOWER_STACK(2, Paint.BODY), TOWER_DECK(4, -1);
+        /** A tower's baked sprites, each a whole panel: casing, louvers, fan stack, deck, the spray seen through a fan, a natural shell's concrete. */
+        TOWER_PANEL(4, Paint.BODY), TOWER_LOUVER(4, Paint.BODY), TOWER_STACK(2, Paint.BODY), TOWER_DECK(4, -1), TOWER_DRIFT(4, -1), TOWER_CONCRETE(16, -1);
 
         private final double period;
         private final int channel;

@@ -43,7 +43,7 @@ A fill costs 0.05 ms in Merkel, 0.01 ms as a correlation. The running loop reads
 4. **Small items, left.** Water spills at 1 m under a 1.5 m rim, so the rim's clamp is unreachable. `distributorHeight()` and the snapped nozzle differ up to 0.4 m on natural towers (about 4 kPa).
 5. **GUI gates: fixed.** The tower's control moved to `DeviceColumn` with a gate at every width, and the fan integrates its own phase, so a speed change cannot jump it.
 
-Not run here: the final lane (chain-100, fluid GameTests, campaign), and `verify.ps1` never has been. `equipment_concrete.png` is shared with all equipment. The merge may collide on schema 6, state 30 and protocol numbers with the column operation branch. `tools/cooling-towers/native.init.gradle` is undocumented. No merge, push, version bump or client check.
+Not run here: the final lane (chain-100, fluid GameTests, campaign), and `verify.ps1` never has been. `equipment_concrete.png` is shared with all equipment. Column operation merged as 0.18.0 and took facts schema 6, so the towers must move to schema 7 at the merge and leave main's image alone; state 30 and protocol numbers may collide too. `tools/cooling-towers/native.init.gradle` is undocumented. No merge, push, version bump or client check.
 
 ## Gates
 

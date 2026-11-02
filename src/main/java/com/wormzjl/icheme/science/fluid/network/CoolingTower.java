@@ -11,8 +11,8 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
     public static final double BASIN_HEIGHT = 1.5, BASIN_DEPTH = 2 * BASIN_HEIGHT / 3;
     /** Full-speed fan pressure, Pa; declared air and water loading, kg/(s m²); the fan laws' efficiency and air density, kg/m³. */
     public static final double FAN_PRESSURE = 20, DESIGN_LOADING = 2, FAN_EFFICIENCY = .6, AIR_DENSITY = 1.18;
-    /** A fan cell's fan diameter over its width, its stack's height over the fan diameter, and the spray zone above the fill, m. */
-    public static final double FAN_RATIO = .7, STACK_RATIO = .4, SPRAY_ZONE = 1;
+    /** A fan cell's fan diameter and stack height over its width, the bell mouth over the fan, and the spray zone above the fill, m. The stack follows the cell, not the fan: its height is the draft column of {@link TowerTransfer}. */
+    public static final double FAN_RATIO = .6, STACK_RATIO = .28, BELL = 1.18, SPRAY_ZONE = 1;
     public CoolingTower {
         Objects.requireNonNull(draft); Objects.requireNonNull(mode);
         for (double v : new double[]{width, fillDepth, height, speed, setPoint})
@@ -20,8 +20,9 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
         if (columns < 1 || columns > 8 || rows < 1 || rows > 2 || speed < 0 || speed > 1 || setPoint <= 0)
             throw new IllegalArgumentException("Cooling tower setting outside its range");
         if (draft == Draft.INDUCED) {
-            if (width < 4 || width > 14 || width % 2 != 0 || fillDepth < 1 || fillDepth > 3 || fillDepth != Math.rint(fillDepth) || height != fanHeight(width, fillDepth))
-                throw new IllegalArgumentException("A fan cell is 4–14 m wide with 1–3 m fill");
+            // 8 m is the narrowest cell whose fan leaves a railed walkway round its bell mouth.
+            if (width < 8 || width > 14 || width % 2 != 0 || fillDepth < 1 || fillDepth > 3 || fillDepth != Math.rint(fillDepth) || height != fanHeight(width, fillDepth))
+                throw new IllegalArgumentException("A fan cell is 8–14 m wide with 1–3 m fill");
         } else if (width < 40 || width > 80 || width % 10 != 0 || height != naturalHeight(width) || fillDepth != 2 || columns != 1 || rows != 1 || mode != Mode.FAN_SPEED || speed != 0)
             throw new IllegalArgumentException("A natural tower is 40–80 m across, with height 1.3 times its diameter");
     }
@@ -50,7 +51,7 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
     private static double spray(double width, double fill) { return BASIN_HEIGHT + inlet(width) + fill + SPRAY_ZONE; }
     private static double deck(double width, double fill) { return spray(width, fill) + Math.max(1, Math.rint(width / 5)); }
     /** A fan cell from the ground to its stack's top, m: rim, louvers, fill, spray zone, plenum and stack. */
-    public static double fanHeight(double width, double fill) { return deck(width, fill) + STACK_RATIO * FAN_RATIO * width; }
+    public static double fanHeight(double width, double fill) { return deck(width, fill) + STACK_RATIO * width; }
     /** Clear air-inlet height above the basin rim. */
     public double airInletHeight() { return draft == Draft.NATURAL ? .14 * width : inlet(width); }
     /** Bottom of the natural shell or of an induced cell's fill, above grade. */

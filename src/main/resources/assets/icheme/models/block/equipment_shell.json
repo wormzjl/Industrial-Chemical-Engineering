@@ -27,6 +27,8 @@
     "tower_louver": "icheme:block/tower_louver",
     "tower_stack": "icheme:block/tower_stack",
     "tower_deck": "icheme:block/tower_deck",
+    "tower_drift": "icheme:block/tower_drift",
+    "tower_concrete": "icheme:block/tower_concrete",
     "heater": "icheme:block/painted_heater",
     "concrete": "icheme:block/equipment_concrete",
     "guard": "icheme:block/equipment_guard",

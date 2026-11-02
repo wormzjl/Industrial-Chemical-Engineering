@@ -20,26 +20,26 @@ Stacks run 2–5.5 m, about 0.3 to 0.45 fan diameters ([listing](https://zhonghu
 `CoolingTowerDesign.bank` draws a plain box on four legs over a 2 m tray. The side of the box has no air inlet detail, the fan sits in a 1 m cowl under a guard, and the fill is 2–6 m (half the width by default, about twice a real film fill). A 4 m cell is 10 m tall, 2.5 times its width; real cells are 1 to 1.5. Width stops at 8 m, a third row has no face for air to enter, and the hot water pipe is a bare stub. `height == fillDepth + 8` and the literals 4, 5.5 and 7 hold the layout.
 
 ## Proposal
-**Dimensions, in `CoolingTower`, one formula.** Rim 1.5; inlet `max(2, ceil(.3 w))`; fill 1–3 m, default 2 (the calibration point, so `TowerTransfer`'s fit stays); spray and drift zone 1; plenum `max(1, round(.2 w))`; stack `.4` fan diameters; fan `.7 w` as now. Water depth stays two thirds of the rim, so 1 m.
+**Dimensions, in `CoolingTower`, one formula.** Rim 1.5; inlet `max(2, ceil(.3 w))`; fill 1–3 m, default 2 (the calibration point, so `TowerTransfer`'s fit stays); spray and drift zone 1; plenum `max(1, round(.2 w))`; stack `.28 w`; fan `.6 w`, which leaves 1.17 m of deck round the bell at 8 m (owner: room to walk round it). The stack follows the cell, not the fan: its height is the fans-off draft column. Water depth stays two thirds of the rim, so 1 m.
 
-| Width w | 4 | 6 | 8 | 10 | 12 | 14 |
-|---|---|---|---|---|---|---|
-| Height today | 10 | 11 | 12 | – | – | – |
-| Deck, new | 7.5 | 7.5 | 9.5 | 9.5 | 10.5 | 12.5 |
-| Top of stack, new | 8.6 | 9.2 | 11.7 | 12.3 | 13.9 | 16.4 |
-| Height / width | 2.2 | 1.5 | 1.5 | 1.2 | 1.2 | 1.2 |
+| Width w | 8 | 10 | 12 | 14 |
+|---|---|---|---|---|
+| Height today | 12 | – | – | – |
+| Deck, new | 9.5 | 9.5 | 10.5 | 12.5 |
+| Top of stack, new | 11.7 | 12.3 | 13.9 | 16.4 |
+| Height / width | 1.5 | 1.2 | 1.2 | 1.2 |
 
 - **Shell, drawn whole.** Reuse the natural tower's path (`ShapeRasterizer.towerShell`, `NaturalTowerRenderer`): one cached mesh of whole panels about 4 m wide, instead of plates cut at every block. The casing comes down to the rim. Louvers, ribs and seams are sprites baked from a height model (`tools/cooling-towers/relief/`). Normal maps were tried there: the game's solid shader never reads `Normal`, and a custom normal-map shader drew the same picture, about 10% lighter on east and west faces, so sprites are baked. Neither changes the silhouette. Long faces take louvers; end walls of a bank are plain; a single cell takes four louver faces.
-- **Top.** A 16-sided stack in two bands: a bell mouth at the deck and a straight throat. A new `towerFan` with no guard: 5 flat blades and a plain hub. No motor, shaft or gearbox outside the stack (owner, 2026-11-02).
+- **Top.** A 16-sided stack in two bands: a bell mouth at the deck and a straight throat. A new `towerFan` with no guard: 5 flat blades and a plain hub, on a gearbox and two beams inside the stack. No motor, shaft or gearbox outside it (owner, 2026-11-02).
 - **Deck and access.** A flat deck with a rail round its whole edge, cheap as whole facets. One caged ladder up the end wall to the deck's corner, where the stack leaves room to step off. A rest hangs off the wall on brackets, with no posts (owner: "the ladder need improvement").
 - **Water.** The hot water nozzle as drawn today, moved to the spray zone. No spool or elbow.
-- **Inside: nothing drawn (owner, 2026-11-02).** One closed shell, outer faces only, with a dark `OPENING` plate behind the louvers and under the fan. No fill, distributor, drift layer, legs or fan-cell basin water; the heights stay in the model. Walls collide as walls: one box per cell would fill it with blocks.
-- **Budget (owner: the first one was too much).** Stack, shell and fan: at most 200 polygons per cell, held by a gate (112 to 180 measured). Whole towers, measured: 8 m cell 1373 against 5343 before, 3 × 2 bank 2009 against 18967, 14 m cell 1625. Risk: the whole tower takes one light level, as a natural tower does.
+- **Inside: only what the stack shows (owner, 2026-11-02).** One closed shell, outer faces only. Under the fan the bore runs down to one flat floor whose sprite shows the eliminators and spray headers (owner: "show some stuff below the fan"). No fill, distributor, legs or fan-cell basin water; the heights stay in the model. Walls collide as walls: one box per cell would fill it with blocks.
+- **Budget (owner: the first one was too much).** Stack, shell and fan: at most 200 polygons per cell, held by a gate (194 at worst, 14 m). Whole towers, measured: 8 m cell 1387 against 5343 before, 3 × 2 bank 2093 against 18967, 14 m cell 1639. Risk: the whole tower takes one light level, as a natural tower does.
 ## Effect on the model
-Merkel constants stay. `distributorHeight` falls from `5.5 + fill` to the new spray level, so the pump lifts less (w = 6, default fill: 8.5 to 6 m). The fans-off draft reads `height − distributorHeight`, which rises from 2.5 to about 3.2 m; measure it. Tower references move; a layout table, `shapes-4.snbt` and the schema-6 image update. The tower is unreleased, so no alias work.
+Merkel constants stay. `distributorHeight` falls from `5.5 + fill` to the new spray level, so the pump lifts less (w = 8, default fill: 9.5 to 7.5 m). The fans-off draft reads `height − distributorHeight`, which rises from 2.5 to 4.2 m at 8 m. Measured against the marched fill on every cell left: within 0.11 K at the default fill, 0.17 K at worst. Tower references move; a layout table, `shapes-4.snbt` and the schema-6 image update. The tower is unreleased, so no alias work.
 
 ## Decisions, taken as recommended
-1. **Width: decided, real scale** 4–14 m (owner, 2026-11-02). Bank size must be checked: 6 × 14 m is 84 m long.
+1. **Width: decided, 8–14 m** (owner, 2026-11-02: limit the smallest size rather than shrink the fan). A `.6 w` fan leaves the walkway from 7.5 m up. Factory cells of 2.6–5.5 m drop out. Bank size must be checked: 6 × 14 m is 84 m long.
 2. **Rows** 1–2 (recommended; matches the Marbach and Neckarwestheim banks) and columns 1–8. A third row has no louver face.
 3. **Hot water nozzle** moves in height with the spray level, same face and x. `AGENTS.md` asks your approval for a moved nozzle pipe block.
 4. **Rim 1.5 m** for both tower kinds (recommended, one constant), or natural towers stay at 2 m.

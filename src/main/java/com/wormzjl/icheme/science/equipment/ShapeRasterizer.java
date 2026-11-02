@@ -177,7 +177,7 @@ public final class ShapeRasterizer {
     public static List<Polygon> towerShell(EquipmentShape shape){
         if(!shape.kind().coolingTower())return List.of();
         var g=geometry(shape);var polygons=new ArrayList<Polygon>();
-        for(var facet:g.mesh.facets())if(towerShell(shape,facet))polygons.add(Mesh.whole(facet));
+        for(var facet:g.mesh.facets())if(towerShell(shape,facet))polygons.add(shape.kind()==EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER?window(shape,facet):Mesh.whole(facet));
         return List.copyOf(polygons);
     }
 
@@ -192,9 +192,31 @@ public final class ShapeRasterizer {
 
     private static boolean towerShell(EquipmentShape shape,Facet facet){
         if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)return facet.part()<0&&facet.material()!=Material.GRATING;
-        if(shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER||facet.material()!=Material.CONCRETE)return false;
-        double base=shape.coolingTower().shellBaseHeight();
-        return facet.min()[1]>=base-EPS&&facet.max()[1]>base+EPS;
+        return shape.kind()==EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER&&facet.material()==Material.TOWER_CONCRETE;
+    }
+
+    /** Facets round and up a natural shell before its sprite repeats: the boards run on from facet to facet. */
+    private static final int ROUND=4,UP=2;
+    private static Polygon window(EquipmentShape shape,Facet facet){
+        var polygon=Mesh.whole(facet);var uv=polygon.uvs().clone();
+        double axis=shape.coolingTower().width()/2+.5,x=(facet.min()[0]+facet.max()[0])/2-axis,z=(facet.min()[2]+facet.max()[2])/2-axis;
+        int round=Math.floorMod((int)Math.floor(DeterministicMath.atan2(z,x)/(2*Math.PI)*CoolingTowerDesign.naturalFacets(shape.coolingTower().width())),ROUND);
+        int up=Math.floorMod((int)Math.floor(facet.min()[1]/8),UP);
+        for(int i=0;i<uv.length;i+=2){uv[i]=(round+uv[i])/ROUND;uv[i+1]=(UP-1-up+uv[i+1])/UP;}
+        return new Polygon(polygon.positions(),uv,polygon.normals(),polygon.material());
+    }
+
+    /**
+     * A shell's weathering at a point, a factor of its shade: slow patches, rain streaks from the top, a dark rim and foot.
+     * A natural tower is large enough to show any repeat of a sprite; this has none. Any other shape is 1.
+     */
+    public static double towerStain(EquipmentShape shape,double[] p){
+        if(shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER)return 1;
+        var tower=shape.coolingTower();double axis=tower.width()/2+.5,a=DeterministicMath.atan2(p[2]-axis,p[0]-axis),y=p[1];
+        double base=tower.shellBaseHeight(),h=Math.max(0,Math.min(1,(y-base)/(tower.height()-base)));
+        double patches=.5*DeterministicMath.sin(3*a+1.3)*DeterministicMath.sin(y/17+.4)+.3*DeterministicMath.sin(5*a+4.1)*DeterministicMath.sin(y/11+2)+.2*DeterministicMath.sin(11*a+2.2)*DeterministicMath.sin(y/7+1);
+        double streaks=Math.max(0,.6*DeterministicMath.sin(9*a+.7)+.4*DeterministicMath.sin(14*a+3.1));
+        return 1+.05*patches-.14*streaks*h*h-.1*Math.max(0,(h-.9)/.1)-.06*Math.max(0,(.08-h)/.08);
     }
 
     /**

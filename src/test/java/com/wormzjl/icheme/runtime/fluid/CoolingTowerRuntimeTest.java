@@ -15,9 +15,9 @@ class CoolingTowerRuntimeTest {
     private final com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model=FluidTestSupport.networkModel();
 
     private PassiveNetwork basin(){
-        var tower=CoolingTower.induced(4,2,2,1);
+        var tower=CoolingTower.induced(8,2,2,1);
         var amounts=new double[model.componentCount()];amounts[amounts.length-1]=1;
-        double scale=32/model.flashTP(308.15,101325,amounts,()->{}).volume();amounts[amounts.length-1]*=scale;
+        double scale=128/model.flashTP(308.15,101325,amounts,()->{}).volume();amounts[amounts.length-1]*=scale;
         var state=model.flashTP(308.15,101325,amounts,()->{});
         var inventory=new PassiveNetwork.Inventory(tower.basinVolume(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),CoolingTower.BASIN_DEPTH,true).withTower(tower);
         return new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory)),List.of());
@@ -33,7 +33,7 @@ class CoolingTowerRuntimeTest {
     private static FluidDeviceSpec water(double temperature,double pressure){return new FluidDeviceSpec(1,temperature,pressure,FluidDeviceSpec.water(EventPathWorld.CATALOG).composition());}
 
     @Test void aPumpedLoopKeepsUpWithItsIntervalsInEveryFanMode(){
-        for(var control:List.of(CoolingTower.induced(4,2,1,1),CoolingTower.induced(4,2,1,1).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,1,303))){
+        for(var control:List.of(CoolingTower.induced(8,2,1,1),CoolingTower.induced(8,2,1,1).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,1,303))){
             var w=new EventPathWorld();w.runTo(20);
             long id=tower(w,control,new PhysicalFluidTopology.Port(at(1,0,0),NORTH,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(0,0,2),WEST,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(1,0,4),SOUTH,PassiveNetwork.PhasePort.LIQUID));
             w.place(-1,0,2,Kind.PIPE,WEST,.05);w.place(-2,0,2,Kind.GENERATOR,WEST,water(320,400000),.05);
@@ -54,7 +54,7 @@ class CoolingTowerRuntimeTest {
 
     @Test void aPumpedHydrocarbonClosesTheInletWithoutAHold(){
         var w=new EventPathWorld();w.runTo(20);
-        long id=tower(w,CoolingTower.induced(4,2,1,1),new PhysicalFluidTopology.Port(at(1,7,0),NORTH,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(1,0,4),SOUTH,PassiveNetwork.PhasePort.LIQUID));
+        long id=tower(w,CoolingTower.induced(8,2,1,1),new PhysicalFluidTopology.Port(at(1,7,0),NORTH,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(1,0,4),SOUTH,PassiveNetwork.PhasePort.LIQUID));
         double[] oil=new double[model.componentCount()];oil[oil.length-3]=1;
         w.place(1,7,-1,Kind.PIPE,NORTH,.05);w.place(1,7,-2,Kind.PUMP,SOUTH,new FlowControl.Pump(.005,800000),null,.05);
         w.place(1,7,-3,Kind.PIPE,NORTH,.05);w.place(1,7,-4,Kind.GENERATOR,NORTH,new FluidDeviceSpec(1,330,300000,oil),.05);
@@ -65,7 +65,7 @@ class CoolingTowerRuntimeTest {
 
     @Test void anEmptyBasinPublishesItsFansThroughTheScheduledDisplay(){
         for(var mode:CoolingTower.Mode.values()){
-            var tower=CoolingTower.induced(4,2,1,1).withControl(mode,1,298.15);
+            var tower=CoolingTower.induced(8,2,1,1).withControl(mode,1,298.15);
             var empty=PassiveNetwork.emptyVessel(1,0,tower.basinVolume(),CoolingTower.BASIN_DEPTH,true,model);
             var node=new PassiveNetwork.Reservoir(1,0,empty.state(),empty.kind(),empty.inventory().withTower(tower));
             var result=new PassiveIntervalSolver(model).solve(new PassiveNetwork(List.of(node),List.of()),1,PassiveIntervalSolver.Settings.defaults(),()->{});

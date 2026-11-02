@@ -75,7 +75,7 @@ public final class CoolingTowerShellRenderer {
                 int channel=polygon.material().channel(),tint=channel<0||channel>=tints.length?0xFFFFFF:tints[channel];
                 var positions=polygon.positions();var normals=polygon.normals();var uv=polygon.uvs();
                 for(int corner=1;corner+1<polygon.size();corner++)for(int index:new int[]{0,corner,corner+1}){
-                    int shade=EquipmentShellModel.shade(polygon,index);
+                    int shade=(int)Math.min(255,EquipmentShellModel.shade(polygon,index)*ShapeRasterizer.towerStain(shape,new double[]{positions[3*index],positions[3*index+1],positions[3*index+2]}));
                     builder.addVertex((float)positions[3*index],(float)positions[3*index+1],(float)positions[3*index+2])
                         .setColor(shade*(tint>>16&255)/255,shade*(tint>>8&255)/255,shade*(tint&255)/255,255).setUv(sprite.getU((float)uv[2*index]),sprite.getV((float)uv[2*index+1]))
                         .setLight(light).setNormal((float)normals[3*index],(float)normals[3*index+1],(float)normals[3*index+2]);
