@@ -172,6 +172,37 @@ class ColumnRunTest {
         for(int i=0;i<after.length;i++)accounts+=after[i]-before[i];
         assertTrue(accounts>0,"its accounts are booked as destroyed: "+held.stations());
     }
+    /** A Stop pressed while the Start's event is still queued queues behind it: the column stops once that Start has committed, and holds nothing. */
+    @Test void aStopWhileTheStartIsQueuedTakesEffectBehindIt() {
+        var r=rig(0);var world=r.world();long unit=r.unit();
+        assertTrue(world.ledger.pending(r.feed()),"the Start is still queued");
+        r.ops().stop(unit,false,edits->world.registry.submit(edits,world.ledger.nextIdentity(),null));
+        assertTrue(world.ledger.column(unit).running(),"the unit runs until its ports leave");
+        world.runTo(600);
+        assertFalse(world.ledger.column(unit).running(),"it stopped: "+r.ops().status(unit));
+        assertFalse(world.registry.registrations().containsKey(r.feed())||world.registry.registrations().containsKey(r.product()),"its ports left");
+    }
+    /** A dismantle in that window: the unit leaves too, not a running unit with no structure and its ports still splitting the lines. */
+    @Test void aDismantleWhileTheStartIsQueuedTakesTheUnitWithIt() {
+        var r=rig(0);var world=r.world();long unit=r.unit();
+        assertTrue(world.ledger.pending(r.feed()),"the Start is still queued");
+        r.ops().stop(unit,true,edits->world.registry.submit(edits,world.ledger.nextIdentity(),null));
+        world.runTo(600);
+        assertNull(world.ledger.column(unit),"the unit left with its ports");
+        assertFalse(world.registry.registrations().containsKey(r.feed())||world.registry.registrations().containsKey(r.product()),"its ports left");
+    }
+    /** A second press changes nothing: the first Stop's event carries it, and a dismantle only takes the unit along. */
+    @Test void aDismantleAfterAQueuedStopQueuesNothingMore() {
+        var r=rig(0);var world=r.world();var ops=r.ops();long unit=r.unit();
+        world.runTo(3000);
+        ops.stop(unit,false,edits->world.registry.submit(edits,world.ledger.nextIdentity(),null));
+        int queued=world.ledger.events().size();
+        ops.stop(unit,true,edits->world.registry.submit(edits,world.ledger.nextIdentity(),null));
+        assertEquals(queued,world.ledger.events().size(),"no second event");
+        assertTrue(world.ledger.column(unit).running(),"the unit runs until its ports leave");
+        world.runTo(3400);
+        assertNull(world.ledger.column(unit),"the unit left with its ports");
+    }
     /** A pump on the feed line, ahead of the boundary valve: the valve meters its small flow with the pump on its head limit, closed before the first demand (merge review, finding 2). */
     @Test void aPumpOnTheFeedLineRidesBehindItsValve() {
         pumped=true;var r=rig(0);var world=r.world();long unit=r.unit();

@@ -211,6 +211,11 @@ public final class WorldTopologyLedger {
     public Registration latestAt(PhysicalFluidTopology.Position position){owned();Long id=latestAt.get(position);return id==null?null:latest.get(id);}
     /** Whether a queued event places, edits or removes this identity. */
     public boolean pending(long id){owned();return latest.get(id)!=active.get(id);}
+    /** Whether a queued event names this identity: unlike {@link #pending}, also one placed and removed again, which leaves the two registries alike. The queue is walked. */
+    public boolean queued(long id) {
+        owned();for(var event:events)for(var edit:event.edits)if(edit.id==id)return true;
+        return false;
+    }
     public void tick(){owned();onlineTick=Math.addExact(onlineTick,1);}
     /** The caller allocates from nextIdentity, then installs event fences before publishing this preparation. */
     public Prepared queue(List<Edit> edits,Set<Long> touched,long nextIdentity){return queue(edits,touched,nextIdentity,null);}

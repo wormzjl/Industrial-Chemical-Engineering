@@ -19,7 +19,7 @@ import java.util.*;
  * The running columns in the network (batch 2026-10-28-column-operation, C4, plan sections 4.3, 4.4, 5 and 9): the islands'
  * ports read their plans here, their bookings land here, and every running column takes a cycle each
  * {@link #CYCLE_TICKS} online ticks. Minecraft-free; the server thread owns it. Arithmetic only: the split table and each
- * product's specific enthalpy come from a solve on a worker (C5).
+ * product's partial molar enthalpies come from a solve on a worker (C5).
  *
  * <p>Conservation (plan 4.4). An inlet's void books what arrives; the account takes exactly that, as spans of online time,
  * and a cycle takes the spans' shares up to its tick. A cycle takes at most what an account holds and puts the same moles,
@@ -135,30 +135,28 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * Stops unit {@code unit} (plan 4.1): one queued event ({@code submit}) releases what it holds and takes its ports out.
      * The unit runs until that event commits ({@link #committed}): its ports stand in their islands until then, and what
      * they take and give is booked. With {@code leaves} (the column was dismantled) its unit then goes, its accounts booked
-     * as destroyed. A stop already queued only takes {@code leaves} on. Every account stays with the unit otherwise.
+     * as destroyed. A Start still queued goes first: the event queues behind it. A stop already queued has left nothing to
+     * edit, and only takes {@code leaves} on. Every account stays with the unit otherwise.
      */
     public void stop(long unit,boolean leaves,java.util.function.Consumer<List<WorldTopologyLedger.Edit>> submit) {
         var u=topology.column(unit);if(u==null)return;
         if(leaves&&!u.leaving())topology.column(u=u.leave());
         if(!u.running()){if(leaves)topology.removeColumn(unit);return;}
-        var edits=new ArrayList<WorldTopologyLedger.Edit>();boolean ports=false;
-        for(var s:u.stations()) {
-            if(s.device()==0)continue;
-            if(topology.pending(s.device()))return;
-            if(registry.registrations().containsKey(s.device())){edits.add(new WorldTopologyLedger.Edit(s.device(),null));ports=true;}
-        }
+        var edits=new ArrayList<WorldTopologyLedger.Edit>();
+        for(var s:u.stations())if(s.device()!=0&&registry.registrations().containsKey(s.device()))edits.add(new WorldTopologyLedger.Edit(s.device(),null));
         for(var r:registry.registrations().values())if(r.device().suspendedBy()==unit)
             edits.add(new WorldTopologyLedger.Edit(r.device().id(),new WorldTopologyLedger.Registration(r.device().withSuspendedBy(0),r.spec(),Math.addExact(r.revision(),1))));
         if(!edits.isEmpty())submit.accept(edits);
-        if(!ports)stopped(u);
+        if(!standing(u))stopped(u);
     }
     /** An event committed: a running unit whose ports have all left stops. */
     public void committed() {
-        for(var u:topology.columns().values()) {
-            if(!u.running())continue;boolean standing=false;
-            for(var s:u.stations())standing|=s.device()!=0&&(registry.registrations().containsKey(s.device())||topology.pending(s.device()));
-            if(!standing)stopped(u);
-        }
+        for(var u:topology.columns().values())if(u.running()&&!standing(u))stopped(u);
+    }
+    /** Whether a port of {@code u} stands in its island, or a queued event still places or removes one. */
+    private boolean standing(ColumnUnit u) {
+        for(var s:u.stations())if(s.device()!=0&&(topology.active().containsKey(s.device())||topology.queued(s.device())))return true;
+        return false;
     }
     private void stopped(ColumnUnit u) {
         topology.column(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()));
