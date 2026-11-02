@@ -1,6 +1,6 @@
 # Water cooling towers
 
-**Snapshot:** 5b44dbaa3 (branch `claude/codex-water-cooling-tower-review-09c170`, mod 0.19.0), 2026-11-02. Batch: [2026-10-30-water-cooling-tower](../../2026-10-30-water-cooling-tower/README.md). Up: [code guide](README.md).
+**Snapshot:** d5be9da6d (branch `claude/codex-water-cooling-tower-review-09c170`, mod 0.19.0), 2026-11-02. Batch: [2026-10-30-water-cooling-tower](../../2026-10-30-water-cooling-tower/README.md). Up: [code guide](README.md).
 
 ## Geometry and placement
 

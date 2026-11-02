@@ -1,6 +1,6 @@
 # Scalable water cooling towers
 
-In progress since 2026-10-30 on `codex/water-cooling-tower`, based on main `79b853e0d` (0.17.1). This batch has not merged or changed the release version.
+Implemented 2026-11-02 as 0.19.0 on `claude/codex-water-cooling-tower-review-09c170`, which holds main 0.18.1; the merge waits for the owner.
 
 The constructor adds induced-draft banks of bounded parallel cells and passive natural-draft towers. Both store water only in a real open basin and exchange heat and water with fixed ambient air. The induced-draft structure uses a metal basin and steel frame, without concrete support, following the owner's final revision.
 
@@ -13,6 +13,7 @@ The constructor adds induced-draft banks of bounded parallel cells and passive n
 - [Branch review and consolidation](BRANCH_REVIEW.md): the wall-deadline blocker, priming, the correlation model and the owner's options.
 - [Fan tower model plan](INDUCED_TOWER_MODEL_PLAN.md): real photos and sizes, the dimensions and the owner's decisions; built.
 - [Large tower review](LARGE_TOWER_REVIEW.md): frame rate and chunk loading of very large towers.
+- [Merge review](MERGE_REVIEW.md): backward compatibility removed, formats and the final lane.
 - [Code guide](../reference/code-guide/cooling-towers.md).
 - [Verification tools](../../tools/cooling-towers/README.md).
 
@@ -67,3 +68,5 @@ History: 2026-11-02 — after the owner's client check: fan 0.6 of the width, sm
 History: 2026-11-02 — owner reported lag and asked for a chunk loading check on large structures ([LARGE_TOWER_REVIEW.md](LARGE_TOWER_REVIEW.md)). An 80 m tower falls from 57,277 to 2,834 polygons and from 48,539 to 41,157 cells: `towerShell` takes every still part, the fill is two decks, and hidden discs are gone. `LoadedTowers` keeps a tower standing while any cell is loaded. The builder says "Natural draft tower". Layout table updated; schema-6 image unchanged. Quick suite 1844 of 1844, slow gates 188 of 188, GameTest sources compile. Not run: fluid GameTests, campaign, client check.
 
 History: 2026-11-02 — owner's client check: the shell's top was a knife edge, its two faces with nothing between them. A stiffening ring closes it, d/100 proud of the wall on both sides, 2 d/100 deep, drawn and colliding (`aNaturalShellEndsInAThickRing`). 252 polygons and 214 cells; the wall stays 0.25 m. Layout table updated. Quick suite 1845 of 1845. Slow gates not re-run for this drawing change.
+
+History: 2026-11-02 — owner: "remove the backward compat and prepare for merge". Main 0.18.0 and 0.18.1 merged in (`119624a65`, `d5be9da6d`). Eleven old-signature constructors, two legacy hash branches and a shell's tolerance of a missing bank removed (`5b44dbaa3`); that found `withConnections` resetting a tower's bank, fixed and gated. Facts schema 7, shape fields 5, version 0.19.0. Final lane: 2114 tests, chain-100 deviation 0, 39 GameTests, campaign 975, 994, 1000, `refused=0`. Details in [MERGE_REVIEW.md](MERGE_REVIEW.md).
