@@ -246,7 +246,10 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
          */
         public record Identity(long id,int first,int second,List<PipeResistance.Geometry> sections,FlowControl control,
                                int blockedDirections,FilterSettings filter,PhasePort firstPort,PhasePort secondPort,int forbiddenDirections,double actuatorArea,
-                               Record heat) {}
+                               Record heat) {
+            /** This connection without a flow valve's set point: a new target on a running valve is the same line, and its point carries. */
+            Identity line(){return control instanceof FlowControl.ControlValve valve&&!valve.pressureControl()?new Identity(id,first,second,sections,valve.withTarget(0),blockedDirections,filter,firstPort,secondPort,forbiddenDirections,actuatorArea,heat):this;}
+        }
         /** The immutable half of an {@link InlineFilter}; the cake and its energy are the mutable half. */
         public record FilterSettings(double capacity,double cleanResistance) {}
         public Identity identity() {

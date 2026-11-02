@@ -88,12 +88,16 @@ class RegulatingValveHoldTest {
         for(double flow:running.endpointFlows())assertEquals(target,flow,1e-6*target);
     }
     /**
-     * An idle line's first flow of a liquid product, as a column's outlet starts: the junction still holds the gas it stood in,
-     * so the regulated pass stays laid out on that gas, not on the liquid the balance sends it (laid out on the liquid, the
-     * Newton was singular at every step size).
+     * An idle line's first flows of a liquid product, as a column's outlet starts: the junction still holds the gas it stood in,
+     * and each slice sets a new target. Neither slice solves the open valve: open, the hot liquid falls under its bubble pressure
+     * at the junction (546 K at 176 kPa) and the liquid layout goes singular. The valve stays where its target puts it.
      */
-    @Test void aLiquidProductEntersALineHoldingItsGas() {
-        var model=FluidTestSupport.networkModel();var w=new EventPathWorld();double bore=.05,target=1;
+    @Test void aLiquidProductEntersALineHoldingItsGasAndTakesNewTargets() {
+        assertTakesTargets(486,new double[]{.126,0,0,1.26,3.03,0,0,64.7,161.7,1294,2588,258.8});
+        assertTakesTargets(546.3,new double[]{0,0,0,1.87,.83,0,1.66,53.1,0,0,531,0,2549,.104});
+    }
+    private static void assertTakesTargets(double temperature,double[] amounts) {
+        var model=FluidTestSupport.networkModel();var w=new EventPathWorld();double bore=.05,first=.25,second=.32;
         w.place(0,0,0,Kind.GENERATOR,EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,638.15,250000,pure(MaterialTestBasis.NITROGEN)),bore);
         w.place(1,0,0,Kind.PIPE,EAST,bore);
         w.place(2,0,0,Kind.PIPE,EAST,valve(0),null,bore);
@@ -102,15 +106,19 @@ class RegulatingValveHoldTest {
         w.runTo(200);
         var solver=new PassiveIntervalSolver(model);
         var rest=solver.solve(w.coordinator.snapshots().getFirst().graph(),5,PassiveIntervalSolver.Settings.defaults(),()->{},1);
-        double[] product=Arrays.copyOf(new double[]{.126,0,0,1.26,3.03,0,0,64.7,161.7,1294,2588,258.8},MaterialTestBasis.NETWORK+1);
-        double volume=model.flashTP(486,250000,product,()->{}).volume();for(int c=0;c<product.length;c++)product[c]/=volume;
-        var liquid=model.flashTP(486,250000,product,()->{});assertEquals(0,liquid.vaporVolume());
+        double[] product=Arrays.copyOf(amounts,MaterialTestBasis.NETWORK+1);
+        double volume=model.flashTP(temperature,250000,product,()->{}).volume();for(int c=0;c<product.length;c++)product[c]/=volume;
+        var liquid=model.flashTP(temperature,250000,product,()->{});assertEquals(0,liquid.vaporVolume());
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(var n:rest.graph().reservoirs())nodes.add(n.kind()==PassiveNetwork.NodeKind.GENERATOR?new PassiveNetwork.Reservoir(n.id(),n.elevation(),liquid,n.kind(),new PassiveNetwork.Inventory(n.inventory().volume(),PhaseLayout.totalAmounts(liquid),liquid.internalEnergy(),liquid.solids())):n);
-        var pipes=new ArrayList<PassiveNetwork.Pipe>();
-        for(var pipe:rest.graph().pipes())pipes.add(pipe.control() instanceof FlowControl.ControlValve?pipe.withControl(valve(target)):pipe);
-        var running=solver.solve(new PassiveNetwork(nodes,pipes,rest.graph().scheduledTransfers()),5,PassiveIntervalSolver.Settings.defaults(),()->{},1);
-        assertEquals(FlowControl.Mode.VALVE_REGULATING,running.endpointModes().getLast());
-        for(double flow:running.endpointFlows())assertEquals(target,flow,1e-6*target);
+        var graph=new PassiveNetwork(nodes,rest.graph().pipes(),rest.graph().scheduledTransfers());
+        for(double target:new double[]{first,second}) {
+            var pipes=new ArrayList<PassiveNetwork.Pipe>();
+            for(var pipe:graph.pipes())pipes.add(pipe.control() instanceof FlowControl.ControlValve?pipe.withControl(valve(target)):pipe);
+            var running=solver.solve(new PassiveNetwork(graph.reservoirs(),pipes,graph.scheduledTransfers()),5,PassiveIntervalSolver.Settings.defaults(),()->{},1);
+            assertEquals(FlowControl.Mode.VALVE_REGULATING,running.endpointModes().getLast());
+            for(double flow:running.endpointFlows())assertEquals(target,flow,1e-6*target);
+            graph=running.graph();
+        }
     }
 }
