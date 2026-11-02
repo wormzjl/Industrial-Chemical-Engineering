@@ -27,14 +27,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class ColumnRunTest {
     /** The ports' bookings, summed by port node, beside the column's own. */
     static final class Counting implements IslandCoordinator.Ports {
-        final IslandCoordinator.Ports inner;final Map<Long,double[]> moles=new HashMap<>();final Map<Long,Double> heat=new HashMap<>(),solids=new HashMap<>();
+        final IslandCoordinator.Ports inner;final Map<Long,double[]> moles=new HashMap<>();final Map<Long,Double> heat=new HashMap<>(),solids=new HashMap<>(),energy=new HashMap<>();
         Counting(IslandCoordinator.Ports inner){this.inner=inner;}
         public boolean ready(long island,PassiveNetwork graph,long start){return inner.ready(island,graph,start);}
         public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice){return inner.plans(island,graph,slice);}
         public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit){return inner.heatRead(side,partner,start,seconds,transit);}
         public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
             for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);
-            for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE){var sum=moles.computeIfAbsent(b.nodeId(),id->new double[b.moles().length]);var n=b.moles();for(int i=0;i<n.length;i++)sum[i]+=n[i];solids.merge(b.nodeId(),b.solids().massKg(),Double::sum);}
+            for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE){var sum=moles.computeIfAbsent(b.nodeId(),id->new double[b.moles().length]);var n=b.moles();for(int i=0;i<n.length;i++)sum[i]+=n[i];solids.merge(b.nodeId(),b.solids().massKg(),Double::sum);energy.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);}
             inner.booked(island,graph,start,end,result);
         }
     }
@@ -72,7 +72,11 @@ class ColumnRunTest {
         if(pumped)world.place(1,64,0,Kind.PUMP,Direction.EAST,new FlowControl.Pump(.01,500000),null,.05);else world.place(1,64,0,Kind.PIPE,Direction.EAST,lineBore);
         long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),lineBore);
         long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),lineBore),tank=0,steamSource=0,steamValve=0;
-        if(!blocked){world.place(12,64,0,Kind.PIPE,Direction.EAST,productBore);tank=world.place(13,64,0,Kind.RESERVOIR,Direction.EAST);}
+        if(!blocked){
+            world.place(12,64,0,Kind.PIPE,Direction.EAST,productBore);
+            if(!Double.isNaN(secondValve))world.place(13,64,0,Kind.PIPE,Direction.EAST,new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,secondValve,new UUID(1,2),1),null,productBore);
+            tank=world.place(Double.isNaN(secondValve)?13:14,64,0,Kind.RESERVOIR,Direction.EAST);
+        }
         long waterSource=0;
         if(condenser){waterSource=world.place(0,64,4,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,300,300000,water),.05);world.place(1,64,4,Kind.PIPE,Direction.EAST,.05);world.place(5,64,4,Kind.PIPE,Direction.EAST,.05);world.place(6,64,4,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,200000,water),.05);}
         // The steam line is sized for its 0.1 mol/s (1 cm): a 5 cm valve regulating 6 g/s from 3 to 1.5 bar holds its island (README, open items).
@@ -104,6 +108,8 @@ class ColumnRunTest {
     private boolean pumped;
     /** The bore of the rig's product line and of its feed line and valves, m. */
     private double productBore=.05,lineBore=.05;
+    /** A player's flow valve on the rig's product line, kg/s, or NaN for a plain pipe. */
+    private double secondValve=Double.NaN;
     /** The solids in the rig's feed, and the port its product leaves by. */
     private SlurryFeed feedSolids=SlurryFeed.NONE;private Port productPort=Port.DISTILLATE;
     /** The rig's table for a water feed: everything to the distillate, 1 kJ/mol cooler. */
@@ -198,6 +204,81 @@ class ColumnRunTest {
             assertTrue(a.ops().status(a.unit()).startsWith("LIMITED: outlet"),a.ops().status(a.unit()));
             assertArrayEquals(x.totals().taken().moles(),y.totals().taken().moles(),"what the column took at "+bore);
             assertArrayEquals(x.totals().produced().moles(),y.totals().produced().moles(),"what it made at "+bore);
+        }
+    }
+    /** Every component and the energy of unit {@code u} close from port {@code in} through distillate port {@code out}: nothing was given that the account did not hold. */
+    private static void closes(Counting counting,ColumnUnit u,long in,long out,int m) {
+        var arrived=counting.moles.getOrDefault(in,new double[m]);var given=counting.moles.getOrDefault(out,new double[m]);
+        var feed=u.station(Port.FEED,0).account();var made=u.station(Port.DISTILLATE,0).account();
+        for(int i=0;i<m;i++) {
+            double through=u.totals().taken().moles()[i];
+            assertEquals(-arrived[i],feed.moles()[i]+through,1e-9*Math.max(1,through),"component "+i+": what arrived is in the feed account or taken");
+            assertEquals(u.totals().produced().moles()[i],made.moles()[i]+given[i],1e-9*Math.max(1,through),"component "+i+": what was made is in the outlet account or given");
+        }
+        double took=-counting.energy.getOrDefault(in,0.),gave=counting.energy.getOrDefault(out,0.);
+        assertEquals(gave,took-feed.energy()-made.energy()+u.totals().condenser(),1e-9*Math.max(1,Math.abs(took)),"the energy closes on the condenser");
+    }
+    /** What the island's last job solved of {@code port}'s line: each column-worked or player's flow valve as mode, flow and target. */
+    private static List<String> valves(EventPathWorld world,long port) {
+        var s=world.coordinator.snapshot(world.registry.owner(port));var result=s.lastResult().orElseThrow();var line=new ArrayList<String>();
+        for(int e=0;e<s.graph().pipes().size();e++)if(s.graph().pipes().get(e).control() instanceof FlowControl.ControlValve c)line.add(result.endpointModes().get(e)+" "+result.endpointFlows()[e]+" of "+c.massTarget());
+
+        return line;
+    }
+    /** A player's flow valve above the plan on a product line stands open: the plan's target holds and every component stays exact (owner 2026-11-02, "Lower target wins"; merge review, finding 1). */
+    @Test void aSecondFlowValveAboveThePlanStandsOpen() {
+        secondValve=1;var r=rig(0);var world=r.world();world.runTo(5000);int m=world.model.componentCount();
+        assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+        closes(r.counting(),world.ledger.column(r.unit()),r.feed(),r.product(),m);
+        var line=valves(world,r.product());
+        assertTrue(line.get(0).startsWith("VALVE_REGULATING")&&line.get(1).startsWith("VALVE_OPEN"),line.toString());
+        assertTrue(sum(r.counting().moles.get(r.product()))>15,"the outlet gave");
+    }
+    /** A player's flow valve below the plan regulates the line: the port stands open, what the outlet gives is the lower target, and its buffer fills. */
+    @Test void aSecondFlowValveBelowThePlanRegulatesTheLine() {
+        secondValve=.002;productBore=.01;var r=rig(0);var world=r.world();world.runTo(8000);int m=world.model.componentCount();
+        assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+        closes(r.counting(),world.ledger.column(r.unit()),r.feed(),r.product(),m);
+        var line=valves(world,r.product());
+        assertTrue(line.get(0).startsWith("VALVE_OPEN")&&line.get(1).startsWith("VALVE_REGULATING"),line.toString());
+        assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
+    }
+    private record Chain(EventPathWorld world,ColumnOperation ops,Counting counting,long first,long second,long feed,long outlet,long inlet,long product){}
+    /** Column one's distillate into column two's feed, one nitrogen line through both: with {@code shared} through one valve that bounds both, else a valve of each. */
+    private Chain chain(boolean shared,double firstRate,double secondRate) {
+        var world=new EventPathWorld();var model=world.model;int m=model.componentCount();var n2=EventPathWorld.nitrogen().composition();
+        world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,n2),.05);world.place(1,64,0,Kind.PIPE,Direction.EAST,.05);
+        long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST),outletValve=world.place(11,64,0,Kind.VALVE,Direction.EAST),inletValve=outletValve;int inletAt=12;
+        if(!shared){world.place(12,64,0,Kind.PIPE,Direction.EAST,.05);inletValve=world.place(13,64,0,Kind.VALVE,Direction.EAST);inletAt=14;}
+        long productValve=world.place(inletAt+7,64,0,Kind.VALVE,Direction.EAST);world.place(inletAt+8,64,0,Kind.PIPE,Direction.EAST,.05);world.place(inletAt+9,64,0,Kind.RESERVOIR,Direction.EAST);
+        var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.components(),model.molecularWeights());var counting=new Counting(ops);world.coordinator.ports(counting);
+        world.runTo(40);
+        long first=world.ledger.reserve(2),second=first+1,feed=world.ledger.nextIdentity(),outlet=feed+1,inlet=feed+2,product=feed+3;
+        var g=new PipeResistanceGeometry(world.registry.registrations().get(feedValve).device().geometry());var none=new double[0];
+        var a=new Setpoints(firstRate,firstRate,330,1,0,none,none,none);var b=new Setpoints(secondRate,secondRate,330,1,0,none,none,none);
+        world.ledger.column(new ColumnUnit(first,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,a,List.of(new ColumnUnit.Station(Port.FEED,0,feed,feedValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,outlet,outletValve,Account.empty(m))),ColumnUnit.Totals.empty(m),0));
+        world.ledger.column(new ColumnUnit(second,new PhysicalFluidTopology.Position(EventPathWorld.DIM,inletAt+3,70,0),true,b,List.of(new ColumnUnit.Station(Port.FEED,0,inlet,inletValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,product,productValve,Account.empty(m))),ColumnUnit.Totals.empty(m),0));
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
+                new WorldTopologyLedger.Edit(outlet,new WorldTopologyLedger.Registration(port(outlet,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0)),
+                new WorldTopologyLedger.Edit(inlet,new WorldTopologyLedger.Registration(port(inlet,inletAt,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
+                new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,inletAt+6,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0))),product+1,null);
+        ops.refresh();world.columns=ops;
+        var s=table(model,a);ops.table(first,s.table(),s.enthalpy());s=table(model,b);ops.table(second,s.table(),s.enthalpy());
+        return new Chain(world,ops,counting,first,second,feed,outlet,inlet,product);
+    }
+    /** One column's outlet into another's inlet: two port valves in series, or one valve bounding both. The lower target wins, each column's books stay exact, and neither gives what it does not hold (owner 2026-11-02, "Lower target wins"). */
+    @Test void aColumnsOutletFeedsAnother() {
+        for(boolean shared:new boolean[]{false,true}) {
+            var c=chain(shared,.5,.3);var world=c.world();world.runTo(9000);int m=world.model.componentCount();
+            assertTrue(world.held.isEmpty(),"no island held, shared "+shared+": "+world.held);
+            closes(c.counting(),world.ledger.column(c.first()),c.feed(),c.outlet(),m);
+            closes(c.counting(),world.ledger.column(c.second()),c.inlet(),c.product(),m);
+            double given=sum(c.counting().moles.getOrDefault(c.outlet(),new double[m])),taken=-sum(c.counting().moles.getOrDefault(c.inlet(),new double[m]));
+            assertTrue(given>100,"the line carried: "+given+" mol, "+c.ops().status(c.first())+" / "+c.ops().status(c.second()));
+            assertEquals(given,taken,5,"what one gave the other took, but for the line's own holdup");
+            var line=valves(world,c.inlet());
+            assertTrue(c.ops().status(c.first()).startsWith("LIMITED: outlet"),"the slower column limits the faster: "+c.ops().status(c.first())+" "+line);
+            if(!shared)assertEquals(1,line.stream().filter(v->v.startsWith("VALVE_OPEN")).count(),line.toString());
         }
     }
     /** Solids in the feed leave by the bottoms, every gram: what arrived is at the inlet, in the bottoms' account or given (merge review, finding 10). */

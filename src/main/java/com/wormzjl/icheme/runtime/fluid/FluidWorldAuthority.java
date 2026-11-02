@@ -934,6 +934,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(!history.isEmpty())flow=(history.getFirst().forward().massKg()-history.getFirst().reverse().massKg())/result.advancedSeconds();
             if(registration.device().actuator())for(int i=0;i<snapshot.graph().pipes().size();i++){var pipe=snapshot.graph().pipes().get(i);if(pipe.first()==nodeIndex&&!(pipe.control() instanceof FlowControl.Passive)){flow=q[i];devicePressureChange=result.endpointHeads()[i];var mode=result.endpointModes().get(i);
                 if(pipe.control() instanceof FlowControl.Valve&&ControlConstraints.dependent(snapshot.graph()).get(i))status+=" / CONTROL_CONFLICT: dependent control constraints; holding last accepted opening";
+                else if(pipe.control() instanceof FlowControl.Valve&&ControlConstraints.standing(snapshot.graph()).get(i))status+=" / STANDING_OPEN: a lower flow target on this line regulates";
                 if(pipe.control() instanceof FlowControl.Mover mover) {
                     String inlet=mode==FlowControl.Mode.INLET_WRONG_PHASE?inletReason(snapshot.graph(),i,result.advancedSeconds()):"";
                     if(mover instanceof FlowControl.Pump pump)status=PipePresentation.pumpStatus(status,pump,mode,inlet);

@@ -241,6 +241,8 @@ public final class PassiveStepSolver {
     private List<FlowControl.Mode> previousModes=List.of();
     private final Map<PassiveNetwork.Pipe.Identity,Double> acceptedOpenings=new HashMap<>();
     private double[] heldOpenings=new double[0];
+    /** The flow valves of this solve that stand open behind a lower target ({@link ControlConstraints#standing}). */
+    private BitSet standing=new BitSet();
     private static double boreArea(PassiveNetwork.Pipe pipe){return pipe.controlArea();}
     private void rememberOpenings(PassiveNetwork graph,double[] flows,double[] heads,List<FlowControl.Mode> modes){
         for(int e=0;e<graph.pipes().size();e++){var p=graph.pipes().get(e);if(!(p.control() instanceof FlowControl.Valve))continue;
@@ -357,6 +359,7 @@ public final class PassiveStepSolver {
         heldOpenings=new double[graph.pipes().size()];Arrays.fill(heldOpenings,Double.NaN);
         var conflicts=ControlConstraints.dependent(graph);
         for(int e=conflicts.nextSetBit(0);e>=0;e=conflicts.nextSetBit(e+1))heldOpenings[e]=acceptedOpenings.getOrDefault(graph.pipes().get(e).identity(),1.0);
+        standing=ControlConstraints.standing(graph);
         // An island of unconnected nodes changes nothing in a step, unless an open vessel in it gives the atmosphere its gas
         // or its spill (OpenVessel).
         if(graph.pipes().isEmpty()&&graph.scheduledTransfers().isEmpty()&&(rateOnly||graph.reservoirs().stream().noneMatch(node->OpenVessel.releasing(node)||poolHeat(node)!=0)))return new Result(graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),new double[0],dt,
@@ -382,7 +385,8 @@ public final class PassiveStepSolver {
                 if(accepted!=FlowControl.Mode.CLOSED&&accepted!=FlowControl.Mode.VALVE_OPEN&&accepted!=FlowControl.Mode.VALVE_REGULATING&&accepted!=FlowControl.Mode.VALVE_CONFLICT)
                     throw new IllegalArgumentException("Invalid accepted valve mode");
                 // A regulating flow valve whose target went to zero is closed: its regulation row would state a zero flow through its open line.
-                if(Double.isNaN(heldOpenings[edge]))modes.set(edge,accepted==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl()&&valve.targetMassFlow(1)==0?FlowControl.Mode.CLOSED:accepted);
+                if(standing.get(edge)||accepted==FlowControl.Mode.VALVE_CONFLICT&&Double.isNaN(heldOpenings[edge]))modes.set(edge,accepted==FlowControl.Mode.CLOSED?accepted:FlowControl.Mode.VALVE_OPEN);
+                else if(Double.isNaN(heldOpenings[edge]))modes.set(edge,accepted==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl()&&valve.targetMassFlow(1)==0?FlowControl.Mode.CLOSED:accepted);
             }
         }
         // A pump the previous point left on its head limit, on its suction limit or at its shutoff corner opens there;
@@ -792,14 +796,14 @@ public final class PassiveStepSolver {
             if(!Double.isNaN(equations.fixedOpenings[i]))return equations.fixedOpenings[i]==0?FlowControl.Mode.CLOSED:FlowControl.Mode.VALVE_CONFLICT;
             if(valve.bare())return FlowControl.Mode.VALVE_OPEN;
             if(!valve.pressureControl()) {
-                double target=valve.targetMassFlow(rho),band=Math.max(1e-10,1e-8*target);
-                if(target==0)return FlowControl.Mode.CLOSED;
+                double target=valve.targetMassFlow(rho),band=Math.max(1e-10,1e-8*target);boolean stands=standing.get(i);
+                if(target==0&&!stands)return FlowControl.Mode.CLOSED;
                 if(mode==FlowControl.Mode.VALVE_REGULATING) {
                     if(flow<-band)return FlowControl.Mode.CLOSED;
                     if(head<-.01||target>equations.capLimit(i,0,equations.cachedTransport[pipe.first()])*(1+1e-8))return FlowControl.Mode.VALVE_OPEN;
                 } else if(mode==FlowControl.Mode.VALVE_OPEN) {
                     if(flow<-band)return FlowControl.Mode.CLOSED;
-                    if(flow>target+band)return FlowControl.Mode.VALVE_REGULATING;
+                    if(!stands&&flow>target+band)return FlowControl.Mode.VALVE_REGULATING;
                 } else if(mode==FlowControl.Mode.CLOSED&&head>.01)return FlowControl.Mode.VALVE_OPEN;
                 return next;
             }
@@ -1907,11 +1911,13 @@ public final class PassiveStepSolver {
      * slice ({@link PortPlan}). An outlet's generator stands at its account's composition and the planned temperature, at
      * the port's pressure and its own volume, holding the account's solids in their ratio to the moles; each port's boundary valve regulates the mass flow planned for it, measured
      * by the column ({@link PortPlan#COLUMN_SENSOR}; a valve the column works is never bare). A generator already at the
-     * planned state and a target within {@link #VALVE_DEADBAND} of the valve's stand, so a steady plant keeps its graph.
+     * planned state and a target within {@link #VALVE_DEADBAND} of the valve's stand, so a steady plant keeps its graph. A
+     * valve that bounds two columns takes the lower plan.
      */
     public PassiveNetwork ports(PassiveNetwork graph,Map<Long,PortPlan> plans,Runnable checkpoint) {
         if(plans.isEmpty())return graph;
         List<PassiveNetwork.Reservoir> nodes=null;List<PassiveNetwork.Pipe> pipes=null;
+        var lowest=new HashMap<Long,Double>();for(var plan:plans.values())lowest.merge(plan.valve(),plan.massTarget(),Math::min);
         for(var plan:plans.values()) {
             int node=-1;for(int i=0;i<graph.reservoirs().size();i++)if(graph.reservoirs().get(i).id()==plan.node()){node=i;break;}
             if(node<0)continue;
@@ -1932,7 +1938,7 @@ public final class PassiveStepSolver {
             for(int e=0;e<graph.pipes().size();e++){var pipe=graph.pipes().get(e);if(pipe.control() instanceof FlowControl.Valve&&graph.reservoirs().get(pipe.first()).id()==plan.valve()){valve=e;break;}}
             if(valve<0)continue;
             var driven=pipes==null?graph.pipes().get(valve):pipes.get(valve);var law=(FlowControl.Valve)driven.control();
-            double target=plan.massTarget();
+            double target=lowest.get(plan.valve());
             if(law instanceof FlowControl.ControlValve c&&c.source()==FlowControl.ValveSource.MASS_FLOW&&PortPlan.COLUMN_SENSOR.equals(c.sensor())
                     &&(target>0||c.massTarget()==0)&&Math.abs(target-c.massTarget())<=VALVE_DEADBAND*Math.max(c.massTarget(),target)+1e-6)continue;
             var volume=law instanceof FlowControl.ControlValve c?c.volumeTarget():.01;long revision=law instanceof FlowControl.ControlValve c?c.revision():0;
@@ -2384,7 +2390,7 @@ public final class PassiveStepSolver {
             double drive=staticDrive(graph,pipe,endPressure(a,pipe.firstPort(),a.state())-endPressure(b,pipe.secondPort(),b.state()));
             if(dryA&&drive>0||dryB&&drive<0||dryA&&dryB)boundaryClosed[i]=true;
         }
-        if(!(acceptedPipes.equals(identities(graph))&&Arrays.equals(acceptedNodeIds,nodeIds(graph))))return;
+        if(!(sameLines(acceptedPipes,identities(graph))&&Arrays.equals(acceptedNodeIds,nodeIds(graph))))return;
         int edges=graph.pipes().size();
         double[] start=new double[edges];
         startPoint(graph,modes,boundaryClosed,identities(graph),null,start,new double[edges],new boolean[edges]);
