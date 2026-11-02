@@ -603,11 +603,11 @@ public final class PassiveStepSolver {
             // A confirmed emptying (keptEmptying) was decided on the network this active set states, so a mode or closure
             // change decides it again.
             if(changed)Arrays.fill(emptied,false);
-// A flow valve leaving its open pass for regulation leaves that pass's flows behind: a choked line's law flow stands on the
-// saturated law's plateau, where the full Newton step to the target crosses zero and lands further out (steam at 3.65 kg/s
-// through a valve set to 0.75: law flow 5.25, -75.9, then 48, slope 1e-11, at every step size). The regulated pass takes its
-// law flows from the balance on these modes ({@link #balanceStart}) and keeps its seeds: a junction still holding its old
-// charge is laid out on that, not on the mixture the balance sends it (a liquid reaching a gas junction went singular).
+            // A flow valve leaving its open pass for regulation leaves that pass's flows behind: a choked line's law flow stands on the
+            // saturated law's plateau, where the full Newton step to the target crosses zero and lands further out (steam at 3.65 kg/s
+            // through a valve set to 0.75: law flow 5.25, -75.9, then 48, slope 1e-11, at every step size). The regulated pass takes its
+            // law flows from the balance on these modes ({@link #balanceStart}) and keeps its seeds: a junction still holding its old
+            // charge is laid out on that, not on the mixture the balance sends it (a liquid reaching a gas junction went singular).
             if(deviceChange>=0&&deviceNext==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(deviceChange).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()) {
                 seeds=states;balanceLawFlows=balanceStart(graph,modes,boundaryClosed,keep,checkpoint).lawFlows();previousPipes=List.of();previousNodeIds=new long[0];previousFlows=new double[0];previousLawFlows=new double[0];previousHeads=new double[0];previousModes=List.copyOf(modes);continue;
             }

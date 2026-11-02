@@ -93,10 +93,15 @@ class RegulatingValveHoldTest {
      * at the junction (546 K at 176 kPa) and the liquid layout goes singular. The valve stays where its target puts it.
      */
     @Test void aLiquidProductEntersALineHoldingItsGasAndTakesNewTargets() {
-        assertTakesTargets(486,new double[]{.126,0,0,1.26,3.03,0,0,64.7,161.7,1294,2588,258.8});
-        assertTakesTargets(546.3,new double[]{0,0,0,1.87,.83,0,1.66,53.1,0,0,531,0,2549,.104});
+        assertTakesTargets(2,486,new double[]{.126,0,0,1.26,3.03,0,0,64.7,161.7,1294,2588,258.8});
+        assertTakesTargets(2,546.3,new double[]{0,0,0,1.87,.83,0,1.66,53.1,0,0,531,0,2549,.104});
     }
-    private static void assertTakesTargets(double temperature,double[] amounts) {
+    /** The line's old gas washes out of the junction a factor of 1e3 and more a job. A dry junction takes it past 1e-10 and on to nothing. */
+    @Test void aDryLineKeepsRunningWhileItsOldGasWashesOut() {
+        var last=assertTakesTargets(9,546.3,new double[]{0,0,0,1.87,.83,0,1.66,53.1,0,0,531,0,2549,.104});
+        for(var n:last.graph().reservoirs())if(n.junction()){var held=PhaseLayout.totalAmounts(n.state());double total=Arrays.stream(held).sum();assertTrue(held[MaterialTestBasis.NITROGEN]/total<1e-12);}
+    }
+    private static PassiveIntervalSolver.Result assertTakesTargets(int slices,double temperature,double[] amounts) {
         var model=FluidTestSupport.networkModel();var w=new EventPathWorld();double bore=.05,first=.25,second=.32;
         w.place(0,0,0,Kind.GENERATOR,EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,638.15,250000,pure(MaterialTestBasis.NITROGEN)),bore);
         w.place(1,0,0,Kind.PIPE,EAST,bore);
@@ -104,21 +109,25 @@ class RegulatingValveHoldTest {
         w.place(3,0,0,Kind.PIPE,EAST,bore);
         w.place(4,0,0,Kind.VOID,EAST,sink(101325,298.15),bore);
         w.runTo(200);
-        var solver=new PassiveIntervalSolver(model);
-        var rest=solver.solve(w.coordinator.snapshots().getFirst().graph(),5,PassiveIntervalSolver.Settings.defaults(),()->{},1);
-        double[] product=Arrays.copyOf(amounts,MaterialTestBasis.NETWORK+1);
-        double volume=model.flashTP(temperature,250000,product,()->{}).volume();for(int c=0;c<product.length;c++)product[c]/=volume;
-        var liquid=model.flashTP(temperature,250000,product,()->{});assertEquals(0,liquid.vaporVolume());
-        var nodes=new ArrayList<PassiveNetwork.Reservoir>();
-        for(var n:rest.graph().reservoirs())nodes.add(n.kind()==PassiveNetwork.NodeKind.GENERATOR?new PassiveNetwork.Reservoir(n.id(),n.elevation(),liquid,n.kind(),new PassiveNetwork.Inventory(n.inventory().volume(),PhaseLayout.totalAmounts(liquid),liquid.internalEnergy(),liquid.solids())):n);
-        var graph=new PassiveNetwork(nodes,rest.graph().pipes(),rest.graph().scheduledTransfers());
-        for(double target:new double[]{first,second}) {
+        // As production runs a column's line: one retained solver reset from the committed interval before each job, and each
+        // slice with a new composition at the generator and a new target at the valve (a planned port's two changes).
+        var solver=new RetainedSolver();var settings=PassiveIntervalSolver.Settings.defaults();
+        var committed=solver.solve(model,w.coordinator.snapshots().getFirst().graph(),5,settings,()->{});
+        for(int slice=0;slice<slices;slice++) {
+            double target=slice%2==0?first:second,shift=slice%2==0?0:.02;double[] product=Arrays.copyOf(amounts,MaterialTestBasis.NETWORK+1);
+            for(int c=0;c<product.length;c++)product[c]*=1+(c%2==0?shift:-shift);
+            double volume=model.flashTP(temperature,250000,product,()->{}).volume();for(int c=0;c<product.length;c++)product[c]/=volume;
+            var liquid=model.flashTP(temperature,250000,product,()->{});assertEquals(0,liquid.vaporVolume());
+            var nodes=new ArrayList<PassiveNetwork.Reservoir>();
+            for(var n:committed.graph().reservoirs())nodes.add(n.kind()==PassiveNetwork.NodeKind.GENERATOR?new PassiveNetwork.Reservoir(n.id(),n.elevation(),liquid,n.kind(),new PassiveNetwork.Inventory(n.inventory().volume(),PhaseLayout.totalAmounts(liquid),liquid.internalEnergy(),liquid.solids())):n);
             var pipes=new ArrayList<PassiveNetwork.Pipe>();
-            for(var pipe:graph.pipes())pipes.add(pipe.control() instanceof FlowControl.ControlValve?pipe.withControl(valve(target)):pipe);
-            var running=solver.solve(new PassiveNetwork(graph.reservoirs(),pipes,graph.scheduledTransfers()),5,PassiveIntervalSolver.Settings.defaults(),()->{},1);
+            for(var pipe:committed.graph().pipes())pipes.add(pipe.control() instanceof FlowControl.ControlValve?pipe.withControl(valve(target)):pipe);
+            solver.committed(committed);
+            var running=solver.solve(model,new PassiveNetwork(nodes,pipes,committed.graph().scheduledTransfers()),5,settings,()->{});
             assertEquals(FlowControl.Mode.VALVE_REGULATING,running.endpointModes().getLast());
             for(double flow:running.endpointFlows())assertEquals(target,flow,1e-6*target);
-            graph=running.graph();
+            committed=running;
         }
+        return committed;
     }
 }

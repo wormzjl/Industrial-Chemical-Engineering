@@ -42,9 +42,8 @@ every target and fluid tried (steam 3.65, nitrogen 5.57, crude 148 kg/s), so the
 ## Open: outlets still hold later
 
 The outlets now flow for some slices, then hold at pass 0, singular: BOTTOMS at tick 1588, DRAW0 and DRAW1 1673, DRAW2 1734,
-DISTILLATE 1754. Sour water and off-gas never hold. Unit two-slice cases pass, so this takes more slices. Lead, not proven: each
-held junction holds a component washing out towards nothing (nitrogen 2.7e-8 of 25 mol, others near 5e-10). Left so, the column
-fills its accounts and turns to LIMITED: outlet.
+DISTILLATE 1754. Sour water and off-gas never hold. Left so, the column fills its accounts and turns to LIMITED: outlet.
 
-Proposal for the owner: a new task traces this from the world's states with `tools/valve-hold-probes`. Whether a fading trace
-drops out of a junction is an assumption the physics does not force, so it comes back as options. Code guide: not updated, no merge asked.
+Correction: this section said "unit two-slice cases pass, so this takes more slices". Those cases ran one solver with no
+`replayStart`, off the production path, and proved nothing. Cause, gate on the production path and options: [OUTLET_HOLD_REVIEW.md](OUTLET_HOLD_REVIEW.md).
+Code guide: not updated, no merge asked.
