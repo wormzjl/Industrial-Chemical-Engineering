@@ -92,7 +92,7 @@ public final class IslandCertificate {
             for(var boundary:result.boundaries()){for(double n:boundary.moles())if(n!=0)zero=false;if(boundary.totalEnergyJoule()!=0||!boundary.solids().empty())zero=false;}
             boolean flush=false;
             // A boundary transfer at a vessel is a flush when it carries material; the wall's work on the ambient (decision
-            // D54) is booked there as energy alone, and an open vessel's vent and spill are rates a steady island repeats.
+            // D54) is booked there as energy alone, and an open vessel's vent and spill and a tower's exchange with the air are rates a steady island repeats.
             for(var boundary:result.boundaries())for(var node:after.reservoirs())if(node.id()==boundary.nodeId()&&!node.fixed()&&carriesMaterial(boundary)&&!rate(boundary))flush=true;
             flushed=flush;
             boolean closures=true,filter=false;
@@ -117,7 +117,8 @@ public final class IslandCertificate {
         }
         private static boolean rate(com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer boundary) {
             var kind=boundary.kind();
-            return kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.VENT||kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.SPILL;
+            return kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.VENT||kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.SPILL
+                ||kind==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.ATMOSPHERE;
         }
         private static boolean carriesMaterial(com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer boundary) {
             if(!boundary.solids().empty())return true;
@@ -345,11 +346,12 @@ public final class IslandCertificate {
     }
     /** The digest of what replay takes to be fixed about an island: everything but its finite inventories and states. */
     static String graphIdentity(PassiveNetwork graph) {
-        var d=new Digest();d.text("icheme-certificate-graph-identity-8");d.integer(graph.reservoirs().size());
+        var d=new Digest();d.text("icheme-certificate-graph-identity-9");d.integer(graph.reservoirs().size());
         for(var node:graph.reservoirs()) {
             d.number(node.id());d.text(node.kind().name());d.real(node.elevation());
             // A junction's volume is a numerical placeholder that a solve may move; a vessel's is its identity.
             if(!node.junction()){d.real(node.inventory().volume());d.text(node.inventory().geometry().toString());d.integer(node.inventory().open()?1:0);}
+            var tower=node.inventory().tower();d.text(tower==null?"":tower.toString());
             // A kettle's pool's facts and slice inputs (W7): a replay holds them fixed.
             var pool=node.inventory().pool();
             if(pool==null)d.integer(0);
@@ -494,7 +496,7 @@ public final class IslandCertificate {
         var pipes=new ArrayList<PipeTransfer>(recorded.pipeTransfers().size());
         for(var p:recorded.pipeTransfers())pipes.add(new PipeTransfer(p.pipeId(),scale(p.forward(),g),scale(p.reverse(),g)));
         return new PassiveIntervalSolver.Result(graphAt(to),(to-from)/20.0,recorded.averageMassFlows(),0,0,g*recorded.pumpWorkJoule(),boundaries,Map.of(),
-                recorded.endpointModes(),recorded.endpointHeads(),recorded.endpointFlows(),pipes,recorded.observations());
+                recorded.endpointModes(),recorded.endpointHeads(),recorded.endpointFlows(),pipes,recorded.observations(),recorded.towers());
     }
     private static PipeTransfer.Stream scale(PipeTransfer.Stream stream,double g) {
         var phases=stream.phaseMoles();for(var phase:phases)for(int c=0;c<phase.length;c++)phase[c]*=g;

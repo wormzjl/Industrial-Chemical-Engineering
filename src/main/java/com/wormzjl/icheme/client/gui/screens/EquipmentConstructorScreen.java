@@ -111,6 +111,7 @@ public final class EquipmentConstructorScreen extends Screen {
     private Paint paint;
     /** An air cooler's bays in parallel and in series, kept for the other kinds. */
     private ProcessUnit.Bank bank;
+    private com.wormzjl.icheme.science.equipment.TowerBank towerBank;
     /** Whether a lying drum has a boot, the player's choice kept for the other forms ({@link #hasBoot}). */
     private boolean boot;
     /** The bottom outlet's quarter turns from the front, the player's choice kept for the other forms ({@link #outlet()}). */
@@ -160,7 +161,7 @@ public final class EquipmentConstructorScreen extends Screen {
         turns.addAll(design.turns());
         nozzle = 0;
         paint = design.paint();
-        bank = design.bank();
+        bank = design.bank();towerBank=design.towerBank();
         fitConnections();
         layout = ShapeRasterizer.layout(design().shape(facing));
     }
@@ -173,7 +174,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The draft; always valid, because every stepper is clamped to the bounds of its parameter. */
     public Design design() {
         return new Design(diameter, tangentLength, form, support, new VesselPlacement(forward, right, up), trays, List.copyOf(connections), paint, bank, hasBoot(), outlet(),
-                column, List.copyOf(turns));
+                column, List.copyOf(turns),towerBank);
     }
 
     private static Skin skin() {
@@ -257,7 +258,7 @@ public final class EquipmentConstructorScreen extends Screen {
             case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentConstructorScreen::tr);
             case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
                     form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
-                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH), EquipmentConstructorScreen::tr);
+                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank), EquipmentConstructorScreen::tr);
             case CONNECTIONS -> {
                 var c = connections.isEmpty() ? null : connection();
                 int[] stations = stations();
@@ -462,6 +463,8 @@ public final class EquipmentConstructorScreen extends Screen {
                 } else tangentLength = clamp(tangentLength + step, 1, (int) EquipmentShape.MAX_TANGENT_LENGTH);
             }
             case "support" -> support = clamp(support + step, minimumSupport(), form.designed() ? ProcessUnit.maxSupport(kind) : EquipmentShape.MAX_SUPPORT);
+            case "tower_columns" -> towerBank=new com.wormzjl.icheme.science.equipment.TowerBank(clamp(towerBank.columns()+step,1,com.wormzjl.icheme.science.equipment.TowerBank.MAX_COLUMNS),towerBank.rows());
+            case "tower_rows" -> towerBank=new com.wormzjl.icheme.science.equipment.TowerBank(towerBank.columns(),clamp(towerBank.rows()+step,1,com.wormzjl.icheme.science.equipment.TowerBank.MAX_ROWS));
             case "parallel" -> bank = new ProcessUnit.Bank(clamp(bank.parallel() + step, 1, ProcessUnit.Bank.MAX_PARALLEL), bank.series());
             case "series" -> bank = new ProcessUnit.Bank(bank.parallel(), clamp(bank.series() + step, 1, ProcessUnit.Bank.MAX_SERIES));
             case "forward" -> forward = clamp(forward + step, 1, VesselPlacement.MAX_FORWARD);
@@ -666,7 +669,7 @@ public final class EquipmentConstructorScreen extends Screen {
         };
         if (form.designed()) {
             var kind = form.kind();
-            diameter = ProcessUnit.snap(kind, diameter);
+            diameter = ProcessUnit.snap(kind, before.kind()!=kind&&kind.coolingTower()?(kind==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?8:60):diameter);
             // A new kind starts at its design's second size and support; the same kind keeps the player's.
             tangentLength = unitLength(kind, before.kind() != kind ? ProcessUnit.defaultLength(kind, diameter) : tangentLength);
             if (before.kind() != kind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);

@@ -227,6 +227,8 @@ class ProcessUnitTest {
         // coils' inlets and outlets and its fuel gas towards the front.
         // The new units' faces (2026-10-18, NEW_UNITS_PLAN.md) as their designs place them; every unit kind is listed.
         var expected = Map.ofEntries(
+                Map.entry(Kind.INDUCED_DRAFT_COOLING_TOWER,Map.of(Role.HOT_WATER_INLET,"2-",Role.COLD_WATER_OUTLET,"2+")),
+                Map.entry(Kind.NATURAL_DRAFT_COOLING_TOWER,Map.of(Role.HOT_WATER_INLET,"2-",Role.COLD_WATER_OUTLET,"2+")),
                 Map.entry(Kind.EXCHANGER, Map.of(Role.TUBE_INLET, "1-", Role.TUBE_OUTLET, "1+", Role.SHELL_INLET, "1+", Role.SHELL_OUTLET, "1-")),
                 Map.entry(Kind.KETTLE, Map.of(Role.TUBE_INLET, "1+", Role.TUBE_OUTLET, "1-", Role.FEED, "1-", Role.VAPOUR_OUTLET, "1+", Role.LIQUID_OUTLET, "2+")),
                 Map.entry(Kind.AIR_COOLER, Map.of(Role.PROCESS_INLET, "1+", Role.PROCESS_OUTLET, "1-")),

@@ -1,0 +1,24 @@
+package com.wormzjl.icheme.science.fluid.network;
+
+import com.wormzjl.icheme.fluid.support.FluidTestSupport;
+import java.io.PrintWriter;
+import java.nio.file.*;
+import java.util.*;
+import org.junit.jupiter.api.Test;
+
+/** Review scratch: the marched fill's table, for fitting correlations. Not committed. */
+class TowerTableProbeTest {
+    @Test void table()throws Exception{
+        var m=FluidTestSupport.networkModel();
+        try(var out=new PrintWriter(Files.newBufferedWriter(Path.of("tmp/cooling-tower-review/table.csv")))){
+            out.println("induced,cells,area,fill,lift,loading,inlet,speed,outlet,evaporation,air,airT,airW");
+            var towers=new ArrayList<>(List.of(CoolingTower.induced(4,2,1,1),CoolingTower.induced(6,2,1,1),CoolingTower.induced(6,4,1,1),CoolingTower.induced(8,6,1,1),CoolingTower.natural(40),CoolingTower.natural(60),CoolingTower.natural(80)));
+            for(var tower:towers)for(double loading:new double[]{.02,.05,.2,.5,1,2,3,5,10,20})for(double inlet:new double[]{278.15,288.15,295,303.15,313.15,323.15,338.15,353.15})
+            for(double speed:tower.draft()==CoolingTower.Draft.INDUCED?new double[]{0,.25,.5,.75,1}:new double[]{0}){
+                double water=loading*tower.cellArea()*tower.cells();
+                var r=OldTowerTransfer.fill(m,tower,water,inlet,speed);
+                out.printf(Locale.ROOT,"%d,%d,%.6f,%.6f,%.6f,%.4f,%.2f,%.2f,%.6f,%.8f,%.6f,%.4f,%.8f%n",tower.draft()==CoolingTower.Draft.INDUCED?1:0,tower.cells(),tower.cellArea(),tower.fillDepth(),Math.max(1,tower.height()-tower.distributorHeight()),loading,inlet,speed,r.outletTemperature(),r.evaporation()/tower.cells(),r.dryAirFlow()/tower.cells(),r.airTemperature(),r.airHumidity());
+            }
+        }
+    }
+}

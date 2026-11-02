@@ -104,6 +104,11 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      * 2026-10-26-pipe-laying-system). Render thread only; weak, as above.
      */
     private static final Set<EquipmentShellBlockEntity> CLIENT_PORTS = Collections.newSetFromMap(new WeakHashMap<>());
+    /** Client: the cooling towers with a cell loaded, by level. Render thread only; weak, as above. */
+    private static final java.util.Map<Level, LoadedTowers> CLIENT_TOWERS = new WeakHashMap<>();
+    /** Client: the tower this cell counts towards, and the level's index it counts in. */
+    private LoadedTowers.@Nullable Tower tower;
+    private @Nullable LoadedTowers towers;
 
     public EquipmentShellBlockEntity(BlockPos position, BlockState state) {
         super(ModBlockEntities.EQUIPMENT_SHELL.get(), position, state);
@@ -161,6 +166,17 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         return List.copyOf(CLIENT_TANKS);
     }
 
+    /** Client: the cooling towers of {@code level} with a cell loaded. */
+    public static java.util.Collection<LoadedTowers.Tower> clientTowers(Level level) {
+        var index = CLIENT_TOWERS.get(level);
+        return index == null ? List.of() : index.all();
+    }
+
+    private void leaveTower() {
+        if (tower != null) towers.remove(tower);
+        tower = null;
+    }
+
     /** Client: the cells holding a nozzle's flange face in the client's level. */
     public static List<EquipmentShellBlockEntity> clientPortCells() {
         return List.copyOf(CLIENT_PORTS);
@@ -176,8 +192,13 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
+        leaveTower();
         if (shape == null || level == null || !level.isClientSide) return;
-        if (shape.kind() == EquipmentShape.Kind.TANK && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
+        if ((shape.kind() == EquipmentShape.Kind.TANK || shape.kind().coolingTower()) && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
+        if (shape.kind().coolingTower()) {
+            towers = CLIENT_TOWERS.computeIfAbsent(level, k -> new LoadedTowers());
+            tower = towers.add(origin(), shape, paint);
+        }
         for (var port : ShapeRasterizer.ports(shape))
             if (port.cell().equals(cell())) {
                 CLIENT_PORTS.add(this);
@@ -253,6 +274,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
+        leaveTower();
         if (level != null) FloatingRoofs.of(level).remove(worldPosition);
         if (identity != 0 && level instanceof ServerLevel serverLevel && serverLevel.getServer().isSameThread())
             FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world -> world.deviceUnloaded(identity));
@@ -518,6 +540,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
             tag.putInt("Outlet", shape.outlet());
         }
         if (shape.kind() == EquipmentShape.Kind.AIR_COOLER) tag.putIntArray("Bank", shape.bank().encode());
+        if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)tag.putIntArray("TowerBank",shape.towerBank().encode());
     }
 
     /**
@@ -525,7 +548,10 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      * default, a refused one repaired, a kind this build no longer has named as retired. Never throws.
      */
     public static ShapeRepair.Read readShape(CompoundTag tag) {
-        return ShapeRepair.read(saved(tag));
+        var read=ShapeRepair.read(saved(tag));
+        if(read.shape()==null||read.shape().kind()!=EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)return read;
+        try{return new ShapeRepair.Read(read.shape().withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank"))),null,read.repairs());}
+        catch(IllegalArgumentException invalid){var repairs=new java.util.ArrayList<>(read.repairs());repairs.add("tower bank -> one cell: "+invalid.getMessage());return new ShapeRepair.Read(read.shape(),null,repairs);}
     }
 
     /** The shape fields of {@code tag} as written, before any rule reads them. */

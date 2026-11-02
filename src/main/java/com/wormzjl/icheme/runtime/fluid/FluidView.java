@@ -10,24 +10,27 @@ import com.wormzjl.icheme.science.fluid.network.InlineFilter;
 public record FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,
                         double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                         double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,
-                        List<Outlet> outlets,Tank tank,Heat heat) {
+                        List<Outlet> outlets,Tank tank,Heat heat,Tower tower) {
+    public record Tower(com.wormzjl.icheme.science.fluid.network.CoolingTower specification,com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates rates) {}
+    public FluidView withTower(Tower value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,value);}
+    public FluidView withStatus(String value){return new FluidView(identity,inputRevision,committedTick,onlineTick,value,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower);}
     /** A tank has six faces and each face one neighbour, so it has at most six connections. */
     public static final int MAXIMUM_OUTLETS=6;
     /** Source-side convenience for devices without pipe inspection, not a wire-format fallback. */
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter){
-        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,null,List.of(),null,null);
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,null,List.of(),null,null,null);
     }
     public FluidView withPipeInfo(PipeInfo info){
         return withPipeInfo(info,intervalSeconds);
     }
     public FluidView withPipeInfo(PipeInfo info,double seconds){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank,heat);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank,heat,tower);
     }
     public FluidView withOutlets(List<Outlet> list){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank,heat);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank,heat,tower);
     }
     public FluidView withTank(Tank value){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value,heat);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value,heat,tower);
     }
     /**
      * A vessel's own geometry and what it gave the atmosphere over the last completed interval (batch
@@ -185,10 +188,10 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
     /** Every field but the heat side's: a view of a device that is not one. */
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                      double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank) {
-        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,null);
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,null,null);
     }
     public FluidView withHeat(Heat value){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,value);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,value,tower);
     }
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory) {
         this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,null,0,List.of(),null);

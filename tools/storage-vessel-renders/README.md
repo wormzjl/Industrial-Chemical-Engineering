@@ -1,5 +1,7 @@
 # storage-vessel-renders
 
+2026-10-30: `StorageRender.java` also accepts designed process units, including both cooling tower kinds. Optional `[columns rows]` after `[views]` selects a fan bank. Put compiled classes and PNGs under the owning worktree’s indexed `tmp/`; see [cooling-towers](../cooling-towers/README.md).
+
 Software renders of the floating-roof tank (`Kind.TANK`) and the storage sphere (`Kind.SPHERE`), batch
 `2026-10-21-floating-roof-tanks`, work package WP3 (geometry and placement), branch `claude/wonderful-banach-1f1152`,
 commit `a16977ab`. Offline only; nothing here is in a tracked path.

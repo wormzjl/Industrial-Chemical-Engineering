@@ -13,6 +13,17 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FluidPacketCodecTest {
+    @Test void basinDisplayPacketsRetainLevelAndAcceptedFanSpeed(){
+        var from=new TankDisplay(.5f,.5f,2,0,0xff77aacc,.2f);
+        var to=new TankDisplay(1,1,2,0,0xff77aacc,.8f);
+        var packet=new FluidNetwork.TankDisplayPayload(new BlockPos(1,64,2),new TankDisplay.Glide(from,to,100));
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            FluidNetwork.TankDisplayPayload.STREAM_CODEC.encode(buffer,packet);
+            assertEquals(packet,FluidNetwork.TankDisplayPayload.STREAM_CODEC.decode(buffer));
+            assertEquals(.5,packet.glide().at(100+FluidPresentation.BUCKET_TICKS/2.0).fanSpeed(),1e-6);
+        }finally{buffer.release();}
+    }
     /** The live payload a menu receives for {@code data} when no input reply is pending. */
     private static FluidNetwork.LiveData live(FluidNetwork.MenuData data){return new FluidNetwork.LiveData(data.view(),data.controls(),data.message());}
     private static List<Double> weights(int count){return java.util.stream.IntStream.range(0,count).mapToObj(i->0.01+i*0.002).toList();}
@@ -124,8 +135,8 @@ class FluidPacketCodecTest {
      * the live payload as a solid with its crystal record and comes back equal; a crystal made of a component off the
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
-    @Test void theProtocolIsFluidSixteenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-16",FluidNetwork.PROTOCOL);
+    @Test void theProtocolIsFluidSeventeenWithDistinctStaticAndLivePayloads() {
+        assertEquals("fluid-17",FluidNetwork.PROTOCOL);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
