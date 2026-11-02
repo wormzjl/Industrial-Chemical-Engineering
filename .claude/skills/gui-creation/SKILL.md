@@ -149,8 +149,8 @@ java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main too
 
 Both draw in the game's bitmap font from the Minecraft resources jar (`build/moddev/artifacts/`), at 464 by 254 GUI
 px (the design size), and print each column's height against its view. The fluid device pages are drawn at the size a
-window takes for them (`-Dwindow=2560x1440`, 1920x1080 by default; the tool prints the scale). Send the owner the
-sheets with `SendUserFile`.
+window takes for them (`-Dwindow=2560x1440`, 1920x1080 by default; the tool prints the scale). Show the owner the
+sheets (in the Claude app, with `SendUserFile`).
 
 ## Pitfalls
 

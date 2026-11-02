@@ -40,8 +40,8 @@ static Prototype widget() {
 - Before a builder exists, make rows with `Door.group`, `Door.switchRow`, `Door.field`, `Door.reading` and `Door.rows`.
   Once the owner picks, the rows move to the builder and the prototype calls the builder. A sheet drawn from the
   shipped builder cannot differ from the game.
-- Option sheet: two to four options, one `Prototype` each (`widget-a`, `widget-b`). Send them with `SendUserFile`, ask
-  with `AskUserQuestion`, recommend one. After the pick, delete the options from the tool and write one line in the
+- Option sheet: two to four options, one `Prototype` each (`widget-a`, `widget-b`). Show them to the owner, recommend
+  one, and let the owner pick (in the Claude app, with `SendUserFile` and `AskUserQuestion`). After the pick, delete the options from the tool and write one line in the
   History of `tools/heat-gui-renders/README.md`: what the sheet drew and which the owner picked.
 - The tools hold their own copies of the press logic, one per door. Search both for `Press.CURRENT`. When the kit
   changes how a widget draws, change every copy (the latched key of 2026-10-28), or the sheets show the owner
