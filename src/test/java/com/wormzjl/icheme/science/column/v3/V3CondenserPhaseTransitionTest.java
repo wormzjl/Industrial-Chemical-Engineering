@@ -210,10 +210,10 @@ class V3CondenserPhaseTransitionTest {
         assertFalse(success.diagnostics().solvePath().endsWith("liquid-only-condenser"));
         assertTrue(success.result().streams().stream().anyMatch(stream -> stream.streamId().equals("overhead_vapor")
                 && stream.molarFlowMolPerSecond() > 0.0));
-        assertEquals(V3InputDigest.of(selected, V3ColumnCalculator.formulationRevision(cutoff), thermo.datasetRevision(),
+        assertEquals(V3InputDigest.of(selected, V3ColumnCalculator.formulationRevision(input, cutoff), thermo.datasetRevision(),
                 V3ColumnCalculator.ASSUMPTIONS_REVISION, cutoff), success.result().inputDigest());
         V3ColumnProblem obsoleteBranch = V3ColumnProblemResolver.resolve(input, V3CondenserPhaseBranch.LIQUID_ONLY);
-        assertNotEquals(V3InputDigest.of(obsoleteBranch, V3ColumnCalculator.formulationRevision(cutoff), thermo.datasetRevision(),
+        assertNotEquals(V3InputDigest.of(obsoleteBranch, V3ColumnCalculator.formulationRevision(input, cutoff), thermo.datasetRevision(),
                 V3ColumnCalculator.ASSUMPTIONS_REVISION, cutoff), success.result().inputDigest());
         assertTrue(System.nanoTime() - started < 45_000_000_000L);
     }

@@ -36,7 +36,7 @@ public final class AssemblyPresentation<V> {
     private final Host<V> host;
     private final PresentationMailbox<V> mailbox = new PresentationMailbox<>();
     private final Map<V, AssemblyView> sent = new HashMap<>();
-    private final Set<Long> validated = new HashSet<>();
+    private final Set<Long> validated = new HashSet<>(), answered = new HashSet<>();
 
     public AssemblyPresentation(Host<V> host) {
         this.host = host;
@@ -54,7 +54,19 @@ public final class AssemblyPresentation<V> {
     /** A "Validate structure" press: queued for the next bucket; false when one already awaits it. */
     public boolean validate(V viewer, long now) {
         return mailbox.submit(viewer, now, () -> {
+            answered.add(host.master(viewer));
             if (validated.add(host.master(viewer))) host.validate(viewer);
+        });
+    }
+
+    /**
+     * An Operation tab command (batch 2026-10-28-column-operation, C7: Start, Stop, Apply): queued for the next bucket, which
+     * runs {@code action} and answers every open GUI of its master; false while the session's last command awaits its bucket.
+     */
+    public boolean act(V viewer, long now, java.util.function.Consumer<V> action) {
+        return mailbox.submit(viewer, now, () -> {
+            answered.add(host.master(viewer));
+            action.accept(viewer);
         });
     }
 
@@ -68,14 +80,15 @@ public final class AssemblyPresentation<V> {
     public void tick(long now) {
         if (now < mailbox.nextTick()) return;
         validated.clear();
+        answered.clear();
         mailbox.tick(now, viewer -> {
             if (host.valid(viewer)) return true;
             sent.remove(viewer);
             return false;
         }, viewer -> {
             var view = host.view(viewer);
-            // Every open GUI of a master validated in this bucket gets the answer, changed or not.
-            if (view == null || !validated.contains(host.master(viewer)) && view.equals(sent.get(viewer))) return;
+            // Every open GUI of a master a command reached in this bucket gets the answer, changed or not.
+            if (view == null || !answered.contains(host.master(viewer)) && view.equals(sent.get(viewer))) return;
             host.send(viewer, view);
             sent.put(viewer, view);
         });

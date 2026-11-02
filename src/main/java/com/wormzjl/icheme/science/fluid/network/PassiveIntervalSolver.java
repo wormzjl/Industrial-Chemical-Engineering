@@ -74,7 +74,12 @@ public final class PassiveIntervalSolver {
      * without a read moves no heat.
      */
     public Result solve(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads) {
+        return solve(initial,duration,settings,checkpoint,startingStep,reads,Map.of());
+    }
+    /** That solve with each running column's port planned for the interval first ({@link PassiveStepSolver#ports}, batch 2026-10-28-column-operation). */
+    public Result solve(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads,Map<Long,PortPlan> ports) {
         var committed=PassiveNetwork.sizeJunctionHoldups(initial,model);
+        committed=implicit.ports(committed,ports,checkpoint);
         committed=implicit.couple(committed,reads,carriedFlows(committed),duration,checkpoint);
         // Owner decision D33, amended by D62: a transport closure is reconsidered at each interval start, so the interval
         // starts with every one read open, and every path reads that start: the rest test, the slice's inlet decision, the
@@ -418,7 +423,7 @@ public final class PassiveIntervalSolver {
     public void replayStart(PassiveNetwork graph,Result committed) {
         graph=PassiveNetwork.sizeJunctionHoldups(graph,model);
         coldSeed=null;coldSeedFor=null;
-        boolean continued=committed!=null&&PassiveStepSolver.sameStructure(graph,committed.graph())
+        boolean continued=committed!=null&&PassiveStepSolver.sameLines(graph,committed.graph())
                 &&committed.endpointModes().size()==graph.pipes().size()&&committed.endpointFlows().length==graph.pipes().size();
         implicit.replayStart(graph,continued?committed:null);
         // The start-of-step guard and the inlet check's hysteresis (decision D6) read the committed endpoint.

@@ -700,11 +700,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** A held low limit and a heater's shortfall, as {@code FluidWorldAuthority} writes them (K). */
     private static final java.util.regex.Pattern LOW_LIMIT=java.util.regex.Pattern.compile("LOW LIMIT: the outlet is held at ([0-9.]+) K"),
-        DUTY_SHORT=java.util.regex.Pattern.compile("DUTY INSUFFICIENT: outlet ([0-9.]+) K below the set point"),SINCE=java.util.regex.Pattern.compile("since ([0-9.]+) s");
+        DUTY_SHORT=java.util.regex.Pattern.compile("DUTY INSUFFICIENT: outlet ([0-9.]+) K below the set point"),SINCE=java.util.regex.Pattern.compile("since ([0-9.]+) s"),
+        COLUMN=java.util.regex.Pattern.compile("COLUMN: part of the column at (-?[0-9]+), (-?[0-9]+), (-?[0-9]+), running");
     private String clauseText(String clause){
         if(clause.startsWith("STEADY: no flow"))return tr("no_flow");
         if(clause.startsWith("STEADY:"))return tr("flowing");
         if(clause.equals("FULL")||clause.equals("READY"))return tr("ready");
+        // A unit a running column holds (C7): the column runs it.
+        var column=COLUMN.matcher(clause);if(column.matches())return tr("status.column",column.group(1),column.group(2),column.group(3));
         var low=LOW_LIMIT.matcher(clause);if(low.matches())return tr("status.low_limit",quantity(temperatureUnit.display(Double.parseDouble(low.group(1))),temperatureUnit.symbol()));
         // A difference: the same number in kelvin and in degrees Celsius.
         var short_=DUTY_SHORT.matcher(clause);if(short_.matches())return tr("status.duty_short",quantity(Double.parseDouble(short_.group(1)),temperatureUnit.symbol()));

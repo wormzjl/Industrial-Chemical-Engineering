@@ -140,7 +140,7 @@ class V3TruncatedFlashNumericsTest {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
         double[] feed = thermo.crudeFeed("icheme:tia_juana_light").moleFractions();
         V3ThermoException failure = assertThrows(V3ThermoException.class,
-                () -> thermo.flashTP(901.0, 250000.0, feed, POLICY, thermo.newWorkspace()));
+                () -> thermo.flashTP(6001.0, 250000.0, feed, POLICY, thermo.newWorkspace()));
         assertEquals(V3ThermoException.Code.DOMAIN, failure.code());
     }
 

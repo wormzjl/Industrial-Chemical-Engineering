@@ -313,7 +313,14 @@ final class V3TruncationSupport {
     V3DryMeshState projectSeed(V3ColumnProblem problem, V3DryMeshState seed) {
         requireCompatible(Objects.requireNonNull(problem, "problem"));
         requireState(seed);
-        if (isIdentity()) return seed;
+        if (isIdentity()) {
+            boolean positive = true;
+            for (int node = 0; node < topology.nodeCount(); node++) for (int component = 0; component < componentCount; component++) {
+                positive &= !hasLiquidUnknown(problem.condenserComponentPhases(), node, component) || seed.liquidFlow(node, component) > 0.0;
+                positive &= !hasVaporUnknown(node, component) || seed.vaporFlow(node, component) > 0.0;
+            }
+            if (positive) return seed;
+        }
         double[][] liquid = new double[topology.nodeCount()][componentCount];
         double[][] vapor = new double[topology.nodeCount()][componentCount];
         double[] temperatures = new double[topology.nodeCount()];

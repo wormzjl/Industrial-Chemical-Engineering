@@ -86,7 +86,7 @@ final class V3ColumnInitializer {
             double previousLiquid = traffic;
             for (int tray = 1; tray <= topology.trayCount(); tray++) {
                 double feedAtTray = tray == topology.feedTrayNumber() ? feed : 0.0;
-                liquid[tray][component] = previousLiquid + feedAtTray;
+                liquid[tray][component] = topology.hasLiquidPhase(tray) ? previousLiquid + feedAtTray : 0.0;
                 double liquidIn = tray == 1 ? reflux : previousLiquid;
                 vapor[tray + 1][component] = liquid[tray][component] + vapor[tray][component] - liquidIn - feedAtTray;
                 if (!Double.isFinite(vapor[tray + 1][component]) || vapor[tray + 1][component] <= 0.0) {
@@ -104,11 +104,32 @@ final class V3ColumnInitializer {
             }
         }
         V3DryMeshState materialClosed = new V3DryMeshState(topology, components, liquid, vapor, temperatures);
+        if (topology.dryTopTrayCount() > 0 && problem.input().pumparounds().isEmpty() && !problem.hasSideDraws()) {
+            materialClosed = drySectionSeed(problem, feedFlash, feedComposition, materialClosed);
+            V3DryMeshState best = materialClosed;
+            double bestMerit = Double.POSITIVE_INFINITY;
+            for (int sweep = 0; sweep < 24; sweep++) {
+                try {
+                    materialClosed = projectMaterialBalancesAtFixedTemperature(problem, thermo, workspace, materialClosed);
+                    var prediction = V3EnergyShiftPredictor.predict(problem, thermo, feedFlash.molarEnthalpyJoulesPerMol(),
+                            materialClosed, workspace, V3SolveControl.UNBOUNDED);
+                    if (prediction.applied()) materialClosed = prediction.applyTo(materialClosed, topology);
+                    var residual = new V3MeshResidualEvaluator(problem, thermo, feedFlash.molarEnthalpyJoulesPerMol())
+                            .evaluate(materialClosed, workspace);
+                    double merit = residual.maximumAbsoluteScaledResidual();
+                    if (merit < bestMerit) { best = materialClosed; bestMerit = merit; }
+                    if (merit < 1e-4) break;
+                } catch (V3ThermoException | IllegalArgumentException unavailablePreconditioner) {
+                    break; // Only a seed: let the simultaneous solve judge the best finite state.
+                }
+            }
+            materialClosed = best;
+        }
         V3DryMeshState state = materialClosed;
         String trafficPolicy = refluxRatio == 0.0
                 ? "zero-reflux finite traffic seed" : "organic-reflux material-closed traffic seed";
         try {
-            if (mode == Mode.SEQUENTIAL_MATERIAL_VLE) {
+            if (mode == Mode.SEQUENTIAL_MATERIAL_VLE && topology.dryTopTrayCount() == 0) {
                 state = sequentialModularSeed(problem, thermo, workspace, materialClosed, feedFlash.vaporFraction(),
                         feedFlash.molarEnthalpyJoulesPerMol());
                 trafficPolicy = "sequential-modular PR material/VLE seed";
@@ -121,6 +142,36 @@ final class V3ColumnInitializer {
         }
         return new Seed(state, new Evidence(feedFlash.phase().name(), feedFlash.vaporFraction(),
                 trafficPolicy));
+    }
+
+    /** A dry rectifying section advects the feed-flash vapor and a finite sump boilup, without invented reflux. */
+    private static V3DryMeshState drySectionSeed(V3ColumnProblem problem,
+            V3FlashResult flash, double[] feedComposition, V3DryMeshState fallback) {
+        V3ColumnTopology topology = problem.topology();
+        int components = fallback.componentCount(), nodes = topology.nodeCount();
+        double[][] liquid = new double[nodes][components], vapor = new double[nodes][components];
+        double[] temperatures = new double[nodes];
+        java.util.Arrays.fill(temperatures, problem.input().feedTemperatureKelvin());
+        temperatures[0] = specification(problem, V3ColumnSpecification.CondenserOutletTemperature.class).kelvin();
+        double beta = flash.vaporFraction();
+        double[] x = flash.liquidComposition().length == 0 ? feedComposition : flash.liquidComposition();
+        double[] y = flash.vaporComposition().length == 0 ? feedComposition : flash.vaporComposition();
+        double total = problem.activeComponentBasis().totalFeedFlowMolPerSecond();
+        for (int c = 0; c < components; c++) {
+            int publicIndex = problem.activeComponentBasis().publicIndex(c);
+            double feedLiquid = total * (1.0 - beta) * x[publicIndex];
+            double boilup = Math.max(problem.activeComponentBasis().flowScale(c) * 1e-8, 0.25 * feedLiquid);
+            // A feed with no liquid needs the ordinary material-closed fallback, not a negative sump.
+            if (!(feedLiquid > boilup)) return fallback;
+            double upperVapor = total * beta * y[publicIndex] + boilup;
+            vapor[0][c] = topology.hasVaporPhase(0) ? (topology.hasLiquidPhase(0) ? 0.01 : 1.0) * upperVapor : 0;
+            liquid[0][c] = topology.hasLiquidPhase(0) ? upperVapor - vapor[0][c] : 0;
+            for (int n = 1; n < nodes; n++) {
+                vapor[n][c] = n <= topology.feedTrayNumber() ? upperVapor : boilup;
+                liquid[n][c] = !topology.hasLiquidPhase(n) ? 0 : n == topology.reboilerNode() ? feedLiquid - boilup : feedLiquid;
+            }
+        }
+        return new V3DryMeshState(topology, components, liquid, vapor, temperatures);
     }
 
     /**
@@ -190,6 +241,10 @@ final class V3ColumnInitializer {
     private static void solveMaterialBalancesWithPhaseFlowRatios(
             V3ColumnProblem problem, double[][] phaseFlowRatios, double[][] liquid, double[][] vapor) {
         V3ColumnTopology topology = problem.topology();
+        if (topology.dryTopTrayCount() > 0) {
+            solvePhaseAvailableMaterialBalances(problem, phaseFlowRatios, liquid, vapor);
+            return;
+        }
         double[] liquidTotals = new double[liquid.length];
         for (int node = 0; node < liquid.length; node++) liquidTotals[node] = sum(liquid[node]);
         double[] withdrawals = estimatedWithdrawals(problem, liquidTotals);
@@ -206,6 +261,34 @@ final class V3ColumnInitializer {
                         ? phaseFlowRatios[1][component] * componentLiquid[1]
                         : phaseFlowRatios[node][component] * componentLiquid[node];
             }
+        }
+    }
+
+    /** Use total component traffic as the TDMA coordinate where a liquid phase can be absent. */
+    private static void solvePhaseAvailableMaterialBalances(V3ColumnProblem problem, double[][] ratios,
+            double[][] liquid, double[][] vapor) {
+        V3ColumnTopology topology = problem.topology();
+        int nodes = topology.nodeCount();
+        double[] totals = new double[nodes];
+        for (int n = 0; n < nodes; n++) totals[n] = sum(liquid[n]);
+        double[] withdrawals = estimatedWithdrawals(problem, totals);
+        for (int c = 0; c < liquid[0].length; c++) {
+            double[] l = new double[nodes], v = new double[nodes];
+            for (int n = 0; n < nodes; n++) {
+                boolean hasLiquid = topology.hasLiquidPhase(n) && problem.condenserComponentPhases().hasLiquid(topology, n, c);
+                l[n] = !hasLiquid ? 0 : !topology.hasVaporPhase(n) ? 1 : 1.0 / (1.0 + ratios[n][c]);
+                v[n] = 1.0 - l[n];
+            }
+            double[] lower = new double[nodes], diagonal = new double[nodes], upper = new double[nodes], rhs = new double[nodes];
+            java.util.Arrays.fill(diagonal, -1.0);
+            upper[0] = v[1];
+            for (int n = 1; n < nodes; n++) {
+                lower[n] = (n == 1 ? organicRefluxFraction(problem) : 1.0 - withdrawals[n - 1]) * l[n - 1];
+                if (n + 1 < nodes) upper[n] = v[n + 1];
+                if (n == topology.feedTrayNumber()) rhs[n] = -problem.activeComponentBasis().feedFlowMolPerSecond(c);
+            }
+            double[] solution = solveTridiagonal(lower, diagonal, upper, rhs);
+            for (int n = 0; n < nodes; n++) { liquid[n][c] = l[n] * solution[n]; vapor[n][c] = v[n] * solution[n]; }
         }
     }
 
@@ -250,6 +333,7 @@ final class V3ColumnInitializer {
             }
             double liquidTotal = sum(liquid[node]);
             double vaporTotal = sum(vapor[node]);
+            if (liquidTotal == 0.0 && vaporTotal > 0.0) { ratios[node] = 1.0; continue; }
             if (!(liquidTotal > 0.0) || (node == 0 ? vaporTotal < 0.0 : !(vaporTotal > 0.0))
                     || !Double.isFinite(liquidTotal) || !Double.isFinite(vaporTotal)) {
                 throw new IllegalArgumentException("V3 material phase-ratio update has no positive phase total");
@@ -325,6 +409,7 @@ final class V3ColumnInitializer {
         V3ActiveComponentBasis active = problem.activeComponentBasis();
         double maximumChange = 0.0;
         for (int node = 1; node <= topology.reboilerNode(); node++) {
+            if (!topology.hasLiquidPhase(node)) continue;
             double temperature = temperatures[node];
             double residual = bubblePointResidual(problem, thermo, workspace, active,
                     liquidFlows[node], vaporFlows[node], node, temperature);
@@ -752,6 +837,10 @@ final class V3ColumnInitializer {
         V3ActiveComponentBasis active = problem.activeComponentBasis();
         double[][] ratios = new double[liquid.length][active.componentCount()];
         for (int node = 0; node < liquid.length; node++) {
+            if (!problem.topology().hasLiquidPhase(node)) {
+                java.util.Arrays.fill(ratios[node], 1.0);
+                continue;
+            }
             if (!problem.topology().hasVaporPhase(node)) {
                 java.util.Arrays.fill(ratios[node], 1.0);
                 continue;

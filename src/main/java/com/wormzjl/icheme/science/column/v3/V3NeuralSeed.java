@@ -60,7 +60,10 @@ public final class V3NeuralSeed {
         for (int c = 0; c < count; c++) {
             int publicIndex = problem.activeComponentBasis().publicIndex(c);
             active[publicIndex] = true;
-            for (int n = 0; n < l.length; n++) { l[n][c] = liquid[n][publicIndex]; v[n][c] = vapor[n][publicIndex]; }
+            for (int n = 0; n < l.length; n++) {
+                l[n][c] = problem.topology().hasLiquidPhase(n) ? liquid[n][publicIndex] : 0.0;
+                v[n][c] = problem.topology().hasVaporPhase(n) ? vapor[n][publicIndex] : 0.0;
+            }
         }
         for (int c = 0; c < active.length; c++) if (!active[c]) for (int n = 0; n < l.length; n++) {
             if (liquid[n][c] != 0 || vapor[n][c] != 0) throw new IllegalArgumentException("Flow on an inactive component");

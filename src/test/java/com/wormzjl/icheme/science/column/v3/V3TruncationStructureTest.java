@@ -24,7 +24,7 @@ class V3TruncationStructureTest {
                             template.assayId(), template.componentBasis(), template.feedComponentMolarFlowsMolPerSecond(),
                             template.feedTemperatureKelvin(), trays, feedTray, template.topPressurePascal(),
                             template.stagePressureDropPascal(), template.specifications());
-                    V3ColumnProblem original = V3ColumnProblemResolver.resolve(input, branch);
+                    V3ColumnProblem original = V3TruncationSupportTest.allPhaseProblem(input, branch);
                     int nodes = original.topology().nodeCount();
                     double[][] liquid = new double[nodes][2];
                     double[][] vapor = new double[nodes][2];

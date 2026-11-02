@@ -51,14 +51,14 @@ class V3DegreeOfFreedomLedgerTest {
     }
 
     @Test
-    void zeroRefluxTwoPhaseCondenserKeepsExternalLiquidAndTheFullEquationMap() {
+    void zeroRefluxKeepsCondenserLiquidAndRemovesTheDryTrayLiquidAndVle() {
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(input(0.0, standardSpecifications(0.0)),
                 V3CondenserPhaseBranch.TWO_PHASE);
 
         assertEquals(V3CondenserPhaseBranch.TWO_PHASE, problem.topology().condenserPhaseBranch());
         assertTrue(problem.topology().hasLiquidPhase(problem.topology().condenserNode()));
-        assertEquals(29, problem.degreeOfFreedomLedger().unknownCount());
-        assertEquals(29, problem.degreeOfFreedomLedger().equationCount());
+        assertEquals(27, problem.degreeOfFreedomLedger().unknownCount());
+        assertEquals(27, problem.degreeOfFreedomLedger().equationCount());
         assertTrue(problem.degreeOfFreedomLedger().isValid());
     }
 
@@ -68,9 +68,9 @@ class V3DegreeOfFreedomLedgerTest {
                 V3CondenserPhaseBranch.VAPOR_ONLY);
         V3DegreeOfFreedomLedger ledger = problem.degreeOfFreedomLedger();
 
-        assertEquals(27, ledger.unknownCount());
-        assertEquals(27, ledger.equationCount());
-        assertEquals(27, ledger.structuralRank());
+        assertEquals(25, ledger.unknownCount());
+        assertEquals(25, ledger.equationCount());
+        assertEquals(25, ledger.structuralRank());
         assertTrue(ledger.isValid());
         assertTrue(ledger.unknowns().stream().noneMatch(unknown -> unknown.id().family()
                 == V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW && unknown.id().node() == 0));

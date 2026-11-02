@@ -37,6 +37,9 @@ class EventPathWorld {
     final List<Set<Long>> committedRemovals=new ArrayList<>();
     /** Run in each tick between the topology events and the solves, where a placed island is installed and not yet solved. */
     Runnable beforeSolves=()->{};
+    /** Online ticks a job takes to complete: 0, within the tick it was dispatched in (a worker timing, batch 2026-10-28-column-operation). */
+    int lag;
+    private final Map<Long,Long> submitted=new HashMap<>();
 
     /** A world with one synchronous worker. */
     EventPathWorld(){this(1);}
@@ -61,7 +64,7 @@ class EventPathWorld {
         coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
             public int availableWorkers(){return workers-attempts.size();}
             public long nextRequestId(){return ++requests;}
-            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);submitted.put(attempt.slice().requestId(),ledger.onlineTick());commands.put(attempt.slice().requestId(),command);return true;}
             public void cancel(long request){}
         },changed->{for(var s:changed)if(s.status().startsWith("HELD"))held.add(new Held(ledger.onlineTick(),s.id(),s.clock().committedTick(),s.status()));},
                 ()->0L,new IslandCoordinator.Settings(2_000_000_000L,1_500_000_000L,64,false,100,CertificatePolicy.defaults()),ledger::onlineTick);
@@ -73,11 +76,18 @@ class EventPathWorld {
             }
             public boolean acceptsRecovery(UUID player){return true;}
             public void refused(UUID event,String reason){}
-            public void committed(Set<Long> removed,Set<Long> recompiled){committedRemovals.add(removed);}
+            public void committed(Set<Long> removed,Set<Long> recompiled){committedRemovals.add(removed);if(columns!=null)columns.committed();}
         });
         for(var island:islands)coordinator.register(island,model);
         registry.flowmeters(flowmeters);registry.load();
     }
+    /** Online ticks more that one island's jobs take: a slow island beside quick ones. */
+    final Map<Long,Integer> lags=new HashMap<>();
+
+    /** The islands whose jobs fail, as a worker's failure does: they hold. */
+    final Set<Long> failing=new HashSet<>();
+    /** The running columns the events' commits report to, where a test runs one. */
+    ColumnOperation columns;
     /** The world's default control of a device kind (FluidWorldAuthority.place). */
     static FlowControl defaultControl(Kind kind) {
         return switch(kind){case PUMP->new FlowControl.Pump(.01,500000);case COMPRESSOR->new FlowControl.Compressor(.05,3.0);case VALVE->new FlowControl.PressureValve(200000);default->new FlowControl.Passive();};
@@ -139,7 +149,10 @@ class EventPathWorld {
         if(ledger.hasPendingEvents()){registry.applyPending();coordinator.pumpIfUseful();}
         beforeSolves.run();
         for(long request:List.copyOf(attempts.keySet())) {
+            if(ledger.onlineTick()-submitted.getOrDefault(request,0L)<lag+lags.getOrDefault(attempts.get(request).islandId(),0))continue;submitted.remove(request);
             var attempt=attempts.remove(request);var command=commands.remove(request);
+
+            if(failing.contains(attempt.islandId())){coordinator.completed(attempt,Optional.empty());continue;}
             var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
             coordinator.completed(attempt,Optional.of(result));
         }

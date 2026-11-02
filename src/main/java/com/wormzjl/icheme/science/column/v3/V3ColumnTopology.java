@@ -7,8 +7,13 @@ public final class V3ColumnTopology {
     private final int trayCount;
     private final int feedTrayNumber;
     private final V3CondenserPhaseBranch condenserPhaseBranch;
+    private final int firstLiquidTray;
 
     private V3ColumnTopology(int trayCount, int feedTrayNumber, V3CondenserPhaseBranch condenserPhaseBranch) {
+        this(trayCount, feedTrayNumber, condenserPhaseBranch, 1);
+    }
+
+    private V3ColumnTopology(int trayCount, int feedTrayNumber, V3CondenserPhaseBranch condenserPhaseBranch, int firstLiquidTray) {
         if (trayCount < V3ColumnInput.MIN_STAGE_COUNT || trayCount > V3ColumnInput.MAX_STAGE_COUNT) {
             throw new IllegalArgumentException("V3 interior tray count must be in " + V3ColumnInput.MIN_STAGE_COUNT + ".."
                     + V3ColumnInput.MAX_STAGE_COUNT);
@@ -19,7 +24,16 @@ public final class V3ColumnTopology {
         this.trayCount = trayCount;
         this.feedTrayNumber = feedTrayNumber;
         this.condenserPhaseBranch = Objects.requireNonNull(condenserPhaseBranch, "condenserPhaseBranch");
+        if (firstLiquidTray < 1 || firstLiquidTray > trayCount + 1) throw new IllegalArgumentException("Invalid first liquid tray");
+        this.firstLiquidTray = firstLiquidTray;
     }
+
+    /** No reflux and no feed/cooling above this tray: the upper section has only material and energy rows. */
+    V3ColumnTopology withFirstLiquidTray(int firstLiquidTray) {
+        return new V3ColumnTopology(trayCount, feedTrayNumber, condenserPhaseBranch, firstLiquidTray);
+    }
+
+    public int dryTopTrayCount() { return firstLiquidTray - 1; }
 
     public static V3ColumnTopology twoPhase(int trayCount, int feedTrayNumber) {
         return new V3ColumnTopology(trayCount, feedTrayNumber, V3CondenserPhaseBranch.TWO_PHASE);
@@ -61,7 +75,8 @@ public final class V3ColumnTopology {
 
     public boolean hasLiquidPhase(int node) {
         requireNode(node);
-        return node != condenserNode() || condenserPhaseBranch != V3CondenserPhaseBranch.VAPOR_ONLY;
+        return node == condenserNode() ? condenserPhaseBranch != V3CondenserPhaseBranch.VAPOR_ONLY
+                : node >= firstLiquidTray;
     }
 
     public boolean hasVaporPhase(int node) {
@@ -87,17 +102,18 @@ public final class V3ColumnTopology {
     @Override
     public boolean equals(Object other) {
         return other instanceof V3ColumnTopology topology && trayCount == topology.trayCount
-                && feedTrayNumber == topology.feedTrayNumber && condenserPhaseBranch == topology.condenserPhaseBranch;
+                && feedTrayNumber == topology.feedTrayNumber && condenserPhaseBranch == topology.condenserPhaseBranch
+                && firstLiquidTray == topology.firstLiquidTray;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(trayCount, feedTrayNumber, condenserPhaseBranch);
+        return Objects.hash(trayCount, feedTrayNumber, condenserPhaseBranch, firstLiquidTray);
     }
 
     @Override
     public String toString() {
         return "V3ColumnTopology[trayCount=" + trayCount + ", feedTrayNumber=" + feedTrayNumber
-                + ", condenserPhaseBranch=" + condenserPhaseBranch + "]";
+                + ", condenserPhaseBranch=" + condenserPhaseBranch + ", dryTopTrayCount=" + dryTopTrayCount() + "]";
     }
 }

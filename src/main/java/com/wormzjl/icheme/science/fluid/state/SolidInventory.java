@@ -116,6 +116,13 @@ public record SolidInventory(List<Population> populations) {
         var merged = new ArrayList<>(populations); merged.addAll(other.populations);
         return new SolidInventory(merged);
     }
+    /** This stock less {@code taken} (which came from it), population by population, never below empty. */
+    public SolidInventory less(SolidInventory taken) {
+        if (taken.empty()) return this;
+        var left = new ArrayList<Population>();
+        for (var p : populations) left.add(new Population(p.material(), p.size(), Math.max(0, p.massKg() - taken.mass(p.key()))));
+        return new SolidInventory(left);
+    }
     public SolidInventory scale(double fraction) {
         if (!Double.isFinite(fraction) || fraction < 0) throw new IllegalArgumentException("Invalid solid scaling");
         if (fraction == 0 || empty()) return EMPTY;

@@ -57,7 +57,8 @@ public record ColumnDesign(ColumnTrays trays, double diameter) {
         if (!ColumnComponents.kettleRequired(duty) && !V3SteamFeedSpec.hasSumpFeed(input))
             throw new IllegalArgumentException("without reboiler duty the column needs stripping steam into its bottom tray");
         double diameter = builtDiameter(input.columnDiameterMetres());
-        var design = new ColumnDesign(trays.withComponents(ColumnComponents.resolve(choices, input.topPressurePascal(), duty, trays.pumparounds().size())), diameter);
+        var design = new ColumnDesign(trays.withComponents(ColumnComponents.resolve(choices, input.topPressurePascal(), duty, trays.pumparounds().size()))
+                .withOperating(ColumnOperatingPoint.of(input)), diameter);
         misfit(EquipmentShape.column(diameter, design.trays(), EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(diameter)))
                 .ifPresent(reason -> {
                     throw new IllegalArgumentException(reason);
