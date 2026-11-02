@@ -159,7 +159,7 @@ public final class SheetState {
             case STEADY -> compact ? t.get(key + "steady_short", results.passes(), time)
                     : t.get(key + "steady", results.passes(), time, sheet.streams().size(), sheet.units().size(), SheetUnits.number(2, results.massGap()), SheetUnits.number(2, results.heatGap()));
         };
-        int tone = run.status() == FlowsheetRun.Status.FAILED ? Palette.RED : run.status() == FlowsheetRun.Status.NOT_STEADY || !warnings.isEmpty() ? Palette.WARN : Palette.ACCENT;
+        int tone = run.status() == FlowsheetRun.Status.FAILED || run.status() == FlowsheetRun.Status.NOT_STEADY || !warnings.isEmpty() ? Palette.WARN : Palette.ACCENT;
         if (!warnings.isEmpty()) {
             String first = NoteText.text(warnings.getFirst(), t, sheet, units);
             head += " " + t.get(warnings.size() == 1 ? key + "warning" : key + "warnings", warnings.size(), first);

@@ -38,7 +38,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ColumnDoors {
     private static final String KEY = "column.";
-    private static final int PAGE_FEED = 1, MAX_PA = 4, MAX_STEAM = 2;
+    private static final int MAX_PA = 4, MAX_STEAM = 2;
     private static final double KMOL = 3.6;
 
     private ColumnDoors() {
@@ -57,11 +57,7 @@ public final class ColumnDoors {
     private static List<Column.Button> tabs(SheetContext x, Page page) {
         var out = new ArrayList<Column.Button>();
         int i = 0;
-        for (var tab : CalculatorColumn.tabs(page, x.t())) {
-            boolean feed = i == PAGE_FEED;
-            out.add(new Column.Button("tab/" + i, tab.text(), tab.active() && !feed, feed ? x.text("hint.column_feed") : tab.hint(), tab.latched()));
-            i++;
-        }
+        for (var tab : CalculatorColumn.tabs(page, x.t())) out.add(new Column.Button("tab/" + i++, tab.text(), tab.active(), tab.hint(), tab.latched()));
         return out;
     }
 
@@ -81,6 +77,16 @@ public final class ColumnDoors {
                 var rows = CalculatorColumn.results(new CalculatorColumn.ResultsInput(false, view.results, view.metric, streams, view.stream, view.tray, door.stages()), x.t());
                 columns = rows.two() ? List.of(rows.left(), rows.right()) : List.of(rows.right());
                 glass = new ResultGlass(x, id, door, view);
+            }
+            case FEED -> {
+                // The feed comes down its stream: the page reads it, and the stream's own door sets it.
+                var stream = x.into(id, "feed");
+                var feed = x.props(stream);
+                var u = x.units();
+                columns = List.of(List.of(Door.group(x.text("door.group.feed"), new Column.Line(stream == null ? x.text("door.none") : stream.name(), Palette.TEXT), Door.meter(c(x, "field.flow"), feed == null ? "" : u.moles(feed.moles()), u.molesUnit()),
+                        Door.meter(c(x, "field.temperature"), feed == null ? "" : u.t(feed.temperature()), symbol), Door.meter(x.text("door.pressure"), feed == null ? "" : u.p(feed.pressure()), u.pressure().symbol()))));
+                glass = stream == null ? (c, skin, box) -> {
+                } : StreamDoors.contents(x, stream, view);
             }
             case EQUIPMENT -> {
                 var pumps = new ArrayList<ColumnComponents.Pump>();
@@ -107,7 +113,7 @@ public final class ColumnDoors {
         var status = status(x, id, door, display, page);
         var foot = CalculatorColumn.footerButtons(new CalculatorColumn.Footer(false, false, true, false, symbol), x.t());
         var footer = List.of(Door.key("solve", x.text("door.solve_alone"), false, x.text("hint.run")), Door.key("templates", c(x, "templates"), false, x.text("hint.block")), foot.get(3), foot.get(4));
-        return new Door(x.t().get(Tiles.name(unit.type())), tabs(x, page), view.tab, status.text(), status.tone(), true, columns, values, glass, footer, new Door.Actions() {
+        return new Door(x.text("door.column_title"), tabs(x, page), view.tab, status.text(), status.tone(), true, columns, values, glass, footer, new Door.Actions() {
             @Override public void entry(String key, String text) {
                 write(x, id, key, text);
             }
@@ -165,7 +171,7 @@ public final class ColumnDoors {
                 for (var port : ports) if ((port.direction() == Port.Direction.IN ? x.into(id, port.id()) : x.outOf(id, port.id())) == null) free++;
                 yield free == 0 ? x.text("door.status.points_all", ports.size()) : x.text("door.status.points_free", ports.size(), free);
             }
-            default -> x.text("door.status.column", door.draws().size(), door.pumparounds().size(), door.steam().size());
+            default -> x.text("door.status.column", count(x, "draw", door.draws().size()), count(x, "pumparound", door.pumparounds().size()), count(x, "steam", door.steam().size()));
         }, Palette.ACCENT);
     }
 
@@ -263,6 +269,7 @@ public final class ColumnDoors {
         var editor = x.editor();
         int colon = key.indexOf(':');
         String head = colon < 0 ? key : key.substring(0, colon), tail = colon < 0 ? "" : key.substring(colon + 1);
+        if (key.startsWith("phase/")) view.phase = Integer.parseInt(key.substring(6));
         if (key.startsWith("tab/")) {
             view.tab = Integer.parseInt(key.substring(4));
             return;
@@ -393,6 +400,25 @@ public final class ColumnDoors {
         };
     }
 
+    private static String count(SheetContext x, String word, int n) {
+        return x.text("door.count." + word + (n == 1 ? "" : "s"), n);
+    }
+
+    /** A connection point's place in the list: what goes in, the pairs, what comes out. */
+    private static int rank(String port) {
+        return port.equals("feed") ? 0 : port.startsWith("steam/") ? 1 : port.startsWith("condenser") ? 2 : port.startsWith("reboiler") ? 3 : port.startsWith("pa/") ? 4 : port.equals("overhead") ? 5 : port.equals("distillate") ? 6
+                : port.equals("water") ? 7 : port.startsWith("draw/") ? 8 : 9;
+    }
+
+    /** A connection point's name, with its tray where it has one. */
+    private static String point(SheetContext x, ColumnDoor door, String port) {
+        int tray = port.equals("feed") ? door.feedStage() : -1;
+        for (var draw : door.draws()) if (port.equals("draw/" + draw.id())) tray = draw.tray();
+        for (var steam : door.steam()) if (port.equals("steam/" + steam.id())) tray = steam.stage();
+        String name = StreamDoors.portName(x, port);
+        return tray < 0 ? name : x.text("door.port_tray", name, tray + 1);
+    }
+
     /** The block's connection points: what each carries, read from the last run. */
     private static Door.Glass connections(SheetContext x, Flowsheet.Unit unit) {
         return (c, skin, box) -> {
@@ -405,11 +431,14 @@ public final class ColumnDoors {
             y += 14;
             var results = x.state().shown(unit.id());
             int r = 0;
-            for (var port : UnitTypes.model("column").ports(unit.params())) {
+            var door = ColumnDoor.of(unit.params());
+            var ports = new ArrayList<>(UnitTypes.model("column").ports(unit.params()));
+            ports.sort(java.util.Comparator.comparingInt(port -> rank(port.id())));
+            for (var port : ports) {
                 var stream = port.direction() == Port.Direction.IN ? x.into(unit.id(), port.id()) : x.outOf(unit.id(), port.id());
                 var props = x.props(stream);
                 if (r % 2 == 1) c.fill(box.x(), y - 3, box.right(), y + 11, DialogColumns.BAND);
-                c.text(StreamDoors.portName(x, port.id()), x0 + at[0], y, Palette.TEXT);
+                c.text(point(x, door, port.id()), x0 + at[0], y, Palette.TEXT);
                 c.text(stream == null ? x.text("door.none") : stream.name(), x0 + at[1], y, Palette.MUTED);
                 if (props != null) c.text(u.t(props.temperature()) + " " + u.temperature().symbol(), x0 + at[2], y, Palette.ACCENT);
                 double heat = results == null ? Double.NaN : heat(results, unit, port.id());

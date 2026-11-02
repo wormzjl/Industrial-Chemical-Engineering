@@ -52,4 +52,9 @@ public interface SimulatorHost {
     default boolean reader() {
         return false;
     }
+
+    /** Who edits the sheet, while this player only reads it. */
+    default @Nullable String holder() {
+        return null;
+    }
 }

@@ -135,7 +135,9 @@ public final class UnitDoors {
             }
             case "splitter" -> {
                 r.group("split", r.choice("mode", "shares", "shares", "flows"), new Column.Buttons(List.of(Door.key("add_outlet", x.text("door.add_outlet"), true, null))));
-                r.readings(Door.meter(x.text("door.sum"), r.reading("sum", .01, 1), "%"));
+                var rest = rest(x, unit);
+                if (rest == null) r.readings(Door.meter(x.text("door.sum"), r.reading("sum", .01, 1), "%"));
+                else r.readings(Door.meter(x.text("door.sum"), r.reading("sum", .01, 1), "%"), Door.meter(x.text("door.rest"), rest.name(), ""));
             }
             case "filter" -> r.readings(Door.meter(x.text("door.solids"), r.reading("solids", 1, 2), "kg/s"));
             case "drum" -> {
@@ -253,10 +255,40 @@ public final class UnitDoors {
         double duty = results.reading(unit.id(), "duty");
         return new SheetState.Status(switch (unit.type()) {
             case "exchanger", "kettle" -> x.text("door.status.exchanger", SheetUnits.megawatts(duty), SheetUnits.number(1, results.reading(unit.id(), "approach")));
-            case "fired_heater", "air_cooler" -> x.text("door.status.duty", SheetUnits.megawatts(Math.abs(duty)));
+            case "fired_heater" -> x.text("door.status.heater", SheetUnits.megawatts(Math.abs(duty)), SheetUnits.number(1, unit.params().number("limit", 0) / 1e6));
+            case "air_cooler" -> x.text("door.status.duty", SheetUnits.megawatts(Math.abs(duty)));
+            case "pump", "compressor" -> {
+                var p = x.props(x.into(unit.id(), "in"));
+                yield p == null ? x.text("door.status.solved") : x.text("door.status.mover", Door.upper(StreamDoors.phaseName(x, p)), SheetUnits.number(1, p.vapour()));
+            }
+            case "drum" -> held(x, unit);
+            case "splitter" -> {
+                var rest = rest(x, unit);
+                yield rest == null ? x.text("door.status.solved") : x.text("door.status.rest", rest.name());
+            }
             case "valve" -> x.text("door.status.valve", SheetUnits.number(1, 100 * results.reading(unit.id(), "vapour")));
             default -> x.text("door.status.solved");
         }, Palette.ACCENT);
+    }
+
+    /** The phases a vessel holds, from what came in. */
+    private static String held(SheetContext x, Flowsheet.Unit unit) {
+        var p = x.props(x.into(unit.id(), "in"));
+        if (p == null) return x.text("door.status.solved");
+        var phases = p.phases();
+        var names = new ArrayList<String>();
+        if (phases.gas() > 0) names.add(Door.lower(x.text("phase.gas")));
+        if (phases.organic() > 0) names.add(Door.lower(x.text("phase.organic")));
+        if (phases.aqueous() > 0) names.add(Door.lower(x.text("phase.aqueous")));
+        if (phases.solid() > 0) names.add(Door.lower(x.text("phase.solid")));
+        return x.text("door.status.phases", String.join(", ", names));
+    }
+
+    /** The splitter's outlet with no share or flow of its own, which takes what the others leave. */
+    private static Flowsheet.@Nullable Stream rest(SheetContext x, Flowsheet.Unit unit) {
+        for (var row : unit.params().rows("outlets"))
+            if (Double.isNaN(row.number("share", Double.NaN)) && Double.isNaN(row.number("flow", Double.NaN))) return x.outOf(unit.id(), "out/" + row.text("id", ""));
+        return null;
     }
 
     private static void write(SheetContext x, String id, String key, String text, Map<String, Quantity> entries) {
@@ -419,7 +451,7 @@ public final class UnitDoors {
         var head = new String[n + 1];
         head[0] = "";
         var labels = List.of(x.text("label.temperature", u.temperature().symbol()), x.text("label.pressure", u.pressure().symbol()), x.text("label.flow", u.molesUnit()), x.text("label.flow", u.tonnesUnit()), x.text("label.vapour"), x.text("label.density"));
-        for (int i = 0; i < n; i++) head[i + 1] = (i < inlets ? x.text("door.inlet") : x.text("door.outlet")) + " " + streams.get(i).name();
+        for (int i = 0; i < n; i++) head[i + 1] = StreamDoors.portName(x, i < inlets ? streams.get(i).to().port() : streams.get(i).from().port()) + " " + streams.get(i).name();
         rows.add(head);
         for (int r = 0; r < labels.size(); r++) {
             var row = new String[n + 1];

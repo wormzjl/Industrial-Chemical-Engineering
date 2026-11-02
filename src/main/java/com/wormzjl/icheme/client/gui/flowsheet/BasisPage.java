@@ -23,7 +23,7 @@ public final class BasisPage {
     public static List<Column.Row> rows(SheetContext x) {
         var pack = x.fluids().pack();
         var rows = new ArrayList<Column.Row>();
-        rows.add(Door.group(x.text("basis.package"), new Column.Choice(MaterialCatalog.Package.label(pack.id()), null, true, "package")));
+        rows.add(Door.group(x.text("basis.package"), new Column.Choice(x.fluids().packName(), null, true, "package")));
         rows.add(Door.group(x.text("basis.model"), new Column.Line(x.text("basis.eos"), Palette.TEXT), new Column.Line(x.text("basis.water"), Palette.TEXT), new Column.Line(pack.revision(), Palette.MUTED)));
         rows.add(Door.group(x.text("basis.solver"), Door.entry("tolerance", x.text("basis.tolerance"), "%"), Door.entry("passes", x.text("basis.passes"), "")));
         return rows;
@@ -43,7 +43,7 @@ public final class BasisPage {
     }
 
     public static String status(SheetContext x) {
-        return x.text("basis.status", MaterialCatalog.Package.label(x.fluids().pack().id()), x.fluids().axis().size() - 1);
+        return x.text("basis.status", x.fluids().packName().toLowerCase(java.util.Locale.ROOT), x.fluids().axis().size() - 1);
     }
 
     /** The first feed with a flow, whose share the table shows. */

@@ -23,8 +23,14 @@ public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.Pr
         return number(1, difference);
     }
 
+    /** A pressure at the digits a meter shows; typing keeps what the player typed, so nothing rounds on the way back. */
     public String p(double pascals) {
-        return pressure.number(pascals);
+        return number(switch (pressure) {
+            case PASCAL -> 0;
+            case KILOPASCAL -> 1;
+            case BAR -> 2;
+            case MEGAPASCAL -> 3;
+        }, pressure.display(pascals));
     }
 
     /** Mol/s as kmol over the chosen time. */

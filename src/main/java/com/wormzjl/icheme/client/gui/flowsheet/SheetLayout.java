@@ -531,7 +531,7 @@ public final class SheetLayout {
         return flat;
     }
 
-    /** A stream's name: over its longest across segment, on its longest down one where the name does not fit that; then the middle of that segment, for its tear. */
+    /** A stream's name: over its longest across segment, on its longest down one where the name does not fit that; then a place on that segment beside the name, for its tear. */
     private int[] name(int[] p, String text) {
         int across = -1, down = -1, wide = 0, tall = 0;
         for (int i = 0; i + 3 < p.length; i += 2) {
@@ -547,11 +547,11 @@ public final class SheetLayout {
         }
         if (across >= 0 && (wide >= m.width(text) + 4 || down < 0)) {
             int mx = (p[across] + p[across + 2]) / 2, my = p[across + 1];
-            return new int[]{mx, my - 8, mx, my};
+            return new int[]{mx, my - 8, mx + Math.max(0, Math.min(m.width(text) / 2 + 11, wide / 2 - 8)), my};
         }
         if (down >= 0) {
             int mx = p[down], my = (p[down + 1] + p[down + 3]) / 2;
-            return new int[]{mx, my, mx, my};
+            return new int[]{mx, my, mx, my + Math.max(0, Math.min(16, tall / 2 - 8))};
         }
         return new int[]{p.length > 0 ? p[0] : 0, p.length > 1 ? p[1] : 0, 0, 0};
     }

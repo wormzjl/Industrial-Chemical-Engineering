@@ -52,6 +52,7 @@ public final class SheetPainter {
                 boolean free = overlay != null && overlay.freed() != null && overlay.freed().equals(place);
                 p.square(place.x(), place.y(), SheetLayout.PORT, place.held() && !free ? PortColours.CONNECTED : place.rgb());
             }
+        if (selected != null && !selected.unit()) ends(p, layout.line(selected.id()));
         for (var line : layout.lines()) {
             if (line.stream().id().equals(hidden) || !line.hasName() || !p.labels()) continue;
             boolean tear = state.tear(line.stream().id());
@@ -64,6 +65,14 @@ public final class SheetPainter {
         }
         if (overlay != null) overlay(p, overlay, t);
         c.unclip();
+    }
+
+    /** A selected line's ends on their ports, ringed. */
+    private static void ends(FlowsheetPainter p, SheetLayout.@Nullable Line line) {
+        if (line == null || line.points().length < 4) return;
+        int[] q = line.points();
+        if (line.start() == null) p.canvas().outline(p.x(q[0]) - 4, p.y(q[1]) - 4, 9, 9, WHITE);
+        if (line.end() == null) p.canvas().outline(p.x(q[q.length - 2]) - 4, p.y(q[q.length - 1]) - 4, 9, 9, WHITE);
     }
 
     private static void grid(Canvas c, SheetView view) {
@@ -84,7 +93,7 @@ public final class SheetPainter {
         boolean ringed = tone == SheetState.Tone.ACTIVE || selected != null && selected.unit() && selected.id().equals(box.unit().id());
         if (ringed) p.canvas().outline(p.x(r.x()) - 3, p.y(r.y()) - 3, p.px(r.w()) + 6, p.px(r.h()) + 6, Palette.TEXT);
         if (!p.labels()) return;
-        for (var mark : box.marks()) p.tag(t.get(mark.key(), mark.argument()), mark.x(), mark.y(), .5f, Palette.TEXT, PLATE);
+        for (var mark : box.marks()) p.tag(t.get("flowsheet." + mark.key(), mark.argument()), mark.x(), mark.y(), .5f, Palette.TEXT, PLATE);
         p.tag(box.unit().name(), box.tagX(), box.tagY(), box.tagAnchor(), tone == SheetState.Tone.WARNING ? Palette.WARN : Palette.TEXT, PLATE);
     }
 
@@ -97,7 +106,7 @@ public final class SheetPainter {
         for (int k = -ph; k < pw; k += 8) p.line(x0 + k, y1, x0 + k + ph, y0, HATCH);
         c.unclip();
         if (!p.labels()) return;
-        p.fitted(box.unit().type(), r.x() + r.w() / 2, r.y() + r.h() / 2 - 6, r.w(), Look.RED.text());
+        p.fitted(Tiles.typeName(box.unit().type()), r.x() + r.w() / 2, r.y() + r.h() / 2 - 6, r.w(), Look.RED.text());
         p.fitted(t.get("flowsheet.removed_mark"), r.x() + r.w() / 2, r.y() + r.h() / 2 + 6, r.w(), Look.RED.text());
     }
 
@@ -105,7 +114,11 @@ public final class SheetPainter {
     public static void sprite(Canvas c, Symbol s, double x, double y, double w, double h, Look look) {
         double sx = w / s.w, sy = h / s.h;
         float x0 = (float) (x - Symbol.MARGIN * sx), x1 = (float) (x + w + Symbol.MARGIN * sx), y0 = (float) (y - s.top() * sy), y1 = (float) (y + h + s.foot() * sy);
-        for (var layer : s.layers()) c.sprite(s.sprite(layer), x0, y0, x1, y1, tint(layer, look));
+        for (var layer : s.layers()) {
+            c.sprite(s.sprite(layer), x0, y0, x1, y1, tint(layer, look));
+            // Below its own size a stroke thins under a pixel and fades: a second pass holds its colour.
+            if (layer == Symbol.Layer.MARKS && sx < .9) c.sprite(s.sprite(layer), x0, y0, x1, y1, tint(layer, look));
+        }
     }
 
     private static int tint(Symbol.Layer layer, Look look) {
@@ -174,7 +187,7 @@ public final class SheetPainter {
         double x = p.ox() + (overlay.x() - w / 2.0) * p.scale(), y = p.oy() + (overlay.y() - h / 2.0) * p.scale();
         if (tile.type().equals("column")) columnTile(c, (int) x, (int) y, p.px(16), p.px(44), GHOST);
         else sprite(c, tile.symbol(), x, y, w * p.scale(), h * p.scale(), GHOST);
-        p.tag(t.get(tile.name()), overlay.x(), overlay.y() - h / 2 - 7, .5f, Palette.TEXT, PLATE);
+        p.tag(overlay.name() == null ? t.get(tile.name()) : overlay.name(), overlay.x(), overlay.y() - h / 2 - 7, .5f, Palette.TEXT, PLATE);
     }
 
     private static void rings(FlowsheetPainter p, List<SheetLayout.Place> rings) {

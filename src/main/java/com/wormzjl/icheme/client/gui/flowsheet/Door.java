@@ -100,6 +100,16 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
     }
 
     /** A selector's position: a key that acts unless it stands here. */
+    /** A name inside a sentence: its first letter small, unless it is an abbreviation. */
+    public static String lower(String text) {
+        return text.length() < 2 || !Character.isLowerCase(text.charAt(1)) ? text : Character.toLowerCase(text.charAt(0)) + text.substring(1);
+    }
+
+    /** A word that opens a sentence. */
+    public static String upper(String text) {
+        return text.isEmpty() ? text : Character.toUpperCase(text.charAt(0)) + text.substring(1);
+    }
+
     public static Column.Button position(String id, String text, boolean latched) {
         return new Column.Button(id, text, !latched, null, latched);
     }

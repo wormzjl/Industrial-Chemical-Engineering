@@ -3,6 +3,7 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
@@ -168,12 +169,18 @@ public final class ResultsPage {
         c.unclip();
     }
 
+    /** A name in its cell: a bracket that does not fit goes first. */
+    private static String fitted(Measure m, String name, int w) {
+        int bracket = name.lastIndexOf(" (");
+        return m.cut(m.width(name) > w && bracket > 0 ? name.substring(0, bracket) : name, w);
+    }
+
     private static int table(Canvas c, Rect box, List<String[]> rows, int x0, int y, int cell) {
         var m = c.measure();
         for (int r = 0; r < rows.size() && y + 10 < box.bottom(); r++, y += ROW) {
             if (r % 2 == 1) c.fill(box.x(), y - 2, box.right() - 10, y + 10, DialogColumns.BAND);
             var cells = rows.get(r);
-            c.text(m.cut(cells[0], FIRST - 4), x0, y, Palette.TEXT);
+            c.text(fitted(m, cells[0], FIRST - 4), x0, y, Palette.TEXT);
             for (int i = 1; i < cells.length; i++) c.text(cells[i], x0 + FIRST + i * cell - m.width(cells[i]), y, Palette.ACCENT);
         }
         return y;
@@ -253,12 +260,17 @@ public final class ResultsPage {
     }
 
     private static String stateOf(SheetContext x, @Nullable Flowsheet.Stream in, @Nullable Flowsheet.Stream out) {
+        return stateOf(x, in, out, true);
+    }
+
+    private static String stateOf(SheetContext x, @Nullable Flowsheet.Stream in, @Nullable Flowsheet.Stream out, boolean pressure) {
         var u = x.units();
         var a = x.props(in);
         var b = x.props(out);
         if (in == null || out == null) return in != null ? in.name() : out != null ? out.name() : "";
         String head = x.text("results.from_to", in.name(), out.name());
         if (a == null || b == null) return head;
+        if (!pressure) return head + ": " + x.text("results.span_t", u.t(a.temperature()), u.t(b.temperature()), u.temperature().symbol());
         return head + ": " + x.text("results.span", u.t(a.temperature()), u.t(b.temperature()), u.temperature().symbol(), u.p(a.pressure()), u.p(b.pressure()), u.pressure().symbol());
     }
 
@@ -292,9 +304,11 @@ public final class ResultsPage {
         var rows = new ArrayList<String[]>();
         String id = unit.id();
         double power = results.reading(id, "power"), duty = results.reading(id, "duty");
+        // A cooler takes heat out of its stream, and reads below zero as the sheet's other coolers would.
+        if (unit.type().equals("air_cooler")) duty = -Math.abs(duty);
         String work = !Double.isNaN(power) ? SheetUnits.number(1, power / 1e3) + " kW" : !Double.isNaN(duty) ? SheetUnits.megawatts(duty) + " MW" : "0";
         switch (unit.type()) {
-            case "exchanger", "kettle" -> rows.add(new String[]{SheetUnits.megawatts(Math.abs(duty)) + " MW", x.text("results.sides", stateOf(x, x.into(id, "tube_in"), x.outOf(id, "tube_out")), stateOf(x, x.into(id, "shell_in"), x.outOf(id, "shell_out")))});
+            case "exchanger", "kettle" -> rows.add(new String[]{SheetUnits.megawatts(Math.abs(duty)) + " MW", x.text("results.sides", stateOf(x, x.into(id, "tube_in"), x.outOf(id, "tube_out"), false), stateOf(x, x.into(id, "shell_in"), x.outOf(id, "shell_out"), false))});
             case "column" -> {
                 for (var part : parts(results, unit)) {
                     var report = results.report(part);
@@ -333,6 +347,8 @@ public final class ResultsPage {
             lines.add(x.text(loop.closed() ? "results.loop_closed" : "results.loop_open", String.join(", ", tears), loop.passes()));
             tones.add(Palette.TEXT);
         }
+        lines.add(x.state().status(x.t(), x.units(), false).text());
+        tones.add(Palette.TEXT);
         for (var note : NoteText.all(results.run())) {
             lines.add(NoteText.text(note, x.t(), sheet, x.units()));
             tones.add(note.severity() == Note.Severity.ERROR ? Palette.RED : note.severity() == Note.Severity.WARNING ? Palette.WARN : Palette.TEXT);

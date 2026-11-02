@@ -191,9 +191,11 @@ public final class SimulatorPage {
     public static void results(Canvas c, Skin skin, SheetContext x, ResultsPage.State state, SimulatorFrame frame, int w) {
         int bottom = frame.bottom(), door = SimulatorFrame.RESULT_DOOR;
         skin.vDivider(c, door + 3, SimulatorFrame.DOOR_TOP, bottom);
-        var column = SimulatorFrame.doorColumn(ResultsPage.rows(x, state), door, x.m());
-        var list = skin.well(c, ResultsPage.list(column, bottom));
-        ResultsPage.drawList(c, skin, x, state, list);
+        if (state.view == ResultsPage.View.STREAMS) {
+            var column = SimulatorFrame.doorColumn(ResultsPage.rows(x, state), door, x.m());
+            var list = skin.well(c, ResultsPage.list(column, bottom));
+            ResultsPage.drawList(c, skin, x, state, list);
+        }
         var box = skin.well(c, new Rect(door + 9, 71, w - door - 14, bottom - 71));
         ResultsPage.draw(c, skin, x, state, box);
     }
@@ -205,19 +207,22 @@ public final class SimulatorPage {
         BasisPage.draw(c, x, skin.well(c, new Rect(door + 9, 71, w - door - 14, bottom - 71)));
     }
 
-    /** What the status says on a tab, a refusal or a gesture's prompt first. */
-    public static SheetState.Status status(SheetContext x, SimulatorFrame.Tab tab, SheetGestures gestures, SheetEditor editor, boolean compact) {
+    /** What the status says on a tab, a refusal or a gesture's prompt first; {@code holder} is who edits a sheet this player only reads. */
+    public static SheetState.Status status(SheetContext x, SimulatorFrame.Tab tab, ResultsPage.State results, SheetGestures gestures, SheetEditor editor, boolean compact, @Nullable String holder) {
         var refusal = editor.refusal();
         if (refusal != null) return new SheetState.Status(x.t().get(refusal.key(), refusal.arguments().toArray()), Palette.WARN);
         String lifted = gestures.lifted();
         if (lifted != null) return new SheetState.Status(x.text("status.reconnect", editor.stream(lifted).name()), Palette.ACCENT);
-        return x.state().status(x.t(), x.units(), compact);
+        if (tab == SimulatorFrame.Tab.RESULTS) return new SheetState.Status(ResultsPage.status(x, results), Palette.ACCENT);
+        if (tab == SimulatorFrame.Tab.BASIS) return new SheetState.Status(BasisPage.status(x), Palette.ACCENT);
+        var status = x.state().status(x.t(), x.units(), compact);
+        return holder == null ? status : new SheetState.Status(x.text("status.reader", holder, Door.lower(status.text())), status.tone());
     }
 
     /** Draws the page the screen stands on; returns the hover. */
-    public static @Nullable String draw(Canvas c, Skin skin, SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SheetView view, SheetGestures gestures, ResultsPage.State results, int category, SheetEditor editor, KitDoor kit, String title, double mouseX, double mouseY) {
+    public static @Nullable String draw(Canvas c, Skin skin, SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SheetView view, SheetGestures gestures, ResultsPage.State results, int category, SheetEditor editor, KitDoor kit, String title, @Nullable String holder, double mouseX, double mouseY) {
         int w = frame.status().w() + 20, h = frame.bottom() + SimulatorFrame.BOTTOM;
-        back(c, skin, status(x, tab, gestures, editor, frame.size() != SimulatorFrame.Size.WIDE), title, frame, w, h);
+        back(c, skin, status(x, tab, results, gestures, editor, frame.size() != SimulatorFrame.Size.WIDE, holder), title, frame, w, h);
         switch (tab) {
             case FLOWSHEET -> {
                 var box = flowsheet(c, skin, x, frame, view, gestures, editor, category);

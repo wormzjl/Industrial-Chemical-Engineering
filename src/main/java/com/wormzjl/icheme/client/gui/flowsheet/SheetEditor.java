@@ -261,6 +261,16 @@ public final class SheetEditor {
         return prefix + n;
     }
 
+    /** The tag a unit of {@code type} would take now; a stream's for a feed or product tile. */
+    public String nextName(String type) {
+        return type.equals(Tiles.FEED) || type.equals(Tiles.PRODUCT) ? nextStream() : free(names(), Tiles.prefix(type) + "-", 101);
+    }
+
+    /** The name a new stream would take now. */
+    public String nextStream() {
+        return free(names(), "S-", 1);
+    }
+
     /** Adds a unit of {@code type} with its top left at the point, tagged by its kind; its id, or null if refused. */
     public @Nullable String addUnit(String type, int x, int y) {
         var ids = sheet.units().stream().map(Flowsheet.Unit::id).toList();

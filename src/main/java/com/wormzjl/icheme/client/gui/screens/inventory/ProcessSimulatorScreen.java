@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.client.gui.screens.inventory;
 
 import com.wormzjl.icheme.client.ClientConfig;
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
@@ -42,6 +43,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -49,8 +51,10 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -66,7 +70,7 @@ public final class ProcessSimulatorScreen extends Screen {
     private static final String FOLDER = "IChemE/flowsheets";
 
     private enum Dialog {
-        NONE, OPEN, SAVE_AS, TEMPLATES, REPLACE
+        NONE, OPEN, SAVE_AS, TEMPLATES, REPLACE, CHANGES
     }
 
     private final SimulatorHost host;
@@ -88,13 +92,18 @@ public final class ProcessSimulatorScreen extends Screen {
     private String signature = "";
     private @Nullable String hovered;
     private Rect canvasBox = new Rect(0, 0, 0, 0);
+    private boolean placed;
+    private @Nullable Flowsheet opening;
+    private String openingName = "";
 
     public ProcessSimulatorScreen(Component title, Flowsheet sheet, SimulatorHost host) {
         super(title);
         this.host = host;
         var catalog = MaterialRuntime.active();
         String network = sheet.basis().packageId();
-        fluids = new StreamProps.Fluids(FluidThermodynamics.forNetwork(catalog, network), catalog.requirePackage(network), id -> ProcessUi.materialName(catalog.name(id)));
+        var pack = catalog.requirePackage(network);
+        String packName = Component.translatableWithFallback("gui.icheme.flowsheet.basis.pack." + MaterialCatalog.Package.label(pack.id()).replace(':', '.'), MaterialCatalog.Package.label(pack.id())).getString();
+        fluids = new StreamProps.Fluids(FluidThermodynamics.forNetwork(catalog, network), pack, id -> ProcessUi.materialName(catalog.name(id)), packName);
         editor = new SheetEditor(sheet, measure(), ProcessSimulatorScreen::columnDefaults);
         editor.lock(host.reader());
         gestures = new SheetGestures(editor, view, this::open);
@@ -164,7 +173,8 @@ public final class ProcessSimulatorScreen extends Screen {
     }
 
     private SkinButton add(Column.Button spec, Rect at) {
-        var button = SkinButton.of(spec, at, this::act, ProcessSimulatorScreen::skin);
+        var button = SkinButton.of(spec, at, door == null || dialog != Dialog.NONE ? this::act : this::actDoor, ProcessSimulatorScreen::skin);
+        if (spec.key().equals("run") && spec.active()) button.primary(true);
         addRenderableWidget(button);
         return button;
     }
@@ -172,15 +182,32 @@ public final class ProcessSimulatorScreen extends Screen {
     private void simulatorWidgets(SheetContext x) {
         var slots = SimulatorPage.frameKeys(x, tab, frame, host, editor);
         for (var slot : slots) add(slot.button(), slot.rect());
+        themeKey(frame.theme());
         canvasBox = SimulatorFrame.inner(frame.well());
         if (tab == SimulatorFrame.Tab.FLOWSHEET) {
             view.layout(canvasBox);
+            if (!placed) {
+                // A small window opens on the whole sheet; a wide one at its own size.
+                placed = true;
+                if (frame.size() != SimulatorFrame.Size.WIDE) view.fit(editor.layout().bounds());
+            }
             var selected = gestures.selected();
             if (selected != null && !(selected.unit() ? editor.unit(selected.id()) == null : editor.stream(selected.id()) == null)) panelWidgets(x, selected);
             for (var slot : SimulatorPage.canvasKeys(x, frame, canvasBox, category)) add(slot.button(), slot.rect());
             nameWidget();
         } else if (tab == SimulatorFrame.Tab.RESULTS) pageWidgets(ResultsPage.rows(x, resultsState), Map.of(), SimulatorFrame.RESULT_DOOR);
         else if (tab == SimulatorFrame.Tab.BASIS) pageWidgets(BasisPage.rows(x), BasisPage.values(x), SimulatorFrame.BASIS_DOOR);
+    }
+
+    /** The contrast sign; its hover names the panel shown. */
+    private void themeKey(Rect at) {
+        String theme = lang(ClientConfig.theme() == ClientConfig.Theme.DARK ? "fluid.theme.dark" : "fluid.theme.light");
+        var key = new SkinButton(at.x(), at.y(), at.w(), at.h(), Component.literal(theme), b -> {
+            ClientConfig.toggleTheme();
+            rebuildWidgets();
+        }, ProcessSimulatorScreen::skin).icon(Skin.Icon.THEME);
+        key.setTooltip(Tooltip.create(Component.literal(theme + "\n").append(Component.translatable("gui.icheme.fluid.theme.hint"))));
+        addRenderableWidget(key);
     }
 
     private void nameWidget() {
@@ -238,6 +265,7 @@ public final class ProcessSimulatorScreen extends Screen {
 
     private void doorWidgets(Door shown) {
         int w = doorWidth(), h = doorHeight(), left = doorLeft(), top = doorTop();
+        themeKey(CalculatorColumn.theme(w).moved(left, top));
         var tabs = DoorFrame.tabs(shown, w);
         for (int i = 0; i < shown.tabs().size(); i++) add(shown.tabs().get(i), tabs.get(i).moved(left, top));
         var m = GuiCanvas.measure(font);
@@ -279,6 +307,12 @@ public final class ProcessSimulatorScreen extends Screen {
             add(new Column.Button("dialog/save", lang("flowsheet.file.save"), true, null), slots.get(1).moved(left, top));
             return;
         }
+        if (dialog == Dialog.CHANGES) {
+            var slots = DialogColumns.footer(w, h, 2);
+            add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
+            add(new Column.Button("dialog/load", lang("flowsheet.file.open"), true, null), slots.get(1).moved(left, top));
+            return;
+        }
         var list = SimulatorPage.listing(dialog.name(), x, files, chosen);
         var slots = DialogColumns.footer(w, h, list.keys().length);
         for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], true, null), slots.get(i).moved(left, top));
@@ -313,7 +347,10 @@ public final class ProcessSimulatorScreen extends Screen {
             case "file/save_as" -> dialog = Dialog.SAVE_AS;
             case "export" -> export(x);
             default -> {
-                if (key.startsWith("tab/")) tab = SimulatorFrame.Tab.values()[Integer.parseInt(key.substring(4))];
+                if (key.startsWith("tab/")) {
+                    tab = SimulatorFrame.Tab.values()[Integer.parseInt(key.substring(4))];
+                    if (tab == SimulatorFrame.Tab.RESULTS) ResultsPage.first(x, resultsState);
+                }
                 else if (key.startsWith("category/")) category = Integer.parseInt(key.substring(9));
                 else if (key.equals("category-") || key.equals("category+")) category = Math.floorMod(category + (key.endsWith("+") ? 1 : -1), com.wormzjl.icheme.client.gui.flowsheet.Tiles.CATEGORIES.size());
                 else if (key.startsWith("unit/")) unitKey(key.substring(5));
@@ -415,10 +452,19 @@ public final class ProcessSimulatorScreen extends Screen {
             }
             return;
         }
+        if (key.equals("load")) {
+            if (opening != null) load(opening);
+            dialog = Dialog.NONE;
+            return;
+        }
         int index = Integer.parseInt(key);
         var list = SimulatorPage.listing(dialog.name(), x, files, chosen);
         if (index == 0) {
             dialog = Dialog.NONE;
+            return;
+        }
+        if (dialog == Dialog.OPEN && index == 1) {
+            Util.getPlatform().openPath(folder());
             return;
         }
         if (index != list.primary() || chosen < 0) return;
@@ -427,9 +473,14 @@ public final class ProcessSimulatorScreen extends Screen {
                 var entry = files.get(chosen);
                 if (!entry.opens()) return;
                 try {
-                    editor.load(FlowsheetFile.open(entry.file()));
-                    gestures.select(null);
-                    door = null;
+                    var sheet = FlowsheetFile.open(entry.file());
+                    if (!FileColumns.changes(sheet, ProcessSimulatorScreen::lang).isEmpty()) {
+                        opening = sheet;
+                        openingName = entry.name();
+                        dialog = Dialog.CHANGES;
+                        return;
+                    }
+                    load(sheet);
                 } catch (IOException gone) {
                     return;
                 }
@@ -440,6 +491,12 @@ public final class ProcessSimulatorScreen extends Screen {
             }
         }
         dialog = Dialog.NONE;
+    }
+
+    private void load(Flowsheet sheet) {
+        editor.load(sheet);
+        gestures.select(null);
+        door = null;
     }
 
     private void export(SheetContext x) {
@@ -455,7 +512,7 @@ public final class ProcessSimulatorScreen extends Screen {
 
     @Override public boolean mouseClicked(double x, double y, int button) {
         if (dialog != Dialog.NONE) {
-            var list = dialog == Dialog.SAVE_AS ? null : SimulatorPage.listing(dialog.name(), context(), files, chosen);
+            var list = dialog == Dialog.SAVE_AS || dialog == Dialog.CHANGES ? null : SimulatorPage.listing(dialog.name(), context(), files, chosen);
             if (list != null) {
                 int row = FileColumns.rowAt(list, FileColumns.W, FileColumns.H, x - (width - FileColumns.W) / 2.0, y - (height - FileColumns.H) / 2.0);
                 if (row >= 0) chosen = row;
@@ -473,6 +530,7 @@ public final class ProcessSimulatorScreen extends Screen {
         }
         if (super.mouseClicked(x, y, button)) return true;
         if (tab == SimulatorFrame.Tab.RESULTS) {
+            if (resultsState.view != ResultsPage.View.STREAMS) return false;
             var c = context();
             var column = SimulatorFrame.doorColumn(ResultsPage.rows(c, resultsState), SimulatorFrame.RESULT_DOOR, c.m());
             String id = ResultsPage.tick(c, ResultsPage.list(column, frame.bottom()), x, y);
@@ -561,7 +619,7 @@ public final class ProcessSimulatorScreen extends Screen {
             g.pose().popPose();
         } else {
             var canvas = new GuiCanvas(g, font, 0, 0);
-            hovered = SimulatorPage.draw(canvas, skin, x, tab, frame, view, gestures, resultsState, category, editor, kit, title.getString(), mouseX, mouseY);
+            hovered = SimulatorPage.draw(canvas, skin, x, tab, frame, view, gestures, resultsState, category, editor, kit, title.getString(), host.holder(), mouseX, mouseY);
         }
         super.render(g, mouseX, mouseY, partial);
         KitDoor.hint(g, font, hovered, mouseX, mouseY);
@@ -574,6 +632,7 @@ public final class ProcessSimulatorScreen extends Screen {
         g.pose().translate(left, top, 0);
         skin().page(canvas, new Rect(0, 0, w, h));
         if (dialog == Dialog.SAVE_AS) skin().title(canvas, 10, 10, lang("flowsheet.file.save_title"));
+        else if (dialog == Dialog.CHANGES && opening != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.changes_title", openingName), FileColumns.changes(opening, ProcessSimulatorScreen::lang), lang("flowsheet.file.changes_foot"), w, h);
         else FileColumns.draw(canvas, skin(), SimulatorPage.listing(dialog.name(), x, files, chosen), w, h);
         g.pose().popPose();
     }

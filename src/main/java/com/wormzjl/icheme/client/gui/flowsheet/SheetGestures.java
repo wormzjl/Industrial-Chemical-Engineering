@@ -131,11 +131,12 @@ public final class SheetGestures {
         }
         switch (hit.kind()) {
             case PORT -> {
-                selected = new Selection(true, hit.unit());
-                if (hit.place().held()) grab(hit.unit());
-                else if (editor.editable()) {
+                if (!hit.place().held() && editor.editable()) {
                     port = hit.place();
                     mode = Mode.DRAW;
+                } else {
+                    selected = new Selection(true, hit.unit());
+                    if (hit.place().held()) grab(hit.unit());
                 }
             }
             case UNIT, NAME -> {
@@ -306,7 +307,7 @@ public final class SheetGestures {
         if (hit.kind() == SheetLayout.Kind.PILL) start = hit.start();
         else if (hit.kind() == SheetLayout.Kind.NAME) start = nearerStart(line.points(), segmentAt(line), view.designX(x), view.designY(y));
         else start = nearerStart(line.points(), hit.segment(), view.designX(x), view.designY(y));
-        selected = new Selection(false, id);
+        selected = null;
         mode = Mode.RECONNECT;
         return true;
     }
@@ -401,11 +402,11 @@ public final class SheetGestures {
         int cx = (int) Math.round(view.designX(lastX)), cy = (int) Math.round(view.designY(lastY));
         switch (mode) {
             case DROP -> {
-                return new Overlay(null, null, null, List.of(), tile, null, snap(cx), snap(cy));
+                return new Overlay(null, null, null, List.of(), tile, editor.nextName(tile.type()), snap(cx), snap(cy));
             }
             case DRAW -> {
                 boolean from = port.direction() == com.wormzjl.icheme.science.flowsheet.Port.Direction.OUT;
-                return new Overlay(elbow(port.x(), port.y(), cx, cy), null, null, rings(!from, null), null, null, cx, cy);
+                return new Overlay(elbow(port.x(), port.y(), cx, cy), null, null, rings(!from, null), null, editor.nextStream(), cx, cy);
             }
             case RECONNECT -> {
                 var line = layout().line(id);

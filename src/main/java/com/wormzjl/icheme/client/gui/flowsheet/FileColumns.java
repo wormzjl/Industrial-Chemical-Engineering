@@ -89,8 +89,8 @@ public final class FileColumns {
         try {
             var sheet = FlowsheetFile.open(file);
             long unknown = sheet.units().stream().filter(u -> Tiles.symbol(u.type()) == null).count();
-            String size = t.get("flowsheet.file.units", sheet.units().size());
-            return new Entry(file, name, size, when, unknown == 0 ? t.get("flowsheet.file.ready") : t.get("flowsheet.file.look", unknown), unknown != 0, true);
+            String size = t.get(sheet.units().size() == 1 ? "flowsheet.file.unit" : "flowsheet.file.units", sheet.units().size());
+            return new Entry(file, name, size, when, unknown == 0 ? t.get("flowsheet.file.ready") : t.get(unknown == 1 ? "flowsheet.file.look_one" : "flowsheet.file.look", unknown), unknown != 0, true);
         } catch (FlowsheetFailure refused) {
             boolean newer = refused.key().equals("file.newer");
             return new Entry(file, name, "", when, t.get(newer ? "flowsheet.file.newer_state" : "flowsheet.file.damaged_state"), true, false);
@@ -116,7 +116,7 @@ public final class FileColumns {
     /** What changed on opening a sheet. */
     public static List<String[]> changes(Flowsheet sheet, HeatControlColumn.Texts t) {
         var lines = new ArrayList<String[]>();
-        for (var unit : sheet.units()) if (Tiles.symbol(unit.type()) == null) lines.add(new String[]{t.get("flowsheet.file.change_unit"), t.get("flowsheet.file.change_removed", unit.name(), unit.type())});
+        for (var unit : sheet.units()) if (Tiles.symbol(unit.type()) == null) lines.add(new String[]{t.get("flowsheet.file.change_unit"), t.get("flowsheet.file.change_removed", unit.name(), Tiles.typeName(unit.type()))});
         return lines;
     }
 

@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.client.gui.flowsheet;
 
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import java.util.ArrayList;
@@ -43,6 +44,11 @@ public final class SimulatorFrame {
 
     public Size size() {
         return size;
+    }
+
+    /** The theme key on the title row, where every door has it. */
+    public Rect theme() {
+        return CalculatorColumn.theme(w);
     }
 
     public List<Rect> tabs() {

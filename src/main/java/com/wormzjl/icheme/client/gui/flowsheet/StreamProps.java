@@ -29,7 +29,8 @@ public record StreamProps(double temperature, double pressure, double vapour, do
     }
 
     /** The world's package as the screen reads it: its thermo, its list, a component's display name. */
-    public record Fluids(FluidThermodynamics model, MaterialCatalog.Package pack, Function<String, String> names) {
+    /** @param packName the package as a player reads it */
+    public record Fluids(FluidThermodynamics model, MaterialCatalog.Package pack, Function<String, String> names, String packName) {
         public List<String> axis() {
             return model.components();
         }

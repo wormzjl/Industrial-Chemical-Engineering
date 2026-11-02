@@ -10,7 +10,7 @@ import org.jetbrains.annotations.Nullable;
 public final class SheetView {
     public static final double LEAST = .25, MOST = 2, STEP = 1.25;
     /** Fit leaves this much room round a sheet, in canvas pixels. */
-    private static final int ROOM = 16;
+    private static final int ROOM = 6;
 
     private double zoom = 1, x, y;
     private Rect box = new Rect(0, 0, 0, 0);
