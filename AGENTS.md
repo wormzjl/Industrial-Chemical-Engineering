@@ -58,7 +58,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - Run at most two Gradle invocations at a time on the machine, each in its own worktree, and only if neither measures time. A run that measures time (benchmarks, wall-time cost gates) runs alone. Never run a test suite while a dev client is running.
 - When two runs overlap, judge cost by counters. Replay a wall-clock budget hold alone before you count it.
 - Large solver campaigns use 8 to 10 worker threads and never overlap another campaign of that size. A run on the second Gradle lane uses at most 4 worker threads.
-- `./gradlew test` is the quick suite. `./gradlew test slowGates` (or `check`) runs everything. Run both before a merge.
+- `./gradlew test` is the quick suite. `./gradlew test slowGates` (or `check`) runs everything. Only the final lane runs them whole, once per batch.
 - Use the least measurement that decides the task:
   - Compare forms on the 200-seed quick check (all distributions). Compare at most three forms per task, then choose one.
   - Run one full campaign (1000 seeds, all distributions, 8 workers) for the chosen form only. Do not replay worse seeds alone. Replay alone only new budget-class holds (classes C and F not in the baseline), batched in one run.
@@ -68,6 +68,20 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
   - Take counters from the campaign. Do not make separate per-seed Newton runs.
   - Split a hold class by mechanism only when the task targets that class, on the final code, with the existing classifier script.
 - Reports are at most 50 lines.
+
+### No repeated tests
+
+- Never run a test again if neither the test nor anything it loads changed since it last passed. That pass stands.
+- Before every test run, list the files changed since the last pass and the tests that can load them. Run only those tests, with `--tests`. If there are none, do not run.
+  - Documents, `tools/`, comments, `AGENTS.md`, `CHANGELOG.md`: no test run.
+  - A test removed, or test code left without a user removed: `compileTestJava` only. Prove the removal from the test names in the stored results.
+  - A test added or edited: that test class.
+  - Production code: the tests of the changed classes and the gates that name the rule.
+- Run a whole task (`test`, `slowGates`, `check`) only in the final lane, once per batch, when the code is final. Do not run one to confirm a fix, between commits, or after a cleanup or an archive.
+- Gradle reruns a whole task when one file of that task changes. Narrow the run with `--tests` instead of letting it.
+- Read stored results first: `build/test-results`, the lane's output, the batch review. If they answer the question, do not run.
+- Do not force a result again: no `--rerun-tasks`, `--no-build-cache`, `cleanTest` or deleted `build/`. An up-to-date or restored task counts as run.
+- The only exception is a rule in this file that asks for a replay (a wall-clock budget hold, a gate proved with its rule disabled). Use `--rerun` on that one filtered test task.
 
 ### GUI and in-game checks
 
@@ -132,4 +146,4 @@ A documentation-only merge changes only `documentation/`, `tools/`, `AGENTS.md` 
 - The folder's row in `tools/INDEX.md` holds only the folder, the purpose in a few words, the batch and the status with its date.
 - Each tool folder has a `README.md` with its purpose, the batch it served, how to run it, its entry points and its history. For code removed from a tracked path, the README also gives the removing commit and how to re-attach it: source files plus a patch against that commit, so that `git show <sha>:<path>` and the stored copy agree.
 - The batch review names the tool folders.
-- A cleanup does not widen or narrow a gate suite. Re-run the gates after it, record them in the batch review, and add a `CHANGELOG.md` line for the detached code.
+- A cleanup does not widen or narrow a gate suite. After it, run only what it can affect (see "No repeated tests"), record that in the batch review, and add a `CHANGELOG.md` line for the detached code.
