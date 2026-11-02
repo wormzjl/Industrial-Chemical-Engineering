@@ -473,8 +473,8 @@ class NetworkPhaseEngineTest {
 
     /**
      * Water holding a trace of crude boils alone as well, whatever the crude's vapour pressure: the gas cannot hold more
-     * hydrocarbon than there is, 2e-4 of it here, so the balance at water's saturation stands, 5 mK over the exact answer,
-     * from two TP answers where the search takes 25. With 100 mol of water per mol of crude the gas is 2 % hydrocarbon and
+     * hydrocarbon than there is, 2e-4 of it here, so the balance at water's saturation stands, 6 mK over the exact answer,
+     * from two TP answers where the search takes 24. With 100 mol of water per mol of crude the gas is 2 % hydrocarbon and
      * the search answers.
      */
     @Test

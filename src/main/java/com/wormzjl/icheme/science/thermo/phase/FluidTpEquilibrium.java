@@ -167,7 +167,7 @@ public final class FluidTpEquilibrium {
     /**
      * The largest share of the gas the hydrocarbons may hold for the free water beside them to boil alone, at water's
      * saturation with no hydrocarbon vapour ({@link #waterBoiling}). Above it they share the gas and the water leaves through
-     * the three-phase zone the TP answers resolve (crude with water at 2 bar: 8 to 14 mol of hydrocarbon vapour per 100,
+     * the three-phase zone the TP answers resolve (crude with water at 2 bar: 12 to 14 mol of hydrocarbon vapour per 100,
      * 11 to 17 K under the saturation). Below it the water boils at the wet liquid's bubble point, {@code y R T^2 / L} under
      * the saturation (at this bound 30 mK at 1 bar, 90 mK at 60 bar), over a zone that can be narrower than the search's
      * bracket: the step stays the water's. At 1e-4 the targets of a clean heavy cut were lost at 30 and 60 bar, its bracket

@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Fixed
+
+- PH and UV flashes on wet oil (commits `5e9fd2b9`, `be052e63`; batch `2026-11-02-ph-false-root`, review `PH_FALSE_ROOT_REVIEW.md`): free water boils alone, at its saturation with no hydrocarbon vapour, only where the hydrocarbons would hold at most 1e-3 of its gas. Crude with water no longer answers its energy at water's saturation, up to 20 K off with the enthalpy met; its hydrocarbon vapour and three-phase zone come back. Sweeps and lane in `tools/ph-false-root/`.
+
 ## [0.17.1] - 2026-10-28
 
 ### Changed
