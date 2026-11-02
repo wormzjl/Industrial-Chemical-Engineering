@@ -2,7 +2,7 @@
 
 Purpose: why the cold LNG worlds with CO2 crystals reach the 2 s island wall budget, and a proposal for a fundamental fix.
 
-Status: In progress since 2026-11-02. Analysis finished, no code changed; the proposal waits for the owner.
+Status: In progress since 2026-11-02. Analysis finished. The owner chose mode (a), then form G (2026-11-03); the build follows `CARRIED_CRYSTALS_PLAN.md`.
 
 ## History
 
@@ -13,11 +13,13 @@ Status: In progress since 2026-11-02. Analysis finished, no code changed; the pr
 
 - 2026-11-02: step control traced by an Opus high subagent on the owner's word (`STEP_CONTROL_REVIEW.md`). The extra attempts are solid DEPOSITION closures searched to 1 us, not phase crossings or the state cap; the phase check decides 1.2 % of its calls and is not the stage responsible.
 - 2026-11-03: orchestrator's check sent the review back: plan line 93 names the delayed closure, option 3 was misdescribed, the final state shifts could be attributed, and the gate also refuses large steps. Forms A, F and G measured with (b+) standing in for mode (a), and F on today's thermo. Recommendation: G on (a), which reverses plan lines 79 and 93 and waits for the owner. No code changed.
+- 2026-11-03: the owner chose "Build (a), then G" and accepted the reversal for deposition, bounded by D/v_s. main (0.19.0) merged into the branch (30ee73822); seed 855 reproduces its reference on it. Reading the engine showed that (a) as the review wrote it would read a vapour feed stable through the upper half of the two-phase region, so the plan filters dense phases and product checks only and states the stand-in in the engine. The owner sent the build to an Opus high thread.
 
 ## Documents
 
 - [DRY_ICE_COST_REVIEW.md](DRY_ICE_COST_REVIEW.md): physics, the measured time split, the prototypes, the proposal of mode (a).
 - [STEP_CONTROL_REVIEW.md](STEP_CONTROL_REVIEW.md): the step controller in the heaviest jobs, the three closure forms, the binding rule, the recommendation.
+- [CARRIED_CRYSTALS_PLAN.md](CARRIED_CRYSTALS_PLAN.md): the design of mode (a) and form G, the order of work, the harness, the reference table.
 
 ## Code areas
 
@@ -32,8 +34,8 @@ Status: In progress since 2026-11-02. Analysis finished, no code changed; the pr
 
 ## Open items
 
-1. Owner: whether to build mode (a). Everything measured so far stands on (b+), which cannot land.
-2. Owner: form G, which reverses plan lines 79 and 93 for DEPOSITION, or form F, which keeps them and leaves holds.
+1. Mode (a) is unmeasured: everything measured so far stands on (b+), which cannot land.
+2. Form G on (a) is unmeasured.
 3. Stalls at a closure's start: 257 under F with (b+), 0.117 under F on today's thermo, 2.017 under A without (b+), and 855's 0.1059. Unexplained; G avoids them without explaining them.
 4. 683's stall at 0.354: (b+) cures it, and mode (a) may not.
 5. 907's 10 holds under (b+), and the margins of 651 (1.28x) and 244 (0.78x, job 57 not traced).
