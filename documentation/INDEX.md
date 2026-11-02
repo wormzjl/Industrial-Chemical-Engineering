@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-02-tp-steam-refusal/](2026-11-02-tp-steam-refusal/README.md) | TP flash of one hydrocarbon beside steam, and PH and UV at its true step | In progress since 2026-11-02 |
 | [2026-11-02-ph-false-root/](2026-11-02-ph-false-root/README.md) | PH and UV false root on wet oil: free water boils alone only where the hydrocarbons hold next to none of the gas | In progress since 2026-11-02 |
 | [2026-11-02-docs-large-files/](2026-11-02-docs-large-files/README.md) | Keep large files out of documentation/: rule, ignore patterns, move to research/ | Implemented 2026-11-02 |
 | [2026-10-28-drum-outlet-placement/](2026-10-28-drum-outlet-placement/README.md) | A lying boot drum's oil outlet at the bottom of its front end, not mid-height on the head | Implemented 2026-10-28 (0.17.1) |

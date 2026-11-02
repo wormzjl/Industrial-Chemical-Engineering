@@ -42,6 +42,8 @@ public final class PhProbe {
     }
 
     static Map<String, double[]> feeds() {
+        if (pureFeeds) return pureFeeds();
+        if (nearFeeds) return nearFeeds();
         double[] crude = Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE).crudeFeed("icheme:tia_juana_light_methane").moleFractions(), size);
         var feeds = new LinkedHashMap<String, double[]>();
         for (double ratio : new double[] {0.01, 0.2, 1.0, 5.0}) {
@@ -163,6 +165,37 @@ public final class PhProbe {
         }
     }
 
+    static boolean nearFeeds;
+    /** One component with a trace of its neighbour, beside water: a sharp cut from a column. */
+    static Map<String, double[]> nearFeeds() {
+        var feeds = new LinkedHashMap<String, double[]>();
+        int top = size - 2;
+        int[] mains = {top / 2, size - 3};
+        String[] names = {"mid", "heavy"};
+        for (int k = 0; k < mains.length; k++) for (double trace : new double[] {0, 1e-9, 1e-6, 1e-4, 1e-2}) for (double ratio : new double[] {.3, 1e-3}) {
+            double[] f = new double[size];
+            f[mains[k]] = 1;
+            f[mains[k] - 1] = trace;
+            f[water] = ratio;
+            feeds.put(names[k] + " tr" + trace + " w" + ratio, f);
+        }
+        return feeds;
+    }
+
+    static boolean pureFeeds;
+    /** One hydrocarbon beside water, light to heavy, water short and in excess: the true three-phase step at p_sat + P_v = P. */
+    static Map<String, double[]> pureFeeds() {
+        var feeds = new LinkedHashMap<String, double[]>();
+        var axis = m.components();
+        for (int i : new int[] {2, 6, 9, 12, 15, 18}) for (double ratio : new double[] {.03, .3, 3, 30}) {
+            double[] f = new double[size];
+            f[i] = 1;
+            f[water] = ratio;
+            feeds.put(axis.get(i) + " w" + ratio, f);
+        }
+        return feeds;
+    }
+
     static boolean traceFeeds;
     /** Water holding a trace of hydrocarbons: the gas can hold no more hydrocarbon than there is. */
     static Map<String, double[]> traceFeeds() {
@@ -212,9 +245,9 @@ public final class PhProbe {
     static void step(Path out) throws Exception {
         try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(out))) {
             w.println("feed\tP\tTsat\tT3\tTd\tshare\tfraction\ttarget\tok\tT\thcV\tsteam\tcond\tbal\tcalls\tdetail");
-            for (var entry : (traceFeeds ? traceFeeds() : stepFeeds()).entrySet()) {
+            for (var entry : (pureFeeds ? pureFeeds() : traceFeeds ? traceFeeds() : stepFeeds()).entrySet()) {
                 double[] n = scaled(entry.getValue());
-                int tried = 0, fail = 0, bal = 0, calls = 0, max = 0;
+                int tried = 0, fail = 0, bal = 0, calls = 0, max = 0, uvMiss = 0;
                 for (double p : new double[] {1e5, 2e5, 5e5, 10e5, 30e5, 60e5}) {
                     double ts = saturation(p);
                     // T3: the highest temperature with no gas at all, from below.
@@ -249,16 +282,81 @@ public final class PhProbe {
                         tried++; if (!ok) fail++; calls += c; max = Math.max(max, c);
                         if (ok && ph.diagnostics().coexistenceFromBalance()) bal++;
                         String detail = String.valueOf(ph.detail()).replace('\t', ' ');
+                        if (pureFeeds && ok && Math.abs(ph.enthalpy() - target) > 1e-6 * 100 * 8.314 * t(ph)) {
+                            System.out.printf(Locale.ROOT, "  clamped %s P %.0f f %.1f: H %.3f target %.3f at T %.5f%n", entry.getKey(), p, f, ph.enthalpy(), target, t(ph));
+                        }
+                        if (pureFeeds && ok) {
+                            var back = e.crystalUv(ph.internalEnergy(), ph.volume(), n, false, Double.NaN, Double.NaN);
+                            boolean same = back.converged() && !back.phases().isEmpty() && Math.abs(t(back) - t(ph)) < 1e-3 && Math.abs(p(back) / p - 1.0) < 1e-3
+                                    && Math.abs(hcVapour(back) - hcVapour(ph)) < 1e-4 * n.length;
+                            if (!same) {
+                                uvMiss++;
+                                detail = "UV " + (back.converged() ? String.format(Locale.ROOT, "T %.4f P %.0f hcV %.5f vs T %.4f hcV %.5f", t(back), p(back), hcVapour(back), t(ph), hcVapour(ph)) : String.valueOf(back.detail()).replace('\t', ' '));
+                            }
+                        }
                         w.printf(Locale.ROOT, "%s\t%.0f\t%.6f\t%.7f\t%.7f\t%.4g\t%.1f\t%.4f\t%b\t%.7f\t%.6g\t%.6g\t%.6g\t%b\t%d\t%s%n", entry.getKey(), p, ts, t3, td, share, f, target, ok, ok ? t(ph) : Double.NaN, ok ? hcVapour(ph) : Double.NaN, ok ? steam(ph) : Double.NaN, ok ? condensed(ph) : Double.NaN,
-                                ok && ph.diagnostics().coexistenceFromBalance(), c, ok ? "" : detail.substring(0, Math.min(120, detail.length())));
+                                ok && ph.diagnostics().coexistenceFromBalance(), c, ok && !detail.startsWith("UV ") ? "" : detail.substring(0, Math.min(120, detail.length())));
                     }
                 }
-                System.out.printf(Locale.ROOT, "step %-22s targets %3d fail %3d balance %3d calls mean %5.1f max %3d%n", entry.getKey(), tried, fail, bal, (double) calls / Math.max(1, tried), max);
+                System.out.printf(Locale.ROOT, "step %-22s targets %3d fail %3d balance %3d calls mean %5.1f max %3d uvMiss %d%n", entry.getKey(), tried, fail, bal, (double) calls / Math.max(1, tried), max, uvMiss);
             }
         }
     }
 
     /** The zone around T_sat at one pressure: the rule's own answers, to read where gas appears and the water dries out. */
+    /** Every state the TP flash refuses, with its reason; per feed and reason the count and the T range. */
+    static void refusals(Path out) throws Exception {
+        try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(out))) {
+            w.println("feed\tT\tP\tdetail");
+            for (var entry : feeds().entrySet()) {
+                double[] n = scaled(entry.getValue());
+                var counts = new LinkedHashMap<String, int[]>();
+                var range = new LinkedHashMap<String, double[]>();
+                for (double t : TS) for (double p : PS) {
+                    boolean crystals = m.crystalsCompete(t, n);
+                    var tp = e.tp(t, p, n, crystals);
+                    if (tp.converged()) continue;
+                    String detail = String.valueOf(tp.detail()).replace('\t', ' ');
+                    w.printf(Locale.ROOT, "%s\t%.2f\t%.0f\t%s%n", entry.getKey(), t, p, detail);
+                    String key = detail.replaceAll("[-+]?[0-9][0-9.eE+-]*", "#");
+                    key = key.substring(0, Math.min(90, key.length()));
+                    counts.computeIfAbsent(key, k -> new int[1])[0]++;
+                    double[] r = range.computeIfAbsent(key, k -> new double[] {t, t, p, p});
+                    r[0] = Math.min(r[0], t); r[1] = Math.max(r[1], t); r[2] = Math.min(r[2], p); r[3] = Math.max(r[3], p);
+                }
+                for (var c : counts.entrySet()) {
+                    double[] r = range.get(c.getKey());
+                    System.out.printf(Locale.ROOT, "%-14s %3d  T %.0f..%.0f  P %.0f..%.0f  %s%n", entry.getKey(), c.getValue()[0], r[0], r[1], r[2], r[3], c.getKey());
+                }
+            }
+        }
+    }
+
+    /** One feed's failing round trips, grouped by reason, with the phases of the TP state. */
+    static void whyfail(String name) {
+        double[] n = scaled(feeds().get(name));
+        var counts = new java.util.TreeMap<String, Integer>();
+        var states = new java.util.TreeMap<String, List<String>>();
+        for (double t : TS) for (double p : PS) {
+            boolean crystals = m.crystalsCompete(t, n);
+            var tp = e.tp(t, p, n, crystals);
+            if (!tp.converged()) continue;
+            String phases = hcVapour(tp) > 0 ? "hcV" : "";
+            if (steam(tp) > 0) phases += "+steam";
+            if (condensed(tp) > 0) phases += "+water";
+            for (var kind : List.of("PH", "UV")) {
+                var answer = kind.equals("PH") ? e.ph(p, tp.enthalpy(), n, crystals) : e.crystalUv(tp.internalEnergy(), tp.volume(), n, crystals, Double.NaN, Double.NaN);
+                boolean ok = answer.converged() && !answer.phases().isEmpty();
+                if (ok) continue;
+                String key = kind + " " + String.valueOf(answer.detail()).replaceAll("[-+]?[0-9][0-9.eE+-]*", "#");
+                key = key.substring(0, Math.min(100, key.length()));
+                counts.merge(key, 1, Integer::sum);
+                states.computeIfAbsent(key, k -> new ArrayList<>()).add(String.format(Locale.ROOT, "%.0f/%.0f%s", t, p / 1e5, phases.isEmpty() ? "" : ":" + phases));
+            }
+        }
+        counts.forEach((k, v) -> { var s = states.get(k); System.out.printf(Locale.ROOT, "%3d %s%n      %s%n", v, k, String.join(" ", s.subList(0, Math.min(14, s.size())))); });
+    }
+
     static void scan(String name, double p, double from, double to, double step) {
         double[] n = scaled(feeds().get(name));
         System.out.printf(Locale.ROOT, "== %s P %.0f Tsat %.5f%n", name, p, saturation(p));
@@ -282,8 +380,41 @@ public final class PhProbe {
                     case "names" -> { System.out.println(m.components()); System.out.println("contract " + e.engine().contract().components().equals(m.components()) + " water " + e.engine().contract().waterIndex()); feeds().forEach((k, v) -> System.out.println(k + " present " + Arrays.stream(v).filter(x -> x > 0).count())); }
                     case "trips" -> trips(Path.of(args[1]));
                     case "gap" -> gap(Path.of(args[1]));
+                    case "whyfail" -> whyfail(args[1]);
+                    case "refusals" -> refusals(Path.of(args[1]));
+                    case "nearrefusals" -> { nearFeeds = true; refusals(Path.of(args[1])); }
+                    case "neartrips" -> { nearFeeds = true; trips(Path.of(args[1])); }
+                    case "neargap" -> { nearFeeds = true; gap(Path.of(args[1])); }
                     case "step" -> step(Path.of(args[1]));
                     case "traces" -> { traceFeeds = true; step(Path.of(args[1])); }
+                    case "tpcost" -> {
+                        for (String name : List.of("pure-mid+w", "crude+w0.2", "heavy1+w")) {
+                            double[] n = scaled(feeds().get(name));
+                            for (double t : new double[] {370, 382, 450}) for (double p : new double[] {1e5, 5e5}) {
+                                for (int warm = 0; warm < 3000; warm++) e.tp(t, p, n, false);
+                                long start = System.nanoTime();
+                                int calls = 3000;
+                                boolean ok = true;
+                                for (int k = 0; k < calls; k++) ok &= e.tp(t, p, n, false).converged();
+                                System.out.printf(Locale.ROOT, "%-12s T %.0f P %.0f ok %b %8.1f us%n", name, t, p, ok, (System.nanoTime() - start) * 1e-3 / calls);
+                            }
+                        }
+                    }
+                    case "uvat" -> {
+                        nearFeeds = args.length > 4;
+                        double[] n = scaled(feeds().get(args[1]));
+                        double t = Double.parseDouble(args[2]), p = Double.parseDouble(args[3]);
+                        var tp = e.tp(t, p, n, false);
+                        System.out.printf(Locale.ROOT, "TP %s H %.3f U %.3f V %.9g hcV %.6g steam %.6g cond %.6g%n", tp.converged(), tp.enthalpy(), tp.internalEnergy(), tp.volume(), hcVapour(tp), steam(tp), condensed(tp));
+                        var uv = e.crystalUv(tp.internalEnergy(), tp.volume(), n, false, Double.NaN, Double.NaN);
+                        System.out.printf(Locale.ROOT, "UV %s outer %d: %s%n", uv.converged(), uv.diagnostics().outerIterations(), uv.detail());
+                        if (uv.converged()) System.out.printf(Locale.ROOT, "   T %.6f P %.3f%n", t(uv), p(uv));
+                        var ph = e.ph(p, tp.enthalpy(), n, false);
+                        System.out.printf(Locale.ROOT, "PH %s outer %d: %s%n", ph.converged(), ph.diagnostics().outerIterations(), ph.detail());
+                        if (ph.converged()) System.out.printf(Locale.ROOT, "   T %.6f hcV %.6g%n", t(ph), hcVapour(ph));
+                    }
+                    case "purestep" -> { pureFeeds = true; step(Path.of(args[1])); }
+                    case "purescan" -> { pureFeeds = true; scan(args[1], Double.parseDouble(args[2]), Double.parseDouble(args[3]), Double.parseDouble(args[4]), Double.parseDouble(args[5])); }
                     case "scan" -> scan(args[1], Double.parseDouble(args[2]), Double.parseDouble(args[3]), Double.parseDouble(args[4]), Double.parseDouble(args[5]));
                     default -> throw new IllegalArgumentException(args[0]);
                 }

@@ -4,13 +4,13 @@
 #   base: main in a scratch worktree: test slowGates (printed lines) and the campaign with the ported harness;
 #   head: this branch: test slowGates, chain-100 exact, fluid GameTests on a fresh run id, the campaign.
 # Usage: bash lane.sh <base|head> [steps...]   steps: test regression gametest campaign (default: all for head,
-# test campaign for base). Logs and reports in tmp/ph-false-root/lane/<side>/.
+# test campaign for base). Logs and reports in tmp/ph-false-root/lane/<side>/, or $LANE_OUT/<side>; $LANE_RUN is a fresh GameTest run id.
 set -u
 HEAD_WT=$(git rev-parse --show-toplevel)
 BASE_WT=$HEAD_WT
 side=${1:?usage: lane.sh <base|head> [steps]}; shift
 case $side in base) WT=$BASE_WT; steps=${*:-test campaign};; head) WT=$HEAD_WT; steps=${*:-test regression gametest campaign};; *) exit 2;; esac
-OUT=$HEAD_WT/tmp/ph-false-root/lane/$side; mkdir -p "$OUT"
+OUT=$HEAD_WT/${LANE_OUT:-tmp/ph-false-root/lane}/$side; mkdir -p "$OUT"
 FORMS=$HEAD_WT/tools/unified-thermo-port-forms
 CLASSIFY=$HEAD_WT/tools/phase-ports-probes/hold-fuzz/classify.sh
 PRINTED=$HEAD_WT/tools/floating-roof-tanks/final-lane/printed.sh
@@ -32,7 +32,7 @@ for s in $steps; do
           grep -hoE '<testsuite [^>]*>' "$OUT"/results/*.xml | grep -oE '(tests|failures|errors|skipped)="[0-9]+"' | awk -F'"' '{s[$1]+=$2} END{for(k in s) printf "%s%d ", k, s[k]; print ""}'
           bash "$PRINTED" "$OUT/results" "$OUT/printed.txt"; grep -E '^(LiquidJunctionTransientTest|MixedGasJunctionTransientTest) ' "$OUT/printed.txt" > "$OUT/junction.txt"; wc -l < "$OUT/junction.txt";;
     regression) gradle "$OUT/chain-100.gradle.txt" --no-configuration-cache fluidSolverRegression -PfluidRegressionMode=exact; grep -iE "max|differ|exact|BUILD" "$OUT/chain-100.gradle.txt" | tail -5;;
-    gametest) gradle "$OUT/gametests.gradle.txt" --no-configuration-cache runFluidGameTestServer -PfluidGameTestRunId=ph-false-root-final; grep -E "required tests|failed" "$OUT/gametests.gradle.txt" | tail -3;;
+    gametest) gradle "$OUT/gametests.gradle.txt" --no-configuration-cache runFluidGameTestServer -PfluidGameTestRunId=${LANE_RUN:-ph-false-root-final}; grep -E "required tests|failed" "$OUT/gametests.gradle.txt" | tail -3;;
     campaign) fuzz campaign-cold "$FORMS/hold-fuzz-cold" random -PholdFuzzCold=true; fuzz campaign-bundled "$FORMS/hold-fuzz-bundled" "random defaults" "";;
     *) echo "unknown step $s"; exit 2;;
   esac

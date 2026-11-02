@@ -1,6 +1,6 @@
 # Multiphase equilibrium engine
 
-**Snapshot:** be052e63 (branch claude/focused-raman-3bbde7, mod 0.17.1), 2026-11-02 · **Updated:** 2026-11-02 (batch 2026-11-02-ph-false-root: `waterBoiling` answers only where the hydrocarbons would hold at most `BOILS_ALONE_SHARE` of its gas) · earlier: 2026-10-28 (batch 2026-10-27-heat-exchanger-design, water steam: `SteamVirial`, the second-virial steam of `separate-free-water-v3` (IF97 Region 2's B(T)), its computed 2 % limit table, the steam's fugacity on condensed water and ice, `SteamVirialTest` with `If97Region2`) · earlier: 2026-10-27 (batch 2026-10-26-multi-machine-framework: `ThermoIdentity` format `thermo-identity-v2`, its parts the package's and the spine's declared-revision identities in place of fingerprints; `PhaseContract.forNetworkPackage` takes the spine revision) · earlier: 2026-10-21 (0.11.1 test review: archived tests no longer named; `slowGates` beside `test`, G5 = 19) · 2026-10-21 (mod rename to IChemE, 0.11.0: package `com.wormzjl.icheme`, mod id `icheme`) · earlier: 2026-10-19
+**Snapshot:** 60e13ca5 (branch claude/focused-raman-3bbde7, mod 0.17.1), 2026-11-02 · **Updated:** 2026-11-02 (batch 2026-11-02-tp-steam-refusal: a step of `V_gas(pc)` closes on the steam's own volume; `wetCoexistence` takes PH as well as UV, `coexistenceTemperature` the wet condition) · earlier: 2026-11-02 (batch 2026-11-02-ph-false-root: `waterBoiling` answers only where the hydrocarbons would hold at most `BOILS_ALONE_SHARE` of its gas) · earlier: 2026-10-28 (batch 2026-10-27-heat-exchanger-design, water steam: `SteamVirial`, the second-virial steam of `separate-free-water-v3` (IF97 Region 2's B(T)), its computed 2 % limit table, the steam's fugacity on condensed water and ice, `SteamVirialTest` with `If97Region2`) · earlier: 2026-10-27 (batch 2026-10-26-multi-machine-framework: `ThermoIdentity` format `thermo-identity-v2`, its parts the package's and the spine's declared-revision identities in place of fingerprints; `PhaseContract.forNetworkPackage` takes the spine revision) · earlier: 2026-10-21 (0.11.1 test review: archived tests no longer named; `slowGates` beside `test`, G5 = 19) · 2026-10-21 (mod rename to IChemE, 0.11.0: package `com.wormzjl.icheme`, mod id `icheme`) · earlier: 2026-10-19
 Up: [code guide](README.md)
 
 ## Read this when
@@ -36,7 +36,7 @@ Paths are under [`src/main/java/com/wormzjl/icheme/science/thermo/`](../../../sr
 
 | Class | Role | Read it for |
 |---|---|---|
-| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (5748) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `forPackage`, `pureBandBox`; nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
+| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (5807) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `forPackage`, `pureBandBox`; nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
 | [`phase/EquilibriumRequest`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumRequest.java) (71) | Record: `Specification` {TP, PH, UV}, two values (K and Pa; Pa and J; J and m3), species list (the contract basis, in order), amounts, competition | Input validation |
 | [`phase/EquilibriumResult`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumResult.java) (476) | Answer: `Status`, `UnsupportedReason`, `Classification` (13 values), `PhaseAmounts` list, `coexisting`, `Coverage`/`CoverageGrade`, `FreeWater`, `Deposition`, `Diagnostics`; detail prefixes; aggregates (`enthalpy`, `internalEnergy`, `volume`, `conservationDefect`) | Status rules, grades, typed failures |
 | [`phase/PhaseContract`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseContract.java) (160) | What a package promises: basis, `WaterParticipation`, qualified competitions, water-chemistry species, `PhaseDomain`, fluid coverage, `ThermoIdentity`; `forNetworkPackage`, `forPackage`, `admittedCrystals`, `resolve` | Which requests are refused and why |
@@ -184,6 +184,11 @@ flowchart TD
   that saturates the gas, p_sat V_gas/(RT + p_sat B), is taken from the water if there is that much. Otherwise all
   water is steam, and pc solves pc + n_w RT/(V_gas(pc) - n_w B) = P: up to 3 fixed-point steps, else a bisection on
   [1e-6 Pa, P] (70 halvings, stop at 1e-8, accepted within 1e-6).
+- `V_gas(pc)` can step over that root, and the bracket then closes on the step: one hydrocarbon is all vapour under its
+  own vapour pressure and all liquid over it (steam distillation), and a mixture's vapour fraction ends at the flash's
+  resolution, about 5e-9. The steam's own volume at P - pc closes the gas: the vapour of the step's open end, scaled to
+  that volume, the rest liquid. An empty gas at the 1e-6 Pa floor stays the answer for a hydrocarbon with no vapour
+  pressure to speak of: all water is steam at P.
 - Steam above the water model's qualified partial pressure (`vaporPartialPressureLimit`; the network's
   `FluidThermodynamics.waterVaporPressureLimit`, where the virial's volume leaves 2 % of IF97 Region 2: 1.8 MPa below
   500 K, 4.5 MPa from 575 K, 65 MPa from 875 K) is answered and graded `EXTRAPOLATED`.
@@ -222,6 +227,11 @@ flowchart TD
   can hold (their liquid's vapour pressure as a share of P, or all of them in that steam if fewer), is at most
   `BOILS_ALONE_SHARE` (1e-3). Above it the method answers null and the search goes on through the three-phase zone,
   however wide a bracket whose ends read `condensedStep`. PH (`closedPh`) and UV (`closedInner`) both call it.
+- `wetCoexistence` is the true three-phase step of one hydrocarbon beside water: its vapour pressure and p_w add up to
+  P, so the two boil together at one T (`coexistenceTemperature`, PH) or P (`coexistencePressure`, UV). The energy or
+  volume balance splits the step up to where the water runs out, n_w/(n s) of the hydrocarbon in the gas, or the
+  hydrocarbon liquid does. `waterBoiling` is tried first at a `condensedStep`: a heavy hydrocarbon's P_c goes to nothing
+  at water's saturation, which the temperature search cannot resolve.
 
 </details>
 
@@ -356,7 +366,7 @@ flowchart TD
 | Flash, Newton finish, merge, critical band, two liquids | `FluidTpEquilibrium` (`hydrocarbon`, `attempt`, `newtonFinish`, `merged`, `inBand`, `pureBandBox`), `Settings` | `FluidTpEquilibriumTest`, `FluidTpEquilibriumP3Test` |
 | Phase labels | `PhaseIdentification` | `FluidTpEquilibriumP3Test` (`singlePhasesAreLabelledByThePhaseIdentificationParameter`, `hotGasesAreVapourLikeOverTheGrid`, `theLabelRuleSeparatesAHotGasFromACompressedLiquid`) |
 | PH/UV searches and balance steps | `FluidTpEquilibrium` (`solvePh`, `solveUv`, `newtonUv`, `nestedUv`, `wetCoexistence`, `waterBoiling`, `freezingAtVolume`, `waterTriplePoint`) | `FluidTpEquilibriumPhUvTest`, `NetworkPhaseEngineTest`, `qualification/G3F8ConservationAndDerivativeTest` |
-| Free-water rule | `FluidTpEquilibrium` (`solveWet`, `freeWaterSplit`, `hydrocarbonVapour`), `FreeWaterModel` | `FluidTpEquilibriumP3Test.freeWaterFollowsTheNetworkRule`, `freeWaterPhaseCountEqualsTheNetworkFlash`, `FreeWaterIceTest` |
+| Free-water rule | `FluidTpEquilibrium` (`solveWet`, `freeWaterSplit`, `hydrocarbonVapour`), `FreeWaterModel` | `FluidTpEquilibriumP3Test.freeWaterFollowsTheNetworkRule`, `freeWaterPhaseCountEqualsTheNetworkFlash`, `FreeWaterIceTest`, `NetworkPhaseEngineTest` (`aPureHydrocarbonDistilsWithItsSteam`, `aPureHydrocarbonBoilsWithItsWaterAtOneTemperature`, `aHeavyOilBesideSteamStaysLiquid`) |
 | Steam volume and energy, qualified partial pressure | `SteamVirial`; fluid `FluidThermodynamics.waterVaporPressureLimit` | `SteamVirialTest` (against the full IF97 Region 2 of `If97Region2`, itself checked on IF97's verification tables), fluid `FluidPropertyCoverageTest` (NIST steam), runtime `FluidFactsCompatTest.aWorldSavedUnderTheIdealSteamRestatesOntoTheVirialSteam` |
 | Ice | `FreeWaterIce`; data `crystals/ice_ih.json`, the water's `ice` | `FreeWaterIceTest` |
 | Crystal competition and deposition | `FluidTpEquilibrium` (`solveWithCrystals`, `solveWetWithCrystals`, `depositFromVapour`, `depositFromFluid`, `binaryThreePhase`, `pureCrystalStep`), `CrystalPhaseEvaluator` | `GasSolidEquilibriumTest`, `NearPureCrystalStepTest`, `CrystalPhaseEvaluatorTest`, `SolidCarbonDioxideQualificationTest`, `qualification/G4*`, `G5*` |

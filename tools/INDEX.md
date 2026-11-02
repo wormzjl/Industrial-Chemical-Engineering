@@ -8,7 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
-| [ph-false-root/](ph-false-root/README.md) | PH and UV round-trip and gap sweeps on wet feeds, final lane of the false root fix | `2026-11-02-ph-false-root` | In progress since 2026-11-02 |
+| [ph-false-root/](ph-false-root/README.md) | TP, PH and UV sweeps on wet feeds, final lanes of the false root and TP steam fixes | `2026-11-02-ph-false-root`, `2026-11-02-tp-steam-refusal` | In progress since 2026-11-02 |
 | [drum-outlet-sweep/](drum-outlet-sweep/README.md) | Sweep of lying boot drums' oil-outlet placement (head fallbacks, options A and B) | `2026-10-28-drum-outlet-placement` | Implemented 2026-10-28 |
 | [heat-exchanger-design/](heat-exchanger-design/README.md) | Exchanger coupling, cell-count, 1-2 shell, per-phase film, zero-wall relay and game-timing study harnesses; owner-test probe of the review world; the merge lane | `2026-10-27-heat-exchanger-design` | Implemented 2026-10-28 (0.17.0) |
 | [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit` | In use since 2026-10-28 |
