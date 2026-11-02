@@ -32,7 +32,7 @@ Trace of the two smallest, 673 and 183, with the budget raised and one worker, a
 
 ## Cost
 
-Alone, Newton iterations against main: 183 +3.8 %, 555 +6.6 %, 673 +0.9 %, 768 -4.3 %. These predate the review round. Wall time is level with main on these four.
+Alone, Newton iterations against main: 183 +3.8 %, 555 +6.6 %, 673 +0.9 %, 768 -4.3 %. On the two traced this predates the review round. Wall time is level with main or lower on these four.
 The campaign's own counters are not comparable: held islands stop working, so cold reads -9.9 %. Bundled random reads +13.8 %, carried as before by seed 241, held on both sides, 2.6 s to 27 s.
 
 ## Cold 431 and 475
@@ -46,4 +46,4 @@ The review round moved no fluid line: against the lane of a89294fef only wall ti
 
 ## Conclusion
 
-The gates pass on the final code, no world is newly held, and the review round added no solver work. Open: the machine's slow phase, unexplained; a wall budget near the heaviest cold seeds' jobs reads it as holds. Logs: main checkout's `tools/valve-hold-probes/logs/column-final-lane-logs-2026-11-02.tar.gz`; the base's stay in `valve-hold-lane-logs-2026-11-02.tar.gz`.
+The gates pass on the final code, no world is newly held, and the review round added no solver work on the traced worlds. Open: the machine's slow phase, unexplained; a wall budget near the heaviest cold seeds' jobs reads it as holds. Logs: main checkout's `tools/valve-hold-probes/logs/column-final-lane-logs-2026-11-02.tar.gz`; the base's stay in `valve-hold-lane-logs-2026-11-02.tar.gz`.
