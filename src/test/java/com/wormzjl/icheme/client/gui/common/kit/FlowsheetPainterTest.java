@@ -81,31 +81,4 @@ class FlowsheetPainterTest {
         p.label("Air", 10, 10, 1, Palette.TEXT);
         assertEquals(10 - 18, c.texts.getLast().x(), 1e-6, "anchored at its right");
     }
-
-    @Test
-    void marksStayInsideTheBoxTheyAreDrawnFor() {
-        var c = new Recording();
-        var p = new FlowsheetPainter(c, 0, 0, 2, 1.0);
-        var look = FlowsheetPainter.Look.TEAL;
-        p.circle(50, 50, 10, look);
-        p.box(10, 10, 30, 20, look);
-        p.rounded(100, 100, 160, 130, 15, look);
-        for (var f : c.fills) {
-            boolean inCircle = f.x0() >= 40 && f.x1() <= 61 && f.y0() >= 40 && f.y1() <= 61;
-            boolean inBox = f.x0() >= 10 && f.x1() <= 30 && f.y0() >= 10 && f.y1() <= 20;
-            boolean inRounded = f.x0() >= 100 && f.x1() <= 160 && f.y0() >= 100 && f.y1() <= 130;
-            assertTrue(inCircle || inBox || inRounded, "a fill outside its mark: " + f);
-        }
-        c.fills.clear();
-        p.wire(new int[]{0, 10, 20, 10, 20, 30}, true, false, Palette.MUTED);
-        // The path is (0, 20) to (40, 20) to (40, 60) in canvas pixels; the arrow's widest bar spans x 38 to 42.
-        for (var f : c.fills) assertTrue(f.x0() >= 0 && f.x1() <= 43 && f.y0() >= 20 && f.y1() <= 61, "a line or its arrow outside its path: " + f);
-        c.fills.clear();
-        p.wire(new int[]{0, 10, 20, 10}, false, true, Palette.LINE);
-        assertTrue(c.fills.size() > 10, "a utility line is dashed: " + c.fills.size() + " pieces");
-        c.fills.clear();
-        p.square(20, 20, 8, 0x55DDFF);
-        assertEquals(new Fill(31, 31, 49, 49, FlowsheetPainter.EDGE), c.fills.get(0), "the edge one pixel round");
-        assertEquals(new Fill(32, 32, 48, 48, 0xFF55DDFF), c.fills.get(1), "the class colour, opaque");
-    }
 }

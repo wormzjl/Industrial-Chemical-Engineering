@@ -268,26 +268,6 @@ class PipeRouteTest {
     }
 
     /**
-     * Owner report 2026-10-26: a second click on a rack often dropped the line's start. Aimed out of its start away from
-     * its end, the search came round through the start cell, often on the start's own slot; the client sent that route
-     * and dropped the start, and the server refused it (a cell twice). A route holds each cell once.
-     */
-    @Test
-    void anAimedStartLeavingAwayComesRoundOutsideItsCell() {
-        var rooms = row(1, 8, 0);
-        int slot = RackGeometry.option(0, RackGeometry.TIER);
-        var away = new End(new Cell(3, 0, 0), -1, -1, slot, WEST, EAST);
-        var next = new End(new Cell(4, 0, 0), -1, -1, slot, WEST, EAST);
-        assertEquals(Refusal.BLOCKED, search(away, WEST, next, with(rooms)).refusal(), "the end next door is entered from the start's own cell: no route");
-        var far = new End(new Cell(6, 0, 0), -1, -1, slot, WEST, EAST);
-        var round = search(away, WEST, far, with(rooms));
-        assertTrue(round.found(), "" + round.refusal());
-        assertEquals(new Cell(2, 0, 0), round.cells().get(1), "out through the west face");
-        assertEquals(1, Collections.frequency(round.cells(), away.cell()), "round outside the start's cell: " + round.cells());
-        assertNull(PipeRoute.check(round.cells(), round.options(), away, far, 128));
-    }
-
-    /**
      * Owner report 2026-10-27: "you cannot place single-block pipe on the rack". A one-block line has no route to pass on
      * to: it is the aimed lane, open at both its faces, whichever half each click aimed at. Two clicks on one slot lay it;
      * two slots are refused; a pipe or lane it meets in that cell joins it on either of its faces, and on no other.

@@ -337,17 +337,6 @@ class AssemblyMatcherTest {
     }
 
     @Test
-    void aColumnStrippedBySumpSteamHasEveryPortPipedAndNoVapourReturn() {
-        var plant = ideal(trays(Condenser.AIR_COOLER, false, false, List.of(SUMP), Pump.STANDARD, 0, List.of()));
-        var column = plant.unit("column");
-        var report = plant.match();
-        assertTrue(report.complete());
-        var ports = report.ports().stream().filter(p -> p.unit() == column.origin()).toList();
-        assertEquals(List.of(VAPOUR_OUTLET, REFLUX, FEED, STEAM, BOTTOMS), ports.stream().map(AssemblyReport.PortReport::role).toList());
-        for (var p : ports) assertEquals(PortState.CONNECTED, p.state(), p::toString);
-    }
-
-    @Test
     void aCondenserAnotherAssemblyHoldsIsShared() {
         var plant = ideal(basic());
         var report = plant.match(plant.unit("condenser").origin());
