@@ -18,6 +18,12 @@ java tools/cooling-towers/fill-forms/Fit.java tools/cooling-towers/fill-forms/ta
 
 `relief/TowerSprites.java` bakes the towers' eight sprites, the natural tower's concrete, fill and floor among them: `java -Djava.awt.headless=true tools/cooling-towers/relief/TowerSprites.java src/main/resources/assets/icheme/textures/block`.
 
+`poly-counts/` counts what a tower costs: `PolyCount.java width fill columns rows` gives a fan tower's drawn polygons by material, `NaturalCount.java diameter...` a natural tower's cells, chunk polygons by material, sections touched and meshing time. Both are in package `com.wormzjl.icheme.science.equipment`: compile them with `-cp build/classes/java/main` into a folder under `tmp/` and run them with that folder and the main classes on the class path.
+
+`native.init.gradle` puts the `runMcpClient` lane's game directory under `tmp/tower-native/client` and turns off `prepareMcpControlMod`, for one isolated client with the pinned bridge jar copied in by hand. `verify.ps1` stops if any other test worker or client runs, so the merge's lane used `tools/valve-hold-probes/final-lane/lane.sh` with `HEAD_WT` and `RUNID` instead.
+
+History: 2026-11-02 — added `poly-counts/`, moved from `tmp/` in the merge preparation; documented `native.init.gradle`.
+
 History: 2026-11-02 — added `fill-forms/` in the branch review; the marched fill was detached from `TowerTransfer`.
 
 History: 2026-10-30 — added the verification lane and wet-tower support to the existing software renderer. No product code was detached into this folder.

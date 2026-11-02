@@ -1,6 +1,6 @@
 # Water cooling towers
 
-**Branch snapshot:** `a2e9a478e` plus the review consolidation on `claude/codex-water-cooling-tower-review-09c170`, based on main `79b853e0d`, mod 0.17.1, 2026-11-02. Unmerged. Batch: [2026-10-30-water-cooling-tower](../../2026-10-30-water-cooling-tower/README.md). Up: [code guide](README.md).
+**Snapshot:** 5b44dbaa3 (branch `claude/codex-water-cooling-tower-review-09c170`, mod 0.19.0), 2026-11-02. Batch: [2026-10-30-water-cooling-tower](../../2026-10-30-water-cooling-tower/README.md). Up: [code guide](README.md).
 
 ## Geometry and placement
 
@@ -42,6 +42,6 @@ Fan banks default to manual speed 1. Target-temperature control solves fan share
 
 ## Persistence and verification
 
-State format 30 and facts schema 6 include optional `CoolingTower` geometry/controls and basin contents; equipment shape fields 4 append `TowerBank`. Protocols are `fluid-17` and `equipment-15`. Certificate graph identity 9 includes the tower specification. A tower's atmospheric exchange counts as a rate, like a vent or a spill, not a flush. Replay scales the accepted atmospheric boundary with inventory deltas and keeps instantaneous diagnostic rates as rates. Historical images use the existing exact/facts routes; the current `compat/fluid/schema-6/` image was regenerated for the smaller basin, without a legacy-basin migration by owner decision. Equipment shapes remain in `compat/equipment/shapes-4.snbt`.
+State format 30 and facts schema 7 include optional `CoolingTower` geometry/controls and basin contents; equipment shape fields 5 append `TowerBank`. A world without a tower reads its default, no tower and one cell; a shell of an induced tower always holds its bank. Protocols are `fluid-17` and `equipment-15`. Certificate graph identity 9 includes the tower specification. A tower's atmospheric exchange counts as a rate, like a vent or a spill, not a flush. Replay scales the accepted atmospheric boundary with inventory deltas and keeps instantaneous diagnostic rates as rates. Historical images use the existing exact/facts routes; the current `compat/fluid/schema-6/` image was regenerated for the smaller basin, without a legacy-basin migration by owner decision. Equipment shapes remain in `compat/equipment/shapes-4.snbt`.
 
-The focused tests are `CoolingTowerTest`, `CoolingTowerGeometryTest`, `CoolingTowerRuntimeTest` and `CoolingTowerGameTests`; historical compatibility and equipment gates remain active. [Verification tools](../../../tools/cooling-towers/README.md) run the prescribed lane with every output under the owning worktree's indexed `tmp/`. Native single-client MCP GUI/render qualification uses the local bridge launcher; see the batch review for the current evidence.
+The focused tests are `CoolingTowerTest`, `CoolingTowerGeometryTest`, `CoolingTowerRuntimeTest` and `CoolingTowerGameTests`; historical compatibility and equipment gates remain active. [Verification tools](../../../tools/cooling-towers/README.md) run the prescribed lane with every output under the owning worktree's indexed `tmp/`.

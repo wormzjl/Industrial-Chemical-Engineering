@@ -23,6 +23,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 - Fan cell rebuilt from real towers: 8–14 m cells, a louvered inlet, a flared stack with a walkway round it, the drive and eliminators in view under the fan and a ladder on the wall, drawn as whole panels with baked sprites at about a quarter of the polygons; natural shells show lift lines and weathering instead of a repeating tile; a natural tower draws as one mesh of about 3,100 polygons, a twentieth of before, closes its top with a stiffening ring and stays standing while any of it is loaded (`2026-10-30-water-cooling-tower`).
 - Cooling tower review: the marched fill becomes a Merkel rating, with the marched and correlation forms detached to `tools/cooling-towers/fill-forms/`; a spray inlet passes gas to the basin vent so a line built with an empty basin primes itself, a pumped wrong material closes without a hold, unused tests and language keys removed (`2026-10-30-water-cooling-tower`, `BRANCH_REVIEW.md`).
 
+### Removed
+
+- Detached to tools: the marched fill, its table and the correlation (`tools/cooling-towers/fill-forms/`, re-attach steps in its README), the polygon counts (`tools/cooling-towers/poly-counts/`).
+
 ## [0.18.0] - 2026-11-02
 
 ### Added

@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-10-30-water-cooling-tower/](2026-10-30-water-cooling-tower/README.md) | Bounded parallel water-cooling cells and hollow natural-draft towers, coupled heat/mass transfer and real basins | In progress since 2026-10-30 |
+| [2026-10-30-water-cooling-tower/](2026-10-30-water-cooling-tower/README.md) | Bounded parallel water-cooling cells and hollow natural-draft towers, coupled heat/mass transfer and real basins | Implemented 2026-11-02 |
 | [2026-10-28-vacuum-column/](2026-10-28-vacuum-column/README.md) | Column convergence and dry-stage support | Implemented 2026-11-02 |
 | [2026-11-02-docs-large-files/](2026-11-02-docs-large-files/README.md) | Keep large files out of documentation/: rule, ignore patterns, move to research/ | Implemented 2026-11-02 |
 | [2026-10-28-drum-outlet-placement/](2026-10-28-drum-outlet-placement/README.md) | A lying boot drum's oil outlet at the bottom of its front end, not mid-height on the head | Implemented 2026-10-28 (0.17.1) |

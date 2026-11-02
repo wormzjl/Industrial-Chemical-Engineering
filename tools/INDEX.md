@@ -8,7 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
-| [cooling-towers/](cooling-towers/README.md) | Water cooling tower verification lane and fresh GameTest world | `2026-10-30-water-cooling-tower` | In use since 2026-10-30 |
+| [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
 | [vacuum-column-test/](vacuum-column-test/README.md) | CDU/VDU convergence screens and feed checks | `2026-10-28-vacuum-column` | Implemented 2026-11-02 |
 | [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |
 | [drum-outlet-sweep/](drum-outlet-sweep/README.md) | Sweep of lying boot drums' oil-outlet placement (head fallbacks, options A and B) | `2026-10-28-drum-outlet-placement` | Implemented 2026-10-28 |
