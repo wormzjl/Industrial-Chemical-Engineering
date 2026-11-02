@@ -50,6 +50,8 @@ public final class SheetPainter {
         for (var box1 : layout.boxes())
             for (var place : box1.places()) {
                 boolean free = overlay != null && overlay.freed() != null && overlay.freed().equals(place);
+                // Too small for a name, a held port's square would hide the unit; its line already shows it.
+                if (place.held() && !free && !p.labels()) continue;
                 p.square(place.x(), place.y(), SheetLayout.PORT, place.held() && !free ? PortColours.CONNECTED : place.rgb());
             }
         if (selected != null && !selected.unit()) ends(p, layout.line(selected.id()));

@@ -57,6 +57,23 @@ class SheetLayoutTest {
         }
     }
 
+    @Test
+    void aTagStandsClearOfTheLeadFromATopPort() {
+        boolean some = false;
+        for (var type : litTypes()) {
+            if (type.equals("column")) continue;
+            var layout = SheetLayout.of(one(type, SheetEditor.defaults(type, SheetFixture::column)), SheetFixture.M);
+            var box = layout.box("u");
+            var tag = layout.tag(box);
+            for (var place : box.places())
+                if (place.side() == SheetLayout.Side.TOP) {
+                    some = true;
+                    assertTrue(place.x() < tag.x() || place.x() >= tag.right(), type + " " + place.port() + " at " + place.x() + " runs through its tag " + tag);
+                }
+        }
+        assertTrue(some, "a drum has a top port");
+    }
+
     private static JsonArray rows(JsonObject door, String key, int n) {
         var old = door.getAsJsonArray(key);
         var rows = new JsonArray();

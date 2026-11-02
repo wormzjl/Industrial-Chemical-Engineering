@@ -229,7 +229,10 @@ public final class SheetLayout {
             else outlets++;
             at.add(place(unit, port, unit.x() + spot[0], unit.y() + spot[1], side(spot[2]), held));
         }
-        return new Box(unit, symbol, false, new Rect(unit.x(), unit.y(), w, h), 0, at, List.of(), unit.x() + w / 2, unit.y() - 7, .5f);
+        // A lead leaves a top port upward, so the tag stands left of it.
+        int lead = at.stream().filter(p -> p.side() == Side.TOP).mapToInt(Place::x).min().orElse(-1);
+        boolean clear = lead < 0;
+        return new Box(unit, symbol, false, new Rect(unit.x(), unit.y(), w, h), 0, at, List.of(), clear ? unit.x() + w / 2 : lead - 5, unit.y() - 7, clear ? .5f : 1f);
     }
 
     private Place place(Flowsheet.Unit unit, Port port, int x, int y, Side side, Set<Live> held) {
