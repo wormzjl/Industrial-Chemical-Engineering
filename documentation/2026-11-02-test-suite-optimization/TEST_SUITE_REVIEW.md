@@ -1,9 +1,7 @@
 # Test suite and merge lane: what a merge costs, and what changed (2026-11-02)
 Owner: "every time a merge lands a full suite is required and it takes too long, test numbers and runtime needs to be minimized"; then "how about not running column test at all when nothing is changed". Tree `a3720726c` (0.18.1): 2071 test runs of 1991 test methods. Code: `c123e20d9`.
 
-## What a merge cost
-Each step of the head side's lane, for every merge, whatever it touched (lanes of 2026-11-02):
-
+## What a merge cost (head side, every merge, lanes of 2026-11-02)
 | Step | Before | Why |
 |---|---|---|
 | `test slowGates --rerun-tasks` | 267 to 364 s | `--rerun-tasks` forced every task; a change anywhere reruns every test, because every test's input is the whole mod |
@@ -11,6 +9,7 @@ Each step of the head side's lane, for every merge, whatever it touched (lanes o
 | Fluid GameTests | 249 to 270 s | one test took 226 s: it slept each tick to hold the server to 20 ticks a second |
 | Campaign | 402 to 494 s | run for every merge, even one that changes nothing it loads |
 | **Total** | **15 to 19 min** | the base side adds about 11 min when no archived baseline fits |
+
 The time is not in the test count. 20 tests took 197 s of the 361 s of test time; 1857 tests took 20 s.
 
 ## What changed
