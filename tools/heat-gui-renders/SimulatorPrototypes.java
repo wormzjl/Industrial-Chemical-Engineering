@@ -83,8 +83,9 @@ public final class SimulatorPrototypes {
                         "5 Double click a symbol, a pill or a line to open its door. 6 A port's hover names it and says what happens if it stays free.",
                         "7 Right click a stream: the end nearer the click lifts off its port and follows the cursor, with no key held. The stream keeps its name and every setting. Its old port shows free.",
                         "8 Ports that can take that end are ringed. Left click one to land it. Left click on empty canvas ends it in a new pill. Right click or Esc puts it back. What lies downstream greys until the next run. Undo restores it."));
-        single(out, "04-palette", 760, 462, (d, s) -> paletteSheet(d), "The palette: every category, from the constructor's equipment list plus streams and piping",
-                List.of("Lit tiles have a process model on day one. Unlit tiles are drawn so the list stays whole: their hover says no process model yet, and the coverage gate forces a choice for every new equipment."));
+        single(out, "04-palette", 760, 462, (d, s) -> paletteSheet(d), "The palette: one tile for each function, from the constructor's equipment list plus streams and piping",
+                List.of("Equipment with the same function is one tile: Storage tank, Fired heater, Drum, Compressor, Steam turbine. The tile runs with no type, because the world's law is the same for both types. The sizing stage proposes the type (sheet 28), and the symbol on the sheet then follows it.",
+                        "Lit tiles have a process model on day one. Unlit tiles are drawn so the list stays whole: their hover says no process model yet, and the coverage gate forces a choice for every new equipment."));
         var small = new ArrayList<BufferedImage>();
         small.add(GuiPrototypes.render(new GuiPrototypes.Prototype("x", 624, 344, (d, s) -> screen(d, Layout.COMPACT, Show.PLAIN)), PanelSkin.LIGHT, false));
         small.add(GuiPrototypes.render(new GuiPrototypes.Prototype("x", 464, 254, (d, s) -> screen(d, Layout.TINY, Show.PLAIN)), PanelSkin.DARK, false));
@@ -106,7 +107,7 @@ public final class SimulatorPrototypes {
                 List.of("Copy takes the composition, temperature and pressure the page already shows, from the last published snapshot: no packet, no solve. Paste in a stream takes it on the client."));
         both(out, "10-product-stream", DW, DH, (d, s) -> productDoor(d), "A product stream's door: a reader, every value a meter",
                 List.of("Double click on a product pill or a line. Nothing to set: the stream is what its unit makes. Copy puts it on the clipboard, so a product can feed another flowsheet."));
-        grid(out, "11-unit-doors", List.of("Heat exchanger: the shipped drawing on the glass", "Vertical heater: the shipped drawing on the glass", "Pump", "Drum: outlets per phase", "Control valve", "Splitter"),
+        grid(out, "11-unit-doors", List.of("Heat exchanger: the shipped drawing on the glass", "Fired heater: the shipped drawing on the glass", "Pump", "Drum: outlets per phase", "Control valve", "Splitter"),
                 List.of(page(DW, DH, (d, s) -> exchangerDoor(d)), page(DW, DH, (d, s) -> heaterDoor(d)), page(DW, DH, (d, s) -> pumpDoor(d)), page(DW, DH, (d, s) -> drumDoor(d)),
                         page(DW, DH, (d, s) -> valveDoor(d)), page(DW, DH, (d, s) -> splitterDoor(d))));
         grid(out, "12-column-door", List.of("The column's door: the calculator's Column page; flow and temperature are meters read from S-7", "The calculator's Results page, T-101's real profile",
@@ -168,10 +169,10 @@ public final class SimulatorPrototypes {
         sizing.add(page(W, H, (d, s) -> SimulatorSizing.units(d, "E-101", shells, Map.of("shells", "1", "shell", "0.75", "tubes", "6"), true)));
         stack(out.resolve("24-sizing-units.png"), List.of("The Sizing tab, Units: every unit, its size and the limit closest to it", "T-101 selected: its block's members are rows under it", "A size the player keeps: Fixed rates it, and a red row stops Send to block"), sizing,
                 List.of("1 Sizing lights once the sheet reaches a steady state. Size all sizes every unit and line at the Design flow, 110 % of the steady flow. Every number here is a real run of SizingProbe on the sample, with the mod's own laws and the world's films.",
-                        "2 The lamps. Green meets every limit. Yellow is a Should: outside good practice, and it still runs. Red is a Must: the world will not run it or the constructor cannot build it. E-102 is yellow: no bank of the catalogue reaches the 0.6 m/s tube speed at the surface it needs.",
+                        "2 The lamps. Green meets every limit. Yellow is a Should: outside good practice, and it still runs. Red is a Must: the world will not run it or the constructor cannot build it. An exchanger is set by its surface and its drops, both from the duty and the flows.",
                         "3 Auto takes the smallest size that meets every limit. Fixed keeps the player's size and rates it against the same limits, so one stage both sizes and rates. A kept shell of 0.75 m holds 253 of the 444 m² the duty needs: red, and the status says why.",
                         "4 A block is one row with its members under it, as its door builds them. A pumparound has no circulation until here: PA fall gives it, so its pump, lines and cooler get real flows.",
-                        "5 Sizing moves no process number, with one exception: a new column diameter moves the tray drops, so Size all runs the sheet again. Here the door's 8.0 m is what Auto picks: 7.5 m floods at 80.9 %, over the 80 % limit."));
+                        "5 Sizing moves the run in two places: a new column diameter moves the tray drops, and a sized unit's drops follow its flow where the door's were typed. So Size all runs the sheet again and rates once more. Here the door's 8.0 m is what Auto picks: 7.5 m floods at 80.9 %, over the 80 % limit."));
         single(out, "25-sizing-lines", W, H, (d, s) -> SimulatorSizing.lines(d, "S-7"), "The Sizing tab, Lines: each line's service gives its limits",
                 List.of("1 The service comes from the stream's phase, pressure and place: what feeds a pump, what leaves a tray, and so on. The key changes it, as the player may know better. It gives the limits: speed, drop per 100 m, ρv².",
                         "2 S-7 is the transfer line, two-phase at 359.5 °C: ρv² decides it, 8144 of 10000. That takes the pipe tool's largest bore, 0.80 m. Over that a line goes to two parallel runs, with a yellow lamp. The block's own lines follow the sheet's."));
@@ -179,13 +180,22 @@ public final class SimulatorPrototypes {
         budget.add(page(W, H, (d, s) -> SimulatorSizing.pressure(d, 0)));
         budget.add(page(W, H, (d, s) -> SimulatorSizing.pressure(d, 1)));
         stack(out.resolve("26-sizing-pressure.png"), List.of("The Sizing tab, Pressure: P-101's rise against what the sized train loses", "The residue line has no pump: the column's pressure and its sump must push it"), budget,
-                List.of("A path runs from a machine's outlet to the next pressure the sheet sets. The door's drops were the player's estimates; this view adds up the sized ones at design flow, with the lines at the Line length. Sheet says is the door's own drop.",
-                        "Spare under zero is red: the built plant cannot reach the sheet's pressure at this flow. Spare over zero is what a valve takes. Here H-101's door took 7.60 bar and its coils lose 1.95, so 5.34 bar stays spare."));
+                List.of("A path runs from a machine's outlet to the next pressure the sheet sets. The door's drops were the player's estimates; this view adds up the sized ones at design flow, from each unit's flow, with the lines at the Line length. Typed is the door's estimate, which the sized drop replaces in the next run.",
+                        "Spare under zero is red: the built plant cannot reach the sheet's pressure at this flow. Spare over zero is what a valve or a smaller rise takes. Here H-101's door took 7.60 bar and its coils lose 1.95, so 5.34 bar stays spare."));
         var build = new ArrayList<BufferedImage>();
         build.add(page(W, H, (d, s) -> SimulatorSizing.build(d)));
         build.add(page(533, 280, (d, s) -> SimulatorSizing.constructor(d)));
         stack(out.resolve("27-build-list.png"), List.of("The Sizing tab, Build: what Send to block stores on the block", "The constructor's Import lists every unit of the flowsheet"), build,
                 List.of("Send to block stores each unit's design on the block, as Save design does for a column today. The equipment constructor's Import then lists them all, with the block's members. The line list stays with the player, who lays each line with the pipe tool at its bore."));
+        var types = new ArrayList<BufferedImage>();
+        types.add(page(W, H, (d, s) -> SimulatorSizing.units(d, "H-101", List.of(new Column.Line("Type", Palette.MUTED), new Column.Buttons(List.of(key("vertical", "Vertical", false), key("cabin", "Cabin", true))), entry("width", "Width", "m"), entry("radiant", "Length", "m")), Map.of("width", "11.0", "radiant", "41"), false)));
+        types.add(page(W, H, (d, s) -> SimulatorSizing.storage(d, "NAPHTHA")));
+        types.add(page(DW, DH, (d, s) -> exchangerSized(d)));
+        stack(out.resolve("28-sizing-types.png"), List.of("One Fired heater tile: the stage proposes the type, by duty", "One Storage tank tile, as a what-if on the sample's products: the stage proposes the type, by pressure", "An exchanger's door after sizing: its drops follow the flow"), types,
+                List.of("1 A tile with several types runs with none, because the world's law is the same for each. On Auto the stage proposes the type and the size; a key keeps the player's own, and it is rated. The symbol on the sheet follows the type.",
+                        "2 A heater goes by duty: a vertical while the largest vertical holds it, 54.9 MW, a cabin above. H-101 needs 86.2 MW. A cabin under 23 MW is yellow if the player keeps one.",
+                        "3 A tank goes by pressure: a floating roof while the liquid's bubble pressure at the tile's temperature is at most 0.766 bar, a sphere above. Unstabilised naphtha takes a sphere at 2.30 bar; a kerosene draw takes a sphere at 140 °C and a floating roof at 40 °C.",
+                        "4 Before sizing a drop is the player's estimate. Once a unit has a size, its drops come from its passages at the run's flow, as meters on its door, and the next run uses them. A drum's type follows its second liquid, a compressor's its inlet flow."));
     }
 
     // ---- The sample's numbers: tools/process-simulator/SampleFlowsheetProbe.java on the shipped science, 2026-11-02 ----
@@ -401,8 +411,8 @@ public final class SimulatorPrototypes {
         int ox = box.x() + 2, oy = box.y() + 2;
         if (show == Show.INTERACTION) {
             // The drag's path from the tile to the symbol it carries.
-            int tile = box.x() + 2 + 2 * 68 + 33, top = bottom - paletteH + 22;
-            dashes(d.c, tile, top, ox + 124, oy + 126, Palette.TEXT);
+            int tile = box.x() + 2 + 68 + 33, top = bottom - paletteH + 22;
+            dashes(d.c, tile, top, ox + 138, oy + 168, Palette.TEXT);
         }
         if (show == Show.NOTES) {
             note(d.c, 372, 38, 1);
@@ -547,12 +557,9 @@ public final class SimulatorPrototypes {
     static final List<List<Tile>> TILES = List.of(
             List.of(new Tile(Glyph.FEED, "Feed stream", true), new Tile(Glyph.PRODUCT, "Product stream", true)),
             List.of(new Tile(Glyph.VALVE, "Control valve", true), new Tile(Glyph.MIXER, "Mixer", true), new Tile(Glyph.SPLITTER, "Splitter", true), new Tile(Glyph.FILTER, "In-line filter", true)),
-            List.of(new Tile(Glyph.COLUMN, "Column", true), new Tile(Glyph.DRUM, "Vertical drum", true), new Tile(Glyph.LYING, "Horizontal drum", true), new Tile(Glyph.TANK, "Floating roof tank", true),
-                    new Tile(Glyph.SPHERE, "Sphere", true), new Tile(Glyph.ADSORBER, "Adsorber", false), new Tile(Glyph.CYCLONE, "Cyclone", false)),
-            List.of(new Tile(Glyph.EXCHANGER, "Heat exchanger", true), new Tile(Glyph.KETTLE, "Kettle reboiler", true), new Tile(Glyph.AIR_COOLER, "Air cooler", true), new Tile(Glyph.HEATER, "Vertical heater", true),
-                    new Tile(Glyph.CABIN, "Cabin heater", true)),
-            List.of(new Tile(Glyph.PUMP, "Pump", true), new Tile(Glyph.COMPRESSOR, "Piston compressor", true), new Tile(Glyph.TURBO, "Turbo compressor", true), new Tile(Glyph.EJECTOR, "Steam ejector", false),
-                    new Tile(Glyph.TURBINE, "Steam turbine", false), new Tile(Glyph.CONDENSING, "Condensing turbine", false)),
+            List.of(new Tile(Glyph.COLUMN, "Column", true), new Tile(Glyph.DRUM, "Drum", true), new Tile(Glyph.TANK, "Storage tank", true), new Tile(Glyph.ADSORBER, "Adsorber", false), new Tile(Glyph.CYCLONE, "Cyclone", false)),
+            List.of(new Tile(Glyph.EXCHANGER, "Heat exchanger", true), new Tile(Glyph.KETTLE, "Kettle reboiler", true), new Tile(Glyph.AIR_COOLER, "Air cooler", true), new Tile(Glyph.HEATER, "Fired heater", true)),
+            List.of(new Tile(Glyph.PUMP, "Pump", true), new Tile(Glyph.COMPRESSOR, "Compressor", true), new Tile(Glyph.EJECTOR, "Steam ejector", false), new Tile(Glyph.TURBINE, "Steam turbine", false)),
             List.of(new Tile(Glyph.REACTOR, "Stirred reactor", false), new Tile(Glyph.TRICKLE, "Trickle bed", false), new Tile(Glyph.EBULLATED, "Ebullated bed", false), new Tile(Glyph.FCC, "FCC converter", false),
                     new Tile(Glyph.COKER, "Delayed coker", false)),
             List.of(new Tile(Glyph.CFB, "CFB boiler", false), new Tile(Glyph.FLUID_GAS, "Fluid-bed gasifier", false), new Tile(Glyph.GRATE, "Grate boiler", false), new Tile(Glyph.FIXED_GAS, "Fixed-bed gasifier", false)));
@@ -574,7 +581,7 @@ public final class SimulatorPrototypes {
             d.skin.button(d.c, new Rect(r.x() + 5 + i * (kw + gap), r.y(), kw, 18), CATEGORIES.get(i), i == selected ? Skin.Press.CURRENT : Skin.Press.REST, false);
         var box = d.well(new Rect(r.x(), r.y() + 20, r.w(), r.h() - 20));
         int tw = compact ? 48 : 66;
-        for (int i = 0; i < tiles.size() && (i + 1) * (tw + 2) <= box.w(); i++) tile(d, box.x() + 2 + i * (tw + 2), box.y(), tw, box.h(), tiles.get(i), !compact, show == Show.INTERACTION && i == 2);
+        for (int i = 0; i < tiles.size() && (i + 1) * (tw + 2) <= box.w(); i++) tile(d, box.x() + 2 + i * (tw + 2), box.y(), tw, box.h(), tiles.get(i), !compact, show == Show.INTERACTION && i == 1);
     }
 
     /** The whole list: each category on its glass. */
@@ -797,9 +804,9 @@ public final class SimulatorPrototypes {
         /** The sheet of gestures: a dragged tile, a stream being drawn with the port that can take it, a name being typed, a port's hover. */
         static void interaction(GuiPrototypes.Door d, FlowsheetPainter p) {
             var c = p.canvas();
-            // 1: a horizontal drum dragged out of the palette, over the canvas; its tag in place.
-            glyph(p, Glyph.LYING, 120, 112, 64, 28, new Look(0x6033434D, Palette.TEXT, Palette.TEXT));
-            p.tag("D-101", 152, 105, 0.5f, Palette.TEXT, PLATE);
+            // 1: a drum dragged out of the palette, over the canvas; its tag in place.
+            glyph(p, Glyph.DRUM, 124, 112, 28, 56, new Look(0x6033434D, Palette.TEXT, Palette.TEXT));
+            p.tag("D-101", 138, 105, 0.5f, Palette.TEXT, PLATE);
             note(c, p.x(106), p.y(126), 1);
             // 2: a stream drawn from T-101's free draw port to the cursor; a pump that is not connected yet has its inlet ringed.
             p.square(482, 146, 5, PortColours.BULK);
@@ -1013,12 +1020,29 @@ public final class SimulatorPrototypes {
 
     static void exchangerDoor(GuiPrototypes.Door d) {
         var rows = List.<Column.Row>of(nameGroup(),
-                new Column.Group("Target", null, List.of(new Column.Buttons(List.of(key("t", "Outlet", true), key("q", "Duty", false), key("a", "UA", false))),
+                new Column.Group("Target", null, List.of(new Column.Buttons(List.of(key("t", "Outlet", true), key("q", "Duty", false), key("a", "Area", false))),
                         new Column.Buttons(List.of(key("tube", "Tube side", false), key("shell", "Shell side", true))))),
                 new Column.Group("Set point", null, List.of(entry("temperature", "Outlet", "°C"))),
                 new Column.Group("Drops", null, List.of(entry("tube", "Tube", "bar"), entry("shell", "Shell", "bar"))),
-                new Column.Group("Readings", null, List.of(meter("Duty", "25.26", "MW"), meter("Approach", "46.7", "K"), meter("UA needed", "403.3", "kW/K"))));
+                new Column.Group("Readings", null, List.of(meter("Duty", "25.26", "MW"), meter("Approach", "46.7", "K"), meter("Area needed", "403", "m²"))));
         var box = door(d, "Heat exchanger", new String[]{"Design", "Streams"}, 0, "Solved. Duty 25.26 MW, smallest approach 46.7 K.", Palette.ACCENT, rows, Map.of("temperature", "200.0", "tube", "0.50", "shell", "0.30"));
+        name(d, "E-101");
+        var sheet = new HeatFlowsheet(HeatDiagram.of(HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE, ExchangerBlueprint.Design.NONE), HeatDiagram.roles(HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE));
+        sheet.fit(box.x(), box.y(), box.w(), box.h());
+        sheet.draw(d.c, data("25.26 MW"));
+        unitFooter(d);
+    }
+
+    /** The same door once its unit has a size: the surface is the target, the drops are meters at the run's flow. */
+    static void exchangerSized(GuiPrototypes.Door d) {
+        var drops = SimulatorSizing.rows("RUNDROP").getFirst();
+        var rows = List.<Column.Row>of(nameGroup(),
+                new Column.Group("Target", null, List.of(new Column.Buttons(List.of(key("t", "Outlet", true), key("q", "Duty", false), key("a", "Area", false))),
+                        new Column.Buttons(List.of(key("tube", "Tube side", false), key("shell", "Shell side", true))))),
+                new Column.Group("Set point", null, List.of(entry("temperature", "Outlet", "°C"))),
+                new Column.Group("Drops at this flow", null, List.of(meter("Tube", drops[1], "bar"), meter("Shell", drops[2], "bar"))),
+                new Column.Group("Readings", null, List.of(meter("Duty", "25.26", "MW"), meter("Surface", "450", "m²"), meter("Area needed", "403", "m²"))));
+        var box = door(d, "Heat exchanger", new String[]{"Design", "Streams"}, 0, "Sized: shell 1.00 m, tubes 6 m. Drops follow the flow.", Palette.ACCENT, rows, Map.of("temperature", "200.0"));
         name(d, "E-101");
         var sheet = new HeatFlowsheet(HeatDiagram.of(HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE, ExchangerBlueprint.Design.NONE), HeatDiagram.roles(HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE));
         sheet.fit(box.x(), box.y(), box.w(), box.h());
@@ -1032,7 +1056,7 @@ public final class SimulatorPrototypes {
                 new Column.Group("Set point", null, List.of(entry("temperature", "Coil outlet", "°C"), entry("duty", "Duty limit", "MW"))),
                 new Column.Group("Drops", null, List.of(entry("radiant", "Radiant", "bar"), entry("convection", "Convection", "bar"))),
                 new Column.Group("Readings", null, List.of(meter("Duty", "78.37", "MW"), meter("Vapour out", "71.1", "%"))));
-        var box = door(d, "Vertical heater", new String[]{"Design", "Streams"}, 0, "Solved. Duty 78.37 MW of the 90.0 MW limit.", Palette.ACCENT, rows, Map.of("temperature", "365.0", "duty", "90.0", "radiant", "5.10", "convection", "2.50"));
+        var box = door(d, "Fired heater", new String[]{"Design", "Streams"}, 0, "Solved. Duty 78.37 MW of the 90.0 MW limit.", Palette.ACCENT, rows, Map.of("temperature", "365.0", "duty", "90.0", "radiant", "5.10", "convection", "2.50"));
         name(d, "H-101");
         var sheet = new HeatFlowsheet(HeatDiagram.of(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.RADIANT, ExchangerBlueprint.Design.NONE), HeatDiagram.roles(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.RADIANT));
         sheet.fit(box.x(), box.y(), box.w(), box.h());
@@ -1091,9 +1115,9 @@ public final class SimulatorPrototypes {
                 new Column.Group("Heat", null, List.of(new Column.Buttons(List.of(key("adiabatic", "None", true), key("t", "Temp.", false), key("q", "Duty", false))))),
                 phases(28.9, 0, 71.1, 0),
                 new Column.Group("Readings", null, List.of(meter("Temperature", "365.0", "°C"), meter("Pressure", "5.00", "bar"))));
-        var box = door(d, "Horizontal drum", new String[]{"Design", "Streams"}, 0, "Solved. Two phases: gas and organic.", Palette.ACCENT, rows, Map.of("drop", "0.00"));
+        var box = door(d, "Drum", new String[]{"Design", "Streams"}, 0, "Solved. Two phases: gas and organic.", Palette.ACCENT, rows, Map.of("drop", "0.00"));
         name(d, "D-101");
-        var rest = sketch(d, box, Glyph.LYING, "D-101", "S-6", List.of("S-14", "S-15", "none"));
+        var rest = sketch(d, box, Glyph.DRUM, "D-101", "S-6", List.of("S-14", "S-15", "none"));
         streams(d, rest, new String[]{"", "Inlet S-6", "Gas S-14", "Oil S-15", "Water"}, new String[][]{{"Temperature, °C", "365.0", "365.0", "365.0", ""}, {"Pressure, bar", "5.00", "5.00", "5.00", ""},
                 {"Flow, kmol/h", "2652.3", "1885.3", "767.0", "0.0"}, {"Flow, t/h", "572.09", "255.15", "316.94", "0.00"}});
         unitFooter(d);
@@ -1444,20 +1468,20 @@ public final class SimulatorPrototypes {
         point(p, cx + 35, cy + 6, 16, 0, Point.liquid("Liquid out"));
         // The ejector.
         box = d.well(new Rect(5 + 2 * (w + gap), 5, w, h));
-        p = blockPanel(d, box, "Ejector, later", List.of("Unlit until it has a process model."));
+        p = blockPanel(d, box, "Ejector, unlit", List.of("Lights with the last work package, W10."));
         glyph(p, Glyph.EJECTOR, cx - 25, cy - 10, 50, 20, new Look(0xFF2A333A, Palette.LINE, Palette.MUTED));
         point(p, cx - 25, cy, -16, 0, Point.bulk("Suction"));
         point(p, cx - 8, cy - 8, 0, -22, Point.bulk("Motive"));
         point(p, cx + 25, cy, 16, 0, Point.bulk("Discharge"));
         // The heater, coils in series.
         box = d.well(new Rect(5, 5 + h + gap, w, h));
-        p = blockPanel(d, box, "Vertical heater, coils in series", List.of("One pair: the sample's H-101."));
+        p = blockPanel(d, box, "Fired heater, coils in series", List.of("One pair: the sample's H-101."));
         glyph(p, Glyph.HEATER, cx - 29, cy - 44, 58, 88, Sample.NONE);
         point(p, cx - 29, cy + 22, -16, 0, Point.bulk("Process in"));
         point(p, cx + 29, cy - 2, 16, 0, Point.bulk("Process out"));
         // The heater, coils apart.
         box = d.well(new Rect(5 + w + gap, 5 + h + gap, w, h));
-        p = blockPanel(d, box, "Vertical heater, coils apart", List.of("Two pairs: steam can superheat in the convection coil."));
+        p = blockPanel(d, box, "Fired heater, coils apart", List.of("Two pairs: steam can superheat in the convection coil."));
         glyph(p, Glyph.HEATER, cx - 29, cy - 44, 58, 88, Sample.NONE);
         point(p, cx - 22, cy - 24, -23, 0, Point.bulk("Convection in").marked());
         point(p, cx + 22, cy - 24, 23, 0, Point.bulk("Convection out").marked());
@@ -1621,7 +1645,7 @@ public final class SimulatorPrototypes {
                 {"", "", "17.89 MW", "PA 2, tube S-2 to S-3: 67.9 to 122.0 °C. Hot side tray 19, 213.4 °C"},
                 {"", "", "11.20 MW", "PA 3, tube S-3 to S-4: 122.0 to 153.3 °C. Hot side tray 29, 273.8 °C"},
                 {"E-101", "Heat exchanger", "25.26 MW", "Tube S-4 to S-5: 153.3 to 218.4 °C. Shell S-9 to S-10: 300.2 to 200.0 °C"},
-                {"H-101", "Vertical heater", "78.37 MW", "S-5 to S-6: 218.4 to 365.0 °C, 12.60 to 5.00 bar"},
+                {"H-101", "Fired heater", "78.37 MW", "S-5 to S-6: 218.4 to 365.0 °C, 12.60 to 5.00 bar"},
                 {"V-101", "Control valve", "0", "S-6 to S-7: 365.0 to 359.5 °C, 5.00 to 2.72 bar"},
                 {"T-101", "Column", "39.23 MW", "Condenser, tube CWS to CWR: 30.0 to 39.9 °C; products at 59.0 °C"},
                 {"", "", "0", "S-7 and STEAM in; KERO, S-8, AGO, S-9 out; bottoms 300.2 °C"},

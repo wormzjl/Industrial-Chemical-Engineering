@@ -107,9 +107,13 @@ first thing to fix. Leaving a data range never stops a run; it is a notice, as o
 
 ### 3.2 Units on day one
 
-19 lit tiles (sheet 04). The other 14 are drawn unlit, with a hover: adsorber, cyclone, ejector, two turbines, five reactors,
-four solid-fuel units. They have no process model in the mod. Reactors need a reaction model first. A tile's ports follow its
-settings (section 3.11).
+15 lit tiles (sheet 04), one for each function. The other 13 are drawn unlit, with a hover: adsorber, cyclone, ejector, steam
+turbine, five reactors, four solid-fuel units. They have no process model in the mod. Reactors need a reaction model first. The
+ejector lights with W10. A tile's ports follow its settings (section 3.11).
+
+Equipment with the same function is one tile: Drum, Storage tank, Fired heater, Compressor, Steam turbine. A tile runs with no
+type, because the world's law is the same for its types. The sizing stage proposes the type ([SIZING_PLAN.md](SIZING_PLAN.md),
+section 3.10), and the symbol on the sheet follows it.
 
 | Tile | Model |
 |---|---|
@@ -119,12 +123,15 @@ settings (section 3.11).
 | Mixer | Adds amounts and enthalpy; takes the lowest inlet pressure, with a warning if they differ |
 | Splitter | Same state; shares or flows; one outlet takes the rest |
 | In-line filter | Takes the solids |
-| Drums, tank, sphere | Flash; one outlet per phase; heat none, temperature or duty |
+| Drum, storage tank | Flash; one outlet per phase; heat none, temperature or duty. A storage tile holds its liquid at the higher of ambient and its bubble pressure |
 | Column | Section 3.3 |
-| Heat exchanger, kettle | Outlet, duty or UA, with `HeatCurve`; the kettle has a gas and a liquid outlet |
-| Air cooler, fired heaters | Outlet or duty, with a duty limit on a heater |
+| Heat exchanger, kettle | Outlet, duty or area, with `HeatCurve`; the kettle has a gas and a liquid outlet |
+| Air cooler, fired heater | Outlet or duty, with a duty limit on a heater |
 | Pump | Ideal work booked as heat, as in the world; refuses over 2 % vapour by volume |
-| Compressors | Isothermal power booked as heat, as in the world; refuses over 1 % condensed mass |
+| Compressor | Isothermal power booked as heat, as in the world; refuses over 1 % condensed mass |
+
+A heat unit's drops are typed until it has a size. From then on the run takes them from its flow, by the world's law
+([SIZING_PLAN.md](SIZING_PLAN.md), section 3.11).
 
 ### 3.3 The column as a unit
 
@@ -192,7 +199,8 @@ ends it in a new pill. Right click or Esc puts it back. A landed end greys what 
 - Door entries take effect as typed, so doors have no Apply (D6). A change greys what lies downstream. Undo and Redo sit in the
   footer.
 - Symbols are vector shapes in one Minecraft-free class, true to the mod's equipment (sheets 23). A tool bakes each to a mask pair,
-  body and marks, in a texture atlas, tinted by the unit's state, so edges stay smooth at every window scale and zoom.
+  body and marks, in a texture atlas, tinted by the unit's state, so edges stay smooth at every window scale and zoom. A unit
+  shows its tile's symbol until the sizing stage gives it a type.
 
 ### 3.6 Block
 
@@ -236,7 +244,7 @@ both, under the same rule as world saves: facts survive, state rebuilds.
 
 `FlowsheetCatalog` maps every `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyCompiler.Kind` to MODELLED or
 DRAWING_ONLY through an exhaustive switch. A new constant fails the compile. `FlowsheetPaletteCoverageTest` checks each has a
-tile, a port rule and a lang line. `AGENTS.md` and the code guide get the rule.
+tile, a port rule and a lang line; one tile may hold several kinds. `AGENTS.md` and the code guide get the rule.
 
 ### 3.11 Blocks and connection points
 
@@ -287,6 +295,7 @@ follow the merge of column operation (D10).
 | W8 | Block swap, the sheet on the block (upload, replay, read only for a second player), Save design, clipboard, reservoir Copy | Constructor import; no packet on Copy; a sheet survives a reload; a bad upload is refused; no solve on the server |
 | W9 | Coverage gate, `AGENTS.md` rule, code guide chapter, zh_cn, cleanup, final lane | `test slowGates` |
 | S1 to S5 | The sizing stage, after the main flowsheet: [SIZING_PLAN.md](SIZING_PLAN.md) | There |
+| W10 | Ejector, last: the law in `science/flowsheet`, the tile lit, the block's Motive steam port, the steam's heat on the condenser, its sizing ([SIZING_PLAN.md](SIZING_PLAN.md), section 3.12) | Reproduces the correlation's points; closes mass and energy; a wired motive short of the need is red |
 
 ## 5. Decisions
 
@@ -311,7 +320,7 @@ Open:
 | # | Decision | Recommended | Why |
 |---|---|---|---|
 | D12 | Symbols: A silhouette, B framed, or C line (sheets 23) | B | It matches the shipped door drawings, and its dark fill leaves the eye on the streams. A reads best at tile size and follows your logo rule, and a big column turns into a solid block of colour |
-| D13 to D17 | The sizing stage | [SIZING_PLAN.md](SIZING_PLAN.md), section 6 | |
+| D13 to D21 | The sizing stage, the shell's drop, drops in the run, the other tiles, the ejector's scope | [SIZING_PLAN.md](SIZING_PLAN.md), section 6 | |
 
 ## 6. What you did not mention
 
@@ -324,10 +333,10 @@ Taken as defaults unless you say otherwise. Items marked D are in section 5.
 - **A heat cross**: a warning that names it, as free water on trays is. The run still ends.
 - **A pumparound's cold end**: not checked, because the model has no circulation rate.
 - **A target on the crude's outlet**: later. The pumparound's duty would become a result, and the block would read its port.
-- **Motive steam**: joins the overhead as a mixer does. The steam the ejector needs is not calculated.
+- **Motive steam**: joins the overhead as a mixer does. The steam the ejector needs is not calculated until W10.
 - **A flooded column**: a warning above 100 % flood. The solve has no flood limit: T-101 took 24000 kmol/h in the no-way-out run.
-- **Spec modes**: each unit needs its choice of target: outlet, duty, UA, rise (sheet 11).
-- **Pressure**: forward only, set by units. No pressure-driven flows.
+- **Spec modes**: each unit needs its choice of target: outlet, duty, area, rise (sheet 11).
+- **Pressure**: forward only, set by units. No pressure-driven flows. A sized unit's drops follow its flow (D19).
 - **Water and solids**: water is on every stream's axis. Solids pass through units; the filter takes them; the column refuses them.
 - **Failure and partial results**: a failed unit is red with a message, and the solved part stays.
 - **Run progress and Stop** (sheet 06). Editing during a run is refused.

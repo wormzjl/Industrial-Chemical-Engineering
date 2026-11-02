@@ -217,7 +217,7 @@ final class SimulatorSizing {
         d.c.text("What", x0 + 100, y, Palette.MUTED);
         cell(d, "Lost, bar", x0 + 400, y, true, Palette.MUTED);
         cell(d, "After it, bar", x0 + 500, y, true, Palette.MUTED);
-        d.c.text("Sheet says", x0 + 520, y, Palette.MUTED);
+        d.c.text("Typed", x0 + 520, y, Palette.MUTED);
         d.c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
         y += 13;
         var steps = rows("PATH").stream().filter(p -> p[0].equals("" + path)).toList();
@@ -246,6 +246,39 @@ final class SimulatorSizing {
         d.c.text("The sheet's " + sum[6] + " bar", x + 4, targetY - 11, Palette.WARN);
         int lastY = low - (int) Math.round((last - base) / (from - base) * (low - top));
         d.c.text("Spare " + sum[3] + " bar", x + 4, (lastY + targetY) / 2 - 4, Palette.ACCENT);
+    }
+
+    /** A what-if on the sample: each product with a storage tile, the type its bubble pressure proposes and the size its hold takes. */
+    static void storage(GuiPrototypes.Door d, String selected) {
+        var stores = rows("STORE");
+        var picked = stores.stream().filter(s -> s[0].equals(selected)).findFirst().orElseThrow();
+        boolean roof = picked[4].equals("Floating roof");
+        var sizes = List.<Column.Row>of(new Column.Line("Type", Palette.MUTED), new Column.Buttons(List.of(SimulatorPrototypes.key("roof", "Floating roof", roof), SimulatorPrototypes.key("sphere", "Sphere", !roof))), SimulatorPrototypes.entry("hold", "Hold", "h"));
+        int bottom = frame(d, 0, held(selected, sizes, false), Map.of("hold", "24"), "What if the products went to storage: each tile's type comes from its bubble pressure", Palette.ACCENT, true);
+        var box = d.well(new Rect(DOOR + 9, 71, d.w - DOOR - 14, bottom - 71));
+        int x0 = box.x() + 16, y = box.y() + 3;
+        d.c.text("Tile holds", x0, y, Palette.MUTED);
+        cell(d, "°C", x0 + 112, y, true, Palette.MUTED);
+        cell(d, "Bubble, bar", x0 + 184, y, true, Palette.MUTED);
+        cell(d, "Volume, m³", x0 + 256, y, true, Palette.MUTED);
+        d.c.text("Proposed type", x0 + 272, y, Palette.MUTED);
+        d.c.text("Size", x0 + 362, y, Palette.MUTED);
+        d.c.text("Limit", x0 + 448, y, Palette.MUTED);
+        d.c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
+        y += 13;
+        for (int r = 0; r < stores.size(); r++, y += 13) {
+            var s = stores.get(r);
+            if (r % 2 == 1) d.c.fill(box.x(), y - 2, box.right(), y + 11, DialogColumns.BAND);
+            d.c.fill(box.x() + 5, y + 1, box.x() + 11, y + 7, lamp(s[7]));
+            if (s[0].equals(selected)) d.c.outline(box.x() + 1, y - 2, box.w() - 2, 13, Palette.TEXT);
+            d.c.text(s[0], x0, y, Palette.TEXT);
+            cell(d, s[1], x0 + 112, y, true, Palette.TEXT);
+            cell(d, s[2], x0 + 184, y, true, Palette.ACCENT);
+            cell(d, s[3], x0 + 256, y, true, Palette.ACCENT);
+            d.c.text(s[4], x0 + 272, y, Palette.TEXT);
+            d.c.text(s[5], x0 + 362, y, Palette.ACCENT);
+            d.c.text(s[6], x0 + 448, y, Palette.MUTED);
+        }
     }
 
     static void build(GuiPrototypes.Door d) {

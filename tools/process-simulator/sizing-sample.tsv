@@ -1,4 +1,4 @@
-STATUS	Sized at 110 % of the steady flow: 16 units, 31 lines; 1 limit outside practice: E-102 tube speed	1
+STATUS	Sized at 110 % of the steady flow: 16 units, 31 lines; every limit met	0
 BASIS	110	50	60
 UNIT	0	P-101	Pump	Discharge 0.30 m, 71 m	Flow to rated	96 %	70 to 120 %	0
 UNIT	0	E-101	Exchanger	Shell 1.00 m, tubes 6 m	Surface	450 m²	min 444 m²	0
@@ -12,10 +12,10 @@ UNIT	1	PA 1 cooler	Exchanger	Shell 1.00 m, tubes 3 m	Surface	225 m²	min 224 m²
 UNIT	1	PA 1 pump	Pump	Discharge 0.25 m, 14 m	Flow to rated	110 %	70 to 120 %	0
 UNIT	1	PA 2 cooler	Exchanger	Shell 1.00 m, tubes 3 m	Surface	225 m²	min 223 m²	0
 UNIT	1	PA 2 pump	Pump	Discharge 0.30 m, 14 m	Flow to rated	93 %	70 to 120 %	0
-UNIT	1	PA 3 cooler	Exchanger	Shell 1.00 m, tubes 3 m	Tube speed	1.99 m/s	1.00 to 3.00 m/s	0
+UNIT	1	PA 3 cooler	Exchanger	Shell 1.00 m, tubes 3 m	Surface	225 m²	min 117 m²	0
 UNIT	1	PA 3 pump	Pump	Discharge 0.25 m, 13 m	Flow to rated	78 %	70 to 120 %	0
 UNIT	0	P-102	Pump	Discharge 0.15 m, 51 m	Flow to rated	71 %	70 to 120 %	0
-UNIT	0	E-102	Air cooler	5 × 4 bays of 2.0 × 6 m	Tube speed	0.59 m/s	0.60 to 2.40 m/s	1
+UNIT	0	E-102	Air cooler	5 × 3 bays of 2.5 × 6 m	Bare surface	752 m²	min 741 m²	0
 RATED	E-101	Shell 0.75 m, tubes 6 m	Surface	253 m²	min 444 m²	2
 CRIT	T-101	Flood	Must	71.3 %	max 100.0 %	0	World
 CRIT	T-101	Flood	Should	71.3 %	max 80.0 %	0	[NPTEL], [KIST]
@@ -31,66 +31,55 @@ CRIT	PA 1 cooler	Temperature, hot end	Must	72.1 K	min 0.0 K	0	World
 CRIT	PA 1 cooler	Temperature, cold end	Must	55.0 K	min 0.0 K	0	World
 CRIT	PA 1 cooler	Least approach	Should	55.0 K	min 10.0 K	0	[BLOG]
 CRIT	PA 1 cooler	Surface over the need	Should	1 %	max 100 %	0	This plan
-CRIT	PA 1 cooler	Tube speed	Should	1.87 m/s	1.00 to 3.00 m/s	0	[BLOG]
 CRIT	PA 1 cooler	Tube drop	Should	0.30 bar	max 0.70 bar	0	[BLOG]
-CRIT	PA 1 cooler	Shell speed	Should	1.62 m/s	0.30 to 2.00 m/s	0	[SCR-HX] × 2
 CRIT	PA 1 cooler	Shell drop	Should	0.08 bar	max 0.70 bar	0	[BLOG]
 CRIT	PA 2 cooler	Surface	Must	225 m²	min 223 m²	0	World
 CRIT	PA 2 cooler	Temperature, hot end	Must	91.4 K	min 0.0 K	0	World
 CRIT	PA 2 cooler	Temperature, cold end	Must	85.4 K	min 0.0 K	0	World
 CRIT	PA 2 cooler	Least approach	Should	85.4 K	min 10.0 K	0	[BLOG]
 CRIT	PA 2 cooler	Surface over the need	Should	1 %	max 100 %	0	This plan
-CRIT	PA 2 cooler	Tube speed	Should	1.92 m/s	1.00 to 3.00 m/s	0	[BLOG]
 CRIT	PA 2 cooler	Tube drop	Should	0.33 bar	max 0.70 bar	0	[BLOG]
-CRIT	PA 2 cooler	Shell speed	Should	1.97 m/s	0.30 to 2.00 m/s	0	[SCR-HX] × 2
 CRIT	PA 2 cooler	Shell drop	Should	0.11 bar	max 0.70 bar	0	[BLOG]
 CRIT	PA 3 cooler	Surface	Must	225 m²	min 117 m²	0	World
 CRIT	PA 3 cooler	Temperature, hot end	Must	120.5 K	min 0.0 K	0	World
 CRIT	PA 3 cooler	Temperature, cold end	Must	91.8 K	min 0.0 K	0	World
 CRIT	PA 3 cooler	Least approach	Should	91.8 K	min 10.0 K	0	[BLOG]
 CRIT	PA 3 cooler	Surface over the need	Should	93 %	max 100 %	0	This plan
-CRIT	PA 3 cooler	Tube speed	Should	1.99 m/s	1.00 to 3.00 m/s	0	[BLOG]
 CRIT	PA 3 cooler	Tube drop	Should	0.29 bar	max 0.70 bar	0	[BLOG]
-CRIT	PA 3 cooler	Shell speed	Should	1.14 m/s	0.30 to 2.00 m/s	0	[SCR-HX] × 2
 CRIT	PA 3 cooler	Shell drop	Should	0.04 bar	max 0.70 bar	0	[BLOG]
 CRIT	E-101	Surface	Must	450 m²	min 444 m²	0	World
 CRIT	E-101	Temperature, hot end	Must	81.8 K	min 0.0 K	0	World
 CRIT	E-101	Temperature, cold end	Must	46.7 K	min 0.0 K	0	World
 CRIT	E-101	Least approach	Should	46.7 K	min 10.0 K	0	[BLOG]
 CRIT	E-101	Surface over the need	Should	1 %	max 100 %	0	This plan
-CRIT	E-101	Tube speed	Should	2.04 m/s	1.00 to 3.00 m/s	0	[BLOG]
 CRIT	E-101	Tube drop	Should	0.44 bar	max 0.70 bar	0	[BLOG]
-CRIT	E-101	Shell speed	Should	1.27 m/s	0.30 to 2.00 m/s	0	[SCR-HX] × 2
 CRIT	E-101	Shell drop	Should	0.15 bar	max 0.70 bar	0	[BLOG]
 CRIT	E-101 kept	Surface	Must	253 m²	min 444 m²	2	World
 CRIT	E-101 kept	Temperature, hot end	Must	81.8 K	min 0.0 K	0	World
 CRIT	E-101 kept	Temperature, cold end	Must	46.7 K	min 0.0 K	0	World
 CRIT	E-101 kept	Least approach	Should	46.7 K	min 10.0 K	0	[BLOG]
-CRIT	E-101 kept	Surface over the need	Should	-43 %	max 100 %	1	This plan
-CRIT	E-101 kept	Tube speed	Should	3.62 m/s	1.00 to 3.00 m/s	1	[BLOG]
+CRIT	E-101 kept	Surface over the need	Should	-43 %	max 100 %	0	This plan
 CRIT	E-101 kept	Tube drop	Should	1.29 bar	max 0.70 bar	1	[BLOG]
-CRIT	E-101 kept	Shell speed	Should	2.26 m/s	0.30 to 2.00 m/s	1	[SCR-HX] × 2
 CRIT	E-101 kept	Shell drop	Should	0.41 bar	max 0.70 bar	0	[BLOG]
 CRIT	Condenser	Surface	Must	1406 m²	min 862 m²	0	World
 CRIT	Condenser	Temperature, hot end	Must	41.9 K	min 0.0 K	0	World
 CRIT	Condenser	Temperature, cold end	Must	29.0 K	min 0.0 K	0	World
 CRIT	Condenser	Least approach	Should	29.0 K	min 10.0 K	0	[BLOG]
 CRIT	Condenser	Surface over the need	Should	63 %	max 100 %	0	This plan
-CRIT	Condenser	Tube speed	Should	2.07 m/s	1.00 to 3.00 m/s	0	[BLOG]
 CRIT	Condenser	Tube drop	Should	0.43 bar	max 0.70 bar	0	[BLOG]
-CRIT	Condenser	Shell speed	Should	24.41 m/s	max 30.00 m/s	0	[SCR-HX]
 CRIT	Condenser	Shell drop	Should	0.18 bar	max 0.20 bar	0	[SCR-HX]
 CRIT	Condenser	Water out	Should	39.9 °C	max 45.0 °C	0	[BLOG]
+CRIT	Receiver	Type: free water to settle	Must	24.0 m³/h	min 0.0 m³/h	0	[SCR-VES]
 CRIT	Receiver	Hold to half	Should	9.3 min	min 5.0 min	0	[BLOG], [COST]
 CRIT	Receiver	Length to diameter	Should	2.5	2.5 to 5.0	0	[BLOG]
 CRIT	Receiver	Gas speed over the liquid	Should	0.06 m/s	max 0.73 m/s	0	[GPSA], [FLU]
 CRIT	Receiver	Boot hold	Should	7.0 min	min 5.0 min	0	[REDBAG]
 CRIT	Receiver	Diameter	Must	4.0 m	max 10.0 m	0	World
-CRIT	E-102	Bare surface	Must	783 m²	min 741 m²	0	World
+CRIT	E-102	Bare surface	Must	752 m²	min 741 m²	0	World
 CRIT	E-102	Outlet above air	Should	45.0 K	min 15.0 K	0	[HALL-R]
-CRIT	E-102	Tube speed	Should	0.59 m/s	0.60 to 2.40 m/s	1	[CHECALC]
-CRIT	E-102	Tube drop	Should	0.09 bar	max 0.70 bar	0	[WEAK]
+CRIT	E-102	Tube drop	Should	0.05 bar	max 0.70 bar	0	[WEAK]
 CRIT	H-101	Duty held	Must	87.6 MW	min 86.2 MW	0	World
+CRIT	H-101	Type: over a vertical's most	Must	86.2 MW	min 54.9 MW	0	World
 CRIT	P-101	Flow	Must	731 m³/h	max 36000 m³/h	0	World
 CRIT	P-101	Head	Must	71 m	max 204 m	0	World
 CRIT	P-101	NPSH available	Must	80.4 m	min 0.0 m	0	World
@@ -123,7 +112,7 @@ CRIT	Reflux pump	NPSH available	Should	8.0 m	min 1.0 m	0	[HI-961]
 CRIT	Reflux pump	Flow to rated	Should	119 %	70 to 120 %	0	[API610]
 CRIT	H-101	Pressure spare on its path	Must	5.34 bar	min 0.00 bar	0	World
 CRIT	V-101	Drop	Should	2.28 bar	min 1.19 bar	0	[HALL-V]
-CRIT	E-102	Pressure spare on its path	Must	0.48 bar	min 0.00 bar	0	World
+CRIT	E-102	Pressure spare on its path	Must	0.52 bar	min 0.00 bar	0	World
 LINE	CRUDE	Suction, cold	731	0.400	1.6	0.058	2247	0	Speed
 LINE	S-1	Liquid	730	0.300	2.9	0.233	7099	0	Speed
 LINE	S-2	Liquid	748	0.300	2.9	0.196	7266	0	Speed
@@ -166,12 +155,12 @@ PATH	0	S-4	Line, 50 m	0.04	12.78		0
 PATH	0	E-101	Tube side	0.44	12.34	0.50	0
 PATH	0	S-5	Line, 50 m	0.04	12.29		0
 PATH	0	H-101	Coils: convection, then radiant	1.95	10.34	7.60	0
-PATHSUM	T-101's sump to RESIDUE	0.99	0.51	0.48	2.72	0.49	2.22
+PATHSUM	T-101's sump to RESIDUE	0.99	0.47	0.52	2.72	0.49	2.22
 PATH	1	S-9	Line, 50 m	0.00	3.20		0
 PATH	1	E-101	Shell side	0.15	3.05	0.30	0
 PATH	1	S-10	Line, 50 m	0.09	2.96		0
-PATH	1	E-102	Tubes	0.09	2.87	0.20	0
-PATH	1	RESIDUE	Line, 50 m	0.17	2.69		0
+PATH	1	E-102	Tubes	0.05	2.91	0.20	0
+PATH	1	RESIDUE	Line, 50 m	0.17	2.73		0
 BUILD	P-101	1	Pump	Discharge 0.30 m, 71 m	0
 BUILD	E-101	1	Exchanger	Shell 1.00 m, tubes 6 m	0
 BUILD	H-101	1	Cabin heater	Cabin 11.0 × 41 m	0
@@ -187,7 +176,14 @@ BUILD	PA 2 pump	1	Pump	Discharge 0.30 m, 14 m	0
 BUILD	PA 3 cooler	1	Exchanger	Shell 1.00 m, tubes 3 m	0
 BUILD	PA 3 pump	1	Pump	Discharge 0.25 m, 13 m	0
 BUILD	P-102	1	Pump	Discharge 0.15 m, 51 m	0
-BUILD	E-102	1	Air cooler	5 × 4 bays of 2.0 × 6 m	1
+BUILD	E-102	1	Air cooler	5 × 3 bays of 2.5 × 6 m	0
+RUNDROP	E-101	0.37	0.13
+STORE	NAPHTHA	59.0	2.299	2191	Sphere	D 17 m	Over 0.766 bar; design 2.53 bar	0
+STORE	KERO	40.0	0.099	2321	Floating roof	D 18 × 11 m	Bubble at most 0.766 bar	0
+STORE	DIESEL	40.0	0.027	3196	Floating roof	D 20 × 12 m	Bubble at most 0.766 bar	0
+STORE	AGO	40.0	0.016	1240	Floating roof	D 15 × 9 m	Bubble at most 0.766 bar	0
+STORE	RESIDUE	70.0	under 0.015	11567	Floating roof	D 30 × 18 m	Bubble at most 0.766 bar	0
+STORE	KERO, hot	140.1	1.839	2590	Sphere	D 18 m	Over 0.766 bar; design 2.02 bar	0
 BUILDLINES	Lines	31	
 BUILDLINES	Pipe	1550	m
 BUILDLINES	Largest bore	0.80	m

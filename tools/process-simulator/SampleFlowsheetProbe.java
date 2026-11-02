@@ -107,8 +107,8 @@ public final class SampleFlowsheetProbe {
                 q101 = tear.enthalpy() - s10.enthalpy();
             }
             s5 = ph(s4.temperature() + q101 / 3e5, s4.pressure() - 0.5e5, s4.enthalpy() + q101, overall);
-            // H-101: the coil's outlet set at 365 C, 5 bar.
-            s6 = tp(638.15, 5e5, overall);
+            // H-101: the coil's outlet set at 365 C, 5 bar; -Ds6bar gives it another, to measure what sized drops move (SIZING_PLAN.md section 3.11).
+            s6 = tp(638.15, Double.parseDouble(System.getProperty("s6bar", "5")) * 1e5, overall);
             qHeater = s6.enthalpy() - s5.enthalpy();
             // V-101, isenthalpic to the feed tray's pressure.
             s7 = ph(s6.temperature() - 6, 2.72e5, s6.enthalpy(), overall);

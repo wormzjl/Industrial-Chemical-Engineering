@@ -45,6 +45,14 @@ public final class SizingProbe {
     static final double[] BORES = {.025, .05, .075, .1, .15, .2, .25, .3, .35, .4, .45, .5, .6, .7, .8};
     /** A regulating valve's least drop, Pa [HALL-V]. */
     static final double VALVE = .7e5;
+    /** Option B of D18: the shell side priced as a tube bank, baffles 0.4 D apart, 1.0 D on a vapour shell. Only the shipped passage writes the sheets' table. */
+    static final boolean BANK = "bank".equals(System.getProperty("shell"));
+    /** A tube bank's velocity heads per baffle crossing per metre of shell, on top of the passage's own friction: Kern's drop at Re 30000. */
+    static final double BANK_HEADS = 12;
+    /** The vapour pressure above which a floating roof is not allowed, Pa [CFR], [KC]. */
+    static final double ROOF_LIMIT = 76.6e3;
+    /** Storage hold, h, and working share (plan section 3.4). */
+    static final double HOLD = 24, WORKING = .85;
     static final double PI = Math.PI, G = 9.80665;
     static final String WORLD = "World";
 
@@ -112,7 +120,7 @@ public final class SizingProbe {
 
     /** The pressure at which {@code n} at {@code t} starts to boil, Pa: a bisection on the world's flash. */
     static double bubble(double t, double[] n) {
-        double low = 1e3, high = 5e6;
+        double low = 100, high = 5e6;
         for (int i = 0; i < 40 && high / low > 1.0005; i++) {
             double middle = Math.sqrt(low * high);
             if (props(SampleFlowsheetProbe.tp(t, middle, n)).vapour() > 1e-7) low = middle;
@@ -130,7 +138,7 @@ public final class SizingProbe {
     /** One limit on one item: a ceiling if {@code max}, otherwise a floor; a ceiling with a {@code floor} is a band. */
     record Crit(String tag, String name, boolean must, boolean max, double value, double limit, double floor, String form, String unit, String source, boolean ranks) {
         boolean ok() {
-            return (max ? value <= limit * (1 + 1e-9) : value >= limit * (1 - 1e-9)) && !(value < floor * (1 - 1e-9));
+            return (max ? value <= limit * (1 + 1e-9) : value >= limit * (1 - 1e-9)) && !(floor > 0 && value < floor * (1 - 1e-9));
         }
 
         /** How near the limit: 1 is on it. */
@@ -226,31 +234,50 @@ public final class SizingProbe {
         }
     }
 
-    /** A side's limits: least and most speed, m/s, most drop, bar. */
-    record Side(double low, double high, double drop) {}
+    /** The shell side's passage: the shipped one, or under {@link #BANK} a tube bank with baffles 0.4 D apart, 1.0 D on a vapour shell. */
+    static PipeResistance.Geometry shellLaw(double d, int l, boolean vapour) {
+        var g = HeatSides.shellPassage(d, l);
+        if (!BANK) return g;
+        double pitch = vapour ? 1 : .4;
+        return new PipeResistance.Geometry(l / pitch, g.diameter(), g.roughness(), BANK_HEADS * l / pitch, (int) Math.round(.25 * pitch * d * d / (PI * .018 * .018 / 4)));
+    }
 
-    static final Side FREE = new Side(0, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
+    /** Kern's shell-side drop at design flow, bar, on the world's tube bank: 25 % free, equivalent diameter 18 mm, baffles {@code pitch} D apart. */
+    static double kern(int n, double d, int l, Props p, double pitch) {
+        double flux = p.mass() * MARGIN / n / (.25 * pitch * d * d), re = flux * .018 / p.viscosity(), f = Math.exp(.576 - .19 * Math.log(re));
+        return f * flux * flux * d * (l / (pitch * d)) / (2 * p.density() * .018) / 1e5;
+    }
+
+    /** The baffle pitch, in D, at which Kern's drop equals {@code drop} bar. */
+    static double pitchFor(double drop, int n, double d, int l, Props p) {
+        double low = .05, high = 4;
+        for (int i = 0; i < 50; i++) {
+            double middle = Math.sqrt(low * high);
+            if (kern(n, d, l, p, middle) > drop) low = middle;
+            else high = middle;
+        }
+        return Math.sqrt(low * high);
+    }
 
     /** What {@code n} shells of {@code d} by {@code l} m do at design flow. */
-    static Bundle bundle(int n, double d, int l, Props tube, Props shell) {
+    static Bundle bundle(int n, double d, int l, Props tube, Props shell, boolean vapour) {
         var tg = HeatSides.tubePassage(d, l);
-        var sg = HeatSides.shellPassage(d, l);
+        var sg = shellLaw(d, l, vapour);
         double tv = tube.volume() * MARGIN / n / tg.area(), sv = shell.volume() * MARGIN / n / sg.area();
         double td = PipeResistance.pressureDrop(tg, tube.mass() * MARGIN / n, tube.density(), tube.viscosity()) / 1e5;
         double sd = PipeResistance.pressureDrop(sg, shell.mass() * MARGIN / n, shell.density(), shell.viscosity()) / 1e5;
         return new Bundle(n, d, l, n * ProcessUnit.tubeSurface(d, l), tv, td, sv, sd);
     }
 
-    /** The fewest shells, then the least surface, that hold {@code needed} m^2 under twice the need and within the sides' limits. */
-    static Bundle exchanger(double needed, Props tube, Props shell, Side tubeSide, Side shellSide, double... caps) {
+    /** The fewest shells, then the least surface, that hold {@code needed} m^2 under {@code caps} times the need and within the sides' drops, bar. */
+    static Bundle exchanger(double needed, Props tube, Props shell, double tubeDrop, double shellDrop, boolean vapour, double... caps) {
         for (double most : caps)
             for (int n = 1; n <= 6; n++) {
                 Bundle best = null;
                 for (double d = .5; d <= 2.5 + 1e-9; d += ProcessUnit.SHELL_STEP)
                     for (int l = Math.max(2, (int) Math.ceil(3 * d - 1e-9)); l <= 12; l++) {
-                        var b = bundle(n, d, l, tube, shell);
-                        if (b.area() < needed || b.area() > most * needed) continue;
-                        if (b.tubeSpeed() < tubeSide.low() || b.tubeSpeed() > tubeSide.high() || b.tubeDrop() > tubeSide.drop() || b.shellSpeed() < shellSide.low() || b.shellSpeed() > shellSide.high() || b.shellDrop() > shellSide.drop()) continue;
+                        var b = bundle(n, d, l, tube, shell, vapour);
+                        if (b.area() < needed || b.area() > most * needed || b.tubeDrop() > tubeDrop || b.shellDrop() > shellDrop) continue;
                         if (best == null || b.area() < best.area()) best = b;
                     }
                 if (best != null) return best;
@@ -260,22 +287,23 @@ public final class SizingProbe {
 
     /** Sizes an exchanger and states its limits. {@code hot} and {@code cold} are the end temperatures, K; the tube side takes {@code tube}. */
     static Bundle exchanger(String tag, int depth, double duty, double u, double[] hot, double[] cold, Props tube, Props shell, boolean condenser) {
-        double dt = lmtd(hot[0], hot[1], cold[0], cold[1]), needed = duty * MARGIN / (u * dt);
-        var tubeSide = new Side(1, 3, .7);
-        var shellSide = condenser ? new Side(0, 30, .2) : new Side(.3, 2, .7);
-        var b = exchanger(needed, tube, shell, tubeSide, shellSide, 2, Double.POSITIVE_INFINITY);
-        if (b == null) b = exchanger(needed, tube, shell, FREE, FREE, 2, Double.POSITIVE_INFINITY);
-        // What the plan's D14 and D15 rest on: a liquid shell held to the source's 1 m/s, with the tube floor and without it; no cap on the surface.
-        for (var other : new Bundle[]{condenser ? null : exchanger(needed, tube, shell, tubeSide, new Side(.3, 1, .7), Double.POSITIVE_INFINITY), condenser ? null : exchanger(needed, tube, shell, new Side(0, 3, .7), new Side(.3, 1, .7), Double.POSITIVE_INFINITY), exchanger(needed, tube, shell, tubeSide, shellSide, Double.POSITIVE_INFINITY)})
-            if (other != null) System.out.printf(Locale.ROOT, "   other rule: %s = %.0f m2 (+%.0f %%), tube %.2f m/s, shell %.2f m/s%n", other.size(), other.area(), 100 * (other.area() / needed - 1), other.tubeSpeed(), other.shellSpeed());
-        System.out.printf(Locale.ROOT, "%-12s %6.2f MW, LMTD %6.1f K, U %5.0f, needs %5.0f m2: %s = %5.0f m2, tube %.2f m/s %.2f bar, shell %.2f m/s %.2f bar%n", tag, duty / 1e6, dt, u, needed, b.size(), b.area(), b.tubeSpeed(), b.tubeDrop(), b.shellSpeed(), b.shellDrop());
+        double dt = lmtd(hot[0], hot[1], cold[0], cold[1]), needed = duty * MARGIN / (u * dt), no = Double.POSITIVE_INFINITY, shellLimit = condenser ? .2 : .7;
+        var b = exchanger(needed, tube, shell, .7, shellLimit, condenser, 2, no);
+        if (b == null) b = exchanger(needed, tube, shell, no, no, condenser, 2, no);
+        // What the plan's D15 rests on: no cap on the surface.
+        var uncapped = exchanger(needed, tube, shell, .7, shellLimit, condenser, no);
+        if (uncapped != null) System.out.printf(Locale.ROOT, "   no cap: %s = %.0f m2 (+%.0f %%)%n", uncapped.size(), uncapped.area(), 100 * (uncapped.area() / needed - 1));
+        double pitch = pitchFor(b.shellDrop(), b.shells(), b.shell(), b.tubes(), shell);
+        double re = shell.mass() * MARGIN / b.shells() / (.1 * b.shell() * b.shell()) * .018 / shell.viscosity();
+        System.out.printf(Locale.ROOT, "%-12s %6.2f MW, LMTD %6.1f K, U %5.0f, needs %5.0f m2: %s = %5.0f m2, tube %.2f m/s %.2f bar, shell %.2f m/s %.2f bar; Kern at 0.4 D %.2f bar, Re %.0f; the law's drop is Kern's at %.2f D, real shell speed %.2f m/s%n",
+                tag, duty / 1e6, dt, u, needed, b.size(), b.area(), b.tubeSpeed(), b.tubeDrop(), b.shellSpeed(), b.shellDrop(), kern(b.shells(), b.shell(), b.tubes(), shell, .4), re, pitch, shell.volume() * MARGIN / b.shells() / (.25 * pitch * b.shell() * b.shell()));
         UNITS.add(new Unit(depth, tag, "Exchanger", b.size(), b.shells(), "Exchanger"));
-        limits(tag, needed, b, hot, cold, tubeSide, shellSide, condenser);
+        limits(tag, needed, b, hot, cold, shellLimit, condenser);
         return b;
     }
 
-    /** Every limit on an exchanger of {@code b}. */
-    static void limits(String tag, double needed, Bundle b, double[] hot, double[] cold, Side tubeSide, Side shellSide, boolean condenser) {
+    /** Every limit on an exchanger of {@code b}: the surface its duty needs, its ends, the drops its flows give. */
+    static void limits(String tag, double needed, Bundle b, double[] hot, double[] cold, double shellLimit, boolean condenser) {
         least(tag, "Surface", true, b.area(), needed, "%.0f", "m²", WORLD);
         double hotEnd = hot[0] - cold[1], coldEnd = hot[1] - cold[0];
         least(tag, "Temperature, hot end", true, hotEnd, 0, "%.1f", "K", WORLD);
@@ -285,11 +313,8 @@ public final class SizingProbe {
         least(tag, "Least approach", false, Math.min(hotEnd, coldEnd), 10, "%.1f", "K", "[BLOG]");
         most(tag, "Surface over the need", false, 100 * (b.area() / needed - 1), 100, "%.0f", "%", "This plan");
         quiet();
-        within(tag, "Tube speed", false, b.tubeSpeed(), tubeSide.low(), tubeSide.high(), "%.2f", "m/s", "[BLOG]");
-        most(tag, "Tube drop", false, b.tubeDrop(), tubeSide.drop(), "%.2f", "bar", "[BLOG]");
-        if (condenser) most(tag, "Shell speed", false, b.shellSpeed(), shellSide.high(), "%.2f", "m/s", "[SCR-HX]");
-        else within(tag, "Shell speed", false, b.shellSpeed(), shellSide.low(), shellSide.high(), "%.2f", "m/s", "[SCR-HX] × 2");
-        most(tag, "Shell drop", false, b.shellDrop(), shellSide.drop(), "%.2f", "bar", condenser ? "[SCR-HX]" : "[BLOG]");
+        most(tag, "Tube drop", false, b.tubeDrop(), .7, "%.2f", "bar", "[BLOG]");
+        most(tag, "Shell drop", false, b.shellDrop(), shellLimit, "%.2f", "bar", condenser ? "[SCR-HX]" : "[BLOG]");
     }
 
     /** A coil's drop from {@code in} to {@code out}: the homogeneous law along the enthalpy, in {@code slices}. */
@@ -332,6 +357,7 @@ public final class SizingProbe {
     }
 
     static final List<PressurePath> PATHS = new ArrayList<>();
+    static double runTube, runShell;
 
     public static void main(String[] args) throws IOException {
         SampleFlowsheetProbe.main(args);
@@ -451,10 +477,15 @@ public final class SizingProbe {
         // E-101: both sides liquid; the crude in the tubes, the bottoms on the shell.
         double q101 = S.get("S-9").enthalpy() - S.get("S-10").enthalpy();
         var e101 = exchanger("E-101", 0, q101, 1000, new double[]{S.get("S-9").temperature(), S.get("S-10").temperature()}, new double[]{S.get("S-4").temperature(), S.get("S-5").temperature()}, props(S.get("S-4")), props(S.get("S-9")), false);
+        // What the run uses once E-101 has its size: the drops at the steady flow, not the design flow.
+        var crude = props(S.get("S-4"));
+        var bottoms = props(S.get("S-9"));
+        runTube = PipeResistance.pressureDrop(HeatSides.tubePassage(e101.shell(), e101.tubes()), crude.mass() / e101.shells(), crude.density(), crude.viscosity()) / 1e5;
+        runShell = PipeResistance.pressureDrop(shellLaw(e101.shell(), e101.tubes(), false), bottoms.mass() / e101.shells(), bottoms.density(), bottoms.viscosity()) / 1e5;
         // The same unit with a size the player keeps: one step down, as a Fixed size that fails.
         double[] e101Hot = {S.get("S-9").temperature(), S.get("S-10").temperature()}, e101Cold = {S.get("S-4").temperature(), S.get("S-5").temperature()};
-        var kept = bundle(1, .75, 6, props(S.get("S-4")), props(S.get("S-9")));
-        limits("E-101 kept", q101 * MARGIN / (1000 * lmtd(e101Hot[0], e101Hot[1], e101Cold[0], e101Cold[1])), kept, e101Hot, e101Cold, new Side(1, 3, .7), new Side(.3, 2, .7), false);
+        var kept = bundle(1, .75, 6, props(S.get("S-4")), props(S.get("S-9")), false);
+        limits("E-101 kept", q101 * MARGIN / (1000 * lmtd(e101Hot[0], e101Hot[1], e101Cold[0], e101Cold[1])), kept, e101Hot, e101Cold, .7, false);
         // The condenser: vapour on the shell side, water in the tubes; film 5000 against 2000.
         double condenser = Math.abs(r.dutyLedger().orElseThrow().condenserWatts()), cu = 1 / (1 / 5000.0 + 1 / 2000.0);
         var e100 = exchanger("Condenser", 1, condenser, cu, new double[]{top.temperatureKelvin(), condenserNode.temperatureKelvin()}, new double[]{S.get("CWS").temperature(), S.get("CWR").temperature()}, props(S.get("CWS")), props(overhead), true);
@@ -482,6 +513,8 @@ public final class SizingProbe {
         double load = gas / (PI * dd * dd / 8), allowed = 1.25 * .107 / 2 * Math.sqrt((liquid.density() - off.density()) / off.density());
         System.out.printf(Locale.ROOT, "liquid %.1f m3/h, gas %.0f m3/h at %.1f kg/m3, water %.1f m3/h; drum D %.1f x T/T %d m, boot D %.2f x %.2f m, saddles %.0f m%n", oil * 3600, gas * 3600, off.density(), water * 3600, dd, tt, boot.diameter(), boot.length(), saddles);
         UNITS.add(new Unit(1, "Receiver", "Lying drum", String.format(Locale.ROOT, "D %.1f × T/T %d m, boot", dd, tt), 1, "Drum with boot"));
+        least("Receiver", "Type: free water to settle", true, water * 3600, 0, "%.1f", "m³/h", "[SCR-VES]");
+        quiet();
         least("Receiver", "Hold to half", false, drum[2] / 2 / oil / 60, 5, "%.1f", "min", "[BLOG], [COST]");
         within("Receiver", "Length to diameter", false, tt / dd, 2.5, 5, "%.1f", "", "[BLOG]");
         quiet();
@@ -501,9 +534,7 @@ public final class SizingProbe {
         double bestFace = 1e9, bestSpeed = 0, bestDrop = 0, bestBare = 0;
         String bestBank = null;
         int bestBays = 0;
-        for (double floor : new double[]{.6, 0}) {
-            if (bestBank != null) break;
-            for (var bay : ProcessUnit.bays())
+        for (var bay : ProcessUnit.bays())
             for (int parallel = 1; parallel <= ProcessUnit.Bank.MAX_PARALLEL; parallel++)
                 for (int series = 1; series <= ProcessUnit.Bank.MAX_SERIES; series++) {
                     double w = bay[0], l = bay[1];
@@ -512,8 +543,8 @@ public final class SizingProbe {
                     if (bare * film < uaNeeded) continue;
                     var g = HeatSides.airCoolerPassage(w, l, bank);
                     double speed = mean.volume() * MARGIN / g.area(), drop = PipeResistance.pressureDrop(g, mean.mass() * MARGIN, mean.density(), mean.viscosity()) / 1e5;
-                    if (speed < floor || speed > 2.4 || drop > .7) continue;
-                    if (floor > 0 ? face < bestFace : speed > bestSpeed) {
+                    if (drop > .7) continue;
+                    if (face < bestFace || face == bestFace && parallel * series < bestBays) {
                         bestFace = face;
                         bestBare = bare;
                         bestSpeed = speed;
@@ -522,30 +553,29 @@ public final class SizingProbe {
                         bestBank = String.format(Locale.ROOT, "%d × %d bays of %.1f × %.0f m", parallel, series, w, l);
                     }
                 }
-        }
         System.out.printf(Locale.ROOT, "E-102: %.2f MW design, C %.1f kW/K, UA needed %.1f kW/K, bare needed %.0f m2: %s, face %.0f m2, bare %.0f m2, tube %.2f m/s, %.2f bar, fans %.0f kW%n", qAir / 1e6, capacity / 1e3, uaNeeded / 1e3, uaNeeded / film, bestBank, bestFace, bestBare, bestSpeed, bestDrop, HeatSides.fanPower(bestBare, 1) / 1e3);
         UNITS.add(new Unit(0, "E-102", "Air cooler", bestBank, 1, "Air cooler"));
         least("E-102", "Bare surface", true, bestBare, uaNeeded / film, "%.0f", "m²", WORLD);
         least("E-102", "Outlet above air", false, residue.temperature() - HeatSides.AIR_TEMPERATURE, 15, "%.1f", "K", "[HALL-R]");
-        within("E-102", "Tube speed", false, bestSpeed, .6, 2.4, "%.2f", "m/s", "[CHECALC]");
         most("E-102", "Tube drop", false, bestDrop, .7, "%.2f", "bar", "[WEAK]");
 
         // ---- H-101: the smallest heater that holds the duty ----
         System.out.println("--- fired heater ---");
         double heater = (S.get("S-6").enthalpy() - S.get("S-5").enthalpy()) * MARGIN, picked = 1e9;
-        String pick = null, item = null;
-        for (var kind : List.of(EquipmentShape.Kind.VERTICAL_HEATER, EquipmentShape.Kind.CABIN_HEATER)) {
-            double[] sizes = kind == EquipmentShape.Kind.VERTICAL_HEATER ? new double[]{2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12} : new double[]{4, 5, 6, 7, 8, 9, 10, 11, 12};
-            for (double d : sizes) {
-                int low = kind == EquipmentShape.Kind.VERTICAL_HEATER ? Math.max(4, (int) Math.ceil(1.5 * d)) : Math.max(6, (int) Math.ceil(1.2 * d));
-                int high = kind == EquipmentShape.Kind.VERTICAL_HEATER ? Math.min(20, (int) Math.floor(2.75 * d)) : 48;
-                for (int l = low; l <= high; l++) {
-                    double duty = ProcessUnit.heaterDuty(kind, d, l);
-                    if (duty * 1e6 < heater || duty >= picked) continue;
-                    picked = duty;
-                    pick = String.format(Locale.ROOT, "%s %.1f × %d m", kind == EquipmentShape.Kind.VERTICAL_HEATER ? "Vertical" : "Cabin", d, l);
-                    item = kind == EquipmentShape.Kind.VERTICAL_HEATER ? "Vertical heater" : "Cabin heater";
-                }
+        // The type by duty: a vertical while the largest holds it, a cabin above (plan section 3.10).
+        double mostVertical = ProcessUnit.heaterDuty(EquipmentShape.Kind.VERTICAL_HEATER, 12, 20);
+        var kind = heater / 1e6 <= mostVertical ? EquipmentShape.Kind.VERTICAL_HEATER : EquipmentShape.Kind.CABIN_HEATER;
+        boolean vertical = kind == EquipmentShape.Kind.VERTICAL_HEATER;
+        String pick = null, item = vertical ? "Vertical heater" : "Cabin heater";
+        double[] sizes = vertical ? new double[]{2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12} : new double[]{4, 5, 6, 7, 8, 9, 10, 11, 12};
+        for (double d : sizes) {
+            int low = vertical ? Math.max(4, (int) Math.ceil(1.5 * d)) : Math.max(6, (int) Math.ceil(1.2 * d));
+            int high = vertical ? Math.min(20, (int) Math.floor(2.75 * d)) : 48;
+            for (int l = low; l <= high; l++) {
+                double held = ProcessUnit.heaterDuty(kind, d, l);
+                if (held * 1e6 < heater || held >= picked) continue;
+                picked = held;
+                pick = String.format(Locale.ROOT, "%s %.1f × %d m", vertical ? "Vertical" : "Cabin", d, l);
             }
         }
         double duty = heater / 1e6, radiant = .7 * duty * 1000 / 35, convection = .3 * duty * 1000 / 15;
@@ -559,6 +589,9 @@ public final class SizingProbe {
         System.out.printf(Locale.ROOT, "H-101: design %.2f MW, largest vertical %.1f, largest cabin %.1f; %s holds %.1f MW; coils %d passes, %.2f + %.2f = %.2f bar; cold oil %.2f m/s, %.0f kg/s/m2%n", duty, ProcessUnit.heaterDuty(EquipmentShape.Kind.VERTICAL_HEATER, 12, 20), ProcessUnit.heaterDuty(EquipmentShape.Kind.CABIN_HEATER, 12, 48), pick, picked, cg.channels(), dc / 1e5, dr / 1e5, (dc + dr) / 1e5, props(coolIn).volume() * MARGIN / cg.area(), massFlux);
         UNITS.add(new Unit(0, "H-101", "Fired heater", pick, 1, item));
         least("H-101", "Duty held", true, picked, duty, "%.1f", "MW", WORLD);
+        if (vertical) most("H-101", "Type: a vertical's most", true, duty, mostVertical, "%.1f", "MW", WORLD);
+        else least("H-101", "Type: over a vertical's most", true, duty, mostVertical, "%.1f", "MW", WORLD);
+        quiet();
 
         // ---- Pumps ----
         System.out.println("--- pumps ---");
@@ -623,7 +656,50 @@ public final class SizingProbe {
         least("E-102", "Pressure spare on its path", true, PATHS.get(1).available() - PATHS.get(1).lost(), 0, "%.2f", "bar", WORLD);
         quiet();
 
+        // ---- What if the products went to storage: the type each tile would be proposed ----
+        System.out.println("--- storage ---");
+        store("NAPHTHA", S.get("NAPHTHA"), S.get("NAPHTHA").temperature());
+        store("KERO", S.get("KERO"), 313.15);
+        store("DIESEL", S.get("DIESEL"), 313.15);
+        store("AGO", S.get("AGO"), 313.15);
+        store("RESIDUE", S.get("RESIDUE"), S.get("RESIDUE").temperature());
+        // The same kerosene as its draw leaves the column: hot liquid at its own bubble pressure.
+        store("KERO, hot", S.get("KERO"), S.get("KERO").temperature());
+
+        if (BANK) return;
         write(diameter, chosenFlood, chosenTray);
+    }
+
+    /** One storage tile on the sample's what-if: the bubble pressure at {@code kelvin} proposes the type, the hold sizes it. */
+    record Stored(String name, double kelvin, double bubble, double volume, String type, String size, int count, double each, String limit, int lamp) {}
+
+    static final List<Stored> STORED = new ArrayList<>();
+
+    static void store(String name, FluidThermodynamics.State s, double kelvin) {
+        double[] n = SampleFlowsheetProbe.amounts(s);
+        var liquid = props(SampleFlowsheetProbe.tp(kelvin, 30e5, n));
+        double pressure = bubble(kelvin, n), volume = liquid.volume() * MARGIN * HOLD * 3600 / WORKING;
+        boolean roof = pressure <= ROOF_LIMIT;
+        for (int count = 1; count <= 12; count++) {
+            double[] best = null;
+            for (int d = 4; d <= (roof ? 40 : 24); d++) {
+                int shell = roof ? Math.max(4, Math.min(24, Math.round(.6f * d))) : 0;
+                double each = roof ? PI * d * d / 4 * (shell - 1) : PI * d * d * d / 6;
+                if (count * each >= volume) {
+                    best = new double[]{d, shell, each};
+                    break;
+                }
+            }
+            if (best == null) continue;
+            String size = roof ? String.format(Locale.ROOT, "D %.0f × %.0f m", best[0], best[1]) : String.format(Locale.ROOT, "D %.0f m", best[0]);
+            double design = 1.1 * pressure / 1e5;
+            int lamp = !roof && design > 20 ? 1 : 0;
+            String limit = roof ? String.format(Locale.ROOT, "Bubble at most %.3f bar", ROOF_LIMIT / 1e5) : String.format(Locale.ROOT, "Over %.3f bar; design %.2f bar", ROOF_LIMIT / 1e5, design);
+            STORED.add(new Stored(name, kelvin, pressure, volume, roof ? "Floating roof" : "Sphere", size, count, best[2], limit, lamp));
+            System.out.printf(Locale.ROOT, "%-10s %.1f C, bubble %.4f bar, %.0f m3 for %.0f h at %.0f %%: %s, %d × %s, %.0f m3 each%n", name, kelvin - 273.15, pressure / 1e5, volume, HOLD, 100 * WORKING, roof ? "Floating roof" : "Sphere", count, size, best[2]);
+            return;
+        }
+        throw new IllegalStateException(name);
     }
 
     /** The table {@code SimulatorSizing} draws. */
@@ -669,6 +745,9 @@ public final class SizingProbe {
             var mine = CRITS.stream().filter(c -> c.tag().equals(u.tag())).toList();
             out.add(String.join("\t", "BUILD", u.tag(), "" + u.count(), u.item(), u.count() > 1 ? u.size().replaceFirst("^\\d+ × s", "S") : u.size(), "" + mine.stream().mapToInt(Crit::lamp).max().orElse(0)));
         }
+        out.add("RUNDROP\tE-101\t" + bar(runTube) + "\t" + bar(runShell));
+        for (var s : STORED)
+            out.add(String.join("\t", "STORE", s.name(), String.format(Locale.ROOT, "%.1f", s.kelvin() - 273.15), s.bubble() < 1500 ? "under 0.015" : String.format(Locale.ROOT, "%.3f", s.bubble() / 1e5), String.format(Locale.ROOT, "%.0f", s.volume()), s.type(), (s.count() > 1 ? s.count() + " × " : "") + s.size(), s.limit(), "" + s.lamp()));
         double metres = 0, largest = 0;
         int count = 0;
         for (var l : LINES.values()) {
