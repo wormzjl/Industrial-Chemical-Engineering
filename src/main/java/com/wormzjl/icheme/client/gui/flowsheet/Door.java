@@ -90,8 +90,13 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
 
     /** A meter; a unit wider than its place goes into the label (the alignment rule). */
     public static Column.Reading meter(String label, String value, String unit) {
+        return meter(label.toLowerCase(Locale.ROOT), label, value, unit);
+    }
+
+    /** A meter whose label another in its column shares; {@code key} tells them apart. */
+    public static Column.Reading meter(String key, String label, String value, String unit) {
         boolean wide = unit.length() > 4;
-        return new Column.Reading(label.toLowerCase(Locale.ROOT), wide ? label + " " + unit : label, value, wide ? "" : unit, null);
+        return new Column.Reading("meter:" + key, wide ? label + " " + unit : label, value, wide ? "" : unit, null);
     }
 
     public static Column.Field entry(String key, String label, String unit) {

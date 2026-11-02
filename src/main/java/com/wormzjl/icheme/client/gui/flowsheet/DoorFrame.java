@@ -2,6 +2,7 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
+import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
@@ -29,6 +30,14 @@ public final class DoorFrame {
 
     private static boolean two(Door door) {
         return door.columns().size() == 2;
+    }
+
+    /** The rows a column, as the door at {@code w} shows them: a calculator page's two fold into one where the door is too narrow to split. */
+    public static List<List<Column.Row>> columns(Door door, int w) {
+        if (!door.calculator() || !two(door) || CalculatorColumn.split(w)) return door.columns();
+        var all = new ArrayList<Column.Row>();
+        door.columns().forEach(all::addAll);
+        return List.of(all);
     }
 
     /** The door's columns, one area a list of rows. */

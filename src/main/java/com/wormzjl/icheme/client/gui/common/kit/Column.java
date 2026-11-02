@@ -295,9 +295,9 @@ public final class Column {
             case Reading r -> labelled(row, r.key(), r.label(), r.unit(), r.hint(), x, y, w, m, h, beside);
             case Setting s -> labelled(row, s.key(), s.label(), s.unit(), s.hint(), x, y, w, m, h, beside);
             case Buttons b -> {
-                // Side by side while every text fits its button; else one button a row, each the whole width.
+                // Side by side while every button keeps 40 px and its text fits; else one button a row, each the whole width.
                 int n = b.buttons().size(), bw = (w - BUTTON_GAP * (n - 1)) / n;
-                boolean stacked = b.buttons().stream().anyMatch(button -> m.width(button.text()) > bw - 6);
+                boolean stacked = bw < 40 || b.buttons().stream().anyMatch(button -> m.width(button.text()) > bw - 6);
                 for (int i = 0; i < n; i++)
                     slots.put(b.buttons().get(i).key(), stacked ? new Rect(x, y + i * h.buttons(), w, WIDGET) : new Rect(x + i * (bw + BUTTON_GAP), y, bw, WIDGET));
                 yield new Placed(row, new Rect(x, y, w, stacked ? n * h.buttons() : h.buttons()), slots, List.of(), 0, null);
@@ -334,7 +334,7 @@ public final class Column {
         var slots = new LinkedHashMap<String, Rect>();
         slots.put(key, box);
         if (row instanceof Setting s && s.steps()) {
-            slots.put(s.minus().key(), new Rect(box.x() - STEPPERS, box.y(), STEP, WIDGET));
+            slots.put(s.minus().key(), new Rect(Math.max(x, box.x() - STEPPERS), box.y(), STEP, WIDGET));
             slots.put(s.plus().key(), new Rect(box.x() - STEP - 2, box.y(), STEP, WIDGET));
         }
         return new Placed(row, new Rect(x, y, w, above + h.field()), slots, texts, lines.size(), hint != null ? label + "\n" + hint : null);

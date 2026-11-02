@@ -298,7 +298,9 @@ public final class SheetEditor {
             var route = new ArrayList<>(routed(stream).route());
             if (start) route.addFirst(heldAt(stream.from()));
             if (end) route.addLast(heldAt(stream.to()));
-            streams.add(new Flowsheet.Stream(stream.id(), stream.name(), start ? null : stream.from(), end ? null : stream.to(), stream.feed(), route, stream.unknown()));
+            var from = start ? null : stream.from();
+            var to = end ? null : stream.to();
+            streams.add(new Flowsheet.Stream(stream.id(), stream.name(), from, to, fed(from, to, stream.feed()), route, stream.unknown()));
         }
         return apply(with(units, streams), null);
     }
@@ -394,7 +396,16 @@ public final class SheetEditor {
     /** A new stream's id, the first free; its name, likewise. */
     private Flowsheet.Stream fresh(@Nullable Flowsheet.End from, @Nullable Flowsheet.End to, @Nullable Flowsheet.Feed feed, List<Flowsheet.Point> route) {
         var ids = sheet.streams().stream().map(Flowsheet.Stream::id).toList();
-        return new Flowsheet.Stream(free(ids, "s", 1), free(names(), "S-", 1), from, to, feed, route, new JsonObject());
+        return new Flowsheet.Stream(free(ids, "s", 1), free(names(), "S-", 1), from, to, fed(from, to, feed), route, new JsonObject());
+    }
+
+    private static Flowsheet.Feed noFlow() {
+        return new Flowsheet.Feed(298.15, 101325, new java.util.LinkedHashMap<>(), List.of());
+    }
+
+    /** What enters a unit from an open start is a feed, with no flow until its door sets one: the solver refuses an open start without one, and only a feed's door can give it one. */
+    private static Flowsheet.@Nullable Feed fed(@Nullable Flowsheet.End from, @Nullable Flowsheet.End to, @Nullable Flowsheet.Feed feed) {
+        return from == null && to != null && feed == null ? noFlow() : feed;
     }
 
     private @Nullable String added(Flowsheet.Stream stream) {
@@ -405,7 +416,7 @@ public final class SheetEditor {
 
     /** Drops a feed's pill, with no flow until its door sets one; its id, or null if refused. */
     public @Nullable String addFeed(int x, int y) {
-        return added(fresh(null, null, new Flowsheet.Feed(298.15, 101325, new java.util.LinkedHashMap<>(), List.of()), List.of(new Flowsheet.Point(x, y))));
+        return added(fresh(null, null, noFlow(), List.of(new Flowsheet.Point(x, y))));
     }
 
     /** Drops a product's pill. */
@@ -500,7 +511,9 @@ public final class SheetEditor {
             else route.addLast(point);
         }
         var end = port == null ? null : end(port);
-        return apply(withStream(id, s -> new Flowsheet.Stream(s.id(), s.name(), start ? end : s.from(), start ? s.to() : end, s.feed(), route, s.unknown())), null);
+        var from = start ? end : stream.from();
+        var to = start ? stream.to() : end;
+        return apply(withStream(id, s -> new Flowsheet.Stream(s.id(), s.name(), from, to, fed(from, to, s.feed()), route, s.unknown())), null);
     }
 
     /** Moves a stream's pill to the point. */

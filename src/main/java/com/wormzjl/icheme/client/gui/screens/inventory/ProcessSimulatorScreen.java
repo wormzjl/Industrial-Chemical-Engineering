@@ -240,6 +240,7 @@ public final class ProcessSimulatorScreen extends Screen {
         kit.keep((field, slot) -> {
             var box = new SkinField(font, slot.x(), slot.y(), slot.w(), slot.h(), Component.literal(field.label()), ProcessSimulatorScreen::skin);
             box.setValue(values.getOrDefault(field.key(), ""));
+            box.setEditable(editor.editable());
             box.setResponder(text -> write.write(field.key(), text));
             entries.put(field.key(), box);
             return addRenderableWidget(box);
@@ -269,7 +270,7 @@ public final class ProcessSimulatorScreen extends Screen {
         var tabs = DoorFrame.tabs(shown, w);
         for (int i = 0; i < shown.tabs().size(); i++) add(shown.tabs().get(i), tabs.get(i).moved(left, top));
         var m = GuiCanvas.measure(font);
-        kit.layout(DoorFrame.areas(shown, w, h), DoorFrame.bar(shown, w), shown.columns(), m);
+        kit.layout(DoorFrame.areas(shown, w, h), DoorFrame.bar(shown, w), DoorFrame.columns(shown, w), m);
         keep(shown.values(), (key, text) -> shown.actions().entry(key, text), this::actDoor);
         kit.place(left, top);
         var footer = DoorFrame.footer(shown, w, h, m);
@@ -287,6 +288,7 @@ public final class ProcessSimulatorScreen extends Screen {
             }
             var box = new SkinField(font, at.x(), at.y(), at.w(), at.h(), Component.literal(slot.key()), ProcessSimulatorScreen::skin);
             box.setValue(slot.text());
+            box.setEditable(editor.editable());
             if (slot.hint() != null) box.setHint(Component.literal(slot.hint()));
             box.setResponder(text -> shown.actions().entry(slot.key(), text));
             addRenderableWidget(box);
@@ -613,7 +615,7 @@ public final class ProcessSimulatorScreen extends Screen {
             g.pose().pushPose();
             g.pose().translate(left, top, 0);
             DoorFrame.back(canvas, skin, shown, doorWidth(), doorHeight());
-            kit.placeAll(shown.columns(), x.m());
+            kit.placeAll(DoorFrame.columns(shown, doorWidth()), x.m());
             kit.place(left, top);
             hovered = kit.draw(canvas, skin, mouseX - left, mouseY - top);
             g.pose().popPose();

@@ -53,6 +53,16 @@ class KitLayoutTest {
     }
 
     @Test
+    void aWideRowIsOneEntryAcrossTheWholeWidth() {
+        var column = Column.place(List.of(new Column.Wide("add", "Add a component")), 20, 74, 300, M);
+        var slot = column.rows().getFirst().slots().get("add");
+        assertEquals(20, slot.x());
+        assertEquals(300, slot.w());
+        assertTrue(slot.inside(column.rows().getFirst().rect()));
+        assertEquals(java.util.List.of("add"), java.util.List.copyOf(column.slots().keySet()));
+    }
+
+    @Test
     void textsAreCutAndWrappedByTheMeasure() {
         assertEquals("Hold the", M.cut("Hold the outlet", 50));
         assertEquals(List.of("one two", "three"), M.wrap("one two three", 42));

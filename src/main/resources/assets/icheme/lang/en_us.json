@@ -1928,7 +1928,6 @@
   "gui.icheme.flowsheet.door.power": "Power",
   "gui.icheme.flowsheet.door.head": "Head",
   "gui.icheme.flowsheet.door.none": "none",
-  "gui.icheme.flowsheet.door.rest": "Rest",
   "gui.icheme.flowsheet.door.share": "Share, %%",
   "gui.icheme.flowsheet.door.outlet_row": "Outlet %s",
   "gui.icheme.flowsheet.door.mole": "Mole",

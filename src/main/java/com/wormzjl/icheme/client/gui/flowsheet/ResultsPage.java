@@ -53,7 +53,7 @@ public final class ResultsPage {
             rows.add(Door.group(x.text("results.mass"), Door.meter(x.text("results.in"), u.tonnes(run.massIn()), u.tonnesUnit()), Door.meter(x.text("results.out"), u.tonnes(run.massOut()), u.tonnesUnit()), Door.meter(x.text("results.gap"), SheetUnits.number(2, results.massGap()), "%")));
             var heat = heat(x);
             rows.add(Door.group(x.text("results.heat"), Door.meter(x.text("results.fired"), SheetUnits.megawatts(heat[0]), "MW"), Door.meter(x.text("results.recovered"), SheetUnits.megawatts(heat[1]), "MW"), Door.meter(x.text("results.cooled"), SheetUnits.megawatts(heat[2]), "MW"),
-                    Door.meter(x.text("results.gap"), SheetUnits.number(2, results.heatGap()), "%")));
+                    Door.meter("heat_gap", x.text("results.gap"), SheetUnits.number(2, results.heatGap()), "%")));
         }
         return rows;
     }

@@ -270,7 +270,7 @@ public final class SimulatorRender {
         var tabs = DoorFrame.tabs(door, d.w);
         for (int i = 0; i < door.tabs().size(); i++) d.skin.button(d.c, tabs.get(i), door.tabs().get(i).text(), SimulatorPage.press(door.tabs().get(i)), false);
         var areas = DoorFrame.areas(door, d.w, d.h);
-        for (int i = 0; i < areas.size(); i++) rows(d, door.columns().get(i), areas.get(i).x(), areas.get(i).y(), areas.get(i).w(), door.values());
+        for (int i = 0; i < areas.size(); i++) rows(d, DoorFrame.columns(door, d.w).get(i), areas.get(i).x(), areas.get(i).y(), areas.get(i).w(), door.values());
         var footer = DoorFrame.footer(door, d.w, d.h, d.m);
         d.skin.button(d.c, footer.getFirst(), T.get("fluid.close"), Skin.Press.REST, false);
         for (int i = 0; i < door.footer().size(); i++) {
