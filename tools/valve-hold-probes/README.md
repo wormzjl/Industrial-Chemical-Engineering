@@ -8,12 +8,12 @@ Batch: `documentation/2026-11-02-valve-hold/`.
 
 In a scratch worktree that merges `claude/valve-hold` and the column branch, from the worktree root:
 
-1. Apply `held-dump.patch`. It logs every island on `HELD: Substep` as `HELD_DUMP`, with node states and pipes.
+1. Apply `tools/valve-hold-probes/held-dump.patch`. It logs every island on `HELD: Substep` as `HELD_DUMP`, with node states and pipes.
 2. Copy `trace/TraceDump.java` to `src/main/java/com/wormzjl/icheme/science/fluid/solver/` and `trace/LeadProbe.java` to `src/main/java/com/wormzjl/icheme/runtime/fluid/`. Make `ROOT` in `LeadProbe` and `FILE` in `TraceDump` absolute: the world server runs in `run/`.
-3. Run `perl trace/add.pl`, then `perl trace/add2.pl`.
-4. Run `./gradlew runReviewWorldServer --offline > tmp/trace/run.log`, about 3 minutes.
+3. Run `perl tools/valve-hold-probes/trace/add.pl`, then `perl tools/valve-hold-probes/trace/add2.pl`.
+4. Make `tmp/trace/`, then run `./gradlew runReviewWorldServer --offline > tmp/trace/run.log`, about 3 minutes.
 
-`final-lane/lane.sh base` and `head` run the final lane, one Gradle run at a time, in the two scratch worktrees named at its top. `final-lane/linediff.pl <base> <head>` gives the largest number change per test between two `printed.txt`. `final-lane/replay183.sh` replays one seed alone on both sides.
+`final-lane/lane.sh base` and `head` run the final lane, one Gradle run at a time, in the two scratch worktrees named at its top (`gates-base-scratch`, `gates-head-scratch`). It takes the hold-fuzz harness and the classifiers from the head worktree's `tools/`. `final-lane/linediff.pl <base> <head>` gives the largest number change per test between two `printed.txt`. `final-lane/replay183.sh` replays cold seed 183 alone on both sides; the worktree names and the seed are at its top. Change the names at the top of both scripts for other worktrees.
 
 ## Entry points
 

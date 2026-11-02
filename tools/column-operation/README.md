@@ -16,6 +16,14 @@ rm src/test/java/com/wormzjl/icheme/science/column/v3/ColumnOperationC1BenchTest
 
 It writes `tmp/column-op-c1/sweep-<native|java>.tsv` and prints one `C1` line per case. `-PnativeThermoBatch=false` gives the Java outer pass.
 
+The layout probe is one Java source file on the compiled science classes. From the worktree root, after `./gradlew compileJava processResources`:
+
+```text
+java -cp "build/classes/java/main;build/resources/main;<gson-2.10.1.jar>" tools/column-operation/probes/ReviewWorldLayoutProbe.java 0.0625
+```
+
+The jar is in the Gradle cache, `modules-2/files-2.1/com.google.code.gson/gson/2.10.1/`. On Linux or macOS the path separator is `:`.
+
 ## Entry points
 
 | Test | Solves | Prints |
@@ -23,8 +31,14 @@ It writes `tmp/column-op-c1/sweep-<native|java>.tsv` and prints one `C1` line pe
 | `sweep` | three designs on `tjl20_methane_nitrogen` (the `tia_juana_nitrogen` preset; the same with a 310 K condenser and reflux 8; a 15 MW kettle without steam): one cold base each, then warm (`AGGRESSIVE`) solves at alpha 0.5 and 1.2 with hydraulics and with a prescribed 0.7 kPa drop, feed T -10..+10 K, the feed 1/5/10 % toward WTI Light Export and Cold Lake Blend, steam short 10/25/50 %, condenser +5/+10 K | status, time, path; the base table applied to the new input against the new solve: largest product flow error, composition L1, product temperature change, the condenser duty closed on the table's products against the solved one, sump pressure and temperature change |
 | `probe` | candidate designs (cold solves): the owner's cold-condenser and high-reflux cases | outcome, duties, wet trays, the water dew-point advisories, flood and drop |
 
+`probes/ReviewWorldLayoutProbe.java` (`main`, argument: the fraction of the template's column area): the default template's trays, diameter and components, the bounding box and the port cells of its column, of the least exchanger and pump, and of a lying drum. It was written to lay out the plant of `ColumnOperationReviewWorld`.
+
+The review world itself stays in `src/fluidGameTest/`, run by `runReviewWorldServer`. The Operation tab's prototype sheets are in `tools/heat-gui-renders/OperationPrototypes.java`.
+
 `results/` holds the TSV of the C1 run (2026-10-29, C++ outer pass). The run's console log is archived in the main checkout, `tools/column-operation/logs/c1-sweep-logs-2026-10-29.tar.gz` (local, never staged).
 
 ## History
 
 - 2026-10-29: written for C1. Sweep: 63 cases in 45 s, every warm solve accepted on the warm route; rule B median 0.33 s, 95th percentile 0.52 s. Findings in the review.
+- 2026-10-29: the layout probe, written for the owner's test world in `tmp/column-op-world/` as `Probe.java`. Moved here with the class renamed at the cleanup of 2026-11-02. It was not re-run at that move.
+- Neither probe was ever on a tracked source path, so there is nothing to re-attach.

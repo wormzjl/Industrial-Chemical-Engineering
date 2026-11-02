@@ -60,6 +60,8 @@ public final class ColumnOperationReviewWorld {
     static final double SCALE = 1 / 16.0;
     /** The supply pressure of the feed, the steam and the cooling water, Pa; the atmosphere the products leave to. */
     static final double SUPPLY = 500_000, WATER = 400_000, ATMOSPHERE = 101_325;
+    /** The cooling water's supply temperature, K. */
+    static final double WATER_TEMPERATURE = 298.15;
     static final ColumnComponents.Choices CHOICES = new ColumnComponents.Choices(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD,
             List.of(ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD));
     /** The condenser's shell size, m: larger than the least exchanger, for the overhead's duty. */
@@ -76,13 +78,8 @@ public final class ColumnOperationReviewWorld {
 
     @GameTest(template = "empty", timeoutTicks = Integer.MAX_VALUE, batch = "review-operation")
     public static void aCrudeColumnRuns(GameTestHelper helper) {
-        var level = helper.getLevel();
-        // North of the column review plant, clear of the test's own structure block, on the ground.
-        var corner = helper.absolutePos(new BlockPos(48, 0, -64));
-        level.getChunk(corner.getX() >> 4, corner.getZ() >> 4);
-        var base = new BlockPos(corner.getX(), level.getHeight(Heightmap.Types.WORLD_SURFACE, corner.getX(), corner.getZ()), corner.getZ());
-        var plant = new AssemblyGameTests.Plant(helper, base, new BlockPos(-34, 0, -32), new BlockPos(24, 44, 36));
-        var rig = new Rig(plant);
+        var rig = rig(helper);
+        var plant = rig.plant;
         String[] failure = {null};
         try {
             rig.build();
@@ -95,6 +92,7 @@ public final class ColumnOperationReviewWorld {
                 .thenIdle(20)
                 .thenExecute(() -> {
                     if (failure[0] == null) rig.start(failure);
+                    if (failure[0] == null) rig.spawn();
                 })
                 .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && rig.past(), "Waiting for the first solve"));
         for (int i = 1; i <= REPORTS; i++) {
@@ -111,6 +109,15 @@ public final class ColumnOperationReviewWorld {
         }).thenSucceed();
     }
 
+    /** The plant's rig north of the test's own structure block, on the ground. */
+    static Rig rig(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var corner = helper.absolutePos(new BlockPos(48, 0, -64));
+        level.getChunk(corner.getX() >> 4, corner.getZ() >> 4);
+        var base = new BlockPos(corner.getX(), level.getHeight(Heightmap.Types.WORLD_SURFACE, corner.getX(), corner.getZ()), corner.getZ());
+        return new Rig(new AssemblyGameTests.Plant(helper, base, new BlockPos(-34, 0, -32), new BlockPos(24, 44, 36)));
+    }
+
     /** The default template at {@code scale} of its feed, its draws, steam and pumparound duties, its column area in step. */
     static V3ColumnInput scaled(V3ColumnInput in, double scale) {
         double[] feed = in.feedComponentMolarFlowsMolPerSecond().clone();
@@ -123,7 +130,7 @@ public final class ColumnOperationReviewWorld {
                 in.columnDiameterMetres() * Math.sqrt(scale));
     }
 
-    private static final class Rig {
+    static final class Rig {
         final AssemblyGameTests.Plant plant;
         final List<BlockPos> sinks = new ArrayList<>();
         BlockPos feed, steam, water;
@@ -215,7 +222,7 @@ public final class ColumnOperationReviewWorld {
             supply(feed, FEED_BORE, new FluidDeviceSpec(1, input.feedTemperatureKelvin(), SUPPLY, crude(catalog)));
             var waterFluid = FluidDeviceSpec.water(catalog).composition();
             supply(steam, STEAM_BORE, new FluidDeviceSpec(1, input.steamFeeds().getFirst().temperatureKelvin(), SUPPLY, waterFluid));
-            TankCharge.run(plant.world, id(water), new FluidDeviceSpec(1, 303.15, WATER, waterFluid));
+            TankCharge.run(plant.world, id(water), new FluidDeviceSpec(1, WATER_TEMPERATURE, WATER, waterFluid));
             for (var at : sinks) {
                 long id = id(at);
                 var r = plant.world.registrations().get(id);
@@ -248,7 +255,7 @@ public final class ColumnOperationReviewWorld {
             return z;
         }
 
-        /** Validates the plant complete and starts its column; the reviewer stands north of it, facing it, at noon. */
+        /** Validates the plant complete and starts its column. */
         void start(String[] failure) {
             var entry = AssemblyService.validate(plant.level, plant.controller());
             if (entry == null || entry.status() != AssemblyStore.Status.COMPLETE) {
@@ -265,12 +272,15 @@ public final class ColumnOperationReviewWorld {
                 failure[0] = "start refused: " + refused;
                 return;
             }
-            var spawn = plant.base.offset(4, 0, -30);
-            plant.level.setDefaultSpawnPos(spawn, 0);
-            plant.level.setDayTime(6000);
-            IChemE.LOGGER.info("review_operation status=STARTED slots={} column={} spawn={} devices={} design_kmol_h={}", entry.report().slots().size(),
-                    plant.column.origin().toShortString(), spawn.toShortString(), plant.devices.size(),
+            IChemE.LOGGER.info("review_operation status=STARTED slots={} column={} devices={} design_kmol_h={}", entry.report().slots().size(),
+                    plant.column.origin().toShortString(), plant.devices.size(),
                     String.format(Locale.ROOT, "%.1f", java.util.Arrays.stream(input.feedComponentMolarFlowsMolPerSecond()).sum() * 3.6));
+        }
+
+        /** The reviewer stands north of the column, facing it, at noon. */
+        void spawn() {
+            plant.level.setDefaultSpawnPos(plant.base.offset(4, 0, -30), 0);
+            plant.level.setDayTime(6000);
         }
 
         long lastTick;

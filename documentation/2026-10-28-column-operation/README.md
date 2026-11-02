@@ -7,14 +7,16 @@ Status: In progress since 2026-10-29: owner answers recorded, implementation by 
 ## Documents
 
 - [COLUMN_OPERATION_PLAN.md](COLUMN_OPERATION_PLAN.md): the expected behaviour and three facts that shape the design (throughput scales exactly, recoveries drift slowly, the condenser closes the energy); what the code has; the column unit (boundary at the valves, void inlets, buffer vessels at product pressure, the master's valve jobs, conservation); the cycle and the split table; new solves (bands, warm route, fixed application, trip); short inputs (rules A and B); drift and the specifications (S1 to S4); timing and determinism; utilities (stages A and B, W9); package, water, nitrogen, solids; saves; the Operation tab; work packages C1 to C8 with C6b (the water-cooled condenser); owner questions Q1 to Q11 and the answers.
+- [C3_DESIGN.md](C3_DESIGN.md): the column unit's design notes for C3.
 - [C1_MEASUREMENT_REVIEW.md](C1_MEASUREMENT_REVIEW.md): C1: homogeneity, the table's error against drift and the proposed bands, warm solves (dry, wet, kettle), rule B's cost (decision B), S2 or S3.
 - [PORT_COLOURS_REVIEW.md](PORT_COLOURS_REVIEW.md): distinct assembly port colours shared by GUI and pipe laying tool, retained after connection; mapping/drawing gates and software renders.
+- [MERGE_REVIEW.md](MERGE_REVIEW.md): the merge of this batch with its three neighbours: tool folders, the final lane, formats, the owner's items.
 
 Tools: [`tools/column-operation/`](../../tools/column-operation/README.md) (the C1 bench and its TSV).
 
-## Code areas (planned)
+## Code areas
 
-`science/column/v3` (warm solves through `V3ColumnCalculator.calculateWithStrategy`, no solver change in stage A), `science/fluid/solver` (a constant-pressure buffer node; the vessel wall row unchanged), `science/fluid/network/ScheduledTransfer` (its first runtime producer), `runtime/fluid` (the column unit's registration and facts, the suspension, the ports, `IslandCoordinator` fence and valve operations), `runtime/assembly` (Start and Stop on a COMPLETE report), `science/equipment/ColumnDesign` and `ColumnTrays` (the operating point), the assembly screen's Operation tab.
+`science/column/operation` (`ColumnCycle`, `SplitTable`, `DriftBands`, `Setpoints`, `Port`, `OperationView`, `ColumnSolve`), `science/fluid/network` (`PortPlan`, `PassiveStepSolver.ports`, `ExchangerRelay.Read.column`), `runtime/fluid` (`ColumnOperation`, `ColumnUnit`, `ColumnStarts`, the suspension, `IslandCoordinator.Ports` and `owe`), `runtime/assembly` (Start, Stop, the operation commands), `science/equipment/ColumnOperatingPoint`, `client` (`OperationColumn`, the assembly screen's Operation page, `PortColours`). Chapter: `documentation/reference/code-guide/column-operation.md`. A plan item the code settled otherwise: an outlet is a GENERATOR port planned per slice, not a new node kind, so `ScheduledTransfer` still has no producer.
 
 ## History
 
@@ -50,5 +52,5 @@ Tools: [`tools/column-operation/`](../../tools/column-operation/README.md) (the 
 - C5 left out (proposed later or for the owner): the port pressures stay the design estimate (the solved tray pressures differ by the hydraulic drop, a few kPa); a package change starts no cold solve (a table on another axis is dropped at load); a solve refused for a full queue tries again at the next cycle (timing-dependent under load, as a budget hold); the warm seed is not saved (the first solve after a reload is the fast cold one).
 - The proposed bands of the C1 review (composition 0.5 %, enthalpy 1 K, closure 3 %) replace the plan's section 6 values unless the orchestrator or owner says otherwise.
 - C7 left out (for the owner or later): the members' column values on their screens (the condenser duty, the reflux rate; the status line only); the inlet's supply pressure against the port's (the table shows the port's pressure only); the set points of a column that never ran show as the design's meters (they take edits once it has run); a refused Start's reason is held per server until the next press, not saved. No gate covers the members' status and the held mover (the authority needs a server); the owner's in-game test.
-- C3 gates still open: the GameTests (Start and Stop through the assembly, a full buffer cuts the feed, dismantling books the accounts); the unit test covers the registry half.
-- C6b gate still open: the GameTest of a running column warming its cooling water by Q/(m c_p); `ColumnRunTest` covers the conservation and the shortage. Under rule B a cooling-water shortage limits the throughput as under A; the plan's alternative (re-solve at a warmer condenser) is for the owner.
+- Column GameTests: closed by `ColumnOperationGameTests` (history, 2026-11-02).
+- Under rule B a cooling-water shortage limits the throughput as under A; the plan's alternative (re-solve at a warmer condenser) is for the owner.

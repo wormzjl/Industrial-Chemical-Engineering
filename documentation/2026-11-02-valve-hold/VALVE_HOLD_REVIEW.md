@@ -46,4 +46,4 @@ DISTILLATE 1754. Sour water and off-gas never hold. Left so, the column fills it
 
 Correction: this section said "unit two-slice cases pass, so this takes more slices". Those cases ran one solver with no
 `replayStart`, off the production path, and proved nothing. Cause, gate on the production path and options: [OUTLET_HOLD_REVIEW.md](OUTLET_HOLD_REVIEW.md).
-Code guide: not updated, no merge asked.
+Code guide: updated with the column operation's merge preparation.

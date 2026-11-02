@@ -32,7 +32,7 @@ misplaced parts retain their yellow frame. Nozzles absent from the GUI use class
 - `AssemblyPortColoursTest`, `AssemblyDiagramTest`, `AssemblyColumnTest`, `FlowsheetPainterTest`, `AssemblyToolWatchTest`: 20 tests, zero failures/errors; client adapters compile. The owner closed the dev client first.
 - Regression: maximal designs under both condensers, both pumps, ejector and kettle choices; distinct actual GUI fills match nozzle lookups, connected fills stay identical with grey edges, wildcard/absent nozzles handled.
 - Software renders: both themes, with/without a selected part, byte-identical to the checked initial GUI renders.
-- Evidence: `tmp/port-colours/sync-gates.log`, `tmp/port-colours/synced/{assembly,assembly-selected}.png`; indexed in `tmp/INDEX.md`.
+- Evidence: `synced/{assembly,assembly-selected}.png` in the main checkout's `research/2026-10-28-column-operation/port-colours/`; the gate log in `tools/column-operation/logs/column-world-logs-2026-11-02.tar.gz`.
 - No live world-marker check; mapping and GUI drawing checked offline. No solver campaign or new tools; existing `tools/heat-gui-renders/GuiPrototypes.java` used.
 - Code guide: GUI, pipe laying and machine-assembly contracts updated. C8/main merge remains deferred.
 

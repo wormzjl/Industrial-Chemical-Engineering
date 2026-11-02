@@ -18,6 +18,7 @@ Status: In progress since 2026-10-28 (branch `claude/distillation-column-integra
 - 2026-10-28 (`9c5eb01f`): the C++ library is built by `processResources` when CMake is found, packed into the jar and loaded by default; the C++ Peng-Robinson outer pass of the inside-out trial runs unless `-Dicheme.native.thermo.batch=false`. Checks: column quick tests 405/405, column slow gates 99/99 with the library loaded; `NativeColumnSolverTest` 3/3 with the pass on and off; the jar copies and reuses the library. The C++ pass equals the Java kernel to 5e-14 in ln(phi); a separating crude column publishes the same products to 7e-13 relative and takes the same time. The C++ Newton stays a test probe (not wired; slower than the Java banded Newton). Code guide: `column-v3.md` (class row, owner row, the determinism exception) and `README.md` (the exception).
 - 2026-10-29: owner decision: option A of the review, the C++ library stays the default with the Java path as fallback. No code change.
 - 2026-10-29: owner decision on the side finding: the PC03/PC10 column with its feed below the bubble point behaves as it should (it simulates what could happen). No task.
+- 2026-11-02: merge preparation with the column operation (one merge, `documentation/2026-10-28-column-operation/MERGE_REVIEW.md`). Probes checked: the tool folder holds them all and `src/` holds none. `NativeColumnSolverTest` keeps its two printed lines (a timing report) and its `assumeTrue` on a build without the library; line 22 asserts that a packaged library loads.
 
 ## Open items
 

@@ -15,15 +15,22 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Added
+
+- Column operation: a built column runs in the plant from its assembly screen. Ports split the islands at the boundary valves, a split table from the last accepted solve turns the feed taken into products every 5 s, a new solve runs only when the input drifts, short inputs follow rule B (rule A where a solve fails), a water-cooled condenser gives its duty to its cooling water, and the Operation tab shows and sets it; ports share their colours between the GUI and the pipe laying tool, connected ports with grey outlines; facts schema 6, shape fields 4, protocol assembly-3 (C1 `d222c3cd3`, C2 `5199ab276`, core `805756de3`, C3 `df2dab397`, C4 `1834c0510`, C5 `97ca2d9c3`, C6 `de8f5c534`, C6b `6769f178d`, C7 `153ebe7c1`, `ae13f22d3`, test world `1f653486e`, `1352b8858`, `61955af21`, port colours `9cfc3a088`, `645e203d3`; batch `2026-10-28-column-operation`).
+
 ### Changed
 
-- Column assembly ports share distinct colours between the GUI and pipe laying tool, including after connection; connected ports have grey outlines (`9cfc3a08`, `645e203d`; batch `2026-10-28-column-operation`, `PORT_COLOURS_REVIEW.md`).
 - The C++ column library is the default (commit `9c5eb01f`; owner request; batch `2026-10-28-native-column-default`, review `NATIVE_DEFAULT_REVIEW.md`): the build packs it into the jar under `natives/<os>-<arch>/` when CMake is found (PATH, `-PnativeCmake` or Visual Studio), with a static runtime; the column loads it without a switch and runs the inside-out trial's Peng-Robinson outer pass in C++ unless `-Dicheme.native.thermo.batch=false`; without a library the Java path runs. Investigation probes in `tools/native-column-default/`.
 
 ### Fixed
 
 - Zero-reflux columns support exactly dry upper stages; phase admission rejects collapsed liquid/vapor startup roots, continuation respects dry layouts, column caloric fits continue beyond data edges, and dry trays lose phantom liquid head; offline bulk CDU/VDU screens qualify convergence and preserve unresolved budget/coupling outcomes (`dba4ba45`, `3509f67a`; batch `2026-10-28-vacuum-column`).
 - A flow valve no longer holds its island when it regulates a line its open pass chokes, when a new set point meets a hot liquid, or when a trace washes out of a dry junction: fluid solver (f730d61de, 83802e11e, 22fd0d2e4, c39e2bcd3; batch 2026-11-02-valve-hold).
+
+### Removed
+
+- Detached to tools: the outlet probe test and the trace instrumentation of the valve hold (`tools/valve-hold-probes/`, re-attach steps in its README).
 
 ## [0.17.1] - 2026-10-28
 
