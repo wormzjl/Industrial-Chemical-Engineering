@@ -2,7 +2,7 @@
 
 Purpose: an in-game process simulator: a dedicated block, a drag-and-drop flowsheet with a palette below, feed streams from the Fluid Generator's page, every unit including the column, Run on the client, a Results tab, flowsheet files under `.minecraft/IChemE`, and a compatibility system (owner request 2026-11-02: "make some design drawings for me to approve before moving to implementation").
 
-Status: Planned. The owner took decisions D1 to D11 on 2026-11-02. The symbols (D12) and the sizing stage (D13 to D21) await the owner. No game code changed (branch `claude/in-game-process-simulator-93dd9a`, base `79b853e0`). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-02. The owner took decisions D1 to D21 on 2026-11-02. W1 to W4 can start now; the rest follows column operation's merge (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`, base `79b853e0`). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -28,7 +28,7 @@ Status: Planned. The owner took decisions D1 to D11 on 2026-11-02. The symbols (
 | 20 | Pumparound exchangers, options A and B |
 | 21 | The same rule for other blocks |
 | 22 | Loops: a material recycle, a furnace on duty, no steady state |
-| 23 | Symbols: options A silhouette, B framed, C line |
+| 23 | Symbols: options A silhouette, B framed (chosen, D12), C line |
 | 24 | Sizing, Units: E-101 and T-101 selected, a kept size that fails |
 | 25 | Sizing, Lines |
 | 26 | Sizing, Pressure: two paths |
@@ -37,7 +37,7 @@ Status: Planned. The owner took decisions D1 to D11 on 2026-11-02. The symbols (
 
 ## Code areas
 
-None changed yet. The plan names `science/flowsheet` (new), `client/gui/common` (new canvas and door builders), the calculator's block, menu, screen and `network/ColumnV3Network`, `V3ClientPresets` and the bundled presets and packages.
+The comment on `HeatSides.shellPassage` (D18). The plan names `science/flowsheet` (new), `client/gui/common` (new canvas and door builders), the calculator's block, menu, screen and `network/ColumnV3Network`, `V3ClientPresets` and the bundled presets and packages.
 
 Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md) (the feasibility, sizing and ejector probes), `tools/heat-gui-renders/` (`SimulatorPrototypes.java`, `SimulatorIcons.java`, `SimulatorSizing.java`: the sheets).
 
@@ -49,9 +49,10 @@ Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md
 - 2026-11-02: symbols redrawn as vector shapes in three options (`SimulatorIcons`, sheets 23), open as D12.
 - 2026-11-02: the owner asked for an equipment and line sizing stage after the main flowsheet, with research and criteria now. One research agent collected 12 classes into `SIZING_SOURCES.md`. It read no standard in full, so its quotes of them are leads, and it routed three public PDFs through a third-party text reader, marked in the note; the permission system stopped a fourth. `SizingProbe` sized the sample on the shipped laws: 16 units, 31 lines, every Must met, one Should missed. `SIZING_PLAN.md`, sheets 24 to 27.
 - 2026-11-02: the owner's note: same-function equipment is one tile with its type proposed at sizing; exchanger design goes by duty and area with a flow-based drop; an ejector model comes late in this work. Five pairs became one tile each, 15 lit. Exchangers and air coolers lost their speed rows, so every limit of the sample is met. The shipped shell law is 10 times under Kern at the 0.4 D its comment names and equals Kern at about 0.93 D, so it prices a wide-baffle shell (D18). A jet law for the ejector failed against El-Dessouky's correlation, which W10 takes with a molar-mass rule. `EjectorProbe` added, sheet 28, `SIZING_PLAN.md` sections 3.10 to 3.12, decisions D18 to D21.
+- 2026-11-02: the owner approved D12 to D21 as recommended: framed symbols, the sizing defaults, no speed rows, the shipped shell law, sized drops in the run, five merged pairs, the ejector last. `HeatSides.shellPassage`'s comment corrected (D18). W1 started, as D10 allows.
 
 ## Open items
 
-- The owner's decisions D12 (plan section 5) and D13 to D21 (`SIZING_PLAN.md`, section 6), and the defaults of plan section 6.
+- The simplifications table of `SIZING_PLAN.md` section 6: confirm with the owner before S1.
 - Order against `claude/column-operation-5c3005`, `claude/valve-hold` and the native column default (`9c5eb01f`), none merged.
 - Not measured: option B of D11, a reboiler stream, a column with nitrogen on the plain start, a run's peak heap; the sizing rules on any sheet but the sample; the ejector law on a real vacuum column; a compressor's or a drum's type proposal.

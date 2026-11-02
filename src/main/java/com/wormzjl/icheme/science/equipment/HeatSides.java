@@ -126,8 +126,9 @@ public final class HeatSides {
         return new PipeResistance.Geometry(2*tubes,.0148,TUBE_ROUGHNESS,8,channels(630*shell*shell));
     }
     /**
-     * An exchanger's shell side: an equivalent passage of 18 mm hydraulic diameter and 0.1 D² crossflow area, one shell
-     * diameter per baffle crossing with baffles 0.4 D apart, so 2.5 L long.
+     * An exchanger's shell side: an equivalent passage of 18 mm hydraulic diameter and 0.1 D² crossflow area, 2.5 L long,
+     * with a pipe's friction. Its drop equals Kern's with baffles about 0.93 D apart, so this prices a wide-baffle shell;
+     * Kern at 0.4 D gives 10 times it (batch 2026-11-02-process-simulator, D18).
      */
     public static PipeResistance.Geometry shellPassage(double shell,double tubes) {
         return new PipeResistance.Geometry(2.5*tubes,.018,TUBE_ROUGHNESS,0,channels(.1*shell*shell/(Math.PI*.018*.018/4)));

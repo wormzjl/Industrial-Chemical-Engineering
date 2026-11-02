@@ -1,6 +1,6 @@
 # In-game process simulator: design plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: decisions D1 to D11 taken on 2026-11-02 (section 5); the symbols and the sizing stage await the owner. Nothing here is built.
+Batch [2026-11-02-process-simulator](README.md). Status: the owner took decisions D1 to D21 on 2026-11-02 (section 5). W1 to W4 in progress; the rest follows column operation's merge (D10).
 The drawings are in [research/2026-11-02-process-simulator/renders/](../../research/2026-11-02-process-simulator/renders/), in the main checkout. Every number comes from the shipped code at `79b853e0`, run by the tools in
 `tools/process-simulator/`.
 
@@ -314,13 +314,8 @@ The owner's answers of 2026-11-02.
 | D9 | Recipe for the block | None |
 | D10 | When it starts | After column operation merges; W1 to W4 can start now |
 | D11 | Pumparound exchangers | Option A: the cooler stays in the block, a stream through its tube side |
-
-Open:
-
-| # | Decision | Recommended | Why |
-|---|---|---|---|
-| D12 | Symbols: A silhouette, B framed, or C line (sheets 23) | B | It matches the shipped door drawings, and its dark fill leaves the eye on the streams. A reads best at tile size and follows your logo rule, and a big column turns into a solid block of colour |
-| D13 to D21 | The sizing stage, the shell's drop, drops in the run, the other tiles, the ejector's scope | [SIZING_PLAN.md](SIZING_PLAN.md), section 6 | |
+| D12 | Symbols | B, framed (sheets 23): it matches the shipped door drawings, and its dark fill leaves the eye on the streams |
+| D13 to D21 | The sizing stage, the shell's drop, drops in the run, the other tiles, the ejector's scope | As recommended: [SIZING_PLAN.md](SIZING_PLAN.md), section 6 |
 
 ## 6. What you did not mention
 

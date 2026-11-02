@@ -1,6 +1,6 @@
 # Sizing stage plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: criteria and drawings for the owner's review (sheets 24 to 28). Nothing here is built. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 (section 6). Drawings: sheets 24 to 28. Nothing here is built. Nothing here is built. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
 
 ## 1. Expected behaviour
 
@@ -352,9 +352,11 @@ They follow W1 to W9 of the main plan. Each ends with the quick suite and a comm
 
 The ejector is W10 of the main plan, after S5.
 
-## 6. Decisions for the owner
+## 6. Decisions
 
-| # | Decision | Recommended | Why |
+The owner approved every row as written on 2026-11-02.
+
+| # | Decision | Answer | Why |
 |---|---|---|---|
 | D13 | Basis defaults | Design flow 110 %, Line length 50 m, PA fall 60 K | The flow is sourced. The other two are mine, and the player can change them |
 | D14 | The Must and Should split | As section 3: red only for what the world refuses or its model fails, yellow for practice. Exchangers and air coolers go by surface and drops, with no speed rows | No law in the world reads their speeds. With the rows, the shell's speed needed 2 m/s, twice the source's, and E-102 stayed yellow at 0.59 of 0.60 m/s, a floor with no law behind it |
@@ -367,6 +369,8 @@ The ejector is W10 of the main plan, after S5.
 | D21 | The ejector's scope | W10: the law, the tile, the block's port, its sizing, one stage. The world's device stays in column operation's stage C | Vacuum columns do not run in the world until that stage, and a three-port device needs its own engine work |
 
 ### Simplifications to validate
+
+These were not part of that approval. Confirm them with the owner before S1.
 
 | Simplification | Effect | Risk |
 |---|---|---|
