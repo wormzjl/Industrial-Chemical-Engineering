@@ -894,7 +894,6 @@
   "gui.icheme.assembly.operation.limit.condenser": "condenser",
   "gui.icheme.assembly.operation.trigger.start": "Start",
   "gui.icheme.assembly.operation.trigger.setpoint": "Set points",
-  "gui.icheme.assembly.operation.trigger.package": "Package",
   "gui.icheme.assembly.operation.trigger.component": "Components",
   "gui.icheme.assembly.operation.trigger.composition": "Feed composition",
   "gui.icheme.assembly.operation.trigger.enthalpy": "Feed temperature",

@@ -54,8 +54,8 @@ import java.util.Set;
  * drawing of its assembly, generated from the column's component design ({@link AssemblyFlowsheet}), each part teal,
  * yellow or red, each port square in its own colour with a grey edge once connected, and the parts list with each part's
  * state in a word; every part reads what it is and its state on hover. On the door, Check parts, whose answer comes with
- * the engine's next bucket, and the selected part with Open unit. A complete structure opens on its Operation tab (a
- * placeholder in this stage), the drawing on its Structure tab. Before the first view arrives, the drawing shows the design
+ * the engine's next bucket, and the selected part with Open unit. A complete structure opens on its Operation tab,
+ * the drawing on its Structure tab. Before the first view arrives, the drawing shows the design
  * all red. Opening replays the last published view; the screen asks for nothing until the player presses Check parts.
  */
 public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> {

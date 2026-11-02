@@ -23,7 +23,7 @@ import java.util.Objects;
  * goes once its ports have left.</p>
  */
 public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,long condenser,State state,boolean leaving) {
-    /** The most stations a column has: a feed, three steams, an off-gas, a sour water, a distillate, eight draws, a bottoms. */
+    /** The most stations a saved unit may hold. A column has at most eleven today (ColumnTrays): a feed, two steams, an off-gas, a sour water, a distillate, four draws, a bottoms. */
     public static final int MAXIMUM_STATIONS=16;
     /** Without engine state: one solve before it runs. */
     public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals){this(id,master,running,setpoints,stations,totals, 0,null,false);}

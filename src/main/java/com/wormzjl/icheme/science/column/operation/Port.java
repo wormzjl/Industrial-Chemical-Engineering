@@ -2,7 +2,7 @@ package com.wormzjl.icheme.science.column.operation;
 
 /**
  * A running column's port at a boundary valve (plan section 4.2): two inlets, which are sinks at the required pressure,
- * and five product outlets, which are constant-pressure buffers. Saved by name.
+ * and five product outlets, which are generators that give what their accounts hold. Saved by name.
  */
 public enum Port {
     FEED, STEAM, OFF_GAS, SOUR_WATER, DISTILLATE, DRAW, BOTTOMS;

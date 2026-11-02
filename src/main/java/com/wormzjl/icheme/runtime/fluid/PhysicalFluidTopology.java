@@ -178,8 +178,8 @@ public final class PhysicalFluidTopology {
         public Device withGeneratorEnabled(boolean value){return new Device(id,position,kind,facing,geometry,control,ports,value,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);}
         /** The same heat side with {@code value}: a control or transit edit, or a partner found (batch 2026-10-27-heat-exchanger-design). */
         public Device withHeat(HeatUnit value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,value,suspendedBy);}
-        /** The same device held by the running column at {@code master} (its origin; 0: released). */
-        public Device withSuspendedBy(long master){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,master);}
+        /** The same device held by the running column unit {@code unit} (0: released). */
+        public Device withSuspendedBy(long unit){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,unit);}
         /**
          * Whether a running column holds this device (batch 2026-10-28-column-operation, plan 4.1): it stands where it was,
          * with what it holds, and joins nothing until the column stops; the column's ports take its place at the valves.

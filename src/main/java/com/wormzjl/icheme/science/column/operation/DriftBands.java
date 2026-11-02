@@ -30,7 +30,7 @@ public final class DriftBands {
 
     /** Why a column solves: the band left, or another cause. */
     public enum Trigger {
-        START, SETPOINT, PACKAGE, COMPONENT, COMPOSITION, ENTHALPY, STEAM_RATIO, THROUGHPUT, CLOSURE
+        START, SETPOINT, COMPONENT, COMPOSITION, ENTHALPY, STEAM_RATIO, THROUGHPUT, CLOSURE
     }
 
     /** A trigger and the value that crossed its band. */
