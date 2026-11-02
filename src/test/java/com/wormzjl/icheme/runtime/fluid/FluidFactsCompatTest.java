@@ -57,7 +57,7 @@ class FluidFactsCompatTest {
     }
     private EventPathWorld corpusWorld(){
         var world=world();var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);
-        world.place(20,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g),.05);
+        world.place(20,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null),.05);
         long valve=world.place(22,64,0,Kind.VALVE,Direction.EAST);
         var r=world.registry.registrations().get(valve);var d=r.device();
         var control=new FlowControl.ControlValve(FlowControl.ValveSource.VOLUME_FLOW,200000,1,.02,new UUID(1,2),1);
@@ -85,6 +85,10 @@ class FluidFactsCompatTest {
         var held0=world.registry.registrations().get(pipe);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(pipe,new WorldTopologyLedger.Registration(held0.device().withSuspendedBy(unit),held0.spec(),held0.revision()+1)),
                 new WorldTopologyLedger.Edit(port,new WorldTopologyLedger.Registration(feed,new FluidDeviceSpec(1,330,260000,FluidDeviceSpec.nitrogen(CATALOG).composition()),0))),port+1,null);
+        // Facts schema 7: a tower's bank and control on a basin.
+        var tower=CoolingTower.induced(8,2,3,2).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,.4,299);
+        world.place(50,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(tower.basinVolume(),298.15,101325,
+            FluidDeviceSpec.water(CATALOG).composition(),SlurryFeed.NONE,CoolingTower.BASIN_DEPTH,true).withTower(tower),.05);
         world.runTo(800);return world;
     }
     private static PhysicalFluidTopology.Device heatSide(long id,int x,int z,PipeResistance.Geometry passage,HeatUnit heat) {
@@ -211,7 +215,7 @@ class FluidFactsCompatTest {
         var ids=new ArrayList<>(world.basis().components());int retired=ids.size()-1;ids.add(retired,"Retired");
         java.util.function.BiFunction<double[],Double,double[]> widen=(n,held)->{var w=new double[n.length+1];System.arraycopy(n,0,w,0,retired);w[retired]=held;w[n.length]=n[retired];return w;};
         var registrations=new ArrayList<WorldTopologyLedger.Registration>();
-        for(var r:world.registrations()){var s=r.spec();registrations.add(new WorldTopologyLedger.Registration(r.device(),new FluidDeviceSpec(s.volume(),s.temperature(),s.pressure(),widen.apply(s.composition(),0.),s.solids(),s.levelHeight(),s.open(),s.geometry()),r.revision()));}
+        for(var r:world.registrations()){var s=r.spec();registrations.add(new WorldTopologyLedger.Registration(r.device(),new FluidDeviceSpec(s.volume(),s.temperature(),s.pressure(),widen.apply(s.composition(),0.),s.solids(),s.levelHeight(),s.open(),s.geometry(),s.tower()),r.revision()));}
         java.util.function.Function<WorldTopologyLedger.MaterialTotal,WorldTopologyLedger.MaterialTotal> total=m->new WorldTopologyLedger.MaterialTotal(widen.apply(m.moles(),0.),m.totalEnergy(),m.solidMasses());
         var placed=new ArrayList<FluidFacts.Placed>();
         for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());placed.add(new FluidFacts.Placed(FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id()),row.committed()));}
@@ -307,6 +311,13 @@ class FluidFactsCompatTest {
     // ---------------- the corpus: one image per facts schema ----------------
 
     private static final Path CORPUS=Path.of("src/test/resources/compat/fluid");
+    @Test void towerSettingsSurviveBothExactAndFactsOnlyLoads(){
+        var world=corpusWorld();var saved=image(world);
+        for(var restored:List.of(load(saved,key->model,CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->model,CATALOG))){
+            var towers=restored.world().orElseThrow().active().values().stream().map(r->r.spec().tower()).filter(java.util.Objects::nonNull).toList();
+            assertEquals(List.of(CoolingTower.induced(8,2,3,2).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,.4,299)),towers);
+        }
+    }
 
     /**
      * Every corpus image rebuilds from its facts to the registry, vessel count and stock it was written with. The image

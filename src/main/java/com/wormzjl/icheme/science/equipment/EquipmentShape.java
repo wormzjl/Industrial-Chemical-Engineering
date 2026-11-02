@@ -52,7 +52,15 @@ import java.util.Objects;
  * trickle-bed reactor's effluent on the sides its design leaves free ({@link #outlets}); 0 for every other shape.
  */
 public record EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
-                             @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet) {
+                             @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank) {
+    public EquipmentShape withTowerBank(TowerBank value) {
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value);
+    }
+    public com.wormzjl.icheme.science.fluid.network.CoolingTower coolingTower() {
+        return kind==Kind.INDUCED_DRAFT_COOLING_TOWER
+            ? com.wormzjl.icheme.science.fluid.network.CoolingTower.induced(diameter,tangentLength,towerBank.columns(),towerBank.rows())
+            : com.wormzjl.icheme.science.fluid.network.CoolingTower.natural(diameter,tangentLength);
+    }
     public static final double MIN_DIAMETER = .5, MAX_DIAMETER = 10, MAX_COLUMN_DIAMETER = 15, MAX_TANGENT_LENGTH = 64;
     public static final int MAX_SUPPORT = 16;
     /**
@@ -124,7 +132,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         EXCHANGER, KETTLE, AIR_COOLER, EJECTOR, PUMP, COMPRESSOR, VERTICAL_HEATER, CABIN_HEATER,
         // New units (owner request 2026-10-18, NEW_UNITS_PLAN.md).
         STIRRED_REACTOR, ADSORBER, TRICKLE_BED_REACTOR, EBULLATED_BED_REACTOR, CENTRIFUGAL_COMPRESSOR, STEAM_TURBINE, CONDENSING_TURBINE, CYCLONE,
-        FCC_CONVERTER, DELAYED_COKER, FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER;
+        FCC_CONVERTER, DELAYED_COKER, FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER, INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER;
+
+        public boolean coolingTower() { return this==INDUCED_DRAFT_COOLING_TOWER || this==NATURAL_DRAFT_COOLING_TOWER; }
 
         /** A standalone unit, built from its parts ({@link ProcessUnit}); a drum and a column are vessels of revolution. */
         public boolean unit() {
@@ -146,7 +156,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
         /** A fluid reservoir: one node, a port per nozzle, its design volume and level height. */
         public boolean reservoir() {
-            return this == DRUM || storage();
+            return this == DRUM || storage() || coolingTower();
         }
 
         /** A self-powered fluid mover, with one suction and one discharge nozzle. */
@@ -216,7 +226,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         VENT(PortClass.VAPOUR), EXHAUST(PortClass.VAPOUR), FLUE_GAS(PortClass.VAPOUR), RELIEF(PortClass.VAPOUR), SYNGAS(PortClass.VAPOUR),
         DRAIN(PortClass.LIQUID), CONDENSATE(PortClass.LIQUID), CATALYST_OUTLET(PortClass.LIQUID), SOLIDS_OUTLET(PortClass.LIQUID),
         // A floating-roof tank: centered front/back bottom nozzles, and the front overflow at the fill height.
-        BOTTOM(PortClass.LIQUID), OVERFLOW(PortClass.OVERFLOW);
+        BOTTOM(PortClass.LIQUID), OVERFLOW(PortClass.OVERFLOW), HOT_WATER_INLET(PortClass.BULK), COLD_WATER_OUTLET(PortClass.LIQUID);
 
         public final PortClass port;
 
@@ -333,7 +343,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** A bare vertical drum resting on its lower head, front to the north: the debug command's form. */
     public EquipmentShape(double diameter, double tangentLength) {
-        this(Kind.DRUM, diameter, tangentLength, Orientation.VERTICAL, Heading.NORTH, 0, null, defaultConnections(diameter, tangentLength, Orientation.VERTICAL, 0, false), ProcessUnit.Bank.ONE, false, 0);
+        this(Kind.DRUM, diameter, tangentLength, Orientation.VERTICAL, Heading.NORTH, 0, null, defaultConnections(diameter, tangentLength, Orientation.VERTICAL, 0, false), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE);
     }
 
     /** A drum with a new drum's side connection ({@link #defaultConnections}). */
@@ -353,17 +363,17 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     /** A drum as {@link #drum(double, double, Orientation, Heading, int, List, boolean)}, a skirted one's bottom outlet turned {@code outlet} quarter turns from the front. */
     public static EquipmentShape drum(double diameter, double tangentLength, Orientation orientation, Heading front, int support, List<Connection> connections, boolean boot,
                                       int outlet) {
-        return new EquipmentShape(Kind.DRUM, diameter, tangentLength, orientation, front, support, null, connections, ProcessUnit.Bank.ONE, boot, outlet);
+        return new EquipmentShape(Kind.DRUM, diameter, tangentLength, orientation, front, support, null, connections, ProcessUnit.Bank.ONE, boot, outlet, TowerBank.ONE);
     }
 
     /** This drum with {@code connections} instead of its own. */
     public EquipmentShape withConnections(List<Connection> connections) {
-        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet);
+        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank);
     }
 
     /** A column: its bottoms leave through its skirt to the front (the owner leaves columns alone, 2026-10-25). */
     public static EquipmentShape column(double diameter, ColumnTrays trays, Heading front, int skirt) {
-        return new EquipmentShape(Kind.COLUMN, diameter, trays.tangentLength(diameter), Orientation.VERTICAL, front, skirt, trays, List.of(), ProcessUnit.Bank.ONE, false, 0);
+        return new EquipmentShape(Kind.COLUMN, diameter, trays.tangentLength(diameter), Orientation.VERTICAL, front, skirt, trays, List.of(), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE);
     }
 
     /** A standalone unit of kind {@code kind}, its sizes as {@link ProcessUnit} reads them; it lies or stands as its kind does. */
@@ -379,7 +389,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     /** A unit as {@link #unit(Kind, double, double, Heading, int, ProcessUnit.Bank)}, its bottom outlet turned {@code outlet} quarter turns from the front where its design turns it. */
     public static EquipmentShape unit(Kind kind, double diameter, double tangentLength, Heading front, int support, ProcessUnit.Bank bank, int outlet) {
         if (!kind.unit()) throw new IllegalArgumentException(kind + " is not a unit");
-        return new EquipmentShape(kind, diameter, tangentLength, ProcessUnit.orientation(kind), front, support, null, List.of(), bank, false, outlet);
+        return new EquipmentShape(kind, diameter, tangentLength, ProcessUnit.orientation(kind), front, support, null, List.of(), bank, false, outlet, TowerBank.ONE);
     }
 
     /**
@@ -388,7 +398,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      */
     public static EquipmentShape storage(Kind kind, double diameter, double shell, Heading front, int support) {
         if (!kind.storage()) throw new IllegalArgumentException(kind + " is not a storage vessel");
-        return new EquipmentShape(kind, diameter, shell, ProcessUnit.orientation(kind), front, support, null, List.of(), ProcessUnit.Bank.ONE, false, 0);
+        return new EquipmentShape(kind, diameter, shell, ProcessUnit.orientation(kind), front, support, null, List.of(), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE);
     }
 
     /** A shape of any designed kind ({@link Kind#designed()}): a storage vessel, or a unit in {@code bank} (an air cooler's). */
@@ -399,7 +409,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     /** A designed shape as {@link #designed(Kind, double, double, Heading, int, ProcessUnit.Bank)}, its bottom outlet turned {@code outlet} quarter turns ({@link #outlets}). */
     public static EquipmentShape designed(Kind kind, double diameter, double length, Heading front, int support, ProcessUnit.Bank bank, int outlet) {
         if (!kind.designed()) throw new IllegalArgumentException(kind + " is not drawn from a design");
-        return new EquipmentShape(kind, diameter, length, ProcessUnit.orientation(kind), front, support, null, List.of(), kind.storage() ? ProcessUnit.Bank.ONE : bank, false, outlet);
+        return new EquipmentShape(kind, diameter, length, ProcessUnit.orientation(kind), front, support, null, List.of(), kind.storage() ? ProcessUnit.Bank.ONE : bank, false, outlet, TowerBank.ONE);
     }
 
     /**
@@ -413,7 +423,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** A new drum's side connections ({@link #defaultConnections(double, double, Orientation, int, boolean)}) fitted round its bottom outlet turned {@code outlet}. */
     public static List<Connection> defaultConnections(double diameter, double tangentLength, Orientation orientation, int support, boolean boot, int outlet) {
-        var drum = new EquipmentShape(Kind.DRUM, diameter, tangentLength, orientation, Heading.NORTH, support, null, List.of(), ProcessUnit.Bank.ONE, boot, outlet);
+        var drum = new EquipmentShape(Kind.DRUM, diameter, tangentLength, orientation, Heading.NORTH, support, null, List.of(), ProcessUnit.Bank.ONE, boot, outlet, TowerBank.ONE);
         double bT = orientation.horizontal() || support == 0 ? diameter / 4 : support, tT = bT + tangentLength;
         if (orientation.horizontal()) {
             double near = Math.ceil(bT) + .5, far = Math.floor(tT - 1) + .5;
@@ -485,6 +495,8 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         Objects.requireNonNull(orientation, "orientation");
         Objects.requireNonNull(front, "front");
         Objects.requireNonNull(bank, "bank");
+        Objects.requireNonNull(towerBank,"towerBank");
+        if(kind!=Kind.INDUCED_DRAFT_COOLING_TOWER && !towerBank.equals(TowerBank.ONE)) throw new IllegalArgumentException("Only induced-draft towers have a cell bank");
         connections = List.copyOf(connections);
         if (outlet < 0 || outlet >= SIDES.length) throw new IllegalArgumentException("A bottom outlet turns 0 to 3 quarter turns from the front, not " + outlet);
         if (kind.designed()) {
@@ -805,12 +817,14 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * cylinder up to its fill height, π D²/4 · H, and a sphere's π D³/6. Supports and nozzles hold no volume.
      */
     public com.wormzjl.icheme.science.fluid.network.VesselGeometry fluidGeometry() {
+        if(kind.coolingTower())return com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(coolingTower().basinVolume(),com.wormzjl.icheme.science.fluid.network.CoolingTower.BASIN_DEPTH);
         if(kind==Kind.KETTLE)return HeatSides.kettleShell(diameter,tangentLength);
         var form=kind==Kind.TANK?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.CYLINDER:kind==Kind.SPHERE?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.SPHERE:orientation.horizontal()?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.HORIZONTAL_DRUM:com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.VERTICAL_DRUM;
         var b=bootPlace();return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(form,diameter,kind==Kind.TANK?fillHeight():kind==Kind.SPHERE?0:tangentLength,b==null?0:b.diameter(),b==null?0:b.length());
     }
 
     public double volume() {
+        if (kind.coolingTower()) return coolingTower().basinVolume();
         if (kind == Kind.KETTLE) return fluidGeometry().capacity();
         if (kind == Kind.TANK) return Math.PI * diameter * diameter / 4 * fillHeight();
         if (kind == Kind.SPHERE) return Math.PI * diameter * diameter * diameter / 6;
@@ -836,6 +850,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * drum's).
      */
     public double levelHeight() {
+        if (kind.coolingTower()) return com.wormzjl.icheme.science.fluid.network.CoolingTower.BASIN_DEPTH;
         if (kind == Kind.KETTLE) return fluidGeometry().height();
         if (kind == Kind.TANK) return fillHeight();
         if (kind == Kind.SPHERE) return diameter;

@@ -98,6 +98,14 @@ public final class DeviceColumn {
     }
 
     /** What the player sets on the device: its set points, a mover's limit, a valve's target, a pipe's bore. */
+    /** A fan tower's control: manual speed or a leaving-water target. A natural tower has none. */
+    public static List<Column.Row> towerControl(boolean fans, boolean target, boolean canEdit, String temperatureUnit, HeatControlColumn.Texts t) {
+        if (!fans) return List.of();
+        return List.of(group(t.get("tower_control"),
+                new Column.Buttons(List.of(new Column.Button("tower:manual", t.get("tower_manual"), canEdit, null, !target, false),
+                        new Column.Button("tower:auto", t.get("tower_auto"), canEdit, null, target, false))),
+                new Column.Field(target ? "towerTemperature" : "towerSpeed", t.get(target ? "tower_temperature" : "tower_speed"), target ? temperatureUnit : "%", null)));
+    }
     static List<Column.Row> settings(Input in, HeatControlColumn.Texts t) {
         String p = in.pressureUnit(), volume = "m³" + in.flowTime(), mass = "kg" + in.flowTime();
         var setPoint = t.get("heat_group.set_point");

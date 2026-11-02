@@ -85,7 +85,7 @@ import java.util.function.Function;
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=29;
+    public static final int VERSION=30;
     /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -284,6 +284,7 @@ public final class FluidCheckpointCodec {
                 if(p.reverse().phaseMoles()[0].length!=count)throw new IllegalArgumentException("Pipe history streams of different component counts");
                 w.varint(count);stream(w,p.forward());stream(w,p.reverse());
             }
+            w.varint(r.towers().size());for(var towerEntry:new TreeMap<>(r.towers()).entrySet()){w.i64(towerEntry.getKey());towerRates(w,towerEntry.getValue());}
         }
         if(persisted.isEmpty())w.u8(0);
         else {
@@ -305,6 +306,26 @@ public final class FluidCheckpointCodec {
     }
     private static void geometry(Writer w,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){w.text(g.form().name());w.f64(g.capacity());w.f64(g.height());w.f64(g.diameter());w.f64(g.length());w.f64(g.bootDiameter());w.f64(g.bootLength());}
     /** A kettle's pool (format 28, W7): absent, or its facts and slice inputs. */
+    private static void transfer(Writer w,com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result t){
+        w.f64(t.outletTemperature());w.f64(t.evaporation());w.f64(t.dutyWatt());w.f64(t.energyWatt());w.f64(t.dryAirFlow());w.f64(t.fanPowerWatt());w.f64(t.speed());
+    }
+    private static com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result transfer(Reader r){
+        return new com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result(r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64());
+    }
+    private static void towerRates(Writer w,com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates t){transfer(w,t.fill());w.f64(t.surfaceWatt());w.f64(t.inletTemperature());w.f64(t.inletFlow());w.text(t.status());}
+    private static com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates towerRates(Reader r){return new com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates(transfer(r),r.f64(),r.f64(),r.f64(),r.text());}
+    private static void tower(Writer w,com.wormzjl.icheme.science.fluid.network.CoolingTower t) {
+        w.bool(t!=null);if(t==null)return;
+        w.text(t.draft().name());w.f64(t.width());w.f64(t.fillDepth());w.f64(t.height());w.varint(t.columns());w.varint(t.rows());
+        w.text(t.mode().name());w.f64(t.speed());w.f64(t.setPoint());
+    }
+    private static com.wormzjl.icheme.science.fluid.network.CoolingTower tower(Reader r) {
+        if(!r.bool())return null;
+        var draft=com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.valueOf(r.text());
+        double width=r.f64(),fill=r.f64(),height=r.f64();int columns=r.varint(6),rows=r.varint(4);
+        var mode=com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.valueOf(r.text());
+        return new com.wormzjl.icheme.science.fluid.network.CoolingTower(draft,width,fill,height,columns,rows,mode,r.f64(),r.f64());
+    }
     private static void pool(Writer w,com.wormzjl.icheme.science.fluid.network.Pool pool) {
         w.bool(pool!=null);if(pool==null)return;
         w.i64(pool.id());w.i64(pool.partner());w.f64(pool.area());w.f64(pool.bottom());w.f64(pool.bundle());w.varint(pool.cells());for(double t:pool.wall())w.f64(t);w.f64(pool.giveBack());w.f64(pool.active());
@@ -319,7 +340,7 @@ public final class FluidCheckpointCodec {
     private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Reader r){return new com.wormzjl.icheme.science.fluid.network.VesselGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64());}
     private static void topology(Writer w,PassiveNetwork graph) {
         w.varint(graph.reservoirs().size());
-        for(var n:graph.reservoirs()){w.i64(n.id());w.f64(n.elevation());w.u8(n.kind().ordinal());w.f64(n.inventory().volume());w.f64(n.inventory().levelHeight());w.bool(n.inventory().open());geometry(w,n.inventory().geometry());pool(w,n.inventory().pool());}
+        for(var n:graph.reservoirs()){w.i64(n.id());w.f64(n.elevation());w.u8(n.kind().ordinal());w.f64(n.inventory().volume());w.f64(n.inventory().levelHeight());w.bool(n.inventory().open());geometry(w,n.inventory().geometry());pool(w,n.inventory().pool());tower(w,n.inventory().tower());}
         w.varint(graph.pipes().size());
         for(var p:graph.pipes()) {
             w.i64(p.id());w.varint(p.first());w.varint(p.second());w.varint(p.sections().size());
@@ -392,7 +413,7 @@ public final class FluidCheckpointCodec {
     /** Where a unit lies: its pack, offset, length and SHA-256. */
     record UnitRef(long pack,long offset,int length,byte[] sha256) {}
     private record Topology(long[] ids,double[] elevations,PassiveNetwork.NodeKind[] kinds,double[] volumes,double[] heights,boolean[] opens,com.wormzjl.icheme.science.fluid.network.VesselGeometry[] geometries,
-                            com.wormzjl.icheme.science.fluid.network.Pool[] pools,long[] pipeIds,int[] first,int[] second,
+                            com.wormzjl.icheme.science.fluid.network.Pool[] pools,com.wormzjl.icheme.science.fluid.network.CoolingTower[] towers,long[] pipeIds,int[] first,int[] second,
                             List<List<PipeResistance.Geometry>> sections,List<FlowControl> controls,PassiveNetwork.PhasePort[] firstPorts,PassiveNetwork.PhasePort[] secondPorts,int[] forbiddenDirections,double[] actuatorAreas,
                             com.wormzjl.icheme.science.fluid.network.HeatLaw[] heats) {}
     private static com.wormzjl.icheme.science.fluid.network.HeatLaw heat(Reader r) {
@@ -474,7 +495,9 @@ public final class FluidCheckpointCodec {
             // A closed or refused connection's end flow is exactly zero (the step solver records it so).
             for(int i=0;i<pipes;i++)if(endFlows[i]!=0&&(endpointModes.get(i)==FlowControl.Mode.CLOSED||endpointModes.get(i)==FlowControl.Mode.INLET_WRONG_PHASE))
                 throw new IllegalArgumentException("Invalid saved interval history: a closed connection with an end flow");
-            result=Optional.of(new PassiveIntervalSolver.Result(graph,seconds,flows,accepted,rejected,pumpWork,boundaries,reasons,endpointModes,heads,endFlows,transfers));
+            var towers=new TreeMap<Long,com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates>();
+            int towerCount=r.varint(MAXIMUM_NODES);for(int k=0;k<towerCount;k++){long towerId=r.i64();if(towers.put(towerId,towerRates(r))!=null)throw r.invalid("Duplicate tower reading");}
+            result=Optional.of(new PassiveIntervalSolver.Result(graph,seconds,flows,accepted,rejected,pumpWork,boundaries,reasons,endpointModes,heads,endFlows,transfers,List.of(),towers));
         }
         IslandCertificate.Signature signature=null;PassiveNetwork certifiedFrom=null;
         if(r.bool()) {
@@ -513,10 +536,10 @@ public final class FluidCheckpointCodec {
     private static Topology topology(Reader r) {
         int nodes=r.varint(MAXIMUM_NODES);if(nodes==0)throw new IllegalArgumentException("Invalid saved graph size");
         var ids=new long[nodes];var elevations=new double[nodes];var kinds=new PassiveNetwork.NodeKind[nodes];var volumes=new double[nodes];var heights=new double[nodes];var opens=new boolean[nodes];var geometries=new com.wormzjl.icheme.science.fluid.network.VesselGeometry[nodes];
-        var pools=new com.wormzjl.icheme.science.fluid.network.Pool[nodes];
+        var pools=new com.wormzjl.icheme.science.fluid.network.Pool[nodes];var towers=new com.wormzjl.icheme.science.fluid.network.CoolingTower[nodes];
         for(int n=0;n<nodes;n++) {
             ids[n]=r.i64();elevations[n]=r.f64();int kind=r.u8();if(kind>=NODE_KINDS.length)throw r.invalid("unknown node kind "+kind);
-            kinds[n]=NODE_KINDS[kind];if(kinds[n]==PassiveNetwork.NodeKind.PORT)throw new IllegalArgumentException("Internal port cannot be persisted");volumes[n]=r.f64();heights[n]=r.f64();opens[n]=r.bool();geometries[n]=geometry(r);pools[n]=pool(r);
+            kinds[n]=NODE_KINDS[kind];if(kinds[n]==PassiveNetwork.NodeKind.PORT)throw new IllegalArgumentException("Internal port cannot be persisted");volumes[n]=r.f64();heights[n]=r.f64();opens[n]=r.bool();geometries[n]=geometry(r);pools[n]=pool(r);towers[n]=tower(r);
         }
         int pipes=r.varint(MAXIMUM_PIPES);var pipeIds=new long[pipes];var first=new int[pipes];var second=new int[pipes];
         var sections=new ArrayList<List<PipeResistance.Geometry>>(pipes);var controls=new ArrayList<FlowControl>(pipes);
@@ -530,14 +553,14 @@ public final class FluidCheckpointCodec {
                 case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
             firstPorts[p]=port(r);secondPorts[p]=port(r);forbiddenDirections[p]=r.varint(3);actuatorAreas[p]=r.f64();heats[p]=heat(r);
         }
-        return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pools,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas,heats);
+        return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pools,towers,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas,heats);
     }
     private static PassiveNetwork state(Reader r,Topology t,FluidThermodynamics model) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(t.ids.length);
         for(int n=0;n<t.ids.length;n++) {
             var moles=r.sparse(MAXIMUM_ARRAY);double energy=r.f64();var solids=solids(r,model);
             double temperature=r.f64(),pressure=r.f64();var liquid=r.sparse(MAXIMUM_ARRAY);var vapor=r.sparse(MAXIMUM_ARRAY);double waterLiquid=r.f64(),waterVapor=r.f64(),hydrocarbonPressure=r.f64();
-            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n]);
+            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n]);
             var state=Arrays.stream(moles).sum()==0&&!solids.empty()?model.solidState(temperature,pressure,solids):model.state(temperature,pressure,liquid,vapor,waterLiquid,waterVapor,hydrocarbonPressure).withSolids(solids);
             nodes.add(new PassiveNetwork.Reservoir(t.ids[n],t.elevations[n],state,t.kinds[n],inventory));
         }

@@ -30,7 +30,7 @@ class FloatingRoofsTest {
     private static final BlockPos ORIGIN = new BlockPos(100, 64, -40);
 
     private static TankDisplay at(double level) {
-        return new TankDisplay((float) level, 0, (float) TANK.fillHeight(), 0, 0);
+        return new TankDisplay((float) level, 0, (float) TANK.fillHeight(), 0, 0, 0);
     }
 
     @Test
@@ -85,7 +85,7 @@ class FloatingRoofsTest {
         roofs.glide(node, reloaded);
         assertEquals(4.3, roofs.standing(node, 5000 + FluidPresentation.BUCKET_TICKS), 1e-6, "then the roof stands on its glide");
         // The free water under the oil starts no higher than the saved level.
-        var wet = TankDisplay.Glide.next(null, 1, new TankDisplay(4, 1.5f, (float) TANK.fillHeight(), 0, 0), 0);
+        var wet = TankDisplay.Glide.next(null, 1, new TankDisplay(4, 1.5f, (float) TANK.fillHeight(), 0, 0, 0), 0);
         assertEquals(1, wet.from().level(), 0);
         assertEquals(1, wet.from().waterLevel(), 0);
         assertEquals(1.5, wet.at(FluidPresentation.BUCKET_TICKS).waterLevel(), 1e-6);

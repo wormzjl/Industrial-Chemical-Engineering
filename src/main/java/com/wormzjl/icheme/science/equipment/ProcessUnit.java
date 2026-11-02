@@ -483,6 +483,12 @@ public final class ProcessUnit {
             return new Solid(whole.min, whole.max, 1, whole.centre, outer, outer, lo, hi, 0, 0, inner, from, to, null);
         }
 
+        /** Thin tapered shell; its inner radius follows its outer radius at every height. */
+        static Solid hollowCone(double x,double z,double lo,double hi,double r0,double r1,double wall) {
+            var outer=cone(new double[]{x,0,z},1,lo,hi,r0,r1,0);
+            return new Solid(outer.min,outer.max,1,outer.centre,r0,r1,lo,hi,0,0,r0-wall,0,0,null);
+        }
+
         static Solid rod(double[] centre, int axis, double lo, double hi, double radius, double headHi) {
             return cone(centre, axis, lo, hi, radius, radius, 0, headHi);
         }
@@ -532,7 +538,8 @@ public final class ProcessUnit {
             if (axis < 0) return true;
             double rho2 = 0;
             for (int a = 0; a < 3; a++) if (a != axis) rho2 += (p[a] - centre[a]) * (p[a] - centre[a]);
-            if (rho2 < inner * inner) return false;
+            double innerAt=inner>0&&hi>lo?inner+(radiusHi-radius)*Math.clamp((p[axis]-lo)/(hi-lo),0,1):inner;
+            if (rho2 < innerAt * innerAt) return false;
             if (to > from) {
                 double dx = p[0] - centre[0], dz = p[2] - centre[2];
                 double c0 = DeterministicMath.cos(from), s0 = DeterministicMath.sin(from), c1 = DeterministicMath.cos(to), s1 = DeterministicMath.sin(to);
@@ -2013,6 +2020,32 @@ public final class ProcessUnit {
     void grilledFan(Frame f, double r, double face, double depth, int n, double speed) {
         mesh.bore(f, r, face - depth, face, n, Material.OPENING);
         mesh.annulus(f, 0, r, face - depth, n, 1, Material.OPENING);
+        fanRotorAndGrille(f, r, face, depth, n, speed);
+    }
+
+    /** An open axial-flow fan with a metal cowl, rather than a motor fan's closed backing plate. */
+    void axialFan(Frame f, double r, double face, double depth, int n, double speed) {
+        mesh.ring(f, r, r + .08, face - depth, face, n, 3, Material.AC_PLENUM);
+        fanRotorAndGrille(f, r, face, depth, n, speed);
+    }
+
+    /** A cooling tower's fan low in its stack: a plain hub and five flat pitched blades, one moving part, seen only from above. */
+    void towerFan(Frame f, double r, double z, double speed) {
+        double hub = .16 * r, chord = .2 * r, tip = .92 * r, rise = .06 * r;
+        mesh.part(motions.size());
+        mesh.cylinder(f, hub, z, z + .3, 8, Material.MOTOR);
+        for (int k = 0; k < 5; k++) {
+            double angle = 2 * Math.PI * k / 5;
+            var across = cross(f.axis(), sub(f.at(angle, 1, 0), f.at(angle, 0, 0)));
+            double[] root = f.at(angle, hub, z + .15), end = f.at(angle, tip, z + .15);
+            var half = plus(scale(across, chord / 2), scale(f.axis(), rise));
+            mesh.flat(List.of(plus(root, half), plus(end, half), sub(end, half), sub(root, half)), f.axis(), Material.MOTOR);
+        }
+        mesh.part(-1);
+        motions.add(Motion.turning(f.along(z + .15), f.axis(), speed, 0));
+    }
+
+    private void fanRotorAndGrille(Frame f, double r, double face, double depth, int n, double speed) {
         double hub = .2 * r, t = .01 + .01 * r, deep = face - depth + .01, shallow = face - 2 * t - .005, width = Math.min(.4 * r, 1.6 * (shallow - deep));
         mesh.part(motions.size());
         mesh.cylinder(f, hub, deep, shallow, 10, Material.MOTOR);
@@ -2025,7 +2058,8 @@ public final class ProcessUnit {
                     Material.MOTOR);
         }
         mesh.part(-1);
-        motions.add(Motion.turning(f.along(face), f.axis(), speed, 0));
+        // The pivot's cell owns the animated part. Keep it inside the hub, including on a sparse/open structure.
+        motions.add(Motion.turning(f.along((deep + shallow) / 2), f.axis(), speed, 0));
         for (int k = 0; k < 8; k++) mesh.bar(f.at(k * Math.PI / 4, .15 * r, face - t / 2), f.at(k * Math.PI / 4, r, face - t / 2), t, f.axis(), Material.MOTOR);
         for (double ring : new double[]{.45 * r, .75 * r}) mesh.ring(f, ring - t / 2, ring + t / 2, face - t, face, n, 3, Material.MOTOR);
         mesh.cylinder(f, .15 * r, face - t, face, 10, Material.MOTOR);
@@ -3776,6 +3810,22 @@ public final class ProcessUnit {
     /** The axis-aligned box spanned by two corners in any order, a solid. */
     static Solid span(double[] p, double[] q) {
         return Solid.box(new double[]{Math.min(p[0], q[0]), Math.min(p[1], q[1]), Math.min(p[2], q[2])}, new double[]{Math.max(p[0], q[0]), Math.max(p[1], q[1]), Math.max(p[2], q[2])});
+    }
+
+    /** A square bar with selected end faces, buried ends needing no polygons, and the oriented collision box of its section when {@code solid}. */
+    void bar(double[] a, double[] b, double width, double[] up, int ends, Material material, boolean solid) {
+        mesh.bar(a, b, width, up, ends, material);
+        if (!solid) return;
+        var axis = sub(b, a);
+        double length = Math.sqrt(dot(axis, axis));
+        if (length < EPS) return;
+        var dir = scale(axis, 1 / length);
+        var side = cross(dir, up);
+        if (dot(side, side) < EPS) side = cross(dir, Math.abs(dir[0]) < .9 ? new double[]{1, 0, 0} : new double[]{0, 1, 0});
+        side = unit(side);
+        var normal = cross(side, dir);
+        double h = width / 2;
+        solids.add(Solid.block(scale(plus(a, b), .5), scale(dir, length / 2), scale(side, h), scale(normal, h)));
     }
 
     /** An axis-aligned box, every face drawn; {@code solid} for one a player collides with. */

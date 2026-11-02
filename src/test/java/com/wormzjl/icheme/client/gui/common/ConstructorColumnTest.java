@@ -40,7 +40,7 @@ class ConstructorColumnTest {
         var outlet = form == Form.TRICKLE_BED_REACTOR ? new ConstructorColumn.Outlet(0b1011, 3, STANDING) : new ConstructorColumn.Outlet(1, 0, STANDING);
         var column = form.column() ? new ConstructorColumn.Imported(diameter, length + 2, length / 2 + 1) : null;
         return new ConstructorColumn.Design(form, diameter, length, support, forward, right, up, new ProcessUnit.Bank(right == 0 ? 1 : ProcessUnit.Bank.MAX_PARALLEL,
-                right == 0 ? 1 : ProcessUnit.Bank.MAX_SERIES), column, outlet, 16);
+                right == 0 ? 1 : ProcessUnit.Bank.MAX_SERIES), column, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE);
     }
 
     /** Every form at its least and its largest sizes and places, the right and up shifts at their least. */
@@ -298,7 +298,7 @@ class ConstructorColumnTest {
                 var small = designs.get(i);
                 var large = designs.get(i + 1);
                 var moved = new ConstructorColumn.Design(small.form(), large.diameter(), large.length(), large.support(), large.forward(), large.right(), large.up(), large.bank(),
-                        large.column(), small.outlet(), small.reach());
+                        large.column(), small.outlet(), small.reach(), small.towerBank());
                 assertEquals(widgets(ConstructorColumn.design(small, t), width), widgets(ConstructorColumn.design(moved, t), width), small.form() + " at " + width);
             }
             for (boolean horizontal : new boolean[]{false, true}) {

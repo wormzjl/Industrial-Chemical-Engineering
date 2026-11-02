@@ -1,0 +1,8 @@
+// One isolated native client. Its pinned bridge jar is copied into this directory before launching.
+gradle.projectsEvaluated {
+    def project=gradle.rootProject
+    project.extensions.getByName('neoForge').runs.named('mcpClient') {
+        gameDirectory=project.layout.projectDirectory.dir('tmp/tower-native/client')
+    }
+    project.tasks.named('prepareMcpControlMod') { enabled=false }
+}

@@ -109,7 +109,7 @@ class ShapeRasterizerTest {
         assertThrows(IllegalArgumentException.class, () -> drum(12, 5, Orientation.VERTICAL, Heading.NORTH, 3));
         assertThrows(IllegalArgumentException.class, () -> EquipmentShape.column(3, ColumnTrays.simple(12, 6), Heading.NORTH, 0));
         assertThrows(IllegalArgumentException.class, () -> new EquipmentShape(EquipmentShape.Kind.COLUMN, 3, 4, Orientation.VERTICAL, Heading.NORTH, 2, ColumnTrays.simple(12, 6), List.of(),
-                ProcessUnit.Bank.ONE, false, 0));
+                ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE));
         // Owner decision 2026-10-25: a lower skirt, the bottom line on the lowest row: ceil(0.5 + 0.8 + 0.05 + D/4).
         assertEquals(2, EquipmentShape.minimumSkirt(2.5));
         assertEquals(3, EquipmentShape.minimumSkirt(6));
@@ -633,7 +633,7 @@ class ShapeRasterizerTest {
         for (Runnable bad : List.<Runnable>of(() -> drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 4, List.of(), false, 4),
                 () -> drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 4, List.of(), false, -1), () -> drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 0, List.of(), false, 1),
                 () -> drum(3, 9, Orientation.HORIZONTAL, Heading.NORTH, 2, List.of(), false, 2),
-                () -> new EquipmentShape(Kind.COLUMN, 3, trays.tangentLength(3), Orientation.VERTICAL, Heading.NORTH, 4, trays, List.of(), ProcessUnit.Bank.ONE, false, 1)))
+                () -> new EquipmentShape(Kind.COLUMN, 3, trays.tangentLength(3), Orientation.VERTICAL, Heading.NORTH, 4, trays, List.of(), ProcessUnit.Bank.ONE, false, 1, TowerBank.ONE)))
             assertThrows(IllegalArgumentException.class, bad::run);
         assertFalse(EquipmentShape.column(3, trays, Heading.NORTH, 4).outletTurns());
         assertFalse(drum(3, 9, Orientation.HORIZONTAL, Heading.NORTH, 2).outletTurns());
@@ -667,7 +667,7 @@ class ShapeRasterizerTest {
                 java.util.Collections.nCopies(EquipmentShape.MAX_CONNECTIONS + 1, new Connection(0, 5, 0))));
         var trays = ColumnTrays.simple(12, 6);
         assertThrows(IllegalArgumentException.class, () -> new EquipmentShape(EquipmentShape.Kind.COLUMN, 3, trays.tangentLength(3), Orientation.VERTICAL,
-                Heading.NORTH, 4, trays, List.of(new Connection(0, 5, 0)), ProcessUnit.Bank.ONE, false, 0));
+                Heading.NORTH, 4, trays, List.of(new Connection(0, 5, 0)), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE));
         // Right, left and a hillside nozzle at the back over the manway: clear of each other, of the outlets and of the
         // manway, the hillside one off centre.
         var drum = drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 4, placed);
@@ -935,9 +935,9 @@ class ShapeRasterizerTest {
         assertThrows(IllegalArgumentException.class, () -> EquipmentShape.storage(Kind.DRUM, 2, 3, Heading.NORTH, 0));
         // Neither takes side connections or trays: their ports are fixed.
         assertThrows(IllegalArgumentException.class, () -> new EquipmentShape(Kind.TANK, 12, 8, Orientation.VERTICAL, Heading.NORTH, 0, null,
-                List.of(new Connection(0, 1, 0)), ProcessUnit.Bank.ONE, false, 0));
+                List.of(new Connection(0, 1, 0)), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE));
         assertThrows(IllegalArgumentException.class, () -> new EquipmentShape(Kind.SPHERE, 8, 1, Orientation.VERTICAL, Heading.NORTH, 2, ColumnTrays.simple(12, 6),
-                List.of(), ProcessUnit.Bank.ONE, false, 0));
+                List.of(), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE));
         assertEquals(37 * 21 + 21 * 7, everyStorageSize().size());
     }
 
