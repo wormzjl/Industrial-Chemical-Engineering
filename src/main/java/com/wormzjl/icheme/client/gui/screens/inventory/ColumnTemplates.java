@@ -20,9 +20,9 @@ import java.util.function.Function;
  * The column templates an equipment constructor builds a column from (owner request 2026-10-28: "it should allow
  * default templates"; owner choice: column templates): the column calculator's library, its bundled templates first,
  * then the player's own from {@code IChemE/columnpreset} in the game folder. A template's input is the calculator's
- * default input with the template's column settings, as the calculator's Templates load them; its design takes an air
- * cooler and standard pumps ({@link #choices}). The server checks the design again ({@link ColumnDesign#of}), as it
- * checks a calculator's Save design.
+ * default input with the template's column settings at the template's design feed; its design takes an air cooler and
+ * standard pumps ({@link #choices}). The server checks the design again ({@link ColumnDesign#of}), as it checks a
+ * calculator's Save design.
  */
 public final class ColumnTemplates {
     private ColumnTemplates() {
@@ -71,7 +71,7 @@ public final class ColumnTemplates {
             String problem = null;
             try {
                 var draft = new V3EditorDraft(base);
-                draft.loadColumn(column.fields());
+                draft.loadColumnAtDesignFeed(column.template());
                 input = draft.assembleOperating();
                 ColumnDesign.of(input, choices(input));
             } catch (RuntimeException refused) {

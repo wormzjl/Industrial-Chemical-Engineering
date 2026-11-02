@@ -3,7 +3,8 @@
   "kind": "mixture",
   "name": "Cold Lake Blend",
   "translation_key": "gui.icheme.column_preset.cold_lake_blend",
-  "package": "icheme:cold_lake_blend_tjl20",
+  "temperature_kelvin": 638.15,
+  "flow_kmol_h": 2652.385506520698,
   "basis": "mole",
   "components": [
     {

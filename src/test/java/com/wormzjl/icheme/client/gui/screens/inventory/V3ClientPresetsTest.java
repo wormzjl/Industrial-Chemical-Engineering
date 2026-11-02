@@ -22,20 +22,80 @@ class V3ClientPresetsTest {
         assertEquals(7,columns.entries().size());assertEquals(8,mixtures.entries().size());
         for(var entry:columns.entries()){
             if(entry.file().equals("pot.json"))continue;
-            var d=draft();var column=(V3ClientPresets.Column)entry.preset();d.loadColumn(column.fields());
+            // A crude is two files now: the stream, then the tower on it, as the calculator's Templates load them.
+            var stream=(V3ClientPresets.Mixture)mixtures.entries().stream().filter(e->e.file().equals(entry.file())).findFirst().orElseThrow().preset();
+            var d=draft();var editor=V3EditorCatalog.from(MaterialCatalog.bundled(),reference());var on=editor.sourceFor(stream.amounts().keySet());
+            d.loadMixture(stream,on,editor.weightsFor(on));d.loadColumn(((V3ClientPresets.Column)entry.preset()).template());
             var changed=d.assemble();assertEquals(reference().packageId(),changed.packageId());
-            var source=MaterialCatalog.bundled().presets().column(entry.file().replace(".json","")).input(MaterialCatalog.bundled());
-            assertEquals(source.stageCount(),changed.stageCount());assertEquals(source.feedStageNumber(),changed.feedStageNumber());
-            assertEquals(Arrays.stream(source.feedComponentMolarFlowsMolPerSecond()).sum(),Arrays.stream(changed.feedComponentMolarFlowsMolPerSecond()).sum(),1e-9);
-            assertEquals(source.steamFeeds(),changed.steamFeeds());
+            var crude=V3TestInputs.crude(MaterialCatalog.bundled(),entry.file().replace(".json",""));
+            assertEquals(crude.stageCount(),changed.stageCount());assertEquals(crude.feedStageNumber(),changed.feedStageNumber());
+            assertArrayEquals(crude.feedComponentMolarFlowsMolPerSecond(),changed.feedComponentMolarFlowsMolPerSecond(),1e-9);
+            assertEquals(crude.feedTemperatureKelvin(),changed.feedTemperatureKelvin(),1e-9);
+            assertEquals(crude.steamFeeds(),changed.steamFeeds());
+            for(int i=0;i<crude.sideDraws().size();i++)assertEquals(crude.sideDraws().get(i).molarFlowMolPerSecond(),changed.sideDraws().get(i).molarFlowMolPerSecond(),1e-9);
+            for(int i=0;i<crude.pumparounds().size();i++)assertEquals(crude.pumparounds().get(i).dutyWatts(),changed.pumparounds().get(i).dutyWatts(),1e-3);
         }
+    }
+    /** A stream sits on the fewest components that hold it (a file names no package), and a part nothing holds finds nothing. */
+    @Test void aStreamFindsItsComponentsByTheirIds(){
+        var mixtures=library().refresh(V3ClientPresets.Kind.MIXTURE).entries();var editor=V3EditorCatalog.from(MaterialCatalog.bundled(),reference());
+        for(var entry:mixtures){
+            var mixture=(V3ClientPresets.Mixture)entry.preset();
+            assertEquals(entry.file().equals("tia_juana_nitrogen.json")?"icheme:tjl20_methane_nitrogen":"icheme:tjl20_methane",editor.sourceFor(mixture.amounts().keySet()).packageId(),entry.file());
+        }
+        assertThrows(NoSuchElementException.class,()->editor.sourceFor(Set.of("Unobtainium")));
+    }
+    /** Old files (process simulator plan, section 3.7): a column's feed flow is its design feed, and a mixture's package, gone or not, decides nothing. */
+    @Test void filesOfTheOlderBuildsLoad()throws Exception{
+        String column=corpus("column-schema-2.json"),mixture=corpus("mixture-schema-1.json");
+        assertTrue(mixture.contains("icheme:bonga_tjl20"),"the image names a package this build does not have");
+        var c=(V3ClientPresets.Column)V3ClientPresets.decode(column,V3ClientPresets.Kind.COLUMN);
+        var m=(V3ClientPresets.Mixture)V3ClientPresets.decode(mixture,V3ClientPresets.Kind.MIXTURE);
+        assertEquals(2650.277212975707,c.template().designFeed());
+        assertTrue(m.flow().isEmpty()&&m.temperature().isEmpty()&&m.pressure().isEmpty(),"an old mixture is a mixture only");
+        var l=library();
+        Files.createDirectories(l.directory(V3ClientPresets.Kind.COLUMN));Files.createDirectories(l.directory(V3ClientPresets.Kind.MIXTURE));
+        Files.writeString(l.directory(V3ClientPresets.Kind.COLUMN).resolve("old.json"),column);Files.writeString(l.directory(V3ClientPresets.Kind.MIXTURE).resolve("old.json"),mixture);
+        var columns=l.refresh(V3ClientPresets.Kind.COLUMN);var mixtures=l.refresh(V3ClientPresets.Kind.MIXTURE);
+        assertTrue(columns.problems().isEmpty()&&mixtures.problems().isEmpty(),()->columns.problems()+" "+mixtures.problems());
+        assertEquals(8,columns.entries().size());assertEquals(9,mixtures.entries().size());
+        // On the default feed: the feed and its temperature stay, the mixture changes, and the tower's flows scale to the feed they meet.
+        var editor=V3EditorCatalog.from(MaterialCatalog.bundled(),reference());var on=editor.sourceFor(m.amounts().keySet());assertEquals(reference().packageId(),on.packageId());
+        var d=draft();d.loadMixture(m,on,editor.weightsFor(on));d.loadColumn(c.template());var loaded=d.assemble();
+        double feed=Arrays.stream(reference().feedComponentMolarFlowsMolPerSecond()).sum(),k=feed*3.6/c.template().designFeed();
+        assertEquals(feed,Arrays.stream(loaded.feedComponentMolarFlowsMolPerSecond()).sum(),1e-9);assertEquals(reference().feedTemperatureKelvin(),loaded.feedTemperatureKelvin(),1e-9);
+        assertFalse(Arrays.equals(reference().feedComponentMolarFlowsMolPerSecond(),loaded.feedComponentMolarFlowsMolPerSecond()),"the mixture is the old file's");
+        assertEquals(c.template().draws().getFirst().flow()*k/3.6,loaded.sideDraws().getFirst().molarFlowMolPerSecond(),1e-9);
+        assertEquals(c.template().steam().getFirst().flow()*k/3.6,loaded.steamFeeds().getFirst().molarFlowMolPerSecond(),1e-9);
+        assertEquals(-c.template().pumparounds().getFirst().cooling()*k*1e6,loaded.pumparounds().getFirst().dutyWatts(),1e-3);
+    }
+    /** A saved column names its feed as a design feed and holds no feed of its own; a stream template's conditions read as they stand. */
+    @Test void aColumnFileHoldsNoFeedAndAStreamFileMayHoldConditions(){
+        var o=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();
+        assertEquals(3,o.get("schema_version").getAsInt());assertFalse(o.has("feed_flow_kmol_h")||o.has("feed_temperature_kelvin"));
+        assertEquals(Arrays.stream(reference().feedComponentMolarFlowsMolPerSecond()).sum()*3.6,o.get("design_feed_kmol_h").getAsDouble(),1e-9);
+        var d=draft();d.set("s0","1000");d.loadColumn(((V3ClientPresets.Column)V3ClientPresets.decode(o.toString(),V3ClientPresets.Kind.COLUMN)).template());
+        assertEquals(reference().sideDraws().getFirst().molarFlowMolPerSecond()*1000/o.get("design_feed_kmol_h").getAsDouble(),d.assemble().sideDraws().getFirst().molarFlowMolPerSecond(),1e-9);
+        String json="{\"schema_version\":1,\"kind\":\"mixture\",\"name\":\"tank\",\"translation_key\":\"\",\"basis\":\"mole\",\"temperature_kelvin\":313.15,\"pressure_bar\":1.01,\"flow_kmol_h\":5000,\"components\":[{\"id\":\"Propane\",\"amount\":1}]}";
+        var m=(V3ClientPresets.Mixture)V3ClientPresets.decode(json,V3ClientPresets.Kind.MIXTURE);
+        assertEquals(313.15,m.temperature().orElseThrow());assertEquals(1.01,m.pressure().orElseThrow());assertEquals(5000,m.flow().orElseThrow());
+        assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(json.replace("\"flow_kmol_h\":5000","\"flow_kmol_h\":-1"),V3ClientPresets.Kind.MIXTURE));
+        var loaded=draft();var editor=V3EditorCatalog.from(MaterialCatalog.bundled(),reference());var on=editor.sourceFor(m.amounts().keySet());loaded.loadMixture(m,on,editor.weightsFor(on));
+        assertEquals(5000/3.6,Arrays.stream(loaded.assemble().feedComponentMolarFlowsMolPerSecond()).sum(),1e-9);assertEquals(313.15,loaded.assemble().feedTemperatureKelvin(),1e-9);
+        for(var entry:library().refresh(V3ClientPresets.Kind.MIXTURE).entries()){
+            var stream=(V3ClientPresets.Mixture)entry.preset();boolean residue=entry.file().equals("tia_juana_residue.json");
+            assertEquals(!residue,stream.flow().isPresent(),entry.file());assertEquals(!residue,stream.temperature().isPresent(),entry.file());assertTrue(stream.pressure().isEmpty(),entry.file());
+        }
+    }
+    private String corpus(String file)throws Exception{
+        try(var stream=getClass().getClassLoader().getResourceAsStream("compat/presets/"+file)){return new String(stream.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);}
     }
     /** The VDU feed template (batch 2026-10-26-multi-machine-framework, plan 4.4): the crude from 378 C up in its own proportions, and a 5 % gas oil tail. */
     @Test void theVduFeedTemplateIsTheCrudesResidueWithAGasOilTail(){
         var mixtures=library().refresh(V3ClientPresets.Kind.MIXTURE).entries();
         var residue=(V3ClientPresets.Mixture)mixtures.stream().filter(e->e.file().equals("tia_juana_residue.json")).findFirst().orElseThrow().preset();
         var crude=(V3ClientPresets.Mixture)mixtures.stream().filter(e->e.file().equals("tia_juana.json")).findFirst().orElseThrow().preset();
-        assertEquals(reference().packageId(),residue.packageId());assertFalse(residue.mass());
+        assertFalse(residue.mass());
         var d=draft();d.composition().load(residue.amounts(),residue.mass());
         var ids=List.copyOf(reference().componentBasis().componentIds());var x=d.composition().moleFractions();
         assertEquals(.05,x[ids.indexOf("crude_pc07")],1e-12);
@@ -64,7 +124,7 @@ class V3ClientPresetsTest {
         String column=V3ClientPresets.columnJson("pot",pot);
         assertFalse(column.contains("package"));assertFalse(column.contains("components"));assertFalse(column.contains("stage_pressure_drop_kpa"));
         var c=(V3ClientPresets.Column)V3ClientPresets.decode(column,V3ClientPresets.Kind.COLUMN);
-        var restored=draft();restored.loadColumn(c.fields());
+        var restored=draft();restored.loadColumn(c.template());
         var reloaded=restored.assemble();assertEquals(pot.stageCount(),reloaded.stageCount());assertEquals(pot.steamFeeds(),reloaded.steamFeeds());
         assertEquals(pot.stagePressureDropPascal(),reloaded.stagePressureDropPascal(),1e-9);
         assertArrayEquals(pot.feedComponentMolarFlowsMolPerSecond(),reloaded.feedComponentMolarFlowsMolPerSecond(),1e-12);
@@ -98,12 +158,15 @@ class V3ClientPresetsTest {
         var result=l.refresh(V3ClientPresets.Kind.COLUMN);assertEquals(7,result.entries().size());assertEquals(2,result.problems().size());
         var o=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();o.addProperty("tray_count",1);
         assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(o.toString(),V3ClientPresets.Kind.COLUMN));
-        // A schema 1 file is refused by its version; a schema 2 file that still carries the stage drop reads, the drop ignored.
+        // A schema 1 or a newer file is refused by its version; a schema 2 file that still carries the stage drop reads, the drop ignored.
         var old=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();old.addProperty("schema_version",1);
         assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(old.toString(),V3ClientPresets.Kind.COLUMN));
-        var dropped=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();dropped.addProperty("stage_pressure_drop_kpa",5.0);
+        old.addProperty("schema_version",4);
+        assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(old.toString(),V3ClientPresets.Kind.COLUMN));
+        assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode("{\"schema_version\":2,\"kind\":\"mixture\",\"name\":\"m\",\"translation_key\":\"\",\"basis\":\"mole\",\"components\":[{\"id\":\"Propane\",\"amount\":1}]}",V3ClientPresets.Kind.MIXTURE));
+        var dropped=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();dropped.addProperty("schema_version",2);dropped.addProperty("stage_pressure_drop_kpa",5.0);
         var carried=(V3ClientPresets.Column)V3ClientPresets.decode(dropped.toString(),V3ClientPresets.Kind.COLUMN);
-        assertFalse(carried.fields().containsKey("s8"));var loaded=draft();loaded.loadColumn(carried.fields());
+        var loaded=draft();loaded.loadColumn(carried.template());
         assertEquals(loaded.base().stagePressureDropPascal(),loaded.assemble().stagePressureDropPascal(),1e-9);
     }
 }

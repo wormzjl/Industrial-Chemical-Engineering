@@ -1,12 +1,20 @@
 {
   "schema_version": 1,
   "id": "icheme:dalia",
-  "package": "icheme:dalia_tjl20",
+  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "DALIA26Y",
     "source_url": "https://corporate.exxonmobil.com/-/media/global/files/crude-oils/pdf/dalia.pdf",
     "source_pdf_sha256": "02553213cde6cbb7dd0b4fea42029250485781dba2e2d39d092c5e5d6f8dfabc",
+    "advisory_evidence": [
+      "SHARED_COMPONENT_SURROGATE: source assay rebinned onto shared regrouped crude basis; properties are not characterized for this crude",
+      "ASSAY_SOURCE: ExxonMobil DALIA26Y; source light-end and cut mass yields retained with rounding adjustment",
+      "C1_C2_ALLOCATION: combined methane+ethane assigned to ethane; methane zero; original split is unknown",
+      "ESTIMATED_HEAVY_TAIL: above 590C exponential tail constrained by reported 550C+ volume-average boiling point",
+      "CONTAMINANTS: whole-crude elemental totals retained as metadata; no chemical speciation or removal model",
+      "TRANSPORT_SURROGATE: reused shared regrouped crude basis component viscosity curves are not crude-specific measurements"
+    ],
     "source_whole_crude": {
       "density_15c_kg_per_m3": 917.8,
       "sulfur_mass_percent": 0.52,
@@ -33,7 +41,7 @@
     "transparency": 0.01,
     "estimated": true
   },
-  "revision": "crude-regrouped-r1",
+  "revision": "crude-regrouped-r2",
   "amounts_by_component": {
     "Isobutane": 0.0004,
     "N-butane": 0.0014000000000000002,

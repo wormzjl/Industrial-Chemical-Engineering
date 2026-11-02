@@ -3,15 +3,14 @@ package com.wormzjl.icheme.science.column.v3.thermo;
 import com.wormzjl.icheme.science.material.*;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.column.v3.*;
-import com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RegroupedCrudeTest {
     @Test void replacementHasTwelveConsistentCutsAndNoRetiredProductionBasis() {
-        // Eight column/network packages plus the bundled pilot icheme:pilot_cryogenic (no column package).
-        var catalog=MaterialCatalog.bundled();assertEquals(9,catalog.packages().size());
+        // Three column/network packages plus the bundled pilot icheme:pilot_cryogenic (no column package).
+        var catalog=MaterialCatalog.bundled();assertEquals(4,catalog.packages().size());
         assertFalse(catalog.packages().containsKey("icheme:cdu17_tjl_acs2018"));
         var p=catalog.requirePackage("icheme:tjl20_methane");assertEquals(19,p.components().size());
         for(int i=1;i<=12;i++)assertEquals("crude_pc%02d".formatted(i),p.components().get(i+6));
@@ -52,7 +51,7 @@ class RegroupedCrudeTest {
         }
     }
     @Test void productionTransportMeetsTheUnusedDaliaChecksAndSharesTheUnresolvedTail() {
-        var catalog=MaterialCatalog.bundled();String id="icheme:dalia_tjl20";
+        var catalog=MaterialCatalog.bundled();String id="icheme:tjl20_methane";
         var p=catalog.requirePackage(id);var thermo=V3PengRobinsonThermo.fromRegisteredPackage(id);
         var whole=thermo.crudeFeed("icheme:dalia").moleFractions();var residue=whole.clone();
         for(int i=0;i<residue.length;i++) {
@@ -81,10 +80,10 @@ class RegroupedCrudeTest {
             assertNotNull(stream);
             var targets=com.google.gson.JsonParser.parseReader(new java.io.InputStreamReader(stream,java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
             for(var element:targets.getAsJsonArray("targets")) {
-                var row=element.getAsJsonObject();var preset=ColumnInputPreset.fromId(row.get("preset").getAsString());
+                var row=element.getAsJsonObject();String crude=row.get("preset").getAsString();
                 // Captured in the prescribed-drop mode; the shipped diameter marches a per-tray profile that
                 // moves every product volume, and is covered by V3TrayHydraulicsColumnTest.
-                var input=preset.input(catalog).withColumnDiameter(0.0);var success=assertInstanceOf(V3ColumnOutcome.Success.class,com.wormzjl.icheme.science.column.v3.V3TestInputs.calculate(input));
+                var input=V3TestInputs.crude(catalog,crude).withColumnDiameter(0.0);var success=assertInstanceOf(V3ColumnOutcome.Success.class,com.wormzjl.icheme.science.column.v3.V3TestInputs.calculate(input));
                 var properties=catalog.requirePackage(input.packageId());
                 for(var target:row.getAsJsonObject("targets_m3_per_second").entrySet()) {
                     var product=success.result().streams().stream().filter(v->v.streamId().equals(target.getKey())).findFirst().orElseThrow();
@@ -94,15 +93,15 @@ class RegroupedCrudeTest {
                         if(index>=0)volume+=product.molarFlowMolPerSecond()*fraction.moleFraction()*properties.properties().get(index).molecularWeight()/properties.properties().get(index).density();
                     }
                     double expected=target.getValue().getAsDouble();
-                    assertEquals(expected,volume,expected*1e-5,preset.id()+" "+target.getKey());
+                    assertEquals(expected,volume,expected*1e-5,crude+" "+target.getKey());
                 }
             }
         }
     }
 
     @Test void previouslyDifficultCrudesPublishAuditedClassicalSolutionsWithoutLearnedSeeds() {
-        for(var preset:List.of(ColumnInputPreset.fromId(MaterialCatalog.bundled(),"bonga"),ColumnInputPreset.fromId(MaterialCatalog.bundled(),"cold_lake_blend"))) {
-            var input=preset.input(MaterialCatalog.bundled());long start=System.nanoTime();
+        for(String crude:List.of("bonga","cold_lake_blend")) {
+            var input=V3TestInputs.crude(MaterialCatalog.bundled(),crude);long start=System.nanoTime();
             var result=V3ColumnCalculator.calculate(input,()->{
                 if(System.nanoTime()-start>45_000_000_000L)throw new java.util.concurrent.CancellationException("Regrouped preset deadline");
             },0,0,V3InitializationOptions.CURRENT,V3NeuralInitializer.UNAVAILABLE, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);

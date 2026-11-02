@@ -3,7 +3,8 @@
   "kind": "mixture",
   "name": "WTI Light - Export",
   "translation_key": "gui.icheme.column_preset.wti_light_export",
-  "package": "icheme:wti_light_export_tjl20",
+  "temperature_kelvin": 638.15,
+  "flow_kmol_h": 2653.4826277789275,
   "basis": "mole",
   "components": [
     {

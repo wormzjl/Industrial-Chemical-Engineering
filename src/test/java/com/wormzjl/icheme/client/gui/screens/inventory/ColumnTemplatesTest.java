@@ -38,7 +38,7 @@ class ColumnTemplatesTest {
     void everyBundledCrudeTemplateBuildsAColumnAndThePotIsOff() {
         var library = templates();
         assertEquals(0, library.unreadable());
-        assertEquals(Set.of("Bonga", "Cold Lake Blend", "Dalia", "Tia Juana Light (default)", "Upper Zakum", "WTI Light - Export", "Two-tray pot"),
+        assertEquals(Set.of("Crude tower (Bonga)", "Crude tower (Cold Lake Blend)", "Crude tower (Dalia)", "Crude tower (Tia Juana Light)", "Crude tower (Upper Zakum)", "Crude tower (WTI Light)", "Two-tray pot"),
                 library.templates().stream().map(ColumnTemplates.Template::name).collect(Collectors.toSet()));
         assertEquals(7, library.templates().size());
         for (var template : library.templates()) {
@@ -57,10 +57,21 @@ class ColumnTemplatesTest {
         }
     }
 
+    /** The constructor's operating point stands at the template's own design feed, on the default input's mixture and temperature. */
+    @Test
+    void aTemplateBuildsAtItsDesignFeed() {
+        for (var template : templates().templates()) {
+            double feed = java.util.Arrays.stream(template.input().feedComponentMolarFlowsMolPerSecond()).sum() * 3.6;
+            double design = template.name().equals("Two-tray pot") ? 360 : template.name().equals("Crude tower (Bonga)") ? 2650.277212975707 : feed;
+            assertEquals(design, feed, 1e-9, template.name());
+            assertEquals(base().feedTemperatureKelvin(), template.input().feedTemperatureKelvin(), 1e-9, template.name());
+        }
+    }
+
     @Test
     void aPlayersOwnTemplateFollowsTheBundledOnes() throws Exception {
         var bundled = templates().templates();
-        var own = bundled.stream().filter(t -> t.name().equals("Bonga")).findFirst().orElseThrow();
+        var own = bundled.stream().filter(t -> t.name().equals("Crude tower (Bonga)")).findFirst().orElseThrow();
         var directory = library().directory(V3ClientPresets.Kind.COLUMN);
         Files.createDirectories(directory);
         Files.writeString(directory.resolve("my_column.json"), V3ClientPresets.columnJson("My column", own.input()));

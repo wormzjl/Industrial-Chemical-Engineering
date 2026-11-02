@@ -53,7 +53,7 @@ The probes stand in for the plan's solver and sizing code: they are not them. `L
 
 ## Flash findings, 2026-11-02
 
-Taken while W2 built `FlowThermo`, which is why a stream searches along the TP flash. All on the bundled network package. These three are engine findings, reported to the owner; the engine is unchanged.
+Taken while W2 built `FlowThermo`, which is why a stream searches along the TP flash. All on the bundled network package, with the numbers as they stood that day. These three are engine findings, reported to the owner. Findings 1 and 3 were fixed on main in 0.18.1 (batches `2026-11-02-ph-false-root`, `2026-11-02-tp-steam-refusal`). Finding 2 stands with the owner, and it is the reason `FlowThermo` keeps its TP search.
 
 1. The PH flash has a false root on wet oil with volatile components. `FluidTpEquilibrium.solvePh` calls `closedPh` as soon as a bracket's ends read as `condensedStep`, however wide, and `waterBoiling` answers at pure water's saturation with no hydrocarbon vapour. Crude with 20 mole % water: at 2 bar every TP state from 376 to 382 K answers 393.36 K; at 30 bar, 500 K answers 507.00 K. The TP flash there holds 8 to 14 mol of hydrocarbon vapour per 100, and its three-phase zone (482.5 to 488.7 K at 30 bar) is continuous, so no step exists. The answer's enthalpy is the target, so nothing flags it.
 2. Under the melting line the PH flash answers ice, and `adopt` carries that ice as the liquid stand-in (D23), so the state's enthalpy misses the target by up to the latent heat. 100 mol/s at 5 bar: 273.12 K, 400 kW off. The TP flash holds a smooth supercooled stand-in there.
@@ -69,3 +69,4 @@ The search answers every grid target the fluid can reach within 0.06 W on 100 mo
 - 2026-11-02: the owner's note on types, drops and the ejector. `SizingProbe` goes by surface and drops, proposes the heater's type and writes the storage what-if and the door's drops; `EjectorProbe` added.
 - 2026-11-02: W2. `FlashProbeTest` added, with the flash findings above.
 - 2026-11-02: W3. `FlashProbeTest` follows `FlowThermo`'s constructor.
+- 2026-11-02: W5. The probes' feeds still read the bundled crude: the assays moved onto `icheme:tjl20_methane`, and the results above were taken before that move.

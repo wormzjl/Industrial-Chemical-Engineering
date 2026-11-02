@@ -1,12 +1,20 @@
 {
   "schema_version": 1,
   "id": "icheme:upper_zakum",
-  "package": "icheme:upper_zakum_tjl20",
+  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "UPZAK26B",
     "source_url": "https://corporate.exxonmobil.com/-/media/global/files/crude-oils/pdf/upper_zakum.pdf",
     "source_pdf_sha256": "bf6be49db1d61e5279e4b04ac3e40635d5b02190101b34270fa51d53142e71ea",
+    "advisory_evidence": [
+      "SHARED_COMPONENT_SURROGATE: source assay rebinned onto shared regrouped crude basis; properties are not characterized for this crude",
+      "ASSAY_SOURCE: ExxonMobil UPZAK26B; source light-end and cut mass yields retained with rounding adjustment",
+      "C1_C2_ALLOCATION: combined methane+ethane assigned to ethane; methane zero; original split is unknown",
+      "ESTIMATED_HEAVY_TAIL: above 590C exponential tail constrained by reported 550C+ volume-average boiling point",
+      "CONTAMINANTS: whole-crude elemental totals retained as metadata; no chemical speciation or removal model",
+      "TRANSPORT_SURROGATE: reused shared regrouped crude basis component viscosity curves are not crude-specific measurements"
+    ],
     "source_whole_crude": {
       "density_15c_kg_per_m3": 857.7,
       "sulfur_mass_percent": 2.09,
@@ -33,7 +41,7 @@
     "transparency": 0.04,
     "estimated": true
   },
-  "revision": "crude-regrouped-r1",
+  "revision": "crude-regrouped-r2",
   "amounts_by_component": {
     "Propane": 0.0038,
     "Isobutane": 0.0037,

@@ -3,7 +3,8 @@
   "kind": "mixture",
   "name": "Dalia",
   "translation_key": "gui.icheme.column_preset.dalia",
-  "package": "icheme:dalia_tjl20",
+  "temperature_kelvin": 638.15,
+  "flow_kmol_h": 2649.177154702273,
   "basis": "mole",
   "components": [
     {

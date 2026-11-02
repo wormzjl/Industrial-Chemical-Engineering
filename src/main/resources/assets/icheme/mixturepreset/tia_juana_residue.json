@@ -3,7 +3,6 @@
   "kind": "mixture",
   "name": "Tia Juana Light atmospheric residue (VDU feed)",
   "translation_key": "gui.icheme.column_preset.tia_juana_residue",
-  "package": "icheme:tjl20_methane",
   "basis": "mole",
   "components": [
     {

@@ -1,12 +1,20 @@
 {
   "schema_version": 1,
   "id": "icheme:cold_lake_blend",
-  "package": "icheme:cold_lake_blend_tjl20",
+  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "CLKBL23B",
     "source_url": "https://corporate.exxonmobil.com/-/media/global/files/crude-oils/pdf/2024/cold_lake_blend.pdf",
     "source_pdf_sha256": "b15cf7217f38cfde936d27cc3848133b43e602d2db65174f2cb672f14e7921f1",
+    "advisory_evidence": [
+      "SHARED_COMPONENT_SURROGATE: source assay rebinned onto shared regrouped crude basis; properties are not characterized for this crude",
+      "ASSAY_SOURCE: ExxonMobil CLKBL23B; source light-end and cut mass yields retained with rounding adjustment",
+      "C1_C2_ALLOCATION: combined methane+ethane assigned to ethane; methane zero; original split is unknown",
+      "ESTIMATED_HEAVY_TAIL: above 590C exponential tail constrained by reported 550C+ volume-average boiling point",
+      "CONTAMINANTS: whole-crude elemental totals retained as metadata; no chemical speciation or removal model",
+      "TRANSPORT_SURROGATE: reused shared regrouped crude basis component viscosity curves are not crude-specific measurements"
+    ],
     "source_whole_crude": {
       "density_15c_kg_per_m3": 936.6999999999999,
       "sulfur_mass_percent": 3.87,
@@ -33,7 +41,7 @@
     "transparency": 0.0,
     "estimated": true
   },
-  "revision": "crude-regrouped-r1",
+  "revision": "crude-regrouped-r2",
   "amounts_by_component": {
     "Propane": 0.0001,
     "Isobutane": 0.0040999999999999995,

@@ -3,6 +3,6 @@
   "id": "icheme:cold_lake_blend",
   "kind": "fluid",
   "label": "Cold Lake Blend",
-  "package": "icheme:cold_lake_blend_tjl20",
+  "package": "icheme:tjl20_methane",
   "assay": "icheme:cold_lake_blend"
 }

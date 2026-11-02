@@ -340,7 +340,7 @@ The naphtha is unstabilised, so its lights need a sphere until a stabiliser take
 
 ## 5. Work packages
 
-They follow W1 to W9 of the main plan. Each ends with the quick suite and a commit.
+They follow W1 to W9 of the main plan. Each ends with the tests it can affect and a commit.
 
 | WP | What | Gates |
 |---|---|---|

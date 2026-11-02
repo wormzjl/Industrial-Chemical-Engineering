@@ -3,7 +3,8 @@
   "kind": "mixture",
   "name": "Tia Juana Light (default)",
   "translation_key": "gui.icheme.column_preset.tia_juana",
-  "package": "icheme:tjl20_methane",
+  "temperature_kelvin": 638.15,
+  "flow_kmol_h": 2652.2804730356065,
   "basis": "mole",
   "components": [
     {

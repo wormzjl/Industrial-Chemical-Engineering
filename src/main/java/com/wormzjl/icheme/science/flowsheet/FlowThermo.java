@@ -15,10 +15,9 @@ import java.util.concurrent.CancellationException;
  * package, as streams. Run it inside {@code MaterialRuntime.with}. Minecraft-free.
  *
  * <p>A stream is what the world's TP flash says at the temperature that holds its enthalpy, and {@link #atEnthalpy} searches
- * along that flash. The engine's PH answers only on a true step of H(T). Measured: on crude with 20 mole % water it answers
- * free water boiling at pure saturation across 376 to 382 K at 2 bar, 393.36 K with no hydrocarbon vapour, where the TP flash
- * holds both; and on water under its melting line it answers ice, which a network state cannot carry (D23), so its enthalpy
- * misses the target by the latent heat.
+ * along that flash. The engine's PH answers only on a true step of H(T). Measured: on water under its melting line it answers
+ * ice, which a network state cannot carry (D23), so its enthalpy misses the target by up to the latent heat, where the TP flash
+ * holds a smooth supercooled stand-in.
  */
 public final class FlowThermo implements StreamThermo {
     private static final double GAS_CONSTANT = 8.314462618;

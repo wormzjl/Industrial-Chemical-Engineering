@@ -3,7 +3,8 @@
   "kind": "mixture",
   "name": "Tia Juana Light + 2 % nitrogen",
   "translation_key": "gui.icheme.column_preset.tia_juana_nitrogen",
-  "package": "icheme:tjl20_methane_nitrogen",
+  "temperature_kelvin": 638.15,
+  "flow_kmol_h": 2652.2804730356065,
   "basis": "mole",
   "components": [
     {

@@ -3,6 +3,8 @@ package com.wormzjl.icheme.science.column.operation;
 import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnOperatingPoint;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -106,6 +108,34 @@ class ColumnSolveTest {
         }
         assertEquals(table.condenserPerFeed(), scaled.condenserPerFeed(), 1e-4 * Math.abs(table.condenserPerFeed()), "the condenser duty per feed");
         assertEquals(.5, scaled.reference().alpha(), 1e-12);
+    }
+
+    /**
+     * A column built on a crude package that is gone (batch 2026-11-02-process-simulator, W5): the package and assay a saved
+     * point names are plain names, so the point starts, and the solve stands on the network's own package.
+     */
+    @Test void aSavedPointOnARemovedPackageStarts() {
+        var catalog = MaterialCatalog.bundled();
+        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        assertNull(catalog.packages().get("icheme:bonga_tjl20"), "the package this point names is gone");
+        var built = ColumnDesign.of(design, ColumnComponents.Choices.DEFAULT.fit(design.pumparounds().size()));
+        var p = ColumnOperatingPoint.of(design);
+        var saved = new ColumnOperatingPoint("icheme:bonga_tjl20", "icheme:bonga", p.components(), p.feed(), p.feedTemperature(), p.topPressure(), p.stageDrop(),
+                p.condenserTemperature(), p.refluxRatio(), p.reboilerDuty(), p.steam(), p.draws(), p.pumparounds());
+        var trays = built.trays().withOperating(saved);
+        var start = trays.operating().input(trays, built.diameter());
+        assertEquals("icheme:bonga_tjl20", start.packageId());
+        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
+        var axis = model.components();
+        double[] feed = new double[axis.size()];
+        for (int c = 0; c < start.componentBasis().componentCount(); c++) {
+            int i = axis.indexOf(start.componentBasis().componentId(c));
+            if (i >= 0) feed[i] += start.feedComponentMolarFlowsMolPerSecond()[c];
+        }
+        var steam = start.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
+        var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, start, Setpoints.of(saved), new ColumnSolve.Taken(feed, Double.NaN, steam), null),
+                model, catalog, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
+        assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
     }
 
     private static double dot(double[] a, double[] b) {

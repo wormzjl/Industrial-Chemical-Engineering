@@ -356,12 +356,11 @@ public final class ColumnCalculatorV3Screen extends AbstractContainerScreen<Colu
         if(busy())return;
         try{
             if(preset instanceof V3ClientPresets.Column column){
-                var replacement=newDraft(draft.base());replacement.loadColumn(column.fields());replacement.assembleOperating();
-                draft.loadColumn(column.fields());
+                var replacement=newDraft(draft.base());replacement.loadColumn(column.template());replacement.assembleOperating();
+                draft.loadColumn(column.template());
             }else if(preset instanceof V3ClientPresets.Mixture mixture){
-                var source=state.editorCatalog().templates().values().stream().filter(i->i.packageId().equals(mixture.packageId())).findFirst().orElseThrow();
-                var comp=new V3CompositionDraft(source,state.editorCatalog().weightsFor(source));comp.load(mixture.amounts(),mixture.mass());
-                draft.composition(source,state.editorCatalog().weightsFor(source));draft.composition().load(mixture.amounts(),mixture.mass());massRate=mixture.mass();basisToConfig();
+                var source=state.editorCatalog().sourceFor(mixture.amounts().keySet());
+                draft.loadMixture(mixture,source,state.editorCatalog().weightsFor(source));massRate=mixture.mass();basisToConfig();
             }
             selectedDraw=selectedPA=selectedSteam=-1;presetKind=null;glassView.reset();edited();rebuild();
         }catch(IllegalArgumentException|NoSuchElementException e){rejection=tr("preset_incompatible");}

@@ -43,6 +43,12 @@ public record V3EditorCatalog(Map<String,V3ColumnInput> templates, Map<String,Li
     private static List<Double> weights(MaterialCatalog catalog,V3ColumnInput input) {
         return catalog.requirePackage(input.packageId()).properties().stream().map(MaterialCatalog.Property::molecularWeight).toList();
     }
+    /** The template a stream of {@code parts} sits on, the one with the fewest components that holds them: a stream names no package. */
+    public V3ColumnInput sourceFor(Collection<String> parts) {
+        return templates.entrySet().stream().filter(t->t.getValue().componentBasis().componentIds().containsAll(parts))
+                .min(Comparator.<Map.Entry<String,V3ColumnInput>>comparingInt(t->t.getValue().componentBasis().componentCount()).thenComparing(Map.Entry::getKey))
+                .map(Map.Entry::getValue).orElseThrow();
+    }
     public List<Double> weightsFor(V3ColumnInput input) {
         var values=molecularWeights.get(input.packageId());
         if(values==null||values.size()!=input.componentBasis().componentCount())

@@ -30,9 +30,9 @@ class FluidAppearanceTest {
             for (String component : p.components()) assertTrue(catalog.componentAppearance(p.id(), component).estimated());
             for (String assay : p.assays().keySet()) assertTrue(catalog.assayAppearance(p.id(), assay).estimated());
         }
-        assertEquals(0x171615, catalog.assayAppearance("icheme:cold_lake_blend_tjl20", "icheme:cold_lake_blend").rgb());
+        assertEquals(0x171615, catalog.assayAppearance(PACKAGE, "icheme:cold_lake_blend").rgb());
         assertThrows(IllegalArgumentException.class, () -> catalog.componentAppearance(PACKAGE, "Unknown"));
-        assertThrows(IllegalArgumentException.class, () -> catalog.assayAppearance(PACKAGE, "icheme:cold_lake_blend"));
+        assertThrows(IllegalArgumentException.class, () -> catalog.assayAppearance("icheme:tjl20_methane_nitrogen", "icheme:cold_lake_blend"));
     }
 
     @Test void appearanceEditsPreserveThePackagesScienceAndTransport() {

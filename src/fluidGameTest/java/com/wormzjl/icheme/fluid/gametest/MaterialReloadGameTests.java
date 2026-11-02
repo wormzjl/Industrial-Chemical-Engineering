@@ -38,10 +38,10 @@ public class MaterialReloadGameTests {
     public static void materialReloadIsAtomic(GameTestHelper helper) throws Exception {
         var server=helper.getLevel().getServer();
         var original=MaterialRuntime.active();
+        var feedPackage=original.requirePackage("icheme:tjl20_methane");
         for (String crude : List.of("wti_light_export", "upper_zakum", "bonga", "dalia", "cold_lake_blend")) {
-            var feedPackage=original.requirePackage("icheme:"+crude+"_tjl20");
             var assay=feedPackage.assays().get("icheme:"+crude);
-            if (!feedPackage.components().equals(original.requirePackage("icheme:tjl20_methane").components()) || assay==null || !assay.basis().equals("mass")) {
+            if (assay==null || !assay.basis().equals("mass")) {
                 helper.fail("Bundled regrouped crude assay was not loaded: "+crude);return;
             }
         }

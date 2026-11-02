@@ -40,22 +40,15 @@ class PilotCryogenicCatalogTest {
      * compared directly ({@link #TJL20_PHYSICS}).
      */
     private static final String[][] BUNDLED_PINS = {
-        {"icheme:bonga_tjl20", "icheme:bonga_tjl20@crude-regrouped-r1"},
-        {"icheme:cold_lake_blend_tjl20", "icheme:cold_lake_blend_tjl20@crude-regrouped-r1"},
-        {"icheme:dalia_tjl20", "icheme:dalia_tjl20@crude-regrouped-r1"},
         {"icheme:tjl19_dwsim", "icheme:tjl19_dwsim@crude-regrouped-r1"},
         {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r1"},
         {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r1"},
-        {"icheme:upper_zakum_tjl20", "icheme:upper_zakum_tjl20@crude-regrouped-r1"},
-        {"icheme:wti_light_export_tjl20", "icheme:wti_light_export_tjl20@crude-regrouped-r1"},
     };
     private static final String TJL20 = "icheme:tjl20_methane";
     /**
-     * The packages with tjl20_methane's physics on its axis: the regrouped crude assays (one physics fingerprint,
-     * {@code b1b9f1eb...}, until 2026-10-26) and the network package, whose nitrogen lies outside that axis.
+     * The packages with tjl20_methane's physics on its axis: the network package, whose nitrogen lies outside that axis.
      */
-    private static final List<String> TJL20_PHYSICS = List.of("icheme:bonga_tjl20", "icheme:cold_lake_blend_tjl20", "icheme:dalia_tjl20",
-            "icheme:tjl20_methane_nitrogen", "icheme:upper_zakum_tjl20", "icheme:wti_light_export_tjl20");
+    private static final List<String> TJL20_PHYSICS = List.of("icheme:tjl20_methane_nitrogen");
 
     /**
      * The pilot package as committed in P3 WP3 (pilot records r1, the E-PPR78 rule on icheme:eppr78_2022 r1), with
@@ -92,7 +85,7 @@ class PilotCryogenicCatalogTest {
             var dwsim = catalog.requirePackage("icheme:tjl19_dwsim");
             assertTrue(axis.containsAll(dwsim.components()));
             assertTrue(catalog.samePhysics(dwsim.id(), TJL20, dwsim.components()), "tjl19_dwsim on its own axis");
-            // The pilot is the ninth bundled package and the only one with a reference spine.
+            // The pilot is the fourth bundled package and the only one with a reference spine.
             assertEquals(BUNDLED_PINS.length + 1, catalog.packages().size());
             assertEquals(List.of(PilotCryogenicTestCatalog.PACKAGE_ID), catalog.packages().values().stream()
                     .filter(p -> !p.spine().isEmpty()).map(MaterialCatalog.Package::id).toList());

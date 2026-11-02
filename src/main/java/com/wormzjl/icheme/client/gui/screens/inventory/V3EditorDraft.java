@@ -107,16 +107,51 @@ final class V3EditorDraft {
     }
     void removeSteam(int i){set("t"+i+"stage","");set("t"+i+"rate","");set("t"+i+"T","");}
     /** A column preset's fields: every field but the tray drop {@code s8}, which stays the base's (owner choice (a), 2026-10-28). */
-    void loadColumn(Map<String,String> data){
-        var expected=new HashSet<>(fields.keySet());expected.remove("s8");
-        if(!data.keySet().equals(expected))throw new IllegalArgumentException("Invalid column preset fields");
-        data.forEach((key,value)->{
-            fields.put(key,value);exact.remove(key);
-            if(!value.isBlank()&&!key.endsWith("split")){
-                double n=Double.parseDouble(value);exact.put(key,n);
-                fields.put(key,isInteger(key)?Integer.toString((int)n):String.format(Locale.ROOT,"%.1f",n));
-            }
-        });for(int i=0;i<2;i++)steamAtBottom[i]=fields.get("t"+i+"stage").equals(fields.get("s2"));columnChanged=true;
+    /** Loads a template on the feed this draft holds: the feed and the tray drop stay, and its flows and duties scale to the feed (plan D4). */
+    void loadColumn(V3ColumnTemplate template){
+        double feed;
+        try{feed=Double.parseDouble(precise("s0"));}catch(NumberFormatException blank){feed=0;}
+        fields(template.scaledTo(feed)).forEach(this::load);
+        for(int i=0;i<2;i++)steamAtBottom[i]=fields.get("t"+i+"stage").equals(fields.get("s2"));columnChanged=true;
+    }
+    /** Loads a template at its own design feed, where it names one: the operating point the equipment constructor builds. */
+    void loadColumnAtDesignFeed(V3ColumnTemplate template){
+        if(template.designFeed()>0)load("s0",Double.toString(template.designFeed()));
+        loadColumn(template);
+    }
+    /** Loads a stream template on {@code source}'s components, with the feed flow and temperature where it has them. */
+    void loadMixture(V3ClientPresets.Mixture mixture,V3ColumnInput source,List<Double> weights){
+        var loaded=new V3CompositionDraft(source,weights);loaded.load(mixture.amounts(),mixture.mass());composition=loaded;
+        mixture.flow().ifPresent(flow->load("s0",Double.toString(flow)));
+        mixture.temperature().ifPresent(kelvin->load("s1",Double.toString(kelvin-273.15)));
+    }
+    private void load(String key,String value){
+        fields.put(key,value);exact.remove(key);
+        if(!value.isBlank()&&!key.endsWith("split")){
+            double n=Double.parseDouble(value);exact.put(key,n);
+            fields.put(key,isInteger(key)?Integer.toString((int)n):String.format(Locale.ROOT,"%.1f",n));
+        }
+    }
+    /** The fields a template sets: all but the feed (s0, s1) and the tray drop (s8). */
+    private static Map<String,String> fields(V3ColumnTemplate t){
+        var f=new LinkedHashMap<String,String>();
+        f.put("s2",Integer.toString(t.trays()));f.put("s3",Integer.toString(t.feedTray()));f.put("s4",Double.toString(t.topTemperature()-273.15));
+        f.put("s5",Double.toString(t.reboilerDuty()));f.put("s6",Double.toString(t.refluxRatio()));f.put("s7",Double.toString(t.topPressure()));f.put("s9",Double.toString(t.diameter()));
+        for(int i=0;i<V3ColumnInput.MAX_SIDE_DRAWS;i++){
+            var d=i<t.draws().size()?t.draws().get(i):null;
+            f.put("d"+i+"stage",d==null?"":Integer.toString(d.tray()));f.put("d"+i+"rate",d==null?"":Double.toString(d.flow()));
+        }
+        for(int i=0;i<V3ColumnInput.MAX_STEAM_FEEDS;i++){
+            var s=i<t.steam().size()?t.steam().get(i):null;
+            f.put("t"+i+"stage",s==null?"":Integer.toString(s.tray()));f.put("t"+i+"rate",s==null?"":Double.toString(s.flow()));
+            f.put("t"+i+"T",s==null?"":Double.toString(s.temperature()-273.15));
+        }
+        for(int i=0;i<V3ColumnInput.MAX_PUMPAROUNDS;i++){
+            var c=i<t.pumparounds().size()?t.pumparounds().get(i):null;
+            f.put("c"+i+"draw",c==null?"":Integer.toString(c.drawTray()));f.put("c"+i+"return",c==null?"":Integer.toString(c.returnTray()));
+            f.put("c"+i+"duty",c==null?"":Double.toString(c.cooling()));f.put("c"+i+"split",c==null?"UNIFORM":c.split().name());
+        }
+        return f;
     }
     private static boolean isInteger(String key){return key.equals("s2")||key.equals("s3")||key.endsWith("stage")||key.endsWith("draw")||key.endsWith("return");}
     private String index(String key,int delta){

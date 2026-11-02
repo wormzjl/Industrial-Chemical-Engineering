@@ -1,12 +1,20 @@
 {
   "schema_version": 1,
   "id": "icheme:bonga",
-  "package": "icheme:bonga_tjl20",
+  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "BONGA25Y",
     "source_url": "https://corporate.exxonmobil.com/-/media/global/files/crude-oils/pdf/2025/bonga.pdf",
     "source_pdf_sha256": "0ee57146598b561ee885c67959173f6f3f630443a7bcc1dc0bab22b30dcdecd7",
+    "advisory_evidence": [
+      "SHARED_COMPONENT_SURROGATE: source assay rebinned onto shared regrouped crude basis; properties are not characterized for this crude",
+      "ASSAY_SOURCE: ExxonMobil BONGA25Y; source light-end and cut mass yields retained with rounding adjustment",
+      "C1_C2_ALLOCATION: combined methane+ethane assigned to ethane; methane zero; original split is unknown",
+      "ESTIMATED_HEAVY_TAIL: above 590C exponential tail constrained by reported 550C+ volume-average boiling point",
+      "CONTAMINANTS: whole-crude elemental totals retained as metadata; no chemical speciation or removal model",
+      "TRANSPORT_SURROGATE: reused shared regrouped crude basis component viscosity curves are not crude-specific measurements"
+    ],
     "source_whole_crude": {
       "density_15c_kg_per_m3": 888.4,
       "sulfur_mass_percent": 0.26,
@@ -33,7 +41,7 @@
     "transparency": 0.03,
     "estimated": true
   },
-  "revision": "crude-regrouped-r1",
+  "revision": "crude-regrouped-r2",
   "amounts_by_component": {
     "Ethane": 0.0001,
     "Propane": 0.0017000000000000001,

@@ -1,6 +1,6 @@
 # In-game process simulator: design plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner took decisions D1 to D22 on 2026-11-02 (section 5). W1 to W4 are built on the branch, not merged; the rest follows column operation's merge (D10).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner took decisions D1 to D22 on 2026-11-02 (section 5). W1 to W5 are built on the branch, not merged; column operation is on main, so the rest may follow (D10).
 The drawings are in [research/2026-11-02-process-simulator/renders/](../../research/2026-11-02-process-simulator/renders/), in the main checkout. Every number comes from the shipped code at `79b853e0`, run by the tools in
 `tools/process-simulator/`.
 
@@ -223,6 +223,10 @@ The column block needs no save compatibility, so an alias takes `column_calculat
 - `columnpreset` goes to schema 3. A schema 2 file still loads: its feed flow becomes the design feed.
 - The bundled column presets split the same way. The crude-specific packages go, and a crude becomes a stream template. All six
   share `icheme:crude_19` physics; they differ only in id and evidence text.
+- As built (W5): `V3ColumnTemplate` holds the column and the one scaling rule, and `V3ClientPresets` reads schema 2 and 3 and writes 3. A
+  stream template names no package: `V3EditorCatalog.sourceFor` seats it on the fewest components that hold it. The five crude assays moved onto
+  `icheme:tjl20_methane`, each with its crude's evidence lines in its `provenance`, so the column's audit list now shows the shared package's
+  lines alone. The five crude column presets in the material data went too: no screen read them, only gates, and those now run on the two templates.
 
 ### 3.8 Copy and paste
 
@@ -291,7 +295,8 @@ A multi-machine is one tile, one door, one block (sheets 19, 21). Its ports are 
 
 ## 4. Work packages
 
-Each ends with the quick suite and a commit. W1 to W4 have no GUI and no Minecraft classes. W1 to W4 can start now; the rest
+Each ends with the tests it can affect and a commit (`AGENTS.md`, "No repeated tests"). The whole suites run once, in the final
+lane after W10, when the owner asks for the merge. W1 to W4 have no GUI and no Minecraft classes. W1 to W4 can start now; the rest
 follow the merge of column operation (D10).
 
 | WP | Content | Gate |
@@ -304,7 +309,7 @@ follow the merge of column operation (D10).
 | W6 | Screen: canvas with block ports and hovers, selection panel, reconnect, baked symbols, palette, doors, Results, Basis | Column-builder gates; sheets rendered from shipped code |
 | W7 | Client run: thread, Stop, progress, revision notice | Stop mid-column; nothing on the render thread |
 | W8 | Block swap, the sheet on the block (upload, replay, read only for a second player), Save design, clipboard, reservoir Copy | Constructor import; no packet on Copy; a sheet survives a reload; a bad upload is refused; no solve on the server |
-| W9 | Coverage gate, `AGENTS.md` rule, code guide chapter, zh_cn, cleanup, final lane | `test slowGates` |
+| W9 | Coverage gate, `AGENTS.md` rule, code guide chapter, zh_cn, cleanup | The coverage gate |
 | S1 to S5 | The sizing stage, after the main flowsheet: [SIZING_PLAN.md](SIZING_PLAN.md) | There |
 | W10 | Ejector, last: the law in `science/flowsheet`, the tile lit, the block's Motive steam port, the steam's heat on the condenser, its sizing ([SIZING_PLAN.md](SIZING_PLAN.md), section 3.12) | Reproduces the correlation's points; closes mass and energy; a wired motive short of the need is red |
 

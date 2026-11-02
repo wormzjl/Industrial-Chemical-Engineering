@@ -13,7 +13,7 @@
     },
     {
       "preset": "wti_light_export",
-      "package": "icheme:wti_light_export_tjl20",
+      "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
         "side_liquid_tray_10": 0.01900335750367469,
         "side_liquid_tray_18": 0.02422687348003732,
@@ -22,7 +22,7 @@
     },
     {
       "preset": "upper_zakum",
-      "package": "icheme:upper_zakum_tjl20",
+      "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
         "side_liquid_tray_10": 0.020752298299421237,
         "side_liquid_tray_18": 0.02865295627955716,
@@ -31,7 +31,7 @@
     },
     {
       "preset": "bonga",
-      "package": "icheme:bonga_tjl20",
+      "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
         "side_liquid_tray_10": 0.023678557823011013,
         "side_liquid_tray_18": 0.03133848075030262,
@@ -40,7 +40,7 @@
     },
     {
       "preset": "dalia",
-      "package": "icheme:dalia_tjl20",
+      "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
         "side_liquid_tray_10": 0.0242423764935738,
         "side_liquid_tray_18": 0.03405368981896664,

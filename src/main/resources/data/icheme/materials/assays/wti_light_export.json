@@ -1,12 +1,20 @@
 {
   "schema_version": 1,
   "id": "icheme:wti_light_export",
-  "package": "icheme:wti_light_export_tjl20",
+  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "WTLEX26Y",
     "source_url": "https://corporate.exxonmobil.com/-/media/global/files/crude-oils/pdf/wti_light.pdf",
     "source_pdf_sha256": "96ea254f6666fb85b3b12d050ed34f04a6f74187dd5b7c1efc51990c11b65c9c",
+    "advisory_evidence": [
+      "SHARED_COMPONENT_SURROGATE: source assay rebinned onto shared regrouped crude basis; properties are not characterized for this crude",
+      "ASSAY_SOURCE: ExxonMobil WTLEX26Y; source light-end and cut mass yields retained with rounding adjustment",
+      "C1_C2_ALLOCATION: combined methane+ethane assigned to ethane; methane zero; original split is unknown",
+      "ESTIMATED_HEAVY_TAIL: above 590C exponential tail constrained by reported 550C+ volume-average boiling point",
+      "CONTAMINANTS: whole-crude elemental totals retained as metadata; no chemical speciation or removal model",
+      "TRANSPORT_SURROGATE: reused shared regrouped crude basis component viscosity curves are not crude-specific measurements"
+    ],
     "source_whole_crude": {
       "density_15c_kg_per_m3": 790.6,
       "sulfur_mass_percent": 0.07,
@@ -33,7 +41,7 @@
     "transparency": 0.12,
     "estimated": true
   },
-  "revision": "crude-regrouped-r1",
+  "revision": "crude-regrouped-r2",
   "amounts_by_component": {
     "Ethane": 0.0002,
     "Propane": 0.0044,
