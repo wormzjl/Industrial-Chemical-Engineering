@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet;
 
+import com.google.gson.JsonObject;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -11,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 
@@ -34,12 +36,18 @@ public final class FlowsheetSolver {
      * @param maxPasses            passes a loop may take
      * @param lowestFactor         Wegstein's q is held in here
      * @param highestFactor        0 is a plain step
+     * @param unknown              the fields a later version put here, {@link Flowsheet}
      */
-    public record Settings(double flowTolerance, double temperatureTolerance, int maxPasses, double lowestFactor, double highestFactor) {
+    public record Settings(double flowTolerance, double temperatureTolerance, int maxPasses, double lowestFactor, double highestFactor, JsonObject unknown) {
         public static final Settings DEFAULT = new Settings(1e-4, .01, 30, -5, 0);
 
         public Settings {
             if (!(flowTolerance > 0) || !(temperatureTolerance > 0) || maxPasses < 1 || !(lowestFactor <= highestFactor) || !(highestFactor <= 0)) throw new IllegalArgumentException("Invalid solver settings");
+            Objects.requireNonNull(unknown, "unknown");
+        }
+
+        public Settings(double flowTolerance, double temperatureTolerance, int maxPasses, double lowestFactor, double highestFactor) {
+            this(flowTolerance, temperatureTolerance, maxPasses, lowestFactor, highestFactor, new JsonObject());
         }
     }
 

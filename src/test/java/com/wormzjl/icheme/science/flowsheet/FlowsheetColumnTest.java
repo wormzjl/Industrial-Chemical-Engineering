@@ -137,6 +137,15 @@ final class FlowsheetColumnTest {
         assertEquals(run.reports().get("T").readings().get("energy_gap"), run.heatGap(), 1, "free sides book their heat: what is left is what the two thermo models differ by");
     }
 
+    /** A door holding a package gone from this version takes the sheet's, as it does for a feed its own cannot hold. */
+    @Test void aDoorsRemovedPackageFallsToTheSheets() {
+        var door = ColumnDoor.from(BASE, ColumnComponents.Condenser.AIR_COOLER);
+        door.json().addProperty("package", "icheme:retired_package");
+        var run = new Sheet().unit("T", "column", door).feed("feed", "T", "feed", crude(BASE.feedTemperatureKelvin(), FEED_TRAY))
+                .product("overhead", "T", "overhead").product("distillate", "T", "distillate").product("water", "T", "water").product("bottoms", "T", "bottoms").run();
+        assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
+    }
+
     private static double feedTray(V3ColumnResult result) {
         return result.inspection().orElseThrow().nodes().get(BASE.feedStageNumber()).pressurePascal();
     }

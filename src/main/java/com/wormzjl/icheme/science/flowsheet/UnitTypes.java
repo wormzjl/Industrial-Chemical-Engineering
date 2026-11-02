@@ -17,10 +17,29 @@ import java.util.Map;
 
 /**
  * The tiles that run, by the stable type strings a flowsheet file holds (batch 2026-11-02-process-simulator, plan section 3.2).
- * One tile for each function: a drum's or a heater's kind is the sizing stage's, and the run needs none. A renamed type gets an
- * alias; a removed one reads as a placeholder.
+ * One tile for each function: a drum's or a heater's kind is the sizing stage's, and the run needs none. A renamed type or port gets
+ * an alias; a removed one reads as a placeholder.
  */
 public final class UnitTypes {
+    /**
+     * What a type or a port was called. A file is read through this, so a sheet holds today's names.
+     *
+     * @param types today's type by what it was called
+     * @param ports by today's type, today's port by what it was called
+     */
+    public record Aliases(Map<String, String> types, Map<String, Map<String, String>> ports) {
+        String type(String type) {
+            return types.getOrDefault(type, type);
+        }
+
+        String port(String type, String port) {
+            return ports.getOrDefault(type, Map.of()).getOrDefault(port, port);
+        }
+    }
+
+    /** No type or port has changed its name yet. */
+    public static final Aliases ALIASES = new Aliases(Map.of(), Map.of());
+
     private static final Map<String, UnitModel> MODELS = Map.ofEntries(
             Map.entry("valve", new ValveUnit()),
             Map.entry("mixer", new MixerUnit()),

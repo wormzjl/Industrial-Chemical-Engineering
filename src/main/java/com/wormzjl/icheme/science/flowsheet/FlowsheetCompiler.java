@@ -7,6 +7,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,12 +60,32 @@ public final class FlowsheetCompiler {
         return estimates;
     }
 
+    /** Each component and solid the sheet holds that this package no longer has, once: they stay in the file, out of the solve. */
+    public static List<String> parked(Flowsheet sheet, FlowThermo thermo) {
+        var parked = new LinkedHashSet<String>();
+        for (var stream : sheet.streams()) if (stream.feed() != null) parked.addAll(parked(stream.feed(), thermo));
+        return List.copyOf(parked);
+    }
+
+    private static List<String> parked(Flowsheet.Feed feed, FlowThermo thermo) {
+        var parked = new ArrayList<String>();
+        feed.amounts().forEach((component, amount) -> {
+            if (amount > 0 && thermo.place(component) < 0) parked.add(component);
+        });
+        for (var solid : feed.solids()) if (solid.massFlow() > 0 && !thermo.model().solids.materials().containsKey(solid.material())) parked.add(solid.material());
+        return parked;
+    }
+
     /** A port holds one stream: whether {@code end} is a live port that {@code stream} now holds. */
     private static boolean claims(Flowsheet.Stream stream, @Nullable Flowsheet.End end, Port.Direction direction, Set<Live> live, Map<String, Map<String, String>> wires) {
         return end != null && live.contains(new Live(end, direction)) && wires.computeIfAbsent(end.unit(), k -> new HashMap<>()).putIfAbsent(end.port(), stream.id()) == null;
     }
 
-    private record Live(Flowsheet.End end, Port.Direction direction) {
+    /** A port by its stable strings: what else a stream's end holds does not make it another port. */
+    private record Live(String unit, String port, Port.Direction direction) {
+        Live(Flowsheet.End end, Port.Direction direction) {
+            this(end.unit(), end.port(), direction);
+        }
     }
 
     /**
@@ -79,7 +100,7 @@ public final class FlowsheetCompiler {
             try {
                 var model = UnitTypes.model(unit.type());
                 if (model == null) placeholders.add(unit.id());
-                else for (var port : model.ports(unit.params())) live.add(new Live(new Flowsheet.End(unit.id(), port.id()), port.direction()));
+                else for (var port : model.ports(unit.params())) live.add(new Live(unit.id(), port.id(), port.direction()));
             } catch (FlowsheetFailure noPorts) {
                 placeholders.add(unit.id());
             }
@@ -98,24 +119,27 @@ public final class FlowsheetCompiler {
             var flow = thermo.atTemperature(feed.temperature(), feed.pressure(), amounts(feed, thermo), solids(feed, thermo));
             board.stream(stream.id(), flow);
             report.enters(flow.mass(), flow.enthalpy());
+            for (var id : parked(feed, thermo)) report.note(Note.warning(stream.id(), "basis.parked", id));
         });
     }
 
+    /** The feed on the axis. An id and its alias name one component, so they add; a component with no place is parked. */
     private static double[] amounts(Flowsheet.Feed feed, FlowThermo thermo) {
-        var axis = thermo.axis();
-        double[] amounts = new double[axis.size()];
+        double[] amounts = new double[thermo.axis().size()];
         for (var entry : feed.amounts().entrySet()) {
-            int at = axis.indexOf(entry.getKey());
-            if (at >= 0) amounts[at] = entry.getValue();
+            int at = thermo.place(entry.getKey());
+            if (at >= 0) amounts[at] += entry.getValue();
         }
         return amounts;
     }
 
     private static SolidInventory solids(Flowsheet.Feed feed, FlowThermo thermo) {
-        if (feed.solids().isEmpty()) return SolidInventory.EMPTY;
         var populations = new ArrayList<SolidInventory.Population>();
-        for (var solid : feed.solids()) populations.add(new SolidInventory.Population(thermo.model().solids.require(solid.material()), ParticleSize.micrometres(solid.micrometres()), solid.massFlow()));
-        return new SolidInventory(populations);
+        for (var solid : feed.solids()) {
+            var material = thermo.model().solids.materials().get(solid.material());
+            if (material != null) populations.add(new SolidInventory.Population(material, ParticleSize.micrometres(solid.micrometres()), solid.massFlow()));
+        }
+        return populations.isEmpty() ? SolidInventory.EMPTY : new SolidInventory(populations);
     }
 
     private static List<Calculation> unit(Flowsheet.Unit unit, Map<String, String> wires, List<String> outlets, FlowThermo thermo) {

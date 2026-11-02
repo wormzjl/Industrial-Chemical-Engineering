@@ -263,11 +263,11 @@ public final class ColumnUnit implements UnitModel {
             steam.add(added);
         }
 
-        /** The door's package while it holds the feed, else the sheet's. The learned start declines nitrogen, so the narrower one stands while it can. */
+        /** The door's package while there is one and it holds the feed, else the sheet's. The learned start declines nitrogen, so the narrower one stands while it can. */
         private V3ColumnInput input(double[] amounts, double temperature, List<V3SteamFeedSpec> steam) {
             var thermo = u.thermo();
-            var pack = thermo.catalog().requirePackage(door.packageId().isEmpty() ? thermo.packageId() : door.packageId());
-            if (!holds(pack.components(), amounts)) pack = thermo.catalog().requirePackage(thermo.packageId());
+            var pack = thermo.catalog().packages().get(door.packageId());
+            if (pack == null || !holds(pack.components(), amounts)) pack = thermo.catalog().requirePackage(thermo.packageId());
             if (!holds(pack.components(), amounts)) throw new FlowsheetFailure("column.component");
             var axis = thermo.axis();
             double[] flows = new double[pack.components().size()];

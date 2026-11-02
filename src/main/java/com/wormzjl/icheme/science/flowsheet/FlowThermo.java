@@ -66,6 +66,11 @@ public final class FlowThermo implements StreamThermo {
         return model.components();
     }
 
+    /** Where {@code component} stands on the axis, by its id or the package's alias of it, or -1 if the package has it no longer. */
+    public int place(String component) {
+        return axis().indexOf(catalog.requirePackage(packageId).canonicalId(component));
+    }
+
     private FlowStream stream(FluidThermodynamics.State state, double[] amounts) {
         return new FlowStream(state.temperature(), state.pressure(), amounts, state.enthalpy(), state.mass(), state);
     }

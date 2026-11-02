@@ -53,6 +53,11 @@ public record FlowsheetRun(Status status, Map<String, FlowStream> streams, Map<S
         log = List.copyOf(log);
     }
 
+    /** A run that never started: {@code why} says what the sheet asks of the player first. */
+    static FlowsheetRun refused(Note why) {
+        return new FlowsheetRun(Status.FAILED, Map.of(), Map.of(), Map.of(), List.of(), List.of(why), 0, 0, 0, 0, 0);
+    }
+
     public double massGap() {
         return massIn - massOut;
     }
