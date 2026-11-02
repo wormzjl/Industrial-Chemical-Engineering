@@ -94,7 +94,7 @@ class ColumnRunTest {
         }
         world.registry.submit(edits,Math.max(steamPort,shell)+1,null);
         if(solves!=null){solves.model=model;ops.solves(solves);}
-        ops.refresh();
+        ops.refresh();world.columns=ops;
         if(solves==null){var s=table(model,setpoints);ops.table(unit,s.table(),s.enthalpy());}
         return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell);
     }
@@ -117,6 +117,52 @@ class ColumnRunTest {
         assertTrue(sum(given)>15&&stock>sum(given)*.5,"the product reached the tank, the outlet filling its buffer toward 60 s of production first: given "+sum(given)+", tank "+stock);
         assertTrue(totals.condenser()<0,"the condenser removed heat: "+totals.condenser());
         assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+    }
+    /** What the ports carried after Stop was pressed and before their event committed is booked (merge review, finding 4). */
+    @Test void aStopBooksWhatItsPortsCarryUntilTheyLeave() {
+        var r=rig(0);var world=r.world();var ops=r.ops();var counting=r.counting();long unit=r.unit();int m=world.model.componentCount();
+        world.runTo(3000);
+        ops.stop(unit,false,edits->world.registry.submit(edits,world.ledger.nextIdentity(),null));
+        assertTrue(world.ledger.column(unit).running(),"the unit runs until its ports leave");
+        world.runTo(3400);
+        var u=world.ledger.column(unit);assertFalse(u.running(),"its ports left: "+ops.status(unit));
+        var arrived=counting.moles.getOrDefault(r.feed(),new double[m]);var given=counting.moles.getOrDefault(r.product(),new double[m]);
+        for(int i=0;i<m;i++) {
+            double in=-arrived[i],inlet=u.station(Port.FEED,0).account().moles()[i],taken=u.totals().taken().moles()[i];
+            assertEquals(in,inlet+taken,1e-9*Math.max(1,in),"component "+i+": every arrival is booked");
+            assertEquals(u.totals().produced().moles()[i],u.station(Port.DISTILLATE,0).account().moles()[i]+given[i],1e-9*Math.max(1,in),"component "+i+": every gift is debited");
+        }
+        assertTrue(world.registry.registrations().values().stream().noneMatch(x->x.device().suspendedBy()==unit),"it holds nothing");
+    }
+    /** Dismantling a running column: a save before its release commits finds every held device's unit, and the unit goes with its ports (merge review, finding 3). */
+    @Test void aDismantledColumnLeavesWithItsPorts() {
+        var r=rig(0);var world=r.world();var ops=r.ops();long unit=r.unit();
+        world.runTo(3000);
+        var held=world.ledger.column(unit);double accounts=0;
+        ops.stop(unit,true,edits->world.registry.submit(edits,world.ledger.nextIdentity(),null));
+        assertNotNull(world.ledger.snapshot(),"a save before the release commits");
+        assertTrue(world.ledger.column(unit).leaving());
+        double[] before=world.ledger.snapshot().destroyed().moles();
+        world.runTo(3400);
+        assertNull(world.ledger.column(unit),"the unit left with its ports");
+        double[] after=world.ledger.snapshot().destroyed().moles();
+        for(int i=0;i<after.length;i++)accounts+=after[i]-before[i];
+        assertTrue(accounts>0,"its accounts are booked as destroyed: "+held.stations());
+    }
+    /** A port its design lost keeps its account and takes no part in the cycle (merge review, finding 16). */
+    @Test void aStationItsDesignLostKeepsItsAccount() {
+        var r=rig(0);var world=r.world();long unit=r.unit();int m=world.model.componentCount();
+        var u=world.ledger.column(unit);var held=new double[m];held[0]=4;var lost=new ColumnUnit.Station(Port.DRAW,3,0,u.station(Port.FEED,0).valve(),new Account(held,-1e4));
+        assertEquals(List.of(lost),new ColumnUnit(unit,u.master(),false,u.setpoints(),List.of(lost),u.totals()).lost(u.stations()));
+        var stations=new ArrayList<>(u.stations());stations.add(lost);
+        world.ledger.column(u.withStations(true,stations));r.ops().refresh();
+        world.runTo(1500);
+        assertEquals(4,world.ledger.column(unit).station(Port.DRAW,3).account().total());
+        assertTrue(world.ledger.column(unit).totals().taken().total()>0,"the column runs");
+        assertTrue(r.ops().view(unit,world.coordinator.now(),valve->.5).streams().stream().noneMatch(s->s.port()==Port.DRAW));
+    }
+    @Test void aCondenserTemperatureMustBeFinite() {
+        assertThrows(IllegalArgumentException.class,()->new Setpoints(.5,.5,Double.POSITIVE_INFINITY,1,0,new double[0],new double[0],new double[0]));
     }
     /**
      * The Operation tab's view (C7, plan section 13) is a read of the run's last cycle: reading it again reads the same and

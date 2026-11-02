@@ -81,7 +81,7 @@ class FluidFactsCompatTest {
         var account=new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(held,-1.2e6);
         world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,70,0),true,setpoints,
                 List.of(new ColumnUnit.Station(com.wormzjl.icheme.science.column.operation.Port.FEED,0,port,feedValve,account)),
-                new ColumnUnit.Totals(account,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m),2e5,-3e5,-1e4)));
+                new ColumnUnit.Totals(account,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m),2e5,-3e5,-1e4),tube));
         var held0=world.registry.registrations().get(pipe);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(pipe,new WorldTopologyLedger.Registration(held0.device().withSuspendedBy(unit),held0.spec(),held0.revision()+1)),
                 new WorldTopologyLedger.Edit(port,new WorldTopologyLedger.Registration(feed,new FluidDeviceSpec(1,330,260000,FluidDeviceSpec.nitrogen(CATALOG).composition()),0))),port+1,null);
@@ -203,6 +203,56 @@ class FluidFactsCompatTest {
         }
     }
 
+    /** A component the data no longer has leaves a column's account too: the ledger and the status line book it (merge review, finding 5). */
+    @Test void aComponentRemovedFromAColumnAccountIsBooked() {
+        var image=image(corpusWorld());var core=FluidCheckpointCodec.readCore(image.core());
+        var t=core.topology();var topologyPack=image.packs().get(t.pack());
+        var world=FluidCheckpointCodec.worldFacts(topologyPack,FluidCheckpointCodec.topologySections(topologyPack,(int)t.offset(),t.length(),core.topologyGeneration()));
+        var ids=new ArrayList<>(world.basis().components());int retired=ids.size()-1;ids.add(retired,"Retired");
+        java.util.function.BiFunction<double[],Double,double[]> widen=(n,held)->{var w=new double[n.length+1];System.arraycopy(n,0,w,0,retired);w[retired]=held;w[n.length]=n[retired];return w;};
+        var registrations=new ArrayList<WorldTopologyLedger.Registration>();
+        for(var r:world.registrations()){var s=r.spec();registrations.add(new WorldTopologyLedger.Registration(r.device(),new FluidDeviceSpec(s.volume(),s.temperature(),s.pressure(),widen.apply(s.composition(),0.),s.solids(),s.levelHeight(),s.open(),s.geometry()),r.revision()));}
+        var columns=new ArrayList<ColumnUnit>();double energy=0;
+        for(var u:world.columns()) {
+            columns.add(new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),u.stations().stream().map(s->s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(s.account().moles(),1.5),s.account().energy()))).toList(),
+                    new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().taken().moles(),0.),u.totals().taken().energy()),
+                            new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().produced().moles(),0.),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds()),u.condenser()));
+            energy+=u.stations().getFirst().account().energy();
+        }
+        java.util.function.Function<WorldTopologyLedger.MaterialTotal,WorldTopologyLedger.MaterialTotal> total=m->new WorldTopologyLedger.MaterialTotal(widen.apply(m.moles(),0.),m.totalEnergy(),m.solidMasses());
+        var wide=new FluidFacts.World(world.nextIdentity(),new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision()),registrations,total.apply(world.constructed()),total.apply(world.destroyed()),world.recoveries(),world.restated(),world.removedMovers(),columns);
+        var placed=new ArrayList<FluidFacts.Placed>();
+        for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());placed.add(new FluidFacts.Placed(FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id()),row.committed()));}
+        var rebuilt=FluidFacts.rebuild(wide,placed,core.epoch(),key->model,CATALOG,true,"test");
+        assertEquals(Map.of("Retired",1.5),rebuilt.world().restated().removedMoles(),"the ledger books the removed component by id");
+        for(var entry:rebuilt.checkpoint().islands())assertTrue(entry.snapshot().status().contains("Retired 1.5 mol"),entry.snapshot().status());
+        for(var u:rebuilt.world().columns().values())assertEquals(energy,u.stations().getFirst().account().energy(),"an account has no temperature: its energy stands");
+    }
+    /** Queued events do not survive the facts path: a unit's queued Start, Stop or removal settles on what stands (merge review, finding 15). */
+    @Test void aColumnsQueuedEventsSettleOnWhatStands() {
+        var stoppedHolding=corpusWorld();var unit=stoppedHolding.ledger.columns().values().iterator().next();
+        stoppedHolding.ledger.column(unit.withStations(false,unit.stations().stream().map(s->s.withDevice(0)).toList()));
+        var settled=load(edited(image(stoppedHolding),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow();
+        assertEquals(0,suspended(settled),"a stopped unit holds nothing");
+        assertTrue(unit.stations().stream().noneMatch(s->settled.active().containsKey(s.device())),"its ports left");
+        assertFalse(settled.columns().get(unit.id()).running());
+
+        var unplaced=corpusWorld();var u=unplaced.ledger.columns().values().iterator().next();
+        unplaced.ledger.column(u.withStations(true,u.stations().stream().map(s->s.withDevice(s.device()+1000)).toList()));
+        var started=load(edited(image(unplaced),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow();
+        assertEquals(0,suspended(started),"a Start whose ports never stood holds nothing");
+        assertFalse(started.columns().get(u.id()).running());
+
+        var leaving=corpusWorld();var v=leaving.ledger.columns().values().iterator().next();double[] destroyed=leaving.ledger.snapshot().destroyed().moles();
+        leaving.ledger.column(v.leave());
+        var left=load(edited(image(leaving),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow();
+        assertFalse(left.columns().containsKey(v.id()),"a dismantled column leaves");
+        assertEquals(0,suspended(left));
+        assertEquals(Arrays.stream(destroyed).sum()+v.stations().getFirst().account().total(),Arrays.stream(left.destroyed().moles()).sum(),1e-9,"its accounts are destroyed");
+
+        var running=corpusWorld();var w=running.ledger.columns().values().iterator().next();
+        assertTrue(load(edited(image(running),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow().columns().get(w.id()).running(),"a unit whose devices stand keeps running");
+    }
     /** A facts section is read by every later build: one this build cannot read refuses the world, its files kept. */
     /**
      * W3 (plan section 5.2): the heat an exchanger holds in transit is a fact of its sides. A save writes the coordinator's
@@ -431,7 +481,7 @@ class FluidFactsCompatTest {
         var text=new StringBuilder();
         for(var u:new TreeMap<>(world.columns()).values()) {
             if(!text.isEmpty())text.append(";");
-            text.append(u.id()).append(":").append(u.running()).append(":").append(u.setpoints().feedRate()).append(":").append(u.totals().taken().total());
+            text.append(u.id()).append(":").append(u.running()).append(":").append(u.setpoints().feedRate()).append(":").append(u.totals().taken().total()).append(":condenser=").append(u.condenser());
             for(var s:u.stations())text.append(":").append(s.port()).append(s.index()).append("=").append(s.device()).append("/").append(s.valve()).append("/").append(s.account().total()).append("/").append(s.account().energy());
         }
         return text.toString();

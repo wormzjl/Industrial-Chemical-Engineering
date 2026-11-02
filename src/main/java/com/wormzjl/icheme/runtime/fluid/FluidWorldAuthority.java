@@ -402,6 +402,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 if(inside.putIfAbsent(next.device().id(),next)==null)queue.add(next);
             }
         }
+        if(sharePlace(request.spots()))return "two ports share a place";
         for(var s:request.spots()) {
             var valve=registrations().get(s.valve());
             if(valve==null||inside.containsKey(s.valve()))return "a boundary valve is missing or inside the column";
@@ -423,18 +424,25 @@ public final class FluidWorldAuthority implements AutoCloseable {
             stations.add(new ColumnUnit.Station(s.port(),s.index(),id,s.valve(),kept==null?com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m):kept.account()));
             id++;
         }
-        // Stations a stopped column kept and this start no longer has (the design lost a port) keep their accounts, stopped.
-        if(existing!=null)for(var s:existing.stations())if(stations.stream().noneMatch(t->t.port()==s.port()&&t.index()==s.index()))
-            return "the column's ports changed while it was stopped";
+        // Stations a stopped column kept and this start no longer has (the design lost a port) keep their accounts, with no port.
+        if(existing!=null)stations.addAll(existing.lost(stations));
         // The condenser's water side: of its two sides, the one outside the column, partnered with one inside (C6b).
         long water=0;
         for(long side:request.condenser()){var r=registrations().get(side);if(r!=null&&!inside.containsKey(side)&&r.device().heat()!=null&&inside.containsKey(r.device().heat().partner()))water=side;}
         // A restart keeps the set points the player applied while they fit the design's ports (C7); else the design's.
         var setpoints=existing!=null&&compatible(existing.setpoints(),request.setpoints())?existing.setpoints():request.setpoints();
-        topology.column(new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water));
-        submit(edits,id);columns.refresh();
+        var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water);
+        var was=existing;topology.column(running);
+        try{submit(edits,id);}catch(IllegalArgumentException|IllegalStateException refused){if(was!=null)topology.column(was);else topology.removeColumn(unit);return "the column's ports do not fit its lines: "+refused.getMessage();}
+        columns.refresh();
         IChemE.LOGGER.info("column status=STARTED master={},{},{} unit={} held={} ports={}",request.master().x(),request.master().y(),request.master().z(),unit,inside.size(),stations.size());
         return null;
+    }
+    /** Whether two of {@code spots} stand inside one cell: two boundary valves on one inside cell have one place for a port. */
+    static boolean sharePlace(List<PortSpot> spots) {
+        var places=new HashSet<PhysicalFluidTopology.Position>();
+        for(var s:spots)if(!places.add(s.cell()))return true;
+        return false;
     }
     /** Whether set points {@code a} fit the design {@code b} was taken from: its rate and as many steam inlets, draws and pumparounds. */
     static boolean compatible(com.wormzjl.icheme.science.column.operation.Setpoints a,com.wormzjl.icheme.science.column.operation.Setpoints b) {
@@ -461,14 +469,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Stops column unit {@code unit} (plan 4.1), one queued ledger event: its held devices are released as they are and its
      * ports leave. Every account stays with the unit. Nothing when it is not running. */
     public void stopColumn(long unit) {
-        owned();if(closed)return;var u=topology.column(unit);if(u==null||!u.running())return;
-        var edits=new ArrayList<WorldTopologyLedger.Edit>();
-        for(var r:registrations().values())if(r.device().suspendedBy()==unit)
-            edits.add(new WorldTopologyLedger.Edit(r.device().id(),new WorldTopologyLedger.Registration(r.device().withSuspendedBy(0),r.spec(),Math.addExact(r.revision(),1))));
-        for(var s:u.stations())if(s.device()!=0&&registrations().containsKey(s.device()))edits.add(new WorldTopologyLedger.Edit(s.device(),null));
-        topology.column(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()));
-        if(!edits.isEmpty())submit(edits,topology.nextIdentity());columns.refresh();
-        IChemE.LOGGER.info("column status=STOPPED master={},{},{} unit={}",u.master().x(),u.master().y(),u.master().z(),unit);
+        owned();if(closed)return;columns.stop(unit,false,edits->submit(edits,topology.nextIdentity()));
     }
     /**
      * The calculator input of the design of the column at {@code master}, as built (its shell's diameter), or null where it
@@ -489,7 +490,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The column at {@code master} is gone (plan section 12): it stops, and its accounts leave the world, booked as destroyed. */
     public void columnRemoved(PhysicalFluidTopology.Position master) {
         owned();var u=column(master);if(u==null)return;
-        stopColumn(u.id());topology.removeColumn(u.id());data.setDirty();
+        columns.stop(u.id(),true,edits->submit(edits,topology.nextIdentity()));data.setDirty();
     }
     /** The most pipes one line resize changes; a longer line is refused whole. */
     public static final int LINE_LIMIT=4096;
@@ -817,7 +818,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public void flowmeter(long id,boolean installed){owned();registry.flowmeter(id,installed);}
     public boolean removePipeAccessory(long id){owned();return registry.removePipeAccessory(id);}
     public record InstrumentReading(double pressure,double temperature,boolean flowing,double massFlow,Double volumeFlow){public InstrumentReading(double pressure,double temperature,boolean flowing){this(pressure,temperature,flowing,0,0.0);}}
-    public InstrumentReading instrumentPipeReading(long id){owned();Long owner=registry.owner(id);if(owner==null)return null;var r=registrations().get(id);if(r==null)return null;var snapshot=runtime.coordinator().presentation(owner);if(snapshot.lastResult().isEmpty())return null;
+    public InstrumentReading instrumentPipeReading(long id){owned();Long owner=registry.owner(id);if(owner==null)return null;var r=registrations().get(id);if(r==null)return null;var snapshot=presented(owner);if(snapshot.lastResult().isEmpty())return null;
         for(var observed:snapshot.lastResult().get().observations())for(var sample:observed.flowSamples())if(sample.host()==id)
             return new InstrumentReading(sample.pressure(),observed.temperature(),observed.flowing(),sample.massFlow(),sample.volumeFlow());
         for(var mapping:registry.pipeViews(id)){if(!Double.isFinite(mapping.tap()))continue;for(var observed:snapshot.lastResult().get().observations())if(observed.pipe()==mapping.pipeId())return new InstrumentReading(observed.pressure(mapping.tap(),r.device().position().y(),!mapping.forward()),observed.temperature(),observed.flowing(),observed.massFlow()*(mapping.forward()?1:-1),observed.density()>0?observed.massFlow()/observed.density()*(mapping.forward()?1:-1):0);}return null;}
@@ -908,11 +909,16 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return !topology.active().containsKey(id)?"WAITING: topology event":Objects.requireNonNullElse(registry.diagnostic(id),"NO FLOW: no hydraulic boundary");
     }
     public FluidView view(long id){owned();return view(id,new HashMap<>());}
+    /** Whether {@link #stored} is reading: the islands' stored snapshots stand in for the presentation's. */
+    private boolean storedOnly;
+    /** {@code read} of views and instruments from the islands as they are stored, advancing none: a column's Operation tab, which a menu open reads (a replay runs no engine work). */
+    public <T> T stored(java.util.function.Supplier<T> read){owned();storedOnly=true;try{return read.get();}finally{storedOnly=false;}}
+    private IslandCoordinator.Snapshot presented(long island){return storedOnly?runtime.coordinator().observe(island):runtime.coordinator().presentation(island);}
     /** {@code islands} caches island reads, so one bucket reads each island once however many of its devices it presents. */
     private FluidView view(long id,Map<Long,IslandCoordinator.Snapshot> islands) {
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.viewBuilds);var registration=registrations().get(id);if(registration==null)return new FluidView(id,0,0,topology.onlineTick(),"REMOVED",null,0,List.of());
         Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);
-        var snapshot=islands.computeIfAbsent(owner,runtime.coordinator()::presentation);FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
+        var snapshot=islands.computeIfAbsent(owner,this::presented);FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
         for(int i=0;i<snapshot.graph().reservoirs().size();i++)if(snapshot.graph().reservoirs().get(i).id()==id){nodeIndex=i;var node=snapshot.graph().reservoirs().get(i);empty=node.empty();if(!empty)state=FluidView.State.from(node.state(),node.kind()==PassiveNetwork.NodeKind.RESERVOIR?node.inventory().volume():node.state().volume());break;}
         InlineFilter filter=null;if(registration.device().filter()){state=null;for(var p:snapshot.graph().pipes())if(p.id()==PhysicalFluidTopology.filterIdentity(id))filter=p.filter();}
         var mappings=registration.device().actuator()?PipePresentation.actuatorMappings(registration.device(),snapshot.graph()):registry.pipeViews(id);
@@ -1151,6 +1157,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             // A removed exchanger takes its heat in transit along (plan section 5.2): its sides leave in one event, keyed by the lower.
             for(long device:removed)topology.removedHeat(runtime.coordinator().removeTransit(PhysicalFluidTopology.sideIdentity(device)));
             unboundBindings.removeAll(removed);publishedMenuData.keySet().removeAll(removed);publishedGlides.keySet().removeAll(removed);for(long device:removed){tankWatchers.remove(device);forgetSightGlass(device);forgetMover(device);}
+            columns.committed();
             // Every recompiled device's cached snapshot predates the change, and one left in no island (a pipe whose only
             // tank was broken) gets no publication that would mark it: each is marked for its next bucket, which presents
             // its new view (its replacement island, or "no hydraulic boundary"); an opening menu waits for that bucket.

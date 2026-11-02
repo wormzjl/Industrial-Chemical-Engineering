@@ -76,11 +76,13 @@ class EventPathWorld {
             }
             public boolean acceptsRecovery(UUID player){return true;}
             public void refused(UUID event,String reason){}
-            public void committed(Set<Long> removed,Set<Long> recompiled){committedRemovals.add(removed);}
+            public void committed(Set<Long> removed,Set<Long> recompiled){committedRemovals.add(removed);if(columns!=null)columns.committed();}
         });
         for(var island:islands)coordinator.register(island,model);
         registry.flowmeters(flowmeters);registry.load();
     }
+    /** The running columns the events' commits report to, where a test runs one. */
+    ColumnOperation columns;
     /** The world's default control of a device kind (FluidWorldAuthority.place). */
     static FlowControl defaultControl(Kind kind) {
         return switch(kind){case PUMP->new FlowControl.Pump(.01,500000);case COMPRESSOR->new FlowControl.Compressor(.05,3.0);case VALVE->new FlowControl.PressureValve(200000);default->new FlowControl.Passive();};

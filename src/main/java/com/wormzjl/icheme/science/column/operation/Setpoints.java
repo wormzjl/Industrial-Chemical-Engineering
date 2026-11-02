@@ -23,7 +23,7 @@ public record Setpoints(double designFeedRate, double feedRate, double condenser
         pumparoundsPerFeed = pumparoundsPerFeed.clone();
         if (!(designFeedRate > 0) || !Double.isFinite(designFeedRate)) throw new IllegalArgumentException("A design feed rate above 0");
         if (!(feedRate >= 0) || feedRate > designFeedRate * (1 + 1e-12)) throw new IllegalArgumentException("A feed rate of 0 to the design rate");
-        if (!(condenserTemperature > 0) || !(refluxRatio >= 0) || !Double.isFinite(refluxRatio) || !Double.isFinite(reboilerPerFeed))
+        if (!(condenserTemperature > 0) || !Double.isFinite(condenserTemperature) || !(refluxRatio >= 0) || !Double.isFinite(refluxRatio) || !Double.isFinite(reboilerPerFeed))
             throw new IllegalArgumentException("A condenser temperature above 0, a reflux of 0 or more, a finite reboiler duty");
         for (double s : steamPerFeed) if (!(s >= 0) || !Double.isFinite(s)) throw new IllegalArgumentException("A steam ratio of 0 or more");
         for (double d : drawsPerFeed) if (!(d > 0) || !Double.isFinite(d)) throw new IllegalArgumentException("A draw ratio above 0");

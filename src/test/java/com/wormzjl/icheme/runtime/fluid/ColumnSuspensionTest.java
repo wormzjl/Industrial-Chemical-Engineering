@@ -17,6 +17,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * line into islands, and a stop joins the line again with every vessel as it was.
  */
 class ColumnSuspensionTest {
+    /** Two boundary valves on one inside cell have one place for a port: Start refuses them before anything changes (merge review, finding 12). */
+    @Test void twoPortsCannotShareAPlace() {
+        var cell=new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,0);var other=new PhysicalFluidTopology.Position(EventPathWorld.DIM,1,64,0);
+        java.util.function.BiFunction<PhysicalFluidTopology.Position,Long,FluidWorldAuthority.PortSpot> spot=(at,valve)->new FluidWorldAuthority.PortSpot(com.wormzjl.icheme.science.column.operation.Port.DRAW,valve.intValue(),valve,at,PhysicalFluidTopology.Direction.EAST,1e5,300);
+        assertTrue(FluidWorldAuthority.sharePlace(java.util.List.of(spot.apply(cell,1L),spot.apply(cell,2L))));
+        assertFalse(FluidWorldAuthority.sharePlace(java.util.List.of(spot.apply(cell,1L),spot.apply(other,2L))));
+    }
     /** A 3 bar nitrogen generator, a pipe, a valve, a pipe and a tank in a row along x. */
     private static long[] line(EventPathWorld world) {
         long generator=world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,EventPathWorld.nitrogen().composition()),.05);

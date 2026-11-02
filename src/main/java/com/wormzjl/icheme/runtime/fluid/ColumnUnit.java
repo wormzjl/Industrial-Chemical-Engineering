@@ -16,23 +16,25 @@ import java.util.Objects;
  * <p>{@code id} is a registry identity (from the ledger's counter, never a device's): the devices a running column holds
  * name it ({@link PhysicalFluidTopology.Device#suspendedBy}). {@code master} is the column's origin. An inlet's account holds
  * what its port took from the network and the column has not used yet; an outlet's what the column made and its port has
- * not given yet. Both stay while the column is stopped: a station's {@code device} is then 0. {@code condenser} is the
- * registration of its water-cooled condenser's water side, outside the column (C6b: the column is its heat partner), or 0.</p>
+ * not given yet. Both stay while the column is stopped: a station's {@code device} is then 0, and on a running column
+ * where its design lost that port. {@code condenser} is the registration of its water-cooled condenser's water side,
+ * outside the column (C6b: the column is its heat partner), or 0. {@code leaving}: the column was dismantled, and its unit
+ * goes once its ports have left.</p>
  */
-public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,long condenser,State state) {
+public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,long condenser,State state,boolean leaving) {
     /** The most stations a column has: a feed, three steams, an off-gas, a sour water, a distillate, eight draws, a bottoms. */
     public static final int MAXIMUM_STATIONS=16;
     /** Without engine state: one solve before it runs. */
-    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals){this(id,master,running,setpoints,stations,totals, 0,null);}
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals){this(id,master,running,setpoints,stations,totals, 0,null,false);}
     /** Without engine state. */
-    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,long condenser){this(id,master,running,setpoints,stations,totals,condenser,null);}
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,long condenser){this(id,master,running,setpoints,stations,totals,condenser,null,false);}
     public ColumnUnit {
         Objects.requireNonNull(master);Objects.requireNonNull(setpoints);Objects.requireNonNull(totals);stations=List.copyOf(stations);
         if(id<=0||master.lane()!=0||stations.size()>MAXIMUM_STATIONS)throw new IllegalArgumentException("Invalid column unit");
         var seen=new HashSet<String>();int width=-1;
         for(var s:stations) {
             if(!seen.add(s.port()+"#"+s.index()))throw new IllegalArgumentException("Duplicate column station "+s.port()+" "+s.index());
-            if(running!=(s.device()!=0))throw new IllegalArgumentException("A running column's stations, and only those, have port devices");
+            if(!running&&s.device()!=0)throw new IllegalArgumentException("Only a running column's stations have port devices");
             int w=s.account().moles().length;if(width<0)width=w;else if(w!=width)throw new IllegalArgumentException("Column accounts on one axis");
         }
         if(width>=0&&(totals.taken().moles().length!=width||totals.produced().moles().length!=width))throw new IllegalArgumentException("Column totals on the accounts' axis");
@@ -70,11 +72,18 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         for(var s:stations)if(s.port()==port&&s.index()==index)return s;
         return null;
     }
+    /** The stations of this unit a start with {@code next} no longer has (its design lost the port): they keep their accounts, with no port. */
+    public List<Station> lost(List<Station> next) {
+        var kept=new java.util.ArrayList<Station>();
+        for(var s:stations)if(next.stream().noneMatch(t->t.port()==s.port()&&t.index()==s.index()))kept.add(s.withDevice(0));
+        return kept;
+    }
     /** These stations, running or not; a stopped column forgets its engine state. */
-    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condenser,value?state:null);}
-    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condenser,state);}
-    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condenser,state);}
-    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condenser,value);}
+    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condenser,value?state:null,leaving);}
+    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condenser,state,leaving);}
+    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condenser,state,leaving);}
+    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condenser,value,leaving);}
+    public ColumnUnit leave(){return new ColumnUnit(id,master,running,setpoints,stations,totals,condenser,state,true);}
 
     /**
      * A running unit's engine state (plan section 12): its split table and the products' partial molar enthalpies (J/mol), the

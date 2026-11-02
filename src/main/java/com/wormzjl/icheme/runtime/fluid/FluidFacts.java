@@ -287,7 +287,7 @@ final class FluidFacts {
                 .record(q->setpoints(q,s))
                 .list(u.stations(),(q,st)->q.name(st.port()).count(st.index()).count(st.device()).count(st.valve()).record(a->account(a,st.account())))
                 .record(q->q.record(a->account(a,t.taken())).record(a->account(a,t.produced())).f64(t.reboiler()).f64(t.condenser()).f64(t.pumparounds()))
-                .count(u.condenser());
+                .count(u.condenser()).bool(u.leaving());
     }
     private static ColumnUnit column(Record f) {
         long id=f.count(0);var master=position(f);boolean running=f.bool(false);
@@ -299,9 +299,9 @@ final class FluidFacts {
         var totals=f.record(null,q->{var taken=q.record(null,FluidFacts::account);var produced=q.record(null,FluidFacts::account);double reboiler=q.f64(0),condenser=q.f64(0),pumparounds=q.f64(0);
             required(taken,q,"taken total");required(produced,q,"produced total");
             return valid(q,"column totals",()->new ColumnUnit.Totals(taken,produced,reboiler,condenser,pumparounds));});
-        long condenser=f.count(0);
+        long condenser=f.count(0);boolean leaving=f.bool(false);
         required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
-        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condenser));
+        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condenser,null,leaving));
     }
     private static Fields setpoints(Fields q,com.wormzjl.icheme.science.column.operation.Setpoints s) {
         return q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())
@@ -554,6 +554,22 @@ final class FluidFacts {
             if(restate)spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),spec.pressure(),composition,spec.solids(),spec.levelHeight(),spec.open(),spec.geometry());
             registrations.put(r.device().id(),new WorldTopologyLedger.Registration(r.device(),spec,r.revision()));
         }
+        // The column units, their accounts on the current axis (a component the data no longer has leaves, booked as removed), and
+        // their queued Starts and Stops, which do not survive this path, settled on what stands.
+        var columns=new HashMap<Long,ColumnUnit>();
+        for(var saved:world.columns) {
+            var u=saved;
+            if(!axis.identity()) {
+                var stations=u.stations().stream().map(s->s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(s.account().moles(),removed),s.account().energy()))).toList();
+                var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
+                        new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
+                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condenser(),null,u.leaving());
+            }
+            columns.put(u.id(),settled(u,registrations));
+        }
+        var ports=new HashSet<Long>();
+        for(var u:columns.values())for(var s:u.stations())if(s.device()!=0)ports.add(s.device());
+        registrations.values().removeIf(r->r.device().port()&&!ports.contains(r.device().id()));
         // Vessel contents and filter cakes, by device identity.
         var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var cakes=new HashMap<Long,InlineFilter>();int restated=0,vessels=0;
         double energy=0;
@@ -605,15 +621,26 @@ final class FluidFacts {
             recoveries.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,solids,r.energy));
         }
         var restatedTotal=world.restated.plus(new WorldTopologyLedger.Restated(energy,removed.moles,removed.solids));
-        // The column units, their accounts on the current axis (a component the data no longer has leaves, booked as removed).
-        var columns=new HashMap<Long,ColumnUnit>();
-        for(var u:world.columns)columns.put(u.id(),axis.identity()?u:u.withStations(u.running(),u.stations().stream().map(s->s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(s.account().moles(),removed),s.account().energy()))).toList())
-                .withTotals(new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
-                        new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds())));
         var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns);
-        new WorldTopologyLedger(snapshot);
+        var ledger=new WorldTopologyLedger(snapshot);
+        // A dismantled column whose release was still queued leaves now, its accounts booked as destroyed.
+        for(var u:columns.values())if(u.leaving())ledger.removeColumn(u.id());
+        snapshot=ledger.snapshot();
         if(restate)IChemE.LOGGER.warn("fluid_checkpoint status=RESTATED vessels={} energy_delta_J={} removed={}",restated,energy,removed.empty()?"none":removed.summary());
         return new Rebuilt(new FluidCheckpointCodec.Checkpoint(entries),snapshot,vessels,restated);
+    }
+    /**
+     * Unit {@code u} as what stands in {@code registrations} leaves it, queued events gone: a unit that is stopped, leaves or
+     * misses a port device releases what it holds and its ports leave, so no device stays held by a stopped unit and no
+     * running unit misses a port. A running unit whose devices all stand keeps running.
+     */
+    private static ColumnUnit settled(ColumnUnit u,Map<Long,WorldTopologyLedger.Registration> registrations) {
+        boolean unplaced=u.running()&&u.stations().stream().anyMatch(s->s.device()!=0&&!registrations.containsKey(s.device()));
+        if(u.running()&&!unplaced&&!u.leaving())return u;
+        for(var r:List.copyOf(registrations.values()))if(r.device().suspendedBy()==u.id())
+            registrations.put(r.device().id(),new WorldTopologyLedger.Registration(r.device().withSuspendedBy(0),r.spec(),Math.addExact(r.revision(),1)));
+        for(var s:u.stations())if(s.device()!=0)registrations.remove(s.device());
+        return u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList());
     }
     /** A generator's or void's state from its spec; a spec outside the package's input box is clamped into it first (logged). */
     private static PassiveNetwork.Reservoir initialised(WorldTopologyLedger.Registration r,FluidThermodynamics model,MaterialCatalog catalog) {

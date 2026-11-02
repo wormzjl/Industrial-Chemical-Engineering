@@ -121,6 +121,41 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         refresh();
     }
 
+    /**
+     * Stops unit {@code unit} (plan 4.1): one queued event ({@code submit}) releases what it holds and takes its ports out.
+     * The unit runs until that event commits ({@link #committed}): its ports stand in their islands until then, and what
+     * they take and give is booked. With {@code leaves} (the column was dismantled) its unit then goes, its accounts booked
+     * as destroyed. A stop already queued only takes {@code leaves} on. Every account stays with the unit otherwise.
+     */
+    public void stop(long unit,boolean leaves,java.util.function.Consumer<List<WorldTopologyLedger.Edit>> submit) {
+        var u=topology.column(unit);if(u==null)return;
+        if(leaves&&!u.leaving())topology.column(u=u.leave());
+        if(!u.running()){if(leaves)topology.removeColumn(unit);return;}
+        var edits=new ArrayList<WorldTopologyLedger.Edit>();boolean ports=false;
+        for(var s:u.stations()) {
+            if(s.device()==0)continue;
+            if(topology.pending(s.device()))return;
+            if(registry.registrations().containsKey(s.device())){edits.add(new WorldTopologyLedger.Edit(s.device(),null));ports=true;}
+        }
+        for(var r:registry.registrations().values())if(r.device().suspendedBy()==unit)
+            edits.add(new WorldTopologyLedger.Edit(r.device().id(),new WorldTopologyLedger.Registration(r.device().withSuspendedBy(0),r.spec(),Math.addExact(r.revision(),1))));
+        if(!edits.isEmpty())submit.accept(edits);
+        if(!ports)stopped(u);
+    }
+    /** An event committed: a running unit whose ports have all left stops. */
+    public void committed() {
+        for(var u:topology.columns().values()) {
+            if(!u.running())continue;boolean standing=false;
+            for(var s:u.stations())standing|=s.device()!=0&&(registry.registrations().containsKey(s.device())||topology.pending(s.device()));
+            if(!standing)stopped(u);
+        }
+    }
+    private void stopped(ColumnUnit u) {
+        topology.column(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()));
+        if(u.leaving())topology.removeColumn(u.id());
+        refresh();
+        com.wormzjl.icheme.IChemE.LOGGER.info("column status=STOPPED master={},{},{} unit={}",u.master().x(),u.master().y(),u.master().z(),u.id());
+    }
     /** Reads the ledger's running units again: after a Start, a Stop, a load. A unit that stopped forgets its state. */
     public void refresh() {
         var units=topology.columns();portUnits.clear();waterSides.clear();
@@ -181,7 +216,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(r==null)return new com.wormzjl.icheme.science.column.operation.OperationView(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,ColumnCycle.Limit.NONE,0,false,null,false,
                 "STOPPED",false,true,set,List.of(),List.of(),null);
         var t=r.table;var step=r.last!=null&&r.last.trip()==null?r.last:null;double seconds=CYCLE_TICKS/20.0;
-        var stations=new ArrayList<>(u.stations());stations.sort(Comparator.comparing((ColumnUnit.Station s)->s.port()).thenComparingInt(ColumnUnit.Station::index));
+        var stations=new ArrayList<>(u.stations());stations.removeIf(s->s.device()==0);stations.sort(Comparator.comparing((ColumnUnit.Station s)->s.port()).thenComparingInt(ColumnUnit.Station::index));
         var streams=new ArrayList<com.wormzjl.icheme.science.column.operation.OperationView.Stream>();
         for(var s:stations) {
             var registration=s.device()==0?null:topology.active().get(s.device());
@@ -349,7 +384,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         // What each inlet had by the tick: its account less what arrived after it, an interval across the tick shared by time.
         var available=new HashMap<Long,Account>();
         for(var s:u.stations()) {
-            if(!s.port().inlet())continue;
+            if(!s.port().inlet()||s.device()==0)continue;
             var later=Account.empty(weights.length);var queue=r.spans.get(s.device());
             if(queue!=null) {
                 while(!queue.isEmpty()&&queue.peekFirst().end()<=tick)queue.removeFirst();
@@ -427,7 +462,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private void levels(Run r,ColumnUnit u,Map<Long,Account> available,long tick,boolean demanding) {
         r.unmetered=null;
         for(var s:u.stations()) {
-            if(s.device()!=0)wakes.computeIfAbsent(tick+FENCE_TICKS,t->new TreeSet<>()).add(s.device());
+            if(s.device()==0)continue;
+            wakes.computeIfAbsent(tick+FENCE_TICKS,t->new TreeSet<>()).add(s.device());
             if(!s.port().inlet())continue;
             double rate=!demanding?0:s.port()==Port.FEED?u.setpoints().feedRate():u.setpoints().feedRate()*u.setpoints().steamPerFeed()[s.index()];
             // An empty account has no composition yet: its valve meters the design's feed, or water for the steam (not the
