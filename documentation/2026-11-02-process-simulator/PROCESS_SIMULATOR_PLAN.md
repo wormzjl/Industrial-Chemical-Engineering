@@ -1,6 +1,6 @@
 # In-game process simulator: design plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner took decisions D1 to D21 on 2026-11-02 (section 5). W1 to W4 are built on the branch, not merged; the rest follows column operation's merge (D10).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner took decisions D1 to D22 on 2026-11-02 (section 5). W1 to W4 are built on the branch, not merged; the rest follows column operation's merge (D10).
 The drawings are in [research/2026-11-02-process-simulator/renders/](../../research/2026-11-02-process-simulator/renders/), in the main checkout. Every number comes from the shipped code at `79b853e0`, run by the tools in
 `tools/process-simulator/`.
 
@@ -327,6 +327,7 @@ The owner's answers of 2026-11-02.
 | D11 | Pumparound exchangers | Option A: the cooler stays in the block, a stream through its tube side |
 | D12 | Symbols | B, framed (sheets 23): it matches the shipped door drawings, and its dark fill leaves the eye on the streams |
 | D13 to D21 | The sizing stage, the shell's drop, drops in the run, the other tiles, the ejector's scope | As recommended: [SIZING_PLAN.md](SIZING_PLAN.md), section 6 |
+| D22 | A fresh sheet with a furnace on a fixed duty | A first estimate on a line, or a first run with the furnace on its outlet (section 3.1). The column's door gets no start temperature |
 
 ## 6. What you did not mention
 

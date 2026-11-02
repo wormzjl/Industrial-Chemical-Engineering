@@ -2,7 +2,7 @@
 
 Purpose: an in-game process simulator: a dedicated block, a drag-and-drop flowsheet with a palette below, feed streams from the Fluid Generator's page, every unit including the column, Run on the client, a Results tab, flowsheet files under `.minecraft/IChemE`, and a compatibility system (owner request 2026-11-02: "make some design drawings for me to approve before moving to implementation").
 
-Status: In progress since 2026-11-02. The owner took decisions D1 to D21 on 2026-11-02. W1 to W4 are built on the branch; the rest follows column operation's merge (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`, base `79b853e0`). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026-11-02. W1 to W4 are built on the branch; the rest follows column operation's merge (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`, base `79b853e0`). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -54,12 +54,12 @@ Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md
 - 2026-11-02: W2 (`1637d8a3`): the unit models of section 3.2 on the world's flash, `FlowsheetUnitsTest` (38), quick suite 1866, 0 failures. A stream searches along the TP flash, because the PH flash has a false root on wet oil with volatile components and misses its enthalpy under the melting line. Three engine findings in `tools/process-simulator/README.md`; the engine is unchanged.
 - 2026-11-02: W3 (`fc3b4ad2`): the column as one block. Flashed to the authored 2.5 bar the sample's feed left a gap of 0.198 %, because the real tray stands at about 2.7 bar; on the solved tray pressure the gap is under the gate's 0.05 %, and a stream at that pressure matches the calculator to the last digit. The sample closes in 2 passes, the 15 % recycle closes, and the furnace on a fixed duty closes from a first estimate. A gate caught the kettle's side taking the column's sign, not its negative, before the commit. `FlowsheetColumnTest` takes about 90 s, so it runs under `slowGates`. Quick suite 1871, 0 failures.
 - 2026-11-02: W4 (`859f4882`): `FlowsheetFile`, format 1, with `format-1.json` in the corpus: a later version's field on every object, a removed type, a parked component and solid. `FlowsheetFileTest` (19): every image writes back all it holds, a damaged field is refused by name, a cut file and bad bytes are refused, a refused file stays as it is, a save lands whole, a removed row leaves open pills and moves no other. The image found a bug on its first run: the compiler's live ports compared whole ends, so an end holding a later version's field fell off its port. A stream gains `route`, so format 1 is whole for the screen. Quick suite 1890, 0 failures; `FlowsheetColumnTest` 9 of 9.
+- 2026-11-02: the owner kept first estimates (D22): a fresh sheet with a furnace on a fixed duty needs an estimate on a line, or a first run with the furnace on its outlet, and the column's door gets no start temperature. The owner started the fix of the false PH root in a session of its own.
 
 ## Open items
 
 - The simplifications table of `SIZING_PLAN.md` section 6: confirm with the owner before S1.
-- The three engine findings in `tools/process-simulator/README.md`: for the owner. The false PH root has a candidate fix that moves world references.
-- A fresh sheet with a furnace on a fixed duty needs a first estimate on a line, or a first run with the furnace on its outlet. The alternative is a door start temperature, with a retry in the block.
+- The engine findings of `tools/process-simulator/README.md`: the fix of the first runs in its own session and lands apart; the second and third are with the owner.
 - W6: English lines for the keys `science/flowsheet` names under `gui.icheme.flowsheet.`, none yet (search `Note.` and `FlowsheetFailure(`); the door's Results pages need the block's `V3ColumnResult`, which a `Report` does not keep; a save name's guard (separators, reserved names).
 - W7, W8: results are state with no format yet: a file holds none. The autosave beside a file is the client's; `FlowsheetFile.save` serves it.
 - W9: code guide chapter, the `AGENTS.md` clause. W10: the Motive steam port; the block has none until then.
