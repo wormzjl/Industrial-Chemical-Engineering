@@ -15,6 +15,7 @@ java "-Dfile.encoding=UTF-8" -cp "build\classes\java\main;build\resources\main;$
 java "-Dfile.encoding=UTF-8" -cp "build\classes\java\main;build\resources\main;$g" "tools\process-simulator\LoopProbe.java"
 java "-Dfile.encoding=UTF-8" -cp "build\classes\java\main;build\resources\main;$g" "tools\process-simulator\SizingProbe.java"
 java "-Dfile.encoding=UTF-8" "tools\process-simulator\EjectorProbe.java"
+java "-Dfile.encoding=UTF-8" -cp "build\classes\java\main;build\resources\main;$g" "tools\process-simulator\StopGapProbe.java"
 ```
 
 `SizingProbe` takes `-Dshell=bank` for option B of D18: it prints the sizes and leaves the table alone. `SampleFlowsheetProbe` takes `-Ds6bar=11.2` to measure what the sized drops move. `EjectorProbe` needs no class path.
@@ -23,6 +24,7 @@ Git Bash mangles the `;` class path; use PowerShell.
 
 ## Entry points
 
+- `StopGapProbe.java`: W7. The longest gap between two checkpoints of the sample on a normal and a low-priority thread, each pass's record, the W3 gate's sheet for its pass count, and S-8's bubble pressure against its draw tray's steam. It reads clocks, so run it alone; the argument `bubble` runs only the last part.
 - `ClientRunProbe.java`: times the catalog, the neural bind, the default column (cold, three runs), a warm column at feed +1 %, +2 K, and TP and PH flashes; re-reads the column's balance in the stream thermo and prints the gap.
 - `SampleFlowsheetProbe.java`: the sheets' crude unit, the owner's example, solved by hand in the order the plan's solver would take: P-101, the crude through T-101's three pumparound coolers at their door duties, then the loop E-101, H-101, V-101, T-101 torn at the bottoms, then the condenser's cooling water, P-102, E-102. Prints each pass, the 21 streams, the units' duties, the closures, the column's preset and tray profile, the phase splits and the compositions.
 - `LoopProbe.java`: the loops. A, the sample with each pumparound's hot side at an assumed circulation (option B of decision D11). B, the furnace on a fixed duty 8 MW short, plain and with Wegstein, then torn at the bottoms. C, 15 and 30 % of the residue back to the crude through a mixer ahead of P-101, cooled to 70 C first. D, all of the residue back, where no steady state exists.
@@ -70,3 +72,4 @@ The search answers every grid target the fluid can reach within 0.06 W on 100 mo
 - 2026-11-02: W2. `FlashProbeTest` added, with the flash findings above.
 - 2026-11-02: W3. `FlashProbeTest` follows `FlowThermo`'s constructor.
 - 2026-11-02: W5. The probes' feeds still read the bundled crude: the assays moved onto `icheme:tjl20_methane`, and the results above were taken before that move.
+- 2026-11-03: W7. `StopGapProbe.java`: longest gap 38.9 ms on a normal thread; the sample's third pass is H-101's 90 MW limit; S-8's bubble pressure is 74.2 % of its own, the oil's partial pressure on its steam-stripped tray. The numbers are in the batch README.

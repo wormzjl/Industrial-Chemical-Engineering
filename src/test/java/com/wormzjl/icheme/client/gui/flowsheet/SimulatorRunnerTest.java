@@ -585,6 +585,8 @@ class SimulatorRunnerTest {
         assertTrue(noticed.text().startsWith(said.text()), "nothing it says is lost");
         assertTrue(noticed.text().contains("server's on crude"), noticed.text());
         assertEquals(said.tone(), noticed.tone());
+        var narrow = SimulatorPage.status(differ, SimulatorFrame.Tab.FLOWSHEET, new ResultsPage.State(), gestures, editor, true, null);
+        assertTrue(narrow.text().endsWith(texts.get("flowsheet.status.data_differs_short")), narrow.text());
         assertTrue(texts.missing.isEmpty(), texts.missing.toString());
     }
 

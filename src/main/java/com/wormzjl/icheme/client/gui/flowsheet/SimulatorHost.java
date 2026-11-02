@@ -7,7 +7,7 @@ import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * What the screen asks of the outside (batch 2026-11-02-process-simulator, W6_SCREEN_PLAN.md section 2): starting and stopping a run, which W7 fills in, and storing the sheet on
+ * What the screen asks of the outside (batch 2026-11-02-process-simulator, W6_SCREEN_PLAN.md section 2): starting and stopping a run, which {@link SimulatorRunner} does, and storing the sheet on
  * its block, which W8 does. The screen keeps no thread and no packet of its own. {@link #NONE} runs nothing and stores nothing, as the screen stands until then.
  */
 public interface SimulatorHost {

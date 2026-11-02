@@ -197,10 +197,13 @@ public final class SimulatorRender {
         ResultsPage.State results = new ResultsPage.State();
         int category = 2;
         SheetLayout.Place hover;
+        /** A runner's result, which stands instead of the scene's run; a client's data that differ from the server's. */
+        SimulatorHost.Finished finished;
+        List<String> differing = List.of();
 
         Scene(Flowsheet sheet, FlowsheetRun run, double seconds, SimulatorHost host) {
             editor = new SheetEditor(sheet, FONT, SimulatorRender::columnDoor);
-            editor.lock(host.reader());
+            host.lock(editor);
             this.ran = run == null ? null : sheet;
             this.run = run;
             this.seconds = seconds;
@@ -209,7 +212,8 @@ public final class SimulatorRender {
         }
 
         SheetContext context() {
-            return new SheetContext(editor, new SheetState(editor.sheet(), ran, run, seconds, host.running()), SheetUnits.DEFAULT, T, FONT, FLUIDS);
+            var state = finished != null ? SheetState.of(editor.sheet(), finished).running(host.running()) : new SheetState(editor.sheet(), ran, run, seconds, host.running());
+            return new SheetContext(editor, state, SheetUnits.DEFAULT, T, FONT, FLUIDS, host, differing);
         }
     }
 
@@ -367,14 +371,14 @@ public final class SimulatorRender {
     }
 
     private static BiConsumer<GuiPrototypes.Door, Skin> unit(Flowsheet sheet, FlowsheetRun run, String id, int tab) {
-        return (d, skin) -> door(d, unitDoor(new Scene(sheet, run, 3.6, SimulatorHost.NONE), id, tab));
+        return (d, skin) -> door(d, unitDoor(new Scene(sheet, run, 3.6, new Host(false, null)), id, tab));
     }
 
     private static BiConsumer<GuiPrototypes.Door, Skin> stream(Flowsheet sheet, FlowsheetRun run, String id, int tab) {
         return (d, skin) -> {
             var view = new Door.View();
             view.tab = tab;
-            door(d, StreamDoors.door(new Scene(sheet, run, 3.6, SimulatorHost.NONE).context(), id, view));
+            door(d, StreamDoors.door(new Scene(sheet, run, 3.6, new Host(false, null)).context(), id, view));
         };
     }
 
@@ -382,7 +386,23 @@ public final class SimulatorRender {
         return (d, skin) -> {
             var view = new Door.View();
             view.tab = 2;
-            door(d, ColumnDoors.door(new Scene(sheet, run, 3.6, SimulatorHost.NONE).context(), "T-101", view));
+            door(d, ColumnDoors.door(new Scene(sheet, run, 3.6, new Host(false, null)).context(), "T-101", view));
+        };
+    }
+
+    /** A sheet of the column alone, with no feed. */
+    private static Flowsheet columnOnly(Flowsheet sheet) {
+        return new Flowsheet(sheet.basis(), sheet.units().stream().filter(u -> u.id().equals("T-101")).toList(), List.of(), sheet.settings());
+    }
+
+    /** A column's door with its hover where a key is off, as the game draws it. */
+    private static BiConsumer<GuiPrototypes.Door, Skin> doorKeys(Flowsheet sheet, FlowsheetRun run, SimulatorHost host, String id, boolean hover) {
+        return (d, skin) -> {
+            var built = ColumnDoors.door(new Scene(sheet, run, 3.6, host).context(), id, new Door.View());
+            door(d, built);
+            var solve = built.footer().getFirst();
+            var at = DoorFrame.footer(built, d.w, d.h, d.m).get(1);
+            if (hover && !solve.active() && solve.hint() != null) tooltip(d, solve.hint(), at.x() + 280, at.y() - 24);
         };
     }
 
@@ -543,14 +563,30 @@ public final class SimulatorRender {
         small.add(page(624, 344, PanelSkin.LIGHT, scene(sheet, run, seconds, host, nothing())));
         small.add(page(464, 254, PanelSkin.DARK, scene(sheet, run, seconds, host, nothing())));
         SimulatorPrototypes.stack(out.resolve("05-small-windows.png"), List.of("1280 by 720 window, scale 2: 624 by 344", "The design minimum, 464 by 254"), small, List.of());
-        sheet(out, "06-run-in-progress", W, H, List.of("A run in progress", "A second player, read only"), List.of(
-                scene(sheet, run, seconds, new Host(false, new SheetState.Running(3.1, 2, 30, "T-101")), nothing()), scene(sheet, run, seconds, new Host(true, null), nothing())));
+        var running = new Host(false, new SheetState.Running(3.1, 2, 30, "T-101", com.wormzjl.icheme.science.flowsheet.Report.Start.LAST));
+        sheet(out, "06-run-in-progress", W, H, List.of("A run in progress", "An edit refused during the run", "A second player, read only"), List.of(
+                scene(sheet, run, seconds, running, nothing()), scene(sheet, run, seconds, running, s -> s.editor.moveUnit("P-101", 92, 84, null)), scene(sheet, run, seconds, new Host(true, null), nothing())));
         sheet(out, "07-feed-stream", DW, DH, List.of("A feed stream's door"), List.of(stream(sheet, run, "CRUDE", 0)));
         sheet(out, "08-feed-composition", DW, DH, List.of("A feed stream's Composition tab"), List.of(stream(sheet, run, "CRUDE", 1)));
         sheet(out, "10-product-stream", DW, DH, List.of("A product stream's door"), List.of(stream(sheet, run, "NAPHTHA", 0)));
         grid(out, "11-unit-doors", DW, DH, List.of("Heat exchanger", "Fired heater", "Pump", "Drum", "Control valve", "Splitter"), List.of(unit(sheet, run, "E-101", 0), unit(sheet, run, "H-101", 0), unit(sheet, run, "P-101", 0), unit(more, moreRun, "D-101", 0), unit(sheet, run, "V-101", 0), unit(more, moreRun, "TEE-1", 0)));
         grid(out, "12-column-door", DW, DH, List.of("The Column page, D1 open", "The Feed page: read from S-7", "The Results page, T-101's real profile", "The Equipment page"), List.of(unit(sheet, run, "T-101", 0), unit(sheet, run, "T-101", 1), columnResults(sheet, run), unit(sheet, run, "T-101", 3)));
         var ticks = List.of("CRUDE", "S-7", "OFFGAS", "NAPHTHA", "KERO", "RESIDUE");
+        var bundled = new ArrayList<FileColumns.ColumnTemplate>();
+        try (var index = Files.newBufferedReader(Path.of("src/main/resources/assets/icheme/columnpreset/index.json"))) {
+            for (var file : com.google.gson.JsonParser.parseReader(index).getAsJsonArray())
+                try (var in = Files.newBufferedReader(Path.of("src/main/resources/assets/icheme/columnpreset/" + file.getAsString()))) {
+                    var o = com.google.gson.JsonParser.parseReader(in).getAsJsonObject();
+                    bundled.add(new FileColumns.ColumnTemplate(o.get("name").getAsString(), com.wormzjl.icheme.science.column.v3.V3ColumnTemplate.read(o), true));
+                }
+        }
+        var presets = com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog.resolve(CATALOG);
+        var templates = new ArrayList<BufferedImage>();
+        for (var skin : List.of(PanelSkin.LIGHT, PanelSkin.DARK)) {
+            templates.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> list(d, FileColumns.columnTemplates(bundled, 0, SheetUnits.DEFAULT, T))));
+            templates.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> list(d, SimulatorPage.listing("TEMPLATES", new Scene(sheet, run, seconds, host).context(), List.of(), presets, List.of(), 0))));
+        }
+        SimulatorPrototypes.stack(out.resolve("13-templates.png"), List.of("Column templates, a column's door", "Stream templates, a feed's door"), templates.subList(0, 2), List.of());
         sheet(out, "14-results-streams", W, H, List.of("The Results tab"), List.of(scene(sheet, run, seconds, host, s -> {
             s.tab = SimulatorFrame.Tab.RESULTS;
             s.results.ticked.addAll(ticks);
@@ -566,6 +602,32 @@ public final class SimulatorRender {
         sheet(out, "15-results-units-log", W, H, List.of("The Units view", "The Log view"), List.of(units, log));
         sheet(out, "16-basis", W, H, List.of("The Basis tab"), List.of(scene(sheet, run, seconds, host, s -> s.tab = SimulatorFrame.Tab.BASIS)));
         opened(out);
+        // Solve alone on a real runner: the door's reflux edited, then the column on what it had.
+        var runner = new com.wormzjl.icheme.client.gui.flowsheet.SimulatorRunner(() -> CATALOG);
+        runner.run(sheet);
+        while (runner.running() != null) Thread.sleep(50);
+        var alone = new Scene(sheet, null, 0, host);
+        var door = alone.editor.unit("T-101").params().json().deepCopy();
+        door.addProperty("reflux", door.get("reflux").getAsDouble() * 1.05);
+        alone.editor.setParams("T-101", new com.wormzjl.icheme.science.flowsheet.Params(door), null);
+        var edited = alone.editor.sheet();
+        var ranWhole = runner.last();
+        runner.alone(edited, "T-101");
+        while (runner.running() != null) Thread.sleep(50);
+        var solved = runner.last();
+        System.out.printf("alone: %s, %s%n", solved.alone().status(), solved.alone().why());
+        Consumer<Scene> fresh = s -> {
+            s.editor.setParams("T-101", new com.wormzjl.icheme.science.flowsheet.Params(door), null);
+            s.finished = ranWhole;
+        };
+        Consumer<Scene> settled = s -> {
+            s.editor.setParams("T-101", new com.wormzjl.icheme.science.flowsheet.Params(door), null);
+            s.finished = solved;
+        };
+        sheet(out, "22-solve-alone", W, H, List.of("T-101's reflux edited: the loop greys, the column's own feed with it", "Solve alone: T-101 solved on what it had, and what lies after it waits for a Run"),
+                List.of(scene(sheet, null, 0, host, fresh), scene(sheet, null, 0, host, settled)));
+        grid(out, "22-column-door-keys", DW, DH, List.of("Solve alone and Templates live", "No stream yet: the hover says why", "During a run"), List.of(doorKeys(sheet, run, host, "T-101", false), doorKeys(columnOnly(sheet), null, host, "T-101", true), doorKeys(sheet, run, running, "T-101", false)));
+        sheet(out, "23-revision-notice", W, H, List.of("A client on a dedicated server whose data differ: a notice, and nothing blocked"), List.of(scene(sheet, run, seconds, host, s -> s.differing = List.of(com.wormzjl.icheme.science.material.MaterialCatalog.Package.label(NETWORK)))));
         sheet(out, "18-missing-unit", W, H, List.of("A sheet after an update removed a unit"), List.of(scene(missing, missingRun, 1.2, host, s -> s.gestures.select(new SheetGestures.Selection(true, "H-101")))));
         sheet(out, "19-block-ports", W, 442, List.of("One block: the door's settings add the connection points"), List.of((d, s) -> blockPorts(d)));
         sheet(out, "21-other-blocks", W, 402, List.of("The same rule for every block"), List.of((d, s) -> otherBlocks(d)));

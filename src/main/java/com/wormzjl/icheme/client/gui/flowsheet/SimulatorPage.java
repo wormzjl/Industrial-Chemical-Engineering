@@ -213,8 +213,10 @@ public final class SimulatorPage {
 
     /** What the status says on a tab, a refusal or a gesture's prompt first; {@code holder} is who edits a sheet this player only reads. */
     public static SheetState.Status status(SheetContext x, SimulatorFrame.Tab tab, ResultsPage.State results, SheetGestures gestures, SheetEditor editor, boolean compact, @Nullable String holder) {
-        var said = said(x, tab, results, gestures, editor, compact, holder);
-        return x.differing().isEmpty() ? said : new SheetState.Status(said.text() + " " + x.text("status.data_differs", String.join(", ", x.differing())), said.tone());
+        if (x.differing().isEmpty()) return said(x, tab, results, gestures, editor, compact, holder);
+        // The status line does not wrap, so a notice takes the short form of what stands before it.
+        var said = said(x, tab, results, gestures, editor, true, holder);
+        return new SheetState.Status(said.text() + " " + (compact ? x.text("status.data_differs_short") : x.text("status.data_differs", String.join(", ", x.differing()))), said.tone());
     }
 
     private static SheetState.Status said(SheetContext x, SimulatorFrame.Tab tab, ResultsPage.State results, SheetGestures gestures, SheetEditor editor, boolean compact, @Nullable String holder) {
