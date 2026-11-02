@@ -1,12 +1,17 @@
 package com.wormzjl.icheme.fluid.gametest;
 
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.registry.ModBlocks;
+import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.fluid.ColumnUnit;
+import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
+import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.science.column.operation.ColumnCycle;
 import com.wormzjl.icheme.science.column.operation.OperationView;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -31,6 +36,30 @@ import java.util.Set;
 @PrefixGameTestTemplate(false)
 public final class ColumnOperationGameTests {
     private ColumnOperationGameTests() {}
+
+    /** A menu open reads what is stored: a resting island's clock stays where it stands, where a live read advances it (merge review, finding 8). */
+    @GameTest(template = "empty", timeoutTicks = 10000, batch = "column-read")
+    public static void aMenuReadAdvancesNoIsland(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var pos = helper.absolutePos(new BlockPos(0, 1, 0));
+        level.setBlock(pos, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        long device = ((FluidDeviceBlockEntity) level.getBlockEntity(pos)).fluidIdentity();
+        java.util.function.LongSupplier committed = () -> world.diagnosticSnapshots().stream().filter(s -> s.graph().reservoirs().stream().anyMatch(n -> n.id() == device)).findFirst().orElseThrow().clock().committedTick();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(world.diagnosticSnapshots().stream().anyMatch(s -> s.certificate().isPresent() && s.graph().reservoirs().stream().anyMatch(n -> n.id() == device)), "Waiting for the tank to certify"))
+                .thenIdle(60)
+                .thenExecute(() -> {
+                    long before = committed.getAsLong();
+                    FluidNetwork.opening(world, device);
+                    helper.assertTrue(committed.getAsLong() == before, "The read advanced the island past " + before);
+                    world.view(device);
+                    helper.assertTrue(committed.getAsLong() > before, "A live read should advance what the stored read left");
+                    level.removeBlock(pos, false);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(!world.capture().world().active().containsKey(device), "Waiting for topology cleanup"))
+                .thenSucceed();
+    }
 
     /** Liquid water near 40 C, J/(kg K): the heat balance of the condenser's tubes. */
     private static final double WATER_HEAT_CAPACITY = 4180;
