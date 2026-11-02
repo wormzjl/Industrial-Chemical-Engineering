@@ -283,9 +283,7 @@ public final class ColumnUnit implements UnitModel {
                 if (at >= 0) flows[i] = amounts[at];
             }
             try {
-                return new V3ColumnInput(V3ColumnInput.SCHEMA_VERSION, pack.id(), door.assayId().isEmpty() ? pack.id() : door.assayId(), new V3ComponentBasis(pack.components()), flows, temperature,
-                        door.stages(), door.feedStage(), door.topPressure(), door.stageDrop(), door.specifications(), door.draws().stream().map(d -> new V3SideDrawSpec(d.tray(), d.flow())).toList(), steam,
-                        door.pumparounds().stream().map(p -> new V3PumparoundSpec(p.returnTray(), p.drawTray(), p.duty(), p.split())).toList(), door.diameter());
+                return door.input(pack, flows, temperature, steam);
             } catch (IllegalArgumentException refused) {
                 throw new FlowsheetFailure("column.failed", String.valueOf(refused.getMessage()));
             }

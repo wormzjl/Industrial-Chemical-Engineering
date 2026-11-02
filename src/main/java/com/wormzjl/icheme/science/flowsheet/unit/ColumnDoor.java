@@ -3,6 +3,10 @@ package com.wormzjl.icheme.science.flowsheet.unit;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
+import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
+import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification;
 import com.wormzjl.icheme.science.column.v3.V3ColumnTemplate;
 import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
@@ -37,6 +41,17 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
 
     /** A pumparound; {@code drop} is its cooler's cold side (Pa). */
     public record Pumparound(String id, int returnTray, int drawTray, double duty, V3PumparoundSpec.Split split, double drop) {
+    }
+
+    /** This column on a feed: {@code flows} on {@code pack}'s components, mol/s. A column's steam stands as its rows set it. */
+    public V3ColumnInput input(MaterialCatalog.Package pack, double[] flows, double temperature) {
+        return input(pack, flows, temperature, steam.stream().map(s -> new V3SteamFeedSpec(s.stage(), s.flow(), s.temperature())).toList());
+    }
+
+    /** This column on a feed, with the steam a wired port brings joined to {@code steam}. */
+    public V3ColumnInput input(MaterialCatalog.Package pack, double[] flows, double temperature, List<V3SteamFeedSpec> steam) {
+        return new V3ColumnInput(V3ColumnInput.SCHEMA_VERSION, pack.id(), assayId.isEmpty() ? pack.id() : assayId, new V3ComponentBasis(pack.components()), flows, temperature, stages, feedStage, topPressure, stageDrop,
+                specifications(), draws.stream().map(d -> new V3SideDrawSpec(d.tray(), d.flow())).toList(), steam, pumparounds.stream().map(p -> new V3PumparoundSpec(p.returnTray(), p.drawTray(), p.duty(), p.split())).toList(), diameter);
     }
 
     public static ColumnDoor of(Params p) {
