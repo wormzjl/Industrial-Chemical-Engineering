@@ -1,0 +1,12 @@
+diff --git a/src/main/java/com/wormzjl/icheme/runtime/fluid/FluidWorldAuthority.java b/src/main/java/com/wormzjl/icheme/runtime/fluid/FluidWorldAuthority.java
+index 4cb62454f..09cc71c99 100644
+--- a/src/main/java/com/wormzjl/icheme/runtime/fluid/FluidWorldAuthority.java
++++ b/src/main/java/com/wormzjl/icheme/runtime/fluid/FluidWorldAuthority.java
+@@ -1177,6 +1177,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
+     private void published(List<IslandCoordinator.Snapshot> changed) {
+         if(observer!=null){var timings=new HashMap<Long,IslandCoordinator.Metrics>();for(var island:changed)runtime.coordinator().metrics(island.id()).ifPresent(m->timings.put(island.id(),m));observer.accept(changed,Map.copyOf(timings));}
+         // A phase hold has its own, rate-limited line with the full detail (phaseHeld); every other hold keeps this one.
++for(var dump:changed)if(dump.status().startsWith("HELD: Substep")){var dg=dump.graph();var db=new StringBuilder("HELD_DUMP island="+dump.id()+" "+dump.status());for(var dn:dg.reservoirs()){var ds=dn.state();db.append("\n  node ").append(dn.id()).append(' ').append(dn.kind()).append(" P=").append(ds.pressure()).append(" T=").append(ds.temperature()).append(" m=").append(ds.mass()).append(" V=").append(ds.volume()).append(" vap=").append(ds.vaporVolume()).append(" liq=").append(ds.liquidVolume()).append(" wat=").append(ds.waterVolume()).append(" n=").append(java.util.Arrays.toString(com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(ds)));}for(var dp:dg.pipes())db.append("\n  pipe ").append(dp.id()).append(' ').append(dp.first()).append("->").append(dp.second()).append(' ').append(dp.control()).append(" sections=").append(dp.sections());IChemE.LOGGER.warn(db.toString());}
+         data.setDirty();var ids=new HashSet<Long>();for(var snapshot:changed){ids.add(snapshot.id());if(snapshot.status().startsWith("HELD")&&!snapshot.status().startsWith(com.wormzjl.icheme.runtime.ProcessSolveServices.PHASE_HOLD))IChemE.LOGGER.warn("fluid_island={} committed_tick={} status={}",snapshot.id(),snapshot.clock().committedTick(),snapshot.status());}
+         // Only loaded devices are marked; their bucket presents them. A publication itself pushes nothing.
+         for(long island:ids)for(long physical:registry.members(island))presentation.markIfLoaded(physical);

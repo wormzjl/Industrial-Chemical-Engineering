@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Fixed
+
+- A flow valve no longer holds its island when it regulates a line its open pass chokes, or when a new set point meets a hot liquid: start stage of the fluid solver (f730d61de, 83802e11e, 22fd0d2e4; batch 2026-11-02-valve-hold).
+
 ## [0.17.1] - 2026-10-28
 
 ### Changed
