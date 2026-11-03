@@ -2,6 +2,8 @@
 
 Owner, 2026-11-03: "These common equipment shouldn't have a fixed in/out connections, user should be free to connect it from left or right, review the logic". Case: heater H-101 (a `fired_heater`) draws its inlet left and its outlet right, and a feed could not land on the right. Review only, code at `e4709610a`; no code changed, no Gradle run.
 
+Owner, 2026-11-04, on keeping old sheets readable: "no need". Simulator sheet files are treated like AGENTS.md's other formats: a breaking change is tested on a fresh sheet, with no migration. Port ids and stream-end fields may change meaning. Each option below names the corpus images it re-records or retires.
+
 ## 1. Expected behaviour
 
 What the equipment fixes:
@@ -42,7 +44,7 @@ Where direction is enforced:
 - `SheetLayout`: `spot` (260 to 308) is a pure function of the type, the port id and the direction, so no fact of the unit moves a port. `placeholder` (316 to 327) and `live`/`held` (187 to 197, 355 to 366) anchor a line only on a port of the matching direction.
 - `SheetEditor`: `takes` (452 to 455) lets an outlet take a stream's start and an inlet its end. `addStream` (462 to 481) refuses two ports of the same direction with `PORT_SIDE`, "A stream runs from an outlet to an inlet."; `reconnect` (512) applies the same rule, and the ring hints in `SheetGestures` (392, 409) follow `takes`.
 - Readers that name `in` and `out` by id: `SheetSizing` (the exchanger loads 493 to 498; the cooler, heater, compressor, pump and valve 521 to 877; the pressure-path walk 910 to 962); `UnitDoors` (`into`, `outOf` and the nozzle rows 432 to 439); `ResultsPage` 317; `SelectionColumn` 59 to 60; `SheetContext.into`/`outOf`; `SimulatorPage` 273 to 282 (the open-port notice).
-- File (`FlowsheetFile` FORMAT 1): a stream end is `{unit, port}`, saved as `from` or `to`; which of the two it is gives its direction, and nothing saves a side. A unit saves `id, type, name, x, y, params`, and unknown fields survive a round trip (`beside`). The five corpus images in `compat/flowsheet/` hold only today's ends, so any option below that adds no meaning to an existing field reads them the same.
+- File (`FlowsheetFile` FORMAT 1): a stream end is `{unit, port}`, saved as `from` or `to`; which of the two it is gives its direction, and nothing saves a side. A unit saves `id, type, name, x, y, params`. `FlowsheetFileTest` reads the five images in `compat/flowsheet/` and writes back all they hold. Their passage ends: `format-1.json` has `valve` in and out and `drum` in; `-coolers` has `cooler` in and out; `-counts` and `-sizing` have the `exchanger`'s `tube_in` and `tube_out`; `-ejector` has machine ports only. `compat/simulator/designs-*.snbt` (`SentDesignTagsTest`) holds the block's sent designs, shapes and counts with no port or side, and no option touches it.
 
 Finding: the direction rule matches every simulator and the physics. The defect is that the side is hard-coded for each type, so the player cannot draw a unit facing the other way. The cooler's inverted spot was a one-off answer to the same need.
 
@@ -50,25 +52,25 @@ Finding: the direction rule matches every simulator and the physics. The defect 
 
 **A. A mirror fact on each unit.** Ports swap left and right and keep their ids and directions.
 - **Changes:** `Flowsheet.Unit` gains `mirrored`. `spot`, the `ColumnBlock` spots and the tag position (244 to 246) use `x → w − x`, with left and right swapped; `SheetPainter.sprite` draws the sprite flipped. A "Mirror" key or door button is one undoable edit, with one lang key in all 5 files.
-- **Deletes:** nothing below the editor. The cooler's special spot can become the plain default (Q4).
-- **Save:** `"mirror": true` on the unit; absent means false, today's drawing. FORMAT stays 1, an older build keeps the field as unknown, and one corpus image is added (`format-1-mirror.json`).
-- **Tests moved:** new cases in `SheetLayoutTest`, `SheetEditorTest` and `SheetGesturesTest`, and the new image in the file compatibility test. No `science/flowsheet` test moves.
+- **Deletes:** nothing below the editor. The cooler's special spot becomes the plain default (Q4).
+- **Save:** `"mirror": true` on the unit, false when absent. No image is re-recorded or retired. A cooler whose default moves to the left draws mirrored in `-coolers`, which is a drawing change only.
+- **Tests moved:** new cases in `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest` and `FlowsheetFileTest` (the field round-trips). No `science/flowsheet` test moves.
 - **Risks:** mirrored symbol marks (the ejector's cone, the heater's stack, the air cooler's fan) must still read right; check them in `SimulatorRender`. The column, with its members drawn inside its frame, is the largest piece of work.
 
 **A′. Mirror on landing**, an addition to A. When a stream's end lands on a port of the wrong direction, the editor mirrors the unit if the port it needs is free, then lands the end on it, as one undo step. The heater case then works in one gesture, and `takes` and the rings answer "yes, by mirroring". The risk is a unit that turns when the player did not expect it to, so the status line says that it mirrored.
 
 **B. Reversible passages.** A two-nozzle passage has no fixed in or out, and the stream wired to it decides; machines and phase outlets stay fixed.
-- **Changes:** `Port` gains a pair or reversible flag, and `claims` accepts either end. Every reader that names `in`/`out` (about 40 places, listed in section 2) must read through a normalised wiring: sizing, the path walk, doors, results, the open-port notice.
-- **Deletes:** nothing. It gives each passage port id a second meaning.
-- **Save:** no new field, but a file can hold a `to` on an `out` port, which an older build reads as an open end; old files read the same. Arrows follow the stream, and the sizing, results and door tests move as well as the editor ones.
+- **Changes:** the passage ports get neutral ids, so no id names a direction (`a`/`b`, `tube_a`/`tube_b`, `shell_a`/`shell_b`, the coil ends). `Port` gains a pair, and `claims` lets the stream's `from` or `to` decide which end is the inlet. Every reader that names `in`/`out` (about 40 places, listed in section 2) must find the inlet through the wiring: the models, sizing, the path walk, doors, results, the open-port notice.
+- **Deletes:** the direction in passage port ids; the cooler's special spot.
+- **Save:** the ends change meaning. Re-record `format-1.json` (valve), `-coolers`, `-counts` and `-sizing` (exchanger tube ends); `-ejector` stays. The unit, sizing, results, door and editor tests move.
 - **Risks:** a passage with one end wired is ambiguous until the other end lands; a reversed exchanger side must not read as co-current; and it gives nothing for machines, mixers, splitters or vessels, so A is still needed.
 
-**C. Every port drawn on both sides.** Changes layout, hit tests and rings. `End` gains `side` (defaulting to the drawn side), so the file must say which twin a line uses. Every free port shows twice (a 6-inlet mixer shows 12 dots), and the layout, editor and gestures tests move. Risks: clutter and mis-hits on small symbols.
+**C. Every port drawn on both sides.** Changes layout, hit tests and rings. `End` gains a required `side`, so every image with a stream end is re-recorded (all five). Every free port shows twice (a 6-inlet mixer shows 12 dots), and the layout, editor and gestures tests move. Risks: clutter and mis-hits on small symbols.
 
-**Recommendation: A with A′**, for every tile; the column in the same step or a second one (Q2). It gives the owner's free left and right connection and keeps direction a fact, as every simulator and the physics do. It changes nothing in the compiler, the models, sizing or the file's meaning, and it adds one append-only field. Reject B: about 40 readers, and it still needs A. Reject C: clutter and a new end field.
+**Recommendation: A with A′**, for every tile; the column in the same step or a second one (Q2). It gives the owner's free left and right connection and keeps direction a fact, as every simulator and the physics do. It changes nothing in the compiler, the models or sizing, adds one unit field and re-records no image. The owner's decision makes B cheaper (neutral ids, no save cost), but it still means about 40 readers and still needs A, so reject it. Reject C: clutter, and all five images re-recorded.
 
 Questions for the owner:
 1. A alone (an explicit Mirror), or A with A′ (mirror on landing)?
 2. Is the column mirrored in the same step, or later?
 3. Only a left-right mirror? Gravity ports rule out a vertical flip for vessels and columns; a rotation (inlet on top) for passages could come later.
-4. The cooler's default: keep the inlet on the right (old sheets unchanged), or make it left like the others (old sheets' coolers redraw mirrored, a drawing-only move)?
+4. The cooler's default: keep the inlet on the right, as the owner's sheet drew it, or make it left like the others, with Mirror for the right?
