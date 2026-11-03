@@ -291,7 +291,48 @@ public final class PipeRackBlockEntity extends BlockEntity {
             }
         }
         setLanes(next, null);
+        // Registry first (schema 9): a lane whose frame the registry does not hold learns this cell's (a world saved before
+        // frames, or a lane registered from the copy), unless another lane of the cell holds another frame: then this is
+        // not the cell the registry knows, and the re-alignment sets it back (RegistryRealignment).
+        var frame = PipeRackBlock.frame(getBlockState());
+        boolean known = true;
+        for (int option = 0; option < RackGeometry.OPTIONS && known; option++) {
+            var record = world.at(position(option)).orElse(null);
+            var held = record == null ? null : world.rackFrame(record.device().id());
+            known = held == null || held.equals(frame);
+        }
+        if (known) for (var lane : lanes) if (world.rackFrame(lane.identity) == null) world.rackFrame(lane.identity, frame);
         refresh(true);
+    }
+
+    /** Whether lane {@code identity} is in this cell's copy. */
+    public boolean carries(long identity) {
+        for (var lane : lanes) if (lane.identity == identity) return true;
+        return false;
+    }
+
+    /**
+     * The frames a rack cell may have for its registered {@code lanes}: those that take each lane at its registered face
+     * points, straight cells first. Several where the points do not fix the frame (a straight cell and a tee's leg give
+     * the same points); none where no frame takes them all. For lanes saved before the registry kept their frame.
+     */
+    public static List<RackGeometry.Rack> frames(List<PhysicalFluidTopology.Device> lanes) {
+        var out = new ArrayList<RackGeometry.Rack>();
+        for (int corner = RackGeometry.STRAIGHT; corner <= RackGeometry.TEE; corner++)
+            for (int facing = 2; facing < 6; facing++) {
+                var rack = new RackGeometry.Rack(facing, corner);
+                boolean takes = !lanes.isEmpty();
+                for (var d : lanes) {
+                    try {
+                        var lane = new Lane(d.id(), d.position().lane() - 1, d.slots(), Lane.arms(d.joints(), d.facing().ordinal()), d.joints(), d.geometry().diameter());
+                        takes &= RackGeometry.valid(rack, lane.option, lane.width, lane.arms) && RackGeometry.points(rack, lane.drawn(0)) == d.points();
+                    } catch (IllegalArgumentException invalid) {
+                        takes = false;
+                    }
+                }
+                if (takes) out.add(rack);
+            }
+        return out;
     }
 
     /** A lane's copy in the paint the registry holds for it, bare when it holds none. */

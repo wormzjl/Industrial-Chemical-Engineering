@@ -90,18 +90,33 @@ public final class WorldTopologyLedger {
      * changed. While they are unchanged, every snapshot shares one instance, so a save compares them by reference
      * ({@link FluidCheckpointCodec#sameWorldBody}).</p>
      */
-    public record Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures) {
-        public static final Builds NONE=new Builds(Map.of(),Map.of());
+    public record Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures,Map<Long,RackFrame> racks) {
+        public static final Builds NONE=new Builds(Map.of(),Map.of(),Map.of());
         public Builds {
-            paints=Map.copyOf(paints);structures=Map.copyOf(structures);
+            paints=Map.copyOf(paints);structures=Map.copyOf(structures);racks=Map.copyOf(racks);
             for(var e:paints.entrySet())if(e.getKey()<=0||e.getValue().bare())throw new IllegalArgumentException("Invalid line paint of "+e.getKey());
             for(var origin:structures.keySet())if(origin.lane()!=0)throw new IllegalArgumentException("A structure's origin is a block, not a rack lane");
+            for(long id:racks.keySet())if(id<=0)throw new IllegalArgumentException("Invalid rack frame of "+id);
         }
-        public boolean empty(){return paints.isEmpty()&&structures.isEmpty();}
-        /** These facts with the paints of only the identities in {@code ids}. Unchanged: this. */
+        public boolean empty(){return paints.isEmpty()&&structures.isEmpty()&&racks.isEmpty();}
+        /** These facts with the paints and rack frames of only the identities in {@code ids}. Unchanged: this. */
         Builds keeping(Set<Long> ids) {
-            if(ids.containsAll(paints.keySet()))return this;
-            var next=new HashMap<>(paints);next.keySet().retainAll(ids);return new Builds(next,structures);
+            if(ids.containsAll(paints.keySet())&&ids.containsAll(racks.keySet()))return this;
+            var nextPaints=new HashMap<>(paints);nextPaints.keySet().retainAll(ids);var nextRacks=new HashMap<>(racks);nextRacks.keySet().retainAll(ids);
+            return new Builds(nextPaints,structures,nextRacks);
+        }
+    }
+    /** A rack cell's shape (schema 9), in {@code RackGeometry}'s corner order, by {@code PipeRackBlock.Shape}'s names. Saved by name: new shapes go last. */
+    public enum RackShape { STRAIGHT, BACK_LEFT, BACK_RIGHT, FRONT_LEFT, FRONT_RIGHT, TEE }
+    /**
+     * The frame of the rack cell a lane lies in (schema 9): its horizontal facing and its shape, decided once when the
+     * player placed it. A lane's face points do not fix it (a straight cell and a tee's leg give the same points), so the
+     * registry keeps it to place a lost rack cell again. Kept per lane identity, so it leaves with its lane.
+     */
+    public record RackFrame(PhysicalFluidTopology.Direction facing,RackShape shape) {
+        public RackFrame {
+            Objects.requireNonNull(facing);Objects.requireNonNull(shape);
+            if(facing==PhysicalFluidTopology.Direction.UP||facing==PhysicalFluidTopology.Direction.DOWN)throw new IllegalArgumentException("A rack faces a horizontal direction");
         }
     }
     /** A line's two paints, each 0xRRGGBB or {@link com.wormzjl.icheme.science.equipment.Paint#BARE}. */
@@ -175,6 +190,7 @@ public final class WorldTopologyLedger {
             }
             for(var r:active.values())if(r.device.suspended()&&!columns.containsKey(r.device.suspendedBy()))throw new IllegalArgumentException("Device "+r.device.id()+" is held by no column");
             Objects.requireNonNull(builds);for(long id:builds.paints().keySet())if(id>=nextIdentity)throw new IllegalArgumentException("Paint of an identity never given: "+id);
+            for(long id:builds.racks().keySet())if(id>=nextIdentity)throw new IllegalArgumentException("Rack frame of an identity never given: "+id);
         }
         public static Snapshot empty(){return empty(com.wormzjl.icheme.science.material.MaterialRuntime.current());}
         public static Snapshot empty(com.wormzjl.icheme.science.material.MaterialCatalog catalog) {
@@ -226,6 +242,7 @@ public final class WorldTopologyLedger {
     // topology preparation nor makes the next snapshot copy the registry.
     private final HashMap<Long,LinePaint> paints=new HashMap<>();
     private final HashMap<PhysicalFluidTopology.Position,Structure> structures=new HashMap<>();
+    private final HashMap<Long,RackFrame> racks=new HashMap<>();
     private Builds builds;
     private Snapshot shared;private long sharedVersion;
     public WorldTopologyLedger(Snapshot restored) {
@@ -235,20 +252,20 @@ public final class WorldTopologyLedger {
         // Every queued event must apply to the registry before it, in order, as when it was queued.
         for(var event:restored.events){check(latest,latestAt,event.edits);apply(latest,latestAt,event.edits);events.add(event);}
         recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);
-        paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());builds=restored.builds;
+        paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());racks.putAll(restored.builds.racks());builds=restored.builds;
         shared=restored;sharedVersion=version;
     }
     private void owned(){if(Thread.currentThread()!=owner)throw new IllegalStateException("World topology belongs to the server thread");}
     /** The ledger as a checkpoint saves it. While the ledger is unchanged every snapshot shares the same immutable parts. */
     public Snapshot snapshot() {
         owned();
-        if(builds==null)builds=new Builds(paints,structures);
+        if(builds==null)builds=new Builds(paints,structures,racks);
         if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),builds);sharedVersion=version;}
         else if(shared.onlineTick!=onlineTick||shared.builds!=builds)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,builds);
         return shared;
     }
     /** The build facts as the next snapshot holds them. */
-    public Builds builds(){owned();if(builds==null)builds=new Builds(paints,structures);return builds;}
+    public Builds builds(){owned();if(builds==null)builds=new Builds(paints,structures,racks);return builds;}
     /** The paint of line {@code id}, or null for a bare line: a live read, no copy. */
     public LinePaint paint(long id){owned();return paints.get(id);}
     /** The structure whose origin is {@code origin}, or null: a live read, no copy. */
@@ -262,6 +279,18 @@ public final class WorldTopologyLedger {
         if(paint!=null&&paint.bare())paint=null;
         if(Objects.equals(paints.get(id),paint))return;
         if(paint==null)paints.remove(id);else paints.put(id,paint);builds=null;
+    }
+    /** The frame of the rack cell lane {@code id} lies in, or null where none is held: a live read, no copy. */
+    public RackFrame rack(long id){owned();return racks.get(id);}
+    /**
+     * Records the frame of the rack cell rack lane {@code id} lies in, a registered or queued identity; null removes it. A
+     * build fact: no flow changes, nothing is queued. The frame leaves with its identity, as a line's paint does.
+     */
+    public void rack(long id,RackFrame frame) {
+        owned();var lane=latest.get(id);
+        if(lane==null||lane.device.position().lane()<=0||lane.device.port())throw new IllegalArgumentException("Rack frame of an identity that is no rack lane: "+id);
+        if(Objects.equals(racks.get(id),frame))return;
+        if(frame==null)racks.remove(id);else racks.put(id,frame);builds=null;
     }
     /** Records the structure whose origin is {@code origin}; null removes it. A build fact: no flow changes, nothing is queued. */
     public void structure(PhysicalFluidTopology.Position origin,Structure structure) {
@@ -388,8 +417,8 @@ public final class WorldTopologyLedger {
         else {
             var applied=Collections.newSetFromMap(new IdentityHashMap<Event,Boolean>());applied.addAll(prepared.applied);events.removeIf(applied::contains);
             for(var event:prepared.applied)apply(active,activeAt,event.edits);
-            // A removed identity is never given again, so its line paint leaves with it: one place for every removal path.
-            for(var event:prepared.applied)for(var edit:event.edits)if(edit.replacement==null&&paints.remove(edit.id)!=null)builds=null;
+            // A removed identity is never given again, so its line paint and its rack frame leave with it: one place for every removal path.
+            for(var event:prepared.applied)for(var edit:event.edits)if(edit.replacement==null&&(paints.remove(edit.id)!=null|racks.remove(edit.id)!=null))builds=null;
             constructed=prepared.constructed;destroyed=prepared.destroyed;recoveries.putAll(prepared.recoveries);
         }
         nextIdentity=prepared.nextIdentity;version++;

@@ -182,8 +182,9 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     }
     /**
      * Server thread: the blocks being placed or replaced stand for registrations that already exist, so placing one registers
-     * nothing and replacing one removes no registration and recovers nothing. The laying tool sets it for a line it
-     * registered itself ({@link PipeLaying}), the re-alignment for a block it sets back ({@link RegistryRealignment}).
+     * nothing and replacing one, or a rack cell ({@link PipeRackBlock}), removes no registration and recovers nothing. The
+     * laying tool sets it for a line it registered itself ({@link PipeLaying}), the re-alignment for a block it sets back
+     * ({@link RegistryRealignment}).
      */
     static boolean registered;
     /** Runs {@code change} with {@link #registered} set: block edits that follow the registry, never edit it. */

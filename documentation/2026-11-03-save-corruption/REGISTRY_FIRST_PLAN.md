@@ -41,9 +41,11 @@ A new part of the ledger snapshot, `WorldTopologyLedger.Builds`. It holds the fa
 |---|---|---|---|
 | Line paint | device identity: a pipe, a one-block device or a rack lane | primary, secondary (0xRRGGBB, or bare) | `FluidDeviceBlockEntity.paint/secondary`, `PipeRackBlockEntity.Lane.paint/secondary` |
 | Structure | origin position | the shape as SNBT text, and the paint | `EquipmentShellBlockEntity` (`writeShape`, `Paint`) |
+| Rack frame (schema 9, step 5) | rack lane identity | the facing and the shape of the rack cell the lane lies in | `PipeRackBlock.FACING`, `PipeRackBlock.SHAPE` (block state) |
 
 Facts the first draft listed that step 1 found to be derived. They stay out of the registry:
-- **The rack record.** `PipeRackBlockEntity` already rebuilds a lane from its registration (line 299). It takes the option from `position.lane() - 1`, the width from `slots`, the arms from the joints and facing, and the bore from the geometry. The rack's `Frame` and `Joined` are not saved at all, so they are derived. A rack lane needs only its paint, which is a line paint.
+- **The rack lanes.** `PipeRackBlockEntity` already rebuilds a lane from its registration (line 299). It takes the option from `position.lane() - 1`, the width from `slots`, the arms from the joints and facing, and the bore from the geometry. The rack's drawn `Frame` (its steel) and `Joined` are not saved at all, so they are derived. A rack lane needs its paint, which is a line paint.
+- **Corrected in step 5: the rack cell's frame is a fact.** Its facing and shape are block state, decided once at placement from the neighbours and the player's look (RACK_JUNCTION_PLAN J1, J2). A lane's registered face points do not fix them. Over every valid lane of every frame and seven bores, 544 of 1,376 lane cases fit more than one frame, and 228 fit frames of different shapes (a straight cell and a tee's leg give the same points; `tmp/rack-frame/ambiguity.jsh`). So the registry keeps each lane's frame, keyed by the lane's identity. It leaves with its lane, as paint does (facts schema 9).
 - **The nozzle sizes.** The shell's `Nozzles` are per-cell drawing codes that `EquipmentStructure` redraws from the bores of the pipes the nozzles meet (`ShapeRasterizer.cellCodes`). Those bores are in the registry.
 - **The member identities.** A structure's registrations sit at the node cells that its shape gives at its origin.
 - **The layout stamp, the box and the roof level.** These are derived from the shape and the contents.
@@ -84,7 +86,7 @@ The writers, listed by `grep` before coding (step 2): line paint has one, `PipeL
 | Device removed (any path) | the ledger drops the line's paint when an applied edit removes its identity: one place for every removal path, no hook |
 | Structure dismantled, or removed as a retired kind | `EquipmentStructure.dismantle` and `removeRetired` |
 
-The shell's `bind(shape, cell, paint)` is no hook: it runs once per cell, and a structure's origin cell may be no shell. A rack's lanes, frame and joins need no hook: they are rebuilt from the lane registrations (3.1). A nozzle size change is a pipe change, which the registry already holds.
+The shell's `bind(shape, cell, paint)` is no hook: it runs once per cell, and a structure's origin cell may be no shell. A rack's lanes and joins need no hook: they are rebuilt from the lane registrations (3.1). A rack frame (schema 9) has one writer, `PipeLaying.lay`, which records each new lane's cell frame; a rack's shape never changes after it is placed (J1). It leaves with its lane in the ledger, as paint does. A rack's bind learns the frame of a lane that has none, unless another lane of the cell holds a different one (then the block is not the cell the registry knows). A nozzle size change is a pipe change, which the registry already holds.
 
 ### 3.4 Learning from blocks (worlds saved before schema 8)
 
@@ -131,6 +133,9 @@ For each registration of the chunk:
    - Another block at the cell: hold.
    - A held registration whose block stands again (present, restated or placed) is released.
 3. **Rack lane:** handled per cell. A rack block present with the lane: restate. A rack missing: place a `PipeRackBlock` if the cell is free, and let its block entity rebuild the lanes from their registrations, as it does at load. Else hold every lane of the cell.
+   - Built in step 5 (`RegistryRealignment.lane`). The cell's frame is the one the registry holds for its lowest lane identity. A rack present with another frame takes that frame (same block, no lane removed) and binds again. A rack present without the lane binds again. A free cell gets a rack of that frame, which binds. A lane its cell still does not carry after the bind is held, and so is a lane whose cell another block holds.
+   - Lanes saved before schema 9 have no frame. A free cell then gets the first frame that takes every lane of the cell at its registered points, straight cells first (`PipeRackBlockEntity.frames`). The lanes stand where they stood, but a tee or a corner may come back straight. With no such frame, the lanes are held.
+   - Rack blocks follow the restore flag too: `PipeRackBlock.onRemove` removes no lane while `FluidDeviceBlock.quietly` runs.
 4. **Structure member:** handled per structure (4.4).
 
 ### 4.3 Placing one-block devices
@@ -170,7 +175,7 @@ Each step is one commit and runs only the tests that its files can load.
 | 2 | Write paths (3.3), the block-entity restatement (3.5) and learning (3.4, moved here from step 8). **Done** (see the batch README) | GameTests: the painted lay in `PipeLayingGameTests` (registry holds the paints, restatement, learning, paint leaves with a dismantled lane); `EquipmentCompatGameTests` structure record (built, restated, learned, dismantled). The save and reload round trip is the step-1 unit tests' |
 | 3 | Held registrations: compilation, state, commands (4.1, 4.5 commands). **Done** (see the batch README) | `PhysicalFluidTopologyTest` (a held tank is its own island, a held pipe parts its line); `WorldTopologyLedgerTest` (a hold survives an exact load, queued or applied, and never reaches facts). GameTest `RegistryFirstGameTests`: hold, list, then drop |
 | 4 | `stateFor`, the restore flag, the kind check, the queue, one-block re-alignment (4.2, 4.3). **Done** (see the batch README) | `stateFor` round trip over every kind and fitting. GameTests a to d (section 7) |
-| 5 | Rack cells placed again from their lane registrations (4.2 item 3) | GameTest e |
+| 5 | Rack cells placed again from their lane registrations (4.2 item 3), with the rack frame as a fact (schema 9). **Done** (see the batch README) | GameTest e; `WorldTopologyLedgerTest` (a frame leaves with its lane); `FluidFactsCompatTest` with the new `compat/fluid/schema-9` image |
 | 6 | Structures (4.4) | GameTests f and g. `equipmentGates` only if refresh code changed |
 | 7 | Notices, lang keys (4.5) | `LanguageFilesTest`; `tools/localization/check.js` |
 | 8 | Learning from blocks (3.4): built in step 2; what is left is its world-level check | GameTest h, and the schema-7 image still loads |
@@ -186,7 +191,7 @@ Owner requirement (2026-11-03): the system must be lag-free, above all during sa
 | A save with no build edit | nothing: the topology unit is reused (`sameWorldBody` compares `builds` by reference) | zero |
 | A save after a build edit | one re-encoding of the topology unit, the same cost as after placing a pipe today; shape texts are already made | one unit per save |
 | A load | each structure's SNBT parsed once, at world open | not during play |
-| A block's bind at load (pipe, rack) | one map read for its paint; a write only when it learns | O(1) per block |
+| A block's bind at load (pipe, rack) | one map read for its paint; a rack also reads the frames of its cell's at most 14 lane positions; a write only when it learns | O(1) per block |
 | A vessel's restate at load | one map read for its record; the shell cells walked only when the paint differs | O(1) per vessel, as a rule |
 | Chunk load | the chunk queued; no block placed, no solve | O(devices of the chunk) to queue |
 | Re-alignment | at most 32 devices and 1 ms per tick (4.2) | 1 ms per tick |
@@ -214,7 +219,7 @@ Structure records persist in the GameTest world as registrations do. Once re-ali
   - Its vessel neighbour sees no flow.
   - After the stone is removed and the chunk is re-queued, the pipe is placed and released.
 - Built in step 4 (`RegistryFirstGameTests`): a to c as `aBrokenLineIsSetBackFromTheRegistry` (it first checks that an intact line re-aligns nothing, the core of i), d as `aBlockedCellHoldsItsPipeUntilItIsFree`, and the `stateFor` round trip as `everyOneBlockDeviceStandsAsItsRegistration`. Each runs in a batch of its own, because a re-queued chunk also queues its neighbours' registrations. "Behind the authority's back" is `FluidDeviceBlock.quietly`, and a chunk's next load is `FluidWorldAuthority.loadedChunk`.
-- **e. Rack.** A rack cell removed behind the authority's back is rebuilt with its lanes.
+- **e. Rack.** A rack cell removed behind the authority's back is rebuilt with its lanes. Built in step 5 as `aLostRackCellIsSetBackWithItsLanes`: a corner cell removed comes back as the corner it was, and a straight rack turned the other way faces as laid again.
 - **f. Drum.** A drum whose shells were removed is rebuilt from its structure record, its contents kept.
 - **g. Constructor edit.** A drum whose shell shape differs from its record is rebuilt to the record.
 - **h. Learning.** A schema-7 world's painted pipe learns its paint into the registry at its chunk's first load.

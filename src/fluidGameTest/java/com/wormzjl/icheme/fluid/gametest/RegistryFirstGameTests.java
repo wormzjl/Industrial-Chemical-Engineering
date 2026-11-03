@@ -1,12 +1,22 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.mojang.authlib.GameProfile;
 import com.wormzjl.icheme.registry.ModBlocks;
+import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
+import com.wormzjl.icheme.science.equipment.PipeRoute;
+import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
+import com.wormzjl.icheme.world.item.PipelineToolItem;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
+import com.wormzjl.icheme.world.level.block.PipeAnchor;
+import com.wormzjl.icheme.world.level.block.PipeLaying;
+import com.wormzjl.icheme.world.level.block.PipeRackBlock;
 import com.wormzjl.icheme.world.level.block.RegistryRealignment;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
@@ -15,18 +25,23 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Registry first (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md section 7): the registry decides which IChemE
@@ -248,6 +263,103 @@ public final class RegistryFirstGameTests {
                 })
                 .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the line's registrations to leave"))
                 .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 5, GameTest e (plan 4.2 item 3): rack cells changed behind the authority's back are set back from the registry.
+     * A line laid through three racks, the middle one a corner: each lane holds its cell's frame, and an intact run
+     * re-aligns nothing. Then the corner cell is gone and the first rack faces the other way: the corner comes back as the
+     * corner it was, the first rack faces as it was laid, each with its lane and the joins it had, and the tanks stay one
+     * island. Once the line is gone, so are its frames.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-realign-rack")
+    public static void aLostRackCellIsSetBackWithItsLanes(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var west = helper.absolutePos(new BlockPos(0, 1, 1));
+        var first = west.east();
+        var straight = west.east(2);
+        var corner = west.east(3);
+        var turned = corner.south();
+        var last = turned.south();
+        var south = last.south();
+        var placed = List.of(west, first, straight, corner, turned, last, south);
+        var cells = List.of(straight, corner, turned);
+        for (var at : placed) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(west, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        level.setBlock(south, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        // As the laying test places them: one looking east, a corner at its end looking south, one more south of it.
+        var racks = ModBlocks.PIPE_RACK.get();
+        level.setBlock(straight, racks.placed(level, straight, Direction.EAST, false), 3);
+        level.setBlock(corner, racks.placed(level, corner, Direction.SOUTH, false), 3);
+        level.setBlock(turned, racks.placed(level, turned, Direction.SOUTH, false), 3);
+        var player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "RegistryFirstRack"));
+        player.setGameMode(GameType.SURVIVAL);
+        player.setPos(west.getX() + 2.5, west.getY(), west.getZ() - 1.5);
+        var tool = new ItemStack(ModItems.PIPE_LAYING_TOOL.get());
+        tool.set(ModItems.PIPE_LAYING_SETTINGS.get(), new PipelineToolItem.Settings(.1));
+        player.setItemInHand(InteractionHand.MAIN_HAND, tool);
+        player.getInventory().add(new ItemStack(ModItems.FLUID_PIPE.get(), 5));
+        var start = new PipeAnchor.Click(west, Direction.EAST);
+        var end = new PipeAnchor.Click(south, Direction.NORTH);
+        double outside = PipeSizes.outside(.1);
+        String[] failure = {null};
+        var from = PipeAnchor.resolve(level, start, outside);
+        var to = PipeAnchor.resolve(level, end, outside);
+        if (from.anchor() == null || to.anchor() == null) failure[0] = "the line's ends were refused: " + from.refusal() + ", " + to.refusal();
+        else {
+            var route = PipeRoute.search(from.anchor().end(), from.anchor().leaving(), to.anchor().end(), outside, PipeAnchor.space(level), PipeRoute.Limits.DEFAULT);
+            var refusal = route.found() ? PipeLaying.lay(player, InteractionHand.MAIN_HAND, start, end, List.of(first, straight, corner, turned, last), route.options()) : null;
+            if (!route.found()) failure[0] = "no route through the racks: " + route;
+            else if (refusal != null) failure[0] = "the line was refused: " + refusal.getString();
+        }
+        long[] lanes = new long[cells.size()];
+        var frames = new ArrayList<WorldTopologyLedger.RackFrame>();
+        for (int i = 0; i < cells.size() && failure[0] == null; i++) {
+            lanes[i] = ((PipeRackBlockEntity) level.getBlockEntity(cells.get(i))).lanes().getFirst().identity();
+            frames.add(PipeRackBlock.frame(level.getBlockState(cells.get(i))));
+            if (!frames.get(i).equals(world.rackFrame(lanes[i]))) failure[0] = "lane #" + lanes[i] + " holds no frame of its rack: " + world.rackFrame(lanes[i]);
+        }
+        int[] joins = {1 << Direction.WEST.ordinal() | 1 << Direction.EAST.ordinal(), 1 << Direction.WEST.ordinal() | 1 << Direction.SOUTH.ordinal(),
+                1 << Direction.NORTH.ordinal() | 1 << Direction.SOUTH.ordinal()};
+        long westTank = world.at(position(level, west)).orElseThrow().device().id();
+        long southTank = world.at(position(level, south)).orElseThrow().device().id();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || joined(world, westTank, southTank), "Waiting for the line to join its tanks"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) return;
+                    for (long id : lanes) {
+                        var check = RegistryRealignment.realign(level, world, id);
+                        if (failure[0] == null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the intact run was re-aligned at #" + id + ": " + check;
+                    }
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(corner, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(straight, level.getBlockState(straight).setValue(PipeRackBlock.FACING, Direction.WEST), 3);
+                    });
+                    for (long id : lanes)
+                        if (failure[0] == null && !world.registrations().containsKey(id)) failure[0] = "a rack edited quietly removed lane #" + id;
+                    requeue(world, level, placed);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || java.util.stream.IntStream.range(0, cells.size()).allMatch(i -> level.getBlockEntity(cells.get(i)) instanceof PipeRackBlockEntity rack
+                        && rack.carries(lanes[i]) && PipeRackBlock.frame(level.getBlockState(cells.get(i))).equals(frames.get(i))), "Waiting for the rack cells to be set back"))
+                .thenExecute(() -> {
+                    for (int i = 0; i < cells.size() && failure[0] == null; i++) {
+                        var rack = (PipeRackBlockEntity) level.getBlockEntity(cells.get(i));
+                        if (rack.lanes().size() != 1 || rack.drawnLanes().getFirst().joined() != joins[i]) failure[0] = "rack " + cells.get(i).toShortString() + " draws " + rack.drawnLanes();
+                    }
+                    if (failure[0] == null && !joined(world, westTank, southTank)) failure[0] = "the tanks parted";
+                    if (failure[0] == null && !level.getEntitiesOfClass(ItemEntity.class, new AABB(west).inflate(6)).isEmpty()) failure[0] = "a rack cell dropped an item";
+                    for (var at : placed) level.removeBlock(at, false);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(Arrays.stream(lanes).allMatch(id -> world.committedDevice(id).isEmpty())
+                        && placed.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the lanes' removals to apply"))
+                .thenExecute(() -> {
+                    // The frames leave as the removals apply, as a line's paint does.
+                    for (long id : lanes)
+                        if (failure[0] == null && world.rackFrame(id) != null) failure[0] = "lane #" + id + "'s frame stayed after the lane left";
                     if (failure[0] != null) helper.fail(failure[0]);
                 })
                 .thenSucceed();

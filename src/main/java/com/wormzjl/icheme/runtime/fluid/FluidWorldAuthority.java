@@ -201,6 +201,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
         owned();if(!topology.latest().containsKey(id))return;
         topology.paint(id,new WorldTopologyLedger.LinePaint(primary,secondary));data.setDirty();
     }
+    /** The frame of the rack cell lane {@code id} lies in, as the registry holds it, or null. */
+    public WorldTopologyLedger.RackFrame rackFrame(long id){owned();return topology.rack(id);}
+    /** Records the frame of the rack cell lane {@code id} lies in. A lane the registry no longer has, or is removing, keeps none. */
+    public void rackFrame(long id,WorldTopologyLedger.RackFrame frame) {
+        owned();var lane=topology.latest().get(id);if(lane==null||lane.device().position().lane()<=0||lane.device().port())return;
+        topology.rack(id,frame);data.setDirty();
+    }
     /** The registry's record of the structure whose origin is {@code origin}, or null. */
     public WorldTopologyLedger.Structure structure(PhysicalFluidTopology.Position origin){owned();return topology.structure(origin);}
     /** Records the structure whose origin is {@code origin}; null removes it. */

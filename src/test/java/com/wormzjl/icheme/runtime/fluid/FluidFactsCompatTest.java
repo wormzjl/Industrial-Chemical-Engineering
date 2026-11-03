@@ -101,6 +101,8 @@ class FluidFactsCompatTest {
         world.ledger.structure(new PhysicalFluidTopology.Position(EventPathWorld.DIM,60,64,0),WorldTopologyLedger.Structure.of(
                 EquipmentShape.drum(2,6,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.EAST,EquipmentShape.defaultSupport(2,EquipmentShape.Orientation.HORIZONTAL)),
                 new Paint(0x587246,0x383E42)));
+        // Facts schema 9: the rack lane's rack frame, the straight rack facing east it was laid on.
+        world.ledger.rack(lane,new WorldTopologyLedger.RackFrame(Direction.EAST,WorldTopologyLedger.RackShape.STRAIGHT));
         return world;
     }
     private static PhysicalFluidTopology.Device heatSide(long id,int x,int z,PipeResistance.Geometry passage,HeatUnit heat) {
@@ -520,18 +522,19 @@ class FluidFactsCompatTest {
         }
         return text.toString();
     }
-    /** Every line paint in identity order, then every structure in origin order: what schema 8 carries. */
+    /** Every line paint in identity order, then every structure in origin order (schema 8), then every rack frame in identity order (schema 9). */
     private static String builds(WorldTopologyLedger.Snapshot world) {
         var parts=new ArrayList<String>();
         for(var e:new TreeMap<>(world.builds().paints()).entrySet())parts.add(e.getKey()+":"+Integer.toHexString(e.getValue().primary())+"/"+Integer.toHexString(e.getValue().secondary()));
         var structures=new ArrayList<>(world.builds().structures().entrySet());structures.sort(Comparator.comparing(e->e.getKey().toString()));
         for(var e:structures){var p=e.getKey();var s=e.getValue();parts.add(p.x()+","+p.y()+","+p.z()+":"+s.shape().kind()+":"+s.shape().diameter()+"x"+s.shape().tangentLength()+":"+Integer.toHexString(s.paint().body())+"/"+Integer.toHexString(s.paint().structure()));}
+        for(var e:new TreeMap<>(world.builds().racks()).entrySet())parts.add(e.getKey()+":"+e.getValue().facing()+"/"+e.getValue().shape());
         return String.join(";",parts);
     }
     /** The build facts survive an exact load and a load from facts alone (batch 2026-11-03-save-corruption). */
     @Test void buildFactsSurviveBothExactAndFactsOnlyLoads() {
         var world=corpusWorld();var builds=world.ledger.snapshot().builds();var saved=image(world);
-        assertEquals(2,builds.paints().size());assertEquals(1,builds.structures().size());
+        assertEquals(2,builds.paints().size());assertEquals(1,builds.structures().size());assertEquals(1,builds.racks().size());
         for(var restored:List.of(load(saved,key->model,CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->model,CATALOG)))
             assertEquals(builds,restored.world().orElseThrow().builds(),restored.route().toString());
     }

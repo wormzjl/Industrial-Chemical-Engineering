@@ -102,6 +102,9 @@ public final class PipeLaying {
         // lanes the line starts or ends at keep theirs. The blocks copy them as they bind.
         int paint = PipeLayingToolItem.paint(stack), secondary = PipeLayingToolItem.secondary(stack);
         var records = world.lay(laid, settings.diameter(), hosts, paint, secondary);
+        // Each new lane's rack frame: the lanes' points do not fix it, so the registry keeps it to place a lost cell again.
+        for (int i = 0; i < path.size(); i++)
+            if (lanes.get(i) != null) world.rackFrame(records.get(i).device().id(), PipeRackBlock.frame(level.getBlockState(path.get(i))));
         // The blocks and lanes bind to their queued registrations, then take their connections: every new block's joints
         // are set before any neighbour reads them, as EquipmentStructure.place sets its cells before it reconnects them.
         var racks = new ArrayList<PipeRackBlockEntity>();

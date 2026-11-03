@@ -45,9 +45,10 @@ final class FluidFacts {
      *  6 (batch 2026-10-28-column-operation): a registration's column unit (the running column that holds it), the column units.
      *  7 (batch 2026-10-30-water-cooling-tower): a device spec's cooling tower.
      *  8 (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 3): the registry's build facts, each painted line's
-     *  paints and each equipment structure's shape and paint, so that the registry can place their blocks again. */
-    static final int SCHEMA=8;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 8. */
+     *  paints and each equipment structure's shape and paint, so that the registry can place their blocks again.
+     *  9 (same batch, step 5): each rack lane's rack frame, the facing and shape of the cell it lies in. */
+    static final int SCHEMA=9;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 9. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -201,6 +202,8 @@ final class FluidFacts {
             f.list(new TreeMap<>(builds.paints()).entrySet(),(q,e)->q.count(e.getKey()).i32(e.getValue().primary()).i32(e.getValue().secondary()));
             var structures=new ArrayList<>(builds.structures().entrySet());structures.sort(Map.Entry.comparingByKey(ORIGIN_ORDER));
             f.list(structures,(q,e)->{position(q,e.getKey());var t=e.getValue();q.text(t.text()).i32(t.paint().body()).i32(t.paint().structure());});
+            // Schema 9: each rack lane's rack frame, by identity.
+            f.list(new TreeMap<>(builds.racks()).entrySet(),(q,e)->q.count(e.getKey()).name(e.getValue().facing()).name(e.getValue().shape()));
         });
     }
     private static final Comparator<PhysicalFluidTopology.Position> ORIGIN_ORDER=Comparator.comparing(PhysicalFluidTopology.Position::dimension)
@@ -252,8 +255,13 @@ final class FluidFacts {
                 if(!origins.add(e.getKey()))throw f.invalid("duplicate structure at "+e.getKey());
                 e.getValue().ifPresent(s->structures.put(e.getKey(),s));
             }
+            // Schema 9: the rack frames. A record written before them holds none, and the racks teach them at bind.
+            var racks=new HashMap<Long,WorldTopologyLedger.RackFrame>();
+            for(var e:f.list(List.<Map.Entry<Long,WorldTopologyLedger.RackFrame>>of(),q->{long id=q.count(0);var facing=q.name(PhysicalFluidTopology.Direction.class,null);var shape=q.name(WorldTopologyLedger.RackShape.class,null);
+                    if(id<=0||facing==null||shape==null)throw q.invalid("rack frame of "+id);return Map.entry(id,valid(q,"rack frame of "+id,()->new WorldTopologyLedger.RackFrame(facing,shape)));}))
+                if(racks.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate rack frame "+e.getKey());
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
-            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,new WorldTopologyLedger.Builds(paints,structures));
+            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,new WorldTopologyLedger.Builds(paints,structures,racks));
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {

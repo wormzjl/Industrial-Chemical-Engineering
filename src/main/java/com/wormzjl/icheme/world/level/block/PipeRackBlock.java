@@ -3,6 +3,8 @@ package com.wormzjl.icheme.world.level.block;
 import com.mojang.serialization.MapCodec;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
+import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
 import com.wormzjl.icheme.science.equipment.RackGeometry;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
 import net.minecraft.core.BlockPos;
@@ -76,6 +78,21 @@ public final class PipeRackBlock extends BaseEntityBlock {
     /** The lane geometry of a rack cell in this state: its facing and corner. */
     public static RackGeometry.Rack rack(BlockState state) {
         return new RackGeometry.Rack(state.getValue(FACING).ordinal(), state.getValue(SHAPE).ordinal());
+    }
+
+    /** A rack cell's frame as the registry keeps it for its lanes (batch 2026-11-03-save-corruption, schema 9). */
+    public static WorldTopologyLedger.RackFrame frame(BlockState state) {
+        return new WorldTopologyLedger.RackFrame(PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name()), WorldTopologyLedger.RackShape.valueOf(state.getValue(SHAPE).name()));
+    }
+
+    /** The rack cell of {@code frame}. */
+    public BlockState stateFor(WorldTopologyLedger.RackFrame frame) {
+        return defaultBlockState().setValue(FACING, Direction.valueOf(frame.facing().name())).setValue(SHAPE, Shape.valueOf(frame.shape().name()));
+    }
+
+    /** The frame of {@code rack}'s geometry. */
+    public static WorldTopologyLedger.RackFrame frame(RackGeometry.Rack rack) {
+        return new WorldTopologyLedger.RackFrame(PhysicalFluidTopology.Direction.values()[rack.facing()], WorldTopologyLedger.RackShape.values()[rack.corner()]);
     }
 
     /** Shaped once by the racks next door and the player's horizontal look; sneaking, straight along the look. */
@@ -161,10 +178,10 @@ public final class PipeRackBlock extends BaseEntityBlock {
         if (!carries(level, position)) super.onBlockExploded(state, level, position, explosion);
     }
 
-    /** Removed any other way (a command), its lanes leave the ledger with it. */
+    /** Removed any other way (a command), its lanes leave the ledger with it; not while {@link FluidDeviceBlock#quietly} edits the world. */
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos position, BlockState replacement, boolean moved) {
-        if (state.getBlock() != replacement.getBlock() && level instanceof ServerLevel server && level.getBlockEntity(position) instanceof PipeRackBlockEntity rack)
+        if (!FluidDeviceBlock.registered && state.getBlock() != replacement.getBlock() && level instanceof ServerLevel server && level.getBlockEntity(position) instanceof PipeRackBlockEntity rack)
             FluidWorldAuthority.find(server.getServer()).ifPresent(world -> {
                 for (var lane : rack.lanes()) world.remove(lane.identity());
             });

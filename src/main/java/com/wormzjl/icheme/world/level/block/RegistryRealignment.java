@@ -1,14 +1,22 @@
 package com.wormzjl.icheme.world.level.block;
 
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
+import com.wormzjl.icheme.science.equipment.RackGeometry;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Registry first (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 4.2 and 4.3): the fluid registry decides which
@@ -23,9 +31,11 @@ import net.minecraft.world.level.block.state.BlockState;
  *       as the laying tool connects a line. The block it replaces drops nothing (decision S9) and leaves no registration;</li>
  *   <li>any other block there: the registration is held (decision S11), never the block overwritten.</li>
  * </ul>
- * A held registration whose block stands again is released. Rack lanes and structures follow in steps 5 and 6. A
- * registration is served once its own chunk is loaded: neighbours in a chunk that is not loaded keep their saved joints,
- * and their own load settles both sides (FluidDeviceBlock.connectedState).
+ * A rack lane is checked at its rack cell: the cell takes the frame the registry holds for its lanes, or a free cell gets
+ * a rack of that frame, and its copy rebuilds the lanes from their registrations; a lane the cell cannot carry is held.
+ * A held registration whose block or lane stands again is released. Structures follow in step 6. A registration is
+ * served once its own chunk is loaded: neighbours in a chunk that is not loaded keep their saved joints, and their own
+ * load settles both sides (FluidDeviceBlock.connectedState).
  */
 public final class RegistryRealignment {
     private RegistryRealignment() {}
@@ -82,10 +92,12 @@ public final class RegistryRealignment {
         var record = world.registrations().get(id);
         if (record == null) return Check.NONE; // removed since its chunk loaded
         var d = record.device();
-        var wanted = FluidDeviceBlock.stateFor(d);
-        if (wanted == null || !d.position().dimension().equals(level.dimension().location().toString())) return Check.NONE;
+        if (d.port() || !d.position().dimension().equals(level.dimension().location().toString())) return Check.NONE;
         var at = new BlockPos(d.position().x(), d.position().y(), d.position().z());
         if (!level.hasChunkAt(at)) return Check.NONE; // unloaded since: its next load queues it again
+        if (d.position().lane() > 0) return lane(level, world, at, d);
+        var wanted = FluidDeviceBlock.stateFor(d);
+        if (wanted == null) return Check.NONE;
         var present = level.getBlockState(at);
         Outcome outcome;
         if (present.getBlock() == wanted.getBlock()) outcome = restate(level, world, at, present, d) ? Outcome.RESTATED : Outcome.NOTHING;
@@ -94,6 +106,73 @@ public final class RegistryRealignment {
             outcome = Outcome.PLACED;
         } else return world.hold(id, true) ? new Check(Outcome.HELD, false) : Check.NONE;
         return new Check(outcome, d.held() && world.hold(id, false));
+    }
+
+    /**
+     * Rack lane {@code d} (plan 4.2 item 3): its rack cell at {@code at} takes the frame the registry holds for the cell's
+     * lanes, and its copy rebuilds the lanes from their registrations ({@link PipeRackBlockEntity#bind}). A free cell gets
+     * a rack of that frame. A lane its cell cannot carry, or whose cell another block holds, is held.
+     */
+    private static Check lane(ServerLevel level, FluidWorldAuthority world, BlockPos at, PhysicalFluidTopology.Device d) {
+        var present = level.getBlockState(at);
+        var recorded = recordedFrame(world, d.position());
+        Outcome outcome;
+        if (present.getBlock() instanceof PipeRackBlock racks) {
+            boolean changed = recorded != null && !recorded.equals(PipeRackBlock.frame(present));
+            if (changed) level.setBlock(at, racks.stateFor(recorded), Block.UPDATE_ALL);
+            if (!(level.getBlockEntity(at) instanceof PipeRackBlockEntity rack)) return Check.NONE;
+            if (changed || !rack.carries(d.id())) {
+                rack.bind(world);
+                changed = true;
+            }
+            if (!rack.carries(d.id())) return hold(world, d);
+            outcome = changed ? Outcome.RESTATED : Outcome.NOTHING;
+        } else if (present.isAir() || present.canBeReplaced()) {
+            var frame = recorded != null ? recorded : derivedFrame(world, d.position());
+            if (frame == null) return hold(world, d);
+            level.setBlock(at, ModBlocks.PIPE_RACK.get().stateFor(frame), Block.UPDATE_ALL);
+            if (!(level.getBlockEntity(at) instanceof PipeRackBlockEntity rack)) return Check.NONE;
+            rack.bind(world);
+            if (!rack.carries(d.id())) return hold(world, d);
+            outcome = Outcome.PLACED;
+        } else return hold(world, d);
+        return new Check(outcome, d.held() && world.hold(d.id(), false));
+    }
+
+    private static Check hold(FluidWorldAuthority world, PhysicalFluidTopology.Device d) {
+        return world.hold(d.id(), true) ? new Check(Outcome.HELD, false) : Check.NONE;
+    }
+
+    /** The registered lanes of the rack cell at {@code cell}, in option order. */
+    private static List<PhysicalFluidTopology.Device> lanes(FluidWorldAuthority world, PhysicalFluidTopology.Position cell) {
+        var out = new ArrayList<PhysicalFluidTopology.Device>();
+        for (int option = 0; option < RackGeometry.OPTIONS; option++)
+            world.at(cell.withLane(option + 1)).ifPresent(r -> out.add(r.device()));
+        return out;
+    }
+
+    /** The frame the registry holds for the rack cell at {@code cell}: its lowest lane identity's, or null where none holds one. */
+    private static WorldTopologyLedger.@Nullable RackFrame recordedFrame(FluidWorldAuthority world, PhysicalFluidTopology.Position cell) {
+        WorldTopologyLedger.RackFrame frame = null;
+        long lowest = Long.MAX_VALUE;
+        for (var d : lanes(world, cell)) {
+            var held = world.rackFrame(d.id());
+            if (held != null && d.id() < lowest) {
+                frame = held;
+                lowest = d.id();
+            }
+        }
+        return frame;
+    }
+
+    /**
+     * A frame for a rack cell whose lanes were saved before the registry kept frames (schema 8 and older): the first that
+     * takes every lane at its registered points, straight cells first. The lanes stand where they stood; where the points
+     * leave the shape open, the cell may come back straight. Null where no frame takes them all.
+     */
+    private static WorldTopologyLedger.@Nullable RackFrame derivedFrame(FluidWorldAuthority world, PhysicalFluidTopology.Position cell) {
+        var frames = PipeRackBlockEntity.frames(lanes(world, cell));
+        return frames.isEmpty() ? null : PipeRackBlock.frame(frames.getFirst());
     }
 
     /** The block of {@code d} stands at {@code at}: it takes {@code d}'s facing and fittings, and its identity. Whether anything changed. */

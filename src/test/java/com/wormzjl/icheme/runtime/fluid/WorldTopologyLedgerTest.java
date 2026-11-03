@@ -137,6 +137,28 @@ class WorldTopologyLedgerTest {
         assertEquals(Map.of(2L,red),ledger.snapshot().builds().paints());assertNotSame(before.builds(),ledger.snapshot().builds());
     }
     /**
+     * Schema 9: a rack lane's rack frame is a build fact of its identity. Only a rack lane takes one; it survives a save,
+     * and it leaves with its lane when the removal applies, as a line's paint does.
+     */
+    @Test void aRackFrameIsALanesAndLeavesWhenItsRemovalApplies() {
+        var along=1<<PhysicalFluidTopology.Direction.WEST.ordinal()|1<<PhysicalFluidTopology.Direction.EAST.ordinal();
+        var old=at(2,20);
+        var lane=new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0,3),Kind.PIPE,PhysicalFluidTopology.Direction.EAST,
+                old.device().geometry(),old.device().control(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,along,2,0),old.spec(),0);
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,lane,2L,old),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var tee=new WorldTopologyLedger.RackFrame(PhysicalFluidTopology.Direction.NORTH,WorldTopologyLedger.RackShape.TEE);
+        assertThrows(IllegalArgumentException.class,()->ledger.rack(2,tee),"a block takes no rack frame");
+        assertThrows(IllegalArgumentException.class,()->new WorldTopologyLedger.RackFrame(PhysicalFluidTopology.Direction.UP,WorldTopologyLedger.RackShape.STRAIGHT),"a rack faces a horizontal direction");
+        var before=ledger.snapshot();ledger.rack(1,tee);
+        assertEquals(tee,ledger.rack(1));assertNotSame(before.builds(),ledger.snapshot().builds());
+        var saved=ledger.snapshot();var restored=new WorldTopologyLedger(FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(saved),saved.onlineTick(),NO_RECOVERIES));
+        assertEquals(Map.of(1L,tee),restored.snapshot().builds().racks(),"the frame survives a save");
+        ledger.commit(ledger.queue(List.of(new WorldTopologyLedger.Edit(1,null)),Set.of(1L),3));
+        assertEquals(tee,ledger.rack(1),"a queued removal keeps the frame");
+        ledger.commit(applyFirst(ledger,List.of(),List.of(),new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],3));
+        assertNull(ledger.rack(1),"the applied removal took the frame");assertTrue(ledger.snapshot().builds().racks().isEmpty());
+    }
+    /**
      * A crystal is its component in another phase (owner decision D23): a pilot tank placed holding CO2 in N2 below its
      * frost point and broken after its refresh deposited CO2-I books the same component moles and total energy destroyed
      * as constructed. The dry ice enters the destroyed totals as CO2 moles with its true energy (its stored sensible part
