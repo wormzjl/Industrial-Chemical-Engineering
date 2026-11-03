@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** faf06e629 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example; Delete in Open)
+**Snapshot:** d120746df (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example; Delete in Open; a drag on empty canvas pans)
 
 Up: [code guide](README.md)
 
@@ -173,7 +173,7 @@ The file keeps fields it does not know and refuses a newer format and an older o
   - `SheetLayout` places boxes, ports and routes and answers hit tests.
   - `SheetPainter` draws them with the `Symbol` atlas (`textures/gui/flowsheet/symbols.png`). The grid, each line, circle and valve, the hatch and the tear are each one batch (`Canvas.batch`, [client-gui](client-gui.md)): the sample's Flowsheet tab went from 3,486 draw calls a frame to 718 (the render tool's `-Dcount`), and `DrawCallTest` holds the sheet's drawing to 360.
   - `SheetView` pans and zooms.
-  - `SheetGestures` turns mouse events into edits.
+  - `SheetGestures` turns mouse events into edits. A press where `SheetLayout.at` finds nothing pans (`Mode.PAN`): the game sends `mouseMoved` before each `mouseDragged` at the same point, so the cursor (`lastX`) follows every move and a pan steps from where the last drag left it (`heldX`). Unit, pill and segment moves measure from the press. `SheetGesturesTest` drags as the game sends it.
   - `SheetEditor` applies them, with undo and redo.
   - `Tiles` is the palette.
   - `ColumnBlock` draws a column with its members inside a boundary.
@@ -261,7 +261,7 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | Open's Delete: which rows go, the folder guard, the open sheet's name | `FileColumns.deletable`, `delete`, `nameAfterDelete`, `ProcessSimulatorScreen` (`Dialog.DELETE`) | `OpenDeleteTest`, `SimulatorBlockTest` (the keys) |
 | The block's store, uploads and packets ([packets](#packets-and-protocol), [block](#the-block-and-its-store)) | `SheetStore`, `SheetBody`, `ProcessSimulatorNetwork`, `ProcessSimulatorBlockEntity` | `SheetStoreTest`, `SimulatorBlockTest`, `ProcessSimulatorGameTests` |
 | Sent designs and Import | `SheetSizing.designs`, `SentDesign`, `SentDesignTags`, `EquipmentNetwork` | `SentDesignTagsTest` (the corpus), `ProcessSimulatorGameTests.aConstructorImportsTheNearestSimulatorsDesign` |
-| The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `StreamFlowBasisTest` (the flow basis), `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`, `DrawCallTest` (draw calls); renders: `tools/heat-gui-renders/SimulatorRender.java` (`-Dcount`: draw calls per page; `-Dbasis`: MOLE, MASS or VOLUME) |
+| The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `StreamFlowBasisTest` (the flow basis), `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`, `DrawCallTest` (draw calls); renders: `tools/heat-gui-renders/SimulatorRender.java` (`-Donly=run-key`: the Run key's options; `-Dcount`: draw calls per page; `-Dbasis`: MOLE, MASS or VOLUME) |
 | The runner and Stop | `SimulatorRunner` | `SimulatorRunnerTest`, `SimulatorRunTest` (slow: Stop inside a column) |
 | A new kind | `FlowsheetCatalog`, `SizingCoverage` (both in `src/test`) | `FlowsheetPaletteCoverageTest`, `SizingCoverageTest` |
 
