@@ -1820,6 +1820,7 @@
   "gui.icheme.flowsheet.frame.redo": "やり直し",
   "gui.icheme.flowsheet.frame.fit": "全体",
   "gui.icheme.flowsheet.hint.run": "シミュレーターに実行スレッドが用意されると、ここから実行が始まります。",
+  "gui.icheme.flowsheet.hint.run_due": "結果が古くなっています。フローシートを実行してください。",
   "gui.icheme.flowsheet.hint.block": "シートを保持するプロセスシミュレーターブロックを待っています。",
   "gui.icheme.flowsheet.hint.clipboard": "コピーや貼り付けできるものはまだありません。",
   "gui.icheme.flowsheet.hint.sizing": "シートの実行が定常になると、寸法決定が開きます。",

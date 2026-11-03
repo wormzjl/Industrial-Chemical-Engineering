@@ -1820,6 +1820,7 @@
   "gui.icheme.flowsheet.frame.redo": "Rétablir",
   "gui.icheme.flowsheet.frame.fit": "Ajuster",
   "gui.icheme.flowsheet.hint.run": "Un calcul démarre ici dès que le simulateur a son fil de calcul.",
+  "gui.icheme.flowsheet.hint.run_due": "Les résultats ne sont plus à jour : lancez le schéma.",
   "gui.icheme.flowsheet.hint.block": "Ceci attend le bloc Simulateur de procédé, qui conserve le schéma.",
   "gui.icheme.flowsheet.hint.clipboard": "Rien à copier ni à coller pour l'instant.",
   "gui.icheme.flowsheet.hint.sizing": "Le dimensionnement s'ouvre dès qu'un calcul du schéma est en régime permanent.",

@@ -353,6 +353,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private SkinButton add(Column.Button spec, Rect at) {
         var button = SkinButton.of(spec, at, door == null || dialog != Dialog.NONE ? this::act : this::actDoor, ProcessSimulatorScreen::skin);
         if ((spec.key().equals("run") || spec.key().equals("size_all")) && spec.active()) button.primary(true);
+        // Run: its ▶, lit amber while the results are out of date (the owner, 2026-11-04, option C).
+        if (spec.key().equals("run")) button.sign(Skin.Icon.RUN).due(spec.active() && SimulatorPage.runDue(context(), host));
         addRenderableWidget(button);
         return button;
     }
@@ -552,7 +554,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private String signature(SheetContext x) {
         var shown = shownDoor(x);
         var text = new StringBuilder().append(tab).append(dialog).append(door).append(doorView.tab).append(doorView.connection).append(doorView.index).append(doorView.phase).append(doorView.results).append(doorView.metric);
-        text.append(gestures.selected()).append(gestures.naming() == null ? "" : gestures.naming().target()).append(category).append(resultsState.view).append(host.running() == null).append(editor.canUndo()).append(editor.canRedo());
+        text.append(gestures.selected()).append(gestures.naming() == null ? "" : gestures.naming().target()).append(category).append(resultsState.view).append(host.running() == null).append(editor.canUndo()).append(editor.canRedo()).append(SimulatorPage.runDue(x, host));
         text.append(x.units());
         if (shown != null) for (var rows : shown.columns()) text.append(rows.size()).append(SimulatorPage.keys(rows));
         if (shown != null) text.append(shown.glass().slots(new Rect(0, 0, 400, 400)).stream().map(Door.Slot::key).toList());

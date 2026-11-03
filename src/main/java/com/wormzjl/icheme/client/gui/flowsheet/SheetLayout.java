@@ -562,15 +562,39 @@ public final class SheetLayout {
         for (var line : lines.values())
             if (line.hasName() && name(line).contains(x, y)) return new Hit(Kind.NAME, null, null, line.stream().id(), 0, false);
         for (var box : boxes.values())
-            if (box.rect().contains(x, y)) return new Hit(Kind.UNIT, null, box.unit().id(), null, 0, false);
+            if (grabs(box, x, y, reach)) return new Hit(Kind.UNIT, null, box.unit().id(), null, 0, false);
         for (var line : lines.values()) {
             int[] p = line.points();
-            for (int i = 0; i + 3 < p.length; i += 2) {
-                double dx = Math.max(Math.min(p[i], p[i + 2]) - x, x - Math.max(p[i], p[i + 2])), dy = Math.max(Math.min(p[i + 1], p[i + 3]) - y, y - Math.max(p[i + 1], p[i + 3]));
-                if (dx <= reach && dy <= reach) return new Hit(Kind.LINE, null, null, line.stream().id(), i / 2, false);
-            }
+            for (int i = 0; i + 3 < p.length; i += 2) if (onSegment(p, i, x, y, reach)) return new Hit(Kind.LINE, null, null, line.stream().id(), i / 2, false);
         }
         return null;
+    }
+
+    /**
+     * Whether a press at ({@code x}, {@code y}) takes the unit: a symbol's box; on a column, what is drawn: the frame's outline,
+     * the tower, the members and the pipes between them, within {@code reach}. The empty plate inside pans (the owner, 2026-11-04,
+     * "Empty inside pans", in place of D23's grab anywhere in the frame); the tag and the ports are found before.
+     */
+    private static boolean grabs(Box box, double x, double y, double reach) {
+        var block = box.block();
+        if (block == null) return box.rect().contains(x, y);
+        var f = block.frame();
+        if (x < f.x() - reach || x > f.right() + reach || y < f.y() - reach || y > f.bottom() + reach) return false;
+        if (x < f.x() + reach || x > f.right() - reach || y < f.y() + reach || y > f.bottom() - reach) return true;
+        var t = block.tower();
+        if (x >= t.x() - reach && x <= t.right() + reach && y >= t.y() - reach && y <= t.bottom() + reach) return true;
+        for (var part : block.parts()) if (part.at(x, y, reach)) return true;
+        for (var pipe : block.pipes()) {
+            int[] p = pipe.points();
+            for (int i = 0; i + 3 < p.length; i += 2) if (onSegment(p, i, x, y, reach)) return true;
+        }
+        return false;
+    }
+
+    /** Whether ({@code x}, {@code y}) lies within {@code reach} of the straight segment from point {@code i} of {@code p} to the next. */
+    private static boolean onSegment(int[] p, int i, double x, double y, double reach) {
+        double dx = Math.max(Math.min(p[i], p[i + 2]) - x, x - Math.max(p[i], p[i + 2])), dy = Math.max(Math.min(p[i + 1], p[i + 3]) - y, y - Math.max(p[i + 1], p[i + 3]));
+        return dx <= reach && dy <= reach;
     }
 
     /** The box a unit's tag stands in, as the painter places it at full size: a column's is the plate on its frame's top edge. */

@@ -1820,6 +1820,7 @@
   "gui.icheme.flowsheet.frame.redo": "Rehacer",
   "gui.icheme.flowsheet.frame.fit": "Ajustar",
   "gui.icheme.flowsheet.hint.run": "Una ejecución empieza aquí cuando el simulador tenga su hilo de ejecución.",
+  "gui.icheme.flowsheet.hint.run_due": "Los resultados están desactualizados: ejecuta el diagrama.",
   "gui.icheme.flowsheet.hint.block": "Esto espera al bloque Simulador de procesos, que guarda el diagrama.",
   "gui.icheme.flowsheet.hint.clipboard": "Aún no hay nada que copiar ni pegar.",
   "gui.icheme.flowsheet.hint.sizing": "El dimensionado se abre cuando una ejecución del diagrama queda estacionaria.",

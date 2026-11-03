@@ -1820,6 +1820,7 @@
   "gui.icheme.flowsheet.frame.redo": "Redo",
   "gui.icheme.flowsheet.frame.fit": "Fit",
   "gui.icheme.flowsheet.hint.run": "A run starts here once the simulator has its run thread.",
+  "gui.icheme.flowsheet.hint.run_due": "The results are out of date: run the sheet.",
   "gui.icheme.flowsheet.hint.block": "This waits for the Process Simulator block, which keeps the sheet.",
   "gui.icheme.flowsheet.hint.clipboard": "Nothing to copy or paste yet.",
   "gui.icheme.flowsheet.hint.sizing": "Sizing opens once a run of the sheet stands steady.",

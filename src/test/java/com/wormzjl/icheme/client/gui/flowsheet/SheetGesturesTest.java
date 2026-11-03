@@ -149,6 +149,54 @@ class SheetGesturesTest {
         assertEquals(SheetGestures.Mode.IDLE, gestures.mode());
     }
 
+    /**
+     * The owner, 2026-11-04, "Empty inside pans": inside a column's frame only what is drawn grabs the column (its outline, tag,
+     * members, ports and pipes); a drag from the empty plate pans like the rest of the canvas.
+     */
+    @Test
+    void aColumnFramesEmptyInsidePansAndItsOutlineAndTagStillGrabIt() {
+        editor = SheetFixture.editor(SheetFixture.sample());
+        gestures = new SheetGestures(editor, view, doors::add);
+        var layout = editor.layout();
+        var frame = layout.box("T-101").block().frame();
+        double ex = -1, ey = -1, bx = -1, by = -1;
+        for (int y = frame.y() + 8; y < frame.bottom() - 8 && ex < 0; y += 2)
+            for (int x = frame.x() + 8; x < frame.right() - 8; x += 2)
+                if (layout.at(x, y, view.zoom()) == null) {
+                    ex = x;
+                    ey = y;
+                    break;
+                }
+        assertTrue(ex >= 0, "the frame has an empty inside");
+        for (int y = frame.y(); y <= frame.bottom() && bx < 0; y++) {
+            var hit = layout.at(frame.x(), y, view.zoom());
+            if (hit != null && hit.kind() == SheetLayout.Kind.UNIT) {
+                bx = frame.x();
+                by = y;
+            }
+        }
+        assertTrue(bx >= 0, "the outline is the column's");
+
+        byte[] before = FlowsheetFile.write(editor.sheet());
+        double x0 = view.canvasX(0);
+        drag(ex, ey, ex + 40, ey);
+        assertEquals(x0 + 40, view.canvasX(0), 1e-9, "the empty inside pans");
+        assertArrayEquals(before, FlowsheetFile.write(editor.sheet()), "and moves nothing");
+
+        gestures.press(view.canvasX(bx), view.canvasY(by), 0, time);
+        assertEquals(new SheetGestures.Selection(true, "T-101"), gestures.selected(), "a press on the outline takes the column");
+        assertEquals(SheetGestures.Mode.MOVE_UNIT, gestures.mode());
+        gestures.release(view.canvasX(bx), view.canvasY(by), 0);
+        time += 1000;
+        var tag = layout.tag(layout.box("T-101"));
+        gestures.press(view.canvasX(tag.x() + tag.w() / 2.0), view.canvasY(tag.y() + tag.h() / 2.0), 0, time);
+        assertEquals(new SheetGestures.Selection(true, "T-101"), gestures.selected(), "and on its tag");
+        assertEquals(SheetGestures.Mode.MOVE_UNIT, gestures.mode());
+        gestures.release(view.canvasX(tag.x() + tag.w() / 2.0), view.canvasY(tag.y() + tag.h() / 2.0), 0);
+        var tower = layout.box("T-101").block().tower();
+        assertEquals("T-101", layout.at(tower.x() + tower.w() / 2.0, tower.y() + tower.h() / 2.0, view.zoom()).unit(), "and on the tower");
+    }
+
     @Test
     void aDragMovesAUnitOnTheGridInOneStep() {
         drag(midX("p"), midY("p"), midX("p") + 33, midY("p") + 17);

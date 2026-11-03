@@ -1820,6 +1820,7 @@
   "gui.icheme.flowsheet.frame.redo": "重做",
   "gui.icheme.flowsheet.frame.fit": "适配",
   "gui.icheme.flowsheet.hint.run": "模拟器有了运行线程后，运行从这里启动。",
+  "gui.icheme.flowsheet.hint.run_due": "结果已过时：请运行流程图。",
   "gui.icheme.flowsheet.hint.block": "这要等流程模拟器方块，流程图由它保存。",
   "gui.icheme.flowsheet.hint.clipboard": "还没有可复制或粘贴的内容。",
   "gui.icheme.flowsheet.hint.sizing": "流程图运行达到稳态后，才能选型。",

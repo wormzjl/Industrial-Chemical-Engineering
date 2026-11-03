@@ -7,9 +7,18 @@ package com.wormzjl.icheme.client.gui.common.kit;
  * bar). {@link #PLAIN} is the look the screens drew before; {@link PanelSkin} draws a control panel door, light or dark.
  */
 public interface Skin {
-    /** A button's state: at rest, switched off, latched (the page or the side shown), the confirm button (Apply). */
+    /**
+     * A button's state: at rest, switched off, latched (the page or the side shown), the confirm button (Apply), and the
+     * confirm button lit because its action is due (the simulator's Run while the results are out of date; IEC 60073 amber,
+     * attention needed).
+     */
     enum Press {
-        REST, OFF, CURRENT, PRIMARY
+        REST, OFF, CURRENT, PRIMARY, DUE;
+
+        /** Whether a press of it acts. */
+        public boolean acts() {
+            return this == REST || this == PRIMARY || this == DUE;
+        }
     }
 
     /** A row colour named by the palette ({@link Palette#TEXT}, {@link Palette#MUTED}, {@link Palette#ACCENT}, {@link Palette#WARN}) in this skin. */
@@ -62,11 +71,28 @@ public interface Skin {
 
     /** A button {@code r} with its text, {@code hover} while the pointer or the keyboard is on it. */
     default void button(Canvas c, Rect r, String text, Press press, boolean hover) {
-        boolean active = press == Press.REST || press == Press.PRIMARY;
+        boolean active = press.acts();
         c.fill(r.x(), r.y(), r.right(), r.bottom(), hover && active ? 0xFFFFFFFF : 0xFF000000);
-        c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.bottom() - 1, active ? 0xFF6F6F6F : 0xFF2C2C2C);
-        centred(c, r, text, active ? 0xFFFFFFFF : 0xFFA0A0A0);
+        c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.bottom() - 1, press == Press.DUE ? 0xFF8F6B00 : active ? 0xFF6F6F6F : 0xFF2C2C2C);
+        centred(c, r, text, legend(press));
     }
+
+    /** The colour of a button's word in {@code press}. */
+    default int legend(Press press) {
+        return press.acts() ? 0xFFFFFFFF : 0xFFA0A0A0;
+    }
+
+    /** A button {@code r} with {@code sign} before its word, both in its legend's colour, centred together. */
+    default void signButton(Canvas c, Rect r, Icon sign, String text, Press press, boolean hover) {
+        button(c, r, "", press, hover);
+        String shown = c.measure().cut(text, r.w() - 6 - SIGN);
+        int x = r.x() + (r.w() - c.measure().width(shown) - SIGN) / 2, y = r.y() + (r.h() - 9) / 2 + 1;
+        sign(c, x, y, sign, legend(press));
+        c.text(shown, x + SIGN, y, legend(press));
+    }
+
+    /** What a sign before a word takes: the sign and its gap. */
+    int SIGN = 7;
 
     /**
      * A split bar {@code r}: {@code amounts} side by side in {@code colours}, each as wide as its share of their sum; empty
@@ -95,9 +121,20 @@ public interface Skin {
         });
     }
 
-    /** A sign a key shows instead of a word: the theme's contrast sign, a ring half filled. */
+    /** A sign a key shows instead of a word or before it: the theme's contrast sign, a ring half filled; Run's ▶. */
     enum Icon {
-        THEME
+        THEME, RUN
+    }
+
+    /** A sign before a word ({@link #signButton}), its top left at ({@code x}, {@code y}), the text's top: RUN is a ▶ 4 px wide and 7 tall. */
+    static void sign(Canvas c, int x, int y, Icon icon, int argb) {
+        if (icon == Icon.THEME) {
+            icon(c, new Rect(x - 3, y - 2, 10, 10), icon, argb);
+            return;
+        }
+        c.batch(() -> {
+            for (int i = 0; i < 7; i++) c.fill(x, y + i, x + 1 + Math.min(i, 6 - i), y + i + 1, argb);
+        });
     }
 
     /** A key {@code r} with {@code icon} on its face instead of a word, {@code hover} as for a button. */
@@ -109,6 +146,10 @@ public interface Skin {
     /** {@code icon} centred in {@code r}, 10 by 10 px, in {@code argb}. */
     static void icon(Canvas c, Rect r, Icon icon, int argb) {
         int x0 = r.x() + (r.w() - 10) / 2, y0 = r.y() + (r.h() - 10) / 2;
+        if (icon == Icon.RUN) {
+            sign(c, x0 + 3, y0 + 1, icon, argb);
+            return;
+        }
         // THEME: a ring of radius 5 round pixel centres, its left half filled.
         c.batch(() -> {
             for (int y = 0; y < 10; y++)

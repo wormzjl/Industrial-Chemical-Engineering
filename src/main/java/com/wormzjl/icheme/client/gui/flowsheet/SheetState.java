@@ -210,6 +210,14 @@ public final class SheetState {
         return !stale.isEmpty();
     }
 
+    /**
+     * Whether the results are out of date: no run yet on a sheet with something on it, or edits greyed something since the
+     * run, which the status line says as "Changed since the last run" ({@link #edited}). Run is lit while it is.
+     */
+    public boolean outOfDate() {
+        return results == null ? !sheet.units().isEmpty() || !sheet.streams().isEmpty() : edited();
+    }
+
     /** Whether edits have greyed a unit or stream. */
     public boolean stale(String id) {
         return stale.contains(id);

@@ -59,12 +59,20 @@ public final class SimulatorPage {
         var foot = frame.footer();
         boolean running = host.running() != null;
         slots.add(new Slot(new Column.Button("close", x.t().get("fluid.close"), true, null), foot.get(0)));
-        slots.add(new Slot(new Column.Button("run", x.text("frame.run"), host.canRun() && !running && !reader, host.canRun() ? null : x.text("hint.run")), foot.get(1)));
+        slots.add(new Slot(new Column.Button("run", x.text("frame.run"), host.canRun() && !running && !reader, !host.canRun() ? x.text("hint.run") : runDue(x, host) ? x.text("hint.run_due") : null), foot.get(1)));
         slots.add(new Slot(new Column.Button("stop", x.text("frame.stop"), running, null), foot.get(2)));
         if (foot.size() > 3) {
             slots.add(new Slot(new Column.Button("undo", x.text("frame.undo"), editor.canUndo(), null), foot.get(3)));
             slots.add(new Slot(new Column.Button("redo", x.text("frame.redo"), editor.canRedo(), null), foot.get(4)));
         }
+    }
+
+    /**
+     * Whether Run is lit (the owner, 2026-11-04, option C: "lit when out of date"): it can act, and the results are out of
+     * date as the status line says ({@link SheetState#outOfDate}). While a run is going Run is off and Stop on.
+     */
+    public static boolean runDue(SheetContext x, SimulatorHost host) {
+        return host.canRun() && host.running() == null && !host.reader() && x.state().outOfDate();
     }
 
     /** The display keys. */
