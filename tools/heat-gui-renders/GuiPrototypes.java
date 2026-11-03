@@ -809,6 +809,7 @@ public final class GuiPrototypes {
         var door = new Door(canvas, skin, p.width(), p.height(), end);
         skin.page(canvas, new Rect(0, 0, p.width(), p.height()));
         p.body().accept(door, skin);
+        canvas.count(p.file() + " " + (skin == PanelSkin.LIGHT ? "light" : skin == PanelSkin.DARK ? "dark" : "plain") + (end ? " end" : ""));
         g.dispose();
         return image;
     }

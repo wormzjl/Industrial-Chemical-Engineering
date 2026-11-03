@@ -84,8 +84,10 @@ public final class SheetPainter {
         var box = view.box();
         int step = Math.max(8, (int) Math.round(DESIGN_GRID * view.zoom()));
         int ox = Math.floorMod((int) Math.round(view.canvasX(0)) - box.x() + step / 2, step), oy = Math.floorMod((int) Math.round(view.canvasY(0)) - box.y() + step / 2, step);
-        for (int y = box.y() + oy; y < box.bottom(); y += step)
-            for (int x = box.x() + ox; x < box.right(); x += step) c.fill(x, y, x + 1, y + 1, GRID);
+        c.batch(() -> {
+            for (int y = box.y() + oy; y < box.bottom(); y += step)
+                for (int x = box.x() + ox; x < box.right(); x += step) c.fill(x, y, x + 1, y + 1, GRID);
+        });
     }
 
     private static void unit(FlowsheetPainter p, SheetLayout layout, SheetLayout.Box box, SheetState state, SheetGestures.@Nullable Selection selected, HeatControlColumn.Texts t) {
@@ -209,7 +211,9 @@ public final class SheetPainter {
         int x0 = p.x(r.x()), y0 = p.y(r.y()), x1 = p.x(r.right()), y1 = p.y(r.bottom()), pw = x1 - x0, ph = y1 - y0;
         p.box(x0, y0, x1, y1, Look.RED);
         c.clip(new Rect(x0 + 1, y0 + 1, pw - 2, ph - 2));
-        for (int k = -ph; k < pw; k += 8) p.line(x0 + k, y1, x0 + k + ph, y0, HATCH);
+        c.batch(() -> {
+            for (int k = -ph; k < pw; k += 8) p.line(x0 + k, y1, x0 + k + ph, y0, HATCH);
+        });
         c.unclip();
         if (!p.labels()) return;
         p.fitted(Tiles.typeName(box.unit().type()), r.x() + r.w() / 2, r.y() + r.h() / 2 - 6, r.w(), Look.RED.text());
@@ -274,7 +278,9 @@ public final class SheetPainter {
     private static void tear(FlowsheetPainter p, int x, int y) {
         var c = p.canvas();
         int cx = p.x(x), cy = p.y(y), r = Math.max(4, p.px(7));
-        for (int dy = -r; dy <= r; dy++) c.hLine(cx - (r - Math.abs(dy)), cx + (r - Math.abs(dy)), cy + dy, Palette.ACCENT);
+        c.batch(() -> {
+            for (int dy = -r; dy <= r; dy++) c.hLine(cx - (r - Math.abs(dy)), cx + (r - Math.abs(dy)), cy + dy, Palette.ACCENT);
+        });
         if (p.labels()) c.text("T", cx - 2, cy - 3, 0xFF0B1216);
     }
 

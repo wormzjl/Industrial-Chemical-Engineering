@@ -93,9 +93,39 @@ public final class GuiCanvas implements Canvas {
         g.pose().popPose();
     }
 
-    /** One linear page, no mip levels: at scale 2 and zoom 1 a texture pixel lies near a screen pixel, and vanilla has no chain for a plain texture. */
+    /**
+     * Batches open on the render thread, across every canvas on the frame's {@code GuiGraphics}: {@code drawManaged}
+     * ends managed drawing when its body returns, so only the outermost batch opens one.
+     */
+    private static int batches;
+
+    /**
+     * The body in {@code drawManaged}: its fills wait in the shared buffer and go out as one draw call, where unmanaged
+     * each fill flushes. Order stays: the buffer holds one render type at a time (a text ends the fills before it), a
+     * scissor change flushes when managed, and {@link #sprite} flushes before its blit.
+     */
+    @Override
+    @SuppressWarnings("deprecation")
+    public void batch(Runnable body) {
+        if (batches > 0) {
+            body.run();
+            return;
+        }
+        batches++;
+        try {
+            g.drawManaged(body);
+        } finally {
+            batches--;
+        }
+    }
+
+    /**
+     * One linear page, no mip levels: at scale 2 and zoom 1 a texture pixel lies near a screen pixel, and vanilla has no
+     * chain for a plain texture. The blit draws at once, so the fills a batch holds go out first.
+     */
     @Override
     public void sprite(Sprite sprite, float x0, float y0, float x1, float y1, int argb) {
+        g.flush();
         var location = ResourceLocation.parse(sprite.texture());
         Minecraft.getInstance().getTextureManager().getTexture(location).setFilter(true, false);
         RenderSystem.enableBlend();

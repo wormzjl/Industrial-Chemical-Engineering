@@ -1028,12 +1028,14 @@ public final class SizingPage {
         double top = path.from() + path.head(), floor = Math.min(path.to(), top - path.lost());
         double low = Math.max(0, Math.min(floor, path.to()) - .1 * (top - floor + 1e-9)), span = Math.max(1e-9, top - low);
         int n = path.steps().size() + 1, w = Math.max(2, r.w() / n);
-        double at = top;
-        for (int i = 0; i < n; i++) {
-            if (i > 0) at -= path.steps().get(i - 1).lost();
-            int h = (int) Math.round(r.h() * (at - low) / span);
-            c.fill(r.x() + i * w + 1, r.bottom() - Math.max(1, h), r.x() + (i + 1) * w - 1, r.bottom(), Palette.LINE);
-        }
+        c.batch(() -> {
+            double at = top;
+            for (int i = 0; i < n; i++) {
+                if (i > 0) at -= path.steps().get(i - 1).lost();
+                int h = (int) Math.round(r.h() * (at - low) / span);
+                c.fill(r.x() + i * w + 1, r.bottom() - Math.max(1, h), r.x() + (i + 1) * w - 1, r.bottom(), Palette.LINE);
+            }
+        });
         int set = r.bottom() - (int) Math.round(r.h() * (path.to() - low) / span);
         c.hLine(r.x(), r.x() + n * w, set, path.set() ? colour(path.rating().lamp()) : Palette.MUTED);
     }

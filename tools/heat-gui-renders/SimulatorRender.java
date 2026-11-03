@@ -338,7 +338,12 @@ public final class SimulatorRender {
     // ---- The sheets ----
 
     private static BufferedImage page(int w, int h, Skin skin, BiConsumer<GuiPrototypes.Door, Skin> body) {
-        return GuiPrototypes.render(new GuiPrototypes.Prototype("x", w, h, body), skin, false);
+        return page("page", w, h, skin, body);
+    }
+
+    /** A page named {@code name} in the draw-call count ({@code -Dcount}). */
+    private static BufferedImage page(String name, int w, int h, Skin skin, BiConsumer<GuiPrototypes.Door, Skin> body) {
+        return GuiPrototypes.render(new GuiPrototypes.Prototype(name, w, h, body), skin, false);
     }
 
     /** The pages one under another, a file for each door. */
@@ -347,7 +352,7 @@ public final class SimulatorRender {
             var pages = new ArrayList<BufferedImage>();
             var names = new ArrayList<String>();
             for (int i = 0; i < bodies.size(); i++) {
-                pages.add(page(w, h, skin, bodies.get(i)));
+                pages.add(page(file + " | " + titles.get(i), w, h, skin, bodies.get(i)));
                 names.add(titles.get(i) + (skin == PanelSkin.LIGHT ? " (light door)" : " (dark door)"));
             }
             SimulatorPrototypes.stack(out.resolve(file + (skin == PanelSkin.LIGHT ? "" : "-dark") + ".png"), names, pages, List.of());
@@ -357,7 +362,7 @@ public final class SimulatorRender {
     private static void grid(Path out, String file, int w, int h, List<String> titles, List<BiConsumer<GuiPrototypes.Door, Skin>> bodies) throws Exception {
         for (var skin : SKINS) {
             var pages = new ArrayList<BufferedImage>();
-            for (var body : bodies) pages.add(page(w, h, skin, body));
+            for (int i = 0; i < bodies.size(); i++) pages.add(page(file + " | " + (i < titles.size() ? titles.get(i) : "#" + i), w, h, skin, bodies.get(i)));
             SimulatorPrototypes.grid(out, file + (skin == PanelSkin.LIGHT ? "" : "-dark"), titles, pages);
         }
     }

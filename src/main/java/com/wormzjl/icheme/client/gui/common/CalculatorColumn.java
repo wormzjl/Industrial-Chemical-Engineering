@@ -730,15 +730,20 @@ public final class CalculatorColumn {
         for (int i = 2; i <= n; i++) max = Math.max(max, drops[i]);
         c.fill(x, y, x + w, y + h, Palette.PANEL);
         var m = c.measure();
-        int numbered = Integer.MIN_VALUE, last = y + (n - 2) * h / (n - 1);
-        for (int i = 2; i <= n; i++) {
-            int py = y + (i - 2) * h / (n - 1), next = y + (i - 1) * h / (n - 1);
-            c.fill(x, py, x + (int) Math.round(drops[i] / max * w), Math.max(py + 1, next - 1), Palette.ACCENT);
-            if (i == 2 || i == n || (i + 1) % 5 == 0 && py - numbered >= PITCH && last - py >= PITCH) {
-                c.text(Integer.toString(i + 1), x - 4 - m.width(Integer.toString(i + 1)), py, Palette.MUTED);
-                numbered = py;
+        int last = y + (n - 2) * h / (n - 1);
+        double top = max;
+        // The bars run in one batch between their tray numbers.
+        c.batch(() -> {
+            int numbered = Integer.MIN_VALUE;
+            for (int i = 2; i <= n; i++) {
+                int py = y + (i - 2) * h / (n - 1), next = y + (i - 1) * h / (n - 1);
+                c.fill(x, py, x + (int) Math.round(drops[i] / top * w), Math.max(py + 1, next - 1), Palette.ACCENT);
+                if (i == 2 || i == n || (i + 1) % 5 == 0 && py - numbered >= PITCH && last - py >= PITCH) {
+                    c.text(Integer.toString(i + 1), x - 4 - m.width(Integer.toString(i + 1)), py, Palette.MUTED);
+                    numbered = py;
+                }
             }
-        }
+        });
         String high = Format.number(max) + " kPa";
         c.text("0", x, y + h + 5, Palette.MUTED);
         c.text(high, x + w - m.width(high), y + h + 5, Palette.MUTED);
@@ -757,11 +762,13 @@ public final class CalculatorColumn {
 
     private static void line(Canvas c, int x0, int y0, int x1, int y1, int colour) {
         int steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-        for (int i = 0; i <= steps; i++) {
-            double f = steps == 0 ? 0 : (double) i / steps;
-            int x = (int) Math.round(x0 + (x1 - x0) * f), y = (int) Math.round(y0 + (y1 - y0) * f);
-            c.fill(x, y, x + 1, y + 1, colour);
-        }
+        c.batch(() -> {
+            for (int i = 0; i <= steps; i++) {
+                double f = steps == 0 ? 0 : (double) i / steps;
+                int x = (int) Math.round(x0 + (x1 - x0) * f), y = (int) Math.round(y0 + (y1 - y0) * f);
+                c.fill(x, y, x + 1, y + 1, colour);
+            }
+        });
     }
 
     // ---- Readouts and tables on the glass ----

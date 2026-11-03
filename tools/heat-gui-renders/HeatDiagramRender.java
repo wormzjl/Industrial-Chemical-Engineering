@@ -110,6 +110,7 @@ public final class HeatDiagramRender {
         var sheet = new HeatFlowsheet(HeatDiagram.of(unit, side, c.design()), HeatDiagram.roles(unit, side));
         sheet.fit(pad, pad, HeatDiagram.WIDTH, HeatDiagram.HEIGHT);
         sheet.draw(canvas, data());
+        canvas.count(c.file() + " drawing");
         g.dispose();
         return image;
     }
@@ -331,6 +332,9 @@ public final class HeatDiagramRender {
 
         @Override
         public void sprite(Sprite s, float x0, float y0, float x1, float y1, int argb) {
+            sprites++;
+            draws++;
+            run = false;
             var hint = g.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             var at = java.awt.geom.AffineTransform.getTranslateInstance(x0, y0);
@@ -351,8 +355,42 @@ public final class HeatDiagramRender {
             return measure;
         }
 
+        /** {@code -Dcount}: print each page's draw calls as the game makes them. */
+        static final boolean COUNT = Boolean.getBoolean("count");
+
+        /**
+         * The draw calls the game makes for what this canvas drew (1.21.1 {@code GuiGraphics}: an unmanaged fill or text
+         * flushes at once, a blit draws at once): a fill outside a batch, a run of fills inside one (a text, a sprite or a
+         * clip ends the run), a text, a sprite.
+         */
+        private int draws, fills, texts, sprites, depth;
+        private boolean run;
+
+        /** This canvas's draw calls so far, with what made them. */
+        String draws() {
+            return String.format("%5d draws (%d fills, %d texts, %d sprites)", draws, fills, texts, sprites);
+        }
+
+        /** Prints this canvas's draw calls for page {@code name} when {@code -Dcount} is set. */
+        void count(String name) {
+            if (COUNT) System.out.printf("DRAWS %-60s %s%n", name, draws());
+        }
+
+        @Override
+        public void batch(Runnable body) {
+            depth++;
+            try {
+                body.run();
+            } finally {
+                if (--depth == 0) run = false;
+            }
+        }
+
         @Override
         public void fill(int x0, int y0, int x1, int y1, int argb) {
+            fills++;
+            if (depth == 0 || !run) draws++;
+            run = depth > 0;
             if (x1 <= x0 || y1 <= y0) return;
             g.setColor(new Color(argb, true));
             g.fillRect(x0, y0, x1 - x0, y1 - y0);
@@ -365,6 +403,9 @@ public final class HeatDiagramRender {
 
         @Override
         public void text(String text, float x, float y, float scale, int argb) {
+            texts++;
+            draws++;
+            run = false;
             if (font != null) {
                 font.draw(g, text, x, y, scale, new Color(argb, true));
                 return;
@@ -379,11 +420,13 @@ public final class HeatDiagramRender {
 
         @Override
         public void clip(Rect area) {
+            run = false;
             g.setClip(area.x(), area.y(), area.w(), area.h());
         }
 
         @Override
         public void unclip() {
+            run = false;
             g.setClip(null);
         }
     }
@@ -512,6 +555,7 @@ public final class HeatDiagramRender {
         view.drawBar(canvas, skin);
         if (!scrolled && skin == PanelSkin.LIGHT)
             System.out.printf(Locale.ROOT, "%-24s columns %3d px in a %d px view%s%n", c.file(), tall, controlBottom - controlTop, cutTexts(columns, m));
+        canvas.count(c.file() + " " + (skin == PanelSkin.LIGHT ? "light" : "dark") + (scrolled ? " end" : ""));
         g.dispose();
         return image;
     }

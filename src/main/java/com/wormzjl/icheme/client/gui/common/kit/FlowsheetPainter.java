@@ -91,42 +91,46 @@ public final class FlowsheetPainter {
 
     /** A line through design points {@code points}; a utility line dashed (two pixels on, one off); an arrow at its end. */
     public void wire(int[] p, boolean arrow, boolean utility, int colour) {
-        for (int i = 0; i + 3 < p.length; i += 2) {
-            int x0 = x(p[i]), y0 = y(p[i + 1]), x1 = x(p[i + 2]), y1 = y(p[i + 3]);
-            boolean across = y0 == y1;
-            int from = across ? Math.min(x0, x1) : Math.min(y0, y1), to = across ? Math.max(x0, x1) : Math.max(y0, y1);
-            for (int a = from; a <= to; a += utility ? 3 : to - from + 1) {
-                int b = utility ? Math.min(a + 1, to) : to;
-                if (across) c.hLine(a, b, y0, colour);
-                else c.fill(x0, a, x0 + 1, b + 1, colour);
+        c.batch(() -> {
+            for (int i = 0; i + 3 < p.length; i += 2) {
+                int x0 = x(p[i]), y0 = y(p[i + 1]), x1 = x(p[i + 2]), y1 = y(p[i + 3]);
+                boolean across = y0 == y1;
+                int from = across ? Math.min(x0, x1) : Math.min(y0, y1), to = across ? Math.max(x0, x1) : Math.max(y0, y1);
+                for (int a = from; a <= to; a += utility ? 3 : to - from + 1) {
+                    int b = utility ? Math.min(a + 1, to) : to;
+                    if (across) c.hLine(a, b, y0, colour);
+                    else c.fill(x0, a, x0 + 1, b + 1, colour);
+                }
             }
-        }
-        if (!arrow || p.length < 4) return;
-        int n = p.length;
-        int ex = x(p[n - 2]), ey = y(p[n - 1]), dx = Integer.signum(x(p[n - 2]) - x(p[n - 4])), dy = Integer.signum(y(p[n - 1]) - y(p[n - 3]));
-        for (int k = 0; k < 3; k++) {
-            int bx = ex - dx * k, by = ey - dy * k;
-            if (dx != 0) c.vLine(bx, by - k - 1, by + k + 1, colour);
-            else c.hLine(bx - k, bx + k, by, colour);
-        }
+            if (!arrow || p.length < 4) return;
+            int n = p.length;
+            int ex = x(p[n - 2]), ey = y(p[n - 1]), dx = Integer.signum(x(p[n - 2]) - x(p[n - 4])), dy = Integer.signum(y(p[n - 1]) - y(p[n - 3]));
+            for (int k = 0; k < 3; k++) {
+                int bx = ex - dx * k, by = ey - dy * k;
+                if (dx != 0) c.vLine(bx, by - k - 1, by + k + 1, colour);
+                else c.hLine(bx - k, bx + k, by, colour);
+            }
+        });
     }
 
     /** A straight line between canvas points, one pixel wide, at any slope. */
     public void line(int x0, int y0, int x1, int y1, int colour) {
-        int dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = Integer.signum(x1 - x0), sy = Integer.signum(y1 - y0), err = dx + dy;
-        while (true) {
-            c.fill(x0, y0, x0 + 1, y0 + 1, colour);
-            if (x0 == x1 && y0 == y1) return;
-            int e2 = 2 * err;
-            if (e2 >= dy) {
-                err += dy;
-                x0 += sx;
+        c.batch(() -> {
+            int x = x0, y = y0, dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = Integer.signum(x1 - x0), sy = Integer.signum(y1 - y0), err = dx + dy;
+            while (true) {
+                c.fill(x, y, x + 1, y + 1, colour);
+                if (x == x1 && y == y1) return;
+                int e2 = 2 * err;
+                if (e2 >= dy) {
+                    err += dy;
+                    x += sx;
+                }
+                if (e2 <= dx) {
+                    err += dx;
+                    y += sy;
+                }
             }
-            if (e2 <= dx) {
-                err += dx;
-                y0 += sy;
-            }
-        }
+        });
     }
 
     /**
@@ -134,28 +138,32 @@ public final class FlowsheetPainter {
      * the full height; 0 flat, half the height a half circle), filled and outlined.
      */
     public void vessel(int x0, int y0, int x1, int y1, int left, int right, Look look) {
-        double b = (y1 - y0) / 2.0;
-        for (int yy = y0; yy < y1; yy++) {
-            double t = Math.min(1, Math.abs(yy + 0.5 - (y0 + b)) / b);
-            double chord = 1 - Math.sqrt(Math.max(0, 1 - t * t));
-            int l = x0 + (int) Math.round(left * chord), r = x1 - 1 - (int) Math.round(right * chord);
-            c.hLine(l, r, yy, look.fill());
-            c.fill(l, yy, l + 1, yy + 1, look.stroke());
-            c.fill(r, yy, r + 1, yy + 1, look.stroke());
-        }
-        c.hLine(x0 + left / 2, x1 - 1 - right / 2, y0, look.stroke());
-        c.hLine(x0 + left / 2, x1 - 1 - right / 2, y1 - 1, look.stroke());
+        c.batch(() -> {
+            double b = (y1 - y0) / 2.0;
+            for (int yy = y0; yy < y1; yy++) {
+                double t = Math.min(1, Math.abs(yy + 0.5 - (y0 + b)) / b);
+                double chord = 1 - Math.sqrt(Math.max(0, 1 - t * t));
+                int l = x0 + (int) Math.round(left * chord), r = x1 - 1 - (int) Math.round(right * chord);
+                c.hLine(l, r, yy, look.fill());
+                c.fill(l, yy, l + 1, yy + 1, look.stroke());
+                c.fill(r, yy, r + 1, yy + 1, look.stroke());
+            }
+            c.hLine(x0 + left / 2, x1 - 1 - right / 2, y0, look.stroke());
+            c.hLine(x0 + left / 2, x1 - 1 - right / 2, y1 - 1, look.stroke());
+        });
     }
 
     /** A trapezoid, canvas pixels: its top edge {@code topInset} and its bottom edge {@code bottomInset} in from each side, filled and outlined. */
     public void trapezoid(int x0, int y0, int x1, int y1, int topInset, int bottomInset, Look look) {
-        int h = Math.max(1, y1 - y0 - 1);
-        for (int yy = y0; yy < y1; yy++) {
-            int inset = (int) Math.round(topInset + (bottomInset - topInset) * (yy - y0) / (double) h);
-            c.hLine(x0 + inset, x1 - 1 - inset, yy, yy == y0 || yy == y1 - 1 ? look.stroke() : look.fill());
-            c.fill(x0 + inset, yy, x0 + inset + 1, yy + 1, look.stroke());
-            c.fill(x1 - 1 - inset, yy, x1 - inset, yy + 1, look.stroke());
-        }
+        c.batch(() -> {
+            int h = Math.max(1, y1 - y0 - 1);
+            for (int yy = y0; yy < y1; yy++) {
+                int inset = (int) Math.round(topInset + (bottomInset - topInset) * (yy - y0) / (double) h);
+                c.hLine(x0 + inset, x1 - 1 - inset, yy, yy == y0 || yy == y1 - 1 ? look.stroke() : look.fill());
+                c.fill(x0 + inset, yy, x0 + inset + 1, yy + 1, look.stroke());
+                c.fill(x1 - 1 - inset, yy, x1 - inset, yy + 1, look.stroke());
+            }
+        });
     }
 
     /** A filled box with its outline, canvas pixels. */
@@ -166,15 +174,17 @@ public final class FlowsheetPainter {
 
     /** A box with rounded ends of radius {@code r}: rows shortened by a circle's chord at each end, canvas pixels. */
     public void rounded(int x0, int y0, int x1, int y1, int r, Look look) {
-        for (int yy = y0; yy < y1; yy++) {
-            double dy = Math.max(0, Math.max(y0 + r - yy - 0.5, yy + 0.5 - (y1 - r)));
-            int inset = (int) Math.round(r - Math.sqrt(Math.max(0, r * r - dy * dy)));
-            c.hLine(x0 + inset, x1 - 1 - inset, yy, look.fill());
-            c.fill(x0 + inset, yy, x0 + inset + 1, yy + 1, look.stroke());
-            c.fill(x1 - 1 - inset, yy, x1 - inset, yy + 1, look.stroke());
-        }
-        c.hLine(x0 + r, x1 - 1 - r, y0, look.stroke());
-        c.hLine(x0 + r, x1 - 1 - r, y1 - 1, look.stroke());
+        c.batch(() -> {
+            for (int yy = y0; yy < y1; yy++) {
+                double dy = Math.max(0, Math.max(y0 + r - yy - 0.5, yy + 0.5 - (y1 - r)));
+                int inset = (int) Math.round(r - Math.sqrt(Math.max(0, r * r - dy * dy)));
+                c.hLine(x0 + inset, x1 - 1 - inset, yy, look.fill());
+                c.fill(x0 + inset, yy, x0 + inset + 1, yy + 1, look.stroke());
+                c.fill(x1 - 1 - inset, yy, x1 - inset, yy + 1, look.stroke());
+            }
+            c.hLine(x0 + r, x1 - 1 - r, y0, look.stroke());
+            c.hLine(x0 + r, x1 - 1 - r, y1 - 1, look.stroke());
+        });
     }
 
     /** A tee: a solid block at least two pixels across. */
@@ -184,36 +194,42 @@ public final class FlowsheetPainter {
 
     /** A valve on a line across at canvas y {@code vy}, centred on {@code cx}: two triangles and its actuator above. */
     public void valve(int cx, int vy, Look look) {
-        int hw = Math.max(2, px(8)), hh = Math.max(2, px(6));
-        for (int dx = -hw; dx <= hw; dx++) {
-            int h = Math.round(hh * Math.abs(dx) / (float) hw);
-            c.vLine(cx + dx, vy - h - 1, vy + h + 1, look.stroke());
-        }
-        c.vLine(cx, vy - px(11) - 1, vy, look.stroke());
-        c.fill(cx - px(5), vy - px(16), cx + px(5) + 1, vy - px(11), look.stroke());
+        c.batch(() -> {
+            int hw = Math.max(2, px(8)), hh = Math.max(2, px(6));
+            for (int dx = -hw; dx <= hw; dx++) {
+                int h = Math.round(hh * Math.abs(dx) / (float) hw);
+                c.vLine(cx + dx, vy - h - 1, vy + h + 1, look.stroke());
+            }
+            c.vLine(cx, vy - px(11) - 1, vy, look.stroke());
+            c.fill(cx - px(5), vy - px(16), cx + px(5) + 1, vy - px(11), look.stroke());
+        });
     }
 
     /** A valve on a line down at canvas x {@code vx}, centred on {@code cy}: its actuator to the left. */
     public void valveDown(int vx, int cy, Look look) {
-        int hw = Math.max(2, px(8)), hh = Math.max(2, px(6));
-        for (int dy = -hw; dy <= hw; dy++) {
-            int w = Math.round(hh * Math.abs(dy) / (float) hw);
-            c.hLine(vx - w - 1, vx + w + 1, cy + dy, look.stroke());
-        }
-        c.hLine(vx - px(11) - 1, vx, cy, look.stroke());
-        c.fill(vx - px(16), cy - px(5), vx - px(11), cy + px(5) + 1, look.stroke());
+        c.batch(() -> {
+            int hw = Math.max(2, px(8)), hh = Math.max(2, px(6));
+            for (int dy = -hw; dy <= hw; dy++) {
+                int w = Math.round(hh * Math.abs(dy) / (float) hw);
+                c.hLine(vx - w - 1, vx + w + 1, cy + dy, look.stroke());
+            }
+            c.hLine(vx - px(11) - 1, vx, cy, look.stroke());
+            c.fill(vx - px(16), cy - px(5), vx - px(11), cy + px(5) + 1, look.stroke());
+        });
     }
 
     /** A filled circle of radius {@code r} with its outline, centred on canvas point ({@code cx}, {@code cy}). */
     public void circle(int cx, int cy, int r, Look look) {
-        for (int dy = -r; dy <= r; dy++) {
-            int half = (int) Math.round(Math.sqrt(r * r - dy * dy));
-            c.hLine(cx - half, cx + half, cy + dy, look.fill());
-            c.fill(cx - half, cy + dy, cx - half + 1, cy + dy + 1, look.stroke());
-            c.fill(cx + half, cy + dy, cx + half + 1, cy + dy + 1, look.stroke());
-        }
-        c.hLine(cx - 1, cx + 1, cy - r, look.stroke());
-        c.hLine(cx - 1, cx + 1, cy + r, look.stroke());
+        c.batch(() -> {
+            for (int dy = -r; dy <= r; dy++) {
+                int half = (int) Math.round(Math.sqrt(r * r - dy * dy));
+                c.hLine(cx - half, cx + half, cy + dy, look.fill());
+                c.fill(cx - half, cy + dy, cx - half + 1, cy + dy + 1, look.stroke());
+                c.fill(cx + half, cy + dy, cx + half + 1, cy + dy + 1, look.stroke());
+            }
+            c.hLine(cx - 1, cx + 1, cy - r, look.stroke());
+            c.hLine(cx - 1, cx + 1, cy + r, look.stroke());
+        });
     }
 
     /** A nozzle's or port's square of design size {@code size} at design point ({@code x}, {@code y}), RGB {@code rgb}, edged. */

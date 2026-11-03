@@ -35,6 +35,15 @@ public interface Canvas {
     default void sprite(Sprite sprite, float x0, float y0, float x1, float y1, int argb) {
     }
 
+    /**
+     * Runs {@code body}, a loop of fills (a shape drawn dot by dot, row by row or segment by segment). In the game, what
+     * the body draws goes out as one draw call where it can, instead of one a fill; a text, a sprite or a clip inside it
+     * still ends the fills before it. The look does not change. A batch inside a batch is part of the outer one.
+     */
+    default void batch(Runnable body) {
+        body.run();
+    }
+
     /** Draws only inside {@code area} until {@link #unclip}. */
     void clip(Rect area);
 

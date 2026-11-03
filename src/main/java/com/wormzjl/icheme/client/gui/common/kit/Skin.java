@@ -82,14 +82,17 @@ public interface Skin {
         double total = 0;
         for (double a : amounts) total += Math.max(0, a);
         if (!(total > 0)) return;
-        double at = 0;
-        int x = r.x();
-        for (int i = 0; i < amounts.length; i++) {
-            at += Math.max(0, amounts[i]);
-            int end = i == amounts.length - 1 ? r.right() : r.x() + (int) Math.round(r.w() * at / total);
-            if (end > x) c.fill(x, r.y(), end, r.bottom(), colours[i]);
-            x = Math.max(x, end);
-        }
+        double sum = total;
+        c.batch(() -> {
+            double at = 0;
+            int x = r.x();
+            for (int i = 0; i < amounts.length; i++) {
+                at += Math.max(0, amounts[i]);
+                int end = i == amounts.length - 1 ? r.right() : r.x() + (int) Math.round(r.w() * at / sum);
+                if (end > x) c.fill(x, r.y(), end, r.bottom(), colours[i]);
+                x = Math.max(x, end);
+            }
+        });
     }
 
     /** A sign a key shows instead of a word: the theme's contrast sign, a ring half filled. */
@@ -107,11 +110,13 @@ public interface Skin {
     static void icon(Canvas c, Rect r, Icon icon, int argb) {
         int x0 = r.x() + (r.w() - 10) / 2, y0 = r.y() + (r.h() - 10) / 2;
         // THEME: a ring of radius 5 round pixel centres, its left half filled.
-        for (int y = 0; y < 10; y++)
-            for (int x = 0; x < 10; x++) {
-                double d = (x - 4.5) * (x - 4.5) + (y - 4.5) * (y - 4.5);
-                if (d < 25 && (d >= 16 || x < 5)) c.fill(x0 + x, y0 + y, x0 + x + 1, y0 + y + 1, argb);
-            }
+        c.batch(() -> {
+            for (int y = 0; y < 10; y++)
+                for (int x = 0; x < 10; x++) {
+                    double d = (x - 4.5) * (x - 4.5) + (y - 4.5) * (y - 4.5);
+                    if (d < 25 && (d >= 16 || x < 5)) c.fill(x0 + x, y0 + y, x0 + x + 1, y0 + y + 1, argb);
+                }
+        });
     }
 
     /**

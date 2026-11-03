@@ -118,8 +118,10 @@ public final class AssemblyBlock {
      */
     public void draw(Canvas c, Rect box, @Nullable AssemblyReport report, @Nullable Slot selected, String name, HeatControlColumn.Texts t) {
         int step = Math.max(8, (int) Math.round(16 * scale));
-        for (int y = box.y() + Math.floorMod(oy - box.y() + step / 2, step); y < box.bottom(); y += step)
-            for (int x = box.x() + Math.floorMod(ox - box.x() + step / 2, step); x < box.right(); x += step) c.fill(x, y, x + 1, y + 1, GRID);
+        c.batch(() -> {
+            for (int y = box.y() + Math.floorMod(oy - box.y() + step / 2, step); y < box.bottom(); y += step)
+                for (int x = box.x() + Math.floorMod(ox - box.x() + step / 2, step); x < box.right(); x += step) c.fill(x, y, x + 1, y + 1, GRID);
+        });
         var p = new FlowsheetPainter(c, ox, oy, scale, 1);
         SheetPainter.block(p, block, FRAME, false, SheetPainter.NONE, slot -> look(slot, report), t);
         if (p.labels()) for (var mark : block.marks()) p.tag(t.get("flowsheet." + mark.key(), mark.argument()), mark.x(), mark.y(), .5f, Palette.TEXT, PLATE);

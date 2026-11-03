@@ -238,19 +238,22 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         return digits * 8 - 2 + (text.length() - digits) * 2;
     }
 
+    /** One batch for the whole reading: its unlit and lit segments are one draw call in the game. */
     private static void segments(Canvas c, String text, int right, int top, int on, int off) {
-        int x = right - segmentsWidth(text);
-        for (int i = 0; i < text.length(); i++) {
-            char ch = text.charAt(i);
-            if (ch == '.') {
-                c.fill(x - 1, top + 9, x + 1, top + 11, on);
-                x += 2;
-                continue;
+        c.batch(() -> {
+            int x = right - segmentsWidth(text);
+            for (int i = 0; i < text.length(); i++) {
+                char ch = text.charAt(i);
+                if (ch == '.') {
+                    c.fill(x - 1, top + 9, x + 1, top + 11, on);
+                    x += 2;
+                    continue;
+                }
+                digit(c, x, top, 0b1111111, off);
+                digit(c, x, top, bits(ch), on);
+                x += 8;
             }
-            digit(c, x, top, 0b1111111, off);
-            digit(c, x, top, bits(ch), on);
-            x += 8;
-        }
+        });
     }
 
     private static void digit(Canvas c, int x, int y, int bits, int argb) {
@@ -325,11 +328,13 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
     public void bar(Canvas c, Rect r, double share) {
         window(c, r, bar.glass());
         int x0 = r.x() + 2, n = (r.w() - 3) / 3, lit = (int) Math.round(n * share);
-        for (int s = 0; s < n; s++) {
-            boolean top = s >= n * 9 / 10;
-            int on = top ? barTop : bar.on(), off = top ? mix(bar.glass(), barTop, 0.22) : bar.off();
-            c.fill(x0 + 3 * s, r.y() + 2, x0 + 3 * s + 2, r.bottom() - 2, s < lit ? on : off);
-        }
+        c.batch(() -> {
+            for (int s = 0; s < n; s++) {
+                boolean top = s >= n * 9 / 10;
+                int on = top ? barTop : bar.on(), off = top ? mix(bar.glass(), barTop, 0.22) : bar.off();
+                c.fill(x0 + 3 * s, r.y() + 2, x0 + 3 * s + 2, r.bottom() - 2, s < lit ? on : off);
+            }
+        });
     }
 
     /** A split bar in the bar graph's window: its shares lit side by side. */
