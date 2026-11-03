@@ -2,6 +2,7 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.science.column.v3.V3ColumnInspection;
 import com.wormzjl.icheme.science.display.DisplayUnit;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
@@ -60,6 +61,26 @@ class DoorUnitsTest {
         var column = ColumnDoor.of(editor.unit("T-101").params());
         assertEquals(3e5, column.topPressure(), 1e-6, "300 kPa typed");
         assertEquals(6 * 1000 / 60.0, column.draws().getFirst().flow(), 1e-9, "6 kmol/min typed");
+    }
+
+    /** The column door's Results glass reads on the keys as its entries do (1b, 2026-11-04): Products and Tray, flows molar on the time key. */
+    @Test
+    void theColumnsResultsGlassReadsOnTheKeys() {
+        var editor = SheetFixture.editor(SheetFixture.sample());
+        var x = context(editor, KPA_PER_MINUTE);
+        assertEquals(List.of("6.0 kmol/min", "120.0 kg/min", "100.0 °C", "250.0 kPa"), values(ColumnGlass.streamPairs(x, 100, 2, 373.15, 250_000)), "Products: 100 mol/s, 2 kg/s, 373.15 K, 250 kPa");
+        var heads = ColumnGlass.productHeader(x);
+        assertEquals("kmol/min", heads.get(2));
+        assertEquals("kg/min", heads.get(4));
+        var node = new V3ColumnInspection.Node(373.15, 250_000, 100, 50, 10, 0, List.of(1.0), List.of(1.0));
+        assertEquals(List.of("100.0 °C", "250.0 kPa", "0.700 kPa", "6.0 kmol/min", "3.0 kmol/min", "0.6 kmol/min", "0.0 kmol/min"), values(ColumnGlass.nodePairs(x, node, 700)), "Tray");
+        assertEquals(List.of("100.0 °C", "2.50 bar", "0.0070 bar", "360.0 kmol/h", "180.0 kmol/h", "36.0 kmol/h", "0.0 kmol/h"), values(ColumnGlass.nodePairs(context(editor, SheetUnits.DEFAULT), node, 700)),
+                "the default keys; a tray's drop two digits finer than a pressure");
+        assertEquals("—", ColumnGlass.nodePairs(x, node, Double.NaN).get(2).get(1), "the condenser and the reboiler have no tray drop");
+    }
+
+    private static List<String> values(List<List<String>> pairs) {
+        return pairs.stream().map(pair -> pair.get(1)).toList();
     }
 
     @Test

@@ -71,12 +71,21 @@ public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.Pr
 
     /** A pressure at the digits a meter shows; typing keeps what the player typed, so nothing rounds on the way back. */
     public String p(double pascals) {
-        return number(switch (pressure) {
+        return number(digits(), pressure.display(pascals));
+    }
+
+    /** A pressure drop, two digits finer than {@link #p}: a tray's few hundred pascals still read in bar. */
+    public String drop(double pascals) {
+        return number(digits() + 2, pressure.display(pascals));
+    }
+
+    private int digits() {
+        return switch (pressure) {
             case PASCAL -> 0;
             case KILOPASCAL -> 1;
             case BAR -> 2;
             case MEGAPASCAL -> 3;
-        }, pressure.display(pascals));
+        };
     }
 
     /** Mol/s as kmol over the chosen time. */

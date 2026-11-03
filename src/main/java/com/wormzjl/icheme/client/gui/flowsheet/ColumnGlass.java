@@ -147,6 +147,29 @@ final class ColumnGlass {
         return String.format(Locale.ROOT, "%.5g", value);
     }
 
+    /** The Products view's flow, mass flow, temperature and pressure on the display keys: flows stay molar, on the time key. */
+    static List<List<String>> streamPairs(SheetContext x, double moles, double kilograms, double kelvin, double pascals) {
+        var u = x.units();
+        return List.of(List.of(c(x, "field.flow"), u.moles(moles) + " " + u.molesUnit()), List.of(c(x, "reading.mass_flow"), SheetUnits.number(1, u.time().display(kilograms)) + " " + u.time().unit("kg")),
+                List.of(c(x, "field.temperature"), u.t(kelvin) + " " + u.temperature().symbol()), List.of(c(x, "reading.pressure"), u.p(pascals) + " " + u.pressure().symbol()));
+    }
+
+    /** The Products view's table heads: its rates per the time key. */
+    static List<String> productHeader(SheetContext x) {
+        var u = x.units();
+        return List.of(c(x, "component"), c(x, "mole_percent"), u.molesUnit(), c(x, "mass_percent"), u.time().unit("kg"));
+    }
+
+    /** The Tray view's readings on the display keys; {@code dropPascals} NaN where the stage has no tray (the condenser, the reboiler). */
+    static List<List<String>> nodePairs(SheetContext x, V3ColumnInspection.Node node, double dropPascals) {
+        var u = x.units();
+        String p = " " + u.pressure().symbol(), flow = " " + u.molesUnit();
+        return List.of(List.of(c(x, "field.temperature"), u.t(node.temperatureKelvin()) + " " + u.temperature().symbol()), List.of(c(x, "reading.pressure"), u.p(node.pressurePascal()) + p),
+                List.of(c(x, "tray_dp"), Double.isNaN(dropPascals) ? "—" : u.drop(dropPascals) + p), List.of(c(x, "hc_liquid"), u.moles(node.liquidMolPerSecond()) + flow),
+                List.of(c(x, "hc_vapor"), u.moles(node.vaporMolPerSecond()) + flow), List.of(c(x, "water_vapor"), u.moles(node.waterVaporMolPerSecond()) + flow),
+                List.of(c(x, "free_water"), u.moles(node.freeWaterMolPerSecond()) + flow));
+    }
+
     /** The Results page's glass: the calculator's profiles, products, heat, tray and solver sheets. */
     record ResultGlass(SheetContext x, String id, ColumnDoor door, Door.View view) implements Door.Glass {
         @Override public void draw(Canvas c, Skin skin, Rect box) {
@@ -222,13 +245,14 @@ final class ColumnGlass {
             var out = new CalculatorColumn.SheetBuilder(width, m);
             if (display == null || display.streams().isEmpty()) return out.note(c(x, "solve_products"), Palette.MUTED);
             var stream = display.streams().get(Math.clamp(view.stream, 0, display.streams().size() - 1));
-            var u = x.units();
-            out.pair(c(x, "field.flow"), SheetUnits.number(1, stream.molarFlowMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h").pair(c(x, "reading.mass_flow"), SheetUnits.number(1, stream.massFlowKgPerSecond() * 3600) + " kg/h")
-                    .pair(c(x, "field.temperature"), u.t(stream.temperatureKelvin()) + " " + u.temperature().symbol()).pair(c(x, "reading.pressure"), SheetUnits.number(1, stream.pressurePascal() / 1000) + " kPa").blank();
-            List<String> header = List.of(c(x, "component"), c(x, "mole_percent"), c(x, "molar_rate"), c(x, "mass_percent"), c(x, "mass_rate"));
+            var time = x.units().time();
+            for (var pair : streamPairs(x, stream.molarFlowMolPerSecond(), stream.massFlowKgPerSecond(), stream.temperatureKelvin(), stream.pressurePascal())) out.pair(pair.get(0), pair.get(1));
+            out.blank();
+            var header = productHeader(x);
             var rows = new ArrayList<List<String>>();
             for (var part : stream.moleFractions())
-                rows.add(List.of(material(part.componentId()), percent(part.moleFraction() * 100), percent(stream.molarFlowMolPerSecond() * part.moleFraction() / SheetUnits.KMOL_PER_HOUR), percent(part.massFraction() * 100), percent(stream.massFlowKgPerSecond() * part.massFraction() * 3600)));
+                rows.add(List.of(material(part.componentId()), percent(part.moleFraction() * 100), percent(time.display(stream.molarFlowMolPerSecond() * part.moleFraction()) / 1000), percent(part.massFraction() * 100),
+                        percent(time.display(stream.massFlowKgPerSecond() * part.massFraction()))));
             if (CalculatorColumn.SheetBuilder.fits(header, rows, width - 80 + m.width(header.getFirst()), m)) return out.table(header, rows);
             return out.table(header.subList(0, 3), rows.stream().map(r -> r.subList(0, 3)).toList());
         }
@@ -249,10 +273,8 @@ final class ColumnGlass {
             out.note(c(x, selected == 0 ? "top_tray" : selected == n + 1 ? "bottom_tray" : "tray", selected + 1), Palette.TEXT);
             if (inspection == null || selected >= inspection.nodes().size()) return out.note(c(x, "solve_to_inspect"), Palette.MUTED);
             var node = inspection.nodes().get(selected);
-            var u = x.units();
-            out.pair(c(x, "field.temperature"), u.t(node.temperatureKelvin()) + " " + u.temperature().symbol()).pair(c(x, "reading.pressure"), SheetUnits.number(1, node.pressurePascal() / 1000) + " kPa")
-                    .pair(c(x, "tray_dp"), selected > 0 && selected <= n ? SheetUnits.number(1, drop(inspection, selected)) + " kPa" : "—").pair(c(x, "hc_liquid"), SheetUnits.number(1, node.liquidMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h")
-                    .pair(c(x, "hc_vapor"), SheetUnits.number(1, node.vaporMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h").pair(c(x, "water_vapor"), SheetUnits.number(1, node.waterVaporMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h").pair(c(x, "free_water"), SheetUnits.number(1, node.freeWaterMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h").blank();
+            for (var pair : nodePairs(x, node, selected > 0 && selected <= n ? drop(inspection, selected) * 1000 : Double.NaN)) out.pair(pair.get(0), pair.get(1));
+            out.blank();
             var rows = new ArrayList<List<String>>();
             var basis = inspection.input().componentBasis();
             for (int i = 0; i < basis.componentCount(); i++) rows.add(List.of(material(basis.componentId(i)), node.liquidMolPerSecond() == 0 ? "—" : percent(node.liquidFractions().get(i) * 100), node.vaporMolPerSecond() == 0 ? "—" : percent(node.vaporFractions().get(i) * 100)));
