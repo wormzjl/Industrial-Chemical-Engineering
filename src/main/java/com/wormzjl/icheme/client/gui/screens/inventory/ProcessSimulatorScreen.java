@@ -193,7 +193,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
 
     /** What the server made of a body or a design. A body it took silently, unless the player asked for it by Save. */
     private void answered(String key, String detail) {
-        boolean ok = key.equals(ProcessSimulatorNetwork.SAVED) || key.equals(ProcessSimulatorNetwork.DESIGN_SAVED);
+        boolean ok = key.equals(ProcessSimulatorNetwork.SAVED) || key.equals(ProcessSimulatorNetwork.DESIGN_SAVED) || key.equals(ProcessSimulatorNetwork.DESIGNS_SENT);
         if (key.equals(ProcessSimulatorNetwork.SAVED) && !saving) return;
         if (key.equals(ProcessSimulatorNetwork.SAVED)) saving = false;
         if (door != null) doorView.said = lang("flowsheet." + key, detail);
@@ -528,6 +528,10 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
                 host.size(editor.sheet());
             }
             case "stop" -> host.stop();
+            case "send" -> {
+                // The key acts only while SizingPage.unsent has nothing against it; the server reads the designs again.
+                if (SizingPage.unsent(x) == null) ProcessSimulatorNetwork.sendDesigns(menu.containerId, SizingPage.designs(x));
+            }
             case "undo" -> editor.undo();
             case "redo" -> editor.redo();
             case "zoom/out" -> view.zoom(1 / SheetView.STEP, canvasBox.x() + canvasBox.w() / 2.0, canvasBox.y() + canvasBox.h() / 2.0);

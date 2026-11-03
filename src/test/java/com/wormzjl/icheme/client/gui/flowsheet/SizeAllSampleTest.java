@@ -162,6 +162,27 @@ class SizeAllSampleTest {
                 "the sheet it was given keeps its door");
     }
 
+    /**
+     * S5: Send to block stores the column at its door's diameter with its member counts, the condenser's five shells as its count, and every
+     * unit with a shape but the valve, each reading back whole as the block keeps it.
+     */
+    @Test
+    void sendToBlockStoresTheColumnAtItsDoorsDiameterWithItsMemberCounts() {
+        var designs = SheetSizing.designs(all.sheet(), all.sized());
+        var door = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(all.sheet().units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params());
+        var column = designs.stream().filter(d -> d.column() != null).findFirst().orElseThrow();
+        assertEquals("T-101", column.tag());
+        assertEquals(door.diameter(), column.column().diameter(), 1e-12);
+        assertEquals(door.units(), column.column().components().units());
+        var condenser = designs.stream().filter(d -> d.member().equals("condenser")).findFirst().orElseThrow();
+        assertEquals(5, condenser.count());
+        long shaped = all.sized().units().values().stream().filter(u -> u.size() != null && !(u.size() instanceof com.wormzjl.icheme.science.flowsheet.sizing.ValveSizing.Size)).count();
+        assertEquals(shaped, designs.size());
+        var read = com.wormzjl.icheme.world.level.block.entity.SentDesignTags.read(com.wormzjl.icheme.world.level.block.entity.SentDesignTags.write(designs, List.of()));
+        assertTrue(read.whole(), read.repairs().toString());
+        assertEquals(designs, read.designs());
+    }
+
     /** A run that has just ended rates every size with no trial column: each column reads its own run's trays. */
     @Test
     void aRatingSolvesNoColumn() {

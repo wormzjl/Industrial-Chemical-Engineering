@@ -367,7 +367,7 @@ public final class GuiPrototypes {
                 }, true),
                 new Prototype("equipment-constructor-templates", 464, 254, (d, s) -> constructorDoor(d, templatePage, "Distillation column", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor-choose", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.VESSELS,
-                        ConstructorColumn.Equipment.VERTICAL_DRUM, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
+                        ConstructorColumn.Equipment.VERTICAL_DRUM, 16, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor", 464, 254, (d, s) -> constructorDoor(d, drum, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
                 new Prototype("equipment-constructor-lying", 464, 254, (d, s) -> constructorDoor(d, lying, "Horizontal drum", "change",
                         DIALOG.get(CONSTRUCTOR + "blocked", 3), Palette.WARN, Map.of()), true),

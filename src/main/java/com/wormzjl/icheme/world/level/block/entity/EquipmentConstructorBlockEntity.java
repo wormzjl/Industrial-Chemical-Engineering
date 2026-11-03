@@ -124,6 +124,28 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
                     bank, boot, 0, imported, turns,towerBank);
         }
 
+        /**
+         * This design with {@code sent} on it, a design Send to block stored (batch 2026-11-02-process-simulator, S5): a column imported as a
+         * calculator's design is ({@link #imported}); anything else at its form, sizes and support as sized, an air cooler's bank, a drum's boot
+         * with its standard connections, its bottom outlet. The placement, the paint, the imported column, the turns and the other forms'
+         * fields are kept; a lying drum laid crosswise stays crosswise.
+         */
+        public Design landed(com.wormzjl.icheme.science.equipment.SentDesign sent) {
+            if (sent.column() != null) return imported(sent.column());
+            var shape = sent.shape();
+            var kind = shape.kind();
+            VesselPlacement.Form to = null;
+            if (kind == EquipmentShape.Kind.DRUM)
+                to = shape.orientation() == Orientation.VERTICAL ? VesselPlacement.Form.VERTICAL : form == VesselPlacement.Form.CROSSWISE ? form : VesselPlacement.Form.LENGTHWISE;
+            else for (var f : VesselPlacement.Form.values()) if (f.kind() == kind) to = f;
+            if (to == null) throw new IllegalArgumentException("No form builds a " + kind);
+            int length = (int) Math.round(shape.tangentLength());
+            boolean drum = kind == EquipmentShape.Kind.DRUM;
+            var fitted = drum ? EquipmentShape.defaultConnections(shape.diameter(), length, shape.orientation(), shape.support(), shape.boot(), shape.outlet()) : connections;
+            return new Design(shape.diameter(), length, to, shape.support(), placement, trays, fitted, paint, kind == EquipmentShape.Kind.AIR_COOLER ? shape.bank() : bank,
+                    drum ? shape.boot() : boot, shape.outlet(), column, turns, kind == EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER ? shape.towerBank() : towerBank);
+        }
+
         /** {@code edited}, a design the player sent, with this design's imported column: only an import sets it. */
         public Design keepingColumn(Design edited) {
             return new Design(edited.diameter, edited.tangentLength, edited.form, edited.support, edited.placement, edited.trays, edited.connections, edited.paint,
@@ -334,12 +356,8 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         if (!design.turns().isEmpty()) tag.put("Turns", ColumnDesignTags.writeTurns(design.turns()));
     }
 
-    /**
-     * Server: the process simulator nearest this constructor within {@code reach} blocks (empty when there is none), and
-     * this design with its saved design imported ({@link Design#imported}; empty when it has none). A read: nothing is
-     * solved.
-     */
-    public java.util.Optional<java.util.Optional<Design>> importColumn(int reach) {
+    /** Server: the process simulator nearest this constructor within {@code reach} blocks, whose designs its Import lists; empty when there is none. A read: nothing is solved. */
+    public java.util.Optional<ProcessSimulatorBlockEntity> simulator(int reach) {
         if (level == null) return java.util.Optional.empty();
         ProcessSimulatorBlockEntity nearest = null;
         double best = Double.MAX_VALUE;
@@ -351,8 +369,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
                 nearest = simulator;
             }
         }
-        if (nearest == null) return java.util.Optional.empty();
-        return java.util.Optional.of(nearest.savedDesign().map(design::imported));
+        return java.util.Optional.ofNullable(nearest);
     }
 
     @Override

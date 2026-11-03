@@ -10,6 +10,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.Params;
@@ -93,6 +94,38 @@ public final class SizingPage {
     /** Whether Size all may start: a steady run that nothing has greyed, and nothing in hand. */
     public static boolean sizes(SheetContext x) {
         return x.state().steady() && !x.state().running() && x.editor().editable();
+    }
+
+    /** The red rows of a rating: units, lines that flow, and paths. Each stops Send to block (plan section 3.1); a yellow row does not. */
+    public static int reds(SheetSizing.Sized sized) {
+        int red = 0;
+        for (var unit : sized.units().values()) if (unit.rating().lamp() == Lamp.RED) red++;
+        for (var line : sized.lines().values()) if (line.line().flows() && line.rating().lamp() == Lamp.RED) red++;
+        for (var path : sized.paths()) if (path.rating().lamp() == Lamp.RED) red++;
+        return red;
+    }
+
+    /** What Send to block stores: each unit and member at the size the tab shows ({@link SheetSizing#designs}); none before a rating. */
+    public static List<SentDesign> designs(SheetContext x) {
+        var sized = sized(x);
+        return sized == null ? List.of() : SheetSizing.designs(x.editor().sheet(), sized);
+    }
+
+    /**
+     * Why Send to block is off, or null while it acts: only the holder sends (D2), on a steady run nothing has greyed, with no red row and
+     * something to send, and nothing in hand.
+     */
+    public static @Nullable String unsent(SheetContext x) {
+        var host = x.host();
+        if (!host.stores()) return x.text("sizing.send_nowhere");
+        if (host.reader()) return x.text("sizing.send_reader");
+        if (host.running() != null) return x.text("sizing.send_running");
+        var sized = sized(x);
+        if (sized == null || !x.state().steady()) return x.text("sizing.send_run");
+        int red = reds(sized);
+        if (red > 0) return x.text("sizing.send_red", red);
+        if (designs(x).isEmpty()) return x.text("sizing.send_none");
+        return null;
     }
 
     private static SizingFacts facts(SheetContext x) {
@@ -1068,7 +1101,7 @@ public final class SizingPage {
 
     // ---- The footer ----
 
-    /** The tab's footer: Close, Size all (the confirming key) or Stop while it runs, Send to block (S5), Undo and Redo where they fit. */
+    /** The tab's footer: Close, Size all (the confirming key) or Stop while it runs, Send to block ({@link #unsent}), Undo and Redo where they fit. */
     public static List<SimulatorPage.Slot> footer(SheetContext x, SimulatorFrame frame, SimulatorHost host, SheetEditor editor) {
         var slots = new ArrayList<SimulatorPage.Slot>();
         var at = frame.sizingFooter();
@@ -1080,7 +1113,9 @@ public final class SizingPage {
             slots.add(new SimulatorPage.Slot(new Column.Button("size_all", x.text("sizing.size_all"), host.canRun() && sizes(x), why), at.get(1)));
         }
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE;
-        slots.add(new SimulatorPage.Slot(new Column.Button("send", x.text(narrow ? "sizing.send_short" : "sizing.send"), false, x.text("sizing.send_hint")), at.get(2)));
+        String unsent = unsent(x);
+        String send = unsent != null ? unsent : x.text("sizing.send_hint", designs(x).size());
+        slots.add(new SimulatorPage.Slot(new Column.Button("send", x.text(narrow ? "sizing.send_short" : "sizing.send"), unsent == null, send), at.get(2)));
         if (at.size() > 3) {
             slots.add(new SimulatorPage.Slot(new Column.Button("undo", x.text("frame.undo"), editor.canUndo(), null), at.get(3)));
             slots.add(new SimulatorPage.Slot(new Column.Button("redo", x.text("frame.redo"), editor.canRedo(), null), at.get(4)));

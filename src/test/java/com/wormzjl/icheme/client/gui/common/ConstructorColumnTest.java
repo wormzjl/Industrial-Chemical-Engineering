@@ -6,10 +6,14 @@ import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
+import com.wormzjl.icheme.client.gui.flowsheet.SizingCoverageTest;
+import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.equipment.VesselPlacement;
 import com.wormzjl.icheme.science.equipment.VesselPlacement.Form;
+import com.wormzjl.icheme.science.flowsheet.sizing.ColumnSizing;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -79,7 +83,7 @@ class ConstructorColumnTest {
         var out = new ArrayList<Case>();
         for (var shown : Category.values())
             for (var current : new Equipment[]{Equipment.VERTICAL_DRUM, Equipment.FIXED_BED_GASIFIER})
-                out.add(new Case("choose " + shown + " " + current, ConstructorColumn.choose(shown, current, t)));
+                out.add(new Case("choose " + shown + " " + current, ConstructorColumn.choose(shown, current, 16, t)));
         for (var d : designs()) out.add(new Case("design " + d.form() + " " + d.diameter(), ConstructorColumn.design(d, t)));
         for (var c : connectionCases()) out.add(new Case("connections " + c, ConstructorColumn.connections(c, t)));
         out.add(new Case("no nozzles", ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(0, 0, null, STANDING, 0), t)));
@@ -88,7 +92,62 @@ class ConstructorColumnTest {
         for (int channel : new int[]{0, 1}) out.add(new Case("paint " + channel, ConstructorColumn.paint(channel, t)));
         out.add(new Case("templates", ConstructorColumn.templates(TEMPLATES, 0, t)));
         out.add(new Case("no templates, files unreadable", ConstructorColumn.templates(List.of(), 3, t)));
+        out.add(new Case("imports", ConstructorColumn.imports(imports(t), t)));
+        out.add(new Case("no imports", ConstructorColumn.imports(List.of(), t)));
         return out;
+    }
+
+    /**
+     * What a simulator holds, as Send to block stores it: the calculator's untagged design, then every size the stage proposes, as a unit, a
+     * member with its count, or a column. Each named on the page as {@link ConstructorColumn#listed} names it.
+     */
+    private static List<SentDesign> sent() {
+        var out = new ArrayList<SentDesign>();
+        for (var size : SizingCoverageTest.samples()) {
+            var shape = size.shape();
+            if (shape == null) continue;
+            if (size instanceof ColumnSizing.Size c) {
+                var design = new ColumnDesign(c.layout(), c.diameter());
+                out.addFirst(SentDesign.column("", design));
+                out.add(SentDesign.column("T-101", design));
+            } else out.add(new SentDesign("U-10" + out.size(), out.size() % 2 == 0 ? "" : "pa " + out.size() + " cooler", size.count(), shape, null));
+        }
+        out.add(new SentDesign("T-101", "condenser", 5, out.get(2).shape(), null));
+        return out;
+    }
+
+    private static List<ConstructorColumn.Listed> imports(HeatControlColumn.Texts t) {
+        return sent().stream().map(s -> ConstructorColumn.listed(s, t)).toList();
+    }
+
+    /**
+     * S5: the Import page lists every design a key a row, each acting, named by its tag, a member's own name and its count. Import stands on
+     * the choice page of every group, under its kinds, and on a column's design page beside its Templates; no other design page grows.
+     */
+    @Test
+    void theImportPageListsEveryDesignAndEveryFormHasImport() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        var sent = sent();
+        var listed = imports(t);
+        var page = ConstructorColumn.imports(listed, t);
+        var keys = buttons(page);
+        assertEquals(java.util.stream.IntStream.range(0, sent.size()).mapToObj(i -> "design:" + i).toList(), List.copyOf(keys.keySet()));
+        assertTrue(keys.values().stream().allMatch(b -> b.active() && !b.latched()));
+        assertEquals(t.get(ConstructorColumn.KEY + "import.saved"), listed.getFirst().name(), "the calculator's design first, by what it is");
+        var condenser = listed.getLast();
+        assertEquals(t.get(ConstructorColumn.KEY + "import.count", t.get(ConstructorColumn.KEY + "import.member", "T-101", t.get("flowsheet.sizing.member.condenser")), 5), condenser.name());
+        assertTrue(condenser.hint().contains(t.get("vessel.title.exchanger")), condenser.hint());
+        assertEquals(condenser.hint(), keys.get("design:" + (sent.size() - 1)).hint());
+        var lying = sent.stream().filter(s -> s.shape().kind() == com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.DRUM && s.shape().orientation().horizontal()).findFirst().orElseThrow();
+        assertTrue(ConstructorColumn.listed(lying, t).hint().contains(t.get(ConstructorColumn.KEY + "equipment.horizontal_drum")), "a lying drum is named as one");
+        assertTrue(page.footer().isEmpty() && !page.display(), "Back by the title, no footer, no message display");
+        assertEquals(List.of(t.get(ConstructorColumn.KEY + "imports.none")),
+                ((Column.Group) ConstructorColumn.imports(List.of(), t).rows().getFirst()).rows().stream().map(r -> ((Column.Line) r).text()).toList());
+        for (var category : Category.values()) {
+            var b = buttons(ConstructorColumn.choose(category, Equipment.PUMP, 16, t));
+            assertTrue(b.containsKey("import") && b.get("import").active(), category + "'s choice page has Import");
+        }
+        for (var d : designs()) assertEquals(d.form().column(), buttons(ConstructorColumn.design(d, t)).containsKey("import"), d.form() + "'s design page");
     }
 
     /** The Templates page as the screen fills it: the bundled crude templates and the pot (off), then one of the player's. */
@@ -124,7 +183,7 @@ class ConstructorColumnTest {
                 "schematic.feed", "schematic.draws", "schematic.extras", "paint.swatch", "clash.connection", "clash.vapour", "clash.liquid", "clash.saddle",
                 "clash.ground", "clash.manway", "clash.boot", "template.bundled", "template.own", "template.unusable"));
         for (var e : Equipment.values()) keys.add("equipment." + e.key() + ".hint");
-        for (var key : keys) texts.get(ConstructorColumn.KEY + key, "1", "2");
+        for (var key : keys) texts.get(ConstructorColumn.KEY + key, "1", "2", "3", "4", "5");
         assertEquals(Set.of(), texts.missing);
     }
 
@@ -219,17 +278,17 @@ class ConstructorColumnTest {
     @Test
     void eachPageShowsItsKeysWithTheCurrentPositionsLatched() {
         var t = new HeatControlColumnTest.Recording("gui.icheme.");
-        var choose = buttons(ConstructorColumn.choose(Category.VESSELS, Equipment.COLUMN, t));
-        assertEquals(List.of("category:vessels", "category:heat", "category:machines", "category:reactors", "category:solid_fuel", "kind:vertical_drum", "kind:horizontal_drum",
+        var choose = buttons(ConstructorColumn.choose(Category.VESSELS, Equipment.COLUMN, 16, t));
+        assertEquals(List.of("category:vessels", "category:heat", "category:machines", "category:reactors", "category:solid_fuel", "import", "kind:vertical_drum", "kind:horizontal_drum",
                 "kind:column", "kind:floating_roof_tank", "kind:sphere", "kind:adsorber", "kind:cyclone"), List.copyOf(choose.keySet()));
         assertTrue(choose.get("category:vessels").latched() && !choose.get("category:vessels").active() && choose.get("category:heat").active());
         assertTrue(choose.get("kind:column").latched() && choose.get("kind:column").active() && choose.get("kind:sphere").active() && !choose.get("kind:sphere").latched(),
                 "the draft's kind latched, and still pressed to return to its design");
-        var elsewhere = buttons(ConstructorColumn.choose(Category.HEAT, Equipment.COLUMN, t));
+        var elsewhere = buttons(ConstructorColumn.choose(Category.HEAT, Equipment.COLUMN, 16, t));
         assertTrue(elsewhere.values().stream().filter(b -> b.key().startsWith("kind:")).noneMatch(Column.Button::latched), "the draft's kind latched only in its group");
         for (var category : Category.values())
             assertEquals(java.util.Arrays.stream(Equipment.values()).filter(e -> e.category == category).count(),
-                    buttons(ConstructorColumn.choose(category, Equipment.PUMP, t)).keySet().stream().filter(k -> k.startsWith("kind:")).count(), category + "'s kinds");
+                    buttons(ConstructorColumn.choose(category, Equipment.PUMP, 16, t)).keySet().stream().filter(k -> k.startsWith("kind:")).count(), category + "'s kinds");
 
         var drum = ConstructorColumn.design(design(Form.VERTICAL, 2, 6, 3, 3, 0, 0), t);
         assertEquals(List.of("size", "size-", "size+", "length", "length-", "length+", "support", "support-", "support+", "forward", "forward-", "forward+", "right", "right-",

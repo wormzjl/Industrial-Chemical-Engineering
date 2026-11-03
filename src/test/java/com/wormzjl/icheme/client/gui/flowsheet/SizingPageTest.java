@@ -295,8 +295,102 @@ class SizingPageTest {
         assertEquals(List.of("close", "size_all", "send", "undo", "redo"), footer.stream().map(slot -> slot.button().key()).toList());
         assertFalse(footer.get(1).button().active());
         assertEquals(texts.get("flowsheet.sizing.size_all_hint"), footer.get(1).button().hint());
-        assertFalse(footer.get(2).button().active(), "Send to block is S5's");
-        assertEquals(texts.get("flowsheet.sizing.send_hint"), footer.get(2).button().hint());
+        assertFalse(footer.get(2).button().active(), "a sheet on no block sends nowhere");
+        assertEquals(texts.get("flowsheet.sizing.send_nowhere"), footer.get(2).button().hint());
+        assertTrue(texts.missing.isEmpty(), texts.missing.toString());
+    }
+
+    /** A host on a block, as the holder or a reader, with a run in hand or not. */
+    private static SimulatorHost block(SimulatorHost.Finished last, SimulatorRunner.Rated rated, boolean reader, SheetState.Running running) {
+        return new SimulatorHost() {
+            @Override public Finished last() {
+                return last;
+            }
+
+            @Override public SimulatorRunner.Rated rated() {
+                return rated;
+            }
+
+            @Override public boolean reader() {
+                return reader;
+            }
+
+            @Override public boolean canRun() {
+                return true;
+            }
+
+            @Override public boolean stores() {
+                return true;
+            }
+
+            @Override public SheetState.Running running() {
+                return running;
+            }
+        };
+    }
+
+    private static SheetContext sending(SheetFixture.Texts texts, SheetEditor editor, FlowsheetRun run, SheetSizing.Sized sized, boolean reader, SheetState.Running running) {
+        var last = new SimulatorHost.Finished(editor.sheet(), run, 1);
+        var host = block(last, new SimulatorRunner.Rated(editor.sheet(), last, sized, false), reader, running);
+        return new SheetContext(editor, SheetState.of(editor.sheet(), last), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS, host, List.of());
+    }
+
+    /** {@code sized} with its red rows left out. */
+    private static SheetSizing.Sized green(SheetSizing.Sized sized) {
+        var units = new LinkedHashMap<String, SheetSizing.SizedUnit>();
+        sized.units().forEach((id, unit) -> {
+            if (unit.rating().lamp() != com.wormzjl.icheme.science.flowsheet.sizing.Lamp.RED) units.put(id, unit);
+        });
+        var lines = new LinkedHashMap<String, SheetSizing.SizedLine>();
+        sized.lines().forEach((id, line) -> {
+            if (line.rating().lamp() != com.wormzjl.icheme.science.flowsheet.sizing.Lamp.RED) lines.put(id, line);
+        });
+        return new SheetSizing.Sized(lines, units, sized.paths().stream().filter(p -> p.rating().lamp() != com.wormzjl.icheme.science.flowsheet.sizing.Lamp.RED).toList());
+    }
+
+    /**
+     * S5: Send to block acts for the holder on a steady run nothing has greyed, with no red row (plan section 3.1: a yellow row does not stop
+     * it), and nothing in hand; its hover says why not, or how many designs it stores. Those designs are each unit and member at its shown size,
+     * under its block's tag, with its count; the valve, which the pipe tool lays, is not among them.
+     */
+    @Test
+    void sendToBlockActsForTheHolderOnASteadyRunWithNoRedRow() {
+        var texts = new SheetFixture.Texts();
+        var editor = SheetFixture.editor(SHEET);
+        var frame = new SimulatorFrame(SimulatorFrame.DOOR_W, SimulatorFrame.DOOR_H);
+        var all = sized();
+        int red = SizingPage.reds(all);
+        assertTrue(red > 0, "the fixture has red rows");
+        var x = sending(texts, editor, STEADY, all, false, null);
+        assertEquals(texts.get("flowsheet.sizing.send_red", red), SizingPage.unsent(x));
+        var ok = green(all);
+        // A Should missed: the column floods past good practice and still runs.
+        ok.units().put("T-101", new SheetSizing.SizedUnit(ok.units().get("T-101").size(), rating(Limit.COLUMN_FLOOD, 85, 80)));
+        assertEquals(0, SizingPage.reds(ok));
+        assertTrue(ok.units().values().stream().anyMatch(u -> u.rating().lamp() == com.wormzjl.icheme.science.flowsheet.sizing.Lamp.YELLOW), "a yellow row stays");
+        var holder = sending(texts, editor, STEADY, ok, false, null);
+        assertNull(SizingPage.unsent(holder));
+        var designs = SizingPage.designs(holder);
+        var send = SizingPage.footer(holder, frame, holder.host(), editor).get(2).button();
+        assertTrue(send.active());
+        assertEquals(texts.get("flowsheet.sizing.send_hint", designs.size()), send.hint());
+        assertEquals(texts.get("flowsheet.sizing.send_reader"), SizingPage.unsent(sending(texts, editor, STEADY, ok, true, null)));
+        assertEquals(texts.get("flowsheet.sizing.send_run"), SizingPage.unsent(sending(texts, editor, FlowsheetRun.none(), ok, false, null)));
+        assertEquals(texts.get("flowsheet.sizing.send_running"), SizingPage.unsent(sending(texts, editor, STEADY, ok, false, new SheetState.Running(1, 0, 0, null, null, SheetState.Task.SIZE))));
+        // What it stores: every green unit the constructor builds (a valve it does not; a size off its grid it refuses), a member under its
+        // block's tag with its own key and its count.
+        var expected = ok.units().entrySet().stream().filter(e -> com.wormzjl.icheme.science.flowsheet.sizing.UnitSize.built(e.getValue().size()) != null).map(java.util.Map.Entry::getKey).toList();
+        assertTrue(expected.contains("T-101/condenser") && !expected.contains("V-101"));
+        assertEquals(expected.size(), designs.size());
+        for (int i = 0; i < designs.size(); i++) {
+            var design = designs.get(i);
+            String id = expected.get(i);
+            int slash = id.indexOf('/');
+            assertEquals(slash < 0 ? editor.unit(id).name() : editor.unit(id.substring(0, slash)).name(), design.tag(), id);
+            assertEquals(slash < 0 ? "" : id.substring(slash + 1), design.member(), id);
+            assertEquals(ok.units().get(id).size().count(), design.count(), id);
+            assertEquals(ok.units().get(id).size() instanceof ColumnSizing.Size, design.column() != null, id);
+        }
         assertTrue(texts.missing.isEmpty(), texts.missing.toString());
     }
 

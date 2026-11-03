@@ -4,14 +4,20 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
 import com.wormzjl.icheme.science.flowsheet.SheetBody;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import com.wormzjl.icheme.world.inventory.ProcessSimulatorMenu;
 import com.wormzjl.icheme.world.level.block.entity.ProcessSimulatorBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.SentDesignTags;
+import java.util.List;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -27,13 +33,14 @@ import org.jetbrains.annotations.Nullable;
  * Between a process simulator's block and the player at it (batch 2026-11-02-process-simulator, plan section 3.4). Opening replays what is stored at once, a read
  * that solves nothing. The client sends a sheet body on Save, when a run ends and when the screen closes, in parts. A body is the player's own and an upload is untrusted:
  * it counts only from the holder, near the block, with the screen open, and {@link SheetBody} bounds it before it inflates. A store is no engine event, since nothing in a
- * sheet reaches the engine, so it lands with its last part: a close that follows it must find it stored. Wire format: no compatibility work.
+ * sheet reaches the engine, so it lands with its last part: a close that follows it must find it stored. Send to block stores the sized designs on the block (S5), from
+ * the holder only, and the server reads them whole before it keeps them; a constructor reads them when its Import opens. Wire format: no compatibility work.
  */
 public final class ProcessSimulatorNetwork {
-    private static final String PROTOCOL = "1";
+    private static final String PROTOCOL = "2";
     private static final int MAX_KEY = 64, MAX_DETAIL = 256;
     /** Translation key suffixes of an answer. */
-    public static final String SAVED = "store.saved", DESIGN_SAVED = "store.design_saved", DESIGN_REFUSED = "store.design_refused";
+    public static final String SAVED = "store.saved", DESIGN_SAVED = "store.design_saved", DESIGN_REFUSED = "store.design_refused", DESIGNS_SENT = "store.designs_sent", DESIGNS_REFUSED = "store.designs_refused";
 
     private ProcessSimulatorNetwork() {
     }
@@ -42,6 +49,7 @@ public final class ProcessSimulatorNetwork {
         var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
         registrar.playBidirectional(SheetPart.TYPE, SheetPart.STREAM_CODEC, new DirectionalPayloadHandler<>(ProcessSimulatorNetwork::replayPart, ProcessSimulatorNetwork::upload));
         registrar.playToServer(SaveDesign.TYPE, SaveDesign.STREAM_CODEC, ProcessSimulatorNetwork::saveDesign);
+        registrar.playToServer(SendDesigns.TYPE, SendDesigns.STREAM_CODEC, ProcessSimulatorNetwork::sendDesigns);
         registrar.playToClient(Answer.TYPE, Answer.STREAM_CODEC, ProcessSimulatorNetwork::answer);
     }
 
@@ -79,6 +87,24 @@ public final class ProcessSimulatorNetwork {
                 ColumnWire.writeChoices(buffer, payload.choices);
             }
         };
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Send to block's designs, as {@link SentDesignTags} writes them under {@code Designs}. The server reads them again. */
+    public record SendDesigns(int container, CompoundTag designs) implements CustomPacketPayload {
+        public static final Type<SendDesigns> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "simulator_send_designs"));
+        public static final StreamCodec<FriendlyByteBuf, SendDesigns> STREAM_CODEC = StreamCodec.composite(ByteBufCodecs.VAR_INT, SendDesigns::container,
+                ByteBufCodecs.COMPOUND_TAG, SendDesigns::designs, SendDesigns::new);
+
+        public static SendDesigns of(int container, List<SentDesign> designs) {
+            var tag = new CompoundTag();
+            tag.put("Designs", SentDesignTags.write(designs, List.of()));
+            return new SendDesigns(container, tag);
+        }
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -171,6 +197,29 @@ public final class ProcessSimulatorNetwork {
         }
     }
 
+    private static void sendDesigns(SendDesigns designs, IPayloadContext context) {
+        if (context.player() instanceof ServerPlayer player) receive(player, designs);
+    }
+
+    /** Send to block's designs from {@code player}: only the holder's, read whole, at most {@link SentDesign#MAX}; they replace what the block held. */
+    public static void receive(ServerPlayer player, SendDesigns designs) {
+        var menu = menu(player, designs.container);
+        var block = menu == null ? null : menu.block();
+        if (block == null || !player.getUUID().equals(block.store().holder())) {
+            PacketDistributor.sendToPlayer(player, new Answer(designs.container, ProcessSimulatorMenu.READ_ONLY, ""));
+            return;
+        }
+        var list = designs.designs.getList("Designs", Tag.TAG_COMPOUND);
+        var read = SentDesignTags.read(list);
+        if (!read.whole() || read.designs().isEmpty() || list.size() > SentDesign.MAX) {
+            String why = read.repairs().isEmpty() ? "count " + list.size() : read.repairs().getFirst();
+            PacketDistributor.sendToPlayer(player, new Answer(designs.container, DESIGNS_REFUSED, why.substring(0, Math.min(why.length(), MAX_DETAIL))));
+            return;
+        }
+        block.send(read.designs());
+        PacketDistributor.sendToPlayer(player, new Answer(designs.container, DESIGNS_SENT, Integer.toString(read.designs().size())));
+    }
+
     // ---- Client: none of this names a client class, so a dedicated server loads it ----
 
     private static void replayPart(SheetPart part, IPayloadContext context) {
@@ -197,5 +246,9 @@ public final class ProcessSimulatorNetwork {
 
     public static void sendDesign(int container, V3ColumnInput input, ColumnComponents.Choices choices) {
         PacketDistributor.sendToServer(new SaveDesign(container, input, choices));
+    }
+
+    public static void sendDesigns(int container, List<SentDesign> designs) {
+        PacketDistributor.sendToServer(SendDesigns.of(container, designs));
     }
 }

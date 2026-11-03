@@ -8,12 +8,16 @@ import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.VesselPlacement;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.ProcessSimulatorBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.SentDesignTags;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
@@ -27,28 +31,31 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.HandlerThread;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
  * Equipment protocol {@value #PROTOCOL}: the constructor screen sends its design with what to do with it: keep it (the
- * screen closes), build it (Build) or import the nearest column calculator's design onto it (Import). Placing a vessel is
- * a world edit, like placing blocks; it involves no process state, so the server answers at once in chat. An import reads
- * the calculator's saved design (nothing is solved) and always answers the requesting player ({@link ImportAnswer}); so
- * does a column template ({@link TemplatePayload}, protocol 14). A cooling tower's cell bank rides on the form (protocol 15).
+ * screen closes) or build it (Build). Placing a vessel is a world edit, like placing blocks; it involves no process state,
+ * so the server answers at once in chat. Import (protocol 16, batch 2026-11-02-process-simulator S5) lists the designs the
+ * nearest process simulator holds ({@link ImportList}, answered by {@link ImportListAnswer}), then lands the chosen one on
+ * the draft ({@link ImportChoice}); both read what the block stores (nothing is solved) and always answer the requesting
+ * player, the choice with {@link ImportAnswer}, as a column template does ({@link TemplatePayload}, protocol 14). A cooling
+ * tower's cell bank rides on the form (protocol 15).
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-15";
+    public static final String PROTOCOL = "equipment-16";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
-    /** A column calculator is imported from within this many blocks of the constructor. */
+    /** A process simulator's designs are imported from within this many blocks of the constructor. */
     public static final int IMPORT_REACH = 16;
 
     private EquipmentNetwork() {
     }
 
-    /** What the server does with the design the screen sends: keep it, build it, or import a column calculator's design onto it. */
+    /** What the server does with the design the screen sends: keep it, or build it. */
     public enum Action {
-        KEEP, BUILD, IMPORT
+        KEEP, BUILD
     }
 
     /**
@@ -130,6 +137,53 @@ public final class EquipmentNetwork {
         }
     }
 
+    /** Client to server, sent after the screen's draft ({@link Action#KEEP}): the designs the nearest process simulator holds, please. */
+    public record ImportList(BlockPos position) implements CustomPacketPayload {
+        public static final Type<ImportList> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_import_list"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, ImportList> STREAM_CODEC = StreamCodec.composite(BlockPos.STREAM_CODEC, ImportList::position, ImportList::new);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Server to client, the answer to every {@link ImportList}: the designs as {@link SentDesignTags} writes them under {@code Designs}, the
+     * calculator's saved design first; none, with why in {@code message}, when there is no simulator or it holds nothing.
+     */
+    public record ImportListAnswer(BlockPos position, Component message, CompoundTag designs) implements CustomPacketPayload {
+        public static final Type<ImportListAnswer> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_import_list_answer"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, ImportListAnswer> STREAM_CODEC = StreamCodec.composite(BlockPos.STREAM_CODEC, ImportListAnswer::position,
+                ComponentSerialization.TRUSTED_STREAM_CODEC, ImportListAnswer::message, ByteBufCodecs.COMPOUND_TAG, ImportListAnswer::designs, ImportListAnswer::new);
+
+        /** The designs it carries; a design this build cannot read is left out. */
+        public List<SentDesign> listed() {
+            return SentDesignTags.read(designs.getList("Designs", Tag.TAG_COMPOUND)).designs();
+        }
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Client to server, sent after the screen's draft ({@link Action#KEEP}): land design {@code index} of the list the screen showed on the
+     * draft. Its tag and member must still name that design, else the list changed meanwhile and nothing lands. Answered by {@link ImportAnswer}.
+     */
+    public record ImportChoice(BlockPos position, int index, String tag, String member) implements CustomPacketPayload {
+        public static final Type<ImportChoice> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_import_choice"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, ImportChoice> STREAM_CODEC = StreamCodec.composite(BlockPos.STREAM_CODEC, ImportChoice::position,
+                ByteBufCodecs.VAR_INT, ImportChoice::index, ByteBufCodecs.stringUtf8(SentDesign.MAX_TAG), ImportChoice::tag, ByteBufCodecs.stringUtf8(SentDesign.MAX_TAG),
+                ImportChoice::member, ImportChoice::new);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     /**
      * Client to server: a column template for a constructor (owner request 2026-10-28), sent after the screen's draft
      * ({@link Action#KEEP}): its name as shown, and its input, the calculator's default input with the template's column
@@ -161,6 +215,10 @@ public final class EquipmentNetwork {
         var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
         registrar.playToServer(ConstructorPayload.TYPE, ConstructorPayload.STREAM_CODEC, EquipmentNetwork::constructor);
         registrar.playToServer(TemplatePayload.TYPE, TemplatePayload.STREAM_CODEC, EquipmentNetwork::template);
+        registrar.playToServer(ImportList.TYPE, ImportList.STREAM_CODEC, EquipmentNetwork::importList);
+        registrar.playToServer(ImportChoice.TYPE, ImportChoice.STREAM_CODEC, EquipmentNetwork::importChoice);
+        registrar.playToClient(ImportListAnswer.TYPE, ImportListAnswer.STREAM_CODEC, (answer, context) -> com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.listed(
+                answer.position(), answer.message(), answer.listed()));
         registrar.playToClient(ImportAnswer.TYPE, ImportAnswer.STREAM_CODEC, (answer, context) -> com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.answered(
                 answer.position(), answer.message(), answer.design().map(tag -> EquipmentConstructorBlockEntity.readDesign(tag, EquipmentConstructorBlockEntity.Design.fresh(), repair -> {
                 }))));
@@ -180,34 +238,20 @@ public final class EquipmentNetwork {
         return constructor;
     }
 
-    /**
-     * Applies the screen's design, then keeps it, builds it or imports onto it. An import is always answered, as the
-     * screen waits for the answer; a design the server refuses or cannot reach answers it too.
-     */
+    /** Applies the screen's design, then keeps it or builds it. */
     private static void constructor(ConstructorPayload payload, IPayloadContext context) {
         if (!(context.player() instanceof ServerPlayer player)) return;
-        boolean importing = payload.action() == Action.IMPORT;
         var constructor = editable(player, payload.position());
-        if (constructor == null) {
-            if (importing) answer(player, payload.position(), Component.translatable("message.icheme.equipment.not_editable"), null);
-            return;
-        }
+        if (constructor == null) return;
         EquipmentConstructorBlockEntity.Design design;
         try {
             design = payload.design(constructor.design());
         } catch (IllegalArgumentException invalid) {
-            var message = Component.translatable("message.icheme.equipment.invalid", invalid.getMessage());
-            if (importing) answer(player, payload.position(), message, null);
-            else player.sendSystemMessage(message.withStyle(ChatFormatting.RED));
+            player.sendSystemMessage(Component.translatable("message.icheme.equipment.invalid", invalid.getMessage()).withStyle(ChatFormatting.RED));
             return;
         }
         constructor.apply(design);
-        switch (payload.action()) {
-            case KEEP -> {
-            }
-            case BUILD -> build(player, constructor, design);
-            case IMPORT -> importColumn(player, constructor);
-        }
+        if (payload.action() == Action.BUILD) build(player, constructor, design);
     }
 
     private static void build(ServerPlayer player, EquipmentConstructorBlockEntity constructor, EquipmentConstructorBlockEntity.Design design) {
@@ -240,23 +284,92 @@ public final class EquipmentNetwork {
         }
     }
 
-    /** Imports the nearest column calculator's saved design onto the constructor's design, which the screen just sent. */
-    private static void importColumn(ServerPlayer player, EquipmentConstructorBlockEntity constructor) {
-        var at = constructor.getBlockPos();
-        var calculator = constructor.importColumn(IMPORT_REACH);
-        if (calculator.isEmpty()) {
+    /** Lists the designs of the process simulator nearest the constructor; always answered. */
+    private static void importList(ImportList request, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+        var at = request.position();
+        var constructor = editable(player, at);
+        var listed = new CompoundTag();
+        if (constructor == null) {
+            PacketDistributor.sendToPlayer(player, new ImportListAnswer(at, Component.translatable("message.icheme.equipment.not_editable"), listed));
+            return;
+        }
+        var simulator = constructor.simulator(IMPORT_REACH);
+        var designs = simulator.map(ProcessSimulatorBlockEntity::listed).orElse(List.of());
+        listed.put("Designs", SentDesignTags.write(designs, List.of()));
+        var message = simulator.isEmpty() ? Component.translatable("message.icheme.equipment.no_calculator", IMPORT_REACH)
+                : designs.isEmpty() ? Component.translatable("message.icheme.equipment.no_design") : Component.empty();
+        PacketDistributor.sendToPlayer(player, new ImportListAnswer(at, message, listed));
+    }
+
+    /** Lands the chosen design of the nearest process simulator on the constructor's design, which the screen just sent; always answered. */
+    private static void importChoice(ImportChoice choice, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+        var at = choice.position();
+        var constructor = editable(player, at);
+        if (constructor == null) {
+            answer(player, at, Component.translatable("message.icheme.equipment.not_editable"), null);
+            return;
+        }
+        var simulator = constructor.simulator(IMPORT_REACH);
+        if (simulator.isEmpty()) {
             answer(player, at, Component.translatable("message.icheme.equipment.no_calculator", IMPORT_REACH), null);
             return;
         }
-        if (calculator.get().isEmpty()) {
-            answer(player, at, Component.translatable("message.icheme.equipment.no_design"), null);
+        var designs = simulator.get().listed();
+        int i = choice.index();
+        if (i < 0 || i >= designs.size() || !designs.get(i).tag().equals(choice.tag()) || !designs.get(i).member().equals(choice.member())) {
+            answer(player, at, Component.translatable("message.icheme.equipment.import_changed"), null);
             return;
         }
-        var design = calculator.get().get();
+        var sent = designs.get(i);
+        EquipmentConstructorBlockEntity.Design design;
+        try {
+            design = constructor.design().landed(sent);
+        } catch (IllegalArgumentException refused) {
+            answer(player, at, Component.translatable("message.icheme.equipment.invalid", refused.getMessage()), null);
+            return;
+        }
         constructor.apply(design);
-        var column = design.column();
-        // The calculator's numbering: its trays and the condenser and reboiler.
-        answer(player, at, Component.translatable("message.icheme.equipment.imported", column.trays().trays() + 2, column.trays().feed() + 1, column.diameter()), design);
+        answer(player, at, imported(sent), design);
+    }
+
+    /** What an import says: a column as the calculator counts it (its trays with the condenser and reboiler), a unit by its name, its kind and how many to build. */
+    static Component imported(SentDesign sent) {
+        var column = sent.column();
+        if (column != null && sent.tag().isEmpty())
+            return Component.translatable("message.icheme.equipment.imported", column.trays().trays() + 2, column.trays().feed() + 1, column.diameter());
+        if (column != null)
+            return Component.translatable("message.icheme.equipment.imported_column", name(sent), column.trays().trays() + 2, column.trays().feed() + 1, column.diameter());
+        return Component.translatable("message.icheme.equipment.imported_unit", name(sent), kind(sent.shape()), sent.count());
+    }
+
+    /** A sent design's name, as the Import page's ({@code ConstructorColumn.listed}) in the reader's language: its tag, a member's own name after it; the calculator's untagged design by what it is. */
+    static Component name(SentDesign sent) {
+        if (sent.tag().isEmpty()) return Component.translatable("gui.icheme.equipment_constructor.import.saved");
+        if (sent.member().isEmpty()) return Component.literal(sent.tag());
+        String member = sent.member();
+        String[] words = member.split(" ");
+        var own = words.length == 3 && words[0].equals("pa") ? Component.translatable("gui.icheme.flowsheet.sizing.member.pa_" + words[2], words[1])
+                : Component.translatable("gui.icheme.flowsheet.sizing.member." + member.replace(' ', '_'));
+        return Component.translatable("gui.icheme.equipment_constructor.import.member", sent.tag(), own);
+    }
+
+    /** What a shape builds, as the constructor names it: a drum standing or lying. */
+    static Component kind(EquipmentShape shape) {
+        if (shape.kind() == EquipmentShape.Kind.DRUM)
+            return Component.translatable("gui.icheme.equipment_constructor.equipment." + (shape.orientation() == EquipmentShape.Orientation.VERTICAL ? "vertical_drum" : "horizontal_drum"));
+        return Component.translatable("gui.icheme.vessel.title." + shape.kind().name().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** Client: ask for the designs of the process simulator nearest the constructor at {@code position}, after its draft. */
+    public static void sendImportList(BlockPos position) {
+        PacketDistributor.sendToServer(new ImportList(position));
+    }
+
+    /** Client: land {@code sent}, design {@code index} of the list, on the constructor at {@code position}, after its draft. */
+    public static void sendImportChoice(BlockPos position, int index, SentDesign sent) {
+        PacketDistributor.sendToServer(new ImportChoice(position, index, sent.tag(), sent.member()));
     }
 
     /** Client: send a column template for the constructor at {@code position}, after its draft. */

@@ -8,6 +8,9 @@ import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFile;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
@@ -139,21 +142,43 @@ public final class ProcessSimulatorGameTests {
         return ColumnDesign.of(catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog), ColumnComponents.Choices.DEFAULT);
     }
 
+    /** What Send to block sends on the sample's crude unit: the column, its condenser's five shells, and a lying drum with a boot. */
+    private static List<SentDesign> sent() {
+        var drum = EquipmentShape.drum(2, 6, EquipmentShape.Orientation.HORIZONTAL, EquipmentShape.Heading.NORTH, EquipmentShape.minimumBootSupport(2, 6), List.of(), true);
+        var exchanger = EquipmentShape.designed(EquipmentShape.Kind.EXCHANGER, 1, 3, EquipmentShape.Heading.NORTH, ProcessUnit.defaultSupport(EquipmentShape.Kind.EXCHANGER, 1, 3),
+                ProcessUnit.Bank.ONE);
+        return List.of(SentDesign.column("T-101", design()), new SentDesign("T-101", "condenser", 5, exchanger, null), new SentDesign("V-102", "", 1, drum, null));
+    }
+
+    /**
+     * S5's Import on a world: a constructor finds the nearest simulator within its reach, lists the calculator's saved design first, then what
+     * the holder's Send to block stored, and a chosen design lands on its draft as what it is. The designs survive a save, as facts.
+     */
     @GameTest(template = "empty", timeoutTicks = 20, batch = "simulator")
     public static void aConstructorImportsTheNearestSimulatorsDesign(GameTestHelper helper) {
         helper.setBlock(AT, ModBlocks.EQUIPMENT_CONSTRUCTOR.get());
         var constructor = (EquipmentConstructorBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(AT));
-        helper.assertTrue(constructor.importColumn(4).isEmpty(), "A simulator found where none stands");
+        helper.assertTrue(constructor.simulator(4).isEmpty(), "A simulator found where none stands");
         var block = place(helper, AT.east(3));
-        helper.assertTrue(constructor.importColumn(4).orElseThrow().isEmpty(), "A design found where none is saved");
+        helper.assertTrue(constructor.simulator(4).orElseThrow().listed().isEmpty(), "A design found where none is saved");
         var near = player(helper, "editor", AT);
         open(near, block, 1);
         ProcessSimulatorNetwork.receive(near, new ProcessSimulatorNetwork.SaveDesign(1, MaterialRuntime.active().presets().column(MaterialRuntime.active().presets().network().defaultColumnPreset()).input(MaterialRuntime.active()), ColumnComponents.Choices.DEFAULT));
+        ProcessSimulatorNetwork.receive(near, ProcessSimulatorNetwork.SendDesigns.of(1, sent()));
         close(near);
         helper.assertTrue(block.savedDesign().isPresent(), "Save design was not stored");
-        var imported = constructor.importColumn(4).orElseThrow().orElseThrow();
+        var listed = constructor.simulator(4).orElseThrow().listed();
+        helper.assertTrue(listed.size() == 4 && listed.getFirst().tag().isEmpty() && listed.subList(1, 4).equals(sent()), "Import lists " + listed);
+        var imported = constructor.design().landed(listed.getFirst());
         helper.assertTrue(imported.column() != null, "The import took no column");
-        helper.assertTrue(constructor.importColumn(2).isEmpty(), "A simulator out of reach answered");
+        var drum = constructor.design().landed(listed.get(3));
+        helper.assertTrue(drum.form() == com.wormzjl.icheme.science.equipment.VesselPlacement.Form.LENGTHWISE && drum.boot() && drum.diameter() == 2 && drum.tangentLength() == 6,
+                "The drum landed as " + drum);
+        helper.assertTrue(constructor.simulator(2).isEmpty(), "A simulator out of reach answered");
+        var registries = helper.getLevel().registryAccess();
+        var fresh = place(helper, AT.above());
+        fresh.loadWithComponents(block.saveWithFullMetadata(registries), registries);
+        helper.assertTrue(fresh.listed().equals(listed), "The designs did not survive a save");
         helper.succeed();
     }
 
@@ -169,6 +194,8 @@ public final class ProcessSimulatorGameTests {
         helper.assertTrue(block.store().body().length == 0, "A reader's upload was stored");
         ProcessSimulatorNetwork.receive(reader, new ProcessSimulatorNetwork.SaveDesign(2, MaterialRuntime.active().presets().column(MaterialRuntime.active().presets().network().defaultColumnPreset()).input(MaterialRuntime.active()), ColumnComponents.Choices.DEFAULT));
         helper.assertTrue(block.savedDesign().isEmpty(), "A reader's design was stored");
+        ProcessSimulatorNetwork.receive(reader, ProcessSimulatorNetwork.SendDesigns.of(2, sent()));
+        helper.assertTrue(block.listed().isEmpty(), "A reader's Send to block was stored");
         close(reader);
         helper.assertTrue(block.store().holder().equals(editor.getUUID()), "A reader's close freed the sheet");
         close(editor);

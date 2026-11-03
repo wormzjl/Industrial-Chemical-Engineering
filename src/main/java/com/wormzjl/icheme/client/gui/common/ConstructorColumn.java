@@ -6,6 +6,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.equipment.VesselPlacement;
 import java.util.ArrayList;
@@ -169,10 +170,11 @@ public final class ConstructorColumn {
     /**
      * What to build: the groups as a latched selector, three a row, then the shown group's kinds, one a row, the draft's
      * latched. The draft's kind still acts: pressed, it returns to its design, as Back right of the title does (owner
-     * report 2026-10-28: the green kind could not be pressed). A kind's hover gives its full name and what it is. Keys:
-     * {@code category:<category>}, {@code kind:<equipment>}.
+     * report 2026-10-28: the green kind could not be pressed). A kind's hover gives its full name and what it is. After the
+     * last group, Import (batch 2026-11-02-process-simulator, S5): a process simulator's design within {@code reach} blocks, which sets the
+     * kind with its sizes. Keys: {@code category:<category>}, {@code kind:<equipment>}, {@code import}.
      */
-    public static Page choose(Category shown, Equipment current, HeatControlColumn.Texts t) {
+    public static Page choose(Category shown, Equipment current, int reach, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
         var categories = Category.values();
         for (int i = 0; i < categories.length; i += 3) {
@@ -181,6 +183,8 @@ public final class ConstructorColumn {
                 String key = KEY + "category." + categories[j].key();
                 row.add(position("category:" + categories[j].key(), t.get(key), categories[j] == shown, t.get(key + ".hint")));
             }
+            // Import takes the last row's free place: a row of its own would scroll the largest groups.
+            if (i + 3 >= categories.length) row.add(importKey(reach, t));
             rows.add(new Column.Buttons(row));
         }
         rows.add(new Column.Gap(4));
@@ -214,6 +218,52 @@ public final class ConstructorColumn {
         return new Page(List.of(new Column.Group(t.get(KEY + "group.templates"), t.get(KEY + "group.templates.hint"), rows)), List.of(), false);
     }
 
+    // ---- The designs a process simulator holds ----
+
+    /** A design as the Import page lists it: its name and count (cut to the column by the screen), and its hover: what it builds and at what sizes. */
+    public record Listed(String name, String hint) {
+    }
+
+    /**
+     * {@code sent} as the Import page lists it: its tag, a block member's own name after it ({@code flowsheet.sizing.member.*}), and its count
+     * where more than one stands on its row; the hover says what it builds, a drum standing or lying, at what sizes, and how many to build.
+     * The calculator's untagged design is named as such.
+     */
+    public static Listed listed(SentDesign sent, HeatControlColumn.Texts t) {
+        String name = sent.tag().isEmpty() ? t.get(KEY + "import.saved") : sent.member().isEmpty() ? sent.tag() : t.get(KEY + "import.member", sent.tag(), member(sent.member(), t));
+        String shown = sent.count() > 1 ? t.get(KEY + "import.count", name, sent.count()) : name;
+        var shape = sent.shape();
+        var column = sent.column();
+        String hint = column != null ? t.get(KEY + "import.column_hint", name, UnitDesign.number(column.diameter()), column.trays().trays() + 2)
+                : t.get(KEY + "import.unit_hint", name, kind(shape, t), UnitDesign.number(shape.diameter()), UnitDesign.number(shape.tangentLength()), sent.count());
+        return new Listed(shown, hint);
+    }
+
+    /** A block member's own name: {@code condenser}, {@code pa 2 cooler}. */
+    private static String member(String member, HeatControlColumn.Texts t) {
+        String[] words = member.split(" ");
+        if (words.length == 3 && words[0].equals("pa")) return t.get("flowsheet.sizing.member.pa_" + words[2], words[1]);
+        return t.get("flowsheet.sizing.member." + member.replace(' ', '_'));
+    }
+
+    /** What a shape builds, as the constructor names it: a drum standing or lying, else its kind's title. */
+    private static String kind(EquipmentShape shape, HeatControlColumn.Texts t) {
+        if (shape.kind() == EquipmentShape.Kind.DRUM) return t.get(KEY + "equipment." + (shape.orientation() == EquipmentShape.Orientation.VERTICAL ? "vertical_drum" : "horizontal_drum"));
+        return t.get("vessel.title." + shape.kind().name().toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * The designs the nearest process simulator holds (batch 2026-11-02-process-simulator, S5): one key a row, the column door's saved design
+     * first, then what Send to block stored, each lands on the draft. Back, right of the title, returns to the design. Keys:
+     * {@code design:<index>}.
+     */
+    public static Page imports(List<Listed> designs, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        for (int i = 0; i < designs.size(); i++) rows.add(new Column.Buttons(List.of(new Column.Button("design:" + i, designs.get(i).name(), true, designs.get(i).hint()))));
+        if (designs.isEmpty()) rows.add(new Column.Line(t.get(KEY + "imports.none"), Palette.MUTED));
+        return new Page(List.of(new Column.Group(t.get(KEY + "group.imports"), t.get(KEY + "group.imports.hint"), rows)), List.of(), false);
+    }
+
     // ---- The design page ----
 
     /**
@@ -243,9 +293,9 @@ public final class ConstructorColumn {
     /**
      * The design page: Size (the form's sizes and its support; a column's imported diameter, trays and feed tray shown,
      * with Import and Templates), a unit's Bottom outlet where its design turns it, then Place (a lying drum's axis, then forward, right
-     * and up). Footer: a drum's or a column's Nozzles, Paint, Build. Keys: the settings {@code size}, {@code length},
-     * {@code support}, {@code parallel}, {@code series}, {@code forward}, {@code right}, {@code up} (their steppers
-     * {@code <key>-} and {@code <key>+}); a column's {@code import} and {@code templates}; {@code axis:lengthwise}, {@code axis:crosswise};
+     * and up); every other form imports from the choice page. Footer: a drum's or a column's Nozzles, Paint, Build. Keys: the settings
+     * {@code size}, {@code length}, {@code support}, {@code parallel}, {@code series}, {@code forward}, {@code right}, {@code up} (their
+     * steppers {@code <key>-} and {@code <key>+}); a column's {@code import} and {@code templates}; {@code axis:lengthwise}, {@code axis:crosswise};
      * {@code outlet:<turn>}.
      */
     public static Page design(Design in, HeatControlColumn.Texts t) {
@@ -266,7 +316,7 @@ public final class ConstructorColumn {
                 size.add(shown("trays", "trays", Integer.toString(c.trays()), "", t));
                 size.add(shown("feed", "feed", Integer.toString(c.feed()), "", t));
                 size.add(step("support", "skirt", support, "m", t));
-                size.add(new Column.Buttons(List.of(new Column.Button("import", t.get(KEY + "import"), true, t.get(KEY + "import.hint", in.reach())),
+                size.add(new Column.Buttons(List.of(importKey(in.reach(), t),
                         new Column.Button("templates", t.get(KEY + "templates"), true, t.get(KEY + "templates.hint")))));
             }
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> {
@@ -316,6 +366,10 @@ public final class ConstructorColumn {
         footer.add(push("paint", "paint.hint", t));
         footer.add(build(t));
         return new Page(rows, footer, true);
+    }
+
+    private static Column.Button importKey(int reach, HeatControlColumn.Texts t) {
+        return new Column.Button("import", t.get(KEY + "import"), true, t.get(KEY + "import.hint", reach));
     }
 
     /** The Bottom outlet group: its four sides latched where it faces, those its form does not allow switched off. Keys {@code outlet:<turn>}. */

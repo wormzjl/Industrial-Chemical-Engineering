@@ -3,10 +3,12 @@ package com.wormzjl.icheme.world.level.block.entity;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlockEntities;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.flowsheet.SheetBody;
 import com.wormzjl.icheme.science.flowsheet.SheetStore;
 import com.wormzjl.icheme.world.inventory.ProcessSimulatorMenu;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -28,14 +30,17 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * A process simulator's data (batch 2026-11-02-process-simulator, plan sections 3.4 and 3.6): the sheet with its results as one packed body, what it
- * could not read, and the saved column design a constructor imports. Sheet and results go as one body and only to who asks, so they ride in no update tag:
+ * could not read, the saved column design and the designs Send to block stores (S5), which a constructor imports. Sheet and results go as one body and only to who asks, so they ride in no update tag:
  * this entity has none. It stores what it is sent and never solves it; {@link SheetStore} holds the rules. Who edits is state, and is not saved.
  */
 public class ProcessSimulatorBlockEntity extends BlockEntity implements MenuProvider {
-    private static final String TAG_SHEET = "Sheet", TAG_KEPT = "KeptSheets", TAG_DESIGN = "Design", TAG_ID = "SheetId";
+    private static final String TAG_SHEET = "Sheet", TAG_KEPT = "KeptSheets", TAG_DESIGN = "Design", TAG_ID = "SheetId", TAG_DESIGNS = "Designs";
     private final SheetStore store = new SheetStore();
     private @Nullable UUID sheetId;
     private Optional<ColumnDesign> savedDesign = Optional.empty();
+    /** What Send to block stored, and the entries of it this build could not read, kept as saved. */
+    private List<SentDesign> designs = List.of();
+    private List<CompoundTag> unread = List.of();
 
     public ProcessSimulatorBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.PROCESS_SIMULATOR.get(), pos, state);
@@ -81,6 +86,21 @@ public class ProcessSimulatorBlockEntity extends BlockEntity implements MenuProv
         setChanged();
     }
 
+    /** Stores what Send to block sent, in place of what it sent before. Facts: a later send replaces them, nothing else does. */
+    public void send(List<SentDesign> sent) {
+        designs = List.copyOf(sent);
+        unread = List.of();
+        setChanged();
+    }
+
+    /** What a constructor's Import lists: the calculator's saved design first, untagged, then what Send to block stored. A read: nothing is solved. */
+    public List<SentDesign> listed() {
+        var out = new ArrayList<SentDesign>();
+        savedDesign.ifPresent(design -> out.add(SentDesign.column("", design)));
+        out.addAll(designs);
+        return out;
+    }
+
     @Override
     public void setRemoved() {
         store.free();
@@ -98,6 +118,7 @@ public class ProcessSimulatorBlockEntity extends BlockEntity implements MenuProv
             tag.put(TAG_KEPT, kept);
         }
         savedDesign.ifPresent(design -> tag.put(TAG_DESIGN, ColumnDesignTags.write(design)));
+        if (!designs.isEmpty() || !unread.isEmpty()) tag.put(TAG_DESIGNS, SentDesignTags.write(designs, unread));
     }
 
     @Override
@@ -114,6 +135,10 @@ public class ProcessSimulatorBlockEntity extends BlockEntity implements MenuProv
             } catch (IllegalArgumentException invalid) {
                 IChemE.LOGGER.warn("Process simulator at {}: saved design refused ({})", worldPosition, invalid.getMessage());
             }
+        var read = SentDesignTags.read(tag.getList(TAG_DESIGNS, Tag.TAG_COMPOUND));
+        designs = read.designs();
+        unread = read.unread();
+        for (var repair : read.repairs()) IChemE.LOGGER.warn("equipment_compat process simulator at={} repair={}", worldPosition.toShortString(), repair);
     }
 
     @Override

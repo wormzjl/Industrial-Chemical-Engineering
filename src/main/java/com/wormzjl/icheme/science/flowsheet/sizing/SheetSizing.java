@@ -2,9 +2,11 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 
 import com.wormzjl.icheme.science.column.v3.V3ColumnInspection;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.NozzleBore;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
@@ -150,6 +152,31 @@ public final class SheetSizing {
     /** A member's key: its block's id, a slash and its own. */
     public static String member(String block, String member) {
         return block + "/" + member;
+    }
+
+    /**
+     * What Send to block stores ({@code SIZING_PLAN.md} section 3.7): each unit and member at the size the tab shows, the player's where
+     * the sheet holds one, else the rating's, in the rating's order. A column goes at its door's diameter with its components and member
+     * counts. A unit the constructor has no kind for (a valve: the pipe tool lays it at its line's bore) or a size it refuses is left out,
+     * as is a unit with nothing to size.
+     */
+    public static List<SentDesign> designs(Flowsheet sheet, Sized sized) {
+        var names = new HashMap<String, String>();
+        for (var unit : sheet.units()) names.put(unit.id(), unit.name());
+        var out = new ArrayList<SentDesign>();
+        for (var entry : sized.units().entrySet()) {
+            String id = entry.getKey();
+            var held = sheet.sizing().unit(id).size();
+            UnitSize size = held != null ? held : entry.getValue().size();
+            var shape = size == null ? null : UnitSize.built(size);
+            if (shape == null) continue;
+            int slash = id.indexOf('/');
+            String block = slash < 0 ? id : id.substring(0, slash), member = slash < 0 ? "" : id.substring(slash + 1);
+            var column = size instanceof ColumnSizing.Size c ? new ColumnDesign(c.layout(), c.diameter()) : null;
+            out.add(new SentDesign(names.getOrDefault(block, block), member, size.count(), shape, column));
+            if (out.size() == SentDesign.MAX) break;
+        }
+        return out;
     }
 
     /**

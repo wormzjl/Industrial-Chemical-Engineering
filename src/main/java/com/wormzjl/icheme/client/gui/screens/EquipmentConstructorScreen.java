@@ -25,6 +25,7 @@ import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
@@ -59,11 +60,13 @@ import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
  * design, on a panel door at the left beside the world and the vessel's ghost; a drum's side connections and every kind's
  * paint have pages of their own (owner requests 2026-10-16). It edits a local draft; the server receives the design when
  * the screen closes, or with a build request on Build. A column is imported whole (its diameter, trays, feed, draws,
- * pumparounds, steam and components) from the design saved in the nearest column calculator and built from it only
+ * pumparounds, steam and components) from a design the nearest process simulator holds and built from it only
  * (batch 2026-10-26-multi-machine-framework), or made from a column template on its Templates page (the calculator's
  * library: the bundled templates and the player's own, {@link ColumnTemplates}; owner request 2026-10-28); its
- * schematic is the calculator's ({@link ColumnDiagram}), on the HMI glass
- * beside the world. A bottom outlet leaving through a skirt turns to the sides its form allows (owner request
+ * schematic is the calculator's ({@link ColumnDiagram}), on the HMI glass beside the world. Import, on the choice page and a
+ * column's design page, lists the designs the nearest process simulator holds (its column door's saved design, then what Send to block stored; batch
+ * 2026-11-02-process-simulator, S5) and lands the chosen one on the draft: its form, sizes and type; the place and paint stay the
+ * player's. A bottom outlet leaving through a skirt turns to the sides its form allows (owner request
  * 2026-10-25, {@link EquipmentShape#outlets}): a standing drum's on its Nozzles page, a trickle-bed reactor's on its
  * design page. A column's side nozzles take their sides by themselves; its Nozzles page turns any of them to a side
  * the player picks (finding F3, owner decision 2026-10-27).
@@ -74,9 +77,9 @@ import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
  * or where it stands rebuilds the page.
  */
 public final class EquipmentConstructorScreen extends Screen {
-    /** The screen's pages: what to build, its design, a drum's side connections, a column's side nozzles, the paint and a column's templates. */
+    /** The screen's pages: what to build, its design, a drum's side connections, a column's side nozzles, the paint, a column's templates and a simulator's designs. */
     private enum Page {
-        CHOOSE, DESIGN, CONNECTIONS, NOZZLES, PAINT, TEMPLATES
+        CHOOSE, DESIGN, CONNECTIONS, NOZZLES, PAINT, TEMPLATES, IMPORTS
     }
 
     /** The schematic's width on its glass: the steam lines (90 pixels left of the axis) to the draw marks (39 right of it), and margins. */
@@ -132,6 +135,8 @@ public final class EquipmentConstructorScreen extends Screen {
     private @Nullable Component refused;
     /** The column templates the Templates page lists, read again each time it opens. */
     private ColumnTemplates.Library templates = new ColumnTemplates.Library(List.of(), 0);
+    /** The designs the Import page lists, as the server last answered. */
+    private List<SentDesign> imports = List.of();
     private boolean sent;
 
     public EquipmentConstructorScreen(BlockPos position, Direction facing, Design design) {
@@ -255,7 +260,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The page's rows, footer and message display as the builder makes them from the draft. */
     private ConstructorColumn.Page panel() {
         return switch (page) {
-            case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentConstructorScreen::tr);
+            case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentNetwork.IMPORT_REACH, EquipmentConstructorScreen::tr);
             case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
                     form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
                     new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank), EquipmentConstructorScreen::tr);
@@ -282,6 +287,7 @@ public final class EquipmentConstructorScreen extends Screen {
             }
             case PAINT -> ConstructorColumn.paint(channel, EquipmentConstructorScreen::tr);
             case TEMPLATES -> ConstructorColumn.templates(templateKeys(), templates.unreadable(), EquipmentConstructorScreen::tr);
+            case IMPORTS -> ConstructorColumn.imports(importKeys(), EquipmentConstructorScreen::tr);
         };
     }
 
@@ -294,6 +300,17 @@ public final class EquipmentConstructorScreen extends Screen {
             String hint = template.usable() ? tr(k + (template.bundled() ? "template.bundled" : "template.own"), template.name())
                     : tr(k + "template.unusable", template.name(), template.problem());
             out.add(new ConstructorColumn.Template(m.cut(template.name(), ConstructorColumn.WIDTH - 12), template.usable(), hint));
+        }
+        return out;
+    }
+
+    /** The designs as the Import page lists them ({@link ConstructorColumn#listed}): a name and count cut to its key, its hover whole. */
+    private List<ConstructorColumn.Listed> importKeys() {
+        var m = GuiCanvas.measure(font);
+        var out = new ArrayList<ConstructorColumn.Listed>();
+        for (var sent : imports) {
+            var listed = ConstructorColumn.listed(sent, EquipmentConstructorScreen::tr);
+            out.add(new ConstructorColumn.Listed(m.cut(listed.name(), ConstructorColumn.WIDTH - 12), listed.hint()));
         }
         return out;
     }
@@ -324,7 +341,7 @@ public final class EquipmentConstructorScreen extends Screen {
             var button = addRenderableWidget(SkinButton.of(spec, footer.get(i), this::act, EquipmentConstructorScreen::skin));
             if (spec.key().equals("build")) build = button.primary(true);
         }
-        if (page == Page.DESIGN || page == Page.CHOOSE || page == Page.TEMPLATES) {
+        if (page == Page.DESIGN || page == Page.CHOOSE || page == Page.TEMPLATES || page == Page.IMPORTS) {
             String key = page == Page.DESIGN ? "change" : "back";
             var spec = new Column.Button(key, tr(ConstructorColumn.KEY + key), true, tr(ConstructorColumn.KEY + key + ".hint"));
             addRenderableWidget(SkinButton.of(spec, ConstructorColumn.TITLE_KEY, this::act, EquipmentConstructorScreen::skin));
@@ -393,7 +410,8 @@ public final class EquipmentConstructorScreen extends Screen {
             case "nozzles" -> show(form.column() ? Page.NOZZLES : Page.CONNECTIONS);
             case "paint" -> show(Page.PAINT);
             case "build" -> build();
-            case "import" -> importColumn();
+            case "import" -> listImports();
+            case "design" -> land(Integer.parseInt(at));
             case "templates" -> {
                 templates = ColumnTemplates.load(minecraft);
                 show(Page.TEMPLATES);
@@ -690,12 +708,41 @@ public final class EquipmentConstructorScreen extends Screen {
         show(Page.DESIGN);
     }
 
-    /** Sends the draft with an import: the server keeps it, imports onto it and answers ({@link #answered}). */
-    private void importColumn() {
+    /** Sends the draft, then asks for the nearest process simulator's designs: the server answers with them ({@link #listed}). */
+    private void listImports() {
         importing = true;
         refused = null;
         saved = design();
-        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.IMPORT);
+        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.KEEP);
+        EquipmentNetwork.sendImportList(position);
+    }
+
+    /** Sends the draft, then lands design {@code index} of the listed ones on it: the server answers as an import does ({@link #answered}); the design page waits for it. */
+    private void land(int index) {
+        if (index < 0 || index >= imports.size()) return;
+        var sent = imports.get(index);
+        importing = true;
+        refused = null;
+        saved = design();
+        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.KEEP);
+        EquipmentNetwork.sendImportChoice(position, index, sent);
+        show(Page.DESIGN);
+    }
+
+    /**
+     * The server's list of designs. An open screen for that constructor stops waiting: it lists them on the Import page, or shows why there
+     * are none on its status line. Nothing lands until the player picks one.
+     */
+    public static void listed(BlockPos at, Component message, List<SentDesign> designs) {
+        var minecraft = Minecraft.getInstance();
+        if (!(minecraft.screen instanceof EquipmentConstructorScreen screen) || !screen.position.equals(at)) return;
+        screen.importing = false;
+        if (designs.isEmpty()) {
+            screen.refused = message;
+            return;
+        }
+        screen.imports = List.copyOf(designs);
+        screen.show(Page.IMPORTS);
     }
 
     /**
