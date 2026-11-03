@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Added
+
+- French, Spanish and Japanese translations (`fr_fr`, `es_es`, `ja_jp`, 1785 keys each). zh_cn completed: 749 missing lines added, 79 outdated lines updated, 16 wrong lines fixed, 124 unused keys removed. The 56 nozzle-role names in the pipe laying HUD get lang keys. Checks in `tools/localization/` (batch `2026-11-03-localization`).
+
 ## [0.19.2] - 2026-11-03
 
 ### Changed
