@@ -373,7 +373,11 @@ public final class ColumnDoors {
             case "add" -> add(x, id, tail, view);
             case "remove" -> remove(x, id, view);
             case "split" -> row(x, id, view, "split", tail.equals("uniform") ? "UNIFORM" : "RETURN_TRAY");
-            case "condenser" -> editor.set(id, "condenser", (tail.equals("exchanger") ? ColumnComponents.Condenser.EXCHANGER : ColumnComponents.Condenser.AIR_COOLER).name(), null);
+            case "condenser" -> editor.set(id, "condenser", (switch (tail) {
+                case "exchanger" -> ColumnComponents.Condenser.EXCHANGER;
+                case "air_then_water" -> ColumnComponents.Condenser.AIR_THEN_WATER;
+                default -> ColumnComponents.Condenser.AIR_COOLER;
+            }).name(), null);
             case "reflux" -> editor.set(id, "reflux_pump", tail.toUpperCase(Locale.ROOT), null);
             default -> {
                 if (head.startsWith("units/") && (head.endsWith("-") || head.endsWith("+"))) units(x, id, head.substring(6, head.length() - 1), head.endsWith("+") ? 1 : -1);
@@ -387,7 +391,7 @@ public final class ColumnDoors {
     }
 
     /**
-     * Steps a member count by {@code by}, within 1 to {@link ColumnComponents#MAX_UNITS}: {@code condenser} and {@code kettle}
+     * Steps a member count by {@code by}, within 1 to {@link ColumnComponents#MAX_UNITS}: {@code condenser}, {@code trim} (an air-then-water condenser's water shells) and {@code kettle}
      * on the door, {@code pa<i>} on pumparound row {@code i}. One undo step each.
      */
     private static void units(SheetContext x, String id, String member, int by) {
@@ -397,6 +401,7 @@ public final class ColumnDoors {
         switch (member) {
             case "condenser" -> json.addProperty(ColumnDoor.CONDENSER_UNITS, Math.clamp(door.units().condenser() + by, 1, ColumnComponents.MAX_UNITS));
             case "kettle" -> json.addProperty(ColumnDoor.KETTLE_UNITS, Math.clamp(door.units().kettle() + by, 1, ColumnComponents.MAX_UNITS));
+            case "trim" -> json.addProperty(ColumnDoor.TRIM_UNITS, Math.clamp(door.units().trim() + by, 1, ColumnComponents.MAX_UNITS));
             default -> {
                 int i = Integer.parseInt(member.substring(2));
                 json.getAsJsonArray("pumparounds").get(i).getAsJsonObject().addProperty(ColumnDoor.UNITS, Math.clamp(door.units().cooler(i) + by, 1, ColumnComponents.MAX_UNITS));
@@ -551,9 +556,10 @@ public final class ColumnDoors {
         };
     }
 
-    /** The heat of a pair, shown on its inlet: a part's reading, {@code T-101/pa 1}. */
+    /** The heat of a pair, shown on its inlet: a part's reading, {@code T-101/pa 1}; air then water's, its trim's. */
     private static double heat(SheetResults results, Flowsheet.Unit unit, String port) {
-        if (port.equals("condenser_in")) return results.reading(unit.id(), "condenser");
+        // Air then water's pair is its trim's (C1): the water's share, not the whole condenser.
+        if (port.equals("condenser_in")) return results.reading(unit.id(), ColumnDoor.of(unit.params()).condenser() == ColumnComponents.Condenser.AIR_THEN_WATER ? "condenser_water" : "condenser");
         if (port.equals("reboiler_in")) return results.reading(unit.id(), "reboiler");
         if (port.startsWith("pa/") && port.endsWith("/in")) return results.part(unit.id(), "pa " + port.split("/")[1], "duty");
         return Double.NaN;

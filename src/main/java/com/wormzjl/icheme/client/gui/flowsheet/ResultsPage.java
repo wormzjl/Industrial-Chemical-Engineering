@@ -8,11 +8,13 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Report;
+import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -324,7 +326,19 @@ public final class ResultsPage {
                     }
                 }
                 double condenser = results.reading(id, "condenser");
-                rows.add(new String[]{SheetUnits.megawatts(Math.abs(condenser)) + " MW", x.text("results.condenser", stateOf(x, x.into(id, "condenser_in"), x.outOf(id, "condenser_out")))});
+                String water = stateOf(x, x.into(id, "condenser_in"), x.outOf(id, "condenser_out"));
+                // Air then water (C1): the air cooler's share to 40 °C, then the trim's on the cooling water's pair.
+                if (ColumnDoor.of(unit.params()).condenser() == ColumnComponents.Condenser.AIR_THEN_WATER) {
+                    rows.add(new String[]{SheetUnits.megawatts(Math.abs(results.reading(id, "condenser_air"))) + " MW", x.text("results.condenser_air")});
+                    rows.add(new String[]{SheetUnits.megawatts(Math.abs(results.reading(id, "condenser_water"))) + " MW", x.text("results.trim", water)});
+                } else rows.add(new String[]{SheetUnits.megawatts(Math.abs(condenser)) + " MW", x.text("results.condenser", water)});
+                // Each stripping steam as V3 took it, past its inlet valve (U1b).
+                var u = x.units();
+                for (var row : ColumnDoor.of(unit.params()).steam()) {
+                    double t = results.reading(id, "steam_temperature/" + row.id()), p = results.reading(id, "steam_pressure/" + row.id());
+                    if (!Double.isNaN(t) && !Double.isNaN(p))
+                        rows.add(new String[]{"", x.text("results.steam", row.id(), u.t(t), u.temperature().symbol(), u.p(p), u.pressure().symbol())});
+                }
                 var out = new ArrayList<String>();
                 for (var stream : x.streams(id, false)) if (!stream.from().port().equals("condenser_out") && !stream.from().port().contains("/out")) out.add(stream.name());
                 rows.add(new String[]{"0", x.text("results.column_out", String.join(", ", out))});
@@ -356,7 +370,7 @@ public final class ResultsPage {
             lines.add(new Line(x.text(loop.closed() ? "results.loop_closed" : "results.loop_open", String.join(", ", tears), loop.passes()), Palette.TEXT));
         }
         lines.add(new Line(x.state().status(x.t(), x.units(), false).text(), Palette.TEXT));
-        var checked = checked(run, sheet);
+        var checked = checked(x, run, sheet);
         if (checked != null) lines.add(new Line(x.text("log.checked", checked), Palette.TEXT));
         for (var note : NoteText.all(run)) lines.add(new Line(NoteText.text(note, x.t(), sheet, x.units()), note.severity() == Note.Severity.ERROR ? Palette.RED : note.severity() == Note.Severity.WARNING ? Palette.WARN : Palette.TEXT));
         return lines;
@@ -398,12 +412,14 @@ public final class ResultsPage {
         return Double.isNaN(pass.temperature()) ? line : line + " " + x.text("log.tear_out", tear, x.units().t(pass.temperature()), x.units().temperature().symbol());
     }
 
-    /** Each hot side a column rated, by what it has in hand, or null with none. */
-    private static @Nullable String checked(FlowsheetRun run, Flowsheet sheet) {
+    /** Each hot side a column rated, by what it has in hand, or null with none: kelvin, and a stripping steam's pressure over its stage (U1b). */
+    private static @Nullable String checked(SheetContext x, FlowsheetRun run, Flowsheet sheet) {
         var margins = new ArrayList<String>();
         for (var id : new TreeSet<>(run.reports().keySet())) {
             var margin = run.reports().get(id).readings().get("margin");
-            if (margin != null) margins.add(NoteText.subject(id.replaceFirst(" check$", ""), sheet) + " " + SheetUnits.number(1, margin) + " K");
+            if (margin == null) continue;
+            boolean steam = id.contains("/steam ");
+            margins.add(NoteText.subject(id.replaceFirst(" check$", ""), sheet) + " " + (steam ? x.units().p(margin) + " " + x.units().pressure().symbol() : SheetUnits.number(1, margin) + " K"));
         }
         return margins.isEmpty() ? null : String.join(", ", margins);
     }

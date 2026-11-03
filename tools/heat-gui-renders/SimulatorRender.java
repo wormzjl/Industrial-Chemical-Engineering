@@ -313,7 +313,11 @@ public final class SimulatorRender {
         var tabs = DoorFrame.tabs(door, d.w);
         for (int i = 0; i < door.tabs().size(); i++) d.skin.button(d.c, tabs.get(i), door.tabs().get(i).text(), SimulatorPage.press(door.tabs().get(i)), false);
         var areas = DoorFrame.areas(door, d.w, d.h);
-        for (int i = 0; i < areas.size(); i++) rows(d, DoorFrame.columns(door, d.w).get(i), areas.get(i).x(), areas.get(i).y(), areas.get(i).w(), door.values());
+        for (int i = 0; i < areas.size(); i++) {
+            d.c.clip(areas.get(i));
+            rows(d, DoorFrame.columns(door, d.w).get(i), areas.get(i).x(), areas.get(i).y(), areas.get(i).w(), door.values());
+            d.c.unclip();
+        }
         var footer = DoorFrame.footer(door, d.w, d.h, d.m);
         d.skin.button(d.c, footer.getFirst(), T.get("fluid.close"), Skin.Press.REST, false);
         for (int i = 0; i < door.footer().size(); i++) {
@@ -898,6 +902,65 @@ public final class SimulatorRender {
                 List.of(sized(sized, s -> s.sizing.unit = "J-101"), sized(sized, s -> s.sizing.unit = "J-102"), sized(sized, s -> s.sizing.unit = "J-103")));
     }
 
+    /** {@code sheet} with unit {@code id}'s settings changed by {@code change}. */
+    private static Flowsheet withParams(Flowsheet sheet, String id, Consumer<JsonObject> change) {
+        var units = new ArrayList<Flowsheet.Unit>();
+        for (var unit : sheet.units()) {
+            if (!unit.id().equals(id)) {
+                units.add(unit);
+                continue;
+            }
+            var json = unit.params().json().deepCopy();
+            change.accept(json);
+            units.add(new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), new Params(json), unit.unknown()));
+        }
+        return new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), sheet.sizing(), sheet.unknown());
+    }
+
+    /**
+     * C3's sheets (batch 2026-11-02-process-simulator, COOLER_MODEL_PLAN.md section 7): T-101 on an air-then-water condenser at a
+     * 38 °C receiver with two trim shells, its block and its door's Equipment page; the Results' Units view and Log on that run;
+     * the CWS feed whose flow T-101 sets; and the Sizing tab after Size all, E-102 (the Cooler, its type keys and fans) and T-101
+     * (its proposed condenser) picked.
+     */
+    private static void c3(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
+        var trimmed = withParams(sheet, "T-101", json -> {
+            json.addProperty("condenser", ColumnComponents.Condenser.AIR_THEN_WATER.name());
+            json.addProperty("condenser_temperature", 311.15);
+            json.addProperty("trim_units", 2);
+        });
+        long start = System.nanoTime();
+        var trimmedRun = FlowsheetEngine.run(trimmed, CATALOG, () -> {
+        });
+        double took = (System.nanoTime() - start) / 1e9;
+        System.out.printf("air then water: %s, condenser %.2f MW, air %.2f MW, water %.2f MW, notes %s%n", trimmedRun.status(), trimmedRun.reports().get("T-101").readings().getOrDefault("condenser", Double.NaN) / 1e6,
+                trimmedRun.reports().get("T-101").readings().getOrDefault("condenser_air", Double.NaN) / 1e6, trimmedRun.reports().get("T-101").readings().getOrDefault("condenser_water", Double.NaN) / 1e6,
+                com.wormzjl.icheme.client.gui.flowsheet.NoteText.all(trimmedRun));
+        var host = new Host(false, null);
+        sheet(out, "01-air-then-water-block", W, H, List.of("T-101 on air then water: the air cooler, then two trim shells on the cooling water's pair"),
+                List.of(scene(trimmed, trimmedRun, took, host, s -> s.gestures.select(new SheetGestures.Selection(true, "T-101")))));
+        grid(out, "02-column-door-equipment", DW, DH, List.of("The Equipment page, air then water: the third key and the trim's shells", "The sample's exchanger, for comparison"),
+                List.of(unit(trimmed, trimmedRun, "T-101", 3), unit(sheet, run, "T-101", 3)));
+        sheet(out, "03-results-units-log", W, H, List.of("Units: the condenser's air and trim, the steam past its valve", "Log: the steam check's margin in bar"), List.of(
+                scene(trimmed, trimmedRun, took, host, s -> {
+                    s.tab = SimulatorFrame.Tab.RESULTS;
+                    s.results.view = ResultsPage.View.UNITS;
+                }), scene(trimmed, trimmedRun, took, host, s -> {
+                    s.tab = SimulatorFrame.Tab.RESULTS;
+                    s.results.view = ResultsPage.View.LOG;
+                })));
+        grid(out, "04-feed-set-by", DW, DH, List.of("CWS: its flow set by T-101; the entry is the first guess, the readings what the run gave"), List.of(stream(sheet, run, "CWS", 0)));
+        var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
+        });
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
+        var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds);
+        var sized = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
+        System.out.printf("sized: E-102 %s, values %s; T-101 proposes %s; fans %.1f kW%n", all.sized().units().get("E-102").size(), all.sized().units().get("E-102").rating().values(), all.sized().condensers().get("T-101"),
+                all.sized().fanPower() / 1e3);
+        sheet(out, "05-sizing-values", W, H, List.of("E-102, the Cooler: its type keys (Air, Water), its fans, and the sheet's fans", "T-101: the condenser sizing proposes"),
+                List.of(sized(sized, s -> s.sizing.unit = "E-102"), sized(sized, s -> s.sizing.unit = "T-101")));
+    }
+
     private static Flowsheet withType(Flowsheet sheet, String id, String type) {
         var units = new ArrayList<Flowsheet.Unit>();
         for (var unit : sheet.units()) units.add(unit.id().equals(id) ? new Flowsheet.Unit(unit.id(), type, unit.name(), unit.x(), unit.y(), unit.params(), unit.unknown()) : unit);
@@ -930,6 +993,11 @@ public final class SimulatorRender {
         // -Donly=sizing: S4b's sheets alone.
         if ("sizing".equals(System.getProperty("only"))) {
             sizing(out, sheet, run, seconds);
+            return;
+        }
+        // -Donly=c3: C3's sheets alone.
+        if ("c3".equals(System.getProperty("only"))) {
+            c3(out, sheet, run, seconds);
             return;
         }
         // -Donly=send: S5's sheets alone.

@@ -98,6 +98,11 @@ public final class Tiles {
             "compressor", List.of(UnitType.PISTON, UnitType.TURBO),
             "cooler", List.of(UnitType.AIR_COOLER, UnitType.WATER_COOLER));
 
+    /** The types tile {@code tile} is built as (plan section 3.10), none for an untyped tile; the Sizing tab's type keys. */
+    public static List<UnitType> types(@Nullable String tile) {
+        return TYPED.getOrDefault(tile, List.of());
+    }
+
     /** Whether a unit of tile {@code tile} can be built as {@code type}: an exchanger's size is no Water cooler on an exchanger tile. */
     public static boolean builtAs(@Nullable String tile, @Nullable UnitType type) {
         return type != null && TYPED.getOrDefault(tile, List.of()).contains(type);

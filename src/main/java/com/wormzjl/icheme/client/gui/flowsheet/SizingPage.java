@@ -67,12 +67,6 @@ public final class SizingPage {
 
     public static final String KEY = "sizing/";
     private static final int ROW = 12, GAP = 8, LAMP = 12, LAMP_SIZE = 5;
-    /** Types a tile is built as (plan section 3.10), by tile. */
-    private static final Map<String, List<UnitType>> TYPES = Map.of(
-            "fired_heater", List.of(UnitType.VERTICAL_HEATER, UnitType.CABIN_HEATER),
-            "storage_tank", List.of(UnitType.FLOATING_ROOF, UnitType.SPHERE),
-            "drum", List.of(UnitType.STANDING_DRUM, UnitType.LYING_DRUM),
-            "compressor", List.of(UnitType.PISTON, UnitType.TURBO));
 
     private SizingPage() {
     }
@@ -351,7 +345,7 @@ public final class SizingPage {
         if (!valve) group.add(new Column.Buttons(List.of(position("auto", x.text("sizing.auto"), held.mode() == SizingFacts.Mode.AUTO, edits),
                 position("fixed", x.text("sizing.fixed"), held.mode() == SizingFacts.Mode.FIXED, edits))));
         var unit = x.editor().unit(id);
-        var types = unit == null ? List.<UnitType>of() : TYPES.getOrDefault(unit.type(), List.of());
+        var types = unit == null ? List.<UnitType>of() : Tiles.types(unit.type());
         if (!types.isEmpty()) {
             var shown = type(x, id, size);
             var keys = new ArrayList<Column.Button>();
@@ -951,9 +945,18 @@ public final class SizingPage {
                 var limits = picked == null ? List.<Item>of() : limitItems(x, sized.units().get(picked).rating());
                 String[] limitHead = limitHead(x, x.text("sizing.every_limit", picked == null ? "" : name(x, picked)));
                 var lower = Table.of(m, width, limitHead, limits);
-                int below = picked == null ? 0 : (limits.size() + 1) * lower.height() + 8;
-                split(c, x, box, state, unitHead(x), unitItems(x, state, sized), y, Math.max(box.y() + box.h() / 2, box.bottom() - below));
-                if (picked != null) lower.draw(c, box, limitHead, limits, 0, Math.max(box.y() + box.h() / 2, box.bottom() - below) + 6, box.bottom());
+                // What the picked item shows beside its limits, and the sheet's fans, wrapped under its table (C2, U1).
+                var said = new ArrayList<String>();
+                for (var text : beside(x, sized, picked)) said.addAll(m.wrap(text, width));
+                int below = (picked == null ? 0 : (limits.size() + 1) * lower.height() + 8) + said.size() * ROW + (said.isEmpty() ? 0 : 6);
+                int top = Math.max(box.y() + box.h() / 2, box.bottom() - below);
+                split(c, x, box, state, unitHead(x), unitItems(x, state, sized), y, top);
+                int end = picked == null ? top + 6 : lower.draw(c, box, limitHead, limits, 0, top + 6, box.bottom()) + 4;
+                for (var text : said) {
+                    if (end + ROW > box.bottom()) break;
+                    c.text(text, box.x() + 4, end, Palette.TEXT);
+                    end += ROW;
+                }
             }
             case LINES -> {
                 String picked = line(state, sized);
@@ -985,6 +988,30 @@ public final class SizingPage {
             }
         }
         c.unclip();
+    }
+
+    /**
+     * The lines under the Units view's limits: the picked item's values (a free water side's tower water, the duty an air cooler
+     * ahead would take, an air cooler's fans), a column's proposed condenser (the door's is the player's), and every air cooler's fans
+     * together. They light no lamp.
+     */
+    static List<String> beside(SheetContext x, SheetSizing.Sized sized, @Nullable String picked) {
+        var lines = new ArrayList<String>();
+        var rated = picked == null ? null : sized.units().get(picked);
+        if (rated != null) {
+            var values = rated.rating().values();
+            if (values.containsKey(Rating.WATER))
+                lines.add(x.text("sizing.value.water", number(values.get(Rating.WATER)), number(values.getOrDefault(Rating.WATER_VOLUME, Double.NaN))));
+            if (values.containsKey(Rating.AIR_AHEAD)) lines.add(x.text("sizing.value.air_ahead", number(values.get(Rating.AIR_AHEAD) / 1e6)));
+            if (values.containsKey(Rating.FANS))
+                lines.add(x.text("sizing.value.fans", SheetUnits.number(0, 100 * values.get(Rating.FANS)) + " %", number(values.getOrDefault(Rating.FAN_POWER, 0.) / 1e3)));
+        }
+        var proposed = picked == null ? null : sized.condensers().get(picked);
+        if (proposed != null)
+            lines.add(x.text("sizing.value.condenser", x.text("sizing.condenser." + proposed.name().toLowerCase(Locale.ROOT))));
+        double fans = sized.fanPower();
+        if (fans > 0) lines.add(x.text("sizing.value.fan_total", number(fans / 1e3)));
+        return lines;
     }
 
     /** The item table over a line at {@code bottom}: rows from the state's offset. */

@@ -2,6 +2,7 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
@@ -196,6 +197,25 @@ class SizingPageTest {
         state.view = SizingPage.View.PRESSURE;
         assertTrue(SizingPage.pick(state, SizingPage.click(x, state, texts.measure, box, box.x() + 30, box.y() + 4 + 12 + 12 + 4)));
         assertEquals(1, state.path);
+        assertEquals(List.of(), texts.missing.stream().toList());
+    }
+
+    /**
+     * C3: under the picked item's limits, what it shows beside them (C2, U1): an air cooler's fans as a share and kW, a free water
+     * side's tower water, a column's proposed condenser; and every air cooler's fans together, whatever is picked.
+     */
+    @Test
+    void theUnitsViewSaysThePickedItemsValuesAndTheSheetsFans() {
+        var texts = new SheetFixture.Texts();
+        var x = context(texts, SheetFixture.editor(SHEET), STEADY, false);
+        var units = new LinkedHashMap<>(sized().units());
+        units.put("E-102", new SheetSizing.SizedUnit(units.get("E-102").size(), units.get("E-102").rating().with(Rating.FANS, .72).with(Rating.FAN_POWER, 67.8e3)));
+        units.put("E-101", new SheetSizing.SizedUnit(units.get("E-101").size(), units.get("E-101").rating().with(Rating.WATER, 938.8).with(Rating.WATER_VOLUME, 3390)));
+        var sized = new SheetSizing.Sized(sized().lines(), units, sized().paths(), Map.of("T-101", ColumnComponents.Condenser.AIR_THEN_WATER));
+        assertEquals(List.of(x.text("sizing.value.fans", "72 %", "67.8"), x.text("sizing.value.fan_total", "67.8")), SizingPage.beside(x, sized, "E-102"));
+        assertEquals(x.text("sizing.value.water", "939", "3390"), SizingPage.beside(x, sized, "E-101").getFirst());
+        assertEquals(x.text("sizing.value.condenser", x.text("sizing.condenser.air_then_water")), SizingPage.beside(x, sized, "T-101").getFirst());
+        assertEquals(List.of(x.text("sizing.value.fan_total", "67.8")), SizingPage.beside(x, sized, null), "the sheet's fans with nothing picked");
         assertEquals(List.of(), texts.missing.stream().toList());
     }
 

@@ -87,7 +87,7 @@ class HeatDiagramTest {
             assertEquals(expected, drawn, c::toString);
             checked++;
         }
-        assertEquals(18, checked);
+        assertEquals(32, checked, "every pair of lines, both sides");
     }
 
     @Test

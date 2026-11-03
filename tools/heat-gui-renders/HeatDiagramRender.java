@@ -65,6 +65,7 @@ public final class HeatDiagramRender {
         var B = ExchangerBlueprint.Lines.BYPASS;
         var R = ExchangerBlueprint.Lines.RATIO;
         var N = ExchangerBlueprint.Lines.NONE;
+        var F = ExchangerBlueprint.Lines.FEED;
         var cases = List.of(
                 new Case("exchanger-plain", "EXCHANGER", "TUBE", true, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OFF, true, "bypass", 0.25, null, true),
                 new Case("exchanger-tube-bypass", "EXCHANGER", "TUBE", true, new ExchangerBlueprint.Design(B, N), HeatUnit.Mode.OUTLET_TEMPERATURE, true, "bypass", 0.3, lines("CHECKED", 1), true),
@@ -72,6 +73,8 @@ public final class HeatDiagramRender {
                 new Case("exchanger-both-bypass", "EXCHANGER", "SHELL", true, new ExchangerBlueprint.Design(B, B), HeatUnit.Mode.DUTY, true, "bypass", 0.1, lines("UNMETERED", 1), true),
                 new Case("exchanger-ratio", "EXCHANGER", "TUBE", true, new ExchangerBlueprint.Design(R, R), HeatUnit.Mode.RATIO, true, "feed_valve", null, lines("COMPLETE", 0), true),
                 new Case("exchanger-bypass-ratio", "EXCHANGER", "SHELL", true, new ExchangerBlueprint.Design(R, B), HeatUnit.Mode.OUTLET_TEMPERATURE, true, "bypass", 0.2, lines("NOT_VALIDATED", 0), true),
+                new Case("exchanger-feed", "EXCHANGER", "TUBE", true, new ExchangerBlueprint.Design(F, N), HeatUnit.Mode.COLUMN, true, "feed_valve", null, lines("COMPLETE", 0), true),
+                new Case("exchanger-feed-both", "EXCHANGER", "SHELL", true, new ExchangerBlueprint.Design(F, F), HeatUnit.Mode.COLUMN, true, "feed_valve", null, lines("CHECKED", 0), false),
                 new Case("air-cooler", "AIR_COOLER", "PROCESS", false, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OFF, true, "fans", 1.0, null, true),
                 new Case("air-cooler-reader", "AIR_COOLER", "PROCESS", false, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "fans", 0.6, null, false),
                 new Case("fired-heater", "FIRED_HEATER", "RADIANT", true, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OFF, true, "burners", 0.7, null, true),
@@ -87,7 +90,7 @@ public final class HeatDiagramRender {
         var drawings = new ArrayList<BufferedImage>();
         var names = new ArrayList<String>();
         for (var c : cases)
-            if (List.of("exchanger-both-bypass", "air-cooler", "fired-heater", "kettle").contains(c.file())) {
+            if (List.of("exchanger-both-bypass", "exchanger-feed-both", "air-cooler", "fired-heater", "kettle").contains(c.file())) {
                 drawings.add(drawing(c));
                 names.add(c.file());
             }

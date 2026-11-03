@@ -314,6 +314,33 @@ class ColumnBlockTest {
         assertNull(layout.part(10, 10, 1), "off the block");
     }
 
+    /**
+     * C3: the door's third condenser key sets air then water, which the block draws as the air cooler, then the water trim on the
+     * cooling water's ports, the frame wider by the trim; the trim's stepper counts its shells within 1 to the most.
+     */
+    @Test
+    void theDoorsAirThenWaterKeyDrawsTheTrimAndItsStepperCountsItsShells() {
+        var editor = SheetFixture.editor(one(door(ColumnComponents.Condenser.EXCHANGER, 18e6, 1.4e5)));
+        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS);
+        var view = new Door.View();
+        int width = editor.layout().box("u").block().frame().w();
+        ColumnDoors.door(x, "u", view).actions().button("condenser:air_then_water");
+        assertEquals(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnDoor.of(editor.unit("u").params()).condenser());
+        var block = editor.layout().box("u").block();
+        assertEquals(width + ColumnBlock.TRIM, block.frame().w(), "the frame takes the trim");
+        var air = block.parts().stream().filter(p -> p.slot().equals(ColumnBlueprint.CONDENSER)).findFirst().orElseThrow();
+        var trim = block.parts().stream().filter(p -> p.slot().equals(ColumnBlueprint.TRIM_CONDENSER)).findFirst().orElseThrow();
+        assertEquals(ColumnBlock.Shape.AIR_CONDENSER, air.shape());
+        assertEquals(ColumnBlock.Shape.CONDENSER, trim.shape());
+        assertTrue(air.x() < trim.x(), "the air cooler, then the trim");
+        ColumnDoors.door(x, "u", view).actions().button("units/trim+");
+        assertEquals(2, ColumnDoor.of(editor.unit("u").params()).units().trim());
+        for (int i = 0; i < 3; i++) ColumnDoors.door(x, "u", view).actions().button("units/trim-");
+        assertEquals(1, ColumnDoor.of(editor.unit("u").params()).units().trim(), "never under one shell");
+        ColumnDoors.door(x, "u", view).actions().button("condenser:air_cooler");
+        assertEquals(ColumnComponents.Condenser.AIR_COOLER, ColumnDoor.of(editor.unit("u").params()).condenser());
+    }
+
     @Test
     void tracksKeepLinesInOrder() {
         assertArrayEquals(new int[]{0, 0}, ColumnBlock.tracks(new int[]{10, 40}, new int[]{10, 40}), "straight lines need no jog");

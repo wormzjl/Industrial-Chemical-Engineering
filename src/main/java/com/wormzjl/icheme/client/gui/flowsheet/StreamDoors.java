@@ -91,8 +91,12 @@ public final class StreamDoors {
             values.put("temperature", u.t(feed.temperature()));
             boolean mass = view.basis.equals("mass"), volume = view.basis.equals("volume");
             var props = x.props(stream);
-            rows.add(Door.group(x.text("door.group.flow"), new Column.Buttons(List.of(Door.position("basis/mole", x.text("door.mole"), !mass && !volume), Door.position("basis/mass", x.text("door.mass"), mass), Door.position("basis/volume", x.text("door.volume"), volume))),
+            var flow = new ArrayList<Column.Row>(List.of(new Column.Buttons(List.of(Door.position("basis/mole", x.text("door.mole"), !mass && !volume), Door.position("basis/mass", x.text("door.mass"), mass), Door.position("basis/volume", x.text("door.volume"), volume))),
                     Door.entry("flow", x.text("door.flow"), volume ? u.time().unit("m³") : mass ? u.tonnesUnit() : u.molesUnit())));
+            // A unit that sets this feed's flow (U1): the entry is its first guess, and the readings show the flow the run gave it.
+            String setBy = setBy(x, stream);
+            if (setBy != null) flow.add(new Column.Line(setBy, Palette.ACCENT));
+            rows.add(Door.group(x.text("door.group.flow"), flow.toArray(Column.Row[]::new)));
             values.put("flow", volume ? props == null ? "" : SheetUnits.number(1, u.time().display(mass(x, feed) / props.density())) : mass ? u.tonnes(mass(x, feed)) : u.moles(total(feed)));
             rows.add(Door.phases(x.text("door.group.phases"), props == null ? StreamProps.Phases.NONE : props.phases(), x.t()));
             rows.add(Door.group(x.text("door.group.readings"), Door.meter(x.text("door.mass_flow"), props == null ? "" : u.tonnes(props.mass()), u.tonnesUnit()), Door.meter(x.text("door.density"), props == null ? "" : SheetUnits.number(1, props.density()), "kg/m³"),
@@ -126,6 +130,15 @@ public final class StreamDoors {
                 else if (key.equals("paste_state")) view.said = paste(x, stream.id(), true);
             }
         });
+    }
+
+    /** What the last run says of a unit that set this feed's flow (U1's {@code flow.set_by}), without the stream's own name, or null where none did. */
+    static @Nullable String setBy(SheetContext x, Flowsheet.Stream stream) {
+        var results = x.state().results();
+        if (results == null) return null;
+        for (var note : NoteText.all(results.run()))
+            if (note.key().equals("flow.set_by") && note.subject().equals(stream.id())) return x.text("flow.set_by", NoteText.subject(note.arguments().getFirst(), x.editor().sheet()));
+        return null;
     }
 
     private static String feedStatus(SheetContext x, Flowsheet.Stream stream) {

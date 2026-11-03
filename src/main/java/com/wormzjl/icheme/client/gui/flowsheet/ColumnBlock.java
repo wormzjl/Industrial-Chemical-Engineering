@@ -24,7 +24,8 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ColumnBlock {
     /** The frame's bands round the tower; the foot under a kettle; the frame of a column with no elbows. */
-    public static final int LEFT = 72, RIGHT = 86, TOP = 62, FOOT = 20, KETTLE_FOOT = 56, WIDTH = LEFT + Symbol.COLUMN_TOP.w + RIGHT, HEIGHT = TOP + 30 + 16 * SheetLayout.SLICES + FOOT;
+    /** The right band widens by {@link #TRIM} where an air-then-water condenser puts its water trim between the air cooler and the drum. */
+    public static final int LEFT = 72, RIGHT = 86, TOP = 62, TRIM = 28, FOOT = 20, KETTLE_FOOT = 56, WIDTH = LEFT + Symbol.COLUMN_TOP.w + RIGHT, HEIGHT = TOP + 30 + 16 * SheetLayout.SLICES + FOOT;
     private static final int W = Symbol.COLUMN_TOP.w, HEAD = 15, ATTACH = 5, TRACK = 3, CLEAR = 2, TRACKS = 2, RISER = 14, UNDER_REFLUX = 16, MARK = 11;
 
     public enum Shape {
@@ -226,7 +227,7 @@ public final class ColumnBlock {
 
     private ColumnBlock(Flowsheet.Unit unit, ColumnDoor door) {
         var choices = ColumnDoors.choices(unit);
-        boolean kettle = ColumnComponents.kettleRequired(door.reboilerDuty()), air = door.condenser() == ColumnComponents.Condenser.AIR_COOLER, ejector = ColumnComponents.ejectorRequired(door.topPressure());
+        boolean kettle = ColumnComponents.kettleRequired(door.reboilerDuty()), air = door.condenser() == ColumnComponents.Condenser.AIR_COOLER, trimmed = door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER, ejector = ColumnComponents.ejectorRequired(door.topPressure());
         var runs = runs(door);
         var draws = new ArrayList<>(door.draws());
         draws.sort(Comparator.comparingInt(ColumnDoor.Draw::tray));
@@ -252,12 +253,12 @@ public final class ColumnBlock {
         int[] band = from.stream().mapToInt(Integer::intValue).toArray(), attach = to.stream().mapToInt(Integer::intValue).toArray(), inner = tracks(band, attach), outer = tracks(onFrame, onTower);
         int topTrack = most(inner), left = LEFT + TRACK * Math.max(0, topTrack - TRACKS), deepest = most(outer);
 
-        int bx = unit.x(), by = unit.y(), tx = bx + left, wall = tx + W, br = wall + RIGHT, mid = tx + W / 2, ty = by + TOP, tf = ty + h, bb = tf + (kettle ? KETTLE_FOOT : FOOT);
+        int bx = unit.x(), by = unit.y(), tx = bx + left, wall = tx + W, br = wall + RIGHT + (trimmed ? TRIM : 0), mid = tx + W / 2, ty = by + TOP, tf = ty + h, bb = tf + (kettle ? KETTLE_FOOT : FOOT);
         frame = new Rect(bx, by, br - bx, bb - by);
         tower = new Rect(tx, ty, W, h);
         part(ColumnBlueprint.COLUMN, Shape.TOWER, tx, ty, tower, "");
 
-        overhead(door, choices, air, ejector, bx, by, tx, wall, br, mid, ty);
+        overhead(door, choices, air, trimmed, ejector, bx, by, tx, wall, br, mid, ty);
 
         int cooler = bx + 18, pump = cooler + 30, valve = bx + 14, line = 0;
         var inlets = new ArrayList<String>();
@@ -305,9 +306,13 @@ public final class ColumnBlock {
         return settle(runs, door, h, kettle ? last - ATTACH : last, kettle ? last - RISER : last) && spread(onTower, ATTACH, HEAD + UNDER_REFLUX, last) && spread(onFrame, SheetLayout.PITCH, HEAD + UNDER_REFLUX, last);
     }
 
-    /** Overhead train at the top right, as the assembly drawing has it: head, ejector, condenser, receiver and its boot, the pump, the tee, a valve on each leg. Cooling water passes over the head to its pair. */
-    private void overhead(ColumnDoor door, ColumnComponents.Choices choices, boolean air, boolean ejector, int bx, int by, int tx, int wall, int br, int mid, int ty) {
-        int vapour = ty - 20, water = ty - 6, reflux = ty + HEAD, condenser = wall + 18, d0 = condenser + 20, d1 = d0 + 32, oil = d0 + 8, boot = d1 - 9, vx = wall + 74, wash = wall + 23;
+    /**
+     * Overhead train at the top right, as the assembly drawing has it: head, ejector, condenser, an air-then-water condenser's water trim, receiver and its
+     * boot, the pump, the tee, a valve on each leg. Cooling water passes over the head to its pair: the condenser's, or the trim's.
+     */
+    private void overhead(ColumnDoor door, ColumnComponents.Choices choices, boolean air, boolean trimmed, boolean ejector, int bx, int by, int tx, int wall, int br, int mid, int ty) {
+        int shift = trimmed ? TRIM : 0, vapour = ty - 20, water = ty - 6, reflux = ty + HEAD, condenser = wall + 18, trim = condenser + TRIM, d0 = condenser + 20 + shift, d1 = d0 + 32, oil = d0 + 8,
+                boot = d1 - 9, vx = wall + 74 + shift, wash = wall + 23;
         if (ejector) {
             int e0 = wall - 16, e1 = wall + 4;
             pipe(Service.HOT, true, mid, ty, mid, vapour, e0, vapour);
@@ -319,20 +324,25 @@ public final class ColumnBlock {
             pipe(Service.HOT, true, bx, motive, e0 + 4, motive, e0 + 4, vapour - 4);
             spots.put("motive", new Spot(bx, motive, SheetLayout.Side.LEFT));
         } else pipe(Service.HOT, true, mid, ty, mid, vapour, condenser - 8, vapour);
-        pipe(Service.HOT, true, condenser + 8, vapour, d0, vapour);
-        if (air) part(ColumnBlueprint.CONDENSER, Shape.AIR_CONDENSER, condenser, vapour, new Rect(condenser - 8, vapour - 7, 16, 14), "");
-        else {
+        // The water-cooled member: the condenser itself, or the trim after an air cooler (COOLER_MODEL_PLAN.md section 6).
+        int cooled = trimmed ? trim : condenser;
+        if (trimmed) pipe(Service.HOT, true, condenser + 8, vapour, trim - 8, vapour);
+        pipe(Service.HOT, true, cooled + 8, vapour, d0, vapour);
+        if (air || trimmed) part(ColumnBlueprint.CONDENSER, Shape.AIR_CONDENSER, condenser, vapour, new Rect(condenser - 8, vapour - 7, 16, 14), "");
+        if (!air) {
             int cold = ejector ? ty - 56 : ty - 54, back = ejector ? ty - 42 : ty - 34;
-            pipe(Service.COLD, true, bx, cold, condenser + 4, cold, condenser + 4, vapour - 7);
-            pipe(Service.COLD, true, condenser - 4, vapour - 7, condenser - 4, back, bx, back);
-            part(ColumnBlueprint.CONDENSER, Shape.CONDENSER, condenser, vapour, new Rect(condenser - 8, vapour - 8, 16, 16), "");
+            pipe(Service.COLD, true, bx, cold, cooled + 4, cold, cooled + 4, vapour - 7);
+            pipe(Service.COLD, true, cooled - 4, vapour - 7, cooled - 4, back, bx, back);
+            part(trimmed ? ColumnBlueprint.TRIM_CONDENSER : ColumnBlueprint.CONDENSER, Shape.CONDENSER, cooled, vapour, new Rect(cooled - 8, vapour - 8, 16, 16), "");
             spots.put("condenser_in", new Spot(bx, cold, SheetLayout.Side.LEFT));
             spots.put("condenser_out", new Spot(bx, back, SheetLayout.Side.LEFT));
         }
-        notes.add(new Note("mark.condenser", "", condenser, vapour + 16, 0));
-        // Its units in parallel (S3b): the count over the line into it, under the cooling water's return and clear of an ejector.
+        notes.add(new Note(trimmed ? "mark.air" : "mark.condenser", "", condenser, vapour + 16, 0));
+        if (trimmed) notes.add(new Note("mark.trim", "", trim, vapour + 16, 0));
+        // Its units in parallel (S3b): the count over the line into it, under the cooling water's return and clear of an ejector; the trim's over its own.
         int units = door.units().condenser();
         if (units > 1) notes.add(new Note("mark.units", Integer.toString(units), condenser - 17, vapour - 8, 0));
+        if (trimmed && door.units().trim() > 1) notes.add(new Note("mark.units", Integer.toString(door.units().trim()), trim - 14, vapour - 8, 0));
         parts.add(new Part(ColumnBlueprint.RECEIVER, Shape.DRUM, boot, water, new Rect(d0, vapour - 7, d1 - d0, 14), "", new Rect(boot - 4, vapour + 7, 8, water + 4 - vapour - 7)));
         notes.add(new Note("mark.drum", "", (d0 + d1) / 2, vapour, d1 - d0));
 
