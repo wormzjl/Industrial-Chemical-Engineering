@@ -14,6 +14,7 @@ import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+import com.wormzjl.icheme.science.fluid.transport.SolidMobility;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** S1's service gate on the world's own flash (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 3.3): every rule at both sides of its threshold. */
@@ -107,7 +109,17 @@ final class ServiceTest {
         on(() -> {
             assertEquals(Service.WATER, service(at(300, 5e5, mix(CRUDE, .96, WATER)), OPEN));
             assertEquals(Service.LIQUID, service(at(300, 5e5, mix(CRUDE, .94, WATER)), OPEN));
-            assertEquals(Service.WATER, service(at(300, 5e5, pure(WATER)), TRAY_TO_PUMP), "the plan's order: water first");
+            assertEquals(Service.WATER, service(at(300, 5e5, pure(WATER)), OPEN));
+            return null;
+        });
+    }
+
+    @Test void whatALineFeedsOrLeavesComesBeforeWhatItCarries() {
+        on(() -> {
+            var water = at(300, 5e5, pure(WATER));
+            assertEquals(Service.DRAW, service(water, TRAY), "a draw's limit protects the column's head, whatever the liquid");
+            assertEquals(Service.DRAW, service(water, TRAY_TO_PUMP));
+            assertEquals(Service.SUCTION_COLD, service(water, PUMP), "a suction's limit protects its pump, whatever the liquid");
             return null;
         });
     }
@@ -243,6 +255,107 @@ final class ServiceTest {
             assertEquals(1.10 * (water.mass() + 5), line.mass(), 1e-9);
             assertTrue(line.density() > clean.density() && line.viscosity() > clean.viscosity(), "the world's slurry");
             assertEquals(NetworkReduction.viscosity(MODEL, mud.state(), scratch), line.viscosity(), 0);
+            return null;
+        });
+    }
+
+    private static LineSizing.Line line(FlowStream stream, Service service) {
+        return LineSizing.Line.of(stream, service, DesignBasis.DEFAULT, THERMO, PipeSizes.MAX_BORE, null, new MixtureViscosity.Workspace());
+    }
+
+    private static LineSizing.Line solids(LineSizing.Line line, SolidMobility.Donor donor) {
+        return new LineSizing.Line(line.service(), line.mass(), line.volume(), line.density(), line.viscosity(), line.pressure(), line.length(), line.nozzle(), line.speedLimit(), new LineSizing.Solids(donor, line.solids().state()));
+    }
+
+    @Test void aLineWithNoSolidsCarriesNoSuchReading() {
+        on(() -> {
+            var size = new LineSizing.Size(.3, 1);
+            var line = line(at(320, 3e5, pure(WATER)), Service.WATER);
+            assertNull(LineSizing.rate(line, size).reading(Limit.LINE_SOLIDS));
+            assertNull(LineSizing.mobility(line, size));
+            return null;
+        });
+    }
+
+    /** The row says what the world's own check says, at every usual bore. */
+    @Test void aSlurryLineReadsTheWorldsCheck() {
+        on(() -> {
+            var line = line(slurry(at(320, 3e5, pure(WATER)), .2), Service.WATER);
+            int refused = 0;
+            for (double bore : new double[]{.05, .1, .2, .3, .5, .8}) {
+                var size = new LineSizing.Size(bore, 1);
+                var check = LineSizing.mobility(line, size);
+                var reading = LineSizing.rate(line, size).reading(Limit.LINE_SOLIDS);
+                assertEquals(check.allowed(), reading.met(), bore + " m");
+                assertEquals(check.minimumVelocity(), reading.low(), 0);
+                if (!check.allowed()) refused++;
+            }
+            assertTrue(refused > 0 && refused < 6, "some bores carry it and some do not: " + refused);
+            return null;
+        });
+    }
+
+    @Test void onTheSpeedThatSuspendsItsSolidsALineStillDeposits() {
+        on(() -> {
+            var line = line(slurry(at(320, 3e5, pure(WATER)), .2), Service.WATER);
+            var size = new LineSizing.Size(.3, 1);
+            double speed = LineSizing.mobility(line, size).velocity();
+            var donor = line.solids().donor();
+            var on = solids(line, new SolidMobility.Donor(false, false, true, donor.liquidVolume(), donor.solidVolume(), donor.largestDiameter(), speed));
+            assertEquals(SolidMobility.Reason.DEPOSITION, LineSizing.mobility(on, size).reason(), "the check is strict");
+            assertEquals(Lamp.RED, LineSizing.rate(on, size).lamp());
+            var just = solids(line, new SolidMobility.Donor(false, false, true, donor.liquidVolume(), donor.solidVolume(), donor.largestDiameter(), Math.nextDown(speed)));
+            assertEquals(SolidMobility.Reason.MOBILE, LineSizing.mobility(just, size).reason());
+            assertTrue(LineSizing.rate(just, size).reading(Limit.LINE_SOLIDS).met());
+            return null;
+        });
+    }
+
+    @Test void aParticleAsWideAsTheBoreIsRedUntilTheBoreClearsIt() {
+        on(() -> {
+            var line = line(slurry(at(320, 3e5, pure(WATER)), .2), Service.WATER);
+            var donor = line.solids().donor();
+            var coarse = solids(line, new SolidMobility.Donor(false, false, true, donor.liquidVolume(), donor.solidVolume(), .1, 0));
+            var size = new LineSizing.Size(.1, 1);
+            assertEquals(SolidMobility.Reason.PARTICLE_TOO_LARGE, LineSizing.mobility(coarse, size).reason(), "on the bore itself it is refused");
+            assertEquals(Lamp.RED, LineSizing.rate(coarse, size).lamp());
+            assertTrue(LineSizing.auto(coarse).size().bore() > .1, "Auto goes past it");
+            return null;
+        });
+    }
+
+    @Test void aRefusalNoSizeFixesStaysRedAndAutoStillAnswers() {
+        on(() -> {
+            var line = line(slurry(at(320, 3e5, pure(WATER)), .2), Service.WATER);
+            var donor = line.solids().donor();
+            var packed = solids(line, new SolidMobility.Donor(false, false, true, donor.liquidVolume(), donor.liquidVolume(), donor.largestDiameter(), 0));
+            var stuck = solids(line, new SolidMobility.Donor(false, true, false, donor.liquidVolume(), 0, 0, 0));
+            var size = new LineSizing.Size(.3, 1);
+            assertEquals(SolidMobility.Reason.PACKED_SLURRY, LineSizing.mobility(packed, size).reason());
+            assertEquals(SolidMobility.Reason.IMMOBILE_LIQUID, LineSizing.mobility(stuck, size).reason());
+            for (var refused : List.of(packed, stuck)) {
+                var choice = LineSizing.auto(refused);
+                assertEquals(Lamp.RED, choice.rating().lamp());
+                assertSame(Limit.LINE_SOLIDS, choice.rating().closest().limit());
+                assertEquals(LineSizing.auto(line(at(320, 3e5, pure(WATER)), Service.WATER)).size().bore() > 0, choice.size().bore() > 0, "it still answers");
+            }
+            return null;
+        });
+    }
+
+    @Test void aLineReadsTheWorldsSpeedLawAtItsState() {
+        on(() -> {
+            var gas = at(320, 3e5, pure(NITROGEN));
+            assertEquals(MODEL.velocityLimit(gas.state()), line(gas, Service.GAS).speedLimit(), 0);
+            var wet = crudeAt(5, 1.5e5);
+            double limit = MODEL.velocityLimit(wet.state());
+            assertTrue(limit < 100, "a dense two-phase line at low pressure: " + limit);
+            var line = line(wet, Service.TWO_PHASE);
+            assertEquals(limit, line.speedLimit(), 0);
+            double bore = Math.sqrt(4 * line.volume() / (1.01 * limit) / Math.PI);
+            var over = LineSizing.rate(line, new LineSizing.Size(bore, 1)).reading(Limit.LINE_SPEED);
+            assertEquals(limit, over.high(), 0);
+            assertEquals(Lamp.RED, over.lamp(), "a Fixed size is checked against what the world does");
             return null;
         });
     }

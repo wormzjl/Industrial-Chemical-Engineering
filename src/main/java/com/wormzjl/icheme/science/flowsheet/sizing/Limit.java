@@ -24,7 +24,6 @@ import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Axis;
 import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Sense;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
-import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 
 /**
  * The sizing stage's limits, one row a limit (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.3, 3.4 and
@@ -36,8 +35,11 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 public enum Limit {
     // ---- Every line, section 3.3 ----
     LINE_BORE(MUST, most(PipeSizes.MAX_BORE), "m", "World: `PipeSizes.MAX_BORE`", QUIET),
-    LINE_SPEED(MUST, most(FluidThermodynamics.DEFAULT_MAXIMUM_VELOCITY), "m/s", "World: `DEFAULT_MAXIMUM_VELOCITY`", QUIET),
+    /** The line's state gives this one: the lesser of 100 m/s and the isothermal acoustic bound. */
+    LINE_SPEED(MUST, given(Sense.MOST), "m/s", "World: `velocityLimit`", QUIET),
     LINE_NOZZLE(MUST, given(Sense.MOST), "m", "World: `NozzleBore.largest`", QUIET),
+    /** On a line with solids: the liquid's speed, over the speed that keeps them suspended. A refusal that speed does not decide takes no speed. */
+    LINE_SOLIDS(MUST, given(Sense.ABOVE), "m/s", "World: `SolidMobility`"),
     /** Auto pays this one: it takes parallel runs, section 3.5, before it leaves a run outside a service's limits. */
     LINE_RUNS(SHOULD, most(1), "", "This plan", PAID),
 

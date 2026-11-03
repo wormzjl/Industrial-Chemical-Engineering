@@ -7,7 +7,6 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
-import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -32,7 +31,6 @@ final class LimitTest {
 
     @Test void aWorldRowIsTheWorldsOwnNumber() {
         assertEquals(PipeSizes.MAX_BORE, Limit.LINE_BORE.value(), EXACT);
-        assertEquals(FluidThermodynamics.DEFAULT_MAXIMUM_VELOCITY, Limit.LINE_SPEED.value(), EXACT);
         assertEquals(36000, Limit.PUMP_FLOW.value(), EXACT);
         assertEquals(2e6, Limit.PUMP_HEAD.value(), EXACT);
         assertEquals(FluidNetwork.MAXIMUM_PRESSURE_RATIO, Limit.COMPRESSOR_RATIO.value(), EXACT);
@@ -73,8 +71,8 @@ final class LimitTest {
     }
 
     @Test void aRowReadsBySense() {
-        assertEquals(Lamp.GREEN, Limit.LINE_SPEED.read(100).lamp());
-        assertEquals(Lamp.RED, Limit.LINE_SPEED.read(101).lamp());
+        assertEquals(Lamp.GREEN, Limit.LINE_BORE.read(.8).lamp());
+        assertEquals(Lamp.RED, Limit.LINE_BORE.read(.81).lamp());
         assertEquals(Lamp.GREEN, Limit.PUMP_NPSH.read(1).lamp(), "at least: on it meets it");
         assertEquals(Lamp.YELLOW, Limit.PUMP_NPSH.read(.9).lamp());
         assertEquals(Lamp.RED, Limit.PUMP_NPSH_WORLD.read(0).lamp(), "above: on it misses it");
@@ -84,12 +82,13 @@ final class LimitTest {
         assertEquals(Lamp.YELLOW, Limit.PUMP_RATED.read(121).lamp());
         assertEquals(Lamp.RED, Limit.EXCHANGER_SURFACE.against(253, 444).lamp(), "the rating gives this limit");
         assertEquals(444 / 253., Limit.EXCHANGER_SURFACE.against(253, 444).load(), 1e-12);
-        assertEquals(Lamp.RED, Limit.LINE_SPEED.read(Double.NaN).lamp(), "no number meets nothing");
+        assertEquals(Lamp.RED, Limit.LINE_BORE.read(Double.NaN).lamp(), "no number meets nothing");
     }
 
     @Test void aRuleOrAGivenRowCannotBeReadAlone() {
         assertThrows(IllegalArgumentException.class, () -> Limit.SERVICE_BOILING.read(.2));
         assertThrows(IllegalStateException.class, () -> Limit.LINE_NOZZLE.read(.2));
+        assertThrows(IllegalStateException.class, () -> Limit.LINE_SPEED.read(20), "the line's own state gives this one");
     }
 
     @Test void theLampIsTheWorstRowAndClosestIsWhatLimits() {

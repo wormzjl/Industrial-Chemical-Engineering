@@ -3,11 +3,14 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
+import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.NetworkReduction;
+import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.PipeResistance;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+import com.wormzjl.icheme.science.fluid.transport.SolidMobility;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -49,20 +52,58 @@ public final class LineSizing {
     }
 
     /**
+     * A stream as the world's bulk end carries it at design flow. Solids ride the liquid, so a gas with no liquid leaves them behind.
+     *
+     * @param mass       kg/s
+     * @param volume     m³/s
+     * @param density    kg/m³
+     * @param viscosity  Pa s
+     * @param speedLimit the world's law at this state, m/s
+     * @param solids     what it asks of a line, null with none aboard
+     */
+    record Carried(double mass, double volume, double density, double viscosity, double speedLimit, @Nullable Solids solids) {
+        /** {@code stream}, which must flow, at {@code flow} times its steady rate. */
+        static Carried of(FlowStream stream, double flow, FlowThermo thermo, MixtureViscosity.Workspace scratch) {
+            var state = stream.state();
+            var model = thermo.model();
+            boolean dry = FluidThermodynamics.bulkDrawsGas(state);
+            double mass = dry ? model.vaporMass(state) : state.mass(), volume = dry ? state.vaporVolume() : state.volume();
+            double limit = dry ? model.phaseVelocityLimit(state, FluidThermodynamics.GAS) : model.velocityLimit(state);
+            var solids = dry || state.solids().empty() ? null : new Solids(SolidMobility.donor(model, state), state);
+            return new Carried(mass * flow, volume * flow, mass / volume, NetworkReduction.viscosity(model, state, scratch), limit, solids);
+        }
+
+        /** What it loses through {@code passage}, bar, split evenly over {@code ways} of them. */
+        double drop(PipeResistance.Geometry passage, int ways) {
+            return PipeResistance.pressureDrop(passage, mass / ways, density, viscosity) / 1e5;
+        }
+    }
+
+    /**
+     * What a line's solids ask of it: {@link SolidMobility}'s donor, on the stream it was prepared from.
+     *
+     * @param state its steady flow's state
+     */
+    public record Solids(SolidMobility.Donor donor, FluidThermodynamics.State state) {
+    }
+
+    /**
      * A line at design flow.
      *
-     * @param service   null with no flow
-     * @param mass      kg/s
-     * @param volume    m³/s
-     * @param density   kg/m³
-     * @param viscosity Pa s
-     * @param pressure  Pa
-     * @param length    m
-     * @param nozzle    the largest bore its nozzles take, m
+     * @param service    null with no flow
+     * @param mass       kg/s
+     * @param volume     m³/s
+     * @param density    kg/m³
+     * @param viscosity  Pa s
+     * @param pressure   Pa
+     * @param length     m
+     * @param nozzle     the largest bore its nozzles take, m
+     * @param speedLimit the world's law at its state, m/s
+     * @param solids     null with none aboard, so no reading
      */
-    public record Line(@Nullable Service service, double mass, double volume, double density, double viscosity, double pressure, double length, double nozzle) {
+    public record Line(@Nullable Service service, double mass, double volume, double density, double viscosity, double pressure, double length, double nozzle, double speedLimit, @Nullable Solids solids) {
         /** A line with no flow: no size, no lamp. */
-        public static final Line NONE = new Line(null, 0, 0, 0, 0, 0, 0, 0);
+        public static final Line NONE = new Line(null, 0, 0, 0, 0, 0, 0, 0, 0, null);
 
         public boolean flows() {
             return mass > 0;
@@ -76,12 +117,9 @@ public final class LineSizing {
          * @param scratch the caller's: this runs on the run's thread
          */
         public static Line of(FlowStream stream, @Nullable Service service, DesignBasis basis, FlowThermo thermo, double nozzle, @Nullable Double length, MixtureViscosity.Workspace scratch) {
-            var state = stream.state();
-            if (state == null || stream.empty() || service == null) return NONE;
-            // Solids ride the liquid: a gas with no liquid leaves them behind, as the world's bulk end does.
-            boolean dry = FluidThermodynamics.bulkDrawsGas(state);
-            double mass = dry ? thermo.model().vaporMass(state) : state.mass(), volume = dry ? state.vaporVolume() : state.volume(), flow = basis.designFlow();
-            return new Line(service, mass * flow, volume * flow, mass / volume, NetworkReduction.viscosity(thermo.model(), state, scratch), state.pressure(), basis.length(length), nozzle);
+            if (stream.state() == null || stream.empty() || service == null) return NONE;
+            var carried = Carried.of(stream, basis.designFlow(), thermo, scratch);
+            return new Line(service, carried.mass(), carried.volume(), carried.density(), carried.viscosity(), stream.pressure(), basis.length(length), nozzle, carried.speedLimit(), carried.solids());
         }
 
         /** The key a row of this line's stands at, for {@code bore} m. */
@@ -105,6 +143,22 @@ public final class LineSizing {
         return PipeResistance.pressureDrop(new PipeResistance.Geometry(metres, size.bore(), PipeResistance.DEFAULT_ROUGHNESS_METRES, 0, size.runs()), line.mass(), line.density(), line.viscosity()) / 1e5;
     }
 
+    /** The world's own check of {@code line}'s solids at {@code size}, null with none aboard. Its reason says what a red row means. */
+    public static @Nullable SolidMobility.Check mobility(Line line, Size size) {
+        var solids = line.solids();
+        if (solids == null) return null;
+        var pipe = new PassiveNetwork.Pipe(0, 0, 1, List.of(new PipeResistance.Geometry(1, size.bore(), 0, 0, size.runs())), new FlowControl.Passive());
+        return SolidMobility.check(solids.donor(), solids.state(), pipe, line.mass(), SolidMobility.Outlet.MIXED, solids.state().mass());
+    }
+
+    /** {@code check} as a reading, on the speed where speed decides it. What it refuses at any speed stands past any limit. */
+    private static Reading solids(SolidMobility.Check check) {
+        return switch (check.reason()) {
+            case MOBILE, DEPOSITION -> Limit.LINE_SOLIDS.against(check.velocity(), check.minimumVelocity());
+            default -> Limit.LINE_SOLIDS.against(check.velocity(), Double.POSITIVE_INFINITY);
+        };
+    }
+
     /** Every limit of {@code line} read at {@code size}, any bore and any count; nothing to read with no flow. */
     public static Rating rate(Line line, Size size) {
         var service = line.service();
@@ -112,9 +166,11 @@ public final class LineSizing {
         double bore = size.bore(), speed = line.volume() / (size.runs() * Math.PI * bore * bore / 4);
         var readings = new ArrayList<Reading>();
         readings.add(Limit.LINE_BORE.read(bore));
-        readings.add(Limit.LINE_SPEED.read(speed));
+        readings.add(Limit.LINE_SPEED.against(speed, line.speedLimit()));
         readings.add(Limit.LINE_NOZZLE.against(bore, line.nozzle()));
         readings.add(Limit.LINE_RUNS.read(size.runs()));
+        var check = mobility(line, size);
+        if (check != null) readings.add(solids(check));
         readings.add(line.read(service.speed(), speed, bore));
         var drop = service.drop();
         if (drop == Limit.VACUUM_DROP) readings.add(line.read(drop, 100 * drop(line, size, line.length()) * 1e5 / line.pressure(), bore));

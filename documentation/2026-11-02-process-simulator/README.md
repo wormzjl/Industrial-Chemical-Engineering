@@ -89,7 +89,7 @@ Taken alone, each reversible:
 - Vacuum vapour is a vapour under ambient, 1.01325 bara, as the brief read it, and whatever its gas: a limit of 0.2 bar/100 m means nothing at 0.1 bara, so it comes before Steam. Speed is 60 m/s on both sides of ambient. The drop nearly closes too: 5 % of 1.013 bar over the default 50 m is 0.101 bar/100 m, against Gas's 0.11. One step stays: Vacuum vapour has no ρv² row, so a vapour of 3.2 kg/m³ at 0.9 bara may run 60 m/s in a 0.8 m line, ρv² 11500, where at 1.02 bara it holds 6000 and about 43 m/s. No law in the world reads it.
 - Vacuum vapour's drop reads the line's length, as a share of its pressure. Plan section 3.2 and the simplification row now say so.
 - Two-phase's floor is a Should, `TWO_PHASE_SPEED`. Where ρv² and the floor leave no usual bore, Auto takes the nearest, yellow.
-- "A liquid" means past the vapour's tests. So the order is vapour, two phases, Water, Draw, Suction, Liquid, and condensate at 1 % vapour is Two-phase, not Water.
+- "A liquid" means past the vapour's tests, so condensate at 1 % vapour is Two-phase, not Water.
 - A line with no flow has no service, no size and `Lamp.NONE`, and a Fixed size on it is not red.
 - Density and viscosity are the world's, not the probe's McAdams: `state.mass() / state.volume()` and `NetworkReduction.viscosity`, the phases' own by volume, now public. It is the bulk average the pipe law reads.
 - A line's mass follows the world's bulk end. With a liquid it carries all of it, solids too, at the slurry's density and viscosity, and the mass the solids add counts. A gas with no liquid carries only itself (`bulkDrawsGas`, owner decision D33). The vapour tests count fluid only, so solids do not move a service.
@@ -101,6 +101,12 @@ Taken alone, each reversible:
 - A bore the wall's roughness fills rates as an infinite drop, so a Fixed size there is red and not an exception.
 - The nozzle is one number, `Line.nozzle`: the caller gives the smaller of a line's two ends.
 - The sample gate is a slow gate, 7 s for a real column, and stands beside `SheetFixture` in `client/gui/flowsheet`.
+
+Decided by the orchestrating session on 2026-11-03, on S1's report. Each is reversible, and the owner can overturn it:
+
+- Water goes after Draw and Suction: vapour, two phases, Draw, Suction, Water, Liquid. A suction's limit protects the pump, and a draw's protects a liquid with only the column's head behind it; neither reason depends on what the liquid is. S1 had Water first, as the plan's sentence then read, so cooling water into a pump took 3 m/s against [THAK]'s 0.3 to 1.5. No sample line moves.
+- Slurry lines read the world: option A of S1's report, a Must, `LINE_SOLIDS`, on a line with solids. D14 decides it: red is what the world refuses. The plan's section 7 said streams carry no solids; they do. The row reads `SolidMobility.check` itself, so it holds deposition (10 times the settling speed, with the check's strict `velocity<=required`), particle too large, packed slurry and immobile liquid. Packed slurry and immobile liquid refuse at any size, so they stay red and Auto still answers with the size the other limits ask. No Durand row. One row: `LineSizing.mobility` gives the check, whose reason says which refusal lit it. A line with no solids carries no such reading, and a dry gas leaves its solids behind, as the world's bulk end does.
+- `LINE_SPEED` reads the world's law at the line's state, `model.velocityLimit(state)`, the lesser of 100 m/s and the isothermal acoustic bound (the owner's rule, q_cap = 蟻 A min(100 m/s, c_T)). So a Fixed size is checked against what the world does. A dry gas reads `phaseVelocityLimit`, as the world's bulk end does. The row's number is now the line's, so it holds none. All 21 sample lines read 100 m/s and no number moved.
 
 ## W9 decisions
 
@@ -203,9 +209,6 @@ Taken alone, each reversible:
 
 - Engine finding 2 of `tools/process-simulator/README.md` is with the owner, and `FlowThermo` keeps its TP search for it. Findings 1 and 3 are fixed on main (0.18.1).
 - Owner to validate: P-102's silence (W7 findings): the proposal is to leave the law.
-- Owner to decide, S1: slurry lines. Plan section 7 says streams carry no solids; they do. `Flowsheet.Feed.solids` reaches `FlowStream`, the units carry them, a filter takes them out and the column refuses them. Expected: a slurry line slower than its solids' deposition speed closes in the world. What the code does: `SolidMobility` has that law (10 times the settling speed, and a bore rule, a packing rule and an immobile-liquid rule), the plan has no row for it, so such a line lights green. Options: A, a Must row reading `SolidMobility`, one reading on a line with solids, recommended, because red is for what the world refuses; B, a Should row with Durand's speed, as section 7 proposes; C, leave it, and correct section 7's sentence.
-- Owner to decide, S1: Water comes before Draw and Suction, as the plan orders it. So cooling water into a pump takes 3 m/s, where [THAK] gives a water suction 0.3 to 1.5 m/s, and a water draw takes 3 m/s against a draw's 0.9. Option: Water after Draw and Suction, which moves no sample line. The player can choose the service either way.
-- S1 left: the Must reads the 100 m/s cap, and the world's `velocityLimit` is the lesser of that and an acoustic bound. They agree on all 21 sample lines. A dense two-phase line at low pressure can fall under 100 m/s, and ρv² stops Auto there long before; a Fixed size is not checked against it.
 - Follow-up outside this batch: `ColumnSolve` line 164 reads inverted. `saturationPressure(t - SUPERHEAT) < feedPressure` is true when the feed is NOT 5 K over saturation, against V3's own `T >= Tsat + 5`, so a hot feed's water follows the distillate and a cold feed's goes in as a steam feed, which V3 refuses. Read from the code; not run, and not changed.
 - Owner to validate: `option-c-rearranged.png` and the block built from it (D23): built without an answer. The tower moved right by 72 and down by 62 within a stored unit's corner; no released sheet holds one.
 - Column block left: no client has drawn it. At 1280 by 720, scale 2, the sample opens at zoom 0.43, under the label scale of 0.5, because a sheet can be no shorter than its column's frame: names and valves wait for one Zoom in.

@@ -18,10 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * each of its limits, Auto against the rate function, and what no size can meet.
  */
 final class LineSizingTest {
-    private static final double LIQUID = 1e-3, GAS = 1.5e-5, BAR = 1e5, ATMOSPHERE = 101325, NOZZLE = .8, LENGTH = 50;
+    private static final double LIQUID = 1e-3, GAS = 1.5e-5, BAR = 1e5, ATMOSPHERE = 101325, NOZZLE = .8, LENGTH = 50, SPEED = 100;
 
     private static LineSizing.Line line(Service service, double mass, double density, double viscosity, double pressure) {
-        return new LineSizing.Line(service, mass, mass / density, density, viscosity, pressure, LENGTH, NOZZLE);
+        return new LineSizing.Line(service, mass, mass / density, density, viscosity, pressure, LENGTH, NOZZLE, SPEED, null);
     }
 
     /**
@@ -122,8 +122,8 @@ final class LineSizingTest {
     @Test void vacuumVapoursDropReadsTheLinesLength() {
         var size = new LineSizing.Size(.3, 1);
         double mass = .3;
-        var short_ = LineSizing.rate(new LineSizing.Line(Service.VACUUM_VAPOUR, mass, mass / .5, .5, GAS, .5 * BAR, 25, NOZZLE), size).reading(Limit.VACUUM_DROP);
-        var long_ = LineSizing.rate(new LineSizing.Line(Service.VACUUM_VAPOUR, mass, mass / .5, .5, GAS, .5 * BAR, 50, NOZZLE), size).reading(Limit.VACUUM_DROP);
+        var short_ = LineSizing.rate(new LineSizing.Line(Service.VACUUM_VAPOUR, mass, mass / .5, .5, GAS, .5 * BAR, 25, NOZZLE, SPEED, null), size).reading(Limit.VACUUM_DROP);
+        var long_ = LineSizing.rate(new LineSizing.Line(Service.VACUUM_VAPOUR, mass, mass / .5, .5, GAS, .5 * BAR, 50, NOZZLE, SPEED, null), size).reading(Limit.VACUUM_DROP);
         assertEquals(2, long_.value() / short_.value(), 1e-9);
         double drop = PipeResistance.pressureDrop(new PipeResistance.Geometry(50, .3, PipeResistance.DEFAULT_ROUGHNESS_METRES, 0), mass, .5, GAS);
         assertEquals(100 * drop / (.5 * BAR), long_.value(), 1e-9, "the world's law, over the line, as a share of the pressure");
@@ -131,8 +131,8 @@ final class LineSizingTest {
 
     @Test void aServicePricedPerHundredMetresDoesNotReadTheLength() {
         var size = new LineSizing.Size(.3, 1);
-        var short_ = new LineSizing.Line(Service.LIQUID, 80, .1, 800, LIQUID, 5 * BAR, 10, NOZZLE);
-        var long_ = new LineSizing.Line(Service.LIQUID, 80, .1, 800, LIQUID, 5 * BAR, 500, NOZZLE);
+        var short_ = new LineSizing.Line(Service.LIQUID, 80, .1, 800, LIQUID, 5 * BAR, 10, NOZZLE, SPEED, null);
+        var long_ = new LineSizing.Line(Service.LIQUID, 80, .1, 800, LIQUID, 5 * BAR, 500, NOZZLE, SPEED, null);
         assertEquals(LineSizing.rate(short_, size).reading(Limit.LIQUID_DROP).value(), LineSizing.rate(long_, size).reading(Limit.LIQUID_DROP).value(), 0);
     }
 
@@ -145,8 +145,8 @@ final class LineSizingTest {
     }
 
     @Test void runsShareTheFlowEvenly() {
-        var one = new LineSizing.Line(Service.WATER, 100, .1, 1000, LIQUID, 5 * BAR, 50, NOZZLE);
-        var half = new LineSizing.Line(Service.WATER, 50, .05, 1000, LIQUID, 5 * BAR, 50, NOZZLE);
+        var one = new LineSizing.Line(Service.WATER, 100, .1, 1000, LIQUID, 5 * BAR, 50, NOZZLE, SPEED, null);
+        var half = new LineSizing.Line(Service.WATER, 50, .05, 1000, LIQUID, 5 * BAR, 50, NOZZLE, SPEED, null);
         var rating = LineSizing.rate(one, new LineSizing.Size(.3, 2));
         assertEquals(LineSizing.drop(half, new LineSizing.Size(.3, 1), 100), rating.reading(Limit.WATER_DROP).value(), 1e-12);
         assertEquals(.1 / (2 * Math.PI * .3 * .3 / 4), rating.reading(Limit.WATER_SPEED).value(), 1e-12);
@@ -193,11 +193,11 @@ final class LineSizingTest {
     @Test void aNozzleBoundsTheBore() {
         var free = LineSizing.auto(line(Service.LIQUID, 200, 800, LIQUID, 5 * BAR));
         assertEquals(.35, free.size().bore());
-        var tight = new LineSizing.Line(Service.LIQUID, 200, .25, 800, LIQUID, 5 * BAR, 50, .3);
+        var tight = new LineSizing.Line(Service.LIQUID, 200, .25, 800, LIQUID, 5 * BAR, 50, .3, SPEED, null);
         var choice = LineSizing.auto(tight);
         assertEquals(new LineSizing.Size(.25, 2), choice.size(), "each run on what the nozzle takes");
         assertEquals(Lamp.YELLOW, choice.rating().lamp());
-        var none = new LineSizing.Line(Service.LIQUID, 200, .25, 800, LIQUID, 5 * BAR, 50, .02);
+        var none = new LineSizing.Line(Service.LIQUID, 200, .25, 800, LIQUID, 5 * BAR, 50, .02, SPEED, null);
         assertEquals(Lamp.RED, LineSizing.auto(none).rating().lamp(), "no usual bore fits");
     }
 

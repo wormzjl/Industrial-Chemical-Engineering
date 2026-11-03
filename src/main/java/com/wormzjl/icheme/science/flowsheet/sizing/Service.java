@@ -68,8 +68,9 @@ public enum Service {
 
     /**
      * The service of {@code stream}, or {@code chosen} if the player chose one. Null with no choice and no flow: it carries nothing
-     * to read. In order: a vapour, then two phases, then what the liquid is, so a stream reads as a liquid only once it has passed the
-     * vapour's tests, and a liquid that leaves a tray is a draw even where it feeds a pump.
+     * to read. In order: a vapour, then two phases, then what the line's ends ask of a liquid, then what the liquid is. A draw's limit
+     * protects a liquid with only the column's head behind it and a suction's protects its pump, whatever the liquid: so a liquid
+     * that leaves a tray is a draw even where it feeds a pump, and water into a pump is a suction.
      */
     public static @Nullable Service of(FlowStream stream, Ends ends, FlowThermo thermo, @Nullable Service chosen) {
         if (chosen != null) return chosen;
@@ -78,12 +79,13 @@ public enum Service {
         double vapour = 100 * thermo.model().vaporMass(state) / (state.mass() - state.solidMoments().mass());
         if (vapour > Limit.SERVICE_VAPOUR.value()) return vapour(state, thermo.model());
         if (vapour > Limit.SERVICE_TWO_PHASE.value()) return TWO_PHASE;
-        double oil = Arrays.stream(state.liquidView()).sum();
-        if (100 * state.waterLiquid() / (oil + state.waterLiquid()) > Limit.SERVICE_WATER.value()) return WATER;
         if (ends.leavesTray()) return DRAW;
-        if (!ends.feedsPump()) return LIQUID;
-        double spare = (stream.pressure() - thermo.bubblePressure(stream.temperature(), stream.amountsView())) / 1e5;
-        return spare <= Limit.SERVICE_BOILING.value() ? SUCTION_BOILING : SUCTION_COLD;
+        if (ends.feedsPump()) {
+            double spare = (stream.pressure() - thermo.bubblePressure(stream.temperature(), stream.amountsView())) / 1e5;
+            return spare <= Limit.SERVICE_BOILING.value() ? SUCTION_BOILING : SUCTION_COLD;
+        }
+        double oil = Arrays.stream(state.liquidView()).sum();
+        return 100 * state.waterLiquid() / (oil + state.waterLiquid()) > Limit.SERVICE_WATER.value() ? WATER : LIQUID;
     }
 
     /** A vapour under ambient answers to its absolute pressure, whatever its gas: a limit in bar per 100 m means nothing there. */
