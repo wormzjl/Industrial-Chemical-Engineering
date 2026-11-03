@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** cbd4b9410 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2)
+**Snapshot:** 295fd1c11 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key)
 
 Up: [code guide](README.md)
 
@@ -180,6 +180,7 @@ The file keeps fields it does not know and refuses a newer format and an older o
   - `UnitDoors` builds every unit's door.
   - `ColumnDoors` builds the column's, through `client/gui/common/CalculatorColumn` (its tabs, the Templates dialog, Save design).
   - `StreamDoors` builds a stream's: feed, flow, T and P, components, the clipboard's Copy and Paste.
+  - A stream's flow follows the display key (`SheetUnits.Basis`: Mole, Mass, Volume, the actual m³ at the stream's own T and P): the feed's Flow entry in the panel and the door, the feed door's status line and the panel's Flow meter for a stream a unit makes. `SheetUnits.flow` is the one format, `molesOf` the one way back (through `SheetContext.feedMoles` and `StreamDoors.writeFeed`). `SheetContext.density` gives a feed greyed only by a flow edit the run's density while its T, P and mole fractions are the run's (density is intensive); otherwise Volume leaves the entry blank, takes no typing, and its hover says why (`door.volume_unknown`). The composition tables, `ResultsPage`, the unit doors' stream tables, the column door, splitter flows and `FileColumns` keep their own columns.
   - `SelectionColumn` lists Auto's sizes.
   - `FileColumns` holds the Open and Save as dialogs and the file names.
 - **Pages:**
@@ -256,7 +257,7 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | The file | `FlowsheetFile` | `FlowsheetFileTest` (27, the corpus) |
 | The block's store, uploads and packets ([packets](#packets-and-protocol), [block](#the-block-and-its-store)) | `SheetStore`, `SheetBody`, `ProcessSimulatorNetwork`, `ProcessSimulatorBlockEntity` | `SheetStoreTest`, `SimulatorBlockTest`, `ProcessSimulatorGameTests` |
 | Sent designs and Import | `SheetSizing.designs`, `SentDesign`, `SentDesignTags`, `EquipmentNetwork` | `SentDesignTagsTest` (the corpus), `ProcessSimulatorGameTests.aConstructorImportsTheNearestSimulatorsDesign` |
-| The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`, `DrawCallTest` (draw calls); renders: `tools/heat-gui-renders/SimulatorRender.java` (`-Dcount`: draw calls per page) |
+| The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `StreamFlowBasisTest` (the flow basis), `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`, `DrawCallTest` (draw calls); renders: `tools/heat-gui-renders/SimulatorRender.java` (`-Dcount`: draw calls per page; `-Dbasis`: MOLE, MASS or VOLUME) |
 | The runner and Stop | `SimulatorRunner` | `SimulatorRunnerTest`, `SimulatorRunTest` (slow: Stop inside a column) |
 | A new kind | `FlowsheetCatalog`, `SizingCoverage` (both in `src/test`) | `FlowsheetPaletteCoverageTest`, `SizingCoverageTest` |
 
