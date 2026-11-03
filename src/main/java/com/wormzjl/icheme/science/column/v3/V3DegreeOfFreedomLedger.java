@@ -26,6 +26,8 @@ public final class V3DegreeOfFreedomLedger {
     private final List<V3ColumnSpecification> specifications;
     private final List<Unknown> unknowns;
     private final List<Equation> equations;
+    /** The equations' ids in ledger order, shared by every residual of this ledger and never written. */
+    private final EquationId[] equationIds;
     private final List<ContractDiagnostic> diagnostics;
     private final int structuralRank;
 
@@ -41,6 +43,7 @@ public final class V3DegreeOfFreedomLedger {
         this.specifications = List.copyOf(specifications);
         this.unknowns = List.copyOf(unknowns);
         this.equations = List.copyOf(equations);
+        this.equationIds = this.equations.stream().map(Equation::id).toArray(EquationId[]::new);
         this.diagnostics = List.copyOf(diagnostics);
         this.structuralRank = structuralRank;
     }
@@ -122,6 +125,11 @@ public final class V3DegreeOfFreedomLedger {
 
     public List<Equation> equations() {
         return equations;
+    }
+
+    /** The equations' ids in ledger order: the shared array, which a caller never writes. */
+    EquationId[] equationIds() {
+        return equationIds;
     }
 
     public List<ContractDiagnostic> diagnostics() {

@@ -979,10 +979,10 @@ final class V3AcceptanceAuditor {
             V3MeshResidual residual, V3DegreeOfFreedomLedger.EquationFamily family, String auditFamily, double limit) {
         double maximum = 0.0;
         boolean found = false;
-        for (V3MeshResidual.Row row : residual.rows()) {
-            if (row.equation().family() != family) continue;
+        for (int row = 0; row < residual.size(); row++) {
+            if (residual.equation(row).family() != family) continue;
             found = true;
-            maximum = Math.max(maximum, Math.abs(row.scaledValue()));
+            maximum = Math.max(maximum, Math.abs(residual.scaledValue(row)));
         }
         if (!found) return V3AcceptanceAudit.Check.fail(auditFamily, 1.0, limit, "required dry acceptance family is absent");
         return maximum <= limit ? V3AcceptanceAudit.Check.pass(auditFamily, maximum, limit, "fresh residual recomputation")

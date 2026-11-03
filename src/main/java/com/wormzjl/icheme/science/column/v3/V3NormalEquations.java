@@ -34,7 +34,7 @@ final class V3NormalEquations {
         Objects.requireNonNull(control, "control");
         int size = jacobian.unknowns().size();
         int lastNode = layout.nodeCount() - 1;
-        if (residual.rows().size() != size || layout.start(lastNode) + layout.size(lastNode) != size) {
+        if (residual.size() != size || layout.start(lastNode) + layout.size(lastNode) != size) {
             throw new IllegalArgumentException("V3 normal products do not match their residual and stage layout");
         }
         int[] nodes = new int[size];
@@ -50,7 +50,7 @@ final class V3NormalEquations {
         double[] gradient = new double[size];
         for (int row = 0; row < size; row++) {
             control.checkpoint();
-            double scaledResidual = residual.rows().get(row).scaledValue();
+            double scaledResidual = residual.scaledValue(row);
             // Implicit positive zeros cannot change this zero-initialized sum for finite residuals.
             // Retain the full loop for non-finite scales: zero times infinity must still produce NaN.
             int first = Double.isFinite(scaledResidual) ? jacobian.firstStoredColumn(row) : 0;
