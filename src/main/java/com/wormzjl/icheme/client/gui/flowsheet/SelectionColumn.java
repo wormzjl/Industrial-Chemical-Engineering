@@ -119,20 +119,18 @@ public final class SelectionColumn {
             rows.add(new Column.Line(stream.to() == null ? x.text("panel.feed_open") : x.text("panel.feed_to", name(x, stream.to().unit())), Palette.MUTED));
             rows.add(Door.entry("temperature", x.text("door.temperature"), u.temperature().symbol()));
             rows.add(Door.entry("pressure", x.text("door.pressure"), u.pressure().symbol()));
-            rows.add(Door.entry("flow", x.text("door.flow"), u.molesUnit()));
+            rows.add(StreamDoors.flowEntry(x, stream));
             rows.add(new Column.Line(x.text("panel.parts", feed.amounts().size()), Palette.MUTED));
             rows.add(keys(x, "open", true));
-            double total = 0;
-            for (double amount : feed.amounts().values()) total += amount;
-            return wrap(x, stream.name(), rows, Map.of("temperature", u.t(feed.temperature()), "pressure", u.p(feed.pressure()), "flow", u.moles(total)));
+            return wrap(x, stream.name(), rows, Map.of("temperature", u.t(feed.temperature()), "pressure", u.p(feed.pressure()), "flow", x.feedFlow(stream)));
         }
         String from = stream.from() == null ? "" : name(x, stream.from().unit()), to = stream.to() == null ? "" : name(x, stream.to().unit());
         rows.add(new Column.Line(stream.to() == null ? x.text("panel.product_from", from) : stream.from() == null ? x.text("panel.feed_to", to) : x.text("panel.from_to", from, to), Palette.MUTED));
         rows.add(Door.meter(x.text("door.temperature"), p == null ? "" : u.t(p.temperature()), u.temperature().symbol()));
         rows.add(Door.meter(x.text("door.pressure"), p == null ? "" : u.p(p.pressure()), u.pressure().symbol()));
         rows.add(Door.meter(x.text("door.vapour"), p == null ? "" : SheetUnits.number(1, p.vapour()), "%"));
-        rows.add(Door.meter(x.text("door.flow"), p == null ? "" : u.moles(p.moles()), u.molesUnit()));
-        rows.add(Door.meter(x.text("door.mass_flow"), p == null ? "" : u.tonnes(p.mass()), u.tonnesUnit()));
+        // The flow on the display key's basis; in Mass a separate mass meter would say it twice.
+        rows.add(Door.meter(x.text("door.flow"), p == null ? "" : u.flow(p.moles(), p.mass(), p.density()), u.flowUnit()));
         rows.add(Door.meter(x.text("door.density"), p == null ? "" : SheetUnits.number(1, p.density()), "kg/m³"));
         rows.add(new Column.Buttons(List.of(Door.key("open", x.text("panel.open"), true, null), Door.key("copy", x.text("door.copy"), p != null, x.text("hint.clipboard")))));
         return wrap(x, stream.name(), rows, Map.of());

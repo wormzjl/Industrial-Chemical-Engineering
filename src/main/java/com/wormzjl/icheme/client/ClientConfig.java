@@ -20,9 +20,12 @@ public final class ClientConfig {
         LIGHT, DARK
     }
 
-    /** The basis the composition tables and flows show. */
+    /**
+     * The basis the composition tables and flows show. VOLUME is the process simulator's: a stream's flow in m³ at its own
+     * temperature and pressure; the fluid device screen, which keys only MOLE and MASS, reads it as MOLE.
+     */
     public enum Basis {
-        MOLE, MASS
+        MOLE, MASS, VOLUME
     }
 
     public static final ModConfigSpec SPEC;
@@ -42,7 +45,7 @@ public final class ClientConfig {
         TEMPERATURE = builder.comment("CELSIUS or KELVIN.").defineEnum("temperature", TemperatureUnit.CELSIUS);
         PRESSURE = builder.comment("PASCAL, KILOPASCAL, BAR or MEGAPASCAL.").defineEnum("pressure", PressureUnit.KILOPASCAL);
         FLOW_TIME = builder.comment("Flows per second (PER_SECOND), per minute (PER_MINUTE) or per hour (PER_HOUR).").defineEnum("flow_time", FlowRateUnit.PER_SECOND);
-        BASIS = builder.comment("Compositions and flows in moles (MOLE) or in mass (MASS).").defineEnum("basis", Basis.MOLE);
+        BASIS = builder.comment("Compositions and flows in moles (MOLE) or in mass (MASS); VOLUME shows the process simulator's stream flows in m³ at the stream's own temperature and pressure, and the fluid device screens read it as MOLE.").defineEnum("basis", Basis.MOLE);
         builder.pop();
         SPEC = builder.build();
     }

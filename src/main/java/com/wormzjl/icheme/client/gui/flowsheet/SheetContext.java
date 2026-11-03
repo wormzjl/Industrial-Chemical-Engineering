@@ -92,6 +92,81 @@ public record SheetContext(SheetEditor editor, SheetState state, SheetUnits unit
         return solved == null ? null : state.props(stream.id(), () -> StreamProps.of(solved, fluids));
     }
 
+    /** A feed's mol/s, all its parts together. */
+    public static double total(Flowsheet.Feed feed) {
+        double total = 0;
+        for (double amount : feed.amounts().values()) total += amount;
+        return total;
+    }
+
+    /** A feed's kg/s: each part by its molar mass, one the package lacks as water. */
+    public double mass(Flowsheet.Feed feed) {
+        double mass = 0;
+        var axis = fluids.axis();
+        var properties = fluids.pack().properties();
+        for (var e : feed.amounts().entrySet()) {
+            int i = axis.indexOf(e.getKey());
+            mass += e.getValue() * (i >= 0 && i < properties.size() ? properties.get(i).molecularWeight() : .018015);
+        }
+        return mass;
+    }
+
+    /**
+     * A stream's density at its own temperature and pressure, kg/m³, for its flow in Volume; NaN where it is not known.
+     * Density is intensive: a feed greyed only because its flow changed keeps the run's density, as long as its temperature,
+     * pressure and mole fractions are the run's (a feed whose flow a unit set, U1, still does). Once one of those changed,
+     * or with no run, nobody knows it until the sheet runs.
+     */
+    public double density(Flowsheet.Stream stream) {
+        var shown = props(stream);
+        if (shown != null) return shown.density();
+        var feed = stream.feed();
+        var run = last(stream);
+        if (feed == null || run == null || !sameState(feed, run)) return Double.NaN;
+        return state.props("density " + stream.id(), () -> StreamProps.of(run, fluids)).density();
+    }
+
+    /** Whether {@code feed} stands at the run's temperature, pressure and mole fractions, whatever its flow. */
+    private boolean sameState(Flowsheet.Feed feed, FlowStream run) {
+        if (!close(feed.temperature(), run.temperature()) || !close(feed.pressure(), run.pressure())) return false;
+        double[] ran = run.amounts(), typed = new double[ran.length];
+        var axis = fluids.axis();
+        for (var e : feed.amounts().entrySet()) {
+            int i = axis.indexOf(e.getKey());
+            if (i >= 0 && i < typed.length) typed[i] += e.getValue();
+        }
+        double a = 0, b = 0;
+        for (int i = 0; i < ran.length; i++) {
+            a += typed[i];
+            b += ran[i];
+        }
+        if (!(a > 0) || !(b > 0)) return false;
+        for (int i = 0; i < ran.length; i++) if (Math.abs(typed[i] / a - ran[i] / b) > 1e-9) return false;
+        return true;
+    }
+
+    private static boolean close(double a, double b) {
+        return Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b));
+    }
+
+    /** A feed's flow on the display key's basis ({@link SheetUnits#flow}); empty in Volume while its density is not known. */
+    public String feedFlow(Flowsheet.Stream stream) {
+        var feed = stream.feed();
+        return units.flow(total(feed), mass(feed), density(stream));
+    }
+
+    /** Whether the feed's flow reads and takes a typed flow on the display key's basis: all but Volume with no density. */
+    public boolean feedFlowKnown(Flowsheet.Stream stream) {
+        return units.basis() != SheetUnits.Basis.VOLUME || density(stream) > 0;
+    }
+
+    /** The mol/s a flow typed on the display key's basis means for this feed ({@link SheetUnits#molesOf}); NaN where none: no flow to scale, or Volume with no density. */
+    public double feedMoles(Flowsheet.Stream stream, double typed) {
+        var feed = stream.feed();
+        double total = total(feed);
+        return total > 0 ? units.molesOf(typed, mass(feed) / total, density(stream)) : Double.NaN;
+    }
+
     /** A number as typed: a comma reads as a point; null if it is no number. */
     public static @Nullable Double number(String text) {
         try {

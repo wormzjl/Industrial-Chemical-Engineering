@@ -4,11 +4,60 @@ import com.wormzjl.icheme.science.display.DisplayUnit;
 import java.util.Locale;
 
 /**
- * The units the display keys chose (batch 2026-11-02-process-simulator): temperature, pressure, the flow's time, mole or mass basis.
- * Every builder reads SI values from a sheet or a run and formats them here, so a key changes all of the screen at once.
+ * The units the display keys chose (batch 2026-11-02-process-simulator): temperature, pressure, the flow's time, and the
+ * basis a stream's flow reads in. Every builder reads SI values from a sheet or a run and formats them here, so a key
+ * changes all of the screen at once.
  */
-public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.PressureUnit pressure, DisplayUnit.FlowRateUnit time, boolean mass) {
-    public static final SheetUnits DEFAULT = new SheetUnits(DisplayUnit.TemperatureUnit.CELSIUS, DisplayUnit.PressureUnit.BAR, DisplayUnit.FlowRateUnit.PER_HOUR, false);
+public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.PressureUnit pressure, DisplayUnit.FlowRateUnit time, Basis basis) {
+    public static final SheetUnits DEFAULT = new SheetUnits(DisplayUnit.TemperatureUnit.CELSIUS, DisplayUnit.PressureUnit.BAR, DisplayUnit.FlowRateUnit.PER_HOUR, Basis.MOLE);
+
+    /**
+     * What a stream's flow reads in, the Mole, Mass and Volume display key (the owner, 2026-11-04: "The flowrate definition
+     * in stream should follow the mass/mole button, and add volume to that button as well"): kmol, tonnes, or m³ at the
+     * stream's own temperature and pressure (the owner's "Actual volume").
+     */
+    public enum Basis {
+        MOLE, MASS, VOLUME;
+
+        public Basis next() {
+            return values()[(ordinal() + 1) % values().length];
+        }
+    }
+
+    /**
+     * A stream's flow on the chosen basis, from its mol/s, its kg/s and its density in kg/m³: the one place a flow is shown
+     * by the key. Empty in Volume where the density is not known.
+     */
+    public String flow(double moles, double mass, double density) {
+        return switch (basis) {
+            case MOLE -> moles(moles);
+            case MASS -> tonnes(mass);
+            case VOLUME -> density > 0 && Double.isFinite(density) ? number(1, time.display(mass / density)) : "";
+        };
+    }
+
+    /** The unit {@link #flow} reads in. */
+    public String flowUnit() {
+        return switch (basis) {
+            case MOLE -> molesUnit();
+            case MASS -> tonnesUnit();
+            case VOLUME -> time.unit("m³");
+        };
+    }
+
+    /**
+     * The mol/s a flow typed on the chosen basis means, for a stream of {@code kgPerMole} mean molar mass and
+     * {@code density} kg/m³: the one place a typed flow goes back. NaN where it means nothing (Volume with no density).
+     */
+    public double molesOf(double typed, double kgPerMole, double density) {
+        double perSecond = time.perSecond(typed);
+        boolean weighed = kgPerMole > 0 && Double.isFinite(kgPerMole);
+        return switch (basis) {
+            case MOLE -> perSecond * 1000;
+            case MASS -> weighed ? perSecond * 1000 / kgPerMole : Double.NaN;
+            case VOLUME -> weighed && density > 0 && Double.isFinite(density) ? perSecond * density / kgPerMole : Double.NaN;
+        };
+    }
 
     public static String number(int digits, double value) {
         return Double.isFinite(value) ? String.format(Locale.ROOT, "%." + digits + "f", value) : "—";

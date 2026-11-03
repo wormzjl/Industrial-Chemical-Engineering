@@ -75,7 +75,6 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
     /** A door's view: the tab shown, the phase on the glass, the flow's basis on a feed's page; the screen keeps it while the door stands open. */
     public static final class View {
         public int tab, phase;
-        public String basis = "mole";
         /** The column door's selected connection, the results it shows, the tray and product in hand. */
         public CalculatorColumn.Connection connection = CalculatorColumn.Connection.NONE;
         public CalculatorColumn.View results = CalculatorColumn.View.PROFILES;

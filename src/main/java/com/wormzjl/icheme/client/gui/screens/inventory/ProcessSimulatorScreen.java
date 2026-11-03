@@ -224,7 +224,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     }
 
     private static SheetUnits units() {
-        return new SheetUnits(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime(), ClientConfig.basis() == ClientConfig.Basis.MASS);
+        return new SheetUnits(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime(), SheetUnits.Basis.valueOf(ClientConfig.basis().name()));
     }
 
     /** What the frame and every key read: worked out once for a sheet and a run, since a sheet's signature strings are not a frame's work. Only the run's clock is new each time. */
@@ -539,7 +539,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
 
     private String signature(SheetContext x) {
         var shown = shownDoor(x);
-        var text = new StringBuilder().append(tab).append(dialog).append(door).append(doorView.tab).append(doorView.connection).append(doorView.index).append(doorView.phase).append(doorView.basis).append(doorView.results).append(doorView.metric);
+        var text = new StringBuilder().append(tab).append(dialog).append(door).append(doorView.tab).append(doorView.connection).append(doorView.index).append(doorView.phase).append(doorView.results).append(doorView.metric);
         text.append(gestures.selected()).append(gestures.naming() == null ? "" : gestures.naming().target()).append(category).append(resultsState.view).append(host.running() == null).append(editor.canUndo()).append(editor.canRedo());
         text.append(x.units());
         if (shown != null) for (var rows : shown.columns()) text.append(rows.size()).append(SimulatorPage.keys(rows));
@@ -607,7 +607,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             case "temperature" -> ClientConfig.temperature(ClientConfig.temperature().next());
             case "pressure" -> ClientConfig.pressure(ClientConfig.pressure().next());
             case "time" -> ClientConfig.flowTime(ClientConfig.flowTime().next());
-            default -> ClientConfig.basis(ClientConfig.basis() == ClientConfig.Basis.MASS ? ClientConfig.Basis.MOLE : ClientConfig.Basis.MASS);
+            // Mole, Mass, Volume and back: a stream's flow on that basis.
+            default -> ClientConfig.basis(ClientConfig.Basis.valueOf(SheetUnits.Basis.valueOf(ClientConfig.basis().name()).next().name()));
         }
     }
 

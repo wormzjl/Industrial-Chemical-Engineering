@@ -82,6 +82,8 @@ public final class SimulatorRender {
     static final String NETWORK = CATALOG.presets().network().packageId();
     static final V3ColumnInput BASE = CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG);
     static StreamProps.Fluids FLUIDS;
+    /** The display units the sheets show: the default's, with the flow's basis from {@code -Dbasis=MOLE|MASS|VOLUME}. */
+    static final SheetUnits UNITS = new SheetUnits(SheetUnits.DEFAULT.temperature(), SheetUnits.DEFAULT.pressure(), SheetUnits.DEFAULT.time(), SheetUnits.Basis.valueOf(System.getProperty("basis", "MOLE")));
     static final Measure FONT = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
 
     private static StreamProps.Fluids fluids() {
@@ -235,7 +237,7 @@ public final class SimulatorRender {
 
         SheetContext context() {
             var state = finished != null ? SheetState.of(editor.sheet(), finished).running(host.running()) : new SheetState(editor.sheet(), ran, run, seconds, host.running());
-            return new SheetContext(editor, state, SheetUnits.DEFAULT, T, FONT, FLUIDS, host, differing);
+            return new SheetContext(editor, state, UNITS, T, FONT, FLUIDS, host, differing);
         }
     }
 
@@ -326,7 +328,7 @@ public final class SimulatorRender {
             else d.skin.button(d.c, footer.get(i + 1), key.text(), SimulatorPage.press(key), false);
         }
         if (!door.calculator()) {
-            var soft = SimulatorPage.softKeys(SheetUnits.DEFAULT, T);
+            var soft = SimulatorPage.softKeys(UNITS, T);
             for (int i = 0; i < 4; i++) d.skin.softKey(d.c, footer.get(footer.size() - 4 + i), soft.get(i).text(), false);
         }
         for (var slot : door.glass().slots(box)) {

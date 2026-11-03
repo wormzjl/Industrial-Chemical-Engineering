@@ -61,20 +61,13 @@ public final class StreamDoors {
     // ---- A feed ----
 
     private static double total(Flowsheet.Feed feed) {
-        double total = 0;
-        for (double amount : feed.amounts().values()) total += amount;
-        return total;
+        return SheetContext.total(feed);
     }
 
-    private static double mass(SheetContext x, Flowsheet.Feed feed) {
-        double mass = 0;
-        var axis = x.fluids().axis();
-        var properties = x.fluids().pack().properties();
-        for (var e : feed.amounts().entrySet()) {
-            int i = axis.indexOf(e.getKey());
-            mass += e.getValue() * (i >= 0 && i < properties.size() ? properties.get(i).molecularWeight() : .018015);
-        }
-        return mass;
+    /** The feed's Flow entry on the display key's basis; in Volume with no density, with a hover that says why it is blank. */
+    static Column.Field flowEntry(SheetContext x, Flowsheet.Stream stream) {
+        var entry = Door.entry("flow", x.text("door.flow"), x.units().flowUnit());
+        return x.feedFlowKnown(stream) ? entry : new Column.Field(entry.key(), entry.label(), entry.unit(), x.text("door.volume_unknown"));
     }
 
     private static Door feed(SheetContext x, Flowsheet.Stream stream, Door.View view) {
@@ -89,15 +82,13 @@ public final class StreamDoors {
             rows.add(Door.group(x.text("door.group.set_point"), Door.entry("pressure", x.text("door.pressure"), u.pressure().symbol()), Door.entry("temperature", x.text("door.temperature"), u.temperature().symbol())));
             values.put("pressure", u.p(feed.pressure()));
             values.put("temperature", u.t(feed.temperature()));
-            boolean mass = view.basis.equals("mass"), volume = view.basis.equals("volume");
             var props = x.props(stream);
-            var flow = new ArrayList<Column.Row>(List.of(new Column.Buttons(List.of(Door.position("basis/mole", x.text("door.mole"), !mass && !volume), Door.position("basis/mass", x.text("door.mass"), mass), Door.position("basis/volume", x.text("door.volume"), volume))),
-                    Door.entry("flow", x.text("door.flow"), volume ? u.time().unit("m³") : mass ? u.tonnesUnit() : u.molesUnit())));
+            var flow = new ArrayList<Column.Row>(List.of(flowEntry(x, stream)));
             // A unit that sets this feed's flow (U1): the entry is its first guess, and the readings show the flow the run gave it.
             String setBy = setBy(x, stream);
             if (setBy != null) flow.add(new Column.Line(setBy, Palette.ACCENT));
             rows.add(Door.group(x.text("door.group.flow"), flow.toArray(Column.Row[]::new)));
-            values.put("flow", volume ? props == null ? "" : SheetUnits.number(1, u.time().display(mass(x, feed) / props.density())) : mass ? u.tonnes(mass(x, feed)) : u.moles(total(feed)));
+            values.put("flow", x.feedFlow(stream));
             rows.add(Door.phases(x.text("door.group.phases"), props == null ? StreamProps.Phases.NONE : props.phases(), x.t()));
             rows.add(Door.group(x.text("door.group.readings"), Door.meter(x.text("door.mass_flow"), props == null ? "" : u.tonnes(props.mass()), u.tonnesUnit()), Door.meter(x.text("door.density"), props == null ? "" : SheetUnits.number(1, props.density()), "kg/m³"),
                     Door.meter(x.text("door.mean_weight"), props == null ? "" : SheetUnits.number(1, props.weight()), "kg/kmol")));
@@ -117,13 +108,12 @@ public final class StreamDoors {
         var status = view.said != null ? view.said : feedStatus(x, stream);
         return new Door(x.text("door.feed"), Door.tabs(view.tab, x.t().get("fluid.overview"), x.t().get("fluid.composition"), x.t().get("fluid.solids")), view.tab, status, Palette.ACCENT, false, List.of(rows), values, glass, List.of(), new Door.Actions() {
             @Override public void entry(String key, String text) {
-                writeFeed(x, stream.id(), key, text, view);
+                writeFeed(x, stream.id(), key, text);
             }
 
             @Override public void button(String key) {
                 if (key.startsWith("tab/")) view.tab = Integer.parseInt(key.substring(4));
                 else if (key.startsWith("phase/")) view.phase = Integer.parseInt(key.substring(6));
-                else if (key.startsWith("basis/")) view.basis = key.substring(6);
                 else if (key.startsWith("remove/")) removePart(x, stream.id(), key.substring(7));
                 else if (key.equals("copy")) view.said = copy(x, stream);
                 else if (key.equals("paste")) view.said = paste(x, stream.id(), false);
@@ -145,7 +135,7 @@ public final class StreamDoors {
         var feed = stream.feed();
         var u = x.units();
         var props = x.props(stream);
-        String flow = u.moles(total(feed)) + " " + u.molesUnit(), t = u.t(feed.temperature()) + " " + u.temperature().symbol(), p = u.p(feed.pressure()) + " " + u.pressure().symbol();
+        String shown = x.feedFlow(stream), flow = (shown.isEmpty() ? "—" : shown) + " " + u.flowUnit(), t = u.t(feed.temperature()) + " " + u.temperature().symbol(), p = u.p(feed.pressure()) + " " + u.pressure().symbol();
         if (total(feed) == 0) return x.text("door.status.no_flow");
         return x.text("door.status.feed", props == null ? x.text("door.status.not_solved_short") : phaseName(x, props), flow, t, p);
     }
@@ -156,7 +146,8 @@ public final class StreamDoors {
         return p.gas() >= 100 ? x.text("phase.gas_word") : p.gas() > 0 ? x.text("phase.two_word") : x.text("phase.liquid_word");
     }
 
-    private static void writeFeed(SheetContext x, String id, String key, String text, Door.View view) {
+    /** What the feed's panel and door type, one path for both: a flow on the display key's basis goes back to moles in {@link SheetContext#feedMoles}. */
+    static void writeFeed(SheetContext x, String id, String key, String text) {
         var stream = x.editor().stream(id);
         var feed = stream.feed();
         String step = "entry " + id + " " + key;
@@ -176,12 +167,9 @@ public final class StreamDoors {
             case "pressure" -> next = new Flowsheet.Feed(feed.temperature(), u.pressure().si(value), feed.amounts(), feed.solids(), feed.unknown());
             case "temperature" -> next = new Flowsheet.Feed(u.temperature().si(value), feed.pressure(), feed.amounts(), feed.solids(), feed.unknown());
             case "flow" -> {
-                boolean mass = view.basis.equals("mass"), volume = view.basis.equals("volume");
-                var props = x.props(stream);
-                if (volume && props == null) return;
-                double now = volume ? mass(x, feed) / props.density() : mass ? mass(x, feed) : total(feed), wanted = u.time().perSecond(value) * (volume ? 1 : 1000);
-                if (now == 0) return;
-                double scale = wanted / now;
+                double wanted = x.feedMoles(stream, value);
+                if (!(wanted >= 0)) return;
+                double scale = wanted / total(feed);
                 var amounts = new LinkedHashMap<String, Double>();
                 for (var e : feed.amounts().entrySet()) amounts.put(e.getKey(), e.getValue() * scale);
                 next = new Flowsheet.Feed(feed.temperature(), feed.pressure(), amounts, feed.solids(), feed.unknown());

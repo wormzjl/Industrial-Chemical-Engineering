@@ -69,7 +69,11 @@ public final class SimulatorPage {
 
     /** The display keys. */
     public static List<Column.Button> softKeys(SheetUnits u, HeatControlColumn.Texts t) {
-        return List.of(new Column.Button("unit/basis", t.get(u.mass() ? "fluid.mass_basis_short" : "fluid.mole_basis_short"), true, null, false, true), new Column.Button("unit/temperature", u.temperature().symbol(), true, null, false, true),
+        return List.of(new Column.Button("unit/basis", t.get(switch (u.basis()) {
+            case MOLE -> "fluid.mole_basis_short";
+            case MASS -> "fluid.mass_basis_short";
+            case VOLUME -> "fluid.volume_basis_short";
+        }), true, null, false, true), new Column.Button("unit/temperature", u.temperature().symbol(), true, null, false, true),
                 new Column.Button("unit/pressure", u.pressure().symbol(), true, null, false, true), new Column.Button("unit/time", u.time().suffix(), true, null, false, true));
     }
 
