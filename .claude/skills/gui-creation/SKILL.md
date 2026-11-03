@@ -44,6 +44,9 @@ Builders, tests and the render tool use the Minecraft-free part. `KitDoor`, `Kit
   column's button), `SkinField`, `KitDoor` (a door's columns: one view, one bar where the window is short, kept
   widgets, drawing and hover; two columns side by side share the view and the bar, `layout(areas, bar, rows, m)`;
   used by the dialogs, the constructor, the assembly screen and the column calculator).
+- A loop of fills (a shape drawn dot by dot, row by row or segment by segment) draws inside `Canvas.batch`: one draw
+  call in the game, where each fill outside a batch is its own. `DrawCallTest` holds the counts; the render tools'
+  `-Dcount` prints each page's draw calls.
 - A dialog: title at (10, 10), column from `DialogColumns.TOP`, push buttons from `DialogColumns.footer` (two or more
   share the width, Save the primary one at the right; Done alone stands at the right; a dialog may have none). Tables
   go on the HMI glass, as the datasheet's.
