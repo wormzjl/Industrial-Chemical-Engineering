@@ -1,6 +1,6 @@
 # Sizing stage plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. S1 and S2 are built; the rest is not. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. S1 to S3 are built; the rest is not. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
 
 ## 1. Expected behaviour
 
@@ -172,13 +172,15 @@ The world fixes the radiant flux at 35 kW/m², inside the 32 to 38 of crude heat
 | Flood at design flow | Must | ≤ 100 % | World: `V3TrayHydraulics` |
 | Flood at design flow | Should | ≤ 80 % | [NPTEL], [KIST] |
 | Diameter, trays | Must | ≤ 15 m, ≤ 64 | World |
-| Widest line on a nozzle | Must | ≤ `NozzleBore.largest` | World |
+| The column solves at this diameter | Must | A trial converges | World: `V3ColumnCalculator` |
 | Downcomer speed | Should | ≤ 0.18 m/s | [KIST] |
 | Tray drop | Should | ≤ 1.0 kPa | [TRAY-X] |
 | Sump hold to half | Should | ≥ 5 min | [ET] |
 | Height to diameter | Should | ≤ 30 | [ROT] |
 
-**Drums**
+A trial solves the column alone with the run's feed at one diameter. Flood and tray drop read its worst tray at design flow (drop: dry part times 1.1², liquid part as is). The downcomer's area is `V3TrayHydraulics.DOWNCOMER_AREA_FRACTION`, 10 % of the tower's, under the worst tray's liquid at design flow. The sump holds the bottom space's volume to half, against the bottoms' design flow. Height is the tangent length. The column's nozzles bound the lines that meet them by each line's own `LINE_NOZZLE` row, so the table has no nozzle row of its own.
+
+**Members.** Each member slot of the block is sized by its own class: the condenser as an exchanger with the sheet's cooling pair, or as an air cooler; a kettle where the reboiler needs one; the receiver as a drum; the reflux and pumparound pumps; each pumparound's cooler; and the ten member lines. A pumparound circulates what its fall takes from its duty. A member pump's head is the loop's lift from the column's own nozzle levels (`EquipmentShape.minimumSkirt` plus `ColumnTrays.trayHeight`), plus the sized lines' and coolers' drops at design flow, plus a 0.7 bar valve.
 
 | Limit | Kind | Value | Source |
 |---|---|---|---|
@@ -226,6 +228,8 @@ Sizing reads a steady run only. A run that failed, stopped or did not close leav
 | Pump | Smallest discharge whose rated flow fits the window |
 | Column | Diameter in steps of 0.5 m, real solves |
 | Drum, tank | The type, then the least volume |
+
+A column's walk starts where flood, which goes as 1/D² at a fixed traffic, would meet the Should: the door's diameter times √(flood / 80 %), up to the next 0.5 m. It walks down while a trial meets every row and up while one does not, and the one rule picks among the diameters it tried. Each trial starts warm from the last; the door's diameter reads the run's own hydraulics and solves nothing. When Auto's diameter is not the door's, the sheet runs once more, on a private copy at the new diameter, and every item is rated again on the sizes already chosen. Nothing is sized twice.
 
 ### 3.6 Blocks and pressure paths
 
@@ -325,16 +329,18 @@ A jet law in the world compressor's isothermal heads was tried first. It has one
 | E-101 | Shell 1.00 m, tubes 6 m | Surface 450 of 440 m² (the probe's 444) |
 | H-101 | Cabin 11.0 × 41 m | Duty 87.6 of 86.2 MW |
 | V-101 | Bore 0.70 m | Drop 2.28 bar, at least 1.19 |
-| T-101 | D 8.0 m, 40 trays, 29.8 m tall | Flood 71.3 %, at most 80 |
-| Condenser | 3 × shell 1.25 m, tubes 4 m | Shell drop 0.18 bar, at most 0.20 |
-| Receiver | D 4.0 × T/T 10 m, boot | Boot hold 7.0 min, at least 5 |
-| Reflux pump | Discharge 0.20 m, 45 m | 119 % of rated |
+| T-101 | D 8.0 m, 40 trays, 29.0 m tangent length (the probe's 29.8 m tall) | Flood 71.3 %, at most 80; 7.5 m reads 80.9 % |
+| Condenser | 5 × shell 1.00 m, tubes 3 m (the probe's 3 × 1.25 × 4 m) | Shell drop 0.15 bar, at most 0.20; surface 1125 of 782 m² |
+| Receiver | D 4.0 × T/T 10 m, boot | Boot hold 7.7 min, at least 5 (the probe's 7.0) |
+| Reflux pump | Discharge 0.20 m, 42 m (the probe's 45) | 119 % of rated |
 | PA 1, 2, 3 coolers | Shell 1.00 m, tubes 3 m each | Surface 225 of 224 and 223 m²; a 0.75 m shell would cost PA 3 over 0.7 bar in its tubes |
 | PA 1, 2, 3 pumps | Discharge 0.25, 0.30, 0.25 m, 13 to 14 m | 110, 93, 78 % of rated |
 | P-102 | Discharge 0.15 m, 51 m | 71 % of rated |
 | E-102 | 6 × 4 bays of 2.0 × 5 m (the probe's 5 × 3 of 2.5 × 6 m) | Bare surface 726 of 724 m² (the probe's 752 of 741) |
 
 S2's code rates surfaces on the curves of section 3.11, where the probe held one heat capacity along a duty. The residue's capacity rises with temperature, so more of its heat passes where the difference to the cold side is wide, and the need falls: E-101 from 444 to 440 m², with no size change; E-102 from 741 to 724 m². That moves E-102 to the least face: 145 m² of face against the probe's 150. The probe's bank stays green if the player keeps it.
+
+S3's code moves the condenser and the receiver. The probe flashed the overhead at the top tray's temperature and pressure, where the world's flash, unlike V3's, condenses 19 % of it (60.4 of 74.4 kg/s stays vapour, with 153 mol/s of liquid water). The code instead heats the condensate back by the condenser's duty, so the overhead enters as all gas, lighter, and its shell drop at 3 × 1.25 × 4 m reads over 0.20 bar: five 1.00 m shells meet it. The receiver's boot now holds what the world's boot holds with its head, 7.7 min. The reflux pump's head reads the column's own levels, 42.5 m.
 
 Three results went against what the sheet's author would guess.
 
@@ -420,6 +426,7 @@ The owner accepted all ten as written on 2026-11-03.
 - **Weak type thresholds**: 23 MW for a cabin, 15000 m³/h for a piston and 20 bar for a sphere come from decks, blogs and a forum, not a standard. 0.766 bar is the only one from a rule (40 CFR 60). Each is one row of the limits table.
 - **Over-pressure after a re-run**: Size all does not change P-101. A sheet with a large spare runs at a high coil pressure until the player lowers the pump.
 - **Kern as the yardstick**: the method is approximate on leakage and bypassing, and its friction form here rests on memory plus one quoted example (the note, section 13).
-- **Trial cost**: a warm column took about 0.7 s on the sample, so six trials take about 4 s. It runs in the run's thread, so nothing blocks.
-- **Condensing drop**: the world's law prices a shell at its inlet vapour, so a condenser's drop reads high. It sets the sample's condenser at 3 shells.
-- **A column at a far diameter**: a trial can fail to solve. It counts as no fit, and the search moves on.
+- **Trial cost**: a warm column took about 0.7 s on the sample, so six trials take about 4 s. It runs in the run's thread, so nothing blocks. S3's walk starts at the flood estimate, so the sample tries one diameter, 7.5 m, beside the door's 8.0 m, which solves nothing; a door at 9.0 m tries 8.0 and 7.5 m, then runs the sheet once more. Not timed: no gate measures time.
+- **Condensing drop**: the world's law prices a shell at its inlet vapour, so a condenser's drop reads high. It sets the sample's condenser at 5 shells of 1.00 m.
+- **A column at a far diameter**: a trial can fail to solve. It reads red on `COLUMN_SOLVES`, and the search moves on.
+- **One air cooler bank**: an air cooler has no count. The sample's overhead needs 1949 m² of bare surface at air 25 °C, and the largest bank holds 1468, so an air-cooled condenser on this column is red.
