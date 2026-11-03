@@ -819,6 +819,85 @@ public final class SimulatorRender {
                         (d, s) -> GuiPrototypes.constructorDoor(d, landed, t.get("vessel.title.exchanger"), "change", t.get(ConstructorColumn.KEY + held.key(), held.args()), Palette.ACCENT, java.util.Map.of())));
     }
 
+    /** W10's load: nitrogen with a little steam at 20 kPa and 50 °C. */
+    private static Flowsheet.Feed ejectorLoad() {
+        var amounts = new LinkedHashMap<String, Double>();
+        amounts.put("Nitrogen", 10.);
+        amounts.put("Water", .5);
+        return new Flowsheet.Feed(323.15, 2e4, amounts, List.of());
+    }
+
+    private static Flowsheet.Feed motiveSteam(double molPerSecond) {
+        var amounts = new LinkedHashMap<String, Double>();
+        amounts.put("Water", molPerSecond);
+        return new Flowsheet.Feed(460, 1e6, amounts, List.of());
+    }
+
+    /**
+     * Main plan W10's sheets (batch 2026-11-02-process-simulator): the lit ejector tile on a small vacuum sheet, its Motive port free,
+     * wired at 1.1 times the need and at 0.9 times it; their doors; the column block's Motive steam port, and the door's Ejector group;
+     * the Sizing rows of the three.
+     */
+    private static void ejector(Path out) throws Exception {
+        var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
+        });
+        String door = "{\"discharge\":1.2e5,\"motive\":1e6}";
+        var free = new Sheet().unit("J-101", "ejector", 120, 60, door).feed("LOAD", "J-101", "suction", ejectorLoad(), 60, 40).product("S-1", "J-101", "discharge", 260, 70).build();
+        var freeRun = FlowsheetEngine.run(free, CATALOG, () -> {
+        });
+        double need = freeRun.reports().get("J-101").readings().get("need"), waterMass = MaterialRuntime.with(CATALOG, NETWORK, () -> com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit.waterMass(thermo));
+        System.out.printf("ejector: free run %s, need %.3f kg/s (%.0f kg/h), notes %s%n", freeRun.status(), need, 3600 * need, com.wormzjl.icheme.client.gui.flowsheet.NoteText.all(freeRun));
+        var sheet = new Sheet().unit("J-101", "ejector", 120, 60, door).feed("LOAD", "J-101", "suction", ejectorLoad(), 60, 40).product("S-1", "J-101", "discharge", 260, 70)
+                .unit("J-102", "ejector", 120, 160, door).feed("LOAD-2", "J-102", "suction", ejectorLoad(), 60, 140).feed("STEAM-2", "J-102", "motive", motiveSteam(1.1 * need / waterMass), 40, 170)
+                .product("S-2", "J-102", "discharge", 260, 170)
+                .unit("J-103", "ejector", 120, 260, door).feed("LOAD-3", "J-103", "suction", ejectorLoad(), 60, 240).feed("STEAM-3", "J-103", "motive", motiveSteam(.9 * need / waterMass), 40, 270)
+                .product("S-3", "J-103", "discharge", 260, 270).build();
+        long start = System.nanoTime();
+        var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
+        });
+        double seconds = (System.nanoTime() - start) / 1e9;
+        System.out.printf("ejector sheet: %s, mass gap %.3g, heat gap %.3g W, notes %s%n", run.status(), run.massGap(), run.heatGap(), com.wormzjl.icheme.client.gui.flowsheet.NoteText.all(run));
+        var host = new Host(false, null);
+        sheet(out, "01-ejector-tile", W, H, List.of("The Machines tiles: the steam ejector lit. J-101 selected: its Motive port free, a utility at the need",
+                        "J-102 selected: Motive wired at 1.1 times the need", "J-103 selected: Motive wired at 0.9 times the need, short"),
+                List.of(scene(sheet, run, seconds, host, s -> {
+                    s.category = 4;
+                    s.gestures.select(new SheetGestures.Selection(true, "J-101"));
+                }), scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(true, "J-102"))),
+                        scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(true, "J-103")))));
+        grid(out, "02-ejector-doors", DW, DH, List.of("J-101's door: the two pressures, the steam the law needs", "J-103's door: its wired steam short of the need", "J-102's streams"),
+                List.of(unit(sheet, run, "J-101", 0), unit(sheet, run, "J-103", 0), unit(sheet, run, "J-102", 1)));
+
+        // The column block under ambient pressure: its ejector on the vapour line, with the Motive steam port.
+        var exchanger = edited(ColumnDoor.from(BASE, ColumnComponents.Condenser.EXCHANGER), j -> {
+            j.addProperty("top_pressure", .3e5);
+            j.add("draws", new com.google.gson.JsonArray());
+            j.add("pumparounds", pumparounds(4, 6));
+        });
+        var air = edited(exchanger, j -> j.addProperty("condenser", ColumnComponents.Condenser.AIR_COOLER.name()));
+        sheet(out, "03-ejector-block", W, H, List.of("The block's Motive steam port"), List.of((d, skin) -> {
+            int gap = 4, w = (d.w - 10 - gap) / 2, x = (w - ColumnBlock.WIDTH) / 2, y = 76;
+            block(d, d.well(new Rect(5, 5, w, d.h - 10)), "Top 30 kPa, exchanger condenser", List.of("The cooling water's pair one pitch higher", "Motive steam enters under it"), "T-101", "column", exchanger, x, y);
+            block(d, d.well(new Rect(5 + w + gap, 5, w, d.h - 10)), "Top 30 kPa, air-cooled condenser", List.of("No cooling water pair"), "T-101", "column", air, x, y);
+        }));
+        var vacuum = new Sheet().unit("T-101", "column", 40, 20, exchanger).build();
+        var equipment = new Door.View();
+        equipment.tab = 3;
+        grid(out, "04-ejector-column-door", DW, DH, List.of("The column door's Equipment page: the Ejector group's two pressures"),
+                List.of((d, s) -> door(d, ColumnDoors.door(new Scene(vacuum, null, 0, host).context(), "T-101", equipment))));
+
+        // The Sizing tab after Size all: the free port's bore, the wired ports' motive rows.
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
+        for (var id : List.of("J-101", "J-102", "J-103")) {
+            var unit = all.sized().units().get(id);
+            System.out.printf("sized %s: %s, lamp %s, closest %s%n", id, unit.size(), unit.rating().lamp(), unit.rating().closest());
+        }
+        var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds);
+        var sized = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
+        sheet(out, "05-ejector-sizing", W, H, List.of("J-101 after Size all: the suction holds the load with its spare", "J-102: the wired steam between the need and 1.20 times it", "J-103: the wired steam short of the need"),
+                List.of(sized(sized, s -> s.sizing.unit = "J-101"), sized(sized, s -> s.sizing.unit = "J-102"), sized(sized, s -> s.sizing.unit = "J-103")));
+    }
+
     private static Flowsheet withType(Flowsheet sheet, String id, String type) {
         var units = new ArrayList<Flowsheet.Unit>();
         for (var unit : sheet.units()) units.add(unit.id().equals(id) ? new Flowsheet.Unit(unit.id(), type, unit.name(), unit.x(), unit.y(), unit.params(), unit.unknown()) : unit);
@@ -832,6 +911,11 @@ public final class SimulatorRender {
         Files.createDirectories(out);
         var jar = Path.of(args.length > 2 ? args[2] : "build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar");
         HeatDiagramRender.font = Files.exists(jar) ? HeatDiagramRender.GameFont.load(jar) : null;
+        // -Donly=ejector: W10's sheets alone, on a sheet of their own.
+        if ("ejector".equals(System.getProperty("only"))) {
+            ejector(out);
+            return;
+        }
         var sheet = sample();
         long start = System.nanoTime();
         var run = FlowsheetEngine.run(sheet, CATALOG, () -> {

@@ -37,7 +37,7 @@ The mod already knows what each size does; only the choice is missing.
 | Column | D 0.5 to 15 m, to 64 trays | Fixed trays: `V3TrayHydraulics`, spacing 0.6 m, downcomer 10 %, Fair flood; `NozzleBore.largest` |
 | Tank, sphere | Tank D 4 to 40, shell 4 to 24 m; sphere D 4 to 24 m | A tank is an `OpenVessel`: ambient pressure, and any gas vents. A sphere is a closed drum with no pressure limit. `FluidDeviceSpec.MAX_VOLUME` 30000 m³ |
 | Valve | No Cv in the world | A drop between two pressures |
-| Ejector | Suction 0.05 to 1 m | Drawn only: the world has no law for it (section 3.12) |
+| Ejector | Suction 0.05 to 0.8 m (`PipeSizes.MAX_OUTSIDE`) | The simulator's law since W10 (section 3.12); the world has none yet |
 
 ## 3. Proposal
 
@@ -335,6 +335,15 @@ A jet law in the world compressor's isothermal heads was tried first. It has one
 - **One tile is one stage**, as the column's auxiliaries plan chose. A deep vacuum stays yellow on the block, and on the sheet a chain of tiles with condensers between goes further.
 - **Sizing.** The suction bore takes the Vacuum vapour row of section 3.3, within `EjectorDesign`'s 0.05 to 1 m. Section 3.4 holds the stage limits.
 - **The world.** Vacuum columns do not run there until column operation's stage C (its Q11), which needs a device with three ports. This law lives in `science/`, so that stage reads it. D21.
+
+**As built (main plan W10, 2026-11-03).**
+
+- The law is `science/flowsheet/EjectorLaw`: `ratio` and `fitted`. It reproduces the table above to its printed digits, and the block's 15640 kg/h. Above 1500 kPa only (P_m / P_s)^0.015 moves the steam: 2.93 kg/kg at 2000 kPa and 2.95 at 3500 for the table's M 100 at 12 kPa, against 3.13 at 1000.
+- The fitted range reads the correlation's own steam on water, before the molar-mass factor. Its notice, "Outside the law's fitted range", is a warning that comes after the motive's own warnings, so a door says what the player can fix first. At 20 kPa the table's water needs 4.30 kg/kg, so most vacuum loads read it.
+- The tile is `EjectorUnit`, type `ejector`, tag prefix J. Ports: `suction` (in), `motive` (optional in), `discharge` (out). The door sets `discharge` (default 1.2 bar) and `motive` (10 bar). A free Motive port is a utility at the need, dry at the world's saturation temperature for the door's pressure. A wired one brings its stream. It warns where that is short of the need, under 90 % water by mass, or under the door's pressure. The law always reads the door's pressure.
+- The discharge is the load and the motive at their summed enthalpy, flashed at the discharge pressure. The tile refuses a discharge at or under the suction and a motive at or under the discharge. The gate closes mass, energy and every component on a free port, at 0.9 and at 1.1 times the need.
+- The column block takes the Motive port where the top is under ambient pressure (`ejectorRequired`). The door's Equipment page holds an Ejector group with the same two pressures (`ejector_discharge`, `ejector_motive`, the tile's defaults where absent). The load is the top tray's vapour, hydrocarbons and steam, at that tray's temperature and pressure. The steam joins the free-water product at its temperature and pressure (the condenser's where V3 leaves no free water). The heat it gives up there joins the condenser's duty, as a link when the condenser's cold side is wired, else as a utility, and in the `condenser` reading. V3 still solves at its own pressures, so no product's pressure moves.
+- Sizing: `EjectorSizing`, on the tile and as the block's member `ejector`, ahead of the condenser. The suction bore reads `VACUUM_SPEED` at the suction's pressure. Auto tries the bores that pass 1.20 × the load's volume first (`AUTO_SPARE`, spare-first). The stage rows read the compression and the suction for one stage. A wired port reads `EJECTOR_MOTIVE` (Must, against the need) and `EJECTOR_MOTIVE_SPARE` (Should, 20 % over it). A free port reads neither. The block's condenser member condenses the motive steam with the overhead, on the duty that holds its heat.
 
 ## 4. The sample's result
 
