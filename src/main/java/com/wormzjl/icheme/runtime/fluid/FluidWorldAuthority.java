@@ -413,7 +413,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         while(!queue.isEmpty()) {
             var r=queue.removeFirst();var d=r.device();
             if(d.fixed())return "a generator or a void stands inside the column";
-            if(d.suspended()||d.port()||topology.pending(d.id()))return "a device inside the column is held or being edited";
+            if(d.suspended()||d.held()||d.port()||topology.pending(d.id()))return "a device inside the column is held or being edited";
             if(inside.size()>COLUMN_LIMIT)return "the column holds more than "+COLUMN_LIMIT+" devices";
             for(var contact:d.contacts()) {
                 var next=PhysicalFluidTopology.across(at,WorldTopologyLedger.Registration::device,d,contact.cell(),contact.direction());
@@ -534,6 +534,32 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Reading committed static configuration never advances or materialises process state. */
     public Optional<PhysicalFluidTopology.Device> committedDevice(long id){owned();var record=topology.active().get(id);return record==null?Optional.empty():Optional.of(record.device());}
     public void remove(long id){owned();instruments.recoverHost(id);var old=registrations().get(id);if(old!=null)submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity(),old.device().filter()?new WorldTopologyLedger.Recovery(id,null):null);}
+    /**
+     * Holds registration {@code id}, or releases it (decision S11, REGISTRY_FIRST_PLAN.md 4.1): held, it keeps what it holds
+     * and joins nothing. A topology edit at its next revision, so its islands recompile on the engine's schedule. Whether an
+     * edit was queued: none for an unknown identity, a column's port, or one already so.
+     */
+    public boolean hold(long id,boolean held) {
+        owned();var r=registrations().get(id);if(r==null||r.device().port()||r.device().held()==held)return false;
+        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device().withHeld(held),r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity());
+        return true;
+    }
+    /** The held registrations, queued holds included, by identity. */
+    public List<WorldTopologyLedger.Registration> held() {
+        owned();var held=new ArrayList<WorldTopologyLedger.Registration>();
+        for(var r:registrations().values())if(r.device().held())held.add(r);
+        held.sort(Comparator.comparingLong(r->r.device().id()));return held;
+    }
+    /**
+     * An operator drops held registration {@code id} (REGISTRY_FIRST_PLAN.md 4.5): it leaves as a broken device does, what
+     * it holds booked as removed, but nothing drops (decision S9): its block is not in the world. Its accessories leave the
+     * accessory store with it. Whether it was held.
+     */
+    public boolean drop(long id) {
+        owned();var r=registrations().get(id);if(r==null||!r.device().held())return false;
+        instruments.discardHost(id);submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity());
+        return true;
+    }
     /**
      * Queues a filter's solid recovery as a ledger event and returns it, as an edit is queued: nothing is applied or
      * delivered here. The engine applies it with the next batch of events, takes the cake the island holds then and

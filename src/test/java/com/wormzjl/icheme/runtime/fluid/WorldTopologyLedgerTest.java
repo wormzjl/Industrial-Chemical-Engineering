@@ -101,6 +101,27 @@ class WorldTopologyLedgerTest {
         assertThrows(IllegalArgumentException.class,()->ledger.paint(9,new WorldTopologyLedger.LinePaint(0x2271B3,0x2271B3)),"only a registered identity is painted");
     }
     /**
+     * Holding is state (decision S11, REGISTRY_FIRST_PLAN.md 4.1): the topology unit's state section carries a hold, queued
+     * or applied, through an exact load, and its facts never carry one, so a load from facts releases every hold.
+     */
+    @Test void aHoldIsStateTheTopologyUnitCarriesAndItsFactsNever() {
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var held=new WorldTopologyLedger.Registration(at(1,0).device().withHeld(true),at(1,0).spec(),1);
+        ledger.commit(ledger.queue(List.of(new WorldTopologyLedger.Edit(1,held)),Set.of(1L),3));
+        var queued=ledger.snapshot();
+        var restored=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(queued),queued.onlineTick(),NO_RECOVERIES);
+        assertEquals(held,restored.events().getFirst().edits().getFirst().replacement(),"a queued hold survives the state");
+        assertFalse(restored.active().get(1L).device().held(),"until it applies");
+        ledger.commit(applyFirst(ledger,List.of(),List.of(),new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],3));
+        var applied=ledger.snapshot();assertTrue(applied.active().get(1L).device().held());
+        var exact=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(applied),applied.onlineTick(),NO_RECOVERIES);
+        assertEquals(applied.active(),exact.active(),"an applied hold survives an exact load");
+        var unheld=new HashMap<>(applied.active());unheld.put(1L,new WorldTopologyLedger.Registration(at(1,0).device(),at(1,0).spec(),1));
+        var released=new WorldTopologyLedger.Snapshot(applied.onlineTick(),applied.nextIdentity(),unheld,List.of(),applied.constructed(),applied.destroyed(),applied.basis(),
+                applied.recoveries(),applied.restated(),applied.columns(),applied.builds());
+        assertArrayEquals(FluidFacts.world(released),FluidFacts.world(applied),"a registration's facts never carry its hold");
+    }
+    /**
      * A line's paint leaves with its identity when the removal applies, whatever removed it (REGISTRY_FIRST_PLAN.md 3.3).
      * A queued removal keeps it: a removal that never applies leaves the line, painted.
      */

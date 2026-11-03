@@ -1001,7 +1001,8 @@ public final class EquipmentStructure {
         }
         var unit = Commands.literal("unit").then(at);
         event.getDispatcher().register(Commands.literal("icheme").requires(source -> source.hasPermission(2))
-                .then(Commands.literal("equipment").then(place).then(column).then(unit)));
+                .then(Commands.literal("equipment").then(place).then(column).then(unit))
+                .then(com.wormzjl.icheme.runtime.fluid.HeldDevicesCommand.node()));
     }
 
     private static int place(CommandContext<CommandSourceStack> context, int rows, EquipmentShape.Orientation orientation, int support, EquipmentShape.Heading front, boolean boot,

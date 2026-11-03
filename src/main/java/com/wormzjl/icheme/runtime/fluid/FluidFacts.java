@@ -405,20 +405,28 @@ final class FluidFacts {
     }
     /**
      * The topology unit's state: its queued events, each with the registrations it would install; then the running column
-     * units' engine state ({@link ColumnUnit.State}), by unit. A checkpoint written before the column states has none.
+     * units' engine state ({@link ColumnUnit.State}), by unit; then the held devices of {@code active}, by identity. An
+     * event lists, after its recovery, the edits whose replacement is held. Holding is state (decision S11, batch
+     * 2026-11-03-save-corruption): a registration's facts never carry it. A checkpoint written before the column states, or
+     * before holding, has none.
      */
-    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns) {
+    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns,Map<Long,WorldTopologyLedger.Registration> active) {
         var states=new ArrayList<ColumnUnit>();for(var u:columns.values())if(u.state()!=null)states.add(u);states.sort(Comparator.comparingLong(ColumnUnit::id));
+        var held=new ArrayList<Long>();for(var r:active.values())if(r.device().held())held.add(r.device().id());Collections.sort(held);
         return section(f->f.list(events,(q,event)->{uuid(q,event.id());q.count(event.tick());
             q.list(event.edits(),(e,edit)->e.count(edit.id()).list(edit.replacement()==null?List.<WorldTopologyLedger.Registration>of():List.of(edit.replacement()),FluidFacts::registration));
             var touched=new ArrayList<>(event.touched());Collections.sort(touched);q.list(touched,(t,id)->t.count(id));
             var recovery=event.recovery();
             q.list(recovery==null?List.<WorldTopologyLedger.Recovery>of():List.of(recovery),(r,v)->r.count(v.filterId()).list(v.player()==null?List.<UUID>of():List.of(v.player()),FluidFacts::uuid));
-        }).list(states,(q,u)->columnState(q.count(u.id()),u.state())));
+            q.list(event.edits().stream().filter(edit->edit.replacement()!=null&&edit.replacement().device().held()).map(WorldTopologyLedger.Edit::id).toList(),(h,id)->h.count(id));
+        }).list(states,(q,u)->columnState(q.count(u.id()),u.state())).list(held,(q,id)->q.count(id)));
     }
-    static byte[] events(List<WorldTopologyLedger.Event> events){return topologyState(events,Map.of());}
-    /** A topology unit's state: its events, and the column states that validate (one that does not is dropped: that unit solves again). */
-    record TopologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit.State> columns) {}
+    static byte[] events(List<WorldTopologyLedger.Event> events){return topologyState(events,Map.of(),Map.of());}
+    /**
+     * A topology unit's state: its events, the column states that validate (one that does not is dropped: that unit solves
+     * again), and the identities of its held devices.
+     */
+    record TopologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit.State> columns,Set<Long> held) {}
     static TopologyState topologyState(byte[] data,int offset,int length) {
         return read(data,offset,length,"state of the topology unit",f->{
             var events=f.list(List.<WorldTopologyLedger.Event>of(),q->{
@@ -427,12 +435,21 @@ final class FluidFacts {
                     return valid(e,"edit",()->new WorldTopologyLedger.Edit(device,replacement.isEmpty()?null:replacement.getFirst()));});
                 var touched=new HashSet<Long>();for(long t:q.list(List.<Long>of(),t->t.count(0)))if(!touched.add(t))throw q.invalid("duplicate touched device");
                 var recovery=q.list(List.of(),r->{long filter=r.count(0);var player=r.list(List.of(),FluidFacts::uuid);return valid(r,"recovery",()->new WorldTopologyLedger.Recovery(filter,player.isEmpty()?null:player.getFirst()));});
-                return valid(q,"event",()->new WorldTopologyLedger.Event(id,tick,edits,touched,recovery.isEmpty()?null:recovery.getFirst()));
+                var holding=new HashSet<Long>();for(long h:q.list(List.<Long>of(),h->h.count(0)))if(!holding.add(h))throw q.invalid("duplicate held edit");
+                var held=new ArrayList<WorldTopologyLedger.Edit>(edits.size());
+                for(var edit:edits) {
+                    if(!holding.remove(edit.id())){held.add(edit);continue;}
+                    var r=edit.replacement();if(r==null)throw q.invalid("a held removal of "+edit.id());
+                    held.add(valid(q,"held edit",()->new WorldTopologyLedger.Edit(edit.id(),new WorldTopologyLedger.Registration(r.device().withHeld(true),r.spec(),r.revision()))));
+                }
+                if(!holding.isEmpty())throw q.invalid("held edits of no edit "+holding);
+                return valid(q,"event",()->new WorldTopologyLedger.Event(id,tick,held,touched,recovery.isEmpty()?null:recovery.getFirst()));
             });
             var columns=new HashMap<Long,ColumnUnit.State>();
             for(var entry:f.list(List.<Map.Entry<Long,ColumnUnit.State>>of(),q->{long id=q.count(0);var state=columnState(q);return new AbstractMap.SimpleEntry<>(id,state);}))
                 if(entry.getValue()!=null&&columns.put(entry.getKey(),entry.getValue())!=null)throw new IllegalArgumentException("Invalid saved topology state: duplicate column unit "+entry.getKey());
-            return new TopologyState(events,columns);
+            var held=new HashSet<Long>();for(long id:f.list(List.<Long>of(),q->q.count(0)))if(!held.add(id))throw f.invalid("duplicate held device "+id);
+            return new TopologyState(events,columns,Set.copyOf(held));
         });
     }
     static List<WorldTopologyLedger.Event> events(byte[] data,int offset,int length){return topologyState(data,offset,length).events();}

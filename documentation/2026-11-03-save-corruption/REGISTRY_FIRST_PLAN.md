@@ -110,10 +110,10 @@ Each is one map read per block or vessel. A block entity never writes the regist
 ### 4.1 Held registrations (S11)
 
 - **Meaning.** A held registration keeps its contents and joins no flow.
-- **Compilation.** `PhysicalFluidTopology.compile` treats a held device as having no joints and no ports, so a held vessel is an island of its own and rests.
-- **Holding and releasing.** Both are topology edits, submitted through the registry's queue like any network change. Their results arrive on the engine schedule.
-- **State, not a fact.** Holding is recomputed at every re-alignment of its chunk. It is carried in the topology unit's state section (pending-event style). A state reset releases a hold until the chunk's next re-alignment.
-- **Check first.** Find out how column suspension (`Device.suspendedBy`) leaves the network, and reuse that path if it fits.
+- **Compilation (built in step 3).** Column suspension leaves the network through `Device.joins`: a suspended device joins nothing. Holding reuses that path. `Device` gains `held`, and a held device joins nothing, as built either (it has no block). A held vessel is an island of its own and rests. A held pipe leaves dead ends on both sides ("NO FLOW: unconnected pipe"), as a missing pipe block does. Every `with…` copy keeps the hold; a column's port cannot be held.
+- **Holding and releasing.** Both are topology edits at the registration's next revision, submitted through the registry's queue like any network change (`FluidWorldAuthority.hold(id, held)`). Their results arrive on the engine schedule. A hold must travel with its event: `PhysicalRegistry.load` matches the saved islands against a compile of the applied registry, so a hold that took effect before its edit applied would refuse the load.
+- **State, not a fact.** Holding is recomputed at every re-alignment of its chunk. The topology unit's state section carries it: a list of the held applied devices, and per queued event the edits whose replacement is held. The registration record, which facts share, never carries it, so facts do not change (no schema bump). A state written before holding reads as none. A state reset or a load from facts releases a hold until the chunk's next re-alignment.
+- **Reason.** Not stored. The listing reads it from the world when asked: no level for the dimension, the chunk not loaded, or the block the cell holds.
 
 ### 4.2 The queue
 
@@ -150,14 +150,14 @@ For each registration of the chunk:
 
 ### 4.5 Operator commands and notices
 
-- Under `/icheme`, permission 2, next to `equipment`:
-  - `devices held` lists each held registration with dimension, position, kind and reason (blocked by a named block, no level, cannot be rebuilt).
-  - `devices drop <id>` removes one through the break path. Its contents are booked as removed, and it drops no item.
+- Under `/icheme`, permission 2, next to `equipment` (built in step 3, `HeldDevicesCommand`):
+  - `devices held` lists each held registration with identity, kind, dimension, position and reason (what its cell holds, no level, chunk not loaded), at most 20, then a count of the rest.
+  - `devices drop <id>` removes a held one through the break path. Its contents are booked as removed, and it drops no item: its accessories leave the accessory store (`InstrumentService.discardHost`), and a filter's cake gets no recovery. A device that is not held is refused.
 - **Notices:**
   - the affected island's status line names the held devices;
   - a chat line tells operators on join while any registration is held;
   - a re-alignment log line has the form `fluid_realign chunk=… placed=… restated=… held=… learned=…`.
-- **Text.** Command feedback, the chat line and the status words are new `en_us` keys. Every other lang file is updated in the same commit (AGENTS.md, Translations).
+- **Text.** The command replies are operator text in English, as every other `/icheme` command's (`Component.literal`): no lang keys. The chat line and the status words are player text: new `en_us` keys in step 7, with every other lang file updated in the same commit (AGENTS.md, Translations).
 
 ## 5. Order of work
 
@@ -167,7 +167,7 @@ Each step is one commit and runs only the tests that its files can load.
 |---|---|---|
 | 1 | `Builds` in the snapshot, schema 8, encoding, validation. No behaviour change. **Done** (see the batch README) | `FluidFactsCompatTest` (with the new `compat/fluid/schema-8` image), facts round trip |
 | 2 | Write paths (3.3), the block-entity restatement (3.5) and learning (3.4, moved here from step 8). **Done** (see the batch README) | GameTests: the painted lay in `PipeLayingGameTests` (registry holds the paints, restatement, learning, paint leaves with a dismantled lane); `EquipmentCompatGameTests` structure record (built, restated, learned, dismantled). The save and reload round trip is the step-1 unit tests' |
-| 3 | Held registrations: compilation, state, commands (4.1, 4.5 commands) | Compile unit test (a held vessel is its own island). GameTest: hold, then drop |
+| 3 | Held registrations: compilation, state, commands (4.1, 4.5 commands). **Done** (see the batch README) | `PhysicalFluidTopologyTest` (a held tank is its own island, a held pipe parts its line); `WorldTopologyLedgerTest` (a hold survives an exact load, queued or applied, and never reaches facts). GameTest `RegistryFirstGameTests`: hold, list, then drop |
 | 4 | `stateFor`, the restore flag, the kind check, the queue, one-block re-alignment (4.2, 4.3) | `stateFor` round trip over every kind and fitting. GameTests a to d (section 7) |
 | 5 | Rack cells placed again from their lane registrations (4.2 item 3) | GameTest e |
 | 6 | Structures (4.4) | GameTests f and g. `equipmentGates` only if refresh code changed |

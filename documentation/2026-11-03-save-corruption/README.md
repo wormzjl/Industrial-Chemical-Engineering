@@ -2,7 +2,7 @@
 
 Purpose: how save corruption can damage an IChemE world, and how to stop it from causing total data loss, as an extension of the backward-compat facts/state system (owner 2026-11-03: "Research about how to handle eventual save corruption to prevent total data loss"; "I'd imagine it will be somehow combined with the backward compat system").
 
-Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is being built: steps 1 and 2 of 8 are done. The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is being built: steps 1 to 3 of 8 are done. The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -20,6 +20,7 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
 
 - Changed (W5a step 1): `runtime/fluid/WorldTopologyLedger` (`Builds`, `LinePaint`, `Structure`, `paint`, `structure`), `FluidFacts` (schema 8), `FluidCheckpointCodec` (`sameWorldBody`); tests `WorldTopologyLedgerTest`, `FluidFactsCompatTest`; corpus image `src/test/resources/compat/fluid/schema-8`.
 - Changed (W5a step 2): `WorldTopologyLedger` (live reads; paint leaves with an applied removal), `FluidWorldAuthority` (`linePaint`, `paint`, `structure`, `lay` with paints, `loadedChunk` through the pipe's `bind`), `FluidDeviceBlockEntity` (`bind`, `restatePaint`; paint setter removed), `PipeRackBlockEntity.bind`, `PipeLaying.lay`, `EquipmentStructure` (`record`, `restatePaint`; hooks in `place`, `refresh`, `dismantle`, `removeRetired`, `restate`), `EquipmentShellBlockEntity.repaint`; GameTests `PipeLayingGameTests`, `EquipmentCompatGameTests`.
+- Changed (W5b step 3): `PhysicalFluidTopology.Device` (`held`, `withHeld`; `joins`), `FluidFacts.topologyState` (held lists), `FluidCheckpointCodec.topology`, `FluidWorldAuthority` (`hold`, `held`, `drop`; the column start refuses a held device), `InstrumentService.discardHost`, new `runtime/fluid/HeldDevicesCommand` (attached to `/icheme` in `EquipmentStructure.registerCommands`); tests `PhysicalFluidTopologyTest`, `WorldTopologyLedgerTest`; new GameTest class `RegistryFirstGameTests`.
 - Read: `runtime/fluid/FluidCheckpointStore`, `FluidSavedData`, `FluidCheckpointCodec` (core seal) and `FluidFacts.rebuild`.
 - `FluidWorldAuthority.loadedChunk`, `PhysicalFluidTopology.Device`, `FluidDeviceBlockEntity` (`bindIdentity`, saved fields), `PipeRackBlockEntity`, `EquipmentShellBlockEntity`, `EquipmentStructure.restoreFluidBinding`, `EquipmentRefresh`, `runtime/instrument/InstrumentService.Store` and `runtime/assembly/AssemblyStore`.
 - Vanilla and NeoForge 21.1.219: `SavedData`, `DimensionDataStorage`, `IOUtilities`, `Util.safeReplaceFile`, `LevelStorageSource`, `ChunkMap.handleChunkLoadFailure` and `scheduleUnload`, `ChunkStatusTasks`, `RegionFile` and `ChunkEvent.Load`.
@@ -51,9 +52,15 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
   - Removed: the pipe block's public paint setter, and `PipeLaying`'s painting of blocks; the duplicated bind branch of `onLoad` and `loadedChunk`.
   - Gates: `WorldTopologyLedgerTest` 10/10 (new: paint leaves when its removal applies), `FluidFactsCompatTest` 15/15, `PipeLineCompatTest` 8/8; fluid GameTests 40/40 on the fresh run id `save-w5-step2` (edited: the painted lay in `PipeLayingGameTests`; new: `EquipmentCompatGameTests` structure record). Code guide: waits for the merge.
 
+- 2026-11-03: W5b step 3, the commit that adds this line. Held registrations (S11).
+  - Mechanism: column suspension leaves the network through `Device.joins`. Holding reuses it as a new `Device.held`, which joins nothing, as built either. A held tank is an island of its own with its contents; a held pipe leaves dead ends, as a missing block does. Hold and release are queued edits at the next revision, because `PhysicalRegistry.load` matches saved islands against a compile of the applied registry.
+  - State, not a fact: the topology unit's state section lists the held applied devices, and per queued event its held edits. Facts are unchanged (no schema bump, no corpus image); a state written before holding reads as none; a load from facts releases.
+  - `/icheme devices held` (reason read from the world when asked, not stored) and `/icheme devices drop <id>` (held only; booked as removed, accessories leave the store, nothing drops). Operator text in English as the other `/icheme` commands, so no lang keys.
+  - Gates: `PhysicalFluidTopologyTest` 30/30, `WorldTopologyLedgerTest` 11/11 (2 new tests), `FluidCheckpointCodecTest` 11/11, `FluidCheckpointFormatTest` 8/8, `FluidFactsCompatTest` 15/15 (images 1-8 read with no holds), `FluidCheckpointStoreTest` 9/9, `ColumnSuspensionTest` 2/2; fluid GameTests 41/41 on the fresh run id `save-w5-step3` (new: `registry-first-held`). Code guide: waits for the merge.
+
 ## Open items
 
-- W5 steps 3-8 per REGISTRY_FIRST_PLAN.md section 5. Next: step 3, held registrations.
+- W5 steps 4-8 per REGISTRY_FIRST_PLAN.md section 5. Next: step 4, `stateFor`, the restore flag, the kind check, the queue and one-block re-alignment (which also releases holds).
 - Before step 4: every GameTest that places a structure must end with its dismantle or clear its record (plan section 7).
 - W6 (save encoding off the server thread): proposed, owner to decide.
 - `SolidMaterialCatalog.validate` still says "create a fresh world". The start guard reaches it only when the basis check misses a change to the solid data. Its text changes with P8 (review G9).

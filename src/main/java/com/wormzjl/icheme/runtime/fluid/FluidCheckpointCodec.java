@@ -156,7 +156,7 @@ public final class FluidCheckpointCodec {
      * totals, recoveries and identity counter) and its state (the queued events, the running columns' engine state), as a unit's two sections. It changes
      * only when the ledger commits, so a save keeps the unit of an unchanged ledger.
      */
-    public static byte[] encodeTopology(WorldTopologyLedger.Snapshot world){return sections(FluidFacts.world(world),FluidFacts.topologyState(world.events(),world.columns()));}
+    public static byte[] encodeTopology(WorldTopologyLedger.Snapshot world){return sections(FluidFacts.world(world),FluidFacts.topologyState(world.events(),world.columns(),world.active()));}
     /**
      * A topology {@link #encodeTopology} wrote, at {@code onlineTick}, validated as the ledger itself validates it. Its
      * pending recoveries' solids are read as records of its basis package, whose model {@code models} gives (asked only
@@ -176,11 +176,21 @@ public final class FluidCheckpointCodec {
             if(model[0]==null)model[0]=Objects.requireNonNull(models.apply(new PackageKey(world.basis().packageId())));
             return record(new SolidMaterial(saved.id(),saved.revision(),saved.density(),saved.heatCapacity()),model[0]);
         });
+        if(state.columns().isEmpty()&&state.held().isEmpty())return snapshot;
         // A running unit takes its engine state back; a state for a unit that is gone or stopped is dropped.
-        if(state.columns().isEmpty())return snapshot;
         var columns=new HashMap<>(snapshot.columns());
         state.columns().forEach((id,saved)->{var u=columns.get(id);if(u!=null&&u.running())columns.put(id,u.withState(saved));});
-        return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),snapshot.active(),snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
+        // A held device is held again (decision S11): the islands were compiled with it apart.
+        var active=snapshot.active();
+        if(!state.held().isEmpty()) {
+            var holding=new HashMap<>(active);
+            for(long id:state.held()) {
+                var r=holding.get(id);if(r==null)throw new IllegalArgumentException("The topology's state holds device "+id+", which is not registered");
+                holding.put(id,new WorldTopologyLedger.Registration(r.device().withHeld(true),r.spec(),r.revision()));
+            }
+            active=Map.copyOf(holding);
+        }
+        return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),active,snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
                 snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),snapshot.builds());
     }
     /** The facts of a topology unit; facts this build cannot read refuse the world. */

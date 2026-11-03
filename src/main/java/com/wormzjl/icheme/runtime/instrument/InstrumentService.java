@@ -128,6 +128,8 @@ public final class InstrumentService {
         if(!host.metadata().sensors().equals(store.sensors(host.identity()))||!host.metadata().installed().equals(store.host(host.identity()))||host.metadata().revision()!=store.revision(host.identity()))sync(host);
     }
     public void recoverHost(long id){var host=world.instrumentHost(id);if(host!=null)recover(id,host.entity().getLevel(),host.entity().getBlockPos(),host.pipe()?InstrumentHosts.legacy(host.entity().getBlockState()):null,host.metadata().recoverOnBreak());}
+    /** A registration that leaves with no block to stand on (a held device an operator drops): its accessories leave the store, and nothing drops. */
+    public void discardHost(long id){recover(id,null,null,null,false);}
     public void recover(long id,Level level,BlockPos position,Instrument.Type legacy,boolean drop){recoverSensors(id,null,level,position,drop);for(var i:store.host(id))if(store.remove(i.key(),i.instance())!=null){if(drop)refund(null,level,position,item(i));samples.remove(i.instance());}var fitting=store.legacy(id);if(fitting!=null&&store.removeLegacy(id,fitting.instance())!=null&&drop)refund(null,level,position,item(fitting.type()));forget(id);}
     public void legacyInstalled(long host,Instrument.Type type){store.installLegacy(host,type);if(type==Instrument.Type.PRESSURE_VALVE){store.modular.add(host);store.setDirty();}bind(world.instrumentHost(host));}
     public void recoverLegacy(long host,Level level,BlockPos position){var old=store.legacy(host);if(old!=null&&store.removeLegacy(host,old.instance())!=null){refund(null,level,position,item(old.type()));bind(world.instrumentHost(host));}}
