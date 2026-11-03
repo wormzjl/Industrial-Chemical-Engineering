@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -29,6 +30,7 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * The nameplates of named devices (batch 2026-11-02-process-simulator, N1; owner 2026-11-03: "Give them a nameplate on
@@ -45,8 +47,12 @@ public final class NameplateRenderer {
     private static final RenderType TYPE = RenderType.entitySolid(WHITE);
     /** The look: a light plate, a dark frame and dark text (P1). */
     private static final int PLATE = 0xF2F2EC, FRAME = 0x23282C, INK = 0xFF23282C;
-    /** The plates of the shapes drawn so far ({@link Nameplate#of} walks the solid; a shape's plate never changes). */
-    private static final Map<EquipmentShape, Optional<Nameplate.Plate>> PLATES = new HashMap<>();
+    /**
+     * The plates of the shapes drawn so far. {@link Nameplate#of} walks the solid, up to 0.85 s on the largest shapes (an
+     * 80 m cooling tower, N1 findings), so it runs on the background executor and the plate draws once it is found; a
+     * shape's plate never changes.
+     */
+    private static final Map<EquipmentShape, CompletableFuture<Optional<Nameplate.Plate>>> PLATES = new HashMap<>();
 
     private NameplateRenderer() {
     }
@@ -65,7 +71,7 @@ public final class NameplateRenderer {
             var origin = cell.origin();
             if (shape == null || origin == null || cell.isRemoved() || cell.name().isEmpty()) continue;
             if (PLATES.size() > 1024) PLATES.clear();
-            var plate = PLATES.computeIfAbsent(shape, Nameplate::of);
+            var plate = PLATES.computeIfAbsent(shape, s -> CompletableFuture.supplyAsync(() -> Nameplate.of(s), Util.backgroundExecutor())).getNow(Optional.empty());
             if (plate.isEmpty()) continue;
             var p = plate.get();
             drew |= draw(event, pose, buffers, camera, new Vec3(origin.getX() + p.x(), origin.getY() + p.y(), origin.getZ() + p.z()), p, cell.name());
