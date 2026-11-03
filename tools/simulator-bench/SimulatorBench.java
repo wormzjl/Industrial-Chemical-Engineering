@@ -2,6 +2,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
+import com.wormzjl.icheme.client.gui.common.kit.HeldDraws;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
@@ -303,60 +304,57 @@ public final class SimulatorBench {
     // ---- The screen, as ProcessSimulatorScreen.render draws it ----
 
     /**
-     * Counts what a frame sends the GPU, as DrawCallTest counts it (1.21.1 {@code GuiGraphics}): a fill outside a batch is one draw, a
-     * run of fills inside a batch is one; a text and a sprite are one each and end a run. Quads: a fill, a glyph or a sprite each.
+     * Counts what a frame sends the GPU, as GuiCanvas and DrawCallTest count it (1.21.1 {@code GuiGraphics}, {@link HeldDraws}): outside a
+     * batch every fill, text and sprite is one draw; inside, fills go out in runs while texts and sprites wait until a fill or text would
+     * cover them, a clip changes or the batch ends. Quads: a fill, a glyph or a sprite each.
      */
     static final class Counting implements Canvas {
-        long draws, fills, glyphs, sprites, texts;
-        int depth;
-        boolean run;
+        /** The draw calls as GuiCanvas makes them, by kind: a batch holds its texts and sprites (P5). */
+        final HeldDraws held = new HeldDraws();
+        long fills, glyphs, sprites, texts;
 
         @Override public Measure measure() {
             return M;
         }
 
         @Override public void batch(Runnable body) {
-            depth++;
+            held.begin(() -> {
+            });
             try {
                 body.run();
             } finally {
-                if (--depth == 0) run = false;
+                held.end();
             }
         }
 
         @Override public void fill(int x0, int y0, int x1, int y1, int argb) {
             fills++;
-            if (depth == 0 || !run) draws++;
-            run = depth > 0;
-        }
-
-        private void glyphs(String text) {
-            texts++;
-            draws++;
-            run = false;
-            for (int i = 0; i < text.length(); i++) if (text.charAt(i) != ' ') glyphs++;
+            held.fill(Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1));
         }
 
         @Override public void text(String text, int x, int y, int argb) {
-            glyphs(text);
+            text(text, x, y, 1, argb);
         }
 
         @Override public void text(String text, float x, float y, float scale, int argb) {
-            glyphs(text);
+            texts++;
+            for (int i = 0; i < text.length(); i++) if (text.charAt(i) != ' ') glyphs++;
+            held.text(x, y, x + M.width(text) * scale, y + M.height() * scale, () -> {
+            });
         }
 
         @Override public void sprite(Sprite sprite, float x0, float y0, float x1, float y1, int argb) {
             sprites++;
-            draws++;
-            run = false;
+            held.sprite(x0, y0, x1, y1, () -> {
+            });
         }
 
         @Override public void clip(Rect area) {
-            run = false;
+            held.clip();
         }
 
         @Override public void unclip() {
-            run = false;
+            held.clip();
         }
     }
 
@@ -439,8 +437,12 @@ public final class SimulatorBench {
             }
         }
 
-        /** One frame: render()'s own work, then the widgets super.render draws, through the same skin calls. */
+        /** One frame: render()'s own work, then the widgets super.render draws, through the same skin calls, in one batch as the screen draws it (P5). */
         void frame(Counting c) {
+            c.batch(() -> draw(c));
+        }
+
+        private void draw(Counting c) {
             var x = context();
             var shown = shownDoor(x);
             signature(x, shown);
@@ -624,11 +626,11 @@ public final class SimulatorBench {
         var screen = page(solved(), page);
         var one = new Counting();
         screen.frame(one);
-        say("frame %s: %d draw calls, %d fills, %d texts (%d glyphs), %d sprites; %d quads, %d vertices", page, one.draws, one.fills, one.texts, one.glyphs, one.sprites, one.fills + one.glyphs + one.sprites,
+        say("frame %s: %d draw calls (%d fill runs, %d text runs, %d sprites), %d fills, %d texts (%d glyphs), %d sprites; %d quads, %d vertices", page, one.held.draws(), one.held.fillDraws(), one.held.textDraws(),
+                one.held.spriteDraws(), one.fills, one.texts, one.glyphs, one.sprites, one.fills + one.glyphs + one.sprites,
                 4 * (one.fills + one.glyphs + one.sprites));
         var c = new Counting();
         timed("frame-" + page, () -> {
-            c.depth = 0;
             screen.frame(c);
         });
     }

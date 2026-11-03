@@ -78,7 +78,7 @@ What a frame leaves out:
 - the hover tooltip;
 - GPU time.
 
-Draw calls follow `DrawCallTest`'s count: a batch of fills is one call, a text is one, a sprite is one. Quads are fills, glyphs other than spaces, and sprites; vertices are 4 a quad. The frame-time and GPU check in the game is a separate session.
+Draw calls follow `GuiCanvas`'s count through the kit's `HeldDraws`, as `DrawCallTest` does: a frame is one batch, its fills go out in runs while its texts and sprites wait until something would cover them, and the line gives the fill runs, the text runs and the sprites. Quads are fills, glyphs other than spaces, and sprites; vertices are 4 a quad. The frame-time and GPU check in the game is a separate session.
 
 ## History
 
@@ -86,3 +86,4 @@ Draw calls follow `DrawCallTest`'s count: a batch of fills is one call, a text i
 - 2026-11-04: baseline at `a958cecd2`, all 18 phases, beside another project's simulator (17–34 % CPU): `PERFORMANCE_REVIEW.md`. Then `histo`, with `-Druns=20`, found the shape caches: 12.4 MB a Run on a new input, up to 211 MB. The driver now logs the top CPU users of any process.
 - 2026-11-04: after `3e39dbc39`, `histo -Druns=20` on runner threads holds 0.4 MB, flat.
 - 2026-11-04: `size-stages` added (P8). The crude unit's Size all: proposal pass 1.58 s CPU, 1.71 GB, 280k checkpoints (24.6 %); applied copy 0; re-run 4.81 s, 5.46 GB, 887k checkpoints (74.9 %), 2 passes, T-101 4.7 s and 773k checkpoints from the learned seed; rating 31 ms, 10 MB. The machine was shared (CPU beside the load).
+- 2026-11-04: the frame counts through `HeldDraws` and draws in one batch, as the screen does since P5 (`1ed994e46`). One frame each, no timing: idle 758 to 124 draw calls (11 fill runs, 10 text runs, 103 sprites), Results 485 to 12, the column door 10, its Results tab 10.
