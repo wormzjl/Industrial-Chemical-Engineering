@@ -77,6 +77,30 @@ class WorldTopologyLedgerTest {
         assertThrows(IllegalStateException.class,()->ledger.queue(List.of(new WorldTopologyLedger.Edit(1,changed)),Set.of(1L),2));assertSame(snapshot,ledger.snapshot());
     }
     /**
+     * Build facts (batch 2026-11-03-save-corruption) cost a save nothing while they stand still. An edit leaves the
+     * registry's parts shared, so a snapshot copies no registration, and an unchanged ledger gives the same snapshot. The
+     * facts round-trip through the topology unit, and a bare line keeps no entry.
+     */
+    @Test void buildFactsShareTheRegistryAndRoundTripThroughTheTopologyUnit() {
+        var registration=record(1,Kind.PIPE);
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,2,Map.of(1L,registration),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var before=ledger.snapshot();
+        ledger.paint(1,new WorldTopologyLedger.LinePaint(0x2271B3,com.wormzjl.icheme.science.equipment.Paint.BARE));
+        var origin=new PhysicalFluidTopology.Position("minecraft:overworld",40,64,-8);
+        var drum=com.wormzjl.icheme.science.equipment.EquipmentShape.drum(2,6,com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation.HORIZONTAL,
+                com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.EAST,com.wormzjl.icheme.science.equipment.EquipmentShape.defaultSupport(2,com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation.HORIZONTAL));
+        ledger.structure(origin,WorldTopologyLedger.Structure.of(drum,new com.wormzjl.icheme.science.equipment.Paint(0x587246,0x383E42)));
+        var after=ledger.snapshot();
+        assertSame(before.active(),after.active(),"a build edit copies no registration");assertNotSame(before.builds(),after.builds());
+        assertFalse(FluidCheckpointCodec.sameWorldBody(before,after),"a build edit rewrites the topology unit");
+        assertSame(after,ledger.snapshot(),"an unchanged ledger shares its snapshot");
+        var restored=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(after),after.onlineTick(),NO_RECOVERIES);
+        assertEquals(after.builds(),restored.builds());assertEquals(drum,restored.builds().structures().get(origin).shape());
+        ledger.paint(1,new WorldTopologyLedger.LinePaint(com.wormzjl.icheme.science.equipment.Paint.BARE,com.wormzjl.icheme.science.equipment.Paint.BARE));
+        assertTrue(ledger.snapshot().builds().paints().isEmpty(),"a bare line keeps no entry");
+        assertThrows(IllegalArgumentException.class,()->ledger.paint(9,new WorldTopologyLedger.LinePaint(0x2271B3,0x2271B3)),"only a registered identity is painted");
+    }
+    /**
      * A crystal is its component in another phase (owner decision D23): a pilot tank placed holding CO2 in N2 below its
      * frost point and broken after its refresh deposited CO2-I books the same component moles and total energy destroyed
      * as constructed. The dry ice enters the destroyed totals as CO2 moles with its true energy (its stored sensible part

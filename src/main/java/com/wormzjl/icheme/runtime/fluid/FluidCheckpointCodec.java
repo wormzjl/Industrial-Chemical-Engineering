@@ -181,7 +181,7 @@ public final class FluidCheckpointCodec {
         var columns=new HashMap<>(snapshot.columns());
         state.columns().forEach((id,saved)->{var u=columns.get(id);if(u!=null&&u.running())columns.put(id,u.withState(saved));});
         return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),snapshot.active(),snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
-                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns));
+                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),snapshot.builds());
     }
     /** The facts of a topology unit; facts this build cannot read refuse the world. */
     static FluidFacts.World worldFacts(byte[] data,Sections s) {
@@ -192,7 +192,7 @@ public final class FluidCheckpointCodec {
      * immutable parts with the state it was taken from, so an unchanged ledger is the same objects. */
     public static boolean sameWorldBody(WorldTopologyLedger.Snapshot a,WorldTopologyLedger.Snapshot b) {
         return a.nextIdentity()==b.nextIdentity()&&a.active()==b.active()&&a.events()==b.events()&&a.constructed()==b.constructed()
-                &&a.destroyed()==b.destroyed()&&a.basis()==b.basis()&&a.recoveries()==b.recoveries()&&a.restated()==b.restated()&&a.columns()==b.columns();
+                &&a.destroyed()==b.destroyed()&&a.basis()==b.basis()&&a.recoveries()==b.recoveries()&&a.restated()==b.restated()&&a.columns()==b.columns()&&a.builds()==b.builds();
     }
     static byte[] topologyUnit(WorldTopologyLedger.Snapshot world,long generation) {
         var w=new Writer();header(w,TOPOLOGY,0,0,generation);w.raw(encodeTopology(world));return w.toByteArray();

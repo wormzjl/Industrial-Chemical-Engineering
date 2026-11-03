@@ -79,9 +79,54 @@ public final class WorldTopologyLedger {
             return new Restated(energy+other.energy,moles,solids);
         }
     }
+    /**
+     * What the registry holds of a build beyond its physics, so that it can place the blocks again (batch
+     * 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 3.1). It holds each painted line's paint by device identity
+     * (a pipe, a one-block device or a rack lane), and each equipment structure's shape and paint by its origin. These
+     * are facts, and none changes a flow. A structure's cells, nozzles and registrations follow from its shape at its
+     * origin. Its nozzle sizes follow from the bores of the pipes it meets.
+     *
+     * <p>The ledger keeps these facts as live maps. An edit costs O(1), and a snapshot copies them only after they
+     * changed. While they are unchanged, every snapshot shares one instance, so a save compares them by reference
+     * ({@link FluidCheckpointCodec#sameWorldBody}).</p>
+     */
+    public record Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures) {
+        public static final Builds NONE=new Builds(Map.of(),Map.of());
+        public Builds {
+            paints=Map.copyOf(paints);structures=Map.copyOf(structures);
+            for(var e:paints.entrySet())if(e.getKey()<=0||e.getValue().bare())throw new IllegalArgumentException("Invalid line paint of "+e.getKey());
+            for(var origin:structures.keySet())if(origin.lane()!=0)throw new IllegalArgumentException("A structure's origin is a block, not a rack lane");
+        }
+        public boolean empty(){return paints.isEmpty()&&structures.isEmpty();}
+        /** These facts with the paints of only the identities in {@code ids}. Unchanged: this. */
+        Builds keeping(Set<Long> ids) {
+            if(ids.containsAll(paints.keySet()))return this;
+            var next=new HashMap<>(paints);next.keySet().retainAll(ids);return new Builds(next,structures);
+        }
+    }
+    /** A line's two paints, each 0xRRGGBB or {@link com.wormzjl.icheme.science.equipment.Paint#BARE}. */
+    public record LinePaint(int primary,int secondary) {
+        public LinePaint {
+            if(!com.wormzjl.icheme.science.equipment.Paint.line(primary)||!com.wormzjl.icheme.science.equipment.Paint.line(secondary))throw new IllegalArgumentException("A line's paint is 0xRRGGBB or bare");
+        }
+        /** A bare line on both sides: what a line with no entry has. */
+        public boolean bare(){return primary==com.wormzjl.icheme.science.equipment.Paint.BARE&&secondary==com.wormzjl.icheme.science.equipment.Paint.BARE;}
+    }
+    /**
+     * A placed equipment structure: its shape, its paint, and the shape as its shell writes it (SNBT, keys sorted). The
+     * text is made once per edit ({@link #of}), so a save writes it as it stands and encodes nothing.
+     */
+    public record Structure(com.wormzjl.icheme.science.equipment.EquipmentShape shape,com.wormzjl.icheme.science.equipment.Paint paint,String text) {
+        public Structure{Objects.requireNonNull(shape);Objects.requireNonNull(paint);Objects.requireNonNull(text);}
+        public static Structure of(com.wormzjl.icheme.science.equipment.EquipmentShape shape,com.wormzjl.icheme.science.equipment.Paint paint) {
+            var tag=new net.minecraft.nbt.CompoundTag();com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity.writeShape(tag,shape);
+            return new Structure(shape,paint,tag.toString());
+        }
+    }
     public record Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,
                            MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,
-                           Map<Long,ColumnUnit> columns) {
+                           Map<Long,ColumnUnit> columns,Builds builds) {
+        public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,Map<Long,ColumnUnit> columns){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,Builds.NONE);}
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,Map.of());}
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,Restated.NONE);}
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,Map.of());}
@@ -106,7 +151,7 @@ public final class WorldTopologyLedger {
                 if(changed==null)changed=new HashMap<>(active);
                 changed.put(r.device().id(),new Registration(r.device().withHeat(heat.withTransit(joule)),r.spec(),r.revision()));
             }
-            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns);
+            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns,builds);
         }
         public Snapshot {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologySnapshots);
@@ -129,6 +174,7 @@ public final class WorldTopologyLedger {
                 for(var s:unit.stations())if(s.account().moles().length!=count)throw new IllegalArgumentException("Column account axis mismatch");
             }
             for(var r:active.values())if(r.device.suspended()&&!columns.containsKey(r.device.suspendedBy()))throw new IllegalArgumentException("Device "+r.device.id()+" is held by no column");
+            Objects.requireNonNull(builds);for(long id:builds.paints().keySet())if(id>=nextIdentity)throw new IllegalArgumentException("Paint of an identity never given: "+id);
         }
         public static Snapshot empty(){return empty(com.wormzjl.icheme.science.material.MaterialRuntime.current());}
         public static Snapshot empty(com.wormzjl.icheme.science.material.MaterialCatalog catalog) {
@@ -175,6 +221,12 @@ public final class WorldTopologyLedger {
     private final Map<Long,Registration> activeView=Collections.unmodifiableMap(active),latestView=Collections.unmodifiableMap(latest);
     private final List<Event> eventsView=Collections.unmodifiableList(events);
     private final Map<UUID,RecoveredSolid> recoveriesView=Collections.unmodifiableMap(recoveries);
+    // The build facts (batch 2026-11-03-save-corruption), live: an edit costs O(1). builds is their shared immutable copy,
+    // null after an edit until the next snapshot makes it. A build edit leaves version alone, so it neither stales a
+    // topology preparation nor makes the next snapshot copy the registry.
+    private final HashMap<Long,LinePaint> paints=new HashMap<>();
+    private final HashMap<PhysicalFluidTopology.Position,Structure> structures=new HashMap<>();
+    private Builds builds;
     private Snapshot shared;private long sharedVersion;
     public WorldTopologyLedger(Snapshot restored) {
         Objects.requireNonNull(restored);onlineTick=restored.onlineTick;nextIdentity=restored.nextIdentity;basis=restored.basis;constructed=restored.constructed;destroyed=restored.destroyed;restated=restored.restated;
@@ -183,15 +235,35 @@ public final class WorldTopologyLedger {
         // Every queued event must apply to the registry before it, in order, as when it was queued.
         for(var event:restored.events){check(latest,latestAt,event.edits);apply(latest,latestAt,event.edits);events.add(event);}
         recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);
+        paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());builds=restored.builds;
         shared=restored;sharedVersion=version;
     }
     private void owned(){if(Thread.currentThread()!=owner)throw new IllegalStateException("World topology belongs to the server thread");}
     /** The ledger as a checkpoint saves it. While the ledger is unchanged every snapshot shares the same immutable parts. */
     public Snapshot snapshot() {
         owned();
-        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns));sharedVersion=version;}
-        else if(shared.onlineTick!=onlineTick)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns);
+        if(builds==null)builds=new Builds(paints,structures);
+        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),builds);sharedVersion=version;}
+        else if(shared.onlineTick!=onlineTick||shared.builds!=builds)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,builds);
         return shared;
+    }
+    /** The build facts as the next snapshot holds them. */
+    public Builds builds(){owned();if(builds==null)builds=new Builds(paints,structures);return builds;}
+    /**
+     * Paints the line {@code id}, a registered or queued identity; null or a bare line removes its entry. A build fact:
+     * no flow changes, nothing is queued.
+     */
+    public void paint(long id,LinePaint paint) {
+        owned();if(!latest.containsKey(id))throw new IllegalArgumentException("Paint of an unregistered identity "+id);
+        if(paint!=null&&paint.bare())paint=null;
+        if(Objects.equals(paints.get(id),paint))return;
+        if(paint==null)paints.remove(id);else paints.put(id,paint);builds=null;
+    }
+    /** Records the structure whose origin is {@code origin}; null removes it. A build fact: no flow changes, nothing is queued. */
+    public void structure(PhysicalFluidTopology.Position origin,Structure structure) {
+        owned();Objects.requireNonNull(origin);if(origin.lane()!=0)throw new IllegalArgumentException("A structure's origin is a block, not a rack lane");
+        if(Objects.equals(structures.get(origin),structure))return;
+        if(structure==null)structures.remove(origin);else structures.put(origin,structure);builds=null;
     }
     public long onlineTick(){owned();return onlineTick;}
     public long nextIdentity(){owned();return nextIdentity;}

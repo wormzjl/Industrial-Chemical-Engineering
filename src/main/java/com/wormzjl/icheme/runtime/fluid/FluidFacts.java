@@ -43,9 +43,11 @@ final class FluidFacts {
      *  and appends the data's identity, the declared revision of every record it reads (owner decisions 2026-10-26).
      *  5 (batch 2026-10-27-heat-exchanger-design): a geometry's channel count, a heat side's unit on its registration.
      *  6 (batch 2026-10-28-column-operation): a registration's column unit (the running column that holds it), the column units.
-     *  7 (batch 2026-10-30-water-cooling-tower): a device spec's cooling tower. */
-    static final int SCHEMA=7;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 7. */
+     *  7 (batch 2026-10-30-water-cooling-tower): a device spec's cooling tower.
+     *  8 (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 3): the registry's build facts, each painted line's
+     *  paints and each equipment structure's shape and paint, so that the registry can place their blocks again. */
+    static final int SCHEMA=8;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 8. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -168,14 +170,14 @@ final class FluidFacts {
      */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
                  WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
-                 List<String> removedMovers,List<ColumnUnit> columns) {
+                 List<String> removedMovers,List<ColumnUnit> columns,WorldTopologyLedger.Builds builds) {
         /** The ledger these facts and {@code events} make at {@code onlineTick}, its recoveries' solids named by {@code record}. */
         WorldTopologyLedger.Snapshot snapshot(long onlineTick,List<WorldTopologyLedger.Event> events,Function<Solid,SolidMaterial> record) {            var active=new HashMap<Long,WorldTopologyLedger.Registration>();
             for(var r:registrations)if(active.put(r.device().id(),r)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate device "+r.device().id());
             var pending=new HashMap<UUID,WorldTopologyLedger.RecoveredSolid>();
             for(var r:recoveries)if(pending.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,inventory(r.solids,record),r.energy))!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate recovery "+r.id);
             var units=new HashMap<Long,ColumnUnit>();for(var u:columns)if(units.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate column unit "+u.id());
-            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units);
+            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,builds);
             new WorldTopologyLedger(snapshot);return snapshot;
         }
     }
@@ -193,7 +195,31 @@ final class FluidFacts {
                     .list(new TreeMap<>(restated.removedSolids()).entrySet(),(e,m)->e.text(m.getKey()).f64(m.getValue())));
             // Schema 6: the column units, by identity.
             f.list(new TreeMap<>(s.columns()).values(),FluidFacts::column);
+            // Schema 8: the build facts, line paints by identity and structures by origin. A structure's shape is its
+            // shell's own SNBT, made once when it was recorded.
+            var builds=s.builds();
+            f.list(new TreeMap<>(builds.paints()).entrySet(),(q,e)->q.count(e.getKey()).i32(e.getValue().primary()).i32(e.getValue().secondary()));
+            var structures=new ArrayList<>(builds.structures().entrySet());structures.sort(Map.Entry.comparingByKey(ORIGIN_ORDER));
+            f.list(structures,(q,e)->{position(q,e.getKey());var t=e.getValue();q.text(t.text()).i32(t.paint().body()).i32(t.paint().structure());});
         });
+    }
+    private static final Comparator<PhysicalFluidTopology.Position> ORIGIN_ORDER=Comparator.comparing(PhysicalFluidTopology.Position::dimension)
+            .thenComparingInt(PhysicalFluidTopology.Position::x).thenComparingInt(PhysicalFluidTopology.Position::y).thenComparingInt(PhysicalFluidTopology.Position::z);
+    /**
+     * Schema 8: a structure's record. Its shape reads through the shell's own reader and repairs ({@code ShapeRepair}),
+     * repairs logged as a shell logs them. A shape of a kind this build retired is dropped: the shell's load removes the
+     * structure whole (backward-compat decision D6), and the registry cannot place it again. Returns null for that.
+     */
+    private static WorldTopologyLedger.Structure structure(Record q,PhysicalFluidTopology.Position origin,String text,int body,int structure) {
+        net.minecraft.nbt.CompoundTag tag;
+        try{tag=net.minecraft.nbt.TagParser.parseTag(text);}
+        catch(com.mojang.brigadier.exceptions.CommandSyntaxException invalid){throw q.invalid("structure at "+origin+": its shape does not read: "+invalid.getMessage());}
+        var read=com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity.readShape(tag);
+        if(read.retired()!=null){warn("structure at "+origin+" is a retired "+read.retired()+"; the registry drops it");return null;}
+        if(read.shape()==null)throw q.invalid("structure at "+origin+": no shape");
+        for(var repair:read.repairs())IChemE.LOGGER.warn("equipment_compat kind={} at={} repair={}",read.shape().kind().name().toLowerCase(Locale.ROOT),origin,repair);
+        var paint=valid(q,"structure paint at "+origin,()->new com.wormzjl.icheme.science.equipment.Paint(body,structure));
+        return WorldTopologyLedger.Structure.of(read.shape(),paint);
     }
     static World world(byte[] data,int offset,int length) {
         return read(data,offset,length,"facts of the topology unit",f->{
@@ -215,8 +241,19 @@ final class FluidFacts {
                 var solids=new HashMap<String,Double>();for(var e:q.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))solids.put(e.getKey(),e.getValue());
                 return valid(q,"restated totals",()->new WorldTopologyLedger.Restated(energy,moles,solids));});
             var columns=f.list(List.<ColumnUnit>of(),FluidFacts::column);
+            // Schema 8: the build facts. A record written before them holds none, and the blocks teach them later.
+            var paints=new HashMap<Long,WorldTopologyLedger.LinePaint>();
+            for(var e:f.list(List.<Map.Entry<Long,WorldTopologyLedger.LinePaint>>of(),q->{long id=q.count(0);int primary=q.i32(com.wormzjl.icheme.science.equipment.Paint.BARE),secondary=q.i32(primary);
+                    var paint=valid(q,"line paint of "+id,()->new WorldTopologyLedger.LinePaint(primary,secondary));if(id<=0||paint.bare())throw q.invalid("line paint of "+id);return Map.entry(id,paint);}))
+                if(paints.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate line paint "+e.getKey());
+            var structures=new HashMap<PhysicalFluidTopology.Position,WorldTopologyLedger.Structure>();var origins=new HashSet<PhysicalFluidTopology.Position>();
+            for(var e:f.list(List.<Map.Entry<PhysicalFluidTopology.Position,Optional<WorldTopologyLedger.Structure>>>of(),q->{var origin=required(position(q),q,"structure origin");var text=q.text("");
+                    int body=q.i32(0),structure=q.i32(0);if(origin.lane()!=0||text.isEmpty())throw q.invalid("structure at "+origin);return Map.entry(origin,Optional.ofNullable(structure(q,origin,text,body,structure)));})) {
+                if(!origins.add(e.getKey()))throw f.invalid("duplicate structure at "+e.getKey());
+                e.getValue().ifPresent(s->structures.put(e.getKey(),s));
+            }
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
-            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns);
+            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,new WorldTopologyLedger.Builds(paints,structures));
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {
@@ -641,7 +678,9 @@ final class FluidFacts {
             recoveries.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,solids,r.energy));
         }
         var restatedTotal=world.restated.plus(new WorldTopologyLedger.Restated(energy,removed.moles,removed.solids));
-        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns);
+        // The build facts are kept whole: a paint of a device this rebuild left out goes with it.
+        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,
+                world.builds.keeping(registrations.keySet()));
         var ledger=new WorldTopologyLedger(snapshot);
         // A dismantled column whose release was still queued leaves now, its accounts booked as destroyed.
         for(var u:columns.values())if(u.leaving())ledger.removeColumn(u.id());

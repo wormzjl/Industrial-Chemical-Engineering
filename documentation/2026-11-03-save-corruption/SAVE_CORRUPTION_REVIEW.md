@@ -293,7 +293,7 @@ W5a and W5b are planned in [REGISTRY_FIRST_PLAN.md](REGISTRY_FIRST_PLAN.md).
 - **W4. Accessory store (P6) and refusal text (P8).** P8 changes `en_us` and the other lang files in the same commit. P7 is part of W5b.
 - **W5a. Registry facts (section 5.5).**
   - Code:
-    - paints on device registrations, rack records and structure records, as facts fields of the topology unit (a facts-schema bump);
+    - line paints by device identity and structure records, as facts fields of the topology unit (a facts-schema bump). Rack lanes, nozzle sizes and members are derived from registrations (plan 3.1);
     - the structure record written with the shell's shape codec;
     - learning a missing field from the block at its chunk's first load;
     - restating block-entity copies from the registry at bind.
@@ -315,6 +315,12 @@ W5a and W5b are planned in [REGISTRY_FIRST_PLAN.md](REGISTRY_FIRST_PLAN.md).
     - a cell held by stone keeps the registration held and listed, and is placed after the stone is cleared;
     - an unknown device block registers fresh.
   - Each test edits the world or the registry directly, so it needs no real crash.
+- **W6. Save encoding off the server thread (proposed 2026-11-03, owner to decide).**
+  - Why: the owner asked for saves without lag. Today `FluidSavedData` captures and prepares on the server thread, and prepare encodes and hashes every changed unit. A cold save of 10,000 lone tanks costs 7.6 ms + 48.4 ms (f3 tables), about one tick. A world whose islands keep flowing pays about that at every autosave.
+  - Proposal: the server thread keeps only the capture (the immutable island and ledger snapshots, about 7.6 ms at 10,000 islands). `FluidCheckpointStore.prepare` (encoding, SHA-256, layout) runs on the IO worker, in the same task as its commit, so plans stay in order.
+  - Conditions to check first: every input of `prepare` is immutable once captured; the store's reuse state is read and written only by that worker; a flushing save (`save-all flush`, shutdown) still waits for it; a failed prepare is reported as a failed commit is (W3).
+  - Gates: `FluidCheckpointStoreTest` and `FluidCheckpointFormatTest`, plus a counter of server-thread save nanoseconds.
+  - Independent of W1 to W5. With W6, P3's two halves (an island whose encoding throws keeps its last good unit; the decode check of each new unit) run in one worker task.
 - **Order.** W5a and W5b do not depend on W1 to W4. They fix a case that needs no damaged file, so they can come first. W5b needs W5a for structures and paint, but one-block devices can go first.
 - **Code guide:** fluid-runtime (checkpoint section and chunk load), equipment (`restoreFluidBinding`), instrument-accessories, verification.
 

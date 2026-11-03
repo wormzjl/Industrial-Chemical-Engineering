@@ -39,45 +39,58 @@ A new part of the ledger snapshot, `WorldTopologyLedger.Builds`. It holds the fa
 
 | Record | Key | Fields | Source today |
 |---|---|---|---|
-| Line paint | device identity | primary, secondary (0xRRGGBB, or bare) | `FluidDeviceBlockEntity.paint/secondary` |
-| Rack | cell position | frame, the joined faces (`int[]`), and per lane (by device identity) its option and arms | `PipeRackBlockEntity` (`Frame`, `Joined`, `Lanes`) |
-| Structure | origin position | the shape as SNBT text, the paint (`Paint.encode()`), the nozzle sizes, and the member identities | `EquipmentShellBlockEntity` (`writeShape`, `Paint`, `Nozzles`) |
+| Line paint | device identity: a pipe, a one-block device or a rack lane | primary, secondary (0xRRGGBB, or bare) | `FluidDeviceBlockEntity.paint/secondary`, `PipeRackBlockEntity.Lane.paint/secondary` |
+| Structure | origin position | the shape as SNBT text, and the paint | `EquipmentShellBlockEntity` (`writeShape`, `Paint`) |
 
-- **Shapes as SNBT text.** The shape is written by `EquipmentShellBlockEntity.writeShape` and read by `readShape` → `ShapeRepair.read`. The shape keeps its own compat rules and corpus (`compat/equipment/shapes-N.snbt`), and there is no second shape format.
+Facts the first draft listed that step 1 found to be derived. They stay out of the registry:
+- **The rack record.** `PipeRackBlockEntity` already rebuilds a lane from its registration (line 299). It takes the option from `position.lane() - 1`, the width from `slots`, the arms from the joints and facing, and the bore from the geometry. The rack's `Frame` and `Joined` are not saved at all, so they are derived. A rack lane needs only its paint, which is a line paint.
+- **The nozzle sizes.** The shell's `Nozzles` are per-cell drawing codes that `EquipmentStructure` redraws from the bores of the pipes the nozzles meet (`ShapeRasterizer.cellCodes`). Those bores are in the registry.
+- **The member identities.** A structure's registrations sit at the node cells that its shape gives at its origin.
+- **The layout stamp, the box and the roof level.** These are derived from the shape and the contents.
+
+How the shape is held:
+- **Shapes as SNBT text.** The shape is written by `EquipmentShellBlockEntity.writeShape` and read by `readShape` → `ShapeRepair.read`. The shape keeps its own compat rules and corpus (`compat/equipment/shapes-N.snbt`), and there is no second shape format. SNBT sorts its keys, so equal shapes give equal text.
 - **Text size.** A facts text may be up to 1 MiB (`FluidCheckpointCodec.MAXIMUM_TEXT`), and a shape is a few KB. Identical shapes share one entry of the section's text table.
-- **Lane fields already in the registry.** A lane's width, joints and bore are in `Device` already (`slots`, `joints`, `geometry`), so the rack record leaves them out. Check before coding that `Option` and `Arms` are the only lane fields that are not derived.
-- **What stays out:** the layout stamp, the box and the roof level. They are derived from the shape and the contents.
+- **A retired kind.** A structure whose shape reads as a retired kind is dropped from the registry with a log line. The shell's load removes it whole (D6).
 
 ### 3.2 Encoding
 
-- `FluidFacts.world`/`World`: three lists are appended after `columns`: paints, racks, structures. Every entry is a record, as the existing ones are. Absent lists read as empty, which is the behaviour before the field.
+- `FluidFacts.world`/`World`: two lists are appended after `columns`: paints by identity, then structures by origin. Every entry is a record, as the existing ones are. Absent lists read as empty, which is the behaviour before the field.
 - `FluidFacts.SCHEMA` goes from 7 to 8, with the schema comment line.
 - Validation on read:
-  - a paint is a line colour (`Paint.line`);
-  - a rack's lanes name registered rack lanes of that cell;
-  - a structure's members are registered;
+  - a paint is a line colour (`Paint.line`) and not bare on both sides;
+  - a structure's origin is a block (lane 0), and its paint is a colour pair;
+  - duplicates refuse;
   - a shape that `ShapeRepair` repairs is logged as on a shell load;
   - a shape that does not read refuses, as any damaged fact does until W2 lands.
-- `WorldTopologyLedger.Snapshot` carries `Builds` (one more constructor overload, as for `columns`). `sameWorldBody` compares it, so a build edit rewrites the topology unit at the next save.
+- `WorldTopologyLedger.Snapshot` carries `Builds` (one more constructor overload, as for `columns`). `sameWorldBody` compares it by reference, so a build edit rewrites the topology unit at the next save.
+- How the ledger holds them (built in step 1):
+  - The ledger keeps live maps, and an edit is one map update.
+  - The immutable `Builds` copy is made at the next `snapshot()` after an edit, and at no other time.
+  - A build edit does not bump the registry's `version`, so the registrations, events and columns are not copied again. The snapshot shares them with the previous one.
+  - `Structure.of` makes the shape's SNBT text once, when the structure is recorded. A save writes the stored text and encodes no shape.
 
 ### 3.3 Write paths: every edit reaches the registry
 
-All on the server thread, as direct ledger updates (`version++`). This is the same path as `WorldTopologyLedger.column`, because a build fact changes no flow and needs no queued event.
+All on the server thread, as direct ledger updates: `WorldTopologyLedger.paint(id, …)` and `structure(origin, …)`, built in step 1. A build fact changes no flow, so it needs no queued event and does not bump the registry's `version` (3.2).
 
 | Edit | Hook |
 |---|---|
-| Line paint (pipe tool, laying) | `FluidDeviceBlockEntity.paint(primary, secondary)` → `FluidWorldAuthority.paint(id, …)` |
-| Rack placed, lane added or removed, frame or join changed | the `PipeRackBlockEntity` setters that call `setChanged` → `FluidWorldAuthority.rack(cell, …)` |
-| Structure placed, refreshed, rebuilt by the constructor, repainted, nozzle sizes changed | `EquipmentShellBlockEntity.bind(shape, cell, paint)` at the origin cell, and the constructor's apply → `FluidWorldAuthority.structure(origin, …)` |
-| Device or structure removed through the break path | the existing removal also drops its build record |
+| Line paint of a pipe or one-block device (pipe tool, laying) | `FluidDeviceBlockEntity.paint(primary, secondary)` → `FluidWorldAuthority.paint(id, …)` |
+| Line paint of a rack lane | the `PipeRackBlockEntity` lane paint setter → `FluidWorldAuthority.paint(laneId, …)` |
+| Structure placed, refreshed, rebuilt by the constructor, repainted | `EquipmentShellBlockEntity.bind(shape, cell, paint)` at the origin cell, and the constructor's apply → `FluidWorldAuthority.structure(origin, …)` |
+| Device removed (any path) | the ledger drops the line's paint when an applied edit removes its identity: one place for every removal path, no hook |
+| Structure removed through the break path | the existing removal also drops its structure record |
+
+A rack's lanes, frame and joins need no hook: they are rebuilt from the lane registrations (3.1). A nozzle size change is a pipe change, which the registry already holds.
 
 Before coding, list every writer of these block-entity fields (`grep` the setters), so that no edit path is missed. The pipe tool's laying path (`PipeLaying`, the `laying` flag) is the most likely one to bypass the hook.
 
 ### 3.4 Learning from blocks (worlds saved before schema 8)
 
 At the re-alignment pass of a chunk (4.2), a registration in that chunk with no build record copies the record from its block when the block is present and of the right kind. A world saved at schema 7 therefore fills its records chunk by chunk as it is played. Until a chunk loads once:
-- one-block devices are re-placeable without a record (bare paint);
-- rack lanes and structure members are not. If their block is missing, they keep today's behaviour and are listed as "cannot be rebuilt: saved before the registry held its shape".
+- one-block devices and rack lanes are re-placeable without a record (bare paint);
+- structure members are not. If their block is missing, they keep today's behaviour and are listed as "cannot be rebuilt: saved before the registry held its shape".
 
 ### 3.5 Block-entity copies
 
@@ -96,7 +109,7 @@ The block entities keep their copies, because the client draws from them. At bin
 ### 4.2 The queue
 
 - `FluidWorldAuthority.loadedChunk` keeps its binding and its "register a block that has none" (S10). It then queues the chunk for re-alignment. It places no block itself.
-- The queue is served on the level tick, beside `EquipmentStructure.onLevelTick`, for a bounded number of devices per tick. Start at 32 and measure it with the counters.
+- The queue is served on the level tick, beside `EquipmentStructure.onLevelTick`. Each tick serves at most 32 devices and stops after 1 ms, whichever comes first (section 6). Measure both with the counters.
 - A registration is served once every chunk its block needs is loaded and block-ticking, as refresh requires (`shouldTickBlocksAt`).
 - The queue never loads a chunk and never solves. A dimension that has no level holds its registrations and lists them.
 
@@ -107,7 +120,7 @@ For each registration of the chunk:
    - Block present and same kind: restate the block state (facing, fittings) and the block entity (joints, bore, paint) where they differ.
    - Block missing, or another `FluidDeviceBlock` at the cell: place `FluidDeviceBlock.stateFor(device)` with the restore flag, then `bindIdentity(id)`.
    - Another block at the cell: hold.
-3. **Rack lane:** handled per cell. A rack block present with the lane: restate. A rack missing: place it from the rack record if the cell is free, else hold every lane of the cell.
+3. **Rack lane:** handled per cell. A rack block present with the lane: restate. A rack missing: place a `PipeRackBlock` if the cell is free, and let its block entity rebuild the lanes from their registrations, as it does at load. Else hold every lane of the cell.
 4. **Structure member:** handled per structure (4.4).
 
 ### 4.3 Placing one-block devices
@@ -143,19 +156,37 @@ Each step is one commit and runs only the tests that its files can load.
 
 | Step | Content | Tests |
 |---|---|---|
-| 1 | `Builds` in the snapshot, schema 8, encoding, validation. No behaviour change | `FluidFactsCompatTest` (with the new `compat/fluid/schema-8` image), facts round trip |
+| 1 | `Builds` in the snapshot, schema 8, encoding, validation. No behaviour change. **Done** (see the batch README) | `FluidFactsCompatTest` (with the new `compat/fluid/schema-8` image), facts round trip |
 | 2 | Write paths (3.3) and the block-entity restatement (3.5) | GameTest: paint a pipe, save, reload, read the registry |
 | 3 | Held registrations: compilation, state, commands (4.1, 4.5 commands) | Compile unit test (a held vessel is its own island). GameTest: hold, then drop |
 | 4 | `stateFor`, the restore flag, the kind check, the queue, one-block re-alignment (4.2, 4.3) | `stateFor` round trip over every kind and fitting. GameTests a to d (section 7) |
-| 5 | Racks | GameTest e |
+| 5 | Rack cells placed again from their lane registrations (4.2 item 3) | GameTest e |
 | 6 | Structures (4.4) | GameTests f and g. `equipmentGates` only if refresh code changed |
 | 7 | Notices, lang keys (4.5) | `LanguageFilesTest`; `tools/localization/check.js` |
 | 8 | Learning from blocks (3.4) | GameTest h, and the schema-7 image still loads |
 
-## 6. Measurement
+## 6. Cost: no lag at edits, saves and loads
 
+Owner requirement (2026-11-03): the system must be lag-free, above all during saving.
+
+| Moment | Server-thread work W5 adds | Bound |
+|---|---|---|
+| A build edit (paint, structure) | one map update | O(1) |
+| The save's capture after a build edit (`FluidWorldAuthority.capture`, the only taker of a ledger snapshot in play) | one copy of the two build maps; registrations, events and columns are shared | once per save, and only after an edit |
+| A save with no build edit | nothing: the topology unit is reused (`sameWorldBody` compares `builds` by reference) | zero |
+| A save after a build edit | one re-encoding of the topology unit, the same cost as after placing a pipe today; shape texts are already made | one unit per save |
+| A load | each structure's SNBT parsed once, at world open | not during play |
+| Chunk load | the chunk queued; no block placed, no solve | O(devices of the chunk) to queue |
+| Re-alignment | at most 32 devices and 1 ms per tick (4.2) | 1 ms per tick |
+
+Measurement:
 - The re-alignment's cost goes into `FluidRuntimeDiagnostics`: chunks queued, devices checked, placed, held, and nanoseconds per served tick.
 - One fluid GameTest batch reads them. No campaign is needed: no solver code changes, only `compile` for held devices. Run the campaign only if step 3 changes `compile` beyond held devices.
+
+The save itself, before W5 (outside this plan, proposal W6 in the review, section 9):
+- A save is prepared on the server thread and written on Minecraft's IO worker (`FluidSavedData`). The preparation captures the authority and encodes and hashes every unit whose island changed since the last save.
+- f3 tables, 10,000 lone tanks, cold save: capture 7.6 ms, then prepare 48.4 ms. A world whose islands all keep flowing pays about that at every autosave: one tick of lag.
+- The f3 warm-save prepare time (40.3 ms) is the tests' self-verification (`icheme.fluid.scheduler.verify`), which re-encodes every reused unit. A game save does not run it.
 
 ## 7. GameTests (fluid GameTest source set)
 
