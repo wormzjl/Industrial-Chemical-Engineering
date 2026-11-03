@@ -103,7 +103,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     }
 
     private final ProcessSimulatorMenu menu;
-    private final SimulatorHost host;
+    private final SimulatorBlockHost host;
     private final SheetEditor editor;
     private final SheetView view = new SheetView();
     private final SheetGestures gestures;
@@ -190,12 +190,10 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
 
     /** What the block held lands. Its parts follow the opening, so nothing has been edited yet. */
     private void replayed(byte[] packed) {
-        if (host instanceof SimulatorBlockHost block) {
-            var sheet = block.replayed(packed, fluids.model());
-            if (sheet != null) {
-                load(sheet);
-                autosaved = sheet;
-            }
+        var sheet = host.replayed(packed, fluids.model());
+        if (sheet != null) {
+            load(sheet);
+            autosaved = sheet;
         }
         if (minecraft != null) rebuildWidgets();
     }
@@ -275,7 +273,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
 
     /** Esc and Close end here: the block takes what is new first, for the close that follows must find it stored. */
     @Override public void onClose() {
-        if (host instanceof SimulatorBlockHost block) block.settle(editor.sheet());
+        host.settle(editor.sheet());
         minecraft.player.closeContainer();
     }
 
@@ -292,7 +290,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             minecraft.player.closeContainer();
             return;
         }
-        if (host instanceof SimulatorBlockHost block) block.ranOut(editor.sheet());
+        host.ranOut(editor.sheet());
         if (ticks - savedAt >= AUTOSAVE_TICKS) {
             savedAt = ticks;
             autosave();
@@ -489,36 +487,28 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             entries.put("file", name);
             addRenderableWidget(name);
             setFocused(name);
-            boolean text = dialog == Dialog.SAVE_AS;
-            var slots = DialogColumns.footer(w, h, text ? 3 : 2);
-            add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
-            if (text) add(new Column.Button("dialog/to_clipboard", lang("flowsheet.file.to_clipboard"), true, null), slots.get(1).moved(left, top));
-            add(new Column.Button("dialog/save", lang("flowsheet.file.save"), true, null), slots.get(text ? 2 : 1).moved(left, top)).primary(true);
+            if (dialog == Dialog.SAVE_AS) keys(left, top, "cancel", lang("flowsheet.file.cancel"), "to_clipboard", lang("flowsheet.file.to_clipboard"), "save", lang("flowsheet.file.save"));
+            else keys(left, top, "cancel", lang("flowsheet.file.cancel"), "save", lang("flowsheet.file.save"));
             return;
         }
-        if (dialog == Dialog.UNSAVED) {
-            var slots = DialogColumns.footer(w, h, 3);
-            add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
-            add(new Column.Button("dialog/discard", lang("flowsheet.file.discard"), true, null), slots.get(1).moved(left, top));
-            add(new Column.Button("dialog/store", lang("flowsheet.file.save"), true, null), slots.get(2).moved(left, top)).primary(true);
-            return;
+        switch (dialog) {
+            case UNSAVED -> keys(left, top, "cancel", lang("flowsheet.file.cancel"), "discard", lang("flowsheet.file.discard"), "store", lang("flowsheet.file.save"));
+            case CHANGES -> keys(left, top, "cancel", lang("flowsheet.file.cancel"), "load", lang("flowsheet.file.open"));
+            case DELETE -> keys(left, top, "cancel", lang("flowsheet.file.cancel"), "delete", lang("flowsheet.file.delete"));
+            default -> {
+                var list = listing(x);
+                var slots = DialogColumns.footer(FileColumns.W, FileColumns.H, list.keys().length);
+                // Each dialog's confirming key is primary, as the renders draw it (gui-creation rule 6): Open's Open, the templates' Load.
+                for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], list.off()[i] == null, list.off()[i]), slots.get(i).moved(left, top)).primary(i == list.primary());
+            }
         }
-        if (dialog == Dialog.CHANGES) {
-            var slots = DialogColumns.footer(w, h, 2);
-            add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
-            add(new Column.Button("dialog/load", lang("flowsheet.file.open"), true, null), slots.get(1).moved(left, top)).primary(true);
-            return;
-        }
-        if (dialog == Dialog.DELETE) {
-            var slots = DialogColumns.footer(w, h, 2);
-            add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
-            add(new Column.Button("dialog/delete", lang("flowsheet.file.delete"), true, null), slots.get(1).moved(left, top)).primary(true);
-            return;
-        }
-        var list = listing(x);
-        var slots = DialogColumns.footer(w, h, list.keys().length);
-        // Each dialog's confirming key is primary, as the renders draw it (gui-creation rule 6): Open's Open, the templates' Load.
-        for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], list.off()[i] == null, list.off()[i]), slots.get(i).moved(left, top)).primary(i == list.primary());
+    }
+
+    /** A prompt's push buttons: each key {@code dialog/<key>} with its text, in pairs; the last confirms, primary. */
+    private void keys(int left, int top, String... pairs) {
+        var slots = DialogColumns.footer(FileColumns.W, FileColumns.H, pairs.length / 2);
+        for (int i = 0; i < pairs.length; i += 2)
+            add(new Column.Button("dialog/" + pairs[i], pairs[i + 1], true, null), slots.get(i / 2).moved(left, top)).primary(i == pairs.length - 2);
     }
 
     /**
@@ -705,7 +695,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     /** Puts {@code sheet} in place of this one, once the player has said what becomes of an edit the block has not taken. */
     private void replaceWith(Flowsheet sheet) {
         boolean blank = editor.sheet().units().isEmpty() && editor.sheet().streams().isEmpty();
-        if (!blank && host instanceof SimulatorBlockHost block && block.unsaved(editor.sheet())) {
+        if (!blank && host.unsaved(editor.sheet())) {
             pending = () -> load(sheet);
             dialog = Dialog.UNSAVED;
             return;

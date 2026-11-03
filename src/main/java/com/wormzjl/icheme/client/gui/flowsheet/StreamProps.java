@@ -34,6 +34,12 @@ public record StreamProps(double temperature, double pressure, double vapour, do
         public List<String> axis() {
             return model.components();
         }
+
+        /** The kg/mol of the axis's component {@code i}: the package's, water's for one the package lacks. */
+        public double weight(int i) {
+            var properties = pack.properties();
+            return i >= 0 && i < properties.size() ? properties.get(i).molecularWeight() : WATER_WEIGHT;
+        }
     }
 
     /** A component's share of a stream. */
@@ -68,10 +74,9 @@ public record StreamProps(double temperature, double pressure, double vapour, do
         double[] amounts = amounts(stream, phase);
         double total = Arrays.stream(amounts).sum();
         var axis = fluids.axis();
-        var properties = fluids.pack().properties();
         for (int i = 0; i < amounts.length && i < axis.size(); i++) {
             if (amounts[i] <= 0) continue;
-            double weight = i < properties.size() ? properties.get(i).molecularWeight() : WATER_WEIGHT;
+            double weight = fluids.weight(i);
             parts.add(new Part(fluids.names().apply(axis.get(i)), 100 * amounts[i] / total, amounts[i], amounts[i] * weight));
         }
         return parts;
@@ -94,11 +99,5 @@ public record StreamProps(double temperature, double pressure, double vapour, do
             }
         }
         return out;
-    }
-
-    /** The phase a stream's page opens on: the first it holds. */
-    public static int firstPhase(StreamProps props) {
-        var p = props.phases();
-        return p.organic() > 0 ? 0 : p.aqueous() > 0 ? 1 : p.gas() > 0 ? 2 : 0;
     }
 }

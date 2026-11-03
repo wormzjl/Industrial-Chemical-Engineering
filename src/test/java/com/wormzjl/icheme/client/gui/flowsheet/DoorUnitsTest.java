@@ -23,7 +23,7 @@ class DoorUnitsTest {
 
     private static SheetContext context(SheetEditor editor, SheetUnits units) {
         var texts = new SheetFixture.Texts();
-        return new SheetContext(editor, new SheetState(editor.sheet(), null, null, 1.2, null), units, texts, texts.measure, SheetFixture.FLUIDS);
+        return new SheetContext(editor, new SheetState(editor.sheet(), null, null, 1.2, null), units, texts, texts.measure, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
     }
 
     private static @Nullable Column.Field field(List<Column.Row> rows, String key) {

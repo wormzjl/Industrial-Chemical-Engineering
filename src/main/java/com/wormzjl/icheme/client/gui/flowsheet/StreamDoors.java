@@ -21,7 +21,6 @@ import org.jetbrains.annotations.Nullable;
  * meter. Copy and Paste use {@link SheetClipboard}.
  */
 public final class StreamDoors {
-    private static final double KMOL_PER_HOUR = 1000 / 3600.0;
     private static final int TOP_SEARCH = 24;
 
     private StreamDoors() {
@@ -112,9 +111,8 @@ public final class StreamDoors {
             }
 
             @Override public void button(String key) {
-                if (key.startsWith("tab/")) view.tab = Integer.parseInt(key.substring(4));
-                else if (key.startsWith("phase/")) view.phase = Integer.parseInt(key.substring(6));
-                else if (key.startsWith("remove/")) removePart(x, stream.id(), key.substring(7));
+                if (view.press(key)) return;
+                if (key.startsWith("remove/")) removePart(x, stream.id(), key.substring(7));
                 else if (key.equals("copy")) view.said = copy(x, stream);
                 else if (key.equals("paste")) view.said = paste(x, stream.id(), false);
                 else if (key.equals("paste_state")) view.said = paste(x, stream.id(), true);
@@ -186,7 +184,7 @@ public final class StreamDoors {
     private static Flowsheet.Feed part(Flowsheet.Feed feed, String component, double percent) {
         double total = total(feed);
         var amounts = new LinkedHashMap<>(feed.amounts());
-        if (total == 0) amounts.put(component, percent * KMOL_PER_HOUR);
+        if (total == 0) amounts.put(component, percent * SheetUnits.KMOL_PER_HOUR);
         else {
             double others = total - amounts.getOrDefault(component, 0.0), share = Math.min(percent, 100) / 100;
             double scale = others == 0 ? 1 : (1 - share) / (others / total);
@@ -220,20 +218,14 @@ public final class StreamDoors {
         x.editor().setFeed(id, new Flowsheet.Feed(feed.temperature(), feed.pressure(), amounts, feed.solids(), feed.unknown()), null);
     }
 
-    /** Loads a template's mixture: its fractions on the axis, the flow held, 100 kmol/h with none yet. */
-    /** Loads a stream template: its mixture, at its flow or the feed's, and its T and P where it has them. */
+    /**
+     * Loads a stream template as a paste ({@link SheetClipboard#paste}): its mixture at its own flow or the feed's (100 kmol/h with none yet), its T and P where it has them;
+     * a component the sheet does not hold stays out, and the rest take the whole flow.
+     */
     public static void template(SheetContext x, String id, FileColumns.StreamTemplate template) {
-        var feed = x.editor().stream(id).feed();
-        double total = Double.isNaN(template.flow()) ? total(feed) : template.flow();
-        if (total == 0) total = 100 * KMOL_PER_HOUR;
-        double parts = template.amounts().values().stream().mapToDouble(Double::doubleValue).sum();
-        var amounts = new LinkedHashMap<String, Double>();
-        for (var component : x.fluids().axis()) {
-            var part = template.amounts().get(component);
-            if (part != null && part > 0) amounts.put(component, part / parts * total);
-        }
-        double temperature = Double.isNaN(template.temperature()) ? feed.temperature() : template.temperature(), pressure = Double.isNaN(template.pressure()) ? feed.pressure() : template.pressure();
-        x.editor().setFeed(id, new Flowsheet.Feed(temperature, pressure, amounts, feed.solids(), feed.unknown()), null);
+        var held = new SheetClipboard.Held(template.name(), template.amounts(), template.temperature(), template.pressure());
+        var pasted = SheetClipboard.paste(held, x.editor().stream(id).feed(), x.fluids().axis(), template.flow(), true);
+        x.editor().setFeed(id, pasted.feed(), null);
     }
 
     /** Puts a stream on the clipboard, and says what went: a feed as set, any other as solved. */
@@ -270,10 +262,9 @@ public final class StreamDoors {
         var rows = new ArrayList<CalculatorColumn.FeedRow>();
         var components = new LinkedHashMap<Integer, String>();
         var axis = x.fluids().axis();
-        var properties = x.fluids().pack().properties();
         for (var e : feed.amounts().entrySet()) {
-            int row = rows.size(), i = axis.indexOf(e.getKey());
-            double share = total == 0 ? 0 : 100 * e.getValue() / total, weight = i >= 0 && i < properties.size() ? properties.get(i).molecularWeight() : .018015;
+            int row = rows.size();
+            double share = total == 0 ? 0 : 100 * e.getValue() / total, weight = x.fluids().weight(axis.indexOf(e.getKey()));
             rows.add(new CalculatorColumn.FeedRow(row, x.fluids().names().apply(e.getKey()), SheetUnits.number(1, share), u.moles(e.getValue()), u.tonnes(e.getValue() * weight)));
             components.put(row, e.getKey());
         }
@@ -361,9 +352,7 @@ public final class StreamDoors {
             }
 
             @Override public void button(String key) {
-                if (key.startsWith("tab/")) view.tab = Integer.parseInt(key.substring(4));
-                else if (key.startsWith("phase/")) view.phase = Integer.parseInt(key.substring(6));
-                else if (key.equals("copy")) view.said = copy(x, stream);
+                if (!view.press(key) && key.equals("copy")) view.said = copy(x, stream);
             }
         });
     }

@@ -43,7 +43,7 @@ class SimulatorFrameTest {
                 for (int k = i + 1; k < keys.size(); k++) assertFalse(keys.get(i).overlaps(keys.get(k)), "tabs and file keys apart at " + size[0]);
             }
             var foot = new java.util.ArrayList<Rect>();
-            foot.addAll(frame.footer());
+            foot.addAll(frame.footer(frame.size().narrow() ? 50 : 84));
             foot.addAll(frame.softKeys());
             for (int i = 0; i < foot.size(); i++) for (int k = i + 1; k < foot.size(); k++) assertFalse(foot.get(i).overlaps(foot.get(k)), "the footer apart at " + size[0]);
             assertTrue(frame.well().bottom() <= frame.palette().y(), "the canvas ends above the palette");

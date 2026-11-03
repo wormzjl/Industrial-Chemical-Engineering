@@ -40,7 +40,6 @@ import org.jetbrains.annotations.Nullable;
 public final class ColumnDoors {
     private static final String KEY = "column.";
     private static final int MAX_PA = 4, MAX_STEAM = 2;
-    private static final double KMOL = 3.6;
 
     private ColumnDoors() {
     }
@@ -224,7 +223,7 @@ public final class ColumnDoors {
         var last = x.last(stream);
         double feed = last != null ? last.total() : 0;
         if (last == null && stream != null && stream.feed() != null) for (double amount : stream.feed().amounts().values()) feed += amount;
-        return x.editor().setParams(id, ColumnDoor.template(x.editor().unit(id).params(), template.scaledTo(feed * 3.6)), null);
+        return x.editor().setParams(id, ColumnDoor.template(x.editor().unit(id).params(), template.scaledTo(feed / SheetUnits.KMOL_PER_HOUR)), null);
     }
 
     private static ColumnComponents.Pump pump(String name) {
@@ -351,11 +350,7 @@ public final class ColumnDoors {
         var editor = x.editor();
         int colon = key.indexOf(':');
         String head = colon < 0 ? key : key.substring(0, colon), tail = colon < 0 ? "" : key.substring(colon + 1);
-        if (key.startsWith("phase/")) view.phase = Integer.parseInt(key.substring(6));
-        if (key.startsWith("tab/")) {
-            view.tab = Integer.parseInt(key.substring(4));
-            return;
-        }
+        if (view.press(key)) return;
         switch (head) {
             case "view" -> {
                 for (var v : CalculatorColumn.View.values()) if (v.key().equals(tail)) view.results = v;
@@ -431,7 +426,7 @@ public final class ColumnDoors {
         switch (kind) {
             case "draw" -> {
                 row.addProperty("tray", node);
-                row.addProperty("flow", 100 / KMOL);
+                row.addProperty("flow", 100 * SheetUnits.KMOL_PER_HOUR);
                 rows(json, "draws").add(row);
                 select(view, Connection.DRAW, door.draws().size());
             }
@@ -446,7 +441,7 @@ public final class ColumnDoors {
             }
             default -> {
                 row.addProperty("stage", n + 1);
-                row.addProperty("flow", 100 / KMOL);
+                row.addProperty("flow", 100 * SheetUnits.KMOL_PER_HOUR);
                 row.addProperty("temperature", 533.15);
                 rows(json, "steam").add(row);
                 select(view, Connection.STEAM, door.steam().size());
@@ -574,12 +569,8 @@ public final class ColumnDoors {
         return n < 2 ? 0 : (view.nodes().get(n).pressurePascal() - view.nodes().get(1).pressurePascal()) / 1000;
     }
 
-    private static String fmt(double value) {
-        return String.format(Locale.ROOT, "%.1f", value);
-    }
-
     private static String percent(double value) {
-        return value != 0 && Math.abs(value) < .05 ? String.format(Locale.ROOT, "%.2g", value) : fmt(value);
+        return value != 0 && Math.abs(value) < .05 ? String.format(Locale.ROOT, "%.2g", value) : SheetUnits.number(1, value);
     }
 
     private static String fraction(double value) {
@@ -615,10 +606,10 @@ public final class ColumnDoors {
                 case TEMPERATURE -> x.units().temperature().display(node.temperatureKelvin());
                 case PRESSURE -> node.pressurePascal() / 1000;
                 case TRAFFIC -> switch (series) {
-                    case 0 -> node.liquidMolPerSecond() * KMOL;
-                    case 1 -> node.vaporMolPerSecond() * KMOL;
-                    case 2 -> node.waterVaporMolPerSecond() * KMOL;
-                    default -> node.freeWaterMolPerSecond() * KMOL;
+                    case 0 -> node.liquidMolPerSecond() / SheetUnits.KMOL_PER_HOUR;
+                    case 1 -> node.vaporMolPerSecond() / SheetUnits.KMOL_PER_HOUR;
+                    case 2 -> node.waterVaporMolPerSecond() / SheetUnits.KMOL_PER_HOUR;
+                    default -> node.freeWaterMolPerSecond() / SheetUnits.KMOL_PER_HOUR;
                 };
                 case DROP -> throw new IllegalStateException("A drop is a bar, not a profile");
             };
@@ -628,7 +619,7 @@ public final class ColumnDoors {
             var m = c.measure();
             int nodes = inspection.nodes().size();
             if (view.metric == Metric.DROP) {
-                int head = CalculatorColumn.heading(c, box, c(x, "column_dp", fmt(totalDrop(inspection))), List.of(), m);
+                int head = CalculatorColumn.heading(c, box, c(x, "column_dp", SheetUnits.number(1, totalDrop(inspection))), List.of(), m);
                 var values = new double[nodes];
                 for (int i = 2; i <= inspection.input().stageCount(); i++) values[i] = drop(inspection, i);
                 CalculatorColumn.drops(c, CalculatorColumn.plot(box, head), values);
@@ -662,12 +653,12 @@ public final class ColumnDoors {
             if (display == null || display.streams().isEmpty()) return out.note(c(x, "solve_products"), Palette.MUTED);
             var stream = display.streams().get(Math.clamp(view.stream, 0, display.streams().size() - 1));
             var u = x.units();
-            out.pair(c(x, "field.flow"), fmt(stream.molarFlowMolPerSecond() * KMOL) + " kmol/h").pair(c(x, "reading.mass_flow"), fmt(stream.massFlowKgPerSecond() * 3600) + " kg/h")
-                    .pair(c(x, "field.temperature"), u.t(stream.temperatureKelvin()) + " " + u.temperature().symbol()).pair(c(x, "reading.pressure"), fmt(stream.pressurePascal() / 1000) + " kPa").blank();
+            out.pair(c(x, "field.flow"), SheetUnits.number(1, stream.molarFlowMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h").pair(c(x, "reading.mass_flow"), SheetUnits.number(1, stream.massFlowKgPerSecond() * 3600) + " kg/h")
+                    .pair(c(x, "field.temperature"), u.t(stream.temperatureKelvin()) + " " + u.temperature().symbol()).pair(c(x, "reading.pressure"), SheetUnits.number(1, stream.pressurePascal() / 1000) + " kPa").blank();
             List<String> header = List.of(c(x, "component"), c(x, "mole_percent"), c(x, "molar_rate"), c(x, "mass_percent"), c(x, "mass_rate"));
             var rows = new ArrayList<List<String>>();
             for (var part : stream.moleFractions())
-                rows.add(List.of(material(part.componentId()), percent(part.moleFraction() * 100), percent(stream.molarFlowMolPerSecond() * part.moleFraction() * KMOL), percent(part.massFraction() * 100), percent(stream.massFlowKgPerSecond() * part.massFraction() * 3600)));
+                rows.add(List.of(material(part.componentId()), percent(part.moleFraction() * 100), percent(stream.molarFlowMolPerSecond() * part.moleFraction() / SheetUnits.KMOL_PER_HOUR), percent(part.massFraction() * 100), percent(stream.massFlowKgPerSecond() * part.massFraction() * 3600)));
             if (CalculatorColumn.SheetBuilder.fits(header, rows, width - 80 + m.width(header.getFirst()), m)) return out.table(header, rows);
             return out.table(header.subList(0, 3), rows.stream().map(r -> r.subList(0, 3)).toList());
         }
@@ -675,9 +666,9 @@ public final class ColumnDoors {
         private CalculatorColumn.SheetBuilder heat(@Nullable V3ColumnDisplayResult display, int width, Canvas c) {
             var out = new CalculatorColumn.SheetBuilder(width, c.measure()).note(c(x, "signed_heat"), Palette.MUTED);
             if (display != null) display.dutyLedger().ifPresent(d -> {
-                out.note(c(x, "tray_duty", 1, fmt(d.condenserWatts() / 1e6)), Palette.TEXT).note(c(x, "tray_duty", door.stages() + 2, fmt(d.reboilerWatts() / 1e6)), Palette.TEXT)
-                        .note(c(x, "stage_heat", fmt(d.stageHeatTotalWatts() / 1e6)), Palette.TEXT).note(c(x, "feed_enthalpy", fmt(d.feedEnthalpyWatts() / 1e6)), Palette.TEXT).note(c(x, "steam_enthalpy", fmt(d.steamEnthalpyWatts() / 1e6)), Palette.TEXT);
-                for (var stage : d.stageDuties()) out.note(c(x, "tray_duty", stage.trayNumber() + 1, fmt(stage.dutyWatts() / 1e6)), Palette.TEXT);
+                out.note(c(x, "tray_duty", 1, SheetUnits.number(1, d.condenserWatts() / 1e6)), Palette.TEXT).note(c(x, "tray_duty", door.stages() + 2, SheetUnits.number(1, d.reboilerWatts() / 1e6)), Palette.TEXT)
+                        .note(c(x, "stage_heat", SheetUnits.number(1, d.stageHeatTotalWatts() / 1e6)), Palette.TEXT).note(c(x, "feed_enthalpy", SheetUnits.number(1, d.feedEnthalpyWatts() / 1e6)), Palette.TEXT).note(c(x, "steam_enthalpy", SheetUnits.number(1, d.steamEnthalpyWatts() / 1e6)), Palette.TEXT);
+                for (var stage : d.stageDuties()) out.note(c(x, "tray_duty", stage.trayNumber() + 1, SheetUnits.number(1, stage.dutyWatts() / 1e6)), Palette.TEXT);
             });
             return out;
         }
@@ -689,9 +680,9 @@ public final class ColumnDoors {
             if (inspection == null || selected >= inspection.nodes().size()) return out.note(c(x, "solve_to_inspect"), Palette.MUTED);
             var node = inspection.nodes().get(selected);
             var u = x.units();
-            out.pair(c(x, "field.temperature"), u.t(node.temperatureKelvin()) + " " + u.temperature().symbol()).pair(c(x, "reading.pressure"), fmt(node.pressurePascal() / 1000) + " kPa")
-                    .pair(c(x, "tray_dp"), selected > 0 && selected <= n ? fmt(drop(inspection, selected)) + " kPa" : "—").pair(c(x, "hc_liquid"), fmt(node.liquidMolPerSecond() * KMOL) + " kmol/h")
-                    .pair(c(x, "hc_vapor"), fmt(node.vaporMolPerSecond() * KMOL) + " kmol/h").pair(c(x, "water_vapor"), fmt(node.waterVaporMolPerSecond() * KMOL) + " kmol/h").pair(c(x, "free_water"), fmt(node.freeWaterMolPerSecond() * KMOL) + " kmol/h").blank();
+            out.pair(c(x, "field.temperature"), u.t(node.temperatureKelvin()) + " " + u.temperature().symbol()).pair(c(x, "reading.pressure"), SheetUnits.number(1, node.pressurePascal() / 1000) + " kPa")
+                    .pair(c(x, "tray_dp"), selected > 0 && selected <= n ? SheetUnits.number(1, drop(inspection, selected)) + " kPa" : "—").pair(c(x, "hc_liquid"), SheetUnits.number(1, node.liquidMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h")
+                    .pair(c(x, "hc_vapor"), SheetUnits.number(1, node.vaporMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h").pair(c(x, "water_vapor"), SheetUnits.number(1, node.waterVaporMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h").pair(c(x, "free_water"), SheetUnits.number(1, node.freeWaterMolPerSecond() / SheetUnits.KMOL_PER_HOUR) + " kmol/h").blank();
             var rows = new ArrayList<List<String>>();
             var basis = inspection.input().componentBasis();
             for (int i = 0; i < basis.componentCount(); i++) rows.add(List.of(material(basis.componentId(i)), node.liquidMolPerSecond() == 0 ? "—" : percent(node.liquidFractions().get(i) * 100), node.vaporMolPerSecond() == 0 ? "—" : percent(node.vaporFractions().get(i) * 100)));
@@ -704,8 +695,8 @@ public final class ColumnDoors {
             if (inspection != null) {
                 var wet = new ArrayList<String>();
                 for (int i = 1; i <= inspection.input().stageCount(); i++) if (inspection.nodes().get(i).freeWaterMolPerSecond() > 0) wet.add(Integer.toString(i + 1));
-                out.note(c(x, "wet_trays", wet.isEmpty() ? c(x, "none") : String.join(", ", wet)), Palette.TEXT).note(c(x, "column_dp", fmt(totalDrop(inspection))), Palette.TEXT);
-                display.trayHydraulics().ifPresent(h -> out.note(c(x, h.floods() ? "flooding" : "below_flood", h.maximumFloodTray() + 1), h.floods() ? Palette.WARN : Palette.TEXT).note(c(x, "worst_flood", fmt(h.maximumFloodFraction() * 100)), Palette.TEXT));
+                out.note(c(x, "wet_trays", wet.isEmpty() ? c(x, "none") : String.join(", ", wet)), Palette.TEXT).note(c(x, "column_dp", SheetUnits.number(1, totalDrop(inspection))), Palette.TEXT);
+                display.trayHydraulics().ifPresent(h -> out.note(c(x, h.floods() ? "flooding" : "below_flood", h.maximumFloodTray() + 1), h.floods() ? Palette.WARN : Palette.TEXT).note(c(x, "worst_flood", SheetUnits.number(1, h.maximumFloodFraction() * 100)), Palette.TEXT));
             }
             out.note(c(x, "iterations", display.newtonIterations()), Palette.TEXT).note(c(x, "residual", fraction(display.maximumScaledResidual())), Palette.TEXT).note(c(x, "closure", fraction(display.closureTolerance())), Palette.TEXT);
             display.inspection().ifPresent(v -> {

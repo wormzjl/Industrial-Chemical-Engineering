@@ -373,7 +373,7 @@ class SheetGesturesTest {
 
     @Test
     void aReadOnlySheetRefusesEveryGestureThatEdits() {
-        editor.lock(true);
+        editor.lock(true, SheetEditor.LOCKED);
         byte[] before = FlowsheetFile.write(editor.sheet());
         drag(midX("p"), midY("p"), midX("p") + 40, midY("p"));
         var free = editor.layout().place("q", "out");

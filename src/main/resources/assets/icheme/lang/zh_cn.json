@@ -2277,7 +2277,6 @@
   "gui.icheme.flowsheet.door.option.series": "串联",
   "gui.icheme.flowsheet.door.option.apart": "独立",
   "gui.icheme.flowsheet.door.outlet": "出口",
-  "gui.icheme.flowsheet.door.inlet": "入口",
   "gui.icheme.flowsheet.door.drop": "压降",
   "gui.icheme.flowsheet.door.pressure": "压力",
   "gui.icheme.flowsheet.door.discharge": "排出",

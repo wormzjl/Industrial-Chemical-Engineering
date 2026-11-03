@@ -264,7 +264,7 @@ public final class FileColumns {
         var rows = new ArrayList<Row>();
         for (var template : templates) {
             var column = template.template();
-            String feed = column.designFeed() > 0 ? units.moles(column.designFeed() / 3.6) + " " + units.molesUnit() : "";
+            String feed = column.designFeed() > 0 ? units.moles(column.designFeed() * SheetUnits.KMOL_PER_HOUR) + " " + units.molesUnit() : "";
             rows.add(new Row(new String[]{template.name(), Integer.toString(column.trays()), connections(column, t), feed, t.get(template.bundled() ? "flowsheet.file.bundled" : "flowsheet.file.yours")}, false));
         }
         var off = new String[4];
@@ -374,12 +374,5 @@ public final class FileColumns {
         }
         if (shown < lines.size()) c.text("...", x0 + 68, y, Palette.MUTED);
         c.text(foot, x0, box.bottom() - 13, Palette.MUTED);
-    }
-
-    /** A placed key of a dialog's footer, or null. */
-    public static @Nullable String keyAt(Listing l, int w, int h, double x, double y) {
-        var slots = DialogColumns.footer(w, h, l.keys().length);
-        for (int i = 0; i < slots.size(); i++) if (slots.get(i).contains(x, y)) return Integer.toString(i);
-        return null;
     }
 }

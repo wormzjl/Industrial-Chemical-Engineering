@@ -20,9 +20,11 @@ public final class SheetPainter {
     public static final Look NONE = new Look(FlowsheetPainter.BODY, Palette.LINE, Palette.TEXT), ACTIVE = new Look(FlowsheetPainter.BODY, Palette.TEXT, Palette.TEXT);
     /** A tile with a process model, and one with none; the carried ghost. */
     public static final Look LIT = new Look(FlowsheetPainter.BODY, Palette.ACCENT, Palette.TEXT), UNLIT = new Look(0xFF20292F, 0xFF46545C, 0xFF72828C), GHOST = new Look(0x6033434D, Palette.TEXT, Palette.TEXT);
-    private static final int PLATE = 0xFF10181D, GRID = 0x24FFFFFF, WHITE = 0xFFFFFFFF, HATCH = 0xFF7A2A2A, DESIGN_GRID = 16;
+    static final int PLATE = 0xFF10181D;
+    private static final int GRID = 0x24FFFFFF, WHITE = 0xFFFFFFFF, HATCH = 0xFF7A2A2A, DESIGN_GRID = 16;
     /** A column's frame, its fill, and the colour of what runs hot inside it. */
-    private static final int FRAME = 0xFF7F97A5, FRAME_FILL = 0xFF1A252C, HOT = 0xFFE8A23C;
+    static final int FRAME = 0xFF7F97A5;
+    private static final int FRAME_FILL = 0xFF1A252C, HOT = 0xFFE8A23C;
 
     private SheetPainter() {
     }
@@ -81,12 +83,16 @@ public final class SheetPainter {
     }
 
     private static void grid(Canvas c, SheetView view) {
-        var box = view.box();
-        int step = Math.max(8, (int) Math.round(DESIGN_GRID * view.zoom()));
-        int ox = Math.floorMod((int) Math.round(view.canvasX(0)) - box.x() + step / 2, step), oy = Math.floorMod((int) Math.round(view.canvasY(0)) - box.y() + step / 2, step);
+        grid(c, view.box(), view.zoom(), (int) Math.round(view.canvasX(0)), (int) Math.round(view.canvasY(0)));
+    }
+
+    /** The sheet's dotted grid on {@code box} at {@code zoom}, its design origin at canvas point ({@code ox}, {@code oy}): one draw call. */
+    static void grid(Canvas c, Rect box, double zoom, int ox, int oy) {
+        int step = Math.max(8, (int) Math.round(DESIGN_GRID * zoom));
+        int dx = Math.floorMod(ox - box.x() + step / 2, step), dy = Math.floorMod(oy - box.y() + step / 2, step);
         c.batch(() -> {
-            for (int y = box.y() + oy; y < box.bottom(); y += step)
-                for (int x = box.x() + ox; x < box.right(); x += step) c.fill(x, y, x + 1, y + 1, GRID);
+            for (int y = box.y() + dy; y < box.bottom(); y += step)
+                for (int x = box.x() + dx; x < box.right(); x += step) c.fill(x, y, x + 1, y + 1, GRID);
         });
     }
 

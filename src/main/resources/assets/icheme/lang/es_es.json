@@ -2277,7 +2277,6 @@
   "gui.icheme.flowsheet.door.option.series": "En serie",
   "gui.icheme.flowsheet.door.option.apart": "Separados",
   "gui.icheme.flowsheet.door.outlet": "Salida",
-  "gui.icheme.flowsheet.door.inlet": "Entrada",
   "gui.icheme.flowsheet.door.drop": "Caída",
   "gui.icheme.flowsheet.door.pressure": "Presión",
   "gui.icheme.flowsheet.door.discharge": "Descarga",

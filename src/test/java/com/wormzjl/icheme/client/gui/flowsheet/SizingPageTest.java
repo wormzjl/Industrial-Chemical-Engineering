@@ -431,7 +431,7 @@ class SizingPageTest {
         assertEquals(Symbol.CABIN, editor.layout().box("H-101").symbol(), "the sheet draws it");
         assertEquals(74, editor.layout().box("H-101").rect().w());
         var texts = new SheetFixture.Texts();
-        var x = new SheetContext(editor, SheetState.of(editor.sheet(), null), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS);
+        var x = new SheetContext(editor, SheetState.of(editor.sheet(), null), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         assertNotNull(UnitSize.built(new ExchangerSizing.Size(false, 1, 1, 6)), "a size the constructor builds");
         var door = UnitDoors.door(x, "E-101", new Door.View());
         var keys = new ArrayList<String>();

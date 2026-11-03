@@ -334,11 +334,11 @@ class SimulatorRunnerTest {
     void theStatusLineSaysWhereARunIs() {
         var texts = new SheetFixture.Texts();
         var sheet = SheetFixture.water();
-        assertEquals("Starting, 0.2 s.", new SheetState(sheet, null, null, 0, new SheetState.Running(.2, 0, 0, null, null)).status(texts, SheetUnits.DEFAULT, false).text());
-        assertEquals("Running, 1.0 s: P-1.", new SheetState(sheet, null, null, 0, new SheetState.Running(1, 0, 30, "P-1", null)).status(texts, SheetUnits.DEFAULT, false).text());
-        assertEquals("Running, 3.1 s: pass 2 of at most 30, V-1 from its last state.", new SheetState(sheet, null, null, 0, new SheetState.Running(3.1, 2, 30, "V-1", Report.Start.LAST)).status(texts, SheetUnits.DEFAULT, false).text());
-        assertEquals("Running, 2.0 s: pass 1 of at most 30, V-1 from its learned start.", new SheetState(sheet, null, null, 0, new SheetState.Running(2, 1, 30, "V-1", Report.Start.LEARNED)).status(texts, SheetUnits.DEFAULT, false).text());
-        assertEquals(SheetState.Tone.ACTIVE, new SheetState(sheet, null, null, 0, new SheetState.Running(1, 1, 30, "V-1", null)).tone("V-1"));
+        assertEquals("Starting, 0.2 s.", new SheetState(sheet, null, null, 0, new SheetState.Running(.2, 0, 0, null, null, SheetState.Task.RUN)).status(texts, SheetUnits.DEFAULT, false).text());
+        assertEquals("Running, 1.0 s: P-1.", new SheetState(sheet, null, null, 0, new SheetState.Running(1, 0, 30, "P-1", null, SheetState.Task.RUN)).status(texts, SheetUnits.DEFAULT, false).text());
+        assertEquals("Running, 3.1 s: pass 2 of at most 30, V-1 from its last state.", new SheetState(sheet, null, null, 0, new SheetState.Running(3.1, 2, 30, "V-1", Report.Start.LAST, SheetState.Task.RUN)).status(texts, SheetUnits.DEFAULT, false).text());
+        assertEquals("Running, 2.0 s: pass 1 of at most 30, V-1 from its learned start.", new SheetState(sheet, null, null, 0, new SheetState.Running(2, 1, 30, "V-1", Report.Start.LEARNED, SheetState.Task.RUN)).status(texts, SheetUnits.DEFAULT, false).text());
+        assertEquals(SheetState.Tone.ACTIVE, new SheetState(sheet, null, null, 0, new SheetState.Running(1, 1, 30, "V-1", null, SheetState.Task.RUN)).tone("V-1"));
         assertTrue(texts.missing.isEmpty(), texts.missing.toString());
     }
 
@@ -346,7 +346,7 @@ class SimulatorRunnerTest {
     void aStateTheScreenKeepsTakesARunningClockWithoutWorkingItsSignaturesAgain() {
         var sheet = SheetFixture.water();
         var base = new SheetState(sheet, sheet, FlowsheetRun.none(), 0, null);
-        var running = base.running(new SheetState.Running(1, 1, 30, "P-1", null));
+        var running = base.running(new SheetState.Running(1, 1, 30, "P-1", null, SheetState.Task.RUN));
         assertTrue(running.running());
         assertFalse(base.running());
         assertSame(base.results(), running.results(), "the run's results are the same object");
@@ -371,7 +371,7 @@ class SimulatorRunnerTest {
     void solveAloneIsOffWithAReasonWhereTheUnitHasNoStream() throws InterruptedException {
         var texts = new SheetFixture.Texts();
         var nowhere = SheetFixture.editor(fedColumn(true));
-        var off = key(ColumnDoors.door(new SheetContext(nowhere, new SheetState(nowhere.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS), "T", new Door.View()), "solve");
+        var off = key(ColumnDoors.door(new SheetContext(nowhere, new SheetState(nowhere.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of()), "T", new Door.View()), "solve");
         assertFalse(off.active(), "nothing to run on");
         assertEquals(texts.get("flowsheet.hint.run"), off.hint());
         var gate = new Gate();
@@ -475,7 +475,7 @@ class SimulatorRunnerTest {
         var texts = new SheetFixture.Texts();
         var editor = SheetFixture.editor(fedColumn(true));
         var before = editor.unit("T").params().json().deepCopy();
-        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS);
+        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         var template = new V3ColumnTemplate(720, 12, 6, 310, 8, 2, 1.5, 3, List.of(new V3ColumnTemplate.Draw(4, 72)), List.of(new V3ColumnTemplate.Steam(11, 36, 500)),
                 List.of(new V3ColumnTemplate.Pumparound(5, 3, 2, com.wormzjl.icheme.science.column.v3.V3PumparoundSpec.Split.UNIFORM)));
         assertTrue(ColumnDoors.template(x, "T", template));
@@ -578,7 +578,7 @@ class SimulatorRunnerTest {
         var gestures = new SheetGestures(editor, view, s -> {
         });
         var state = new SheetState(editor.sheet(), null, null, 0, null);
-        var plain = new SheetContext(editor, state, SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS);
+        var plain = new SheetContext(editor, state, SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         var said = SimulatorPage.status(plain, SimulatorFrame.Tab.FLOWSHEET, new ResultsPage.State(), gestures, editor, false, null);
         assertEquals(texts.get("flowsheet.status.ready"), said.text());
         var differ = new SheetContext(editor, state, SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, List.of("crude"));
@@ -609,8 +609,8 @@ class SimulatorRunnerTest {
         assertFalse(editor.moveUnit("P-1", 64, 32, null));
         var gestures = new SheetGestures(editor, new SheetView(), s -> {
         });
-        var state = new SheetState(editor.sheet(), null, null, 0, new SheetState.Running(1, 2, 30, "V-1", null));
-        var x = new SheetContext(editor, state, SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS);
+        var state = new SheetState(editor.sheet(), null, null, 0, new SheetState.Running(1, 2, 30, "V-1", null, SheetState.Task.RUN));
+        var x = new SheetContext(editor, state, SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         var line = SimulatorPage.status(x, SimulatorFrame.Tab.RESULTS, new ResultsPage.State(), gestures, editor, false, null);
         assertTrue(line.text().startsWith("Running, 1.0 s: pass 2"), line.text());
         assertTrue(line.text().endsWith(texts.get("flowsheet.refused.running")), line.text());
@@ -623,7 +623,7 @@ class SimulatorRunnerTest {
         var editor = SheetFixture.editor(SheetFixture.water());
         var host = new SimulatorHost() {
             @Override public SheetState.Running running() {
-                return new SheetState.Running(1, 0, 0, null, null);
+                return new SheetState.Running(1, 0, 0, null, null, SheetState.Task.RUN);
             }
         };
         host.lock(editor);

@@ -40,7 +40,7 @@ class RunKeyTest {
 
     private static SheetContext context(SheetEditor editor, boolean ran, SheetState.@Nullable Running running) {
         var texts = new SheetFixture.Texts();
-        return new SheetContext(editor, new SheetState(editor.sheet(), ran ? SHEET : null, ran ? RUN : null, 1.2, running), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS);
+        return new SheetContext(editor, new SheetState(editor.sheet(), ran ? SHEET : null, ran ? RUN : null, 1.2, running), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
     }
 
     private static boolean edited(SheetContext x) {
@@ -67,7 +67,7 @@ class RunKeyTest {
         assertEquals(x.text("hint.run_due"), run(x, idle, editor).hint(), "its hover says why");
         assertTrue(run(x, idle, editor).active());
 
-        var running = new SheetState.Running(1.0, 1, 30, null, null);
+        var running = new SheetState.Running(1.0, 1, 30, null, null, SheetState.Task.RUN);
         var busy = host(running, false);
         x = context(editor, true, running);
         assertFalse(SimulatorPage.runDue(x, busy), "while a run is going Run is off");

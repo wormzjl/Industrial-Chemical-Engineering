@@ -70,7 +70,7 @@ public final class BasisPage {
             String id = axis.get(r);
             double amount = feed == null ? 0 : feed.feed().amounts().getOrDefault(id, 0.0);
             boolean used = used(x, id);
-            double weight = r < properties.size() ? properties.get(r).molecularWeight() * 1000 : 18.015, boils = r < properties.size() ? properties.get(r).normalBoilingPoint() : 373.15;
+            double weight = x.fluids().weight(r) * 1000, boils = r < properties.size() ? properties.get(r).normalBoilingPoint() : 373.15;
             String[] cells = {x.fluids().names().apply(id), SheetUnits.number(1, weight), x.units().t(boils), total == 0 ? "" : SheetUnits.number(2, 100 * amount / total), x.text(used ? "basis.yes" : "basis.no")};
             for (int i = 0; i < 5; i++) c.text(cells[i], x0 + at[i], y, i == 0 ? Palette.TEXT : used ? Palette.ACCENT : Palette.MUTED);
         }

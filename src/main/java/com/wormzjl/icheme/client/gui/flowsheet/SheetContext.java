@@ -10,17 +10,12 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
 /** What every door and page reads (batch 2026-11-02-process-simulator): the sheet through its editor, the run's state, the display units, the texts. */
 public record SheetContext(SheetEditor editor, SheetState state, SheetUnits units, HeatControlColumn.Texts t, Measure m, StreamProps.Fluids fluids, SimulatorHost host, List<String> differing) {
     public static final String KEY = "flowsheet.";
-
-    public SheetContext(SheetEditor editor, SheetState state, SheetUnits units, HeatControlColumn.Texts t, Measure m, StreamProps.Fluids fluids) {
-        this(editor, state, units, t, m, fluids, SimulatorHost.NONE, List.of());
-    }
 
     public String text(String key, Object... arguments) {
         return t.get(KEY + key, arguments);
@@ -103,11 +98,7 @@ public record SheetContext(SheetEditor editor, SheetState state, SheetUnits unit
     public double mass(Flowsheet.Feed feed) {
         double mass = 0;
         var axis = fluids.axis();
-        var properties = fluids.pack().properties();
-        for (var e : feed.amounts().entrySet()) {
-            int i = axis.indexOf(e.getKey());
-            mass += e.getValue() * (i >= 0 && i < properties.size() ? properties.get(i).molecularWeight() : .018015);
-        }
+        for (var e : feed.amounts().entrySet()) mass += e.getValue() * fluids.weight(axis.indexOf(e.getKey()));
         return mass;
     }
 
@@ -175,10 +166,5 @@ public record SheetContext(SheetEditor editor, SheetState state, SheetUnits unit
         } catch (NumberFormatException noNumber) {
             return null;
         }
-    }
-
-    /** The sentence-case text of an enum-like id. */
-    public static String title(String id) {
-        return id.isEmpty() ? id : id.substring(0, 1).toUpperCase(Locale.ROOT) + id.substring(1);
     }
 }

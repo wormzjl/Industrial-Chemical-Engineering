@@ -56,15 +56,22 @@ public final class SimulatorPage {
     }
 
     private static void footer(List<Slot> slots, SheetContext x, SimulatorFrame frame, SimulatorHost host, SheetEditor editor, boolean reader) {
-        var foot = frame.footer();
         boolean running = host.running() != null;
-        slots.add(new Slot(new Column.Button("close", x.t().get("fluid.close"), true, null), foot.get(0)));
-        slots.add(new Slot(new Column.Button("run", x.text("frame.run"), host.canRun() && !running && !reader, !host.canRun() ? x.text("hint.run") : runDue(x, host) ? x.text("hint.run_due") : null), foot.get(1)));
-        slots.add(new Slot(new Column.Button("stop", x.text("frame.stop"), running, null), foot.get(2)));
-        if (foot.size() > 3) {
-            slots.add(new Slot(new Column.Button("undo", x.text("frame.undo"), editor.canUndo(), null), foot.get(3)));
-            slots.add(new Slot(new Column.Button("redo", x.text("frame.redo"), editor.canRedo(), null), foot.get(4)));
+        slots.addAll(footer(x, frame.footer(50), editor, new Column.Button("run", x.text("frame.run"), host.canRun() && !running && !reader, !host.canRun() ? x.text("hint.run") : runDue(x, host) ? x.text("hint.run_due") : null),
+                new Column.Button("stop", x.text("frame.stop"), running, null)));
+    }
+
+    /** A tab's footer at {@code at}: Close, the tab's {@code second} and {@code third} keys, then Undo and Redo where they fit. */
+    static List<Slot> footer(SheetContext x, List<Rect> at, SheetEditor editor, Column.Button second, Column.Button third) {
+        var slots = new ArrayList<Slot>();
+        slots.add(new Slot(new Column.Button("close", x.t().get("fluid.close"), true, null), at.get(0)));
+        slots.add(new Slot(second, at.get(1)));
+        slots.add(new Slot(third, at.get(2)));
+        if (at.size() > 3) {
+            slots.add(new Slot(new Column.Button("undo", x.text("frame.undo"), editor.canUndo(), null), at.get(3)));
+            slots.add(new Slot(new Column.Button("redo", x.text("frame.redo"), editor.canRedo(), null), at.get(4)));
         }
+        return slots;
     }
 
     /**

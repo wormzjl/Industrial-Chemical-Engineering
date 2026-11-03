@@ -108,13 +108,12 @@ public final class Tiles {
         return type != null && TYPED.getOrDefault(tile, List.of()).contains(type);
     }
 
-    /** The name's key of a unit of {@code type}, a removed one's too. */
     /** A removed type's own name, as a person would write it. */
     public static String typeName(String type) {
-        String text = type.replace('_', ' ');
-        return text.isEmpty() ? text : Character.toUpperCase(text.charAt(0)) + text.substring(1);
+        return Door.upper(type.replace('_', ' '));
     }
 
+    /** The name's key of a unit of {@code type}, a removed one's too. */
     public static String name(String type) {
         return tile(type) == null ? KEY + "tile.removed" : tile(type).name();
     }

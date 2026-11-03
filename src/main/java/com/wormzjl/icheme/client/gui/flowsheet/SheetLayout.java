@@ -63,11 +63,11 @@ public final class SheetLayout {
     }
 
     /**
-     * A unit as placed: its box; its symbol, or null for a placeholder; a column's tray slices; its ports; where its tag stands; a column's parts, and its box is their frame.
+     * A unit as placed: its box; its symbol, or null for a placeholder; its ports; where its tag stands; a column's parts, and its box is their frame.
      *
      * @param tagAnchor as {@code FlowsheetPainter.label}
      */
-    public record Box(Flowsheet.Unit unit, @Nullable Symbol symbol, boolean column, Rect rect, int slices, List<Place> places, List<Mark> marks, int tagX, int tagY, float tagAnchor, @Nullable ColumnBlock block) {
+    public record Box(Flowsheet.Unit unit, @Nullable Symbol symbol, Rect rect, List<Place> places, List<Mark> marks, int tagX, int tagY, float tagAnchor, @Nullable ColumnBlock block) {
         public Box {
             places = List.copyOf(places);
             marks = List.copyOf(marks);
@@ -75,6 +75,11 @@ public final class SheetLayout {
 
         public boolean placeholder() {
             return symbol == null;
+        }
+
+        /** A column, drawn as its block. */
+        public boolean column() {
+            return block != null;
         }
     }
 
@@ -271,7 +276,7 @@ public final class SheetLayout {
         // A lead leaves a top port upward, so the tag stands left of it.
         int lead = at.stream().filter(p -> p.side() == Side.TOP).mapToInt(Place::x).min().orElse(-1);
         boolean clear = lead < 0;
-        return new Box(unit, symbol, false, new Rect(unit.x(), unit.y(), w, h), 0, at, List.of(), clear ? unit.x() + w / 2 : lead - 5, unit.y() - 7, clear ? .5f : 1f, null);
+        return new Box(unit, symbol, new Rect(unit.x(), unit.y(), w, h), at, List.of(), clear ? unit.x() + w / 2 : lead - 5, unit.y() - 7, clear ? .5f : 1f, null);
     }
 
     private Place place(Flowsheet.Unit unit, Port port, int x, int y, Side side, Set<Live> held) {
@@ -350,7 +355,7 @@ public final class SheetLayout {
             int y = spaced(inlet ? i++ : o++, inlet ? in : out, h);
             at.add(place(unit, port, unit.x() + (inlet ? 0 : w), unit.y() + y, inlet ? Side.LEFT : Side.RIGHT, held));
         }
-        return new Box(unit, null, false, new Rect(unit.x(), unit.y(), w, h), 0, at, List.of(), unit.x() + w / 2, unit.y() - 7, .5f, null);
+        return new Box(unit, null, new Rect(unit.x(), unit.y(), w, h), at, List.of(), unit.x() + w / 2, unit.y() - 7, .5f, null);
     }
 
     /** The {@code order}th of {@code n} ports spaced to fill a side {@code h} high. */
@@ -370,7 +375,7 @@ public final class SheetLayout {
             at.add(place(unit, port, spot.x(), spot.y(), spot.side(), held));
         }
         var frame = block.frame();
-        return new Box(unit, Symbol.COLUMN_TOP, true, frame, block.slices(), at, block.marks(), frame.x() + PLATE_ROOM + 6, frame.y(), 0f, block);
+        return new Box(unit, Symbol.COLUMN_TOP, frame, at, block.marks(), frame.x() + PLATE_ROOM + 6, frame.y(), 0f, block);
     }
 
     // ---- Lines ----
@@ -581,8 +586,7 @@ public final class SheetLayout {
         var f = block.frame();
         if (x < f.x() - reach || x > f.right() + reach || y < f.y() - reach || y > f.bottom() + reach) return false;
         if (x < f.x() + reach || x > f.right() - reach || y < f.y() + reach || y > f.bottom() - reach) return true;
-        var t = block.tower();
-        if (x >= t.x() - reach && x <= t.right() + reach && y >= t.y() - reach && y <= t.bottom() + reach) return true;
+        // The tower is a part.
         for (var part : block.parts()) if (part.at(x, y, reach)) return true;
         for (var pipe : block.pipes()) {
             int[] p = pipe.points();

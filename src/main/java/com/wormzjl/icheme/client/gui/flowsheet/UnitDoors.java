@@ -110,9 +110,7 @@ public final class UnitDoors {
         }
 
         String reading(String key, double scale, int digits) {
-            var results = x.state().shown(unit.id());
-            double value = results == null ? Double.NaN : results.reading(unit.id(), key);
-            return Double.isNaN(value) ? "" : SheetUnits.number(digits, value / scale);
+            return Reader.of(x, unit.id()).of(key, scale, digits);
         }
     }
 
@@ -125,7 +123,7 @@ public final class UnitDoors {
         var unit = x.editor().unit(id);
         var r = new Rows(x, unit);
         var u = x.units();
-        Glass glass = null;
+        Door.Glass glass = null;
         switch (unit.type()) {
             case "valve" -> {
                 r.group("target", r.choice("target", "outlet", "outlet", "drop"));
@@ -148,13 +146,13 @@ public final class UnitDoors {
                 r.group("pressure", r.choice("pressure_mode", "inlet", "inlet", "set"), r.text("pressure_mode", "inlet").equals("set") ? r.entry("pressure", x.text("door.pressure"), Quantity.PRESSURE) : r.entry("drop", x.text("door.drop"), Quantity.PRESSURE));
                 heat(r);
                 r.rows.add(phases(x, unit.type(), id));
-                r.readings(Door.meter(x.text("door.temperature"), reading(x, unit, "temperature", u), u.temperature().symbol()), Door.meter(x.text("door.pressure"), reading(x, unit, "pressure", u), u.pressure().symbol()));
+                r.readings(Door.meter(x.text("door.temperature"), Reader.of(x, id).temperature(u), u.temperature().symbol()), Door.meter(x.text("door.pressure"), Reader.of(x, id).pressure(u), u.pressure().symbol()));
             }
             case "storage_tank" -> {
                 r.group("pressure", r.entry("ambient", x.text("door.ambient"), Quantity.PRESSURE));
                 heat(r);
                 r.rows.add(phases(x, unit.type(), id));
-                r.readings(Door.meter(x.text("door.temperature"), reading(x, unit, "temperature", u), u.temperature().symbol()), Door.meter(x.text("door.pressure"), reading(x, unit, "pressure", u), u.pressure().symbol()));
+                r.readings(Door.meter(x.text("door.temperature"), Reader.of(x, id).temperature(u), u.temperature().symbol()), Door.meter(x.text("door.pressure"), Reader.of(x, id).pressure(u), u.pressure().symbol()));
             }
             case "exchanger", "kettle" -> {
                 r.group("target", r.choice("target", "outlet", "outlet", "duty", "area"), r.choice("side", "shell", "tube", "shell"));
@@ -208,14 +206,13 @@ public final class UnitDoors {
         var title = x.t().get(Tiles.name(unit.type()));
         var status = status(x, unit);
         var entries = r.entries;
-        return new Door(title, Door.tabs(view.tab, x.text("door.tab.design"), x.text("door.tab.streams")), view.tab, status.text(), status.tone(), false, List.of(r.rows), r.values, glass.door(), List.of(), new Door.Actions() {
+        return new Door(title, Door.tabs(view.tab, x.text("door.tab.design"), x.text("door.tab.streams")), view.tab, status.text(), status.tone(), false, List.of(r.rows), r.values, glass, List.of(), new Door.Actions() {
             @Override public void entry(String key, String text) {
                 write(x, id, key, text, entries);
             }
 
             @Override public void button(String key) {
-                if (key.startsWith("tab/")) view.tab = Integer.parseInt(key.substring(4));
-                else press(x, id, key);
+                if (!view.press(key)) press(x, id, key);
             }
         });
     }
@@ -246,13 +243,6 @@ public final class UnitDoors {
     private static Column.Reading drop(Rows r, SheetContext x, String key, String label) {
         var u = x.units();
         return Door.meter(key, x.text(label), r.reading(key, u.pressure().si(1), 2), u.pressure().symbol());
-    }
-
-    private static String reading(SheetContext x, Flowsheet.Unit unit, String key, SheetUnits u) {
-        var results = x.state().shown(unit.id());
-        double value = results == null ? Double.NaN : results.reading(unit.id(), key);
-        if (Double.isNaN(value)) return "";
-        return key.equals("temperature") ? u.t(value) : u.p(value);
     }
 
     private static Column.Group phases(SheetContext x, Flowsheet.@Nullable Stream stream) {
@@ -394,30 +384,8 @@ public final class UnitDoors {
 
     // ---- The glass ----
 
-    /** A glass, with the slots it keeps. */
-    private interface Glass {
-        void draw(Canvas c, Skin skin, Rect box);
-
-        default List<Door.Slot> slots(Rect box) {
-            return List.of();
-        }
-
-        default Door.Glass door() {
-            var me = this;
-            return new Door.Glass() {
-                @Override public void draw(Canvas c, Skin skin, Rect box) {
-                    me.draw(c, skin, box);
-                }
-
-                @Override public List<Door.Slot> slots(Rect box) {
-                    return me.slots(box);
-                }
-            };
-        }
-    }
-
     /** The shipped drawing of an exchanger's or a heater's assembly, read from the unit's streams. */
-    private static Glass heat(SheetContext x, Flowsheet.Unit unit, HeatSides.Unit kind, HeatSides.Side side) {
+    private static Door.Glass heat(SheetContext x, Flowsheet.Unit unit, HeatSides.Unit kind, HeatSides.Side side) {
         return (c, skin, box) -> {
             var drawing = new HeatFlowsheet(HeatDiagram.of(kind, side, ExchangerBlueprint.Design.NONE), HeatDiagram.roles(kind, side));
             drawing.fit(box.x(), box.y(), box.w(), box.h());
@@ -468,7 +436,7 @@ public final class UnitDoors {
     }
 
     /** The streams side by side: their properties, one column a stream, as many as the glass holds. */
-    private static Glass streams(SheetContext x, Flowsheet.Unit unit) {
+    private static Door.Glass streams(SheetContext x, Flowsheet.Unit unit) {
         return (c, skin, box) -> table(c, x, unit, box);
     }
 
@@ -519,8 +487,8 @@ public final class UnitDoors {
     }
 
     /** The unit on the glass above its table: its symbol, its stream in, its streams out as pills. */
-    private static Glass sketch(SheetContext x, Flowsheet.Unit unit) {
-        return new Glass() {
+    private static Door.Glass sketch(SheetContext x, Flowsheet.Unit unit) {
+        return new Door.Glass() {
             @Override public void draw(Canvas c, Skin skin, Rect box) {
                 var symbol = Tiles.symbol(unit, x.editor().sheet().sizing());
                 var p = new FlowsheetPainter(c, box.x(), box.y(), 1, 1);

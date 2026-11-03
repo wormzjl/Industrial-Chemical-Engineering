@@ -50,7 +50,7 @@ class SimulatorColumnsTest {
 
     private static SheetContext context(SheetFixture.Texts texts, boolean solved) {
         var editor = SheetFixture.editor(SHEET);
-        return new SheetContext(editor, new SheetState(editor.sheet(), solved ? SHEET : null, solved ? RUN : null, 1.2, null), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS);
+        return new SheetContext(editor, new SheetState(editor.sheet(), solved ? SHEET : null, solved ? RUN : null, 1.2, null), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
     }
 
     private static List<Door> doors(SheetContext x) {
@@ -74,7 +74,7 @@ class SimulatorColumnsTest {
         var units = List.of(new Flowsheet.Unit("t", "column", "T-101", 300, 40, SheetFixture.column()));
         var streams = List.of(new Flowsheet.Stream("feed", "FEED", null, new Flowsheet.End("t", "feed"), SheetFixture.water(100), List.of(new Flowsheet.Point(100, 200)), new JsonObject()));
         var editor = SheetFixture.editor(new Flowsheet(SheetFixture.basis(), units, streams, FlowsheetSolver.Settings.DEFAULT));
-        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS);
+        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         var doors = new ArrayList<Door>();
         for (int tab = 0; tab < 4; tab++)
             for (var connection : CalculatorColumn.Connection.values()) {
@@ -211,7 +211,7 @@ class SimulatorColumnsTest {
             if (!tile.lit() || tile.type().equals(Tiles.FEED) || tile.type().equals(Tiles.PRODUCT)) continue;
             var units = List.of(new Flowsheet.Unit("u", tile.type(), "U-101", 100, 60, SheetEditor.defaults(tile.type(), SheetFixture::column)));
             var editor = SheetFixture.editor(new Flowsheet(SheetFixture.basis(), units, List.of(), FlowsheetSolver.Settings.DEFAULT));
-            var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS);
+            var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
             for (var place : editor.layout().box("u").places()) {
                 var lines = SimulatorPage.portHover(x, place).split("\n");
                 assertEquals(2, lines.length, tile.type() + " " + place.port());
@@ -223,7 +223,7 @@ class SimulatorColumnsTest {
         assertEquals(Map.of(), kinds, "every case met");
         assertEquals(Set.of(), texts.missing);
         var editor = SheetFixture.editor(SheetFixture.line());
-        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS);
+        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         assertTrue(SimulatorPage.portHover(x, editor.layout().place("p", "out")).contains("Holds S-1."));
     }
 

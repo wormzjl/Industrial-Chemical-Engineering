@@ -83,6 +83,14 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
         /** What a key just did, which the door's status says until its next change of tab. */
         public @Nullable String said;
 
+        /** Takes a door's own view keys, {@code tab/<i>} and {@code phase/<i>}: whether {@code key} was one. */
+        public boolean press(String key) {
+            if (key.startsWith("tab/")) tab = Integer.parseInt(key.substring(4));
+            else if (key.startsWith("phase/")) phase = Integer.parseInt(key.substring(6));
+            else return false;
+            return true;
+        }
+
         /** Whether the selected pumparound spreads its heat; a row's own setting. */
         public boolean spread(com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor door) {
             return connection == CalculatorColumn.Connection.PA && index < door.pumparounds().size() && door.pumparounds().get(index).split() == com.wormzjl.icheme.science.column.v3.V3PumparoundSpec.Split.UNIFORM;

@@ -30,7 +30,7 @@ class StreamFlowBasisTest {
     /** The sheet as the editor holds it now, on the run of {@link #SHEET} (or on none), shown on {@code basis}. */
     private static SheetContext context(SheetEditor editor, SheetUnits.Basis basis, boolean ran) {
         var texts = new SheetFixture.Texts();
-        return new SheetContext(editor, new SheetState(editor.sheet(), ran ? SHEET : null, ran ? RUN : null, 1.2, null), units(basis), texts, texts.measure, SheetFixture.FLUIDS);
+        return new SheetContext(editor, new SheetState(editor.sheet(), ran ? SHEET : null, ran ? RUN : null, 1.2, null), units(basis), texts, texts.measure, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
     }
 
     private static @Nullable Column.Field field(List<Column.Row> rows, String key) {

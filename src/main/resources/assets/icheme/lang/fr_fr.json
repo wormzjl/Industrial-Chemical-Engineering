@@ -2277,7 +2277,6 @@
   "gui.icheme.flowsheet.door.option.series": "En série",
   "gui.icheme.flowsheet.door.option.apart": "Séparés",
   "gui.icheme.flowsheet.door.outlet": "Sortie",
-  "gui.icheme.flowsheet.door.inlet": "Entrée",
   "gui.icheme.flowsheet.door.drop": "Perte de charge",
   "gui.icheme.flowsheet.door.pressure": "Pression",
   "gui.icheme.flowsheet.door.discharge": "Refoulement",

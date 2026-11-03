@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.client.gui.flowsheet;
 
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
@@ -17,6 +16,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import org.jetbrains.annotations.Nullable;
@@ -80,11 +80,6 @@ public final class SheetEditor {
             wiringBut = but;
         }
         return wiring;
-    }
-
-    /** A read-only sheet takes no edit. */
-    public void lock(boolean locked) {
-        lock(locked, LOCKED);
     }
 
     /** A sheet takes no edit while {@code locked}, and {@code why} is what a refused gesture says. Lifting the lock lifts what it refused. */
@@ -169,10 +164,7 @@ public final class SheetEditor {
             while (undo.size() > HISTORY) undo.removeLast();
         }
         redo.clear();
-        sheet = next;
-        layout = null;
-        roles = null;
-        wiring = null;
+        replace(next);
         step = key;
         return true;
     }
@@ -356,30 +348,22 @@ public final class SheetEditor {
         return apply(withUnit(id, u -> new Flowsheet.Unit(u.id(), u.type(), u.name(), u.x(), u.y(), params, u.unknown())), key);
     }
 
-    /** Sets one setting; the unit's other settings, known or not, stay. A row's or a pair's ports follow its settings, and an end that named a port now gone stays. */
-    public boolean set(String id, String field, JsonElement value, @Nullable String key) {
-        var unit = unit(id);
-        if (unit == null) return false;
-        var json = unit.params().json().deepCopy();
-        json.add(field, value);
-        return setParams(id, new Params(json), key);
-    }
-
     /** Sets a text setting. */
     public boolean set(String id, String field, String value, @Nullable String key) {
-        var unit = unit(id);
-        if (unit == null) return false;
-        var json = unit.params().json().deepCopy();
-        json.addProperty(field, value);
-        return setParams(id, new Params(json), key);
+        return change(id, json -> json.addProperty(field, value), key);
     }
 
     /** Sets a number setting. */
     public boolean set(String id, String field, double value, @Nullable String key) {
+        return change(id, json -> json.addProperty(field, value), key);
+    }
+
+    /** Changes a copy of a unit's settings; the unit's other settings, known or not, stay. */
+    private boolean change(String id, Consumer<JsonObject> change, @Nullable String key) {
         var unit = unit(id);
         if (unit == null) return false;
         var json = unit.params().json().deepCopy();
-        json.addProperty(field, value);
+        change.accept(json);
         return setParams(id, new Params(json), key);
     }
 
@@ -633,10 +617,6 @@ public final class SheetEditor {
         return apply(new Flowsheet(sheet.basis(), sheet.units(), sheet.streams(), settings, sheet.sizing(), sheet.unknown()), key);
     }
 
-    public boolean basis(Flowsheet.Basis basis, @Nullable String key) {
-        return apply(new Flowsheet(basis, sheet.units(), sheet.streams(), sheet.settings(), sheet.sizing(), sheet.unknown()), key);
-    }
-
     // ---- Sizing ----
 
     /** Takes Size all's sheet, which the caller has copied, as one step: Undo takes it back whole. A sheet holding the same facts adds no step. */
@@ -652,8 +632,7 @@ public final class SheetEditor {
 
     /** Sets the sizing facts and {@code unit}'s settings, which the caller has copied, in one step: a member's count is its column door's (S3b). */
     public boolean sizing(SizingFacts facts, String unit, Params params, @Nullable String key) {
-        var units = new ArrayList<Flowsheet.Unit>();
-        for (var u : sheet.units()) units.add(u.id().equals(unit) ? new Flowsheet.Unit(u.id(), u.type(), u.name(), u.x(), u.y(), params, u.unknown()) : u);
+        var units = withUnit(unit, u -> new Flowsheet.Unit(u.id(), u.type(), u.name(), u.x(), u.y(), params, u.unknown())).units();
         return apply(new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), facts, sheet.unknown()), key);
     }
 }

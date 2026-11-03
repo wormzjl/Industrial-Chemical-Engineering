@@ -25,7 +25,7 @@ public final class SheetClipboard {
     public record Pasted(Flowsheet.Feed feed, int placed, List<String> left) {
     }
 
-    private static final double FLOW_WHEN_NONE = 100 * 1000 / 3600.0;
+    private static final double FLOW_WHEN_NONE = 100 * SheetUnits.KMOL_PER_HOUR;
     private static @Nullable Held held;
 
     private SheetClipboard() {
@@ -68,24 +68,34 @@ public final class SheetClipboard {
      * sheet's {@code axis} does not hold stays out, and is named: the rest take the whole flow between them.
      */
     public static Pasted paste(Held held, Flowsheet.Feed feed, List<String> axis, boolean conditions) {
+        return paste(held, feed, axis, Double.NaN, conditions);
+    }
+
+    /**
+     * As {@link #paste(Held, Flowsheet.Feed, List, boolean)}, at {@code flow} mol/s where it is a number (a stream template's own flow); with {@code conditions}, the held
+     * temperature and pressure each where it is a number (a template may hold neither). A part of none is no part.
+     */
+    public static Pasted paste(Held held, Flowsheet.Feed feed, List<String> axis, double flow, boolean conditions) {
         double placed = 0;
         var left = new ArrayList<String>();
         for (var part : held.amounts().entrySet()) {
+            if (!(part.getValue() > 0)) continue;
             if (axis.contains(part.getKey())) placed += part.getValue();
             else left.add(part.getKey());
         }
         left.sort(null);
-        double total = feed.amounts().values().stream().mapToDouble(Double::doubleValue).sum();
+        double total = Double.isNaN(flow) ? feed.amounts().values().stream().mapToDouble(Double::doubleValue).sum() : flow;
         if (total == 0) total = FLOW_WHEN_NONE;
         var amounts = new LinkedHashMap<String, Double>();
         int count = 0;
         if (placed > 0) for (var component : axis) {
             var part = held.amounts().get(component);
-            if (part == null) continue;
+            if (part == null || !(part > 0)) continue;
             amounts.put(component, part / placed * total);
             count++;
         }
-        var next = placed > 0 ? new Flowsheet.Feed(conditions ? held.temperature() : feed.temperature(), conditions ? held.pressure() : feed.pressure(), amounts, feed.solids(), feed.unknown()) : feed;
+        double temperature = conditions && !Double.isNaN(held.temperature()) ? held.temperature() : feed.temperature(), pressure = conditions && !Double.isNaN(held.pressure()) ? held.pressure() : feed.pressure();
+        var next = placed > 0 ? new Flowsheet.Feed(temperature, pressure, amounts, feed.solids(), feed.unknown()) : feed;
         return new Pasted(next, count, left);
     }
 }

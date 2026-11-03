@@ -126,12 +126,8 @@ public interface Skin {
         THEME, RUN
     }
 
-    /** A sign before a word ({@link #signButton}), its top left at ({@code x}, {@code y}), the text's top: RUN is a ▶ 4 px wide and 7 tall. */
+    /** A sign before a word ({@link #signButton}), its top left at ({@code x}, {@code y}), the text's top: RUN, the only sign, is a ▶ 4 px wide and 7 tall. */
     static void sign(Canvas c, int x, int y, Icon icon, int argb) {
-        if (icon == Icon.THEME) {
-            icon(c, new Rect(x - 3, y - 2, 10, 10), icon, argb);
-            return;
-        }
         c.batch(() -> {
             for (int i = 0; i < 7; i++) c.fill(x, y + i, x + 1 + Math.min(i, 6 - i), y + i + 1, argb);
         });
@@ -146,11 +142,7 @@ public interface Skin {
     /** {@code icon} centred in {@code r}, 10 by 10 px, in {@code argb}. */
     static void icon(Canvas c, Rect r, Icon icon, int argb) {
         int x0 = r.x() + (r.w() - 10) / 2, y0 = r.y() + (r.h() - 10) / 2;
-        if (icon == Icon.RUN) {
-            sign(c, x0 + 3, y0 + 1, icon, argb);
-            return;
-        }
-        // THEME: a ring of radius 5 round pixel centres, its left half filled.
+        // THEME, the only key face: a ring of radius 5 round pixel centres, its left half filled.
         c.batch(() -> {
             for (int y = 0; y < 10; y++)
                 for (int x = 0; x < 10; x++) {

@@ -27,7 +27,7 @@ import org.jetbrains.annotations.Nullable;
  * the slots of {@link ColumnBlueprint} the assembly checks, so a drawn part is the part the check reports. No Minecraft classes.
  */
 public final class AssemblyBlock {
-    private static final int PLATE = 0xFF10181D, FRAME = 0xFF7F97A5, GRID = 0x24FFFFFF, MARGIN = 6;
+    private static final int MARGIN = 6;
     public final ColumnBlock block;
     private int ox, oy;
     private double scale = 1;
@@ -117,23 +117,17 @@ public final class AssemblyBlock {
      * inlets' names on the tower, its {@code name} on its plate (none while it has none), the {@code selected} part ringed. {@code t} reads keys under {@code gui.icheme.}.
      */
     public void draw(Canvas c, Rect box, @Nullable AssemblyReport report, @Nullable Slot selected, String name, HeatControlColumn.Texts t) {
-        int step = Math.max(8, (int) Math.round(16 * scale));
-        c.batch(() -> {
-            for (int y = box.y() + Math.floorMod(oy - box.y() + step / 2, step); y < box.bottom(); y += step)
-                for (int x = box.x() + Math.floorMod(ox - box.x() + step / 2, step); x < box.right(); x += step) c.fill(x, y, x + 1, y + 1, GRID);
-        });
+        SheetPainter.grid(c, box, scale, ox, oy);
         var p = new FlowsheetPainter(c, ox, oy, scale, 1);
-        SheetPainter.block(p, block, FRAME, false, SheetPainter.NONE, slot -> look(slot, report), t);
-        if (p.labels()) for (var mark : block.marks()) p.tag(t.get("flowsheet." + mark.key(), mark.argument()), mark.x(), mark.y(), .5f, Palette.TEXT, PLATE);
+        SheetPainter.block(p, block, SheetPainter.FRAME, false, SheetPainter.NONE, slot -> look(slot, report), t);
+        if (p.labels()) for (var mark : block.marks()) p.tag(t.get("flowsheet." + mark.key(), mark.argument()), mark.x(), mark.y(), .5f, Palette.TEXT, SheetPainter.PLATE);
         var f = block.frame();
-        if (p.labels() && !name.isEmpty()) p.tag(name, f.x() + 12, f.y(), 0f, Palette.TEXT, PLATE);
+        if (p.labels() && !name.isEmpty()) p.tag(name, f.x() + 12, f.y(), 0f, Palette.TEXT, SheetPainter.PLATE);
+        // The tower is a part, its rect the tower's.
         if (selected != null)
             for (var part : block.parts())
-                if (part.slot().equals(selected) && part.shape() != ColumnBlock.Shape.TOWER) {
+                if (part.slot().equals(selected)) {
                     var r = part.rect();
-                    c.outline(p.x(r.x()) - 2, p.y(r.y()) - 2, p.px(r.w()) + 4, p.px(r.h()) + 4, Palette.TEXT);
-                } else if (part.slot().equals(selected)) {
-                    var r = block.tower();
                     c.outline(p.x(r.x()) - 2, p.y(r.y()) - 2, p.px(r.w()) + 4, p.px(r.h()) + 4, Palette.TEXT);
                 }
     }

@@ -108,33 +108,19 @@ public final class SimulatorFrame {
         return new Rect(box.x() + 2, box.y() + 2, 3 * 26 + 8 + 6, 21);
     }
 
-    /** The footer's keys: Close, Run, Stop, then Undo and Redo where they fit. */
-    public List<Rect> footer() {
+    /**
+     * The footer's keys: Close, the tab's two keys, the second {@code third} px wide, then Undo and Redo where they fit. The
+     * Flowsheet tabs' are Run and Stop (50); the Sizing tab's Size all and Send to block (84, 50 where the window is narrow).
+     */
+    public List<Rect> footer(int third) {
         int y = h - 27, x = 10;
         var keys = new ArrayList<Rect>();
         keys.add(new Rect(x, y, 50, 18));
         x += 54;
         keys.add(new Rect(x, y, 60, 18));
         x += 64;
-        keys.add(new Rect(x, y, 50, 18));
-        x += 54;
-        if (size != Size.TINY) for (int i = 0; i < 2; i++) {
-            keys.add(new Rect(x, y, 50, 18));
-            x += 54;
-        }
-        return keys;
-    }
-
-    /** The Sizing tab's footer: Close, Size all, Send to block (narrower where the window is), then Undo and Redo where they fit. */
-    public List<Rect> sizingFooter() {
-        int y = h - 27, x = 10, send = size.narrow() ? 50 : 84;
-        var keys = new ArrayList<Rect>();
-        keys.add(new Rect(x, y, 50, 18));
-        x += 54;
-        keys.add(new Rect(x, y, 60, 18));
-        x += 64;
-        keys.add(new Rect(x, y, send, 18));
-        x += send + 4;
+        keys.add(new Rect(x, y, third, 18));
+        x += third + 4;
         if (size != Size.TINY) for (int i = 0; i < 2; i++) {
             keys.add(new Rect(x, y, 50, 18));
             x += 54;

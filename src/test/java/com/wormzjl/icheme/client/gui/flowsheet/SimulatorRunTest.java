@@ -148,7 +148,7 @@ class SimulatorRunTest {
 
         var editor = SheetFixture.editor(SAMPLE);
         var texts = new SheetFixture.Texts();
-        var x = new SheetContext(editor, SheetState.of(editor.sheet(), finished), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS);
+        var x = new SheetContext(editor, SheetState.of(editor.sheet(), finished), SheetUnits.DEFAULT, texts, SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         var lines = ResultsPage.logLines(x).stream().map(ResultsPage.Line::text).toList();
         assertTrue(texts.missing.isEmpty(), texts.missing.toString());
         assertTrue(lines.getFirst().startsWith("Order: "), lines.getFirst());

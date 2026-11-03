@@ -343,7 +343,7 @@ public final class SimulatorRender {
     /** The footer in option C: results current, after a feed edit, while running; and the canvas with what grabs T-101 inside its frame marked. */
     private static void runKey(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
         var host = new Host(false, null);
-        var running = new Host(false, new SheetState.Running(3.1, 2, 30, "T-101", com.wormzjl.icheme.science.flowsheet.Report.Start.LAST));
+        var running = new Host(false, new SheetState.Running(3.1, 2, 30, "T-101", com.wormzjl.icheme.science.flowsheet.Report.Start.LAST, SheetState.Task.RUN));
         Consumer<Scene> edited = s -> StreamDoors.door(s.context(), "CRUDE", new Door.View()).actions().entry("temperature", "30");
         sheet(out, "28-run-key", W, H, List.of("Run with the results current: blue", "After a feed edit: Run lit amber, its hover says why", "While running: Run off, Stop on", "No run yet"), List.of(
                 scene(sheet, run, seconds, host, nothing()), scene(sheet, run, seconds, host, edited), scene(sheet, run, seconds, running, nothing()), (d, skin) -> screen(d, new Scene(sheet, null, 0, host))));
@@ -1124,7 +1124,7 @@ public final class SimulatorRender {
         small.add(page(624, 344, PanelSkin.LIGHT, scene(sheet, run, seconds, host, nothing())));
         small.add(page(464, 254, PanelSkin.DARK, scene(sheet, run, seconds, host, nothing())));
         SimulatorPrototypes.stack(out.resolve("05-small-windows.png"), List.of("1280 by 720 window, scale 2: 624 by 344", "The design minimum, 464 by 254"), small, List.of());
-        var running = new Host(false, new SheetState.Running(3.1, 2, 30, "T-101", com.wormzjl.icheme.science.flowsheet.Report.Start.LAST));
+        var running = new Host(false, new SheetState.Running(3.1, 2, 30, "T-101", com.wormzjl.icheme.science.flowsheet.Report.Start.LAST, SheetState.Task.RUN));
         sheet(out, "06-run-in-progress", W, H, List.of("A run in progress", "An edit refused during the run", "A second player, read only"), List.of(
                 scene(sheet, run, seconds, running, nothing()), scene(sheet, run, seconds, running, s -> s.editor.moveUnit("P-101", 92, 84, null)), scene(sheet, run, seconds, new Host(true, null), nothing())));
         var empty = new Flowsheet(sheet.basis(), List.of(), List.of(), sheet.settings());

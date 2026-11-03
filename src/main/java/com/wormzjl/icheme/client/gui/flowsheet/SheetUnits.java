@@ -9,6 +9,8 @@ import java.util.Locale;
  * changes all of the screen at once.
  */
 public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.PressureUnit pressure, DisplayUnit.FlowRateUnit time, Basis basis) {
+    /** The mol/s in one kmol/h: the column's own settings and results, templates and the 100 kmol/h a new flow starts at are in kmol/h. */
+    public static final double KMOL_PER_HOUR = 1000 / 3600.0;
     public static final SheetUnits DEFAULT = new SheetUnits(DisplayUnit.TemperatureUnit.CELSIUS, DisplayUnit.PressureUnit.BAR, DisplayUnit.FlowRateUnit.PER_HOUR, Basis.MOLE);
 
     /**
@@ -65,11 +67,6 @@ public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.Pr
 
     public String t(double kelvin) {
         return number(1, temperature.display(kelvin));
-    }
-
-    /** A temperature difference, which has no offset. */
-    public String kelvins(double difference) {
-        return number(1, difference);
     }
 
     /** A pressure at the digits a meter shows; typing keeps what the player typed, so nothing rounds on the way back. */

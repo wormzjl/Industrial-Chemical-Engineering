@@ -296,7 +296,7 @@ class ColumnBlockTest {
         var params = door(ColumnComponents.Condenser.EXCHANGER, 18e6, .3e5);
         var editor = SheetFixture.editor(one(params));
         var layout = editor.layout();
-        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS);
+        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         for (var part : layout.box("u").block().parts()) {
             var r = part.rect();
             double cx = r.x() + r.w() / 2.0, cy = r.y() + r.h() / 2.0;
@@ -321,7 +321,7 @@ class ColumnBlockTest {
     @Test
     void theDoorsAirThenWaterKeyDrawsTheTrimAndItsStepperCountsItsShells() {
         var editor = SheetFixture.editor(one(door(ColumnComponents.Condenser.EXCHANGER, 18e6, 1.4e5)));
-        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS);
+        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         var view = new Door.View();
         int width = editor.layout().box("u").block().frame().w();
         ColumnDoors.door(x, "u", view).actions().button("condenser:air_then_water");

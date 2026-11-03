@@ -296,7 +296,7 @@ class SimulatorBlockTest {
     // ---- The clipboard
 
     private static SheetContext context(SheetEditor editor) {
-        return new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS);
+        return new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
     }
 
     @Test
@@ -484,7 +484,7 @@ class SimulatorBlockTest {
         var run = com.wormzjl.icheme.science.flowsheet.FlowsheetEngine.run(sheet, SheetFixture.CATALOG, () -> {
         });
         var editor = SheetFixture.editor(sheet);
-        var x = new SheetContext(editor, new SheetState(editor.sheet(), sheet, run, 1, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS);
+        var x = new SheetContext(editor, new SheetState(editor.sheet(), sheet, run, 1, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
         var open = x.openOutlets(units.getFirst());
         assertEquals(java.util.Set.of("water"), open.keySet(), "the water leaves by the port with no stream on it; the empty oil outlet says nothing");
         assertEquals(100, open.get("water").moles(), 1e-6);

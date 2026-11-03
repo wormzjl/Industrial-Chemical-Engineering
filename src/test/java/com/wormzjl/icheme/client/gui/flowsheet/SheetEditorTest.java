@@ -159,7 +159,7 @@ class SheetEditorTest {
     @Test
     void aReadOnlySheetRefusesEveryEdit() {
         var editor = SheetFixture.editor(marked());
-        editor.lock(true);
+        editor.lock(true, SheetEditor.LOCKED);
         byte[] before = FlowsheetFile.write(editor.sheet());
         assertNull(editor.addUnit("drum", 0, 0));
         assertEquals(SheetEditor.LOCKED, editor.refusal().key());

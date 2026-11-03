@@ -223,10 +223,6 @@ public final class SizingPage {
         return SheetUnits.number(a >= 100 ? 0 : a >= 10 ? 1 : a >= .1 || a == 0 ? 2 : 3, value);
     }
 
-    private static String metres(double value) {
-        return SheetUnits.number(2, value);
-    }
-
     /** Limits a size meets or not: a reading of 1 or 0, which the tab says as yes or no. */
     private static final java.util.Set<Limit> YES_NO = java.util.EnumSet.of(Limit.RUN_STEADY, Limit.UNIT_SHAPE, Limit.COLUMN_SOLVES);
 
@@ -282,15 +278,15 @@ public final class SizingPage {
     /** A size in a few words: sheet 24's Size column. */
     public static String sizeText(SheetContext x, @Nullable UnitSize size) {
         String text = switch (size) {
-            case PumpSizing.Size p -> x.text("sizing.size.pump", metres(p.discharge()));
-            case EjectorSizing.Size e -> x.text("sizing.size.ejector", metres(e.suction()));
-            case ExchangerSizing.Size e -> x.text("sizing.size.exchanger", metres(e.shell()), e.tubes());
+            case PumpSizing.Size p -> x.text("sizing.size.pump", SheetUnits.number(2, p.discharge()));
+            case EjectorSizing.Size e -> x.text("sizing.size.ejector", SheetUnits.number(2, e.suction()));
+            case ExchangerSizing.Size e -> x.text("sizing.size.exchanger", SheetUnits.number(2, e.shell()), e.tubes());
             case AirCoolerSizing.Size a -> x.text("sizing.size.air_cooler", a.bank().parallel(), a.bank().series(), SheetUnits.number(1, a.width()), a.length());
             case HeaterSizing.Size h -> x.text("sizing.size.heater", SheetUnits.number(1, h.diameter()), h.length());
-            case CompressorSizing.Size k -> x.text("sizing.size.compressor", metres(k.size()), k.length());
+            case CompressorSizing.Size k -> x.text("sizing.size.compressor", SheetUnits.number(2, k.size()), k.length());
             case DrumSizing.Size d -> x.text(d.boot() ? "sizing.size.drum_boot" : "sizing.size.drum", SheetUnits.number(1, d.diameter()), d.length());
             case TankSizing.Size t -> x.text("sizing.size.tank", SheetUnits.number(1, t.diameter()), t.shell());
-            case ValveSizing.Size v -> x.text("sizing.size.valve", metres(v.bore()));
+            case ValveSizing.Size v -> x.text("sizing.size.valve", SheetUnits.number(2, v.bore()));
             case ColumnSizing.Size c -> x.text("sizing.size.column", SheetUnits.number(1, c.diameter()), c.layout().trays(), SheetUnits.number(1, c.height()));
             case null -> "";
         };
@@ -299,7 +295,7 @@ public final class SizingPage {
 
     private static String lineSizeText(SheetContext x, LineSizing.@Nullable Size size) {
         if (size == null) return "";
-        String bore = metres(size.bore());
+        String bore = SheetUnits.number(2, size.bore());
         return size.runs() > 1 ? x.text("sizing.size.count", size.runs(), bore) : bore;
     }
 
@@ -388,7 +384,7 @@ public final class SizingPage {
                 group.add(Door.entry(KEY + "size/diameter", x.text("sizing.diameter"), "m"));
                 group.add(Door.entry(KEY + "size/shell", x.text("sizing.height"), "m"));
             }
-            case ValveSizing.Size v -> group.add(Door.meter(x.text("sizing.bore"), metres(v.bore()), "m"));
+            case ValveSizing.Size v -> group.add(Door.meter(x.text("sizing.bore"), SheetUnits.number(2, v.bore()), "m"));
             case ColumnSizing.Size c -> {
                 group.add(Door.entry(KEY + "size/diameter", x.text("sizing.diameter"), "m"));
                 group.add(Door.meter(x.text("sizing.trays"), Integer.toString(c.layout().trays()), ""));
@@ -425,12 +421,12 @@ public final class SizingPage {
         int n = sized.paths().size(), i = Math.floorMod(state.path, n) + 1;
         var group = new ArrayList<Column.Row>();
         group.add(new Column.Setting(KEY + "path", x.text("sizing.path"), x.text("sizing.of", i, n), "", x.text("sizing.path_hint"), n > 1));
-        group.add(Door.meter("from", x.text("sizing.from"), metres(path.from()), "bar"));
-        group.add(Door.meter("head", x.text("sizing.head"), metres(path.head()), "bar"));
-        group.add(Door.meter("to", x.text("sizing.to"), metres(path.to()), "bar"));
-        group.add(Door.meter("available", x.text("sizing.available"), metres(path.available()), "bar"));
-        group.add(Door.meter("lost", x.text("sizing.lost"), metres(path.lost()), "bar"));
-        group.add(Door.meter("spare", x.text("sizing.spare"), metres(path.spare()), "bar"));
+        group.add(Door.meter("from", x.text("sizing.from"), SheetUnits.number(2, path.from()), "bar"));
+        group.add(Door.meter("head", x.text("sizing.head"), SheetUnits.number(2, path.head()), "bar"));
+        group.add(Door.meter("to", x.text("sizing.to"), SheetUnits.number(2, path.to()), "bar"));
+        group.add(Door.meter("available", x.text("sizing.available"), SheetUnits.number(2, path.available()), "bar"));
+        group.add(Door.meter("lost", x.text("sizing.lost"), SheetUnits.number(2, path.lost()), "bar"));
+        group.add(Door.meter("spare", x.text("sizing.spare"), SheetUnits.number(2, path.spare()), "bar"));
         return new Column.Group(x.text("sizing.path_group"), null, group);
     }
 
@@ -446,7 +442,7 @@ public final class SizingPage {
             largest = Math.max(largest, size.bore());
         }
         return Door.group(x.text("sizing.lines"), Door.meter("count", x.text("sizing.line_count"), Integer.toString(lines), ""), Door.meter("pipe", x.text("sizing.pipe"), SheetUnits.number(0, pipe), "m"),
-                Door.meter("largest", x.text("sizing.largest"), metres(largest), "m"));
+                Door.meter("largest", x.text("sizing.largest"), SheetUnits.number(2, largest), "m"));
     }
 
     /** What the entries hold. */
@@ -461,10 +457,10 @@ public final class SizingPage {
         String unit = unit(state, sized);
         if (state.view == View.UNITS && unit != null) {
             switch (size(x, unit, sized)) {
-                case PumpSizing.Size p -> values.put(KEY + "size/discharge", metres(p.discharge()));
-                case EjectorSizing.Size e -> values.put(KEY + "size/suction", metres(e.suction()));
+                case PumpSizing.Size p -> values.put(KEY + "size/discharge", SheetUnits.number(2, p.discharge()));
+                case EjectorSizing.Size e -> values.put(KEY + "size/suction", SheetUnits.number(2, e.suction()));
                 case ExchangerSizing.Size e -> {
-                    values.put(KEY + "size/shell", metres(e.shell()));
+                    values.put(KEY + "size/shell", SheetUnits.number(2, e.shell()));
                     values.put(KEY + "size/tubes", Integer.toString(e.tubes()));
                 }
                 case AirCoolerSizing.Size a -> {
@@ -476,7 +472,7 @@ public final class SizingPage {
                     values.put(KEY + "size/length", Integer.toString(h.length()));
                 }
                 case CompressorSizing.Size k -> {
-                    values.put(KEY + "size/size", metres(k.size()));
+                    values.put(KEY + "size/size", SheetUnits.number(2, k.size()));
                     values.put(KEY + "size/length", Integer.toString(k.length()));
                 }
                 case DrumSizing.Size d -> {
@@ -498,7 +494,7 @@ public final class SizingPage {
         String line = line(state, sized);
         if (state.view == View.LINES && line != null) {
             var size = lineSize(x, line, sized);
-            values.put(KEY + "line/bore", size == null ? "" : metres(size.bore()));
+            values.put(KEY + "line/bore", size == null ? "" : SheetUnits.number(2, size.bore()));
             values.put(KEY + "line/length", SheetUnits.number(0, facts(x).basis().length(facts(x).line(line).length())));
         }
         return values;
@@ -873,8 +869,8 @@ public final class SizingPage {
             var path = sized.paths().get(i);
             var lamp = path.rating().lamp();
             items.add(new Item("path/" + i, lamp, List.of(Cell.of(name(x, path.start()), Palette.TEXT), Cell.of(name(x, path.end()) + (path.taker() == null || path.taker().equals(path.end()) ? "" : " (" + name(x, path.taker()) + ")"), Palette.TEXT),
-                    Cell.right(metres(path.available()) + " bar", Palette.ACCENT), Cell.right(metres(path.lost()) + " bar", Palette.ACCENT),
-                    Cell.right(metres(path.spare()) + " bar", path.set() ? tone(lamp) : Palette.MUTED)), path == picked));
+                    Cell.right(SheetUnits.number(2, path.available()) + " bar", Palette.ACCENT), Cell.right(SheetUnits.number(2, path.lost()) + " bar", Palette.ACCENT),
+                    Cell.right(SheetUnits.number(2, path.spare()) + " bar", path.set() ? tone(lamp) : Palette.MUTED)), path == picked));
         }
         return items;
     }
@@ -888,8 +884,8 @@ public final class SizingPage {
         double at = path.from() + path.head();
         for (var step : path.steps()) {
             at -= step.lost();
-            items.add(new Item(null, null, List.of(Cell.of(name(x, step.item()), Palette.TEXT), Cell.of(passage(x, step.passage()), Palette.MUTED), Cell.right(metres(step.lost()), Palette.ACCENT),
-                    Cell.right(metres(at), Palette.ACCENT), Cell.right(step.passage().equals(PressurePath.Step.LINE) ? "" : metres(step.typed()), Palette.MUTED)), false));
+            items.add(new Item(null, null, List.of(Cell.of(name(x, step.item()), Palette.TEXT), Cell.of(passage(x, step.passage()), Palette.MUTED), Cell.right(SheetUnits.number(2, step.lost()), Palette.ACCENT),
+                    Cell.right(SheetUnits.number(2, at), Palette.ACCENT), Cell.right(step.passage().equals(PressurePath.Step.LINE) ? "" : SheetUnits.number(2, step.typed()), Palette.MUTED)), false));
         }
         return items;
     }
@@ -1097,29 +1093,17 @@ public final class SizingPage {
         if (sized == null) return new SheetState.Status(x.text(x.host().rating() ? "sizing.rating" : "sizing.none"), Palette.MUTED);
         var last = x.host().last();
         if (last == null || last.run().status() != FlowsheetRun.Status.STEADY) return new SheetState.Status(x.text("sizing.unsteady"), Palette.WARN);
-        int red = 0, yellow = 0, units = sized.units().size(), lines = 0;
-        String first = null;
-        for (var entry : sized.units().entrySet()) {
-            var lamp = entry.getValue().rating().lamp();
-            if (lamp == Lamp.RED) red++;
-            if (lamp == Lamp.YELLOW) yellow++;
-            if (first == null && lamp == Lamp.RED) first = missed(x, entry.getKey(), entry.getValue().rating());
-        }
-        for (var entry : sized.lines().entrySet()) {
-            if (!entry.getValue().line().flows()) continue;
-            lines++;
-            var lamp = entry.getValue().rating().lamp();
-            if (lamp == Lamp.RED) red++;
-            if (lamp == Lamp.YELLOW) yellow++;
-            if (first == null && lamp == Lamp.RED) first = missed(x, entry.getKey(), entry.getValue().rating());
-        }
-        for (var path : sized.paths()) {
-            var lamp = path.rating().lamp();
-            if (lamp == Lamp.YELLOW) yellow++;
-            if (lamp != Lamp.RED) continue;
-            red++;
-            if (first == null) first = missed(x, path.start(), path.rating());
-        }
+        int units = sized.units().size(), lines = 0;
+        var tally = new Lamps();
+        for (var entry : sized.units().entrySet()) tally.add(x, entry.getKey(), entry.getValue().rating());
+        for (var entry : sized.lines().entrySet())
+            if (entry.getValue().line().flows()) {
+                lines++;
+                tally.add(x, entry.getKey(), entry.getValue().rating());
+            }
+        for (var path : sized.paths()) tally.add(x, path.start(), path.rating());
+        int red = tally.red, yellow = tally.yellow;
+        String first = tally.first;
         if (first == null && yellow > 0) for (var entry : sized.units().entrySet())
             if (entry.getValue().rating().lamp() == Lamp.YELLOW) {
                 first = missed(x, entry.getKey(), entry.getValue().rating());
@@ -1137,6 +1121,20 @@ public final class SizingPage {
         return new SheetState.Status(text, red > 0 || yellow > 0 ? Palette.WARN : x.state().edited() ? Palette.MUTED : Palette.ACCENT);
     }
 
+    /** The red and yellow lamps of the units, lines and paths, and the first red item's miss. */
+    private static final class Lamps {
+        int red, yellow;
+        @Nullable String first;
+
+        void add(SheetContext x, String id, Rating rating) {
+            var lamp = rating.lamp();
+            if (lamp == Lamp.YELLOW) yellow++;
+            if (lamp != Lamp.RED) return;
+            red++;
+            if (first == null) first = missed(x, id, rating);
+        }
+    }
+
     /** An item's first miss: its tag, the limit, its value and the bound. */
     private static String missed(SheetContext x, String id, Rating rating) {
         var closest = rating.closest();
@@ -1148,23 +1146,11 @@ public final class SizingPage {
 
     /** The tab's footer: Close, Size all (the confirming key) or Stop while it runs, Send to block ({@link #unsent}), Undo and Redo where they fit. */
     public static List<SimulatorPage.Slot> footer(SheetContext x, SimulatorFrame frame, SimulatorHost host, SheetEditor editor) {
-        var slots = new ArrayList<SimulatorPage.Slot>();
-        var at = frame.sizingFooter();
-        boolean running = host.running() != null;
-        slots.add(new SimulatorPage.Slot(new Column.Button("close", x.t().get("fluid.close"), true, null), at.get(0)));
-        if (running) slots.add(new SimulatorPage.Slot(new Column.Button("stop", x.text("frame.stop"), true, null), at.get(1)));
-        else {
-            String why = host.reader() ? x.text("sizing.size_all_reader") : x.state().steady() ? null : x.text("sizing.size_all_hint");
-            slots.add(new SimulatorPage.Slot(new Column.Button("size_all", x.text("sizing.size_all"), host.canRun() && sizes(x), why), at.get(1)));
-        }
+        String why = host.reader() ? x.text("sizing.size_all_reader") : x.state().steady() ? null : x.text("sizing.size_all_hint");
+        var second = host.running() != null ? new Column.Button("stop", x.text("frame.stop"), true, null) : new Column.Button("size_all", x.text("sizing.size_all"), host.canRun() && sizes(x), why);
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE;
         String unsent = unsent(x);
         String send = unsent != null ? unsent : x.text("sizing.send_hint", designs(x).size());
-        slots.add(new SimulatorPage.Slot(new Column.Button("send", x.text(narrow ? "sizing.send_short" : "sizing.send"), unsent == null, send), at.get(2)));
-        if (at.size() > 3) {
-            slots.add(new SimulatorPage.Slot(new Column.Button("undo", x.text("frame.undo"), editor.canUndo(), null), at.get(3)));
-            slots.add(new SimulatorPage.Slot(new Column.Button("redo", x.text("frame.redo"), editor.canRedo(), null), at.get(4)));
-        }
-        return slots;
+        return SimulatorPage.footer(x, frame.footer(frame.size().narrow() ? 50 : 84), editor, second, new Column.Button("send", x.text(narrow ? "sizing.send_short" : "sizing.send"), unsent == null, send));
     }
 }

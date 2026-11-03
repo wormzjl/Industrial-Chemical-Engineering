@@ -39,9 +39,6 @@ public final class SheetState {
      * @param start where that block's solve set out from, or null
      */
     public record Running(double seconds, int pass, int passes, @Nullable String unit, Report.@Nullable Start start, Task task) {
-        public Running(double seconds, int pass, int passes, @Nullable String unit, Report.@Nullable Start start) {
-            this(seconds, pass, passes, unit, start, Task.RUN);
-        }
     }
 
     private final Flowsheet sheet;

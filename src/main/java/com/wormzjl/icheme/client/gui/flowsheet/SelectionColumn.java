@@ -47,8 +47,7 @@ public final class SelectionColumn {
             return wrap(x, unit.name(), rows, Map.of());
         }
         rows.add(new Column.Line(x.t().get(Tiles.name(unit.type())), Palette.MUTED));
-        var results = x.state().shown(unit.id());
-        var read = new Reader(results, unit.id());
+        var read = Reader.of(x, unit.id());
         switch (unit.type()) {
             case "valve" -> {
                 rows.add(Door.meter(x.text("door.drop"), read.of("drop", u.pressure().si(1), 2), u.pressure().symbol()));
@@ -86,23 +85,6 @@ public final class SelectionColumn {
         }
         rows.add(keys(x, "open", true));
         return wrap(x, unit.name(), rows, Map.of());
-    }
-
-    private record Reader(SheetResults results, String unit) {
-        String of(String key, double scale, int digits) {
-            double value = results == null ? Double.NaN : results.reading(unit, key);
-            return Double.isNaN(value) ? "" : SheetUnits.number(digits, value / scale);
-        }
-
-        String temperature(SheetUnits u) {
-            double value = results == null ? Double.NaN : results.reading(unit, "temperature");
-            return Double.isNaN(value) ? "" : u.t(value);
-        }
-
-        String pressure(SheetUnits u) {
-            double value = results == null ? Double.NaN : results.reading(unit, "pressure");
-            return Double.isNaN(value) ? "" : u.p(value);
-        }
     }
 
     private static void addOut(SheetContext x, List<Column.Row> rows, Flowsheet.Stream stream, String key) {
