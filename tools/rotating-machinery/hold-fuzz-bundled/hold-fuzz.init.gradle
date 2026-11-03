@@ -1,0 +1,30 @@
+// Attaches this folder's src/ to the test source set for one Gradle invocation and forwards the fuzz switches:
+//   ./gradlew --no-configuration-cache --init-script tools/phase-ports-probes/hold-fuzz/hold-fuzz.init.gradle test \
+//       --tests '*HoldFuzzTest' -PholdFuzzSeeds=1-300 -PholdFuzzThreads=8 -PholdFuzzOut=<file> [-PholdFuzzSlices=120]
+//       [-PholdFuzzVerbose=true] [-PholdFuzzStrict=true]
+// Not part of any gate suite: without this init script the class is not compiled.
+gradle.projectsEvaluated {
+    def here = gradle.startParameter.initScripts.find { it.name == 'hold-fuzz.init.gradle' }.parentFile
+    def root = gradle.rootProject
+    root.sourceSets.test.java.srcDir(new File(here, 'src'))
+    // -PholdFuzzInstr=true: the singular-Jacobian probes, which need ../holds3/instr/instr-f8-singular-dump.patch applied.
+    if (root.findProperty('holdFuzzInstr')) { root.sourceSets.test.java.srcDir(new File(here, 'instr')); root.sourceSets.test.java.srcDir(new File(here, '../holds3/instr')) }
+    root.tasks.withType(Test).configureEach {
+        maxHeapSize = root.findProperty('holdFuzzHeap') ?: '8g'
+        systemProperty 'holdFuzz.seeds', root.findProperty('holdFuzzSeeds') ?: '1-20'
+        systemProperty 'holdFuzz.threads', root.findProperty('holdFuzzThreads') ?: '8'
+        systemProperty 'holdFuzz.slices', root.findProperty('holdFuzzSlices') ?: '120'
+        systemProperty 'holdFuzz.verbose', root.findProperty('holdFuzzVerbose') ?: 'false'
+        systemProperty 'holdFuzz.strict', root.findProperty('holdFuzzStrict') ?: 'false'
+        systemProperty 'holdFuzz.defaults', root.findProperty('holdFuzzDefaults') ?: 'false'
+        systemProperty 'holdFuzz.counters', root.findProperty('holdFuzzCounters') ?: 'false'
+        systemProperty 'holdFuzz.pipeBetween', root.findProperty('holdFuzzPipeBetween') ?: 'true'
+        // Batch 2026-11-03-rotating-machinery: -PholdFuzzCornerLaw=true runs form F2 (set-flow movers on the corner law),
+        // -PholdFuzzMachines=true the centrifugal variant (each in-line mover a machine on its curve, rated from its settings).
+        systemProperty 'icheme.fluid.cornerLaw', root.findProperty('holdFuzzCornerLaw') ?: 'false'
+        systemProperty 'holdFuzz.machines', root.findProperty('holdFuzzMachines') ?: 'false'
+        systemProperty 'holdFuzz.out', root.findProperty('holdFuzzOut') ?: new File(here, 'logs/report.txt').absolutePath
+        testLogging { showStandardStreams = true }
+        outputs.upToDateWhen { false }
+    }
+}
