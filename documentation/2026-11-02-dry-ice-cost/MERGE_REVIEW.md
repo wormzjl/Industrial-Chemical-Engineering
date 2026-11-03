@@ -37,10 +37,9 @@ Counts the guide had wrong before this batch (runtime files, test source set, `N
 - Logs are local in the main checkout's `tools/dry-ice-cost/logs/`. This step ran no test: documents, the CHANGELOG and the code guide only.
 ## CHANGELOG and version
 - One line for the batch under `[Unreleased]`, and one for the native-default probes.
-- Version: proposed **0.20.0**, a minor bump for a solver and model batch (the version rule). The alternative is 0.19.2, a patch, if the owner counts it as fixes to the dry ice cases. `mod_version` is unchanged until the owner chooses.
+- Version: the owner chose **0.19.2** (proposed 0.20.0, a minor bump for a solver and model batch).
 ## At the merge
-- Set `mod_version` and move `[Unreleased]` to the version heading.
-- Set the `documentation/INDEX.md` and `tools/INDEX.md` rows to Implemented with the merge date.
+- Done on the branch before the merge: `mod_version` 0.19.2, the `[0.19.2]` heading, the INDEX rows and the code guide snapshot lines.
 - Delete this batch's `tmp/` folders once the merge is recorded.
 ## Open items carried
-Batch README items 1 to 8: the start stage's leading-phase pricing, the PH steps, the carried tables in 244, stalls at a closure's start, 118's equation gate, 555, run totals, and the merge itself.
+Batch README items 1 to 8: the start stage's leading-phase pricing, the PH steps, the carried tables in 244, stalls at a closure's start, 118's equation gate, 555, run totals, and pushing main.

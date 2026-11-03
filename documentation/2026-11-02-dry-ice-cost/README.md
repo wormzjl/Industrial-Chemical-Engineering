@@ -2,7 +2,7 @@
 
 Purpose: why the cold LNG worlds with CO2 crystals reach the 2 s island wall budget, and a proposal for a fundamental fix.
 
-Status: In progress since 2026-11-02. Mode (a), form G and the junction tables are built and measured on the branch (`CARRIED_CRYSTALS_REVIEW.md`, `JUNCTION_TABLES_REVIEW.md`). All nine worlds: 0 holds, no job over 2 s. The owner kept the tables' carried fallback. Campaign: cold 989 clean (975), bundled 994 and 1000. The dry tank arrival is fixed (`DRY_TANK_ARRIVAL_REVIEW.md`): 181 and 397 clean, 431 new. Final lane run (`FINAL_LANE_REVIEW.md`): one test bound missed by G, fixed; cold 991, bundled 993 with 301 new from the arrival rule; the owner chose A for 301 (`DRAWN_ARRIVAL_REVIEW.md`): cold 992, bundled 995, defaults 1000, no new held seed. The merge is prepared (`MERGE_REVIEW.md`): CHANGELOG under `[Unreleased]`, code guide at e7a3a7f2b; version 0.20.0 proposed, the owner chooses.
+Status: Implemented 2026-11-03, released as 0.19.2. Mode (a), form G and the junction tables are built and measured on the branch (`CARRIED_CRYSTALS_REVIEW.md`, `JUNCTION_TABLES_REVIEW.md`). All nine worlds: 0 holds, no job over 2 s. The owner kept the tables' carried fallback. Campaign: cold 989 clean (975), bundled 994 and 1000. The dry tank arrival is fixed (`DRY_TANK_ARRIVAL_REVIEW.md`): 181 and 397 clean, 431 new. Final lane run (`FINAL_LANE_REVIEW.md`): one test bound missed by G, fixed; cold 991, bundled 993 with 301 new from the arrival rule; the owner chose A for 301 (`DRAWN_ARRIVAL_REVIEW.md`): cold 992, bundled 995, defaults 1000, no new held seed. Merged as 0.19.2 (`MERGE_REVIEW.md`), the owner's choice.
 
 ## History
 
@@ -55,4 +55,4 @@ Status: In progress since 2026-11-02. Mode (a), form G and the junction tables a
 5. The equation gate: Newton's junction solid row against D33's booking. The refusals at 0.06 to 1 s are not fully explained. Seed 118 now holds on it: 518 refusals against 505 accepted steps.
 6. 555 is not traced.
 7. Run totals rise 1.2 to 4.4x with the tables. The worst job stays under 1 s; look here first if the campaign shows a new budget hold.
-8. CHANGELOG, version, code guide, merge: the owner's word. The final lane ran at 803970ac1; form A's campaign at its successor.
+8. Pushing main: the owner's word.

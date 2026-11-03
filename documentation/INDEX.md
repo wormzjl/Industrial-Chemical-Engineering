@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-02-dry-ice-cost/](2026-11-02-dry-ice-cost/README.md) | Why cold CO2 crystal worlds reach the island wall budget; fix proposal | In progress since 2026-11-02 |
+| [2026-11-02-dry-ice-cost/](2026-11-02-dry-ice-cost/README.md) | Why cold CO2 crystal worlds reach the island wall budget; fix proposal | Implemented 2026-11-03 |
 | [2026-10-30-water-cooling-tower/](2026-10-30-water-cooling-tower/README.md) | Bounded parallel water-cooling cells and hollow natural-draft towers, coupled heat/mass transfer and real basins | Implemented 2026-11-02 |
 | [2026-11-02-test-suite-optimization/](2026-11-02-test-suite-optimization/README.md) | Skip gates a change cannot affect, GameTest lockstep, one tracked lane | Implemented 2026-11-03 |
 | [2026-11-02-tp-steam-refusal/](2026-11-02-tp-steam-refusal/README.md) | TP flash of one hydrocarbon beside steam, and PH and UV at its true step | Implemented 2026-11-02 (0.18.1) |
