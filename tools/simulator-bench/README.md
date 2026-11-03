@@ -36,6 +36,7 @@ Output, per phase, in the `-Out` folder:
 
 - `SimulatorBench.java <phase> <out folder>`: one file, run by the JDK's source launcher. `-Dwarm`, `-Dmeasure`.
 - `bench.ps1`: the driver above.
+- `alloc-sites.js <recording.jfr> [rows] [jdk folder]`: allocation weight by the first mod frame (with its line) and the allocated class, from the recording's `jdk.ObjectAllocationSample` events. JFR's own threads are left out; the views' `allocation-by-site` counts JFR's class instrumentation, about half of the sampled weight.
 
 Phases:
 
@@ -61,11 +62,12 @@ Phases:
   - a rating;
   - the props caches;
   - 100 undo steps of three kinds.
+- `bits`: every value a cold Run, a warm Run from it and Size all leave (streams, reports, loops, the sized sheet's file text), written exactly to `results.txt`, with no timing and the steps' seconds left out. A change that must keep results bit-identical diffs this file before and after. The checkpoint counts on its first lines vary from run to run on the same code; they are not results. For the "before", compile the base commit's versions of the changed files into a folder and put it first on the class path.
 - `histo`: what one held cold Run's `FlowsheetRun` adds to the heap, by class, from the VM's class histogram with and without it. Then `-Druns` Runs (default 4) on feeds 1 K apart, results dropped, and what they leave by class. Each Run goes on its own thread, as `SimulatorRunner` starts one a job; `-Dsame=true` keeps them on the bench's thread, where `NetworkPhaseEngine`'s per-instance `ThreadLocal` workspaces stay about 270 kB a Run. Not in the default list; it takes no timing.
 
 What a frame covers: the screen's per-frame work.
 
-- `ProcessSimulatorScreen.render`: `context()` with its cached state, `signature()`, which builds a door again, the shown door built again, and `SimulatorPage.draw`, or `DoorFrame.back` with the kit's `placeAll` and `draw`, or `FileColumns.draw`.
+- `ProcessSimulatorScreen.render`: `context()` with its cached state, the shown door built once and `signature(x, shown)` on it (since `78a779996`, P6; before it, `signature()` built the door a second time), and `SimulatorPage.draw`, or `DoorFrame.back` with the kit's `placeAll` and `draw`, or `FileColumns.draw`.
 - The widgets that `super.render` draws, through the same `Skin` calls: frame keys, canvas keys, the theme key, door tabs and footers, glass slots, and the kit's fields and buttons in view.
 
 What a frame leaves out:

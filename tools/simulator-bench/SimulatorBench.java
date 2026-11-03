@@ -407,9 +407,8 @@ public final class SimulatorBench {
             return StreamDoors.door(x, door.id(), doorView);
         }
 
-        /** The screen's signature(): what it compares each frame to know whether its widgets stand. */
-        String signature(SheetContext x) {
-            var shown = shownDoor(x);
+        /** The screen's signature(x, shown): what it compares each frame to know whether its widgets stand, on the frame's own door (P6). */
+        String signature(SheetContext x, Door shown) {
             var text = new StringBuilder().append(tab).append(open).append(door).append(doorView.tab).append(doorView.connection).append(doorView.index).append(doorView.phase).append(doorView.results).append(doorView.metric);
             text.append(gestures.selected()).append(category).append(results.view).append(true).append(editor.canUndo()).append(editor.canRedo()).append(SimulatorPage.runDue(x, host));
             text.append(x.units());
@@ -443,8 +442,8 @@ public final class SimulatorBench {
         /** One frame: render()'s own work, then the widgets super.render draws, through the same skin calls. */
         void frame(Counting c) {
             var x = context();
-            signature(x);
             var shown = shownDoor(x);
+            signature(x, shown);
             if (open) {
                 FileColumns.draw(c, SKIN, SimulatorPage.listing("OPEN", x, files, List.of(), List.of(), 0), FileColumns.W, FileColumns.H);
                 return;
@@ -802,6 +801,71 @@ public final class SimulatorBench {
         retained("Open's 50 rows, as the dialog holds them", () -> FileColumns.entries(folder, FlowsheetExamples.read(ClassLoader::getSystemResourceAsStream), T));
     }
 
+    // ---- Results, exactly ----
+
+    /**
+     * Every value a cold Run, a warm Run from it and Size all leave, as exact text, to {@code results.txt}: a change that must keep
+     * results bit-identical is checked by this file before and after (diff). No timing.
+     */
+    static void bitsPhase() throws Exception {
+        var out = new StringBuilder();
+        var sheet = crudeUnit();
+        var units = new Units();
+        var cold = run(sheet, null, units);
+        out.append("cold checkpoints ").append(units.checkpoints).append('\n');
+        dump(out, "cold", cold, 0, new java.util.IdentityHashMap<>());
+        units = new Units();
+        var warm = run(sheet, cold, units);
+        out.append("warm checkpoints ").append(units.checkpoints).append('\n');
+        dump(out, "warm", warm, 0, new java.util.IdentityHashMap<>());
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, cold, thermo()));
+        out.append("size sheet ").append(new String(FlowsheetFile.write(all.sheet()), StandardCharsets.UTF_8)).append('\n');
+        dump(out, "size", all.run(), 0, new java.util.IdentityHashMap<>());
+        Files.writeString(OUT.resolve("results.txt"), out);
+        say("bits: %d lines, cold %s, warm %s, size %s", out.chars().filter(c -> c == '\n').count(), cold.status(), warm.status(), all.run().status());
+    }
+
+    /** {@code value}'s fields, depth first: doubles by their exact text, maps by sorted key, timings left out. */
+    static void dump(StringBuilder out, String path, Object value, int depth, java.util.IdentityHashMap<Object, Boolean> seen) throws Exception {
+        if (value == null || value instanceof Number || value instanceof CharSequence || value instanceof Boolean || value instanceof Enum<?> || value instanceof Character) {
+            out.append(path).append(" = ").append(value).append('\n');
+            return;
+        }
+        if (depth > 12 || seen.put(value, Boolean.TRUE) != null) return;
+        var type = value.getClass();
+        if (type.isArray()) {
+            int n = java.lang.reflect.Array.getLength(value);
+            for (int i = 0; i < n; i++) dump(out, path + "[" + i + "]", java.lang.reflect.Array.get(value, i), depth + 1, seen);
+            return;
+        }
+        if (value instanceof Map<?, ?> map) {
+            var keys = new java.util.ArrayList<String>();
+            var byKey = new java.util.HashMap<String, Object>();
+            for (var e : map.entrySet()) {
+                keys.add(String.valueOf(e.getKey()));
+                byKey.put(String.valueOf(e.getKey()), e.getValue());
+            }
+            java.util.Collections.sort(keys);
+            for (var k : keys) dump(out, path + "{" + k + "}", byKey.get(k), depth + 1, seen);
+            return;
+        }
+        if (value instanceof Iterable<?> list) {
+            int i = 0;
+            for (var item : list) dump(out, path + "[" + i++ + "]", item, depth + 1, seen);
+            return;
+        }
+        if (!type.getName().startsWith("com.wormzjl.")) {
+            out.append(path).append(" : ").append(type.getName()).append('\n');
+            return;
+        }
+        for (var t = type; t != null && t != Object.class; t = t.getSuperclass())
+            for (var f : t.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || f.getName().equals("seconds")) continue;
+                f.setAccessible(true);
+                dump(out, path + "." + f.getName(), f.get(value), depth + 1, seen);
+            }
+    }
+
     public static void main(String[] args) throws Exception {
         String phase = args[0];
         OUT = Path.of(args[1]);
@@ -827,6 +891,7 @@ public final class SimulatorBench {
             case "ram" -> ramPhase();
             case "open" -> openPhase();
             case "histo" -> histoPhase();
+            case "bits" -> bitsPhase();
             default -> throw new IllegalArgumentException("phase " + phase);
         }
         Files.writeString(OUT.resolve(phase.replace(':', '-') + ".txt"), REPORT);
