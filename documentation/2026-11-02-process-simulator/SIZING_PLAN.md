@@ -1,6 +1,6 @@
 # Sizing stage plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. S1 is built; the rest is not. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. S1 and S2 are built; the rest is not. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
 
 ## 1. Expected behaviour
 
@@ -97,6 +97,8 @@ API RP 14E's erosional speed needs no row of its own: its C 100 is ρv² ≤ 146
 
 Tags are entries of the note, [SIZING_SOURCES.md](../../research/2026-11-02-process-simulator/sizing/SIZING_SOURCES.md), which gives each value's provenance. No standard was read in full, so values quoted from them are leads. "World" names a law or a limit in the mod's code.
 
+Every unit has one Must more: its size is one the constructor builds (`EquipmentShape`). A size the shape refuses reads red, never an error.
+
 **Pumps**
 
 | Limit | Kind | Value | Source |
@@ -120,6 +122,9 @@ A block's member pumps have no door: their head is the loop's lift, friction and
 | Displacement | Should | ≥ design flow | World: `displacement` |
 | Ratio a stage | Should | ≤ 3.5 piston, ≤ 3 turbo | [PEREZ] |
 | Discharge temperature | Should | ≤ 150 °C, adiabatic estimate | [WEAK]; 135 °C with hydrogen [API618] |
+| Hydrogen-rich | Rule | Over 50 mole % of the gas takes the 135 °C row | This plan, unsourced: the standard gives no share |
+
+Each stage takes an equal share of the ratio. Its discharge is the adiabatic estimate from the suction, with the gas cooled back to the suction temperature between stages.
 
 **Exchangers**
 
@@ -136,6 +141,8 @@ A block's member pumps have no door: their head is the loop's lift, friction and
 | Kettle flux | Should | ≤ 38 kW/m² | [ET] |
 
 The source gives a condensing side 0.1 bar and a gas side 0.2 bar [SCR-HX]. A condenser takes the gas row here, because the world's law prices its whole shell as inlet vapour.
+
+A side reads the row for what it does, at the world's own film threshold, 5 % vapour by mass (`HeatCurve.LIQUID_UNTIL`): a side entering over it is gas or condensing; a heated side entering as liquid and leaving over it is boiling; anything else is liquid.
 
 Speeds have no row: no law in the world reads a tube's or a shell's speed, and the drops bound them (section 3.11).
 
@@ -206,6 +213,8 @@ A valve takes its line's bore: the world's valve has no Cv. Section 3.12 gives t
 ### 3.5 Selection
 
 Auto takes the smallest size that meets every limit, Must and Should. Where none does, it takes the smallest that meets the Musts and comes nearest the Shoulds, and the row stays yellow. Where no Must can be met, the row is red.
+
+Sizing reads a steady run only. A run that failed, stopped or did not close leaves no state to size: every line and unit has no size, and one red Must, `RUN_STEADY` (World: `FlowsheetRun.Status`).
 
 | Item | Auto varies, in this order |
 |---|---|
@@ -313,7 +322,7 @@ A jet law in the world compressor's isothermal heads was tried first. It has one
 | Item | Size | Closest limit |
 |---|---|---|
 | P-101 | Discharge 0.30 m, 71 m | 96 % of rated |
-| E-101 | Shell 1.00 m, tubes 6 m | Surface 450 of 444 m² |
+| E-101 | Shell 1.00 m, tubes 6 m | Surface 450 of 440 m² (the probe's 444) |
 | H-101 | Cabin 11.0 × 41 m | Duty 87.6 of 86.2 MW |
 | V-101 | Bore 0.70 m | Drop 2.28 bar, at least 1.19 |
 | T-101 | D 8.0 m, 40 trays, 29.8 m tall | Flood 71.3 %, at most 80 |
@@ -323,7 +332,9 @@ A jet law in the world compressor's isothermal heads was tried first. It has one
 | PA 1, 2, 3 coolers | Shell 1.00 m, tubes 3 m each | Surface 225 of 224 and 223 m²; a 0.75 m shell would cost PA 3 over 0.7 bar in its tubes |
 | PA 1, 2, 3 pumps | Discharge 0.25, 0.30, 0.25 m, 13 to 14 m | 110, 93, 78 % of rated |
 | P-102 | Discharge 0.15 m, 51 m | 71 % of rated |
-| E-102 | 5 × 3 bays of 2.5 × 6 m | Bare surface 752 of 741 m² |
+| E-102 | 6 × 4 bays of 2.0 × 5 m (the probe's 5 × 3 of 2.5 × 6 m) | Bare surface 726 of 724 m² (the probe's 752 of 741) |
+
+S2's code rates surfaces on the curves of section 3.11, where the probe held one heat capacity along a duty. The residue's capacity rises with temperature, so more of its heat passes where the difference to the cold side is wide, and the need falls: E-101 from 444 to 440 m², with no size change; E-102 from 741 to 724 m². That moves E-102 to the least face: 145 m² of face against the probe's 150. The probe's bank stays green if the player keeps it.
 
 Three results went against what the sheet's author would guess.
 
@@ -387,7 +398,7 @@ The owner accepted all ten as written on 2026-11-03.
 | One Line length | The Pressure view and Vacuum vapour's drop | A long line can set its own |
 | Fixed tray geometry | Weir load below | None: the world's law prices it |
 | A wide-baffle shell | Drops 10 times under Kern's at 0.4 D, equal at 0.93 D | Real U falls with wider baffles; the world's does not |
-| One LMTD in the probe | None on the sample's duties | The code uses `HeatCurve`, so a boiling or gas side reads true there |
+| One LMTD in the probe | None on the sample's duties. Measured by S2: E-101 needs 440 m², not 444, and keeps its size; E-102 needs 724, not 741, and takes 6 × 4 bays of 2.0 × 5 m | The code uses `HeatCurve`, so a boiling or gas side reads true there |
 | One ejector stage | Steam for a ratio of 10: 3.13 kg/kg at M 100 | A real deep vacuum has two or three stages with condensers |
 | √M for a load | Vendors' factors to 2 digits on hydrogen, methane and CO₂ | Fitted on none of the heavy vapours a column sends |
 
@@ -405,7 +416,7 @@ The owner accepted all ten as written on 2026-11-03.
 ## 8. Risks
 
 - **Secondary sources**: most values come from excerpts and rule lists, and the standards themselves were not read. Each stays tagged in the limits table, so one can change without touching code around it.
-- **Yellow noise**: a lamp that is always yellow means nothing. The sample has none of 45; other sheets may have more. S2 runs the crude presets through the rules before the values freeze.
+- **Yellow noise**: a lamp that is always yellow means nothing. The sample has none of 45; other sheets may have more. S2 ran the six crude tower templates on the sample's layout (`pot` has no draws; columns and members wait for S3). Tia Juana, Upper Zakum and WTI Light ran steady: 147 to 154 rows each, 0 red, and 0, 1 and 2 yellow. No row is yellow on every crude. P-102's flow to rated is yellow on two, at 69.8 and 133.7 %: a pump's rated flow goes as its discharge squared, so below 0.25 m one step of 0.05 m passes more than 120/70 = 1.71 (2.25 from 0.10 to 0.15, 1.78 to 0.20), and flows of 102 to 134 and 229 to 238 m³/h fit no size. WTI's E-101 approach reads 2.5 K: the sample's fixed 200 °C bottoms outlet pinches a lighter crude's hotter preheat, and no size moves it. Bonga, Cold Lake and Dalia fail in the column on the sample's settings, so they size nothing.
 - **Weak type thresholds**: 23 MW for a cabin, 15000 m³/h for a piston and 20 bar for a sphere come from decks, blogs and a forum, not a standard. 0.766 bar is the only one from a rule (40 CFR 60). Each is one row of the limits table.
 - **Over-pressure after a re-run**: Size all does not change P-101. A sheet with a large spare runs at a high coil pressure until the player lowers the pump.
 - **Kern as the yardstick**: the method is approximate on leakage and bypassing, and its friction form here rests on memory plus one quoted example (the note, section 13).

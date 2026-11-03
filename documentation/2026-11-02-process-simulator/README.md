@@ -2,7 +2,7 @@
 
 Purpose: an in-game process simulator: a dedicated block, a drag-and-drop flowsheet with a palette below, feed streams from the Fluid Generator's page, every unit including the column, Run on the client, a Results tab, flowsheet files under `.minecraft/IChemE`, and a compatibility system (owner request 2026-11-02: "make some design drawings for me to approve before moving to implementation").
 
-Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026-11-02, and D23 on 2026-11-03. W1 to W9 and sizing's S1 are built on the branch, which carries main 0.19.0, with column operation in it (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026-11-02, and D23 on 2026-11-03. W1 to W9 and sizing's S1 and S2 are built on the branch, which carries main 0.19.0, with column operation in it (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -49,6 +49,8 @@ Added by W9: `client/gui/flowsheet/FlowsheetCatalog`; the block's `SheetId`, sen
 
 Added by S1: `science/flowsheet/sizing` (`Limit`, the table; `Bound`; `Reading`, `Rating`, `Lamp`, `Selection`, the one rule; `DesignBasis`; `Service`; `LineSizing`). Moved down so the table can read them: `FlowControl.Mover.MAXIMUM_VOLUME_FLOW`, `Pump.MAXIMUM_ADDED_PRESSURE`, `Compressor.MAXIMUM_PRESSURE_RATIO`, `EquipmentShape.MAX_VOLUME`. Opened: `NetworkReduction.viscosity`, `ColumnSolve.SUPERHEAT`, `ProcessUnit.turboFlow`, `ColumnUnit.leavesTray`. Gates: `LimitTest`, `LineSizingTest`, `ServiceTest`, and `LineSizingSampleTest` under `slowGates`.
 
+Added by S2: in `science/flowsheet/sizing`, `UnitSize` (the sealed size, its shape and `UNIT_SHAPE`), `UnitType`, `PumpSizing`, `ValveSizing`, `ExchangerSizing` (kettle too), `AirCoolerSizing`, `HeaterSizing`, `CompressorSizing`, `DrumSizing`, `TankSizing`, and `SheetSizing`, the one entry point. Opened: `ExchangerRating` (public, with `Side.sink` for air), `HeatSides.airCoolerSurface`. Gates: `UnitSizingTest`, `SheetSizingTest`, and `UnitSizingSampleTest` under `slowGates`.
+
 Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md) (the feasibility, sizing and ejector probes), `tools/heat-gui-renders/` (`SimulatorPrototypes.java`, `SimulatorIcons.java`, `SimulatorSizing.java`: the design sheets; `SimulatorRender.java`: the built screen; `SymbolAtlas.java`: bakes the atlas).
 
 ## History
@@ -79,6 +81,28 @@ Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md
 - 2026-11-03: the owner accepted the ten simplifications of `SIZING_PLAN.md` section 6 as written ("Accept all ten"), which opens S1. The plan's P-102 line now follows W7's reading: the run gives no warning, so the sizing stage clears none.
 
 - 2026-11-03: S1 (`9a3b9cfd5`, `788205ecd`): `science/flowsheet/sizing`. No screen, no format, no language line, no run result moved. On a real steady run of the sample the 21 sheet lines equal the probe: bore, count, deciding limit, and drop to its three places, all green, on the first run, with WATER now on the Water row. S-6 and S-7 keep their drops on the world's viscosity, because at Re 1e7 the wall's roughness sets them. The Two-phase floor moves no line: S-6 runs 15.1 m/s, S-7 23.4. The world's own speed bound, `velocityLimit`, is 100 m/s on all 21. Gates, filtered, 0 failures: `LimitTest` (12), `LineSizingTest` (13), `ServiceTest` (14), `LineSizingSampleTest` (1, on `slowGates`), `FluidDeviceSpecDomainTest`, `FluidPacketCodecTest`, `FlowsheetColumnDoorTest`. The ten member lines stay for S3.
+
+- 2026-11-03: S1 changed by the orchestrator's three decisions (`e24868544`, `73a2fc77d`), listed under S1 decisions. S2 (`0f136d2da`, `f581f2421`): the nine unit classes, one rule each that sizes and rates, the type proposals, the surface from the world's curves, and `SheetSizing`. On a real steady run P-101, P-102, H-101 and V-101 equal the probe; E-101 keeps its size on 440 m², not 444; E-102 moves to 6 × 4 bays of 2.0 × 5 m on 724 m², not 741 (the curves, not the probe's one capacity). The storage what-if's sphere D 17 and roof D 30 × 18 stand. The owner added `RUN_STEADY`, a Must: a run that is not steady sizes nothing. Yellow noise: 0 to 2 yellow rows on each steady crude, none on every crude. Gates, filtered, 0 failures: `UnitSizingTest` (40), `SheetSizingTest` (18), the sizing package (104), `UnitSizingSampleTest` (12) and `LineSizingSampleTest` (1) on `slowGates`, `FlowsheetUnitsTest`, `HeatSidesTest` (7). No screen, format, language line, fact field or corpus image.
+
+## S2 decisions
+
+Taken alone, each reversible:
+
+- A size is what the constructor builds: every main size on `UnitDesign`'s grid, snapped by `ProcessUnit.snap`; lengths from `minLength` to `maxLength`; what a size holds from `ProcessUnit`, `HeatSides` and `shape().volume()`. A size the shape refuses is red `UNIT_SHAPE`.
+- `Rating`'s miss adds the loads of the rows it misses, so a miss that every size shares cancels out between them.
+- An exchanger side's drop row follows the world's film threshold, 5 % vapour by mass (`EXCHANGER_SIDE`, from `HeatCurve.LIQUID_UNTIL`). A drop reads at the side's inlet, as the world's law does; an air cooler's at the mean temperature of its two ends.
+- An exchanger with a free side has no load and no lamp: its outlet gives no surface to read. S4's utility temperatures close it.
+- The air side is a sink at 25 °C on the air cooler's films (`Side.sink`), equal to the world's `AirCooled` march within 0.1 %; the door's surface equals `ExchangerRelay`'s at one duty within 1 %.
+- Compressor stages: a turbo has an impeller a stage; a piston's opposed pairs are shared among the stages its ratio asks, so its first stage has only its share. Each stage takes an equal share of the ratio, its discharge the adiabatic estimate, cooled back to the suction between stages; the exponent R/Cp comes from a 1 K difference on the world's flash. Hydrogen-rich is over 50 mole % (`COMPRESSOR_HYDROGEN`, This plan, unsourced).
+- A drum's hold reads its `shape().volume()`, heads and boot included; its boot hold reads what the boot adds. Its standing rule is read at the least diameter its gas allows. Its shape has no connections; S5 adds them.
+- A tank holds what `shape().volume()` gives; its working share reads the entry's fill; the bubble pressure is that of what it holds, oil and water together.
+- A valve takes its inlet line's bore and has no shape. Its share reads the path given, the valve's own drop in it.
+- Static head: a pump fed from anything but a column counts 0 m. From a column its NPSH rows are not read until S3 gives the nozzle's height; the sample gate holds them absent, then gives the probe's height and reads 31.1 m.
+- The sample gate allows the bubble pressure the bisection's own width, 0.05 %: the probe and `FlowThermo` bisect from other bounds, 2.298 against 2.299 bar.
+
+Decided by the owner on 2026-11-03 ("Steady run first"):
+
+- `RUN_STEADY`, a Must from `FlowsheetRun.Status`: a run that failed, stopped or did not close leaves no state to size, so every line and unit has no size and this one red reading. Before it, Bonga's failed run lit a yellow from an empty stream.
 
 ## S1 decisions
 
@@ -222,5 +246,9 @@ Taken alone, each reversible:
 - W9 left: 693 older English lines have no Chinese (assembly 234, fluid 173, column 109, constructor 46, pipe laying 41, heat 21, and less): the column door's tabs and plates and the exchanger's drawing stand in English in a Chinese game. They are older batches' lines, outside W9.
 - W9 left: no client has run the block id. A GameTest holds its save and load; the path from `Opening` to the file on the client ran in no game. `V3CompositionDraft` and the draft's composition path are reached only by tests. `tools/cloud-science-harness` keeps a stub naming the two removed getters, an archive of its batch.
 - W10: the Motive steam port; the block has none until then. The merge package: the code guide chapter, with the rule of plan 3.10 and the crude packages `thermo-materials.md` still names, and the tooling cleanup.
-- S2 to S4 inherit: `Selection.smallest` takes sizes smallest first, so S2 sorts an exchanger's sizes by shells and surface. `Line.nozzle` waits for S2 and S3. `Limit`'s Should rows for the drum's and the tank's holds are the entries' defaults; S4 makes them entries.
-- Not measured: option B of D11, a reboiler stream, a column with nitrogen on the plain start, a run's peak heap; the sizing rules on any sheet but the sample; the ejector law on a real vacuum column; a compressor's or a drum's type proposal.
+- S3 and S4 inherit: `Line.nozzle` reads only a boot drum's oil outlet until S3 adds the column's nozzles. The drum's and the tank's holds, a valve's path and a heater's spare are `UnitEntry` parameters; S4 makes them entries. A column has no size and no lamp in `SheetSizing` until S3. S3 warning: the probe's receiver read cylinders only; with heads and boot in `shape().volume()` its 7.0 min and D 4.0 m may move.
+- Owner to validate, S2: E-102's least face, 6 × 4 bays of 2.0 × 5 m (145 m² of face, 24 bays) on the curves' 724 m², against the probe's 5 × 3 of 2.5 × 6 m (150 m², 15 bays). A: keep the least face, as section 3.5 says (done). B: fewer bays within some share of the least face, a rule the physics does not force.
+- Owner to validate, S2: P-102's flow to rated is yellow on Upper Zakum and WTI (69.8, 133.7 %): below 0.25 m one 0.05 m step passes more than 120/70, so flows of 102 to 134 and 229 to 238 m³/h fit no size. The row is [API610]'s and stays; a finer grid would be a world change.
+- Owner to validate, S2: `COMPRESSOR_HYDROGEN`'s 50 % has no source.
+- S2 left: Bonga, Cold Lake and Dalia fail in T-101 on the sample's settings (stage continuation stalled; the 491 kmol/h draw on tray 11 starves; no admissible Newton step), so the yellow-noise pass has three crudes. WTI's E-101 approach of 2.5 K comes from the sample's fixed 200 °C bottoms outlet, not from a size.
+- Not measured: option B of D11, a reboiler stream, a column with nitrogen on the plain start, a run's peak heap; the ejector law on a real vacuum column; a compressor's or a drum's type proposal on a real sheet (the gates read them on small sheets).
