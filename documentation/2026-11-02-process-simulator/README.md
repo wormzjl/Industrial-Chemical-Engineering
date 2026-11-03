@@ -74,6 +74,8 @@ Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md
 
 - 2026-11-03: W9 (`96b9b1fd3`, `ef04b17bb`, `7f074f4bf`, `f0640669c`, `f1aad39f1`): `FlowsheetCatalog` with exhaustive switches over the three kinds, gated by `FlowsheetPaletteCoverageTest` (5); it found no tile for a cooling tower, now drawn and off. `AGENTS.md`: the run outside the engine schedule, and the new-equipment rule. Each block its own autosave, Delete off with a hover, the boot's hover, the repair dialog's Component, Field and Data rows, a unit's open outlet in its Streams table, the block's notes clear of every line and part, three inlet names on the tower, gates for a dropped column and a ring on sheet 02. The old screen's code removed. `zh_cn`: 486 lines, the 4 changed ones, the old block key gone, and the door and panel sweeps run in Chinese too. Gates: 118 quick in `client.gui.flowsheet.*` and `HeatDiagramTest`, the 3 draft classes (32), `SimulatorRunTest` (5) on `slowGates`, `ProcessSimulatorGameTests` (11), 0 failures. `renders-w6/` refreshed; `renders-zh/` holds every sheet in Chinese, in the main checkout's `research/`. The code guide chapter and the tooling cleanup wait for the merge package.
 
+- 2026-11-03: the owner accepted the ten simplifications of `SIZING_PLAN.md` section 6 as written ("Accept all ten"), which opens S1. The plan's P-102 line now follows W7's reading: the run gives no warning, so the sizing stage clears none.
+
 ## W9 decisions
 
 Taken alone, each reversible:
@@ -173,7 +175,6 @@ Taken alone, each reversible:
 
 ## Open items
 
-- The simplifications table of `SIZING_PLAN.md` section 6: confirm with the owner before S1.
 - Engine finding 2 of `tools/process-simulator/README.md` is with the owner, and `FlowThermo` keeps its TP search for it. Findings 1 and 3 are fixed on main (0.18.1).
 - Owner to validate: P-102's silence (W7 findings): the proposal is to leave the law.
 - Owner to validate: `option-c-rearranged.png` and the block built from it (D23): built without an answer. The tower moved right by 72 and down by 62 within a stored unit's corner; no released sheet holds one.

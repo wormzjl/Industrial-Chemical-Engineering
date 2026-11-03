@@ -1,6 +1,6 @@
 # Sizing stage plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 (section 6). Drawings: sheets 24 to 28. Nothing here is built. Nothing here is built. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. Nothing here is built. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
 
 ## 1. Expected behaviour
 
@@ -323,7 +323,7 @@ Three results went against what the sheet's author would guess.
 
 - The boot's 5 min, not the oil's, sets the receiver: D 3.0 m holds the oil, and the water needs D 4.0 m.
 - H-101's door took 7.60 bar, and its coils lose 1.95 bar at design flow. So 5.34 bar stays spare, for a valve or a smaller rise on P-101. A lower rise needs a new run, as the coils lose more at a lower pressure. Section 3.11 gives what the run moves once it reads these drops.
-- P-102's warning clears. The run warns because a tray draw leaves at its bubble point and the sheet knows no heights. Here the draw nozzle's 21 m of static head and the steam's share of the tray pressure give 31 m of NPSH.
+- P-102 has room, as the run already shows. W7 measured its bubble pressure at 191.5 kPa, 74.2 % of the stream's pressure, because the tray's vapour is 23.9 % steam, so the run gives no warning. Here the draw nozzle's 21 m of static head and the steam's share of the tray pressure give 31 m of NPSH.
 
 The sample has no storage tile, so this what-if gives each product one, at a 24 h hold and an 85 % working share:
 
@@ -368,9 +368,9 @@ The owner approved every row as written on 2026-11-02.
 | D20 | One tile for the other same-function pairs | Yes: Drum, Compressor and Steam turbine as well, 15 lit tiles | You named tanks and heaters. The same reasons hold for these: one law, a type that numbers decide |
 | D21 | The ejector's scope | W10: the law, the tile, the block's port, its sizing, one stage. The world's device stays in column operation's stage C | Vacuum columns do not run in the world until that stage, and a three-port device needs its own engine work |
 
-### Simplifications to validate
+### Simplifications
 
-These were not part of that approval. Confirm them with the owner before S1.
+The owner accepted all ten as written on 2026-11-03.
 
 | Simplification | Effect | Risk |
 |---|---|---|
