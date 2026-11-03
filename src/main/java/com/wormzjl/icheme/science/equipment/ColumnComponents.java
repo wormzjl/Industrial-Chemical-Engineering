@@ -23,8 +23,12 @@ import java.util.Objects;
  *                        2026-11-02-process-simulator, S3b); one cooler count per pumparound
  */
 public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> pumparoundPumps, boolean ejector, boolean kettle, Units units) {
-    /** An air cooler, or an exchanger taking the vapour on its shell side (decision D15: its condensate drains only there). */
-    public enum Condenser { AIR_COOLER, EXCHANGER }
+    /**
+     * An air cooler, or an exchanger taking the vapour on its shell side (decision D15: its condensate drains only there), or
+     * an air cooler that condenses the overhead to the split ({@link HeatSides#airSplit}) and a water exchanger, the trim,
+     * that cools it from there to the receiver (batch 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 6).
+     */
+    public enum Condenser { AIR_COOLER, EXCHANGER, AIR_THEN_WATER }
 
     /** A standard pump on its base, or an In-line Pump fitted on a pipe. */
     public enum Pump { STANDARD, IN_LINE }
@@ -45,8 +49,10 @@ public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> 
      * @param condenser the condenser's units
      * @param kettle    the kettle's units, read only where the design has one
      * @param coolers   each pumparound cooler's units, in the design's order
+     * @param trim      the water trim's shells, read only where the condenser is {@link Condenser#AIR_THEN_WATER} (the
+     *                  condenser's count is then its air cooler's banks)
      */
-    public record Units(int condenser, int kettle, List<Integer> coolers) {
+    public record Units(int condenser, int kettle, List<Integer> coolers, int trim) {
         /** One unit on every step. */
         public static final Units ONE = new Units(1, 1, List.of());
 
@@ -54,8 +60,14 @@ public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> 
             coolers = List.copyOf(coolers);
             check(condenser, "condenser units");
             check(kettle, "kettle units");
+            check(trim, "trim units");
             if (coolers.size() > ColumnTrays.MAX_PUMPAROUNDS) throw new IllegalArgumentException("A column has at most " + ColumnTrays.MAX_PUMPAROUNDS + " pumparound coolers");
             for (int i = 0; i < coolers.size(); i++) check(coolers.get(i), "pumparound cooler " + (i + 1) + " units");
+        }
+
+        /** These counts with one trim shell: the counts before the trim existed. */
+        public Units(int condenser, int kettle, List<Integer> coolers) {
+            this(condenser, kettle, coolers, 1);
         }
 
         private static void check(int count, String field) {
@@ -66,7 +78,7 @@ public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> 
         public Units fit(int pumparounds) {
             var next = new ArrayList<Integer>();
             for (int i = 0; i < pumparounds; i++) next.add(i < coolers.size() ? coolers.get(i) : 1);
-            return new Units(condenser, kettle, next);
+            return new Units(condenser, kettle, next, trim);
         }
 
         /** Pumparound {@code index}'s cooler count, 1 past the list. */
@@ -75,18 +87,22 @@ public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> 
         }
 
         public Units withCondenser(int next) {
-            return new Units(next, kettle, coolers);
+            return new Units(next, kettle, coolers, trim);
         }
 
         public Units withKettle(int next) {
-            return new Units(condenser, next, coolers);
+            return new Units(condenser, next, coolers, trim);
+        }
+
+        public Units withTrim(int next) {
+            return new Units(condenser, kettle, coolers, next);
         }
 
         /** These counts with pumparound {@code index}'s cooler at {@code next} (the list fitted to reach it). */
         public Units withCooler(int index, int next) {
             var list = new ArrayList<>(fit(Math.max(coolers.size(), index + 1)).coolers());
             list.set(index, next);
-            return new Units(condenser, kettle, list);
+            return new Units(condenser, kettle, list, trim);
         }
     }
 

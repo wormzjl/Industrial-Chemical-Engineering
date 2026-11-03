@@ -23,7 +23,9 @@ public final class ColumnBlueprint {
             RECEIVER = new Slot("receiver", 0), OFFGAS_VALVE = new Slot("offgas_valve", 0), WATER_VALVE = new Slot("water_valve", 0),
             REFLUX_PUMP = new Slot("reflux_pump", 0), REFLUX_TEE = new Slot("reflux_tee", 0), REFLUX_VALVE = new Slot("reflux_valve", 0),
             DISTILLATE_VALVE = new Slot("distillate_valve", 0), FEED_VALVE = new Slot("feed_valve", 0), REBOILER = new Slot("reboiler", 0),
-            BOTTOMS_VALVE = new Slot("bottoms_valve", 0);
+            BOTTOMS_VALVE = new Slot("bottoms_valve", 0),
+            // An air-then-water condenser's water exchanger, after its air cooler (COOLER_MODEL_PLAN.md section 6).
+            TRIM_CONDENSER = new Slot("trim_condenser", 0);
 
     private static final Form VALVE = new FittingForm(Fitting.CONTROL_VALVE), INLINE_PUMP = new FittingForm(Fitting.INLINE_PUMP),
             PUMP = new UnitForm(Kind.PUMP, false, Role.SUCTION, Role.DISCHARGE, Set.of()),
@@ -31,6 +33,9 @@ public final class ColumnBlueprint {
             // The vapour condenses on the shell side, where its condensate drains (decision D15); the tube side is cooling water.
             EXCHANGER_CONDENSER = new UnitForm(Kind.EXCHANGER, false, Role.SHELL_INLET, null, Set.of(Role.TUBE_INLET, Role.TUBE_OUTLET)),
             AIR_COOLER = new UnitForm(Kind.AIR_COOLER, false, Role.PROCESS_INLET, null, Set.of()),
+            // An air-then-water condenser's air cooler passes the overhead on to the trim; an exchanger in its place passes it on its shell.
+            AIR_COOLER_THROUGH = new UnitForm(Kind.AIR_COOLER, false, Role.PROCESS_INLET, Role.PROCESS_OUTLET, Set.of()),
+            EXCHANGER_THROUGH = new UnitForm(Kind.EXCHANGER, false, Role.SHELL_INLET, Role.SHELL_OUTLET, Set.of(Role.TUBE_INLET, Role.TUBE_OUTLET)),
             RECEIVER_DRUM = new UnitForm(Kind.DRUM, true, Role.SIDE, null, Set.of()),
             ANY_DRUM = new UnitForm(Kind.DRUM, false, Role.SIDE, null, Set.of()),
             PA_COOLER = new UnitForm(Kind.EXCHANGER, false, Role.SHELL_INLET, Role.SHELL_OUTLET, Set.of(Role.TUBE_INLET, Role.TUBE_OUTLET)),
@@ -62,16 +67,26 @@ public final class ColumnBlueprint {
         var links = new ArrayList<Link>();
         slots.add(COLUMN);
         if (c.ejector()) slots.add(EJECTOR);
-        slots.addAll(List.of(CONDENSER, RECEIVER, OFFGAS_VALVE, WATER_VALVE, REFLUX_PUMP, REFLUX_TEE, REFLUX_VALVE, DISTILLATE_VALVE, FEED_VALVE));
+        slots.add(CONDENSER);
+        boolean trimmed = c.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER;
+        if (trimmed) slots.add(TRIM_CONDENSER);
+        slots.addAll(List.of(RECEIVER, OFFGAS_VALVE, WATER_VALVE, REFLUX_PUMP, REFLUX_TEE, REFLUX_VALVE, DISTILLATE_VALVE, FEED_VALVE));
 
-        // The heat-transfer members take their counts of identical units in parallel (S3b).
-        var condenser = (c.condenser() == ColumnComponents.Condenser.AIR_COOLER ? Step.of(CONDENSER, AIR_COOLER, EXCHANGER_CONDENSER)
-                : Step.of(CONDENSER, EXCHANGER_CONDENSER, AIR_COOLER)).withCount(c.units().condenser());
+        // The heat-transfer members take their counts of identical units in parallel (S3b). An air-then-water condenser's
+        // air cooler passes the overhead on to its water trim, where the overhead link ends (COOLER_MODEL_PLAN.md section 6).
         var overhead = new ArrayList<Step>();
         if (c.ejector()) overhead.add(Step.of(EJECTOR, EJECTOR_UNIT));
-        overhead.add(condenser);
-        links.add(new Link("overhead", Start.at(COLUMN, Role.VAPOUR_OUTLET, 0), overhead, new AtUnit(), false, CONDENSER));
-        links.add(new Link("condensate", Start.after(CONDENSER), List.of(Step.of(RECEIVER, RECEIVER_DRUM, ANY_DRUM)), new AtUnit(), false, RECEIVER));
+        switch (c.condenser()) {
+            case AIR_COOLER -> overhead.add(Step.of(CONDENSER, AIR_COOLER, EXCHANGER_CONDENSER).withCount(c.units().condenser()));
+            case EXCHANGER -> overhead.add(Step.of(CONDENSER, EXCHANGER_CONDENSER, AIR_COOLER).withCount(c.units().condenser()));
+            case AIR_THEN_WATER -> {
+                overhead.add(Step.of(CONDENSER, AIR_COOLER_THROUGH, EXCHANGER_THROUGH).withCount(c.units().condenser()));
+                overhead.add(Step.of(TRIM_CONDENSER, EXCHANGER_CONDENSER, AIR_COOLER).withCount(c.units().trim()));
+            }
+        }
+        var last = trimmed ? TRIM_CONDENSER : CONDENSER;
+        links.add(new Link("overhead", Start.at(COLUMN, Role.VAPOUR_OUTLET, 0), overhead, new AtUnit(), false, last));
+        links.add(new Link("condensate", Start.after(last), List.of(Step.of(RECEIVER, RECEIVER_DRUM, ANY_DRUM)), new AtUnit(), false, RECEIVER));
         links.add(new Link("offgas", Start.at(RECEIVER, Role.VAPOUR_OUTLET, 0), List.of(Step.of(OFFGAS_VALVE, VALVE)), new Outside(), false, OFFGAS_VALVE));
         links.add(new Link("water", Start.at(RECEIVER, Role.BOOT_DRAIN, 0), List.of(Step.of(WATER_VALVE, VALVE)), new Outside(), false, WATER_VALVE));
         var tee = new TeeForm(List.of(
@@ -109,6 +124,18 @@ public final class ColumnBlueprint {
         }
         slots.add(BOTTOMS_VALVE);
         return new Blueprint(COLUMN, slots, links);
+    }
+
+    /**
+     * The slot whose units' water sides cool a column's condenser: the condenser's own for an exchanger, the trim's for an
+     * air-then-water condenser, none for an air cooler.
+     */
+    public static @org.jetbrains.annotations.Nullable Slot waterCooled(ColumnComponents.Condenser condenser) {
+        return switch (condenser) {
+            case AIR_COOLER -> null;
+            case EXCHANGER -> CONDENSER;
+            case AIR_THEN_WATER -> TRIM_CONDENSER;
+        };
     }
 
     /** A pump step of the designed kind; the other kind fills it as the wrong kind. */

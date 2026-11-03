@@ -239,6 +239,28 @@ class ColumnWireTest {
         }
     }
 
+    // ---- The component choices a Save design names
+
+    /** Every condenser kind and every member count crosses whole, the water trim's shells among them (COOLER_MODEL_PLAN.md section 6). */
+    @Test
+    void theComponentChoicesRoundTripWithTheTrimCount() {
+        var one = com.wormzjl.icheme.science.equipment.ColumnComponents.Units.ONE;
+        for (var condenser : com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.values())
+            for (int trim = 1; trim <= com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS; trim++) {
+                var choices = new com.wormzjl.icheme.science.equipment.ColumnComponents.Choices(condenser,
+                        com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.IN_LINE,
+                        List.of(com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.STANDARD), one.withCondenser(2).withCooler(0, 3).withTrim(trim));
+                RegistryFriendlyByteBuf buffer = buffer();
+                try {
+                    ColumnWire.writeChoices(buffer, choices);
+                    assertEquals(choices, ColumnWire.readChoices(buffer));
+                    assertEquals(0, buffer.readableBytes());
+                } finally {
+                    buffer.release();
+                }
+            }
+    }
+
     // ---- Column diameter and tray hydraulics
 
     @Test

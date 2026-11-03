@@ -112,7 +112,8 @@ public final class ColumnDesignTags {
 
     /**
      * The components' fields: the condenser, the reflux pump, the pumparound pumps by name, and the two flags; the member
-     * counts (shape fields 6): the condenser's, the kettle's and each pumparound cooler's units in parallel.
+     * counts (shape fields 6): the condenser's, the kettle's and each pumparound cooler's units in parallel; the water trim's
+     * shells (shape fields 7).
      */
     public static CompoundTag writeComponents(ColumnComponents components) {
         var tag = new CompoundTag();
@@ -126,6 +127,7 @@ public final class ColumnDesignTags {
         tag.putInt("CondenserUnits", components.units().condenser());
         tag.putInt("KettleUnits", components.units().kettle());
         tag.putIntArray("CoolerUnits", components.units().coolers().stream().mapToInt(Integer::intValue).toArray());
+        tag.putInt("TrimUnits", components.units().trim());
         return tag;
     }
 
@@ -178,7 +180,7 @@ public final class ColumnDesignTags {
         int[] coolers = tag.get("CoolerUnits") instanceof net.minecraft.nbt.IntArrayTag array ? array.getAsIntArray() : tag.contains("CoolerUnits") ? new int[] {0} : new int[0];
         if (coolers.length > ColumnTrays.MAX_PUMPAROUNDS + 1) coolers = java.util.Arrays.copyOf(coolers, ColumnTrays.MAX_PUMPAROUNDS + 1);
         return new ShapeRepair.SavedComponents(tag.getString("Condenser"), tag.getString("RefluxPump"), pumps, tag.getBoolean("Ejector"), tag.getBoolean("Kettle"),
-                count(tag, "CondenserUnits"), count(tag, "KettleUnits"), coolers);
+                count(tag, "CondenserUnits"), count(tag, "KettleUnits"), coolers, count(tag, "TrimUnits"));
     }
 
     private static int count(CompoundTag tag, String key) {

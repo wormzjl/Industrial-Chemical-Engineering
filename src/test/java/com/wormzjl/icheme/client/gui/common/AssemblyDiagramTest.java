@@ -71,7 +71,7 @@ class AssemblyDiagramTest {
                     assertTrue(w.points()[i] == w.points()[i + 2] || w.points()[i + 1] == w.points()[i + 3], "lines run across or down");
             checked++;
         }
-        assertEquals(2800, checked);
+        assertEquals(1400 * Condenser.values().length, checked);
     }
 
     /**
@@ -126,6 +126,20 @@ class AssemblyDiagramTest {
         assertEquals(AssemblyDiagram.Text.of("label.pa_cooler", 2), d.part(ColumnBlueprint.pumparoundCooler(2)).label());
         var one = AssemblyDiagram.of(new ColumnTrays(TRAYS, 10, List.of(), List.of(18), List.of(), new ColumnComponents(Condenser.AIR_COOLER, Pump.STANDARD, List.of(), false, true)));
         assertEquals(AssemblyDiagram.Text.of("label.air_cooler"), one.part(ColumnBlueprint.CONDENSER).label());
+    }
+
+    /** An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): the air cooler's banks, then the trim's shells, left to right on the overhead line. */
+    @Test
+    void anAirThenWaterCondenserDrawsItsAirCoolerThenItsTrim() {
+        var units = new ColumnComponents.Units(2, 1, List.of(), 3);
+        var d = AssemblyDiagram.of(new ColumnTrays(TRAYS, 10, List.of(), List.of(18), List.of(), new ColumnComponents(Condenser.AIR_THEN_WATER, Pump.STANDARD, List.of(), true, true, units)));
+        var air = d.part(ColumnBlueprint.CONDENSER);
+        var trim = d.part(ColumnBlueprint.TRIM_CONDENSER);
+        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.air_cooler"), 2), air.label());
+        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.trim"), 3), trim.label());
+        assertEquals(air.y(), trim.y(), "on one line");
+        assertTrue(air.x() + air.w() < trim.x(), "the air cooler first");
+        assertTrue(d.ports().stream().anyMatch(p -> p.slot().equals(ColumnBlueprint.RECEIVER) && p.partner().equals(ColumnBlueprint.TRIM_CONDENSER)), "the trim feeds the drum");
     }
 
     @Test

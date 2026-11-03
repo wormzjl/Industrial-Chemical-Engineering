@@ -112,7 +112,7 @@ class CalculatorColumnTest {
                         // S3b: with a kettle and every count at its most, and with one unit a step and no kettle.
                         for (boolean kettle : new boolean[]{false, true}) {
                             var most = ColumnComponents.MAX_UNITS;
-                            var units = kettle ? new ColumnComponents.Units(most, most, java.util.Collections.nCopies(pumps.size(), most)) : ColumnComponents.Units.ONE;
+                            var units = kettle ? new ColumnComponents.Units(most, most, java.util.Collections.nCopies(pumps.size(), most), most) : ColumnComponents.Units.ONE;
                             out.add(new EquipmentInput(conflict, condenser, saves ? Pump.IN_LINE : Pump.STANDARD, pumps, saves, units, kettle));
                         }
         return out;
@@ -405,7 +405,7 @@ class CalculatorColumnTest {
         assertTrue(profile.get("metric:drop").latched() && profile.get("metric:temperature").active() && !profile.get("metric:temperature").latched());
 
         var equipment = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.EXCHANGER, Pump.IN_LINE, List.of(Pump.STANDARD, Pump.IN_LINE), false), t);
-        assertEquals(List.of("condenser:air_cooler", "condenser:exchanger", "units/condenser", "units/condenser-", "units/condenser+", "reflux:standard", "reflux:in_line",
+        assertEquals(List.of("condenser:air_cooler", "condenser:exchanger", "condenser:air_then_water", "units/condenser", "units/condenser-", "units/condenser+", "reflux:standard", "reflux:in_line",
                 "pa0:standard", "pa0:in_line", "units/pa0", "units/pa0-", "units/pa0+", "pa1:standard", "pa1:in_line", "units/pa1", "units/pa1-", "units/pa1+", "save_design"),
                 keys(equipment.right()));
         var chosen = buttons(equipment.right());
@@ -422,6 +422,17 @@ class CalculatorColumnTest {
         assertEquals(t.get("column.units.banks"), settings.get("units/condenser").label());
         assertEquals(t.get("column.units.shells"), CalculatorColumn.equipment(new EquipmentInput(false, Condenser.EXCHANGER, Pump.STANDARD, List.of(), true), t).right().stream()
                 .filter(r -> r instanceof Column.Group).map(r -> (Column.Group) r).flatMap(g -> g.rows().stream()).filter(r -> r instanceof Column.Setting).map(r -> ((Column.Setting) r).label()).findFirst().orElseThrow());
+        // An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): its air cooler's banks, then its water trim's shells.
+        var trimmed = new LinkedHashMap<String, Column.Setting>();
+        var trimPage = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.AIR_THEN_WATER, Pump.STANDARD, List.of(), true,
+                new ColumnComponents.Units(2, 1, List.of(), 3), false), t).right();
+        for (var row : trimPage)
+            if (row instanceof Column.Group g) for (var r : g.rows()) if (r instanceof Column.Setting s) trimmed.put(s.key(), s);
+        assertEquals(List.of("units/condenser", "units/trim"), List.copyOf(trimmed.keySet()));
+        assertEquals(List.of(t.get("column.units.banks"), t.get("column.units.trim_shells")), trimmed.values().stream().map(Column.Setting::label).toList());
+        assertEquals(List.of("2", "3"), trimmed.values().stream().map(Column.Setting::value).toList());
+        assertTrue(buttons(trimPage).get("condenser:air_then_water").latched());
+        assertFalse(buttons(trimPage).get("condenser:air_cooler").latched());
 
         assertEquals(List.of("save_json", "back"), keys(CalculatorColumn.presets(false, true, t).right()));
         assertEquals(List.of("back", "refresh", "open_folder"), keys(CalculatorColumn.presets(false, false, t).right()));
@@ -476,15 +487,17 @@ class CalculatorColumnTest {
                     groups.put("results " + conflict + " " + v, list);
                 }
             for (boolean conflict : new boolean[]{false, true}) {
-                // The kettle's row shows with the design's reboiler duty; the counts' values move no widget (S3b).
-                for (boolean kettle : new boolean[]{false, true}) {
-                    var list = new ArrayList<Rows>();
-                    for (var in : equipmentInputs()) if (in.conflict() == conflict && in.pumparounds().size() == 4 && in.kettle() == kettle) list.add(CalculatorColumn.equipment(in, t));
-                    for (var in : equipmentInputs())
-                        if (in.conflict() == conflict && in.pumparounds().size() == 4 && in.kettle() == kettle)
-                            list.add(CalculatorColumn.equipment(new EquipmentInput(conflict, in.condenser(), in.reflux(), in.pumparounds(), in.saves(), ColumnComponents.Units.ONE.fit(4), kettle), t));
-                    groups.put("equipment " + conflict + " " + kettle, list);
-                }
+                // The kettle's row shows with the design's reboiler duty, the trim's with an air-then-water condenser; the counts' values move no widget (S3b).
+                for (boolean kettle : new boolean[]{false, true})
+                    for (boolean trim : new boolean[]{false, true}) {
+                        var list = new ArrayList<Rows>();
+                        for (var in : equipmentInputs())
+                            if (in.conflict() == conflict && in.pumparounds().size() == 4 && in.kettle() == kettle && (in.condenser() == Condenser.AIR_THEN_WATER) == trim) {
+                                list.add(CalculatorColumn.equipment(in, t));
+                                list.add(CalculatorColumn.equipment(new EquipmentInput(conflict, in.condenser(), in.reflux(), in.pumparounds(), in.saves(), ColumnComponents.Units.ONE.fit(4), kettle), t));
+                            }
+                        groups.put("equipment " + conflict + " " + kettle + " " + trim, list);
+                    }
                 var feeds = new ArrayList<Rows>();
                 for (boolean editable : new boolean[]{false, true}) for (var unit : UNITS) feeds.add(CalculatorColumn.feed(conflict, editable, unit, t));
                 groups.put("feed " + conflict, feeds);

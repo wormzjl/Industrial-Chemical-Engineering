@@ -418,7 +418,7 @@ public final class CalculatorColumn {
         }
     }
 
-    /** A member count's setting, stepped by {@code key-} and {@code key+}: {@code units/condenser}, {@code units/kettle}, {@code units/pa<i>}. */
+    /** A member count's setting, stepped by {@code key-} and {@code key+}: {@code units/condenser}, {@code units/trim}, {@code units/kettle}, {@code units/pa<i>}. */
     private static Column.Setting units(String key, String label, int count, HeatControlColumn.Texts t) {
         return new Column.Setting("units/" + key, t.get(KEY + label), Integer.toString(count), "", t.get(KEY + "units.hint"), true);
     }
@@ -429,20 +429,25 @@ public final class CalculatorColumn {
     }
 
     /**
-     * The Equipment page: Condenser (air cooler, exchanger, and its banks or shells), Reflux pump, the Kettle's shells where
-     * the design has one, and each pumparound's pump (standard, in-line) and cooler shells; latched selectors in place of
-     * the cycle buttons, counts stepped; Design (Save design). The derived components and the design's state stand on the
-     * glass. Buttons {@code condenser:air_cooler}, {@code condenser:exchanger}, {@code reflux:<pump>}, {@code pa<i>:<pump>},
-     * {@code save_design}; settings {@code units/condenser}, {@code units/kettle}, {@code units/pa<i>}.
+     * The Equipment page: Condenser (air cooler, exchanger, or air then water, and its banks or shells; the water trim's
+     * shells after an air cooler), Reflux pump, the Kettle's shells where the design has one, and each pumparound's pump
+     * (standard, in-line) and cooler shells; latched selectors in place of the cycle buttons, counts stepped; Design (Save
+     * design). The derived components and the design's state stand on the glass. Buttons {@code condenser:air_cooler},
+     * {@code condenser:exchanger}, {@code condenser:air_then_water}, {@code reflux:<pump>}, {@code pa<i>:<pump>},
+     * {@code save_design}; settings {@code units/condenser}, {@code units/trim}, {@code units/kettle}, {@code units/pa<i>}.
      */
     public static Rows equipment(EquipmentInput in, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
         if (in.conflict()) rows.add(draft(t));
-        boolean air = in.condenser() == Condenser.AIR_COOLER;
-        rows.add(new Column.Group(t.get(KEY + "component_condenser"), t.get(KEY + "condenser.hint"), List.of(new Column.Buttons(List.of(
-                position("condenser:air_cooler", t.get(KEY + "condenser.air_cooler"), air, true, null),
-                position("condenser:exchanger", t.get(KEY + "condenser.exchanger"), !air, true, null))),
-                units("condenser", air ? "units.banks" : "units.shells", in.units().condenser(), t))));
+        var condenser = new ArrayList<Column.Row>();
+        condenser.add(new Column.Buttons(List.of(
+                position("condenser:air_cooler", t.get(KEY + "condenser.air_cooler"), in.condenser() == Condenser.AIR_COOLER, true, null),
+                position("condenser:exchanger", t.get(KEY + "condenser.exchanger"), in.condenser() == Condenser.EXCHANGER, true, null),
+                position("condenser:air_then_water", t.get(KEY + "condenser.air_then_water"), in.condenser() == Condenser.AIR_THEN_WATER, true, null))));
+        // The condenser's own count is an air cooler's banks; an air-then-water condenser's water trim counts its shells after it.
+        condenser.add(units("condenser", in.condenser() == Condenser.EXCHANGER ? "units.shells" : "units.banks", in.units().condenser(), t));
+        if (in.condenser() == Condenser.AIR_THEN_WATER) condenser.add(units("trim", "units.trim_shells", in.units().trim(), t));
+        rows.add(new Column.Group(t.get(KEY + "component_condenser"), t.get(KEY + "condenser.hint"), condenser));
         rows.add(new Column.Group(t.get(KEY + "component_reflux_pump"), t.get(KEY + "pump.hint"), List.of(pumps("reflux", in.reflux(), t))));
         if (in.kettle()) rows.add(new Column.Group(t.get(KEY + "component_kettle"), t.get(KEY + "units.hint"), List.of(units("kettle", "units.shells", in.units().kettle(), t))));
         for (int i = 0; i < in.pumparounds().size(); i++)

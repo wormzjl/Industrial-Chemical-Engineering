@@ -118,6 +118,36 @@ class ColumnCycleTest {
         assertEquals(0, none.steam().getFirst().total(), "no feed, no steam: steam is held per mole of feed");
     }
 
+    /**
+     * The condenser's room is its cooling water's (C6b): a water-cooled condenser's room bounds its whole duty, an air-then-water
+     * condenser's only its trim's share (COOLER_MODEL_PLAN.md section 6), and an air cooler's water takes nothing to bound.
+     */
+    @Test
+    void theCondensersRoomBoundsItsWatersShareOfTheDuty() {
+        var whole = table();
+        var trimmed = new SplitTable(whole.axis(), whole.products(), whole.reboilerPerFeed(), whole.pumparoundPerFeed(), whole.condenserPerFeed(), whole.reference(),
+                whole.held(), .4 * whole.condenserPerFeed());
+        var air = new SplitTable(whole.axis(), whole.products(), whole.reboilerPerFeed(), whole.pumparoundPerFeed(), whole.condenserPerFeed(), whole.reference(),
+                whole.held(), 0);
+        assertEquals(.4, trimmed.waterShare(), 1e-12);
+        var feed = new Account(new double[] {300, 400, 300, 0}, -1.4e8);
+        var steam = new Account(new double[] {0, 0, 0, 1000}, -2.3e8);
+        double[] room = {1e9, 1e9, 1e9, 1e9, 1e9};
+        // Room for a fifth of the cycle's whole duty.
+        double condenserRoom = -.2 * whole.condenserPerFeed() * 500;
+        var a = ColumnCycle.step(whole, setpoints(), 5, feed, List.of(steam), room, condenserRoom, (k, n) -> energy(whole, k, n), false);
+        assertEquals(ColumnCycle.Limit.CONDENSER, a.limit());
+        assertEquals(.2, a.alpha(), 1e-12, "the whole duty in the water: a fifth of the feed");
+        var b = ColumnCycle.step(trimmed, setpoints(), 5, feed, List.of(steam), room, condenserRoom, (k, n) -> energy(trimmed, k, n), false);
+        assertEquals(ColumnCycle.Limit.CONDENSER, b.limit());
+        assertEquals(.5, b.alpha(), 1e-12, "the trim's 40 %: half the feed");
+        var c = ColumnCycle.step(air, setpoints(), 5, feed, List.of(steam), room, condenserRoom, (k, n) -> energy(air, k, n), false);
+        assertEquals(ColumnCycle.Limit.NONE, c.limit());
+        assertEquals(1, c.alpha(), 1e-12);
+        assertThrows(IllegalArgumentException.class, () -> new SplitTable(whole.axis(), whole.products(), 0, whole.pumparoundPerFeed(), whole.condenserPerFeed(),
+                whole.reference(), whole.held(), 2 * whole.condenserPerFeed()), "the water takes no more than the whole duty");
+    }
+
     @Test
     void aClosureThatWouldHeatTheOverheadTripsTheColumnAndTakesNothing() {
         var table = table();

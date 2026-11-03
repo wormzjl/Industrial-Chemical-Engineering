@@ -37,7 +37,11 @@ class AssemblyParallelTest {
     }
 
     /** What a test builds: how many units stand on each step, and whether the last condenser has another size or the split an open branch. */
-    private record Build(int condensers, int kettles, int coolers, boolean oddSize, boolean openBranch, boolean chained) {
+    private record Build(int condensers, int kettles, int coolers, boolean oddSize, boolean openBranch, boolean chained, int trims) {
+        Build(int condensers, int kettles, int coolers, boolean oddSize, boolean openBranch, boolean chained) {
+            this(condensers, kettles, coolers, oddSize, openBranch, chained, 1);
+        }
+
         static Build of(int condensers, int kettles, int coolers) {
             return new Build(condensers, kettles, coolers, false, false, false);
         }
@@ -87,9 +91,36 @@ class AssemblyParallelTest {
         var receiver = g.drum(true, true, VAPOUR_OUTLET, LIQUID_OUTLET, BOOT_DRAIN, SIDE, SIDE);
         units.put("receiver", List.of(receiver));
         boolean air = c.condenser() == Condenser.AIR_COOLER;
-        units.put("condenser", parallel(g, port(column, VAPOUR_OUTLET), air ? Kind.AIR_COOLER : Kind.EXCHANGER, air ? PROCESS_INLET : SHELL_INLET,
-                air ? PROCESS_OUTLET : SHELL_OUTLET, port(receiver, SIDE, 1), b.condensers(), b.oddSize(), b.openBranch(), b.chained(),
-                air ? new Role[]{PROCESS_INLET, PROCESS_OUTLET} : new Role[]{TUBE_INLET, TUBE_OUTLET, SHELL_INLET, SHELL_OUTLET}));
+        if (c.condenser() == Condenser.AIR_THEN_WATER) {
+            // The air coolers' banks, then the water trim's shells, each set between a split and a merge.
+            var banks = parallel(g, port(column, VAPOUR_OUTLET), Kind.AIR_COOLER, PROCESS_INLET, PROCESS_OUTLET, null, b.condensers(), b.oddSize(), b.openBranch(), false,
+                    PROCESS_INLET, PROCESS_OUTLET);
+            var shells = new ArrayList<Unit>();
+            for (int i = 0; i < b.trims(); i++) shells.add(g.unit(Kind.EXCHANGER, SIZE, TUBE_INLET, TUBE_OUTLET, SHELL_INLET, SHELL_OUTLET));
+            if (banks.size() == 1 && shells.size() == 1) g.pipe(port(banks.getFirst(), PROCESS_OUTLET), port(shells.getFirst(), SHELL_INLET));
+            else {
+                var merge = g.hub();
+                if (banks.size() > 1) for (var u : banks) g.leg(merge, port(u, PROCESS_OUTLET));
+                else g.leg(merge, port(banks.getFirst(), PROCESS_OUTLET));
+                var split = merge;
+                if (banks.size() > 1 && shells.size() > 1) {
+                    split = g.hub();
+                    g.join(merge, split);
+                }
+                for (var u : shells) g.leg(split, port(u, SHELL_INLET));
+            }
+            if (shells.size() == 1) g.pipe(port(shells.getFirst(), SHELL_OUTLET), port(receiver, SIDE, 1));
+            else {
+                var merge = g.hub();
+                for (var u : shells) g.leg(merge, port(u, SHELL_OUTLET));
+                g.leg(merge, port(receiver, SIDE, 1));
+            }
+            units.put("condenser", banks);
+            units.put("trim", shells);
+        } else
+            units.put("condenser", parallel(g, port(column, VAPOUR_OUTLET), air ? Kind.AIR_COOLER : Kind.EXCHANGER, air ? PROCESS_INLET : SHELL_INLET,
+                    air ? PROCESS_OUTLET : SHELL_OUTLET, port(receiver, SIDE, 1), b.condensers(), b.oddSize(), b.openBranch(), b.chained(),
+                    air ? new Role[]{PROCESS_INLET, PROCESS_OUTLET} : new Role[]{TUBE_INLET, TUBE_OUTLET, SHELL_INLET, SHELL_OUTLET}));
         g.outside(port(receiver, VAPOUR_OUTLET), valve());
         g.outside(port(receiver, BOOT_DRAIN), valve());
         var pump = g.unit(Kind.PUMP, SUCTION, DISCHARGE);
@@ -138,6 +169,27 @@ class AssemblyParallelTest {
                 for (var port : r.ports())
                     if (port.unit() == u.origin()) assertTrue(port.state() == PortState.CONNECTED || port.state() == PortState.UTILITY, u + ": " + port);
         }
+    }
+
+    /**
+     * An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): the air cooler's banks, then the trim's shells, in
+     * series, each set in parallel; the assembly is complete on the design's counts, and another number of trim shells is
+     * the trim's count fault.
+     */
+    @Test
+    void anAirThenWaterCondenserMatchesItsBanksThenItsTrimShells() {
+        for (int[] counts : new int[][]{{1, 1}, {3, 1}, {1, 2}, {2, 3}}) {
+            var trays = trays(Condenser.AIR_THEN_WATER, new ColumnComponents.Units(counts[0], 1, List.of(1), counts[1]));
+            var p = plant(trays, new Build(counts[0], 1, 1, false, false, false, counts[1]));
+            var r = p.match();
+            assertTrue(r.complete(), java.util.Arrays.toString(counts) + ": " + r.slots());
+            assertEquals(origins(p.units().get("condenser")), r.slot(CONDENSER).units());
+            assertEquals(origins(p.units().get("trim")), r.slot(TRIM_CONDENSER).units());
+        }
+        var two = trays(Condenser.AIR_THEN_WATER, new ColumnComponents.Units(2, 1, List.of(1), 2));
+        var short1 = plant(two, new Build(2, 1, 1, false, false, false, 1)).match().slot(TRIM_CONDENSER);
+        assertEquals(State.UNIT_COUNT, short1.state());
+        assertEquals("1:2", short1.detail());
     }
 
     @Test

@@ -415,7 +415,8 @@ final class FluidFacts {
                 .record(q->q.doubles(ref.feedFractions()).f64(ref.feedEnthalpy()).f64(ref.enthalpySlope()).doubles(ref.steamRatios()).f64(ref.alpha()).record(p->setpoints(p,ref.setpoints())).f64(ref.feedTemperature()).doubles(ref.steamTemperatures()))
                 .doubles(held).list(Arrays.asList(s.enthalpy()),(q,row)->q.doubles(row)).i64(s.tableTick()).i64(s.applied()).f64(s.solvedCondenser())
                 .list(s.levels(),(q,l)->q.count(l.device()).i64(l.tick()).f64(l.held()).f64(l.rate()).f64(l.molarMass()))
-                .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())));
+                .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())))
+                .f64(t.condenserWaterPerFeed());
     }
     /** A column unit's engine state as saved, or null where it does not validate. */
     private static ColumnUnit.State columnState(Record f) {
@@ -431,10 +432,12 @@ final class FluidFacts {
         var levels=f.list(List.<ColumnUnit.State.Level>of(),q->{long device=q.count(0),tick=q.i64(0);double amount=q.f64(0),rate=q.f64(0),molar=q.f64(0);return new ColumnUnit.State.Level(device,tick,amount,rate,molar);});
         var credits=f.list(List.<ColumnUnit.State.Credit>of(),q->{long device=q.count(0),tick=q.i64(0);
             var product=q.record(null,a->{try{return account(a);}catch(IllegalArgumentException invalid){return null;}});return product==null?null:new ColumnUnit.State.Credit(device,tick,product);});
+        // The water's share of the condenser duty (COOLER_MODEL_PLAN.md section 6): a state written before it, the whole duty.
+        double water=f.f64(condenser);
         try {
             var kept=new boolean[held.length];for(int i=0;i<kept.length;i++)kept[i]=held[i]!=0;
             if(products.contains(null)||credits.contains(null))return null;
-            return new ColumnUnit.State(new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept),enthalpy,tableTick,applied,solved,levels,credits);
+            return new ColumnUnit.State(new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water),enthalpy,tableTick,applied,solved,levels,credits);
         }catch(RuntimeException invalid){return null;}
     }
 

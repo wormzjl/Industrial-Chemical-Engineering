@@ -10,6 +10,8 @@ import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
 import com.wormzjl.icheme.science.column.v3.V3SolveStrategy;
 import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
@@ -68,13 +70,22 @@ public final class ColumnSolve {
         }
     }
 
-    /** One solve: why, the design's calculator input, the setpoints, the state taken, and the last accepted seed (null: cold). */
-    public record Job(DriftBands.Trigger trigger, V3ColumnInput design, Setpoints setpoints, Taken taken, V3NeuralSeed seed) {
+    /**
+     * One solve: why, the design's calculator input, the setpoints, the state taken, the last accepted seed (null: cold), and
+     * the design's condenser, which says what share of its duty the cooling water takes.
+     */
+    public record Job(DriftBands.Trigger trigger, V3ColumnInput design, Setpoints setpoints, Taken taken, V3NeuralSeed seed, ColumnComponents.Condenser condenser) {
         public Job {
             Objects.requireNonNull(trigger, "trigger");
             Objects.requireNonNull(design, "design");
             Objects.requireNonNull(setpoints, "setpoints");
             Objects.requireNonNull(taken, "taken");
+            Objects.requireNonNull(condenser, "condenser");
+        }
+
+        /** A solve of a water-cooled condenser's column. */
+        public Job(DriftBands.Trigger trigger, V3ColumnInput design, Setpoints setpoints, Taken taken, V3NeuralSeed seed) {
+            this(trigger, design, setpoints, taken, seed, ColumnComponents.Condenser.EXCHANGER);
         }
     }
 
@@ -222,9 +233,47 @@ public final class ColumnSolve {
         double paTotal = 0;
         for (double q : pa) paTotal += q * rate;
         double condenser = (out - in - solved.reboilerPerFeed() * rate - paTotal) / rate;
-        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held());
+        double cooled = switch (job.condenser()) {
+            case EXCHANGER -> condenser;
+            case AIR_COOLER -> 0;
+            case AIR_THEN_WATER -> trim(model, success.result().inspection().orElseThrow(), basis, axis, setpoints.condenserTemperature(), condenser * rate, checkpoint) / rate;
+        };
+        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled);
         return new Solved(table, enthalpy, success.result().warmSeed().orElse(null), solved.condenserPerFeed() * rate,
                 success.diagnostics().solvePath(), note);
+    }
+
+    /**
+     * The duty an air-then-water condenser's water trim takes, W (column sign, removed: negative), of the whole
+     * {@code condenser} duty ({@code COOLER_MODEL_PLAN.md} section 6): the overhead, the top tray's vapour with its water
+     * vapour, cooled at the condenser's pressure from the split ({@link HeatSides#airSplit}) to the receiver. None where the
+     * split is the receiver, the whole where it is the top vapour, never beyond the whole. The air takes the rest.
+     */
+    static double trim(FluidThermodynamics model, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis,
+                       List<String> axis, double receiver, double condenser, Runnable checkpoint) {
+        var top = inspection.nodes().get(1);
+        int water = axis.indexOf(SplitTable.WATER);
+        double[] overhead = new double[axis.size()];
+        var y = top.vaporFractions();
+        for (int c = 0; c < basis.componentCount(); c++) {
+            int i = axis.indexOf(basis.componentId(c));
+            if (i >= 0 && i != water) overhead[i] += top.vaporMolPerSecond() * y.get(c);
+        }
+        if (water >= 0) overhead[water] += top.waterVaporMolPerSecond();
+        double p = inspection.nodes().getFirst().pressurePascal();
+        return trim(top.temperatureKelvin(), receiver, condenser, t -> model.flashTP(t, p, overhead.clone(), checkpoint).enthalpy());
+    }
+
+    /**
+     * The trim's duty, W (column sign), from the top vapour's and the receiver's temperatures, the whole {@code condenser}
+     * duty and the overhead's enthalpy at a temperature, W: the overhead from the split to the receiver, bounded by the whole.
+     */
+    static double trim(double top, double receiver, double condenser, java.util.function.DoubleUnaryOperator enthalpy) {
+        if (!(condenser < 0)) return 0;
+        double split = HeatSides.airSplit(top, receiver);
+        if (split <= receiver) return 0;
+        if (split >= top) return condenser;
+        return Math.max(condenser, Math.min(0, enthalpy.applyAsDouble(receiver) - enthalpy.applyAsDouble(split)));
     }
 
     /** The temperature at which {@code moles} at {@code p} has the specific enthalpy {@code h}, from {@code guess}: a secant on the model; NaN where none. */

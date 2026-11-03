@@ -30,6 +30,19 @@ public final class HeatSides {
     /** The air an air cooler's fans blow through its bundle, K: a constant 25 °C (owner Q11), no weather, biome or altitude. */
     public static final double AIR_TEMPERATURE=298.15;
     /**
+     * The lowest outlet an air cooler is practical to, K: the air plus a 15 K approach, 40 °C (batch 2026-11-02-process-simulator,
+     * {@code COOLER_MODEL_PLAN.md} sections 1 and 6; the sizing stage's {@code AIR_COOLER_OUTLET} row). An air-then-water
+     * condenser hands the overhead from air to water here, and the simulator proposes a cooler's type by it.
+     */
+    public static final double AIR_SPLIT_TEMPERATURE=AIR_TEMPERATURE+15;
+    /**
+     * Where an air-then-water condenser's air hands the overhead to its water trim, K: the split, but never below the
+     * receiver (the trim then has no duty) nor above the top vapour (the air then has none).
+     */
+    public static double airSplit(double topVapour,double receiver){
+        return Math.min(topVapour,Math.max(receiver,AIR_SPLIT_TEMPERATURE));
+    }
+    /**
      * An air cooler per m² of bundle face (plan section 4): 5 m² of bare tube (four rows of 1" finned tubes), 50 m² of
      * finned surface (fin ratio 10) under a 100 W/m²K gas film, and at full fans air at 3 m/s, whose heat capacity rate is
      * 3.5 kW/K and which 1 kW of fan power drives (3 m³/s through 200 Pa at 60 %).

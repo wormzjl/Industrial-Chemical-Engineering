@@ -63,6 +63,7 @@ class ColumnSolveTest {
         assertEquals(0, step.departure(), 1e-9, "the table's condenser duty is the network's closure at its reference");
         double v3 = solved.solvedCondenser(), network = table.condenserPerFeed() * rate;
         assertTrue(network < 0 && Math.abs(network - v3) < .1 * Math.abs(v3), "the network's closure " + network + " W beside V3's " + v3 + " W");
+        assertEquals(table.condenserPerFeed(), table.condenserWaterPerFeed(), "a water-cooled condenser's water takes the whole duty");
         assertTrue(DriftBands.check(table, step, setpoints.designFeedRate() * SECONDS).isEmpty(), "the reference is inside its own bands");
 
         // The feed 2 K warmer: a band crossed, solved warm from the seed.
@@ -136,6 +137,66 @@ class ColumnSolveTest {
         var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, start, Setpoints.of(saved), new ColumnSolve.Taken(feed, Double.NaN, steam), null),
                 model, catalog, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
         assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
+    }
+
+    /**
+     * The water share of an air-then-water condenser (COOLER_MODEL_PLAN.md section 6), the rule alone: none for a receiver at
+     * or above the 40 °C split, the whole duty for a top vapour at or below it, and between them the overhead's enthalpy from
+     * the split to the receiver, never beyond the whole.
+     */
+    @Test void theTrimTakesNoneAboveTheSplitTheWholeBelowItAndTheOverheadBetween() {
+        double split = com.wormzjl.icheme.science.equipment.HeatSides.AIR_SPLIT_TEMPERATURE, whole = -5e6;
+        java.util.function.DoubleUnaryOperator linear = t -> 1e5 * t;
+        assertEquals(313.15, split, 1e-12, "40 °C: the air plus 15 K");
+        assertEquals(0, ColumnSolve.trim(390, split, whole, linear), "a receiver at the split: no trim duty");
+        assertEquals(0, ColumnSolve.trim(390, 318.15, whole, linear), "a receiver above it");
+        assertEquals(whole, ColumnSolve.trim(split, 300, whole, linear), "a top vapour at the split: the whole duty");
+        assertEquals(whole, ColumnSolve.trim(310, 300, whole, linear), "a top vapour below it");
+        assertEquals(-1e5 * (split - 303.15), ColumnSolve.trim(390, 303.15, whole, linear), 1e-6, "between: the overhead from the split to the receiver");
+        assertEquals(whole, ColumnSolve.trim(390, 303.15, whole, t -> 1e7 * t), "never beyond the whole");
+        assertEquals(0, ColumnSolve.trim(390, 303.15, 0, linear), "no duty, no share");
+    }
+
+    /**
+     * The crude column on the network's basis (Tia Juana light) with an air-then-water condenser, at receivers of 45, 38 and 30 °C: the table keeps the whole
+     * duty and gives its water the trim's share (none at 45 °C, more as the receiver falls); a water-cooled condenser's water
+     * takes the whole duty and an air cooler's none. Prints the split and the air's and the water's MW for the batch.
+     */
+    @Test void anAirThenWaterCondensersWaterTakesTheTrimsShare() {
+        var catalog = MaterialCatalog.bundled();
+        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
+        var axis = model.components();
+        double[] feed = new double[axis.size()];
+        for (int c = 0; c < design.componentBasis().componentCount(); c++) {
+            int i = axis.indexOf(design.componentBasis().componentId(c));
+            if (i >= 0) feed[i] += design.feedComponentMolarFlowsMolPerSecond()[c];
+        }
+        double rate = Arrays.stream(feed).sum();
+        var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
+        var s = Setpoints.of(ColumnOperatingPoint.of(design));
+        double before = 0;
+        for (double celsius : new double[] {45, 38, 30}) {
+            var setpoints = new Setpoints(s.designFeedRate(), s.feedRate(), 273.15 + celsius, s.refluxRatio(), s.reboilerPerFeed(), s.steamPerFeed(), s.drawsPerFeed(),
+                    s.pumparoundsPerFeed());
+            var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, Double.NaN, steam), null,
+                    ColumnComponents.Condenser.AIR_THEN_WATER), model, catalog, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
+            var solved = assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
+            var table = solved.table();
+            double whole = table.condenserPerFeed() * rate, water = table.condenserWaterPerFeed() * rate;
+            // The seed's node 1 is the top tray.
+            double top = solved.seed().temperatures()[1];
+            System.out.printf(java.util.Locale.ROOT, "C1_AIR_THEN_WATER receiver=%.0f C top=%.1f C split=%.1f C condenser=%.3f MW air=%.3f MW water=%.3f MW share=%.3f%n",
+                    celsius, top - 273.15, com.wormzjl.icheme.science.equipment.HeatSides.airSplit(top, 273.15 + celsius) - 273.15,
+                    -whole / 1e6, -(whole - water) / 1e6, -water / 1e6, table.waterShare());
+            assertTrue(whole < 0, "the condenser removes heat");
+            if (celsius >= 40) assertEquals(0, water, "a receiver at or above the split leaves the trim no duty");
+            else {
+                assertTrue(water < 0 && water > whole, "the trim takes part: " + water + " of " + whole + " W");
+                assertTrue(water < before, "a colder receiver gives the trim more: " + water + " after " + before + " W");
+            }
+            before = water;
+        }
     }
 
     private static double dot(double[] a, double[] b) {

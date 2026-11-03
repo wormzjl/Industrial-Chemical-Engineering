@@ -74,11 +74,12 @@ public final class ColumnStarts {
         }
         var master = new PhysicalFluidTopology.Position(dimension, o.getX(), o.getY(), o.getZ());
         // A water-cooled condenser's sides: the column holds its process side, its water side stays in the network (C6b);
-        // every shell in parallel the same (S3b).
+        // every shell in parallel the same (S3b); an air-then-water condenser's from its trim (COOLER_MODEL_PLAN.md section 6).
         var condenser = new ArrayList<Long>();
-        if (trays.components().condenser() != com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.AIR_COOLER)
+        var cooled = ColumnBlueprint.waterCooled(trays.components().condenser());
+        if (cooled != null)
             for (var s : entry.report().slots())
-                if (s.slot().equals(ColumnBlueprint.CONDENSER))
+                if (s.slot().equals(cooled))
                     for (long unit : s.units()) {
                         var member = EquipmentStructure.at(level, BlockPos.of(unit));
                         if (member != null) condenser.addAll(EquipmentStructure.heatSides(world, level, member));

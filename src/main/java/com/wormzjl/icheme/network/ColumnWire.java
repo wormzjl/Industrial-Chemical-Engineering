@@ -53,12 +53,13 @@ public final class ColumnWire {
         buffer.writeEnum(choices.condenser());
         buffer.writeEnum(choices.refluxPump());
         writePumps(buffer, choices.pumparoundPumps());
-        // The member counts (S3b): the condenser's, the kettle's, each pumparound cooler's.
+        // The member counts (S3b): the condenser's, the kettle's, each pumparound cooler's, then the water trim's.
         var units = choices.units();
         buffer.writeVarInt(units.condenser());
         buffer.writeVarInt(units.kettle());
         buffer.writeVarInt(units.coolers().size());
         for (int count : units.coolers()) buffer.writeVarInt(count);
+        buffer.writeVarInt(units.trim());
     }
 
     static ColumnComponents.Choices readChoices(RegistryFriendlyByteBuf buffer) {
@@ -69,8 +70,9 @@ public final class ColumnWire {
         int coolers = readCount(buffer, ColumnTrays.MAX_PUMPAROUNDS, "pumparound cooler", 1);
         var counts = new ArrayList<Integer>(coolers);
         for (int i = 0; i < coolers; i++) counts.add(buffer.readVarInt());
+        int trimUnits = buffer.readVarInt();
         try {
-            return new ColumnComponents.Choices(condenser, reflux, pumps, new ColumnComponents.Units(condenserUnits, kettleUnits, counts));
+            return new ColumnComponents.Choices(condenser, reflux, pumps, new ColumnComponents.Units(condenserUnits, kettleUnits, counts, trimUnits));
         } catch (IllegalArgumentException invalid) {
             throw new DecoderException(invalid.getMessage());
         }

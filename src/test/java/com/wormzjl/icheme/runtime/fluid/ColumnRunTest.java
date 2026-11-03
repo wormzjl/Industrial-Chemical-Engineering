@@ -105,13 +105,17 @@ class ColumnRunTest {
         world.registry.submit(edits,last+1,null);
         if(solves!=null){solves.model=model;ops.solves(solves);}
         ops.refresh();world.columns=ops;
-        if(solves==null){var s=liquid?waterTable(model,setpoints,productPort):table(model,setpoints,setpoints.steamPerFeed(),productPort);ops.table(unit,s.table(),s.enthalpy());}
+        if(solves==null){var s=liquid?waterTable(model,setpoints,productPort):table(model,setpoints,setpoints.steamPerFeed(),productPort);var t=s.table();
+            if(waterShare!=1)t=new SplitTable(t.axis(),t.products(),t.reboilerPerFeed(),t.pumparoundPerFeed(),t.condenserPerFeed(),t.reference(),t.held(),waterShare*t.condenserPerFeed());
+            ops.table(unit,t,s.enthalpy());}
         return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell);
     }
     /** A liquid water feed on the rig's line through a pump, ahead of its boundary valve. */
     private boolean pumped;
     /** The rig's condenser shells in parallel, each with its own cooling-water line, and its feed rate, mol/s (S3b). */
     private int shells=1;private double feedRate=.5;
+    /** The share of the condenser duty the rig's table gives its cooling water: 1 water-cooled, less an air-then-water condenser's trim. */
+    private double waterShare=1;
     /** The bore of the rig's product line and of its feed line and valves, m. */
     private double productBore=.05,lineBore=.05;
     /** A player's flow valve on the rig's product line, kg/s, or NaN for a plain pipe. */
@@ -590,6 +594,25 @@ class ColumnRunTest {
         assertTrue(water>.5*removed,"the water took most of it: "+water+" of "+removed+" J");
         assertTrue(r.ops().status(r.unit()).startsWith("RUNNING")||r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
         assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+    }
+    /**
+     * An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): its trim's water takes the table's share of the duty, the
+     * air the rest. The totals book the whole duty; the water took 40 % of it or holds it in transit.
+     */
+    @Test void anAirThenWaterCondensersTrimWaterTakesOnlyItsShare() {
+        waterShare=.4;
+        var r=rig(0,null,false,false,true);var world=r.world();
+        world.runTo(4000);
+        var u=world.ledger.column(r.unit());
+        double removed=-u.totals().condenser(),water=r.counting().heat.getOrDefault(PhysicalFluidTopology.sideIdentity(r.tube()),0.),owed=world.coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(r.tube()),PhysicalFluidTopology.sideIdentity(r.shell()),world.ledger.onlineTick());
+        assertTrue(removed>10000,"the column's condenser removed heat: "+removed+" J");
+        assertEquals(.4*removed,water+owed,1e-6*removed,"the trim's water took its share or it is in transit: water "+water+" J, owed "+owed+" J of "+removed+" J");
+        assertTrue(water>.2*removed,"the water took most of its share: "+water+" of "+removed+" J");
+        assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+        // The share is state: the topology unit carries it through a save.
+        var saved=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(world.ledger.snapshot()),world.ledger.onlineTick(),k->world.model);
+        var table=saved.columns().get(r.unit()).state().table();
+        assertEquals(.4*table.condenserPerFeed(),table.condenserWaterPerFeed(),1e-12*Math.abs(table.condenserPerFeed()));
     }
     /** A column's cycle, s. */
     private static final double CYCLE_SECONDS=ColumnOperation.CYCLE_TICKS/20.0;

@@ -27,9 +27,12 @@ import java.util.Objects;
  * @param condenserPerFeed  J per mole of feed taken, the solved condenser duty (column sign: negative, removed)
  * @param reference         the intensive state the table was solved at
  * @param held              components the solve had a feed of; the others borrowed a row
+ * @param condenserWaterPerFeed J per mole of feed taken, the share of the condenser duty its cooling water takes (column sign;
+ *                          batch 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 6): the whole duty for a
+ *                          water-cooled condenser, none for an air cooler, the trim's for an air-then-water condenser
  */
 public record SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
-                         Reference reference, boolean[] held) {
+                         Reference reference, boolean[] held, double condenserWaterPerFeed) {
     /** The water's id on the network axis. */
     public static final String WATER = "Water";
 
@@ -105,6 +108,19 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
             }
             if (Math.abs(sum - 1) > 1e-12) throw new IllegalArgumentException("Component " + axis.get(i) + "'s recoveries sum to " + sum);
         }
+        if (!Double.isFinite(condenserWaterPerFeed) || condenserWaterPerFeed * condenserPerFeed < 0 || Math.abs(condenserWaterPerFeed) > Math.abs(condenserPerFeed))
+            throw new IllegalArgumentException("The condenser's water takes a share of its duty, not " + condenserWaterPerFeed + " of " + condenserPerFeed);
+    }
+
+    /** A table whose condenser's water takes the whole duty: a water-cooled condenser's, the table before the share existed. */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserPerFeed);
+    }
+
+    /** The share of the condenser duty its cooling water takes, 0 to 1; 0 where the duty is 0. */
+    public double waterShare() {
+        return condenserPerFeed == 0 ? 0 : condenserWaterPerFeed / condenserPerFeed;
     }
 
     @Override

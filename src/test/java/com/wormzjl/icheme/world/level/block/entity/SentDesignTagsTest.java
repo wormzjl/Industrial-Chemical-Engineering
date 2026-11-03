@@ -1,7 +1,9 @@
 package com.wormzjl.icheme.world.level.block.entity;
 
 import com.wormzjl.icheme.client.gui.flowsheet.SizingCoverageTest;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
+import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.flowsheet.sizing.ColumnSizing;
 import java.io.IOException;
@@ -24,10 +26,16 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class SentDesignTagsTest {
     private static final Path CORPUS = Path.of("src/test/resources/compat/simulator");
-    /** The designs' fields revision: the corpus file this build's tags are kept in. Raise it with a field change. */
-    private static final int FIELDS = 1;
+    /**
+     * The designs' fields revision: the corpus file this build's tags are kept in. Raise it with a field change (2: a column's water trim count
+     * and its air-then-water condenser, COOLER_MODEL_PLAN.md section 6).
+     */
+    private static final int FIELDS = 2;
 
-    /** Every size the stage proposes, as Send to block stores it, members and counts among them. */
+    /** Member counts as an image written before the water trim's count shows them. */
+    private static final java.util.regex.Pattern UNITS_BEFORE_TRIM = java.util.regex.Pattern.compile("(Units\\[condenser=\\d+, kettle=\\d+, coolers=\\[[0-9, ]*\\])\\]");
+
+    /** Every size the stage proposes, as Send to block stores it, members and counts among them; and an air-then-water column. */
     static List<SentDesign> designs() {
         var out = new ArrayList<SentDesign>();
         for (var size : SizingCoverageTest.samples()) {
@@ -36,6 +44,9 @@ class SentDesignTagsTest {
             out.add(size instanceof ColumnSizing.Size c ? SentDesign.column("T-101", new ColumnDesign(c.layout(), c.diameter()))
                     : new SentDesign("U-" + out.size(), out.size() % 2 == 0 ? "" : "pa " + out.size() + " cooler", size.count(), shape, null));
         }
+        var trimmed = new ColumnComponents(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                new ColumnComponents.Units(2, 1, List.of(1), 3));
+        out.add(SentDesign.column("T-102", new ColumnDesign(new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), trimmed), 3)));
         return out;
     }
 
@@ -111,7 +122,8 @@ class SentDesignTagsTest {
                     list.add(entry.getCompound("Saved"));
                     var read = SentDesignTags.read(list);
                     assertTrue(read.whole(), file + ": " + read.repairs());
-                    assertEquals(entry.getString("Expected"), read.designs().getFirst().toString(), file.toString());
+                    // Counts written before the water trim's read one trim shell.
+                    assertEquals(UNITS_BEFORE_TRIM.matcher(entry.getString("Expected")).replaceAll("$1, trim=1]"), read.designs().getFirst().toString(), file.toString());
                 }
         }
     }

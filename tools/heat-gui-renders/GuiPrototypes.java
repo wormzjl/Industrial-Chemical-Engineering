@@ -91,7 +91,10 @@ public final class GuiPrototypes {
                 new Prototype("column-calculator-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.COLUMN, CalculatorColumn.Metric.TEMPERATURE), true),
                 new Prototype("column-calculator-wide", 533, 280, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.COLUMN, CalculatorColumn.Metric.TEMPERATURE)),
                 new Prototype("column-calculator-results", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TEMPERATURE)),
-                new Prototype("column-calculator-results-wide", 533, 280, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TRAFFIC)));
+                new Prototype("column-calculator-results-wide", 533, 280, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TRAFFIC)),
+                // C1 (COOLER_MODEL_PLAN.md section 6): the condenser's third choice, air then water, with its banks and its trim's shells.
+                new Prototype("column-calculator-air-then-water", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE), true),
+                new Prototype("column-calculator-air-then-water-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE), true));
     }
 
     /** The draft's entries as the door shows them. */
@@ -137,6 +140,9 @@ public final class GuiPrototypes {
         d.skin.status(d.c, CalculatorColumn.display(d.w), status.text(), status.palette());
         var rows = page == CalculatorColumn.Page.COLUMN
                 ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
+                : page == CalculatorColumn.Page.EQUIPMENT
+                ? CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD,
+                        List.of(ColumnComponents.Pump.STANDARD), true, new ColumnComponents.Units(2, 1, List.of(1), 3), true), t)
                 : CalculatorColumn.results(new CalculatorColumn.ResultsInput(false, CalculatorColumn.View.PROFILES, metric, List.of(), 0, 13, 20), t);
         boolean two = rows.two();
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - CalculatorColumn.DIVIDER);
@@ -150,6 +156,8 @@ public final class GuiPrototypes {
             var in = new CalculatorColumn.DrawingInput(20, 7, List.of(new CalculatorColumn.Mark(0, 13, 0)), List.of(new CalculatorColumn.Mark(0, 10, 8)),
                     List.of(new CalculatorColumn.Mark(0, 21, 0)), 13, CalculatorColumn.Connection.DRAW, 0, shares);
             CalculatorColumn.draw(d.c, CalculatorColumn.drawing(in, box, 0, d.m, t, node -> ""), t);
+        } else if (page == CalculatorColumn.Page.EQUIPMENT) {
+            // The derived components' glass is the screen's own; the sheet shows the door.
         } else {
             var legend = metric == CalculatorColumn.Metric.TRAFFIC ? List.of(new CalculatorColumn.Legend(t.get("column.traffic.organic"), CalculatorColumn.TRAFFIC[0]),
                     new CalculatorColumn.Legend(t.get("column.traffic.vapor"), CalculatorColumn.TRAFFIC[1]), new CalculatorColumn.Legend(t.get("column.traffic.water"), CalculatorColumn.TRAFFIC[2]),
@@ -279,8 +287,22 @@ public final class GuiPrototypes {
     static List<Prototype> assembly() {
         return List.of(new Prototype("assembly", 464, 254, (d, s) -> assemblyDoor(d, null, false)),
                 new Prototype("assembly-selected", 464, 254, (d, s) -> assemblyDoor(d, ColumnBlueprint.REFLUX_PUMP, true)),
-                new Prototype("assembly-member-counts", 464, 254, (d, s) -> assemblyDoor(d, COUNTED, countedReport(), ColumnBlueprint.CONDENSER, false)));
+                new Prototype("assembly-member-counts", 464, 254, (d, s) -> assemblyDoor(d, COUNTED, countedReport(), ColumnBlueprint.CONDENSER, false)),
+                new Prototype("assembly-air-then-water", 464, 254, (d, s) -> assemblyDoor(d, TRIMMED, assemblyReport(TRIMMED, Map.of()), ColumnBlueprint.TRIM_CONDENSER, false)),
+                // The drawing alone at its design size, with an ejector, the trim selected, to read the pair's labels and lines.
+                new Prototype("assembly-air-then-water-drawing", AssemblyDiagram.WIDTH + 16, AssemblyDiagram.HEIGHT + 16, (d, s) -> {
+                    var box = d.well(new Rect(8, 8, AssemblyDiagram.WIDTH, AssemblyDiagram.HEIGHT));
+                    var vacuum = new ColumnTrays(TRIMMED.trays(), TRIMMED.feed(), TRIMMED.draws(), TRIMMED.steam(), TRIMMED.pumparounds(), new ColumnComponents(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), true, true, TRIMMED.components().units()));
+                    var sheet = new AssemblyFlowsheet(AssemblyDiagram.of(vacuum));
+                    sheet.fit(box);
+                    sheet.draw(d.c, assemblyReport(vacuum, Map.of()), ColumnBlueprint.TRIM_CONDENSER, x -> AssemblyColumn.text(x, DIALOG));
+                }));
     }
+
+    /** C1 (COOLER_MODEL_PLAN.md section 6): the same column with an air-then-water condenser, two air cooler banks and three trim shells, all in place. */
+    static final ColumnTrays TRIMMED = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
+            new ColumnComponents(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                    new ColumnComponents.Units(2, 1, List.of(1), 3)));
 
     static void assemblyDoor(Door d, Slot selected, boolean queued) {
         assemblyDoor(d, ASSEMBLY, assemblyReport(), selected, queued);

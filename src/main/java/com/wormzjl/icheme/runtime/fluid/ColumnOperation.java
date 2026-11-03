@@ -53,6 +53,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     public interface Solves {
         /** The calculator input of unit {@code unit}'s design, or null where it has none. */
         V3ColumnInput design(ColumnUnit unit);
+        /** Unit {@code unit}'s condenser, which says what share of its duty the cooling water takes: water-cooled where it has no design. */
+        default com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser condenser(ColumnUnit unit){return com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.EXCHANGER;}
         /** Submits {@code job}; {@code done} gets its outcome on the server thread. False: not admitted, the next cycle tries again. */
         boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done);
         /** No solves: a table comes only from {@link #table}. */
@@ -333,7 +335,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(design==null){if(r.table==null){r.status="NOT READY: the design has no operating point";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;}return;}
         if(taken==null)taken=designTaken(u,design);
         var pending=new Pending(trigger,tick);
-        var job=new ColumnSolve.Job(trigger,design,u.setpoints(),taken,trigger==DriftBands.Trigger.START?null:r.seed);
+        var job=new ColumnSolve.Job(trigger,design,u.setpoints(),taken,trigger==DriftBands.Trigger.START?null:r.seed,solves.condenser(u));
         // In flight before the submission: a solver may answer at once.
         r.pending=pending;
         if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.pending=null;return;}
@@ -429,7 +431,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 for(var o:r.owed)if(o.booked()&&o.tick()>tick-FENCE_TICKS)held-=o.joule();
                 owed=Math.max(owed,held);
             }
-            condenserRoom=CONDENSER_HOLD_SECONDS*Math.abs(t.condenserPerFeed())*u.setpoints().designFeedRate()-sides.size()*owed;
+            // The water's hold is of its own share: an air-then-water condenser's trim takes part of the duty (COOLER_MODEL_PLAN.md section 6).
+            condenserRoom=CONDENSER_HOLD_SECONDS*Math.abs(t.condenserWaterPerFeed())*u.setpoints().designFeedRate()-sides.size()*owed;
         }
         var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;},r.ruleA);
         r.last=step;
@@ -457,7 +460,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double pumparounds=0;for(double q:step.pumparounds())pumparounds+=q;
         totals=new ColumnUnit.Totals(totals.taken().plus(in),totals.produced().plus(out),totals.reboiler()+step.reboiler(),totals.condenser()+step.condenser(),totals.pumparounds()+pumparounds);
         topology.column(u.withStations(true,stations).withTotals(totals));
-        owe(r,u,tick,-step.condenser(),false);
+        // The totals book the whole duty; the water is owed its share, the air takes the rest (COOLER_MODEL_PLAN.md section 6).
+        owe(r,u,tick,-step.condenser()*t.waterShare(),false);
         levels(r,u,available,tick,true);
         r.status=step.limit()==ColumnCycle.Limit.NONE?"RUNNING":String.format(Locale.ROOT,"LIMITED: %s, %.0f %%",step.limit().name().toLowerCase(Locale.ROOT),100*step.alpha());
         r.phase=step.limit()==ColumnCycle.Limit.NONE?com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING:com.wormzjl.icheme.science.column.operation.OperationView.Phase.LIMITED;
@@ -612,7 +616,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 var t=u.totals();u=withPort(u,s,account,s.solids().less(solid)).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
                 topology.column(u);
                 if(r!=null)r.gifts.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Gift(start,end,given));
-                if(r!=null)owe(r,u,end,-(joule-debited),true);
+                if(r!=null)owe(r,u,end,-(joule-debited)*(r.table==null?1:r.table.waterShare()),true);
             }
         }
     }

@@ -127,8 +127,9 @@ public final class ColumnCycle {
     }
 
     /**
-     * One cycle whose condenser can reject at most {@code condenserRoom} J (C6b: what its cooling water has not yet taken
-     * leaves less): a short condenser cuts the throughput as a full outlet does, by the table's solved duty per feed.
+     * One cycle whose condenser can reject at most {@code condenserRoom} J into its cooling water (C6b: what its water has not
+     * yet taken leaves less): a short condenser cuts the throughput as a full outlet does, by the table's solved water duty
+     * per feed (the whole duty of a water-cooled condenser, an air-then-water condenser's trim share).
      */
     public static Step step(SplitTable table, Setpoints setpoints, double seconds, Account feed, List<Account> steam, double[] room,
                             double condenserRoom, ProductEnergy energy, boolean ruleA) {
@@ -161,7 +162,7 @@ public final class ColumnCycle {
             alpha = alphaRoom;
             limit = Limit.OUTLET;
         }
-        double duty = -table.condenserPerFeed() * demand;
+        double duty = -table.condenserWaterPerFeed() * demand;
         if (duty > 0 && condenserRoom < Double.POSITIVE_INFINITY) {
             double alphaCondenser = Math.max(0, condenserRoom) / duty;
             if (alphaCondenser < alpha) {

@@ -118,7 +118,10 @@ public final class AssemblyDiagram {
     public static AssemblyDiagram of(ColumnTrays trays) {
         var c = Objects.requireNonNull(trays.components(), "A column without a component design has no assembly");
         var d = new AssemblyDiagram();
-        boolean vac = c.ejector(), ket = c.kettle(), air = c.condenser() == ColumnComponents.Condenser.AIR_COOLER;
+        boolean vac = c.ejector(), ket = c.kettle(), trim = c.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER,
+                air = trim || c.condenser() == ColumnComponents.Condenser.AIR_COOLER;
+        // An air-then-water condenser: the air cooler, then its water trim, in series (COOLER_MODEL_PLAN.md section 6).
+        int condenserX = trim ? 402 : 460, ejectorX = trim ? 316 : 340;
 
         d.part(COLUMN, Glyph.COLUMN, 232, 120, 56, 500, null, t("part.column"), t("where.column"), null);
         for (int k = 0, y = 146; y < 594; k++, y += 18) if (y <= 312 || y >= 348) d.trays.add(k % 2 == 1 ? new int[]{236, y, 276} : new int[]{244, y, 284});
@@ -126,20 +129,32 @@ public final class AssemblyDiagram {
 
         // The overhead: the ejector, the condenser, the receiver and its three lines.
         if (vac) {
-            d.wire(true, 260, 120, 260, 40, 339, 40);
-            d.part(EJECTOR, Glyph.UNIT, 340, 30, 56, 20, t("label.ejector"), t("part.ejector"), t("where.ejector"), t("wanted.ejector"));
-            d.wire(true, 397, 40, 459, 40);
-            d.utility(368, 29, 368, 12);
-            d.label(374, 14, t("utility.motive_steam"), Align.LEFT);
-        } else d.wire(true, 260, 120, 260, 40, 459, 40);
-        d.part(CONDENSER, Glyph.UNIT, 460, 24, 120, 32, units(t(air ? "label.air_cooler" : "label.exchanger"), c.units().condenser()), t("part.condenser"),
-                t(vac ? "where.condenser_ejector" : "where.condenser"), t(air ? "wanted.air_cooler" : "wanted.condenser"));
-        if (!air) {
-            d.utility(530, 23, 530, 8);
-            d.utility(546, 23, 546, 8);
-            d.label(554, 13, t("utility.cooling_water"), Align.LEFT);
+            d.wire(true, 260, 120, 260, 40, ejectorX - 1, 40);
+            d.part(EJECTOR, Glyph.UNIT, ejectorX, 30, 56, 20, t("label.ejector"), t("part.ejector"), t("where.ejector"), t("wanted.ejector"));
+            d.wire(true, ejectorX + 57, 40, condenserX - 1, 40);
+            d.utility(ejectorX + 28, 29, ejectorX + 28, 12);
+            d.label(ejectorX + 34, 14, t("utility.motive_steam"), Align.LEFT);
+        } else d.wire(true, 260, 120, 260, 40, condenserX - 1, 40);
+        if (trim) {
+            d.part(CONDENSER, Glyph.UNIT, condenserX, 24, 94, 32, units(t("label.air_cooler"), c.units().condenser()), t("part.condenser"),
+                    t(vac ? "where.air_cooler_trim_ejector" : "where.air_cooler_trim"), t("wanted.air_cooler"));
+            d.wire(true, 496, 40, 505, 40);
+            d.part(TRIM_CONDENSER, Glyph.UNIT, 506, 24, 94, 32, units(t("label.trim"), c.units().trim()), t("part.trim_condenser"), t("where.trim_condenser"),
+                    t("wanted.condenser"));
+            d.utility(541, 23, 541, 8);
+            d.utility(557, 23, 557, 8);
+            d.label(565, 13, t("utility.cooling_water"), Align.LEFT);
+            d.wire(true, 600, 40, 605, 40, 605, 109);
+        } else {
+            d.part(CONDENSER, Glyph.UNIT, condenserX, 24, 120, 32, units(t(air ? "label.air_cooler" : "label.exchanger"), c.units().condenser()), t("part.condenser"),
+                    t(vac ? "where.condenser_ejector" : "where.condenser"), t(air ? "wanted.air_cooler" : "wanted.condenser"));
+            if (!air) {
+                d.utility(530, 23, 530, 8);
+                d.utility(546, 23, 546, 8);
+                d.label(554, 13, t("utility.cooling_water"), Align.LEFT);
+            }
+            d.wire(true, 580, 40, 605, 40, 605, 109);
         }
-        d.wire(true, 580, 40, 605, 40, 605, 109);
         d.part(RECEIVER, Glyph.DRUM, 440, 110, 190, 38, t("label.receiver"), t("part.receiver"), t("where.receiver"), t("wanted.receiver"));
         d.label(527, 163, t("label.boot"), Align.LEFT);
         d.wire(true, 465, 110, 465, 84, 351, 84);
@@ -203,20 +218,24 @@ public final class AssemblyDiagram {
             d.valve(BOTTOMS_VALVE, 310, 700);
         }
         d.pill(360, 700, 72, t("outside.bottoms"));
-        d.ports(trays, c, vac, ket, air, standard);
+        d.ports(trays, c, vac, ket, air, trim, standard);
         return d;
     }
 
     /** The port squares: each nozzle the blueprint names, and the part it pipes to. */
-    private void ports(ColumnTrays trays, ColumnComponents c, boolean vac, boolean ket, boolean air, boolean standard) {
+    private void ports(ColumnTrays trays, ColumnComponents c, boolean vac, boolean ket, boolean air, boolean trim, boolean standard) {
         port(COLUMN, Role.VAPOUR_OUTLET, 0, 260, 120, vac ? EJECTOR : CONDENSER);
         if (vac) {
-            port(EJECTOR, Role.SUCTION, 0, 340, 40, COLUMN);
-            port(EJECTOR, Role.DISCHARGE, 0, 396, 40, CONDENSER);
+            port(EJECTOR, Role.SUCTION, 0, trim ? 316 : 340, 40, COLUMN);
+            port(EJECTOR, Role.DISCHARGE, 0, trim ? 372 : 396, 40, CONDENSER);
         }
-        port(CONDENSER, air ? Role.PROCESS_INLET : Role.SHELL_INLET, 0, 460, 40, vac ? EJECTOR : COLUMN);
-        port(CONDENSER, air ? Role.PROCESS_OUTLET : Role.SHELL_OUTLET, 0, 580, 40, RECEIVER);
-        port(RECEIVER, Role.SIDE, -1, 605, 110, CONDENSER);
+        port(CONDENSER, air ? Role.PROCESS_INLET : Role.SHELL_INLET, 0, trim ? 402 : 460, 40, vac ? EJECTOR : COLUMN);
+        if (trim) {
+            port(CONDENSER, Role.PROCESS_OUTLET, 0, 496, 40, TRIM_CONDENSER);
+            port(TRIM_CONDENSER, Role.SHELL_INLET, 0, 506, 40, CONDENSER);
+            port(TRIM_CONDENSER, Role.SHELL_OUTLET, 0, 600, 40, RECEIVER);
+        } else port(CONDENSER, air ? Role.PROCESS_OUTLET : Role.SHELL_OUTLET, 0, 580, 40, RECEIVER);
+        port(RECEIVER, Role.SIDE, -1, 605, 110, trim ? TRIM_CONDENSER : CONDENSER);
         port(RECEIVER, Role.VAPOUR_OUTLET, 0, 465, 110, OFFGAS_VALVE);
         port(RECEIVER, Role.BOOT_DRAIN, 0, 511, 174, WATER_VALVE);
         port(RECEIVER, Role.LIQUID_OUTLET, 0, 470, 148, REFLUX_PUMP);

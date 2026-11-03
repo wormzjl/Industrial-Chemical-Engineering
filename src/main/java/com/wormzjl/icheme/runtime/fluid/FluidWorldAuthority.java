@@ -105,6 +105,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         columns=new ColumnOperation(topology,registry,runtime.coordinator(),model.components(),model.molecularWeights());runtime.coordinator().ports(columns);
         columns.solves(new ColumnOperation.Solves() {
             @Override public com.wormzjl.icheme.science.column.v3.V3ColumnInput design(ColumnUnit unit){return columnDesign(unit.master());}
+            @Override public com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser condenser(ColumnUnit unit){return columnCondenser(unit.master());}
             @Override public boolean submit(long unit,com.wormzjl.icheme.science.column.operation.ColumnSolve.Job job,java.util.function.Consumer<com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome> done) {
                 var dimension=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,net.minecraft.resources.ResourceLocation.parse(topology.column(unit).master().dimension()));
                 var request=new com.wormzjl.icheme.runtime.ProcessSolveServices.ColumnUnitRequest(com.wormzjl.icheme.runtime.ProcessSolveServices.nextRequestId(),new com.wormzjl.icheme.runtime.ProcessSolveServices.ColumnUnitTarget(dimension,unit),0,done);
@@ -481,14 +482,24 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * cannot be read: no operating point, or its chunk not loaded (a read never loads one).
      */
     private com.wormzjl.icheme.science.column.v3.V3ColumnInput columnDesign(PhysicalFluidTopology.Position master) {
+        var vessel=columnVessel(master);
+        if(vessel==null)return null;
+        var trays=vessel.shape().trays();var point=trays.operating();
+        return point==null||!point.fits(trays)?null:point.input(trays,vessel.shape().diameter());
+    }
+    /** The condenser of the column at {@code master}'s design: water-cooled where it has none. */
+    private com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser columnCondenser(PhysicalFluidTopology.Position master) {
+        var vessel=columnVessel(master);
+        return vessel==null||vessel.shape().trays().components()==null?com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.EXCHANGER:vessel.shape().trays().components().condenser();
+    }
+    /** The loaded column vessel at {@code master}, or null. */
+    private com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel columnVessel(PhysicalFluidTopology.Position master) {
         for(var level:server.getAllLevels()) {
             if(!level.dimension().location().toString().equals(master.dimension()))continue;
             var at=new net.minecraft.core.BlockPos(master.x(),master.y(),master.z());
             if(!level.isLoaded(at))return null;
             var vessel=com.wormzjl.icheme.world.level.block.EquipmentStructure.at(level,at);
-            if(vessel==null||vessel.shape().trays()==null)return null;
-            var trays=vessel.shape().trays();var point=trays.operating();
-            return point==null||!point.fits(trays)?null:point.input(trays,vessel.shape().diameter());
+            return vessel==null||vessel.shape().trays()==null?null:vessel;
         }
         return null;
     }

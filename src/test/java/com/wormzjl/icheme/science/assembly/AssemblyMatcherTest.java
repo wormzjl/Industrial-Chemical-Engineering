@@ -86,6 +86,14 @@ class AssemblyMatcherTest {
             condenser = g.unit(Kind.AIR_COOLER, PROCESS_INLET, PROCESS_OUTLET);
             g.pipe(overhead, port(condenser, PROCESS_INLET));
             condensate = port(condenser, PROCESS_OUTLET);
+        } else if (c.condenser() == Condenser.AIR_THEN_WATER) {
+            // The air cooler, then the water trim on its shell side (COOLER_MODEL_PLAN.md section 6).
+            condenser = g.unit(Kind.AIR_COOLER, PROCESS_INLET, PROCESS_OUTLET);
+            g.pipe(overhead, port(condenser, PROCESS_INLET));
+            var trim = g.unit(Kind.EXCHANGER, TUBE_INLET, TUBE_OUTLET, SHELL_INLET, SHELL_OUTLET);
+            units.put("trim_condenser", trim);
+            g.pipe(port(condenser, PROCESS_OUTLET), port(trim, SHELL_INLET));
+            condensate = port(trim, SHELL_OUTLET);
         } else {
             condenser = g.unit(Kind.EXCHANGER, TUBE_INLET, TUBE_OUTLET, SHELL_INLET, SHELL_OUTLET);
             g.pipe(overhead, port(condenser, SHELL_INLET));
@@ -183,7 +191,7 @@ class AssemblyMatcherTest {
                                 assertEquals(plant.units().size(), report.members().size(), trays::toString);
                                 cases++;
                             }
-        assertEquals(8680, cases);
+        assertEquals(8680 * Condenser.values().length / 2, cases);
     }
 
     @Test
