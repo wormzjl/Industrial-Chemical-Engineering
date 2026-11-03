@@ -1,6 +1,6 @@
 # Sizing stage plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. S1 to S3 are built; the rest is not. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. S1 to S3 and S4a, the science and formats half of S4, are built; the rest is not. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
 
 ## 1. Expected behaviour
 
@@ -206,6 +206,7 @@ A trial solves the column alone with the run's feed at one diameter. Flood and t
 
 | Limit | Kind | Value | Source |
 |---|---|---|---|
+| Pressure spare on its path | Must | ≥ 0 at the valve that holds the path's end | World |
 | Valve drop | Should | ≥ 20 % of the path, ≥ 0.7 bar | [HALL-V] |
 | Ejector compression a stage | Should | ≤ 7 | [SK], [EJ-X] |
 | Ejector stages by suction | Should | 1 above 100 mbar, 2 above 13, 3 above 1.3 | [WEAK], [EJ-X] |
@@ -237,6 +238,8 @@ A block is one row with its members under it, as its door builds them: condenser
 
 A pressure path runs from a machine's outlet to the next pressure the sheet sets. The door's drops were the player's estimates. The Pressure view adds up the sized ones at design flow, with static head where nozzle heights give it. A negative spare is red. A positive spare is what a valve takes. The tool finds the paths from the sheet.
 
+As built (S4a): a path starts on a feed, a pump's or a compressor's outlet, a drum's or a tank's outlet, a kettle's gas or liquid, a column's product or draw, and a valve that holds its outlet. It walks each line (at the basis's 50 m or its own length) and each unit side (its law at design flow once sized, else the door's drop), passes mixers and filters, and branches at splitters. It ends where the sheet sets a pressure: a valve on its outlet, which takes the spare; a column's feed or steam tray; a drum set to a pressure; a tank's held pressure. There the spare is a Must, `PATH_SPARE`. Anywhere else it ends at what the run delivers on the doors' drops (the run reads no head), with no lamp: a product, a pump's suction, a drum at its inlet's pressure. Static head counts from a column's tray or sump and the receiver's levels. `VALVE_SHARE` reads the valve's drop against the path's loss plus that drop, and `HEATER_SPARE` the spare of the path its coils are on.
+
 ### 3.7 Hand-off
 
 Send to block stores each unit's design on the block as an `EquipmentShape`, as Save design does for a column today. The constructor's Import lists them all, each with its tag and count, and lands the chosen one on the open draft. The protocol changes, and needs no compatibility. The Build view's line list stays with the player, who lays each line at its bore with the pipe tool. Nothing places itself.
@@ -248,6 +251,8 @@ Sheets 24 to 27. One tab with four views: Units, Lines, Pressure, Build. The lef
 ### 3.9 Formats
 
 Sizes, Auto or Fixed, are facts of the sheet: new fields with defaults, under the sheet's own rule (main plan, section 3.9). Lamps, values and paths are state, rebuilt when the tab opens. An old sheet opens with every item on Auto and no size yet. A tile's type is a fact of the same kind: no type means Auto.
+
+As built (S4a): an optional `sizing` section, written only once a fact is held. It holds the basis (`design_flow`, `line_length`, `pa_fall`); `units` by id (a member's id is `block/member`), each with `mode` (`AUTO` or `FIXED`, by name), `type`, `hold` and `size` (`kind` and the size's own fields); `lines` by stream id, each with `mode`, `service`, `length` and `size` (`bore`, `runs`). A column's size is its door's diameter and a valve's its inlet line's bore, so neither stores one. Unknown fields are kept at every level. A damaged fact refuses the file and names where. The format number stays 1: a reader of 1 that predates the section keeps it as an unknown field, writes it back, and runs on the doors' drops, which is the sheet's behaviour before it was sized. The corpus image is `compat/flowsheet/format-1-sizing.json`.
 
 ### 3.10 Types
 
@@ -288,6 +293,8 @@ The reason is the friction factor: a pipe's, where Kern uses a tube bank's. But 
 4. Surface and drops decide an exchanger. Speeds have no row.
 
 The feedback is real. H-101's door typed 7.60 bar, and its coils lose 1.95 at design flow. At the run's flow this path's units lose about 2.8 bar, where the doors typed 9.00. So S-6 rises from 5.00 to about 11.2 bar, and less crude flashes in the coil at 365 °C: 54 mole % vapour, not 71. H-101 falls from 78.37 to 74.25 MW and T-101's feed from 359.5 to 350.5 °C. The run still closes in 2 passes. The Pressure view shows the cure: 5.34 bar of P-101's rise is spare.
+
+As built (S4a), on a real run: the sized drops lose 2.69 bar at the run's flow, so S-6 rises to 11.31 bar, H-101 falls to 74.20 MW, T-101's feed to 350.40 °C, and the coil's outlet holds 53.6 mole % vapour, STEADY in 2 passes. The estimate of 2.8 scaled the design stair by the square of the flow; at 11.3 bar the coil's crude flashes less than at 5, so its law loses less than that. The coils' law at design flow is 2.11 bar, not 1.95 (section 4). P-101's path ends at V-101's set 2.72 bar: 11.28 bar available, 3.85 lost, 7.43 spare, which is V-101's drop at design flow.
 
 ### 3.12 Ejector
 
@@ -346,6 +353,8 @@ Three results went against what the sheet's author would guess.
 
 - The boot's 5 min, not the oil's, sets the receiver: D 3.0 m holds the oil, and the water needs D 4.0 m.
 - H-101's door took 7.60 bar, and its coils lose 1.95 bar at design flow. So 5.34 bar stays spare, for a valve or a smaller rise on P-101. A lower rise needs a new run, as the coils lose more at a lower pressure. Section 3.11 gives what the run moves once it reads these drops.
+
+S4a's code reads H-101's coils at 2.11 bar, not 1.95: the radiant coil starts where the convection coil ends, 0.46 bar lower, so more crude flashes in it (0.11 bar; the probe restarted the radiant march at the inlet's pressure), and the built cabin holds 87.6 MW, not the design's 86.2, on the same 11 passes, so its coils are longer (0.05 bar). P-101's path also counts the transfer line S-6 (0.03 bar), which the probe's path, ending at H-101's outlet, left out: 3.85 bar lost, not 3.66. The residue's path loses 0.48 of 0.99 bar, not 0.47: E-102's bank (above).
 - P-102 has room, as the run already shows. W7 measured its bubble pressure at 191.5 kPa, 74.2 % of the stream's pressure, because the tray's vapour is 23.9 % steam, so the run gives no warning. Here the draw nozzle's 21 m of static head and the steam's share of the tray pressure give 31 m of NPSH.
 
 The sample has no storage tile, so this what-if gives each product one, at a 24 h hold and an 85 % working share:
@@ -370,7 +379,8 @@ They follow W1 to W9 of the main plan. Each ends with the tests it can affect an
 | S1 | `science/flowsheet/sizing`: the limits as one table with source tags, services, line sizing | Each service at both sides of its limit; the sample's lines equal the probe's |
 | S2 | Units: pump, exchanger, kettle, air cooler, heater, compressor, drum, tank, valve; one rule both sizes and rates; the type proposals; the surface from `HeatCurve` | Per class: the size holds, one step down fails, Fixed reports the same limits; each tile's proposal on both sides of its limit; the door's surface against the world's at one duty |
 | S3 | Column and members: trial diameters in the run thread, re-run on a new diameter, circulation, member heads | Stop reaches a trial; the sample's flood at each diameter; no process number moves but a column's |
-| S4 | Pressure paths, the tab and its four views, lamps, Auto, Fixed and type keys, the run on sized drops, formats | Column-builder gates; sheets rendered from shipped code; a corpus image; an old sheet opens; a sized unit's drop follows a changed flow |
+| S4a | Pressure paths, the run on sized drops, the facts and their format, Size all and the rating as pure functions | The sample's paths against the probe's; a sized unit's drop follows a changed flow; the sample sized moves as section 3.11 says; an unsized run moves no number; a corpus image; an old sheet opens |
+| S4b | The tab and its four views, lamps, Auto, Fixed and type keys, Size all's wiring | Column-builder gates; sheets rendered from shipped code |
 | S5 | Send to block, the constructor's list, the coverage gate: every equipment kind declares its sizing or says why it has none; code guide chapter | Import gate; coverage gate |
 
 The ejector is W10 of the main plan, after S5.
