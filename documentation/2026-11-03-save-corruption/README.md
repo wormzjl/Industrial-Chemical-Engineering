@@ -2,7 +2,7 @@
 
 Purpose: how save corruption can damage an IChemE world, and how to stop it from causing total data loss, as an extension of the backward-compat facts/state system (owner 2026-11-03: "Research about how to handle eventual save corruption to prevent total data loss"; "I'd imagine it will be somehow combined with the backward compat system").
 
-Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is built: steps 1 to 8 are done, not merged. The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is built: steps 1 to 8 are done, not merged. It merges after the in-game process simulator batch works (owner, 2026-11-04). The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -120,7 +120,7 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
 
 ## Open items
 
-- W5 is complete. Merge preparation (final lane, CHANGELOG, version, code guide, tooling cleanup) waits for the owner.
+- W5 is complete. It merges after the in-game process simulator batch works (owner, 2026-11-04: "This will merge after the simulator works"). Merge preparation then: bring in main with the simulator, final lane, CHANGELOG, version, code guide, tooling cleanup.
 - One in-game check of a rebuilt structure (rendering, light) to offer the owner after step 6 (plan section 8); not started unasked.
 - Tooling cleanup before the merge: the rack-frame probe `tmp/rack-frame/ambiguity.jsh` (plan 3.1) moves to a `tools/` folder.
 - A restored sight glass faces the run's default axis, not the one its player chose: the fitting record keeps no axis. Option: an append-only axis field in the accessory facts, with a corpus image. Owner to decide.
