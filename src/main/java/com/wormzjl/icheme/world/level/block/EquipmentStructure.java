@@ -130,6 +130,24 @@ public final class EquipmentStructure {
      * @throws IllegalStateException naming the first cell that blocks the vessel
      */
     public static int place(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint, int rows) {
+        return place(level, origin, shape, paint, com.wormzjl.icheme.science.equipment.DeviceName.NONE, rows);
+    }
+
+    /**
+     * Names the structure {@code vessel} (N1): every shell cell takes {@code name} (cleaned), as every cell holds its
+     * paint, and sends itself to the clients. Nothing changes, and false, while a shell cell is not loaded: the name stays
+     * the same on every cell.
+     */
+    public static boolean rename(ServerLevel level, Vessel vessel, String name) {
+        var cells = ShapeRasterizer.layout(vessel.shape()).shell();
+        for (var cell : cells) if (!level.isLoaded(vessel.origin().offset(cell.x(), cell.y(), cell.z()))) return false;
+        for (var cell : cells)
+            if (level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity entity) entity.rename(name);
+        return true;
+    }
+
+    /** {@link #place(ServerLevel, BlockPos, EquipmentShape, Paint, int)}, every cell named {@code name} (N1: an imported design's tag). */
+    public static int place(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint, String name, int rows) {
         var layout = ShapeRasterizer.layout(shape);
         for (var list : java.util.List.of(layout.shell(), layout.interior()))
             for (var cell : list) {
@@ -144,7 +162,7 @@ public final class EquipmentStructure {
             if (cell.y() >= rows) continue;
             var position = origin.offset(cell.x(), cell.y(), cell.z());
             level.setBlock(position, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
-            if (level.getBlockEntity(position) instanceof EquipmentShellBlockEntity entity) entity.bind(shape, cell, paint);
+            if (level.getBlockEntity(position) instanceof EquipmentShellBlockEntity entity) entity.bind(shape, cell, paint, name);
             placed++;
         }
         for (var cell : layout.interior()) {
@@ -510,6 +528,27 @@ public final class EquipmentStructure {
         return null;
     }
 
+    /**
+     * The name of the device at {@code position} (N1): a one-block device's, or the structure's whose cell or interior that
+     * is, read from its loaded cells; empty when it has none or none is loaded.
+     */
+    public static String name(BlockGetter level, BlockPos position) {
+        if (level.getBlockEntity(position) instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity device) return device.name();
+        var vessel = find(level, position);
+        return vessel == null ? com.wormzjl.icheme.science.equipment.DeviceName.NONE : name(level, vessel);
+    }
+
+    /** The name of {@code vessel}, from its first loaded shell cell (every cell holds it); empty when it has none or none is loaded. */
+    public static String name(BlockGetter level, Vessel vessel) {
+        var layout = ShapeRasterizer.layout(vessel.shape());
+        var controller = layout.controller();
+        if (level.getBlockEntity(vessel.origin().offset(controller.x(), controller.y(), controller.z())) instanceof EquipmentShellBlockEntity shell && shell.shape() != null)
+            return shell.name();
+        for (var cell : layout.shell())
+            if (level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity shell && shell.shape() != null) return shell.name();
+        return com.wormzjl.icheme.science.equipment.DeviceName.NONE;
+    }
+
     /** The longest walk over interior cells: across the widest body, a column's or a floating-roof tank's. */
     private static final int FIND_STEPS = (int) Math.ceil(Math.max(EquipmentShape.MAX_COLUMN_DIAMETER, UnitDesign.of(EquipmentShape.Kind.TANK).maxSize())) + 2;
 
@@ -755,6 +794,7 @@ public final class EquipmentStructure {
     static void refresh(ServerLevel level, BlockPos origin, EquipmentShape shape, BlockPos low, BlockPos high) {
         var world = new HashMap<ShapeRasterizer.Cell, EquipmentRefresh.Holding>();
         Paint paint = null;
+        String name = com.wormzjl.icheme.science.equipment.DeviceName.NONE;
         BlockPos oldNode = null;
         var held = new ArrayList<Long>();
         for (var at : BlockPos.betweenClosed(low, high)) {
@@ -762,7 +802,10 @@ public final class EquipmentStructure {
             var state = level.getBlockState(at);
             if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && ours(shell, origin, shape)) {
                 world.put(cell, EquipmentRefresh.Holding.SHELL);
-                if (paint == null) paint = shell.paint();
+                if (paint == null) {
+                    paint = shell.paint();
+                    name = shell.name();
+                }
                 if (shell.fluidIdentity() != 0) {
                     oldNode = at.immutable();
                     held.add(shell.fluidIdentity());
@@ -801,7 +844,7 @@ public final class EquipmentStructure {
                 if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity entity) {
                     var before = entity.key();
                     if (!placeShell.contains(cell)) cellPaint = entity.paint();
-                    entity.bind(shape, cell, cellPaint);
+                    entity.bind(shape, cell, cellPaint, name);
                     if (!entity.key().equals(before)) {
                         level.sendBlockUpdated(at, entity.getBlockState(), entity.getBlockState(), Block.UPDATE_CLIENTS);
                         touched.add(at);

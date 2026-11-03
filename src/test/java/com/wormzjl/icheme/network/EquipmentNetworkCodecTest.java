@@ -92,11 +92,11 @@ class EquipmentNetworkCodecTest {
         assertNotEquals(DRAFT.placement(), STORED.imported(next).placement());
     }
 
-    /** The list request and the choice cross whole: the choice names its design by place, tag and member. */
+    /** The list request and the choice cross whole: the choice names its design by place, tag and member, and carries the name the page listed (N1). */
     @Test
     void theListAndTheChoiceCross() {
         assertEquals(AT, roundTrip(EquipmentNetwork.ImportList.STREAM_CODEC, new EquipmentNetwork.ImportList(AT)).position());
-        var choice = new EquipmentNetwork.ImportChoice(AT, 3, "T-101", "pa 2 cooler");
+        var choice = new EquipmentNetwork.ImportChoice(AT, 3, "T-101", "pa 2 cooler", "T-101 PA 2 cooler");
         assertEquals(choice, roundTrip(EquipmentNetwork.ImportChoice.STREAM_CODEC, choice));
     }
 
@@ -172,5 +172,47 @@ class EquipmentNetworkCodecTest {
         var repairs = new ArrayList<String>();
         assertEquals(DRAFT, EquipmentConstructorBlockEntity.readDesign(tag, Design.DEFAULT, repairs::add));
         assertEquals(List.of(), repairs);
+    }
+
+    /** N1: a design's name crosses in its tags, a constructor saved before names reads unnamed, and one that breaks the rule is cleaned, a repair. */
+    @Test
+    void aDesignsNameReadsBackAndASavedOneBeforeNamesReadsUnnamed() {
+        var named = DRAFT.withName("E-101");
+        var tag = new CompoundTag();
+        EquipmentConstructorBlockEntity.writeDesign(tag, named);
+        var repairs = new ArrayList<String>();
+        assertEquals(named, EquipmentConstructorBlockEntity.readDesign(tag, Design.DEFAULT, repairs::add));
+        assertEquals(List.of(), repairs);
+        tag.remove("Name");
+        assertEquals("", EquipmentConstructorBlockEntity.readDesign(tag, Design.DEFAULT, repairs::add).name());
+        assertEquals(List.of(), repairs);
+        var unnamed = new CompoundTag();
+        EquipmentConstructorBlockEntity.writeDesign(unnamed, DRAFT);
+        assertFalse(unnamed.contains("Name"), "an unnamed design writes no name");
+        tag.putString("Name", "  §cE-1\u000701  ");
+        assertEquals("E-101", EquipmentConstructorBlockEntity.readDesign(tag, Design.DEFAULT, repairs::add).name());
+        assertEquals(1, repairs.size(), repairs.toString());
+    }
+
+    /** N1: an import names the draft; a hand edit keeps the name, as it keeps the imported column; a new import replaces it. */
+    @Test
+    void anImportNamesTheDraftAndAHandEditKeepsIt() {
+        var sent = new SentDesign("E-101", "", 1, EquipmentShape.designed(EquipmentShape.Kind.EXCHANGER, 1.5, 5, EquipmentShape.Heading.NORTH, 2,
+                com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE, 0), null);
+        var landed = DRAFT.landed(sent).withName("E-101");
+        assertEquals("E-101", landed.name());
+        assertEquals("E-101", landed.keepingColumn(DRAFT).name(), "a hand edit keeps the name");
+        assertEquals("E-101", landed.withTurns(List.of()).name());
+        assertEquals("E-101", landed.withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.ONE).name());
+        assertEquals("E-102", landed.landed(sent).withName("E-102").name(), "a new import replaces it");
+        assertEquals("", Design.DEFAULT.name(), "a design built by hand starts unnamed");
+    }
+
+    /** N1: a rename crosses whole, at most {@link EquipmentNetwork.Rename#MAX_TEXT} characters on the wire. */
+    @Test
+    void aRenameCrosses() {
+        var rename = new EquipmentNetwork.Rename(AT, "P-101 水泵");
+        assertEquals(rename, roundTrip(EquipmentNetwork.Rename.STREAM_CODEC, rename));
+        assertThrows(Exception.class, () -> roundTrip(EquipmentNetwork.Rename.STREAM_CODEC, new EquipmentNetwork.Rename(AT, "x".repeat(EquipmentNetwork.Rename.MAX_TEXT + 1))));
     }
 }

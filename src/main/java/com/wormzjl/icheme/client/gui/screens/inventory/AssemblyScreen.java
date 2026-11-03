@@ -418,12 +418,21 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         g.pose().popPose();
     }
 
+    /** The title with the column's name first (N1), read from the client's cells of the structure at the menu's origin. */
+    private String titled() {
+        var level = minecraft == null ? null : minecraft.level;
+        var vessel = level == null ? null : com.wormzjl.icheme.world.level.block.EquipmentStructure.at(level, menu.origin());
+        String name = vessel == null ? "" : com.wormzjl.icheme.world.level.block.EquipmentStructure.name(level, vessel);
+        return com.wormzjl.icheme.science.equipment.DeviceName.titled(name, title.getString(),
+                (n, kind) -> net.minecraft.network.chat.Component.translatable("gui.icheme.device.named", n, kind).getString());
+    }
+
     @Override
     protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) {
         int x = mouseX - leftPos, y = mouseY - topPos;
         var skin = skin();
         var canvas = new GuiCanvas(g, font, leftPos, topPos);
-        String name = title.getString(), shown = font.plainSubstrByWidth(name, AssemblyColumn.title(imageWidth));
+        String name = titled(), shown = font.plainSubstrByWidth(name, AssemblyColumn.title(imageWidth));
         skin.title(canvas, 10, 10, shown);
         if (shown.length() < name.length() && x >= 6 && x < AssemblyColumn.title(imageWidth) + 14 && y >= 6 && y < 22) hovered = name;
         // The status once, on the message display; its detail (where the structure changed) on hover.
@@ -539,6 +548,15 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return Component.translatable("gui.icheme.vessel.role." + name.toLowerCase(Locale.ROOT));
     }
 
+    /** {@link #found(String)}, the name of the device at {@code at} first where it has one (N1), read from the client's blocks. */
+    private static Component found(String detail, long at) {
+        var kind = found(detail);
+        var level = net.minecraft.client.Minecraft.getInstance().level;
+        if (level == null || at == AssemblyReport.NONE) return kind;
+        String name = com.wormzjl.icheme.world.level.block.EquipmentStructure.name(level, BlockPos.of(at));
+        return name.isEmpty() ? kind : Component.translatable("gui.icheme.device.named", name, kind);
+    }
+
     /** A unit or fitting the matcher found, by the word it wrote. */
     private static Component found(String detail) {
         return switch (detail) {
@@ -567,19 +585,19 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             case MISSING -> detail.isEmpty() ? tr("state.missing", name, where)
                     : detail.equals("terminal") ? tr("state.missing.terminal", name, position(at))
                     : detail.startsWith("returns:") ? tr("state.missing.returns", name, role(detail.substring(8)))
-                    : tr("state.missing.found", name, found(detail), position(at));
+                    : tr("state.missing.found", name, found(detail, at), position(at));
             case OPEN_END -> detail.equals("unconnected") || at == AssemblyReport.NONE ? tr("state.open_end.unconnected", name, where)
                     : tr("state.open_end", name, position(at));
             case NOT_LOADED -> {
                 var pos = BlockPos.of(at);
                 yield tr("state.not_loaded", name, pos.getX() >> 4, pos.getZ() >> 4);
             }
-            case WRONG_KIND -> tr("state.wrong_kind", name, found(detail), wanted == null ? where : wanted);
+            case WRONG_KIND -> tr("state.wrong_kind", name, found(detail, at), wanted == null ? where : wanted);
             case WRONG_PORT -> detail.equals("backwards") ? tr("state.backwards", name)
                     : detail.startsWith("returns:") ? tr("state.wrong_port.returns", name, role(detail.substring(8)))
                     : tr("state.wrong_port", name, role(detail), where);
             case VALVE_REVERSED -> tr("state.valve_reversed", name);
-            case EXTRA_VALVE -> tr("state.extra_valve", name, found(detail), position(at));
+            case EXTRA_VALVE -> tr("state.extra_valve", name, found(detail, at), position(at));
             case WRONG_ORDER -> tr("state.wrong_order", name, where);
             case BRANCHED -> tr("state.branched", name, position(at));
             case SHARED -> tr("state.shared", name);

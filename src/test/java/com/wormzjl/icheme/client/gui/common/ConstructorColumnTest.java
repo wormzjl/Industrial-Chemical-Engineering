@@ -370,4 +370,25 @@ class ConstructorColumnTest {
             assertEquals(widgets(ConstructorColumn.nozzles(placed, t), width), widgets(ConstructorColumn.nozzles(unplaced, t), width));
         }
     }
+
+    /**
+     * N1: the name a design gives the structure it builds is its tag, a block member's own name after it, as the Import page lists it
+     * without its count; the calculator's untagged design gives none. The design page's title puts the name first and stays in its room.
+     */
+    @Test
+    void anImportedDesignsNameIsItsListedTagAndTheTitlePutsItFirst() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        for (var sent : sent()) {
+            String label = ConstructorColumn.label(sent, t);
+            if (sent.tag().isEmpty()) assertEquals("", label);
+            else assertTrue(ConstructorColumn.listed(sent, t).name().startsWith(label), label);
+        }
+        var condenser = sent().getLast();
+        assertEquals(t.get(ConstructorColumn.KEY + "import.member", "T-101", t.get("flowsheet.sizing.member.condenser")), ConstructorColumn.label(condenser, t));
+        java.util.function.BiFunction<String, String, String> named = (n, kind) -> t.get("device.named", n, kind);
+        assertEquals("Drum", ConstructorColumn.title("", "Drum", "Drum", M, named), "no name: the kind");
+        assertEquals(t.get("device.named", "V-1", "Drum"), ConstructorColumn.title("V-1", "Drum", "Drum", M, named));
+        String longest = ConstructorColumn.title("X".repeat(32), "Heat exchanger", "Exchanger", M, named);
+        assertTrue(M.width(longest) <= ConstructorColumn.TITLE, longest);
+    }
 }

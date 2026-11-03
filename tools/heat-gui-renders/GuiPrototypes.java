@@ -80,6 +80,7 @@ public final class GuiPrototypes {
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         out.addAll(OperationPrototypes.operation());
+        out.addAll(names());
         return out;
     }
 
@@ -573,8 +574,15 @@ public final class GuiPrototypes {
      * asks for it. Fields show {@code drafts} by key. Returns the glass's inner box.
      */
     static Rect device(Door d, DeviceColumn.Input in, Map<String, String> drafts) {
+        return device(d, List.of(), in, drafts);
+    }
+
+    /** {@link #device(Door, DeviceColumn.Input, Map)} with {@code lead}, rows before the device's own (an option sheet's). */
+    static Rect device(Door d, List<Column.Row> lead, DeviceColumn.Input in, Map<String, String> drafts) {
         int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
-        var column = Column.place(DeviceColumn.rows(in, TEXTS), 10, top, side - 10, d.m, Column.Metrics.COMPACT);
+        var rows = new ArrayList<Column.Row>(lead);
+        rows.addAll(DeviceColumn.rows(in, TEXTS));
+        var column = Column.place(rows, 10, top, side - 10, d.m, Column.Metrics.COMPACT);
         var view = new ScrollView();
         view.layout(new Rect(8, top, side - 6, bottom - top), side + 3, column.bounds().h());
         while (d.end && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
@@ -584,6 +592,9 @@ public final class GuiPrototypes {
             if (p.row() instanceof Column.Field f) {
                 var r = p.slots().get(f.key());
                 if (view.visible(r)) d.skin.field(d.c, view.onScreen(r), drafts.getOrDefault(f.key(), ""), "", false);
+            } else if (p.row() instanceof Column.Wide wide) {
+                var r = p.slots().get(wide.key());
+                if (view.visible(r)) d.skin.field(d.c, view.onScreen(r), drafts.getOrDefault(wide.key(), ""), "", false);
             } else if (p.row() instanceof Column.Buttons b)
                 for (var spec : b.buttons()) {
                     var r = p.slots().get(spec.key());
@@ -676,6 +687,50 @@ public final class GuiPrototypes {
             var box = device(d, in, Map.of("pressure", "2.00", "temperature", "25.0"));
             contents(d, box, 0, List.of(new String[]{"Component", "Mole %", "kmol/s"}, new String[]{"n-Hexane", "61.0", "0.1"}, new String[]{"n-Heptane", "39.0", "0.1"}));
             d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/s");
+        });
+    }
+
+    // ---- N1: where the device's name is entered (option sheet; the owner picks one) ----
+
+    /** The pump's page as the three name entries draw it. */
+    static List<Prototype> names() {
+        return List.of(nameOption("name-a"), nameOption("name-b"), nameDialog(), nameOption("name-c"));
+    }
+
+    static Prototype nameOption(String file) {
+        var in = new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.20", "bar"),
+                meter("throughput", "554.8", "kmol/h"), meter("pressure_change", "2.40", "bar")));
+        return devicePage(file, WINDOW[0], WINDOW[1], in, (d, s) -> {
+            switch (file) {
+                case "name-a" -> d.title("P-101 · Centrifugal pump");
+                case "name-b" -> {
+                    d.title("P-101 · Centrifugal pump");
+                    d.skin.button(d.c, new Rect(d.w - 28 - 6 - 54, 5, 54, 18), "Rename", Skin.Press.REST, false);
+                }
+                default -> {
+                    d.skin.field(d.c, new Rect(10, 6, 54, 16), "P-101", "Name", false);
+                    d.skin.title(d.c, 68, 10, "Centrifugal pump");
+                    d.skin.iconKey(d.c, new Rect(d.w - 28, 5, 18, 18), Skin.Icon.THEME, false);
+                }
+            }
+            d.tabs(0, "Overview", "Datasheet");
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var lead = file.equals("name-a") ? List.<Column.Row>of(new Column.Group("Name", null, List.of(new Column.Wide("name", null)))) : List.<Column.Row>of();
+            var box = device(d, lead, in, Map.of("name", "P-101", "volumeFlow", "12.0", "maximumAddedPressure", "5.00"));
+            contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "92.1", "511"}, new String[]{"Ethanol", "7.9", "43.8"}));
+            d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+        });
+    }
+
+    /** Option B's dialog, opened by the Rename key. */
+    static Prototype nameDialog() {
+        var rows = List.<Column.Row>of(new Column.Paragraph("Shown first in its screens' titles and on its nameplate. Empty clears it.", Palette.MUTED),
+                new Column.Wide("name", null));
+        return new Prototype("name-b-dialog", 230, dialogHeight(rows, 230) + 12, (d, s) -> {
+            d.skin.title(d.c, 10, 10, "Rename P-101");
+            d.column(rows, 10, DialogColumns.TOP, d.w - 20, Map.of("name", "P-101"));
+            dialogFooter(d, "Cancel", "Save");
         });
     }
 
@@ -810,6 +865,7 @@ public final class GuiPrototypes {
             column.draw(c, 0, skin);
             for (var p : column.rows()) {
                 if (p.row() instanceof Column.Field f) skin.field(c, p.slots().get(f.key()), values.getOrDefault(f.key(), ""), "off", false);
+                else if (p.row() instanceof Column.Wide wide) skin.field(c, p.slots().get(wide.key()), values.getOrDefault(wide.key(), ""), "", false);
                 else if (p.row() instanceof Column.Buttons b)
                     for (var spec : b.buttons())
                         skin.button(c, p.slots().get(spec.key()), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);

@@ -89,6 +89,8 @@ public final class EquipmentConstructorScreen extends Screen {
     private final BlockPos position;
     private final Direction facing;
     private Design saved;
+    /** The design's name (N1), which only an import sets; the built structure takes it. */
+    private String name = com.wormzjl.icheme.science.equipment.DeviceName.NONE;
     /** The screen opens on the choice page. */
     private Page page = Page.CHOOSE;
     /** The group the choice page shows: the current kind's until another is picked, again so each time the page opens. */
@@ -148,6 +150,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     private void load(Design design) {
         saved = design;
+        name = design.name();
         form = design.form();
         column = design.column();
         diameter = design.diameter();
@@ -179,7 +182,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The draft; always valid, because every stepper is clamped to the bounds of its parameter. */
     public Design design() {
         return new Design(diameter, tangentLength, form, support, new VesselPlacement(forward, right, up), trays, List.copyOf(connections), paint, bank, hasBoot(), outlet(),
-                column, List.copyOf(turns),towerBank);
+                column, List.copyOf(turns), towerBank, name);
     }
 
     private static Skin skin() {
@@ -725,7 +728,7 @@ public final class EquipmentConstructorScreen extends Screen {
         refused = null;
         saved = design();
         EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.KEEP);
-        EquipmentNetwork.sendImportChoice(position, index, sent);
+        EquipmentNetwork.sendImportChoice(position, index, sent, ConstructorColumn.label(sent, EquipmentConstructorScreen::tr));
         show(Page.DESIGN);
     }
 
@@ -881,7 +884,8 @@ public final class EquipmentConstructorScreen extends Screen {
         skin.page(canvas, new Rect(0, 0, ConstructorColumn.PANEL, height));
         var equipment = Equipment.of(form);
         String title = page == Page.CHOOSE ? this.title.getString()
-                : ConstructorColumn.title(tr(ConstructorColumn.KEY + "equipment." + equipment.key()), tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".short"), m);
+                : ConstructorColumn.title(name, tr(ConstructorColumn.KEY + "equipment." + equipment.key()), tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".short"), m,
+                (n, kind) -> Component.translatable("gui.icheme.device.named", n, kind).getString());
         skin.title(canvas, 10, 10, title);
         // Placed again for this frame's texts and values; the widgets keep their slots.
         var shown = panel();

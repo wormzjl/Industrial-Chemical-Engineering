@@ -41,10 +41,12 @@ import java.util.Optional;
  * nearest process simulator holds ({@link ImportList}, answered by {@link ImportListAnswer}), then lands the chosen one on
  * the draft ({@link ImportChoice}); both read what the block stores (nothing is solved) and always answer the requesting
  * player, the choice with {@link ImportAnswer}, as a column template does ({@link TemplatePayload}, protocol 14). A cooling
- * tower's cell bank rides on the form (protocol 15).
+ * tower's cell bank rides on the form (protocol 15). A device's name (protocol 17, N1): {@link Rename} names a placed
+ * structure or one-block device, and {@link ImportChoice} carries the name the Import page listed, which the built
+ * structure takes.
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-16";
+    public static final String PROTOCOL = "equipment-17";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
     /** A process simulator's designs are imported from within this many blocks of the constructor. */
@@ -172,11 +174,11 @@ public final class EquipmentNetwork {
      * Client to server, sent after the screen's draft ({@link Action#KEEP}): land design {@code index} of the list the screen showed on the
      * draft. Its tag and member must still name that design, else the list changed meanwhile and nothing lands. Answered by {@link ImportAnswer}.
      */
-    public record ImportChoice(BlockPos position, int index, String tag, String member) implements CustomPacketPayload {
+    public record ImportChoice(BlockPos position, int index, String tag, String member, String name) implements CustomPacketPayload {
         public static final Type<ImportChoice> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_import_choice"));
         public static final StreamCodec<RegistryFriendlyByteBuf, ImportChoice> STREAM_CODEC = StreamCodec.composite(BlockPos.STREAM_CODEC, ImportChoice::position,
                 ByteBufCodecs.VAR_INT, ImportChoice::index, ByteBufCodecs.stringUtf8(SentDesign.MAX_TAG), ImportChoice::tag, ByteBufCodecs.stringUtf8(SentDesign.MAX_TAG),
-                ImportChoice::member, ImportChoice::new);
+                ImportChoice::member, ByteBufCodecs.stringUtf8(Rename.MAX_TEXT), ImportChoice::name, ImportChoice::new);
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -211,12 +213,61 @@ public final class EquipmentNetwork {
         }
     }
 
+    /**
+     * Client to server: name the device at {@code position} (N1), a placed structure's cell or a one-block device that
+     * opens a screen; empty clears it. The server cleans the text ({@link com.wormzjl.icheme.science.equipment.DeviceName})
+     * and writes it on the device's block entities, which send it to the clients as they send paint. No engine event: a
+     * name is a drawing fact, not process state.
+     */
+    public record Rename(BlockPos position, String name) implements CustomPacketPayload {
+        /** The longest text the wire takes; the name is cut to {@link com.wormzjl.icheme.science.equipment.DeviceName#MAX} after. */
+        public static final int MAX_TEXT = 128;
+        public static final Type<Rename> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "device_rename"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, Rename> STREAM_CODEC = StreamCodec.composite(BlockPos.STREAM_CODEC, Rename::position,
+                ByteBufCodecs.stringUtf8(MAX_TEXT), Rename::name, Rename::new);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Client: name the device at {@code position}. */
+    public static void rename(BlockPos position, String name) {
+        PacketDistributor.sendToServer(new Rename(position, name));
+    }
+
+    /**
+     * Names the device the player may reach and use: a one-block device that opens a screen within its screen's reach, or
+     * a structure within its screen's reach (the reach plus its largest size), every one of its cells loaded. Anything
+     * else changes nothing; a structure with an unloaded cell answers in chat.
+     */
+    private static void rename(Rename rename, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+        var level = player.serverLevel();
+        var at = rename.position();
+        if (!level.isLoaded(at) || !player.mayBuild() || player.isSpectator() || !level.mayInteract(player, at)) return;
+        double reach = com.wormzjl.icheme.world.inventory.FluidDeviceMenu.REACH;
+        if (level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity device) {
+            if (device.nameable() && player.distanceToSqr(at.getCenter()) <= reach * reach) device.rename(rename.name());
+            return;
+        }
+        var vessel = EquipmentStructure.find(level, at);
+        if (vessel == null) return;
+        var shape = vessel.shape();
+        reach += Math.max(shape.sizeX(), Math.max(shape.sizeY(), shape.sizeZ()));
+        if (player.distanceToSqr(at.getCenter()) > reach * reach) return;
+        if (!EquipmentStructure.rename(level, vessel, rename.name()))
+            player.displayClientMessage(Component.translatable("message.icheme.device.rename_unloaded"), true);
+    }
+
     public static void register(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
         registrar.playToServer(ConstructorPayload.TYPE, ConstructorPayload.STREAM_CODEC, EquipmentNetwork::constructor);
         registrar.playToServer(TemplatePayload.TYPE, TemplatePayload.STREAM_CODEC, EquipmentNetwork::template);
         registrar.playToServer(ImportList.TYPE, ImportList.STREAM_CODEC, EquipmentNetwork::importList);
         registrar.playToServer(ImportChoice.TYPE, ImportChoice.STREAM_CODEC, EquipmentNetwork::importChoice);
+        registrar.playToServer(Rename.TYPE, Rename.STREAM_CODEC, EquipmentNetwork::rename);
         registrar.playToClient(ImportListAnswer.TYPE, ImportListAnswer.STREAM_CODEC, (answer, context) -> com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.listed(
                 answer.position(), answer.message(), answer.listed()));
         registrar.playToClient(ImportAnswer.TYPE, ImportAnswer.STREAM_CODEC, (answer, context) -> com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.answered(
@@ -272,12 +323,14 @@ public final class EquipmentNetwork {
             return;
         }
         try {
-            int placed = EquipmentStructure.place(player.serverLevel(), vessel.origin(), vessel.shape(), design.paint(), Integer.MAX_VALUE);
+            int placed = EquipmentStructure.place(player.serverLevel(), vessel.origin(), vessel.shape(), design.paint(), design.name(), Integer.MAX_VALUE);
             var at = vessel.origin().toShortString();
-            player.sendSystemMessage(design.form().column()
+            var kind = Component.translatable("gui.icheme.vessel.title." + vessel.shape().kind().name().toLowerCase(java.util.Locale.ROOT));
+            player.sendSystemMessage(!design.name().isEmpty() ? Component.translatable("message.icheme.equipment.built_named", design.name(), kind, placed, at)
+                    : design.form().column()
                     ? Component.translatable("message.icheme.equipment.built_column", vessel.shape().diameter(), vessel.shape().trays().trays() + 2, placed, at)
                     : vessel.shape().designed() ? Component.translatable("message.icheme.equipment.built_unit",
-                    Component.translatable("gui.icheme.vessel.title." + vessel.shape().kind().name().toLowerCase(java.util.Locale.ROOT)), placed, at)
+                    kind, placed, at)
                     : Component.translatable("message.icheme.equipment.built", design.diameter(), design.tangentLength(), placed, at));
         } catch (IllegalStateException blocked) {
             player.sendSystemMessage(Component.translatable("message.icheme.equipment.blocked", blocked.getMessage()).withStyle(ChatFormatting.RED));
@@ -325,7 +378,7 @@ public final class EquipmentNetwork {
         var sent = designs.get(i);
         EquipmentConstructorBlockEntity.Design design;
         try {
-            design = constructor.design().landed(sent);
+            design = constructor.design().landed(sent).withName(sent.tag().isEmpty() ? com.wormzjl.icheme.science.equipment.DeviceName.NONE : choice.name());
         } catch (IllegalArgumentException refused) {
             answer(player, at, Component.translatable("message.icheme.equipment.invalid", refused.getMessage()), null);
             return;
@@ -368,8 +421,8 @@ public final class EquipmentNetwork {
     }
 
     /** Client: land {@code sent}, design {@code index} of the list, on the constructor at {@code position}, after its draft. */
-    public static void sendImportChoice(BlockPos position, int index, SentDesign sent) {
-        PacketDistributor.sendToServer(new ImportChoice(position, index, sent.tag(), sent.member()));
+    public static void sendImportChoice(BlockPos position, int index, SentDesign sent, String name) {
+        PacketDistributor.sendToServer(new ImportChoice(position, index, sent.tag(), sent.member(), name));
     }
 
     /** Client: send a column template for the constructor at {@code position}, after its draft. */

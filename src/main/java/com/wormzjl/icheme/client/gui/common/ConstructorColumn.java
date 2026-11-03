@@ -57,6 +57,18 @@ public final class ConstructorColumn {
     }
 
     /** The kind's name on the title plate: the full one where it leaves room for Change, else the short one. */
+    /**
+     * The design page's title with the design's name first (N1), through {@code named} (a line "%s · %s"): the full kind where it
+     * fits, else the short one, else that cut to the title's room; the kind alone for no name.
+     */
+    public static String title(String name, String full, String shorter, Measure m, java.util.function.BiFunction<String, String, String> named) {
+        if (name.isEmpty()) return title(full, shorter, m);
+        String whole = named.apply(name, full);
+        if (m.width(whole) <= TITLE) return whole;
+        String brief = named.apply(name, shorter);
+        return m.width(brief) <= TITLE ? brief : m.cut(brief, TITLE);
+    }
+
     public static String title(String full, String shorter, Measure m) {
         return m.width(full) <= TITLE ? full : shorter;
     }
@@ -230,13 +242,21 @@ public final class ConstructorColumn {
      * The calculator's untagged design is named as such.
      */
     public static Listed listed(SentDesign sent, HeatControlColumn.Texts t) {
-        String name = sent.tag().isEmpty() ? t.get(KEY + "import.saved") : sent.member().isEmpty() ? sent.tag() : t.get(KEY + "import.member", sent.tag(), member(sent.member(), t));
+        String name = sent.tag().isEmpty() ? t.get(KEY + "import.saved") : label(sent, t);
         String shown = sent.count() > 1 ? t.get(KEY + "import.count", name, sent.count()) : name;
         var shape = sent.shape();
         var column = sent.column();
         String hint = column != null ? t.get(KEY + "import.column_hint", name, UnitDesign.number(column.diameter()), column.trays().trays() + 2)
                 : t.get(KEY + "import.unit_hint", name, kind(shape, t), UnitDesign.number(shape.diameter()), UnitDesign.number(shape.tangentLength()), sent.count());
         return new Listed(shown, hint);
+    }
+
+    /**
+     * The name {@code sent} gives the structure it builds (N1): its tag, a block member's own name after it, as the Import page lists it
+     * without its count; empty for the calculator's untagged design.
+     */
+    public static String label(SentDesign sent, HeatControlColumn.Texts t) {
+        return sent.tag().isEmpty() ? "" : sent.member().isEmpty() ? sent.tag() : t.get(KEY + "import.member", sent.tag(), member(sent.member(), t));
     }
 
     /** A block member's own name: {@code condenser}, {@code pa 2 cooler}. */

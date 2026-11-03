@@ -64,6 +64,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
 
     public FluidDeviceScreen(FluidDeviceMenu menu,Inventory inventory,Component title){super(menu,inventory,title);}
     private static String tr(String key,Object...args){return Component.translatable("gui.icheme.fluid."+key,args).getString();}
+    /** {@code kind} with the device's name first (N1), read from the client's block at the menu's position: a structure's name is on every cell. */
+    private String titled(String kind){var level=minecraft==null?null:minecraft.level;String name=level==null?"":com.wormzjl.icheme.world.level.block.EquipmentStructure.name(level,menu.position());return com.wormzjl.icheme.science.equipment.DeviceName.titled(name,kind,(n,k)->Component.translatable("gui.icheme.device.named",n,k).getString());}
     @Override public void removed(){super.removed();WindowScale.restore(minecraft);}
     @Override protected void init(){
         WindowScale.apply(minecraft,this,FluidGuiLayout.HEIGHT,this::fits);
@@ -518,7 +520,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     @Override protected void renderLabels(GuiGraphics g,int mouseX,int mouseY){
         hoverX=mouseX-leftPos;hoverY=mouseY-topPos;
         var skin=skin();var canvas=new GuiCanvas(g,font,leftPos,topPos);
-        String name=title.getString(),shownName=font.plainSubstrByWidth(name,imageWidth-36-themeWidth());skin.title(canvas,10,10,shownName);
+        String name=titled(title.getString()),shownName=font.plainSubstrByWidth(name,imageWidth-36-themeWidth());skin.title(canvas,10,10,shownName);
         if(shownName.length()<name.length()&&hoverX>=6&&hoverX<imageWidth-20-themeWidth()&&hoverY>=6&&hoverY<22)hovered=name;
         var data=menu.clientData();
         if(data==null){doorStatus(canvas,skin,tr("waiting"),MUTED);return;}

@@ -62,6 +62,11 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
     private long nozzles;
     /** The vessel's paint, the same on every cell; the client tints the cell's painted parts with it. */
     private Paint paint = Paint.DEFAULT;
+    /**
+     * The structure's name, the same on every cell, as its paint ({@link com.wormzjl.icheme.science.equipment.DeviceName}, batch
+     * 2026-11-02-process-simulator, N1): a fact, saved only when named, so a cell saved before names reads unnamed.
+     */
+    private String name = com.wormzjl.icheme.science.equipment.DeviceName.NONE;
     private @Nullable ShapeRasterizer.CellKey key;
     /** The equipment's fluid identity, on its node cell only (0 elsewhere and while unregistered). */
     private long identity;
@@ -104,6 +109,8 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      * 2026-10-26-pipe-laying-system). Render thread only; weak, as above.
      */
     private static final Set<EquipmentShellBlockEntity> CLIENT_PORTS = Collections.newSetFromMap(new WeakHashMap<>());
+    /** Client: the controller cells of named structures, whose nameplates the client draws (N1). Render thread only; weak, as above. */
+    private static final Set<EquipmentShellBlockEntity> CLIENT_NAMED = Collections.newSetFromMap(new WeakHashMap<>());
     /** Client: the cooling towers with a cell loaded, by level. Render thread only; weak, as above. */
     private static final java.util.Map<Level, LoadedTowers> CLIENT_TOWERS = new WeakHashMap<>();
     /** Client: the tower this cell counts towards, and the level's index it counts in. */
@@ -182,6 +189,11 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         return List.copyOf(CLIENT_PORTS);
     }
 
+    /** Client: the controller cells of the named structures in the client's level. */
+    public static List<EquipmentShellBlockEntity> clientNamedCells() {
+        return List.copyOf(CLIENT_NAMED);
+    }
+
     /**
      * Client: lists the moving parts whose pivots lie in this cell ({@link ShapeRasterizer#moving}) for the client that moves
      * them, a floating-roof tank's node cell for the client that draws its roof, and a nozzle's cell for the laying tool.
@@ -192,9 +204,11 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
+        CLIENT_NAMED.remove(this);
         leaveTower();
         if (shape == null || level == null || !level.isClientSide) return;
         if ((shape.kind() == EquipmentShape.Kind.TANK || shape.kind().coolingTower()) && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
+        if (!name.isEmpty() && cell().equals(ShapeRasterizer.layout(shape).controller())) CLIENT_NAMED.add(this);
         if (shape.kind().coolingTower()) {
             towers = CLIENT_TOWERS.computeIfAbsent(level, k -> new LoadedTowers());
             tower = towers.add(origin(), shape, paint);
@@ -274,6 +288,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
+        CLIENT_NAMED.remove(this);
         leaveTower();
         if (level != null) FloatingRoofs.of(level).remove(worldPosition);
         if (identity != 0 && level instanceof ServerLevel serverLevel && serverLevel.getServer().isSameThread())
@@ -310,9 +325,10 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
             FluidWorldAuthority.find(player.server).ifPresent(world -> world.replayOnOpen(menu));
     }
 
-    public void bind(EquipmentShape shape, ShapeRasterizer.Cell cell, Paint paint) {
+    public void bind(EquipmentShape shape, ShapeRasterizer.Cell cell, Paint paint, String name) {
         assign(shape, cell, 0);
         this.paint = paint;
+        this.name = com.wormzjl.icheme.science.equipment.DeviceName.clean(name);
         stamp = ShapeRasterizer.stamp(shape);
         box = new int[]{shape.sizeX(), shape.sizeY(), shape.sizeZ()};
         setChanged();
@@ -375,6 +391,20 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
 
     public Paint paint() {
         return paint;
+    }
+
+    /** The structure's name, empty when it has none. */
+    public String name() {
+        return name;
+    }
+
+    /** Server: names this cell's structure {@code next} (cleaned) and sends the cell to the clients, as paint: a drawing fact, not process state. */
+    public void rename(String next) {
+        String cleaned = com.wormzjl.icheme.science.equipment.DeviceName.clean(next);
+        if (shape == null || cleaned.equals(name)) return;
+        name = cleaned;
+        setChanged();
+        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
     }
 
     public @Nullable ShapeRasterizer.CellKey key() {
@@ -451,6 +481,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         shape = null;
         key = null;
         paint = Paint.DEFAULT;
+        name = DeviceNames.read(tag, "equipment_compat at=" + worldPosition.toShortString());
         stamp = 0;
         box = new int[3];
         identity = tag.getLong("FluidIdentity");
@@ -509,6 +540,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         tag.putIntArray("Cell", new int[]{cellX, cellY, cellZ});
         tag.putLong("Nozzles", nozzles);
         tag.putIntArray("Paint", paint.encode());
+        DeviceNames.write(tag, name);
         tag.putLong("Layout", stamp);
         tag.putIntArray("Box", box);
         if (roofLevel > 0) tag.putFloat("RoofLevel", roofLevel);

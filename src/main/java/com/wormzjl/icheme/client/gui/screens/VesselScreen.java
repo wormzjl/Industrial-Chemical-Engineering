@@ -51,9 +51,13 @@ public final class VesselScreen extends Screen {
     private @Nullable Rect glassBox;
     private @Nullable String hovered;
 
+    /** The structure shown, whose name (N1) the title reads from the client's cells. */
+    private final EquipmentStructure.Vessel vessel;
+
     public VesselScreen(EquipmentStructure.Vessel vessel) {
         super(Component.translatable(KEY + "title." + vessel.shape().kind().name().toLowerCase(Locale.ROOT)));
         sheet = sheet(vessel);
+        this.vessel = vessel;
         moving = vessel.shape().unit() && ProcessUnit.moves(vessel.shape().kind());
     }
 
@@ -206,7 +210,8 @@ public final class VesselScreen extends Screen {
         var canvas = new GuiCanvas(g, font, left, top);
         g.pose().pushPose();
         g.pose().translate(left, top, 0);
-        skin.title(canvas, 10, 10, font.plainSubstrByWidth(title.getString(), panelWidth - 20));
+        skin.title(canvas, 10, 10, font.plainSubstrByWidth(com.wormzjl.icheme.science.equipment.DeviceName.titled(minecraft == null || minecraft.level == null ? "" : EquipmentStructure.name(minecraft.level, vessel),
+                title.getString(), (n, kind) -> Component.translatable("gui.icheme.device.named", n, kind).getString()), panelWidth - 20));
         hovered = door.draw(canvas, skin, mouseX - left, mouseY - top);
         if (glassBox != null) {
             // The glass's lines, its bar inside its right edge where they are taller than it.
