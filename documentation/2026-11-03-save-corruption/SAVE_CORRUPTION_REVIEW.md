@@ -69,7 +69,7 @@ The causes, roughly from most to least likely for this mod. External sources: se
   - Two texts still tell the player to create a fresh world, which is the total-loss route:
     - the class comment of `FluidCheckpointStore` (line 42);
     - `SolidMaterialCatalog.validate` (line 24, "no migration; create a fresh world"). The start guard `FluidWorldAuthority` line 90 reaches it, and it fires only if the basis check missed a change to the solid data.
-- **G10. The chunks and the fluid store can disagree after a hard kill, even when no file is damaged** (section 5).
+- **G10. The chunks and the fluid store can disagree after a hard kill, even when no file is damaged.** Section 5 proposes registry first.
   - A device broken just before the kill comes back as a phantom.
   - A block of another kind binds to the old registration at its cell.
 
@@ -128,7 +128,7 @@ Rungs 3 and 4 always do four things:
 - **P7. Regenerated chunk notice.**
   - NeoForge's `ChunkEvent.Load.isNewChunk()` is true exactly when the chunk was promoted from a `ProtoChunk` and not read as a full chunk (`ChunkStatusTasks`). That includes a chunk vanilla regenerated after a read failure (`createEmptyChunk`). If the registry holds devices in such a chunk, the chunk's saved data was lost: damaged region data, or a region file someone deleted.
   - Log a WARN and add a status line: "<n> devices lost their blocks: chunk <x, z> was regenerated". Keep the registrations.
-  - Fixes G8. It is the "new chunk" branch of the chunk reconcile rule (section 5.4). A tool that places the blocks again from the registry's retained geometry is a later option.
+  - Fixes G8 together with section 5. A new chunk is re-aligned like any other: its devices are placed again from the registry where the new terrain leaves room. This notice says the chunk was regenerated.
 - **P8. Refusal text.**
   - Name the recovery steps, and remove the "fresh world" instructions.
   - Fixes G9.
@@ -137,78 +137,107 @@ Rungs 3 and 4 always do four things:
   - On Linux, `force` the parent directory after each rename (fsync(2); OSDI 2014 found that rename ordering and atomicity vary by file system, [S5]).
   - None of these is measured, so none is proposed for now.
 
-## 5. When the chunks and the fluid store disagree
+## 5. When the chunks and the fluid store disagree: registry first
 
-Owner, 2026-11-03: "since the data are not stored in chunks, the chunk data could be different to the mod's system". This happens without any damaged file. A hard crash is enough.
+The owner, 2026-11-03:
+- "since the data are not stored in chunks, the chunk data could be different to the mod's system";
+- "How about registry first? since it has backups, re-align the world if necessary";
+- "add additional data to registry if necessary".
+
+A disagreement needs no damaged file. A hard kill is enough.
 
 ### 5.1 Expected behaviour
 
-- After any load, every device block has its registration, and every registration has its block, with the same kind, facing and fittings.
-- The world's blocks record what the player built. The fluid store is the only record of what each device holds. Contents follow the device identity and are never invented.
-- When the two disagree, the side that saw the later edit decides which devices exist:
-  - A device the player removed is removed, and its contents are booked as removed, as a normal break books them.
-  - A device whose block the world lost (the player did not remove it) keeps its registration and contents, and a notice names it.
+- **The authority.** The fluid registry is the authority for IChemE devices and structures: which exist, where, of what kind and shape, and what they hold. It is the only store with checksums, kept generations and pins (sections 3 and 4). Region chunks have none of these, and vanilla replaces a damaged chunk silently.
+- **One consistent snapshot.** After any load, the IChemE layer of the world matches the registry: every registration has its block, of the same kind, facing, fittings and paint. The topology and the contents then come from one save, so they agree with each other.
+- **Re-alignment.** The world is re-aligned to the registry where the world is free:
+  - a missing block is placed again from its registration;
+  - a block of the wrong kind or state is set back to it.
+- **Two limits:**
+  - Another block is never overwritten. A registration that cannot be placed is held and listed until its cell is cleared or an operator drops it.
+  - A block the registry never saw is registered from the block, as today. The registry cannot decide about something it never recorded.
+- **Contents** come only from the registry and are never invented.
 
-### 5.2 How they diverge
+### 5.2 How they diverge, and what registry first does
 
 The two saves are not taken together:
 - Vanilla saves a chunk at every autosave, and also whenever the chunk unloads (`ChunkMap.scheduleUnload` → `save`).
 - The fluid store commits only at autosave (6000 ticks).
 - Chunk writes go to the region IO worker, and the fluid commit goes to NeoForge's save-data worker. Nothing orders the two.
 
-An ordinary crash or stop runs `saveAllChunks`, which saves both sides. Divergence needs a hard kill (power loss, an OOM kill, the task manager), or a failure inside one side's save.
+An ordinary crash or stop runs `saveAllChunks` and saves both sides. Divergence needs a hard kill (power loss, an OOM kill, the task manager), or a failure inside one side's save.
 
-| Cause | Newer side | What happens today |
+| Cause | Today | Registry first |
 |---|---|---|
-| A hard kill after a chunk with an edited device unloaded | The chunk, by up to 5 min | See the three rows below |
-| … a device placed in that window | The chunk | It registers fresh and empty at chunk load. This is right |
-| … a device broken in that window | The chunk | Its registration and contents come back without a block, still joined to the real pipes beside it (a phantom) |
-| … a device replaced by another kind (a pipe by a filter) | The chunk | The new block binds to the old registration: `FluidDeviceBlockEntity.bindIdentity` checks the position, not the kind. The world shows a filter, and the simulation runs a pipe |
-| The mod's own save throws (G4). The server's stop still saves the chunks | The chunk | As above, for every edit since the last good fluid save |
-| A torn autosave: the fluid commit lands, the chunk write does not | The fluid store | Blocks placed in the window are gone from the world, but their registrations stay (phantoms). Blocks broken in the window come back and register fresh, empty |
-| Ladder rung 3 (an older generation), or a `data/` folder restored from a backup | The chunk | As in the hard-kill rows, for one autosave or for the backup's age |
-| Region files restored without `data/` | The fluid store | Devices built since the backup become phantoms. Devices removed since then come back, registered fresh |
-| Vanilla regenerates a damaged chunk, or a tool deletes it (for example an MCA Selector trim) | The fluid store (the chunk has no data) | Phantoms (G8) |
-| The mod that adds a dimension is removed | The fluid store | Its devices keep simulating. `loadedChunk` never runs for them |
+| Hard kill: a device broken after the last fluid save, its chunk saved on unload | Its registration and contents come back with no block, still joined to the real pipes beside it (a phantom) | The block is placed again, with its contents. The player's break is undone |
+| Hard kill: a device placed after the last fluid save | It registers fresh and empty | The same: the registry never saw it |
+| Hard kill: a pipe replaced by a filter after the last fluid save | The filter binds to the old pipe registration (`FluidDeviceBlockEntity.bindIdentity` checks the position, not the kind). The world shows a filter, and the simulation runs a pipe | The block is set back to the registered pipe |
+| The mod's own save throws (G4), but the server's stop still saves the chunks | As the three rows above, for every edit since the last good fluid save | As the three rows above. P3 makes this case rare |
+| A torn autosave: the fluid commit lands, the chunk write does not | Blocks placed in the window are gone, their registrations stay. Blocks broken in the window come back and register fresh | Placed blocks are put back. Broken blocks come back and register fresh, empty (decision S10) |
+| Ladder rung 3 (an older generation), or `data/` restored from a backup | As after a hard kill, for one autosave or for the backup's age | Device edits since that save are undone. The world matches the save that was loaded |
+| Region files restored without `data/` | Devices built since the backup are phantoms | The newer devices are placed again |
+| Vanilla regenerates a damaged chunk, or a tool deletes it | Phantoms (G8) | The devices are placed again where the new terrain leaves room. Cells held by terrain are held and listed (S7) |
+| The mod that adds a dimension is removed | Its devices keep simulating | They are held and listed |
 
-Today `FluidWorldAuthority.loadedChunk` only adds. It registers a block that has no registration, and it binds by position. It never removes a registration, and it never compares kind, facing or fittings. Equipment vessels are the exception: `EquipmentStructure.restoreFluidBinding` compares the geometry and re-registers.
+`FluidWorldAuthority.loadedChunk` today only adds. It registers a block that has none and binds by position, never removes, and never compares kind, facing or fittings. Equipment vessels are the exception: `EquipmentStructure.restoreFluidBinding` compares the geometry and re-registers.
 
-### 5.3 Why the newer side cannot be told apart today
+### 5.3 Why registry first, not "the newer side wins"
 
-- A registration with no block means one of two things:
-  - the player broke the device after the last fluid save, so remove the registration;
-  - the world lost the block, so keep it.
-- The two actions are opposite, and nothing saved today tells the cases apart.
-- Game time cannot tell them apart either. The chunk's `LastUpdate` is game time, and game time in `level.dat` goes back after a crash, so later saves reuse the same values.
+- **No recency to work out.** The earlier draft kept a device counter per chunk in both stores, to tell which side was newer. Under registry first that question disappears, and so does the counter: no chunk attachment, no new comparison.
+- **The trustworthy side wins.** Every damage case of section 2 hits chunks without any check. A regenerated chunk loses its devices today. Registry first rebuilds them from a store that has three generations and digests.
+- **One snapshot.** Topology and contents come from the same save, so a restored tank holds what it held when it was saved. Under "the newer side wins", a newer chunk's topology mixes with older contents.
+- **One mechanism for three gaps.** It covers the regenerated-chunk gap (G8, and P7 shrinks to a notice), restores blocks from the registry (once a later batch), and settles what happens to a registration whose block is missing.
+- **The price:** after a hard kill, IChemE device edits made since the last fluid save are undone. That is at most one autosave (5 min), or K saves after rung 3. The contents roll back by the same amount today, so device layout and contents roll back together.
 
-### 5.4 Proposal: a device generation per chunk
+### 5.4 The rule at chunk load
 
-- **The counter.** Keep a counter G for each chunk that holds devices. G goes up by one at every change to the chunk's device set: a place, a remove, a change of kind or fittings.
-- **Two copies.** The registry keeps one copy (per chunk, an append-only facts field in the topology unit, absent meaning unknown). The chunk keeps the other (a NeoForge data attachment on `LevelChunk`, saved with the chunk).
-- **Why the copies stay together.** Only a loaded chunk can be edited, so within a session the two copies rise together. They differ only after a hard kill, a torn save or a restore.
-- **At chunk load** (`loadedChunk`), compare the two copies:
-  - **New chunk** (`ChunkEvent.Load.isNewChunk()`, true exactly when the chunk was promoted from a `ProtoChunk` and not read as a full chunk, per `ChunkStatusTasks`): the saved data is lost. Keep the registrations and post the notice (P7).
-  - **Equal**: the two sides agree, so bind as today. If the device sets still differ (an editor that bypassed both), reconcile as "chunk newer", and log the anomaly.
-  - **Chunk newer**: the world decides which devices exist.
-    - A registration with no matching block is removed through the break path, without item drops. Its contents are booked as removed: "removed with its block; the chunk was saved after the fluid data".
-    - A block with no registration registers, as today.
-    - A block whose kind, facing or fittings differ re-registers from the block. It keeps its contents if it is still a vessel of the same volume; otherwise they are booked as removed.
-  - **Registry newer**: the world lost edits.
-    - A registration with no block stays. The status line and an operator list mark it "missing its block".
-    - A block of another kind at its cell is not bound to it. It is reported as "missing its block" too.
-    - A block with no registration registers fresh, as today.
-  - **No counter on either side** (worlds saved before this change): keep today's behaviour, plus the kind check, so a block never binds to a registration of another kind.
-  - **After any reconcile**, set both copies to the larger value plus one.
-- **Cost:** one long per device chunk in each store. Each chunk load compares two sets: `registry.chunk(name, chunk)`, which `loadedChunk` already walks, and the chunk's block entities.
-- **What it replaces:** P7 becomes the "new chunk" branch of this rule. Decision S5 becomes "chunk newer" (removed) or "registry newer" (kept and marked), depending on which side the counter says is newer.
-- **Operator commands:**
-  - `/icheme devices missing` lists the marked registrations.
-  - `drop <id>` removes one through the break path, with its contents booked as removed.
-  - `restore <id>` places the block back from the registration. This is a later batch (S7).
+Re-alignment never runs while a chunk loads. `loadedChunk` only queues the chunk, exactly as equipment refresh defers (code guide, equipment, "Contract: layout refresh"). The queue is served on the level tick, a bounded number of devices per tick, once the region's chunks are all loaded and block-ticking. It never loads a chunk and never solves.
 
-**Alternative without a counter: the world always wins, except for a new chunk.**
-- It needs no new field, and it is right after a hard kill.
-- It is wrong after a torn autosave or a region-only restore. There it removes registrations whose blocks the world lost, together with their contents.
+For each registration in the chunk:
+- **Block present, same kind:** bind as today. Facing, fittings, joints and paint are set from the registration where they differ (a block-state update, a restatement of the block entity).
+- **Block missing, or another IChemE device block at the cell:** place the registered block. One-block devices and rack lanes use a small placer. A structure goes through the equipment refresh plan with the registry's shape.
+  - The placement binds to the existing registration and does not register anew (a restore flag, as refresh's rebind).
+  - It keeps the identity, contents and accessories. The accessory store is keyed by the device identity.
+  - A replaced IChemE block drops no item (S9).
+- **Cell held by a block that is not ours** (terrain, the player's wall): do not overwrite it.
+  - The registration is held. It keeps its contents and joins no flow, like a device that a running column suspends (`Device.suspendedBy`).
+  - The island's status line and the operator list `/icheme devices held` name it.
+  - It is placed when its cell is free at a later load. `/icheme devices drop <id>` removes it through the break path, booking its contents as removed.
+
+For each IChemE device block with no registration at its cell:
+- **The registry never saw it:** register it from the block, as today (S10).
+
+Exception: rung 5. When no generation holds the registry, the registry is rebuilt from the blocks. The world then decides by necessity. The block entities' copies of the registry's facts are the backup of last resort.
+
+### 5.5 What the registry has to gain
+
+Facts that live only in blocks today. Each becomes an append-only facts field of the topology unit. That is a facts-schema bump, with a corpus image under `src/test/resources/compat/`.
+
+| Block | Held only in the block entity today | Added to the registration |
+|---|---|---|
+| Pipe and one-block device (`FluidDeviceBlockEntity`) | Paint and secondary paint | Both paints |
+| Pipe rack (`PipeRackBlockEntity`) | Frame, joined faces, and each lane's option, width and arms | A rack record per cell; the lanes are already devices |
+| Equipment structure (`EquipmentShellBlockEntity`) | Shape: kind, diameter, tangent length, orientation, front, support, trays, connections, bank, boot, outlet, tower bank, components and turns. Also the origin, paint and nozzle sizes | A structure record per vessel identity, written with the shell's own shape codec and its repair rules (`ShapeRepair`). No second format |
+
+Already in the registry, and kept as it is:
+- kind, position and rack lane, facing, cutoff, filter, the flow control (valve and mover), joints, bore, ports, vessel geometry and the heat unit;
+- the accessories, held in their own store by device identity.
+
+The layout stamp, the box and the roof level are state, derived from the shape and the contents, so they stay out of the registry.
+
+- **A missing field** (a world saved before the bump) means "learn it from the block". The first load of each chunk under the new build copies the block's facts into the registry. Until then, that device keeps today's behaviour. This meets the append-only rule that the default equals the old behaviour.
+- **Size.** About 5 B of paint per painted pipe, and a few hundred bytes per structure: roughly 50 KB per 10,000 pipes and 250 KB per 500 structures, on top of the topology unit. That unit is rewritten only in a save in which the registry changed.
+- **Two copies.** The block entity keeps its copy, because the client draws from it. It is restated from the registry at bind, as `bindIdentity` already does for bore and joints.
+
+### 5.6 Limits
+
+- **Undone edits.** Edits made in the window are undone, and a player whose inventory was saved later (a logout on a server) can lose or duplicate the blocks involved. Vanilla has the same class of problem with chests after a crash.
+- **A registry bug now edits the world.** Mitigations:
+  - only IChemE blocks are ever replaced, never another block;
+  - every placement and replacement is logged with its position;
+  - pins (P2) keep an undo;
+  - a gate asserts that an ordinary save and load re-aligns nothing.
+- **A held registration** keeps its contents indefinitely until its cell is cleared or an operator drops it. The status line keeps it visible.
 
 ## 6. Fit with the backward-compat rules: AGENTS.md text for the owner
 
@@ -217,19 +246,19 @@ Replace "A damaged facts section refuses the world and leaves its files untouche
 - A damaged part of a save is taken from the newest retained generation that validates. A part that no generation holds starts empty. The ledger books it, the island's status line and the log name it, and the damaged files move to quarantine and are never deleted. A world refuses only when no generation holds its registry, or when a newer build wrote it. Its files are left untouched.
 - Keep the core records of the last three saves and every pack they reference. A load that rebuilds from facts or recovers, and the first load under a new `mod_version`, pins the core it read.
 - A save checks every unit it writes with the reader before it commits. A failed save keeps the previous one, and operators are told after two failures in a row.
-- At chunk load, the side that saw the later edit decides which devices exist. The device generation per chunk tells which side that is. Contents come only from the fluid store.
-  - A registration that a newer chunk lacks is removed through the break path, with its contents booked as removed.
-  - A registration whose block the world lost stays, marked, until an operator drops it.
-  - A block never binds to a registration of another kind.
+- The fluid registry is the authority for IChemE devices and structures. It holds every fact needed to rebuild their blocks: kind, facing, fittings, joints, paint, shapes, nozzle sizes and rack frames. After a chunk loads, the world is re-aligned to it on the engine's queue, never during the load.
+  - A missing block, or an IChemE block of another kind or state, is placed again from its registration. The registration keeps its identity and contents.
+  - A cell held by a block that is not ours is never overwritten. The registration is held (it keeps its contents and joins no flow) and is listed until the cell is free or an operator drops it.
+  - A block the registry never saw registers from the block.
+  - Block-entity copies of registry facts are caches restated at bind. They rebuild the registry only when no generation of it survives.
 - The compat corpus gains damaged images: a flipped byte in an island unit, in the topology unit and in the core; a missing pack; a damaged newest core with a valid previous one. The gates read every image.
 
 ## 7. Risks
 
 - **A rolled-back island.** Its vessels jump back by at most one autosave. Fluid moved into items or other stores in that interval is duplicated. This happens only on damage, so accept it.
-- **Phantom registrations after a topology rollback.**
-  - A device removed after the older topology unit was written comes back registered with no block.
-  - The chunk counter of section 5.4 finds the chunk newer and removes the registration, booking its contents as removed.
-  - A device placed after the older topology unit registers fresh and empty on chunk load (today's path).
+- **A topology rollback undoes device edits.**
+  - Under registry first (section 5), a device removed after the older topology unit was written is placed again, with its contents.
+  - A device placed after it registers fresh and empty on chunk load (today's path).
 - **A fallback that hides a systematic bug.** If every load fell back a generation, a writer bug would go unnoticed. Mitigations:
   - the fallback logs at ERROR and its notice stays until acknowledged;
   - a gate asserts that an ordinary save and load never leaves rung 2.
@@ -244,26 +273,45 @@ Replace "A damaged facts section refuses the world and leaves its files untouche
 | S2 | When no generation holds a vessel | Starts empty, booked as lost, notice, bytes in quarantine | Refuse |
 | S3 | Generations kept | K = 3 | K = 2 (current and previous only); K = 5 |
 | S4 | Pins | At FACTS and recovery loads and at a new `mod_version`; newest 3 kept | No pins |
-| S5 | How a chunk load decides which side is newer (section 5) | A device generation per chunk, kept in both stores: the newer side decides which devices exist, and contents come only from the fluid store | The world always wins except for a new chunk (no new field; loses contents after a torn save or a region-only restore). Or today's add-only behaviour plus the kind check |
+| S5 | Who decides at chunk load (section 5) | **Owner direction 2026-11-03: registry first**, with the missing facts added to the registry | Rejected: the newer side wins, by a device counter per chunk. Rejected: the world always wins except for a new chunk |
 | S6 | Rung 5: rebuild devices from their blocks with empty contents | An opt-in config switch named in the refusal message | Manual file deletion, documented only |
-| S7 | Regenerated chunk | Notice only | Also restore the blocks from the registry (later batch) |
+| S7 | A regenerated chunk whose new terrain fills device cells | Never overwrite: those registrations are held and listed until the player clears the cells | In a chunk known to be regenerated (`isNewChunk()`), replace natural terrain blocks |
 | S8 | Whole-world backups | Not the mod's job. Document vanilla Make Backup and backup mods | The mod zips `data/icheme_*` on a schedule |
-| S9 | The registry is newer and the block is missing or of another kind | Keep the registration, mark it "missing its block", and let an operator drop it | Place the block back from the registration automatically (this edits the world) |
+| S9 | An IChemE block that re-alignment replaces | No item drop. A hard kill reverts the player's inventory too in the common case | Drop it as an item (a duplicate when the inventory reverted) |
+| S10 | An IChemE block the registry never saw | Register it from the block, as today | Remove it (strict registry first). That is right only after a torn autosave, and it deletes the player's newest builds after a hard kill |
+| S11 | A registration that cannot be placed | Held: it keeps its contents, joins no flow, and is listed | It keeps simulating with no block, as today |
 
 ## 9. Work packages (once the owner decides)
 
 - **W1. Generations and pins (P1, P2).** Code: `FluidCheckpointStore` (`Backend.writeCore`, the deletion rule, `cleanOrphans`) and pins. Gate: `FluidCheckpointStoreTest`.
 - **W2. Ladder rungs 3 and 4.** Code: `FluidCheckpointStore.load`, `FluidFacts.rebuild` given per-vessel sources, the quarantine, a ledger line (an append-only facts field) and the status notice. Gates: the damaged corpus images, plus one test per rung.
 - **W3. Checks and notices (P3, P4, P5).** Write verification, scrub, retries and the save-failure notice.
-- **W4. Accessory store (P6), chunk notice (P7) and refusal text (P8).** P8 changes `en_us` and the other lang files in the same commit.
-- **W5. Chunk reconcile (section 5).**
+- **W4. Accessory store (P6) and refusal text (P8).** P8 changes `en_us` and the other lang files in the same commit. P7 is part of W5b.
+- **W5a. Registry facts (section 5.5).**
   - Code:
-    - the per-chunk counter in the registry (a facts field) and in a `LevelChunk` data attachment;
-    - the compare-and-reconcile step in `FluidWorldAuthority.loadedChunk`;
+    - paints on device registrations, rack records and structure records, as facts fields of the topology unit (a facts-schema bump);
+    - the structure record written with the shell's shape codec;
+    - learning a missing field from the block at its chunk's first load;
+    - restating block-entity copies from the registry at bind.
+  - Gates: the facts round trip, a corpus image of the new schema, the previous schema's image reading with absent fields, and `EquipmentCompatTest` for the shape inside the record.
+- **W5b. Re-alignment (section 5.4).**
+  - Code:
+    - the queue fed by `loadedChunk` and served on the level tick;
+    - a placer for one-block devices and rack lanes;
+    - equipment refresh fed with the registry's shape;
+    - placement that binds to the existing registration;
     - the kind check in `bindIdentity`;
-    - the operator commands (list and drop).
-  - GameTests, one per branch: chunk newer, registry newer, new chunk, and a kind mismatch. Each sets the two counters directly, so it needs no real crash.
-  - W5 does not depend on W1 to W4, and it can come first: it fixes a case that needs no damaged file.
+    - the held state of a registration;
+    - `/icheme devices held` and `drop`;
+    - the status notice.
+  - GameTests:
+    - a registered pipe whose block was removed behind the authority's back is placed again and keeps its identity;
+    - a vessel removed the same way comes back with its contents;
+    - a block of another kind is set back;
+    - a cell held by stone keeps the registration held and listed, and is placed after the stone is cleared;
+    - an unknown device block registers fresh.
+  - Each test edits the world or the registry directly, so it needs no real crash.
+- **Order.** W5a and W5b do not depend on W1 to W4. They fix a case that needs no damaged file, so they can come first. W5b needs W5a for structures and paint, but one-block devices can go first.
 - **Code guide:** fluid-runtime (checkpoint section and chunk load), equipment (`restoreFluidBinding`), instrument-accessories, verification.
 
 ## 10. External sources
