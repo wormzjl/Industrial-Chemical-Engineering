@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** 615547be2 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example; Delete in Open; a drag on empty canvas pans; each dialog's confirming key primary; Run lit when out of date; a column frame's empty inside pans; door flows and pressures on the display keys; the client consolidation: `Reader`, the glass in `UnitGlass`, `ColumnGlass` and `SizingGlass`, `SheetUnits.KMOL_PER_HOUR`, `Door.View.press`, one footer builder, templates through the paste rule)
+**Snapshot:** 78a779996 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example; Delete in Open; a drag on empty canvas pans; each dialog's confirming key primary; Run lit when out of date; a column frame's empty inside pans; door flows and pressures on the display keys; the client consolidation: `Reader`, the glass in `UnitGlass`, `ColumnGlass` and `SizingGlass`, `SheetUnits.KMOL_PER_HOUR`, `Door.View.press`, one footer builder, templates through the paste rule; a door built once a frame)
 
 Up: [code guide](README.md)
 
@@ -179,7 +179,7 @@ The file keeps fields it does not know and refuses a newer format and an older o
   - `Tiles` is the palette.
   - `ColumnBlock` draws a column with its members inside a boundary.
   - `SheetState` greys what is stale and builds the status.
-- **Doors:** a click on a unit or a stream opens its door, a `Door` placed by `DoorFrame`.
+- **Doors:** a click on a unit or a stream opens its door, a `Door` placed by `DoorFrame`. The screen builds the shown door once a frame and hands it to `signature`; a frame that rebuilds the widgets draws the door the build placed them on. The column door parses its params once (`ColumnDoor.of`) and hands the record on.
   - `UnitDoors` builds every unit's door; `UnitGlass` draws its glass (heat, streams, the sketch, through `Door.Glass`). A unit's readings go through `Reader` (its run's value of a key, its temperature and pressure in the display units), as `SelectionColumn`'s do.
   - `ColumnDoors` builds the column's, through `client/gui/common/CalculatorColumn` (its tabs, the Templates dialog, Save design); `ColumnGlass` draws its glass (the drawing, the connections, the results and the total drop).
   - `StreamDoors` builds a stream's: feed, flow, T and P, components, the clipboard's Copy and Paste. A stream template loads through `SheetClipboard.paste` with the template's flow: parts not on the sheet drop and the rest take the whole flow, a part of none is no part, and a template with none on the sheet changes nothing.
