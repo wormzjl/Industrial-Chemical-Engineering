@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@link ColumnSizingSampleTest}.
  *
  * <p>Two surfaces leave the probe's, because the probe holds one heat capacity along a duty and the curves hold the real one, which
- * rises with temperature, so more of the heat passes where the difference is wide. E-101 needs 440 m², not 444, and keeps its size. E-102
+ * rises with temperature, so more of the heat passes where the difference is wide. E-101 needs 440 m², not 443.5, and keeps its size. E-102
  * needs 724 m², not 741, and that moves it: 6 × 4 bays of 2.0 × 5 m hold it on 145 m² of face, where the probe's 5 × 3 of 2.5 × 6 m take 150.
  * The two gates below rebuild the probe's number from the same streams, so what moved is the form and nothing else.
  *
@@ -127,7 +127,7 @@ class UnitSizingSampleTest {
         var surface = unit.rating().reading(Limit.EXCHANGER_SURFACE);
         assertEquals(586, surface.value(), ONE);
         assertEquals(440, surface.low(), ONE, "the curves' surface");
-        assertEquals(444, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
+        assertEquals(443.5, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
         assertEquals(81.8, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
         assertEquals(46.7, read(unit.rating(), Limit.EXCHANGER_COLD_END), TENTH);
         assertEquals(46.7, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);

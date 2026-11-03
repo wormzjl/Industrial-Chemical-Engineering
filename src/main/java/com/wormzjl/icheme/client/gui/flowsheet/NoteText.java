@@ -20,12 +20,12 @@ public final class NoteText {
 
     /** The note's sentence: {@code T-101: ...}, or the plain line for the sheet. */
     public static String text(Note note, HeatControlColumn.Texts t, Flowsheet sheet, SheetUnits units) {
-        String line = t.get(KEY + note.key(), arguments(note, units));
+        String line = t.get(KEY + note.key(), arguments(note, sheet, units));
         String subject = subject(note.subject(), sheet);
         return subject.isEmpty() ? line : subject + ": " + line;
     }
 
-    private static Object[] arguments(Note note, SheetUnits units) {
+    private static Object[] arguments(Note note, Flowsheet sheet, SheetUnits units) {
         var raw = note.arguments();
         var out = new ArrayList<Object>(raw);
         switch (note.key()) {
@@ -45,6 +45,19 @@ public final class NoteText {
                 out.set(0, flow(raw.get(0)));
                 out.set(1, flow(raw.get(1)));
             }
+            case "column.steam_pressure" -> {
+                out.set(1, pressure(raw.get(1), units));
+                out.set(2, pressure(raw.get(2), units));
+            }
+            case "column.steam_cool" -> {
+                out.set(1, temperature(raw.get(1), units));
+                out.set(2, temperature(raw.get(2), units));
+            }
+            case "column.steam_rate" -> {
+                out.set(1, flow(raw.get(1)));
+                out.set(2, flow(raw.get(2)));
+            }
+            case "flow.set_by" -> out.set(0, subject(raw.get(0), sheet));
             default -> {
             }
         }
@@ -53,6 +66,10 @@ public final class NoteText {
 
     private static String pressure(String pascals, SheetUnits units) {
         return units.p(Double.parseDouble(pascals)) + " " + units.pressure().symbol();
+    }
+
+    private static String temperature(String kelvin, SheetUnits units) {
+        return units.t(Double.parseDouble(kelvin)) + " " + units.temperature().symbol();
     }
 
     private static String watts(String watts) {

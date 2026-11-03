@@ -267,10 +267,11 @@ final class FlowsheetColumnTest {
         assertEquals(in.mass(), out.mass(), 1e-9, "the water stays on its side");
         assertEquals(40 + 273.15, out.temperature(), 1e-3);
         assertEquals(Math.abs(BASE.pumparounds().get(1).dutyWatts()), out.enthalpy() - in.enthalpy(), 1e3, "the duty as set");
-        assertTrue(Math.abs(run.heatGap()) < 50e3, () -> "heat gap " + run.heatGap());
+        // V3 values its steam by temperature: the steam valve's 1.2 K of Joule-Thomson cooling is some 14 kW the two models differ by (U1b).
+        assertTrue(Math.abs(run.heatGap()) < 65e3, () -> "heat gap " + run.heatGap());
         assertEquals(102.4 + 273.15, run.streams().get("S-4").temperature(), .05, "the crude reaches E-101 two coolers warm, not three");
         var limit = run.reports().get("H-101").notes().stream().filter(note -> note.key().equals("heater.limit")).findFirst().orElseThrow();
-        assertEquals(98.07e6, Double.parseDouble(limit.arguments().getFirst()), .01e6, "what the furnace asks");
+        assertEquals(98.10e6, Double.parseDouble(limit.arguments().getFirst()), .01e6, "what the furnace asks");
         assertEquals(90e6, Double.parseDouble(limit.arguments().get(1)), 1, "and what it may give");
     }
 

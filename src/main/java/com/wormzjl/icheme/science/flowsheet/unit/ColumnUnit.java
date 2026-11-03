@@ -78,6 +78,8 @@ public final class ColumnUnit implements UnitModel {
      */
     private static final double SAME_PRESSURE = 100, SUBCOOLED = 1e-3;
     private static final int SETTLING = 5;
+    /** Another unit's stripping steam may differ from its row's rate by this share of the larger, the world's steam band, before the column says so (U1b). */
+    private static final double STEAM_BAND = .02;
     /** The calculator's learned start, on the budget the game ships with. */
     private static final V3InitializationOptions START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
 
@@ -109,7 +111,7 @@ public final class ColumnUnit implements UnitModel {
         if (door.condenser().waterCooled()) ports.addAll(List.of(Port.utilityIn(CONDENSER_IN), Port.out(CONDENSER_OUT)));
         if (ColumnComponents.kettleRequired(door.reboilerDuty())) ports.addAll(List.of(Port.utilityIn(REBOILER_IN), Port.out(REBOILER_OUT)));
         for (var pumparound : door.pumparounds()) ports.addAll(List.of(Port.utilityIn(pumparoundIn(pumparound)), Port.out(pumparoundOut(pumparound))));
-        for (var steam : door.steam()) ports.add(Port.optionalIn(steamPort(steam)));
+        for (var steam : door.steam()) ports.add(Port.utilityIn(steamPort(steam)));
         for (var draw : door.draws()) ports.add(Port.out(drawPort(draw)));
         if (ColumnComponents.ejectorRequired(door.topPressure())) ports.add(Port.optionalIn(MOTIVE));
         return ports;
@@ -141,6 +143,19 @@ public final class ColumnUnit implements UnitModel {
                 if (!steam.empty() && !bottoms.empty() && steam.temperature() <= bottoms.temperature()) report.note(Note.warning(u.id(), "column.reboiler_cold"));
             }));
         } else if (u.wire(REBOILER_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", REBOILER_IN);
+        // A sheet feed of steam on a stripping steam port flows at its row's rate (U1b): the inlet valve holds it.
+        for (var row : door.steam())
+            if (u.utilities().feeds().containsKey(steamPort(row))) calculations.add(utility(u, "steam " + row.id(), steamPort(row), steamPort(row), 0, List.of(), List.of(), board -> 0, rate(u, row)));
+        // A supply under its stage's pressure cannot pass its valve: the column says so once the sheet stands, at the pressure the
+        // converged sheet has, so no pass of a loop decides it (U1b).
+        for (var row : door.steam()) {
+            String wire = u.wire(steamPort(row)), stage = solve.steamStage(row);
+            if (wire != null) calculations.add(new Calculation(u.part("steam " + row.id() + " check"), u.id(), List.of(wire), List.of(), List.of(stage), List.of(), Calculation.Kind.CHECK, (board, report) -> {
+                var supply = board.stream(wire);
+                if (!supply.empty()) report.reading("margin", supply.pressure() - board.link(stage));
+                if (!supply.empty() && supply.pressure() < board.link(stage)) report.note(Note.error(u.id(), "column.steam_pressure", row.id(), String.valueOf(supply.pressure()), String.valueOf(board.link(stage))));
+            }));
+        }
         for (var pumparound : door.pumparounds()) {
             String in = pumparoundIn(pumparound), out = pumparoundOut(pumparound);
             if (u.wire(in) == null) {
@@ -266,6 +281,11 @@ public final class ColumnUnit implements UnitModel {
         };
     }
 
+    /** Stripping steam's rule (U1b): its row's rate, which the inlet valve holds; a feed of liquid water is no steam, and keeps its own. */
+    private static Rule rate(WiredUnit u, ColumnDoor.Steam row) {
+        return (board, report, typed, watts, pressure) -> u.thermo().vapourShare(typed) > TRACE ? row.flow() / typed.total() : Double.NaN;
+    }
+
     /** {@code typed} at {@code share} of its flow, in the same state; none at a share of 0. */
     private static FlowStream scaled(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, FlowStream typed, double share) {
         if (share == 0) return FlowStream.empty(typed.amountsView().length);
@@ -306,6 +326,8 @@ public final class ColumnUnit implements UnitModel {
         private @Nullable V3ComponentBasis basis;
         /** The feed tray's pressure the last solve left (Pa): tray hydraulics march it from the column's own traffic. */
         private double feedTray = Double.NaN;
+        /** Each steam row's stage pressure the last solve left (Pa, by stage): its inlet valve throttles to it. */
+        private final java.util.Map<Integer, Double> stages = new java.util.HashMap<>();
 
         Solve(WiredUnit u, ColumnDoor door) {
             this.u = u;
@@ -319,6 +341,11 @@ public final class ColumnUnit implements UnitModel {
 
         String drawTemperature(ColumnDoor.Pumparound pumparound) {
             return u.part("draw tray " + pumparound.id());
+        }
+
+        /** A wired steam row's stage pressure (Pa) the solve left, which its supply must reach (U1b); minus infinity with no solve. */
+        String steamStage(ColumnDoor.Steam row) {
+            return u.part("steam stage " + row.id());
         }
 
         /** The bottoms' temperature (K), which a kettle's steam must condense above; minus infinity with no bottoms. */
@@ -337,6 +364,7 @@ public final class ColumnUnit implements UnitModel {
             if (u.wire(CONDENSER_IN) != null) gives.add(condenserHeat());
             for (var pumparound : door.pumparounds()) if (u.wire(pumparoundIn(pumparound)) != null) gives.add(drawTemperature(pumparound));
             if (u.utilities().feeds().containsKey(REBOILER_IN)) gives.add(bottomsTemperature());
+            for (var row : door.steam()) if (u.wire(steamPort(row)) != null) gives.add(steamStage(row));
             return new Calculation(u.id(), u.id(), reads, writes, List.of(), gives, Calculation.Kind.BLOCK, this);
         }
 
@@ -349,31 +377,33 @@ public final class ColumnUnit implements UnitModel {
             }
             if (!feed.solids().empty()) throw new FlowsheetFailure("column.solids");
             double heatIn = 0;
-            var steam = new ArrayList<V3SteamFeedSpec>();
+            var supplies = new ArrayList<FlowStream>();
             for (var row : door.steam()) {
                 var stream = steamOf(row, board, report);
-                steam.add(new V3SteamFeedSpec(row.stage(), stream.total(), stream.temperature()));
+                supplies.add(stream);
                 heatIn += stream.enthalpy();
             }
             if (Double.isNaN(feedTray)) feedTray = feed.pressure();
             report.start(warm == null ? Report.Start.LEARNED : Report.Start.LAST);
             FlowStream flashed;
             V3ColumnResult result;
+            List<FlowStream> valved;
             int round = 0;
             double moved;
             do {
                 flashed = thermo.heated(feed, 0, feedTray);
+                valved = valves(supplies);
+                var steam = new ArrayList<V3SteamFeedSpec>();
+                for (int i = 0; i < valved.size(); i++) steam.add(new V3SteamFeedSpec(door.steam().get(i).stage(), valved.get(i).total(), valved.get(i).temperature()));
                 result = run(flashed, steam);
                 warm = result.warmSeed().orElse(warm);
-                feedTray = result.inspection().orElseThrow().nodes().get(door.feedStage()).pressurePascal();
+                var solved = result.inspection().orElseThrow().nodes();
+                feedTray = solved.get(door.feedStage()).pressurePascal();
+                for (var row : door.steam()) stages.put(row.stage(), solved.get(row.stage()).pressurePascal());
                 moved = Math.abs(thermo.heated(feed, 0, feedTray).temperature() - flashed.temperature());
             } while (moved > FEED_TEMPERATURE && ++round < FEED_ROUNDS);
             if (feed.pressure() < feedTray) report.note(Note.warning(u.id(), "column.inlet_pressure", FEED));
-            var nodes = result.inspection().orElseThrow().nodes();
-            for (var row : door.steam()) {
-                String wire = u.wire(steamPort(row));
-                if (wire != null && !board.stream(wire).empty() && board.stream(wire).pressure() < nodes.get(row.stage()).pressurePascal()) report.note(Note.warning(u.id(), "column.inlet_pressure", steamPort(row)));
-            }
+            steamChecks(supplies, valved, report);
             var ejected = ejector(board, report, result);
             var ledger = result.dutyLedger().orElseThrow();
             double motiveHeat = ejected == null ? 0 : ejected.heat();
@@ -461,8 +491,53 @@ public final class ColumnUnit implements UnitModel {
                 return entered;
             }
             if (wired.amountsView()[components - 1] != wired.total()) throw new FlowsheetFailure("column.steam_water", row.id());
-            if (wired.state().waterLiquid() > TRACE * wired.total()) throw new FlowsheetFailure("column.steam_wet", row.id());
             return wired;
+        }
+
+        /**
+         * Each steam row's supply past its inlet valve (U1b, {@code COOLER_MODEL_PLAN.md} section 8): a wired one throttled at constant
+         * enthalpy to its stage's pressure, the solved one once a solve has said, else the door's, so V3 takes it at the valve's outlet
+         * temperature and the supply's superheat goes into the column. A supply under that pressure passes as it comes, and the
+         * steam check reads it red once the sheet stands. The door's own entries stand at the door's pressure already. Steam wet past
+         * the valve is refused.
+         */
+        private List<FlowStream> valves(List<FlowStream> supplies) {
+            var thermo = u.thermo();
+            var past = new ArrayList<FlowStream>();
+            for (int i = 0; i < supplies.size(); i++) {
+                var row = door.steam().get(i);
+                var supply = supplies.get(i);
+                if (u.wire(steamPort(row)) == null || supply.empty()) {
+                    past.add(supply);
+                    continue;
+                }
+                double stage = stages.getOrDefault(row.stage(), door.pressure(row.stage()));
+                var valved = thermo.heated(supply, 0, Math.min(supply.pressure(), stage));
+                if (valved.state().waterLiquid() > TRACE * valved.total()) throw new FlowsheetFailure("column.steam_wet", row.id());
+                past.add(valved);
+            }
+            return past;
+        }
+
+        /**
+         * What the inlet valves leave to say (U1b): steam that comes to its valve cooler than its row's temperature enters with a warning,
+         * judged at the supply, for the valve's own cooling is the slight change the solver takes up (the owner); steam from another unit
+         * more than the world's band off its row's rate enters as it comes, with a warning. What V3 took past the valve is read out. A
+         * supply under its stage's pressure is the steam check's, once the sheet stands.
+         */
+        private void steamChecks(List<FlowStream> supplies, List<FlowStream> valved, Report report) {
+            double kilograms = EjectorUnit.waterMass(u.thermo());
+            for (int i = 0; i < supplies.size(); i++) {
+                var row = door.steam().get(i);
+                var supply = supplies.get(i);
+                String port = steamPort(row);
+                if (u.wire(port) == null || supply.empty()) continue;
+                report.reading("steam_temperature/" + row.id(), valved.get(i).temperature());
+                report.reading("steam_pressure/" + row.id(), valved.get(i).pressure());
+                if (supply.temperature() < row.temperature()) report.note(Note.warning(u.id(), "column.steam_cool", row.id(), String.valueOf(supply.temperature()), String.valueOf(row.temperature())));
+                if (!u.utilities().feeds().containsKey(port) && Math.abs(supply.total() - row.flow()) > STEAM_BAND * Math.max(supply.total(), row.flow()))
+                    report.note(Note.warning(u.id(), "column.steam_rate", row.id(), String.valueOf(supply.total() * kilograms), String.valueOf(row.flow() * kilograms)));
+            }
         }
 
         /** V3 takes one steam feed a stage, so two on one stage join at their mixed temperature. */
@@ -523,6 +598,7 @@ public final class ColumnUnit implements UnitModel {
             var bottoms = product("bottoms_liquid", result);
             u.write(board, report, BOTTOMS, bottoms);
             if (u.utilities().feeds().containsKey(REBOILER_IN)) board.link(bottomsTemperature(), bottoms.empty() ? Double.NEGATIVE_INFINITY : bottoms.temperature());
+            for (var row : door.steam()) if (u.wire(steamPort(row)) != null) board.link(steamStage(row), result == null ? Double.NEGATIVE_INFINITY : stages.getOrDefault(row.stage(), Double.NEGATIVE_INFINITY));
             for (var draw : door.draws()) u.write(board, report, drawPort(draw), product(String.format(Locale.ROOT, "side_liquid_tray_%02d", draw.tray()), result));
             var ledger = result == null ? null : result.dutyLedger().orElseThrow();
             double condenser = ledger == null ? 0 : ledger.condenserWatts() - (ejected == null ? 0 : ejected.heat());

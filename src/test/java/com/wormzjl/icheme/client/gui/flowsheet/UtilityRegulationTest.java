@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
+import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
 import com.wormzjl.icheme.science.flowsheet.sizing.Rating;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Utility regulation on the sample (batch 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 8, U1), a slow gate: the
  * column's condenser sets its cooling water's flow from the duty and the water's inlet, a kettle its steam's, and crude on a
- * pumparound cooler or stripping steam keeps its own; the air coolers' fans run at the speed their face needs, by the fan laws.
+ * pumparound cooler keeps its own; stripping steam flows at its row's rate through an inlet valve to its stage (U1b); the air coolers' fans run at the speed their face needs, by the fan laws.
  */
 class UtilityRegulationTest {
     private static final String T = "T-101";
@@ -61,7 +62,7 @@ class UtilityRegulationTest {
         assertEquals(run.reports().get(T).readings().get("condenser_water"), duty, 1e-6 * duty, "the water takes the condenser's duty");
         assertEquals(duty / (molar(313.15, cwr.pressure()) - cws.molarEnthalpy()), cws.total(), 1e-6 * cws.total(), "Q / Δh");
         assertTrue(Math.abs(cws.total() / TYPED - 1) > .01, "the typed flow is only the first guess");
-        assertEquals(List.of("CWS"), setBy(run), "only the condenser's water is set; crude through the pumparound coolers and the stripping steam keep their own");
+        assertEquals(List.of("CWS", "STEAM"), setBy(run), "the condenser's water and the stripping steam are set; crude through the pumparound coolers keeps its own");
         assertEquals(List.of(T), notes(run, "flow.set_by").getFirst().arguments());
     }
 
@@ -87,7 +88,7 @@ class UtilityRegulationTest {
     void waterAtTheCeilingKeepsItsTypedFlow() {
         var warm = steady(cws(sheet, 328.15));
         assertEquals(TYPED, warm.streams().get("CWS").total(), 1e-9 * TYPED);
-        assertEquals(List.of(), setBy(warm));
+        assertEquals(List.of("STEAM"), setBy(warm));
         assertEquals(List.of("condenser_in"), notes(warm, "column.water_hot").getFirst().arguments());
     }
 
@@ -103,7 +104,7 @@ class UtilityRegulationTest {
         assertEquals(5e6, hps.enthalpy() - hpc.enthalpy(), 1);
         assertEquals(0, thermo.vapourShare(hpc));
         assertEquals(hpc.pressure(), SheetFixture.FLUIDS.model().saturationPressure(hpc.temperature()), 1e-3 * hpc.pressure(), "condensate at its saturation");
-        assertEquals(List.of("CWS", "HPS"), setBy(high));
+        assertEquals(List.of("CWS", "HPS", "STEAM"), setBy(high));
         var low = steady(kettle(sheet, 100e5, 800));
         assertEquals(1500, low.streams().get("HPS").total(), 1e-9);
         assertFalse(notes(low, "column.steam_low").isEmpty());
@@ -134,6 +135,117 @@ class UtilityRegulationTest {
         var line = size(sheet, run).lines().get("CWS").line();
         double mass = run.streams().get("CWS").mass() * DesignBasis.DEFAULT.designFlow();
         assertEquals(mass, line.mass(), 1e-9 * mass);
+    }
+
+    /**
+     * U1b, the owner's inlet valve on stripping steam: the sample's STEAM, typed at its row's rate and temperature but at 3.5 bar,
+     * flows at the row's rate, set by the column, whatever was typed, and reaches its stage through the valve at constant enthalpy,
+     * superheated steam a little cooler. That cooling is the slight change the solver takes up (the owner): the supply comes at its row's
+     * temperature, so the column says nothing.
+     */
+    @Test
+    void strippingSteamFlowsAtItsRowsRateThroughItsValve() {
+        var row = ColumnDoor.of(unit(sheet, T).params()).steam().getFirst();
+        var supply = run.streams().get("STEAM");
+        assertEquals(row.flow(), supply.total(), 1e-9 * row.flow());
+        var readings = run.reports().get(T).readings();
+        double temperature = readings.get("steam_temperature/" + row.id()), pressure = readings.get("steam_pressure/" + row.id());
+        assertTrue(pressure < supply.pressure() && temperature < supply.temperature(), () -> "throttled to " + pressure + " Pa, " + temperature + " K");
+        assertEquals(supply.molarEnthalpy(), thermo.atTemperature(temperature, pressure, supply.amountsView(), SolidInventory.EMPTY).molarEnthalpy(), 1e-6 * Math.abs(supply.molarEnthalpy()), "the valve keeps the enthalpy");
+        assertEquals(List.of(), notes(run, "column.steam_cool"), "judged at the supply, before the valve");
+        assertEquals(List.of(), notes(run, "column.steam_pressure"));
+        var half = steady(steam(sheet, supply.temperature(), supply.pressure(), .5));
+        assertEquals(row.flow(), half.streams().get("STEAM").total(), 1e-9 * row.flow(), "what was typed is only the first guess");
+    }
+
+    /** Steam 50 K hotter reaches V3 about 50 K hotter: its superheat goes into the column, and the block's energy still closes. */
+    @Test
+    void aHotterSupplyGivesTheColumnHotterSteam() {
+        var supply = run.streams().get("STEAM");
+        var hot = steady(steam(sheet, supply.temperature() + 50, supply.pressure(), 1));
+        var readings = hot.reports().get(T).readings();
+        double before = run.reports().get(T).readings().get("steam_temperature/1"), after = readings.get("steam_temperature/1");
+        assertEquals(50, after - before, 1, "the superheat reaches the stage");
+        assertTrue(notes(hot, "column.steam_cool").isEmpty());
+        assertTrue(Math.abs(readings.get("energy_gap")) < 2e-3 * readings.get("condenser"), () -> "the block keeps the steam's energy: " + readings);
+        assertTrue(readings.get("condenser") > run.reports().get(T).readings().get("condenser"), "and the condenser takes more");
+    }
+
+    /**
+     * A supply under its stage's pressure cannot pass its valve, judged once the sheet stands: 1 bar reads red. A supply 1 kPa over the
+     * converged stage pressure passes, though an early pass of the loop reads that stage some 15 kPa higher; one 1 kPa under it reads
+     * red. No pass decides it.
+     */
+    @Test
+    void aSupplyUnderItsStagePressureReadsRed() {
+        var supply = run.streams().get("STEAM");
+        var low = steady(steam(sheet, supply.temperature(), 1e5, 1));
+        var red = notes(low, "column.steam_pressure");
+        assertEquals(1, red.size());
+        assertEquals(Note.Severity.ERROR, red.getFirst().severity());
+        assertEquals(1e5, Double.parseDouble(red.getFirst().arguments().get(1)));
+        assertTrue(Double.parseDouble(red.getFirst().arguments().get(2)) > 1e5);
+        // The Sizing page's Must: the supply's path ends on its tray, set, and its spare reads PATH_SPARE red.
+        var path = size(steam(sheet, supply.temperature(), 1e5, 1), low).paths().stream().filter(p -> p.start().equals("STEAM")).findFirst().orElseThrow();
+        assertTrue(path.set() && path.end().equals(T), () -> path.toString());
+        assertEquals(com.wormzjl.icheme.science.flowsheet.sizing.Lamp.RED, path.rating().reading(com.wormzjl.icheme.science.flowsheet.sizing.Limit.PATH_SPARE).lamp(), () -> path.toString());
+        double stage = supply.pressure() - run.reports().get(T + "/steam 1 check").readings().get("margin");
+        assertTrue(notes(steady(steam(sheet, supply.temperature(), stage + 1e3, 1)), "column.steam_pressure").isEmpty(), () -> "over the converged " + stage + " Pa");
+        assertEquals(1, notes(steady(steam(sheet, supply.temperature(), stage - 1e3, 1)), "column.steam_pressure").size(), () -> "under the converged " + stage + " Pa");
+    }
+
+    /**
+     * Steam from another unit, here a valve from 5 to 3.5 bar, keeps its flow: 5 % under its row's rate it enters as it comes, and the column says
+     * so; the column sets no flow there.
+     */
+    @Test
+    void anotherUnitsSteamKeepsItsFlowAndWarnsPastTheBand() {
+        var row = ColumnDoor.of(unit(sheet, T).params()).steam().getFirst();
+        var supply = run.streams().get("STEAM");
+        var streams = new ArrayList<Flowsheet.Stream>();
+        for (var stream : sheet.streams()) {
+            if (!stream.id().equals("STEAM")) {
+                streams.add(stream);
+                continue;
+            }
+            streams.add(new Flowsheet.Stream("HS", "HS", null, new Flowsheet.End("V-9", "in"), new Flowsheet.Feed(supply.temperature() + 10, 5e5, Map.of("Water", .95 * row.flow()), List.of())));
+            streams.add(new Flowsheet.Stream("STEAM", "STEAM", new Flowsheet.End("V-9", "out"), stream.to(), null));
+        }
+        var units = new ArrayList<>(sheet.units());
+        var valve = new com.google.gson.JsonObject();
+        valve.addProperty("target", "outlet");
+        valve.addProperty("pressure", 3.5e5);
+        valve.addProperty("drop", 1e5);
+        units.add(new Flowsheet.Unit("V-9", "valve", "V-9", 0, 0, new Params(valve)));
+        var piped = steady(new Flowsheet(sheet.basis(), units, streams, sheet.settings()));
+        assertEquals(.95 * row.flow(), piped.streams().get("STEAM").total(), 1e-9 * row.flow());
+        assertFalse(setBy(piped).contains("STEAM") || setBy(piped).contains("HS"));
+        assertEquals(row.id(), notes(piped, "column.steam_rate").getFirst().arguments().getFirst());
+    }
+
+    /** Steam 2 K under its row's temperature at its valve enters as it comes, and the column says so; past the valve it is cooler still. */
+    @Test
+    void aCoolerSupplyWarns() {
+        var supply = run.streams().get("STEAM");
+        var cool = steady(steam(sheet, supply.temperature() - 2, supply.pressure(), 1));
+        var cooled = notes(cool, "column.steam_cool");
+        assertEquals(1, cooled.size());
+        assertEquals(supply.temperature() - 2, Double.parseDouble(cooled.getFirst().arguments().get(1)), 1e-9, "the supply's own temperature");
+        assertTrue(cool.reports().get(T).readings().get("steam_temperature/1") < supply.temperature() - 2, "the valve cools it further");
+    }
+
+    private static Flowsheet.Unit unit(Flowsheet sheet, String id) {
+        return sheet.units().stream().filter(unit -> unit.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    /** The sample with its STEAM typed at {@code temperature} K and {@code pressure} Pa, its amount times {@code share}. */
+    private static Flowsheet steam(Flowsheet sheet, double temperature, double pressure, double share) {
+        return streams(sheet, s -> {
+            if (!s.id().equals("STEAM")) return s;
+            var amounts = new LinkedHashMap<String, Double>();
+            s.feed().amounts().forEach((id, amount) -> amounts.put(id, amount * share));
+            return withFeed(s, new Flowsheet.Feed(temperature, pressure, amounts, s.feed().solids(), s.feed().unknown()));
+        });
     }
 
     private static FlowsheetRun steady(Flowsheet sheet) {

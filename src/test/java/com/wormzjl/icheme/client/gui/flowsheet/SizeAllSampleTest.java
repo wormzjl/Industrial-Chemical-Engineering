@@ -137,7 +137,7 @@ class SizeAllSampleTest {
         assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
         assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
         assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
-        assertEquals(78.37, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
+        assertEquals(78.38, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
         assertEquals(73.93, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
         assertEquals(359.7, before.get("S-7").temperature() - 273.15, .1);
         assertEquals(350.0, after.get("S-7").temperature() - 273.15, .15);
