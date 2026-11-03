@@ -491,20 +491,20 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             var slots = DialogColumns.footer(w, h, text ? 3 : 2);
             add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
             if (text) add(new Column.Button("dialog/to_clipboard", lang("flowsheet.file.to_clipboard"), true, null), slots.get(1).moved(left, top));
-            add(new Column.Button("dialog/save", lang("flowsheet.file.save"), true, null), slots.get(text ? 2 : 1).moved(left, top));
+            add(new Column.Button("dialog/save", lang("flowsheet.file.save"), true, null), slots.get(text ? 2 : 1).moved(left, top)).primary(true);
             return;
         }
         if (dialog == Dialog.UNSAVED) {
             var slots = DialogColumns.footer(w, h, 3);
             add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
             add(new Column.Button("dialog/discard", lang("flowsheet.file.discard"), true, null), slots.get(1).moved(left, top));
-            add(new Column.Button("dialog/store", lang("flowsheet.file.save"), true, null), slots.get(2).moved(left, top));
+            add(new Column.Button("dialog/store", lang("flowsheet.file.save"), true, null), slots.get(2).moved(left, top)).primary(true);
             return;
         }
         if (dialog == Dialog.CHANGES) {
             var slots = DialogColumns.footer(w, h, 2);
             add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
-            add(new Column.Button("dialog/load", lang("flowsheet.file.open"), true, null), slots.get(1).moved(left, top));
+            add(new Column.Button("dialog/load", lang("flowsheet.file.open"), true, null), slots.get(1).moved(left, top)).primary(true);
             return;
         }
         if (dialog == Dialog.DELETE) {
@@ -515,7 +515,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         }
         var list = listing(x);
         var slots = DialogColumns.footer(w, h, list.keys().length);
-        for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], list.off()[i] == null, list.off()[i]), slots.get(i).moved(left, top));
+        // Each dialog's confirming key is primary, as the renders draw it (gui-creation rule 6): Open's Open, the templates' Load.
+        for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], list.off()[i] == null, list.off()[i]), slots.get(i).moved(left, top)).primary(i == list.primary());
     }
 
     /**
