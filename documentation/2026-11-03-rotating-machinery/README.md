@@ -11,6 +11,8 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2 waits on the
 - 2026-11-03: W1, `science/machine/**` (Minecraft-free, deterministic math): `CentrifugalPump`, `CentrifugalCompressor`, `PositiveDisplacement`, `SteamTurbine`, `Motor`, `SpeedControl`, with 28 unit tests against the plan's worked numbers (all pass; `DeterministicMathSourceTest` passes on the new files). Efficiencies of a design (decision A5, plan section 3.5): Corripio for pumps, the IE3 table by pole count (checked whole against EU 2019/1781), a single-stage to multistage blend for turbines.
 - 2026-11-04: W2 measurement point (218f9c5ff): `MachineLaw`; machines on their curves (`FlowControl.Machine`, mode `MOVER_LAW`, one row head − rise(Q) in place of the target and head-limit pair); pumps book the ideal work, compressors the polytropic work at η_p 0.78 with k from the suction per step; checkpoint version 31; the facts refuse a machine until schema 8 (W3); forms F1 (default) and F2 behind `icheme.fluid.cornerLaw`. Its tests pass except `CompressorTest`'s 5 s transfer under F1 (6.87 Pa short of 3 Pa: the switch latches `CLOSED`).
 - 2026-11-04: quick check (`tools/rotating-machinery/`) of F1, F2 and the centrifugal variant Q3. F2 held cold seed 200 (singular Jacobian: the norm residual has no gradient at no flow and no rise), so F2b (ffae9fc4d) states the corner as a finite rise with a knee line; F2b holds as the baseline and lands the transfer; Q3 cold seed 6 is clean alone. `W2_FORMS_REVIEW.md`: options A (F2b, recommended under D1) and B (F1) for the owner.
+- 2026-11-04: owner: "Take F2b (A)" (D10). F1's switch deleted with its rules and modes, checkpoint version 32 (7c7c0132e, WIP). Restating the tests showed F2b's defects: 13 of 415 fail, seven on a delivery up to 1.5 % above the set flow at every rise below 77 % of the limit (the knee line), four on convergence. F2c, the corner as a flow, is singular behind a flow valve or a velocity cap; F2e, a slip line and a relief line joined by a rounded corner, is proposed in `W2_CORNER_REVIEW.md`.
+- 2026-11-04: F2e (1d6d5d19c, WIP): the flow row of `u = smin(1 − s v, m (1 − v) + δ)`, s 0.4 %, m 10, ε 0.02, δ putting no flow on the rise limit (without it six tests cycled between `CLOSED` and `MOVER_LAW`). 418 of 420 affected tests and 58 of 58 hold gates pass; a dead-headed mover now runs on its law with no net flow or stands closed (eight tests restated). The two failures are D10's gaps, failing under F2b too: a flow valve raised past the pump's rate (F1's yield rule) and a cooling-tower pump that never primes (its rise limit reads gas at its suction end). `W2_CORNER_REVIEW.md`: options A (F2e with start-stage proposals A1, A2), B (2 % slip), C (F2b).
 
 ## Documents
 
@@ -18,6 +20,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2 waits on the
 - [MACHINE_RESEARCH_REVIEW.md](MACHINE_RESEARCH_REVIEW.md): the research behind the laws and the conversion ratios, with sources.
 - [DECISION_LOG.md](DECISION_LOG.md): the owner's decisions and the readings taken under the standing instruction.
 - [W2_FORMS_REVIEW.md](W2_FORMS_REVIEW.md): the quick check of forms F1, F2, F2b and the centrifugal variant, and the form proposal.
+- [W2_CORNER_REVIEW.md](W2_CORNER_REVIEW.md): the chosen form F2b against its tests, the flow form F2c, and the law with slip F2e.
 
 ## Code areas (planned)
 
@@ -25,7 +28,10 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2 waits on the
 
 ## Open items
 
-- Owner: form A (F2b) or B (F1), `W2_FORMS_REVIEW.md` section 4.
-- W2 rest: delete the other form and restate `CompressorTest` for it; one full campaign of the chosen form; the turbine connection (plan 3.4). Q3's cold worlds cost 34 % more backtracks than F1.
+- Owner: the set-flow movers' law after D10, `W2_CORNER_REVIEW.md` section 4: F2e with A1 and A2 (recommended), F2e with 2 % slip, or F2b as chosen. `1d6d5d19c` holds F2e with two tests failing; `7c7c0132e` holds F2b.
+- To measure later, not proposed: a mover on F2e stands at its relief behind a sealed pocket (`PumpAheadOfFlowValveTest`, `SealedDischargeTest`), so D58's closure may no longer be needed for movers.
+- Owner request 2026-11-04, a motor or turbine sound apart from the pump or compressor head's, with the volume scaled by operating speed and equipment size: W4's follow-up (D13 on its branch, client and assets); the speed share in `FluidNetwork.MoverState` comes with W3's driver logic.
+- `DECISION_LOG.md` numbering: this branch's D10 (the law) and W4's D10 to D13 collide; renumber at the merge.
+- W2 rest: the tests of the law the owner picks; one full campaign of it; the turbine connection (plan 3.4). Q3's cold worlds cost 34 % more backtracks than F1.
 - W3, W5 and W7 to build (plan section 12); W8 after the simulator merges; W9 only when the owner says so. W4 runs as its own session; W6a is done on `claude/interesting-wozniak-cb5e6a` (43731e4d3, 2b2339d59), not merged.
 - Scratch: `tmp/rotating-machinery/` (worked numbers, campaign reports, test logs, the `CompressorTest` corner-law probe); the measurement tools are in `tools/rotating-machinery/`.
