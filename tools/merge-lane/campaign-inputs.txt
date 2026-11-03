@@ -1,0 +1,11 @@
+^src/main/java/com/wormzjl/icheme/runtime/
+^src/main/java/com/wormzjl/icheme/science/(fluid|thermo|material|math)/
+^src/main/java/com/wormzjl/icheme/science/column/(operation|v3/thermo)/
+^src/main/java/com/wormzjl/icheme/science/equipment/(ColumnComponents|ColumnDesign|ColumnTrays|EquipmentShape|HeatSides|VesselPlacement)\.java
+^src/main/resources/data/icheme/materials/
+^src/main/resources/materials-index\.json
+^src/test/java/com/wormzjl/icheme/runtime/fluid/(EventPathWorld|BlockLineHarness|CertifyingRig|JunctionLedger)\.java
+^src/test/java/com/wormzjl/icheme/science/material/(MaterialTestBasis|PilotCryogenicTestCatalog)\.java
+^src/test/resources/materials/
+^tools/unified-thermo-port-forms/
+^tools/phase-ports-probes/hold-fuzz/

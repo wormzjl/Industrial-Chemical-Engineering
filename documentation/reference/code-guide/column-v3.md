@@ -1,6 +1,6 @@
 # V3 distillation column calculator
 
-**Snapshot:** 321b8d1d (branch `claude/column-operation-5c3005`), 2026-11-02 · **Updated:** 2026-11-02 (batch `2026-10-28-column-operation`: the operating point a saved design keeps, `ColumnUnitCommand`, a running column's solve; the solver's code unchanged since baca269b) · earlier: 2026-10-29 at baca269b (batches `2026-10-28-native-column-default` and `2026-10-28-vacuum-column`: the C++ PR outer pass stays the default; dry upper stages, phase identity audit, seed/continuation and column caloric continuation) · earlier: 2026-10-28 (batch 2026-10-28-constructor-templates: a command accepted from a session that closes before its bucket still runs (`PresentationMailbox`); `ColumnPresentation.queue` checks the screen and its reach at receipt, `applyCalculate` and `applySaveDesign` no longer refuse a closed screen) · earlier: 2026-10-28 (batch `2026-10-27-heat-exchanger-design`, owner choice (b): the Holland Example 3-2 preset and editor template left the game, its facade stays a solver benchmark only; the server refuses a calculation without a column diameter, `Set the column diameter`) · earlier: 2026-10-27 at d2e4ae40 (batch `2026-10-27-column-pressure-drop`: aggressive interactive solves now apply the bounded hydraulic correction before publication, so the inspection pressure profile and tray-hydraulics summary agree) · earlier: 2026-10-27 (batch `2026-10-27-constructor-import`: the constructor's Import is a `ConstructorPayload` with `IMPORT`; no column change)
+**Snapshot:** 0c88691e (branch `claude/test-suite-optimization-8fbeab`), 2026-11-03 · **Updated:** 2026-11-03 (batch 2026-11-02-test-suite-optimization: the Holland benchmark moves to `src/test`; batch `2026-10-28-column-operation`: the operating point a saved design keeps, `ColumnUnitCommand`, a running column's solve; the solver's code unchanged since baca269b) · earlier: 2026-10-29 at baca269b (batches `2026-10-28-native-column-default` and `2026-10-28-vacuum-column`: the C++ PR outer pass stays the default; dry upper stages, phase identity audit, seed/continuation and column caloric continuation) · earlier: 2026-10-28 (batch 2026-10-28-constructor-templates: a command accepted from a session that closes before its bucket still runs (`PresentationMailbox`); `ColumnPresentation.queue` checks the screen and its reach at receipt, `applyCalculate` and `applySaveDesign` no longer refuse a closed screen) · earlier: 2026-10-28 (batch `2026-10-27-heat-exchanger-design`, owner choice (b): the Holland Example 3-2 preset and editor template left the game, its facade stays a solver benchmark only; the server refuses a calculation without a column diameter, `Set the column diameter`) · earlier: 2026-10-27 at d2e4ae40 (batch `2026-10-27-column-pressure-drop`: aggressive interactive solves now apply the bounded hydraulic correction before publication, so the inspection pressure profile and tray-hydraulics summary agree) · earlier: 2026-10-27 (batch `2026-10-27-constructor-import`: the constructor's Import is a `ConstructorPayload` with `IMPORT`; no column change)
 
 Up: [code guide](README.md)
 
@@ -100,8 +100,8 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | [V3WaterProperties][water] | Wagner-Pruss saturation + Shomate enthalpy for free water, data from the catalog. `saturationPressurePascal` is the column's, with a checked range; the unchecked `wagnerPruss` (0 < T ≤ Tc, the supercooled branch below the triple point) serves the fluid network's free water, which also calls the enthalpies (`FluidThermodynamics`, `NetworkPhaseEngine`) | Steam/water rows |
 | [V3ThermoWorkspace][workspace], [V3ThermoException][thermo-ex] | Caller-owned scratch; typed property failure | Thread safety |
 | **Benchmark** | | |
-| [V3HollandExample32][holland] | Fixed Holland (1981) Example 3-2 input and facade, a solver benchmark only: no preset, template or server route reaches it | Package `icheme:holland_b12` |
-| IndependentHollandMeshOracle, HollandB12Thermo, HollandExample32Data (pp) | Independent equations, book K/H fits, scan transcription | Benchmark only |
+| [V3HollandExample32][holland] | Fixed Holland (1981) Example 3-2 input and facade, a solver benchmark only, in `src/test`: no preset, template or server route reaches it | Package `icheme:holland_b12` |
+| IndependentHollandMeshOracle, HollandB12Thermo, HollandExample32Data (pp) | Independent equations, book K/H fits, scan transcription | Benchmark only, in `src/test` with `column/v3/holland-example-3-2.json` |
 
 ## Main flow
 
@@ -366,7 +366,7 @@ Gradle tasks (from `build.gradle`; not run for this chapter): `test` runs everyt
 [display]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnDisplayResult.java
 [digest]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3InputDigest.java
 [editor-catalog]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3EditorCatalog.java
-[holland]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3HollandExample32.java
+[holland]: ../../../src/test/java/com/wormzjl/icheme/science/column/v3/V3HollandExample32.java
 [thermo-api]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3ThermoModel.java
 [thermo-deriv]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3ThermoDerivatives.java
 [thermo]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3PengRobinsonThermo.java

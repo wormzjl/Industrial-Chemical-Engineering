@@ -10,6 +10,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 |---|---|---|---|
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | In progress since 2026-11-02 |
 | [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
+| [merge-lane/](merge-lane/README.md) | The one final lane before a merge, with its campaign inputs | `2026-11-02-test-suite-optimization` | Implemented 2026-11-03 |
 | [ph-false-root/](ph-false-root/README.md) | TP, PH and UV sweeps on wet feeds, final lanes of the false root and TP steam fixes | `2026-11-02-ph-false-root`, `2026-11-02-tp-steam-refusal` | Implemented 2026-11-02 |
 | [vacuum-column-test/](vacuum-column-test/README.md) | CDU/VDU convergence screens and feed checks | `2026-10-28-vacuum-column` | Implemented 2026-11-02 |
 | [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |
@@ -58,6 +59,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [pipeline-tool/](pipeline-tool/README.md) | Pipeline tool placement, client-startup and integration evidence; no harness | `2026-10-23-pipeline-tool` | Archived 2026-10-23 |
 | [stale-worktrees-archive/](stale-worktrees-archive/README.md) | Restore kit of the 2026-10-21 branch and worktree cleanup (36 branch tips, 11 dirty worktrees) | housekeeping 2026-10-21 | Archived 2026-10-21 |
 | [test-archive-2026-10-21/](test-archive-2026-10-21/README.md) | Tests archived by the test review, with source copies and a re-attach patch | `2026-10-21-test-review` | Archived 2026-10-21 (`d13e72d1`) |
+| [test-archive-2026-11-02/](test-archive-2026-11-02/README.md) | Tests archived by the test suite review, with source copies and a re-attach patch | `2026-11-02-test-suite-optimization` | Archived 2026-11-02 (`c1b35ce2d`) |
 | [floating-roof-tanks/](floating-roof-tanks/README.md) | Open-vessel solver impact: bundled hold fuzz with open tanks, traces and prototypes | `2026-10-21-floating-roof-tanks` | Concluded 2026-10-26 (batch in 0.12.0) |
 | [storage-vessel-renders/](storage-vessel-renders/README.md) | Software renders of the floating-roof tank and the storage sphere | `2026-10-21-floating-roof-tanks` | Concluded 2026-10-26 (batch in 0.12.0) |
 | [crystal-junction-holds/](crystal-junction-holds/README.md) | Thread t56: rule-off patches, form switch, 743 trace probes and logs | `2026-10-20-crystal-junction-holds` | Implemented 2026-10-20 |

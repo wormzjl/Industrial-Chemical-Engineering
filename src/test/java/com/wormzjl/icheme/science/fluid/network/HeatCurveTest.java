@@ -9,12 +9,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class HeatCurveTest {
     /** A film of 1 W/m2K makes the area the conductance UA, as the 2026-09-24 prototype's kernel read it. */
     private static HeatCurve sensible(){return HeatCurve.of(List.of(new double[]{0,300,1},new double[]{400_000,400,1}));}
-
-    @Test void agreesWithTheConstantCpExponentialAndItsEnergyBalance() {
-        double out=sensible().march(400_000,2,8000,300);
-        assertEquals(400_000/Math.E,out,1e-9);
-        assertEquals(300+100/Math.E,sensible().temperatureAt(out),1e-12);
-    }
     @Test void latentHeatLeavesAtConstantTemperatureBeforeTheLiquidCools() {
         var curve=HeatCurve.of(List.of(new double[]{0,300,1},new double[]{400_000,400,1},new double[]{2_400_000,400,1},new double[]{2_600_000,500,1}));
         assertEquals(1_400_000,curve.march(2_400_000,1,10_000,300),1e-8);

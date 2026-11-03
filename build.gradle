@@ -455,25 +455,80 @@ tasks.register('fluidSolverRegression', Test) {
         systemProperty 'fluid.regression.traceCutoff', providers.gradleProperty('fluidRegressionTraceCutoff').get()
     outputs.upToDateWhen { false }
 }
-// The slow gates (3 s or more each at 0.11.0, 216 of the suite's 262 s): the everyday `test` leaves them out and
-// `slowGates` runs them; `check` (so `build`) and the final lane run both.
-def slowGateClasses = ['runtime.fluid.HoldClassWorldsTest', 'science.column.v3.thermo.RegroupedCrudeTest',
-        'science.equipment.ProcessUnitTest', 'science.column.v3.V3SideDrawCalculatorTest', 'science.column.v3.V3LearnedRecoveryTest',
-        'science.column.v3.V3ConvergenceClosureTest', 'science.column.v3.V3PumparoundCalculatorTest',
-        'science.column.v3.V3StageContinuationTest', 'science.column.v3.V3PumparoundSteamCalculatorTest',
-        'science.column.v3.V3MethaneColumnTest', 'runtime.fluid.JunctionSeedingGateTest', 'science.column.v3.V3ColumnCalculatorTest',
-        'science.column.v3.V3ColumnFeedAndDrawLimitsTest', 'science.column.v3.V3TrayHydraulicsColumnTest',
-        'science.column.v3.V3LiteraturePresetTest', 'runtime.fluid.IslandSchedulerTest', 'science.column.v3.V3ColdStartTest',
+// An MSVC build stamps its DLL, so the C++ library counts by its sources, not its bytes: otherwise every rebuild reruns
+// every test, and two worktrees of one tree never share a result.
+normalization { runtimeClasspath { ignore 'natives/**' } }
+tasks.withType(Test).configureEach { inputs.dir(nativeSourceDirectory).withPropertyName('nativeSources').withPathSensitivity(PathSensitivity.RELATIVE) }
+
+// A gate group loads a small part of the mod (by -Xlog:class+load, batch 2026-11-02-test-suite-optimization: 115 of the
+// source files for the column, 113 for equipment). Its task sees only that part, so a change anywhere else leaves it up to
+// date or restores it from the build cache: it does not run at all. A class left out of a list fails its test with
+// NoClassDefFoundError: add it. `test` leaves these tests out; narrow a run with `columnGates --tests`.
+def icheme = { "com/wormzjl/icheme/${it}".toString() }
+def gateGroup = { String name, String tests, List<String> main, List<String> helpers, List<String> testResources, List<String> mainResources ->
+    def directory = layout.buildDirectory.dir("gate-inputs/${name}")
+    def testDirectory = directory.map { it.dir('tests') }, libDirectory = directory.map { it.dir('lib') }
+    def inputs = tasks.register("${name}GateInputs", Sync) {
+        description = "Copies what the ${name} gates load, and nothing else, for ${name}Gates to take as its inputs."
+        into directory
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        into('tests') { from(sourceSets.test.output.classesDirs) { include icheme("${tests}/**") } }
+        into('lib') {
+            from(sourceSets.test.output.classesDirs) { include helpers.collect(icheme) }
+            from(tasks.named('processTestResources')) { include testResources + [icheme("${tests}/**")] }
+            from(sourceSets.main.output.classesDirs) { include((main + [tests]).collect { icheme(it.endsWith('*') ? it : "${it}/**") }) }
+            from(tasks.named('processResources')) { include mainResources + ['data/icheme/materials/**', 'materials-index.json'] }
+        }
+    }
+    tasks.register("${name}Gates", Test) {
+        group = 'verification'
+        description = "Runs the ${name} tests on only what they load; it stands up to date unless one of those files changed."
+        testClassesDirs = files(testDirectory).builtBy(inputs)
+        classpath = files(testDirectory, libDirectory).builtBy(inputs) + configurations.testRuntimeClasspath + configurations.runtimeClasspath
+        filter {
+            includeTestsMatching "com.wormzjl.icheme.${tests.replace('/', '.')}.*"
+            failOnNoMatchingTests = true
+        }
+    }
+}
+def columnGates = gateGroup('column', 'science/column/v3',
+        ['science/material', 'science/math', 'science/equipment/ColumnDesign*', 'science/fluid/transport/MixtureViscosity*',
+         'science/thermo/IdealGasFunction*', 'science/thermo/PairInteractions*', 'science/thermo/PengRobinsonKernel*',
+         'science/thermo/ThermoComponent*', 'science/thermo/TraceTruncationPolicy*', 'world/inventory/ColumnCalculatorV3Menu*',
+         'world/level/block/entity/ColumnCalculatorV3BlockEntity*', 'world/level/block/entity/ColumnInputPreset*'],
+        ['network/ColumnCodecs*', 'science/material/CatalogScopedExtension*', 'science/material/Cdu17FixtureExtension*',
+         'science/material/Cdu17TestCatalog*', 'science/material/MaterialTestBasis*', 'science/material/PilotCryogenicTestCatalog*',
+         'science/material/TjlReferenceExtension*', 'science/thermo/PengRobinson78*', 'science/thermo/PhaseProperties*'],
+        ['column/**', 'materials/**', 'science/column/**'], ['data/icheme/neural/**', 'natives/**'])
+def equipmentGates = gateGroup('equipment', 'science/equipment',
+        ['science/material', 'science/math', 'science/fluid/topology/TopologyCompiler*', 'science/thermo/IdealGasFunction*',
+         'science/thermo/PengRobinsonKernel*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*',
+         'science/column/v3/V3ColumnInput*',
+         'science/column/v3/V3ColumnOutcome*', 'science/column/v3/V3ColumnProblemResolver*', 'science/column/v3/V3ColumnSpecification*',
+         'science/column/v3/V3ComponentBasis*', 'science/column/v3/V3InitializationOptions*',
+         'science/column/v3/V3PumparoundSpec*', 'science/column/v3/V3SideDrawSpec*', 'science/column/v3/V3SteamFeedSpec*',
+         'science/column/v3/thermo/V3ThermoModel*', 'science/column/v3/thermo/V3WaterProperties*',
+         'science/fluid/network/CoolingTower*', 'science/fluid/network/AirCooled*', 'science/fluid/network/ConvectionCoil*', 'science/fluid/network/FiredCoil*',
+         'science/fluid/network/HeatControl*', 'science/fluid/network/HeatCurve*', 'science/fluid/network/HeatLaw*',
+         'science/fluid/network/HeatSide*', 'science/fluid/network/PipeResistance*', 'science/fluid/network/VesselGeometry*',
+         'world/level/block/entity/ColumnDesignTags*', 'world/level/block/entity/EquipmentConstructorBlockEntity*',
+         'world/level/block/entity/EquipmentShellBlockEntity*'],
+        ['science/column/v3/V3TestInputs*', 'science/column/v3/HollandB12Thermo*', 'science/column/v3/HollandExample32Data*', 'science/column/v3/V3HollandExample32*'],
+        ['column/**', 'compat/**', 'materials/**'], ['assets/icheme/parts/**', 'assets/icheme/lang/**'])
+
+// The slow gates (3 s or more each): the everyday `test` leaves them out and `holdGates` runs them. `slowGates` runs those
+// and the gate groups; `check` (so `build`) and the final lane run it with `test`.
+def slowGateClasses = ['runtime.fluid.HoldClassWorldsTest', 'runtime.fluid.JunctionSeedingGateTest', 'runtime.fluid.IslandSchedulerTest',
         'runtime.fluid.ExtremeTopologyIslandTest'].collect { "com.wormzjl.icheme.${it}" }
 tasks.named('test', Test) {
     // The fluid GameTests compile with the quick suite: only their server run compiled them, and a removed block left
     // them uncompilable for two days unseen (batch 2026-10-21-floating-roof-tanks, FINAL_LANE_E8EC6455_REVIEW.md).
     dependsOn tasks.named('compileFluidGameTestJava')
-    exclude '**/fluid/benchmark/**'
+    exclude '**/fluid/benchmark/**', icheme('science/column/v3/**'), icheme('science/equipment/**')
     filter { slowGateClasses.each { excludeTestsMatching it } }
     systemProperty 'icheme.fluid.scheduler.verify', 'true'
 }
-def slowGates = tasks.register('slowGates', Test) {
+def holdGates = tasks.register('holdGates', Test) {
     group = 'verification'
     description = 'Runs the slow gate classes the everyday test leaves out; a missing class is a failure.'
     testClassesDirs = sourceSets.test.output.classesDirs
@@ -483,6 +538,12 @@ def slowGates = tasks.register('slowGates', Test) {
         failOnNoMatchingTests = true
     }
     systemProperty 'icheme.fluid.scheduler.verify', 'true'
+}
+// No task of its own, so the groups run side by side: a Test task that depended on them would wait for them.
+def slowGates = tasks.register('slowGates') {
+    group = 'verification'
+    description = 'Runs what the everyday test leaves out: the hold gates and the gate groups.'
+    dependsOn holdGates, columnGates, equipmentGates
 }
 tasks.named('check') { dependsOn slowGates }
 

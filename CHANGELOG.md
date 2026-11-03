@@ -15,6 +15,17 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-11-03
+
+### Changed
+
+- `columnGates` and `equipmentGates` run only when something their tests load changed, the column GameTest waits for solves instead of sleeping, and one tracked lane replaces a copy per batch (`c123e20d9`, batch `2026-11-02-test-suite-optimization`).
+- Code that only tests use leaves `src/main`: the Holland benchmark, its data file and `ControlBinding` move to `src/test`, and the mod no longer ships them (`0c88691e5`, `tools/merge-lane/main-reach.pl`, batch `2026-11-02-test-suite-optimization`).
+
+### Removed
+
+- 20 tests that repeated another test's check or pinned a drawn value no rule names, archived with a re-attach patch; the suite is 2051 runs (`c1b35ce2d`, `tools/test-archive-2026-11-02/`, batch `2026-11-02-test-suite-optimization`).
+
 ## [0.19.0] - 2026-11-02
 
 ### Added

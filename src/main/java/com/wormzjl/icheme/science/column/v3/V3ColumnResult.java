@@ -35,9 +35,7 @@ public final class V3ColumnResult {
         this.dutyLedger = dutyLedger;
         this.problem = Objects.requireNonNull(problem, "problem");
         var catalogPackage = com.wormzjl.icheme.science.material.MaterialRuntime.current().packages().get(problem.input().packageId());
-        this.datasetRevision = V3HollandExample32.isPackage(problem.input().packageId())
-                ? V3HollandExample32.DATASET_REVISION
-                : catalogPackage == null ? "unregistered-test-model" : catalogPackage.scientificRevision();
+        this.datasetRevision = catalogPackage == null ? "unregistered-test-model" : catalogPackage.scientificRevision();
         this.inputDigest = Objects.requireNonNull(inputDigest, "inputDigest");
         this.acceptanceAudit = Objects.requireNonNull(acceptanceAudit, "acceptanceAudit");
         this.convergenceEvidence = Objects.requireNonNull(convergenceEvidence, "convergenceEvidence");

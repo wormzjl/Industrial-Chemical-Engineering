@@ -28,11 +28,6 @@ class VesselGeometryTest {
         assertNotEquals(g.capacity()/3,g.weirVolume(),1e-3);
         assertTrue(g.heightAt(.5*g.bootCapacity())<0);
     }
-    @Test void hydrostaticHeadUsesLayerHeightsAndDensities(){
-        var g=VesselGeometry.round(VesselGeometry.Form.SPHERE,4,0,0,0);
-        double water=g.volumeAt(1),total=g.volumeAt(2.5);
-        assertEquals(PassiveStepSolver.GRAVITY*(1000+800*1.5),g.head(water,1000*water,total-water,800*(total-water)),1e-9);
-    }
     /** The head stands over the body bottom, the node's elevation; the boot below is the line below its nozzle. */
     @Test void bootHeadStandsOverTheBodyBottom(){
         var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);

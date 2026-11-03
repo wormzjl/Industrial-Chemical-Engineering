@@ -164,23 +164,6 @@ class KitLayoutTest {
         assertFalse(view.visible(new Rect(10, 190, 58, 18)));
     }
 
-    @Test
-    void compactMetricsPlaceTheSameRowsShorterAndAChoiceDrawsItsTitleOnly() {
-        var normal = Column.place(every(), 20, 74, 180, M);
-        var compact = Column.place(every(), 20, 74, 180, M, Column.Metrics.COMPACT);
-        assertTrue(compact.bounds().h() < normal.bounds().h());
-        assertEquals(normal.slots().keySet(), compact.slots().keySet());
-        for (var p : compact.rows()) for (var s : p.slots().values()) assertTrue(s.inside(p.rect()), "a widget inside its compact row");
-        for (int i : new int[]{2, 3}) {
-            var choice = compact.rows().get(i);
-            assertEquals(List.of(((Column.Choice) choice.row()).title()), choice.texts(), "chosen or not, a choice draws its title");
-            assertEquals(11, choice.rect().h(), "a line high");
-        }
-        assertEquals("Sets the bypass to hold it", compact.rows().get(2).hover());
-        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(11, 17, 20, 10), "a field row lower than its box");
-        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(9, 20, 20, 10), "a line lower than its text");
-    }
-
     /** Owner, 2026-10-28: "Text plate and function group should be better designed so new users are not overwhelmed". */
     @Test
     void aGroupFramesItsRowsUnderItsPlateAndHoversItsHintOnItsOwnSpace() {
