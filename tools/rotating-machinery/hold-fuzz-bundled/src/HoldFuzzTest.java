@@ -234,7 +234,9 @@ class HoldFuzzTest {
         }
         void runTo(long tick){while(ledger.onlineTick()<tick)tick();}
         String describe(long island) {
-            var s=coordinator.observe(island);var b=new StringBuilder("island "+island+" committed="+s.clock().committedTick()+" status="+s.status()+"\n");
+            // A held island a later topology event in the same tick merged or split is gone by the time it is printed.
+            IslandCoordinator.Snapshot s;try{s=coordinator.observe(island);}catch(IllegalArgumentException gone){return "island "+island+" gone before it was printed\n";}
+            var b=new StringBuilder("island "+island+" committed="+s.clock().committedTick()+" status="+s.status()+"\n");
             var g=s.graph();
             for(int i=0;i<g.reservoirs().size();i++){var n=g.reservoirs().get(i);var st=n.state();
                 b.append("    node ").append(i).append(" id=").append(n.id()).append(' ').append(n.kind()).append(" z=").append(n.elevation()).append(" P=").append(st.pressure()).append(" T=").append(st.temperature()).append(" m=").append(st.mass()).append(" liq=").append(st.liquidVolume()).append(" water=").append(st.waterVolume()).append(" vap=").append(st.vaporVolume()).append('\n');}

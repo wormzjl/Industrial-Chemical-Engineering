@@ -19,3 +19,6 @@ check compares against. Main 0.19.3 changed no solver code since.
 - 2026-11-04: created for W2's quick check on commit `218f9c5ff` (F1, F2 and the centrifugal variant Q3).
 - 2026-11-04: `ONLY` (one harness and distribution, a replay alone); the F2b quick check on `ffae9fc4d` and the replay alone of
   Q3 cold seed 6.
+- 2026-11-04: the full campaign of `bd89826a3` (F2e with A1 and A2, `SEEDS=1-1000`, 6 min) and the verbose replays of seeds
+  896 and 952; `HoldFuzzTest.World.describe` (bundled copy) prints a held island a later event merged away as gone instead
+  of throwing.
