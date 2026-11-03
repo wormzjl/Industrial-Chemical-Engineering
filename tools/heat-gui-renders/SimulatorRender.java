@@ -1,5 +1,6 @@
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
@@ -37,6 +38,9 @@ import com.wormzjl.icheme.client.gui.flowsheet.Tiles;
 import com.wormzjl.icheme.client.gui.flowsheet.UnitDoors;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.UnitDesign;
+import com.wormzjl.icheme.science.equipment.VesselPlacement;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetEngine;
@@ -763,6 +767,58 @@ public final class SimulatorRender {
                         sized(new Sized(plain, rated, new SheetState.Running(14.2, 2, 30, "T-101", com.wormzjl.icheme.science.flowsheet.Report.Start.LAST, SheetState.Task.SIZE)), nothing())));
     }
 
+    /**
+     * S5's sheets (batch 2026-11-02-process-simulator): Send to block on the Sizing tab after one Size all of the sample and after a second, with
+     * what its hover says; then the constructor's Import page listing the designs Send to block stores, Import on the choice page, and
+     * the condenser landed on the draft.
+     */
+    private static void send(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
+        var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
+        });
+        var first = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
+        var second = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(first.sheet(), first.run(), thermo));
+        int red1 = SizingPage.reds(first.sized()), red2 = SizingPage.reds(second.sized());
+        var designs = SheetSizing.designs(second.sheet(), second.sized());
+        System.out.printf("send: first Size all %d red, second %d red; %d designs%n", red1, red2, designs.size());
+        for (var round : List.of(first, second)) {
+            String which = round == first ? "first" : "second";
+            round.sized().units().forEach((id, unit) -> {
+                if (unit.rating().lamp() == com.wormzjl.icheme.science.flowsheet.sizing.Lamp.RED) System.out.println("red after the " + which + ": unit " + id + " " + unit.rating().closest());
+            });
+            round.sized().lines().forEach((id, line) -> {
+                if (line.line().flows() && line.rating().lamp() == com.wormzjl.icheme.science.flowsheet.sizing.Lamp.RED) System.out.println("red after the " + which + ": line " + id + " " + line.rating().closest());
+            });
+            for (var path : round.sized().paths())
+                if (path.rating().lamp() == com.wormzjl.icheme.science.flowsheet.sizing.Lamp.RED) System.out.println("red after the " + which + ": path " + path.start() + " " + path.rating().closest());
+        }
+        var f1 = new SimulatorHost.Finished(first.sheet(), first.run(), seconds);
+        var f2 = new SimulatorHost.Finished(second.sheet(), second.run(), seconds);
+        var host1 = new Sized(f1, new SimulatorRunner.Rated(first.sheet(), f1, first.sized(), true), null);
+        var host2 = new Sized(f2, new SimulatorRunner.Rated(second.sheet(), f2, second.sized(), true), null);
+        String hint1 = red1 > 0 ? HeatDiagramRender.tr("gui.icheme.flowsheet.sizing.send_red", red1) : HeatDiagramRender.tr("gui.icheme.flowsheet.sizing.send_hint", designs.size());
+        String hint2 = red2 > 0 ? HeatDiagramRender.tr("gui.icheme.flowsheet.sizing.send_red", red2) : HeatDiagramRender.tr("gui.icheme.flowsheet.sizing.send_hint", designs.size());
+        sheet(out, "01-send-to-block", W, H, List.of("One Size all. Send's hover: " + hint1, "A second Size all. Send's hover: " + hint2),
+                List.of(sized(host1, nothing()), sized(host2, nothing())));
+        var t = GuiPrototypes.DIALOG;
+        var outlet = new ConstructorColumn.Outlet(1, 0, GuiPrototypes.STANDING);
+        var condenser = designs.stream().filter(d -> d.member().equals("condenser")).findFirst().orElseThrow();
+        var shape = condenser.shape();
+        var landed = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.EXCHANGER, shape.diameter(), (int) Math.round(shape.tangentLength()), shape.support(), 3, 0, 0,
+                shape.bank(), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), t);
+        // The screen keeps what the unit holds on its display, as it does for any draft, and sends the import's message to chat.
+        var held = UnitDesign.of(shape.kind()).held(shape);
+        String said = HeatDiagramRender.tr("message.icheme.equipment.imported_unit", t.get(ConstructorColumn.KEY + "import.member", condenser.tag(), t.get("flowsheet.sizing.member.condenser")),
+                t.get("vessel.title.exchanger"), condenser.count());
+        grid(out, "02-constructor-import", 464, 254, List.of("Import: the designs Send to block stored", "Import on the choice page, beside the last groups", "The condenser landed on the draft. Chat: " + said),
+                List.of((d, s) -> GuiPrototypes.constructorDoor(d, ConstructorColumn.imports(designs.stream().map(x -> {
+                            var l = ConstructorColumn.listed(x, t);
+                            return new ConstructorColumn.Listed(d.m.cut(l.name(), ConstructorColumn.WIDTH - 12), l.hint());
+                        }).toList(), t), t.get(ConstructorColumn.KEY + "group.imports"), "back", null, 0, java.util.Map.of()),
+                        (d, s) -> GuiPrototypes.constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.HEAT, ConstructorColumn.Equipment.EXCHANGER, 16, t),
+                                HeatDiagramRender.tr("block.icheme.equipment_constructor"), "back", null, 0, java.util.Map.of()),
+                        (d, s) -> GuiPrototypes.constructorDoor(d, landed, t.get("vessel.title.exchanger"), "change", t.get(ConstructorColumn.KEY + held.key(), held.args()), Palette.ACCENT, java.util.Map.of())));
+    }
+
     private static Flowsheet withType(Flowsheet sheet, String id, String type) {
         var units = new ArrayList<Flowsheet.Unit>();
         for (var unit : sheet.units()) units.add(unit.id().equals(id) ? new Flowsheet.Unit(unit.id(), type, unit.name(), unit.x(), unit.y(), unit.params(), unit.unknown()) : unit);
@@ -790,6 +846,11 @@ public final class SimulatorRender {
         // -Donly=sizing: S4b's sheets alone.
         if ("sizing".equals(System.getProperty("only"))) {
             sizing(out, sheet, run, seconds);
+            return;
+        }
+        // -Donly=send: S5's sheets alone.
+        if ("send".equals(System.getProperty("only"))) {
+            send(out, sheet, run, seconds);
             return;
         }
         var more = vessels();
