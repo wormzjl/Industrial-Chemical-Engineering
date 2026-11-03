@@ -5,11 +5,15 @@ package com.wormzjl.icheme.science.machine;
  * 2026-11-03-rotating-machinery, plan section 3.3). It delivers its displacement {@code Q_d s} whatever the rise, until its
  * relief valve lifts and passes the delivery back to the suction.
  *
- * <p>As one smooth law, the corner {@code (Q/(Q_d s))^m + (Δp/Δp_relief)^m = 1} with m = 16, of the family of the velocity
- * cap: 98.7 % of the displacement at 90 % of the relief rise, none at the relief rise. Each share counts from zero: a
- * negative rise (suction above discharge) passes the displacement, and a reverse flow stands at the relief rise, passed back
- * by the relief valve. It is today's "set flow up to a rise limit" written as one row instead of a mode switch. A stopped
- * machine is closed, so the law asks a speed above zero.
+ * <p>As the row every law mover states, {@code head − rise(Q) = 0}: the corner {@code (Q/(Q_d s))^m + (Δp/Δp_relief)^m = 1}
+ * with m = 16, of the family of the velocity cap (98.7 % of the displacement at 90 % of the relief rise, none at the relief
+ * rise). At or below no flow the rise is the relief rise: a reverse flow stands there, passed back by the relief valve until
+ * the mover's reverse closure ends it. Past {@link #KNEE} of the displacement the rise goes on falling along a straight
+ * line with the corner's slope there, −47.9 {@code Δp_relief/(Q_d s)}: a suction above the discharge blows through, 1.5 %
+ * above the displacement at no rise. A finite rise at every flow holds the row's head derivative at one, so the row is
+ * never empty; the corner first written as a norm, {@code ‖(u⁺, v⁺)‖₁₆ − 1}, had no gradient at all at no flow and no rise,
+ * where a mover that cannot beat its discharge starts (W2's quick check, cold seed 200). A stopped machine is closed, so
+ * the law asks a speed above zero.
  *
  * @param displacement Q_d, the suction volume flow at rated speed and no rise, m³/s
  * @param reliefRise   Δp_relief, the rise at which the relief valve passes the whole delivery back, Pa
@@ -17,55 +21,37 @@ package com.wormzjl.icheme.science.machine;
 public record PositiveDisplacement(double displacement, double reliefRise) {
     /** The corner's exponent m. */
     public static final int EXPONENT = 16;
+    /** The share of the displacement past which the rise falls along a straight line. */
+    public static final double KNEE = .999;
+    /** The corner's rise at the knee, a share of the relief rise (0.772), and its slope there, relief rises per
+     * displacement (−47.9). */
+    static final double KNEE_RISE = root16(1 - power16(KNEE)), KNEE_SLOPE = -fall(KNEE);
 
     public PositiveDisplacement {
         if (!(displacement > 0) || !(reliefRise > 0) || !Double.isFinite(displacement) || !Double.isFinite(reliefRise))
             throw new IllegalArgumentException("Invalid displacement " + displacement + " m3/s or relief rise " + reliefRise + " Pa");
     }
 
-    /**
-     * The law as a residual, zero on the corner: {@code ‖(u⁺, v⁺)‖₁₆ − 1} with {@code u = Q/(Q_d s)} and
-     * {@code v = Δp/Δp_relief}, each held at zero below zero. The norm is homogeneous of degree one, so the residual reads as a
-     * distance from the corner (−0.48 at half flow and half rise, where {@code u^m + v^m − 1} is −1.0 almost everywhere
-     * inside), and its gradient stays between 0 and 1 per share.
-     */
-    public double residual(double flow, double rise, double speed) {
-        return norm(flow / capacity(speed), rise / reliefRise) - 1;
-    }
-
-    /** {@code ∂residual/∂Q}, per m³/s. */
-    public double residualFlowSlope(double flow, double rise, double speed) {
-        double capacity = capacity(speed);
-        return weight(flow / capacity, rise / reliefRise) / capacity;
-    }
-
-    /** {@code ∂residual/∂Δp}, per Pa. */
-    public double residualRiseSlope(double flow, double rise, double speed) {
-        return weight(rise / reliefRise, flow / capacity(speed)) / reliefRise;
-    }
-
-    /** The suction volume flow, m³/s, at pressure rise {@code rise} (Pa) and speed {@code speed}: the displacement at or below
-     * no rise, none at or above the relief rise. */
-    public double flow(double rise, double speed) {
-        double capacity = capacity(speed), v = Math.max(0, rise / reliefRise);
-        return v >= 1 ? 0 : capacity * root16(1 - power16(v));
-    }
-
     /** The pressure rise, Pa, at suction volume flow {@code flow} (m³/s) and speed {@code speed}: the relief rise at or below
-     * no flow, zero at the displacement. No finite rise passes more than the displacement: above it, negative infinity. */
+     * no flow, the corner up to the knee, then the straight line, zero at 1.0151 of the displacement and negative past it. */
     public double rise(double flow, double speed) {
         double u = Math.max(0, flow / capacity(speed));
-        if (u > 1) return Double.NEGATIVE_INFINITY;
-        return reliefRise * root16(1 - power16(u));
+        return reliefRise * (u <= KNEE ? root16(1 - power16(u)) : KNEE_RISE + KNEE_SLOPE * (u - KNEE));
     }
 
-    /** {@code d(rise)/dQ}, Pa per m³/s: zero at or below no flow, negative infinity at and above the displacement. */
+    /** {@code d(rise)/dQ}, Pa per m³/s: zero at or below no flow, the corner's slope up to the knee, the line's past it. */
     public double riseSlope(double flow, double speed) {
         double capacity = capacity(speed), u = Math.max(0, flow / capacity);
         if (!(u > 0)) return 0;
-        if (!(u < 1)) return Double.NEGATIVE_INFINITY;
-        double t = u / root16(1 - power16(u)), t2 = t * t, t4 = t2 * t2, t8 = t4 * t4;
-        return -reliefRise / capacity * t8 * t4 * t2 * t;
+        return reliefRise / capacity * (u <= KNEE ? -fall(u) : KNEE_SLOPE);
+    }
+
+    /** The suction volume flow, m³/s, at pressure rise {@code rise} (Pa) and speed {@code speed}, the inverse of
+     * {@link #rise}: none at or above the relief rise, more than the displacement below the knee's rise. */
+    public double flow(double rise, double speed) {
+        double capacity = capacity(speed), v = rise / reliefRise;
+        if (v >= 1) return 0;
+        return capacity * (v >= KNEE_RISE ? root16(1 - power16(v)) : KNEE + (v - KNEE_RISE) / KNEE_SLOPE);
     }
 
     private double capacity(double speed) {
@@ -73,19 +59,9 @@ public record PositiveDisplacement(double displacement, double reliefRise) {
         return displacement * speed;
     }
 
-    /** {@code ‖(a⁺, b⁺)‖₁₆}, scaled by the larger share so no power overflows. */
-    static double norm(double a, double b) {
-        a = Math.max(0, a);
-        b = Math.max(0, b);
-        double high = Math.max(a, b), low = Math.min(a, b);
-        if (!(high > 0)) return 0;
-        return high * root16(1 + power16(low / high));
-    }
-
-    /** {@code ∂‖(a⁺, b⁺)‖₁₆/∂a = (a⁺/‖·‖)^15}. */
-    private static double weight(double a, double b) {
-        if (!(a > 0)) return 0;
-        double t = a / norm(a, b), t2 = t * t, t4 = t2 * t2, t8 = t4 * t4;
+    /** The corner's fall, {@code −d(rise/Δp_relief)/du = (u/(1 − u^16)^(1/16))^15}, at a share {@code u} below one. */
+    private static double fall(double u) {
+        double t = u / root16(1 - power16(u)), t2 = t * t, t4 = t2 * t2, t8 = t4 * t4;
         return t8 * t4 * t2 * t;
     }
 

@@ -3142,9 +3142,8 @@ public final class PassiveStepSolver {
          * The forward flow of mover connection {@code e} on its own law ({@code MOVER_LAW}, batch 2026-11-03-rotating-machinery)
          * at static drive {@code drive} (Pa: the end pressures less the column), with the suction at {@code rho} and
          * {@code pressure}: the law flow q of {@code loss(q) - drive - rise(saturated(q)) = 0}, the Newton's row, whose rise
-         * reads the flow the velocity cap lets through. Unique because the loss rises with the law flow and the rise falls. A
-         * rise of negative infinity (past a displacement) bounds the bracket from above. Newton from the last flow found,
-         * bisection where a step leaves the bracket, as {@link #runFlow}.
+         * reads the flow the velocity cap lets through. Unique because the loss rises with the law flow and the rise falls.
+         * Newton from the last flow found, bisection where a step leaves the bracket, as {@link #runFlow}.
          */
         private double curveFlow(int e,double drive,double rho,double pressure,double mu,double cap) {
             if(!(cap>0))return 0;
@@ -3153,7 +3152,6 @@ public final class PassiveStepSolver {
             double lo=0,hi=Double.POSITIVE_INFINITY,q=lastQ[e][0]>0?lastQ[e][0]:nominal>0?Math.min(cap,nominal):cap;
             for(int k=0;k<80;k++) {
                 double moved=saturated(q,cap),rise=lawRise(graph,pipe,moved/rho,rho,pressure);
-                if(rise==Double.NEGATIVE_INFINITY){hi=q;q=.5*(lo+hi);continue;}
                 var loss=pipe.loss(q,rho,mu);double f=loss.pressureDrop()-drive-rise;
                 if(Math.abs(f)<=1e-12*Math.max(Math.abs(drive),Math.abs(rise)))break;
                 if(f>0)hi=q;else lo=q;

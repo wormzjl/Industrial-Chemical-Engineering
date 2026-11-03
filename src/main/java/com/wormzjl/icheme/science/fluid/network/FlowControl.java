@@ -53,14 +53,16 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
          * batch); a compressor the polytropic work over its efficiency (plan section 4.4).
          */
         double power(double massFlow,double head,double suctionDensity,double suctionPressure,double k);
-        /** The rise (Pa) the mover's law holds at suction volume flow {@code flow} (m3/s), falling with flow; negative
-         * infinity where no finite rise passes the flow. */
+        /** The rise (Pa) the mover's law holds at suction volume flow {@code flow} (m3/s): finite at every flow, falling with
+         * a forward flow. */
         double lawRise(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k);
         /** {@code d(lawRise)/dQ}, Pa per m3/s. */
         double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k);
-        /** The law as the {@code MOVER_LAW} row, Pa: zero where the mover holds {@code head} at {@code flow}, rising with the
-         * head, defined at every flow and head. */
-        double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k);
+        /** The law as the {@code MOVER_LAW} row, Pa: the head less the law's rise at {@code flow}. Its head derivative is one,
+         * so the row is never empty. */
+        default double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return head-lawRise(flow,suctionDensity,suctionPressure,referenceDensity,k);
+        }
         /**
          * Whether a supply (what the suction line delivers, {@link InletPhase.Supply}) is refused for the next slice
          * ({@code INLET_WRONG_PHASE}), given whether the device stood refused at the committed slice end: a dry suction
@@ -101,9 +103,6 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         }
         @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return corner(this,suctionDensity,suctionPressure,referenceDensity,k).riseSlope(flow,1);
-        }
-        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
-            var law=corner(this,suctionDensity,suctionPressure,referenceDensity,k);return law.reliefRise()*law.residual(flow,head,1);
         }
         @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
         /** A liquid machine's refusal: a dry suction, or vapour above {@link #VAPOUR_REFUSE} of the fluid volume. */
@@ -154,9 +153,6 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return corner(this,suctionDensity,suctionPressure,referenceDensity,k).riseSlope(flow,1);
         }
-        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
-            var law=corner(this,suctionDensity,suctionPressure,referenceDensity,k);return law.reliefRise()*law.residual(flow,head,1);
-        }
         @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
         /** A gas machine's refusal: a dry suction, a solid above the trace, or condensed phases above {@link #CONDENSED_REFUSE}
          * of the mass. */
@@ -197,9 +193,6 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         }
         @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return law.riseSlope(flow,speed,suctionDensity,suctionPressure,k);
-        }
-        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
-            return head-law.rise(flow,speed,suctionDensity,suctionPressure,k);
         }
         @Override public boolean refuses(InletPhase.Supply supply,boolean refused) {
             return liquid()?Pump.refusesSupply(supply,refused):Compressor.refusesSupply(supply,refused);

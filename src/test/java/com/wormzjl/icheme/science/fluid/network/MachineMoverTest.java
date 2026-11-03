@@ -104,19 +104,21 @@ class MachineMoverTest extends PortFixture {
         double cp=3.470+1.450e-3*400+.121e5/(400.*400);
         assertEquals(cp/(cp-1),model.heatCapacityRatio(model.flashTP(400,101325,n,NOOP)),1e-9,"steam at 400 K");
     }
-    /** Form F2's corner (plan 3.3), as a set-flow mover states it: the set flow is the displacement, the rise limit the
-     * relief rise, so the law passes the set flow at no rise, holds the limit at no flow, and 98.7 % of the limit at 90 %
-     * of the flow; its row is zero on the corner. */
+    /** Form F2's corner (plan 3.3) as a set-flow mover states it: the set flow is the displacement and the rise limit the
+     * relief rise, so the law holds the limit at no flow, 98.7 % of it at 90 % of the set flow, and passes 1.5 % above the
+     * set flow at no rise (the line past the knee); its row is the head less that rise, zero on the law and one per pascal
+     * of head everywhere, at no flow and no rise too. */
     @Test void aSetFlowMoversCornerIsItsSetFlowUpToItsRiseLimit() {
         double rho=model.pumpReferenceDensity();
         for(FlowControl.Mover mover:List.of(new FlowControl.Pump(.01,500000),new FlowControl.Compressor(.05,3))) {
             double limit=mover.riseLimit(rho,1e5,rho,1.4),flow=mover.targetVolumeFlow();
             assertEquals(mover.liquid()?500000:2e5,limit,1e-9*limit,mover.deviceName());
             assertEquals(limit,mover.lawRise(0,rho,1e5,rho,1.4),1e-9*limit,mover.deviceName());
-            assertEquals(0,mover.lawRise(flow,rho,1e5,rho,1.4),1e-9*limit,mover.deviceName());
             assertEquals(.98727,mover.lawRise(.9*flow,rho,1e5,rho,1.4)/limit,1e-5,mover.deviceName());
-            assertEquals(0,mover.lawResidual(flow,0,rho,1e5,rho,1.4),1e-9*limit,mover.deviceName());
-            assertEquals(0,mover.lawResidual(0,limit,rho,1e5,rho,1.4),1e-9*limit,mover.deviceName());
+            assertEquals(0,mover.lawRise(1.01513*flow,rho,1e5,rho,1.4)/limit,1e-3,mover.deviceName());
+            double rise=mover.lawRise(.5*flow,rho,1e5,rho,1.4);
+            assertEquals(0,mover.lawResidual(.5*flow,rise,rho,1e5,rho,1.4),0,mover.deviceName());
+            assertEquals(1,mover.lawResidual(0,1,rho,1e5,rho,1.4)-mover.lawResidual(0,0,rho,1e5,rho,1.4),1e-9,mover.deviceName()+": a head derivative at no flow and no rise");
         }
     }
 
