@@ -1,0 +1,486 @@
+diff --git a/src/test/java/com/wormzjl/icheme/client/gui/common/kit/FlowsheetPainterTest.java b/src/test/java/com/wormzjl/icheme/client/gui/common/kit/FlowsheetPainterTest.java
+index 48abfcce4..56429c8e5 100644
+--- a/src/test/java/com/wormzjl/icheme/client/gui/common/kit/FlowsheetPainterTest.java
++++ b/src/test/java/com/wormzjl/icheme/client/gui/common/kit/FlowsheetPainterTest.java
+@@ -81,4 +81,31 @@ class FlowsheetPainterTest {
+         p.label("Air", 10, 10, 1, Palette.TEXT);
+         assertEquals(10 - 18, c.texts.getLast().x(), 1e-6, "anchored at its right");
+     }
++
++    @Test
++    void marksStayInsideTheBoxTheyAreDrawnFor() {
++        var c = new Recording();
++        var p = new FlowsheetPainter(c, 0, 0, 2, 1.0);
++        var look = FlowsheetPainter.Look.TEAL;
++        p.circle(50, 50, 10, look);
++        p.box(10, 10, 30, 20, look);
++        p.rounded(100, 100, 160, 130, 15, look);
++        for (var f : c.fills) {
++            boolean inCircle = f.x0() >= 40 && f.x1() <= 61 && f.y0() >= 40 && f.y1() <= 61;
++            boolean inBox = f.x0() >= 10 && f.x1() <= 30 && f.y0() >= 10 && f.y1() <= 20;
++            boolean inRounded = f.x0() >= 100 && f.x1() <= 160 && f.y0() >= 100 && f.y1() <= 130;
++            assertTrue(inCircle || inBox || inRounded, "a fill outside its mark: " + f);
++        }
++        c.fills.clear();
++        p.wire(new int[]{0, 10, 20, 10, 20, 30}, true, false, Palette.MUTED);
++        // The path is (0, 20) to (40, 20) to (40, 60) in canvas pixels; the arrow's widest bar spans x 38 to 42.
++        for (var f : c.fills) assertTrue(f.x0() >= 0 && f.x1() <= 43 && f.y0() >= 20 && f.y1() <= 61, "a line or its arrow outside its path: " + f);
++        c.fills.clear();
++        p.wire(new int[]{0, 10, 20, 10}, false, true, Palette.LINE);
++        assertTrue(c.fills.size() > 10, "a utility line is dashed: " + c.fills.size() + " pieces");
++        c.fills.clear();
++        p.square(20, 20, 8, 0x55DDFF);
++        assertEquals(new Fill(31, 31, 49, 49, FlowsheetPainter.EDGE), c.fills.get(0), "the edge one pixel round");
++        assertEquals(new Fill(32, 32, 48, 48, 0xFF55DDFF), c.fills.get(1), "the class colour, opaque");
++    }
+ }
+diff --git a/src/test/java/com/wormzjl/icheme/client/gui/common/kit/KitLayoutTest.java b/src/test/java/com/wormzjl/icheme/client/gui/common/kit/KitLayoutTest.java
+index 4b52ea292..6135db20a 100644
+--- a/src/test/java/com/wormzjl/icheme/client/gui/common/kit/KitLayoutTest.java
++++ b/src/test/java/com/wormzjl/icheme/client/gui/common/kit/KitLayoutTest.java
+@@ -164,6 +164,23 @@ class KitLayoutTest {
+         assertFalse(view.visible(new Rect(10, 190, 58, 18)));
+     }
+ 
++    @Test
++    void compactMetricsPlaceTheSameRowsShorterAndAChoiceDrawsItsTitleOnly() {
++        var normal = Column.place(every(), 20, 74, 180, M);
++        var compact = Column.place(every(), 20, 74, 180, M, Column.Metrics.COMPACT);
++        assertTrue(compact.bounds().h() < normal.bounds().h());
++        assertEquals(normal.slots().keySet(), compact.slots().keySet());
++        for (var p : compact.rows()) for (var s : p.slots().values()) assertTrue(s.inside(p.rect()), "a widget inside its compact row");
++        for (int i : new int[]{2, 3}) {
++            var choice = compact.rows().get(i);
++            assertEquals(List.of(((Column.Choice) choice.row()).title()), choice.texts(), "chosen or not, a choice draws its title");
++            assertEquals(11, choice.rect().h(), "a line high");
++        }
++        assertEquals("Sets the bypass to hold it", compact.rows().get(2).hover());
++        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(11, 17, 20, 10), "a field row lower than its box");
++        assertThrows(IllegalArgumentException.class, () -> new Column.Metrics(9, 20, 20, 10), "a line lower than its text");
++    }
++
+     /** Owner, 2026-10-28: "Text plate and function group should be better designed so new users are not overwhelmed". */
+     @Test
+     void aGroupFramesItsRowsUnderItsPlateAndHoversItsHintOnItsOwnSpace() {
+diff --git a/src/test/java/com/wormzjl/icheme/runtime/fluid/PhysicalFluidTopologyTest.java b/src/test/java/com/wormzjl/icheme/runtime/fluid/PhysicalFluidTopologyTest.java
+index 04e755ba0..b48424a16 100644
+--- a/src/test/java/com/wormzjl/icheme/runtime/fluid/PhysicalFluidTopologyTest.java
++++ b/src/test/java/com/wormzjl/icheme/runtime/fluid/PhysicalFluidTopologyTest.java
+@@ -459,6 +459,13 @@ class PhysicalFluidTopologyTest {
+                 "a joint facing a pipe without one is an open end");
+     }
+ 
++    @Test void aLaidPipeBesideAHandPlacedOneDoesNotJoinIt() {
++        var devices=List.of(tank(1,0,0),pipe(11,1,0,PhysicalFluidTopology.ALL_FACES),tank(2,2,0),pipe(21,1,1,ALONG_X));
++        var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,reservoir(1),2L,reservoir(2)));
++        assertEquals(1,compiled.islands().size());assertFalse(compiled.islands().getFirst().physicalIds().contains(21L));
++        assertEquals("NO FLOW: unconnected pipe",compiled.diagnostics().get(21L));
++    }
++
+     @Test void onlyALaidPipeHasExplicitJointsAndEveryCopyKeepsThem() {
+         assertThrows(IllegalArgumentException.class,()->pipe(1,0,0,64),"past the six faces");
+         assertThrows(IllegalArgumentException.class,()->new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.RESERVOIR,EAST,
+diff --git a/src/test/java/com/wormzjl/icheme/science/assembly/AssemblyMatcherTest.java b/src/test/java/com/wormzjl/icheme/science/assembly/AssemblyMatcherTest.java
+index c8e060b7c..ac627eb73 100644
+--- a/src/test/java/com/wormzjl/icheme/science/assembly/AssemblyMatcherTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/assembly/AssemblyMatcherTest.java
+@@ -336,6 +336,17 @@ class AssemblyMatcherTest {
+         assertSlot(report, DISTILLATE_VALVE, State.MISSING);
+     }
+ 
++    @Test
++    void aColumnStrippedBySumpSteamHasEveryPortPipedAndNoVapourReturn() {
++        var plant = ideal(trays(Condenser.AIR_COOLER, false, false, List.of(SUMP), Pump.STANDARD, 0, List.of()));
++        var column = plant.unit("column");
++        var report = plant.match();
++        assertTrue(report.complete());
++        var ports = report.ports().stream().filter(p -> p.unit() == column.origin()).toList();
++        assertEquals(List.of(VAPOUR_OUTLET, REFLUX, FEED, STEAM, BOTTOMS), ports.stream().map(AssemblyReport.PortReport::role).toList());
++        for (var p : ports) assertEquals(PortState.CONNECTED, p.state(), p::toString);
++    }
++
+     @Test
+     void aCondenserAnotherAssemblyHoldsIsShared() {
+         var plant = ideal(basic());
+diff --git a/src/test/java/com/wormzjl/icheme/science/assembly/ColumnBlueprintTest.java b/src/test/java/com/wormzjl/icheme/science/assembly/ColumnBlueprintTest.java
+index 7a2149eea..1474f75ec 100644
+--- a/src/test/java/com/wormzjl/icheme/science/assembly/ColumnBlueprintTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/assembly/ColumnBlueprintTest.java
+@@ -1,6 +1,7 @@
+ package com.wormzjl.icheme.science.assembly;
+ 
+ import com.wormzjl.icheme.science.assembly.Blueprint.*;
++import com.wormzjl.icheme.science.assembly.PortGraph.Fitting;
+ import com.wormzjl.icheme.science.equipment.ColumnComponents;
+ import com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser;
+ import com.wormzjl.icheme.science.equipment.ColumnComponents.Pump;
+@@ -8,6 +9,7 @@ import com.wormzjl.icheme.science.equipment.ColumnDesign;
+ import com.wormzjl.icheme.science.equipment.ColumnTrays;
+ import com.wormzjl.icheme.science.equipment.ColumnTrays.Pumparound;
+ import com.wormzjl.icheme.science.equipment.EquipmentShape;
++import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
+ import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
+ import org.junit.jupiter.api.Test;
+ 
+@@ -29,6 +31,10 @@ class ColumnBlueprintTest {
+         return new ColumnTrays(20, 10, draws, steam, pumparounds, components);
+     }
+ 
++    private static Link link(Blueprint blueprint, String name) {
++        return blueprint.links().stream().filter(l -> l.name().equals(name)).findFirst().orElseThrow(() -> new AssertionError("No link " + name));
++    }
++
+     @Test
+     void aPlainColumnAsksForItsOverheadSystemTheFeedAndTheBottoms() {
+         var blueprint = ColumnBlueprint.of(trays(new ColumnComponents(Condenser.AIR_COOLER, Pump.STANDARD, List.of(), false, true), List.of(), List.of(), List.of()));
+@@ -39,6 +45,65 @@ class ColumnBlueprintTest {
+                 blueprint.links().stream().map(Link::name).toList());
+     }
+ 
++    @Test
++    void theEjectorComesWithItsFlagBeforeTheCondenser() {
++        var blueprint = ColumnBlueprint.of(trays(new ColumnComponents(Condenser.EXCHANGER, Pump.STANDARD, List.of(), true, true), List.of(), List.of(), List.of()));
++        assertEquals(EJECTOR, blueprint.slots().get(1));
++        var overhead = link(blueprint, "overhead");
++        assertEquals(List.of(EJECTOR, CONDENSER), overhead.steps().stream().map(Step::slot).toList());
++        var condenser = (UnitForm) overhead.steps().get(1).form();
++        // The vapour condenses on the shell side; an air cooler fills the slot as the wrong kind.
++        assertEquals(Kind.EXCHANGER, condenser.kind());
++        assertEquals(Role.SHELL_INLET, condenser.in());
++        assertEquals(Kind.AIR_COOLER, ((UnitForm) overhead.steps().get(1).family().getFirst()).kind());
++    }
++
++    @Test
++    void withoutAKettleTheBottomsLeaveThroughTheirValve() {
++        var blueprint = ColumnBlueprint.of(trays(new ColumnComponents(Condenser.AIR_COOLER, Pump.STANDARD, List.of(), false, false), List.of(), List.of(21), List.of()));
++        assertFalse(blueprint.slots().contains(REBOILER));
++        assertFalse(columnPorts(blueprint).contains(new PortSpec(COLUMN, Role.VAPOUR_RETURN, 0)), "no reboiler, no vapour return (owner answer Q9 (a))");
++        var bottoms = link(blueprint, "bottoms");
++        assertEquals(COLUMN, bottoms.start().slot());
++        assertEquals(Role.BOTTOMS, bottoms.start().role());
++        assertInstanceOf(Outside.class, bottoms.finish());
++    }
++
++    @Test
++    void eachDrawSteamStageAndPumparoundHasItsNumberedSlots() {
++        var components = new ColumnComponents(Condenser.AIR_COOLER, Pump.IN_LINE, List.of(Pump.STANDARD, Pump.IN_LINE), false, true);
++        var blueprint = ColumnBlueprint.of(trays(components, List.of(3, 6, 9), List.of(18, 21), List.of(new Pumparound(5, 3), new Pumparound(9, 7))));
++        for (int i = 1; i <= 3; i++) assertTrue(blueprint.slots().contains(drawValve(i)));
++        for (int i = 1; i <= 2; i++) {
++            assertTrue(blueprint.slots().contains(steamValve(i)));
++            assertTrue(blueprint.slots().contains(pumparoundPump(i)));
++            assertTrue(blueprint.slots().contains(pumparoundCooler(i)));
++        }
++        var pumparounds = blueprint.links().stream().filter(l -> l.name().equals("pumparound")).toList();
++        assertEquals(2, pumparounds.size());
++        var second = pumparounds.get(1);
++        assertEquals(1, second.start().ordinal());
++        assertEquals(new ToPort(new PortSpec(COLUMN, Role.RETURN, 1)), second.finish());
++        // The pump and the cooler in either order; the second pump is an In-line Pump, a standard pump its wrong kind.
++        assertTrue(second.steps().getFirst().anyOrder());
++        assertEquals(new FittingForm(Fitting.INLINE_PUMP), second.steps().getFirst().form());
++        assertEquals(Kind.PUMP, ((UnitForm) second.steps().getFirst().family().getFirst()).kind());
++        // Walked out from the column, the feed and steam lines run against their streams.
++        assertTrue(link(blueprint, "feed").upstream());
++        assertTrue(link(blueprint, "steam").upstream());
++        assertFalse(link(blueprint, "draw").upstream());
++    }
++
++    @Test
++    void theRefluxLineIsInEveryDesignWithItsTeeAndTwoValves() {
++        var blueprint = ColumnBlueprint.of(trays(new ColumnComponents(Condenser.AIR_COOLER, Pump.IN_LINE, List.of(), false, true), List.of(), List.of(), List.of()));
++        var oil = link(blueprint, "oil");
++        assertEquals(new FittingForm(Fitting.INLINE_PUMP), oil.steps().get(0).form());
++        var tee = (TeeForm) oil.steps().get(1).form();
++        assertEquals(new ToPort(new PortSpec(COLUMN, Role.REFLUX, 0)), tee.branches().get(0).finish());
++        assertInstanceOf(Outside.class, tee.branches().get(1).finish());
++    }
++
+     /**
+      * The column's ports its links start from or end at, tee branches included. Owner answer Q9 (a): these are exactly the
+      * nozzles of the column built from the same design, so no nozzle stays without a line and no line lacks its nozzle.
+@@ -71,4 +136,9 @@ class ColumnBlueprintTest {
+         }
+         return ports;
+     }
++
++    @Test
++    void aColumnWithoutAComponentDesignHasNoBlueprint() {
++        assertThrows(NullPointerException.class, () -> ColumnBlueprint.of(new ColumnTrays(20, 10, List.of(), List.of(), List.of())));
++    }
+ }
+diff --git a/src/test/java/com/wormzjl/icheme/science/equipment/PipeRackGeometryTest.java b/src/test/java/com/wormzjl/icheme/science/equipment/PipeRackGeometryTest.java
+index 70e348df7..05c1a14f1 100644
+--- a/src/test/java/com/wormzjl/icheme/science/equipment/PipeRackGeometryTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/equipment/PipeRackGeometryTest.java
+@@ -282,6 +282,39 @@ class PipeRackGeometryTest {
+         for (var box : columns) assertTrue(box[3] <= 4 / 32.0 + 1e-9, "at the back (west): " + java.util.Arrays.toString(box));
+     }
+ 
++    @Test
++    void anOpenLaneEndIsBlindFlangedAndAJoinedOneIsNot() {
++        var rack = new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT);
++        int arms = 1 << NORTH | 1 << SOUTH;
++        var open = RackGeometry.lane(rack, new RackGeometry.Lane(RackGeometry.option(1, RackGeometry.TIER), 1, arms, 0, PipeSizes.code(.1)));
++        var joined = RackGeometry.lane(rack, new RackGeometry.Lane(RackGeometry.option(1, RackGeometry.TIER), 1, arms, arms, PipeSizes.code(.1)));
++        assertTrue(open.size() > joined.size(), "the open lane has a blind flange at each end");
++        assertTrue(open.stream().anyMatch(polygon -> polygon.material() == Mesh.Material.FLANGE), "flanged as a laid pipe's open end");
++        var exit = new RackGeometry.Lane(RackGeometry.option(1, RackGeometry.ABOVE), 1, 1 << SOUTH | 1 << EAST, 0, PipeSizes.code(.1));
++        assertEquals(3, RackGeometry.boxes(rack, exit).size(), "a lane over the tier: along, up and across");
++    }
++
++    @Test
++    void theBentsStandWhereTheFrameSays() {
++        // Facing north, the low face is the front (north): a cell without a bent stands a light frame there.
++        var bare = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT));
++        assertEquals(5, bare.size(), "between bents: the side channels and a light frame (two posts and an angle)");
++        int back = RackGeometry.BENT_BACK;
++        var bent = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back, RackGeometry.BEAM_TOP));
++        assertEquals(8, bent.size(), "a bent at the back: two columns and a beam; the light frame; the channels");
++        for (var box : bent) assertTrue(box[4] <= 13 / 32.0 + 1e-9, "nothing stands over the tier");
++        double half = bent.stream().filter(box -> box[1] == 0 && box[4] == 13 / 32.0 && box[2] > .5).mapToDouble(box -> box[5] - box[2]).max().orElseThrow();
++        assertEquals(2 / 32.0, half, 1e-9, "half of a shared bent: 2/32 m deep");
++        var whole = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back | RackGeometry.END_BACK, RackGeometry.BEAM_TOP));
++        assertEquals(4 / 32.0, whole.stream().filter(box -> box[1] == 0 && box[2] > .5).mapToDouble(box -> box[5] - box[2]).max().orElseThrow(), 1e-9, "a run's end: a whole bent, 4/32 m deep");
++        var grounded = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back | RackGeometry.GROUNDED, RackGeometry.BEAM_TOP));
++        assertEquals(bent.size() + 4, grounded.size(), "on the ground: a pedestal and a base plate under each column");
++        var stacked = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back | RackGeometry.STACKED, RackGeometry.BEAM_TOP));
++        assertEquals(4, stacked.stream().filter(box -> box[4] == 1).count(), "under a rack the columns and the light frame's posts run on up");
++        var joined = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back | RackGeometry.LEFT_JOINED | RackGeometry.RIGHT_JOINED, RackGeometry.BEAM_TOP));
++        assertEquals(3, joined.size(), "joined on both sides: the middle column, the beam running through and the light frame's angle");
++    }
++
+     // ---- aiming on the tier ----------------------------------------------------------------------------------------
+ 
+     @Test
+@@ -461,6 +494,29 @@ class PipeRackGeometryTest {
+         }
+     }
+ 
++    @Test
++    void aJunctionsNeighboursStandAWholeBentAgainstIt() {
++        var world = new HashMap<Cell, RackGeometry.Rack>();
++        run(world, new Cell(0, 0, 4), NORTH, 4);
++        place(world, O, EAST);
++        // The run's last block before the corner: along z 1, a bent only by its neighbours.
++        int steel = steel(world, new Cell(0, 0, 1));
++        assertEquals(RackGeometry.BENT_FRONT | RackGeometry.END_FRONT, steel & (RackGeometry.BENT_FRONT | RackGeometry.END_FRONT), "a whole bent towards the corner");
++        assertEquals(0, steel & RackGeometry.END_BACK, "a shared bent, or none, along the run");
++    }
++
++    @Test
++    void aStackedRackCarriesTheColumnsUpToTheRackOnIt() {
++        var world = new HashMap<Cell, RackGeometry.Rack>();
++        place(world, O, EAST);
++        place(world, new Cell(0, 1, 0), EAST);
++        int lower = steel(world, O), upper = steel(world, new Cell(0, 1, 0));
++        assertEquals(RackGeometry.STACKED | RackGeometry.GROUNDED, lower & (RackGeometry.STACKED | RackGeometry.GROUNDED), "stacked, on the ground");
++        assertEquals(0, upper & (RackGeometry.STACKED | RackGeometry.GROUNDED), "nothing on the upper rack, and it stands on the lower");
++        double top = RackGeometry.members(RackGeometry.framed(world.get(O), lower, RackGeometry.BEAM_TOP)).stream().mapToDouble(box -> box[4]).max().orElseThrow();
++        assertEquals(1, top, 1e-9, "the lower rack's columns reach the upper rack");
++    }
++
+     // ---- helpers ---------------------------------------------------------------------------------------------------
+ 
+     private static RackGeometry.Lane lane(int option, int width, int arms, int code) {
+diff --git a/src/test/java/com/wormzjl/icheme/science/equipment/PipeRouteTest.java b/src/test/java/com/wormzjl/icheme/science/equipment/PipeRouteTest.java
+index 30d176117..0a5987aca 100644
+--- a/src/test/java/com/wormzjl/icheme/science/equipment/PipeRouteTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/equipment/PipeRouteTest.java
+@@ -267,6 +267,26 @@ class PipeRouteTest {
+         assertEquals(Refusal.BROKEN, PipeRoute.check(route.cells(), route.options(), start, fromWest, 128), "a route into the other face");
+     }
+ 
++    /**
++     * Owner report 2026-10-26: a second click on a rack often dropped the line's start. Aimed out of its start away from
++     * its end, the search came round through the start cell, often on the start's own slot; the client sent that route
++     * and dropped the start, and the server refused it (a cell twice). A route holds each cell once.
++     */
++    @Test
++    void anAimedStartLeavingAwayComesRoundOutsideItsCell() {
++        var rooms = row(1, 8, 0);
++        int slot = RackGeometry.option(0, RackGeometry.TIER);
++        var away = new End(new Cell(3, 0, 0), -1, -1, slot, WEST, EAST);
++        var next = new End(new Cell(4, 0, 0), -1, -1, slot, WEST, EAST);
++        assertEquals(Refusal.BLOCKED, search(away, WEST, next, with(rooms)).refusal(), "the end next door is entered from the start's own cell: no route");
++        var far = new End(new Cell(6, 0, 0), -1, -1, slot, WEST, EAST);
++        var round = search(away, WEST, far, with(rooms));
++        assertTrue(round.found(), "" + round.refusal());
++        assertEquals(new Cell(2, 0, 0), round.cells().get(1), "out through the west face");
++        assertEquals(1, Collections.frequency(round.cells(), away.cell()), "round outside the start's cell: " + round.cells());
++        assertNull(PipeRoute.check(round.cells(), round.options(), away, far, 128));
++    }
++
+     /**
+      * Owner report 2026-10-27: "you cannot place single-block pipe on the rack". A one-block line has no route to pass on
+      * to: it is the aimed lane, open at both its faces, whichever half each click aimed at. Two clicks on one slot lay it;
+diff --git a/src/test/java/com/wormzjl/icheme/science/equipment/ShapeRasterizerTest.java b/src/test/java/com/wormzjl/icheme/science/equipment/ShapeRasterizerTest.java
+index 37040d368..01895748f 100644
+--- a/src/test/java/com/wormzjl/icheme/science/equipment/ShapeRasterizerTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/equipment/ShapeRasterizerTest.java
+@@ -534,6 +534,49 @@ class ShapeRasterizerTest {
+             }
+     }
+ 
++    @Test
++    void skirtHoleTakesTheLinesSize() {
++        // Owner decision 2026-10-21: "Skirt hole needs to adapt to the size of the pipe to max 1m". At every line size the
++        // hole in the skirt plate is the line's outside and the port's clearance: sight lines along the line inside it
++        // cross no plate, and sight lines just outside the hole's collar cross the plate's two faces. Lines up to the
++        // skirt's own radius, which turn up inside it.
++        for (var shape : List.of(drum(.5, 4, Orientation.VERTICAL, Heading.NORTH, EquipmentShape.minimumSkirt(.5)), drum(2, 4, Orientation.VERTICAL, Heading.EAST, 4),
++                drum(3, 4, Orientation.VERTICAL, Heading.SOUTH, 4), drum(6, 10, Orientation.VERTICAL, Heading.WEST, 5), EquipmentShape.column(3, ColumnTrays.simple(12, 6), Heading.NORTH, 4))) {
++            int k = 0;
++            while (shape.nozzles().get(k).riser() <= 0) k++;
++            double a = shape.axis(), c = EquipmentShape.SKIRT_OUTLET, inner = shape.radius() * DeterministicMath.cos(Math.PI / shape.facets()) - EquipmentShape.SKIRT_WALL;
++            double outside = a - shape.radius() - .07;
++            int checked = 0;
++            for (double wanted : new double[]{.1, .3, .6, PipeSizes.MAX_OUTSIDE}) {
++                double od = PipeSizes.outsideOf(PipeSizes.code(wanted)), r = od / 2;
++                if (od > inner - .02) continue;
++                checked++;
++                var sizes = new double[shape.nozzles().size()];
++                sizes[k] = od;
++                String at = shape + " line " + od;
++                double from = a - od - .02;
++                assertEquals(0, crossings(shape, new double[]{a, c, from}, new double[]{a, c, outside}, sizes), at + " centre");
++                // Inside the line from in front of the elbow, which turns up at the axis; just outside the collar from just
++                // inside the plate's inner face there (the elbow, the line's width, lies nearer the middle), where the plate
++                // stands (a line near a pipe's largest on the lowest row has its collar over the base ring), to just past its
++                // outer face (an anchor chair may stand beside the collar).
++                double rim = EquipmentShape.portRadius(od) + EquipmentShape.PORT_COLLAR + .02;
++                for (int j = 0; j < 16; j++) {
++                    double t = 2 * Math.PI * j / 16, x = Math.cos(t), y = Math.sin(t);
++                    assertEquals(0, crossings(shape, new double[]{a + .95 * r * x, c + .95 * r * y, from}, new double[]{a + .95 * r * x, c + .95 * r * y, outside}, sizes),
++                            at + " inside at " + j);
++                    // Just outside the collar, where the skirt's front faces stand, the plate's two faces.
++                    double behind = a - Math.sqrt(inner * inner - rim * x * rim * x) + .02, past = a - Math.sqrt(shape.radius() * shape.radius() - rim * x * rim * x) - .02;
++                    if (Math.abs(rim * x) < .5 * shape.radius() && c + rim * y > EquipmentShape.PLATE + .01)
++                        assertEquals(2, crossings(shape, new double[]{a + rim * x, c + rim * y, behind}, new double[]{a + rim * x, c + rim * y, past}, sizes),
++                                at + " collar at " + j);
++                }
++            }
++            // A 0.5 m skirt (inside radius 0.18 m) takes only the smallest line.
++            assertTrue(checked >= (shape.diameter() < 1 ? 1 : 2), shape.toString());
++        }
++    }
++
+     @Test
+     void skirtShowsItsInsideThroughTheOpeningAndSlots() {
+         // Owner reports 2026-10-16: the bottom outlet leaves through its skirt port on the front, centred on the outlet
+@@ -1004,6 +1047,63 @@ class ShapeRasterizerTest {
+         }
+     }
+ 
++    @Test
++    void tankGaugeFacesPointOutwardsIncludingTheUnderside() {
++        var faces = TankGaugeGeometry.bandFaces();assertEquals(6, faces.size());
++        var normals = new java.util.HashSet<String>();
++        for (var face : faces) {
++            var p = face.positions();var n = face.normals();
++            double[] a = {p[3] - p[0], p[4] - p[1], p[5] - p[2]}, b = {p[6] - p[0], p[7] - p[1], p[8] - p[2]};
++            double[] cross = {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
++            assertTrue(cross[0] * (p[0] - .5) + cross[1] * (p[1] - .5) + cross[2] * (p[2] - .5) > 0, "inward face is culled from outside");
++            assertTrue(cross[0] * n[0] + cross[1] * n[1] + cross[2] * n[2] > 0, "winding and light normal disagree");
++            normals.add(n[0] + "," + n[1] + "," + n[2]);
++        }
++        assertEquals(6, normals.size());
++    }
++
++    @Test
++    void tankGaugeHasAClearGlassSleeveAndConnectedEndPipesInEveryHeading() {
++        assertTrue(TankGaugeGeometry.GLASS_HALF > TankGaugeGeometry.BAND_HALF, "liquid clears the glass");
++        assertTrue(TankGaugeGeometry.MARKER_INNER_HALF > TankGaugeGeometry.GLASS_HALF, "the hollow float clears the glass");
++        for (int[] dimensions : new int[][]{{4, 4}, {40, 24}}) for (var heading : Heading.values()) {
++            var shape = EquipmentShape.storage(Kind.TANK, dimensions[0], dimensions[1], heading, 0);
++            var gauge = ShapeRasterizer.floating(shape);
++            // The dynamic liquid stops at fill height; the fixed sleeve extends .3 m above it into the vent space.
++            double low = gauge.glassLow(), high = gauge.glassHigh() + .3, glassArea = 0, lowest = Double.POSITIVE_INFINITY, highest = Double.NEGATIVE_INFINITY;
++            var normals = new HashSet<String>();
++            for (var cell : ShapeRasterizer.layout(shape).shell()) {
++                if (Math.abs(cell.x() + .5 - gauge.glass()[0]) > 1 || Math.abs(cell.z() + .5 - gauge.glass()[1]) > 1) continue;
++                for (var face : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z()))) if (face.material() == Material.GLASS) {
++                    double[] positions = face.positions(), normal = newell(face), light = face.normals();
++                    double dx = positions[0] + cell.x() - gauge.glass()[0], dz = positions[2] + cell.z() - gauge.glass()[1];
++                    assertTrue(normal[0] * dx + normal[2] * dz > 0, "clipped glass faces outwards: " + shape);
++                    assertTrue(normal[0] * light[0] + normal[1] * light[1] + normal[2] * light[2] > 0, "winding agrees with lighting");
++                    assertEquals(0, normal[1], 1e-12, "glass end faces stay buried in opaque caps");
++                    normals.add(light[0] + "," + light[1] + "," + light[2]);
++                    for (int v = 0; v < positions.length; v += 3) {
++                        double x = Math.abs(positions[v] + cell.x() - gauge.glass()[0]), z = Math.abs(positions[v + 2] + cell.z() - gauge.glass()[1]);
++                        assertEquals(TankGaugeGeometry.GLASS_HALF, Math.max(x, z), 1e-9, "the sleeve encloses the liquid without crossing its collar");
++                        lowest = Math.min(lowest, positions[v + 1] + cell.y());highest = Math.max(highest, positions[v + 1] + cell.y());
++                    }
++                    glassArea += area(face);
++                }
++            }
++            assertEquals(4, normals.size(), "all four lateral views have glass");
++            assertEquals(low, lowest, 1e-9);assertEquals(high, highest, 1e-9);
++            assertEquals(8 * TankGaugeGeometry.GLASS_HALF * (high - low), glassArea, 1e-8, "cell clipping leaves no missing or overlapping glass");
++            var plan = TankDesign.Plan.of(dimensions[0], dimensions[1]);var local = plan.gauge();
++            double shellZ = plan.a() - Math.sqrt(plan.r() * plan.r() - Math.pow(local.x() - plan.a(), 2));
++            // Cross the exposed neck at three stations between shell and cap, below/above the glass and scale board.
++            for (double y : new double[]{low - TankGaugeGeometry.END_HEIGHT / 2, high + TankGaugeGeometry.END_HEIGHT / 2})
++                for (double fraction : new double[]{.2, .5, .8}) {
++                    double capBack = local.z() + TankGaugeGeometry.CHAMBER_RADIUS + .03, z = shellZ + fraction * (capBack - shellZ);
++                    assertTrue(crossings(shape, new double[]{local.x() - .09, y, z}, new double[]{local.x() + .09, y, z}) >= 2,
++                            "a continuous round equalizing pipe joins each end to the shell: " + shape + " y=" + y + " fraction=" + fraction);
++                }
++        }
++    }
++
+     /**
+      * Every size: its decks and its wound stair or ladders are walked (at frame level), its pipes kept one block apart. The
+      * wound stair from {@link TankDesign#STAIR_SIZE} and {@link SphereDesign#STAIR_SIZE} across, caged ladders under (owner
+@@ -1068,6 +1168,18 @@ class ShapeRasterizerTest {
+         assertNull(ShapeRasterizer.floating(EquipmentShape.storage(Kind.SPHERE, 14, 1, Heading.NORTH, 2)));
+     }
+ 
++    /** A timing note (plan section 3.3): the largest tank's layout, about 30 000 interior cells; not a gate. */
++    @Test
++    void theLargestTankLaysOut() {
++        var shape = EquipmentShape.storage(Kind.TANK, 40, 24, Heading.NORTH, 0);
++        long start = System.nanoTime();
++        var layout = ShapeRasterizer.layout(shape);
++        long ms = (System.nanoTime() - start) / 1_000_000;
++        System.out.println("TIMING largest tank " + shape.sizeX() + " x " + shape.sizeY() + " x " + shape.sizeZ() + ": " + layout.shell().size() + " shell, "
++                + layout.interior().size() + " interior cells laid out in " + ms + " ms");
++        assertTrue(layout.interior().size() > 25_000, layout.interior().size() + " interior cells");
++    }
++
+     /** A frame point inside the solid. */
+     private static boolean in(EquipmentShape shape, double x, double y, double z) {
+         var p = shape.transform().point(new double[]{x, y, z});
+diff --git a/src/test/java/com/wormzjl/icheme/science/fluid/network/HeatCurveTest.java b/src/test/java/com/wormzjl/icheme/science/fluid/network/HeatCurveTest.java
+index 6286d6a42..83e66ed78 100644
+--- a/src/test/java/com/wormzjl/icheme/science/fluid/network/HeatCurveTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/fluid/network/HeatCurveTest.java
+@@ -9,6 +9,12 @@ import static org.junit.jupiter.api.Assertions.*;
+ class HeatCurveTest {
+     /** A film of 1 W/m2K makes the area the conductance UA, as the 2026-09-24 prototype's kernel read it. */
+     private static HeatCurve sensible(){return HeatCurve.of(List.of(new double[]{0,300,1},new double[]{400_000,400,1}));}
++
++    @Test void agreesWithTheConstantCpExponentialAndItsEnergyBalance() {
++        double out=sensible().march(400_000,2,8000,300);
++        assertEquals(400_000/Math.E,out,1e-9);
++        assertEquals(300+100/Math.E,sensible().temperatureAt(out),1e-12);
++    }
+     @Test void latentHeatLeavesAtConstantTemperatureBeforeTheLiquidCools() {
+         var curve=HeatCurve.of(List.of(new double[]{0,300,1},new double[]{400_000,400,1},new double[]{2_400_000,400,1},new double[]{2_600_000,500,1}));
+         assertEquals(1_400_000,curve.march(2_400_000,1,10_000,300),1e-8);
+diff --git a/src/test/java/com/wormzjl/icheme/science/fluid/network/VesselGeometryTest.java b/src/test/java/com/wormzjl/icheme/science/fluid/network/VesselGeometryTest.java
+index 2b2182383..8a1be783d 100644
+--- a/src/test/java/com/wormzjl/icheme/science/fluid/network/VesselGeometryTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/fluid/network/VesselGeometryTest.java
+@@ -28,6 +28,11 @@ class VesselGeometryTest {
+         assertNotEquals(g.capacity()/3,g.weirVolume(),1e-3);
+         assertTrue(g.heightAt(.5*g.bootCapacity())<0);
+     }
++    @Test void hydrostaticHeadUsesLayerHeightsAndDensities(){
++        var g=VesselGeometry.round(VesselGeometry.Form.SPHERE,4,0,0,0);
++        double water=g.volumeAt(1),total=g.volumeAt(2.5);
++        assertEquals(PassiveStepSolver.GRAVITY*(1000+800*1.5),g.head(water,1000*water,total-water,800*(total-water)),1e-9);
++    }
+     /** The head stands over the body bottom, the node's elevation; the boot below is the line below its nozzle. */
+     @Test void bootHeadStandsOverTheBodyBottom(){
+         var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);

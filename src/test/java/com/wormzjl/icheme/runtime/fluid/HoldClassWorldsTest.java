@@ -332,6 +332,31 @@ class HoldClassWorldsTest {
         w.runTo(332+120*100);w.assertKeptUp("a roundoff arrival in an empty tank");
     }
 
+    // ---------------- DryTankArrival ----------------
+    /**
+     * Owner decision D54: a dry vessel a converged pass's flows reach is laid out from what they deliver. Cold fuzz seed 397
+     * (batch 2026-11-02-dry-ice-cost, JUNCTION_TABLES_REVIEW.md): LNG at 112 K and 222 kPa pumped into a tank, whose outlet
+     * junction stands just above two tanks that never held fluid. The junction was stated under 1 atm at the step's start,
+     * so the rate point left those lines closed and the start flows delivered nothing; the step's flows did, and the booking
+     * stated the LNG at the tank's own 298 K, as vapour, from which no closure reaches a liquid's enthalpy. The tank's
+     * temperature ran to 47 K and every step size stalled, down to 1e-21 s.
+     */
+    @Test void lngReachingAnEmptyTankFromAPassIsLaidOutFromWhatArrives() {
+        cold(w->{var passive=new FlowControl.Passive();var nitrogen=pilot(298.15,101325,1,0,0,0,0);
+            w.runTo(419);w.place(0,-1,3,Kind.RESERVOIR,NORTH,passive,nitrogen,.05);
+            w.runTo(511);w.place(0,-1,2,Kind.PIPE,NORTH,passive,null,.02);
+            w.runTo(622);w.place(0,-1,0,Kind.PIPE,NORTH,passive,null,.01);
+            w.runTo(798);w.place(0,-1,1,Kind.PIPE,NORTH,passive,null,.02);
+            w.runTo(837);w.place(-3,-3,0,Kind.PIPE,NORTH,passive,null,.01);
+            w.runTo(925);w.place(-1,-3,0,Kind.PIPE,NORTH,passive,null,.01);
+            w.runTo(926);w.place(-2,-3,0,Kind.PUMP,EAST,new FlowControl.Pump(.01,500000),null,.01);
+            w.runTo(1200);w.place(0,0,0,Kind.RESERVOIR,NORTH,passive,nitrogen,.05);
+            w.runTo(1227);w.place(0,-2,0,Kind.PIPE,NORTH,passive,null,.01);
+            w.place(-4,-3,0,Kind.GENERATOR,NORTH,passive,pilot(111.657,222268.8,.001905132,.8927278,.06093423,.04443279,0),.05);
+            w.place(0,-3,0,Kind.RESERVOIR,NORTH,passive,nitrogen,.05);
+            w.runTo(2800);w.assertKeptUp("LNG reaching an empty tank from a pass");});
+    }
+
     // ---------------- JunctionStartMixture ----------------
     /**
      * The junction start of form (m') (PHASE_PORTS_REVIEW.md 2026-10-12, owner decision D39): a junction several

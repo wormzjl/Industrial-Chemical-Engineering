@@ -382,8 +382,9 @@ class CrystalDepositionIslandTest {
 
     /**
      * The crystal-phase hold that remains (two liquids beside the crystal: N2 + C2H6 of type III with 5 % CO2 at 95 K and
-     * 2 MPa): the network's TP adapter and the vessel's refresh meet the typed CRYSTAL_PHASES hold, the refresh naming its
-     * node.
+     * 2 MPa). A vessel's refresh, the only place a crystal competes (D23), meets the typed CRYSTAL_PHASES hold and names its
+     * node. A step's TP answer carries the crystal, so it meets the two liquids themselves: neither is crystal-rich, and
+     * they are the typed LIQUID_LIQUID hold.
      * Both are phase holds ({@link com.wormzjl.icheme.science.fluid.thermo.ThermoHold}), which an island parks on
      * when its retry meets the same one.
      */
@@ -393,7 +394,7 @@ class CrystalDepositionIslandTest {
         var island=closed(liquid);
         var direct=assertThrows(FluidThermodynamics.UnsupportedPhases.class,()->model.flashTP(95,2e6,feed,()->{}));
         System.out.println("TP at 95 K, 2 MPa: "+direct.getMessage());
-        assertEquals(FluidThermodynamics.UnsupportedPhases.Kind.CRYSTAL_PHASES,direct.kind());
+        assertEquals(FluidThermodynamics.UnsupportedPhases.Kind.LIQUID_LIQUID,direct.kind());
         RuntimeException refused=assertThrows(RuntimeException.class,()->interval(island));
         System.out.println("refresh: "+refused.getMessage());
         assertInstanceOf(FluidThermodynamics.UnsupportedPhases.class,refused,"the typed hold: "+refused);

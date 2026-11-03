@@ -15,6 +15,30 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.19.3] - 2026-11-03
+
+### Added
+
+- French, Spanish and Japanese translations (`fr_fr`, `es_es`, `ja_jp`, 1785 keys each). zh_cn completed: 749 missing lines added, 79 outdated lines updated, 16 wrong lines fixed, 124 unused keys removed. The 56 nozzle-role names in the pipe laying HUD get lang keys. `LanguageFilesTest` holds every lang file to en_us's keys and arguments, and `UnitTextTest` measures every language's unit texts. Checks in `tools/localization/` (`cbc4bdd7f`, `013cfa3c6`, batch `2026-11-03-localization`).
+
+## [0.19.2] - 2026-11-03
+
+### Changed
+
+- Cold CO2 worlds no longer reach the island wall budget. A step's flashes carry their CO2 crystals in the fluid phases, and only a vessel's refresh books a crystal. A deposition found at the end of a step no longer than D/v_s closes there instead of being searched to 1 us. The start balance reads a flashing junction's density from a table. A dry tank a pass reaches is laid out from what that pass draws. Cold campaign 975 to 992 clean in half the seed time; bundled 995 (`eb4d72b87`, `eb9ad31cb`, `3ed64f98f`, `e7a3a7f2b`, `tools/dry-ice-cost/`, batch `2026-11-02-dry-ice-cost`).
+- The two standalone native-default probes move from `tmp/` to `tools/native-column-default/probes/` (`5662e5905`, batch `2026-10-28-native-column-default`).
+
+## [0.19.1] - 2026-11-03
+
+### Changed
+
+- `columnGates` and `equipmentGates` run only when something their tests load changed, the column GameTest waits for solves instead of sleeping, and one tracked lane replaces a copy per batch (`c123e20d9`, batch `2026-11-02-test-suite-optimization`).
+- Code that only tests use leaves `src/main`: the Holland benchmark, its data file and `ControlBinding` move to `src/test`, and the mod no longer ships them (`0c88691e5`, `tools/merge-lane/main-reach.pl`, batch `2026-11-02-test-suite-optimization`).
+
+### Removed
+
+- 20 tests that repeated another test's check or pinned a drawn value no rule names, archived with a re-attach patch; the suite is 2051 runs (`c1b35ce2d`, `tools/test-archive-2026-11-02/`, batch `2026-11-02-test-suite-optimization`).
+
 ## [0.19.0] - 2026-11-02
 
 ### Added

@@ -1,0 +1,60 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
+index a0abe0995..f65408378 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
+@@ -1201,9 +1201,11 @@ public final class FluidThermodynamics {
+             return state(t,p,hc,hc,condensed?w:0,condensed?0:w,0);
+         }
+         checkpoint.run();
+-        var result=phaseEngine().tp(t,p,overall,crystalsCompete(t,overall));
++        boolean shadowCompeting=crystalsCompete(t,overall);long shadowStarted=System.nanoTime();
++        var result=phaseEngine().tp(t,p,overall,shadowCompeting);long shadowNanos=System.nanoTime()-shadowStarted;
+         for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
+-        return adopt(t,p,overall,result,given);
++        try{return adopt(t,p,overall,result,given);}
++        finally{if(shadowCompeting)ShadowTally.tp(this,t,p,overall,result,shadowNanos);}
+     }
+     /**
+      * A pipe junction's own split (owner decision D26, {@link #phaseCheck}), the phases of an empty bag's
+@@ -1227,11 +1229,15 @@ public final class FluidThermodynamics {
+             target=EnergyReference.sensible(formation.components()).rebase(h,Arrays.copyOf(overall,hydrocarbon.componentCount()),formation);
+         }
+         checkpoint.run();
+-        var result=phaseEngine().ph(p,target,overall,crystals);
++        long shadowStarted=System.nanoTime();
++        var result=phaseEngine().ph(p,target,overall,crystals);long shadowNanos=System.nanoTime()-shadowStarted;
+         for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
+-        if(!result.converged()||result.phases().isEmpty())return null;
+-        try{return adopt(result.phases().getFirst().temperature(),p,overall,result,null);}
+-        catch(IllegalArgumentException refused){return null;}
++        try {
++            if(!result.converged()||result.phases().isEmpty())return null;
++            try{return adopt(result.phases().getFirst().temperature(),p,overall,result,null);}
++            catch(IllegalArgumentException refused){return null;}
++        }
++        finally{if(crystals)ShadowTally.ph(this,t,p,target,overall,result,shadowNanos);}
+     }
+     /**
+      * A taut vessel's own state at a crossing ({@link #crossing}, owner decision D40 A), the UV twin of
+@@ -1243,12 +1249,16 @@ public final class FluidThermodynamics {
+      */
+     private State equilibriumUV(double t,double p,double u,double v,double[] overall,Runnable checkpoint) {
+         checkpoint.run();
+-        var result=phaseEngine().crystalUv(engineEnergy(u,overall),v,overall,crystalsCompete(t,overall),t,p);
++        boolean shadowCompeting=crystalsCompete(t,overall);long shadowStarted=System.nanoTime();double shadowU=engineEnergy(u,overall);
++        var result=phaseEngine().crystalUv(shadowU,v,overall,shadowCompeting,t,p);long shadowNanos=System.nanoTime()-shadowStarted;
+         for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
+-        if(!result.converged()||result.phases().isEmpty())return null;
+-        var answer=result.phases().getFirst();
+-        try{return adopt(answer.temperature(),answer.pressure(),overall,result,null);}
+-        catch(IllegalArgumentException refused){return null;}
++        try {
++            if(!result.converged()||result.phases().isEmpty())return null;
++            var answer=result.phases().getFirst();
++            try{return adopt(answer.temperature(),answer.pressure(),overall,result,null);}
++            catch(IllegalArgumentException refused){return null;}
++        }
++        finally{if(shadowCompeting)ShadowTally.uv(this,shadowU,v,overall,t,p,result,shadowNanos);}
+     }
+ 
+     /** The crystals the package admits, in declaration order; empty without a crystal competition. */

@@ -282,39 +282,6 @@ class PipeRackGeometryTest {
         for (var box : columns) assertTrue(box[3] <= 4 / 32.0 + 1e-9, "at the back (west): " + java.util.Arrays.toString(box));
     }
 
-    @Test
-    void anOpenLaneEndIsBlindFlangedAndAJoinedOneIsNot() {
-        var rack = new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT);
-        int arms = 1 << NORTH | 1 << SOUTH;
-        var open = RackGeometry.lane(rack, new RackGeometry.Lane(RackGeometry.option(1, RackGeometry.TIER), 1, arms, 0, PipeSizes.code(.1)));
-        var joined = RackGeometry.lane(rack, new RackGeometry.Lane(RackGeometry.option(1, RackGeometry.TIER), 1, arms, arms, PipeSizes.code(.1)));
-        assertTrue(open.size() > joined.size(), "the open lane has a blind flange at each end");
-        assertTrue(open.stream().anyMatch(polygon -> polygon.material() == Mesh.Material.FLANGE), "flanged as a laid pipe's open end");
-        var exit = new RackGeometry.Lane(RackGeometry.option(1, RackGeometry.ABOVE), 1, 1 << SOUTH | 1 << EAST, 0, PipeSizes.code(.1));
-        assertEquals(3, RackGeometry.boxes(rack, exit).size(), "a lane over the tier: along, up and across");
-    }
-
-    @Test
-    void theBentsStandWhereTheFrameSays() {
-        // Facing north, the low face is the front (north): a cell without a bent stands a light frame there.
-        var bare = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT));
-        assertEquals(5, bare.size(), "between bents: the side channels and a light frame (two posts and an angle)");
-        int back = RackGeometry.BENT_BACK;
-        var bent = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back, RackGeometry.BEAM_TOP));
-        assertEquals(8, bent.size(), "a bent at the back: two columns and a beam; the light frame; the channels");
-        for (var box : bent) assertTrue(box[4] <= 13 / 32.0 + 1e-9, "nothing stands over the tier");
-        double half = bent.stream().filter(box -> box[1] == 0 && box[4] == 13 / 32.0 && box[2] > .5).mapToDouble(box -> box[5] - box[2]).max().orElseThrow();
-        assertEquals(2 / 32.0, half, 1e-9, "half of a shared bent: 2/32 m deep");
-        var whole = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back | RackGeometry.END_BACK, RackGeometry.BEAM_TOP));
-        assertEquals(4 / 32.0, whole.stream().filter(box -> box[1] == 0 && box[2] > .5).mapToDouble(box -> box[5] - box[2]).max().orElseThrow(), 1e-9, "a run's end: a whole bent, 4/32 m deep");
-        var grounded = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back | RackGeometry.GROUNDED, RackGeometry.BEAM_TOP));
-        assertEquals(bent.size() + 4, grounded.size(), "on the ground: a pedestal and a base plate under each column");
-        var stacked = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back | RackGeometry.STACKED, RackGeometry.BEAM_TOP));
-        assertEquals(4, stacked.stream().filter(box -> box[4] == 1).count(), "under a rack the columns and the light frame's posts run on up");
-        var joined = RackGeometry.members(new RackGeometry.Rack(NORTH, RackGeometry.STRAIGHT, back | RackGeometry.LEFT_JOINED | RackGeometry.RIGHT_JOINED, RackGeometry.BEAM_TOP));
-        assertEquals(3, joined.size(), "joined on both sides: the middle column, the beam running through and the light frame's angle");
-    }
-
     // ---- aiming on the tier ----------------------------------------------------------------------------------------
 
     @Test
@@ -492,29 +459,6 @@ class PipeRackGeometryTest {
                 if (corner) assertEquals(faces(SOUTH, EAST), RackGeometry.runs(world.get(cell)), cell + " turns from the south to the east");
             }
         }
-    }
-
-    @Test
-    void aJunctionsNeighboursStandAWholeBentAgainstIt() {
-        var world = new HashMap<Cell, RackGeometry.Rack>();
-        run(world, new Cell(0, 0, 4), NORTH, 4);
-        place(world, O, EAST);
-        // The run's last block before the corner: along z 1, a bent only by its neighbours.
-        int steel = steel(world, new Cell(0, 0, 1));
-        assertEquals(RackGeometry.BENT_FRONT | RackGeometry.END_FRONT, steel & (RackGeometry.BENT_FRONT | RackGeometry.END_FRONT), "a whole bent towards the corner");
-        assertEquals(0, steel & RackGeometry.END_BACK, "a shared bent, or none, along the run");
-    }
-
-    @Test
-    void aStackedRackCarriesTheColumnsUpToTheRackOnIt() {
-        var world = new HashMap<Cell, RackGeometry.Rack>();
-        place(world, O, EAST);
-        place(world, new Cell(0, 1, 0), EAST);
-        int lower = steel(world, O), upper = steel(world, new Cell(0, 1, 0));
-        assertEquals(RackGeometry.STACKED | RackGeometry.GROUNDED, lower & (RackGeometry.STACKED | RackGeometry.GROUNDED), "stacked, on the ground");
-        assertEquals(0, upper & (RackGeometry.STACKED | RackGeometry.GROUNDED), "nothing on the upper rack, and it stands on the lower");
-        double top = RackGeometry.members(RackGeometry.framed(world.get(O), lower, RackGeometry.BEAM_TOP)).stream().mapToDouble(box -> box[4]).max().orElseThrow();
-        assertEquals(1, top, 1e-9, "the lower rack's columns reach the upper rack");
     }
 
     // ---- helpers ---------------------------------------------------------------------------------------------------

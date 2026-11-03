@@ -1,6 +1,6 @@
 # Multiphase equilibrium engine
 
-**Snapshot:** 60e13ca5 (branch claude/focused-raman-3bbde7, released as 0.18.1), 2026-11-02 · **Updated:** 2026-11-02 (batch 2026-11-02-tp-steam-refusal: a step of `V_gas(pc)` closes on the steam's own volume; `wetCoexistence` takes PH as well as UV, `coexistenceTemperature` the wet condition) · earlier: 2026-11-02 (batch 2026-11-02-ph-false-root: `waterBoiling` answers only where the hydrocarbons would hold at most `BOILS_ALONE_SHARE` of its gas) · earlier: 2026-10-28 (batch 2026-10-27-heat-exchanger-design, water steam: `SteamVirial`, the second-virial steam of `separate-free-water-v3` (IF97 Region 2's B(T)), its computed 2 % limit table, the steam's fugacity on condensed water and ice, `SteamVirialTest` with `If97Region2`) · earlier: 2026-10-27 (batch 2026-10-26-multi-machine-framework: `ThermoIdentity` format `thermo-identity-v2`, its parts the package's and the spine's declared-revision identities in place of fingerprints; `PhaseContract.forNetworkPackage` takes the spine revision) · earlier: 2026-10-21 (0.11.1 test review: archived tests no longer named; `slowGates` beside `test`, G5 = 19) · 2026-10-21 (mod rename to IChemE, 0.11.0: package `com.wormzjl.icheme`, mod id `icheme`) · earlier: 2026-10-19
+**Snapshot:** e7a3a7f2b (branch claude/distillation-column-integration-fef62f, released as 0.19.2), 2026-11-03 · **Updated:** 2026-11-03 (batch 2026-11-02-dry-ice-cost: carried crystals, a step's request `FLUID_CARRYING_CRYSTALS` with no crystal competing; the stability filter `TangentPlaneStability.TrialFilter`, `carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`; `PhaseContract.qualifies` answers it wherever a crystal competition is) · earlier: 2026-11-02 at 60e13ca5 (branch claude/focused-raman-3bbde7, released as 0.18.1; batch 2026-11-02-tp-steam-refusal: a step of `V_gas(pc)` closes on the steam's own volume; `wetCoexistence` takes PH as well as UV, `coexistenceTemperature` the wet condition) · earlier: 2026-11-02 (batch 2026-11-02-ph-false-root: `waterBoiling` answers only where the hydrocarbons would hold at most `BOILS_ALONE_SHARE` of its gas) · earlier: 2026-10-28 (batch 2026-10-27-heat-exchanger-design, water steam: `SteamVirial`, the second-virial steam of `separate-free-water-v3` (IF97 Region 2's B(T)), its computed 2 % limit table, the steam's fugacity on condensed water and ice, `SteamVirialTest` with `If97Region2`) · earlier: 2026-10-27 (batch 2026-10-26-multi-machine-framework: `ThermoIdentity` format `thermo-identity-v2`, its parts the package's and the spine's declared-revision identities in place of fingerprints; `PhaseContract.forNetworkPackage` takes the spine revision) · earlier: 2026-10-21 (0.11.1 test review: archived tests no longer named; `slowGates` beside `test`, G5 = 19) · 2026-10-21 (mod rename to IChemE, 0.11.0: package `com.wormzjl.icheme`, mod id `icheme`) · earlier: 2026-10-19
 Up: [code guide](README.md)
 
 ## Read this when
@@ -9,6 +9,7 @@ Up: [code guide](README.md)
 - An island holds with `HELD (phases)` and the detail names `CRITICAL_BAND`, `UNSTABLE_PRODUCT`, `UNRESOLVED_PRODUCT`, `CRYSTAL_PHASES` or `CRYSTAL_STEP`. A PH or UV search does not converge, or its answer comes from a balance (`coexistenceFromBalance`).
 - An answer is graded `RESEARCH_ONLY` or `EXTRAPOLATED` ("extrapolated past ..." in its evidence).
 - You add a crystal to a package's competition, change the free-water or ice rule, or change the stability test or flash settings.
+- A step's answer states a CO2-rich liquid, a stand-in or one liquid where you expected frost (carried crystals, below).
 
 This chapter covers `science/thermo/phase/**`, `TangentPlaneStability`, `NumericalBox` and `IdealGasFunction`. It ends at the engine's public API and at the interfaces it consumes (`FreeWaterModel`, `IdealGasFunction`, `SolidPhaseEvaluator`, `CrystalFugacity`). The network side is in [fluid-science.md](fluid-science.md): when the network calls the engine, how it turns failures into holds, the "outside data range" status-line notice, `NetworkPhaseEngine` and the implementations it supplies (`NetworkFreeWater`, `CoefficientIdealGas`, `Steam`, `SpinePackageData`, `TranslatedPengRobinson.residualOnly`). The records the engine reads (`ReferenceSpine`, `CrystalReference`, `MaterialCoverage`), the PR78 kernel and `PairInteractions` are in [thermo-materials.md](thermo-materials.md). The column does not use the engine and refuses crystal packages ([column-v3.md](column-v3.md)).
 
@@ -19,7 +20,8 @@ one hydrocarbon liquid, free liquid water or ice, and a pure crystal such as dry
 chemical potential in the fluid exceeds the crystal's. At a fixed enthalpy and pressure (a junction) or a fixed energy
 and volume (a closed vessel), the temperature and pressure follow from the same minimum. In code, a request
 (`EquilibriumRequest`) has a specification (TP, PH or UV), the amounts over the package contract's basis (the EOS
-components, then `Water`), and a phase competition (fluid only, or the fluid phases plus the package's pure crystals).
+components, then `Water`), and a phase competition (fluid only, the fluid phases plus the package's pure crystals, or
+the fluid phases carrying them: a network step's request, where no crystal forms and none is a fluid phase of its own).
 `FluidTpEquilibrium` refuses or answers it: contract checks, a tangent-plane stability test of the hydrocarbon feed on
 the PR78 kernel, a flash with a Newton finish on the Gibbs energy when the feed is unstable, the network's separate
 free-water rule (ice below the melting line), then each crystal against the fluid answer by chemical potential. PH and
@@ -36,11 +38,11 @@ Paths are under [`src/main/java/com/wormzjl/icheme/science/thermo/`](../../../sr
 
 | Class | Role | Read it for |
 |---|---|---|
-| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (5807) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `forPackage`, `pureBandBox`; nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
+| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (5992) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `forPackage`, `pureBandBox`; carried crystals (`carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`); nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
 | [`phase/EquilibriumRequest`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumRequest.java) (71) | Record: `Specification` {TP, PH, UV}, two values (K and Pa; Pa and J; J and m3), species list (the contract basis, in order), amounts, competition | Input validation |
 | [`phase/EquilibriumResult`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumResult.java) (476) | Answer: `Status`, `UnsupportedReason`, `Classification` (13 values), `PhaseAmounts` list, `coexisting`, `Coverage`/`CoverageGrade`, `FreeWater`, `Deposition`, `Diagnostics`; detail prefixes; aggregates (`enthalpy`, `internalEnergy`, `volume`, `conservationDefect`) | Status rules, grades, typed failures |
-| [`phase/PhaseContract`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseContract.java) (160) | What a package promises: basis, `WaterParticipation`, qualified competitions, water-chemistry species, `PhaseDomain`, fluid coverage, `ThermoIdentity`; `forNetworkPackage`, `forPackage`, `admittedCrystals`, `resolve` | Which requests are refused and why |
-| [`phase/PhaseCompetition`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseCompetition.java) (58) | `(crystals, packageCrystals)`; `FLUID_ONLY`, `FLUID_AND_CRYSTALS` (the package's set, resolved by the contract), `withCrystals` | Competition semantics |
+| [`phase/PhaseContract`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseContract.java) (163) | What a package promises: basis, `WaterParticipation`, qualified competitions, water-chemistry species, `PhaseDomain`, fluid coverage, `ThermoIdentity`; `forNetworkPackage`, `forPackage`, `admittedCrystals`, `resolve`; `qualifies` (the carried request wherever a crystal competition is) | Which requests are refused and why |
+| [`phase/PhaseCompetition`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseCompetition.java) (74) | `(crystals, packageCrystals, carried)`; `FLUID_ONLY`, `FLUID_AND_CRYSTALS` (the package's set, resolved by the contract), `FLUID_CARRYING_CRYSTALS` (a step's request: no crystal competes, `fluid+carried-crystals`), `withCrystals` | Competition semantics |
 | [`phase/PhaseDomain`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseDomain.java) (56) | The package envelope (`fluid_domain`, through `FluidDomain.envelope`) used for grading; `open` for research and test contracts | `covers`: extrapolated or not |
 | [`phase/CubicPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CubicPhaseEvaluator.java) (264) | Fluid family `pr78_translated_v1`: translated PR78 at the state pressure for every root (`TranslatedPengRobinson.residualOnly`), one `IdealGasFunction` per component; `forPackage` (a spine package, from `SpinePackageData`), `fromPackage` (the caller's translations and ideal gases), a public constructor on a constant k matrix | State and derivative conventions |
 | [`phase/CrystalPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CrystalPhaseEvaluator.java) (217) | `SolidPhaseEvaluator` of a crystal record; `anchor(CubicPhaseEvaluator)`, `anchored(...)` gives the immutable `Anchored` view (a `CrystalFugacity`) | Crystal state, ln phi against the ideal gas |
@@ -52,7 +54,7 @@ Paths are under [`src/main/java/com/wormzjl/icheme/science/thermo/`](../../../sr
 | [`phase/ThermoIdentity`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/ThermoIdentity.java) (89) | Identity of the numbers: package revision (`MaterialCatalog.fluidRevision`) + evaluator family + spine revision (`MaterialCatalog.spineRevision`) + water formulation; `revision()`; nothing is hashed | What invalidates caches |
 | [`phase/DepositionOnset`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/DepositionOnset.java) (63) | Onset answer (frost point, liquidus or three-phase point); `approximation` for diagnostics only | Onset searches |
 | [`phase/PhaseKind`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseKind.java) (27), [`WaterParticipation`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/WaterParticipation.java) (24), [`SolidPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/SolidPhaseEvaluator.java) (52), [`CrystalFugacity`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CrystalFugacity.java) (12) | Kinds `VAPOR`, `LIQUID`, `FLUID`, `SOLID`, `FREE_WATER`; water `NONE` or `SEPARATE_FREE_WATER`; the solid contract with its `TriplePointAnchor`; a crystal's ln(f_s/P) | |
-| [`TangentPlaneStability`](../../../src/main/java/com/wormzjl/icheme/science/thermo/TangentPlaneStability.java) (819) | Michelsen tangent-plane test on the kernel; one-pressure and per-branch-pressure `test`; `Verdict` {STABLE, UNSTABLE, UNRESOLVED}; `Settings.DEFAULT`; public `cholesky`, `solveCholesky` (shared with the engine's Newton) | Stability verdicts |
+| [`TangentPlaneStability`](../../../src/main/java/com/wormzjl/icheme/science/thermo/TangentPlaneStability.java) (853) | Michelsen tangent-plane test on the kernel; one-pressure and per-branch-pressure `test`, and the per-branch `test` with a `TrialFilter` (a caller's statement that a stationary trial is no phase of the tested fluid); `Verdict` {STABLE, UNSTABLE, UNRESOLVED}; `Settings.DEFAULT`; public `cholesky`, `solveCholesky` (shared with the engine's Newton) | Stability verdicts |
 | [`NumericalBox`](../../../src/main/java/com/wormzjl/icheme/science/thermo/NumericalBox.java) (53) | 10..6000 K, 1 Pa..1 GPa, partial-pressure floor 1e-6 Pa; `contains`, `require`, `containsPartialPressure`, `requirePartialPressure` | The only bound a trial meets (also read by fluid `FluidThermodynamics`, `HydrocarbonModel`, `FluidDomain`, `PassiveStepSolver`) |
 | [`IdealGasFunction`](../../../src/main/java/com/wormzjl/icheme/science/thermo/IdealGasFunction.java) (31) | Ideal-gas interface: h(298.15 K) = formation enthalpy, s(298.15 K, 1e5 Pa) = standard entropy; continues past its range with Cp held | Datum convention. Implemented by `ReferenceSpine` and the network's `CoefficientIdealGas` and `Steam` |
 
@@ -87,12 +89,15 @@ flowchart TD
 2. **`contractChecks`.** A species list other than the contract basis throws `IllegalArgumentException`. Water beside a
    water-chemistry species is `UNSUPPORTED` with `WATER_CHEMISTRY_NOT_MODELLED`. The competition is resolved
    (`PhaseContract.resolve`: `FLUID_AND_CRYSTALS` becomes the package's crystal set); one the contract does not qualify
-   is `PHASE_COMPETITION_NOT_QUALIFIED`.
+   is `PHASE_COMPETITION_NOT_QUALIFIED`. `FLUID_CARRYING_CRYSTALS` qualifies wherever the contract has a crystal
+   competition (`qualifies`).
 3. **`implementationChecks`.** A competing crystal without its evaluator here, or water without a `FreeWaterModel`, is
    `NOT_IMPLEMENTED`. Then the request's material goes into the workspace (feed, hydrocarbon and water totals).
 4. **TP.** `outsideBox` answers `NOT_CONVERGED` for a state outside the box. `evaluateTp` dispatches to `solveDry`,
    `solveWet`, `solveWithCrystals` or `solveWetWithCrystals`. An exception from the model (no physical root, a
-   mechanically unstable root) becomes `NOT_CONVERGED` "evaluation refused: ...".
+   mechanically unstable root) becomes `NOT_CONVERGED` "evaluation refused: ...". The carried request competes no
+   crystal, so it takes `solveDry` or `solveWet`, with its stability tests filtered and its splits restated (see
+   "Carried crystals" below).
 5. **PH and UV.** PH checks its pressure against the box, then `searchWindow` and `solvePh`. UV runs `searchWindow`, then
    `solveUv`: `newtonUv` first, else `nestedUv` with `innerUv` per temperature. Both answer undetermined steps from the
    balance (topic 4).
@@ -119,7 +124,7 @@ flowchart TD
   - `UNSTABLE_PRODUCT`, `UNRESOLVED_PRODUCT` (`NOT_CONVERGED`): a converged split whose product the re-check proved
     unstable, or left unresolved; a third phase is not excluded.
   - `CRYSTAL_PHASES` (`UNSUPPORTED`, `NOT_IMPLEMENTED`): two liquids or three fluid phases beside a crystal, or two
-    crystals forming.
+    crystals forming. Only under a crystal competition: the network meets it at a vessel's refresh, never in a step.
   - `CRYSTAL_STEP` (`NOT_CONVERGED`): a PH or UV search closed on a crystal step of a near-pure feed's major species
     that its pure step does not answer.
 - `CoverageGrade`: `QUALIFIED`, `ESTIMATED_DECLARED_ERROR`, `RESEARCH_ONLY`, `EXTRAPOLATED`, `UNAVAILABLE`; `answer()`
@@ -127,8 +132,9 @@ flowchart TD
   `ESTIMATED_DECLARED_ERROR`) with "; fluid-only: solid phases not assessed". Under a crystal competition the grade is
   the worst of the fluid grade and each crystal record's. Inside the critical band it is `RESEARCH_ONLY`; outside a data
   range `EXTRAPOLATED`.
-- `solidsAssessed()` is false for a `FLUID_ONLY` result: a constrained fluid answer, not a complete equilibrium. A solid
-  phase must name a crystal of the competition, or be the free water's ice.
+- `solidsAssessed()` is false for a `FLUID_ONLY` or a carried result: a constrained fluid answer, not a complete
+  equilibrium. A carried answer is graded as a fluid one. A solid phase must name a crystal of the competition, or be
+  the free water's ice.
 - Contracts: `forNetworkPackage` is the package's PR78 components then `Water` as separate free water, fluid-only, the
   network envelope, no water-chemistry species, graded `ESTIMATED_DECLARED_ERROR`. `forPackage` adds one competition:
   the fluid phases with every crystal the package admits, as one whole set. `admittedCrystals` takes the package's
@@ -257,6 +263,43 @@ flowchart TD
   point), `frostTemperature` (the feed as one vapour), `freezingTemperature` (the feed as one liquid) and
   `depositionPressure`. Each is a bracketed search on D in 1/T or ln P, at most 100 fluid answers.
   `DepositionOnset.approximation` (the partial-pressure estimate) is for diagnostics only.
+- The network asks for the competition only at a vessel's refresh, where crystal mass moves (D23). Its steps carry the
+  crystals instead (next section).
+
+</details>
+
+<details><summary>Carried crystals (a step's request)</summary>
+
+- `FLUID_CARRYING_CRYSTALS` (batch 2026-11-02-dry-ice-cost, owner decision D23: only a vessel's refresh books a crystal)
+  is what a network step asks where crystals would compete: a crystal package, a crystal species present, at or below
+  the crystal ceiling (`FluidThermodynamics.stepCompetition`; elsewhere fluid-only). No crystal competes:
+  the request runs `solveDry` or `solveWet` at about a fifth of the competition's kernel work. The phase a crystal would
+  take is no fluid phase of its own, which gives three shapes: a dense fluid stays one liquid; a vapour keeps a stand-in
+  of crystal species only in the liquid slot; a vapour beside a methane-rich liquid leaves the CO2 in that liquid,
+  supersaturated.
+- The filter (`carriedTrial`, through `TangentPlaneStability.TrialFilter` in every stability test of the feed and of
+  both products, `stabilityOf`). It excludes a stationary dense trial in two cases. First, a crystal species is over
+  `CARRIED_SHARE` (0.5) of the trial or of the tested phase, that phase is dense or a split's product, and it is
+  supersaturated by the deposit test's own sign (`supersaturated`, D > `DEPOSITION_TOLERANCE`). Second, the trial is
+  the dense supersaturated phase with the crystal species taken out (`crystalLean`: it loses more of that species than
+  the other species together lose, so two liquids that part by another species stay two liquids). A feed on a vapour
+  root is never filtered: from its side every liquid-like trial runs to the near-pure species. Above the triple point
+  nothing is supersaturated, so nothing is excluded.
+- `TrialFilter` judges a trial that proved instability or ran out of its budget. An excluded trial proves and seeds
+  nothing. With a filter and no surviving trial the result reports distance 0 and the feed. The overloads without a
+  filter are unchanged bit for bit.
+- `carriedSplit` restates a converged split. With no crystal-rich product (over 0.5 and supersaturated, `crystalRich`)
+  the split is the answer. Both products dense outside the critical band is the stand-in split of a dense fluid: the
+  feed is one liquid. Otherwise a crystal-rich denser product keeps only its crystal species and the lighter product
+  takes the rest. In the vapour the crystal's mass would take a gas's volume (a CO2 let-down stated all vapour ran to
+  CO2's 90 K floor).
+- The three-fluid window. Below the triple point PR78 continues vapour, liquid and frost as three fluid phases: 3 % CO2
+  at 101 kPa between 113 and 129 K, the lean liquid saturating near 15 %. A split whose vapour product is unstable
+  beside a stable crystal-rich liquid records that liquid's crystal species (`standIn`). When the split then fails,
+  `beyondStandIn` holds the stand-in out, splits the rest alone and returns the stand-in to the liquid.
+- Not carried: two liquids where neither is crystal-rich stay `LIQUID_LIQUID` (N2 and ethane with 5 % CO2 at 95 K,
+  2 MPa). PH has no carried twin of `binaryThreePhase`: a target inside a three-phase step (CH4 with 40 % CO2 at
+  1 MPa, 151.39 K, about 2900 J/mol) is refused as a step of H(T). No world meets it (batch open item 2).
 
 </details>
 
@@ -346,7 +389,9 @@ flowchart TD
   when the request also holds a species that needs aqueous chemistry (class comment restated in 0.9.1). The network
   builds its own engine.
 - `PhaseContract.forNetworkPackage` qualifies fluid-only; `forPackage` adds the crystal set. The network uses
-  `forPackage` when its package admits crystals.
+  `forPackage` when its package admits crystals. The carried request is in no `qualifiedCompetitions` list: `qualifies`
+  answers it wherever a crystal competition is.
+- `FLUID_CARRYING_CRYSTALS` is neither `fluidOnly()` nor `crystalsCompete()`; test `carried()`.
 - `PhaseKind` on a `PhaseState` is the root situation the evaluator met (one root gives `FLUID`); on a `PhaseAmounts`
   it is the equilibrium's label.
 - A crystal leaves the composition block of `PhaseDerivatives` unfilled, and nothing flags it.
@@ -370,6 +415,7 @@ flowchart TD
 | Steam volume and energy, qualified partial pressure | `SteamVirial`; fluid `FluidThermodynamics.waterVaporPressureLimit` | `SteamVirialTest` (against the full IF97 Region 2 of `If97Region2`, itself checked on IF97's verification tables), fluid `FluidPropertyCoverageTest` (NIST steam), runtime `FluidFactsCompatTest.aWorldSavedUnderTheIdealSteamRestatesOntoTheVirialSteam` |
 | Ice | `FreeWaterIce`; data `crystals/ice_ih.json`, the water's `ice` | `FreeWaterIceTest` |
 | Crystal competition and deposition | `FluidTpEquilibrium` (`solveWithCrystals`, `solveWetWithCrystals`, `depositFromVapour`, `depositFromFluid`, `binaryThreePhase`, `pureCrystalStep`), `CrystalPhaseEvaluator` | `GasSolidEquilibriumTest`, `NearPureCrystalStepTest`, `CrystalPhaseEvaluatorTest`, `SolidCarbonDioxideQualificationTest`, `qualification/G4*`, `G5*` |
+| Carried crystals (a step's request) | `FluidTpEquilibrium` (`carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`, `stabilityOf`), `TangentPlaneStability.TrialFilter`, `PhaseCompetition.FLUID_CARRYING_CRYSTALS`, `PhaseContract.qualifies` | fluid `science/fluid/thermo/CarriedCrystalsTest` (10: the three shapes, the three-fluid window, a let-down run in PH, a refresh unchanged, two liquids still held), `NetworkPhaseEngineTest`, fluid `CrystalDepositionIslandTest` (a step at 95 K, 2 MPa is `LIQUID_LIQUID`) |
 | Onsets | `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`, `DepositionOnset` | `GasSolidEquilibriumTest`, `G4F1`, `G4F2`, `G5F2` |
 | Admitted competitions, water chemistry | `PhaseContract` | `FluidTpEquilibriumTest.waterChemistryAndQualifiedCrystalsFollowTheContract`, `GasSolidEquilibriumTest.theCrystalCompetitionIsQualifiedAsAWholeSet`, `SpinePackageEvaluatorTest` |
 | Grades and extrapolation | `graded`, `outsideData`, `PhaseDomain`, `EquilibriumResult.Coverage` | `qualification/G3F9DataRangeBoundaryTest`, `FluidTpEquilibriumPhUvTest.aClosedVesselBeyondThePressureEnvelopeIsAnsweredExtrapolated` |
@@ -395,7 +441,8 @@ flowchart TD
   files in `src/test/resources/science/thermo/coolprop/`, `gerg2008/pilot-binaries.json`, `solid-co2-holdouts/*.tsv`
   (14 files).
 - The Helmholtz oracle, `science/thermo/reference`: `HelmholtzReferenceParityTest` (2).
-- The network side: `science/fluid/thermo/NetworkPhaseEngineTest` (8) and the tests in [fluid-science.md](fluid-science.md).
+- The network side: `science/fluid/thermo/NetworkPhaseEngineTest` (14), `CarriedCrystalsTest` (10, the carried
+  request on the pilot cryogenic package) and the tests in [fluid-science.md](fluid-science.md).
 - Gradle: only `test` runs these; `fluidScienceTest` matches `science.fluid.*` only. No dedicated task.
 
 ## Terms
@@ -411,6 +458,8 @@ flowchart TD
 - **Crystal ceiling**: the lowest record maximum temperature of a competition's crystals.
 - **Deposition driving force D**: (mu_i - mu_s)/(RT) of a crystal's species in the fluid answer.
 - **Onset**: the frost point, liquidus or three-phase point where D = 0.
+- **Carried crystals**: a step's request (`FLUID_CARRYING_CRYSTALS`): no crystal forms, and the phase it would take is no
+  fluid phase of its own; the CO2 stays in one liquid or a stand-in until a vessel's refresh.
 - **Coexistence from balance**: a step that TP leaves undetermined, split by the energy and volume balance.
 - **Coverage grade**: the quality label of an answer (`QUALIFIED` .. `UNAVAILABLE`).
 - **Numerical box**: 10..6000 K and 1 Pa..1 GPa; the only bound on a trial.

@@ -14,8 +14,11 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-03-localization/](2026-11-03-localization/README.md) | Missing lang keys; fr_fr, es_es and ja_jp added; zh_cn completed and reviewed | Implemented 2026-11-03 (0.19.3) |
+| [2026-11-02-dry-ice-cost/](2026-11-02-dry-ice-cost/README.md) | Why cold CO2 crystal worlds reach the island wall budget; fix proposal | Implemented 2026-11-03 |
 | [2026-11-02-process-simulator/](2026-11-02-process-simulator/README.md) | In-game process simulator: design sheets, client-side runs, flowsheet files and compatibility | In progress since 2026-11-02 |
 | [2026-10-30-water-cooling-tower/](2026-10-30-water-cooling-tower/README.md) | Bounded parallel water-cooling cells and hollow natural-draft towers, coupled heat/mass transfer and real basins | Implemented 2026-11-02 |
+| [2026-11-02-test-suite-optimization/](2026-11-02-test-suite-optimization/README.md) | Skip gates a change cannot affect, GameTest lockstep, one tracked lane | Implemented 2026-11-03 |
 | [2026-11-02-tp-steam-refusal/](2026-11-02-tp-steam-refusal/README.md) | TP flash of one hydrocarbon beside steam, and PH and UV at its true step | Implemented 2026-11-02 (0.18.1) |
 | [2026-11-02-ph-false-root/](2026-11-02-ph-false-root/README.md) | PH and UV false root on wet oil: free water boils alone only where the hydrocarbons hold next to none of the gas | Implemented 2026-11-02 (0.18.1) |
 | [2026-10-28-vacuum-column/](2026-10-28-vacuum-column/README.md) | Column convergence and dry-stage support | Implemented 2026-11-02 |

@@ -1,0 +1,61 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
+index a0abe0995..e1512a2f0 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
+@@ -1201,10 +1201,26 @@ public final class FluidThermodynamics {
+             return state(t,p,hc,hc,condensed?w:0,condensed?0:w,0);
+         }
+         checkpoint.run();
+-        var result=phaseEngine().tp(t,p,overall,crystalsCompete(t,overall));
++        // Prototype (dry ice cost, form b): the fluid alone first; the crystal competition only where the fluid-only answer is
++        // none the network carries (not converged, two liquids, a third fluid phase indicated): D23's rule, a TP decision
++        // never moves material into a crystal, so the competition's answer is needed only as the stand-in of a fluid the
++        // network cannot state (the crossing's three fluid phases, CrystalFlushBudgetTest).
++        var result=phaseEngine().tp(t,p,overall,false);
+         for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
++        if(crystalsCompete(t,overall)) {
++            State fluid=adoptCarried(t,p,overall,result,given);
++            if(fluid!=null)return fluid;
++            result=phaseEngine().tp(t,p,overall,true);
++            for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
++        }
+         return adopt(t,p,overall,result,given);
+     }
++    /** {@link #adopt} of a fluid-only answer where the network carries it; null where it does not (the competition answers then). */
++    private State adoptCarried(double t,double p,double[] overall,EquilibriumResult result,TranslatedPengRobinson.Workspace terms) {
++        if(!result.converged()||result.phases().isEmpty())return null;
++        try{return adopt(t,p,overall,result,terms);}
++        catch(RuntimeException refused){return null;}
++    }
+     /**
+      * A pipe junction's own split (owner decision D26, {@link #phaseCheck}), the phases of an empty bag's
+      * ({@code PassiveStepSolver.emptyBagSplit}, D54) and a slack vessel's crossing ({@link #crossing}): the engine's PH
+@@ -1227,7 +1243,12 @@ public final class FluidThermodynamics {
+             target=EnergyReference.sensible(formation.components()).rebase(h,Arrays.copyOf(overall,hydrocarbon.componentCount()),formation);
+         }
+         checkpoint.run();
+-        var result=phaseEngine().ph(p,target,overall,crystals);
++        // Prototype (dry ice cost, form b): the fluid alone first, the competition only where the network carries no fluid-only answer.
++        var result=phaseEngine().ph(p,target,overall,false);
++        for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
++        State fluid=result.converged()&&!result.phases().isEmpty()?adoptCarried(result.phases().getFirst().temperature(),p,overall,result,null):null;
++        if(fluid!=null||!crystals)return fluid;
++        result=phaseEngine().ph(p,target,overall,true);
+         for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
+         if(!result.converged()||result.phases().isEmpty())return null;
+         try{return adopt(result.phases().getFirst().temperature(),p,overall,result,null);}
+@@ -1243,7 +1264,13 @@ public final class FluidThermodynamics {
+      */
+     private State equilibriumUV(double t,double p,double u,double v,double[] overall,Runnable checkpoint) {
+         checkpoint.run();
+-        var result=phaseEngine().crystalUv(engineEnergy(u,overall),v,overall,crystalsCompete(t,overall),t,p);
++        // Prototype (dry ice cost, form b): the fluid alone first, the competition only where the network carries no fluid-only answer.
++        double energy=engineEnergy(u,overall);
++        var result=phaseEngine().crystalUv(energy,v,overall,false,t,p);
++        for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
++        State fluid=result.converged()&&!result.phases().isEmpty()?adoptCarried(result.phases().getFirst().temperature(),result.phases().getFirst().pressure(),overall,result,null):null;
++        if(fluid!=null||!crystalsCompete(t,overall))return fluid;
++        result=phaseEngine().crystalUv(energy,v,overall,true,t,p);
+         for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
+         if(!result.converged()||result.phases().isEmpty())return null;
+         var answer=result.phases().getFirst();

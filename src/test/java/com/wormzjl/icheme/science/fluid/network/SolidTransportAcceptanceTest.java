@@ -74,10 +74,22 @@ class SolidTransportAcceptanceTest {
         assertNotEquals(0,first.graph().pipes().getFirst().blockedDirections());
         assertTrue(first.averageMassFlows()[0]>0);
         assertTrue(first.rejectionReasons().keySet().stream().anyMatch(s->s.contains("DEPOSITION")));
-        assertEquals(first.graph().reservoirs().get(1).inventory().solids().massKg(),second.graph().reservoirs().get(1).inventory().solids().massKg(),2e-6);
+        // A deposition closes at the end of the step that shows it, late by at most D/v_s (owner decision of 2026-11-03,
+        // form G), so the two step grids differ by at most the solids a flow at the deposition velocity carries in between.
+        var slurry=graph.reservoirs().getFirst().state();double deposition=deposition(first),late=Math.abs(closure(first)-closure(second));
+        assertTrue(late<=Math.sqrt(4*pipe().maximumArea()/Math.PI)*model.solidSettings.suspensionMultiplier()/deposition,"closures "+closure(first)+" and "+closure(second));
+        double carried=slurry.solids().massKg()/slurry.waterVolume()*pipe().maximumArea()*deposition*late;
+        assertEquals(first.graph().reservoirs().get(1).inventory().solids().massKg(),second.graph().reservoirs().get(1).inventory().solids().massKg(),carried+2e-6,"carried "+carried+" in "+late+" s");
         double after=first.graph().reservoirs().stream().mapToDouble(r->r.inventory().solids().massKg()).sum();
         assertEquals(100,after,1e-9);
     }
+    /** The value after {@code name=} in the key of an interval's deposition closure, as the event integrator records it. */
+    private static double closureValue(PassiveIntervalSolver.Result result,String name,String end) {
+        for(String key:result.rejectionReasons().keySet())if(key.startsWith("blocked with solid: DEPOSITION")){int at=key.lastIndexOf(name)+name.length();return Double.parseDouble(end==null?key.substring(at):key.substring(at,key.indexOf(end,at)));}
+        throw new AssertionError("No deposition closure among "+result.rejectionReasons().keySet());
+    }
+    private static double closure(PassiveIntervalSolver.Result result){return closureValue(result,"; t=",null);}
+    private static double deposition(PassiveIntervalSolver.Result result){return closureValue(result,"deposition=",";");}
     @Test void equalParallelBranchesChooseTheSameClosuresAcrossReplays() {
         var source=water(150001).withSolids(stock(64,100));
         var nodes=List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,water(150000),PassiveNetwork.NodeKind.VOID));
