@@ -416,7 +416,7 @@ final class FluidFacts {
                 .doubles(held).list(Arrays.asList(s.enthalpy()),(q,row)->q.doubles(row)).i64(s.tableTick()).i64(s.applied()).f64(s.solvedCondenser())
                 .list(s.levels(),(q,l)->q.count(l.device()).i64(l.tick()).f64(l.held()).f64(l.rate()).f64(l.molarMass()))
                 .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())))
-                .f64(t.condenserWaterPerFeed());
+                .f64(t.condenserWaterPerFeed()).f64(t.waterBelow());
     }
     /** A column unit's engine state as saved, or null where it does not validate. */
     private static ColumnUnit.State columnState(Record f) {
@@ -434,10 +434,14 @@ final class FluidFacts {
             var product=q.record(null,a->{try{return account(a);}catch(IllegalArgumentException invalid){return null;}});return product==null?null:new ColumnUnit.State.Credit(device,tick,product);});
         // The water's share of the condenser duty (COOLER_MODEL_PLAN.md section 6): a state written before it, the whole duty.
         double water=f.f64(condenser);
+        // Where a booking difference goes (C1b): a state written before it follows the water's share.
+        double below=f.f64(Double.NaN);
         try {
             var kept=new boolean[held.length];for(int i=0;i<kept.length;i++)kept[i]=held[i]!=0;
             if(products.contains(null)||credits.contains(null))return null;
-            return new ColumnUnit.State(new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water),enthalpy,tableTick,applied,solved,levels,credits);
+            var table=Double.isNaN(below)?new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water)
+                    :new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water,below);
+            return new ColumnUnit.State(table,enthalpy,tableTick,applied,solved,levels,credits);
         }catch(RuntimeException invalid){return null;}
     }
 

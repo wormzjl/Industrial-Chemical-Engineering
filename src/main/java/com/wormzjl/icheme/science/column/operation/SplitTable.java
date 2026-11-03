@@ -4,6 +4,7 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnDutyLedger;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnResult;
 import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -30,11 +31,17 @@ import java.util.Objects;
  * @param condenserWaterPerFeed J per mole of feed taken, the share of the condenser duty its cooling water takes (column sign;
  *                          batch 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 6): the whole duty for a
  *                          water-cooled condenser, none for an air cooler, the trim's for an air-then-water condenser
+ * @param waterBelow        K: an outlet's booking difference goes to the condenser's cooling water where the port offered its product
+ *                          below this temperature, to the air otherwise ({@code COOLER_MODEL_PLAN.md} section 6, the owner's "divide
+ *                          by temperature"): {@link #WATER_ALWAYS} for a water-cooled condenser, {@link #WATER_NEVER} for an air cooler,
+ *                          the split for an air-then-water condenser
  */
 public record SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
-                         Reference reference, boolean[] held, double condenserWaterPerFeed) {
+                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow) {
     /** The water's id on the network axis. */
     public static final String WATER = "Water";
+    /** {@link #waterBelow} of a water-cooled condenser, whose water takes every difference, and of an air cooler, whose water takes none. */
+    public static final double WATER_ALWAYS = Double.MAX_VALUE, WATER_NEVER = 0;
 
     /** A product: its port, its index among draws (0 for the others), its recovery row, temperature (K) and pressure (Pa). */
     public record Product(Port port, int index, double[] recovery, double temperature, double pressure) {
@@ -110,6 +117,17 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         }
         if (!Double.isFinite(condenserWaterPerFeed) || condenserWaterPerFeed * condenserPerFeed < 0 || Math.abs(condenserWaterPerFeed) > Math.abs(condenserPerFeed))
             throw new IllegalArgumentException("The condenser's water takes a share of its duty, not " + condenserWaterPerFeed + " of " + condenserPerFeed);
+        if (!(waterBelow >= 0) || !Double.isFinite(waterBelow)) throw new IllegalArgumentException("Invalid water temperature " + waterBelow);
+    }
+
+    /**
+     * A table whose booking differences follow its water's share: all to the water where it takes the whole duty, none where it
+     * takes none, else below the split (a table before {@link #waterBelow} existed).
+     */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed,
+                condenserWaterPerFeed == condenserPerFeed ? WATER_ALWAYS : condenserWaterPerFeed == 0 ? WATER_NEVER : HeatSides.AIR_SPLIT_TEMPERATURE);
     }
 
     /** A table whose condenser's water takes the whole duty: a water-cooled condenser's, the table before the share existed. */
@@ -121,6 +139,11 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
     /** The share of the condenser duty its cooling water takes, 0 to 1; 0 where the duty is 0. */
     public double waterShare() {
         return condenserPerFeed == 0 ? 0 : condenserWaterPerFeed / condenserPerFeed;
+    }
+
+    /** Whether the cooling water takes the booking difference of an outlet that offered its product at {@code temperature} K (NaN unknown: a water-cooled condenser's water only). */
+    public boolean waterTakes(double temperature) {
+        return waterBelow == WATER_ALWAYS || temperature < waterBelow;
     }
 
     @Override

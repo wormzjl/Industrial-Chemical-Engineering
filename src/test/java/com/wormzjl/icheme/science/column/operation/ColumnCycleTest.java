@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.column.operation;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -146,6 +147,31 @@ class ColumnCycleTest {
         assertEquals(1, c.alpha(), 1e-12);
         assertThrows(IllegalArgumentException.class, () -> new SplitTable(whole.axis(), whole.products(), 0, whole.pumparoundPerFeed(), whole.condenserPerFeed(),
                 whole.reference(), whole.held(), 2 * whole.condenserPerFeed()), "the water takes no more than the whole duty");
+    }
+
+    /**
+     * Where an outlet's booking difference goes (C1b, the owner's "divide by temperature"): a water-cooled condenser's water
+     * takes every one, an air cooler's none, an air-then-water condenser's trim those offered below the 40 °C split.
+     */
+    @Test
+    void aBookingDifferenceGoesToTheWaterBelowTheSplit() {
+        var whole = table();
+        var trimmed = new SplitTable(whole.axis(), whole.products(), whole.reboilerPerFeed(), whole.pumparoundPerFeed(), whole.condenserPerFeed(), whole.reference(),
+                whole.held(), .4 * whole.condenserPerFeed(), HeatSides.AIR_SPLIT_TEMPERATURE);
+        var air = new SplitTable(whole.axis(), whole.products(), whole.reboilerPerFeed(), whole.pumparoundPerFeed(), whole.condenserPerFeed(), whole.reference(),
+                whole.held(), 0);
+        double split = HeatSides.AIR_SPLIT_TEMPERATURE;
+        for (double t : new double[] {280, split - .01, split, 573.15, Double.NaN}) {
+            assertTrue(whole.waterTakes(t), "a water-cooled condenser's water takes every difference: " + t);
+            assertFalse(air.waterTakes(t), "an air cooler's takes none: " + t);
+            assertEquals(t < split, trimmed.waterTakes(t), "the trim takes those below the split: " + t);
+        }
+        assertEquals(SplitTable.WATER_ALWAYS, whole.waterBelow());
+        assertEquals(SplitTable.WATER_NEVER, air.waterBelow());
+        assertEquals(HeatSides.AIR_SPLIT_TEMPERATURE, new SplitTable(whole.axis(), whole.products(), 0, whole.pumparoundPerFeed(), whole.condenserPerFeed(),
+                whole.reference(), whole.held(), .4 * whole.condenserPerFeed()).waterBelow(), "a share's table, before the temperature: the split");
+        assertThrows(IllegalArgumentException.class, () -> new SplitTable(whole.axis(), whole.products(), 0, whole.pumparoundPerFeed(), whole.condenserPerFeed(),
+                whole.reference(), whole.held(), whole.condenserPerFeed(), Double.POSITIVE_INFINITY));
     }
 
     @Test

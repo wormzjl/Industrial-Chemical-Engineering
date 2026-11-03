@@ -81,6 +81,7 @@ The owner, approving the plan: "also allow air-then-water approach in column con
   - `ColumnStarts` takes the water sides from the trim slot.
   - A solve records the water share of the condenser duty, the overhead flashed at the split on the worker. It is kept in `SplitTable`, in the topology state section (`FluidFacts.columnState`): state, so no compatibility work.
   - Each cycle owes that share to the water side, under the same `APPROACH_KELVIN` ceiling. The air share books to the totals, as an air-cooled condenser's does now.
+  - An outlet's booking difference (what the column books to the condenser to bring a product to its port's state) goes by the temperature the port offered the product at: to the trim's water below the 40 °C split, to the air at or above it. The owner (2026-11-03): "Divide by temperature, if the temperature is above 40C there is no need to use water cooler at all", then "I mean the user can decide, but it's pointless to use twin cooler config if you don't need to cool below 40C". The table carries the temperature (`SplitTable.waterBelow`, state): every temperature for an exchanger, none for an air cooler, the split for air then water. Built 2026-11-03 (C1b in the batch README's history).
 - **Simulator.**
   - The column door's condenser takes three values.
   - `ColumnUnit` reads `condenser_air` and `condenser_water`. The water share goes to the condenser's water side (a link, or the tower-water utility), and the air share to the air.

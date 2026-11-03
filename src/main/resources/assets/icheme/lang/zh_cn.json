@@ -819,6 +819,7 @@
   "gui.icheme.column.units.cooler_shells": "冷却器壳体数",
   "gui.icheme.column.units.trim_shells": "后冷器壳体数",
   "gui.icheme.column.condenser.air_then_water": "空冷+水冷",
+  "gui.icheme.column.condenser.hint": "设计建造的冷凝器：空冷器；在壳程接收塔顶蒸汽的换热器；或空冷+水冷，即先由空冷器冷却到 40 °C，再由水冷换热器（后冷器）冷却到回流罐。只有回流罐温度低于 40 °C 时空冷+水冷才有意义：高于该温度时后冷器不承担热负荷。",
   "gui.icheme.column.units.hint": "并联的相同设备数，1 到 6：物流在它们之间分开，之后再汇合，每台承担相应份额的流量和热负荷。装配检查要求同样的台数。",
   "gui.icheme.assembly.label.units": "%s ×%s",
   "gui.icheme.assembly.part.trim_condenser": "水冷后冷器",

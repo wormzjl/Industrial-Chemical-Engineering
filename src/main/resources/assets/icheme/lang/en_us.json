@@ -1358,7 +1358,7 @@
   "gui.icheme.column.condenser.air_cooler": "Air cooler",
   "gui.icheme.column.condenser.exchanger": "Exchanger",
   "gui.icheme.column.condenser.air_then_water": "Air + water",
-  "gui.icheme.column.condenser.hint": "The condenser the design builds: an air cooler; an exchanger that takes the overhead vapour on its shell side; or air then water, an air cooler down to 40 °C and a water exchanger, the trim, after it to the drum.",
+  "gui.icheme.column.condenser.hint": "The condenser the design builds: an air cooler; an exchanger that takes the overhead vapour on its shell side; or air then water, an air cooler down to 40 °C and a water exchanger, the trim, after it to the drum. Air then water pays only where the drum runs below 40 °C: above it the trim takes nothing.",
   "gui.icheme.column.pump.standard": "Standard",
   "gui.icheme.column.pump.in_line": "In-line",
   "gui.icheme.column.pump.hint": "A standard pump on its base, or an In-line Pump fitted on a pipe.",

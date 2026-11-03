@@ -238,7 +238,13 @@ public final class ColumnSolve {
             case AIR_COOLER -> 0;
             case AIR_THEN_WATER -> trim(model, success.result().inspection().orElseThrow(), basis, axis, setpoints.condenserTemperature(), condenser * rate, checkpoint) / rate;
         };
-        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled);
+        // An outlet's booking difference is the water's below this temperature, the air's at or above it (the owner's "divide by temperature").
+        double waterBelow = switch (job.condenser()) {
+            case EXCHANGER -> SplitTable.WATER_ALWAYS;
+            case AIR_COOLER -> SplitTable.WATER_NEVER;
+            case AIR_THEN_WATER -> HeatSides.AIR_SPLIT_TEMPERATURE;
+        };
+        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled, waterBelow);
         return new Solved(table, enthalpy, success.result().warmSeed().orElse(null), solved.condenserPerFeed() * rate,
                 success.diagnostics().solvePath(), note);
     }

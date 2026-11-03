@@ -106,7 +106,11 @@ class ColumnRunTest {
         if(solves!=null){solves.model=model;ops.solves(solves);}
         ops.refresh();world.columns=ops;
         if(solves==null){var s=liquid?waterTable(model,setpoints,productPort):table(model,setpoints,setpoints.steamPerFeed(),productPort);var t=s.table();
-            if(waterShare!=1)t=new SplitTable(t.axis(),t.products(),t.reboilerPerFeed(),t.pumparoundPerFeed(),t.condenserPerFeed(),t.reference(),t.held(),waterShare*t.condenserPerFeed());
+            if(waterShare!=1||!Double.isNaN(waterBelow)||productTemperature!=330) {
+                var p=t.products().getFirst();var products=List.of(new SplitTable.Product(p.port(),p.index(),p.recovery(),productTemperature,p.pressure()));
+                t=Double.isNaN(waterBelow)?new SplitTable(t.axis(),products,t.reboilerPerFeed(),t.pumparoundPerFeed(),t.condenserPerFeed(),t.reference(),t.held(),waterShare*t.condenserPerFeed())
+                        :new SplitTable(t.axis(),products,t.reboilerPerFeed(),t.pumparoundPerFeed(),t.condenserPerFeed(),t.reference(),t.held(),waterShare*t.condenserPerFeed(),waterBelow);
+            }
             ops.table(unit,t,s.enthalpy());}
         return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell);
     }
@@ -116,6 +120,8 @@ class ColumnRunTest {
     private int shells=1;private double feedRate=.5;
     /** The share of the condenser duty the rig's table gives its cooling water: 1 water-cooled, less an air-then-water condenser's trim. */
     private double waterShare=1;
+    /** The temperature below which the rig's table gives a booking difference to the water, K (NaN: the share's default), and its product's, K. */
+    private double waterBelow=Double.NaN,productTemperature=330;
     /** The bore of the rig's product line and of its feed line and valves, m. */
     private double productBore=.05,lineBore=.05;
     /** A player's flow valve on the rig's product line, kg/s, or NaN for a plain pipe. */
@@ -596,23 +602,51 @@ class ColumnRunTest {
         assertTrue(world.held.isEmpty(),"no island held: "+world.held);
     }
     /**
-     * An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): its trim's water takes the table's share of the duty, the
-     * air the rest. The totals book the whole duty; the water took 40 % of it or holds it in transit.
+     * An air-then-water condenser (COOLER_MODEL_PLAN.md section 6, C1b): its trim's water takes the table's share of each
+     * cycle's duty, the air the rest; an outlet's booking difference goes by the temperature its port offered the product
+     * at, to the water below the 40 °C split and to the air at or above it (the owner's "divide by temperature"). The totals
+     * book every joule; the water took its part or holds it in transit.
      */
-    @Test void anAirThenWaterCondensersTrimWaterTakesOnlyItsShare() {
+    @Test void anAirThenWaterCondenserDividesItsBookingDifferencesByTemperature() {
         waterShare=.4;
+        for(double offered:new double[]{330,305}) {
+            productTemperature=offered;
+            var r=rig(0,null,false,false,true);var world=r.world();
+            double cycles=-cycles(r,4000);
+            var u=world.ledger.column(r.unit());
+            double removed=-u.totals().condenser(),water=r.counting().heat.getOrDefault(PhysicalFluidTopology.sideIdentity(r.tube()),0.),owed=world.coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(r.tube()),PhysicalFluidTopology.sideIdentity(r.shell()),world.ledger.onlineTick());
+            double differences=removed-cycles;boolean cold=offered<com.wormzjl.icheme.science.equipment.HeatSides.AIR_SPLIT_TEMPERATURE;
+            System.out.printf(Locale.ROOT,"C1B_BOOKING offered=%.2f K cycles=%.1f J differences=%.1f J water=%.1f J owed=%.1f J%n",offered,cycles,differences,water,owed);
+            assertTrue(cycles>10000,"the column's condenser removed heat: "+cycles+" J");
+            assertTrue(Math.abs(differences)>1e-3*cycles,"the outlet's booking differs from its account: "+differences+" J");
+            assertEquals(.4*cycles+(cold?differences:0),water+owed,1e-6*removed,"at "+offered+" K the water took its part or it is in transit: water "+water+" J, owed "+owed+" J, cycles "+cycles+" J, differences "+differences+" J");
+            assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+            // The share and the temperature are state: the topology unit carries them through a save.
+            var saved=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(world.ledger.snapshot()),world.ledger.onlineTick(),k->world.model);
+            var table=saved.columns().get(r.unit()).state().table();
+            assertEquals(.4*table.condenserPerFeed(),table.condenserWaterPerFeed(),1e-12*Math.abs(table.condenserPerFeed()));
+            assertEquals(com.wormzjl.icheme.science.equipment.HeatSides.AIR_SPLIT_TEMPERATURE,table.waterBelow());
+        }
+    }
+    /** An air-cooled condenser (C1b): its water takes no cycle's duty and no booking difference, as before. */
+    @Test void anAirCooledCondensersWaterTakesNothing() {
+        waterShare=0;productTemperature=305;
         var r=rig(0,null,false,false,true);var world=r.world();
         world.runTo(4000);
-        var u=world.ledger.column(r.unit());
-        double removed=-u.totals().condenser(),water=r.counting().heat.getOrDefault(PhysicalFluidTopology.sideIdentity(r.tube()),0.),owed=world.coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(r.tube()),PhysicalFluidTopology.sideIdentity(r.shell()),world.ledger.onlineTick());
+        double removed=-world.ledger.column(r.unit()).totals().condenser(),water=r.counting().heat.getOrDefault(PhysicalFluidTopology.sideIdentity(r.tube()),0.),owed=world.coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(r.tube()),PhysicalFluidTopology.sideIdentity(r.shell()),world.ledger.onlineTick());
         assertTrue(removed>10000,"the column's condenser removed heat: "+removed+" J");
-        assertEquals(.4*removed,water+owed,1e-6*removed,"the trim's water took its share or it is in transit: water "+water+" J, owed "+owed+" J of "+removed+" J");
-        assertTrue(water>.2*removed,"the water took most of its share: "+water+" of "+removed+" J");
-        assertTrue(world.held.isEmpty(),"no island held: "+world.held);
-        // The share is state: the topology unit carries it through a save.
-        var saved=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(world.ledger.snapshot()),world.ledger.onlineTick(),k->world.model);
-        var table=saved.columns().get(r.unit()).state().table();
-        assertEquals(.4*table.condenserPerFeed(),table.condenserWaterPerFeed(),1e-12*Math.abs(table.condenserPerFeed()));
+        assertEquals(0,water,"the water took nothing");
+        assertEquals(0,owed,"nothing is owed to it");
+    }
+    /** Runs the rig to online tick {@code end} a few ticks at a time and sums each cycle's condenser duty, J (column sign: removed, negative). */
+    private static double cycles(Rig r,long end) {
+        double sum=0;var seen=r.ops().last(r.unit());
+        for(long t=r.world().ledger.onlineTick();t<end;) {
+            t=Math.min(end,t+5);r.world().runTo(t);
+            var step=r.ops().last(r.unit());
+            if(step!=null&&step!=seen){if(step.trip()==null)sum+=step.condenser();seen=step;}
+        }
+        return sum;
     }
     /** A column's cycle, s. */
     private static final double CYCLE_SECONDS=ColumnOperation.CYCLE_TICKS/20.0;

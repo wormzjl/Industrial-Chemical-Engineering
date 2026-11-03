@@ -616,9 +616,19 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 var t=u.totals();u=withPort(u,s,account,s.solids().less(solid)).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
                 topology.column(u);
                 if(r!=null)r.gifts.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Gift(start,end,given));
-                if(r!=null)owe(r,u,end,-(joule-debited)*(r.table==null?1:r.table.waterShare()),true);
+                if(r!=null&&water(r,s,start))owe(r,u,end,-(joule-debited),true);
             }
         }
+    }
+    /**
+     * Whether the condenser's cooling water takes outlet {@code s}'s booking difference over the slice from {@code start}: where
+     * the port offered its product, at the temperature its plan gave (the table's as of the fence), below the table's
+     * {@link SplitTable#waterBelow}; the air (the totals alone) otherwise. Before any table, the water.
+     */
+    private static boolean water(Run r,ColumnUnit.Station s,long start) {
+        var table=r.tableAt(start-FENCE_TICKS);if(table==null)return true;
+        int k=table.product(s.port(),s.index());
+        return table.waterTakes(k<0?Double.NaN:table.products().get(k).temperature());
     }
     /** What an inlet took, {@code moles} and {@code joule}, with the crystals of {@code solids} melted into it: each its component, with a population's stored sensible energy made true by its offset (plan section 11, D61). */
     Account melted(double[] moles,double joule,SolidInventory solids) {

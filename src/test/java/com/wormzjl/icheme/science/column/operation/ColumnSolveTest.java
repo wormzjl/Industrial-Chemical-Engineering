@@ -64,6 +64,7 @@ class ColumnSolveTest {
         double v3 = solved.solvedCondenser(), network = table.condenserPerFeed() * rate;
         assertTrue(network < 0 && Math.abs(network - v3) < .1 * Math.abs(v3), "the network's closure " + network + " W beside V3's " + v3 + " W");
         assertEquals(table.condenserPerFeed(), table.condenserWaterPerFeed(), "a water-cooled condenser's water takes the whole duty");
+        assertEquals(SplitTable.WATER_ALWAYS, table.waterBelow(), "and every booking difference");
         assertTrue(DriftBands.check(table, step, setpoints.designFeedRate() * SECONDS).isEmpty(), "the reference is inside its own bands");
 
         // The feed 2 K warmer: a band crossed, solved warm from the seed.
@@ -190,6 +191,7 @@ class ColumnSolveTest {
                     celsius, top - 273.15, com.wormzjl.icheme.science.equipment.HeatSides.airSplit(top, 273.15 + celsius) - 273.15,
                     -whole / 1e6, -(whole - water) / 1e6, -water / 1e6, table.waterShare());
             assertTrue(whole < 0, "the condenser removes heat");
+            assertEquals(com.wormzjl.icheme.science.equipment.HeatSides.AIR_SPLIT_TEMPERATURE, table.waterBelow(), "the trim takes the booking differences below the split");
             if (celsius >= 40) assertEquals(0, water, "a receiver at or above the split leaves the trim no duty");
             else {
                 assertTrue(water < 0 && water > whole, "the trim takes part: " + water + " of " + whole + " W");
