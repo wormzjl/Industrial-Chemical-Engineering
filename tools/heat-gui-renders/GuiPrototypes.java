@@ -1,6 +1,6 @@
 import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
-import com.wormzjl.icheme.client.gui.common.AssemblyFlowsheet;
+import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
@@ -234,7 +234,7 @@ public final class GuiPrototypes {
         c.text("Tray 14", box.x() + 8, dy + 4, Palette.TEXT);
     }
 
-    // ---- The assembly check: the shipped AssemblyColumn and AssemblyFlowsheet on the door (GUI_REVIEW.md order 4) ----
+    // ---- The assembly check: the shipped AssemblyColumn and AssemblyBlock on the door (GUI_REVIEW.md order 4) ----
 
     /** A column with a kettle, one side draw and one pumparound. */
     static final ColumnTrays ASSEMBLY = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
@@ -287,15 +287,17 @@ public final class GuiPrototypes {
     static List<Prototype> assembly() {
         return List.of(new Prototype("assembly", 464, 254, (d, s) -> assemblyDoor(d, null, false)),
                 new Prototype("assembly-selected", 464, 254, (d, s) -> assemblyDoor(d, ColumnBlueprint.REFLUX_PUMP, true)),
-                new Prototype("assembly-member-counts", 464, 254, (d, s) -> assemblyDoor(d, COUNTED, countedReport(), ColumnBlueprint.CONDENSER, false)),
-                new Prototype("assembly-air-then-water", 464, 254, (d, s) -> assemblyDoor(d, TRIMMED, assemblyReport(TRIMMED, Map.of()), ColumnBlueprint.TRIM_CONDENSER, false)),
-                // The drawing alone at its design size, with an ejector, the trim selected, to read the pair's labels and lines.
-                new Prototype("assembly-air-then-water-drawing", AssemblyDiagram.WIDTH + 16, AssemblyDiagram.HEIGHT + 16, (d, s) -> {
-                    var box = d.well(new Rect(8, 8, AssemblyDiagram.WIDTH, AssemblyDiagram.HEIGHT));
+                // At a 1600 by 900 window's size, where the block's labels draw (scale 0.5 and up).
+                new Prototype("assembly-wide", 760, 400, (d, s) -> assemblyDoor(d, ASSEMBLY, assemblyReport(), ColumnBlueprint.REFLUX_PUMP, false)),
+                new Prototype("assembly-member-counts", 760, 400, (d, s) -> assemblyDoor(d, COUNTED, countedReport(), ColumnBlueprint.CONDENSER, false)),
+                new Prototype("assembly-air-then-water", 760, 400, (d, s) -> assemblyDoor(d, TRIMMED, assemblyReport(TRIMMED, Map.of()), ColumnBlueprint.TRIM_CONDENSER, false)),
+                // The drawing alone, with an ejector, the trim selected, to read the pair's labels and lines.
+                new Prototype("assembly-air-then-water-drawing", 360, 420, (d, s) -> {
+                    var box = d.well(new Rect(8, 8, 344, 404));
                     var vacuum = new ColumnTrays(TRIMMED.trays(), TRIMMED.feed(), TRIMMED.draws(), TRIMMED.steam(), TRIMMED.pumparounds(), new ColumnComponents(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), true, true, TRIMMED.components().units()));
-                    var sheet = new AssemblyFlowsheet(AssemblyDiagram.of(vacuum));
-                    sheet.fit(box);
-                    sheet.draw(d.c, assemblyReport(vacuum, Map.of()), ColumnBlueprint.TRIM_CONDENSER, x -> AssemblyColumn.text(x, DIALOG));
+                    var block = new AssemblyBlock(vacuum);
+                    block.fit(box);
+                    block.draw(d.c, box, assemblyReport(vacuum, Map.of()), ColumnBlueprint.TRIM_CONDENSER, "T-101", DIALOG);
                 }));
     }
 
@@ -329,10 +331,11 @@ public final class GuiPrototypes {
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - AssemblyColumn.DIVIDER);
         var box = d.well(AssemblyColumn.glass(d.w, d.h, true));
         var split = AssemblyColumn.split(box);
-        var sheet = new AssemblyFlowsheet(diagram);
-        sheet.fit(split.drawing());
+        // The drawing as the process simulator draws a column (owner's option A, 2026-11-03), the parts list beside it.
+        var block = new AssemblyBlock(trays);
+        block.fit(split.drawing());
         d.c.clip(split.drawing());
-        sheet.draw(d.c, report, selected, x -> AssemblyColumn.text(x, t));
+        block.draw(d.c, split.drawing(), report, selected, "T-101", t);
         d.c.unclip();
         var area = split.list();
         d.c.vLine(area.x() - AssemblyColumn.GAP / 2, box.y() - 1, box.bottom(), Palette.LINE);
@@ -344,6 +347,7 @@ public final class GuiPrototypes {
         AssemblyColumn.draw(d.c, parts, lines, 0, selected == null ? -1 : slots.indexOf(selected));
         d.c.unclip();
         listView.drawBar(d.c, d.skin);
+        if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s block at scale %.2f in %d by %d px%n", "assembly " + d.w + "x" + d.h, block.scale(), split.drawing().w(), split.drawing().h());
         // The door column, narrowed for its bar where it is taller than its area (KitDoor).
         String name = selected == null ? null : AssemblyColumn.text(diagram.part(selected).name(), t);
         // N1 (the owner's pick A): a player who may build names the column first on the door, sent with the footer's Apply.
@@ -355,8 +359,7 @@ public final class GuiPrototypes {
         var keys = AssemblyColumn.footerButtons(true, t);
         for (int i = 0; i < keys.size(); i++) d.skin.button(d.c, footer.get(i), keys.get(i).text(), keys.get(i).key().equals("apply") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
         if (d.skin == PanelSkin.LIGHT)
-            System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view, list %d lines in %d px%n", "assembly" + (selected == null ? "" : " selected"), tall, door.h(),
-                    parts.lines().size(), lines.h());
+            System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", "assembly" + (selected == null ? "" : " selected"), tall, door.h());
     }
 
     // ---- The equipment constructor: the shipped ConstructorColumn on its door left of the world (GUI_REVIEW.md order 3) ----

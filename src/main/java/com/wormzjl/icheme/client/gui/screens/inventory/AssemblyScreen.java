@@ -4,9 +4,9 @@ import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Part;
-import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.PortMark;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Text;
 import com.wormzjl.icheme.client.gui.common.AssemblyFlowsheet;
+import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.OperationColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
@@ -21,7 +21,6 @@ import com.wormzjl.icheme.client.gui.common.kit.SkinField;
 import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.AssemblyNetwork;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
-import com.wormzjl.icheme.science.assembly.AssemblyReport.PortState;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
 import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
@@ -51,8 +50,8 @@ import java.util.Set;
 /**
  * A column's GUI (batch 2026-10-26-multi-machine-framework, plan section 8), a panel door on the GUI kit since batch
  * 2026-10-28-gui-toolkit (GUI_REVIEW.md order 4; the door's parts from {@link AssemblyColumn}): on the HMI glass, the plant
- * drawing of its assembly, generated from the column's component design ({@link AssemblyFlowsheet}), each part teal,
- * yellow or red, each port square in its own colour with a grey edge once connected, and the parts list with each part's
+ * drawing of its assembly as the process simulator draws a column ({@link AssemblyBlock}, the owner's option A, 2026-11-03), each part teal,
+ * yellow or red by its check, and the parts list with each part's
  * state in a word; every part reads what it is and its state on hover. On the door, Check parts, whose answer comes with
  * the engine's next bucket, and the selected part with Open unit. A complete structure opens on its Operation tab,
  * the drawing on its Structure tab. Before the first view arrives, the drawing shows the design
@@ -61,7 +60,10 @@ import java.util.Set;
 public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> {
     private static final String KEY = AssemblyDiagram.KEY;
 
+    /** The parts' names and places, which the list and the hovers read. */
     private final @Nullable AssemblyFlowsheet flowsheet;
+    /** The drawing: the sheet's column block of the column's component design. */
+    private final @Nullable AssemblyBlock block;
     private final List<Slot> slots;
     private final KitDoor door = new KitDoor();
     private final ScrollView listView = new ScrollView();
@@ -91,6 +93,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         var t = column == null ? null : column.shape().trays();
         ColumnTrays trays = t != null && t.components() != null ? t : null;
         flowsheet = trays == null ? null : new AssemblyFlowsheet(AssemblyDiagram.of(trays));
+        block = trays == null ? null : new AssemblyBlock(trays);
         slots = trays == null ? List.of() : ColumnBlueprint.of(trays).slots();
         inventoryLabelY = 10_000;
     }
@@ -448,9 +451,9 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         if (drawing()) {
             // The drawing at the left of the glass, the parts list at its right, its bar inside its right edge.
             var split = AssemblyColumn.split(box);
-            flowsheet.fit(split.drawing());
+            block.fit(split.drawing());
             canvas.clip(split.drawing());
-            flowsheet.draw(canvas, report(), selected, t -> AssemblyColumn.text(t, AssemblyScreen::lang));
+            block.draw(canvas, split.drawing(), report(), selected, currentName(), AssemblyScreen::lang);
             canvas.unclip();
             var area = split.list();
             canvas.vLine(area.x() - AssemblyColumn.GAP / 2, box.y() - 1, box.bottom(), Palette.LINE);
@@ -529,7 +532,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }
 
-    /** What a point on the glass reads (door coordinates): a part in the list, a port, a part or a stream's end on the drawing. */
+    /** What a point on the glass reads (door coordinates): a part in the list or on the drawing. */
     private void glassHover(double x, double y) {
         if (list != null && listBox != null && listBox.contains(x, y)) {
             int i = AssemblyColumn.entry(list, listBox, listView.offset(), y);
@@ -538,18 +541,9 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             return;
         }
         if (drawingBox == null || !drawingBox.contains(x, y)) return;
-        var port = flowsheet.port(x, y);
-        if (port != null) {
-            hovered = portText(port);
-            return;
-        }
-        var part = flowsheet.part(x, y);
-        if (part != null) {
-            hovered = stateText(part).getString();
-            return;
-        }
-        var pill = flowsheet.pill(x, y);
-        if (pill != null) hovered = text(pill.text()).getString();
+        var hit = block.part(x, y);
+        var part = hit == null ? null : flowsheet.diagram.part(hit);
+        if (part != null) hovered = stateText(part).getString();
     }
 
     @Override
@@ -562,8 +556,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
                 int i = AssemblyColumn.entry(list, listBox, listView.offset(), y);
                 if (i >= 0) hit = slots.get(i);
             } else if (drawingBox != null && drawingBox.contains(x, y)) {
-                var part = flowsheet.part(x, y);
-                if (part != null) hit = part.slot();
+                var part = block.part(x, y);
+                if (part != null) hit = part;
             }
             if (hit != null) {
                 selected = hit;
@@ -667,14 +661,5 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             }
             case UNIT_SHAPES -> tr("state.unit_shapes", name, position(at));
         };
-    }
-
-    /** A port's hover: what it is and where it pipes to, then its state. */
-    private String portText(PortMark m) {
-        var partner = flowsheet.diagram.part(m.partner());
-        var head = tr("port", role(m.role().name()), Component.translatable("gui.icheme.vessel.port." + m.role().port.name().toLowerCase(Locale.ROOT)),
-                partner == null ? Component.empty() : text(partner.name()));
-        PortState state = AssemblyFlowsheet.port(report(), m);
-        return head.getString() + "\n" + tr("port." + (state == null ? "needed" : state.name().toLowerCase(Locale.ROOT))).getString();
     }
 }

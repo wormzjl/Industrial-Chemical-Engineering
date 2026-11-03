@@ -116,13 +116,23 @@ public final class SheetPainter {
      * tower, its coolers, drum, pumps and pipes stay; valves, a pump's motor, a cooler's coil, the tee and arrows go, for they would only blot.
      */
     private static void block(FlowsheetPainter p, SheetLayout.Box box, SheetState.Tone tone, Look look, HeatControlColumn.Texts t) {
+        block(p, box.block(), frame(tone, look), tone == SheetState.Tone.SOLVED, look, slot -> look, t);
+    }
+
+    /**
+     * A column block on its own, each part in the look {@code looks} gives its slot and the tower in the column's (N1: the assembly
+     * screen draws the built column as the sheet does, each part by its check). The frame in {@code frame}; amber and teal lines
+     * where {@code solved}, else in {@code look}'s stroke.
+     */
+    public static void block(FlowsheetPainter p, ColumnBlock block, int frame, boolean solved, Look look, java.util.function.Function<com.wormzjl.icheme.science.assembly.Blueprint.Slot, Look> looks,
+                             HeatControlColumn.Texts t) {
         var c = p.canvas();
-        var f = box.rect();
+        var f = block.frame();
         int x0 = p.x(f.x()), y0 = p.y(f.y()), x1 = p.x(f.right()), y1 = p.y(f.bottom());
         c.fill(x0, y0, x1, y1, FRAME_FILL);
-        c.outline(x0, y0, x1 - x0, y1 - y0, frame(tone, look));
-        boolean solved = tone == SheetState.Tone.SOLVED, fine = p.labels();
-        for (var pipe : box.block().pipes()) {
+        c.outline(x0, y0, x1 - x0, y1 - y0, frame);
+        boolean fine = p.labels();
+        for (var pipe : block.pipes()) {
             int colour = switch (pipe.service()) {
                 case HOT -> solved ? HOT : look.stroke();
                 case COLD -> solved ? Palette.ACCENT : look.stroke();
@@ -131,12 +141,12 @@ public final class SheetPainter {
             p.wire(pipe.points(), pipe.arrow() && fine, false, colour);
         }
         var half = new FlowsheetPainter(c, p.ox(), p.oy(), p.scale() / 2, 1);
-        var tower = box.block().tower();
-        column(c, p.ox() + tower.x() * p.scale(), p.oy() + tower.y() * p.scale(), p.scale(), box.slices(), look);
+        var tower = block.tower();
+        column(c, p.ox() + tower.x() * p.scale(), p.oy() + tower.y() * p.scale(), p.scale(), block.slices(), looks.apply(ColumnBlueprint.COLUMN));
         int hot = solved ? HOT : look.stroke();
-        for (var part : box.block().parts()) part(p, half, part, look, fine, part.slot().equals(ColumnBlueprint.REFLUX_VALVE) ? hot : Palette.MUTED);
+        for (var part : block.parts()) part(p, half, part, looks.apply(part.slot()), fine, part.slot().equals(ColumnBlueprint.REFLUX_VALVE) ? hot : Palette.MUTED);
         if (!fine) return;
-        for (var note : box.block().notes()) {
+        for (var note : block.notes()) {
             String text = t.get("flowsheet." + note.key(), note.argument());
             if (note.width() > 0) p.fitted(text, note.x(), note.y(), note.width(), Palette.TEXT);
             else p.tag(text, note.x(), note.y(), .5f, Palette.MUTED, 0);

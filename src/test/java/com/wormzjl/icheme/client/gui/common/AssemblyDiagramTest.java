@@ -101,8 +101,7 @@ class AssemblyDiagramTest {
                 "word.misplaced", "word.missing", "word.not_loaded", "state.not_validated", "state.ok", "state.missing", "state.missing.terminal",
                 "state.missing.returns", "state.missing.found", "state.open_end", "state.open_end.unconnected", "state.not_loaded", "state.wrong_kind",
                 "state.backwards", "state.wrong_port", "state.wrong_port.returns", "state.valve_reversed", "state.extra_valve", "state.wrong_order",
-                "state.branched", "state.shared", "state.unit_count", "state.unit_shapes", "port", "port.needed", "label.units"));
-        for (var s : com.wormzjl.icheme.science.assembly.AssemblyReport.PortState.values()) keys.add("port." + s.name().toLowerCase(java.util.Locale.ROOT));
+                "state.branched", "state.shared", "state.unit_count", "state.unit_shapes", "label.units"));
         for (var f : List.of("drum", "drum_no_boot", "drum_standing", "control_valve", "inline_pump", "other")) keys.add("found." + f);
         var missing = keys.stream().map(k -> AssemblyDiagram.KEY + k).filter(k -> !lang.contains(k)).sorted().toList();
         assertEquals(List.of(), missing);
