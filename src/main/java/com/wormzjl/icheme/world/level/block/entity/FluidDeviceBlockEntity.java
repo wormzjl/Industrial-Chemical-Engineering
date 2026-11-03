@@ -99,8 +99,9 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     private int joints = PhysicalFluidTopology.ALL_FACES;
     /**
      * The paint of a laid line (batch 2026-10-26-pipe-laying-system), 0xRRGGBB, or bare steel: a fact the player chose
-     * with the laying tool, kept on the block as a vessel's paint is kept on its cells. Saved only when painted, so a
-     * pipe saved before paint existed reads bare, as it looked. This is the primary paint, the pipe's.
+     * with the laying tool. The registry holds it; the block keeps a copy to draw, taken at bind ({@link #restatePaint}).
+     * Saved only when painted, so a pipe saved before paint existed reads bare, as it looked. This is the primary paint,
+     * the pipe's.
      */
     private int paint = com.wormzjl.icheme.science.equipment.Paint.BARE;
     /**
@@ -113,10 +114,21 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     public int paint(){return paint;}
     /** The line's secondary paint, its flanges': 0xRRGGBB, or {@link com.wormzjl.icheme.science.equipment.Paint#BARE}. */
     public int secondary(){return secondary;}
-    /** Server: paints this pipe (the laying tool's paints at a lay) and redraws it. */
-    public void paint(int primary,int secondary){
-        if(!com.wormzjl.icheme.science.equipment.Paint.line(primary)||!com.wormzjl.icheme.science.equipment.Paint.line(secondary))throw new IllegalArgumentException("A line's paint is 0xRRGGBB or bare");
-        if(paint==primary&&this.secondary==secondary)return;paint=primary;this.secondary=secondary;sync();
+    /**
+     * Server: the line's paint as the registry holds it, which this block keeps a copy of to draw (registry first, batch
+     * 2026-11-03-save-corruption). A painted block whose line the registry holds bare teaches it its paint: a world saved
+     * before the registry held paint, or a block registered from what it holds. Whether the copy changed.
+     */
+    private boolean restatePaint(FluidWorldAuthority world,long id) {
+        var held=world.linePaint(id);
+        if(held==null){if(paint!=com.wormzjl.icheme.science.equipment.Paint.BARE||secondary!=com.wormzjl.icheme.science.equipment.Paint.BARE)world.paint(id,paint,secondary);return false;}
+        if(held.primary()==paint&&held.secondary()==secondary)return false;
+        paint=held.primary();secondary=held.secondary();return true;
+    }
+    /** Server: binds the registration {@code id} at this block, or marks it loaded when already bound; either way the block takes its build facts. */
+    public void bind(FluidWorldAuthority world,long id) {
+        if(identity!=id){bindIdentity(id);return;}
+        world.deviceLoaded(id);if(restatePaint(world,id))sync();
     }
     @Override public long fluidIdentity(){return identity;}
     public TopologyCompiler.Kind kind(){return ((FluidDeviceBlock)getBlockState().getBlock()).kind();}
@@ -132,7 +144,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
             var record=world.at(p).orElseThrow();
             if(record.device().id()!=id)throw new IllegalStateException("Fluid identity belongs to a different position");
             bore=record.device().geometry().diameter();joints=record.device().joints();
-            computeFaces();
+            restatePaint(world,id);computeFaces();
         }
         identity=id;com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);setChanged();
         if(level instanceof ServerLevel serverLevel){FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(w->w.deviceLoaded(id));level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),2);}
@@ -145,7 +157,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
             var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),worldPosition.getX(),worldPosition.getY(),worldPosition.getZ());
             world.at(p).ifPresent(record->{
-                if(identity!=record.device().id())bindIdentity(record.device().id());else world.deviceLoaded(identity);
+                bind(world,record.device().id());
                 // Drawn geometry: onLoad runs once the chunk is in the level (Level.tickBlockEntities), so its loaded
                 // neighbours are readable; a neighbour loaded before this block drew no line here, so both sides refresh.
                 // Neighbours in unloaded chunks keep their saved joints (FluidDeviceBlock.connectedState).

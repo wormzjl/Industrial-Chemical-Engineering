@@ -5,6 +5,7 @@ import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.world.item.PipelineToolItem;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
@@ -180,12 +181,27 @@ public final class PipeLayingGameTests {
             helper.assertTrue(options.get(0) == -1 && options.get(4) == -1 && options.subList(1, 4).stream().allMatch(o -> o >= 0 && RackGeometry.tier(o) && RackGeometry.level(o) == RackGeometry.TIER),
                     "Not one lane through the racks: " + options);
             helper.assertTrue(PipeLaying.lay(player, InteractionHand.MAIN_HAND, start, end, path, route.options()) == null, "The line was refused");
+            var laidPaint = new WorldTopologyLedger.LinePaint(SKY_BLUE, FLAME_RED);
             for (var cell : List.of(first, last))
                 helper.assertTrue(level.getBlockEntity(cell) instanceof FluidDeviceBlockEntity pipe && pipe.paint() == SKY_BLUE && pipe.secondary() == FLAME_RED, "Laid pipe " + cell.toShortString() + " not painted");
             for (var cell : List.of(straight, corner, turned)) {
                 var lane = ((PipeRackBlockEntity) level.getBlockEntity(cell)).lanes().getFirst();
                 helper.assertTrue(lane.paint() == SKY_BLUE && lane.secondary() == FLAME_RED, "Lane at " + cell.toShortString() + " not painted");
+                helper.assertTrue(laidPaint.equals(world.linePaint(lane.identity())), "The registry does not hold the lane's paint at " + cell.toShortString());
             }
+            // Registry first (batch 2026-11-03-save-corruption): the paint is the registry's, the blocks copy it at bind. A
+            // copy that differs takes the registry's; a painted block whose line the registry holds bare teaches it.
+            var firstPipe = (FluidDeviceBlockEntity) level.getBlockEntity(first);
+            long firstLine = firstPipe.fluidIdentity();
+            helper.assertTrue(laidPaint.equals(world.linePaint(firstLine)), "The registry does not hold the pipe's paint: " + world.linePaint(firstLine));
+            world.paint(firstLine, FLAME_RED, FLAME_RED);
+            firstPipe.bind(world, firstLine);
+            helper.assertTrue(firstPipe.paint() == FLAME_RED && firstPipe.secondary() == FLAME_RED, "The pipe did not take the registry's paint");
+            world.paint(firstLine, Paint.BARE, Paint.BARE);
+            firstPipe.bind(world, firstLine);
+            helper.assertTrue(new WorldTopologyLedger.LinePaint(FLAME_RED, FLAME_RED).equals(world.linePaint(firstLine)), "The painted pipe did not teach the registry");
+            world.paint(firstLine, SKY_BLUE, FLAME_RED);
+            firstPipe.bind(world, firstLine);
             // Aimed at the laid lane's slot from under the tier, the nearest free slot is taken instead.
             var laid = ((PipeRackBlockEntity) level.getBlockEntity(straight)).lanes().getFirst();
             double across = RackGeometry.centre(RackGeometry.position(laid.option()), laid.width());
@@ -217,6 +233,7 @@ public final class PipeLayingGameTests {
             helper.assertTrue(!player.gameMode.destroyBlock(straight) && level.getBlockState(straight).getBlock() instanceof PipeRackBlock && ((PipeRackBlockEntity) level.getBlockEntity(straight)).lanes().size() == 1,
                     "A rack with a lane was broken");
             var cornerRack = (PipeRackBlockEntity) level.getBlockEntity(corner);
+            long cornerLane = cornerRack.lanes().getFirst().identity();
             helper.assertTrue(PipeLaying.dismantle(player, InteractionHand.MAIN_HAND, onLane(corner, cornerRack, 0)) == null, "The lane dismantle was refused");
             helper.assertTrue(cornerRack.lanes().isEmpty() && world.at(position(level, corner).withLane(options.get(2) + 1)).isEmpty(), "The corner lane remains");
             helper.assertTrue(level.getBlockState(corner).getValue(PipeRackBlock.SHAPE) == PipeRackBlock.Shape.FRONT_RIGHT, "The empty corner lost its shape");
@@ -226,6 +243,8 @@ public final class PipeLayingGameTests {
                     "The lane next to the gap did not become an open end: " + straightRack.drawnLanes());
             helper.assertTrue(straightRack.openFaces(0) == 1 << Direction.EAST.ordinal(), "The lane's open end is not towards the gap");
             helper.assertTrue(!joined(world, westTank, southTank), "The tanks are still joined across the gap");
+            // The removal applied (the tanks parted): the lane's paint left the registry with it.
+            helper.assertTrue(world.linePaint(cornerLane) == null, "The removed lane's paint stayed in the registry");
 
             // A one-cell lane from one open end to the other: both lanes keep their joints, the gap lane takes the corner.
             var refill = PipeLaying.lay(player, InteractionHand.MAIN_HAND, onLane(straight, straightRack, 0), onLane(turned, (PipeRackBlockEntity) level.getBlockEntity(turned), 0), List.of(corner), List.of(options.get(2)));

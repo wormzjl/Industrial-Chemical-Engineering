@@ -101,6 +101,21 @@ class WorldTopologyLedgerTest {
         assertThrows(IllegalArgumentException.class,()->ledger.paint(9,new WorldTopologyLedger.LinePaint(0x2271B3,0x2271B3)),"only a registered identity is painted");
     }
     /**
+     * A line's paint leaves with its identity when the removal applies, whatever removed it (REGISTRY_FIRST_PLAN.md 3.3).
+     * A queued removal keeps it: a removal that never applies leaves the line, painted.
+     */
+    @Test void aLinesPaintLeavesWhenItsRemovalApplies() {
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var red=new WorldTopologyLedger.LinePaint(0xE25303,0xE25303);ledger.paint(1,red);ledger.paint(2,red);
+        ledger.commit(ledger.queue(List.of(new WorldTopologyLedger.Edit(1,null)),Set.of(1L),3));
+        assertEquals(red,ledger.paint(1),"a queued removal keeps the paint");
+        assertThrows(IllegalArgumentException.class,()->ledger.paint(1,red),"a line being removed takes no paint");
+        var before=ledger.snapshot();
+        ledger.commit(applyFirst(ledger,List.of(),List.of(),new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],3));
+        assertNull(ledger.paint(1),"the applied removal took the paint");assertEquals(red,ledger.paint(2));
+        assertEquals(Map.of(2L,red),ledger.snapshot().builds().paints());assertNotSame(before.builds(),ledger.snapshot().builds());
+    }
+    /**
      * A crystal is its component in another phase (owner decision D23): a pilot tank placed holding CO2 in N2 below its
      * frost point and broken after its refresh deposited CO2-I books the same component moles and total energy destroyed
      * as constructed. The dry ice enters the destroyed totals as CO2 moles with its true energy (its stored sensible part

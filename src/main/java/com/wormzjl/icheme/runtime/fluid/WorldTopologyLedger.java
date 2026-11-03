@@ -249,9 +249,13 @@ public final class WorldTopologyLedger {
     }
     /** The build facts as the next snapshot holds them. */
     public Builds builds(){owned();if(builds==null)builds=new Builds(paints,structures);return builds;}
+    /** The paint of line {@code id}, or null for a bare line: a live read, no copy. */
+    public LinePaint paint(long id){owned();return paints.get(id);}
+    /** The structure whose origin is {@code origin}, or null: a live read, no copy. */
+    public Structure structure(PhysicalFluidTopology.Position origin){owned();return structures.get(origin);}
     /**
      * Paints the line {@code id}, a registered or queued identity; null or a bare line removes its entry. A build fact:
-     * no flow changes, nothing is queued.
+     * no flow changes, nothing is queued. The paint leaves with its identity, when the edit that removes it applies.
      */
     public void paint(long id,LinePaint paint) {
         owned();if(!latest.containsKey(id))throw new IllegalArgumentException("Paint of an unregistered identity "+id);
@@ -384,6 +388,8 @@ public final class WorldTopologyLedger {
         else {
             var applied=Collections.newSetFromMap(new IdentityHashMap<Event,Boolean>());applied.addAll(prepared.applied);events.removeIf(applied::contains);
             for(var event:prepared.applied)apply(active,activeAt,event.edits);
+            // A removed identity is never given again, so its line paint leaves with it: one place for every removal path.
+            for(var event:prepared.applied)for(var edit:event.edits)if(edit.replacement==null&&paints.remove(edit.id)!=null)builds=null;
             constructed=prepared.constructed;destroyed=prepared.destroyed;recoveries.putAll(prepared.recoveries);
         }
         nextIdentity=prepared.nextIdentity;version++;

@@ -72,29 +72,38 @@ How the shape is held:
 
 ### 3.3 Write paths: every edit reaches the registry
 
-All on the server thread, as direct ledger updates: `WorldTopologyLedger.paint(id, …)` and `structure(origin, …)`, built in step 1. A build fact changes no flow, so it needs no queued event and does not bump the registry's `version` (3.2).
+All on the server thread, as direct ledger updates: `WorldTopologyLedger.paint(id, …)` and `structure(origin, …)`, built in step 1, reached through `FluidWorldAuthority.paint` and `structure` (step 2). A build fact changes no flow, so it needs no queued event and does not bump the registry's `version` (3.2).
 
-| Edit | Hook |
+The writers, listed by `grep` before coding (step 2): line paint has one, `PipeLaying.lay`, for pipes and rack lanes alike. Structures are placed only by the constructor's build, whole. Nothing repaints a laid line or a built structure.
+
+| Edit | Hook (built in step 2) |
 |---|---|
-| Line paint of a pipe or one-block device (pipe tool, laying) | `FluidDeviceBlockEntity.paint(primary, secondary)` → `FluidWorldAuthority.paint(id, …)` |
-| Line paint of a rack lane | the `PipeRackBlockEntity` lane paint setter → `FluidWorldAuthority.paint(laneId, …)` |
-| Structure placed, refreshed, rebuilt by the constructor, repainted | `EquipmentShellBlockEntity.bind(shape, cell, paint)` at the origin cell, and the constructor's apply → `FluidWorldAuthority.structure(origin, …)` |
+| Line paint of laid pipes and rack lanes | `FluidWorldAuthority.lay(…, primary, secondary)` paints the new identities as it registers them. The blocks copy the paint as they bind (3.5), so `PipeLaying` no longer paints a block, and the pipe block's paint setter is gone |
+| Structure built | `EquipmentStructure.place`, for a whole build (`rows` covers the shape) |
+| Structure refreshed to a new layout | `EquipmentStructure.refresh`: the record follows the structure to its shifted origin, cells left out or not |
 | Device removed (any path) | the ledger drops the line's paint when an applied edit removes its identity: one place for every removal path, no hook |
-| Structure removed through the break path | the existing removal also drops its structure record |
+| Structure dismantled, or removed as a retired kind | `EquipmentStructure.dismantle` and `removeRetired` |
 
-A rack's lanes, frame and joins need no hook: they are rebuilt from the lane registrations (3.1). A nozzle size change is a pipe change, which the registry already holds.
-
-Before coding, list every writer of these block-entity fields (`grep` the setters), so that no edit path is missed. The pipe tool's laying path (`PipeLaying`, the `laying` flag) is the most likely one to bypass the hook.
+The shell's `bind(shape, cell, paint)` is no hook: it runs once per cell, and a structure's origin cell may be no shell. A rack's lanes, frame and joins need no hook: they are rebuilt from the lane registrations (3.1). A nozzle size change is a pipe change, which the registry already holds.
 
 ### 3.4 Learning from blocks (worlds saved before schema 8)
 
-At the re-alignment pass of a chunk (4.2), a registration in that chunk with no build record copies the record from its block when the block is present and of the right kind. A world saved at schema 7 therefore fills its records chunk by chunk as it is played. Until a chunk loads once:
+Built in step 2, at the same points as the restatement (3.5): a block whose fact the registry has no record of teaches it.
+- A painted pipe or rack lane whose line the registry holds bare records its paint at bind. Paint is born with its registration at the lay, so a bare line with a painted block is a world saved before schema 8, or a block registered from what it holds (S10).
+- A current vessel with no record records its shape and paint at its restate, which runs once per vessel load when every chunk of it is ticking.
+
+A world saved at schema 7 therefore fills its records chunk by chunk as it is played. Until a chunk loads once:
 - one-block devices and rack lanes are re-placeable without a record (bare paint);
-- structure members are not. If their block is missing, they keep today's behaviour and are listed as "cannot be rebuilt: saved before the registry held its shape".
+- structures are not. If their blocks are missing, they keep today's behaviour and are listed as "cannot be rebuilt: saved before the registry held its shape".
 
 ### 3.5 Block-entity copies
 
-The block entities keep their copies, because the client draws from them. At bind, a block entity's build facts are restated from the registry where they differ, as `bindIdentity` already does for bore and joints. A block entity never writes the registry except through 3.3 and 3.4.
+The block entities keep their copies, because the client draws from them. Each takes the registry's fact where they differ (registry first), as `bindIdentity` already does for bore and joints:
+- pipes and one-block devices: `FluidDeviceBlockEntity.bind(world, id)`, now the one bind of both load paths (`onLoad` and `FluidWorldAuthority.loadedChunk`), and `bindIdentity`;
+- rack lanes: `PipeRackBlockEntity.bind(world)`;
+- structures: `EquipmentStructure.restate`, once per vessel. A vessel's cells share one paint, so the cells are walked only when the controller's paint differs from the record. A record of another shape waits for the re-alignment (4.4).
+
+Each is one map read per block or vessel. A block entity never writes the registry except through 3.3 and 3.4.
 
 ## 4. W5b: re-alignment
 
@@ -157,13 +166,13 @@ Each step is one commit and runs only the tests that its files can load.
 | Step | Content | Tests |
 |---|---|---|
 | 1 | `Builds` in the snapshot, schema 8, encoding, validation. No behaviour change. **Done** (see the batch README) | `FluidFactsCompatTest` (with the new `compat/fluid/schema-8` image), facts round trip |
-| 2 | Write paths (3.3) and the block-entity restatement (3.5) | GameTest: paint a pipe, save, reload, read the registry |
+| 2 | Write paths (3.3), the block-entity restatement (3.5) and learning (3.4, moved here from step 8). **Done** (see the batch README) | GameTests: the painted lay in `PipeLayingGameTests` (registry holds the paints, restatement, learning, paint leaves with a dismantled lane); `EquipmentCompatGameTests` structure record (built, restated, learned, dismantled). The save and reload round trip is the step-1 unit tests' |
 | 3 | Held registrations: compilation, state, commands (4.1, 4.5 commands) | Compile unit test (a held vessel is its own island). GameTest: hold, then drop |
 | 4 | `stateFor`, the restore flag, the kind check, the queue, one-block re-alignment (4.2, 4.3) | `stateFor` round trip over every kind and fitting. GameTests a to d (section 7) |
 | 5 | Rack cells placed again from their lane registrations (4.2 item 3) | GameTest e |
 | 6 | Structures (4.4) | GameTests f and g. `equipmentGates` only if refresh code changed |
 | 7 | Notices, lang keys (4.5) | `LanguageFilesTest`; `tools/localization/check.js` |
-| 8 | Learning from blocks (3.4) | GameTest h, and the schema-7 image still loads |
+| 8 | Learning from blocks (3.4): built in step 2; what is left is its world-level check | GameTest h, and the schema-7 image still loads |
 
 ## 6. Cost: no lag at edits, saves and loads
 
@@ -176,6 +185,8 @@ Owner requirement (2026-11-03): the system must be lag-free, above all during sa
 | A save with no build edit | nothing: the topology unit is reused (`sameWorldBody` compares `builds` by reference) | zero |
 | A save after a build edit | one re-encoding of the topology unit, the same cost as after placing a pipe today; shape texts are already made | one unit per save |
 | A load | each structure's SNBT parsed once, at world open | not during play |
+| A block's bind at load (pipe, rack) | one map read for its paint; a write only when it learns | O(1) per block |
+| A vessel's restate at load | one map read for its record; the shell cells walked only when the paint differs | O(1) per vessel, as a rule |
 | Chunk load | the chunk queued; no block placed, no solve | O(devices of the chunk) to queue |
 | Re-alignment | at most 32 devices and 1 ms per tick (4.2) | 1 ms per tick |
 
@@ -191,6 +202,8 @@ The save itself, before W5 (outside this plan, proposal W6 in the review, sectio
 ## 7. GameTests (fluid GameTest source set)
 
 Each test edits the world or the registry directly, so it needs no crash. Each removes everything it registers, because GameTest areas are not cleared between batches. Use a fresh `fluidGameTestRunId` after a failed run.
+
+Structure records persist in the GameTest world as registrations do. Once re-alignment places structures (steps 4 and 6), a record left behind would rebuild its structure in a later run. Before step 4, check that every GameTest that places a structure ends with its dismantle (breaking a shell or interior cell runs it), or clears its record (`FluidWorldAuthority.structure(origin, null)`). `EquipmentCompatGameTests` clears cells without the dismantle on purpose in two tests.
 
 - **a. Broken pipe.** A registered pipe whose block was set to air behind the authority's back is placed again with the same identity.
 - **b. Broken vessel.** A registered one-block reservoir removed the same way comes back with its contents.

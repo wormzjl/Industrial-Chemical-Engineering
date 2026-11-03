@@ -2,7 +2,7 @@
 
 Purpose: how save corruption can damage an IChemE world, and how to stop it from causing total data loss, as an extension of the backward-compat facts/state system (owner 2026-11-03: "Research about how to handle eventual save corruption to prevent total data loss"; "I'd imagine it will be somehow combined with the backward compat system").
 
-Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is being built: step 1 of 8 is done. The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is being built: steps 1 and 2 of 8 are done. The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -19,6 +19,7 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
 ## Code areas
 
 - Changed (W5a step 1): `runtime/fluid/WorldTopologyLedger` (`Builds`, `LinePaint`, `Structure`, `paint`, `structure`), `FluidFacts` (schema 8), `FluidCheckpointCodec` (`sameWorldBody`); tests `WorldTopologyLedgerTest`, `FluidFactsCompatTest`; corpus image `src/test/resources/compat/fluid/schema-8`.
+- Changed (W5a step 2): `WorldTopologyLedger` (live reads; paint leaves with an applied removal), `FluidWorldAuthority` (`linePaint`, `paint`, `structure`, `lay` with paints, `loadedChunk` through the pipe's `bind`), `FluidDeviceBlockEntity` (`bind`, `restatePaint`; paint setter removed), `PipeRackBlockEntity.bind`, `PipeLaying.lay`, `EquipmentStructure` (`record`, `restatePaint`; hooks in `place`, `refresh`, `dismantle`, `removeRetired`, `restate`), `EquipmentShellBlockEntity.repaint`; GameTests `PipeLayingGameTests`, `EquipmentCompatGameTests`.
 - Read: `runtime/fluid/FluidCheckpointStore`, `FluidSavedData`, `FluidCheckpointCodec` (core seal) and `FluidFacts.rebuild`.
 - `FluidWorldAuthority.loadedChunk`, `PhysicalFluidTopology.Device`, `FluidDeviceBlockEntity` (`bindIdentity`, saved fields), `PipeRackBlockEntity`, `EquipmentShellBlockEntity`, `EquipmentStructure.restoreFluidBinding`, `EquipmentRefresh`, `runtime/instrument/InstrumentService.Store` and `runtime/assembly/AssemblyStore`.
 - Vanilla and NeoForge 21.1.219: `SavedData`, `DimensionDataStorage`, `IOUtilities`, `Util.safeReplaceFile`, `LevelStorageSource`, `ChunkMap.handleChunkLoadFailure` and `scheduleUnload`, `ChunkStatusTasks`, `RegionFile` and `ChunkEvent.Load`.
@@ -43,8 +44,16 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
   - The save path costs about one tick on the server thread when every island changed (f3: 7.6 + 48.4 ms at 10,000 tanks). W6 is proposed in the review, section 9.
   - Gates: `FluidFactsCompatTest` 15/15 (schema-8 image added; images 1-7 read with empty build facts), `WorldTopologyLedgerTest`, `FluidCheckpointCodecTest`, `FluidCheckpointStoreTest` (44 tests with the compat test's first run), `FluidCheckpointFormatTest` 8/8. Code guide: waits for the merge.
 
+- 2026-11-03: W5a step 2, the commit that adds this line. The registry takes every build edit, and the blocks copy from it.
+  - Write paths: line paint has one writer (`PipeLaying.lay` → `FluidWorldAuthority.lay` with the paints). Structures are recorded at their whole build, follow a refresh's shifted origin, and leave at their dismantle or retired removal. A line's paint leaves with its identity when the removal applies, in the ledger: one place for every removal path.
+  - Restatement (registry first): pipes at bind (one `bind` now serves both load paths), rack lanes at the rack's bind, vessels at their once-per-load restate (cells walked only when the controller's paint differs).
+  - Learning moved here from step 8: a painted block whose line the registry holds bare teaches it; a current vessel with no record teaches its shape and paint. Step 8 keeps only its world-level check (GameTest h).
+  - Removed: the pipe block's public paint setter, and `PipeLaying`'s painting of blocks; the duplicated bind branch of `onLoad` and `loadedChunk`.
+  - Gates: `WorldTopologyLedgerTest` 10/10 (new: paint leaves when its removal applies), `FluidFactsCompatTest` 15/15, `PipeLineCompatTest` 8/8; fluid GameTests 40/40 on the fresh run id `save-w5-step2` (edited: the painted lay in `PipeLayingGameTests`; new: `EquipmentCompatGameTests` structure record). Code guide: waits for the merge.
+
 ## Open items
 
-- W5 steps 2-8 per REGISTRY_FIRST_PLAN.md section 5. Next: step 2, the write paths and the block-entity restatement.
+- W5 steps 3-8 per REGISTRY_FIRST_PLAN.md section 5. Next: step 3, held registrations.
+- Before step 4: every GameTest that places a structure must end with its dismantle or clear its record (plan section 7).
 - W6 (save encoding off the server thread): proposed, owner to decide.
 - `SolidMaterialCatalog.validate` still says "create a fresh world". The start guard reaches it only when the basis check misses a change to the solid data. Its text changes with P8 (review G9).

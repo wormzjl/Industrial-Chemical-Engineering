@@ -260,9 +260,10 @@ public final class PipeRackBlockEntity extends BlockEntity {
 
     /**
      * Server: matches the copy to the ledger, which holds the fluid facts. A lane with a registration takes its identity;
-     * a lane without one registers again from the copy; a registration with no copy is adopted, bare. A lane this cell's
-     * shape does not take, or with no room beside the lanes before it, is dropped from the copy. Each lane keeps the
-     * copy's paint, which the ledger does not hold. Then every lane is drawn.
+     * a lane without one registers again from the copy; a registration with no copy is adopted. A lane this cell's
+     * shape does not take, or with no room beside the lanes before it, is dropped from the copy. Each lane takes its
+     * paint from the registry (registry first, batch 2026-11-03-save-corruption); a painted lane the registry holds bare
+     * teaches it its paint, as a pipe block does. Then every lane is drawn.
      */
     public void bind(FluidWorldAuthority world) {
         if (!(level instanceof ServerLevel)) return;
@@ -274,7 +275,8 @@ public final class PipeRackBlockEntity extends BlockEntity {
                 record = world.placeLane(position(lane.option), PhysicalFluidTopology.Direction.values()[lane.facing()], lane.joints, lane.width, points(lane), lane.bore);
             var copied = record == null ? null : copy(record.device());
             if (copied != null && RackGeometry.fits(rack(), taken, copied.drawn(0))) {
-                next.add(copied.painted(lane.paint, lane.secondary));
+                if (world.linePaint(copied.identity) == null) world.paint(copied.identity, lane.paint, lane.secondary);
+                next.add(painted(world, copied));
                 taken.add(copied.drawn(0));
             }
         }
@@ -284,12 +286,18 @@ public final class PipeRackBlockEntity extends BlockEntity {
             var record = world.at(position(option)).orElse(null);
             var copied = record == null ? null : copy(record.device());
             if (copied != null && RackGeometry.fits(rack(), taken, copied.drawn(0))) {
-                next.add(copied);
+                next.add(painted(world, copied));
                 taken.add(copied.drawn(0));
             }
         }
         setLanes(next, null);
         refresh(true);
+    }
+
+    /** A lane's copy in the paint the registry holds for it, bare when it holds none. */
+    private static Lane painted(FluidWorldAuthority world, Lane lane) {
+        var held = world.linePaint(lane.identity);
+        return held == null ? lane : lane.painted(held.primary(), held.secondary());
     }
 
     /** A registered lane as its copy, or null when the registration is no lane this cell can draw. */

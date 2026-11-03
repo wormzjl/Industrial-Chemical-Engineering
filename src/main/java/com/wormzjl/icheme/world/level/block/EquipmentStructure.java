@@ -153,6 +153,7 @@ public final class EquipmentStructure {
             placed++;
         }
         var vessel = new Vessel(origin, shape);
+        if (rows >= shape.sizeY()) record(level, origin, shape, paint);
         if (shape.fluidDevice() && rows >= shape.sizeY()) register(level, vessel);
         reconnect(level, vessel);
         refreshNozzles(level, vessel);
@@ -388,6 +389,43 @@ public final class EquipmentStructure {
         return new PhysicalFluidTopology.Position(level.dimension().location().toString(), at.getX(), at.getY(), at.getZ());
     }
 
+    /**
+     * The registry's record of the structure at {@code origin} (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md
+     * 3.3): its shape and paint, or none when {@code shape} is null. The registry places the structure again from it. The
+     * record's shape text is made only when the record changes.
+     */
+    private static void record(ServerLevel level, BlockPos origin, @Nullable EquipmentShape shape, @Nullable Paint paint) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        if (world == null) return;
+        var at = position(level, origin);
+        var held = world.structure(at);
+        if (shape == null) {
+            if (held != null) world.structure(at, null);
+        } else if (held == null || !held.shape().equals(shape) || !held.paint().equals(paint))
+            world.structure(at, WorldTopologyLedger.Structure.of(shape, paint));
+    }
+
+    /**
+     * The registry first for a current vessel's paint (REGISTRY_FIRST_PLAN.md 3.5): a vessel the registry holds no record
+     * of teaches it its shape and its controller's paint (a world saved before the registry held structures); a vessel
+     * whose record has its shape and another paint takes the record's paint on every shell cell. A vessel's cells share one
+     * paint ({@link #place} and {@link #refresh} bind each with it), so the cells are walked only when the controller's
+     * differs. A record of another shape waits for the re-alignment (plan 4.4).
+     */
+    private static void restatePaint(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        if (world == null) return;
+        var held = world.structure(position(level, origin));
+        if (held == null) {
+            record(level, origin, shape, paint);
+            return;
+        }
+        if (held.paint().equals(paint) || !held.shape().equals(shape)) return;
+        for (var cell : ShapeRasterizer.layout(shape).shell())
+            if (level.getBlockEntity(origin.offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity shell && ours(shell, origin, shape))
+                shell.repaint(held.paint());
+    }
+
     /** Reservoir nozzles keep their phase classes; movers register only their explicitly directed process pair; a kettle's
      * shell (W7) its own nozzles, its tubes' left to their side. */
     private static List<PhysicalFluidTopology.Port> ports(Level level, Vessel vessel) {
@@ -533,13 +571,15 @@ public final class EquipmentStructure {
 
     /**
      * Sets every interior cell of the vessel at {@code origin} that holds another state than {@link #interior} gives
-     * (a save from before {@link EquipmentInteriorBlock#SKYLIGHT}) to it, and lets its chunks wait for their light. Only a
-     * vessel whose controller cell is its own and current: a stale one is refreshed instead, which restates it too.
+     * (a save from before {@link EquipmentInteriorBlock#SKYLIGHT}) to it, and lets its chunks wait for their light; its
+     * paint follows the registry ({@link #restatePaint}). Only a vessel whose controller cell is its own and current: a
+     * stale one is refreshed instead, which restates it too.
      */
     static void restate(ServerLevel level, BlockPos origin, EquipmentShape shape) {
         var controller = ShapeRasterizer.layout(shape).controller();
         if (!(level.getBlockEntity(origin.offset(controller.x(), controller.y(), controller.z())) instanceof EquipmentShellBlockEntity shell)
                 || !ours(shell, origin, shape) || shell.stale()) return;
+        restatePaint(level, origin, shape, shell.paint());
         int changed = restateCells(level, origin, shape, Set.of(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
         if (changed == 0) return;
         var high = origin.offset(shape.sizeX() - 1, shape.sizeY() - 1, shape.sizeZ() - 1);
@@ -588,6 +628,7 @@ public final class EquipmentStructure {
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(server, vessel);
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.dismantled(server, vessel);
             if (level instanceof ServerLevel server && vessel.shape().fluidDevice()) unregister(server, vessel);
+            if (level instanceof ServerLevel server) record(server, vessel.origin(), null, null);
             var layout = ShapeRasterizer.layout(vessel.shape());
             for (var list : java.util.List.of(layout.shell(), layout.interior()))
                 for (var cell : list) {
@@ -645,6 +686,7 @@ public final class EquipmentStructure {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         for (var at : shells)
             if (world != null && level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && shell.fluidIdentity() != 0) world.remove(shell.fluidIdentity());
+        record(level, origin, null, null);
         int flags = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
         dismantling = true;
         try {
@@ -821,6 +863,10 @@ public final class EquipmentStructure {
         for (int x = low.getX() >> 4; x <= high.getX() >> 4; x++)
             for (int z = low.getZ() >> 4; z <= high.getZ() >> 4; z++) level.getChunkSource().chunkMap.waitForLightBeforeSending(new ChunkPos(x, z), 0);
         var vessel = new Vessel(placed, shape);
+        // The registry's record follows the structure to where its layout now stands, cells left out or not: the registry
+        // holds the structure the player built.
+        if (!placed.equals(origin)) record(level, origin, null, null);
+        record(level, placed, shape, paint);
         if (shape.fluidDevice()) reregister(level, vessel, oldNode, held);
         // Pipes beside a dropped, added or redrawn cell take up or drop their connection (old nozzles included).
         for (var at : touched)

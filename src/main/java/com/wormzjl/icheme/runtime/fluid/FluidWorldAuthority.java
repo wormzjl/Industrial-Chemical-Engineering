@@ -188,6 +188,19 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public Map<Long,WorldTopologyLedger.Registration> registrations(){owned();return registry.registrations();}
     /** The registration at a position (every block-entity load and binding asks). */
     public Optional<WorldTopologyLedger.Registration> at(PhysicalFluidTopology.Position position){owned();return registry.at(position);}
+    // The build facts (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 3.3 and 3.5): what the registry holds to
+    // place a build again. The blocks keep copies for drawing and take them from here when they bind.
+    /** The paint the registry holds for line {@code id}, or null for a bare line. */
+    public WorldTopologyLedger.LinePaint linePaint(long id){owned();return topology.paint(id);}
+    /** Paints line {@code id}; a bare paint clears it. A line the registry no longer has, or is removing, keeps none. */
+    public void paint(long id,int primary,int secondary) {
+        owned();if(!topology.latest().containsKey(id))return;
+        topology.paint(id,new WorldTopologyLedger.LinePaint(primary,secondary));data.setDirty();
+    }
+    /** The registry's record of the structure whose origin is {@code origin}, or null. */
+    public WorldTopologyLedger.Structure structure(PhysicalFluidTopology.Position origin){owned();return topology.structure(origin);}
+    /** Records the structure whose origin is {@code origin}; null removes it. */
+    public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure){owned();topology.structure(origin,structure);data.setDirty();}
     /** Applied events that did nothing for the player who asked (a recovery that found no cake or a full inventory), by event, for their reply. Bounded. */
     private final LinkedHashMap<UUID,String> refusedEvents=new LinkedHashMap<>();
     private void refuseEvent(UUID event,String reason){refusedEvents.put(event,reason);if(refusedEvents.size()>WorldTopologyLedger.MAXIMUM_EVENTS)refusedEvents.remove(refusedEvents.keySet().iterator().next());}
@@ -211,9 +224,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /**
      * Registers a laid line as one ledger event (batch 2026-10-26-pipe-laying-system, plan 4.4): a passive pipe of bore
      * {@code diameter} per cell, with its joints, and the new joints of the laid pipes it starts or ends at
-     * ({@code hosts}, by identity). Returns the new pipes' registrations in the order of {@code cells}.
+     * ({@code hosts}, by identity), each new pipe painted {@code primary} and {@code secondary}. Returns the new pipes'
+     * registrations in the order of {@code cells}.
      */
-    public List<WorldTopologyLedger.Registration> lay(List<Laid> cells,double diameter,Map<Long,Integer> hosts) {
+    public List<WorldTopologyLedger.Registration> lay(List<Laid> cells,double diameter,Map<Long,Integer> hosts,int primary,int secondary) {
         owned();
         if(cells.isEmpty())throw new IllegalArgumentException("An empty line");
         long first=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
@@ -228,7 +242,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(old==null||old.device().kind()!=TopologyCompiler.Kind.PIPE)throw new IllegalStateException("A laid line's host pipe is gone");
             edits.add(new WorldTopologyLedger.Edit(host.getKey(),new WorldTopologyLedger.Registration(old.device().withJoints(host.getValue()),old.spec(),Math.addExact(old.revision(),1))));
         }
-        submit(edits,Math.addExact(first,cells.size()));return placed;
+        submit(edits,Math.addExact(first,cells.size()));
+        for(var record:placed)paint(record.device().id(),primary,secondary);
+        return placed;
     }
     /** A rack lane registered again from its rack's copy (a chunk load after the D4 reset): its joints, width, face points and bore. */
     public WorldTopologyLedger.Registration placeLane(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,int joints,int slots,long points,double diameter) {
@@ -686,7 +702,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             else if(entity instanceof FluidDeviceBlockEntity pipe) {
                 var position=new PhysicalFluidTopology.Position(name,cell.getX(),cell.getY(),cell.getZ());
                 var record=registry.at(position).orElseGet(()->place(position,pipe.kind(),PhysicalFluidTopology.Direction.valueOf(pipe.getBlockState().getValue(FluidDeviceBlock.FACING).name()),FluidDeviceBlock.cutoff(pipe.getBlockState()),FluidDeviceBlock.hasPressureValve(pipe.getBlockState()),FluidDeviceBlock.hasFilter(pipe.getBlockState()),FluidDeviceBlock.hasMover(pipe.getBlockState())?pipe.getBlockState().getValue(FluidDeviceBlock.INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE,pipe.kind()==TopologyCompiler.Kind.PIPE?pipe.joints():PhysicalFluidTopology.ALL_FACES));
-                if(pipe.fluidIdentity()!=record.device().id())pipe.bindIdentity(record.device().id());else deviceLoaded(record.device().id());
+                pipe.bind(this,record.device().id());
             } else if(entity instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&shell.shape().fluidDevice()) {
                 var origin=shell.origin();
                 unboundStructures.put(new PhysicalFluidTopology.Position(name,origin.getX(),origin.getY(),origin.getZ()),new EquipmentStructure.Vessel(origin,shell.shape()));

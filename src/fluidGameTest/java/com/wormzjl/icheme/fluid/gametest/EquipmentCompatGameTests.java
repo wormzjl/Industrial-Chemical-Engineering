@@ -67,6 +67,42 @@ public final class EquipmentCompatGameTests {
     }
 
     /**
+     * Registry first for structures (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 3.3 and 3.5): a built drum is
+     * recorded with its shape and paint; a record of another paint repaints every shell cell when the vessel restates; a
+     * vessel the registry holds no record of teaches it; the dismantle removes the record. The drum is dismantled whatever
+     * the checks found, the result held until it has left.
+     */
+    @GameTest(template="empty",timeoutTicks=200,batch="equipment-registry")
+    public static void aStructureIsRecordedRestatedFromItsRecordAndForgottenAtItsDismantle(GameTestHelper helper) {
+        var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var shape=EquipmentShape.drum(3,3,EquipmentShape.Orientation.VERTICAL,EquipmentShape.Heading.NORTH,0);
+        var origin=helper.absolutePos(new BlockPos(1,1,1));var layout=ShapeRasterizer.layout(shape);
+        var at=new PhysicalFluidTopology.Position(level.dimension().location().toString(),origin.getX(),origin.getY(),origin.getZ());
+        var node=ShapeRasterizer.fluidCell(shape);var nodeAt=origin.offset(node.x(),node.y(),node.z());
+        var nodePosition=new PhysicalFluidTopology.Position(at.dimension(),nodeAt.getX(),nodeAt.getY(),nodeAt.getZ());
+        var built=new Paint(0x587246,0x383E42);var recorded=new Paint(0xE25303,0xF7B500);
+        String[] failure={null};
+        EquipmentStructure.place(level,origin,shape,built,Integer.MAX_VALUE);
+        var held=world.structure(at);
+        if(held==null||!held.shape().equals(shape)||!held.paint().equals(built))failure[0]="the build is not recorded: "+held;
+        world.structure(at,com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.Structure.of(shape,recorded));
+        EquipmentStructure.restateLater(level,origin,shape);
+        helper.startSequence().thenIdle(10).thenExecute(()->{
+            for(var c:layout.shell())
+                if(failure[0]==null&&!((EquipmentShellBlockEntity)level.getBlockEntity(origin.offset(c.x(),c.y(),c.z()))).paint().equals(recorded))failure[0]="cell "+c+" did not take the record's paint";
+            world.structure(at,null);EquipmentStructure.restateLater(level,origin,shape);
+        }).thenIdle(10).thenExecute(()->{
+            var learned=world.structure(at);
+            if(failure[0]==null&&(learned==null||!learned.shape().equals(shape)||!learned.paint().equals(recorded)))failure[0]="the vessel did not teach the registry: "+learned;
+            var c=layout.controller();level.removeBlock(origin.offset(c.x(),c.y(),c.z()),false);
+        }).thenWaitUntil(()->helper.assertTrue(world.at(nodePosition).isEmpty(),"Waiting for the drum's registration to leave"))
+        .thenExecute(()->{
+            if(failure[0]==null&&world.structure(at)!=null)failure[0]="the dismantle left the record";
+            if(failure[0]!=null)helper.fail(failure[0]);
+        }).thenSucceed();
+    }
+
+    /**
      * A refresh that finds another block in one of its layout's cells leaves the cell out and the block where it stands, and
      * the cells it wrote keep no stamp (batch 2026-10-26-backward-compat): the next load tries again and, the block cleared,
      * places the cell. The drum keeps its registration throughout.

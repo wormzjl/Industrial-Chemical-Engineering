@@ -319,6 +319,14 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         trackRoof();
     }
 
+    /** Server: the vessel's paint as the registry holds it (registry first, batch 2026-11-03-save-corruption); redraws on a change. */
+    public void repaint(Paint paint) {
+        if (this.paint.equals(paint)) return;
+        this.paint = paint;
+        setChanged();
+        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
+    }
+
     /**
      * The vessel's layout stands incomplete: a refresh left cells of it out where other blocks stand. The cell keeps no
      * stamp, so the next load refreshes the vessel again and places what the player has cleared since (batch
