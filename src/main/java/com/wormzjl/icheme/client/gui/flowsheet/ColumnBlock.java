@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -117,10 +118,17 @@ public final class ColumnBlock {
     private final List<Note> notes = new ArrayList<>();
     private final List<SheetLayout.Mark> marks = new ArrayList<>();
     private final Map<String, Spot> spots = new HashMap<>();
+    /** The utility sides whose streams run from their second end to their first, by their first end: their arrows turn. */
+    private final Set<String> reversed;
 
-    /** The block of {@code unit}, whose settings {@code door} reads. */
+    /** The block of {@code unit}, whose settings {@code door} reads, every utility side drawn running from its first end. */
     public static ColumnBlock of(Flowsheet.Unit unit, ColumnDoor door) {
-        return new ColumnBlock(unit, door);
+        return of(unit, door, Set.of());
+    }
+
+    /** @param reversed the first ends ({@code condenser_a}, {@code reboiler_a}, {@code pa/1/a}) of the sides whose streams enter by their second */
+    public static ColumnBlock of(Flowsheet.Unit unit, ColumnDoor door, Set<String> reversed) {
+        return new ColumnBlock(unit, door, reversed);
     }
 
     public Rect frame() {
@@ -225,7 +233,8 @@ public final class ColumnBlock {
         return most;
     }
 
-    private ColumnBlock(Flowsheet.Unit unit, ColumnDoor door) {
+    private ColumnBlock(Flowsheet.Unit unit, ColumnDoor door, Set<String> reversed) {
+        this.reversed = Set.copyOf(reversed);
         var choices = ColumnDoors.choices(unit);
         boolean kettle = ColumnComponents.kettleRequired(door.reboilerDuty()), air = door.condenser() == ColumnComponents.Condenser.AIR_COOLER, trimmed = door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER, ejector = ColumnComponents.ejectorRequired(door.topPressure());
         var runs = runs(door);
@@ -331,11 +340,11 @@ public final class ColumnBlock {
         if (air || trimmed) part(ColumnBlueprint.CONDENSER, Shape.AIR_CONDENSER, condenser, vapour, new Rect(condenser - 8, vapour - 7, 16, 14), "");
         if (!air) {
             int cold = ejector ? ty - 56 : ty - 54, back = ejector ? ty - 42 : ty - 34;
-            pipe(Service.COLD, true, bx, cold, cooled + 4, cold, cooled + 4, vapour - 7);
-            pipe(Service.COLD, true, cooled - 4, vapour - 7, cooled - 4, back, bx, back);
+            side(Service.COLD, "condenser_a", bx, cold, cooled + 4, cold, cooled + 4, vapour - 7);
+            side(Service.COLD, "condenser_a", cooled - 4, vapour - 7, cooled - 4, back, bx, back);
             part(trimmed ? ColumnBlueprint.TRIM_CONDENSER : ColumnBlueprint.CONDENSER, Shape.CONDENSER, cooled, vapour, new Rect(cooled - 8, vapour - 8, 16, 16), "");
-            spots.put("condenser_in", new Spot(bx, cold, SheetLayout.Side.LEFT));
-            spots.put("condenser_out", new Spot(bx, back, SheetLayout.Side.LEFT));
+            spots.put("condenser_a", new Spot(bx, cold, SheetLayout.Side.LEFT));
+            spots.put("condenser_b", new Spot(bx, back, SheetLayout.Side.LEFT));
         }
         notes.add(new Note(trimmed ? "mark.air" : "mark.condenser", "", condenser, vapour + 16, 0));
         if (trimmed) notes.add(new Note("mark.trim", "", trim, vapour + 16, 0));
@@ -376,8 +385,8 @@ public final class ColumnBlock {
     /** A pumparound: draw, pump, cooler, return; its cold stream through the cooler from the frame and back. */
     private void loop(Run run, int ty, int bx, int tx, int cooler, int pump, int x0, int x1, boolean standard, int units) {
         int c = ty + run.middle, upper = ty + run.upper(), lower = ty + run.lower(), r = standard ? 5 : 4, top = c - run.up(), foot = c + run.down();
-        pipe(Service.COLD, true, bx, top, cooler, top, cooler, c - 8);
-        pipe(Service.COLD, true, cooler, c + 8, cooler, foot, bx, foot);
+        side(Service.COLD, "pa/" + run.id + "/a", bx, top, cooler, top, cooler, c - 8);
+        side(Service.COLD, "pa/" + run.id + "/a", cooler, c + 8, cooler, foot, bx, foot);
         pipe(Service.HOT, true, tx, ty + run.attach[1], x1, ty + run.attach[1], x1, lower, pump + r + 1, lower);
         pipe(Service.HOT, true, pump - r - 1, lower, cooler + 6, lower);
         pipe(Service.HOT, true, cooler + 6, upper, x0, upper, x0, ty + run.attach[0], tx, ty + run.attach[0]);
@@ -386,8 +395,8 @@ public final class ColumnBlock {
         notes.add(new Note("mark.pumparound", run.id, pump, lower + 16, 0));
         // Its coolers in parallel (S3b): the count above its return line, clear of the cold line's elbow.
         if (units > 1) notes.add(new Note("mark.units", Integer.toString(units), cooler + 16, c - 10, 0));
-        spots.put("pa/" + run.id + "/in", new Spot(bx, top, SheetLayout.Side.LEFT));
-        spots.put("pa/" + run.id + "/out", new Spot(bx, foot, SheetLayout.Side.LEFT));
+        spots.put("pa/" + run.id + "/a", new Spot(bx, top, SheetLayout.Side.LEFT));
+        spots.put("pa/" + run.id + "/b", new Spot(bx, foot, SheetLayout.Side.LEFT));
     }
 
     /** The kettle at the bottom left, its pair left, its vapour back to the tower's foot, its liquid under it to the bottoms. */
@@ -395,15 +404,15 @@ public final class ColumnBlock {
         int k0 = tx - 50, k1 = tx - 6, top = tf + 14, foot = top + 18, level = top + 9, in = tf + 16, out = tf + 30, riser = tx - 28, under = tf + 44, valve = tx - 2;
         pipe(Service.HOT, true, mid, tf, mid, level, k1, level);
         pipe(Service.HOT, true, riser, top, riser, back, tx, back);
-        pipe(Service.HOT, true, bx, in, k0, in);
-        pipe(Service.HOT, true, k0, out, bx, out);
+        side(Service.HOT, "reboiler_a", bx, in, k0, in);
+        side(Service.HOT, "reboiler_a", k0, out, bx, out);
         pipe(Service.PRODUCT, false, riser, foot, riser, under, valve - 4, under);
         pipe(Service.PRODUCT, true, valve + 4, under, mid, under, mid, bb);
         part(ColumnBlueprint.REBOILER, Shape.KETTLE, (k0 + k1) / 2, level, new Rect(k0, top, k1 - k0, foot - top), "");
         valve(ColumnBlueprint.BOTTOMS_VALVE, valve, under, "");
         notes.add(counted("mark.reboiler", units, (k0 + k1) / 2, level, k1 - k0));
-        spots.put("reboiler_in", new Spot(bx, in, SheetLayout.Side.LEFT));
-        spots.put("reboiler_out", new Spot(bx, out, SheetLayout.Side.LEFT));
+        spots.put("reboiler_a", new Spot(bx, in, SheetLayout.Side.LEFT));
+        spots.put("reboiler_b", new Spot(bx, out, SheetLayout.Side.LEFT));
     }
 
     /** A member's name, with its count of identical units in parallel past one (S3b). */
@@ -417,6 +426,19 @@ public final class ColumnBlock {
 
     private void valve(Slot slot, int x, int y, String argument) {
         part(slot, Shape.VALVE, x, y, new Rect(x - 4, y - 8, 8, 12), argument);
+    }
+
+    /** A utility side's pipe, drawn from its first end ({@code first}), its points taken backwards where its stream enters by the second. */
+    private void side(Service service, String first, int... points) {
+        if (reversed.contains(first)) {
+            var back = new int[points.length];
+            for (int i = 0; i < points.length; i += 2) {
+                back[points.length - 2 - i] = points[i];
+                back[points.length - 1 - i] = points[i + 1];
+            }
+            points = back;
+        }
+        pipe(service, true, points);
     }
 
     private void pipe(Service service, boolean arrow, int... points) {

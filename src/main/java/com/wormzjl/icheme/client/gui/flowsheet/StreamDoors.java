@@ -338,7 +338,7 @@ public final class StreamDoors {
     private static @Nullable String from(SheetContext x, Flowsheet.Stream stream) {
         if (stream.from() == null) return null;
         var unit = x.editor().unit(stream.from().unit());
-        return unit == null ? null : x.text("door.status.from", unit.name(), Door.lower(portName(x, stream.from().port())));
+        return unit == null ? null : x.text("door.status.from", unit.name(), Door.lower(portName(x, x.role(stream.from(), false))));
     }
 
     /** A port's name for the player. */

@@ -5,8 +5,10 @@ import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
+import com.wormzjl.icheme.science.flowsheet.Passage;
 import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.UnitTypes;
+import com.wormzjl.icheme.science.flowsheet.Wiring;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -181,13 +183,14 @@ public final class SheetLayout {
         var held = new HashSet<Live>();
         var claimed = new HashSet<String>();
         var live = new HashMap<String, List<Port>>();
-        for (var unit : sheet.units()) live.put(unit.id(), ports(unit));
+        var wiring = Wiring.of(sheet);
+        for (var unit : sheet.units()) live.put(unit.id(), ports(unit, wiring));
         // A port holds one stream, as in the compiler: the first that names it.
         for (var stream : sheet.streams()) {
             if (claims(stream.from(), Port.Direction.OUT, live) && claimed.add("o " + stream.from().unit() + " " + stream.from().port())) held.add(new Live(stream.from().unit(), stream.from().port()));
             if (claims(stream.to(), Port.Direction.IN, live) && claimed.add("i " + stream.to().unit() + " " + stream.to().port())) held.add(new Live(stream.to().unit(), stream.to().port()));
         }
-        for (var unit : sheet.units()) boxes.put(unit.id(), box(unit, live.get(unit.id()), held));
+        for (var unit : sheet.units()) boxes.put(unit.id(), box(unit, live.get(unit.id()), held, wiring));
         int free = 0;
         for (var stream : sheet.streams()) lines.put(stream.id(), line(stream, held, free++));
     }
@@ -197,11 +200,16 @@ public final class SheetLayout {
         return live.get(end.unit()).stream().anyMatch(port -> port.id().equals(end.port()) && port.direction() == direction);
     }
 
-    /** A unit's ports: its model's, or, for a unit that cannot say, what its streams name, as its placeholder keeps them. */
-    private List<Port> ports(Flowsheet.Unit unit) {
+    /**
+     * A unit's ports as the sheet shows them: its model's, each passage's two ends in place of its roles, each end in the direction
+     * the streams give it ({@link Wiring}); or, for a unit that cannot say, what its streams name, as its placeholder keeps them.
+     */
+    private List<Port> ports(Flowsheet.Unit unit, Wiring wiring) {
         var model = UnitTypes.model(unit.type());
         if (model != null) try {
-            return model.ports(unit.params());
+            var roles = model.ports(unit.params());
+            var passages = model.passages(unit.params());
+            return passages.isEmpty() ? roles : shown(unit, roles, passages, wiring);
         } catch (FlowsheetFailure noPorts) {
             // A placeholder keeps what its streams name.
         }
@@ -212,6 +220,23 @@ public final class SheetLayout {
             if (stream.from() != null && stream.from().unit().equals(unit.id()) && seen.add("o" + stream.from().port())) kept.add(Port.out(stream.from().port()));
         }
         return kept;
+    }
+
+    /** {@code roles} with each passage's two ends where its inlet role stood: each end the inlet or the outlet as the wiring says, with that role's flags. */
+    private static List<Port> shown(Flowsheet.Unit unit, List<Port> roles, List<Passage> passages, Wiring wiring) {
+        var byId = new HashMap<String, Port>();
+        for (var role : roles) byId.put(role.id(), role);
+        var shown = new ArrayList<Port>();
+        for (var role : roles) {
+            var passage = passages.stream().filter(p -> p.in().equals(role.id()) || p.out().equals(role.id())).findFirst().orElse(null);
+            if (passage == null) shown.add(role);
+            else if (passage.in().equals(role.id())) for (var end : List.of(passage.a(), passage.b())) {
+                boolean inlet = Boolean.TRUE.equals(wiring.isInlet(unit.id(), end));
+                var played = byId.get(inlet ? passage.in() : passage.out());
+                shown.add(new Port(end, played.direction(), played.required(), played.utility()));
+            }
+        }
+        return shown;
     }
 
     private boolean runs(Flowsheet.Unit unit) {
@@ -225,17 +250,20 @@ public final class SheetLayout {
         }
     }
 
-    private Box box(Flowsheet.Unit unit, List<Port> ports, Set<Live> held) {
+    private Box box(Flowsheet.Unit unit, List<Port> ports, Set<Live> held, Wiring wiring) {
         var symbol = runs(unit) ? Tiles.symbol(unit, sheet.sizing()) : null;
         if (symbol == null) return placeholder(unit, ports, held);
-        if (unit.type().equals("column")) return column(unit, ports, held);
+        if (unit.type().equals("column")) return column(unit, ports, held, wiring);
         int w = symbol.w, h = symbol.h;
         if (symbol == Symbol.MIXER) h = Math.max(h, (ports.size() - 2) * PITCH + 12);
         if (symbol == Symbol.SPLITTER) h = Math.max(h, (ports.size() - 2) * PITCH + 12);
         var at = new ArrayList<Place>();
         int inlets = 0, outlets = 0;
         for (var port : ports) {
-            int[] spot = spot(unit, symbol, port, w, h, port.direction() == Port.Direction.IN ? inlets : outlets, ports);
+            // A passage end stands where it stands whichever way its stream runs: its first end where an inlet stood.
+            var passage = wiring.passage(unit.id(), port.id());
+            boolean first = passage != null ? passage.a().equals(port.id()) : port.direction() == Port.Direction.IN;
+            int[] spot = spot(unit, symbol, port, first, w, h, port.direction() == Port.Direction.IN ? inlets : outlets, ports);
             if (port.direction() == Port.Direction.IN) inlets++;
             else outlets++;
             at.add(place(unit, port, unit.x() + spot[0], unit.y() + spot[1], side(spot[2]), held));
@@ -256,10 +284,9 @@ public final class SheetLayout {
 
     private static final int L = 0, R = 1, T = 2, B = 3;
 
-    /** A port's spot in its symbol's box and the side it leaves by. */
-    private static int[] spot(Flowsheet.Unit unit, Symbol symbol, Port port, int w, int h, int order, List<Port> ports) {
+    /** A port's spot in its symbol's box and the side it leaves by; {@code in}: an inlet, or a passage's first end. */
+    private static int[] spot(Flowsheet.Unit unit, Symbol symbol, Port port, boolean in, int w, int h, int order, List<Port> ports) {
         String id = port.id();
-        boolean in = port.direction() == Port.Direction.IN;
         return switch (unit.type()) {
             case "pump" -> new int[]{in ? 0 : w, 13, in ? L : R};
             case "compressor" -> new int[]{in ? 0 : w, 19, in ? L : R};
@@ -278,30 +305,30 @@ public final class SheetLayout {
                 default -> new int[]{w / 2, h, B};
             };
             case "exchanger" -> switch (id) {
-                case "tube_in" -> new int[]{0, 14, L};
-                case "tube_out" -> new int[]{w, 14, R};
-                case "shell_in" -> new int[]{48, h, B};
+                case "tube_a" -> new int[]{0, 14, L};
+                case "tube_b" -> new int[]{w, 14, R};
+                case "shell_a" -> new int[]{48, h, B};
                 default -> new int[]{16, h, B};
             };
             case "kettle" -> switch (id) {
-                case "tube_in" -> new int[]{0, 11, L};
-                case "tube_out" -> new int[]{0, 23, L};
+                case "tube_a" -> new int[]{0, 11, L};
+                case "tube_b" -> new int[]{0, 23, L};
                 case "feed" -> new int[]{46, h, B};
                 case "gas" -> new int[]{44, 0, T};
                 default -> new int[]{w, 24, R};
             };
-            // The owner's sheet: the cooler's inlet at its right end, the sample's residue running back to the left.
-            case "cooler" -> new int[]{in ? w : 0, 8, in ? R : L};
+            // Either end of its bank takes the stream (owner 2026-11-04), so it stands as every passage does: first end left.
+            case "cooler" -> new int[]{in ? 0 : w, 8, in ? L : R};
             // A cabin's convection box sits on its radiant box, narrower: its coil ends stand on the box's sides.
             case "fired_heater" -> symbol == Symbol.CABIN ? switch (id) {
-                case "convection_in" -> new int[]{16, 18, L};
-                case "convection_out" -> new int[]{58, 18, R};
-                case "in", "radiant_in" -> new int[]{0, 56, L};
+                case "convection_a" -> new int[]{16, 18, L};
+                case "convection_b" -> new int[]{58, 18, R};
+                case "a", "radiant_a" -> new int[]{0, 56, L};
                 default -> new int[]{w, 46, R};
             } : switch (id) {
-                case "convection_in" -> new int[]{7, 20, L};
-                case "convection_out" -> new int[]{51, 20, R};
-                case "in", "radiant_in" -> new int[]{0, 66, L};
+                case "convection_a" -> new int[]{7, 20, L};
+                case "convection_b" -> new int[]{51, 20, R};
+                case "a", "radiant_a" -> new int[]{0, 66, L};
                 default -> new int[]{58, 42, R};
             };
             default -> new int[]{in ? 0 : w, h / 2, in ? L : R};
@@ -332,8 +359,11 @@ public final class SheetLayout {
     }
 
     /** Section 3.11's rule, drawn by {@link ColumnBlock}: its frame is the box, and its ports stand on the frame. */
-    private Box column(Flowsheet.Unit unit, List<Port> ports, Set<Live> held) {
-        var block = ColumnBlock.of(unit, ColumnDoor.of(unit.params()));
+    private Box column(Flowsheet.Unit unit, List<Port> ports, Set<Live> held, Wiring wiring) {
+        // A utility side whose stream enters by its second end draws its arrows that way.
+        var reversed = new HashSet<String>();
+        for (var passage : Wiring.passages(unit)) if (passage.b().equals(wiring.inlet(unit.id(), passage))) reversed.add(passage.a());
+        var block = ColumnBlock.of(unit, ColumnDoor.of(unit.params()), reversed);
         var at = new ArrayList<Place>();
         for (var port : ports) {
             var spot = block.spot(port.id());

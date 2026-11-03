@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.flowsheet.unit;
 import com.wormzjl.icheme.science.flowsheet.Calculation;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.Passage;
 import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
 import com.wormzjl.icheme.science.flowsheet.WiredUnit;
@@ -13,6 +14,10 @@ import java.util.List;
 public final class ValveUnit implements UnitModel {
     @Override public List<Port> ports(Params params) {
         return List.of(Port.in("in"), Port.out("out"));
+    }
+
+    @Override public List<Passage> passages(Params params) {
+        return List.of(Passage.THROUGH);
     }
 
     @Override public List<Calculation> calculations(WiredUnit u) {

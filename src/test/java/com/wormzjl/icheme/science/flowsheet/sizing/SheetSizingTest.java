@@ -334,17 +334,17 @@ final class SheetSizingTest {
     }
 
     @Test void aHeatersCoilsSetApartShareOneDuty() {
-        var series = new Sheet().unit("H", "fired_heater", "{\"coils\":\"series\",\"target\":\"duty\",\"duty\":3e7}").feed("oil", "H", "in", 400, 20e5, scaled(DRY_CRUDE, 300)).product("out", "H", "out").sized();
+        var series = new Sheet().unit("H", "fired_heater", "{\"coils\":\"series\",\"target\":\"duty\",\"duty\":3e7}").feed("oil", "H", "a", 400, 20e5, scaled(DRY_CRUDE, 300)).product("out", "H", "b").sized();
         assertEquals(33, series.units().get("H").rating().reading(Limit.HEATER_DUTY).low(), 1e-6, "110 % of 30 MW");
         var apart = new Sheet().unit("H", "fired_heater", "{\"coils\":\"apart\",\"target\":\"duty\",\"duty\":2e7,\"convection_target\":\"duty\",\"convection_duty\":1e7}")
-                .feed("oil", "H", "radiant_in", 400, 20e5, scaled(DRY_CRUDE, 300)).feed("steam", "H", "convection_in", 450, 5e5, pure(WATER, 100)).product("hot", "H", "radiant_out").product("superheat", "H", "convection_out").sized();
+                .feed("oil", "H", "radiant_a", 400, 20e5, scaled(DRY_CRUDE, 300)).feed("steam", "H", "convection_a", 450, 5e5, pure(WATER, 100)).product("hot", "H", "radiant_b").product("superheat", "H", "convection_b").sized();
         assertEquals(33, apart.units().get("H").rating().reading(Limit.HEATER_DUTY).low(), 1e-6);
     }
 
     @Test void anExchangerAndAKettleStandOnTheirStreams() {
         var sized = new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":360}").unit("K", "kettle", "{\"target\":\"duty\",\"side\":\"shell\",\"duty\":2e6}")
-                .feed("hot", "E", "shell_in", 420, 8e5, scaled(DRY_CRUDE, 300)).feed("water", "E", "tube_in", 303, 4e5, pure(WATER, 10000)).product("hot out", "E", "shell_out").product("water out", "E", "tube_out")
-                .feed("steam", "K", "tube_in", 470, 15e5, pure(WATER, 150)).feed("boil", "K", "feed", 380, 2e5, pure(WATER, 80)).product("cond", "K", "tube_out").product("vapour", "K", "gas").product("rest", "K", "liquid").sized();
+                .feed("hot", "E", "shell_a", 420, 8e5, scaled(DRY_CRUDE, 300)).feed("water", "E", "tube_a", 303, 4e5, pure(WATER, 10000)).product("hot out", "E", "shell_b").product("water out", "E", "tube_b")
+                .feed("steam", "K", "tube_a", 470, 15e5, pure(WATER, 150)).feed("boil", "K", "feed", 380, 2e5, pure(WATER, 80)).product("cond", "K", "tube_b").product("vapour", "K", "gas").product("rest", "K", "liquid").sized();
         var exchanger = sized.units().get("E");
         assertEquals(Lamp.GREEN, exchanger.rating().lamp(), () -> exchanger.rating().toString());
         assertNotNull(exchanger.rating().reading(Limit.EXCHANGER_WATER_OUT));
@@ -358,21 +358,21 @@ final class SheetSizingTest {
      * full 10 K, back at 35 °C from a hot inlet. A free side that heats has no utility temperature, so it leaves no surface to read.
      */
     @Test void aFreeCoolingSideIsSizedOnTowerWater() {
-        var sized = new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":360}").feed("hot", "E", "shell_in", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "E", "shell_out").sized();
+        var sized = new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":360}").feed("hot", "E", "shell_a", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "E", "shell_b").sized();
         var unit = sized.units().get("E");
         assertTrue(unit.size() instanceof ExchangerSizing.Size, () -> "sized: " + unit.size());
         assertEquals(35, unit.rating().reading(Limit.EXCHANGER_WATER_OUT).value(), 1e-9, "back at 35 °C");
         double duty = on(() -> at(420, 8e5, scaled(DRY_CRUDE, 300)).enthalpy() - at(360, 8e5, scaled(DRY_CRUDE, 300)).enthalpy()) * DesignBasis.DEFAULT.designFlow() / 1e6;
         assertEquals(23.9, unit.rating().values().get(Rating.WATER) / duty, .2, "kg/s per MW over 10 K");
         assertEquals(unit.rating().values().get(Rating.WATER) * 3.6, unit.rating().values().get(Rating.WATER_VOLUME), .01 * unit.rating().values().get(Rating.WATER) * 3.6, "about a tonne a cubic metre");
-        var heats = new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":460}").feed("cold", "E", "shell_in", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "E", "shell_out").sized();
+        var heats = new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":460}").feed("cold", "E", "shell_a", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "E", "shell_b").sized();
         assertNull(heats.units().get("E").size());
         assertEquals(Lamp.NONE, heats.units().get("E").rating().lamp(), "not green: its rows have no input");
     }
 
     private static SheetSizing.Sized cooled(double outlet, @org.jetbrains.annotations.Nullable UnitType type) {
         var units = type == null ? Map.<String, SheetSizing.UnitEntry>of() : Map.of("A", new SheetSizing.UnitEntry(null, type, null, null, false));
-        return new Sheet().unit("A", "cooler", "{\"target\":\"outlet\",\"temperature\":" + outlet + "}").feed("hot", "A", "in", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "A", "out")
+        return new Sheet().unit("A", "cooler", "{\"target\":\"outlet\",\"temperature\":" + outlet + "}").feed("hot", "A", "a", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "A", "b")
                 .sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), units));
     }
 
@@ -403,7 +403,7 @@ final class SheetSizingTest {
 
     @Test void anAirCoolerStandsOnItsStreamsAndAMixerHasNoSize() {
         var sized = new Sheet().unit("A", "cooler", "{\"target\":\"outlet\",\"temperature\":340}").unit("M", "mixer", "{}").feed("one", "M", "in/1", 420, 8e5, scaled(DRY_CRUDE, 150)).feed("two", "M", "in/2", 420, 8e5, scaled(DRY_CRUDE, 150))
-                .line("oil", "M", "out", "A", "in").product("out", "A", "out").sized();
+                .line("oil", "M", "out", "A", "a").product("out", "A", "b").sized();
         assertNotNull(sized.units().get("A").size());
         assertNull(sized.units().get("M").size());
         assertEquals(Lamp.NONE, sized.units().get("M").rating().lamp());
@@ -420,8 +420,8 @@ final class SheetSizingTest {
 
     /** Crude cooled on cooling water, the water in the tubes. */
     private static Sheet cooler(double water) {
-        return new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":360}").feed("hot", "E", "shell_in", 420, 8e5, scaled(DRY_CRUDE, 300))
-                .feed("water", "E", "tube_in", 303, 4e5, pure(WATER, water)).product("hot out", "E", "shell_out").product("water out", "E", "tube_out");
+        return new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":360}").feed("hot", "E", "shell_a", 420, 8e5, scaled(DRY_CRUDE, 300))
+                .feed("water", "E", "tube_a", 303, 4e5, pure(WATER, water)).product("hot out", "E", "shell_b").product("water out", "E", "tube_b");
     }
 
     /** Once a unit has a size, the run reads its law at the run's flow: twice the water loses near four times as much, turbulent. */

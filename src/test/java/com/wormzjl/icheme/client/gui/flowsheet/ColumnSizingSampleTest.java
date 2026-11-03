@@ -324,8 +324,8 @@ class ColumnSizingSampleTest {
         var streams = new ArrayList<>(reboiled.streams());
         var amounts = new java.util.LinkedHashMap<String, Double>();
         amounts.put("Water", 1500.);
-        streams.add(new Flowsheet.Stream("HPS", "HPS", null, new Flowsheet.End(T, "reboiler_in"), new Flowsheet.Feed(800, 100e5, amounts, List.of())));
-        streams.add(new Flowsheet.Stream("HPC", "HPC", new Flowsheet.End(T, "reboiler_out"), null, null));
+        streams.add(new Flowsheet.Stream("HPS", "HPS", null, new Flowsheet.End(T, "reboiler_a"), new Flowsheet.Feed(800, 100e5, amounts, List.of())));
+        streams.add(new Flowsheet.Stream("HPC", "HPC", new Flowsheet.End(T, "reboiler_b"), null, null));
         var kettled = new Flowsheet(reboiled.basis(), reboiled.units(), streams, reboiled.settings(), reboiled.sizing(), reboiled.unknown());
         var kettleRun = FlowsheetEngine.run(kettled, SheetFixture.CATALOG, () -> {
         });

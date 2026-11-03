@@ -26,22 +26,32 @@ public record SheetContext(SheetEditor editor, SheetState state, SheetUnits unit
         return t.get(KEY + key, arguments);
     }
 
-    /** The stream that reaches a unit's port, or null. */
+    /**
+     * The stream that reaches a unit's port, or null. Here and in {@link #outOf} and {@link #streams}, a port is a role the model names
+     * ({@code in}, {@code tube_out}), and a stream's ends name the roles they play ({@link SheetEditor#roles}): a passage's inlet is
+     * whichever end its stream enters by.
+     */
     public Flowsheet.@Nullable Stream into(String unit, String port) {
-        for (var stream : editor.sheet().streams()) if (stream.to() != null && stream.to().unit().equals(unit) && stream.to().port().equals(port)) return stream;
+        for (var stream : editor.roles().streams()) if (stream.to() != null && stream.to().unit().equals(unit) && stream.to().port().equals(port)) return stream;
         return null;
     }
 
     /** The stream that leaves a unit's port, or null. */
     public Flowsheet.@Nullable Stream outOf(String unit, String port) {
-        for (var stream : editor.sheet().streams()) if (stream.from() != null && stream.from().unit().equals(unit) && stream.from().port().equals(port)) return stream;
+        for (var stream : editor.roles().streams()) if (stream.from() != null && stream.from().unit().equals(unit) && stream.from().port().equals(port)) return stream;
         return null;
+    }
+
+    /** The role a stream's end plays as its {@code to} ({@code inlet}) or its {@code from}: its own port where it plays none. */
+    public String role(Flowsheet.End end, boolean inlet) {
+        var role = editor.wiring(null).role(end, inlet);
+        return role != null ? role : end.port();
     }
 
     /** Every stream on a unit: {@code in} true those that reach it. */
     public List<Flowsheet.Stream> streams(String unit, boolean in) {
         var streams = new ArrayList<Flowsheet.Stream>();
-        for (var stream : editor.sheet().streams()) {
+        for (var stream : editor.roles().streams()) {
             var end = in ? stream.to() : stream.from();
             if (end != null && end.unit().equals(unit)) streams.add(stream);
         }

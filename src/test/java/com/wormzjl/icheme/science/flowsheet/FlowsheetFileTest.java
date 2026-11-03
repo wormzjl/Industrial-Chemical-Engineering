@@ -128,7 +128,7 @@ final class FlowsheetFileTest {
     @Test void aDrawnSheetRoundTrips() {
         var feed = new Flowsheet.Feed(300, 1e5, Map.of("Water", 1e-300), List.of());
         var units = List.of(new Flowsheet.Unit("V", "valve", "a \"quoted\" tag <é>", -4, 7, new Params(new JsonObject())));
-        var streams = List.of(new Flowsheet.Stream("s", "s", null, new Flowsheet.End("V", "in"), feed));
+        var streams = List.of(new Flowsheet.Stream("s", "s", null, new Flowsheet.End("V", "a"), feed));
         var sheet = new Flowsheet(new Flowsheet.Basis(NETWORK, "r1", AXIS), units, streams, new FlowsheetSolver.Settings(1e-5, .1, 7, -2, -.5));
         assertEquals(sheet, FlowsheetFile.read(FlowsheetFile.write(sheet)));
     }
@@ -209,7 +209,7 @@ final class FlowsheetFileTest {
         assertTrue(run.outcomes().containsKey("T-1/pa 2") && run.outcomes().containsKey("T-1/pa 2 utility"), "PA 2 keeps its wires");
         assertEquals(-1.5e7, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(sheet.units().stream().filter(unit -> unit.id().equals("T-1")).findFirst().orElseThrow().params()).pumparounds().getFirst().duty(), 1, "and its duty");
         assertTrue(run.streams().containsKey("P-1"), "the row's coolant stands as a feed with nowhere to go");
-        assertEquals("pa/1/in", sheet.streams().stream().filter(stream -> stream.id().equals("P-1")).findFirst().orElseThrow().to().port(), "the sheet keeps the end, so Undo finds it");
+        assertEquals("pa/1/a", sheet.streams().stream().filter(stream -> stream.id().equals("P-1")).findFirst().orElseThrow().to().port(), "the sheet keeps the end, so Undo finds it");
     }
 
     @Test void aRenamedTypeAndPortReadByTheirAliases() {
@@ -263,7 +263,7 @@ final class FlowsheetFileTest {
 
     // ---- Sizing's facts (sizing plan section 3.9) ----
 
-    private static final Path SIZED = CORPUS.resolve("format-1-sizing.json");
+    private static final Path SIZED = CORPUS.resolve("format-2-sizing.json");
 
     private static JsonObject sized() {
         try {
@@ -306,7 +306,7 @@ final class FlowsheetFileTest {
      * step takes is damage.
      */
     @Test void membersInParallelKeepTheirCounts() throws IOException {
-        var sheet = FlowsheetFile.read(Files.readAllBytes(CORPUS.resolve("format-1-counts.json")));
+        var sheet = FlowsheetFile.read(Files.readAllBytes(CORPUS.resolve("format-2-counts.json")));
         var facts = sheet.sizing();
         assertEquals(2, ((AirCoolerSizing.Size) facts.unit("A-1").size()).banks());
         assertEquals(3, facts.unit("T-1/condenser").size().count());
@@ -320,13 +320,13 @@ final class FlowsheetFileTest {
 
     /** W10: an ejector's suction is a fact, the tile's and a column block member's, and a column door keeps its ejector's pressures. A door saved before them reads the tile's defaults ({@code ColumnEjectorTest}). */
     @Test void anEjectorKeepsItsSuctionAndItsPressures() throws IOException {
-        var sheet = FlowsheetFile.read(Files.readAllBytes(CORPUS.resolve("format-1-ejector.json")));
+        var sheet = FlowsheetFile.read(Files.readAllBytes(CORPUS.resolve("format-2-ejector.json")));
         assertEquals(new EjectorSizing.Size(.25), sheet.sizing().unit("J-1").size());
         assertEquals(new EjectorSizing.Size(.8), sheet.sizing().unit("T-1/ejector").size());
         var door = sheet.units().get(1).params();
         assertEquals(1.2e5, door.number("ejector_discharge"));
         assertEquals(1e6, door.number("ejector_motive"));
-        var json = JsonParser.parseString(Files.readString(CORPUS.resolve("format-1-ejector.json"))).getAsJsonObject();
+        var json = JsonParser.parseString(Files.readString(CORPUS.resolve("format-2-ejector.json"))).getAsJsonObject();
         fact(json.getAsJsonObject("sizing"), "units", "J-1").getAsJsonObject("size").addProperty("suction", -1);
         var refusal = assertThrows(FlowsheetFailure.class, () -> FlowsheetFile.read(bytes(json)));
         assertEquals(List.of("sheet.sizing.units.J-1.size"), refusal.arguments(), "a suction no ejector has is damage");
@@ -337,7 +337,7 @@ final class FlowsheetFileTest {
      * saved before the count reads one shell.
      */
     @Test void aCoolerKeepsItsTypeAndADoorItsTrim() throws IOException {
-        byte[] bytes = Files.readAllBytes(CORPUS.resolve("format-1-coolers.json"));
+        byte[] bytes = Files.readAllBytes(CORPUS.resolve("format-2-coolers.json"));
         var sheet = FlowsheetFile.read(bytes);
         assertEquals(UnitType.WATER_COOLER, sheet.sizing().unit("A-1").type());
         assertEquals(new ExchangerSizing.Size(false, 1, 1., 6), sheet.sizing().unit("A-1").size());
@@ -361,7 +361,7 @@ final class FlowsheetFileTest {
      * key it already holds stands.
      */
     @Test void anAirCoolerReadsAsACoolerHeldOnAir() throws IOException {
-        var json = tree(Files.readAllBytes(CORPUS.resolve("format-1-coolers.json")));
+        var json = tree(Files.readAllBytes(CORPUS.resolve("format-2-coolers.json")));
         unit(json, "A-1").addProperty("type", "air_cooler");
         unit(json, "A-2").addProperty("type", "air_cooler");
         var units = json.getAsJsonObject("sizing").getAsJsonObject("units");
@@ -444,6 +444,15 @@ final class FlowsheetFileTest {
         var refusal = assertThrows(FlowsheetFailure.class, () -> FlowsheetFile.read(bytes(json)));
         assertEquals("file.newer", refusal.key());
         assertEquals(List.of(String.valueOf(FlowsheetFile.FORMAT + 1), String.valueOf(FlowsheetFile.FORMAT)), refusal.arguments());
+    }
+
+    /** Format 1 named a passage's ends by fixed roles; read as format 2 they would be misread, so it is refused (owner 2026-11-04, no compatibility). */
+    @Test void anOlderFormatIsRefused() {
+        var json = image();
+        json.addProperty("format", 1);
+        var refusal = assertThrows(FlowsheetFailure.class, () -> FlowsheetFile.read(bytes(json)));
+        assertEquals("file.older", refusal.key());
+        assertEquals(List.of("1", String.valueOf(FlowsheetFile.FORMAT)), refusal.arguments());
     }
 
     @Test void aCutFileIsRefused() {

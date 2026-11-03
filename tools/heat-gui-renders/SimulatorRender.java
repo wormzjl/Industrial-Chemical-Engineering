@@ -155,14 +155,14 @@ public final class SimulatorRender {
                 .unit("H-101", "fired_heater", 214, 257, "{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"duty\":1e7,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}")
                 .unit("V-101", "valve", 306, 287, "{\"target\":\"outlet\",\"pressure\":2.80e5,\"drop\":1e5}").unit("E-102", "cooler", 40, 359, "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}")
                 .unit("P-102", "pump", 600, 182, "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}")
-                .feed("CRUDE", "P-101", "in", crude(298.15, 8e5), 28, 130).line("S-1", "P-101", "out", "T-101", "pa/1/in").line("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in").line("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in")
-                .line("S-4", "T-101", "pa/3/out", "E-101", "tube_in", new Flowsheet.Point(362, 258), new Flowsheet.Point(362, 238), new Flowsheet.Point(116, 238), new Flowsheet.Point(116, 323))
-                .line("S-5", "E-101", "tube_out", "H-101", "in").line("S-6", "H-101", "out", "V-101", "in").line("S-7", "V-101", "out", "T-101", "feed")
+                .feed("CRUDE", "P-101", "in", crude(298.15, 8e5), 28, 130).line("S-1", "P-101", "out", "T-101", "pa/1/a").line("S-2", "T-101", "pa/1/b", "T-101", "pa/2/a").line("S-3", "T-101", "pa/2/b", "T-101", "pa/3/a")
+                .line("S-4", "T-101", "pa/3/b", "E-101", "tube_a", new Flowsheet.Point(362, 258), new Flowsheet.Point(362, 238), new Flowsheet.Point(116, 238), new Flowsheet.Point(116, 323))
+                .line("S-5", "E-101", "tube_b", "H-101", "a").line("S-6", "H-101", "b", "V-101", "a").line("S-7", "V-101", "b", "T-101", "feed")
                 .feed("STEAM", "T-101", "steam/1", water(steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond()), 316, 319)
-                .feed("CWS", "T-101", "condenser_in", water(303.15, 4e5, 190000 / 3.6), 316, 28).product("CWR", "T-101", "condenser_out", 316, 48)
+                .feed("CWS", "T-101", "condenser_a", water(303.15, 4e5, 190000 / 3.6), 316, 28).product("CWR", "T-101", "condenser_b", 316, 48)
                 .product("OFFGAS", "T-101", "overhead", 690, 8).product("NAPHTHA", "T-101", "distillate", 690, 97).product("WATER", "T-101", "water", 690, 76).product("KERO", "T-101", "draw/1", 690, 151)
                 .line("S-8", "T-101", "draw/2", "P-102", "in").product("DIESEL", "P-102", "out", 690, 195).product("AGO", "T-101", "draw/3", 690, 249)
-                .line("S-9", "T-101", "bottoms", "E-101", "shell_in").line("S-10", "E-101", "shell_out", "E-102", "in", new Flowsheet.Point(146, 343), new Flowsheet.Point(24, 343), new Flowsheet.Point(24, 372)).product("RESIDUE", "E-102", "out", 146, 372).build();
+                .line("S-9", "T-101", "bottoms", "E-101", "shell_a").line("S-10", "E-101", "shell_b", "E-102", "a", new Flowsheet.Point(146, 343), new Flowsheet.Point(24, 343), new Flowsheet.Point(24, 372)).product("RESIDUE", "E-102", "b", 146, 372).build();
     }
 
     /** The doors the crude unit does not hold: the same crude through a drum, its oil split three ways. */

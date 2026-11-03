@@ -51,9 +51,11 @@ public final class FlowsheetFile {
     /**
      * The format this version writes. A new field needs no new number; only what an older reader would get wrong does. Sizing's
      * facts (S4) need none: a reader before them keeps the section as a later version's and writes it back, and runs the sheet on
-     * its doors' drops, which is all it ever did.
+     * its doors' drops, which is all it ever did. Format 2 (PORT_SIDES_REVIEW.md option B): a passage's ends are {@code a} and
+     * {@code b} (or {@code tube_a}, {@code pa/1/a}...), and the streams on them say which is the inlet. A sheet file needs no
+     * compatibility (owner 2026-11-04), so an older format is refused, as a newer one is, and never misread.
      */
-    public static final int FORMAT = 1;
+    public static final int FORMAT = 2;
     private static final Gson JSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().serializeNulls().create();
 
     private FlowsheetFile() {
@@ -89,6 +91,7 @@ public final class FlowsheetFile {
         int format = root.whole("format");
         if (format > FORMAT) throw new FlowsheetFailure("file.newer", String.valueOf(format), String.valueOf(FORMAT));
         if (format < 1) throw damaged("sheet.format");
+        if (format < FORMAT) throw new FlowsheetFailure("file.older", String.valueOf(format), String.valueOf(FORMAT));
         var basis = basis(root.object("basis"));
         var units = new ArrayList<Flowsheet.Unit>();
         var types = new HashMap<String, String>();

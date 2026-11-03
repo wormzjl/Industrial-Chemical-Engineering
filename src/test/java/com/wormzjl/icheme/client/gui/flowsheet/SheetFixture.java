@@ -113,20 +113,20 @@ final class SheetFixture {
                 unit("H-101", "fired_heater", "{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"duty\":1e7,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}"),
                 unit("V-101", "valve", "{\"target\":\"outlet\",\"pressure\":2.80e5,\"drop\":1e5}"), unit("E-102", "cooler", "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}"),
                 unit("P-102", "pump", "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}"));
-        var streams = List.of(stream("CRUDE", null, "", "P-101", "in", new Flowsheet.Feed(298.15, 8e5, crude, List.of())), stream("S-1", "P-101", "out", "T-101", "pa/1/in", null), stream("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in", null),
-                stream("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in", null), stream("S-4", "T-101", "pa/3/out", "E-101", "tube_in", null), stream("S-5", "E-101", "tube_out", "H-101", "in", null), stream("S-6", "H-101", "out", "V-101", "in", null),
-                stream("S-7", "V-101", "out", "T-101", "feed", null), stream("STEAM", null, "", "T-101", "steam/1", fluid("Water", steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond())),
-                stream("CWS", null, "", "T-101", "condenser_in", fluid("Water", 303.15, 4e5, 190000 / 3.6)), stream("CWR", "T-101", "condenser_out", null, "", null), stream("OFFGAS", "T-101", "overhead", null, "", null),
+        var streams = List.of(stream("CRUDE", null, "", "P-101", "in", new Flowsheet.Feed(298.15, 8e5, crude, List.of())), stream("S-1", "P-101", "out", "T-101", "pa/1/a", null), stream("S-2", "T-101", "pa/1/b", "T-101", "pa/2/a", null),
+                stream("S-3", "T-101", "pa/2/b", "T-101", "pa/3/a", null), stream("S-4", "T-101", "pa/3/b", "E-101", "tube_a", null), stream("S-5", "E-101", "tube_b", "H-101", "a", null), stream("S-6", "H-101", "b", "V-101", "a", null),
+                stream("S-7", "V-101", "b", "T-101", "feed", null), stream("STEAM", null, "", "T-101", "steam/1", fluid("Water", steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond())),
+                stream("CWS", null, "", "T-101", "condenser_a", fluid("Water", 303.15, 4e5, 190000 / 3.6)), stream("CWR", "T-101", "condenser_b", null, "", null), stream("OFFGAS", "T-101", "overhead", null, "", null),
                 stream("NAPHTHA", "T-101", "distillate", null, "", null), stream("WATER", "T-101", "water", null, "", null), stream("KERO", "T-101", "draw/1", null, "", null), stream("S-8", "T-101", "draw/2", "P-102", "in", null),
-                stream("DIESEL", "P-102", "out", null, "", null), stream("AGO", "T-101", "draw/3", null, "", null), stream("S-9", "T-101", "bottoms", "E-101", "shell_in", null), stream("S-10", "E-101", "shell_out", "E-102", "in", null),
-                stream("RESIDUE", "E-102", "out", null, "", null));
+                stream("DIESEL", "P-102", "out", null, "", null), stream("AGO", "T-101", "draw/3", null, "", null), stream("S-9", "T-101", "bottoms", "E-101", "shell_a", null), stream("S-10", "E-101", "shell_b", "E-102", "a", null),
+                stream("RESIDUE", "E-102", "b", null, "", null));
         return new Flowsheet(basis(), units, streams, FlowsheetSolver.Settings.DEFAULT);
     }
 
     /** Water through three units in a line, which runs in no time: FEED, P-1, A, V-1, B, P-2, OUT. */
     static Flowsheet water() {
         var units = List.of(unit("P-1", "pump", "{\"target\":\"rise\",\"rise\":2e5}"), unit("V-1", "valve", "{\"target\":\"drop\",\"drop\":1e5}"), unit("P-2", "pump", "{\"target\":\"rise\",\"rise\":2e5}"));
-        var streams = List.of(stream("FEED", null, "", "P-1", "in", water(100)), stream("A", "P-1", "out", "V-1", "in", null), stream("B", "V-1", "out", "P-2", "in", null), stream("OUT", "P-2", "out", null, "", null));
+        var streams = List.of(stream("FEED", null, "", "P-1", "in", water(100)), stream("A", "P-1", "out", "V-1", "a", null), stream("B", "V-1", "b", "P-2", "in", null), stream("OUT", "P-2", "out", null, "", null));
         return new Flowsheet(basis(), units, streams, FlowsheetSolver.Settings.DEFAULT);
     }
 
@@ -156,8 +156,8 @@ final class SheetFixture {
         units.add(new Flowsheet.Unit("q", "pump", "P-102", 300, 200, SheetEditor.defaults("pump", SheetFixture::column)));
         var streams = new ArrayList<Flowsheet.Stream>();
         streams.add(new Flowsheet.Stream("f", "FEED", null, new Flowsheet.End("p", "in"), water(100), List.of(new Flowsheet.Point(40, 97)), new JsonObject()));
-        streams.add(new Flowsheet.Stream("s", "S-1", new Flowsheet.End("p", "out"), new Flowsheet.End("v", "in"), null, List.of(), new JsonObject()));
-        streams.add(new Flowsheet.Stream("o", "PROD", new Flowsheet.End("v", "out"), null, null, List.of(new Flowsheet.Point(420, 97)), new JsonObject()));
+        streams.add(new Flowsheet.Stream("s", "S-1", new Flowsheet.End("p", "out"), new Flowsheet.End("v", "a"), null, List.of(), new JsonObject()));
+        streams.add(new Flowsheet.Stream("o", "PROD", new Flowsheet.End("v", "b"), null, null, List.of(new Flowsheet.Point(420, 97)), new JsonObject()));
         return new Flowsheet(basis(), units, streams, FlowsheetSolver.Settings.DEFAULT);
     }
 

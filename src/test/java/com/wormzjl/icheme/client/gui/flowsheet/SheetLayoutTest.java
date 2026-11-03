@@ -76,17 +76,17 @@ class SheetLayoutTest {
     @Test
     void aLineBetweenTwoPortsOnOneFaceStandsOffIt() {
         var units = List.of(new Flowsheet.Unit("t", "column", "T-101", 200, 40, SheetFixture.column()), new Flowsheet.Unit("e", "exchanger", "E-101", 40, 300, SheetEditor.defaults("exchanger", SheetFixture::column)));
-        var streams = List.of(new Flowsheet.Stream("a", "S-1", new Flowsheet.End("t", "pa/1/out"), new Flowsheet.End("t", "pa/2/in"), null, List.of(), new JsonObject()),
-                new Flowsheet.Stream("b", "S-2", new Flowsheet.End("e", "shell_out"), new Flowsheet.End("e", "shell_in"), null, List.of(), new JsonObject()));
+        var streams = List.of(new Flowsheet.Stream("a", "S-1", new Flowsheet.End("t", "pa/1/b"), new Flowsheet.End("t", "pa/2/a"), null, List.of(), new JsonObject()),
+                new Flowsheet.Stream("b", "S-2", new Flowsheet.End("e", "shell_b"), new Flowsheet.End("e", "shell_a"), null, List.of(), new JsonObject()));
         var layout = SheetLayout.of(new Flowsheet(SheetFixture.basis(), units, streams, FlowsheetSolver.Settings.DEFAULT), SheetFixture.M);
-        int face = layout.place("t", "pa/1/out").x(), least = face;
+        int face = layout.place("t", "pa/1/b").x(), least = face;
         int[] side = layout.line("a").points();
         for (int i = 0; i < side.length; i += 2) least = Math.min(least, side[i]);
         assertEquals(face - SheetLayout.LOOP, least, "out from the column's side");
         var name = layout.name(layout.line("a"));
         assertTrue(name.right() <= face, "the name stands clear of the box: " + name);
         assertTrue(name.w() <= SheetLayout.LOOP, "and has the run to itself");
-        int under = layout.place("e", "shell_out").y(), most = under;
+        int under = layout.place("e", "shell_b").y(), most = under;
         int[] foot = layout.line("b").points();
         for (int i = 1; i < foot.length; i += 2) most = Math.max(most, foot[i]);
         assertEquals(under + SheetLayout.LOOP, most, "out from the exchanger's foot");

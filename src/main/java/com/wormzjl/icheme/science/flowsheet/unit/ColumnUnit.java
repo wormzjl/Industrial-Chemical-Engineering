@@ -22,6 +22,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.Passage;
 import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
@@ -115,6 +116,19 @@ public final class ColumnUnit implements UnitModel {
         for (var draw : door.draws()) ports.add(Port.out(drawPort(draw)));
         if (ColumnComponents.ejectorRequired(door.topPressure())) ports.add(Port.optionalIn(MOTIVE));
         return ports;
+    }
+
+    /**
+     * The heat members' utility sides, either way (owner 2026-11-04, "Column components like heat exchanger utility side only"): the
+     * condenser's water, or its trim's; the kettle's heating side; each pumparound cooler's. The process ports and stripping steam stay fixed.
+     */
+    @Override public List<Passage> passages(Params params) {
+        var door = ColumnDoor.of(params);
+        var passages = new ArrayList<Passage>();
+        if (door.condenser().waterCooled()) passages.add(Passage.named("condenser"));
+        if (ColumnComponents.kettleRequired(door.reboilerDuty())) passages.add(Passage.named("reboiler"));
+        for (var pumparound : door.pumparounds()) passages.add(new Passage("pa/" + pumparound.id() + "/a", "pa/" + pumparound.id() + "/b", pumparoundIn(pumparound), pumparoundOut(pumparound)));
+        return passages;
     }
 
     @Override public List<Calculation> calculations(WiredUnit u) {

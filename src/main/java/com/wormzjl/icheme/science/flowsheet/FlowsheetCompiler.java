@@ -24,7 +24,9 @@ public final class FlowsheetCompiler {
     private FlowsheetCompiler() {
     }
 
-    public static List<Calculation> compile(Flowsheet sheet, FlowThermo thermo) {
+    /** @param drawn the sheet as drawn: its passages' ends read as the roles the models name ({@link Wiring#roles}) */
+    public static List<Calculation> compile(Flowsheet drawn, FlowThermo thermo) {
+        var sheet = Wiring.roles(drawn);
         var calculations = new ArrayList<Calculation>();
         var wires = new HashMap<String, Map<String, String>>();
         var outlets = new HashMap<String, List<String>>();

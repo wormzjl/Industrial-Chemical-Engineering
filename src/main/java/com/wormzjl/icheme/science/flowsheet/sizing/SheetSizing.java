@@ -15,6 +15,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetEngine;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.Wiring;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.CoolerUnit;
@@ -391,14 +392,15 @@ public final class SheetSizing {
         /** Each heater's duty at design flow, MW, whose spare its path gives. */
         private final Map<String, Double> heaters = new LinkedHashMap<>();
 
-        Sizing(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo, Entries entries) {
-            this.sheet = sheet;
+        Sizing(Flowsheet drawn, FlowsheetRun run, FlowThermo thermo, Entries entries) {
+            // A passage's ends read as the roles they play, as the run read them.
+            this.sheet = Wiring.roles(drawn);
             this.run = run;
             this.thermo = thermo;
             this.entries = entries;
             basis = entries.basis();
-            for (var unit : sheet.units()) byId.put(unit.id(), unit);
-            for (var stream : sheet.streams()) {
+            for (var unit : this.sheet.units()) byId.put(unit.id(), unit);
+            for (var stream : this.sheet.streams()) {
                 streams.put(stream.id(), stream);
                 wire(stream.from(), stream.id());
                 wire(stream.to(), stream.id());

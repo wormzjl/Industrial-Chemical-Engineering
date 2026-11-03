@@ -111,8 +111,12 @@ public final class FileColumns {
             String size = t.get(sheet.units().size() == 1 ? "flowsheet.file.unit" : "flowsheet.file.units", sheet.units().size());
             return new Entry(file, name, size, when, unknown == 0 ? t.get("flowsheet.file.ready") : t.get(unknown == 1 ? "flowsheet.file.look_one" : "flowsheet.file.look", unknown), unknown != 0, true);
         } catch (FlowsheetFailure refused) {
-            boolean newer = refused.key().equals("file.newer");
-            return new Entry(file, name, "", when, t.get(newer ? "flowsheet.file.newer_state" : "flowsheet.file.damaged_state"), true, false);
+            String state = switch (refused.key()) {
+                case "file.newer" -> "flowsheet.file.newer_state";
+                case "file.older" -> "flowsheet.file.older_state";
+                default -> "flowsheet.file.damaged_state";
+            };
+            return new Entry(file, name, "", when, t.get(state), true, false);
         } catch (IOException gone) {
             return new Entry(file, name, "", when, t.get("flowsheet.file.damaged_state"), true, false);
         }

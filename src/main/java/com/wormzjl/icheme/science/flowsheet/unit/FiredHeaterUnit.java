@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.Passage;
 import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
@@ -32,6 +33,10 @@ public final class FiredHeaterUnit implements UnitModel {
     @Override public List<Port> ports(Params params) {
         if (apart(params)) return List.of(Port.optionalIn(CONVECTION_IN), Port.out(CONVECTION_OUT), Port.in(RADIANT_IN), Port.out(RADIANT_OUT));
         return List.of(Port.in("in"), Port.out("out"));
+    }
+
+    @Override public List<Passage> passages(Params params) {
+        return apart(params) ? List.of(Passage.named("convection"), Passage.named("radiant")) : List.of(Passage.THROUGH);
     }
 
     @Override public List<Calculation> calculations(WiredUnit u) {

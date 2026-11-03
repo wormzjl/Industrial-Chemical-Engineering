@@ -8,7 +8,13 @@ import java.util.List;
  * refuses the unit, not the sheet.
  */
 public interface UnitModel {
+    /** The roles its calculations read and write. A passage's two roles stand here, and the sheet shows the passage's ends instead. */
     List<Port> ports(Params params);
+
+    /** Its reversible passages (PORT_SIDES_REVIEW.md option B): each one's roles are two of {@link #ports}. None by default. */
+    default List<Passage> passages(Params params) {
+        return List.of();
+    }
 
     List<Calculation> calculations(WiredUnit unit);
 }

@@ -43,8 +43,8 @@ class SimulatorColumnsTest {
         }
         var streams = new ArrayList<Flowsheet.Stream>();
         streams.add(new Flowsheet.Stream("feed", "FEED", null, new Flowsheet.End("u-pump", "in"), SheetFixture.water(100), List.of(new Flowsheet.Point(10, 70)), new JsonObject()));
-        streams.add(new Flowsheet.Stream("a", "A", new Flowsheet.End("u-pump", "out"), new Flowsheet.End("u-valve", "in"), null, List.of(), new JsonObject()));
-        streams.add(new Flowsheet.Stream("b", "B", new Flowsheet.End("u-valve", "out"), null, null, List.of(new Flowsheet.Point(300, 300)), new JsonObject()));
+        streams.add(new Flowsheet.Stream("a", "A", new Flowsheet.End("u-pump", "out"), new Flowsheet.End("u-valve", "a"), null, List.of(), new JsonObject()));
+        streams.add(new Flowsheet.Stream("b", "B", new Flowsheet.End("u-valve", "b"), null, null, List.of(new Flowsheet.Point(300, 300)), new JsonObject()));
         return new Flowsheet(SheetFixture.basis(), units, streams, FlowsheetSolver.Settings.DEFAULT);
     }
 
@@ -204,8 +204,8 @@ class SimulatorColumnsTest {
         kinds.put("pump in", "cannot run");
         kinds.put("pump out", "leaves the sheet");
         kinds.put("mixer in/1", "nothing enters");
-        kinds.put("exchanger tube_in", "a utility");
-        kinds.put("column condenser_in", "a utility");
+        kinds.put("exchanger tube_a", "a utility");
+        kinds.put("column condenser_a", "a utility");
         kinds.put("column feed", "cannot run");
         for (var tile : Tiles.all()) {
             if (!tile.lit() || tile.type().equals(Tiles.FEED) || tile.type().equals(Tiles.PRODUCT)) continue;

@@ -141,16 +141,18 @@ class SheetStoreTest {
         store.open(EDITOR, id -> true);
         store.accept(EDITOR, body(), READ_ONLY);
         var stored = store.body();
-        var bad = List.of(new byte[SheetBody.MAX_PACKED + 1], new byte[40], gzip(new byte[10]), SheetBody.pack("not json".getBytes(StandardCharsets.UTF_8), new byte[0]), SheetBody.pack("{\"format\":99}".getBytes(StandardCharsets.UTF_8), new byte[0]));
+        var bad = List.of(new byte[SheetBody.MAX_PACKED + 1], new byte[40], gzip(new byte[10]), SheetBody.pack("not json".getBytes(StandardCharsets.UTF_8), new byte[0]), SheetBody.pack("{\"format\":99}".getBytes(StandardCharsets.UTF_8), new byte[0]),
+                SheetBody.pack("{\"format\":1}".getBytes(StandardCharsets.UTF_8), new byte[0]));
         var keys = new ArrayList<String>();
         for (var upload : bad) keys.add(assertThrows(SheetBody.Refused.class, () -> store.accept(EDITOR, upload, READ_ONLY)).key());
-        assertEquals(List.of(SheetBody.TOO_LARGE, SheetBody.DAMAGED, SheetBody.DAMAGED, "file.damaged", "file.newer"), keys);
+        assertEquals(List.of(SheetBody.TOO_LARGE, SheetBody.DAMAGED, SheetBody.DAMAGED, "file.damaged", "file.newer", "file.older"), keys);
         assertSame(stored, store.body());
     }
 
+    /** A sheet of an older format too (format 1, before reversible passages): it is never misread, and opens empty (owner 2026-11-04, no compatibility). */
     @Test
     void aDamagedStoredSheetOpensEmptySaysSoAndKeepsItsBytes() throws Exception {
-        for (var damaged : List.of(new byte[]{1, 2, 3}, SheetBody.pack("{\"format\":99}".getBytes(StandardCharsets.UTF_8), new byte[0]))) {
+        for (var damaged : List.of(new byte[]{1, 2, 3}, SheetBody.pack("{\"format\":99}".getBytes(StandardCharsets.UTF_8), new byte[0]), SheetBody.pack("{\"format\":1}".getBytes(StandardCharsets.UTF_8), new byte[0]))) {
             var store = new SheetStore();
             store.load(damaged, List.of());
             assertSame(damaged, store.body(), "a load parses nothing");

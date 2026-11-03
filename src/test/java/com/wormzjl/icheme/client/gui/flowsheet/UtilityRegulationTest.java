@@ -208,8 +208,8 @@ class UtilityRegulationTest {
                 streams.add(stream);
                 continue;
             }
-            streams.add(new Flowsheet.Stream("HS", "HS", null, new Flowsheet.End("V-9", "in"), new Flowsheet.Feed(supply.temperature() + 10, 5e5, Map.of("Water", .95 * row.flow()), List.of())));
-            streams.add(new Flowsheet.Stream("STEAM", "STEAM", new Flowsheet.End("V-9", "out"), stream.to(), null));
+            streams.add(new Flowsheet.Stream("HS", "HS", null, new Flowsheet.End("V-9", "a"), new Flowsheet.Feed(supply.temperature() + 10, 5e5, Map.of("Water", .95 * row.flow()), List.of())));
+            streams.add(new Flowsheet.Stream("STEAM", "STEAM", new Flowsheet.End("V-9", "b"), stream.to(), null));
         }
         var units = new ArrayList<>(sheet.units());
         var valve = new com.google.gson.JsonObject();
@@ -303,8 +303,8 @@ class UtilityRegulationTest {
             units.add(new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), new Params(json), unit.unknown()));
         }
         var streams = new ArrayList<>(sheet.streams());
-        streams.add(new Flowsheet.Stream("HPS", "HPS", null, new Flowsheet.End(T, "reboiler_in"), new Flowsheet.Feed(temperature, pressure, Map.of("Water", 1500.), List.of())));
-        streams.add(new Flowsheet.Stream("HPC", "HPC", new Flowsheet.End(T, "reboiler_out"), null, null));
+        streams.add(new Flowsheet.Stream("HPS", "HPS", null, new Flowsheet.End(T, "reboiler_a"), new Flowsheet.Feed(temperature, pressure, Map.of("Water", 1500.), List.of())));
+        streams.add(new Flowsheet.Stream("HPC", "HPC", new Flowsheet.End(T, "reboiler_b"), null, null));
         return new Flowsheet(sheet.basis(), units, streams, sheet.settings());
     }
 

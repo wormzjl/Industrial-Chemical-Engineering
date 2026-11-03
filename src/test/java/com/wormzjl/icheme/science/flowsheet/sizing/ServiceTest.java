@@ -223,7 +223,7 @@ final class ServiceTest {
     }
 
     private static Service.Ends ends(String port, String to) {
-        var stream = new Flowsheet.Stream("s", "s", new Flowsheet.End("T", port), new Flowsheet.End(to, "in"), null);
+        var stream = new Flowsheet.Stream("s", "s", new Flowsheet.End("T", port), new Flowsheet.End(to, to.equals("V") ? "a" : "in"), null);
         var sheet = new Flowsheet(new Flowsheet.Basis(PACKAGE, "r", AXIS), List.of(unit("T", "column"), unit("P", "pump"), unit("V", "valve")), List.of(stream), FlowsheetSolver.Settings.DEFAULT);
         return Service.Ends.of(sheet, stream);
     }
@@ -233,7 +233,7 @@ final class ServiceTest {
         assertEquals(TRAY, ends("bottoms", "V"));
         assertEquals(PUMP, ends("distillate", "P"));
         assertEquals(OPEN, ends("overhead", "V"));
-        assertEquals(OPEN, ends("pa/1/out", "V"), "a pumparound's cold side leaves no tray");
+        assertEquals(OPEN, ends("pa/1/b", "V"), "a pumparound's cold side leaves no tray");
         var pill = new Flowsheet.Stream("s", "s", null, null, null);
         assertEquals(OPEN, Service.Ends.of(new Flowsheet(new Flowsheet.Basis(PACKAGE, "r", AXIS), List.of(), List.of(pill), FlowsheetSolver.Settings.DEFAULT), pill));
     }

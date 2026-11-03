@@ -217,12 +217,12 @@ final class FlowsheetColumnTest {
         return new Sheet().unit("P-101", "pump", "{\"pressure\":14e5}").unit("T-101", "column", door(ColumnComponents.Condenser.EXCHANGER))
                 .unit("E-101", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":473.15,\"tube_drop\":0.5e5,\"shell_drop\":0.3e5}")
                 .unit("H-101", "fired_heater", furnace).unit("V-101", "valve", "{\"pressure\":2.72e5}").unit("E-102", "cooler", "{\"temperature\":343.15,\"drop\":0.2e5}").unit("P-102", "pump", "{\"pressure\":6e5}")
-                .line("S-1", "P-101", "out", "T-101", "pa/1/in").line("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in").line("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in")
-                .line("S-4", "T-101", "pa/3/out", "E-101", "tube_in").line("S-5", "E-101", "tube_out", "H-101", "in").line("S-6", "H-101", "out", "V-101", "in").line("S-7", "V-101", "out", "T-101", "feed")
+                .line("S-1", "P-101", "out", "T-101", "pa/1/a").line("S-2", "T-101", "pa/1/b", "T-101", "pa/2/a").line("S-3", "T-101", "pa/2/b", "T-101", "pa/3/a")
+                .line("S-4", "T-101", "pa/3/b", "E-101", "tube_a").line("S-5", "E-101", "tube_b", "H-101", "a").line("S-6", "H-101", "b", "V-101", "a").line("S-7", "V-101", "b", "T-101", "feed")
                 .feed("STEAM", "T-101", "steam/1", water(BASE.steamFeeds().getFirst().temperatureKelvin(), 3.5e5, BASE.steamFeeds().getFirst().molarFlowMolPerSecond()))
-                .feed("CWS", "T-101", "condenser_in", water(303.15, 4e5, 190000 / 3.6)).product("CWR", "T-101", "condenser_out")
+                .feed("CWS", "T-101", "condenser_a", water(303.15, 4e5, 190000 / 3.6)).product("CWR", "T-101", "condenser_b")
                 .product("OFFGAS", "T-101", "overhead").product("NAPHTHA", "T-101", "distillate").product("WATER", "T-101", "water").product("KERO", "T-101", "draw/1").line("S-8", "T-101", "draw/2", "P-102", "in")
-                .product("DIESEL", "P-102", "out").product("AGO", "T-101", "draw/3").line("S-9", "T-101", "bottoms", "E-101", "shell_in").line("S-10", "E-101", "shell_out", "E-102", "in");
+                .product("DIESEL", "P-102", "out").product("AGO", "T-101", "draw/3").line("S-9", "T-101", "bottoms", "E-101", "shell_a").line("S-10", "E-101", "shell_b", "E-102", "a");
     }
 
     private static final String HOLDS = "{\"temperature\":638.15,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}";
@@ -238,7 +238,7 @@ final class FlowsheetColumnTest {
     }
 
     @Test void theSampleClosesInTwoPasses() {
-        var run = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "out").run();
+        var run = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b").run();
         closed(run, 5e-4);
         assertEquals(1, run.loops().size(), "one loop stays, the residue's");
         assertEquals(2, run.loops().getFirst().passes());
@@ -257,9 +257,9 @@ final class FlowsheetColumnTest {
      */
     @Test void aPumparoundOnAStreamOfItsOwnTakesItsDutyFromIt() {
         var run = sample("{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}")
-                .without("S-2").without("S-3").line("S-2", "T-101", "pa/1/out", "T-101", "pa/3/in")
-                .feed("CW", "T-101", "pa/2/in", water(303.15, 4e5, 16000)).product("CW back", "T-101", "pa/2/out")
-                .feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "out").run();
+                .without("S-2").without("S-3").line("S-2", "T-101", "pa/1/b", "T-101", "pa/3/a")
+                .feed("CW", "T-101", "pa/2/a", water(303.15, 4e5, 16000)).product("CW back", "T-101", "pa/2/b")
+                .feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b").run();
         closed(run, 5e-4);
         var in = run.streams().get("CW");
         var out = run.streams().get("CW back");
@@ -276,7 +276,7 @@ final class FlowsheetColumnTest {
     }
 
     @Test void aFurnaceOnAFixedDutyCloses() {
-        var held = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "out").run();
+        var held = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b").run();
         double duty = held.reports().get("H-101").readings().get("duty") - 8e6;
         var run = onDuty(duty).run(held);
         closed(run, 1e-3);
@@ -286,7 +286,7 @@ final class FlowsheetColumnTest {
     }
 
     private static Sheet onDuty(double duty) {
-        return sample("{\"target\":\"duty\",\"duty\":" + duty + ",\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}").feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "out");
+        return sample("{\"target\":\"duty\",\"duty\":" + duty + ",\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}").feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b");
     }
 
     /** With no flow on its tear the residue's heat is missing from the first pass, so the feed comes in tens of megawatts short. */
@@ -305,7 +305,7 @@ final class FlowsheetColumnTest {
 
     @Test void aFifteenPercentRecycleCloses() {
         var run = sample(HOLDS).unit("M-1", "mixer", "{}").unit("S-1R", "splitter", "{\"outlets\":[{\"id\":\"back\",\"share\":0.15},{\"id\":\"on\"}]}")
-                .feed("CRUDE", "M-1", "in/1", crude(298.15, 8e5)).line("MIXED", "M-1", "out", "P-101", "in").line("S-11", "E-102", "out", "S-1R", "in")
+                .feed("CRUDE", "M-1", "in/1", crude(298.15, 8e5)).line("MIXED", "M-1", "out", "P-101", "in").line("S-11", "E-102", "b", "S-1R", "in")
                 .line("BACK", "S-1R", "out/back", "M-1", "in/2").product("RESIDUE", "S-1R", "out/on").run();
         closed(run, 2e-3);
         assertTrue(run.loops().stream().allMatch(FlowsheetRun.Loop::closed));
@@ -317,7 +317,7 @@ final class FlowsheetColumnTest {
         var door = ColumnDoor.from(BASE, ColumnComponents.Condenser.AIR_COOLER);
         door.json().addProperty("reboiler_duty", 5e6);
         door.json().addProperty("reboiler_drop", .5e5);
-        var run = new Sheet().unit("T", "column", door).feed("feed", "T", "feed", crude(BASE.feedTemperatureKelvin(), 2.72e5)).feed("steam", "T", "reboiler_in", water(600, 100e5, 80)).product("condensate", "T", "reboiler_out")
+        var run = new Sheet().unit("T", "column", door).feed("feed", "T", "feed", crude(BASE.feedTemperatureKelvin(), 2.72e5)).feed("steam", "T", "reboiler_a", water(600, 100e5, 80)).product("condensate", "T", "reboiler_b")
                 .product("overhead", "T", "overhead").product("distillate", "T", "distillate").product("water", "T", "water").product("bottoms", "T", "bottoms").run();
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
         assertEquals(-5e6, run.streams().get("condensate").enthalpy() - run.streams().get("steam").enthalpy(), .1, "the steam gives what the column takes");

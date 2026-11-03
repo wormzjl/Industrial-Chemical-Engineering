@@ -393,6 +393,14 @@ public final class SheetGestures {
         return rings;
     }
 
+    /** What a stream drawn from {@code from} may end on: from a passage end no stream decides, a port of either kind, and it takes the other role. */
+    private List<SheetLayout.Place> drawRings(SheetLayout.Place from) {
+        if (!editor.either(from)) return rings(from.direction() != com.wormzjl.icheme.science.flowsheet.Port.Direction.OUT, null);
+        var rings = new ArrayList<SheetLayout.Place>();
+        for (var box : layout().boxes()) for (var place : box.places()) if (!place.equals(from) && (editor.takes(place, true, null) || editor.takes(place, false, null))) rings.add(place);
+        return rings;
+    }
+
     private static int[] elbow(int x0, int y0, int x1, int y1) {
         int mid = (x0 + x1) / 2;
         return new int[]{x0, y0, mid, y0, mid, y1, x1, y1};
@@ -406,8 +414,7 @@ public final class SheetGestures {
                 return new Overlay(null, null, null, List.of(), tile, editor.nextName(tile.type()), snap(cx), snap(cy));
             }
             case DRAW -> {
-                boolean from = port.direction() == com.wormzjl.icheme.science.flowsheet.Port.Direction.OUT;
-                return new Overlay(elbow(port.x(), port.y(), cx, cy), null, null, rings(!from, null), null, editor.nextStream(), cx, cy);
+                return new Overlay(elbow(port.x(), port.y(), cx, cy), null, null, drawRings(port), null, editor.nextStream(), cx, cy);
             }
             case RECONNECT -> {
                 var line = layout().line(id);

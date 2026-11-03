@@ -7,6 +7,8 @@ import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.Port;
+import com.wormzjl.icheme.science.flowsheet.Wiring;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
 import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
 import java.util.ArrayDeque;
@@ -31,7 +33,7 @@ public final class SheetEditor {
     }
 
     public static final String LOCKED = "flowsheet.refused.locked", RUNNING = "flowsheet.refused.running", NAME_USED = "flowsheet.refused.name_used", NAME_EMPTY = "flowsheet.refused.name_empty",
-            PORT_HELD = "flowsheet.refused.port_held", PORT_SIDE = "flowsheet.refused.port_side";
+            PORT_HELD = "flowsheet.refused.port_held", PORT_SIDE = "flowsheet.refused.port_side", PASSAGE = "flowsheet.refused.passage";
     private static final int HISTORY = 256;
 
     private final Measure m;
@@ -43,6 +45,10 @@ public final class SheetEditor {
     private boolean locked;
     private String lockedBy = LOCKED;
     private @Nullable SheetLayout layout;
+    private @Nullable Flowsheet roles;
+    /** The last wiring asked for, with the stream it leaves out: rings ask once a place, a frame. */
+    private @Nullable Wiring wiring;
+    private @Nullable String wiringBut;
 
     /** @param column a dropped column's settings, {@code ColumnDoor.from} on the default input */
     public SheetEditor(Flowsheet sheet, Measure m, Supplier<Params> column) {
@@ -59,6 +65,21 @@ public final class SheetEditor {
     public SheetLayout layout() {
         if (layout == null) layout = SheetLayout.of(sheet, m);
         return layout;
+    }
+
+    /** The sheet with its passages' ends named by the roles they play ({@link Wiring#roles}): what the doors and pages read. */
+    public Flowsheet roles() {
+        if (roles == null) roles = Wiring.roles(sheet);
+        return roles;
+    }
+
+    /** The sheet's wiring with the stream {@code but} left out, as a lifted end sees it. */
+    public Wiring wiring(@Nullable String but) {
+        if (wiring == null || !java.util.Objects.equals(but, wiringBut)) {
+            wiring = Wiring.of(sheet, but);
+            wiringBut = but;
+        }
+        return wiring;
     }
 
     /** A read-only sheet takes no edit. */
@@ -125,6 +146,8 @@ public final class SheetEditor {
     private void replace(Flowsheet next) {
         sheet = next;
         layout = null;
+        roles = null;
+        wiring = null;
         step = null;
     }
 
@@ -148,6 +171,8 @@ public final class SheetEditor {
         redo.clear();
         sheet = next;
         layout = null;
+        roles = null;
+        wiring = null;
         step = key;
         return true;
     }
@@ -438,39 +463,67 @@ public final class SheetEditor {
         return added(fresh(null, null, null, List.of(new Flowsheet.Point(x, y))));
     }
 
-    /** Whether a stream holds a port, or a stream other than {@code but}. */
+    /** Whether a stream holds a port, or a stream other than {@code but}. A passage end holds one stream, whichever way it runs. */
     private boolean held(SheetLayout.Place place, @Nullable String but) {
+        boolean passage = passage(place);
         for (var stream : sheet.streams()) {
             if (stream.id().equals(but)) continue;
-            var end = place.direction() == com.wormzjl.icheme.science.flowsheet.Port.Direction.OUT ? stream.from() : stream.to();
-            if (end != null && end.unit().equals(place.unit()) && end.port().equals(place.port())) return true;
+            var ends = passage ? new Flowsheet.End[]{stream.from(), stream.to()} : new Flowsheet.End[]{place.direction() == Port.Direction.OUT ? stream.from() : stream.to()};
+            for (var end : ends) if (end != null && end.unit().equals(place.unit()) && end.port().equals(place.port())) return true;
         }
         return false;
     }
 
+    private boolean passage(SheetLayout.Place place) {
+        return wiring(null).passage(place.unit(), place.port()) != null;
+    }
+
+    /**
+     * The way a stream's end on {@code place} must run: a fixed port's direction; a passage end's as the streams other than {@code but}
+     * decide it (PORT_SIDES_REVIEW.md option B); null for a passage end that no stream decides, which takes either.
+     */
+    private Port.@Nullable Direction direction(SheetLayout.Place place, @Nullable String but) {
+        var wiring = wiring(but);
+        if (wiring.passage(place.unit(), place.port()) == null) return place.direction();
+        if (wiring.free(place.unit(), place.port())) return null;
+        return Boolean.TRUE.equals(wiring.isInlet(place.unit(), place.port())) ? Port.Direction.IN : Port.Direction.OUT;
+    }
+
     /** Whether {@code place} can take a stream's start, or its end. */
     public boolean takes(SheetLayout.Place place, boolean start, @Nullable String stream) {
-        boolean out = place.direction() == com.wormzjl.icheme.science.flowsheet.Port.Direction.OUT;
-        return out == start && !held(place, stream);
+        var direction = direction(place, stream);
+        return (direction == null || direction == Port.Direction.OUT == start) && !held(place, stream);
+    }
+
+    /** Whether a stream drawn from {@code place} may run either way: a passage end that no stream decides. */
+    public boolean either(SheetLayout.Place place) {
+        return direction(place, null) == null;
     }
 
     private static Flowsheet.End end(SheetLayout.Place place) {
         return new Flowsheet.End(place.unit(), place.port());
     }
 
-    /** Draws a stream between two ports, or from a port to a pill at the point. Either order. Its id, or null if refused. */
+    /**
+     * Draws a stream between two ports, or from a port to a pill at the point. Either order. Its id, or null if refused. A port or a
+     * decided passage end says which way the stream runs, and a free passage end takes the other role. Where nothing decides (a free
+     * passage end to a pill, or to another free one), the stream leaves the end it is drawn out of, so a pill is a product (owner
+     * 2026-11-04, "product"): a passage is fed by landing a feed on the end wanted.
+     */
     public @Nullable String addStream(SheetLayout.Place from, @Nullable SheetLayout.Place to, int x, int y) {
-        boolean start = from.direction() == com.wormzjl.icheme.science.flowsheet.Port.Direction.OUT;
         if (held(from, null)) {
             refuse(PORT_HELD, from.port());
             return null;
         }
+        var mine = direction(from, null);
+        var theirs = to == null ? null : direction(to, null);
+        boolean start = mine != null ? mine == Port.Direction.OUT : theirs == null || theirs == Port.Direction.IN;
         if (to == null) {
             var point = List.of(new Flowsheet.Point(x, y));
             return added(start ? fresh(end(from), null, null, point) : fresh(null, end(from), null, point));
         }
-        if (to.direction() == from.direction()) {
-            refuse(PORT_SIDE);
+        if (theirs != null && theirs == Port.Direction.OUT == start) {
+            refuse(passage(from) || passage(to) ? PASSAGE : PORT_SIDE);
             return null;
         }
         if (held(to, null)) {
@@ -509,7 +562,7 @@ public final class SheetEditor {
     public boolean reconnect(String id, boolean start, @Nullable SheetLayout.Place port, int x, int y) {
         var stream = stream(id);
         if (stream == null) return false;
-        if (port != null && !takes(port, start, id)) return held(port, id) ? refuse(PORT_HELD, port.port()) : refuse(PORT_SIDE);
+        if (port != null && !takes(port, start, id)) return held(port, id) ? refuse(PORT_HELD, port.port()) : refuse(passage(port) ? PASSAGE : PORT_SIDE);
         var was = routed(stream);
         var route = new ArrayList<>(was.route());
         boolean open = (start ? stream.from() : stream.to()) == null, oneOfTwo = stream.from() == null && stream.to() == null && route.size() == 1;

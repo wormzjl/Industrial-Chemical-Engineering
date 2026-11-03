@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "basis": {
     "package": "icheme:tjl20_methane_nitrogen",
     "revision": "crude-regrouped-r1",

@@ -127,7 +127,7 @@ final class FlowsheetUnitsTest {
 
     @Test void aValveKeepsItsEnthalpy() {
         var run = closes(sheet().unit("V", "valve", "{\"target\":\"drop\",\"drop\":2e5}")
-                .feed("in", "V", "in", feed(420, 8e5, WET_CRUDE, 100)).product("out", "V", "out").run());
+                .feed("in", "V", "a", feed(420, 8e5, WET_CRUDE, 100)).product("out", "V", "b").run());
         assertEquals(6e5, run.streams().get("out").pressure(), 1e-6);
         assertEquals(run.streams().get("in").enthalpy(), run.streams().get("out").enthalpy(), 1e-6 * Math.abs(run.streams().get("in").enthalpy()));
         assertEquals(2e5, reading(run, "V", "drop"), 1e-6);
@@ -135,7 +135,7 @@ final class FlowsheetUnitsTest {
     }
 
     @Test void aValveCannotRaiseThePressure() {
-        var run = sheet().unit("V", "valve", "{\"pressure\":9e5}").feed("in", "V", "in", feed(420, 8e5, WET_CRUDE, 100)).product("out", "V", "out").run();
+        var run = sheet().unit("V", "valve", "{\"pressure\":9e5}").feed("in", "V", "a", feed(420, 8e5, WET_CRUDE, 100)).product("out", "V", "b").run();
         assertEquals(FlowsheetRun.Status.FAILED, run.status());
         assertTrue(logged(run, "valve.outlet"), () -> "log " + run.log());
     }
@@ -172,7 +172,7 @@ final class FlowsheetUnitsTest {
 
     @Test void aFilterTakesTheSolidsAsCake() {
         var slurry = new Flowsheet.Feed(320, 3e5, feed(320, 3e5, PURE_WATER, 100).amounts(), List.of(new Flowsheet.Solid("icheme:demo_particle", "100", .5)));
-        var run = closes(sheet().unit("F", "filter", "{}").feed("in", "F", "in", slurry).product("out", "F", "out").run());
+        var run = closes(sheet().unit("F", "filter", "{}").feed("in", "F", "a", slurry).product("out", "F", "b").run());
         var in = run.streams().get("in");
         var out = run.streams().get("out");
         assertEquals(.5, in.solids().massKg(), 1e-12);
@@ -230,8 +230,8 @@ final class FlowsheetUnitsTest {
     private static final String HOT_WATER = "{\"target\":\"outlet\",\"side\":\"tube\",\"temperature\":320}";
 
     private static Sheet waterPair(String settings) {
-        return sheet().unit("E", "exchanger", settings).feed("hot", "E", "tube_in", feed(360, 5e5, PURE_WATER, 100)).feed("cold", "E", "shell_in", feed(300, 5e5, PURE_WATER, 200))
-                .product("hot out", "E", "tube_out").product("cold out", "E", "shell_out");
+        return sheet().unit("E", "exchanger", settings).feed("hot", "E", "tube_a", feed(360, 5e5, PURE_WATER, 100)).feed("cold", "E", "shell_a", feed(300, 5e5, PURE_WATER, 200))
+                .product("hot out", "E", "tube_b").product("cold out", "E", "shell_b");
     }
 
     @Test void anExchangerSetByOneSidePassesTheDutyToTheOther() {
@@ -272,7 +272,7 @@ final class FlowsheetUnitsTest {
 
     @Test void aFreeSideIsAUtility() {
         var run = closes(sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":340,\"shell_drop\":1e4}")
-                .feed("in", "E", "shell_in", feed(300, 5e5, PURE_WATER, 100)).product("out", "E", "shell_out").run());
+                .feed("in", "E", "shell_a", feed(300, 5e5, PURE_WATER, 100)).product("out", "E", "shell_b").run());
         assertEquals(340, run.streams().get("out").temperature(), 1e-9);
         assertEquals(4.9e5, run.streams().get("out").pressure(), 1e-6);
         assertTrue(run.duties() > 0, "the utility's heat is booked");
@@ -280,32 +280,32 @@ final class FlowsheetUnitsTest {
 
     @Test void aKettleBoilsItsFeedToAGasAndALiquid() {
         var run = closes(sheet().unit("K", "kettle", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":420}")
-                .feed("heating", "K", "tube_in", feed(520, 30e5, PURE_WATER, 2000)).feed("feed", "K", "feed", feed(390, 2e5, WET_CRUDE, 100))
-                .product("heating out", "K", "tube_out").product("gas", "K", "gas").product("liquid", "K", "liquid").run());
+                .feed("heating", "K", "tube_a", feed(520, 30e5, PURE_WATER, 2000)).feed("feed", "K", "feed", feed(390, 2e5, WET_CRUDE, 100))
+                .product("heating out", "K", "tube_b").product("gas", "K", "gas").product("liquid", "K", "liquid").run());
         sameAmounts(run.streams().get("feed").amounts(), sum(run, "gas", "liquid"));
         assertTrue(run.streams().get("gas").total() > 0 && run.streams().get("liquid").total() > 0);
         assertTrue(run.streams().get("heating out").temperature() < 520);
     }
 
     @Test void anAreaNeedsBothSides() {
-        var run = sheet().unit("E", "exchanger", "{\"target\":\"area\",\"area\":10}").feed("in", "E", "shell_in", feed(300, 5e5, PURE_WATER, 100)).product("out", "E", "shell_out").run();
+        var run = sheet().unit("E", "exchanger", "{\"target\":\"area\",\"area\":10}").feed("in", "E", "shell_a", feed(300, 5e5, PURE_WATER, 100)).product("out", "E", "shell_b").run();
         assertEquals(FlowsheetRun.Status.FAILED, run.status());
         assertTrue(logged(run, "exchanger.area_pair"), () -> "log " + run.log());
     }
 
     @Test void theSetSideNeedsItsStream() {
-        var run = sheet().unit("E", "exchanger", "{\"side\":\"tube\",\"temperature\":340}").feed("in", "E", "shell_in", feed(300, 5e5, PURE_WATER, 100)).product("out", "E", "shell_out").run();
+        var run = sheet().unit("E", "exchanger", "{\"side\":\"tube\",\"temperature\":340}").feed("in", "E", "shell_a", feed(300, 5e5, PURE_WATER, 100)).product("out", "E", "shell_b").run();
         assertEquals(FlowsheetRun.Status.FAILED, run.status());
         assertTrue(logged(run, "exchanger.set_side"), () -> "log " + run.log());
     }
 
     @Test void anAirCoolerRemovesHeatAndCannotAddIt() {
         var run = closes(sheet().unit("A", "cooler", "{\"temperature\":320,\"drop\":1e4}")
-                .feed("in", "A", "in", feed(380, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
+                .feed("in", "A", "a", feed(380, 3e5, PURE_WATER, 100)).product("out", "A", "b").run());
         assertEquals(320, run.streams().get("out").temperature(), 1e-9);
         assertEquals(run.streams().get("in").enthalpy() - run.streams().get("out").enthalpy(), reading(run, "A", "duty"), 1e-3);
         var heats = closes(sheet().unit("A", "cooler", "{\"temperature\":400}")
-                .feed("in", "A", "in", feed(380, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
+                .feed("in", "A", "a", feed(380, 3e5, PURE_WATER, 100)).product("out", "A", "b").run());
         assertEquals(380, heats.streams().get("out").temperature(), 1e-3, "the stream passes");
         assertTrue(logged(heats, "cooler.heats"));
     }
@@ -316,53 +316,53 @@ final class FlowsheetUnitsTest {
      */
     @Test void aCoolerStopsAtItsCoolant() {
         var outlet = closes(sheet().unit("A", "cooler", "{\"temperature\":283.15}")
-                .feed("in", "A", "in", feed(360, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
+                .feed("in", "A", "a", feed(360, 3e5, PURE_WATER, 100)).product("out", "A", "b").run());
         assertEquals(298.15, outlet.streams().get("out").temperature(), 1e-9);
         assertTrue(logged(outlet, "cooler.coolant"));
         var duty = closes(sheet().unit("A", "cooler", "{\"target\":\"duty\",\"duty\":1e9}")
-                .feed("in", "A", "in", feed(360, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
+                .feed("in", "A", "a", feed(360, 3e5, PURE_WATER, 100)).product("out", "A", "b").run());
         assertEquals(298.15, duty.streams().get("out").temperature(), 1e-9);
         assertEquals(duty.streams().get("in").enthalpy() - duty.streams().get("out").enthalpy(), reading(duty, "A", "duty"), 1e-3);
         var held = closes(sheet().unit("A", "cooler", "{\"temperature\":303.15}")
-                .feed("in", "A", "in", feed(360, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
+                .feed("in", "A", "a", feed(360, 3e5, PURE_WATER, 100)).product("out", "A", "b").run());
         assertEquals(303.15, held.streams().get("out").temperature(), 1e-9);
         assertFalse(logged(held, "cooler.coolant"), "30 °C stands");
         var free = closes(sheet().unit("E", "exchanger", "{\"side\":\"shell\",\"temperature\":283.15}")
-                .feed("in", "E", "shell_in", feed(360, 3e5, PURE_WATER, 100)).product("out", "E", "shell_out").run());
+                .feed("in", "E", "shell_a", feed(360, 3e5, PURE_WATER, 100)).product("out", "E", "shell_b").run());
         assertEquals(298.15, free.streams().get("out").temperature(), 1e-9);
         assertTrue(logged(free, "cooler.coolant"));
         var heated = closes(sheet().unit("E", "exchanger", "{\"side\":\"shell\",\"temperature\":283.15}")
-                .feed("in", "E", "shell_in", feed(270, 3e5, NITROGEN, 100)).product("out", "E", "shell_out").run());
+                .feed("in", "E", "shell_a", feed(270, 3e5, NITROGEN, 100)).product("out", "E", "shell_b").run());
         assertEquals(283.15, heated.streams().get("out").temperature(), 1e-9, "a free side that heats is out of scope");
         assertFalse(logged(heated, "cooler.coolant"));
     }
 
     @Test void aFiredHeaterTakesBothDropsAndStopsAtItsLimit() {
         var free = closes(sheet().unit("H", "fired_heater", "{\"temperature\":640,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}")
-                .feed("in", "H", "in", feed(500, 30e5, WET_CRUDE, 100)).product("out", "H", "out").run());
+                .feed("in", "H", "a", feed(500, 30e5, WET_CRUDE, 100)).product("out", "H", "b").run());
         assertEquals(30e5 - 7.6e5, free.streams().get("out").pressure(), 1e-6);
         assertEquals(640, free.streams().get("out").temperature(), 1e-9);
         double duty = reading(free, "H", "duty");
         var limited = closes(sheet().unit("H", "fired_heater", "{\"temperature\":640,\"limit\":" + duty / 2 + "}")
-                .feed("in", "H", "in", feed(500, 30e5, WET_CRUDE, 100)).product("out", "H", "out").run());
+                .feed("in", "H", "a", feed(500, 30e5, WET_CRUDE, 100)).product("out", "H", "b").run());
         assertEquals(duty / 2, reading(limited, "H", "duty"), 1e-3 * duty);
         assertTrue(limited.streams().get("out").temperature() < 640);
         assertTrue(logged(limited, "heater.limit"));
         var cools = closes(sheet().unit("H", "fired_heater", "{\"temperature\":400}")
-                .feed("in", "H", "in", feed(500, 30e5, WET_CRUDE, 100)).product("out", "H", "out").run());
+                .feed("in", "H", "a", feed(500, 30e5, WET_CRUDE, 100)).product("out", "H", "b").run());
         assertEquals(500, cools.streams().get("out").temperature(), 1e-3, "with the fire out the stream passes");
         assertTrue(logged(cools, "heater.cools"));
     }
 
     @Test void aHeatersCoilsApartShareItsLimit() {
         String coils = "{\"coils\":\"apart\",\"convection_temperature\":600,\"temperature\":640";
-        var free = closes(sheet().unit("H", "fired_heater", coils + "}").feed("steam", "H", "convection_in", feed(460, 10e5, PURE_WATER, 100)).feed("crude", "H", "radiant_in", feed(500, 30e5, WET_CRUDE, 100))
-                .product("hot steam", "H", "convection_out").product("hot crude", "H", "radiant_out").run());
+        var free = closes(sheet().unit("H", "fired_heater", coils + "}").feed("steam", "H", "convection_a", feed(460, 10e5, PURE_WATER, 100)).feed("crude", "H", "radiant_a", feed(500, 30e5, WET_CRUDE, 100))
+                .product("hot steam", "H", "convection_b").product("hot crude", "H", "radiant_b").run());
         assertEquals(600, free.streams().get("hot steam").temperature(), 1e-9);
         assertEquals(640, free.streams().get("hot crude").temperature(), 1e-9);
         double steam = reading(free, "H/convection", "duty"), crude = reading(free, "H/radiant", "duty");
-        var limited = closes(sheet().unit("H", "fired_heater", coils + ",\"limit\":" + (steam + crude / 2) + "}").feed("steam", "H", "convection_in", feed(460, 10e5, PURE_WATER, 100)).feed("crude", "H", "radiant_in", feed(500, 30e5, WET_CRUDE, 100))
-                .product("hot steam", "H", "convection_out").product("hot crude", "H", "radiant_out").run());
+        var limited = closes(sheet().unit("H", "fired_heater", coils + ",\"limit\":" + (steam + crude / 2) + "}").feed("steam", "H", "convection_a", feed(460, 10e5, PURE_WATER, 100)).feed("crude", "H", "radiant_a", feed(500, 30e5, WET_CRUDE, 100))
+                .product("hot steam", "H", "convection_b").product("hot crude", "H", "radiant_b").run());
         assertEquals(600, limited.streams().get("hot steam").temperature(), 1e-9, "the convection coil takes its share first");
         assertEquals(crude / 2, reading(limited, "H/radiant", "duty"), 1e-3 * crude);
     }
@@ -413,7 +413,7 @@ final class FlowsheetUnitsTest {
 
     @Test void feedAndEffluentAroundAHeaterIsNoLoop() {
         var run = closes(sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":480}").unit("H", "fired_heater", "{\"temperature\":560}")
-                .feed("cold", "E", "shell_in", feed(320, 100e5, PURE_WATER, 100)).line("warm", "E", "shell_out", "H", "in").line("hot", "H", "out", "E", "tube_in").product("cooled", "E", "tube_out").run());
+                .feed("cold", "E", "shell_a", feed(320, 100e5, PURE_WATER, 100)).line("warm", "E", "shell_b", "H", "a").line("hot", "H", "b", "E", "tube_a").product("cooled", "E", "tube_b").run());
         assertTrue(run.loops().isEmpty(), "the set side solves first, so the heat loop is no stream loop");
         double taken = run.streams().get("warm").enthalpy() - run.streams().get("cold").enthalpy();
         assertEquals(run.streams().get("hot").enthalpy() - taken, run.streams().get("cooled").enthalpy(), .1, "the hot side gives back what the cold side took");
@@ -421,7 +421,7 @@ final class FlowsheetUnitsTest {
 
     @Test void aBoilingStreamStaysOnItsPlateau() {
         var run = closes(sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":480}").unit("H", "fired_heater", "{\"temperature\":560}")
-                .feed("cold", "E", "shell_in", feed(320, 20e5, PURE_WATER, 100)).line("warm", "E", "shell_out", "H", "in").line("hot", "H", "out", "E", "tube_in").product("cooled", "E", "tube_out").run());
+                .feed("cold", "E", "shell_a", feed(320, 20e5, PURE_WATER, 100)).line("warm", "E", "shell_b", "H", "a").line("hot", "H", "b", "E", "tube_a").product("cooled", "E", "tube_b").run());
         var cooled = run.streams().get("cooled");
         assertEquals(485.53, cooled.temperature(), .01, "water at 20 bar condenses at its one temperature");
         assertTrue(cooled.state().waterLiquid() > 0 && cooled.state().waterVapor() > 0, "part steam, part water");
@@ -429,7 +429,7 @@ final class FlowsheetUnitsTest {
 
     @Test void aDrumOnABoilingPlateauKeepsItsEnergy() {
         var run = closes(sheet().unit("V", "valve", "{\"pressure\":5e5}").unit("D", "drum", "{}")
-                .feed("in", "V", "in", feed(460, 20e5, PURE_WATER, 100)).line("flashed", "V", "out", "D", "in").product("gas", "D", "gas").product("oil", "D", "oil").product("water", "D", "water").run());
+                .feed("in", "V", "a", feed(460, 20e5, PURE_WATER, 100)).line("flashed", "V", "b", "D", "in").product("gas", "D", "gas").product("oil", "D", "oil").product("water", "D", "water").run());
         assertTrue(run.streams().get("gas").total() > 0 && run.streams().get("water").total() > 0, "a let-down flashes part of the water");
         assertEquals(run.streams().get("gas").temperature(), run.streams().get("water").temperature(), .01);
         assertEquals(0, run.streams().get("gas").state().waterLiquid(), .02 * run.streams().get("gas").total(), "the gas stays gas");
@@ -439,7 +439,7 @@ final class FlowsheetUnitsTest {
     @Test void aWetStreamStaysOnTheFlashCurve() {
         for (double temperature : new double[]{370, 376, 379, 382, 385}) {
             var run = closes(sheet().unit("V", "valve", "{\"target\":\"drop\",\"drop\":1}")
-                    .feed("in", "V", "in", feed(temperature, 2e5, WET_CRUDE, 100)).product("out", "V", "out").run());
+                    .feed("in", "V", "a", feed(temperature, 2e5, WET_CRUDE, 100)).product("out", "V", "b").run());
             assertEquals(temperature, run.streams().get("out").temperature(), .01, "a one-pascal let-down barely moves it");
             assertEquals(run.streams().get("in").state().waterLiquid(), run.streams().get("out").state().waterLiquid(), .05, "nor its free water");
         }
@@ -448,14 +448,14 @@ final class FlowsheetUnitsTest {
     /** Cooled by a refrigerant's cold side, as no air or tower water can take water under 25 °C (C2). */
     @Test void waterColdEnoughToFreezeStaysALiquidStandIn() {
         var run = closes(sheet().unit("E", "exchanger", "{\"target\":\"duty\",\"side\":\"shell\",\"duty\":-1.2e6}")
-                .feed("in", "E", "shell_in", feed(300, 5e5, PURE_WATER, 100)).product("out", "E", "shell_out")
-                .feed("cold", "E", "tube_in", feed(110, 5e5, NITROGEN, 5000)).product("cold out", "E", "tube_out").run());
+                .feed("in", "E", "shell_a", feed(300, 5e5, PURE_WATER, 100)).product("out", "E", "shell_b")
+                .feed("cold", "E", "tube_a", feed(110, 5e5, NITROGEN, 5000)).product("cold out", "E", "tube_b").run());
         assertTrue(run.streams().get("out").temperature() < 273, "no ice on a stream (D23): the energy still closes");
     }
 
     @Test void aRecycleThroughTheOtherSideCloses() {
         var run = closes(sheet().unit("M", "mixer", "{}").unit("E", "exchanger", "{\"target\":\"duty\",\"side\":\"shell\",\"duty\":1e5}").unit("S", "splitter", "{\"outlets\":[{\"id\":\"back\",\"share\":0.5},{\"id\":\"on\"}]}")
-                .feed("feed", "M", "in/1", feed(330, 5e5, PURE_WATER, 100)).line("mixed", "M", "out", "E", "shell_in").line("hot", "E", "shell_out", "S", "in")
+                .feed("feed", "M", "in/1", feed(330, 5e5, PURE_WATER, 100)).line("mixed", "M", "out", "E", "shell_a").line("hot", "E", "shell_b", "S", "in")
                 .line("back", "S", "out/back", "M", "in/2").product("product", "S", "out/on").run());
         assertEquals(100, run.streams().get("product").total(), 1e-2, "at steady state what enters leaves");
         assertEquals(1, run.loops().size());
@@ -464,7 +464,7 @@ final class FlowsheetUnitsTest {
 
     @Test void whatCannotRunFailsWhereItStandsAndTheRestSolves() {
         var run = sheet().unit("V", "valve", "{\"pressure\":2e5}").unit("X", "gone_unit", "{}").unit("W", "valve", "{\"pressure\":1e5}")
-                .feed("in", "V", "in", feed(420, 8e5, WET_CRUDE, 100)).line("a", "V", "out", "X", "in").line("b", "X", "out", "W", "in").product("c", "W", "out").run();
+                .feed("in", "V", "a", feed(420, 8e5, WET_CRUDE, 100)).line("a", "V", "b", "X", "in").line("b", "X", "out", "W", "a").product("c", "W", "b").run();
         assertEquals(FlowsheetRun.Status.FAILED, run.status());
         assertTrue(logged(run, "unit.removed"), () -> "log " + run.log());
         assertEquals(FlowsheetRun.Outcome.SOLVED, run.outcomes().get("V"));
@@ -474,7 +474,7 @@ final class FlowsheetUnitsTest {
     }
 
     @Test void aFreeRequiredInletRefusesTheUnit() {
-        var run = sheet().unit("V", "valve", "{\"pressure\":2e5}").product("out", "V", "out").run();
+        var run = sheet().unit("V", "valve", "{\"pressure\":2e5}").product("out", "V", "b").run();
         assertEquals(FlowsheetRun.Status.FAILED, run.status());
         assertTrue(logged(run, "unit.free_inlet"), () -> "log " + run.log());
     }
@@ -501,6 +501,6 @@ final class FlowsheetUnitsTest {
 
     @Test void aRunNeedsNoRuntimeOfItsOwn() {
         assertEquals(PACKAGE, MaterialRuntime.with(CATALOG, PACKAGE, () -> closes(sheet().unit("V", "valve", "{\"pressure\":2e5}")
-                .feed("in", "V", "in", feed(420, 8e5, WET_CRUDE, 100)).product("out", "V", "out").run()).streams().size() == 2 ? PACKAGE : ""), "a run nests inside one that stands");
+                .feed("in", "V", "a", feed(420, 8e5, WET_CRUDE, 100)).product("out", "V", "b").run()).streams().size() == 2 ? PACKAGE : ""), "a run nests inside one that stands");
     }
 }

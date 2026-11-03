@@ -268,12 +268,18 @@ public final class SimulatorPage {
     public static String portHover(SheetContext x, SheetLayout.Place place) {
         var unit = x.editor().unit(place.unit());
         var lines = new ArrayList<String>();
-        lines.add(x.text("port.hover", unit.name(), StreamDoors.portName(x, place.port())));
+        // A passage end reads as the role it plays: the one its stream gives it, or both while none does.
+        var wiring = x.editor().wiring(null);
+        var passage = wiring.passage(unit.id(), place.port());
+        boolean free = passage != null && wiring.free(unit.id(), place.port());
+        String role = passage == null ? place.port() : free || Boolean.TRUE.equals(wiring.isInlet(unit.id(), place.port())) ? passage.in() : passage.out();
+        String name = free ? x.text("port.either", StreamDoors.portName(x, passage.in()), Door.lower(StreamDoors.portName(x, passage.out()))) : StreamDoors.portName(x, role);
+        lines.add(x.text("port.hover", unit.name(), name));
         for (var stream : x.editor().sheet().streams()) {
-            var end = place.direction() == Port.Direction.OUT ? stream.from() : stream.to();
-            if (end != null && end.unit().equals(unit.id()) && end.port().equals(place.port())) lines.add(x.text("port.holds", stream.name()));
+            var ends = passage != null ? new Flowsheet.End[]{stream.from(), stream.to()} : new Flowsheet.End[]{place.direction() == Port.Direction.OUT ? stream.from() : stream.to()};
+            for (var end : ends) if (end != null && end.unit().equals(unit.id()) && end.port().equals(place.port())) lines.add(x.text("port.holds", stream.name()));
         }
-        var port = port(unit, place.port());
+        var port = port(unit, role);
         if (port != null) lines.add(x.text(left(port)));
         return String.join("\n", lines);
     }

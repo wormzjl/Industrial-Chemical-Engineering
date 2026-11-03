@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.Passage;
 import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
@@ -49,6 +50,11 @@ public final class ExchangerUnit implements UnitModel {
         ports.add(kettle ? Port.in(shellIn()) : Port.optionalIn(shellIn()));
         for (var port : shellOutlets()) ports.add(Port.out(port));
         return ports;
+    }
+
+    /** The tubes either way; a plain exchanger's shell too, but a kettle's shell boils its feed and its gas leaves at the top. */
+    @Override public List<Passage> passages(Params params) {
+        return kettle ? List.of(Passage.named(TUBE)) : List.of(Passage.named(TUBE), Passage.named(SHELL));
     }
 
     @Override public List<Calculation> calculations(WiredUnit u) {

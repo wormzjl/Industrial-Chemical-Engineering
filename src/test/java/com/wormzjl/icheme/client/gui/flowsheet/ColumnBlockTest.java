@@ -257,8 +257,8 @@ class ColumnBlockTest {
         var params = door(ColumnComponents.Condenser.AIR_COOLER, 0, 1.4e5);
         var block = block(params);
         assertEquals(ColumnBlock.Shape.AIR_CONDENSER, block.parts().stream().filter(p -> p.slot().equals(ColumnBlueprint.CONDENSER)).findFirst().orElseThrow().shape());
-        assertNull(block.spot("condenser_in"));
-        assertNull(block.spot("condenser_out"));
+        assertNull(block.spot("condenser_a"));
+        assertNull(block.spot("condenser_b"));
         assertEquals(0, block.pipes().stream().filter(p -> p.service() == ColumnBlock.Service.COLD).filter(p -> p.points()[1] < block.tower().y() - 20).count(), "no cold line over the head");
         for (var place : SheetLayout.of(one(params), SheetFixture.M).box("u").places()) assertFalse(place.port().startsWith("condenser"), place.port());
     }

@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "basis": {
     "package": "icheme:tjl20_methane_nitrogen",
     "revision": "crude-regrouped-r1",
@@ -8,12 +8,12 @@
   "units": [
     {"id": "P-1", "type": "pump", "name": "P-101", "x": 40, "y": 80, "params": {"target": "rise", "rise": 300000.0}},
     {"id": "E-1", "type": "exchanger", "name": "E-101", "x": 120, "y": 80, "params": {"target": "outlet", "side": "tube", "temperature": 340.0, "tube_drop": 50000.0}},
-    {"id": "T-1", "type": "column", "name": "T-101", "x": 240, "y": 80, "params": {"diameter": 6.5}}
+    {"id": "T-1", "type": "column", "name": "T-101", "x": 240, "y": 80, "params": {"diameter": 6.5, "condenser": "AIR_COOLER", "condenser_units": 3, "kettle_units": 2}}
   ],
   "streams": [
     {"id": "F", "name": "FEED", "to": {"unit": "P-1", "port": "in"}, "feed": {"temperature": 300.0, "pressure": 200000.0, "amounts": {"Water": 100.0}}},
-    {"id": "S-1", "name": "S-1", "from": {"unit": "P-1", "port": "out"}, "to": {"unit": "E-1", "port": "tube_in"}},
-    {"id": "S-2", "name": "S-2", "from": {"unit": "E-1", "port": "tube_out"}}
+    {"id": "S-1", "name": "S-1", "from": {"unit": "P-1", "port": "out"}, "to": {"unit": "E-1", "port": "tube_a"}},
+    {"id": "S-2", "name": "S-2", "from": {"unit": "E-1", "port": "tube_b"}}
   ],
   "sizing": {
     "basis": {"design_flow": 1.2, "line_length": 80.0, "pa_fall": 50.0, "later": "a basis field of a later version"},
@@ -21,11 +21,11 @@
       "P-1": {"mode": "FIXED", "size": {"kind": "PUMP", "discharge": 0.15, "later": "a size field of a later version"}, "later": "a unit field of a later version"},
       "E-1": {"mode": "AUTO", "size": {"kind": "EXCHANGER", "kettle": false, "shells": 2, "shell": 1.0, "tubes": 6}},
       "T-1": {"mode": "FIXED"},
-      "T-1/condenser": {"mode": "AUTO", "size": {"kind": "EXCHANGER", "kettle": false, "shells": 5, "shell": 1.0, "tubes": 3}},
+      "T-1/condenser": {"mode": "AUTO", "size": {"kind": "AIR_COOLER", "width": 3.0, "length": 9, "parallel": 6, "series": 4, "banks": 3}},
       "T-1/receiver": {"mode": "AUTO", "type": "LYING_DRUM", "hold": 7.5, "size": {"kind": "DRUM", "type": "LYING_DRUM", "diameter": 4.0, "length": 10, "boot": true}},
-      "T-1/reboiler": {"mode": "FIXED", "size": {"kind": "EXCHANGER", "kettle": true, "shells": 1, "shell": 1.25, "tubes": 4}},
+      "T-1/reboiler": {"mode": "FIXED", "size": {"kind": "EXCHANGER", "kettle": true, "shells": 2, "shell": 1.25, "tubes": 4}},
       "H-1": {"mode": "AUTO", "type": "CABIN_HEATER", "size": {"kind": "HEATER", "type": "CABIN_HEATER", "count": 1, "diameter": 11.0, "length": 41}},
-      "A-1": {"mode": "AUTO", "size": {"kind": "AIR_COOLER", "width": 2.0, "length": 5, "parallel": 6, "series": 4}},
+      "A-1": {"mode": "AUTO", "size": {"kind": "AIR_COOLER", "width": 2.0, "length": 5, "parallel": 6, "series": 4, "banks": 2}},
       "C-1": {"mode": "FIXED", "type": "PISTON", "size": {"kind": "COMPRESSOR", "type": "PISTON", "size": 0.6, "length": 3}},
       "K-1": {"mode": "AUTO", "type": "SPHERE", "hold": 48.0, "size": {"kind": "TANK", "type": "SPHERE", "count": 1, "diameter": 17.0, "shell": 1}}
     },

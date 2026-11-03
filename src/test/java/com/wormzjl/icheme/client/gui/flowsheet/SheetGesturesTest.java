@@ -185,7 +185,7 @@ class SheetGesturesTest {
         assertEquals("s", gestures.lifted());
         var overlay = gestures.overlay();
         assertEquals("s", overlay.hidden());
-        assertEquals("in", overlay.freed().port());
+        assertEquals("a", overlay.freed().port());
         assertTrue(overlay.rings().stream().anyMatch(p -> p.unit().equals("q") && p.port().equals("in")), "the free inlet is ringed");
         var port = editor.layout().place("q", "in");
         click(port.x(), port.y(), 0);
@@ -256,6 +256,21 @@ class SheetGesturesTest {
         assertNull(feed.from());
         assertEquals("in", feed.to().port());
         assertNotNull(feed.feed(), "every open start is a feed");
+    }
+
+    /** A free passage's end drawn to empty canvas makes a product from either end (owner 2026-11-04, "product"); a passage is fed by landing a feed. */
+    @Test
+    void drawingFromAFreePassageEndToEmptyCanvasMakesAProduct() {
+        var valve = editor.addUnit("valve", 600, 300);
+        for (var end : List.of("a", "b")) {
+            var place = editor.layout().place(valve, end);
+            drag(place.x(), place.y(), place.x() + (end.equals("a") ? -80 : 80), place.y() + 60);
+            var product = editor.sheet().streams().getLast();
+            assertEquals(new Flowsheet.End(valve, end), product.from(), "the end drawn out of is the outlet");
+            assertNull(product.to());
+            assertNull(product.feed(), "a product carries no feed");
+            editor.undo();
+        }
     }
 
     @Test

@@ -65,13 +65,13 @@ public final class StopGapProbe {
                 unit("H-101", "fired_heater", "{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"duty\":1e7,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}"),
                 unit("V-101", "valve", "{\"target\":\"outlet\",\"pressure\":2.72e5,\"drop\":1e5}"), unit("E-102", "air_cooler", "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}"),
                 unit("P-102", "pump", "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}"));
-        var streams = new ArrayList<>(List.of(stream("CRUDE", null, "", "P-101", "in", new Flowsheet.Feed(298.15, 8e5, crude, List.of())), stream("S-1", "P-101", "out", "T-101", "pa/1/in", null), stream("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in", null),
-                stream("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in", null), stream("S-4", "T-101", "pa/3/out", "E-101", "tube_in", null), stream("S-5", "E-101", "tube_out", "H-101", "in", null), stream("S-6", "H-101", "out", "V-101", "in", null),
-                stream("S-7", "V-101", "out", "T-101", "feed", null), stream("STEAM", null, "", "T-101", "steam/1", water(steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond())),
-                stream("CWS", null, "", "T-101", "condenser_in", water(303.15, 4e5, 190000 / 3.6)), stream("CWR", "T-101", "condenser_out", null, "", null), stream("OFFGAS", "T-101", "overhead", null, "", null),
+        var streams = new ArrayList<>(List.of(stream("CRUDE", null, "", "P-101", "in", new Flowsheet.Feed(298.15, 8e5, crude, List.of())), stream("S-1", "P-101", "out", "T-101", "pa/1/a", null), stream("S-2", "T-101", "pa/1/b", "T-101", "pa/2/a", null),
+                stream("S-3", "T-101", "pa/2/b", "T-101", "pa/3/a", null), stream("S-4", "T-101", "pa/3/b", "E-101", "tube_a", null), stream("S-5", "E-101", "tube_b", "H-101", "a", null), stream("S-6", "H-101", "b", "V-101", "a", null),
+                stream("S-7", "V-101", "b", "T-101", "feed", null), stream("STEAM", null, "", "T-101", "steam/1", water(steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond())),
+                stream("CWS", null, "", "T-101", "condenser_a", water(303.15, 4e5, 190000 / 3.6)), stream("CWR", "T-101", "condenser_b", null, "", null), stream("OFFGAS", "T-101", "overhead", null, "", null),
                 stream("NAPHTHA", "T-101", "distillate", null, "", null), stream("WATER", "T-101", "water", null, "", null), stream("KERO", "T-101", "draw/1", null, "", null), stream("S-8", "T-101", "draw/2", "P-102", "in", null),
-                stream("DIESEL", "P-102", "out", null, "", null), stream("AGO", "T-101", "draw/3", null, "", null), stream("S-9", "T-101", "bottoms", "E-101", "shell_in", null), stream("S-10", "E-101", "shell_out", "E-102", "in", null),
-                stream("RESIDUE", "E-102", "out", null, "", null)));
+                stream("DIESEL", "P-102", "out", null, "", null), stream("AGO", "T-101", "draw/3", null, "", null), stream("S-9", "T-101", "bottoms", "E-101", "shell_a", null), stream("S-10", "E-101", "shell_b", "E-102", "a", null),
+                stream("RESIDUE", "E-102", "b", null, "", null)));
         return new Flowsheet(new Flowsheet.Basis(NETWORK, "probe", AXIS), units, streams, FlowsheetSolver.Settings.DEFAULT);
     }
 
