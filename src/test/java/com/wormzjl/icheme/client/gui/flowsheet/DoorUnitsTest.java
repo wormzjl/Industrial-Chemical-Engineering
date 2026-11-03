@@ -77,6 +77,9 @@ class DoorUnitsTest {
         assertEquals(List.of("100.0 °C", "2.50 bar", "0.0070 bar", "360.0 kmol/h", "180.0 kmol/h", "36.0 kmol/h", "0.0 kmol/h"), values(ColumnGlass.nodePairs(context(editor, SheetUnits.DEFAULT), node, 700)),
                 "the default keys; a tray's drop two digits finer than a pressure");
         assertEquals("—", ColumnGlass.nodePairs(x, node, Double.NaN).get(2).get(1), "the condenser and the reboiler have no tray drop");
+        // 1c: the Profiles view's drops and the status line's column drop go the same way.
+        assertEquals("21.500 kPa", ColumnGlass.dropText(x, 21_500));
+        assertEquals("0.2150 bar", ColumnGlass.dropText(context(editor, SheetUnits.DEFAULT), 21_500));
     }
 
     private static List<String> values(List<List<String>> pairs) {

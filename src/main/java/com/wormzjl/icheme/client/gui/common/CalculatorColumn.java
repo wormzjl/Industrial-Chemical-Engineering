@@ -721,10 +721,10 @@ public final class CalculatorColumn {
     }
 
     /**
-     * Each tray's pressure drop as a bar ({@code drops}: kPa a node, the interior trays' from node 1), the trays
-     * numbered at the first, the last and every fifth, 0 and the largest drop under it.
+     * Each tray's pressure drop as a bar ({@code drops}: a node's, the interior trays' from node 1, in any one unit), the trays
+     * numbered at the first, the last and every fifth, 0 and the largest drop under it as {@code label} writes it.
      */
-    public static void drops(Canvas c, Rect plot, double[] drops) {
+    public static void drops(Canvas c, Rect plot, double[] drops, java.util.function.DoubleFunction<String> label) {
         int n = drops.length - 2, x = plot.x(), y = plot.y(), w = plot.w(), h = plot.h();
         if (n < 2 || h < 16) return;
         double max = 0.001;
@@ -745,7 +745,7 @@ public final class CalculatorColumn {
                 }
             }
         });
-        String high = Format.number(max) + " kPa";
+        String high = label.apply(max);
         c.text("0", x, y + h + 5, Palette.MUTED);
         c.text(high, x + w - m.width(high), y + h + 5, Palette.MUTED);
     }

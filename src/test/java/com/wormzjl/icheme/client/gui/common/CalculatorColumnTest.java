@@ -650,8 +650,8 @@ class CalculatorColumnTest {
             for (int height : new int[]{101, 135, 281, 481}) {
                 var box = new Rect(11, 77, width, height);
                 var canvas = new Recording();
-                int head = CalculatorColumn.heading(canvas, box, t.get("column.traffic"), legend, M);
-                assertEquals(head, CalculatorColumn.heading(null, box, t.get("column.traffic"), legend, M));
+                int head = CalculatorColumn.heading(canvas, box, t.get("flowsheet.door.profile_traffic", "kmol/min"), legend, M);
+                assertEquals(head, CalculatorColumn.heading(null, box, t.get("flowsheet.door.profile_traffic", "kmol/min"), legend, M));
                 var plot = CalculatorColumn.plot(box, head);
                 int nodes = 64;
                 double[][] series = new double[4][nodes];
@@ -661,7 +661,7 @@ class CalculatorColumnTest {
                 double[] drops = new double[nodes];
                 for (int n = 2; n < nodes - 1; n++) drops[n] = 0.4 + n * 0.01;
                 var bars = new Recording();
-                CalculatorColumn.drops(bars, plot, drops);
+                CalculatorColumn.drops(bars, plot, drops, v -> v + " kPa");
                 for (var plotted : List.of(profile, bars)) {
                     canvas.places.addAll(plotted.places);
                     // The tray numbers left of the plot, a line apart.

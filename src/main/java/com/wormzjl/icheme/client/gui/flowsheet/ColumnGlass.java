@@ -130,13 +130,20 @@ final class ColumnGlass {
         return Double.NaN;
     }
 
+    /** A tray's drop, Pa. */
     private static double drop(V3ColumnInspection view, int tray) {
-        return (view.nodes().get(tray).pressurePascal() - view.nodes().get(tray - 1).pressurePascal()) / 1000;
+        return view.nodes().get(tray).pressurePascal() - view.nodes().get(tray - 1).pressurePascal();
     }
 
+    /** The trays' whole drop, Pa. */
     static double totalDrop(V3ColumnInspection view) {
         int n = view.input().stageCount();
-        return n < 2 ? 0 : (view.nodes().get(n).pressurePascal() - view.nodes().get(1).pressurePascal()) / 1000;
+        return n < 2 ? 0 : view.nodes().get(n).pressurePascal() - view.nodes().get(1).pressurePascal();
+    }
+
+    /** A drop on the pressure key, with its unit (1c). */
+    static String dropText(SheetContext x, double pascals) {
+        return x.units().drop(pascals) + " " + x.units().pressure().symbol();
     }
 
     private static String percent(double value) {
@@ -197,12 +204,12 @@ final class ColumnGlass {
         private double value(V3ColumnInspection.Node node, int series) {
             return switch (view.metric) {
                 case TEMPERATURE -> x.units().temperature().display(node.temperatureKelvin());
-                case PRESSURE -> node.pressurePascal() / 1000;
+                case PRESSURE -> x.units().pressure().display(node.pressurePascal());
                 case TRAFFIC -> switch (series) {
-                    case 0 -> node.liquidMolPerSecond() / SheetUnits.KMOL_PER_HOUR;
-                    case 1 -> node.vaporMolPerSecond() / SheetUnits.KMOL_PER_HOUR;
-                    case 2 -> node.waterVaporMolPerSecond() / SheetUnits.KMOL_PER_HOUR;
-                    default -> node.freeWaterMolPerSecond() / SheetUnits.KMOL_PER_HOUR;
+                    case 0 -> x.units().time().display(node.liquidMolPerSecond()) / 1000;
+                    case 1 -> x.units().time().display(node.vaporMolPerSecond()) / 1000;
+                    case 2 -> x.units().time().display(node.waterVaporMolPerSecond()) / 1000;
+                    default -> x.units().time().display(node.freeWaterMolPerSecond()) / 1000;
                 };
                 case DROP -> throw new IllegalStateException("A drop is a bar, not a profile");
             };
@@ -212,10 +219,10 @@ final class ColumnGlass {
             var m = c.measure();
             int nodes = inspection.nodes().size();
             if (view.metric == Metric.DROP) {
-                int head = CalculatorColumn.heading(c, box, c(x, "column_dp", SheetUnits.number(1, totalDrop(inspection))), List.of(), m);
+                int head = CalculatorColumn.heading(c, box, x.text("door.column_dp", dropText(x, totalDrop(inspection))), List.of(), m);
                 var values = new double[nodes];
                 for (int i = 2; i <= inspection.input().stageCount(); i++) values[i] = drop(inspection, i);
-                CalculatorColumn.drops(c, CalculatorColumn.plot(box, head), values);
+                CalculatorColumn.drops(c, CalculatorColumn.plot(box, head), values, pascals -> dropText(x, pascals));
                 return;
             }
             boolean traffic = view.metric == Metric.TRAFFIC;
@@ -223,8 +230,8 @@ final class ColumnGlass {
                     new CalculatorColumn.Legend(c(x, "traffic.water"), CalculatorColumn.TRAFFIC[2]), new CalculatorColumn.Legend(c(x, "traffic.aqueous"), CalculatorColumn.TRAFFIC[3]));
             String title = switch (view.metric) {
                 case TEMPERATURE -> c(x, "temperature", x.units().temperature().symbol());
-                case PRESSURE -> c(x, "pressure");
-                default -> c(x, "traffic");
+                case PRESSURE -> x.text("door.profile_pressure", x.units().pressure().symbol());
+                default -> x.text("door.profile_traffic", x.units().molesUnit());
             };
             int head = CalculatorColumn.heading(c, box, title, legend, m);
             var plot = CalculatorColumn.plot(box, head);
@@ -273,7 +280,7 @@ final class ColumnGlass {
             out.note(c(x, selected == 0 ? "top_tray" : selected == n + 1 ? "bottom_tray" : "tray", selected + 1), Palette.TEXT);
             if (inspection == null || selected >= inspection.nodes().size()) return out.note(c(x, "solve_to_inspect"), Palette.MUTED);
             var node = inspection.nodes().get(selected);
-            for (var pair : nodePairs(x, node, selected > 0 && selected <= n ? drop(inspection, selected) * 1000 : Double.NaN)) out.pair(pair.get(0), pair.get(1));
+            for (var pair : nodePairs(x, node, selected > 0 && selected <= n ? drop(inspection, selected) : Double.NaN)) out.pair(pair.get(0), pair.get(1));
             out.blank();
             var rows = new ArrayList<List<String>>();
             var basis = inspection.input().componentBasis();
@@ -287,7 +294,7 @@ final class ColumnGlass {
             if (inspection != null) {
                 var wet = new ArrayList<String>();
                 for (int i = 1; i <= inspection.input().stageCount(); i++) if (inspection.nodes().get(i).freeWaterMolPerSecond() > 0) wet.add(Integer.toString(i + 1));
-                out.note(c(x, "wet_trays", wet.isEmpty() ? c(x, "none") : String.join(", ", wet)), Palette.TEXT).note(c(x, "column_dp", SheetUnits.number(1, totalDrop(inspection))), Palette.TEXT);
+                out.note(c(x, "wet_trays", wet.isEmpty() ? c(x, "none") : String.join(", ", wet)), Palette.TEXT).note(x.text("door.column_dp", dropText(x, totalDrop(inspection))), Palette.TEXT);
                 display.trayHydraulics().ifPresent(h -> out.note(c(x, h.floods() ? "flooding" : "below_flood", h.maximumFloodTray() + 1), h.floods() ? Palette.WARN : Palette.TEXT).note(c(x, "worst_flood", SheetUnits.number(1, h.maximumFloodFraction() * 100)), Palette.TEXT));
             }
             out.note(c(x, "iterations", display.newtonIterations()), Palette.TEXT).note(c(x, "residual", fraction(display.maximumScaledResidual())), Palette.TEXT).note(c(x, "closure", fraction(display.closureTolerance())), Palette.TEXT);

@@ -243,7 +243,7 @@ public final class ColumnDoors {
         return new SheetState.Status(switch (page) {
             case RESULTS -> display.inspection().map(v -> {
                 var h = display.trayHydraulics();
-                return h.isPresent() ? x.text("door.status.column_flood", SheetUnits.number(1, ColumnGlass.totalDrop(v)), SheetUnits.number(1, h.get().maximumFloodFraction() * 100), h.get().maximumFloodTray() + 1) : x.text("door.status.solved");
+                return h.isPresent() ? x.text("door.status.column_flood", x.units().drop(ColumnGlass.totalDrop(v)), x.units().pressure().symbol(), SheetUnits.number(1, h.get().maximumFloodFraction() * 100), h.get().maximumFloodTray() + 1) : x.text("door.status.solved");
             }).orElse(x.text("door.status.solved"));
             case EQUIPMENT -> {
                 var unit = x.editor().unit(id);
