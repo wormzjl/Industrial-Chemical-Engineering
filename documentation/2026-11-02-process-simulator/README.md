@@ -122,6 +122,7 @@ Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md
   - Revised, hot inlets: plants cool hot streams in air first and trim them with water. A water cooler with a hot inlet now reads the duty an air cooler ahead of it would take.
   - Context: plants size on a summer dry bulb of 30 to 40 °C. The game's constant 25 °C sets both floors about 10 K lower.
   - No code changed, no test ran.
+- 2026-11-03: Cooler model decided: the owner's "Ok for the plan, also allow air-then-water approach in column condenser configuration". T1 as revised, and a third condenser type, `AIR_THEN_WATER` ([COOLER_MODEL_PLAN.md](COOLER_MODEL_PLAN.md) sections 6 and 7): air to max(receiver, 40 °C), a water trim exchanger below in a new `trim_condenser` slot with its own count, the water share recorded by the solve and owed to the trim's water side. Found while designing it: `EXCHANGER_APPROACH` reads the least difference along an exchanger, so a free water side fixed at 25 → 35 °C reads yellow on every inlet under 45 °C and red at 35 °C and under; its range now shrinks for cool inlets (plan section 3 item 3), and the trim's water returns at 30 °C. A 45 °C split is the other form, for the owner. Built in three packages by one writer. No code changed, no test ran.
 
 ## W10 findings
 
@@ -452,13 +453,12 @@ Taken alone, each reversible:
 - W9 left: 693 older English lines have no Chinese (assembly 234, fluid 173, column 109, constructor 46, pipe laying 41, heat 21, and less): the column door's tabs and plates and the exchanger's drawing stand in English in a Chinese game. They are older batches' lines, outside W9.
 - W9 left: no client has run the block id. A GameTest holds its save and load; the path from `Opening` to the file on the client ran in no game. `V3CompositionDraft` and the draft's composition path are reached only by tests. `tools/cloud-science-harness` keeps a stub naming the two removed getters, an archive of its batch.
 - W10b, decided 2026-11-03 and built the same day (W10b findings). The owner: "No it should be before the condenser, doesn't need to be modeled explicitly". The ejector stays ahead of the condenser and the block does not model its flows. The steam law S1 of [SIZING_PLAN.md](SIZING_PLAN.md) section 3.12 applies to the condenser's vent. No compatibility work. [VDU_OVERHEAD_REVIEW.md](VDU_OVERHEAD_REVIEW.md) holds the practice behind it.
-- Owner to choose: the cooler model in [COOLER_MODEL_PLAN.md](COOLER_MODEL_PLAN.md), on the owner's "AC is used for target T around 40-50C, and water coolers can go 10-20C lower". T1 is recommended and was revised after the practice check (plan section 5):
+- The cooler model, decided 2026-11-03 and building (C1 to C3 of [COOLER_MODEL_PLAN.md](COOLER_MODEL_PLAN.md) section 7). The owner: "Ok for the plan, also allow air-then-water approach in column condenser configuration". T1 as revised after the practice check:
   - Every cooling utility comes in at 25 °C (air, and tower water returning at 35 °C), and outlets are capped at 25 °C.
   - The approach rows are 15 K for air and 10 K for water, the existing `EXCHANGER_APPROACH`.
   - One Cooler tile, on which sizing proposes Air from 40 °C and Water below. Water is green from 35 °C.
   - A water cooler with a hot inlet reads what an air cooler ahead of it would take.
-
-  T2: two tiles, temperatures and caps only. R1: air and trim as one type.
+  - The column's condenser gains a third type, air then water (plan section 6): air to max(receiver, 40 °C), a water trim below, in the world and on the sheet.
 - W10 left: no client has drawn the tile, its door, the block's port or the Ejector group. The world's device waits for column operation's stage C (D21).
 - W10b left: a vent with no gas, at a top above P_c, takes no steam; real sets are also sized for leaking air, which the game does not model. Below about 1.5 kPa S1 does not count a second booster's steam. The gate column's vent is a light product, not a VDU's off-gas: no vacuum preset exists to show the 1 % case on the block.
 - The merge package: the code guide chapter, with the rule of plan 3.10 and the crude packages `thermo-materials.md` still names, and the tooling cleanup.

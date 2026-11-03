@@ -1,6 +1,6 @@
-# Coolers: air and water (proposal, 2026-11-03)
+# Coolers: air and water (plan, 2026-11-03)
 
-Batch 2026-11-02-process-simulator, after W10b (`b5eb35bc5`). Status: proposal; the owner chooses T1 (section 3, revised after the practice check of section 5) or T2 (section 4). The owner: "you need to find a method to differentiate water cooler and air coolers, usually AC cannot be used at lower target T. I think it's time to make a better model", and "I recall that AC is used for target T around 40-50C, and water coolers can go 10-20C lower".
+Batch 2026-11-02-process-simulator, after W10b (`b5eb35bc5`). Status: approved by the owner on 2026-11-03 ("Ok for the plan": T1 as revised in section 3), with the column condenser's air-then-water configuration added (section 6). Building in the order of section 7. The owner: "you need to find a method to differentiate water cooler and air coolers, usually AC cannot be used at lower target T. I think it's time to make a better model", and "I recall that AC is used for target T around 40-50C, and water coolers can go 10-20C lower".
 
 ## 1. Expected behaviour
 
@@ -36,6 +36,7 @@ Batch 2026-11-02-process-simulator, after W10b (`b5eb35bc5`). Status: proposal; 
    - A column whose condenser runs at or below its water warns. V3's own spec is not capped.
 3. Sizing (practice, yellow): the approach rows are air 15 K (`AIR_COOLER_OUTLET`, as now) and water 10 K (`EXCHANGER_APPROACH`, the row every exchanger already reads). No new row.
    - A free water side gets a load: its surface against 25 to 35 °C water, and its water flow as a reading, in kg/s and m³/h.
+   - Its water rises 10 K, less where the process inlet is cool. The return is 25 + min(10, max(T_in − 35, (T_in − 25)/4)) °C. It keeps 10 K at the hot end down to a 40 °C inlet, and never reaches the inlet. Added with section 6: `EXCHANGER_APPROACH` reads the least difference along the exchanger, so a fixed 35 °C return reads yellow on every inlet under 45 °C, and red (`EXCHANGER_HOT_END`) at 35 °C and under.
    - The 45 °C return row is unchanged.
 4. Types, the method that tells them apart (section 3.10's rule: one function, one tile, and sizing proposes the type).
    - The air cooler tile becomes the Cooler tile. Sizing proposes Air while the outlet is at least 40 °C (air + 15 K), and Water below. Water is green from 35 °C, yellow below it, and red at 25 °C ("needs refrigeration").
@@ -63,5 +64,45 @@ Batch 2026-11-02-process-simulator, after W10b (`b5eb35bc5`). Status: proposal; 
 | Hot inlet to a target under the air floor | One type by the outlet | Air first, water trim [THERMO] | Revised: an air-ahead reading; R1 as the automated form |
 | Design ambient | Constant 25 °C | A summer dry bulb, 30 to 40 °C [THERMO] | The game's climate (owner Q11); floors about 10 K lower than a plant's |
 | Choosing the type | Temperature only | Temperature first, then water supply, power, plot and cost | A game-level screen, as section 3.10's heaters and tanks |
+
+## 6. The column's condenser: air then water (owner, 2026-11-03)
+
+The owner, approving the plan: "also allow air-then-water approach in column condenser configuration". Refinery overhead systems often run that way: an air condenser, then a water trim cooler.
+
+- **Physics.**
+  - The overhead condenses in air from the top down to the split, 40 °C (air + 15 K), and water trims it from there to the receiver.
+  - The split is max(receiver, 40 °C), and never above the top vapour. A receiver at or above 40 °C leaves the trim no duty; a top vapour at or below 40 °C leaves the air none.
+- **Facts.**
+  - `ColumnComponents.Condenser` gains `AIR_THEN_WATER`, saved by name.
+  - `Units` gains `trim`, 1 to 6, default 1.
+  - Both are append-only, with a corpus image each.
+- **World assembly** (`ColumnBlueprint`): the overhead link runs [ejector] → air cooler (the condenser slot, `units.condenser` banks) → water exchanger (a new slot `trim_condenser`, `units.trim` shells, the water condenser's own form `EXCHANGER_CONDENSER`: process on the shell, water on the tubes) → receiver. The condensate link starts after the trim.
+- **World operation.**
+  - `ColumnStarts` takes the water sides from the trim slot.
+  - A solve records the water share of the condenser duty, the overhead flashed at the split on the worker. It is kept in `SplitTable`, in the topology state section (`FluidFacts.columnState`): state, so no compatibility work.
+  - Each cycle owes that share to the water side, under the same `APPROACH_KELVIN` ceiling. The air share books to the totals, as an air-cooled condenser's does now.
+- **Simulator.**
+  - The column door's condenser takes three values.
+  - `ColumnUnit` reads `condenser_air` and `condenser_water`. The water share goes to the condenser's water side (a link, or the tower-water utility), and the air share to the air.
+  - Sizing sizes both members: the air cooler on its part, with its outlet at the split, and the exchanger on the trim. From a 40 °C split the trim's water returns at 30 °C (section 3 item 3), so both ends keep 10 K at a 35 °C receiver. The water is 47.8 kg/s per MW, twice the full range's.
+  - Send to block stores both. The block draws the pair in series.
+- **Proposal** (extends section 3 item 5):
+  - Air while the receiver is at least 40 °C.
+  - Air then water while the receiver is below 40 °C and the top vapour above it.
+  - Water when the top vapour is at or below 40 °C.
+  - A key keeps the player's choice.
+- **GUI.** The calculator's and the constructor's condenser choice take the third key, and `AssemblyDiagram` draws the pair.
+- **Other form, for the owner.** A split at 45 °C puts the air at 20 K. That is nearer a plant's air outlet where a trim follows (55 to 60 °C on a 35 to 40 °C summer). The trim then keeps the full 10 K water range, with half the water. The air-ahead reading of section 3 item 4 would move to 45 °C with it. The plan keeps 40 °C, the floor the owner approved.
+
+## 7. Build order (one writer)
+
+- C1, world: the enum value, `Units.trim`, the blueprint's trim slot, `ColumnStarts`, the water share in `SplitTable` and `ColumnOperation`, the calculator's and the constructor's choice, `AssemblyDiagram`, corpus images.
+- C2, simulator science and sizing: sections 3 and 6.
+  - Coolant temperatures and the 25 °C cap.
+  - Free water sides' loads and their water flow.
+  - The Cooler tile and its alias.
+  - The type proposals, including the condenser's three.
+  - The air-ahead reading.
+- C3, screen: the Cooler door and its type keys, the column door's condenser choice, `ColumnBlock`, the palette, both languages, renders.
 
 Sources: [HALL-R], [THERMO] and [BLOG] are in `SIZING_SOURCES.md`. [PCONV]: Minimum Approach Temperature Reference for Heat Exchangers, https://processconvert.pages.dev/engineering-references/heat-exchanger-minimum-approach-temperature-reference (cooling water 5 to 10 °C, air on the dry bulb's seasonal value).
