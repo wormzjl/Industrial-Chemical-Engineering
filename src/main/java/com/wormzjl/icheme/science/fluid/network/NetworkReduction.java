@@ -347,7 +347,7 @@ public final class NetworkReduction {
     /** A stream's viscosity: its phases' own, volume-weighted (the solver's bulk average, without solids). A state holding
      * no fluid has no stream (its ends are dry); its end reads an empty vessel's, the ambient's ({@code PassiveStepSolver}'s
      * bulk viscosity). */
-    private static double viscosity(FluidThermodynamics model,FluidThermodynamics.State s,MixtureViscosity.Workspace scratch) {
+    public static double viscosity(FluidThermodynamics model,FluidThermodynamics.State s,MixtureViscosity.Workspace scratch) {
         if(!FluidThermodynamics.holdsFluid(s))return viscosity(model,ambient(model),scratch);
         double value=0,volume=0;
         for(int phase:new int[]{FluidThermodynamics.GAS,FluidThermodynamics.OIL,FluidThermodynamics.WATER})

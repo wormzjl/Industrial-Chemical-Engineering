@@ -30,7 +30,7 @@ import java.util.Objects;
  */
 public final class ColumnSolve {
     /** V3's superheat rule for a steam feed, K above saturation at its stage. */
-    static final double SUPERHEAT = 5;
+    public static final double SUPERHEAT = 5;
     private static final int TEMPERATURE_ITERATIONS = 40;
     /** The step of a partial molar enthalpy's difference, a share of the product's moles. */
     static final double PARTIAL_STEP = 1e-5;

@@ -45,7 +45,7 @@ import java.util.Locale;
  * flash at V3's temperature and pressure; what the two thermo models then differ by is read out as the block's energy gap.
  */
 public final class ColumnUnit implements UnitModel {
-    private static final String FEED = "feed", OVERHEAD = "overhead", DISTILLATE = "distillate", WATER = "water", BOTTOMS = "bottoms";
+    private static final String FEED = "feed", OVERHEAD = "overhead", DISTILLATE = "distillate", WATER = "water", BOTTOMS = "bottoms", DRAW = "draw/";
     private static final String CONDENSER_IN = "condenser_in", CONDENSER_OUT = "condenser_out", REBOILER_IN = "reboiler_in", REBOILER_OUT = "reboiler_out";
     /**
      * The feed is flashed to its tray's pressure, which only a solve can say, so it starts at the stream's own and goes round
@@ -59,7 +59,12 @@ public final class ColumnUnit implements UnitModel {
     private static final V3InitializationOptions START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
 
     private static String drawPort(ColumnDoor.Draw draw) {
-        return "draw/" + draw.id();
+        return DRAW + draw.id();
+    }
+
+    /** Whether what leaves by {@code port} leaves a tray or the sump, as a liquid at its boiling point with only the column's own head behind it. */
+    public static boolean leavesTray(String port) {
+        return port.equals(BOTTOMS) || port.startsWith(DRAW);
     }
 
     private static String steamPort(ColumnDoor.Steam steam) {

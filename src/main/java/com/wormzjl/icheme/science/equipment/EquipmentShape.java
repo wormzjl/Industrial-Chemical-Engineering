@@ -62,6 +62,8 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
             : com.wormzjl.icheme.science.fluid.network.CoolingTower.natural(diameter,tangentLength);
     }
     public static final double MIN_DIAMETER = .5, MAX_DIAMETER = 10, MAX_COLUMN_DIAMETER = 15, MAX_TANGENT_LENGTH = 64;
+    /** The largest vessel the fluid model holds, m³. */
+    public static final double MAX_VOLUME = 30_000;
     public static final int MAX_SUPPORT = 16;
     /**
      * Saddles: centred this fraction of T/T from each tangent line (owner decision 2026-10-25 from a reflux drum's drawing,
