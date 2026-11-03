@@ -10,6 +10,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 |---|---|---|---|
 | [process-simulator/](process-simulator/README.md) | Plain-JVM probes: a client can run the column and flashes; the design sheets' sample flowsheet solved by hand | `2026-11-02-process-simulator` | In use since 2026-11-02 |
 | [device-names/](device-names/README.md) | Nameplate placement probe and plate-look renders | `2026-11-02-process-simulator` | In use since 2026-11-03 |
+| [simulator-bench/](simulator-bench/README.md) | Process simulator CPU, allocation, heap and draw-call bench on the bundled crude unit, with JFR | `2026-11-02-process-simulator` | In use since 2026-11-04 |
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |
 | [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
