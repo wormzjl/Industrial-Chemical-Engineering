@@ -142,6 +142,7 @@ Tool folders: [tools/device-names/](../../tools/device-names/README.md) (N1's pl
 - 2026-11-03: N1, the assembly drawing (`c99fec1a2` and this documents commit), on the user's "Improve it so it looks more like the process simulator" and, of the three option renders, "A: block + list". The column's Structure page draws `AssemblyBlock`: the sheet's `ColumnBlock` of the built column's component design, beside the parts list, each part in its check's colour; the old drawing's port squares and their hovers are gone, with their five `gui.icheme.assembly.port*` keys. New gate: `AssemblyBlockTest` (3). Gates, filtered: `AssemblyBlockTest`, `AssemblyDiagramTest`, `ColumnBlockTest`, `SimulatorFrameTest`, `SheetGesturesTest`, `SimulatorBlockTest`, `HeatDiagramTest`, `UnitTextTest`, 0 failures; `AssemblyBlockTest` again alone after its print's fix. Sheets `shipped-assembly*-block.png` in `renders-n1/`. No dev client ran.
 - 2026-11-03: N1, the old assembly drawing removed (`3c3b0b26d` and this documents commit), on the user's "Remove it". `AssemblyFlowsheet` and `AssemblyPortColoursTest` are deleted; `slot` and `colour` move to `AssemblyColumn`; `AssemblyDiagram` keeps each part's name, place and wanted kind and the ports with their partners, in the same order (checked line by line), so the laying tool's nozzle colours do not change; the colour checks move to `AssemblyDiagramTest.everyPortHasItsOwnColourForTheLayingTool`. 26 drawing-only keys leave `en_us` (`gui.icheme.assembly.label.*`, `.utility.*`, `.outside.*`), 2 leave `zh_cn`. The heat side's drawing on the device screen now reads its texts under `gui.icheme.heat.` (N1 findings). The gui-creation skill names `AssemblyBlock`. Gates, filtered: `AssemblyDiagramTest`, `AssemblyColumnTest`, `AssemblyBlockTest`, `HeatDiagramTest`, `HeatControlColumnTest`, `UnitTextTest`, `CalculatorColumnTest`, `FluidPacketCodecTest`, `PilotCryogenicCatalogTest`, `SimulatorBlockTest`, 91 tests, 0 failures. No dev client ran.
 - 2026-11-03: N1, the name in the title strip (`e41027309` and this documents commit), on the owner's "You can put the equipment name here" (a screenshot of the device screen's title strip), relayed by the orchestrator. `TitleStrip` places the kind's plate (the kind alone), the name after it and the theme key: a 200 px LCD entry (32 characters of 6 px and the LCD's insets) for a player who may name the device, its hint ("Name") while empty, sent with Apply; a reader sees the name as text. The Name group (`DeviceColumn.name`, `AssemblyColumn.rows(in, named, t)`) is gone, with `DeviceColumnTest.theNameGroupLeadsTheDoorAndMovesTheRestByItsHeight`; `AssemblyColumnTest.aNamedDoorLeadsWithTheNameAndItsFooterAddsApply` became `aNamingFooterAddsApply` (the footer only). On `FluidDeviceScreen`, `AssemblyScreen` (whose Operation page's Apply now sends the name too) and `VesselScreen`; the constructor is not changed (N1 findings). The name's hint now says "beside the kind in this device's title strip" (en, zh). New gate: `TitleStripTest` (2). Gates, filtered: `TitleStripTest`, `AssemblyColumnTest`, `DeviceColumnTest`, `FluidGuiConsistencyTest`, `OperationColumnTest`, `AssemblyDiagramTest`, `HeatDiagramTest`, `HeatControlColumnTest`, `UnitTextTest`, `CalculatorColumnTest`, `FluidPacketCodecTest`, `PilotCryogenicCatalogTest`, `SimulatorBlockTest`: 107 tests, 1 failure (`TitleStripTest` asked for more than 40 kinds and read 40; its floor is now 30), then `TitleStripTest` alone, 0 failures. The reader's text then took the skin's engraved ink (`Skin.text`), screens only, compiled. Sheets `strip-*.png` in `renders-n1/`. No dev client ran.
+- 2026-11-03: the owner's decisions, recorded in this documents commit (no code, no test run). N1's last two choices ("Yes, take them"): no A/B suffixes; the old assembly drawing's code goes at the merge's tooling cleanup (already removed in `3c3b0b26d`, N1 decisions). The batch's older items to validate (the owner, 2026-11-03, "Others as recommended as well"), each as built: P-102's silence (W7), the block from `option-c-rearranged.png` (D23), V3 against the world's flash at the top tray (S3, engine finding 4), a path that ends at no set pressure (S4a, A), a sheet edited since its run (S4b), E-102's least face (S2, A), `COMPRESSOR_HYDROGEN`'s 50 % (S2, no source), engine finding 2 (`FlowThermo` keeps its TP search).
 
 ## N1 findings
 
@@ -162,6 +163,8 @@ The owner's, 2026-11-03: "A and P1".
 
 - The name entry stands in the title strip (the owner, 2026-11-03: "You can put the equipment name here"), after the kind's plate and before the theme key, one LCD entry of fixed width that Apply sends; a reader sees the name as text; the plate says the kind alone. It replaces option A's Name group on the door ("A and P1"); options B and C stay unbuilt. The pages with a bar since the Name group are settled: none keeps one.
 - The plate's look is P1: a light plate with dark text in a dark frame, as `NameplateRenderer` draws it.
+- No A/B suffixes for parallel units (the owner, 2026-11-03: "Yes, take them"): each unit built from one design takes the same name, and the player can rename either one.
+- The old assembly drawing's code goes at the merge's tooling cleanup (the owner, 2026-11-03: "Yes, take them"): `AssemblyFlowsheet`'s drawing and hit tests, `AssemblyDiagram`'s geometry and `AssemblyPortColoursTest`; the list keeps reading `AssemblyDiagram`'s part names, and port states do not come back onto the block. The removal was already made in `3c3b0b26d`, on the user's "Remove it" in this thread before this decision reached it; it keeps the ports the laying tool reads, in their order.
 - The assembly drawing is option A (the user, 2026-11-03, "A: block + list"): the simulator's column block beside the parts list. B (the block across the glass, no list) and the old drawing are not built. The tower stays neutral while it is in place; every other part is red before a check, then its check's colour; a click on a part selects its row.
 
 Mine, each reversible:
@@ -169,7 +172,7 @@ Mine, each reversible:
 - The orchestrator's limits: a name is at most 32 characters (code points), trimmed, with no formatting codes (`§` and the next character) and no control or format characters; an empty entry clears it. `DeviceName.clean` applies them on the server; a saved name that breaks them is cleaned on load and the repair logged.
 - Storage beside paint, not in the fluid facts: the name is a drawing fact of the block entity (`Name`, written only when set, so an unnamed save is byte for byte the old one), on every shell cell of a structure and on the in-line device. It syncs to clients in the update tag, as paint does. No engine event: a name is not process state, so the rename handler writes the block entities directly.
 - A rename of a structure with an unloaded cell is refused whole ("Part of this structure is not loaded"), so no structure holds two names.
-- An import names the draft with the tag as the Import list shows it, member included; a hand edit keeps the name; an untagged design leaves it empty. Parallel units built from one design each take the same name; plant suffixes (A, B) are an option for the owner, not built.
+- An import names the draft with the tag as the Import list shows it, member included; a hand edit keeps the name; an untagged design leaves it empty. Parallel units built from one design each take the same name; no plant suffixes (the owner, 2026-11-03: "Yes, take them"); the player renames either one.
 - Duplicate names are allowed.
 - The plate is drawn, not placed: no cell, so `EquipmentLayoutGoldenTest` and the refresh rules are untouched. Within 32 blocks, back faces and the frustum culled, the light of the block before it.
 - Where a screen had no Apply, it gains one for the name. The device screen shows Apply on a tank, a filter and a heat side's overview, and sends the name alone there (its hover says so, `fluid.apply_name.hint`). The datasheet's footer is Done and Apply (primary, at the right). The column's Structure page is Close, Datasheet and Apply. Elsewhere Apply sends the name first, then the controls, as before.
@@ -420,6 +423,8 @@ Taken alone, each reversible:
 
 ## S4b decisions
 
+The owner's, 2026-11-03 ("Others as recommended as well"): a sheet edited since its run is rated on that run, with "Changed since the last run", as built; not every item red.
+
 Taken alone, each reversible:
 
 - The tab opens on a run that stood steady, or on any run once the sheet holds sizes, so a later run that is not steady shows every item red under `RUN_STEADY` ("Steady run first"). Before that it is off, with its hover.
@@ -452,6 +457,8 @@ Taken alone, each reversible:
 
 ## S4a decisions
 
+The owner's, 2026-11-03 ("Others as recommended as well"): a path that ends at no pressure the sheet sets lights no lamp: A, as built.
+
 Taken alone, each reversible:
 
 - A path ends at the next pressure the sheet sets: a valve on its outlet (which takes the spare), a column's feed or steam tray, a drum set to a pressure, a tank's held pressure. There `PATH_SPARE`, a new Must, reads it. Anywhere else (a product, a pump's suction, a drum at its inlet's pressure, a kettle's feed) the path ends at what the run delivers on the doors' drops, and the spare lights no lamp: nothing there holds a pressure that a spare could break. The run reads no static head, so a delivered path has its head and the doors' drops to spend.
@@ -465,6 +472,8 @@ Taken alone, each reversible:
 - Facts of a deleted item stay until Size all, which prunes them; the editor carries `sheet.sizing()` through every edit.
 
 ## S3 decisions
+
+The owner's, 2026-11-03 ("Others as recommended as well"): V3 against the world's flash at the top tray stays logged as engine finding 4 of `tools/process-simulator/README.md`; no change in this batch.
 
 Taken alone, each reversible:
 
@@ -484,6 +493,8 @@ Taken alone, each reversible:
 - Owner, 2026-11-03, on the air-cooled condenser (its overhead needs 1949 m² of bare surface at air 25 °C; the largest bank holds 1468): "Add a bank count" (option B). Not built in S4a. It goes to S3b, a package of its own after S4a and before S4b: an assembly `Step` holds one unit (`Blueprint.Step`, one `Slot` and one `Form`), so no member slot takes identical units in parallel, and the condenser's 5 × 1.00 × 3 m shells cannot be placed either. S3b builds one rule for the column's member steps: a count of identical units in parallel.
 
 ## S2 decisions
+
+The owner's, 2026-11-03 ("Others as recommended as well"): E-102's least face, A, as built; B (fewer bays) is not taken. `COMPRESSOR_HYDROGEN`'s 50 % is kept as built, still without a source.
 
 Taken alone, each reversible:
 
@@ -557,6 +568,8 @@ Taken alone, each reversible:
 
 ## Column block decisions
 
+The owner's, 2026-11-03 ("Others as recommended as well"): `option-c-rearranged.png` and the block built from it (D23) are validated as built.
+
 Taken alone, each reversible:
 
 - Trays come from the door: stage `s` stands at `15 + s (H - 30) / (stages + 1)`, since the door's list counts the condenser as 1. The option sheet's pumparounds on 10/12, 18/20, 27/29 were not the sample's: the door has returns and draws 8/10, 16/18, 26/28, so the frame's pairs stand a few pixels from that sheet.
@@ -605,6 +618,8 @@ Taken alone, each reversible:
 
 ## W7 decisions
 
+The owner's, 2026-11-03 ("Others as recommended as well"): P-102's silence (W7 findings) stays; the law is not changed.
+
 Taken alone, each reversible:
 
 - Solve alone's stream is the line's last solved state, greyed or not: in a loop, the column's own edit greys its feed, which is exactly when a player wants it. A line that feeds the unit from the sheet needs no run. Off, with a hover, only where a run never left one.
@@ -634,7 +649,6 @@ Taken alone, each reversible:
 
 ## Open items
 
-- Owner to choose, N1: plant suffixes for parallel units built from one design (E-101A, E-101B), not built; each unit now takes the same name.
 - Owner to choose, N1: a tank with contents holds Copy where Apply stands, so its strip shows the name as text and the tank is not renamed there. A: a third push key in the footer where the width allows (464 px and up). B: Enter in the entry sends the name. C: Copy moves to the tank's Outlets page. Not chosen on my own.
 - Owner to choose, N1: the constructor's header has no room for the 200 px entry beside the kind and Change; it shows the design's name first on its plate, cut (as built). A: leave it (an import names the design, the built structure is renamed on its own screens). B: a Name entry on the design page's door. Not built.
 - N1 offered: one in-game check of the plate's text (size and reading distance, the light on it), the one thing the renders cannot show; not started.
@@ -643,10 +657,8 @@ Taken alone, each reversible:
 - For the merge, N1: the five keys `gui.icheme.assembly.port`, `.port.needed`, `.port.connected`, `.port.utility` and `.port.unused` are removed from `en_us`; no other language had them.
 - For the merge, N1: `gui.icheme.fluid.name.hint` changed its English and Chinese lines ("beside the kind in this device's title strip").
 - For the merge, N1: the code guide names `AssemblyFlowsheet` (`client-gui.md`) and `AssemblyPortColoursTest` (`machine-assemblies.md`), both removed; 26 more `gui.icheme.assembly.label.*`, `.utility.*` and `.outside.*` keys are removed from `en_us` (no other language than `zh_cn` had any).
-- Engine finding 2 of `tools/process-simulator/README.md` is with the owner, and `FlowThermo` keeps its TP search for it. Findings 1 and 3 are fixed on main (0.18.1).
-- Owner to validate: P-102's silence (W7 findings): the proposal is to leave the law.
+- For the merge, N1: the old assembly drawing's removal (the owner: at the tooling cleanup) is already on the branch (`3c3b0b26d`); the cleanup has only the code guide lines above left of it.
 - Follow-up outside this batch: `ColumnSolve` line 164 reads inverted. `saturationPressure(t - SUPERHEAT) < feedPressure` is true when the feed is NOT 5 K over saturation, against V3's own `T >= Tsat + 5`, so a hot feed's water follows the distillate and a cold feed's goes in as a steam feed, which V3 refuses. Read from the code; not run, and not changed.
-- Owner to validate: `option-c-rearranged.png` and the block built from it (D23): built without an answer. The tower moved right by 72 and down by 62 within a stored unit's corner; no released sheet holds one.
 - Column block left: no client has drawn it. At 1280 by 720, scale 2, the sample opens at zoom 0.43, under the label scale of 0.5, because a sheet can be no shorter than its column's frame: names and valves wait for one Zoom in.
 - W8 left: no client has run it. Not exercised: the real open and replay packets, a real second player, a real disconnect (a mock player cannot log in beside KubeJS, so the gate takes `Entity.remove`, the last step of that path), the liveness check's "still here" answer (a fake player is on no player list), the system clipboard, the autosave tick, Copy on a live tank (a source gate holds it).
 - W8 left: `tia_juana`, `tia_juana_nitrogen` and `literature_tia_juana` stay: `tia_juana` is the default input, and a dozen science gates read the other two.
@@ -682,17 +694,12 @@ Taken alone, each reversible:
 - S4c closed S4b's item "the owner's choice on Size all's re-run": the owner chose neither A nor B, and Auto takes a 20 % spare (S4c decisions). After one Size all the sample has no red row.
 - S4c left: a second Size all still moves sizes on the sample, all green: the condenser from 5 × 1.00 × 3 m to 3 × 1.25 × 4 m (98 % over its need, under the 100 % cap), H-101 from 12.0 × 45 m to 12.0 × 42 m, V-101 from 0.70 to 0.50 m. Each press sizes on the run it is given, and the first is given the unsized run (S4c findings).
 - S4c left: P-102 stays yellow, flow to rated 68.3 % against 70 %, as in S4b's renders before the spare; the pump window keeps its grid (owner).
-- S4b left: a sheet edited since its run is rated at its sizes on that run, with "Changed since the last run" before the status. The owner may prefer every item red under `RUN_STEADY` until the next run.
 - S3b closed S4a's item "member counts above one wait for S3b": the condenser's five shells and an air-cooled condenser's banks are a design the assembly builds.
 - S3b left: no client has drawn the steppers, the counted parts or a real split; the matcher's parallel path runs on test graphs and `AssemblyWalker`'s sizes, not on a world. Send to block (S5) carries the counts with the design; the Sizing tab (S4b) edits them on the door.
 - S3b left: the Components page names are English only in Chinese but for S3b's own lines (W9's 693 older lines); "Cooler shells" wraps to two lines beside its stepper.
-- Owner to validate, S3: V3 and the world's flash disagree at the top tray: at V3's 354.84 K and its pressure the world condenses 19 % of the overhead (153 mol/s of water). Sizing reads the energy-consistent overhead, so no number depends on it, but the gap is the engine's. Logged as engine finding 4 in `tools/process-simulator/README.md`; not investigated further.
 - Closed by the owner's "always have enough excess" (S4c decisions): the sample's V-101 sets 2.80 bar, and its path keeps 0.08 to 0.09 bar. The item as it stood: V-101's path to T-101's feed tray is red by 0.01 bar: V-101 sets 2.72 bar, the tray stands at 2.70, and the 50 m transfer line S-7 loses 0.03 at design flow. The sheet's own valve setting, not a size: the player lowers V-101's outlet or shortens S-7. S4c measured it, rule and sample unchanged: −0.005 bar (red) on the proposal before Size all, +0.004 after one press and +0.004 after a second (green).
-- Owner to validate, S4a: where a path ends at no pressure the sheet sets (a product, a pump's suction), its spare lights no lamp (S4a decisions). A: as built. B: end such paths at the atmosphere, a rule the sheet does not state.
 - S4a left: Auto's heater size does not read its path's spare; a heater whose path is red stays red until the player lowers a drop or raises the pump. The type keys' choice is a fact, and no screen yet sets it.
 - S3 left: the condenser takes 5 × 1.00 × 3 m (shell drop 0.15 of 0.20 bar, 1125 of 782 m²) against the probe's 3 × 1.25 × 4 m, which reads over 0.20 bar on the all-gas overhead; the receiver's boot holds 7.7 min against the probe's 7.0, with the head; the column stands 29.0 m tangent to tangent against the probe's 29.8 m tall, so slenderness reads 3.6, not 3.7. The probe is unchanged; `tools/process-simulator/README.md` lists the differences.
 - S3 left: no time is measured; the sample tries one diameter beside the door's.
-- S2: E-102's least face, 6 × 4 bays of 2.0 × 5 m (145 m² of face, 24 bays) on the curves' 724 m², against the probe's 5 × 3 of 2.5 × 6 m (150 m², 15 bays). Option A, the least face, stands under section 3.5; the owner may still choose B: fewer bays within some share of the least face, a rule the physics does not force.
-- Owner to validate, S2: `COMPRESSOR_HYDROGEN`'s 50 % has no source.
 - S2 left: Bonga, Cold Lake and Dalia fail in T-101 on the sample's settings (stage continuation stalled; the 491 kmol/h draw on tray 11 starves; no admissible Newton step), so the yellow-noise pass has three crudes. WTI's E-101 approach of 2.5 K comes from the sample's fixed 200 °C bottoms outlet, not from a size.
 - Not measured: option B of D11, a reboiler stream, a column with nitrogen on the plain start, a run's peak heap; the ejector law on a real vacuum column (W10's gate runs the default crude column at an 80 kPa top); a compressor's or a drum's type proposal on a real sheet (the gates read them on small sheets).
