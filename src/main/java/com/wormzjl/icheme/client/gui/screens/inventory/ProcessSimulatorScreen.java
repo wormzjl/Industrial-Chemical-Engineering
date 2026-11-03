@@ -22,6 +22,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.FileColumns;
 import com.wormzjl.icheme.client.gui.flowsheet.FlowsheetExamples;
 import com.wormzjl.icheme.client.gui.flowsheet.ResultsPage;
 import com.wormzjl.icheme.client.gui.flowsheet.SelectionColumn;
+import com.wormzjl.icheme.client.gui.flowsheet.SheetAutosave;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetContext;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetEditor;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetGestures;
@@ -61,6 +62,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
@@ -161,7 +163,9 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private @Nullable Runnable pending;
     /** The file this sheet last came from or went to, which its autosave stands beside. */
     private @Nullable String fileName;
+    /** The sheet last handed to the autosave writer; a sheet whose write failed comes back through {@link #unsaved}. */
     private @Nullable Flowsheet autosaved;
+    private final AtomicReference<Flowsheet> unsaved = new AtomicReference<>();
     private int ticks, savedAt;
     private SimulatorHost.@Nullable Said said;
     private int saidAt;
@@ -301,6 +305,12 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             savedAt = ticks;
             autosave();
         }
+        var failed = unsaved.getAndSet(null);
+        if (failed != null) {
+            // The next autosave tries again, unless the sheet moved on and that write is already asked for.
+            if (failed == autosaved) autosaved = null;
+            host.say(new SimulatorHost.Said("store.autosave_failed", List.of(), true));
+        }
         var now = host.said();
         if (now != said) {
             said = now;
@@ -330,15 +340,15 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         host.rate(sheet);
     }
 
-    /** The editor's own copy, beside its file: what stays when the block goes. It takes the sheet as it stands, and a reader has nothing of its own to keep. */
+    /**
+     * The editor's own copy, beside its file: what stays when the block goes. It takes the sheet as it stands, and a reader has nothing
+     * of its own to keep. The client's one writer writes it off the render thread (P3); a failed write reaches the status line next tick.
+     */
     private void autosave() {
-        if (host.reader() || editor.sheet() == autosaved) return;
-        try {
-            FlowsheetFile.save(FileColumns.autosave(folder(), fileName, menu.opening().sheet().toString()), editor.sheet());
-            autosaved = editor.sheet();
-        } catch (IOException unwritable) {
-            host.say(new SimulatorHost.Said("store.autosave_failed", List.of(), true));
-        }
+        var sheet = editor.sheet();
+        if (host.reader() || sheet == autosaved) return;
+        autosaved = sheet;
+        SheetAutosave.CLIENT.save(FileColumns.autosave(folder(), fileName, menu.opening().sheet().toString()), sheet, unsaved::set);
     }
 
     @Override protected void init() {
