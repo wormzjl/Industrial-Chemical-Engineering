@@ -17,7 +17,8 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * carry; they differ in the law, the shaft work and the inlet phase they admit. A pump has one more mode,
      * {@code PUMP_SUCTION_LIMIT} (cavitation); a compressor draws gas, which has no vapour pressure to fall below, and never
      * takes it. Every quantity reads the suction only (decision D4): the stream the first end draws, and the first end's
-     * pressure.
+     * pressure; a set-flow pump's relief rise reads the density of its supply, the stream its refusal reads, so it primes
+     * its own line (owner decision D11, A2; {@code PassiveStepSolver.riseDensity}).
      */
     sealed interface Mover extends FlowControl permits Pump,Compressor,Machine {
         /** The largest suction volume flow a device's controls take (m3/s). */
@@ -82,8 +83,8 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
             if(!Double.isFinite(requestedVolumeFlow)||requestedVolumeFlow<0||!Double.isFinite(maximumAddedPressure)||maximumAddedPressure<=0)
                 throw new IllegalArgumentException("Invalid pump settings");
         }
-        /** The setting is the rise for the reference fluid (water at 298.15 K, 1 atm), scaled by the suction's density: a
-         * head, the one quantity a real pump fixes (decision D4: suction density only). */
+        /** The setting is the rise for the reference fluid (water at 298.15 K, 1 atm), scaled by the density of the
+         * pump's supply over the reference's: a head on what the pump is fed (owner decision D11, A2). */
         @Override public double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return maximumAddedPressure*suctionDensity/referenceDensity;
         }

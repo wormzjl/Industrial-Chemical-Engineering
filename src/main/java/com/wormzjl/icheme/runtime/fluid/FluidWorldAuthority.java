@@ -961,10 +961,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
                             :q[i]/(drawn.state().mass()/drawn.state().volume())/mover.targetVolumeFlow();
                     if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet,delivered);
                     else {status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
-                    // The limit on the suction stream the mover draws (its own junction, what arrives at its inlet; decision
-                    // D4): a pump's setting is the rise for water and scales with the suction density, a compressor's is the
-                    // ratio over the suction pressure.
-                    if(!snapshot.graph().reservoirs().get(pipe.first()).empty()&&mode!=FlowControl.Mode.INLET_WRONG_PHASE&&mode!=FlowControl.Mode.PUMP_SUCTION_LIMIT) {var suction=snapshot.graph().reservoirs().get(pipe.first()).state();double limit=mover.riseLimit(suction.mass()/suction.volume(),suction.pressure(),model.pumpReferenceDensity(),mover.liquid()?1.4:model.heatCapacityRatio(suction));
+                    // The limit the mover's law holds: a set-flow pump's setting is the rise for water and scales with its
+                    // supply's density, the stream its refusal reads (owner decision D11, A2); a compressor's is the ratio over
+                    // the suction pressure; a machine's reads the suction stream it draws (decision D4).
+                    if(!snapshot.graph().reservoirs().get(pipe.first()).empty()&&mode!=FlowControl.Mode.INLET_WRONG_PHASE&&mode!=FlowControl.Mode.PUMP_SUCTION_LIMIT) {var suction=snapshot.graph().reservoirs().get(pipe.first()).state();
+                        double density=mover instanceof FlowControl.Pump?InletPhase.density(model,NetworkReduction.reopened(snapshot.graph()),i,mover.targetVolumeFlow(),result.advancedSeconds()):suction.mass()/suction.volume();
+                        double limit=mover.riseLimit(density,suction.pressure(),model.pumpReferenceDensity(),mover.liquid()?1.4:model.heatCapacityRatio(suction));
                         status+=String.format(java.util.Locale.ROOT,mover.liquid()?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
                 }else status+=" / "+mode;}}
         }

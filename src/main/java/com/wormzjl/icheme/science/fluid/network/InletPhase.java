@@ -94,13 +94,30 @@ public final class InletPhase {
      * phase of a phase port).
      */
     public static Supply supply(FluidThermodynamics model,PassiveNetwork graph,int edge,double targetVolumeFlow,double duration) {
-        var walk=walk(graph,edge);
-        var node=graph.reservoirs().get(walk.node());var state=node.state();
+        var source=source(model,graph,edge,targetVolumeFlow,duration);var node=graph.reservoirs().get(source.node());
+        return measure(model,node.state(),source.drawn(),source.node(),node.id(),source.port(),held(graph,edge));
+    }
+    /**
+     * The density (kg/m3) of what connection {@code edge}'s suction line delivers, {@link #supply}'s stream on the same
+     * arguments: the drawn phase streams' mass over their volume, each at the density a connection's end draws it with
+     * ({@code PassiveStepSolver.endDensity}), the bulk's at a BULK end. What a set-flow pump's relief rise reads (owner
+     * decision D11, A2).
+     */
+    public static double density(FluidThermodynamics model,PassiveNetwork graph,int edge,double targetVolumeFlow,double duration) {
+        var source=source(model,graph,edge,targetVolumeFlow,duration);var state=graph.reservoirs().get(source.node()).state();
+        double mass=0,volume=0;
+        if(source.drawn()!=null)for(int phase=0;phase<3;phase++)if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PassiveStepSolver.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
+        return volume>0?mass/volume:state.mass()/state.volume();
+    }
+    /** Where a suction walk ends: the node, its end's port there (BULK at a junction) and the phase stream volumes drawn
+     * through it ({@link #draw}; null for the bulk). */
+    private record Source(int node,PassiveNetwork.PhasePort port,double[] drawn) {}
+    private static Source source(FluidThermodynamics model,PassiveNetwork graph,int edge,double targetVolumeFlow,double duration) {
+        var walk=walk(graph,edge);var node=graph.reservoirs().get(walk.node());
         PassiveNetwork.PhasePort port;
         if(node.junction())port=PassiveNetwork.PhasePort.BULK;
         else port=walk.via()<0?graph.pipes().get(edge).firstPort():graph.pipes().get(walk.via()).portAt(walk.node());
-        double[] drawn=draw(model,graph,walk.node(),port,targetVolumeFlow*Math.max(duration,0));
-        return measure(model,state,drawn,walk.node(),node.id(),port,held(graph,edge));
+        return new Source(walk.node(),port,draw(model,graph,walk.node(),port,targetVolumeFlow*Math.max(duration,0)));
     }
 
     /**

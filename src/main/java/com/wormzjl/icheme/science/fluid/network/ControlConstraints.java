@@ -4,7 +4,8 @@ import java.util.*;
 
 /**
  * Which regulation rows a connection's junction mass balances leave free, without presentation data. Flow valves are
- * settled by {@link #standing}, pressure valves on one node by {@link #dependent}.
+ * settled by {@link #standing} and bounded by the set-flow movers in their series ({@link #moverBounds}), pressure valves
+ * on one node by {@link #dependent}.
  */
 public final class ControlConstraints {
     private ControlConstraints(){}
@@ -29,12 +30,7 @@ public final class ControlConstraints {
         int edges=graph.pipes().size();var result=new BitSet(edges);var valves=new ArrayList<Integer>();
         for(int e=0;e<edges;e++)if(graph.pipes().get(e).control() instanceof FlowControl.ControlValve v&&!v.bare()&&v.source()==FlowControl.ValveSource.MASS_FLOW)valves.add(e);
         if(valves.size()<2)return result;
-        var basis=new double[edges][];
-        for(int node=0;node<graph.reservoirs().size();node++)if(graph.reservoirs().get(node).junction()){
-            double[] row=new double[edges];
-            for(int e=0;e<edges;e++){var p=graph.pipes().get(e);if(p.first()==node)row[e]--;if(p.second()==node)row[e]++;}
-            insert(basis,row);
-        }
+        var basis=junctionBasis(graph);
         var lines=new ArrayList<Line>();
         for(int e:valves){
             double[] row=reduced(basis,unit(edges,e));Line line=null;
@@ -52,6 +48,38 @@ public final class ControlConstraints {
         regulators.sort(Comparator.<Integer>comparingInt(ranks::get).thenComparing(lowest));
         for(int e:regulators)if(!insert(basis,unit(edges,e)))result.set(e);
         return result;
+    }
+    /**
+     * What each connection's series passes at most on its movers' laws (owner decision D11, A1): the lowest
+     * {@code setFlow} (kg/s, of the mover's connection) of a set-flow pump or compressor that junction balances make one
+     * flow with it; positive infinity where there is none. Form F2e delivers the displacement less its slip at every
+     * positive rise, so a flow valve whose target lies above this bound cannot regulate. A machine on its curve passes
+     * more than its rated flow and bounds nothing.
+     */
+    public static double[] moverBounds(PassiveNetwork graph,java.util.function.IntToDoubleFunction setFlow){
+        int edges=graph.pipes().size();double[] bound=new double[edges];Arrays.fill(bound,Double.POSITIVE_INFINITY);
+        var movers=new ArrayList<Integer>();
+        for(int e=0;e<edges;e++)if(graph.pipes().get(e).control() instanceof FlowControl.Mover m&&!(m instanceof FlowControl.Machine)&&m.targetVolumeFlow()>0)movers.add(e);
+        if(movers.isEmpty())return bound;
+        var basis=junctionBasis(graph);var rows=new double[movers.size()][];var flows=new double[movers.size()];
+        for(int k=0;k<rows.length;k++){rows[k]=reduced(basis,unit(edges,movers.get(k)));flows[k]=setFlow.applyAsDouble(movers.get(k));}
+        for(int e=0;e<edges;e++){
+            if(!(graph.pipes().get(e).control() instanceof FlowControl.Valve v)||v.bare()||v.pressureControl())continue;
+            // A row the balances take out whole is a flow they fix at zero, one with nothing in series.
+            double[] row=reduced(basis,unit(edges,e));if(same(row,new double[edges]))continue;
+            for(int k=0;k<rows.length;k++)if(same(rows[k],row))bound[e]=Math.min(bound[e],flows[k]);
+        }
+        return bound;
+    }
+    /** The junction mass balances, eliminated: each junction's row of its connections' flows, in by its second end. */
+    private static double[][] junctionBasis(PassiveNetwork graph){
+        int edges=graph.pipes().size();var basis=new double[edges][];
+        for(int node=0;node<graph.reservoirs().size();node++)if(graph.reservoirs().get(node).junction()){
+            double[] row=new double[edges];
+            for(int e=0;e<edges;e++){var p=graph.pipes().get(e);if(p.first()==node)row[e]--;if(p.second()==node)row[e]++;}
+            insert(basis,row);
+        }
+        return basis;
     }
     private static double target(PassiveNetwork graph,int e){return ((FlowControl.ControlValve)graph.pipes().get(e).control()).massTarget();}
     /** 0 a column's outlet valve (a generator feeds the node it stands on), 1 its inlet valve, 2 any other. */

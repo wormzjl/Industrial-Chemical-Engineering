@@ -2,7 +2,7 @@
 
 Purpose: realistic pumps and compressors at process level, separate drivers (motor, steam turbine, creative motor) joined by shafts and gearboxes, electricity (FE) for motors and air coolers, Create as an optional power source.
 
-Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2 waits on the owner's form choice, `W2_FORMS_REVIEW.md` section 4). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
+Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e with start rules A1 and A2, owner decision D11; its full campaign next). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
 
 ## History
 
@@ -13,6 +13,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2 waits on the
 - 2026-11-04: quick check (`tools/rotating-machinery/`) of F1, F2 and the centrifugal variant Q3. F2 held cold seed 200 (singular Jacobian: the norm residual has no gradient at no flow and no rise), so F2b (ffae9fc4d) states the corner as a finite rise with a knee line; F2b holds as the baseline and lands the transfer; Q3 cold seed 6 is clean alone. `W2_FORMS_REVIEW.md`: options A (F2b, recommended under D1) and B (F1) for the owner.
 - 2026-11-04: owner: "Take F2b (A)" (D10). F1's switch deleted with its rules and modes, checkpoint version 32 (7c7c0132e, WIP). Restating the tests showed F2b's defects: 13 of 415 fail, seven on a delivery up to 1.5 % above the set flow at every rise below 77 % of the limit (the knee line), four on convergence. F2c, the corner as a flow, is singular behind a flow valve or a velocity cap; F2e, a slip line and a relief line joined by a rounded corner, is proposed in `W2_CORNER_REVIEW.md`.
 - 2026-11-04: F2e (1d6d5d19c, WIP): the flow row of `u = smin(1 − s v, m (1 − v) + δ)`, s 0.4 %, m 10, ε 0.02, δ putting no flow on the rise limit (without it six tests cycled between `CLOSED` and `MOVER_LAW`). 418 of 420 affected tests and 58 of 58 hold gates pass; a dead-headed mover now runs on its law with no net flow or stands closed (eight tests restated). The two failures are D10's gaps, failing under F2b too: a flow valve raised past the pump's rate (F1's yield rule) and a cooling-tower pump that never primes (its rise limit reads gas at its suction end). `W2_CORNER_REVIEW.md`: options A (F2e with start-stage proposals A1, A2), B (2 % slip), C (F2b).
+- 2026-11-04: owner: "A: F2e with A1, A2" (D11). A1: a flow valve carried into a solve regulating starts open where its target lies above the set flow of a set-flow mover in its line (reading A9). A2 as written cycled (a reopening and a law on two densities) and left the tower pump reversing; read as a set-flow pump's relief rise on its supply's density in its law, mode tests and status, the start balance on the suction stream (A10), since the supply's relief in the balance stalled the LNG hold gate. The 59 classes (415 tests) and the 58 hold gates pass.
 
 ## Documents
 
@@ -28,7 +29,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2 waits on the
 
 ## Open items
 
-- Owner: the set-flow movers' law after D10, `W2_CORNER_REVIEW.md` section 4: F2e with A1 and A2 (recommended), F2e with 2 % slip, or F2b as chosen. `1d6d5d19c` holds F2e with two tests failing; `7c7c0132e` holds F2b.
+- Owner, to confirm: reading A10 of A2 (the pump's relief rise on its supply's density, the start balance on the suction stream). Not proposed yet: a positive-displacement relief as a pressure on every fluid, which drops P1's head for set-flow pumps.
 - To measure later, not proposed: a mover on F2e stands at its relief behind a sealed pocket (`PumpAheadOfFlowValveTest`, `SealedDischargeTest`), so D58's closure may no longer be needed for movers.
 - Owner request 2026-11-04, a motor or turbine sound apart from the pump or compressor head's, with the volume scaled by operating speed and equipment size: W4's follow-up (D13 on its branch, client and assets); the speed share in `FluidNetwork.MoverState` comes with W3's driver logic.
 - `DECISION_LOG.md` numbering: this branch's D10 (the law) and W4's D10 to D13 collide; renumber at the merge.

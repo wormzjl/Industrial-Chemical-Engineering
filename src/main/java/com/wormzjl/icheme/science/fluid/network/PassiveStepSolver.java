@@ -222,6 +222,9 @@ public final class PassiveStepSolver {
     private double[] heldOpenings=new double[0];
     /** The flow valves of this solve that stand open behind a lower target ({@link ControlConstraints#standing}). */
     private BitSet standing=new BitSet();
+    /** Owner decision D11 (A2): this solve's input graph and slice, and the density of each set-flow pump's supply on it
+     * ({@link #riseDensity}; -1 where none is measured), NaN until read. */
+    private PassiveNetwork supplyGraph;private double supplyDuration;private double[] supplyDensities=new double[0];
     private static double boreArea(PassiveNetwork.Pipe pipe){return pipe.controlArea();}
     private void rememberOpenings(PassiveNetwork graph,double[] flows,double[] heads,List<FlowControl.Mode> modes){
         for(int e=0;e<graph.pipes().size();e++){var p=graph.pipes().get(e);if(!(p.control() instanceof FlowControl.Valve))continue;
@@ -354,25 +357,39 @@ public final class PassiveStepSolver {
         // This seed is passed per attempt by the interval controller; mutable previousModes can include failed trials.
         if(acceptedEndpointModes!=null) {
             if(acceptedEndpointModes.size()!=graph.pipes().size())throw new IllegalArgumentException("Accepted endpoint mode count differs from graph");
+            double[] bound=null;
             for(int edge=0;edge<modes.size();edge++)if(graph.pipes().get(edge).control() instanceof FlowControl.Valve valve&&!valve.bare()) {
                 var accepted=acceptedEndpointModes.get(edge);
                 if(accepted!=FlowControl.Mode.CLOSED&&accepted!=FlowControl.Mode.VALVE_OPEN&&accepted!=FlowControl.Mode.VALVE_REGULATING&&accepted!=FlowControl.Mode.VALVE_CONFLICT)
                     throw new IllegalArgumentException("Invalid accepted valve mode");
+                if(standing.get(edge)||accepted==FlowControl.Mode.VALVE_CONFLICT&&Double.isNaN(heldOpenings[edge])){modes.set(edge,accepted==FlowControl.Mode.CLOSED?accepted:FlowControl.Mode.VALVE_OPEN);continue;}
+                if(!Double.isNaN(heldOpenings[edge]))continue;
+                var start=accepted;
                 // A regulating flow valve whose target went to zero is closed: its regulation row would state a zero flow through its open line.
-                if(standing.get(edge)||accepted==FlowControl.Mode.VALVE_CONFLICT&&Double.isNaN(heldOpenings[edge]))modes.set(edge,accepted==FlowControl.Mode.CLOSED?accepted:FlowControl.Mode.VALVE_OPEN);
-                else if(Double.isNaN(heldOpenings[edge]))modes.set(edge,accepted==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl()&&valve.targetMassFlow(1)==0?FlowControl.Mode.CLOSED:accepted);
+                if(accepted==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl()&&valve.targetMassFlow(1)==0)start=FlowControl.Mode.CLOSED;
+                // Owner decision D11 (A1): one whose target lies above what a set-flow mover in its series moves starts open, the
+                // mover setting the flow, as an open valve's first pass would find; the pass loop regulates again where the open line
+                // passes more. Regulating there asked the mover for its target: 50 kg/s of a 10 kg/s pump stood a thousand relief
+                // rises below its suction, where the thermo failed.
+                else if(accepted==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl()) {
+                    if(bound==null)bound=moverBounds(graph);
+                    var pipe=graph.pipes().get(edge);
+                    if(valve.targetMassFlow(endDensity(graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume()))>bound[edge])start=FlowControl.Mode.VALVE_OPEN;
+                }
+                modes.set(edge,start);
             }
         }
         // A mover the previous point left on its suction limit opens there where this step's suction has a vapour pressure to
         // stand at ({@link #suctionFloors}, the water its first node holds); one it left closed stays closed while its rise at no
-        // flow still loses to the demand; see {@link #previousModes}. Its law states the rest, and the velocity cap is part of
-        // every line's law ({@link #saturated}).
+        // flow ({@link #riseDensity}) still loses to the demand; see {@link #previousModes}.
+        // Its law states the rest, and the velocity cap is part of every line's law ({@link #saturated}).
+        supplyGraph=inputGraph;supplyDuration=rateOnly?0:dt;supplyDensities=new double[graph.pipes().size()];Arrays.fill(supplyDensities,Double.NaN);
         if(carryModes)for(int i=0;i<modes.size();i++) {
             var pipe=graph.pipes().get(i);
             if(!(pipe.control() instanceof FlowControl.Mover pump)||pump.targetVolumeFlow()==0)continue;
             var carried=previousModes.get(i);
             if(carried==FlowControl.Mode.PUMP_SUCTION_LIMIT&&(suctionFloors[i]<Double.POSITIVE_INFINITY||FluidThermodynamics.holdsPhase(inputStates.get(pipe.first()),FluidThermodynamics.WATER)))modes.set(i,carried);
-            else if(carried==FlowControl.Mode.CLOSED&&!(shutoffMargin(graph,pipe)>shutoffBand(Math.max(graph.reservoirs().get(pipe.first()).state().pressure(),graph.reservoirs().get(pipe.second()).state().pressure()),1e-9)))
+            else if(carried==FlowControl.Mode.CLOSED&&!(shutoffMargin(graph,i)>shutoffBand(Math.max(graph.reservoirs().get(pipe.first()).state().pressure(),graph.reservoirs().get(pipe.second()).state().pressure()),1e-9)))
                 modes.set(i,carried);
         }
         // A connection closed to all transport before the solve starts is in the active-set state the pass-by-pass closure
@@ -744,18 +761,17 @@ public final class PassiveStepSolver {
                                       FluidThermodynamics.State up,Equations.Transport suction,double tolerance) {
         var graph=equations.graph;var pipe=graph.pipes().get(i);double rho=suction.density;var next=mode;
         if(pipe.control() instanceof FlowControl.Mover pump) {
-            double margin=riseLimit(graph,pipe,rho,states.get(pipe.first()).pressure())-demand(graph,pipe,states,rho);
             double band=shutoffBand(equations.pressureScales[i],tolerance);
             // A mover on its own law (batch 2026-11-03-rotating-machinery): it closes on a reverse drive, opens where its rise at
-            // no flow beats the demand, goes on its suction limit where its law holds its suction below the vapour pressure of
-            // the water it draws (owner decision D59 (4)), and leaves it where its law cannot hold the point the suction line
-            // delivers.
+            // no flow beats the demand (a set-flow pump's rise on its supply, {@link #riseDensity}), goes on its suction limit
+            // where its law holds its suction below the vapour pressure of the water it draws (owner decision D59 (4)), and
+            // leaves it where its law cannot hold the point the suction line delivers.
             if(pump.targetVolumeFlow()==0)next=FlowControl.Mode.CLOSED;
             else if(mode==FlowControl.Mode.MOVER_LAW&&flow<-1e-10)next=FlowControl.Mode.CLOSED;
-            else if(mode==FlowControl.Mode.CLOSED&&margin>band)next=FlowControl.Mode.MOVER_LAW;
+            else if(mode==FlowControl.Mode.CLOSED&&riseLimit(graph,pipe,riseDensity(i,rho),states.get(pipe.first()).pressure())-demand(graph,pipe,states,rho)>band)next=FlowControl.Mode.MOVER_LAW;
             else if(mode==FlowControl.Mode.MOVER_LAW&&pump.liquid()&&cavitationMargin(equations,i,states)<-band)next=FlowControl.Mode.PUMP_SUCTION_LIMIT;
             else if(mode==FlowControl.Mode.PUMP_SUCTION_LIMIT&&flow<-1e-10)next=FlowControl.Mode.CLOSED;
-            else if(mode==FlowControl.Mode.PUMP_SUCTION_LIMIT&&lawResidual(graph,pipe,flow/rho,head,rho,states.get(pipe.first()).pressure())>band)next=FlowControl.Mode.MOVER_LAW;
+            else if(mode==FlowControl.Mode.PUMP_SUCTION_LIMIT&&lawResidual(graph,pipe,flow/rho,head,riseDensity(i,rho),states.get(pipe.first()).pressure())>band)next=FlowControl.Mode.MOVER_LAW;
         }else if(pipe.control() instanceof FlowControl.Valve valve) {
             if(!Double.isNaN(equations.fixedOpenings[i]))return equations.fixedOpenings[i]==0?FlowControl.Mode.CLOSED:FlowControl.Mode.VALVE_CONFLICT;
             if(valve.bare())return FlowControl.Mode.VALVE_OPEN;
@@ -1428,22 +1444,47 @@ public final class PassiveStepSolver {
      * ({@link FluidThermodynamics#pumpReferenceDensity()}), scaled by the suction's density over water's: a head, the one
      * quantity a real pump fixes. On nitrogen at 1 atm the limit is about 1/870 of the setting, so a pump moving gas
      * between closed vessels reaches its limit and its shutoff within a second instead of evacuating the suction vessel.
-     * The density is the trial's suction stream density ({@link #endDensity}: the bulk at a BULK end, the drawn phase's at
-     * a phase port), the same density the law row and the velocity clamp read, so the Jacobian carries the limit's
-     * dependence on that node and every mode test reads the same density at the converged point. It is the law's rise at
-     * no flow: a set-flow mover's relief rise, a machine's shutoff rise.
+     * The density is {@link #riseDensity}'s: a set-flow pump's supply, constant over the solve (owner decision D11, A2), any
+     * other mover's trial suction stream ({@link #endDensity}: the bulk at a BULK end, the drawn phase's at a phase port),
+     * so every mode test reads the density its law row reads; the start balance reads the suction stream. It is the law's
+     * rise at no flow: a set-flow mover's relief rise, a machine's shutoff rise.
      */
     private double riseLimit(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double suctionDensity,double suctionPressure) {
         var mover=(FlowControl.Mover)pipe.control();
         return mover.riseLimit(suctionDensity,suctionPressure,model.pumpReferenceDensity(),kappa(graph,pipe));
     }
-    /** How far the mover on {@code pipe} out-rises, at no flow, what its ends ask on the step's start states: its rise limit
-     * less the discharge end's pressure over the suction end's and the static column between them (Pa). */
-    private double shutoffMargin(PassiveNetwork graph,PassiveNetwork.Pipe pipe) {
-        var a=graph.reservoirs().get(pipe.first());var b=graph.reservoirs().get(pipe.second());
+    /** How far the closed mover on connection {@code edge} out-rises, at no flow, what its ends ask on the step's start
+     * states: its rise limit ({@link #riseDensity}) less the discharge end's pressure over the suction end's and the static
+     * column between them (Pa). */
+    private double shutoffMargin(PassiveNetwork graph,int edge) {
+        var pipe=graph.pipes().get(edge);var a=graph.reservoirs().get(pipe.first());var b=graph.reservoirs().get(pipe.second());
         double suction=endDensity(a.state(),pipe.firstPort(),pipe.volume());
-        return riseLimit(graph,pipe,suction,a.state().pressure())-(endPressure(b,pipe.secondPort(),b.state())-endPressure(a,pipe.firstPort(),a.state())
+        return riseLimit(graph,pipe,riseDensity(edge,suction),a.state().pressure())-(endPressure(b,pipe.secondPort(),b.state())-endPressure(a,pipe.firstPort(),a.state())
                 +suction*GRAVITY*(b.elevation()-a.elevation()));
+    }
+    /**
+     * The density the rise limit of the mover on connection {@code edge} reads ({@link #riseLimit}). A set-flow pump's is its
+     * supply's, the stream its refusal reads ({@link InletPhase#density} on this solve's input states; owner decision D11,
+     * A2): one value for the whole solve, so its law row and every mode test read one relief rise, and a closed pump reopens
+     * exactly where its law runs (read on the suction stream for the reopening alone, a dead-headed pump behind a junction
+     * 1e-5 lighter than its supply reopened 5 Pa early at 5 bar and cycled). A pump whose suction line still holds the gas it
+     * was built with pushes it out at its relief rise on the liquid behind it, as a positive-displacement pump primes
+     * itself. Every other mover reads its suction stream {@code suction}: a compressor's ratio limit reads no density, and a
+     * centrifugal machine does not prime. The start balance reads every mover on its suction stream ({@link #balanceStart}):
+     * there a pump whose suction flashes yields as the tabled density falls, so a starved pump starts where it cavitates (an
+     * LNG pump fed through a 1 cm line, balanced on its supply's relief, started liquid at its bubble point and every step
+     * size stalled).
+     */
+    private double riseDensity(int edge,double suction) {
+        if(!(supplyGraph.pipes().get(edge).control() instanceof FlowControl.Pump pump))return suction;
+        if(Double.isNaN(supplyDensities[edge])){double d=InletPhase.density(model,supplyGraph,edge,pump.targetVolumeFlow(),supplyDuration);supplyDensities[edge]=d>0&&d<Double.POSITIVE_INFINITY?d:-1;}
+        return supplyDensities[edge]>0?supplyDensities[edge]:suction;
+    }
+    /** What each connection's series passes at most on its set-flow movers' laws ({@link ControlConstraints#moverBounds}):
+     * a mover's set flow at its suction stream's density on {@code graph}'s states (kg/s). */
+    private double[] moverBounds(PassiveNetwork graph) {
+        return ControlConstraints.moverBounds(graph,e->{var pipe=graph.pipes().get(e);
+            return ((FlowControl.Mover)pipe.control()).targetVolumeFlow()*endDensity(graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume());});
     }
     /** The rise (Pa) of the mover on {@code pipe} at suction volume flow {@code flow} on its own law ({@code MOVER_LAW}). */
     private double lawRise(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double flow,double suctionDensity,double suctionPressure) {
@@ -1622,7 +1663,7 @@ public final class PassiveStepSolver {
     }
     /** The density of one phase stream of {@code s}: the vapour's ({@link FluidThermodynamics#vaporDensity}) or a liquid's
      * with its solid share ({@link FluidThermodynamics#phaseMass} over {@link FluidThermodynamics#phaseVolume}). */
-    private static double phaseDensity(FluidThermodynamics model,FluidThermodynamics.State s,int phase) {
+    static double phaseDensity(FluidThermodynamics model,FluidThermodynamics.State s,int phase) {
         return phase==FluidThermodynamics.GAS?model.vaporDensity(s):model.phaseMass(s,phase)/FluidThermodynamics.phaseVolume(s,phase);
     }
     /**
@@ -2689,6 +2730,7 @@ public final class PassiveStepSolver {
         for(int i=0;i<graph.reservoirs().size();i++){var node=graph.reservoirs().get(i);seeded.add(node.junction()&&seeds.get(i)!=null&&seeds.get(i)!=node.state()?new PassiveNetwork.Reservoir(node.id(),node.elevation(),seeds.get(i),node.kind(),node.inventory()):node);}
         graph=new PassiveNetwork(seeded,graph.pipes(),graph.scheduledTransfers());
         suctionFloors=suctionFloors(graph,graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList());
+        supplyGraph=graph;supplyDuration=0;supplyDensities=new double[graph.pipes().size()];Arrays.fill(supplyDensities,Double.NaN);
         var modes=initialModes(graph);boolean[] closed=new boolean[graph.pipes().size()];
         for(int i=0;i<closed.length;i++)if(graph.pipes().get(i).effectiveBlockedDirections()==3){closed[i]=true;if(!(graph.pipes().get(i).control() instanceof FlowControl.Passive))modes.set(i,FlowControl.Mode.CLOSED);}
         if(graph.pipes().stream().anyMatch(pipe->pipe.control() instanceof FlowControl.Mover)){boolean[] refused=InletPhase.decide(model,graph,null,0);for(int i=0;i<refused.length;i++)if(refused[i]){closed[i]=true;modes.set(i,FlowControl.Mode.INLET_WRONG_PHASE);}}
@@ -4620,11 +4662,12 @@ public final class PassiveStepSolver {
             if(boundaryClosed[edge]&&control<0)f[edgeOffset+edge]=flow;
             if(control>=0)f[control]=switch(modes.get(edge)) {
                 // A mover on its own law (batch 2026-11-03-rotating-machinery): its head against the law at its suction volume
-                // flow (a set-flow mover's in the flow form, FlowControl.Mover#lawResidual), on the trial's suction density
-                // and pressure, so the Jacobian carries both: the block sweep re-evaluates
+                // flow (a set-flow mover's in the flow form, FlowControl.Mover#lawResidual), the volume flow on the trial's suction
+                // density, the rise limit on {@link #riseDensity} (a set-flow pump's supply, constant over the solve) and the
+                // trial's suction pressure, so the Jacobian carries what varies: the block sweep re-evaluates
                 // this edge's rows for every perturbed column of its first node, and the sparsity already declares the
                 // actuator row on both endpoints' columns (buildSparsity).
-                case MOVER_LAW->lawResidual(graph,pipe,flow/suction.density,head,suction.density,st[a].pressure())/pressureScale;
+                case MOVER_LAW->lawResidual(graph,pipe,flow/suction.density,head,riseDensity(edge,suction.density),st[a].pressure())/pressureScale;
                 // Cavitation (owner decision D59 (4); t38 K6): the suction end stands at the vapour pressure of the liquid the
                 // pump draws ({@link PassiveStepSolver#vapourPressure}); the head is free, and the hydraulic row with the
                 // suction line's sets the flow.
