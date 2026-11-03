@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** 295fd1c11 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key)
+**Snapshot:** 6c9db6c9e (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example)
 
 Up: [code guide](README.md)
 
@@ -60,6 +60,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `SimulatorRunner`, `SimulatorHost` (`NONE`) | Runs one job at a time on the thread "IChemE simulator run" (daemon, lowest priority): Run, Solve alone, Size all, the quiet rate; Stop sets a flag the next checkpoint throws on | Threads and Stop |
 | `SimulatorFrame`, `SimulatorPage`, `DoorFrame`, `Door` (record), `SheetContext` (record), `SheetUnits` (record) | The screen's frame, pages and doors on the GUI kit | Layout |
 | `UnitDoors`, `ColumnDoors`, `StreamDoors`, `BasisPage`, `ResultsPage`, `SizingPage`, `SelectionColumn`, `FileColumns` | The doors and pages: units, the column, streams, basis, Results, Sizing, the Auto list, Open/Save as and file names | A door's rows |
+| `FlowsheetExamples` | The bundled example flowsheets Open lists first: `assets/icheme/flowsheet_examples/index.json` and its files, read through a `Function<String, InputStream>` (the screen passes `ColumnTemplates.resources`, the resource manager); a file that does not read is listed with its reason, never thrown | The examples |
 | `SheetEditor`, `SheetGestures`, `SheetClipboard` | Edits with undo and redo, the mouse, one clipboard | Editing |
 | `SheetLayout`, `SheetPainter`, `Symbol` (enum, the symbol atlas), `Tiles`, `SheetView` | Boxes, ports, routes and hit tests (reads a stream's saved `route`); drawing; the palette; pan and zoom | Drawing |
 | `ColumnBlock`, `AssemblyBlock` | The column block's drawing, and the assembly screen drawn as one | The column on the glass |
@@ -128,6 +129,7 @@ flowchart TD
 | Format | Version | Where | Kind |
 | --- | --- | --- | --- |
 | Flowsheet file and block body's sheet | `FlowsheetFile.FORMAT` = 2 (passage ends, option B) | `science/flowsheet/FlowsheetFile` | No compatibility (owner 2026-11-04): another format is refused; corpus `compat/flowsheet/format-2*.json` (`FlowsheetFileTest`) |
+| Bundled examples | Each a sheet file of the current `FORMAT`, on the current network package and revision | `assets/icheme/flowsheet_examples/` | A format or material revision change fails `FlowsheetExamplesTest`: write the example again on the new one (the sample gates run it) |
 | Block body | `SheetBody.FORMAT` = 1 | `science/flowsheet/SheetBody` | Fact (the sheet inside it) |
 | Run results | `SimulatorResults.FORMAT` = 1 | `network/SimulatorResults` | State: dropped on a mismatch, rebuilt by a run |
 | Sent designs | `SentDesignTags` (fields 2) | `world/level/block/entity/SentDesignTags` | Fact: corpus `compat/simulator/designs-<n>.snbt` (`SentDesignTagsTest`) |
@@ -182,7 +184,7 @@ The file keeps fields it does not know and refuses a newer format and an older o
   - `StreamDoors` builds a stream's: feed, flow, T and P, components, the clipboard's Copy and Paste.
   - A stream's flow follows the display key (`SheetUnits.Basis`: Mole, Mass, Volume, the actual m³ at the stream's own T and P): the feed's Flow entry in the panel and the door, the feed door's status line and the panel's Flow meter for a stream a unit makes. `SheetUnits.flow` is the one format, `molesOf` the one way back (through `SheetContext.feedMoles` and `StreamDoors.writeFeed`). `SheetContext.density` gives a feed greyed only by a flow edit the run's density while its T, P and mole fractions are the run's (density is intensive); otherwise Volume leaves the entry blank, takes no typing, and its hover says why (`door.volume_unknown`). The composition tables, `ResultsPage`, the unit doors' stream tables, the column door, splitter flows and `FileColumns` keep their own columns.
   - `SelectionColumn` lists Auto's sizes.
-  - `FileColumns` holds the Open and Save as dialogs and the file names.
+  - `FileColumns` holds the Open and Save as dialogs and the file names. Open lists the bundled examples first (`entries(folder, examples, t)`: the translated name `gui.icheme.flowsheet.example.<stem>`, the unit count, Saved "Example", the state as for a file). `FileColumns.opened` gives an example's sheet with no file name, so it opens unsaved, Save asks for a name, and the example itself never changes.
 - **Pages:**
   - `ResultsPage`: streams, units, the run log through `NoteText` in the player's units, and the balances.
   - `SizingPage`: rows and lamps, Fixed and Auto, Size all, Send to block. It re-rates quietly 10 ticks after the last edit (`rateWhenDue`).
@@ -255,6 +257,7 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | Lines and paths | `LineSizing`, `Service`, `PressurePath`, `SheetSizing` | `LineSizingTest`, `ServiceTest`, `LineSizingSampleTest`, `SizeAllSampleTest` (slow) |
 | Which end of a passage is its inlet | `Passage`, `Wiring`, `UnitModel.passages`, `SheetEditor.takes` | `WiringTest`, `PassageEndsTest` |
 | The file | `FlowsheetFile` | `FlowsheetFileTest` (27, the corpus) |
+| The bundled examples and Open's rows | `FlowsheetExamples`, `FileColumns.entries`, `FileColumns.opened`, `assets/icheme/flowsheet_examples/` | `FlowsheetExamplesTest`; the sample gates run the crude unit |
 | The block's store, uploads and packets ([packets](#packets-and-protocol), [block](#the-block-and-its-store)) | `SheetStore`, `SheetBody`, `ProcessSimulatorNetwork`, `ProcessSimulatorBlockEntity` | `SheetStoreTest`, `SimulatorBlockTest`, `ProcessSimulatorGameTests` |
 | Sent designs and Import | `SheetSizing.designs`, `SentDesign`, `SentDesignTags`, `EquipmentNetwork` | `SentDesignTagsTest` (the corpus), `ProcessSimulatorGameTests.aConstructorImportsTheNearestSimulatorsDesign` |
 | The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `StreamFlowBasisTest` (the flow basis), `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`, `DrawCallTest` (draw calls); renders: `tools/heat-gui-renders/SimulatorRender.java` (`-Dcount`: draw calls per page; `-Dbasis`: MOLE, MASS or VOLUME) |
@@ -263,10 +266,10 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 
 ## Tests that pin it
 
-- `test`: `science/flowsheet/` (`FlowGraphTest`, `FlowsheetSolverTest`, `FlowsheetUnitsTest`, `FlowsheetColumnDoorTest`, `FlowsheetFileTest`, `SheetStoreTest`, `EjectorTest`, `WiringTest`), `science/flowsheet/sizing/` (`LimitTest`, `ServiceTest`, `LineSizingTest`, `UnitSizingTest`, `SheetSizingTest`, `CoolerSizingTest`), `client/gui/flowsheet/` (the screen tests above, `PassageEndsTest`, `DrawCallTest`, `SimulatorBlockTest`, `SimulatorRunnerTest`, the two coverage tests), `network/ColumnWireTest`, `world/level/block/entity/SentDesignTagsTest`.
+- `test`: `science/flowsheet/` (`FlowGraphTest`, `FlowsheetSolverTest`, `FlowsheetUnitsTest`, `FlowsheetColumnDoorTest`, `FlowsheetFileTest`, `SheetStoreTest`, `EjectorTest`, `WiringTest`), `science/flowsheet/sizing/` (`LimitTest`, `ServiceTest`, `LineSizingTest`, `UnitSizingTest`, `SheetSizingTest`, `CoolerSizingTest`), `client/gui/flowsheet/` (the screen tests above, `PassageEndsTest`, `FlowsheetExamplesTest`, `DrawCallTest`, `SimulatorBlockTest`, `SimulatorRunnerTest`, the two coverage tests), `network/ColumnWireTest`, `world/level/block/entity/SentDesignTagsTest`.
 - `holdGates` (slow, `slowGateClasses`): `FlowsheetColumnTest`, `ColumnEjectorTest`, `SimulatorRunTest`, `LineSizingSampleTest`, `UnitSizingSampleTest`, `ColumnSizingSampleTest`, `SizeAllSampleTest`, `UtilityRegulationTest`.
 - `runColumnGameTestServer` (namespace `icheme_column_test`): `ProcessSimulatorGameTests` (11): the old id, a reload with no update tag, a damaged sheet kept, the constructor's Import, a second player reads, uploads only from the screen near the block, a bad upload refused, the holder freed on disconnect, away and when the block goes, a replay that runs no solver.
-- Shared fixture: `client/gui/flowsheet/SheetFixture` (the sample sheet).
+- Shared fixture: `client/gui/flowsheet/SheetFixture` (the sample sheet: `sample()` reads the bundled crude unit example, so the sample gates run the sheet players open).
 - Probes and renders outside the gates: `tools/process-simulator/`, `tools/device-names/`, `tools/heat-gui-renders/` (`SimulatorPrototypes`, `SimulatorRender`, `SimulatorSizing`).
 
 ## Terms
