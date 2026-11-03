@@ -53,7 +53,7 @@ public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.Pr
         double perSecond = time.perSecond(typed);
         boolean weighed = kgPerMole > 0 && Double.isFinite(kgPerMole);
         return switch (basis) {
-            case MOLE -> perSecond * 1000;
+            case MOLE -> molesPerSecond(typed);
             case MASS -> weighed ? perSecond * 1000 / kgPerMole : Double.NaN;
             case VOLUME -> weighed && density > 0 && Double.isFinite(density) ? perSecond * density / kgPerMole : Double.NaN;
         };
@@ -90,6 +90,14 @@ public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.Pr
     /** Kg/s as tonnes over the chosen time. */
     public String tonnes(double perSecond) {
         return number(2, time.display(perSecond) / 1000);
+    }
+
+    /**
+     * The mol/s a typed molar flow means, kmol over the chosen time: how a unit's own flow setting reads back, which stays molar
+     * whatever the basis (a draw's or an outlet's makeup is known only after a run), so only its time follows the key.
+     */
+    public double molesPerSecond(double typed) {
+        return time.perSecond(typed) * 1000;
     }
 
     public String molesUnit() {

@@ -333,7 +333,7 @@ public final class UnitDoors {
         }
         var value = SheetContext.number(text);
         if (key.startsWith("share/") || key.startsWith("flow/")) {
-            row(x, id, key.split("/")[1], key.split("/")[0], text.isBlank() ? null : value == null ? null : key.startsWith("share/") ? value / 100 : value / 3.6, step);
+            row(x, id, key.split("/")[1], key.split("/")[0], text.isBlank() ? null : value == null ? null : key.startsWith("share/") ? value / 100 : x.units().molesPerSecond(value), step);
             return;
         }
         var quantity = entries.get(key);

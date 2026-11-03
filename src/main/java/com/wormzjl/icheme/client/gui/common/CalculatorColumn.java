@@ -291,18 +291,19 @@ public final class CalculatorColumn {
                 button("keep_draft", "keep_draft", true, t, "keep_draft"))));
     }
 
-    /** The Feed group: the flow, the temperature in {@code unit}, the tray. Keys {@code s0}, {@code s1}, {@code s3}. */
-    private static Column.Group feedGroup(String unit, HeatControlColumn.Texts t) {
-        return group("feed", t, field("s0", "flow", "kmol/h", "feed_flow", t), field("s1", "temperature", unit, "feed_temperature", t),
+    /** The Feed group: the flow in {@code flow}, the temperature in {@code unit}, the tray. Keys {@code s0}, {@code s1}, {@code s3}. */
+    private static Column.Group feedGroup(String unit, String flow, HeatControlColumn.Texts t) {
+        return group("feed", t, field("s0", "flow", flow, "feed_flow", t), field("s1", "temperature", unit, "feed_temperature", t),
                 field("s3", "tray", "", "feed_tray", t));
     }
 
     /**
-     * What the Column page reads: the draft conflict; whether the draft takes edits; the temperature unit; the selected
+     * What the Column page reads: the draft conflict; whether the draft takes edits; the temperature, pressure and molar flow
+     * units (bar and kmol/h on the column block; the display keys' units on the simulator's door); the selected
      * connection and its index; a pumparound's cooling spread over its trays (else at its return tray); whether a draw,
      * a pumparound and a steam feed can be added.
      */
-    public record ColumnInput(boolean conflict, boolean editable, String unit, Connection selected, int index, boolean spread, boolean addDraw,
+    public record ColumnInput(boolean conflict, boolean editable, String unit, String pressure, String flow, Connection selected, int index, boolean spread, boolean addDraw,
                               boolean addPa, boolean addSteam) {
     }
 
@@ -318,8 +319,8 @@ public final class CalculatorColumn {
         var left = new ArrayList<Column.Row>();
         if (in.conflict()) left.add(draft(t));
         left.add(group("column", t, field("s2", "trays", "", "tray_count", t), field("s9", "diameter", "m", "diameter", t),
-                field("s7", "top_pressure", "bar", "top_pressure", t)));
-        left.add(feedGroup(in.unit(), t));
+                field("s7", "top_pressure", in.pressure(), "top_pressure", t)));
+        left.add(feedGroup(in.unit(), in.flow(), t));
         var right = new ArrayList<Column.Row>();
         right.add(group("condenser", t, field("s4", "outlet", in.unit(), "top_temperature", t), field("s6", "reflux", "", "reflux", t)));
         right.add(group("reboiler", t, field("s5", "duty", "MW", "duty", t)));
@@ -328,7 +329,7 @@ public final class CalculatorColumn {
         int i = in.index();
         switch (in.selected()) {
             case DRAW -> right.add(new Column.Group(t.get(KEY + "group.draw", i + 1), t.get(KEY + "group.draw.hint"), List.of(
-                    field("d" + i + "rate", "flow", "kmol/h", "draw_flow", t), field("d" + i + "stage", "tray", "", "draw_tray", t),
+                    field("d" + i + "rate", "flow", in.flow(), "draw_flow", t), field("d" + i + "stage", "tray", "", "draw_tray", t),
                     new Column.Buttons(List.of(button("remove", "remove", in.editable(), t, "remove_draw"))))));
             case PA -> right.add(new Column.Group(t.get(KEY + "group.pa", i + 1), t.get(KEY + "group.pa.hint"), List.of(
                     field("c" + i + "duty", "cooling", "MW", "cooling", t), field("c" + i + "draw", "draw_tray", "", "draw_tray", t),
@@ -337,7 +338,7 @@ public final class CalculatorColumn {
                             position("split:return", t.get(KEY + "return_heat"), !in.spread(), in.editable(), t.get(KEY + "return_heat.hint")))),
                     new Column.Buttons(List.of(button("remove", "remove", in.editable(), t, "remove_pa"))))));
             case STEAM -> right.add(new Column.Group(t.get(KEY + "group.steam", i + 1), t.get(KEY + "group.steam.hint"), List.of(
-                    field("t" + i + "rate", "flow", "kmol/h", "steam_flow", t), field("t" + i + "stage", "tray", "", "injection_tray", t),
+                    field("t" + i + "rate", "flow", in.flow(), "steam_flow", t), field("t" + i + "stage", "tray", "", "injection_tray", t),
                     field("t" + i + "T", "temperature", in.unit(), "steam_temperature", t),
                     new Column.Buttons(List.of(button("remove", "remove", in.editable(), t, "remove_steam"))))));
             case NONE -> {
@@ -350,7 +351,7 @@ public final class CalculatorColumn {
     public static Rows feed(boolean conflict, boolean editable, String unit, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
         if (conflict) rows.add(draft(t));
-        rows.add(feedGroup(unit, t));
+        rows.add(feedGroup(unit, "kmol/h", t));
         rows.add(group("mixture", t, new Column.Buttons(List.of(button("clear", "clear_mixture", editable, t, "clear_mixture")))));
         return new Rows(List.of(), rows);
     }

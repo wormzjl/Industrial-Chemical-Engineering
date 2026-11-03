@@ -75,14 +75,18 @@ class CalculatorColumnTest {
         return List.copyOf(out);
     }
 
-    /** The Column page's states: each connection selected (its widest index), with and without the draft's conflict, taking edits or not, in each unit. */
+    /**
+     * The Column page's states: each connection selected (its widest index), with and without the draft's conflict, taking edits or not, in each unit; the
+     * block's bar and kmol/h, and the simulator door's widest display units, kPa and kmol/min.
+     */
     private static List<ColumnInput> columnInputs() {
         var out = new ArrayList<ColumnInput>();
         for (boolean conflict : new boolean[]{false, true})
             for (boolean editable : new boolean[]{false, true})
                 for (var c : Connection.values())
                     for (var unit : UNITS)
-                        out.add(new ColumnInput(conflict, editable, unit, c, c == Connection.STEAM ? 1 : 3, editable, editable, !editable, editable));
+                        for (var units : List.of(List.of("bar", "kmol/h"), List.of("kPa", "kmol/min")))
+                            out.add(new ColumnInput(conflict, editable, unit, units.get(0), units.get(1), c, c == Connection.STEAM ? 1 : 3, editable, editable, !editable, editable));
         return out;
     }
 
@@ -362,27 +366,27 @@ class CalculatorColumnTest {
     @Test
     void eachPageShowsItsKeys() {
         var t = texts();
-        var none = CalculatorColumn.column(new ColumnInput(false, true, "°C", Connection.NONE, 0, true, true, true, true), t);
+        var none = CalculatorColumn.column(new ColumnInput(false, true, "°C", "bar", "kmol/h", Connection.NONE, 0, true, true, true, true), t);
         assertTrue(none.two());
         assertEquals(List.of("s2", "s9", "s7", "s0", "s1", "s3"), keys(none.left()));
         assertEquals(List.of("s4", "s6", "s5", "add:draw", "add:pa", "add:steam"), keys(none.right()));
         assertEquals(List.of(none.left(), none.right()), none.at(464));
         assertEquals(List.of(none.all()), none.at(463));
-        var conflict = CalculatorColumn.column(new ColumnInput(true, true, "°C", Connection.NONE, 0, true, true, true, true), t);
+        var conflict = CalculatorColumn.column(new ColumnInput(true, true, "°C", "bar", "kmol/h", Connection.NONE, 0, true, true, true, true), t);
         assertEquals(List.of("use_server", "keep_draft"), keys(conflict.left()).subList(0, 2));
         assertEquals(List.of("s4", "s6", "s5", "add:draw", "add:pa", "add:steam", "d2rate", "d2stage", "remove"),
-                keys(CalculatorColumn.column(new ColumnInput(false, true, "°C", Connection.DRAW, 2, true, true, true, true), t).right()));
-        var pa = CalculatorColumn.column(new ColumnInput(false, true, "°C", Connection.PA, 1, true, false, true, false), t);
+                keys(CalculatorColumn.column(new ColumnInput(false, true, "°C", "bar", "kmol/h", Connection.DRAW, 2, true, true, true, true), t).right()));
+        var pa = CalculatorColumn.column(new ColumnInput(false, true, "°C", "bar", "kmol/h", Connection.PA, 1, true, false, true, false), t);
         assertEquals(List.of("c1duty", "c1draw", "c1return", "split:uniform", "split:return", "remove"), keys(pa.right()).subList(6, 12));
         var split = buttons(pa.right());
         assertTrue(split.get("split:uniform").latched() && !split.get("split:uniform").active() && split.get("split:return").active() && !split.get("split:return").latched());
         assertFalse(split.get("add:draw").active() || split.get("add:steam").active());
         assertTrue(split.get("add:pa").active());
         assertEquals(t.get("column.group.pa", 2), ((Column.Group) pa.right().getLast()).title());
-        var readOnly = buttons(CalculatorColumn.column(new ColumnInput(false, false, "°C", Connection.STEAM, 1, false, false, false, false), t).right());
+        var readOnly = buttons(CalculatorColumn.column(new ColumnInput(false, false, "°C", "bar", "kmol/h", Connection.STEAM, 1, false, false, false, false), t).right());
         assertFalse(readOnly.get("remove").active() || readOnly.get("add:draw").active());
         assertEquals(List.of("t1rate", "t1stage", "t1T", "remove"),
-                keys(CalculatorColumn.column(new ColumnInput(false, true, "°C", Connection.STEAM, 1, true, true, true, true), t).right()).subList(6, 10));
+                keys(CalculatorColumn.column(new ColumnInput(false, true, "°C", "bar", "kmol/h", Connection.STEAM, 1, true, true, true, true), t).right()).subList(6, 10));
 
         var feed = CalculatorColumn.feed(false, true, "K", t);
         assertFalse(feed.two());

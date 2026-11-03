@@ -193,7 +193,7 @@ public final class GuiPrototypes {
         var status = CalculatorColumn.status(new CalculatorColumn.StatusInput(false, false, "", "", false, false, false, null, true, false, null), t);
         d.skin.status(d.c, CalculatorColumn.display(d.w), status.text(), status.palette());
         var rows = page == CalculatorColumn.Page.COLUMN
-                ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
+                ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", "bar", "kmol/h", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
                 : page == CalculatorColumn.Page.EQUIPMENT
                 ? CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD,
                         List.of(ColumnComponents.Pump.STANDARD), true, new ColumnComponents.Units(2, 1, List.of(1), 3), true), t)

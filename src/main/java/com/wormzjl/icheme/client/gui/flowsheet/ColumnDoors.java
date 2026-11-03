@@ -143,7 +143,7 @@ public final class ColumnDoors {
                 glass = connections(x, unit);
             }
             default -> {
-                var in = new CalculatorColumn.ColumnInput(false, true, symbol, view.connection, view.index, view.spread(door), door.draws().size() < V3ColumnInput.MAX_SIDE_DRAWS, door.pumparounds().size() < MAX_PA, door.steam().size() < MAX_STEAM);
+                var in = new CalculatorColumn.ColumnInput(false, true, symbol, x.units().pressure().symbol(), x.units().molesUnit(), view.connection, view.index, view.spread(door), door.draws().size() < V3ColumnInput.MAX_SIDE_DRAWS, door.pumparounds().size() < MAX_PA, door.steam().size() < MAX_STEAM);
                 var rows = CalculatorColumn.column(in, x.t());
                 var left = new ArrayList<Column.Row>();
                 left.add(Door.name(x.text("door.name")));
@@ -270,7 +270,7 @@ public final class ColumnDoors {
         values.put("ejector_motive", u.p(door.ejector().motive()));
         for (int i = 0; i < door.draws().size(); i++) {
             var d = door.draws().get(i);
-            values.put("d" + i + "rate", SheetUnits.number(1, d.flow() * KMOL));
+            values.put("d" + i + "rate", u.moles(d.flow()));
             values.put("d" + i + "stage", Integer.toString(d.tray() + 1));
         }
         for (int i = 0; i < door.pumparounds().size(); i++) {
@@ -281,7 +281,7 @@ public final class ColumnDoors {
         }
         for (int i = 0; i < door.steam().size(); i++) {
             var s = door.steam().get(i);
-            values.put("t" + i + "rate", SheetUnits.number(1, s.flow() * KMOL));
+            values.put("t" + i + "rate", u.moles(s.flow()));
             values.put("t" + i + "stage", Integer.toString(s.stage() + 1));
             values.put("t" + i + "T", u.t(s.temperature()));
         }
@@ -328,8 +328,8 @@ public final class ColumnDoors {
                 int i = Character.getNumericValue(key.charAt(1));
                 String field = key.substring(2);
                 switch (key.charAt(0)) {
-                    case 'd' -> row(x, id, "draws", i, field.equals("rate") ? "flow" : "tray", field.equals("rate") ? value / KMOL : value - 1, step);
-                    case 't' -> row(x, id, "steam", i, field.equals("rate") ? "flow" : field.equals("T") ? "temperature" : "stage", field.equals("rate") ? value / KMOL : field.equals("T") ? kelvin : value - 1, step);
+                    case 'd' -> row(x, id, "draws", i, field.equals("rate") ? "flow" : "tray", field.equals("rate") ? u.molesPerSecond(value) : value - 1, step);
+                    case 't' -> row(x, id, "steam", i, field.equals("rate") ? "flow" : field.equals("T") ? "temperature" : "stage", field.equals("rate") ? u.molesPerSecond(value) : field.equals("T") ? kelvin : value - 1, step);
                     case 'c' -> row(x, id, "pumparounds", i, switch (field) {
                         case "duty" -> "duty";
                         case "draw" -> "draw_tray";
