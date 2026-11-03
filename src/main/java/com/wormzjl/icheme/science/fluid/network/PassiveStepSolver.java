@@ -631,14 +631,15 @@ public final class PassiveStepSolver {
             // What each phase-port outflow drew, phase by phase, at these flows on this candidate: the reconstruction books it
             // and the transfer samples it (decision D11).
             var draws=equations.draws(flows,states);
-            // Decision D54: a dry vessel this pass's flows reach is laid out from what they deliver ({@link #arrivingPhases}) and
-            // the pass is solved again, its end the step's implicit end like every vessel's. The start flows may miss it: a rate
+            // Decision D54: a dry vessel this pass's flows reach is laid out from what they deliver ({@link #arrivingPhases}), the
+            // phases they draw included (what the booking books), and the pass is solved again, its end the step's implicit end
+            // like every vessel's. The start flows may miss it: a rate
             // point carries none into a vessel it left dry, and the booking below states the delivered LNG at the tank's own
             // 298 K, as vapour, from which no closure reaches a liquid's enthalpy (cold seeds 181 and 397 stalled at 47 K at
             // every step size, down to 1e-21 s).
             if(!rateOnly&&anyDry(equations)) {
                 var point=new ArrayList<>(states);for(int i=0;i<point.size();i++)if(equations.dry[i])point.set(i,seeds.get(i));
-                var arrived=arrivingPhases(graph,point,lawFlows,true,modes,boundaryClosed,dt,checkpoint);
+                var arrived=arrivingPhases(graph,point,lawFlows,draws,true,modes,boundaryClosed,dt,checkpoint);
                 if(arrived!=point){seeds=arrived;previousPipes=pipeIdentities;previousNodeIds=nodeIds;previousInputStates=inputStates;previousOutputStates=states;previousRateOnly=rateOnly;previousFlows=flows.clone();previousLawFlows=lawFlows;previousHeads=heads.clone();previousModes=List.copyOf(modes);continue;}
             }
             var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::sideHeat);
@@ -1208,11 +1209,13 @@ public final class PassiveStepSolver {
         if(rateOnly||graph.reservoirs().stream().noneMatch(node->node.junction()&&!node.fixed()||holdsNoFluidVessel(node)))return seeds;
         int edges=graph.pipes().size();double[] flows=new double[edges];
         startPoint(graph,modes,boundaryClosed,identities(graph),null,flows,new double[edges],new boolean[edges]);
-        return arrivingPhases(graph,seeds,flows,false,modes,boundaryClosed,dt,checkpoint);
+        return arrivingPhases(graph,seeds,flows,null,false,modes,boundaryClosed,dt,checkpoint);
     }
     /** {@link #arrivingPhases} at the law flows {@code flows}; {@code vesselsOnly} leaves the junctions, for a converged pass
-     * whose junctions are solved; {@code seeds} itself where nothing is laid out. */
-    private List<FluidThermodynamics.State> arrivingPhases(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,double[] flows,boolean vesselsOnly,List<FlowControl.Mode> modes,
+     * whose junctions are solved; {@code seeds} itself where nothing is laid out. A connection the pass drew phases on
+     * ({@code draws}, {@link Equations#draws}) delivers its drawn stream ({@link #drawnStream}), what the booking books;
+     * any other the stream of its end at a vanishing flow. */
+    private List<FluidThermodynamics.State> arrivingPhases(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,double[] flows,double[][] draws,boolean vesselsOnly,List<FlowControl.Mode> modes,
                                                            boolean[] boundaryClosed,double dt,Runnable checkpoint) {
         int nodes=graph.reservoirs().size();
         List<FluidThermodynamics.State> result=null;
@@ -1227,9 +1230,10 @@ public final class PassiveStepSolver {
                     var pipe=graph.pipes().get(edge);double flow=flows[edge];
                     if(!(Math.abs(flow)>0)||(flow>=0?pipe.second():pipe.first())!=j||!boundaryAllowed(graph,pipe,flow))continue;
                     int donor=flow>=0?pipe.first():pipe.second();var stream=current.get(donor);var port=pipe.drawPort(flow);
-                    double rate=Math.abs(transported(graph,pipe,flow)),delivered=dt*rate,streamMass=endMass(stream,port,pipe.volume());double[] moles=endMoles(stream,port,pipe.volume());
+                    var rates=draws==null?null:draws[edge];var drawn=rates==null?null:drawnStream(rates,stream,graph.reservoirs().get(donor).state());
+                    double rate=Math.abs(transported(graph,pipe,flow)),delivered=dt*rate,streamMass=drawn!=null?1:endMass(stream,port,pipe.volume());double[] moles=drawn!=null?drawn:endMoles(stream,port,pipe.volume());
                     for(int c=0;c<n.length;c++)n[c]+=delivered*moles[c]/streamMass;
-                    var through=delivered(graph,pipe,endSpecificEnthalpy(stream,port,pipe.volume()),stream.temperature(),Math.copySign(rate,flow),checkpoint);
+                    var through=delivered(graph,pipe,drawn!=null?drawn[n.length]:endSpecificEnthalpy(stream,port,pipe.volume()),stream.temperature(),Math.copySign(rate,flow),checkpoint);
                     mass+=delivered;weighted+=delivered*through[1];arrives=true;
                     heat+=delivered*through[0];
                 }
@@ -1742,23 +1746,52 @@ public final class PassiveStepSolver {
      * leaves them (LNG drawn with 1.3 % of dry ice at its stored energy flashed 1.3 % of its methane to vapour). */
     private double[] endMoles(FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume) {
         if(PhaseDraw.mixedLiquids(s,port))return PhaseLayout.totalAmounts(mixedLiquidStream(s,volume));
-        int phase=PhaseDraw.leading(model,s,port);
-        return phase<0?PhaseLayout.totalAmounts(s):FluidThermodynamics.phaseMoles(s,phase);
+        return fluidMoles(s,PhaseDraw.leading(model,s,port));
     }
     /** The fluid mass of {@link #endMoles}' stream, kg: the phase's (or the node's) mass without its solids; a dry end, which
      * draws no fluid ({@link #endStream} is null there), keeps its whole mass. */
     private double endMass(FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume) {
         if(PhaseDraw.mixedLiquids(s,port))return mixedLiquidStream(s,volume).mass();
-        int phase=PhaseDraw.leading(model,s,port);
+        return fluidMass(s,PhaseDraw.leading(model,s,port));
+    }
+    /** The fluid's specific enthalpy of {@link #endMoles}' stream, J/kg, its solids left behind (see {@link #endMoles}). */
+    private double endSpecificEnthalpy(FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume) {
+        if(PhaseDraw.mixedLiquids(s,port)){var mixed=mixedLiquidStream(s,volume);return mixed.enthalpy()/mixed.mass();}
+        return fluidSpecificEnthalpy(s,PhaseDraw.leading(model,s,port));
+    }
+    /**
+     * What a phase-port outflow the pass drew carries per kilogram of fluid ({@code rates}, the six entries of
+     * {@link Equations#draws}): each drawn phase's {@link #fluidMoles} over its {@link #fluidMass}, and its
+     * {@link #fluidSpecificEnthalpy}, weighted by its mass flow and read where the booking reads it, on {@code end} or, for a
+     * pinned entry, on the step's start state {@code start}; the specific enthalpy (J/kg) is the last entry. A full tank
+     * holding a 1.2e-22 m3 nitrogen bubble draws water through its top port, though the bubble leads the port at a vanishing
+     * flow: a dry tank above it laid out from the leading phase held 77 g of overflowing water as 0.081 m3 of vapour, and
+     * the next pass ran its temperature to the 10 K floor (bundled fuzz seed 301).
+     */
+    private double[] drawnStream(double[] rates,FluidThermodynamics.State end,FluidThermodynamics.State start) {
+        double[] stream=null;double total=0;
+        for(double rate:rates)if(rate>0)total+=rate;
+        for(int k=0;k<rates.length;k++) {
+            if(!(rates[k]>0))continue;
+            var at=k<3?end:start;int phase=k%3;double weight=rates[k]/total,fluid=fluidMass(at,phase);double[] moles=fluidMoles(at,phase);
+            if(stream==null)stream=new double[moles.length+1];
+            for(int c=0;c<moles.length;c++)stream[c]+=weight*moles[c]/fluid;
+            stream[moles.length]+=weight*fluidSpecificEnthalpy(at,phase);
+        }
+        return stream;
+    }
+    /** The conserved amounts of phase {@code phase} of {@code s} (water last); the node's total amounts for {@code -1}. */
+    private static double[] fluidMoles(FluidThermodynamics.State s,int phase){return phase<0?PhaseLayout.totalAmounts(s):FluidThermodynamics.phaseMoles(s,phase);}
+    /** The mass of phase {@code phase} of {@code s} (the node's for {@code -1}) without its solids, kg; its whole mass where
+     * the solids would leave none. */
+    private double fluidMass(FluidThermodynamics.State s,int phase) {
         double mass=phase<0?s.mass():model.phaseMass(s,phase),solids=s.solidMoments().mass();
         if(solids==0)return mass;
         double fluid=mass-solidShare(s,phase)*solids;
         return fluid>0?fluid:mass;
     }
-    /** The fluid's specific enthalpy of {@link #endMoles}' stream, J/kg, its solids left behind (see {@link #endMoles}). */
-    private double endSpecificEnthalpy(FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume) {
-        if(PhaseDraw.mixedLiquids(s,port)){var mixed=mixedLiquidStream(s,volume);return mixed.enthalpy()/mixed.mass();}
-        int phase=PhaseDraw.leading(model,s,port);
+    /** The specific enthalpy of phase {@code phase} of {@code s} (the node's for {@code -1}) without its solids, J/kg. */
+    private double fluidSpecificEnthalpy(FluidThermodynamics.State s,int phase) {
         double whole=phase<0?s.enthalpy()/s.mass():model.phaseSpecificEnthalpy(s,phase,null),solids=s.solidMoments().mass();
         if(solids==0)return whole;
         double mass=phase<0?s.mass():model.phaseMass(s,phase),fluid=mass-solidShare(s,phase)*solids;
