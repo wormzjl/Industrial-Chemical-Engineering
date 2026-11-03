@@ -66,9 +66,15 @@ Three entries in the tab's Design group, for the whole sheet.
 
 ### 3.3 Lines
 
-Every line: bore ≤ 0.80 m a run, speed ≤ 100 m/s, bore ≤ what its nozzle takes (`NozzleBore.largest`). These are Musts, all from the world.
+Every line: bore ≤ 0.80 m a run, speed ≤ the world's `velocityLimit` at the line's state (the lesser of 100 m/s and the isothermal acoustic bound), bore ≤ what its nozzle takes (`NozzleBore.largest`). These are Musts, all from the world.
 
-The service comes from the stream, and the player may change it. Water above 95 mole % of a liquid is Water. A stream above 95 % vapour by mass is Gas, or Steam if its gas is water. Above 0.05 % vapour it is Two-phase. A liquid leaving a tray is Draw. One that feeds a pump is Suction: boiling if within 0.3 bar of its bubble pressure, cold otherwise. The rest is Liquid.
+A line with solids has one Must more, from the same law the world's connection reads:
+
+| Limit | Kind | Value | Source |
+|---|---|---|---|
+| Solids carried | Must | `SolidMobility.check` allows it: the liquid's speed above the solids' deposition speed, a bore wider than the largest solid, a slurry that is not packed, a liquid that is not immobile. The last two refuse at any size | World: `SolidMobility` |
+
+The service comes from the stream, and the player may change it. A stream above 95 % vapour by mass is Gas, or Steam if its gas is water. Above 0.05 % vapour it is Two-phase. A liquid leaving a tray is Draw. One that feeds a pump is Suction: boiling if within 0.3 bar of its bubble pressure, cold otherwise. Those two protect the column's head and the pump, whatever the liquid. Of the rest, water above 95 mole % of the liquid is Water, and anything else is Liquid.
 
 Each service's limits are Shoulds.
 
@@ -392,7 +398,7 @@ The owner accepted all ten as written on 2026-11-03.
 - **Nozzle ρv² [TEMA], tube vibration, fan coverage, face speed**: the world has no law that reads them; the bay fixes the last two.
 - **Exchanger and air cooler speeds**: fouling and erosion have no law in the world, the film does not read speed, and the drops bound speed from above.
 - **Mach, noise, flare and relief lines**: the world has no choke law (owner decision: 100 m/s cap) and no relief.
-- **Slurries**: the flowsheet's streams carry no solids on day one. Durand's speed [DUR] is the rule when they do.
+- **Durand's slurry speed** [DUR]: streams do carry solids, and section 3.3's Must reads the world's own `SolidMobility`, so a second speed has no law behind it.
 - **Coking, flue gas, stack**: no combustion model.
 - **Mechanical design and cost**: wall thickness, wind, price. Out of the game's scope.
 
