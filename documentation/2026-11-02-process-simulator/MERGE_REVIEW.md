@@ -39,11 +39,15 @@ Runs (AGENTS.md, No repeated tests):
 
 ## Code guide
 
-Chapters this thread wrote or updated (snapshot at the cleanup commit):
-- `process-simulator.md` (new).
-- `README.md`: the chapter row, the code map, the snapshot line.
-- `thermo-materials.md`: the crude packages W5 removed, and plan 3.10's rule.
-- `column-v3.md`: what this batch changed in the V3 package.
-- `verification.md`: the simulator's gate classes, the corpus images, `ProcessSimulatorGameTests`.
+AGENTS.md, Code guide. Every touched chapter's snapshot line names `6bf2205bf`, the batch's last code commit, dated 2026-11-03. Two threads wrote, on separate files. No Gradle run: documents only.
 
-Chapters of the s3b-member-counts thread: listed when the orchestrator passes them.
+This thread:
+- `process-simulator.md` (new): the class map of `science/flowsheet` (core, units, sizing), `client/gui/flowsheet` and the block side; a run's flow on the runner thread; calculations, links and utility feeds; sizing, lamps, the 20 % spare and Size all; the block's store, holder, replay, files and autosave; Send to block and Import; the formats and their corpus images; traps; plan 3.10's rule (New equipment joins the simulator, `FlowsheetCatalog` and `SizingCoverage` in `src/test`); the gates.
+- `README.md`: the overview's simulator bullet and header line, the code-map row (and the old calculator row rewritten as the column's wire and worker row), routing, a reading path, the batch's section, open items 4 and 5 (calculator parts closed), the snapshot line, the plan 3.10 rule under Maintaining. File counts: 525 main, 431 test, 25 GameTest files.
+- `column-v3.md`: the calculator block, menu, screen, packets, presentation, editor catalog and preset class are gone (W8); the two callers (`ColumnUnit.solve` on the simulator's thread, `ColumnSolve.run` on the workers); `ColumnWire` and Save design on the simulator; `V3ColumnTemplate` (W5); four bundled packages; the removed tests named.
+- `thermo-materials.md`: the five per-crude packages and their column presets removed by W5, their assays on `tjl20_methane` at `crude-regrouped-r2`, three column presets, 84 indexed files, `TJL20_PHYSICS`, adding a crude feed.
+- `verification.md`: `holdGates` with twelve classes, `ProcessSimulatorGameTests` on `runColumnGameTestServer`, the `science/flowsheet` and `client/gui/flowsheet` test rows, the network and block rows, the corpus images (`compat/flowsheet`, `compat/simulator`, `compat/names`, `compat/presets`, fluid schemas 8 and 9, shapes 6 and 7), the GameTests the calculator took with it, the batch line.
+
+The s3b-member-counts thread (`7d3708d41`): `client-gui.md`, `column-operation.md`, `cooling-towers.md`, `equipment.md`, `fluid-runtime.md`, `fluid-science.md`, `heat-exchangers.md`, `machine-assemblies.md`.
+
+Not touched, no code of theirs changed in this batch: `equilibrium-engine.md`, `instrument-accessories.md`, `pipe-laying.md`. Not touched, open: `process-control.md`. S1 (`9a3b9cfd5`) added three constants to `FlowControl` (`MAXIMUM_VOLUME_FLOW` 10 m³/s, `MAXIMUM_ADDED_PRESSURE` 2 MPa, `MAXIMUM_PRESSURE_RATIO` 10), so the sizing table reads the world's mover limits. The chapter's owner thread decides whether it needs a line.
