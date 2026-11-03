@@ -6,8 +6,12 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -24,7 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * stand above their boxes, taller); 122 for the kind's name on the title plate before Change (else its short name
  * shows); 168 for a group's plate; 50 for a group's key, three a row, and 170 for a kind's, one a row, each its button
  * less 6. The datasheet's lines wrap on the vessel screen's glass (DialogColumns.glass); the limit keeps each line short,
- * at most the 427 pixels of an 854-pixel-wide window at GUI scale 2, less 16-pixel margins.
+ * at most the 427 pixels of an 854-pixel-wide window at GUI scale 2, less 16-pixel margins. Every language is measured
+ * (batch 2026-11-03-localization), its lines over en_us as Minecraft falls back; a full-width glyph (CJK, kana, full-width
+ * forms) is unifont's 16-pixel glyph at half scale plus its pixel of spacing, 9.
  */
 class UnitTextTest {
     private static final String C = "gui.icheme.equipment_constructor.", V = "gui.icheme.vessel.";
@@ -41,14 +47,33 @@ class UnitTextTest {
                 case '"', '(', ')', '*', 'I', '[', ']', 't', '{', '}' -> 4;
                 case '<', '>', 'f', 'k' -> 5;
                 case '@', '~' -> 7;
-                default -> 6;
+                default -> fullWidth(c) ? 9 : 6;
             };
         return width;
     }
 
-    private static JsonObject lang() throws IOException {
-        try (var in = Objects.requireNonNull(UnitTextTest.class.getResourceAsStream("/assets/icheme/lang/en_us.json"))) {
+    private static boolean fullWidth(char c) {
+        return c >= 0x2E80 && c <= 0x9FFF || c >= 0xAC00 && c <= 0xD7A3 || c >= 0xF900 && c <= 0xFAFF || c >= 0xFF01 && c <= 0xFF60;
+    }
+
+    private static JsonObject read(String locale) throws IOException {
+        try (var in = Objects.requireNonNull(UnitTextTest.class.getResourceAsStream("/assets/icheme/lang/" + locale + ".json"))) {
             return JsonParser.parseString(new String(in.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+        }
+    }
+
+    /** A language's lines over en_us, as the game shows them. */
+    private static JsonObject lang(String locale) throws IOException {
+        var lang = read("en_us");
+        if (!locale.equals("en_us")) read(locale).entrySet().forEach(e -> lang.add(e.getKey(), e.getValue()));
+        return lang;
+    }
+
+    /** Every language file beside en_us. */
+    static List<String> locales() throws IOException, URISyntaxException {
+        var english = Objects.requireNonNull(UnitTextTest.class.getResource("/assets/icheme/lang/en_us.json"));
+        try (var files = Files.list(Path.of(english.toURI()).getParent())) {
+            return files.map(f -> f.getFileName().toString()).filter(n -> n.endsWith(".json")).map(n -> n.substring(0, n.length() - 5)).sorted().toList();
         }
     }
 
@@ -78,9 +103,17 @@ class UnitTextTest {
     }
 
     @Test
-    void everyUnitsWordsFitTheirScreens() throws IOException {
-        var lang = lang();
+    void everyUnitsWordsFitTheirScreens() throws IOException, URISyntaxException {
         var over = new ArrayList<String>();
+        for (var locale : locales()) {
+            var at = new ArrayList<String>();
+            fitTheirScreens(lang(locale), at);
+            at.forEach(o -> over.add(locale + " " + o));
+        }
+        assertEquals(new ArrayList<String>(), over);
+    }
+
+    private static void fitTheirScreens(JsonObject lang, ArrayList<String> over) {
         for (String category : new String[]{"vessels", "heat", "machines", "reactors", "solid_fuel"})
             fits(over, "category", text(lang, C + "category." + category), CATEGORY);
         for (var kind : Kind.values()) {
@@ -114,6 +147,5 @@ class UnitTextTest {
             for (var line : design.datasheet(shape)) fits(over, at + " datasheet", text(lang, V + line.key(), line.args()), DATASHEET);
             fits(over, at + " support line", text(lang, V + "unit_support." + name, shape.support()), DATASHEET);
         }
-        assertEquals(new ArrayList<String>(), over);
     }
 }
