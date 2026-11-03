@@ -242,7 +242,7 @@ public final class SheetSizing {
             var shape = size == null ? null : UnitSize.built(size);
             if (shape == null) return PipeSizes.MAX_BORE;
             var nozzles = shape.nozzles();
-            for (int k = 0, seen = 0; k < nozzles.size(); k++) if (nozzles.get(k).role() == role && ++seen == index) return NozzleBore.largest(shape, k);
+            for (int k = 0, seen = 0; k < nozzles.size(); k++) if (nozzles.get(k).role() == role && ++seen == index) return NozzleBore.proposed(shape, k);
             return PipeSizes.MAX_BORE;
         }
 
@@ -531,7 +531,7 @@ public final class SheetSizing {
         /** A drum's oil outlet: only a boot drum's, beside its saddle, holds a line back. */
         static double oilNozzle(EquipmentShape shape) {
             double bore = PipeSizes.MAX_BORE;
-            for (int k = 0; k < shape.nozzles().size(); k++) if (shape.nozzles().get(k).role() == EquipmentShape.Role.LIQUID_OUTLET) bore = Math.min(bore, NozzleBore.largest(shape, k));
+            for (int k = 0; k < shape.nozzles().size(); k++) if (shape.nozzles().get(k).role() == EquipmentShape.Role.LIQUID_OUTLET) bore = Math.min(bore, NozzleBore.proposed(shape, k));
             return bore;
         }
 

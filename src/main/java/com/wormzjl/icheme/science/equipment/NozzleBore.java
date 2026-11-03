@@ -5,6 +5,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -26,7 +27,7 @@ public final class NozzleBore {
     private static final double ALONG = .02;
     private static final int CACHE = 64;
     private static final Map<EquipmentShape, double[]> BORES = new ConcurrentHashMap<>();
-    /** The last shape searched and its solid: a shape's nozzles are asked one after another, and only one geometry stays. */
+    /** The last proposed shape searched and its solid: a shape's nozzles are asked one after another, and only one geometry stays. */
     private static volatile @Nullable Probe probe;
 
     private record Probe(EquipmentShape shape, ShapeRasterizer.Solid solid) {
@@ -37,6 +38,20 @@ public final class NozzleBore {
 
     /** The largest bore of a pipe on nozzle {@code k} of {@code shape}, m. */
     public static double largest(EquipmentShape shape, int k) {
+        return largest(shape, k, NozzleBore::world);
+    }
+
+    /**
+     * {@link #largest} for a size the process simulator proposes, a shape no world places: its search reads the world's geometry
+     * where one is held, else one built for it and not kept, so the proposals leave {@link ShapeRasterizer}'s cache as the world
+     * left it (each new proposed column would otherwise stay there, 12 MB, until the facet bound clears the world's shapes with it).
+     * The bores are the same.
+     */
+    public static double proposed(EquipmentShape shape, int k) {
+        return largest(shape, k, NozzleBore::probe);
+    }
+
+    private static double largest(EquipmentShape shape, int k, Function<EquipmentShape, ShapeRasterizer.Solid> solids) {
         if (shape.kind() != EquipmentShape.Kind.COLUMN) {
             // A boot drum's oil outlet beside its front saddle keeps its flange clear of it (EquipmentShape.bootFor).
             var boot = shape.bootPlace();
@@ -50,7 +65,7 @@ public final class NozzleBore {
             bores = BORES.computeIfAbsent(shape, s -> fresh);
         }
         double bore = bores[k];
-        if (Double.isNaN(bore)) bores[k] = bore = search(shape, k);
+        if (Double.isNaN(bore)) bores[k] = bore = search(shape, solids.apply(shape), k);
         return bore;
     }
 
@@ -60,8 +75,7 @@ public final class NozzleBore {
     }
 
     /** From the design pipe up, in {@link #STEP}s to {@link PipeSizes#MAX_BORE}, the last bore whose neck stands clear; the design pipe where none does. */
-    private static double search(EquipmentShape shape, int k) {
-        var solid = solid(shape);
+    private static double search(EquipmentShape shape, ShapeRasterizer.Solid solid, int k) {
         double design = shape.nozzles().get(k).defaultOd() / 1.1, best = design;
         for (double bore = (Math.floor(design / STEP + 1e-9) + 1) * STEP; bore <= PipeSizes.MAX_BORE + 1e-9; bore += STEP) {
             if (!clear(shape, solid, k, PipeSizes.outside(bore))) break;
@@ -79,7 +93,7 @@ public final class NozzleBore {
      * behind its centre line, or up to its flange's hub; a neck that has not left the solid by then meets it.
      */
     public static boolean clear(EquipmentShape shape, int k, double od) {
-        return clear(shape, solid(shape), k, od);
+        return clear(shape, world(shape), k, od);
     }
 
     private static boolean clear(EquipmentShape shape, ShapeRasterizer.Solid solid, int k, double od) {
@@ -94,8 +108,13 @@ public final class NozzleBore {
         return true;
     }
 
-    /** {@code shape}'s solid, the probe's where it was the last shape searched. */
-    private static ShapeRasterizer.Solid solid(EquipmentShape shape) {
+    /** A world shape's solid: {@link ShapeRasterizer#inside} at each point, on the geometry the world's cache holds. */
+    private static ShapeRasterizer.Solid world(EquipmentShape shape) {
+        return (x, y, z) -> ShapeRasterizer.inside(shape, x, y, z);
+    }
+
+    /** A proposed shape's solid, the probe's where it was the last shape searched. */
+    private static ShapeRasterizer.Solid probe(EquipmentShape shape) {
         var last = probe;
         if (last != null && last.shape().equals(shape)) return last.solid();
         var solid = ShapeRasterizer.solid(shape);
