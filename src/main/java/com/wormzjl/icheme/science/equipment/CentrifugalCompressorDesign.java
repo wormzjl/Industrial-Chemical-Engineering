@@ -168,6 +168,20 @@ final class CentrifugalCompressorDesign extends UnitDesign {
             throw new IllegalArgumentException("A centrifugal compressor's design point is its flow and polytropic head");
     }
 
+    /** Inlet flow steps along the R10 numbers to the largest impeller's flow; polytropic head an impeller at a time. */
+    @Override
+    public MachineDuty step(MachineDuty duty, String setting, int steps) {
+        return switch (setting) {
+            case "flow" -> MachineDuty.compressor(MachineDuty.step(MachineDuty.series(MIN_FLOW, flow(maxSize())), duty.flow(), steps), duty.polytropicHead());
+            case "head" -> {
+                var heads = new java.util.ArrayList<Double>();
+                for (int n = minLength(0); n <= maxLength(0); n++) heads.add(IMPELLER_HEAD * n);
+                yield MachineDuty.compressor(duty.flow(), MachineDuty.step(heads, duty.polytropicHead(), steps));
+            }
+            default -> duty;
+        };
+    }
+
     /**
      * The pressure ratio air at 30 °C reaches over polytropic head {@code head}, kJ/kg, at a polytropic efficiency of 0.8
      * (a reference for the constructor: the gas sets the real one).

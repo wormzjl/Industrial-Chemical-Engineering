@@ -124,6 +124,14 @@ final class MotorDesign extends UnitDesign {
             throw new IllegalArgumentException("A " + name() + "'s design point is its power, poles" + (generator ? "" : " and drive"));
     }
 
+    /** Power steps along the IEC list ({@link #POWERS}). */
+    @Override
+    public MachineDuty step(MachineDuty duty, String setting, int steps) {
+        if (!setting.equals("power")) return duty;
+        double power = MachineDuty.step(POWERS, duty.power(), steps);
+        return generator ? MachineDuty.generator(power, duty.poles()) : MachineDuty.motor(power, duty.poles(), duty.drive());
+    }
+
     private String name() {
         return generator ? "generator" : "motor";
     }

@@ -84,6 +84,15 @@ public abstract class UnitDesign {
     void checkDuty(MachineDuty duty) {
     }
 
+    /**
+     * Design point {@code duty} with its setting {@code setting} ({@code flow}, {@code head}, {@code power} or
+     * {@code exhaust}) stepped {@code steps} places along the values the constructor offers, held at its ends;
+     * {@code duty} itself for a setting the kind does not have. Every value stepped to is in the kind's ranges.
+     */
+    public MachineDuty step(MachineDuty duty, String setting, int steps) {
+        return duty;
+    }
+
     /** Checks a shape's design point: in its ranges, and giving the shape's sizes; none for a kind without one. */
     final void check(double size, int length, MachineDuty duty) {
         if (!hasDuty()) {

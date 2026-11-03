@@ -92,6 +92,18 @@ final class SteamTurbineDesign extends UnitDesign {
             throw new IllegalArgumentException("A steam turbine's design point is its power, inlet steam and exhaust");
     }
 
+    /** Power steps along {@link MachineDuty#POWERS} from 55 kW; the exhaust along {@link MachineDuty#EXHAUSTS} to half the inlet. */
+    @Override
+    public MachineDuty step(MachineDuty duty, String setting, int steps) {
+        return switch (setting) {
+            case "power" -> MachineDuty.turbine(MachineDuty.step(MachineDuty.POWERS.stream().filter(p -> p >= MIN_POWER && p <= MAX_POWER).toList(), duty.power(), steps),
+                    duty.steam(), duty.exhaust());
+            case "exhaust" -> MachineDuty.turbine(duty.power(), duty.steam(),
+                    MachineDuty.step(MachineDuty.EXHAUSTS.stream().filter(e -> e <= duty.steam().pressure / 2).toList(), duty.exhaust(), steps));
+            default -> duty;
+        };
+    }
+
     /** The isentropic drop, kJ/kg: {@link #DROP_PER_LOG} per e-fold of the pressure ratio (HP to 4.5 bar 450, to 0.1 bar 1,200). */
     static double drop(MachineDuty duty) {
         return DROP_PER_LOG * Math.log(duty.steam().pressure / duty.exhaust());

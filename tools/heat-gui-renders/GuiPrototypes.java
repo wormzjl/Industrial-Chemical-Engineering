@@ -23,6 +23,7 @@ import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.equipment.VesselPlacement;
@@ -80,87 +81,30 @@ public final class GuiPrototypes {
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         out.addAll(OperationPrototypes.operation());
-        out.addAll(dutyOptions());
+        out.addAll(machines());
         return out;
     }
 
-    // ---- Option sheet (batch 2026-11-03-rotating-machinery, W4): the constructor's duty rows for a motor and a turbine ----
+    // ---- A machine's design point (batch 2026-11-03-rotating-machinery, option A, owner pick 2026-11-04) ----
 
-    /** One option's Duty rows for the motor (A keys, B steppers, C speed stepper with drive keys). */
-    static List<Column.Row> motorDuty(char option) {
-        var rows = new ArrayList<Column.Row>();
-        var duty = new ArrayList<Column.Row>();
-        duty.add(new Column.Setting("power", "Power", "250", "kW", "Rated power, IEC steps", true));
-        switch (option) {
-            case 'A' -> {
-                rows.add(new Column.Group("Duty", null, duty));
-                rows.add(new Column.Group("Speed", "Poles: synchronous speed at 50 Hz", List.of(
-                        new Column.Buttons(List.of(new Column.Button("p2", "2-pole", true, null, false), new Column.Button("p4", "4-pole", true, null, true))),
-                        new Column.Buttons(List.of(new Column.Button("p6", "6-pole", true, null, false), new Column.Button("p8", "8-pole", true, null, false))))));
-                rows.add(new Column.Group("Drive", null, List.of(new Column.Buttons(List.of(new Column.Button("fixed", "Fixed", true, null, true),
-                        new Column.Button("variable", "Variable", true, null, false))))));
-            }
-            case 'B' -> {
-                duty.add(new Column.Setting("poles", "Poles", "4", "", null, true));
-                duty.add(new Column.Setting("drive", "Drive", "FIX", "", "FIX: fixed speed, VAR: variable-speed drive", true));
-                rows.add(new Column.Group("Duty", null, duty));
-            }
-            default -> {
-                duty.add(new Column.Setting("speed", "Speed", "1500", "rpm", "Synchronous speed: 2, 4, 6 or 8 poles at 50 Hz", true));
-                duty.add(new Column.Buttons(List.of(new Column.Button("fixed", "Fixed", true, null, true), new Column.Button("variable", "Variable", true, null, false))));
-                rows.add(new Column.Group("Duty", null, duty));
-            }
-        }
-        rows.add(new Column.Paragraph("Frame 0.75 m, 1,485 rpm, 6.9 kN·m", Palette.MUTED));
-        return rows;
-    }
-
-    /** One option's Duty rows for the steam turbine. */
-    static List<Column.Row> turbineDuty(char option) {
-        var rows = new ArrayList<Column.Row>();
-        var duty = new ArrayList<Column.Row>();
-        duty.add(new Column.Setting("power", "Power", "2500", "kW", "Rated shaft power", true));
-        switch (option) {
-            case 'A' -> {
-                rows.add(new Column.Group("Duty", null, duty));
-                rows.add(new Column.Group("Inlet steam", "MP 17 bar 300 °C, HP 42 bar 400 °C, VHP 100 bar 510 °C", List.of(new Column.Buttons(List.of(
-                        new Column.Button("mp", "MP", true, null, false), new Column.Button("hp", "HP", true, null, true), new Column.Button("vhp", "VHP", true, null, false))))));
-                rows.add(new Column.Group("Exhaust", null, List.of(new Column.Setting("exhaust", "Pressure", "450", "kPa", "10 to 20 kPa: condensing", true))));
-            }
-            case 'B' -> {
-                duty.add(new Column.Setting("inlet", "Inlet", "42", "bar", "17, 42 or 100 bar at 300, 400 or 510 °C", true));
-                duty.add(new Column.Setting("exhaust", "Exhaust", "450", "kPa", "10 to 20 kPa: condensing", true));
-                rows.add(new Column.Group("Duty", null, duty));
-            }
-            default -> {
-                rows.add(new Column.Group("Duty", null, duty));
-                rows.add(new Column.Group("Inlet steam", null, List.of(new Column.Buttons(List.of(
-                        new Column.Button("mp", "MP", true, null, false), new Column.Button("hp", "HP", true, null, true), new Column.Button("vhp", "VHP", true, null, false))))));
-                rows.add(new Column.Group("Exhaust", null, List.of(new Column.Buttons(List.of(new Column.Button("back", "Back press.", true, null, true),
-                        new Column.Button("vacuum", "Vacuum", true, null, false))), new Column.Setting("exhaust", "Pressure", "450", "kPa", null, true))));
-            }
-        }
-        rows.add(new Column.Paragraph("Casing 0.8 m, 9,000 rpm, 11 t/h", Palette.MUTED));
-        return rows;
-    }
-
-    static ConstructorColumn.Page dutyPage(List<Column.Row> duty) {
-        var rows = new ArrayList<>(duty);
-        rows.add(new Column.Group("Place", null, List.of(new Column.Setting("forward", "Forward", "3", "", null, true),
-                new Column.Setting("right", "Right", "0", "", null, true), new Column.Setting("up", "Up", "0", "", null, true))));
-        return new ConstructorColumn.Page(rows, List.of(new Column.Button("paint", "Paint", true, null), new Column.Button("build", "Build", true, null)), true);
-    }
-
-    static List<Prototype> dutyOptions() {
-        var out = new ArrayList<Prototype>();
-        for (char option : new char[]{'A', 'B', 'C'}) {
-            char o = option;
-            out.add(new Prototype("duty-" + Character.toLowerCase(o) + "-motor", 464, 254, (d, s) -> constructorDoor(d, dutyPage(motorDuty(o)), "Motor", "change",
-                    "Option " + o + ": motor", Palette.ACCENT, Map.of()), true));
-            out.add(new Prototype("duty-" + Character.toLowerCase(o) + "-turbine", 464, 254, (d, s) -> constructorDoor(d, dutyPage(turbineDuty(o)), "Steam turbine", "change",
-                    "Option " + o + ": steam turbine", Palette.ACCENT, Map.of()), true));
-        }
-        return out;
+    /** The shipped design page of a pump, a motor and a steam turbine: Duty, then Speed and Drive or Inlet steam and Exhaust, then Place. */
+    static List<Prototype> machines() {
+        var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
+        var one = com.wormzjl.icheme.science.equipment.TowerBank.ONE;
+        var bank = new ProcessUnit.Bank(1, 1);
+        var pump = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.PUMP, UnitDesign.of(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.PUMP).size(MachineDuty.pump(200, 100, 2)), 1, 0, 3, 0, 0, bank, null, outlet, 16, one,
+                MachineDuty.pump(200, 100, 2)), DIALOG);
+        var motor = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.MOTOR, 250, 1, 2, 3, 0, 0, bank, null, outlet, 16, one,
+                MachineDuty.motor(250, 4, MachineDuty.Drive.FIXED)), DIALOG);
+        var turbine = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.STEAM_TURBINE, UnitDesign.of(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.STEAM_TURBINE).size(MachineDuty.turbine(2500, MachineDuty.Steam.HP, 450)), 1, 2, 3, 0, 0, bank, null, outlet, 16, one,
+                MachineDuty.turbine(2500, MachineDuty.Steam.HP, 450)), DIALOG);
+        return List.of(
+                new Prototype("equipment-constructor-pump", 464, 254, (d, s) -> constructorDoor(d, pump, "Pump", "change",
+                        DIALOG.get(CONSTRUCTOR + "pump_flow", "200", "100", "78"), Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-motor", 464, 254, (d, s) -> constructorDoor(d, motor, "Motor", "change",
+                        DIALOG.get(CONSTRUCTOR + "motor.rating", "250", "1,500", "0.75"), Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-turbine", 464, 254, (d, s) -> constructorDoor(d, turbine, "Steam turbine", "change",
+                        DIALOG.get(CONSTRUCTOR + "steam_turbine.power", "2,500", "4,200", "450"), Palette.ACCENT, Map.of()), true));
     }
 
     // ---- The column calculator: the shipped CalculatorColumn on its door (GUI_REVIEW.md order 5) ----

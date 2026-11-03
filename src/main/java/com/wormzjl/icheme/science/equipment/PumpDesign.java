@@ -80,6 +80,16 @@ final class PumpDesign extends UnitDesign {
             throw new IllegalArgumentException("A pump's design point is its flow, head and speed");
     }
 
+    /** Flow and head step along the R10 numbers, to the largest discharge's flow and to 300 m. */
+    @Override
+    public MachineDuty step(MachineDuty duty, String setting, int steps) {
+        return switch (setting) {
+            case "flow" -> MachineDuty.pump(MachineDuty.step(MachineDuty.series(MIN_FLOW, ProcessUnit.pumpFlow(maxSize())), duty.flow(), steps), duty.head(), duty.poles());
+            case "head" -> MachineDuty.pump(duty.flow(), MachineDuty.step(MachineDuty.series(MIN_HEAD, MAX_HEAD), duty.head(), steps), duty.poles());
+            default -> duty;
+        };
+    }
+
     @Override
     public String sizeRow() {
         return "pump_discharge";

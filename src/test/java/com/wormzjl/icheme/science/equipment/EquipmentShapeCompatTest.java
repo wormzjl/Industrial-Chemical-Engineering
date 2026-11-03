@@ -324,6 +324,53 @@ class EquipmentShapeCompatTest {
         }
     }
 
+    /**
+     * A machine's design point as the constructor steps it (option A, batch 2026-11-03-rotating-machinery): every setting
+     * to both ends, every pole count, the variable drive and every steam class make a valid design whose sizes follow it,
+     * and it reads back as written. A design saved before it (no {@code Duty}) takes the design point its sizes give.
+     */
+    @Test
+    void aConstructorKeepsAMachinesDesignPointAcrossAReload() {
+        var fresh = EquipmentConstructorBlockEntity.Design.DEFAULT;
+        int checked = 0;
+        for (var kind : Kind.values()) {
+            if (!kind.designed() || !UnitDesign.of(kind).hasDuty()) continue;
+            var design = UnitDesign.of(kind);
+            var form = VesselPlacement.Form.valueOf(kind.name());
+            double d = ProcessUnit.sizes(kind).getFirst();
+            var start = design.duty(d, ProcessUnit.defaultLength(kind, d));
+            var points = new ArrayList<MachineDuty>();
+            for (int steps : new int[]{-1000, 1, 1000})
+                for (var setting : List.of("flow", "head", "power", "exhaust")) points.add(design.step(start, setting, steps));
+            if (start.poles() != 0) for (int poles : kind == Kind.PUMP ? List.of(2, 4) : MachineDuty.POLES) points.add(start.withPoles(poles));
+            if (kind == Kind.MOTOR) points.add(start.withDrive(MachineDuty.Drive.VARIABLE));
+            if (start.steam() != null)
+                for (var steam : MachineDuty.Steam.values()) points.add(design.step(design.step(start, "exhaust", 1000).withSteam(steam), "power", 1000));
+            for (var point : points) {
+                var made = new EquipmentConstructorBlockEntity.Design(0, 0, form, ProcessUnit.minSupport(kind, design.size(point), design.length(point)), fresh.placement(),
+                        fresh.trays(), List.of(), fresh.paint(), ProcessUnit.Bank.ONE, false, 0, null, List.of(), TowerBank.ONE, point);
+                assertEquals(point, made.duty(), kind::name);
+                assertEquals(design.size(point), made.diameter(), kind::name);
+                var tag = new CompoundTag();
+                EquipmentConstructorBlockEntity.writeDesign(tag, made);
+                var repairs = new ArrayList<String>();
+                assertEquals(made, EquipmentConstructorBlockEntity.readDesign(tag, fresh, repairs::add), kind::name);
+                assertEquals(List.of(), repairs, kind::name);
+                checked++;
+            }
+            // Saved before the constructor kept a design point: the one its sizes give.
+            var old = new CompoundTag();
+            EquipmentConstructorBlockEntity.writeDesign(old, new EquipmentConstructorBlockEntity.Design(0, 0, form, ProcessUnit.minSupport(kind, design.size(points.getLast()),
+                    design.length(points.getLast())), fresh.placement(), fresh.trays(), List.of(), fresh.paint(), ProcessUnit.Bank.ONE, false, 0, null, List.of(), TowerBank.ONE,
+                    points.getLast()));
+            old.remove("Duty");
+            var read = EquipmentConstructorBlockEntity.readDesign(old, fresh, repair -> {
+            });
+            assertEquals(design.duty(read.diameter(), read.tangentLength()), read.duty(), kind::name);
+        }
+        assertTrue(checked > 60, "design points checked: " + checked);
+    }
+
     // ---------------- the corpus: saved shell tags per shape-field change ----------------
 
     private static final Path CORPUS = Path.of("src/test/resources/compat/equipment");

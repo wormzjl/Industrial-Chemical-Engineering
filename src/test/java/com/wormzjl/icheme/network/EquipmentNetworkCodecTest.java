@@ -73,6 +73,18 @@ class EquipmentNetworkCodecTest {
         }
     }
 
+    /** A machine's design point crosses whole (protocol 16): its numbers, its drive and its steam class. */
+    @Test
+    void aMachinesDesignPointCrosses() {
+        var points = List.of(new Design(0, 0, VesselPlacement.Form.STEAM_TURBINE, 4, new VesselPlacement(3, 1, 0), Design.TRAYS, List.of(), Paint.DEFAULT,
+                        com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE, false, 0, null, List.of(), com.wormzjl.icheme.science.equipment.TowerBank.ONE,
+                        com.wormzjl.icheme.science.equipment.MachineDuty.turbine(2500, com.wormzjl.icheme.science.equipment.MachineDuty.Steam.VHP, 10)),
+                new Design(0, 0, VesselPlacement.Form.MOTOR, 2, new VesselPlacement(3, 1, 0), Design.TRAYS, List.of(), Paint.DEFAULT,
+                        com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE, false, 0, null, List.of(), com.wormzjl.icheme.science.equipment.TowerBank.ONE,
+                        com.wormzjl.icheme.science.equipment.MachineDuty.motor(4500, 6, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE)));
+        for (var draft : points) assertEquals(draft, roundTrip(ConstructorPayload.STREAM_CODEC, ConstructorPayload.of(AT, draft, Action.KEEP)).design(Design.DEFAULT));
+    }
+
     /** Import sends the draft first: the calculator's column lands on it, and the player's edits stay. */
     @Test
     void anImportLandsOnTheDraftTheScreenSent() {

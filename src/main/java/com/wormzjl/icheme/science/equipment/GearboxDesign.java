@@ -105,6 +105,12 @@ final class GearboxDesign extends UnitDesign {
         if (!duty.equals(MachineDuty.gearbox(duty.power()))) throw new IllegalArgumentException("A gearbox's design point is its power");
     }
 
+    /** Power steps along the IEC list. */
+    @Override
+    public MachineDuty step(MachineDuty duty, String setting, int steps) {
+        return setting.equals("power") ? MachineDuty.gearbox(MachineDuty.step(MachineDuty.MOTOR_POWERS, duty.power(), steps)) : duty;
+    }
+
     @Override
     public String sizeRow() {
         return "gearbox.power";

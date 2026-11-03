@@ -113,6 +113,38 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
         return exhaust > 0 && exhaust < VACUUM;
     }
 
+    /** This design point with {@code value} poles. */
+    public MachineDuty withPoles(int value) {
+        return new MachineDuty(flow, head, polytropicHead, power, value, drive, steam, exhaust);
+    }
+
+    /** This design point with drive {@code value}. */
+    public MachineDuty withDrive(Drive value) {
+        return new MachineDuty(flow, head, polytropicHead, power, poles, value, steam, exhaust);
+    }
+
+    /** This turbine's design point at inlet class {@code value}, its exhaust lowered to the highest of {@link #EXHAUSTS} at most half the inlet where it stood above. */
+    public MachineDuty withSteam(Steam value) {
+        double e = exhaust;
+        if (e > value.pressure / 2) for (double x : EXHAUSTS) if (x <= value.pressure / 2) e = x;
+        return new MachineDuty(flow, head, polytropicHead, power, poles, drive, value, e);
+    }
+
+    /** The R10 preferred numbers (ISO 3: 1, 1.25, 1.6, 2, 2.5, 3.15, 4, 5, 6.3, 8 in each decade) between {@code min} and {@code max}, both ends included. */
+    public static List<Double> series(double min, double max) {
+        double[] r10 = {1, 1.25, 1.6, 2, 2.5, 3.15, 4, 5, 6.3, 8};
+        var out = new java.util.ArrayList<Double>();
+        out.add(min);
+        for (int k = (int) Math.floor(Math.log10(min)); k <= (int) Math.ceil(Math.log10(max)); k++)
+            for (double m : r10) {
+                double v = k >= 0 ? m * Math.pow(10, k) : m / Math.pow(10, -k);
+                v = Math.round(v * 1e6) / 1e6;
+                if (v > min + 1e-9 && v < max - 1e-9) out.add(v);
+            }
+        if (max > min) out.add(max);
+        return List.copyOf(out);
+    }
+
     /** {@code value} stepped {@code steps} places along {@code list} (ascending) from where it stands, held at its ends; off the list, the first step lands on its neighbour. */
     public static double step(List<Double> list, double value, int steps) {
         int at = 0;

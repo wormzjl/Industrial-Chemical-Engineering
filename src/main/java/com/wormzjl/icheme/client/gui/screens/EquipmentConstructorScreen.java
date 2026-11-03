@@ -24,6 +24,7 @@ import com.wormzjl.icheme.network.EquipmentNetwork;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
@@ -94,6 +95,8 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The diameter (a unit's size), always on its kind's grid: 0.5 m steps for a vessel ({@link ProcessUnit#snap} for a unit). */
     private double diameter;
     private int tangentLength, support, forward, right, up;
+    /** A machine's design point, which its sizes follow ({@link UnitDesign#size}); {@link MachineDuty#NONE} for another form. */
+    private MachineDuty duty;
     private ColumnTrays trays;
     /** The column design imported from a column calculator, the only one a column is built from (plan 2026-10-26, section 4.5); null before an import. */
     private @Nullable ColumnDesign column;
@@ -147,6 +150,7 @@ public final class EquipmentConstructorScreen extends Screen {
         column = design.column();
         diameter = design.diameter();
         tangentLength = design.tangentLength();
+        duty = design.duty();
         boot = design.boot();
         outlet = design.outlet();
         support = Math.max(design.support(), minimumSupport());
@@ -174,7 +178,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The draft; always valid, because every stepper is clamped to the bounds of its parameter. */
     public Design design() {
         return new Design(diameter, tangentLength, form, support, new VesselPlacement(forward, right, up), trays, List.copyOf(connections), paint, bank, hasBoot(), outlet(),
-                column, List.copyOf(turns),towerBank);
+                column, List.copyOf(turns),towerBank,duty);
     }
 
     private static Skin skin() {
@@ -258,7 +262,7 @@ public final class EquipmentConstructorScreen extends Screen {
             case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentConstructorScreen::tr);
             case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
                     form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
-                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank), EquipmentConstructorScreen::tr);
+                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty), EquipmentConstructorScreen::tr);
             case CONNECTIONS -> {
                 var c = connections.isEmpty() ? null : connection();
                 int[] stations = stations();
@@ -407,6 +411,9 @@ public final class EquipmentConstructorScreen extends Screen {
                 outlet = Integer.parseInt(at);
                 refresh();
             }
+            case "poles" -> machine(duty.withPoles(Integer.parseInt(at)));
+            case "drive" -> machine(duty.withDrive(MachineDuty.Drive.valueOf(at.toUpperCase(Locale.ROOT))));
+            case "steam" -> machine(duty.withSteam(MachineDuty.Steam.valueOf(at.toUpperCase(Locale.ROOT))));
             case "add" -> add();
             case "remove" -> {
                 connections.remove(selected);
@@ -484,9 +491,23 @@ public final class EquipmentConstructorScreen extends Screen {
                 connections.set(selected, new EquipmentShape.Connection(c.side(), c.station(), clamp(c.offset() + step, -across, across)));
             }
             case "nozzle" -> nozzle = clamp(nozzle + step, 0, Math.max(0, sideNozzles().size() - 1));
+            case "flow", "head", "power", "exhaust" -> {
+                machine(UnitDesign.of(kind).step(duty, key, step));
+                return;
+            }
             default -> {
             }
         }
+        refresh();
+    }
+
+    /** Takes design point {@code next}: the machine's sizes follow it, its support at least the least they allow. */
+    private void machine(MachineDuty next) {
+        var design = UnitDesign.of(form.kind());
+        duty = next;
+        diameter = design.size(duty);
+        tangentLength = design.length(duty);
+        support = Math.max(support, minimumSupport());
         refresh();
     }
 
@@ -675,7 +696,15 @@ public final class EquipmentConstructorScreen extends Screen {
             // A new kind starts at its design's second size and support; the same kind keeps the player's.
             tangentLength = unitLength(kind, before.kind() != kind ? ProcessUnit.defaultLength(kind, diameter) : tangentLength);
             if (before.kind() != kind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);
+            // A machine keeps its design point; a new kind takes the one its starting sizes give, which its sizes follow.
+            var design = UnitDesign.of(kind);
+            duty = !design.hasDuty() ? MachineDuty.NONE : before.kind() != kind || duty.equals(MachineDuty.NONE) ? design.duty(diameter, tangentLength) : duty;
+            if (design.hasDuty()) {
+                diameter = design.size(duty);
+                tangentLength = design.length(duty);
+            }
         } else {
+            duty = MachineDuty.NONE;
             diameter = vesselDiameter(diameter);
             tangentLength = clamp(tangentLength, 1, (int) EquipmentShape.MAX_TANGENT_LENGTH);
             if (before.designed() || before.orientation() != form.orientation()) support = EquipmentShape.defaultSupport(diameter, form.orientation());
