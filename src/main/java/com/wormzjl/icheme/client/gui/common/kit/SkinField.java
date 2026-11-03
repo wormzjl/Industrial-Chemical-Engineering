@@ -96,6 +96,8 @@ public final class SkinField extends EditBox {
         boolean editing = isFocused();
         s.field(new GuiCanvas(g, font, 0, 0), new Rect(getX(), getY(), width, height), getValue(), hint, editing);
         if (!editing) return;
+        // The vanilla text below draws past the canvas: what a batch holds goes out first, under it.
+        GuiCanvas.release();
         setTextColor(s.fieldText());
         g.pose().pushPose();
         g.pose().translate(4, (height - 8) / 2f, 0);

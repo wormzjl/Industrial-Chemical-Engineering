@@ -1040,6 +1040,18 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             shown = built.door();
         }
         hovered = null;
+        var context = x;
+        var drawn = shown;
+        // The whole frame, widgets too, in one batch: its fills go out in runs that its texts and sprites no longer break (P5).
+        new GuiCanvas(g, font, 0, 0).batch(() -> {
+            draw(g, context, drawn, mouseX, mouseY);
+            super.render(g, mouseX, mouseY, partial);
+        });
+        KitDoor.hint(g, font, hovered, mouseX, mouseY);
+    }
+
+    /** The page, the door or the dialog under the widgets. */
+    private void draw(GuiGraphics g, SheetContext x, @Nullable Door shown, int mouseX, int mouseY) {
         var skin = skin();
         if (dialog != Dialog.NONE) {
             drawDialog(g, x);
@@ -1057,8 +1069,6 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             var canvas = new GuiCanvas(g, font, 0, 0);
             hovered = SimulatorPage.draw(canvas, skin, x, tab, frame, view, gestures, resultsState, sizingState, category, editor, kit, title.getString(), host.holder(), mouseX, mouseY);
         }
-        super.render(g, mouseX, mouseY, partial);
-        KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }
 
     private void drawDialog(GuiGraphics g, SheetContext x) {

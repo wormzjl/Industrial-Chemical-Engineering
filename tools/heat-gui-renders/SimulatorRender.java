@@ -375,9 +375,9 @@ public final class SimulatorRender {
         return page("page", w, h, skin, body);
     }
 
-    /** A page named {@code name} in the draw-call count ({@code -Dcount}). */
+    /** A page named {@code name} in the draw-call count ({@code -Dcount}), in one batch as the screen draws its frame (P5). */
     private static BufferedImage page(String name, int w, int h, Skin skin, BiConsumer<GuiPrototypes.Door, Skin> body) {
-        return GuiPrototypes.render(new GuiPrototypes.Prototype(name, w, h, body), skin, false);
+        return GuiPrototypes.render(new GuiPrototypes.Prototype(name, w, h, (d, s) -> d.c.batch(() -> body.accept(d, s))), skin, false);
     }
 
     /** The pages one under another, a file for each door. */
@@ -789,7 +789,7 @@ public final class SimulatorRender {
         var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
         });
         long start = System.nanoTime();
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
         double took = (System.nanoTime() - start) / 1e9;
         System.out.printf("sized: run %s, %d units, %d lines, %d paths, %.1f s%n", all.run().status(), all.sized().units().size(), all.sized().lines().size(), all.sized().paths().size(), took);
         var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds + took);
@@ -843,8 +843,8 @@ public final class SimulatorRender {
     private static void send(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
         var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
         });
-        var first = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
-        var second = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(first.sheet(), first.run(), thermo));
+        var first = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+        var second = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(first.sheet(), first.run(), thermo, FlowsheetSolver.Progress.NONE));
         int red1 = SizingPage.reds(first.sized()), red2 = SizingPage.reds(second.sized());
         var designs = SheetSizing.designs(second.sheet(), second.sized());
         System.out.printf("send: first Size all %d red, second %d red; %d designs%n", red1, red2, designs.size());
@@ -912,8 +912,8 @@ public final class SimulatorRender {
         String door = "{\"discharge\":1.2e5,\"motive\":1e6}";
         var free = new Sheet().unit("J-101", "ejector", 120, 60, door).feed("LOAD", "J-101", "suction", ejectorLoad(), 60, 40).product("S-1", "J-101", "discharge", 260, 70).build();
         var freeRun = FlowsheetEngine.run(free, CATALOG, () -> {
-        });
-        double need = freeRun.reports().get("J-101").readings().get("need"), waterMass = MaterialRuntime.with(CATALOG, NETWORK, () -> com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit.waterMass(thermo));
+        }, null, FlowsheetSolver.Progress.NONE);
+        double need = freeRun.reports().get("J-101").readings().get("need"), waterMass = MaterialRuntime.with(CATALOG, NETWORK, () -> thermo.waterMass());
         System.out.printf("ejector: free run %s, need %.3f kg/s (%.0f kg/h), notes %s%n", freeRun.status(), need, 3600 * need, com.wormzjl.icheme.client.gui.flowsheet.NoteText.all(freeRun));
         var sheet = new Sheet().unit("J-101", "ejector", 120, 60, door).feed("LOAD", "J-101", "suction", ejectorLoad(), 60, 40).product("S-1", "J-101", "discharge", 260, 70)
                 .unit("J-102", "ejector", 120, 160, door).feed("LOAD-2", "J-102", "suction", ejectorLoad(), 60, 140).feed("STEAM-2", "J-102", "motive", motiveSteam(1.1 * need / waterMass), 40, 170)
@@ -922,7 +922,7 @@ public final class SimulatorRender {
                 .product("S-3", "J-103", "discharge", 260, 270).build();
         long start = System.nanoTime();
         var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
-        });
+        }, null, FlowsheetSolver.Progress.NONE);
         double seconds = (System.nanoTime() - start) / 1e9;
         System.out.printf("ejector sheet: %s, mass gap %.3g, heat gap %.3g W, notes %s%n", run.status(), run.massGap(), run.heatGap(), com.wormzjl.icheme.client.gui.flowsheet.NoteText.all(run));
         var host = new Host(false, null);
@@ -955,7 +955,7 @@ public final class SimulatorRender {
                 List.of((d, s) -> door(d, ColumnDoors.door(new Scene(vacuum, null, 0, host).context(), "T-101", equipment))));
 
         // The Sizing tab after Size all: the free port's bore, the wired ports' motive rows.
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
         for (var id : List.of("J-101", "J-102", "J-103")) {
             var unit = all.sized().units().get(id);
             System.out.printf("sized %s: %s, lamp %s, closest %s%n", id, unit.size(), unit.rating().lamp(), unit.rating().closest());
@@ -995,7 +995,7 @@ public final class SimulatorRender {
         });
         long start = System.nanoTime();
         var trimmedRun = FlowsheetEngine.run(trimmed, CATALOG, () -> {
-        });
+        }, null, FlowsheetSolver.Progress.NONE);
         double took = (System.nanoTime() - start) / 1e9;
         System.out.printf("air then water: %s, condenser %.2f MW, air %.2f MW, water %.2f MW, notes %s%n", trimmedRun.status(), trimmedRun.reports().get("T-101").readings().getOrDefault("condenser", Double.NaN) / 1e6,
                 trimmedRun.reports().get("T-101").readings().getOrDefault("condenser_air", Double.NaN) / 1e6, trimmedRun.reports().get("T-101").readings().getOrDefault("condenser_water", Double.NaN) / 1e6,
@@ -1016,7 +1016,7 @@ public final class SimulatorRender {
         grid(out, "04-feed-set-by", DW, DH, List.of("CWS: its flow set by T-101; the entry is the first guess, the readings what the run gave"), List.of(stream(sheet, run, "CWS", 0)));
         var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
         });
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
         var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds);
         var sized = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
         System.out.printf("sized: E-102 %s, values %s; T-101 proposes %s; fans %.1f kW%n", all.sized().units().get("E-102").size(), all.sized().units().get("E-102").rating().values(), all.sized().condensers().get("T-101"),
@@ -1051,7 +1051,7 @@ public final class SimulatorRender {
         var sheet = sample();
         long start = System.nanoTime();
         var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
-        });
+        }, null, FlowsheetSolver.Progress.NONE);
         double seconds = (System.nanoTime() - start) / 1e9;
         System.out.printf("sample: %s, %d streams, %d loops, %.1f s, notes %s%n", run.status(), run.streams().size(), run.loops().size(), seconds, com.wormzjl.icheme.client.gui.flowsheet.NoteText.all(run));
         // -Donly=member-counts: S3b's two sheets alone.
@@ -1081,11 +1081,11 @@ public final class SimulatorRender {
         }
         var more = vessels();
         var moreRun = FlowsheetEngine.run(more, CATALOG, () -> {
-        });
+        }, null, FlowsheetSolver.Progress.NONE);
         System.out.printf("vessels: %s, log %s%n", moreRun.status(), moreRun.log());
         var missing = withType(sheet, "H-101", "old_heater");
         var missingRun = FlowsheetEngine.run(missing, CATALOG, () -> {
-        });
+        }, null, FlowsheetSolver.Progress.NONE);
         System.out.printf("missing: %s, log %s%n", missingRun.status(), missingRun.log());
         var host = new Host(false, null);
 
@@ -1216,10 +1216,10 @@ public final class SimulatorRender {
         sheet(out, "26-block-variants", 1450, 1020, List.of("What the door can ask of the block"), List.of((d, s) -> blockVariants(d)));
         var warned = withDoor(sheet, j -> j.addProperty("condenser_temperature", 300));
         var warnedRun = FlowsheetEngine.run(warned, CATALOG, () -> {
-        });
+        }, null, FlowsheetSolver.Progress.NONE);
         var failed = withDoor(sheet, j -> j.addProperty("top_pressure", 1e3));
         var failedRun = FlowsheetEngine.run(failed, CATALOG, () -> {
-        });
+        }, null, FlowsheetSolver.Progress.NONE);
         System.out.printf("tones: warned %s %s; failed %s %s%n", warnedRun.status(), warnedRun.log(), failedRun.status(), failedRun.log());
         sheet(out, "27-block-tones", W, H, List.of("Not solved: every line greys", "A warning", "Failed"), List.of(scene(sheet, null, 0, host, nothing()), scene(warned, warnedRun, 1.2, host, nothing()), scene(failed, failedRun, 1.2, host, nothing())));
         System.out.println("sheets in " + out);

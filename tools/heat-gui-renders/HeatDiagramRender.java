@@ -4,6 +4,7 @@ import com.wormzjl.icheme.client.gui.common.HeatDiagram;
 import com.wormzjl.icheme.client.gui.common.HeatFlowsheet;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.HeldDraws;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
@@ -333,8 +334,12 @@ public final class HeatDiagramRender {
         @Override
         public void sprite(Sprite s, float x0, float y0, float x1, float y1, int argb) {
             sprites++;
-            draws++;
-            run = false;
+            int before = held.draws();
+            held.sprite(x0, y0, x1, y1, () -> blit(s, x0, y0, x1, y1, argb));
+            site("sprite", before);
+        }
+
+        private void blit(Sprite s, float x0, float y0, float x1, float y1, int argb) {
             var hint = g.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             var at = java.awt.geom.AffineTransform.getTranslateInstance(x0, y0);
@@ -355,42 +360,57 @@ public final class HeatDiagramRender {
             return measure;
         }
 
-        /** {@code -Dcount}: print each page's draw calls as the game makes them. */
-        static final boolean COUNT = Boolean.getBoolean("count");
+        /** {@code -Dcount}: print each page's draw calls as the game makes them; {@code -Dcount=sites} also by the drawing site that made each. */
+        static final boolean COUNT = System.getProperty("count") != null && !"false".equals(System.getProperty("count")), SITES = "sites".equals(System.getProperty("count"));
+        /** The page's draw calls by kind and site: the first caller outside the canvas. */
+        private final Map<String, int[]> sites = new HashMap<>();
+
+        /** Books the draw calls made since {@code before} to the site that called. */
+        private void site(String kind, int before) {
+            if (!SITES || held.draws() == before) return;
+            String at = StackWalker.getInstance().walk(s -> s.map(f -> f.getClassName().replaceFirst(".*[.]", "") + "." + f.getMethodName())
+                    .filter(n -> !n.startsWith("HeatDiagramRender$Java2dCanvas") && !n.startsWith("Canvas.")).findFirst().orElse("?"));
+            sites.computeIfAbsent(kind + " " + at, k -> new int[1])[0] += held.draws() - before;
+        }
 
         /**
-         * The draw calls the game makes for what this canvas drew (1.21.1 {@code GuiGraphics}: an unmanaged fill or text
-         * flushes at once, a blit draws at once): a fill outside a batch, a run of fills inside one (a text, a sprite or a
-         * clip ends the run), a text, a sprite.
+         * What a batch holds back and the draw calls the game makes for what this canvas drew, as {@code GuiCanvas} does
+         * ({@link HeldDraws}): the texts and sprites are drawn in the order the game draws them, so a render shows its result.
          */
-        private int draws, fills, texts, sprites, depth;
-        private boolean run;
+        private final HeldDraws held = new HeldDraws();
+        private int fills, texts, sprites;
 
         /** This canvas's draw calls so far, with what made them. */
         String draws() {
-            return String.format("%5d draws (%d fills, %d texts, %d sprites)", draws, fills, texts, sprites);
+            return String.format("%5d draws: %d fill runs, %d text runs, %d sprites (%d fills, %d texts)", held.draws(), held.fillDraws(), held.textDraws(), held.spriteDraws(), fills, texts);
         }
 
         /** Prints this canvas's draw calls for page {@code name} when {@code -Dcount} is set. */
         void count(String name) {
             if (COUNT) System.out.printf("DRAWS %-60s %s%n", name, draws());
+            if (SITES) sites.entrySet().stream().sorted((a, b) -> b.getValue()[0] - a.getValue()[0]).forEach(e -> System.out.printf("SITE  %-60s %5d %s%n", name, e.getValue()[0], e.getKey()));
+            sites.clear();
         }
 
         @Override
         public void batch(Runnable body) {
-            depth++;
+            held.begin(() -> {
+            });
             try {
                 body.run();
             } finally {
-                if (--depth == 0) run = false;
+                int before = held.draws();
+                held.end();
+                site("end", before);
             }
         }
 
         @Override
         public void fill(int x0, int y0, int x1, int y1, int argb) {
             fills++;
-            if (depth == 0 || !run) draws++;
-            run = depth > 0;
+            int before = held.draws();
+            held.fill(Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1));
+            site("fill", before);
             if (x1 <= x0 || y1 <= y0) return;
             g.setColor(new Color(argb, true));
             g.fillRect(x0, y0, x1 - x0, y1 - y0);
@@ -404,8 +424,12 @@ public final class HeatDiagramRender {
         @Override
         public void text(String text, float x, float y, float scale, int argb) {
             texts++;
-            draws++;
-            run = false;
+            int before = held.draws();
+            held.text(x, y, x + measure.width(text) * scale, y + measure.height() * scale, () -> draw(text, x, y, scale, argb));
+            site("text", before);
+        }
+
+        private void draw(String text, float x, float y, float scale, int argb) {
             if (font != null) {
                 font.draw(g, text, x, y, scale, new Color(argb, true));
                 return;
@@ -420,13 +444,17 @@ public final class HeatDiagramRender {
 
         @Override
         public void clip(Rect area) {
-            run = false;
+            int before = held.draws();
+            held.clip();
+            site("clip", before);
             g.setClip(area.x(), area.y(), area.w(), area.h());
         }
 
         @Override
         public void unclip() {
-            run = false;
+            int before = held.draws();
+            held.clip();
+            site("clip", before);
             g.setClip(null);
         }
     }

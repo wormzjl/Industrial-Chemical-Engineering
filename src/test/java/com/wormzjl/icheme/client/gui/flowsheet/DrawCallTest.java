@@ -2,6 +2,7 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.FlowsheetPainter;
+import com.wormzjl.icheme.client.gui.common.kit.HeldDraws;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
@@ -19,13 +20,14 @@ import static org.junit.jupiter.api.Assertions.*;
  * sheet's drawing stays in its budget.
  */
 class DrawCallTest {
-    /**
-     * Counts draw calls as the game makes them: a fill outside a batch is one, a run of fills inside a batch is one (a
-     * text, a sprite or a clip ends the run), a text is one, a sprite is one.
-     */
+    /** Counts draw calls as the game makes them ({@link HeldDraws}, as {@code GuiCanvas} holds a batch's texts and sprites). */
     private static final class Counting implements Canvas {
-        int draws, fills, depth;
-        boolean run;
+        final HeldDraws held = new HeldDraws();
+        int fills;
+
+        int draws() {
+            return held.draws();
+        }
 
         @Override
         public Measure measure() {
@@ -34,47 +36,46 @@ class DrawCallTest {
 
         @Override
         public void batch(Runnable body) {
-            depth++;
+            held.begin(() -> {
+            });
             try {
                 body.run();
             } finally {
-                if (--depth == 0) run = false;
+                held.end();
             }
         }
 
         @Override
         public void fill(int x0, int y0, int x1, int y1, int argb) {
             fills++;
-            if (depth == 0 || !run) draws++;
-            run = depth > 0;
+            held.fill(Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1));
         }
 
         @Override
         public void text(String text, int x, int y, int argb) {
-            draws++;
-            run = false;
+            text(text, x, y, 1, argb);
         }
 
         @Override
         public void text(String text, float x, float y, float scale, int argb) {
-            draws++;
-            run = false;
+            held.text(x, y, x + measure().width(text) * scale, y + measure().height() * scale, () -> {
+            });
         }
 
         @Override
         public void sprite(Sprite sprite, float x0, float y0, float x1, float y1, int argb) {
-            draws++;
-            run = false;
+            held.sprite(x0, y0, x1, y1, () -> {
+            });
         }
 
         @Override
         public void clip(Rect area) {
-            run = false;
+            held.clip();
         }
 
         @Override
         public void unclip() {
-            run = false;
+            held.clip();
         }
     }
 
@@ -83,6 +84,8 @@ class DrawCallTest {
      * loops were batched (2026-11-03), each fill a draw call before; 10 % above that.
      */
     private static final int SAMPLE_BUDGET = 360;
+    /** The same drawing in a frame batch: 8 fill runs and 7 text runs (2026-11-04), its 45 sprites apart; 10 % above that. */
+    private static final int FRAME_RUNS = 17;
 
     @Test
     void theGridIsOneDrawAtAnyBoxSizeAndZoom() {
@@ -97,7 +100,7 @@ class DrawCallTest {
                 var c = new Counting();
                 SheetPainter.draw(c, layout, state, view, null, null, new SheetFixture.Texts());
                 assertTrue(c.fills > 1, "the grid has dots in " + box + " at zoom " + zoom);
-                assertEquals(1, c.draws, c.fills + " dots in " + box + " at zoom " + zoom);
+                assertEquals(1, c.draws(), c.fills + " dots in " + box + " at zoom " + zoom);
             }
     }
 
@@ -107,7 +110,7 @@ class DrawCallTest {
             var c = new Counting();
             new FlowsheetPainter(c, 0, 0, 1, 1).circle(50, 50, r, FlowsheetPainter.Look.TEAL);
             assertTrue(c.fills > 2 * r, "radius " + r + " in rows");
-            assertEquals(1, c.draws, "radius " + r);
+            assertEquals(1, c.draws(), "radius " + r);
         }
     }
 
@@ -119,10 +122,10 @@ class DrawCallTest {
                 var c = new Counting();
                 skin.meter(c, new Rect(0, 0, 80, 16), value);
                 assertTrue(c.fills > 3 + 7, value + " in segments");
-                assertEquals(4, c.draws, "the window and one draw for " + value);
+                assertEquals(4, c.draws(), "the window and one draw for " + value);
                 var lcd = new Counting();
                 skin.field(lcd, new Rect(0, 0, 80, 16), value, "", false);
-                assertEquals(4, lcd.draws, "an entry's " + value);
+                assertEquals(4, lcd.draws(), "an entry's " + value);
             }
     }
 
@@ -135,7 +138,25 @@ class DrawCallTest {
         view.fit(layout.bounds());
         var c = new Counting();
         SheetPainter.draw(c, layout, new SheetState(sheet, null, null, 0, null), view, null, null, new SheetFixture.Texts());
-        System.out.println("sample sheet: " + c.draws + " draw calls, " + c.fills + " fills");
-        assertTrue(c.draws <= SAMPLE_BUDGET, c.draws + " draw calls (" + c.fills + " fills) against " + SAMPLE_BUDGET);
+        System.out.println("sample sheet: " + c.draws() + " draw calls, " + c.fills + " fills");
+        assertTrue(c.draws() <= SAMPLE_BUDGET, c.draws() + " draw calls (" + c.fills + " fills) against " + SAMPLE_BUDGET);
+    }
+
+    /**
+     * In the screen's frame batch (P5, 2026-11-04) the sheet's texts and sprites wait, so they no longer break its fill runs:
+     * the sample's drawing, its labels and its symbols in a few runs, each sprite still a draw of its own.
+     */
+    @Test
+    void inTheFrameBatchTheSheetsTextsNoLongerBreakItsFills() {
+        var sheet = SheetFixture.sample();
+        var layout = SheetLayout.of(sheet, SheetFixture.M);
+        var view = new SheetView();
+        view.layout(new Rect(0, 0, 900, 440));
+        view.fit(layout.bounds());
+        var c = new Counting();
+        c.batch(() -> SheetPainter.draw(c, layout, new SheetState(sheet, null, null, 0, null), view, null, null, new SheetFixture.Texts()));
+        var held = c.held;
+        System.out.println("sample sheet in a frame batch: " + held.fillDraws() + " fill runs, " + held.textDraws() + " text runs, " + held.spriteDraws() + " sprites");
+        assertTrue(held.fillDraws() + held.textDraws() <= FRAME_RUNS, held.fillDraws() + " fill runs and " + held.textDraws() + " text runs against " + FRAME_RUNS);
     }
 }
