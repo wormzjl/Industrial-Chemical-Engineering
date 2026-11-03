@@ -65,3 +65,26 @@ Where a term is not listed, use the standard chemical-engineering term, and use 
 | solids, crystals | solides, cristaux | sólidos, cristales | 固体, 結晶 |
 | steady state | régime permanent | estado estacionario | 定常状態 |
 | hint (tooltip) | — translate the text only | — | — |
+
+## Process simulator (batch 2026-11-02-process-simulator)
+
+| English | Français | Español | 日本語 |
+|---|---|---|---|
+| process simulator | simulateur de procédé | simulador de procesos | プロセスシミュレーター |
+| flowsheet, sheet | schéma de procédé, schéma | diagrama | フローシート |
+| stream | courant | corriente | ストリーム |
+| port | port | puerto | ポート |
+| unit door (a unit's settings page) | fiche | ficha | 画面 |
+| run (noun) / Run (button) | calcul / Lancer | ejecución / Ejecutar | 実行 |
+| pass (solver iteration) | passe | pasada | パス |
+| tear (stream) | coupure | corte | テア |
+| sizing / Size all | dimensionnement / Tout dim. | dimensionado / Dimensionar todo | 寸法決定 / 一括寸法 |
+| lamp (red, yellow, green) | témoin | luz | ランプ |
+| design basis | base | base | 基準 |
+| spare (design margin) | marge | margen | 余裕 |
+| pressure path | chemin de pression | ruta de presión | 圧力経路 |
+| utility | utilité | servicio auxiliar | ユーティリティ |
+| set by (a regulated flow) | fixé par | fijado por | %s が設定 |
+| parked (component) | mis de côté | apartado | 退避 |
+| pumparound (short) | RC | PA | PA |
+| pressure drop (limit rows) | perte ch. | caída | 圧損 |
