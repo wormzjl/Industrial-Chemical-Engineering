@@ -121,6 +121,16 @@ import java.util.Objects;
  * ({@link #depositionTemperature}, {@link #freezingTemperature}, {@link #depositionPressure}) are bracketed searches on
  * {@code D} of the fluid answer of the whole feed.</p>
  *
+ * <p>Carried crystals ({@link PhaseCompetition#FLUID_CARRYING_CRYSTALS}, a step's decision: only a vessel's refresh books
+ * a crystal, D23): no crystal competes, and the phase a crystal would take is no fluid phase of its own. A stationary
+ * dense phase rich in a crystal's species is no phase of a dense fluid or of a split's product where that crystal would
+ * form ({@link #carriedTrial}), nor is a dense phase with that species taken out; a vapour feed is never filtered, and a
+ * split that ends with a crystal-rich product is restated ({@link #carriedSplit}): one liquid where both products are
+ * dense, otherwise that product as a stand-in of crystal species only. Below the triple point the equation of state
+ * continues vapour, liquid and frost as three fluid phases, a crystal-rich liquid and a lean one beside the vapour (3 % of
+ * CO2 at 101 kPa, 113 to 129 K; the lean liquid saturates near 15 %), so no vapour-liquid family runs from one liquid to the
+ * other there: the stand-in is held out and the rest split alone ({@link #beyondStandIn}).</p>
+ *
  * <p>Deterministic (fixed arithmetic order; a reused {@link Workspace} carries nothing between calls but prepared
  * temperatures, recomputed bit-identically) and allocation-light: the iterations allocate nothing.</p>
  */
@@ -222,6 +232,11 @@ public final class FluidTpEquilibrium {
      * solid takes the whole species, the vapour none).
      */
     public static final double DEPOSITION_TRACE = 1.0e-15;
+    /**
+     * Under {@link PhaseCompetition#FLUID_CARRYING_CRYSTALS}: a phase holding more than this share of a crystal's species
+     * is that crystal's end of a tie line. A label for a stationary phase, never a validity bound on a fluid state.
+     */
+    private static final double CARRIED_SHARE = 0.5;
     /** Newton steps of the gas-solid solve, and fluid TP equilibria of an onset search, before NOT_CONVERGED. */
     private static final int DEPOSITION_ITERATIONS = 60;
     private static final int ONSET_EVALUATIONS = 100;
@@ -344,6 +359,8 @@ public final class FluidTpEquilibrium {
     private final EquilibriumResult.Coverage convergedCoverage;
     /** The crystals this service evaluates (P4 stage 2a), each anchored once to this fluid family. */
     private final List<Crystal> crystals;
+    /** Per component, whether a crystal of this service is of that species. */
+    private final boolean[] crystalSpecies;
     /**
      * The coverage of the answers outside the critical band of each qualified crystal competition whose crystals all have
      * their evaluator here, built once.
@@ -439,6 +456,8 @@ public final class FluidTpEquilibrium {
             built.add(crystal(solid));
         }
         crystals = List.copyOf(built);
+        crystalSpecies = new boolean[count];
+        for (Crystal c : crystals) crystalSpecies[c.component()] = true;
         Map<PhaseCompetition, EquilibriumResult.Coverage> coverages = new HashMap<>();
         for (PhaseCompetition competition : contract.qualifiedCompetitions()) {
             if (competition.crystals().isEmpty()) continue;
@@ -704,6 +723,13 @@ public final class FluidTpEquilibrium {
         private PhaseCompetition competition;
         private final Crystal[] active;
         private int activeCount;
+        // Carried crystals: the request's mode, the filter the stability tests read, its temperature and whether a product
+        // is being tested, the tested phase's state (never liquidState or vaporState, which finishSplit reads after the tests).
+        private boolean carrying, carriedProduct, standInHeld, beyondStandIn;
+        private double carriedTemperature;
+        private final double[] standIn;
+        private final TangentPlaneStability.TrialFilter carriedFilter;
+        private final PhaseState carriedState;
         private final double[] savedFeed, savedBasis, pure;
         /** D21: the fluid a near-pure crystal step leaves, the traces with it. */
         private final double[] stepFluid;
@@ -764,6 +790,9 @@ public final class FluidTpEquilibrium {
             waterProperties = new double[2];
             slope = owner.evaluator.newDerivatives();
             active = new Crystal[owner.crystals.size()];
+            carriedFilter = (tested, testedRoot, trial, trialRoot) -> owner.carriedTrial(tested, testedRoot, trial, trialRoot, this);
+            carriedState = owner.evaluator.newState();
+            standIn = new double[n];
             savedFeed = new double[n];
             savedBasis = new double[owner.basis];
             pure = new double[n];
@@ -991,6 +1020,7 @@ public final class FluidTpEquilibrium {
      */
     private EquilibriumResult implementationChecks(Specification specification, PhaseCompetition competition, Workspace w) {
         w.activeCount = 0;
+        w.carrying = competition.carried();
         for (String id : competition.crystals()) {
             Crystal c = crystalById(id);
             if (c == null) {
@@ -4721,6 +4751,7 @@ public final class FluidTpEquilibrium {
         w.seedDistance = Double.NaN;
         w.residual = Double.NaN;
         w.productDistance = Double.NaN;
+        w.carriedTemperature = t;
         TangentPlaneStability.Result feed = feedStability(stability, t, w);
         if (feed.verdict() == TangentPlaneStability.Verdict.UNRESOLVED) {
             // A trial ran out of its budget without proving anything (P3 WP7d: next to a mixture critical point a trial can
@@ -4739,19 +4770,174 @@ public final class FluidTpEquilibrium {
                 return SINGLE;
             }
             default -> {
-                return twoPhase(t, feed, w);
+                w.standInHeld = false;
+                int outcome = twoPhase(t, feed, w);
+                if (!w.carrying) return outcome;
+                if (outcome == SPLIT) return carriedSplit(t, w);
+                return outcome == FAILED && w.standInHeld && !w.beyondStandIn ? beyondStandIn(t, feed, w) : outcome;
             }
         }
     }
 
     /** The feed's stability test at the workspace's branch pressures on {@code test}, counted. */
     private TangentPlaneStability.Result feedStability(TangentPlaneStability test, double t, Workspace w) {
-        TangentPlaneStability.Result feed = w.branched
-                ? test.test(t, w.liquidPressure, w.vaporPressure, translations, w.feed, w.stability)
-                : test.test(t, w.liquidPressure, w.feed, w.stability);
-        w.kernelEvaluations += feed.kernelEvaluations();
-        w.derivativeEvaluations += feed.derivativeEvaluations();
-        return feed;
+        w.carriedProduct = false;
+        return stabilityOf(test, t, w.feed, w);
+    }
+
+    /** The stability test of {@code amounts} at the workspace's branch pressures, counted; filtered when carrying. */
+    private TangentPlaneStability.Result stabilityOf(TangentPlaneStability test, double t, double[] amounts, Workspace w) {
+        TangentPlaneStability.Result result = w.carrying
+                ? test.test(t, w.liquidPressure, w.vaporPressure, translations, amounts, w.carriedFilter, w.stability)
+                : w.branched ? test.test(t, w.liquidPressure, w.vaporPressure, translations, amounts, w.stability)
+                : test.test(t, w.liquidPressure, amounts, w.stability);
+        w.kernelEvaluations += result.kernelEvaluations();
+        w.derivativeEvaluations += result.derivativeEvaluations();
+        return result;
+    }
+
+    /**
+     * Whether a stationary trial is a crystal's stand-in and no fluid phase of the phase under test, under
+     * {@link PhaseCompetition#FLUID_CARRYING_CRYSTALS}. The trial is dense, and one of two things holds, the cheap checks
+     * first. A crystal species is over {@link #CARRIED_SHARE} of the trial or of the tested phase, the tested phase is dense
+     * or a split's product (a feed on a vapour root is never filtered: from its side no methane-rich stationary point exists,
+     * every liquid-like trial runs to the near-pure species), and the tested phase is supersaturated by the deposit test's own
+     * sign. Or the trial is the other side of the same gap: a dense supersaturated phase with the crystal species taken out
+     * ({@link #crystalLean}), where that phase is the dense feed under test or a split's liquid, whichever product is tested
+     * (its plane is the vapour's too). Above the triple point, where the liquid is the stable
+     * phase, nothing is excluded.
+     */
+    private boolean carriedTrial(double[] tested, Root testedRoot, double[] trial, Root trialRoot, Workspace w) {
+        double t = w.carriedTemperature;
+        boolean denseTrial = false;
+        for (Crystal c : crystals) {
+            int i = c.component();
+            boolean rich = trial[i] > CARRIED_SHARE || tested[i] > CARRIED_SHARE;
+            double[] phase = rich || !w.carriedProduct ? tested : w.liquidAmounts;
+            if (!rich && !crystalLean(phase, trial, i)) continue;
+            if (!denseTrial) {
+                double trialPressure = w.pressureOf(trialRoot);
+                kernel.evaluate(t, trialPressure, trial, trialRoot, w.mixture, w.first);
+                w.kernelEvaluations++;
+                if (!PhaseIdentification.denseLiquidLike(w.first, t, trialPressure)) return false;
+                denseTrial = true;
+            }
+            Root root = rich || !w.carriedProduct ? testedRoot : Root.LIQUID;
+            double pressure = w.pressureOf(root);
+            if (!w.carriedProduct || !rich) {
+                kernel.evaluate(t, pressure, phase, root, w.mixture, w.second);
+                w.kernelEvaluations++;
+                if (!PhaseIdentification.denseLiquidLike(w.second, t, pressure)) continue;
+            }
+            evaluator.evaluate(t, pressure, phase, root, w.phases, w.carriedState);
+            w.kernelEvaluations++;
+            if (supersaturated(c, w.carriedState, t, w.liquidPressure)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether {@code trial} (shares) is {@code phase} (amounts) with crystal species {@code i} taken out: leaner in it by more
+     * than the other species together lose, so two liquids that part by another species stay two liquids; {@code phase} no
+     * stand-in itself.
+     */
+    private boolean crystalLean(double[] phase, double[] trial, int i) {
+        double total = 0.0;
+        for (int k = 0; k < count; k++) total += phase[k];
+        double lost = phase[i] - trial[i] * total;
+        if (!(lost > 0.0) || phase[i] > CARRIED_SHARE * total) return false;
+        for (int k = 0; k < count; k++) if (!crystalSpecies[k]) lost -= Math.max(phase[k] - trial[k] * total, 0.0);
+        return lost > 0.0;
+    }
+
+    /** The deposit test's sign ({@link #solveWithCrystals}): whether {@code c} would form from {@code state}. */
+    private static boolean supersaturated(Crystal c, PhaseState state, double t, double p) {
+        return (state.chemicalPotential(c.component()) - c.anchored().chemicalPotential(t, p)) / (R * t) > DEPOSITION_TOLERANCE;
+    }
+
+    /** Whether the product {@code amounts} in {@code state} is over {@link #CARRIED_SHARE} of a crystal's species, supersaturated. */
+    private boolean crystalRich(double[] amounts, PhaseState state, double t, Workspace w) {
+        double total = 0.0;
+        for (int i = 0; i < count; i++) total += amounts[i];
+        for (Crystal c : crystals) {
+            if (amounts[c.component()] > CARRIED_SHARE * total && supersaturated(c, state, t, w.liquidPressure)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * A split under {@link PhaseCompetition#FLUID_CARRYING_CRYSTALS} restated, one place for the dry and the wet path. A split
+     * with no crystal-rich product is the answer. Both products dense outside the critical band (the test of
+     * {@link #twoPhaseResult}) is the crystal's stand-in split of a dense fluid: the answer is the feed as one liquid. Otherwise
+     * a crystal-rich denser product is the stand-in beside a vapour: it keeps its crystal species and the lighter product takes
+     * every other species, the shape a crystal is carried in. In the vapour the crystal's mass would take a gas's volume and
+     * energy (a CO2 let-down below the triple point, stated all vapour, ran to CO2's 90 K floor).
+     */
+    private int carriedSplit(double t, Workspace w) {
+        boolean swapped = w.vaporState.molarVolume() < w.liquidState.molarVolume();
+        double[] denser = swapped ? w.vaporAmounts : w.liquidAmounts;
+        double[] lighter = swapped ? w.liquidAmounts : w.vaporAmounts;
+        boolean denserRich = crystalRich(denser, swapped ? w.vaporState : w.liquidState, t, w);
+        boolean lighterRich = crystalRich(lighter, swapped ? w.liquidState : w.vaporState, t, w);
+        if (!denserRich && !lighterRich) return SPLIT;
+        boolean band = inBand(t, w.liquidPressure, w) || w.tieLine < BAND_TIE_LINE;
+        if (!band && w.liquidProductDenseLiquidLike && w.vapourProductDenseLiquidLike) {
+            w.singleRoot = Root.LIQUID;
+            return SINGLE;
+        }
+        if (!denserRich) return SPLIT;
+        for (int i = 0; i < count; i++) {
+            double held = crystalSpecies[i] ? denser[i] : 0.0;
+            w.liquidAmounts[i] = held;
+            w.vaporAmounts[i] = w.feed[i] - held;
+        }
+        evaluator.evaluate(t, w.liquidPressure, w.liquidAmounts, Root.LIQUID, w.phases, w.liquidState);
+        evaluator.evaluate(t, w.vaporPressure, w.vaporAmounts, Root.VAPOR, w.phases, w.vaporState);
+        w.kernelEvaluations += 2;
+        w.liquidProductDenseLiquidLike = false;
+        w.vapourProductDenseLiquidLike = false;
+        return SPLIT;
+    }
+
+    /**
+     * A split under {@link PhaseCompetition#FLUID_CARRYING_CRYSTALS} whose crystal-rich liquid is sound and whose vapour
+     * condenses a liquid of its own: three fluid phases, the crystal's stand-in and the shape a crystal is carried in
+     * beside a vapour and a liquid. The stand-in is held out, the rest split alone, and the stand-in goes back into the
+     * liquid, which then holds it supersaturated.
+     */
+    private int beyondStandIn(double t, TangentPlaneStability.Result feed, Workspace w) {
+        String failure = w.failure;
+        System.arraycopy(w.feed, 0, w.savedFeed, 0, count);
+        System.arraycopy(w.basisAmounts, 0, w.savedBasis, 0, basis);
+        double[] held = w.standIn;
+        for (int i = 0; i < count; i++) w.feed[i] -= held[i];
+        w.beyondStandIn = true;
+        int outcome;
+        try {
+            outcome = hydrocarbon(t, w);
+        } finally {
+            w.beyondStandIn = false;
+            restoreFeed(w);
+        }
+        w.feedResult = feed;
+        if (outcome == FAILED || outcome == MERGED) {
+            w.failure = failure;
+            return FAILED;
+        }
+        if (outcome == SINGLE) {
+            if (w.singleRoot == Root.LIQUID) return SINGLE;
+            for (int i = 0; i < count; i++) {
+                w.vaporAmounts[i] = w.feed[i] - held[i];
+                w.liquidAmounts[i] = 0.0;
+            }
+        }
+        for (int i = 0; i < count; i++) w.liquidAmounts[i] += held[i];
+        evaluator.evaluate(t, w.liquidPressure, w.liquidAmounts, Root.LIQUID, w.phases, w.liquidState);
+        evaluator.evaluate(t, w.vaporPressure, w.vaporAmounts, Root.VAPOR, w.phases, w.vaporState);
+        w.kernelEvaluations += 2;
+        w.liquidProductDenseLiquidLike = false;
+        w.vapourProductDenseLiquidLike = false;
+        return SPLIT;
     }
 
     /**
@@ -4948,16 +5134,9 @@ public final class FluidTpEquilibrium {
             }
         }
         // Stability of both products: a third phase or another split is not an answer.
-        TangentPlaneStability.Result liquidCheck = w.branched
-                ? stability.test(t, w.liquidPressure, w.vaporPressure, translations, w.liquidAmounts, w.stability)
-                : stability.test(t, w.liquidPressure, w.liquidAmounts, w.stability);
-        w.kernelEvaluations += liquidCheck.kernelEvaluations();
-        w.derivativeEvaluations += liquidCheck.derivativeEvaluations();
-        TangentPlaneStability.Result vapourCheck = w.branched
-                ? stability.test(t, w.liquidPressure, w.vaporPressure, translations, w.vaporAmounts, w.stability)
-                : stability.test(t, w.liquidPressure, w.vaporAmounts, w.stability);
-        w.kernelEvaluations += vapourCheck.kernelEvaluations();
-        w.derivativeEvaluations += vapourCheck.derivativeEvaluations();
+        w.carriedProduct = true;
+        TangentPlaneStability.Result liquidCheck = stabilityOf(stability, t, w.liquidAmounts, w);
+        TangentPlaneStability.Result vapourCheck = stabilityOf(stability, t, w.vaporAmounts, w);
         w.productDistance = Math.min(liquidCheck.minimumTangentPlaneDistance(), vapourCheck.minimumTangentPlaneDistance());
         if (liquidCheck.verdict() != TangentPlaneStability.Verdict.STABLE
                 || vapourCheck.verdict() != TangentPlaneStability.Verdict.STABLE) {
@@ -4966,6 +5145,12 @@ public final class FluidTpEquilibrium {
             // re-check left unresolved is the same failure short of the proof, typed as such.
             boolean unstable = liquidCheck.verdict() == TangentPlaneStability.Verdict.UNSTABLE
                     || vapourCheck.verdict() == TangentPlaneStability.Verdict.UNSTABLE;
+            if (w.carrying && vapourCheck.verdict() == TangentPlaneStability.Verdict.UNSTABLE
+                    && liquidCheck.verdict() == TangentPlaneStability.Verdict.STABLE
+                    && liquid.molarVolume() < vapour.molarVolume() && crystalRich(w.liquidAmounts, liquid, t, w)) {
+                w.standInHeld = true;
+                for (int i = 0; i < count; i++) w.standIn[i] = crystalSpecies[i] ? w.liquidAmounts[i] : 0.0;
+            }
             w.failure = (unstable ? EquilibriumResult.UNSTABLE_PRODUCT : EquilibriumResult.UNRESOLVED_PRODUCT) + ": a product phase is not stable (liquid "
                     + liquidCheck.verdict() + ", vapour " + vapourCheck.verdict()
                     + "): a third phase or another split; three-phase equilibrium is not implemented";

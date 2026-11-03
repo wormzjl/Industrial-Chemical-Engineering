@@ -13,6 +13,7 @@ import com.wormzjl.icheme.science.thermo.TraceTruncationPolicy;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import com.wormzjl.icheme.science.thermo.phase.FreeWaterIce;
+import com.wormzjl.icheme.science.thermo.phase.PhaseCompetition;
 import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
 import com.wormzjl.icheme.science.thermo.phase.PhaseKind;
 import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
@@ -1128,10 +1129,10 @@ public final class FluidThermodynamics {
      * engine's equilibrium of the fluid it holds under its wall's law, the problem its own closure solves
      * ({@code InventoryEquilibrium}), as a network state ({@link #adopt}) folded as a vessel: a slack bag at its fluid
      * enthalpy and the ambient pressure ({@link #equilibriumPH}), a taut vessel at its fluid's internal energy and volume
-     * ({@link #equilibriumUV}), warm-started at its temperature and pressure, both under the competition of the vessel's
-     * TP request ({@link #crystalsCompete}); a crystal the engine forms is carried as its stand-in (D23). The fluid alone
-     * is no answer there: LNG with 0.7 % of CO2 cooled past its dew point in a bag of nitrogen is three fluid phases with
-     * a CO2-rich liquid, which the network does not carry. The TP answer says only which phase is missing: its amounts
+     * ({@link #equilibriumUV}), warm-started at its temperature and pressure, both under the step's competition
+     * ({@link #stepCompetition}), the crystals carried (D23). The fluid alone is no answer there: LNG with 0.7 % of CO2
+     * cooled past its dew point in a bag of nitrogen is three fluid phases with a CO2-rich liquid, which the network does
+     * not carry. The TP answer says only which phase is missing: its amounts
      * ignore the vessel's volume and are never the seed (a liquid-full slush tank drawn below its bubble point was offered
      * 13 to 29 m3 of vapour for 0.78 m3 of fluid space, and its closure from there failed). {@code null} where the engine
      * does not converge, answers a phase set the network cannot carry, or answers none of the phases {@code proposed}
@@ -1180,10 +1181,9 @@ public final class FluidThermodynamics {
      * vapour); any other failure is a plain {@link IllegalArgumentException}. Below its melting line the engine states
      * the free water's condensed part as ice; a TP answer never moves material into a crystal (owner decision D23), so the
      * network carries it as free liquid water, the stand-in ({@link #state}), until a vessel's refresh freezes it; on a
-     * package that admits crystals a request carrying a crystal's species at or below the crystals' ceiling is made under
-     * the crystal competition ({@link #crystalsCompete}), and where a crystal forms the answer's vapour is the vapour and
-     * the liquid slot takes the rest with the crystal's share condensed in it ({@link #adopt}). A crystal beside a phase
-     * set the engine does not implement is the typed {@link UnsupportedPhases.Kind#CRYSTAL_PHASES} hold.
+     * package that admits crystals a request carrying a crystal's species at or below the crystals' ceiling carries its
+     * crystals in the fluid phases ({@link #stepCompetition}): one liquid, or beside a vapour a liquid holding the crystal
+     * species only (D29 A, {@link #condensedShareOnly}).
      * {@code checkpoint} runs once before the engine and once per equation-of-state evaluation the engine reports.
      */
     public State equilibriumTP(double t,double p,double[] overall,Runnable checkpoint,Prepared prepared) {
@@ -1201,7 +1201,7 @@ public final class FluidThermodynamics {
             return state(t,p,hc,hc,condensed?w:0,condensed?0:w,0);
         }
         checkpoint.run();
-        var result=phaseEngine().tp(t,p,overall,crystalsCompete(t,overall));
+        var result=phaseEngine().tp(t,p,overall,stepCompetition(t,overall));
         for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
         return adopt(t,p,overall,result,given);
     }
@@ -1209,25 +1209,22 @@ public final class FluidThermodynamics {
      * A pipe junction's own split (owner decision D26, {@link #phaseCheck}), the phases of an empty bag's
      * ({@code PassiveStepSolver.emptyBagSplit}, D54) and a slack vessel's crossing ({@link #crossing}): the engine's PH
      * equilibrium of {@code overall} (the conserved basis, water last) at the node's pressure {@code p} and its fluid
-     * enthalpy {@code h} (J, the network's datum), under the competition of the node's TP request at {@code t}
-     * ({@link #crystalsCompete}), as a network state ({@link #adopt}, unfolded); {@code null} where the engine does not
+     * enthalpy {@code h} (J, the network's datum), under the step's competition at {@code t}
+     * ({@link #stepCompetition}), as a network state ({@link #adopt}, unfolded); {@code null} where the engine does not
      * converge or answers a phase set the network cannot carry. A spine package's engine states energies on the spine's
      * formation datum, the network on its sensible one (D10), so the target moves by the formation enthalpies.
      */
-    public State equilibriumPH(double t,double p,double h,double[] overall,Runnable checkpoint){return equilibriumPH(t,p,h,overall,crystalsCompete(t,overall),checkpoint);}
-    /**
-     * {@link #equilibriumPH} with the crystal competition stated by the caller: fluid-only ({@code crystals} false) for a
-     * starting guess that never books a crystal, the balanced start's density tables ({@code PassiveStepSolver.BalanceNet}),
-     * whose junction's final mixture keeps the competition.
-     */
-    public State equilibriumPH(double t,double p,double h,double[] overall,boolean crystals,Runnable checkpoint) {
+    public State equilibriumPH(double t,double p,double h,double[] overall,Runnable checkpoint){return equilibriumPH(t,p,h,overall,stepCompetition(t,overall),checkpoint);}
+    /** {@link #equilibriumPH} of the fluid phases alone, for the balanced start's density tables ({@code PassiveStepSolver.BalanceNet}). */
+    public State fluidPH(double t,double p,double h,double[] overall,Runnable checkpoint){return equilibriumPH(t,p,h,overall,PhaseCompetition.FLUID_ONLY,checkpoint);}
+    private State equilibriumPH(double t,double p,double h,double[] overall,PhaseCompetition competition,Runnable checkpoint) {
         var spine=hydrocarbon.spine();double target=h;
         if(spine.isPresent()) {
             var formation=spine.get().formationReference();
             target=EnergyReference.sensible(formation.components()).rebase(h,Arrays.copyOf(overall,hydrocarbon.componentCount()),formation);
         }
         checkpoint.run();
-        var result=phaseEngine().ph(p,target,overall,crystals);
+        var result=phaseEngine().ph(p,target,overall,competition);
         for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
         if(!result.converged()||result.phases().isEmpty())return null;
         try{return adopt(result.phases().getFirst().temperature(),p,overall,result,null);}
@@ -1236,14 +1233,14 @@ public final class FluidThermodynamics {
     /**
      * A taut vessel's own state at a crossing ({@link #crossing}, owner decision D40 A), the UV twin of
      * {@link #equilibriumPH}: the engine's equilibrium of {@code overall} (the conserved basis, water last) at its fluid's
-     * internal energy {@code u} (J, the network's datum) and volume {@code v} (m3), under the competition of the vessel's
-     * TP request at {@code t} ({@link #crystalsCompete}), warm-started at {@code t} and {@code p}, as a network state
+     * internal energy {@code u} (J, the network's datum) and volume {@code v} (m3), under the step's competition at
+     * {@code t} ({@link #stepCompetition}), warm-started at {@code t} and {@code p}, as a network state
      * ({@link #adopt}, unfolded); {@code null} where the engine does not converge or answers a phase set the network cannot
      * carry. {@code checkpoint} runs as for {@link #equilibriumTP}. Never inside a residual.
      */
     private State equilibriumUV(double t,double p,double u,double v,double[] overall,Runnable checkpoint) {
         checkpoint.run();
-        var result=phaseEngine().crystalUv(engineEnergy(u,overall),v,overall,crystalsCompete(t,overall),t,p);
+        var result=phaseEngine().crystalUv(engineEnergy(u,overall),v,overall,stepCompetition(t,overall),t,p);
         for(int evaluation=result.diagnostics().kernelEvaluations();evaluation>0;evaluation--)checkpoint.run();
         if(!result.converged()||result.phases().isEmpty())return null;
         var answer=result.phases().getFirst();
@@ -1264,6 +1261,14 @@ public final class FluidThermodynamics {
         if(crystalIds.isEmpty()||!(t<=crystalCeiling))return false;
         for(int i=0;i<crystalSpecies.length;i++)if(crystalSpecies[i]&&overall[i]>0)return true;
         return false;
+    }
+    /**
+     * The competition of a step-level TP, PH or UV decision on {@code overall} at {@code t}: where crystals would compete
+     * ({@link #crystalsCompete}), the fluid phases carrying them (owner decision D23: only a vessel's refresh books a crystal,
+     * {@link #crystalsAtVolume}, {@link #crystalsAtPressure}); otherwise fluid-only.
+     */
+    PhaseCompetition stepCompetition(double t,double[] overall) {
+        return crystalsCompete(t,overall)?PhaseCompetition.FLUID_CARRYING_CRYSTALS:PhaseCompetition.FLUID_ONLY;
     }
 
     /**
@@ -1297,13 +1302,6 @@ public final class FluidThermodynamics {
                         +"); the fluid network carries one hydrocarbon liquid and one hydrocarbon vapour");
                 throw new IllegalArgumentException("Fluid TP equilibrium did not converge: "+result.detail());
             }
-            case UNSUPPORTED->{
-                // A crystal beside a phase set the engine does not implement (two liquids, three fluid phases, two
-                // crystals): held typed, never answered with fewer phases.
-                if(result.detail().startsWith(EquilibriumResult.CRYSTAL_PHASES))throw new UnsupportedPhases(domain.packageId(),t,p,
-                        UnsupportedPhases.Kind.CRYSTAL_PHASES,"a crystal beside a phase set the engine does not implement ("+result.detail()+")");
-                throw new IllegalStateException("The network's equilibrium engine refused a request it must answer: "+result.detail());
-            }
             default->throw new IllegalStateException("The network's equilibrium engine refused a request it must answer: "+result.detail());
         }
         int n=hydrocarbon.componentCount();double[] liquid=new double[n],vapor=new double[n];
@@ -1314,39 +1312,17 @@ public final class FluidThermodynamics {
             // not take the vapour slot; a typed hold, never adopted with fewer phases.
             case LIQUID_LIQUID->throw new UnsupportedPhases(domain.packageId(),t,p,UnsupportedPhases.Kind.LIQUID_LIQUID,
                     "a liquid-liquid split (two liquid-like hydrocarbon phases); the fluid network carries one hydrocarbon liquid");
-            // A crystal in the answer. A TP phase decision never moves material into a crystal (owner decision D23: only a
-            // vessel's refresh does), so the mobile phases carry the crystal's share until then as condensed matter: the
-            // vapour is the answer's vapour and the liquid slot takes the rest, a supersaturated liquid, per component by
-            // difference and never negative, so the amounts are conserved exactly. In the vapour slot the crystal's mass
-            // would take a gas's volume and energy (a CO2 let-down below the triple point, stated all vapour, ran to CO2's
-            // 90 K floor).
-            case VAPOR_SOLID,LIQUID_SOLID,VAPOR_LIQUID_SOLID,SOLID_PRESENT->{
-                var classification=result.classification();
-                if(classification==EquilibriumResult.Classification.VAPOR_SOLID||classification==EquilibriumResult.Classification.VAPOR_LIQUID_SOLID)
-                    for(var phase:result.phases())if(phase.kind()==PhaseKind.VAPOR||phase.kind()==PhaseKind.FLUID)System.arraycopy(phase.amountsView(),0,vapor,0,n);
-                for(int i=0;i<n;i++) {
-                    liquid[i]=Math.max(overall[i]-vapor[i],0.0);
-                    vapor[i]=overall[i]-liquid[i];
-                }
-            }
-            // A pure component at its own coexistence pressure, the split undetermined by T and P: a single liquid, or
-            // the vapour of a pure sublimation coexistence.
-            case PURE_COEXISTENCE_UNDERDETERMINED->{
-                boolean sublimation=false;for(var state:result.coexisting())sublimation|=state.kind()==PhaseKind.SOLID;
-                System.arraycopy(overall,0,sublimation?vapor:liquid,0,n);
-            }
+            // A pure component at its own coexistence pressure, the split undetermined by T and P: a single liquid.
+            case PURE_COEXISTENCE_UNDERDETERMINED->System.arraycopy(overall,0,liquid,0,n);
             // Free water beside the hydrocarbons. Its ice (WP4), which a TP answer never freezes (D23), is carried as its
-            // stand-in, free liquid water, until a vessel's refresh. Beside a competing crystal the hydrocarbons are stated as
-            // a dry crystal answer is: the vapour is the answer's and the liquid slot takes the rest.
+            // stand-in, free liquid water, until a vessel's refresh.
             case FREE_WATER->{
                 var split=result.freeWater();
                 waterLiquid=split.condensed();waterVapor=split.waterVapor();hydrocarbonPressure=split.hydrocarbonPressure();
-                boolean crystal=split.hydrocarbon().holdsCrystal();
                 for(var phase:result.phases()) {
                     if(phase.kind()==PhaseKind.VAPOR)System.arraycopy(phase.amountsView(),0,vapor,0,n);
-                    else if(phase.kind()==PhaseKind.LIQUID&&!crystal)System.arraycopy(phase.amountsView(),0,liquid,0,n);
+                    else if(phase.kind()==PhaseKind.LIQUID)System.arraycopy(phase.amountsView(),0,liquid,0,n);
                 }
-                if(crystal)for(int i=0;i<n;i++){liquid[i]=Math.max(overall[i]-vapor[i],0.0);vapor[i]=overall[i]-liquid[i];}
             }
             default->{
                 for(var phase:result.phases()) {

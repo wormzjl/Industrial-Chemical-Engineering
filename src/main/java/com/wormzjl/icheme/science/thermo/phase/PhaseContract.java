@@ -156,5 +156,8 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
     public int index(String component) { return components.indexOf(component); }
     /** The water slot of the basis, -1 without water. */
     public int waterIndex() { return waterComponent == null ? -1 : components.indexOf(waterComponent); }
-    public boolean qualifies(PhaseCompetition competition) { return qualifiedCompetitions.contains(competition); }
+    /** Whether a request under {@code competition} is answered; the carried request wherever a crystal competition is. */
+    public boolean qualifies(PhaseCompetition competition) {
+        return competition.carried() ? crystalCompetition() != null : qualifiedCompetitions.contains(competition);
+    }
 }

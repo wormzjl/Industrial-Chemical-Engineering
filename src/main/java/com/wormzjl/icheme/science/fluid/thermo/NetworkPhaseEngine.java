@@ -87,12 +87,20 @@ final class NetworkPhaseEngine {
      * package's crystal competition when {@code crystals} ({@link PhaseCompetition#FLUID_AND_CRYSTALS}), fluid phases only
      * otherwise. */
     EquilibriumResult tp(double t,double p,double[] overall,boolean crystals) {
-        return engine.tp(EquilibriumRequest.tp(t,p,species,overall,crystals?PhaseCompetition.FLUID_AND_CRYSTALS:PhaseCompetition.FLUID_ONLY),workspaces.get());
+        return tp(t,p,overall,competition(crystals));
+    }
+    /** {@link #tp(double,double,double[],boolean)} under {@code competition}. */
+    EquilibriumResult tp(double t,double p,double[] overall,PhaseCompetition competition) {
+        return engine.tp(EquilibriumRequest.tp(t,p,species,overall,competition),workspaces.get());
     }
     /** The PH equilibrium of {@code overall} at {@code p} with enthalpy {@code h} (J, on the engine's datum), under the
      * competition {@code crystals} selects as for {@link #tp}: a pipe junction's own split (D26). */
     EquilibriumResult ph(double p,double h,double[] overall,boolean crystals) {
-        return engine.ph(EquilibriumRequest.ph(p,h,species,overall,crystals?PhaseCompetition.FLUID_AND_CRYSTALS:PhaseCompetition.FLUID_ONLY),workspaces.get());
+        return ph(p,h,overall,competition(crystals));
+    }
+    /** {@link #ph(double,double,double[],boolean)} under {@code competition}. */
+    EquilibriumResult ph(double p,double h,double[] overall,PhaseCompetition competition) {
+        return engine.ph(EquilibriumRequest.ph(p,h,species,overall,competition),workspaces.get());
     }
     /**
      * The equilibrium of {@code overall} at internal energy {@code u} (J, the engine's datum) and volume {@code v} (m3), the
@@ -102,9 +110,14 @@ final class NetworkPhaseEngine {
      * ({@link FluidTpEquilibrium#uv(EquilibriumRequest, com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace, double, double)}).
      */
     EquilibriumResult crystalUv(double u,double v,double[] overall,boolean crystals,double hintT,double hintP) {
-        var request=EquilibriumRequest.uv(u,v,species,overall,crystals?PhaseCompetition.FLUID_AND_CRYSTALS:PhaseCompetition.FLUID_ONLY);
+        return crystalUv(u,v,overall,competition(crystals),hintT,hintP);
+    }
+    /** {@link #crystalUv(double,double,double[],boolean,double,double)} under {@code competition}. */
+    EquilibriumResult crystalUv(double u,double v,double[] overall,PhaseCompetition competition,double hintT,double hintP) {
+        var request=EquilibriumRequest.uv(u,v,species,overall,competition);
         return Double.isFinite(hintT)&&Double.isFinite(hintP)?engine.uv(request,workspaces.get(),hintT,hintP):engine.uv(request,workspaces.get());
     }
+    private static PhaseCompetition competition(boolean crystals){return crystals?PhaseCompetition.FLUID_AND_CRYSTALS:PhaseCompetition.FLUID_ONLY;}
     /** The engine itself: the crystal evaluators and the onset functions the network's crystal records are built from. */
     FluidTpEquilibrium engine(){return engine;}
     /** The engine's basis: the network's conserved components, water last. */

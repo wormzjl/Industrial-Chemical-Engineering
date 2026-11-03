@@ -192,7 +192,8 @@ public final class PassiveIntervalSolver {
      * <li>Events: the stage guard's {@code checkRate} runs at every step start, on the previous accepted endpoint, else on
      * the endpoint carried from the last interval while no connection's identity or closure changed, else on one rate
      * solve of the port graph; {@code checkFilters} runs on every step's end. A declared transition is searched onto by
-     * halving.</li>
+     * halving, except a deposition within its bound ({@link #settlesWithin}), which closes at the end of the accepted
+     * step that shows it.</li>
      * <li>Limits: the attempt cap and the twenty-consecutive-rejection limit; transition refusals have their own bound.
      * An exhausted interval states its rejection map.</li>
      * </ul>
@@ -259,7 +260,9 @@ public final class PassiveIntervalSolver {
                     count(rejectionReasons,REOPEN_REJECTION);
                     continue;
                 }
-                guard.checkFilters(result.filters(),result.states(),result.modes(),result.massFlows());
+                SolidEventIntegrator.Transition settled=null;
+                try{guard.checkFilters(result.filters(),result.states(),result.modes(),result.massFlows());}
+                catch(SolidEventIntegrator.Transition found){if(!settlesWithin(accepted,found,step))throw found;settled=found;}
                 double change=stateChange(accepted,result.states());
                 boolean jump=change>STATE_CAP&&previousStateChange>0&&step<=.51*previousStateStep&&change>=.9*previousStateChange;
                 boolean ok=step<=transitionFloor||change<=STATE_CAP||jump;
@@ -267,6 +270,7 @@ public final class PassiveIntervalSolver {
                 if(!ok){previousStateChange=change;previousStateStep=step;throw new StateChangeRejection("Backward-Euler state change "+change);}
                 accepted=replace(accepted,result);last=result;elapsed+=step;acceptedCount++;consecutiveRejects=0;previousStateChange=0;
                 var flush=flushTraces(accepted,checkpoint);if(flush!=null)accepted=flush.graph();
+                declared=settled;
                 implicit.markBackwardEulerAccepted(accepted,result);
                 carriedModes=result.modes();carriedFlows=result.massFlows();carriedKey=flowKey(accepted);
                 // The cold-start graphs are read only while the structure is cold, and the step solver's last solve only
@@ -284,11 +288,12 @@ public final class PassiveIntervalSolver {
                     SolverDiagnostics.count(SolverDiagnostics.restStops);elapsed=duration;
                 }
             }catch(SolidEventIntegrator.Transition transition) {
-                // A rejection kind of its own. The step is not accepted, so no accepted step ever
-                // contains a state past the transition; the search is a plain halving onto the
-                // event, and it is separate from the other rejections both in the substep counts and
-                // in the consecutive-rejection limit, which answers for a step size the controller
-                // could not make work rather than for a physical regime boundary.
+                // A rejection kind of its own. The step is not accepted, so no accepted step contains a
+                // state past the transition, a deposition within its bound aside ({@link #settlesWithin});
+                // the search is a plain halving onto the event, and it is separate from the other
+                // rejections both in the substep counts and in the consecutive-rejection limit, which
+                // answers for a step size the controller could not make work rather than for a physical
+                // regime boundary.
                 SolverDiagnostics.count(SolverDiagnostics.solidTransitionRejections);
                 SolverDiagnostics.attempt(attempt,step,false,"transition",Double.NaN);
                 if(transition.atStart||step<=transitionFloor||transitionRejects>=MAXIMUM_TRANSITION_REJECTIONS){declared=transition;break;}
@@ -322,6 +327,18 @@ public final class PassiveIntervalSolver {
         double normalizer=declared==null?duration:elapsed;
         for(int i=0;i<transferred.length;i++)transferred[i]/=normalizer;
         return new Prefix(new Result(accepted,elapsed,transferred,acceptedCount,rejectedCount,work,boundaries,rejectionReasons,last.modes(),last.devicePressureChanges(),last.massFlows(),pipeTransfers.snapshot(),last.observations(),last.towers()),declared);
+    }
+    /**
+     * Whether {@code found}, seen at the end of a step of {@code step} seconds, closes at that end without a search (owner
+     * decision of 2026-11-03, form G): a deposition, and a step no longer than a particle takes to settle across the bore,
+     * {@code D/v_s}, with {@code v_s} the settling speed behind the deposition velocity. A flow that falls below the
+     * deposition velocity keeps its solids that long anyway, so locating the crossing closer is no physics. Filter and
+     * viscosity events keep their search.
+     */
+    private boolean settlesWithin(PassiveNetwork graph,SolidEventIntegrator.Transition found,double step) {
+        if(found.reason()!=com.wormzjl.icheme.science.fluid.transport.SolidMobility.Reason.DEPOSITION)return false;
+        double settling=found.check.minimumVelocity()/model.solidSettings.suspensionMultiplier();
+        return step*settling<=Math.sqrt(4*graph.pipes().get(found.edge).maximumArea()/Math.PI);
     }
     /**
      * The share of a node's total amount below which a component is flushed at an accepted step (owner decision

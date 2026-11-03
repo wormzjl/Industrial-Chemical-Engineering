@@ -12,12 +12,23 @@ import static org.junit.jupiter.api.Assertions.*;
  * Where a strict transport event lands in time. The event is no longer bracketed by replaying the
  * interval from its start at a tightened tolerance; the adaptive controller rejects the step that
  * would contain the transition and halves onto it, so the event is located on the same step grid,
- * at the same tolerance, as the integration that carries the rest of the interval. These fixtures
- * qualify that placement: that it does not move when the tolerance is tightened by three orders,
- * and that a prescribed constant feed meets a filter capacity at the time arithmetic says it does.
+ * at the same tolerance, as the integration that carries the rest of the interval. A deposition found
+ * at the end of a step no longer than D/v_s closes there (owner decision of 2026-11-03). These fixtures
+ * qualify that placement: that tightening the tolerance by three orders moves a deposition by at most
+ * that bound, and that a prescribed constant feed meets a filter capacity at the time arithmetic says it does.
  */
 class SolidClosureFeasibilityTest {
     private final FluidThermodynamics model = FluidTestSupport.networkModel();
+
+    /** The deposition velocity of the closure of {@code reason}, as the event integrator records it. */
+    private static double depositionVelocity(PassiveIntervalSolver.Result result, String reason) {
+        for (String key : result.rejectionReasons().keySet())
+            if (key.startsWith("blocked with solid: " + reason)) {
+                int at = key.indexOf("deposition=") + "deposition=".length();
+                return Double.parseDouble(key.substring(at, key.indexOf(';', at)));
+            }
+        throw new AssertionError("No " + reason + " closure among " + result.rejectionReasons().keySet());
+    }
 
     /** The declared time of one closure, as the event integrator records it against its reason. */
     private static double closureTime(PassiveIntervalSolver.Result result, String reason) {
@@ -48,18 +59,21 @@ class SolidClosureFeasibilityTest {
                 new PassiveIntervalSolver.Settings(1e-6, 1e-4, 1024), () -> {});
 
         double located = closureTime(result, "DEPOSITION"), exact = closureTime(reference, "DEPOSITION");
-        // Backward Euler (WP1 of the mixed-gas junction batch): the state cap does not see the flow's approach to the
-        // deposition threshold, so the closure is located later than the tight integration puts it - never earlier, and
-        // inside the interval (measured 0.0125 against 0.0055 s; TR-BDF2 met it to 5 floors).
+        // The closure lands at the end of the step that shows it, never earlier than the tight integration puts it, and
+        // later by at most the time a particle takes to settle across the bore: a flow below the deposition velocity keeps
+        // its solids that long anyway.
+        double deposition = depositionVelocity(result, "DEPOSITION"), settling = deposition / model.solidSettings.suspensionMultiplier();
         assertTrue(located >= exact - 5 * floor && located <= duration, "Located closure must not precede the tight one: " + located + " vs " + exact);
-        assertEquals(exact, located, .0105, "Located closure must sit within 10.5 ms of the tight one");
+        assertTrue(located - exact <= 0.05 / settling, "Located closure must sit within D/v_s of the tight one: " + located + " vs " + exact + ", D/v_s=" + 0.05 / settling);
         // A settled bed is in the connection, not in one end of it, so the closure names both
         // directions; the next interval's rate pass reconsiders it from scratch.
         assertEquals(3, result.graph().pipes().getFirst().blockedDirections());
         assertEquals(3, reference.graph().pipes().getFirst().blockedDirections());
-        // No transport after the closure, so the endpoint inventory is the inventory at the event.
+        // No transport after the closure, so the endpoint inventory is the inventory at the event: the later closure has
+        // moved at most what a flow at the deposition velocity carries through the bore in the time it is late.
+        double late = 1000 * Math.PI * .05 * .05 / 4 * deposition * (located - exact);
         assertEquals(reference.graph().reservoirs().getFirst().state().mass(),
-                result.graph().reservoirs().getFirst().state().mass(), 2e-6);
+                result.graph().reservoirs().getFirst().state().mass(), late + 2e-6);
         assertEquals(100, result.graph().reservoirs().stream().mapToDouble(n -> n.inventory().solids().massKg()).sum(), 1e-9);
         FluidTestSupport.assertClosed(before, FluidTestSupport.finiteLedger(result.graph(), weights));
         // A trial integration never edits the caller's graph.

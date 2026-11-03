@@ -25,7 +25,10 @@ Each probe switches the outer pass with the system property `icheme.native.therm
 | `probes/CalculatorDutyProbeTest.java` | the same binary with a 2/4/6 MW reboiler, 6/10/20/30 trays | outcome, distillate rate and its PC03 fraction per pass |
 | `probes/CrudeProbeTest.java` | the dry Tia Juana light crude column of `V3ColdStartTest`, 4/8/15/30 trays, reflux 4.17 and 2 | outcome, distillate rate, largest relative difference of the published products |
 | `probes/PilotProbeTest.java` | the 2-tray PC03/PC10 pilot of `V3ColdStartTest` | the two components' constants; the published products and the audit |
+| `probes/TrivialRoot.java` | standalone PR78 on the PC03/PC10 binary, no mod classes; run with `java tools/native-column-default/probes/TrivialRoot.java` | feed flash, bubble and dew points, the mixture's roots at 250 kPa, the duties to compare with the published column |
+| `probes/Check.java` | `NativeColumnSolver` from a built jar; compile it, then run it with the jar on the class path | where the library was found, `available`, its version, the batch switch and the smoke solve |
 
 ## History
 
 - 2026-10-28: written for the native default task. Results (review): on the crude column the two passes publish the same products to 7e-13 relative and take the same time; on the PC03/PC10 binary every published success has no separation (distillate and bottoms at the feed's 50/50) with either pass, and which degenerate root the solve reaches depends on rounding.
+- 2026-11-02: `TrivialRoot.java` and `Check.java` moved in from `tmp/` after the merge; the batch's cleanup had missed them. Their results are in the review (sections on the built jar and on the binary).

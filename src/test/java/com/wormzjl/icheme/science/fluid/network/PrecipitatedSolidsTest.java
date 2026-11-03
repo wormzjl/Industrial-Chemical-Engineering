@@ -370,12 +370,10 @@ class PrecipitatedSolidsTest {
     /**
      * The D26 amendment (cold seed 48's tank at a step's point): a liquid-full LNG tank beside its dry ice at its bubble
      * point holds no vapour. 21 414 mol of LNG with 1.8 % CO2 dissolved at 157.39 K and 1.382 MPa beside 27.7 kg of dry ice,
-     * liquid and solids filling the 1 m3. The TP answer under the crystal competition freezes 33 mol of the dissolved CO2,
-     * which a step cannot (crystal mass moves only at the refresh, D23), and with that CO2 gone the rest of the liquid boils:
-     * it proposes 55 mol of vapour. The vessel's own state has no room for a bubble: its liquid's own bubble pressure is
-     * 903 Pa below the tank's, and the engine's equilibrium at the tank's energy and volume holds no vapour (it freezes
-     * 21.5 mol of the dissolved CO2 instead), so it has no crossing (owner decision D40 A) and proposes nothing. The check
-     * refuses the vapour for the solve with no own split, so the solve's next pass neither proposes it nor runs a closure.
+     * liquid and solids filling the 1 m3. The tank has no room for a bubble: its liquid's own bubble pressure is 903 Pa below
+     * the tank's. A step's TP answer carries the dissolved CO2 (D23), so it is that one liquid and proposes nothing. Under the
+     * crystal competition it froze 33 mol of that CO2, and the rest of the liquid boiled: a proposal of 55 mol of vapour, which
+     * the check had to refuse.
      */
     @Test void aLiquidFullLngTankBesideDryIceAtItsBubblePointHoldsNoVapour() {
         var dryIce=new SolidInventory(List.of(new SolidInventory.Population(co2().material(),new ParticleSize("0.00025"),27.682029902383036)));
@@ -385,7 +383,7 @@ class PrecipitatedSolidsTest {
         var answer=pilot.flashTP(t,p,PhaseLayout.totalAmounts(tank),()->{});
         System.out.printf(Locale.ROOT,"LNG beside dry ice: %.6f m3 of liquid and %.6f m3 of dry ice in %.6f m3; the TP answer: %.4e mol of vapour%n",
                 tank.liquidVolume(),dryIce.volume(),capacity,Arrays.stream(answer.vaporView()).sum());
-        assertNotNull(answer.vaporProperties(),"the TP answer proposes a vapour");
+        assertNull(answer.vaporProperties(),"the TP answer proposes no vapour");
         int[] splits={0},record={0};var own=ownSplit(tank,capacity,splits);
         assertSame(tank,pilot.phaseCheck(tank,false,null,record,0,null,own,()->{}),"no vapour: the tank keeps its liquid");
         assertEquals(0,splits[0],"no crossing: no own split");
@@ -396,13 +394,12 @@ class PrecipitatedSolidsTest {
 
     /**
      * Form 4 (ii), the D26 amendment by direction: a liquid-full LNG tank beside dry ice whose own closure stops short of
-     * nothing holds no vapour. Seed 48's tank a moment earlier (157.3903 K, 1.3811 MPa): the TP answer proposes 87 mol of
-     * vapour, and the tank's closure, with no room for it, has driven it down to 6.0e-5 mol (2.8e-9 of the moles, still
-     * falling) when its 24 iterations end. That is above the trace share, which kept it and seeded it; the next pass
-     * folded it, the pass key cycled and the step halved (seed 48's storm). The tank's own state has no crossing (owner
-     * decision D40 A): its liquid's own bubble pressure is 280 Pa below the tank's, and the engine's equilibrium at its
-     * energy and volume holds no vapour (it freezes 21.5 mol of the dissolved CO2 instead). The check refuses the vapour
-     * without an own split, and one step of the tank fed its own LNG at its own pressure takes one pass.
+     * nothing holds no vapour. Seed 48's tank a moment earlier (157.3903 K, 1.3811 MPa): under the crystal competition the
+     * TP answer proposed 87 mol of vapour, and the tank's closure, with no room for it, had driven it down to 6.0e-5 mol (2.8e-9
+     * of the moles, still falling) when its 24 iterations ended. That was above the trace share, which kept it and seeded it;
+     * the next pass folded it, the pass key cycled and the step halved (seed 48's storm). A step's TP answer now carries the
+     * dissolved CO2 (D23) and proposes nothing, its liquid's own bubble pressure being 280 Pa below the tank's: one step of the
+     * tank fed its own LNG at its own pressure takes one pass and refuses nothing.
      */
     @Test void aLiquidFullLngTankWhoseClosureStopsShortOfNothingHoldsNoVapour() {
         var dryIce=new SolidInventory(List.of(new SolidInventory.Population(co2().material(),new ParticleSize("0.00025"),27.681970836122474)));
@@ -417,7 +414,7 @@ class PrecipitatedSolidsTest {
         assertNull(step.states().getFirst().vaporProperties(),"no vapour");
         assertEquals(1,SolverDiagnostics.activeSetPasses.sum(),"one pass: no cycle");
         assertEquals(0,SolverDiagnostics.phaseSeeds.sum(),"no crossing: no own split");
-        assertEquals(1,SolverDiagnostics.phaseRefusals.sum(),"the vapour is refused");
+        assertEquals(0,SolverDiagnostics.phaseRefusals.sum(),"nothing to refuse");
     }
 
     /**
@@ -453,14 +450,12 @@ class PrecipitatedSolidsTest {
     }
 
     /**
-     * Form 4 (i): a frosted gas tank's stand-in is decided by its own split, and refused. Nitrogen with 10 % CO2 at 1 MPa,
-     * frosted at its refresh, a kelvin colder at a step's point (its outflow expands it): the gas is supersaturated again,
-     * and its TP answer freezes more CO2, carried condensed as the stand-in beside the vapour. The stand-in is proposed like
-     * any phase the tank lacks. The tank's own state at that crossing (owner decision D40 A), the engine's equilibrium at
-     * its energy and volume, deposits 0.055 mol of frost, carried as the stand-in; from there the tank's own closure, where
-     * no crystal mass moves, has no liquid for that CO2 to stand in beside 1 MPa of nitrogen and does not close, and a
-     * closure that fails proposes nothing: the check refuses the stand-in for the solve, and the solve's next pass runs no
-     * own split. (Liquid CO2 let down into a tank of its gas keeps its stand-in: gate 5 above.)
+     * Form 4 (i): a frosted gas tank proposes no stand-in. Nitrogen with 10 % CO2 at 1 MPa, frosted at its refresh, a kelvin
+     * colder at a step's point (its outflow expands it): the gas is supersaturated again, and stays one vapour until the next
+     * refresh, between its frost line and its metastable liquid's dew line (D23). The check adds nothing and runs no own
+     * split. Under the crystal competition the TP answer froze more CO2 and proposed it as a stand-in, which the tank's own
+     * closure could not close, so the check refused it. (Liquid CO2 let down into a tank of its gas keeps its stand-in: gate 5
+     * above.)
      */
     @Test void aFrostedGasTanksStandInIsDecidedByItsOwnSplitAndRefused() {
         var tank=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,charge(pilot,170,1e6,new double[]{.9,0,0,.1,0},.1))),List.of());
@@ -469,13 +464,11 @@ class PrecipitatedSolidsTest {
         var gas=frosted.state();double t=gas.temperature()-1;
         var point=pilot.state(t,gas.pressure(),new double[4],gas.vaporView(),0,0,gas.pressure()).withSolids(gas.solids());
         var answer=pilot.flashTP(t,point.pressure(),PhaseLayout.totalAmounts(point),()->{});
-        assertTrue(pilot.condensedShareOnly(answer),"the TP answer carries frost as the stand-in");
+        assertNull(answer.liquidProperties(),"the TP answer stays one vapour");
         int[] splits={0},record={0};var own=ownSplit(point,frosted.inventory().volume(),splits);
         assertSame(point,pilot.phaseCheck(point,false,null,record,0,null,own,()->{}),"no phase added");
-        assertEquals(1,splits[0],"its own split decides the stand-in");
-        assertEquals(1,record[0],"the stand-in is refused for the solve");
-        assertSame(point,pilot.phaseCheck(point,false,null,record,0,null,own,()->{}),"the solve's next pass");
-        assertEquals(1,splits[0],"no second own split");
+        assertEquals(0,splits[0],"no own split");
+        assertEquals(0,record[0],"nothing to refuse");
     }
 
     /**

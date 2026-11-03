@@ -15,6 +15,13 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-11-03
+
+### Changed
+
+- Cold CO2 worlds no longer reach the island wall budget. A step's flashes carry their CO2 crystals in the fluid phases, and only a vessel's refresh books a crystal. A deposition found at the end of a step no longer than D/v_s closes there instead of being searched to 1 us. The start balance reads a flashing junction's density from a table. A dry tank a pass reaches is laid out from what that pass draws. Cold campaign 975 to 992 clean in half the seed time; bundled 995 (`eb4d72b87`, `eb9ad31cb`, `3ed64f98f`, `e7a3a7f2b`, `tools/dry-ice-cost/`, batch `2026-11-02-dry-ice-cost`).
+- The two standalone native-default probes move from `tmp/` to `tools/native-column-default/probes/` (`5662e5905`, batch `2026-10-28-native-column-default`).
+
 ## [0.19.1] - 2026-11-03
 
 ### Changed
