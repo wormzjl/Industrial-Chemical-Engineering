@@ -38,6 +38,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetFile;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.sizing.Proposal;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -179,7 +180,7 @@ public final class SimulatorBench {
         var sheet = crudeUnit();
         var run = run(sheet, null, new Units());
         if (run.status() != FlowsheetRun.Status.STEADY) throw new IllegalStateException("crude unit ran " + run.status());
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo(), FlowsheetSolver.Progress.NONE));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo(), FlowsheetSolver.Progress.NONE));
         var finished = new SimulatorHost.Finished(all.sheet(), all.run(), 4.0);
         var sized = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(all.sheet(), all.run(), thermo()));
         return new Solved(all.sheet(), all.run(), finished, new SimulatorRunner.Rated(all.sheet(), finished, sized, false));
@@ -551,7 +552,7 @@ public final class SimulatorBench {
     static void sizePhase() throws Exception {
         var sheet = crudeUnit();
         var run = run(sheet, null, new Units());
-        timed("size", () -> MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo(), FlowsheetSolver.Progress.NONE)));
+        timed("size", () -> MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo(), FlowsheetSolver.Progress.NONE)));
         var solved = solved();
         timed("rate", () -> MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(solved.sheet(), solved.run(), thermo())));
     }
@@ -575,7 +576,7 @@ public final class SimulatorBench {
     }
 
     /**
-     * Size all split as {@code SheetSizing.sizeAll} runs it: the proposal pass (a column on Auto tries its diameters), the applied
+     * Size all split as {@code Proposal.sizeAll} runs it: the proposal pass (a column on Auto tries its diameters), the applied
      * copy, the re-run warm from the run where the sizes move it, and the rating. Counters by stage; -Drounds measured rounds after two.
      */
     static void sizeStagesPhase() throws Exception {
@@ -593,7 +594,7 @@ public final class SimulatorBench {
             int at = round;
             MaterialRuntime.with(CATALOG, NETWORK, () -> {
                 var proposal = stage(stages, "proposal pass (column trials)", checkpoints, () -> SheetSizing.pass(sheet, run, counted, SheetSizing.Entries.of(sheet, false)));
-                var sized = stage(stages, "applied copy", checkpoints, () -> SheetSizing.applied(sheet, proposal));
+                var sized = stage(stages, "applied copy", checkpoints, () -> Proposal.applied(sheet, proposal));
                 boolean moved;
                 try {
                     moved = (boolean) moves.invoke(null, sheet, sized);
@@ -820,7 +821,7 @@ public final class SimulatorBench {
         var warm = run(sheet, cold, units);
         out.append("warm checkpoints ").append(units.checkpoints).append('\n');
         dump(out, "warm", warm, 0, new java.util.IdentityHashMap<>());
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, cold, thermo(), FlowsheetSolver.Progress.NONE));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, cold, thermo(), FlowsheetSolver.Progress.NONE));
         out.append("size sheet ").append(new String(FlowsheetFile.write(all.sheet()), StandardCharsets.UTF_8)).append('\n');
         dump(out, "size", all.run(), 0, new java.util.IdentityHashMap<>());
         Files.writeString(OUT.resolve("results.txt"), out);

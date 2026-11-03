@@ -42,7 +42,7 @@ Phases:
 
 - `run`: Run from no results, as `SimulatorRunner`'s job does it: `FlowsheetEngine.run` with no last run, then `SheetSizing.rate` when steady. It also gives the first Run in a fresh JVM, wall and CPU time by unit (from one `Progress.calculation` to the next), and checkpoints by unit. Every flash and solver step calls the checkpoint, so it stands in for a flash count; no flash counter exists.
 - `run-warm`: the same, started from the last steady run, as a second Run is.
-- `size`: Size all (`SheetSizing.sizeAll`) on the run's result, then a quiet rating (`SheetSizing.rate`) of the sized sheet.
+- `size`: Size all (`Proposal.sizeAll`) on the run's result, then a quiet rating (`SheetSizing.rate`) of the sized sheet.
 - `frame:<page>`: one frame of the screen's own render path on a counting canvas. The pages are `idle`, `selected` (T-101), `feed` (CRUDE's door), `column`, `column-results` (T-101's door, Results tab), `results`, `sizing` and `open` (50 files and the example).
 - `edit:<op>`: one edit with the next frame's state and layout:
   - `move`: a coalesced drag step of P-101;
@@ -51,7 +51,7 @@ Phases:
   - `layout`: `SheetLayout.of` alone;
   - `save`: the autosave, `FlowsheetFile.save`.
 - `open`: one 10 kB sheet parsed, then Open's listing of 50 such files with the bundled example, and its rows' heap.
-- `size-stages`: Size all split as `SheetSizing.sizeAll` runs it: the proposal pass (a column on Auto tries its diameters), the applied copy, the re-run warm from the run where the sizes move it, and the rating. CPU, wall, bytes and checkpoints by stage, the mean of `-Drounds` rounds (default 3) after 2; the re-run's passes and units. Counters, not a timing claim; not in the default list.
+- `size-stages`: Size all split as `Proposal.sizeAll` runs it: the proposal pass (a column on Auto tries its diameters), the applied copy, the re-run warm from the run where the sizes move it, and the rating. CPU, wall, bytes and checkpoints by stage, the mean of `-Drounds` rounds (default 3) after 2; the re-run's passes and units. Counters, not a timing claim; not in the default list.
 - `ram`: retained heap, used after a full GC with and without, of:
   - the catalog;
   - the network thermo;

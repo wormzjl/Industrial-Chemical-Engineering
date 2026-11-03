@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
+import com.wormzjl.icheme.science.flowsheet.sizing.Proposal;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -50,7 +51,7 @@ public final class SimulatorRunner {
 
         /** Size all on {@code run}, or null where the world holds another package than the sheet's. Stop throws {@link CancellationException}. */
         default SheetSizing.@Nullable SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint, FlowsheetSolver.Progress progress) {
-            return thermo(sheet, catalog, checkpoint, thermo -> SheetSizing.sizeAll(sheet, run, thermo, progress));
+            return thermo(sheet, catalog, checkpoint, thermo -> Proposal.sizeAll(sheet, run, thermo, progress));
         }
 
         /** Every item rated at its size on {@code run}, or null where the world holds another package than the sheet's. */

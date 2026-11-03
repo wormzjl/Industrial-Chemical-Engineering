@@ -15,6 +15,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.Limit;
 import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.Rating;
 import com.wormzjl.icheme.science.flowsheet.sizing.Service;
+import com.wormzjl.icheme.science.flowsheet.sizing.Proposal;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
@@ -282,7 +283,7 @@ class ColumnSizingSampleTest {
         assertEquals(Lamp.RED, kept.rating().lamp(), () -> text(kept.rating()));
         assertSame(Limit.AIR_COOLER_SURFACE, kept.rating().closest().limit(), () -> text(kept.rating()));
         // Size all writes the count to the door, which the design then asks the assembly for.
-        var applied = SheetSizing.applied(air, airSized);
+        var applied = Proposal.applied(air, airSized);
         var door = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(applied.units().stream().filter(u -> u.id().equals(T)).findFirst().orElseThrow().params());
         assertEquals(2, door.units().condenser());
         assertNotNull(airSized.units().get(SheetSizing.member(T, "reflux pump")).size());

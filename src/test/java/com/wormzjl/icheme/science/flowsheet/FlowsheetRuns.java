@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet;
 
+import com.wormzjl.icheme.science.flowsheet.sizing.Proposal;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import org.jetbrains.annotations.Nullable;
@@ -25,7 +26,7 @@ public final class FlowsheetRuns {
     }
 
     public static SheetSizing.SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo) {
-        return SheetSizing.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE);
+        return Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE);
     }
 
     /** {@code calculation} as a block's own solve. */
