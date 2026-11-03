@@ -39,7 +39,7 @@ Runs (AGENTS.md, No repeated tests):
 
 ## Code guide
 
-AGENTS.md, Code guide. Every touched chapter's snapshot line names `6bf2205bf`, the batch's last code commit, dated 2026-11-03. Two threads wrote, on separate files. No Gradle run: documents only.
+AGENTS.md, Code guide. Every touched chapter's snapshot line names `6bf2205bf`, the batch's last code commit at the cleanup, dated 2026-11-03; `client-gui.md` and `process-simulator.md` name `0a04faffb`, the draw-call batch after it. Two threads wrote, on separate files. No Gradle run: documents only.
 
 This thread:
 - `process-simulator.md` (new): the class map of `science/flowsheet` (core, units, sizing), `client/gui/flowsheet` and the block side; a run's flow on the runner thread; calculations, links and utility feeds; sizing, lamps, the 20 % spare and Size all; the block's store, holder, replay, files and autosave; Send to block and Import; the formats and their corpus images; traps; plan 3.10's rule (New equipment joins the simulator, `FlowsheetCatalog` and `SizingCoverage` in `src/test`); the gates.
@@ -49,5 +49,7 @@ This thread:
 - `verification.md`: `holdGates` with twelve classes, `ProcessSimulatorGameTests` on `runColumnGameTestServer`, the `science/flowsheet` and `client/gui/flowsheet` test rows, the network and block rows, the corpus images (`compat/flowsheet`, `compat/simulator`, `compat/names`, `compat/presets`, fluid schemas 8 and 9, shapes 6 and 7), the GameTests the calculator took with it, the batch line.
 
 The s3b-member-counts thread (`7d3708d41` and the fixes commit after it): `client-gui.md`, `column-operation.md`, `cooling-towers.md`, `equipment.md`, `fluid-runtime.md`, `fluid-science.md`, `heat-exchangers.md`, `machine-assemblies.md`; `pipe-laying.md`, whose assembly-marks row named the deleted `AssemblyPortColoursTest` (now `AssemblyDiagramTest.everyPortHasItsOwnColourForTheLayingTool`).
+
+The draw-call batch (`0a04faffb` and its documents commit, the owner's "A: batch the loops"): `client-gui.md` (`Canvas.batch` and `GuiCanvas.batch` in the kit rows, `FlowsheetPainter`'s batched shapes, the draw-call note with what is batched and what is not, a change-table row with `DrawCallTest` and `-Dcount`) and `process-simulator.md` (`SheetPainter`'s batches, `DrawCallTest` in the screen's row and the tests).
 
 Not touched, no code of theirs changed in this batch: `equilibrium-engine.md`, `instrument-accessories.md`. Not touched, no change: `process-control.md`. S1 (`9a3b9cfd5`) added three constants to `FlowControl` (`MAXIMUM_VOLUME_FLOW` 10 m³/s, `MAXIMUM_ADDED_PRESSURE` 2 MPa, `MAXIMUM_PRESSURE_RATIO` 10), so the sizing table reads the world's mover limits. The constants are on `FlowControl.Mover`, `Pump` and `Compressor`; the chapter documents only `FlowControl.ControlValve`, and `fluid-runtime.md` and `fluid-science.md` already name all three, so it needs none.

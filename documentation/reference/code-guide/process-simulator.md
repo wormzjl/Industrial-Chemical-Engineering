@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** 6bf2205bf (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-03 · **Updated:** 2026-11-03 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1)
+**Snapshot:** 0a04faffb (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-03 · **Updated:** 2026-11-03 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each)
 
 Up: [code guide](README.md)
 
@@ -156,7 +156,7 @@ The file keeps fields it does not know and refuses a newer format. `SheetLayout`
 - **Frame and tabs:** `SimulatorFrame` gives the rectangles: title, tabs and file keys, the one status display, the canvas's well, the palette and the footer. The screen hit-tests them, and the render tool draws them. The tabs (`SimulatorFrame.Tab`) are FLOWSHEET, RESULTS, SIZING and BASIS. The Sizing tab opens only once the sheet can be sized (`SizingPage.open`). `SimulatorPage` says which keys stand where on each page.
 - **The sheet:**
   - `SheetLayout` places boxes, ports and routes and answers hit tests.
-  - `SheetPainter` draws them with the `Symbol` atlas (`textures/gui/flowsheet/symbols.png`).
+  - `SheetPainter` draws them with the `Symbol` atlas (`textures/gui/flowsheet/symbols.png`). The grid, each line, circle and valve, the hatch and the tear are each one batch (`Canvas.batch`, [client-gui](client-gui.md)): the sample's Flowsheet tab went from 3,486 draw calls a frame to 718 (the render tool's `-Dcount`), and `DrawCallTest` holds the sheet's drawing to 360.
   - `SheetView` pans and zooms.
   - `SheetGestures` turns mouse events into edits.
   - `SheetEditor` applies them, with undo and redo.
@@ -242,13 +242,13 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | The file | `FlowsheetFile` | `FlowsheetFileTest` (26, the corpus) |
 | The block's store, uploads and packets ([packets](#packets-and-protocol), [block](#the-block-and-its-store)) | `SheetStore`, `SheetBody`, `ProcessSimulatorNetwork`, `ProcessSimulatorBlockEntity` | `SheetStoreTest`, `SimulatorBlockTest`, `ProcessSimulatorGameTests` |
 | Sent designs and Import | `SheetSizing.designs`, `SentDesign`, `SentDesignTags`, `EquipmentNetwork` | `SentDesignTagsTest` (the corpus), `ProcessSimulatorGameTests.aConstructorImportsTheNearestSimulatorsDesign` |
-| The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`; renders: `tools/heat-gui-renders/SimulatorRender.java` |
+| The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`, `DrawCallTest` (draw calls); renders: `tools/heat-gui-renders/SimulatorRender.java` (`-Dcount`: draw calls per page) |
 | The runner and Stop | `SimulatorRunner` | `SimulatorRunnerTest`, `SimulatorRunTest` (slow: Stop inside a column) |
 | A new kind | `FlowsheetCatalog`, `SizingCoverage` (both in `src/test`) | `FlowsheetPaletteCoverageTest`, `SizingCoverageTest` |
 
 ## Tests that pin it
 
-- `test`: `science/flowsheet/` (`FlowGraphTest`, `FlowsheetSolverTest`, `FlowsheetUnitsTest`, `FlowsheetColumnDoorTest`, `FlowsheetFileTest`, `SheetStoreTest`, `EjectorTest`), `science/flowsheet/sizing/` (`LimitTest`, `ServiceTest`, `LineSizingTest`, `UnitSizingTest`, `SheetSizingTest`, `CoolerSizingTest`), `client/gui/flowsheet/` (the screen tests above, `SimulatorBlockTest`, `SimulatorRunnerTest`, the two coverage tests), `network/ColumnWireTest`, `world/level/block/entity/SentDesignTagsTest`.
+- `test`: `science/flowsheet/` (`FlowGraphTest`, `FlowsheetSolverTest`, `FlowsheetUnitsTest`, `FlowsheetColumnDoorTest`, `FlowsheetFileTest`, `SheetStoreTest`, `EjectorTest`), `science/flowsheet/sizing/` (`LimitTest`, `ServiceTest`, `LineSizingTest`, `UnitSizingTest`, `SheetSizingTest`, `CoolerSizingTest`), `client/gui/flowsheet/` (the screen tests above, `DrawCallTest`, `SimulatorBlockTest`, `SimulatorRunnerTest`, the two coverage tests), `network/ColumnWireTest`, `world/level/block/entity/SentDesignTagsTest`.
 - `holdGates` (slow, `slowGateClasses`): `FlowsheetColumnTest`, `ColumnEjectorTest`, `SimulatorRunTest`, `LineSizingSampleTest`, `UnitSizingSampleTest`, `ColumnSizingSampleTest`, `SizeAllSampleTest`, `UtilityRegulationTest`.
 - `runColumnGameTestServer` (namespace `icheme_column_test`): `ProcessSimulatorGameTests` (11): the old id, a reload with no update tag, a damaged sheet kept, the constructor's Import, a second player reads, uploads only from the screen near the block, a bad upload refused, the holder freed on disconnect, away and when the block goes, a replay that runs no solver.
 - Shared fixture: `client/gui/flowsheet/SheetFixture` (the sample sheet).
