@@ -2,7 +2,7 @@
 
 Purpose: why the cold LNG worlds with CO2 crystals reach the 2 s island wall budget, and a proposal for a fundamental fix.
 
-Status: In progress since 2026-11-02. Mode (a), form G and the junction tables are built and measured on the branch (`CARRIED_CRYSTALS_REVIEW.md`, `JUNCTION_TABLES_REVIEW.md`). All nine worlds: 0 holds, no job over 2 s. The owner kept the tables' carried fallback. Campaign: cold 989 clean (975), bundled 994 and 1000. The dry tank arrival is fixed (`DRY_TANK_ARRIVAL_REVIEW.md`): 181 and 397 clean, 431 new. Final lane run (`FINAL_LANE_REVIEW.md`): one test bound missed by G, fixed; cold 991, bundled 993 with 301 new from the arrival rule; the owner chose A for 301 (`DRAWN_ARRIVAL_REVIEW.md`): cold 992, bundled 995, defaults 1000, no new held seed. The merge waits for the owner's word.
+Status: In progress since 2026-11-02. Mode (a), form G and the junction tables are built and measured on the branch (`CARRIED_CRYSTALS_REVIEW.md`, `JUNCTION_TABLES_REVIEW.md`). All nine worlds: 0 holds, no job over 2 s. The owner kept the tables' carried fallback. Campaign: cold 989 clean (975), bundled 994 and 1000. The dry tank arrival is fixed (`DRY_TANK_ARRIVAL_REVIEW.md`): 181 and 397 clean, 431 new. Final lane run (`FINAL_LANE_REVIEW.md`): one test bound missed by G, fixed; cold 991, bundled 993 with 301 new from the arrival rule; the owner chose A for 301 (`DRAWN_ARRIVAL_REVIEW.md`): cold 992, bundled 995, defaults 1000, no new held seed. The merge is prepared (`MERGE_REVIEW.md`): CHANGELOG under `[Unreleased]`, code guide at e7a3a7f2b; version 0.20.0 proposed, the owner chooses.
 
 ## History
 
@@ -21,6 +21,7 @@ Status: In progress since 2026-11-02. Mode (a), form G and the junction tables a
 - 2026-11-03: owner: "Fix arrival first". A converged pass that delivers into a dry vessel lays it out by the start stage's rule, at the enthalpy delivered, instead of the booking's TP flash at 298 K. Nine worlds unchanged to the checkpoint; 181, 397 and 792 clean; 431 holds once from a changed history (a stall 1.8e-11 above convergence). Bundled seeds alone hold as in the campaign. New hold-class world (seed 397's island), proved with the rule off; 227 tests in 39 classes pass.
 - 2026-11-03: owner: "Run final lane". Lane at 803970ac1 (local main 0.19.1 merged in): 2108 tests, 1 failure, `SolidTransportAcceptanceTest`'s 2e-6 kg bound from before G; given G's D/v_s bound as its sibling has, class passes. Junction lines as main's, chain-100 exact, 39 GameTests. Campaign: cold 991, bundled 993, defaults 1000, `refused=0`. Bundled 301 is new: the arrival rule priced 77 g of overflowing water as the donor's 1e-22 m3 nitrogen phase. Proposal A (lay out from the pass's draws) or B (merge, 301 open) for the owner.
 - 2026-11-03: owner: "Build A". The pass rule lays a dry vessel out from the pass's own phase draws (`drawnStream`), what the booking books; the end-stream helpers split per phase, arithmetic unchanged. 301 clean. Campaign: cold 992 (431 gone), bundled 995 (301 and 6 gone), defaults 1000, `refused=0`, no new held seed. 186 tests in 27 classes (with `holdGates`) and 39 GameTests pass, no expectation changed.
+- 2026-11-03: owner: "Prepare the merge". CHANGELOG entry, code guide chapters (equilibrium-engine, fluid-science, verification, fluid-runtime, README) at e7a3a7f2b by an Opus subagent, checked against the code; tooling cleanup: 424 of 424 `src/main` classes reachable, no tracked probe. No test run. Version 0.20.0 proposed.
 
 ## Documents
 
@@ -32,6 +33,7 @@ Status: In progress since 2026-11-02. Mode (a), form G and the junction tables a
 - [DRY_TANK_ARRIVAL_REVIEW.md](DRY_TANK_ARRIVAL_REVIEW.md): the first fill of a dry tank reached by a pass, the fix and the recheck of the affected seeds.
 - [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): the final lane, the test bound G missed, the moved printed lines, seed 301 and its proposal.
 - [DRAWN_ARRIVAL_REVIEW.md](DRAWN_ARRIVAL_REVIEW.md): proposal A built, the arrival from the pass's draws, its campaign.
+- [MERGE_REVIEW.md](MERGE_REVIEW.md): what merges, the gates, the code guide, the tooling cleanup, the version proposal.
 
 ## Code areas
 
