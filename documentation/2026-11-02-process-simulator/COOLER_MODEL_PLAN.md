@@ -103,6 +103,7 @@ The owner, approving the plan: "also allow air-then-water approach in column con
   - The Cooler tile and its alias.
   - The type proposals, including the condenser's three.
   - The air-ahead reading.
+  - Built 2026-11-03 (C2 in the batch README's history): `CoolerUnit` and the free side's cap, `CoolerSizing` (the return rule, the two proposals, the air-ahead duty), tower-water loads in `ExchangerSizing`, the `cooler` tile with the `air_cooler` alias held on Air, `trim_units` on the door, `ColumnUnit`'s two shares, the `trim` member, and the idle twin member's `TWIN_IDLE` row (the owner's addendum, README C2 decisions).
 - C3, screen: the Cooler door and its type keys, the column door's condenser choice, `ColumnBlock`, the palette, both languages, renders.
 
 Sources: [HALL-R], [THERMO] and [BLOG] are in `SIZING_SOURCES.md`. [PCONV]: Minimum Approach Temperature Reference for Heat Exchangers, https://processconvert.pages.dev/engineering-references/heat-exchanger-minimum-approach-temperature-reference (cooling water 5 to 10 °C, air on the dry bulb's seasonal value).
