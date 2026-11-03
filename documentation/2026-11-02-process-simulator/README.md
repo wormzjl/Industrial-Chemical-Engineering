@@ -123,6 +123,7 @@ Taken alone, each reversible:
 - Member ids are `block/member` (`T-101/condenser`, `T-101/pa 1 pump`, `T-101/overhead`); members follow their column, and member lines follow the sheet's lines.
 - An unsteady run keeps each entry's size and gives it the one red `RUN_STEADY`.
 - `RUN_STEADY`'s attribution: the owner answered "Steady run first" in this thread on 2026-11-03, which the orchestrator did not see; S2 decisions keep it as the owner's.
+- Owner, 2026-11-03, on the air-cooled condenser (its overhead needs 1949 m² of bare surface at air 25 °C; the largest bank holds 1468): "Add a bank count" (option B). Not built in S4a. It goes to S3b, a package of its own after S4a and before S4b: an assembly `Step` holds one unit (`Blueprint.Step`, one `Slot` and one `Form`), so no member slot takes identical units in parallel, and the condenser's 5 × 1.00 × 3 m shells cannot be placed either. S3b builds one rule for the column's member steps: a count of identical units in parallel.
 
 ## S2 decisions
 
@@ -299,7 +300,7 @@ Taken alone, each reversible:
   - Keys edit the facts: `SizingFacts.with(id, unitFacts)`, `with(id, lineFacts)`, `with(basis)`; `UnitFacts.with(size)`, `with(mode)`, `typed(type)`, `holding(hold)`; `LineFacts.with(size)`, `with(mode)`, `serving(service)`, `lasting(length)`; then `sheet.with(facts)`. A key that changes a size a law reads (`SizedPassages.reads`) changes the run: the results go, as for any edit.
   - `PressurePath`: `steps` (item, passage, lost, typed), `available`, `lost`, `spare`, `rating`, `passes(item)` for the Pressure view's stair.
   - Hooks the screen needs: Size all on the run thread with the runner's Stop and progress; the run's results replaced by `SizeAll.run` when it differs; `SheetEditor` already carries `sheet.sizing()` through its edits.
-- Owner to validate, S3: an air-cooled condenser on the sample is red: its overhead needs 1949 m² of bare surface at air 25 °C and the largest bank holds 1468, and an air cooler has no count. A: leave it red, the player picks water cooling. B: a count of parallel banks, as exchangers have shells and lines have runs; a world change to the block's air-cooled slot.
+- S4a left: member counts above one (the condenser's five shells, any count of parallel banks) wait for S3b; until then the assembly cannot build them. S4a leaves member counts as S3 sizes them.
 - Owner to validate, S3: V3 and the world's flash disagree at the top tray: at V3's 354.84 K and its pressure the world condenses 19 % of the overhead (153 mol/s of water). Sizing reads the energy-consistent overhead, so no number depends on it, but the gap is the engine's. Logged as engine finding 4 in `tools/process-simulator/README.md`; not investigated further.
 - Owner to validate, S4a: V-101's path to T-101's feed tray is red by 0.01 bar: V-101 sets 2.72 bar, the tray stands at 2.70, and the 50 m transfer line S-7 loses 0.03 at design flow. The sheet's own valve setting, not a size: the player lowers V-101's outlet or shortens S-7.
 - Owner to validate, S4a: where a path ends at no pressure the sheet sets (a product, a pump's suction), its spare lights no lamp (S4a decisions). A: as built. B: end such paths at the atmosphere, a rule the sheet does not state.
