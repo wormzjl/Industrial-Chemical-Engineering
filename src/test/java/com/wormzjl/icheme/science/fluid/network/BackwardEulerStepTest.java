@@ -57,7 +57,7 @@ class BackwardEulerStepTest {
         assertEquals(energy,next.internalEnergy()-old.internalEnergy(),1e-3);
     }
     @Test void aCompressorsWorkIsHeatInTheDischargeAndTheInternalEnergyLedgerHoldsIt() {
-        // Nitrogen is lifted 10 m by a compressor (decision D2): its ideal isothermal shaft work (D37 S6) is booked as heat
+        // Nitrogen is lifted 10 m by a compressor (decision D2): its polytropic gas power (batch 2026-11-03-rotating-machinery) is booked as heat
         // into the discharge (decision D8), and the internal energy holds that work exactly: no stream carries potential
         // energy (D37 S1; before, the ledger added the lifted mass's m g z).
         // Above the ambient: drawn at 1 atm, the suction tank (a bag, decision D54) would go slack and take the ambient's

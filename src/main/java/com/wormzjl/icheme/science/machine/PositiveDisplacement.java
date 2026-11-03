@@ -59,6 +59,15 @@ public record PositiveDisplacement(double displacement, double reliefRise) {
         return reliefRise * root16(1 - power16(u));
     }
 
+    /** {@code d(rise)/dQ}, Pa per m³/s: zero at or below no flow, negative infinity at and above the displacement. */
+    public double riseSlope(double flow, double speed) {
+        double capacity = capacity(speed), u = Math.max(0, flow / capacity);
+        if (!(u > 0)) return 0;
+        if (!(u < 1)) return Double.NEGATIVE_INFINITY;
+        double t = u / root16(1 - power16(u)), t2 = t * t, t4 = t2 * t2, t8 = t4 * t4;
+        return -reliefRise / capacity * t8 * t4 * t2 * t;
+    }
+
     private double capacity(double speed) {
         if (!(speed > 0)) throw new IllegalArgumentException("A stopped positive-displacement machine is closed, speed " + speed);
         return displacement * speed;

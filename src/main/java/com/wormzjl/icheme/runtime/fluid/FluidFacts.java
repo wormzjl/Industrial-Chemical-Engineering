@@ -363,6 +363,8 @@ final class FluidFacts {
             case FlowControl.Passive ignored->f.text("passive").f64(0).f64(0).bool(false).f64(0);
             case FlowControl.Pump pump->f.text("pump").f64(pump.requestedVolumeFlow()).f64(pump.maximumAddedPressure()).bool(pump.enabled()).f64(0);
             case FlowControl.Compressor compressor->f.text("compressor").f64(compressor.requestedVolumeFlow()).f64(compressor.maximumPressureRatio()).bool(compressor.enabled()).f64(0);
+            // No block places a machine before W3 of batch 2026-11-03-rotating-machinery, which gives its casing's facts (schema 8).
+            case FlowControl.Machine machine->throw new IllegalStateException("A machine on its curve has no facts before schema 8");
             case FlowControl.PressureValve valve->f.text("pressure_valve").f64(0).f64(0).bool(false).f64(valve.targetPressure());
             case FlowControl.ControlValve valve->{f.text("control_valve").f64(0).f64(0).bool(false).f64(valve.targetPressure()).name(valve.source());f.list(valve.sensor()==null?List.<java.util.UUID>of():List.of(valve.sensor()),FluidFacts::uuid).i64(valve.revision()).f64(valve.massTarget()).f64(valve.volumeTarget());}
         }

@@ -220,6 +220,22 @@ class FluidCheckpointCodecTest {
         assertArrayEquals(full.endpointFlows(),after.lastResult().orElseThrow().endpointFlows(),"the committed end flows (format 7)");
         assertSameImage(image,FluidCheckpointCodec.encode(FluidCheckpointCodec.decode(image,key->model),key->model),"a reloaded checkpoint re-encodes to the same bytes");
     }
+    /** Format 31 (batch 2026-11-03-rotating-machinery, W2): machines on their curves, control tag 5. A pump's and a
+     * compressor's law (rated flow, head and efficiency), speed and switch come back exactly, and the reloaded checkpoint
+     * re-encodes to the same bytes. */
+    @Test void machinesOnTheirCurvesRoundTripExactly() {
+        var block=new PipeResistance.Geometry(1,.05,.000045,0);
+        var nodes=new ArrayList<PassiveNetwork.Reservoir>();for(long id=1;id<=3;id++)nodes.add(new PassiveNetwork.Reservoir(id,0,model.initialNitrogenCharge(1,298.15,150000,()->{})));
+        var pump=new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalPump(.01,50,.7),.85,true);
+        var compressor=new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalCompressor(.02,24400,.78),1,false);
+        var pipes=List.of(new PassiveNetwork.Pipe(10,0,1,List.of(block),pump,0,null,PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.BULK),
+                new PassiveNetwork.Pipe(11,1,2,List.of(block),compressor,0,null,PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.BULK));
+        var state=new IslandCoordinator.Snapshot(1,4,new PassiveNetwork(nodes,pipes),new IslandClock.Snapshot(350,200,400,100),Optional.empty(),"FULL");
+        var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state))),key->model);
+        var after=FluidCheckpointCodec.decode(image,key->model).islands().getFirst().snapshot();
+        assertEquals(pump,after.graph().pipes().get(0).control());assertEquals(compressor,after.graph().pipes().get(1).control());
+        assertSameImage(image,FluidCheckpointCodec.encode(FluidCheckpointCodec.decode(image,key->model),key->model),"a reloaded checkpoint re-encodes to the same bytes");
+    }
     /** The world ledger's compressor registration comes back exactly; an unknown control kind is refused. */
     @Test void aCompressorRegistrationRoundTripsInTheTopologyUnit() {
         var empty=WorldTopologyLedger.Snapshot.empty(MaterialCatalog.bundled());int count=empty.basis().components().size();

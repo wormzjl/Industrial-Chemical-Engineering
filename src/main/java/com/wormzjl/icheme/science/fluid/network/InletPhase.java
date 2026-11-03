@@ -232,12 +232,10 @@ public final class InletPhase {
      */
     public static String reason(FlowControl.Mover mover,Supply supply) {
         if(supply.heldShare()<DRY_RESUME)return String.format(Locale.ROOT,"ERROR: %s inlet dry (from node %d)",mover.deviceName(),supply.nodeId());
-        return switch(mover) {
-            case FlowControl.Pump ignored->String.format(Locale.ROOT,"ERROR: pump inlet not liquid (vapour %.1f %% by volume, from node %d)",100*supply.vapourVolumeShare(),supply.nodeId());
-            case FlowControl.Compressor ignored->supply.largestSolidVolumeFraction()>com.wormzjl.icheme.science.fluid.transport.SlurryTransport.DEFAULT_TRACE_VOLUME_FRACTION
-                    ?String.format(Locale.ROOT,"ERROR: compressor inlet not gas (solids %.1e by volume, from node %d)",supply.largestSolidVolumeFraction(),supply.nodeId())
-                    :String.format(Locale.ROOT,"ERROR: compressor inlet not gas (condensed %.1f %% by mass, from node %d)",100*supply.condensedMassShare(),supply.nodeId());
-        };
+        if(mover.liquid())return String.format(Locale.ROOT,"ERROR: pump inlet not liquid (vapour %.1f %% by volume, from node %d)",100*supply.vapourVolumeShare(),supply.nodeId());
+        return supply.largestSolidVolumeFraction()>com.wormzjl.icheme.science.fluid.transport.SlurryTransport.DEFAULT_TRACE_VOLUME_FRACTION
+                ?String.format(Locale.ROOT,"ERROR: compressor inlet not gas (solids %.1e by volume, from node %d)",supply.largestSolidVolumeFraction(),supply.nodeId())
+                :String.format(Locale.ROOT,"ERROR: compressor inlet not gas (condensed %.1f %% by mass, from node %d)",100*supply.condensedMassShare(),supply.nodeId());
     }
     /** {@link #reason} of connection {@code edge} of {@code graph} (a mover) over a slice of {@code duration} seconds. */
     public static String reason(FluidThermodynamics model,PassiveNetwork graph,int edge,double duration) {

@@ -35,7 +35,7 @@ class CentrifugalCompressorTest {
         double sigma = CentrifugalCompressor.sigma(K, .78), head = CentrifugalCompressor.polytropicHead(3, PRESSURE, DENSITY, sigma);
         assertEquals(177.5e3, head, 500, "177.5 kJ/kg");
         assertEquals(3, CentrifugalCompressor.ratio(head, PRESSURE, DENSITY, sigma), 1e-12);
-        assertEquals(2e5, CentrifugalCompressor.rise(head, PRESSURE, DENSITY, sigma), 1e-6);
+        assertEquals(2e5, CentrifugalCompressor.pressureRise(head, PRESSURE, DENSITY, sigma), 1e-6);
         assertEquals(796e3, MACHINE.gasPower(3.5, head), 1e3, "796 kW");
         // The gas power heats an ideal gas exactly to the polytropic discharge temperature T_s r^(1/σ): 405 K.
         double cp = K / (K - 1) * R / M, discharge = TEMPERATURE * DeterministicMath.pow(3, 1 / sigma);
@@ -47,14 +47,14 @@ class CentrifugalCompressorTest {
 
     @Test void riseRunsOnThroughZeroHead() {
         double sigma = CentrifugalCompressor.sigma(K, .78);
-        assertEquals(0, CentrifugalCompressor.rise(0, PRESSURE, DENSITY, sigma), 0);
-        assertEquals(DENSITY, CentrifugalCompressor.riseSlope(0, PRESSURE, DENSITY, sigma), 0);
-        assertEquals(DENSITY, CentrifugalCompressor.riseSlope(1e-9, PRESSURE, DENSITY, sigma), 1e-12);
-        assertEquals(-DENSITY * 5e4, CentrifugalCompressor.rise(-5e4, PRESSURE, DENSITY, sigma), 1e-9);
+        assertEquals(0, CentrifugalCompressor.pressureRise(0, PRESSURE, DENSITY, sigma), 0);
+        assertEquals(DENSITY, CentrifugalCompressor.pressureRiseSlope(0, PRESSURE, DENSITY, sigma), 0);
+        assertEquals(DENSITY, CentrifugalCompressor.pressureRiseSlope(1e-9, PRESSURE, DENSITY, sigma), 1e-12);
+        assertEquals(-DENSITY * 5e4, CentrifugalCompressor.pressureRise(-5e4, PRESSURE, DENSITY, sigma), 1e-9);
         for (double head : new double[]{-1e5, -1e3, 1e3, 5e4, 2e5, 4e5}) {
-            double step = 1e-3, difference = (CentrifugalCompressor.rise(head + step, PRESSURE, DENSITY, sigma)
-                    - CentrifugalCompressor.rise(head - step, PRESSURE, DENSITY, sigma)) / (2 * step);
-            assertEquals(CentrifugalCompressor.riseSlope(head, PRESSURE, DENSITY, sigma), difference, 1e-6 * difference, "at " + head);
+            double step = 1e-3, difference = (CentrifugalCompressor.pressureRise(head + step, PRESSURE, DENSITY, sigma)
+                    - CentrifugalCompressor.pressureRise(head - step, PRESSURE, DENSITY, sigma)) / (2 * step);
+            assertEquals(CentrifugalCompressor.pressureRiseSlope(head, PRESSURE, DENSITY, sigma), difference, 1e-6 * difference, "at " + head);
             double ratio = CentrifugalCompressor.ratio(head, PRESSURE, DENSITY, sigma);
             assertEquals(head, CentrifugalCompressor.polytropicHead(ratio, PRESSURE, DENSITY, sigma), 1e-9 * Math.abs(head), "round trip at " + head);
         }

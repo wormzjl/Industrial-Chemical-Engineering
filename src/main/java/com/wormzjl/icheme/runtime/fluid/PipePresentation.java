@@ -181,9 +181,9 @@ public final class PipePresentation {
 
     /** A pump's accepted operating condition on its status line, presented without changing its island's solver status. */
 
-    static String pumpStatus(String islandStatus,FlowControl.Pump pump,FlowControl.Mode mode,String inletReason) {
+    static String pumpStatus(String islandStatus,FlowControl.Mover pump,FlowControl.Mode mode,String inletReason) {
         String condition=switch(mode) {
-            case PUMP_TARGET->"pump running";
+            case PUMP_TARGET,MOVER_LAW->"pump running";
             case PUMP_HEAD_LIMIT->"ERROR: pump pressure rise limit reached; requested flow unavailable";
             case PUMP_SUCTION_LIMIT->"ERROR: pump cavitating: suction pressure limit reached";
             case INLET_WRONG_PHASE->inletReason.isBlank()?"ERROR: pump inlet is dry or has the wrong phase":inletReason;

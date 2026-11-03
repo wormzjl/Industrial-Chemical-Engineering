@@ -109,7 +109,7 @@ public final class PhysicalFluidTopology {
                 throw new IllegalArgumentException("A rack lane is a plain laid pipe with at most two joints");
             if(inlineFilter&&(kind!=TopologyCompiler.Kind.PIPE||cutoff!=Cutoff.NONE||!(control instanceof FlowControl.Passive)))throw new IllegalArgumentException("Invalid pipe filter accessory");
             if(kind!=TopologyCompiler.Kind.PIPE&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("Only a pipe has a cutoff accessory");
-            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Pump;case COMPRESSOR->control instanceof FlowControl.Compressor;case VALVE->control instanceof FlowControl.Valve;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve||control instanceof FlowControl.Mover;default->control instanceof FlowControl.Passive;};
+            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve||control instanceof FlowControl.Mover;default->control instanceof FlowControl.Passive;};
             if(!valid)throw new IllegalArgumentException("Device/control mismatch");
             if(control instanceof FlowControl.Valve&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("A pressure valve cannot carry a cutoff accessory");
             if(kind==TopologyCompiler.Kind.PIPE&&control instanceof FlowControl.Mover&&(cutoff!=Cutoff.NONE||facing.y!=0))throw new IllegalArgumentException("An inline mover needs a horizontal pipe without a cutoff");
@@ -161,7 +161,7 @@ public final class PhysicalFluidTopology {
         /** Mechanical pipes compile through the existing valve or filter law when fitted. */
         public TopologyCompiler.Kind hydraulicKind(){
             if(inlineFilter)return TopologyCompiler.Kind.FILTER;
-            if(kind==TopologyCompiler.Kind.PIPE)return switch(control){case FlowControl.Pump p->TopologyCompiler.Kind.PUMP;case FlowControl.Compressor c->TopologyCompiler.Kind.COMPRESSOR;case FlowControl.Valve v->TopologyCompiler.Kind.VALVE;default->kind;};
+            if(kind==TopologyCompiler.Kind.PIPE)return switch(control){case FlowControl.Mover m->m.liquid()?TopologyCompiler.Kind.PUMP:TopologyCompiler.Kind.COMPRESSOR;case FlowControl.Valve v->TopologyCompiler.Kind.VALVE;default->kind;};
             return kind;
         }
         boolean actuator(){var hydraulic=hydraulicKind();return hydraulic==TopologyCompiler.Kind.PUMP||hydraulic==TopologyCompiler.Kind.COMPRESSOR||hydraulic==TopologyCompiler.Kind.VALVE;}
@@ -563,6 +563,7 @@ public final class PhysicalFluidTopology {
     private static FlowControl control(Device device,Set<Long> invalidPumps) {
         if(device.control instanceof FlowControl.Pump pump&&invalidPumps.contains(device.id))return new FlowControl.Pump(0,pump.maximumAddedPressure());
         if(device.control instanceof FlowControl.Compressor compressor&&invalidPumps.contains(device.id))return new FlowControl.Compressor(0,compressor.maximumPressureRatio());
+        if(device.control instanceof FlowControl.Machine machine&&invalidPumps.contains(device.id))return new FlowControl.Machine(machine.law(),0,machine.enabled());
         return device.control;
     }
     private static boolean positiveSide(Device device,Point neighbor){var p=device.position;var d=device.facing;return (neighbor.x-p.x)*d.x+(neighbor.y-p.y)*d.y+(neighbor.z-p.z)*d.z>0;}

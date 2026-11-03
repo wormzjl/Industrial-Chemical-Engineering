@@ -763,7 +763,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private void publishMover(WorldTopologyLedger.Registration record,net.minecraft.server.level.ServerLevel level,BlockPos pos) {
         if(record.device().ports().isEmpty()||!(record.device().control() instanceof FlowControl.Mover mover))return;
         long id=record.device().id();var target=new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id);
-        var state=new com.wormzjl.icheme.network.FluidNetwork.MoverState(target,mover instanceof FlowControl.Compressor,
+        var state=new com.wormzjl.icheme.network.FluidNetwork.MoverState(target,!mover.liquid(),
                 // A column holds its pumps and fans only while it runs, and runs them (C7).
                 record.device().suspendedBy()!=0||mover.enabled()&&mover.requestedVolumeFlow()>0);
         publishedMovers.put(id,state);
@@ -955,13 +955,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 else if(pipe.control() instanceof FlowControl.Valve&&ControlConstraints.standing(snapshot.graph()).get(i))status+=" / STANDING_OPEN: a lower flow target on this line regulates";
                 if(pipe.control() instanceof FlowControl.Mover mover) {
                     String inlet=mode==FlowControl.Mode.INLET_WRONG_PHASE?inletReason(snapshot.graph(),i,result.advancedSeconds()):"";
-                    if(mover instanceof FlowControl.Pump pump)status=PipePresentation.pumpStatus(status,pump,mode,inlet);
+                    if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet);
                     else {status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;}
                     // The limit on the suction stream the mover draws (its own junction, what arrives at its inlet; decision
                     // D4): a pump's setting is the rise for water and scales with the suction density, a compressor's is the
                     // ratio over the suction pressure.
-                    if(!snapshot.graph().reservoirs().get(pipe.first()).empty()&&mode!=FlowControl.Mode.INLET_WRONG_PHASE&&mode!=FlowControl.Mode.PUMP_SUCTION_LIMIT) {var suction=snapshot.graph().reservoirs().get(pipe.first()).state();double limit=mover.riseLimit(suction.mass()/suction.volume(),suction.pressure(),model.pumpReferenceDensity());
-                        status+=String.format(java.util.Locale.ROOT,mover instanceof FlowControl.Pump?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
+                    if(!snapshot.graph().reservoirs().get(pipe.first()).empty()&&mode!=FlowControl.Mode.INLET_WRONG_PHASE&&mode!=FlowControl.Mode.PUMP_SUCTION_LIMIT) {var suction=snapshot.graph().reservoirs().get(pipe.first()).state();double limit=mover.riseLimit(suction.mass()/suction.volume(),suction.pressure(),model.pumpReferenceDensity(),mover.liquid()?1.4:model.heatCapacityRatio(suction));
+                        status+=String.format(java.util.Locale.ROOT,mover.liquid()?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
                 }else status+=" / "+mode;}}
         }
         // A generator or a void in several islands (owner decision D17) reads the status of its owner (the lowest island) and

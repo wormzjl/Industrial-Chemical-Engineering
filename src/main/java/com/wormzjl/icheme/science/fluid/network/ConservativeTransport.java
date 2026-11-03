@@ -565,15 +565,18 @@ public final class ConservativeTransport {
             double work=0;
             if(pipe.control() instanceof FlowControl.Mover mover&&flows[edge]>0){var suction=states.get(pipe.first());
                 // Metered on the suction stream's specific volume (the suction's bulk at a BULK end) and, for a compressor,
-                // the suction node's pressure (decision D8: ideal isothermal work on suction properties); the Newton's
-                // energy rows book the same power (PassiveStepSolver.Equations.nodeAccumulate).
+                // the suction node's pressure and the gas's heat capacity ratio on the step's start state (polytropic work,
+                // batch 2026-11-03-rotating-machinery); the Newton's energy rows book the same power
+                // (PassiveStepSolver.Equations.nodeAccumulate, PassiveStepSolver.kappa).
                 double specificVolume;
                 if(rates==null)specificVolume=suction.volume()/suction.mass();
                 else{specificVolume=0;for(int k:phases){var state=at(k,suction,graph.reservoirs().get(pipe.first()).state());specificVolume+=weight(rates,phases,k)*(FluidThermodynamics.phaseVolume(state,k%3)/model.phaseMass(state,k%3));}}
+                double kappa=mover.liquid()?1.4:model.heatCapacityRatio(graph.reservoirs().get(pipe.first()).state());
                 work=switch(mover) {
                     case FlowControl.Pump pump->rates==null?dt*flows[edge]*suction.volume()/suction.mass()*Math.max(0,heads[edge])
                             :dt*flows[edge]*specificVolume*Math.max(0,heads[edge]);
-                    case FlowControl.Compressor compressor->dt*compressor.power(flows[edge],heads[edge],1/specificVolume,suction.pressure());
+                    case FlowControl.Compressor compressor->dt*compressor.power(flows[edge],heads[edge],1/specificVolume,suction.pressure(),kappa);
+                    case FlowControl.Machine machine->dt*machine.power(flows[edge],heads[edge],1/specificVolume,suction.pressure(),kappa);
                 };
                 energy[receiver]+=work;pumpWork+=work;}
             // A heat-exchanging side: the heat its stream took up crossing the wall, on the donor enthalpy booked above, into

@@ -22,7 +22,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * @param ratedHead  H_r, the polytropic head at the rated point, J/kg
  * @param efficiency η_p, the polytropic efficiency
  */
-public record CentrifugalCompressor(double ratedFlow, double ratedHead, double efficiency) {
+public record CentrifugalCompressor(double ratedFlow, double ratedHead, double efficiency) implements MachineLaw {
     /** The polytropic efficiency of a new design unless it states its own (0.70 to 0.85 in service). */
     public static final double DEFAULT_EFFICIENCY = .78;
     /** The surge line, as {@code x = q/s}. */
@@ -71,6 +71,28 @@ public record CentrifugalCompressor(double ratedFlow, double ratedHead, double e
         return gasPower(density * machineFlow(flow, speed), head);
     }
 
+    @Override public boolean liquid() {
+        return false;
+    }
+
+    /** The pressure rise of the head at {@code flow} and {@code speed}, on the suction's pressure and density and the gas's k. */
+    @Override public double rise(double flow, double speed, double density, double pressure, double k) {
+        return pressureRise(head(flow, speed), pressure, density, sigma(k, efficiency));
+    }
+
+    @Override public double riseSlope(double flow, double speed, double density, double pressure, double k) {
+        return pressureRiseSlope(head(flow, speed), pressure, density, sigma(k, efficiency)) * headSlope(flow, speed);
+    }
+
+    /** {@link #gasPower} of the polytropic head that the {@code rise} stands for. */
+    @Override public double fluidPower(double massFlow, double rise, double density, double pressure, double k) {
+        return gasPower(massFlow, polytropicHead(1 + rise / pressure, pressure, density, sigma(k, efficiency)));
+    }
+
+    @Override public double shaftPower(double flow, double speed, double density, double pressure, double k) {
+        return shaftPower(flow, speed, density, head(flow, speed));
+    }
+
     /** {@code σ = η_p k/(k − 1)} for heat capacity ratio {@code k} (from the suction's ideal-gas heat capacity) and
      * polytropic efficiency {@code efficiency}; {@code (n − 1)/n = 1/σ}. */
     public static double sigma(double k, double efficiency) {
@@ -79,27 +101,27 @@ public record CentrifugalCompressor(double ratedFlow, double ratedHead, double e
     }
 
     /** The pressure ratio for polytropic head {@code head} (J/kg) on suction pressure {@code pressure} (Pa) and density
-     * {@code density} (kg/m³): {@code (1 + H_p ρ_s/(σ P_s))^σ}; below zero head, {@code 1 + H_p ρ_s/P_s} ({@link #rise}). */
+     * {@code density} (kg/m³): {@code (1 + H_p ρ_s/(σ P_s))^σ}; below zero head, {@code 1 + H_p ρ_s/P_s} ({@link #pressureRise}). */
     public static double ratio(double head, double pressure, double density, double sigma) {
-        return 1 + rise(head, pressure, density, sigma) / pressure;
+        return 1 + pressureRise(head, pressure, density, sigma) / pressure;
     }
 
     /** The pressure rise, Pa, for polytropic head {@code head}: {@code P_s (r − 1)}. A negative head (past choke, or a stopped
      * machine passing gas) is a loss, {@code ρ_s H_p}: the polytropic law's tangent at zero head, so the rise and its slope run
      * on through zero. */
-    public static double rise(double head, double pressure, double density, double sigma) {
+    public static double pressureRise(double head, double pressure, double density, double sigma) {
         if (!(head > 0)) return density * head;
         return pressure * (DeterministicMath.pow(1 + head * density / (sigma * pressure), sigma) - 1);
     }
 
     /** {@code d(rise)/dH_p}, kg/m³: {@code ρ_s (1 + H_p ρ_s/(σ P_s))^(σ − 1)}; {@code ρ_s} below zero head. */
-    public static double riseSlope(double head, double pressure, double density, double sigma) {
+    public static double pressureRiseSlope(double head, double pressure, double density, double sigma) {
         if (!(head > 0)) return density;
         return density * DeterministicMath.pow(1 + head * density / (sigma * pressure), sigma - 1);
     }
 
     /** The polytropic head, J/kg, that raises gas at {@code pressure} and {@code density} by pressure ratio {@code ratio}:
-     * {@code σ (P_s/ρ_s)(r^(1/σ) − 1)}; below a ratio of one, the loss {@code P_s (r − 1)/ρ_s} ({@link #rise} turned round). */
+     * {@code σ (P_s/ρ_s)(r^(1/σ) − 1)}; below a ratio of one, the loss {@code P_s (r − 1)/ρ_s} ({@link #pressureRise} turned round). */
     public static double polytropicHead(double ratio, double pressure, double density, double sigma) {
         if (!(ratio > 1)) return pressure * (ratio - 1) / density;
         return sigma * pressure / density * (DeterministicMath.pow(ratio, 1 / sigma) - 1);

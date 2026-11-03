@@ -18,15 +18,20 @@ class FlowControlTest {
         return new PassiveStepSolver(model).solve(line(pa,pb,component,control),dt,()->{});
     }
     /** Now a compressor on methane (decision D2; a liquid-only pump refuses gas, decision D1; test name kept): its target is the suction volume
-     * flow at inlet conditions, and its shaft work the ideal isothermal work on suction properties (decision D8). A ratio
-     * of 3 lifts 1 atm suction by 203 kPa, above the 99 kPa the discharge vessel stands higher. */
+     * flow at inlet conditions, and its gas power the polytropic work at η_p 0.78 on suction properties (batch
+     * 2026-11-03-rotating-machinery, plan 3.2 and 4.4), {@code σ (P_s/ρ_s)(r^(1/σ) − 1)/η_p} per kilogram with
+     * {@code σ = η_p k/(k − 1)} and k from the suction's start state. A ratio of 3 lifts 1 atm suction by 203 kPa, above
+     * the 99 kPa the discharge vessel stands higher. */
     @Test void pumpMeetsItsSuctionFlowTargetAndAccountsForAddedEnergy() {
-        var result=run(101325,200000,0,new FlowControl.Compressor(.001,3),.1);var suction=result.states().getFirst();
+        var graph=line(101325,200000,0,new FlowControl.Compressor(.001,3));
+        var result=new PassiveStepSolver(model).solve(graph,.1,()->{});var suction=result.states().getFirst();
         assertEquals(.001,result.massFlows()[0]/(suction.mass()/suction.volume()),1e-10);
         assertEquals(FlowControl.Mode.PUMP_TARGET,result.modes().getFirst());assertTrue(result.devicePressureChanges()[0]>0);assertTrue(result.pumpWorkJoule()>0);
         double q=result.massFlows()[0],head=result.devicePressureChanges()[0],p=suction.pressure(),rho=suction.mass()/suction.volume();
-        double expected=.1*q*(p/rho)*Math.log1p(head/p);
-        assertEquals(expected,result.pumpWorkJoule(),1e-6*expected,"isothermal work on the suction's pressure and density over the step");
+        double eta=.78,k=model.heatCapacityRatio(graph.reservoirs().getFirst().state()),sigma=eta*k/(k-1);
+        assertTrue(k>1.25&&k<1.32,"methane's ideal-gas k at 350 K, about 1.28: "+k);
+        double expected=.1*q*sigma*(p/rho)*(Math.pow(1+head/p,1/sigma)-1)/eta;
+        assertEquals(expected,result.pumpWorkJoule(),1e-6*expected,"polytropic work on the suction's pressure and density over the step");
     }
     @Test void naturalFlowIsLimitedWithoutInventedPumpWorkAndOpposingHeadShutsThePump() {
         var natural=run(300000,101325,0,new FlowControl.Compressor(.001,3),.1);

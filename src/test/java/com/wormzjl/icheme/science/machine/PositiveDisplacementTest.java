@@ -51,6 +51,17 @@ class PositiveDisplacementTest {
         assertEquals(Double.NEGATIVE_INFINITY, MACHINE.rise(1.01 * QD, 1));
     }
 
+    @Test void theRiseSlopeIsTheRisesDerivative() {
+        // W2: the balance's Newton on a corner mover reads d(rise)/dQ = −(Δp_relief/(Q_d s)) (u/(1 − u^16)^(1/16))^15.
+        for (double u = .1; u < .95; u += .1) {
+            double flow = u * QD, h = 1e-6 * QD, difference = (MACHINE.rise(flow + h, 1) - MACHINE.rise(flow - h, 1)) / (2 * h);
+            assertEquals(difference, MACHINE.riseSlope(flow, 1), 1e-6 * Math.abs(difference) + 1e-9 * RELIEF / QD, "at " + u);
+        }
+        assertEquals(0, MACHINE.riseSlope(0, 1), 0);
+        assertEquals(0, MACHINE.riseSlope(-QD, 1), 0, "flat at the relief rise below no flow");
+        assertEquals(Double.NEGATIVE_INFINITY, MACHINE.riseSlope(QD, 1));
+    }
+
     @Test void aStoppedMachineIsClosed() {
         assertThrows(IllegalArgumentException.class, () -> MACHINE.flow(0, 0));
         assertThrows(IllegalArgumentException.class, () -> MACHINE.residual(0, 0, 0));

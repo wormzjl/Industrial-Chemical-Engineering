@@ -11,8 +11,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The gas compressor (decisions D2, D7, D8 of documentation/2026-09-26-phase-ports-and-compressor; plan 3.7): the
- * pump's modes and rows with a pressure-ratio limit {@code (r_max - 1) P_suction}, a suction volume-flow target, its shaft
- * work the ideal isothermal work on suction properties booked as heat into the discharge, and a gas-only inlet. Plan
+ * pump's modes and rows with a pressure-ratio limit {@code (r_max - 1) P_suction}, a suction volume-flow target, its gas
+ * power the polytropic work at η_p 0.78 on suction properties booked as heat into the discharge (batch
+ * 2026-11-03-rotating-machinery, plan 3.2 and 4.4; the ideal isothermal work before), and a gas-only inlet. Plan
  * fixtures 6 (on gas: target, limit, shutoff, energy ledger, 5 s against 0.1 s) and 7 (on liquid and two-phase supplies:
  * refused, the island integrating). Each fixture prints a {@code COMPRESSOR_RUN} line; the numbers are recorded in
  * PHASE_PORTS_REVIEW.md, section "WP4".
@@ -58,9 +59,15 @@ class CompressorTest extends PortFixture {
         return new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,nitrogenAt(pressure)),new PassiveNetwork.Reservoir(2,0,nitrogenAt(pressure))),
                 List.of(pipe(10,0,1,line(2,.05),new FlowControl.Compressor(.02,1.5))));
     }
+    /** The polytropic work per kilogram at η_p 0.78 for a rise {@code head} on a suction at {@code pressure} and {@code rho},
+     * k of {@code start}: {@code σ (P_s/ρ_s)(r^(1/σ) − 1)/η_p}, {@code σ = η_p k/(k − 1)}, {@code r = 1 + head/P_s}. */
+    private double polytropicWork(FluidThermodynamics.State start,double pressure,double rho,double head) {
+        double eta=.78,k=model.heatCapacityRatio(start),sigma=eta*k/(k-1);
+        return sigma*(pressure/rho)*(Math.pow(1+head/pressure,1/sigma)-1)/eta;
+    }
     /** On its target the compressor moves its suction volume flow at inlet conditions, {@code q = Q rho_s}, and books the
-     * isothermal work {@code q (P_s/rho_s) ln(1 + head/P_s) / eff} of the step (decision D8). */
-    @Test void onItsTargetTheFlowIsTheSuctionVolumeFlowAndTheWorkTheIsothermalWork() {
+     * polytropic work of the step ({@link #polytropicWork}). */
+    @Test void onItsTargetTheFlowIsTheSuctionVolumeFlowAndTheWorkThePolytropicWork() {
         // Above the ambient: a suction tank drawn at 1 atm is a slack bag (decision D54), whose volume, and so whose density,
         // is solved to the closure's tolerance rather than fixed by its capacity.
         var graph=transfer(150000);
@@ -69,7 +76,7 @@ class CompressorTest extends PortFixture {
         assertEquals(FlowControl.Mode.PUMP_TARGET,result.modes().getFirst());
         assertEquals(.02*rho,q,1e-10*q,"q = Q rho_s");
         assertTrue(head>0);
-        double expected=.5*q*(suction.pressure()/rho)*Math.log1p(head/suction.pressure());
+        double expected=.5*q*polytropicWork(graph.reservoirs().getFirst().state(),suction.pressure(),rho,head);
         assertEquals(expected,result.pumpWorkJoule(),1e-6*expected);
         System.out.println("COMPRESSOR_RUN target q="+q+" rhoS="+rho+" head="+head+" work="+result.pumpWorkJoule()+" formula="+expected);
     }
@@ -106,10 +113,11 @@ class CompressorTest extends PortFixture {
     /**
      * The heating of plan 3.7, measured: nitrogen from a generator at 298.15 K and 1 atm compressed into a void at 3 atm
      * through a junction. At steady flow the junction holds what the discharge delivers, the suction enthalpy plus the
-     * isothermal work per kilogram, {@code (P_s/rho_s) ln(1 + head/P_s)}; for an ideal gas at ratio 3 that heats it by
-     * {@code T (R/(M c_p)) ln 3}, about 93 K (plan 3.7's hand estimate; the ideal adiabatic compression 110 K).
+     * polytropic work per kilogram ({@link #polytropicWork}); for an ideal gas at ratio 3 that heats it by
+     * {@code T (3^((k − 1)/(k η_p)) − 1)}, about 148 K at k 1.4 and η_p 0.78 (batch 2026-11-03-rotating-machinery, plan 4.4;
+     * the ideal adiabatic compression 110 K, the isothermal work booked before 93 K).
      */
-    @Test void theDischargeOfARatioThreeCompressionOfNitrogenIsAboutNinetyKelvinWarmer() {
+    @Test void theDischargeOfARatioThreeCompressionOfNitrogenIsAboutOneHundredFiftyKelvinWarmer() {
         var generator=new PassiveNetwork.Reservoir(1,0,nitrogenAt(101325),PassiveNetwork.NodeKind.GENERATOR);
         var graph=new PassiveNetwork(List.of(generator,new PassiveNetwork.Reservoir(2,0,nitrogenAt(3*101325),PassiveNetwork.NodeKind.JUNCTION),
                 new PassiveNetwork.Reservoir(3,0,nitrogenAt(3*101325),PassiveNetwork.NodeKind.VOID)),
@@ -117,14 +125,14 @@ class CompressorTest extends PortFixture {
         // 0.02 m3/s: the junction's holdup (0.05 s of its connections' cap flow, 0.034 kg) turns over in 1.5 s; 40 s is steady.
         var run=drive("heating",graph,5,8);
         var junction=run.last().reservoirs().get(1).state();var suction=generator.state();var last=run.slices().getLast();
-        double head=last.endpointHeads()[0],perKg=suction.pressure()/(suction.mass()/suction.volume())*Math.log1p(head/suction.pressure());
+        double head=last.endpointHeads()[0],perKg=polytropicWork(suction,suction.pressure(),suction.mass()/suction.volume(),head);
         double q=last.averageMassFlows()[0];
         System.out.println("COMPRESSOR_RUN heating junction="+junction.temperature()+"K "+junction.pressure()+"Pa head="+head+"Pa ratio="+(1+head/suction.pressure())+" workPerKg="+perKg+" J/kg rise="+(junction.temperature()-298.15)+"K mode="+last.endpointModes().getFirst());
         assertEquals(FlowControl.Mode.PUMP_TARGET,last.endpointModes().getFirst());
-        assertEquals(5*q*perKg,last.pumpWorkJoule(),1e-6*last.pumpWorkJoule(),"the slice's work is the isothermal work of its flow");
+        assertEquals(5*q*perKg,last.pumpWorkJoule(),1e-6*last.pumpWorkJoule(),"the slice's work is the polytropic work of its flow");
         double hIn=suction.enthalpy()/suction.mass(),hOut=junction.enthalpy()/junction.mass();
         assertEquals(hIn+perKg,hOut,1e-3*perKg,"the discharge carries the suction's enthalpy plus the work");
-        assertEquals(93,junction.temperature()-298.15,5,"about 93 K warmer, the ideal-gas estimate");
+        assertEquals(148,junction.temperature()-298.15,5,"about 148 K warmer, the ideal-gas estimate");
     }
 
     // ---- Fixture 7: a compressor on liquid, two-phase and solids -------------------------------------------------------

@@ -22,7 +22,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * @param ratedHead  H_r, the head at the rated point, m
  * @param efficiency η, the efficiency at the rated point, the best on the curve
  */
-public record CentrifugalPump(double ratedFlow, double ratedHead, double efficiency) {
+public record CentrifugalPump(double ratedFlow, double ratedHead, double efficiency) implements MachineLaw {
     /** Standard gravity, m/s², the fluid solver's. */
     public static final double GRAVITY = 9.80665;
     /** Below this share of the flow at its best efficiency point a pump shows the {@code MIN FLOW} notice (plan S1: real
@@ -71,6 +71,28 @@ public record CentrifugalPump(double ratedFlow, double ratedHead, double efficie
         double q = flow / ratedFlow, h = head(flow, speed) / ratedHead;
         if (!(q > 0) || !(h > 0) || !(speed > 0)) return 0;
         return efficiency * q * h / (speed * speed * (POWER_SHUTOFF * speed + POWER_FLOW * q));
+    }
+
+    @Override public boolean liquid() {
+        return true;
+    }
+
+    /** {@code ρ_s g H}. */
+    @Override public double rise(double flow, double speed, double density, double pressure, double k) {
+        return density * GRAVITY * head(flow, speed);
+    }
+
+    @Override public double riseSlope(double flow, double speed, double density, double pressure, double k) {
+        return density * GRAVITY * headSlope(flow, speed);
+    }
+
+    /** The ideal work {@code Q Δp} (simplification S1: the losses would warm the liquid by 0.15 K at the rated point). */
+    @Override public double fluidPower(double massFlow, double rise, double density, double pressure, double k) {
+        return Math.max(0, massFlow) / density * Math.max(0, rise);
+    }
+
+    @Override public double shaftPower(double flow, double speed, double density, double pressure, double k) {
+        return shaftPower(flow, speed, density);
     }
 
     /** The flow, m³/s, below which the pump at {@code speed} shows {@code MIN FLOW}: {@link #MINIMUM_FLOW_SHARE} of its best

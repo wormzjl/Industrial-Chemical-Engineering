@@ -1,6 +1,8 @@
 package com.wormzjl.icheme.science.fluid.network;
 
-import com.wormzjl.icheme.science.math.DeterministicMath;
+import com.wormzjl.icheme.science.machine.CentrifugalCompressor;
+import com.wormzjl.icheme.science.machine.MachineLaw;
+import com.wormzjl.icheme.science.machine.PositiveDisplacement;
 
 /** Immutable actuator settings; the active regime belongs to a solve attempt, never to this shared value. */
 public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Mover,FlowControl.Valve {
@@ -14,30 +16,51 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * inlet phase they admit. A pump has one more, {@code PUMP_SUCTION_LIMIT} (cavitation); a compressor draws gas, which
      * has no vapour pressure to fall below, and never takes it. Every quantity reads the suction only (decision D4): the stream the first end draws, and the
      * first end's pressure.
+     *
+     * <p>A mover on its own law ({@link #onLaw}, mode {@code MOVER_LAW}, batch 2026-11-03-rotating-machinery) has one row
+     * instead of the switch: its rise falls with its flow ({@link #lawResidual}). A {@link Machine} is always on its curve;
+     * a set-flow pump or compressor is on the corner law of a positive-displacement machine under form F2.
      */
-    sealed interface Mover extends FlowControl permits Pump,Compressor {
+    sealed interface Mover extends FlowControl permits Pump,Compressor,Machine {
         /** The largest suction volume flow a device's controls take (m3/s). */
         double MAXIMUM_VOLUME_FLOW=10;
+        /** Form F2 of the batch's quick check (plan section 4.2): set-flow movers on the corner law instead of the mode switch.
+         * A measurement switch until the owner's form is chosen. */
+        boolean CORNER_LAW=Boolean.getBoolean("icheme.fluid.cornerLaw");
         /** Configured suction volume flow (m3/s), retained while switched off. */
         double requestedVolumeFlow();
         /** Whether the constructed mover is commanded on; one-block devices retain their enabled behavior. */
         boolean enabled();
         /** Effective target: Off uses the existing zero-flow closed regime. */
         default double targetVolumeFlow(){return enabled()?requestedVolumeFlow():0;}
+        /** Whether it moves liquid (a pump) or gas (a compressor). */
+        boolean liquid();
+        /** Whether it runs on its own law ({@code MOVER_LAW}) instead of the set-flow modes. */
+        default boolean onLaw(){return CORNER_LAW;}
         /**
          * The largest pressure rise (Pa) the device can add over what its suction draws: {@code suctionDensity} (kg/m3) is
          * the density of the stream the first end draws, {@code suctionPressure} (Pa) the first end's driving pressure,
          * {@code referenceDensity} the pump setting's reference fluid density
-         * ({@link com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics#pumpReferenceDensity()}).
+         * ({@link com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics#pumpReferenceDensity()}), {@code k} the
+         * gas's heat capacity ratio ({@link com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics#heatCapacityRatio}).
+         * A law's rise at no flow.
          */
-        double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity);
+        double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity,double k);
         /**
-         * The shaft power (W) the device puts into what it moves, booked as heat into the discharge: {@code massFlow}
-         * (kg/s, forward), {@code head} (Pa, the rise the device holds), both clipped at zero, and the suction's density
-         * and pressure only. It is the ideal work: a mover has no efficiency (owner decision D37, simplification S6; the
-         * GUI and the world default always set 1).
+         * The power (W) the device puts into what it moves, booked into the discharge: {@code massFlow} (kg/s, forward),
+         * {@code head} (Pa, the rise the device holds), both clipped at zero, and the suction's density, pressure and
+         * {@code k} only. A pump gives the ideal work (owner decision D37, simplification S1 of the rotating-machinery
+         * batch); a compressor the polytropic work over its efficiency (plan section 4.4).
          */
-        double power(double massFlow,double head,double suctionDensity,double suctionPressure);
+        double power(double massFlow,double head,double suctionDensity,double suctionPressure,double k);
+        /** The rise (Pa) the mover's law holds at suction volume flow {@code flow} (m3/s), falling with flow; negative
+         * infinity where no finite rise passes the flow. */
+        double lawRise(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k);
+        /** {@code d(lawRise)/dQ}, Pa per m3/s. */
+        double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k);
+        /** The law as the {@code MOVER_LAW} row, Pa: zero where the mover holds {@code head} at {@code flow}, rising with the
+         * head, defined at every flow and head. */
+        double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k);
         /**
          * Whether a supply (what the suction line delivers, {@link InletPhase.Supply}) is refused for the next slice
          * ({@code INLET_WRONG_PHASE}), given whether the device stood refused at the committed slice end: a dry suction
@@ -65,14 +88,26 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         }
         /** The setting is the rise for the reference fluid (water at 298.15 K, 1 atm), scaled by the suction's density: a
          * head, the one quantity a real pump fixes (decision D4: suction density only). */
-        @Override public double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity) {
+        @Override public double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return maximumAddedPressure*suctionDensity/referenceDensity;
         }
         /** {@code q v_s head}: the hydraulic power on the suction's specific volume. */
-        @Override public double power(double massFlow,double head,double suctionDensity,double suctionPressure) {
+        @Override public double power(double massFlow,double head,double suctionDensity,double suctionPressure,double k) {
             return Math.max(0,massFlow)/suctionDensity*Math.max(0,head);
         }
-        @Override public boolean refuses(InletPhase.Supply supply,boolean refused) {
+        @Override public boolean liquid(){return true;}
+        @Override public double lawRise(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return corner(this,suctionDensity,suctionPressure,referenceDensity,k).rise(flow,1);
+        }
+        @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return corner(this,suctionDensity,suctionPressure,referenceDensity,k).riseSlope(flow,1);
+        }
+        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            var law=corner(this,suctionDensity,suctionPressure,referenceDensity,k);return law.reliefRise()*law.residual(flow,head,1);
+        }
+        @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
+        /** A liquid machine's refusal: a dry suction, or vapour above {@link #VAPOUR_REFUSE} of the fluid volume. */
+        static boolean refusesSupply(InletPhase.Supply supply,boolean refused) {
             if(supply.dry(refused))return true;
             double share=supply.vapourVolumeShare();
             return share>VAPOUR_REFUSE||refused&&!(share<VAPOUR_RESUME);
@@ -81,8 +116,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
     }
     /**
      * A gas compressor (decisions D2, D7, D8): suction volume flow target (m3/s at inlet conditions) and maximum pressure
-     * ratio {@code r_max} (discharge over suction). Its rise limit is {@code (r_max - 1) P_suction}; its shaft work the
-     * ideal isothermal work on suction properties, booked as heat into the discharge. It
+     * ratio {@code r_max} (discharge over suction). Its rise limit is {@code (r_max - 1) P_suction}; its work the polytropic
+     * work at the default polytropic efficiency, on suction properties, booked into the discharge (batch
+     * 2026-11-03-rotating-machinery, plan section 4.4; the ideal isothermal work before). It
      * refuses a supply whose condensed phases (hydrocarbon liquid, free water and solids) exceed
      * {@link #CONDENSED_REFUSE} of its mass, or that carries any solid population above
      * {@link com.wormzjl.icheme.science.fluid.transport.SlurryTransport#DEFAULT_TRACE_VOLUME_FRACTION} of its volume,
@@ -101,21 +137,78 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
                 throw new IllegalArgumentException("Invalid compressor settings");
         }
         /** {@code (r_max - 1) P_suction} (decision D7): the discharge stands at most {@code r_max} times the suction. */
-        @Override public double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity) {
+        @Override public double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return (maximumPressureRatio-1)*suctionPressure;
         }
-        /** {@code q (P_s / rho_s) ln(1 + head / P_s)} (decision D8): the ideal isothermal work of raising the suction stream
-         * by {@code head}, on suction properties only. */
-        @Override public double power(double massFlow,double head,double suctionDensity,double suctionPressure) {
-            return Math.max(0,massFlow)*(suctionPressure/suctionDensity)*DeterministicMath.log1p(Math.max(0,head)/suctionPressure);
+        /** {@code ṁ H_p/η_p} at {@link CentrifugalCompressor#DEFAULT_EFFICIENCY}: the polytropic head of raising the suction
+         * stream by {@code head} on suction properties and {@code k}, over the efficiency. */
+        @Override public double power(double massFlow,double head,double suctionDensity,double suctionPressure,double k) {
+            double sigma=CentrifugalCompressor.sigma(k,CentrifugalCompressor.DEFAULT_EFFICIENCY);
+            return Math.max(0,massFlow)*Math.max(0,CentrifugalCompressor.polytropicHead(1+Math.max(0,head)/suctionPressure,suctionPressure,suctionDensity,sigma))
+                    /CentrifugalCompressor.DEFAULT_EFFICIENCY;
         }
-        @Override public boolean refuses(InletPhase.Supply supply,boolean refused) {
+        @Override public boolean liquid(){return false;}
+        @Override public double lawRise(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return corner(this,suctionDensity,suctionPressure,referenceDensity,k).rise(flow,1);
+        }
+        @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return corner(this,suctionDensity,suctionPressure,referenceDensity,k).riseSlope(flow,1);
+        }
+        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            var law=corner(this,suctionDensity,suctionPressure,referenceDensity,k);return law.reliefRise()*law.residual(flow,head,1);
+        }
+        @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
+        /** A gas machine's refusal: a dry suction, a solid above the trace, or condensed phases above {@link #CONDENSED_REFUSE}
+         * of the mass. */
+        static boolean refusesSupply(InletPhase.Supply supply,boolean refused) {
             if(supply.dry(refused))return true;
             if(supply.largestSolidVolumeFraction()>com.wormzjl.icheme.science.fluid.transport.SlurryTransport.DEFAULT_TRACE_VOLUME_FRACTION)return true;
             double share=supply.condensedMassShare();
             return share>CONDENSED_REFUSE||refused&&!(share<CONDENSED_RESUME);
         }
         @Override public String deviceName(){return "compressor";}
+    }
+    /**
+     * A rotodynamic machine on a shaft (batch 2026-11-03-rotating-machinery, plan sections 3.1 and 3.2): a centrifugal pump
+     * or compressor on its curve, at the speed its driver set for the slice. It has no set flow: the line and the curve
+     * settle it. Its {@link #requestedVolumeFlow} is the rated flow at its speed, a scale for seeds, zero when it stands.
+     *
+     * @param law     the machine's curve and efficiency
+     * @param speed   its speed for the slice, a share of the rated speed; zero stands it closed
+     * @param enabled whether it runs
+     */
+    record Machine(MachineLaw law,double speed,boolean enabled) implements Mover {
+        public Machine {
+            java.util.Objects.requireNonNull(law);
+            if(!Double.isFinite(speed)||speed<0)throw new IllegalArgumentException("Invalid machine speed "+speed);
+        }
+        @Override public double requestedVolumeFlow(){return law.ratedFlow()*speed;}
+        @Override public boolean liquid(){return law.liquid();}
+        @Override public boolean onLaw(){return true;}
+        /** The curve's rise at no flow. */
+        @Override public double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return law.rise(0,speed,suctionDensity,suctionPressure,k);
+        }
+        @Override public double power(double massFlow,double head,double suctionDensity,double suctionPressure,double k) {
+            return law.fluidPower(massFlow,head,suctionDensity,suctionPressure,k);
+        }
+        @Override public double lawRise(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return law.rise(flow,speed,suctionDensity,suctionPressure,k);
+        }
+        @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return law.riseSlope(flow,speed,suctionDensity,suctionPressure,k);
+        }
+        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return head-law.rise(flow,speed,suctionDensity,suctionPressure,k);
+        }
+        @Override public boolean refuses(InletPhase.Supply supply,boolean refused) {
+            return liquid()?Pump.refusesSupply(supply,refused):Compressor.refusesSupply(supply,refused);
+        }
+        @Override public String deviceName(){return liquid()?"pump":"compressor";}
+    }
+    /** The corner law of a set-flow mover under form F2: its set flow is the displacement, its rise limit the relief rise. */
+    private static PositiveDisplacement corner(Mover mover,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+        return new PositiveDisplacement(mover.targetVolumeFlow(),mover.riseLimit(suctionDensity,suctionPressure,referenceDensity,k));
     }
     /** A passive throttling actuator. It never adds shaft work or pressure. */
     sealed interface Valve extends FlowControl permits PressureValve,ControlValve {
@@ -163,6 +256,10 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * the target-flow row, as the head limit does, and the flow is what the suction line delivers at that pressure. It
      * persists as an endpoint mode like the head limit. The velocity cap is no mode: it is part of every throttling
      * line's law ({@code PassiveStepSolver.saturated}, 2026-10-18).
+     *
+     * <p>{@code MOVER_LAW} (batch 2026-11-03-rotating-machinery) is a mover on its own law ({@link Mover#onLaw}): one row,
+     * the rise falling with the flow, in place of {@code PUMP_TARGET} and {@code PUMP_HEAD_LIMIT}. It closes on a reverse
+     * drive and takes the suction limit as they do.
      */
-    enum Mode { PASSIVE, PUMP_TARGET, PUMP_HEAD_LIMIT, VALVE_REGULATING, VALVE_OPEN, CLOSED, INLET_WRONG_PHASE, PUMP_SUCTION_LIMIT, VALVE_CONFLICT }
+    enum Mode { PASSIVE, PUMP_TARGET, PUMP_HEAD_LIMIT, VALVE_REGULATING, VALVE_OPEN, CLOSED, INLET_WRONG_PHASE, PUMP_SUCTION_LIMIT, VALVE_CONFLICT, MOVER_LAW }
 }
