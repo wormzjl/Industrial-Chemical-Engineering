@@ -631,10 +631,19 @@ public final class PassiveStepSolver {
             // What each phase-port outflow drew, phase by phase, at these flows on this candidate: the reconstruction books it
             // and the transfer samples it (decision D11).
             var draws=equations.draws(flows,states);
+            // Decision D54: a dry vessel this pass's flows reach is laid out from what they deliver ({@link #arrivingPhases}) and
+            // the pass is solved again, its end the step's implicit end like every vessel's. The start flows may miss it: a rate
+            // point carries none into a vessel it left dry, and the booking below states the delivered LNG at the tank's own
+            // 298 K, as vapour, from which no closure reaches a liquid's enthalpy (cold seeds 181 and 397 stalled at 47 K at
+            // every step size, down to 1e-21 s).
+            if(!rateOnly&&anyDry(equations)) {
+                var point=new ArrayList<>(states);for(int i=0;i<point.size();i++)if(equations.dry[i])point.set(i,seeds.get(i));
+                var arrived=arrivingPhases(graph,point,lawFlows,true,modes,boundaryClosed,dt,checkpoint);
+                if(arrived!=point){seeds=arrived;previousPipes=pipeIdentities;previousNodeIds=nodeIds;previousInputStates=inputStates;previousOutputStates=states;previousRateOnly=rateOnly;previousFlows=flows.clone();previousLawFlows=lawFlows;previousHeads=heads.clone();previousModes=List.copyOf(modes);continue;}
+            }
             var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::sideHeat);
-            // Decision D54: a dry vessel this pass's flows reached holds what they delivered (booked at the ambient, closed
-            // at its wall); the pass is solved again with it laid out from that state, so its end is the step's implicit
-            // end like every vessel's.
+            // Decision D54: what the booking fills past the bag's resolution though the flows delivered nothing at it (the
+            // delivered amounts stated warmer) is laid out from that state.
             if(filled(equations,projection)){seeds=projection.states();continue;}
             // Hold class E3: a node this pass solved with no hydrocarbon phase, to which the booked flows deliver a
             // hydrocarbon its layout omitted, was restated by the reconstruction as its flash (ConservativeTransport
@@ -1197,13 +1206,20 @@ public final class PassiveStepSolver {
     private List<FluidThermodynamics.State> arrivingPhases(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,List<FlowControl.Mode> modes,
                                                            boolean[] boundaryClosed,double dt,Runnable checkpoint) {
         if(rateOnly||graph.reservoirs().stream().noneMatch(node->node.junction()&&!node.fixed()||holdsNoFluidVessel(node)))return seeds;
-        int nodes=graph.reservoirs().size(),edges=graph.pipes().size();double[] flows=new double[edges];
+        int edges=graph.pipes().size();double[] flows=new double[edges];
         startPoint(graph,modes,boundaryClosed,identities(graph),null,flows,new double[edges],new boolean[edges]);
+        return arrivingPhases(graph,seeds,flows,false,modes,boundaryClosed,dt,checkpoint);
+    }
+    /** {@link #arrivingPhases} at the law flows {@code flows}; {@code vesselsOnly} leaves the junctions, for a converged pass
+     * whose junctions are solved; {@code seeds} itself where nothing is laid out. */
+    private List<FluidThermodynamics.State> arrivingPhases(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,double[] flows,boolean vesselsOnly,List<FlowControl.Mode> modes,
+                                                           boolean[] boundaryClosed,double dt,Runnable checkpoint) {
+        int nodes=graph.reservoirs().size();
         List<FluidThermodynamics.State> result=null;
         for(int round=0;round<=nodes;round++) {
             boolean changed=false;
             for(int j=0;j<nodes;j++) {
-                var node=graph.reservoirs().get(j);boolean empty=holdsNoFluidVessel(node);if(!(node.junction()&&!node.fixed()||empty))continue;
+                var node=graph.reservoirs().get(j);boolean empty=holdsNoFluidVessel(node);if(!(node.junction()&&!node.fixed()&&!vesselsOnly||empty))continue;
                 var current=result==null?seeds:result;var seed=current.get(j);
                 if(empty&&!dry(node,seed))continue;
                 double[] n=node.inventory().moles().clone();double heldMass=molarMass(n),mass=heldMass,weighted=heldMass*node.state().temperature(),heat=0;boolean arrives=false;
@@ -3498,10 +3514,13 @@ public final class PassiveStepSolver {
     /**
      * Decision D54: whether a pass lays {@code node} out as dry, with no unknowns. A vessel that holds no fluid at the step
      * start ({@link #holdsNoFluidVessel}), whose seed is still its own state, is a receiver at the ambient with no fluid:
-     * its state is its pressure and its solids, and it gives nothing. Once the start flows deliver into it
-     * ({@link #arrivingPhases}) or a pass's flows reach it ({@link #filled}), it is laid out like every vessel.
+     * its state is its pressure and its solids, and it gives nothing. Once the start flows or a
+     * converged pass's flows deliver into it ({@link #arrivingPhases}), or the booking fills it ({@link #filled}), it is laid
+     * out like every vessel.
      */
     static boolean dry(PassiveNetwork.Reservoir node,FluidThermodynamics.State seed){return holdsNoFluidVessel(node)&&seed==node.state();}
+    /** Whether this pass laid out a vessel dry. */
+    private static boolean anyDry(Equations equations){for(boolean dry:equations.dry)if(dry)return true;return false;}
     /** Whether a converged pass's reconstruction books a fluid into a vessel the pass laid out dry: more than none at the
      * bag's resolution ({@link #holdsNoFluid}); a roundoff it receives stays booked and the vessel stays dry. */
     private static boolean filled(Equations equations,ConservativeTransport.Projection projection) {
