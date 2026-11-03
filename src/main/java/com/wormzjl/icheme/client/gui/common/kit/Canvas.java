@@ -36,9 +36,9 @@ public interface Canvas {
     }
 
     /**
-     * Runs {@code body}, a loop of fills (a shape drawn dot by dot, row by row or segment by segment). In the game, what
-     * the body draws goes out as one draw call where it can, instead of one a fill; a text, a sprite or a clip inside it
-     * still ends the fills before it. The look does not change. A batch inside a batch is part of the outer one.
+     * Runs {@code body}: a loop of fills, or a whole frame (the simulator screen). In the game its fills go out in one draw
+     * call where they can, instead of one a fill, while its texts and sprites wait until something would cover them, a clip
+     * changes or the batch ends ({@link HeldDraws}). The look does not change. A batch inside a batch is part of the outer one.
      */
     default void batch(Runnable body) {
         body.run();
