@@ -2,7 +2,7 @@
 
 Purpose: why the cold LNG worlds with CO2 crystals reach the 2 s island wall budget, and a proposal for a fundamental fix.
 
-Status: In progress since 2026-11-02. Mode (a), form G and the junction tables are built and measured on the branch (`CARRIED_CRYSTALS_REVIEW.md`, `JUNCTION_TABLES_REVIEW.md`). All nine worlds: 0 holds, no job over 2 s. The owner kept the tables' carried fallback. Campaign: cold 989 clean (975), bundled 994 and 1000. The dry tank arrival is fixed (`DRY_TANK_ARRIVAL_REVIEW.md`): 181 and 397 clean, 431 new. The final lane and the merge wait for the owner's word.
+Status: In progress since 2026-11-02. Mode (a), form G and the junction tables are built and measured on the branch (`CARRIED_CRYSTALS_REVIEW.md`, `JUNCTION_TABLES_REVIEW.md`). All nine worlds: 0 holds, no job over 2 s. The owner kept the tables' carried fallback. Campaign: cold 989 clean (975), bundled 994 and 1000. The dry tank arrival is fixed (`DRY_TANK_ARRIVAL_REVIEW.md`): 181 and 397 clean, 431 new. Final lane run (`FINAL_LANE_REVIEW.md`): one test bound missed by G, fixed; cold 991, bundled 993 with 301 new from the arrival rule; proposal A for 301 waits for the owner. The merge waits for the owner's word.
 
 ## History
 
@@ -19,6 +19,7 @@ Status: In progress since 2026-11-02. Mode (a), form G and the junction tables a
 - 2026-11-03: the owner chose option A (B and C rejected) and proposal 1 (i), then "build it by yourself". Liquid junction tables built in this session. They cure 907 and hold 651 at job 88, where a two-phase junction the fluid phases refuse keeps its stated density. So a refused point now falls back to the carried flash, which goes beyond the owner's (i) and is written for the owner's decision. Nine worlds: 0 holds, no job over 2 s, worst 812 ms; 907 lives (371.0 + 30.2 kg). New `BalanceTablesTest`, proved with its rules off; 134 tests in 21 classes pass. Not run: campaign, final lane, whole `slowGates`, GameTests.
 - 2026-11-03: the owner kept the carried fallback and asked for the campaign. Cold random 989 clean against 975, in half the seed time; bundled random 994, defaults 1000; `refused=0`. 17 cold seeds gone, 3 new, all three caused by the tables: 181 and 397 by the liquid tables (a dry tank's arrival reads a carried zero flow), 118 by the fallback (the equation gate, open item 5). A scratch prototype of the arrival clears 181 and leaves 651 and 907 unchanged; 397 needs more. Not on the branch. No code changed in this step.
 - 2026-11-03: owner: "Fix arrival first". A converged pass that delivers into a dry vessel lays it out by the start stage's rule, at the enthalpy delivered, instead of the booking's TP flash at 298 K. Nine worlds unchanged to the checkpoint; 181, 397 and 792 clean; 431 holds once from a changed history (a stall 1.8e-11 above convergence). Bundled seeds alone hold as in the campaign. New hold-class world (seed 397's island), proved with the rule off; 227 tests in 39 classes pass.
+- 2026-11-03: owner: "Run final lane". Lane at 803970ac1 (local main 0.19.1 merged in): 2108 tests, 1 failure, `SolidTransportAcceptanceTest`'s 2e-6 kg bound from before G; given G's D/v_s bound as its sibling has, class passes. Junction lines as main's, chain-100 exact, 39 GameTests. Campaign: cold 991, bundled 993, defaults 1000, `refused=0`. Bundled 301 is new: the arrival rule priced 77 g of overflowing water as the donor's 1e-22 m3 nitrogen phase. Proposal A (lay out from the pass's draws) or B (merge, 301 open) for the owner.
 
 ## Documents
 
@@ -28,6 +29,7 @@ Status: In progress since 2026-11-02. Mode (a), form G and the junction tables a
 - [CARRIED_CRYSTALS_REVIEW.md](CARRIED_CRYSTALS_REVIEW.md): what was built, the options A, B and C, the nine worlds, the gates, the risks, the proposals for 907 and the PH steps.
 - [JUNCTION_TABLES_REVIEW.md](JUNCTION_TABLES_REVIEW.md): the balance's tables for flashing junctions, the two forms, the nine worlds, cost and reach.
 - [DRY_TANK_ARRIVAL_REVIEW.md](DRY_TANK_ARRIVAL_REVIEW.md): the first fill of a dry tank reached by a pass, the fix and the recheck of the affected seeds.
+- [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): the final lane, the test bound G missed, the moved printed lines, seed 301 and its proposal.
 
 ## Code areas
 
@@ -42,11 +44,12 @@ Status: In progress since 2026-11-02. Mode (a), form G and the junction tables a
 
 ## Open items
 
-1. Cold seed 431 holds once since the arrival fix, at 1.8e-11 above convergence (`DRY_TANK_ARRIVAL_REVIEW.md`). Not traced further.
-2. PH steps left in carried mode: 2.8 % CO2 at 541 kPa (about 370 J/mol) and 40 % at 1 MPa (2900 J/mol). No world meets them. Options for the owner in the review; nothing built.
-3. Why carried density tables hold 244, on the rows of junctions with vapour and near-pure CO2. Not traced past the rows. It sits at a point the fluid phases answer: carrying only the refused points leaves 244 clean.
-4. Stalls at a closure's start: 257 under F with (b+), 0.117 under F on today's thermo, 2.017 under A without (b+), and 855's 0.1059. Unexplained; G avoids them without explaining them.
-5. The equation gate: Newton's junction solid row against D33's booking. The refusals at 0.06 to 1 s are not fully explained. Seed 118 now holds on it: 518 refusals against 505 accepted steps.
-6. 555 is not traced.
-7. Run totals rise 1.2 to 4.4x with the tables. The worst job stays under 1 s; look here first if the campaign shows a new budget hold.
-8. Final lane, CHANGELOG, version, code guide, merge: the owner's word.
+1. Bundled seed 301 holds 16 times since the arrival fix (`FINAL_LANE_REVIEW.md`): a dry tank laid out from a donor's trace gas phase. Options A and B for the owner.
+2. Cold seed 431 holds once since the arrival fix, at 1.8e-11 above convergence (`DRY_TANK_ARRIVAL_REVIEW.md`). Not traced further.
+3. PH steps left in carried mode: 2.8 % CO2 at 541 kPa (about 370 J/mol) and 40 % at 1 MPa (2900 J/mol). No world meets them. Options for the owner in the review; nothing built.
+4. Why carried density tables hold 244, on the rows of junctions with vapour and near-pure CO2. Not traced past the rows. It sits at a point the fluid phases answer: carrying only the refused points leaves 244 clean.
+5. Stalls at a closure's start: 257 under F with (b+), 0.117 under F on today's thermo, 2.017 under A without (b+), and 855's 0.1059. Unexplained; G avoids them without explaining them.
+6. The equation gate: Newton's junction solid row against D33's booking. The refusals at 0.06 to 1 s are not fully explained. Seed 118 now holds on it: 518 refusals against 505 accepted steps.
+7. 555 is not traced.
+8. Run totals rise 1.2 to 4.4x with the tables. The worst job stays under 1 s; look here first if the campaign shows a new budget hold.
+9. CHANGELOG, version, code guide, merge: the owner's word. The final lane ran at 803970ac1.

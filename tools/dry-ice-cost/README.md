@@ -52,6 +52,7 @@ perl summaryB.pl out/base-673-jobs.tsv out/raised-651-jobs.tsv
 | `carried/hook-t.pl`, `traceT.sh` | `hook-a.pl` for the code after form G, without its prototype forms, plus each balance's pressures, flows and tables and the switch `step.noLiquidTables`; one traced job of a seed |
 | `carried/t1-form.patch` | The liquid tables alone, rejected: 651 holds 7 times. Against 2ab4690e9 |
 | `carried/hook-p.pl` | `hook-t.pl` plus the scratch arrival form behind `step.lawIntoDry`: a dry vessel's arrival reads the law where the carried flow is 0 |
+| `carried/hook-u.pl`, `traceU.sh` | `hook-t.pl` plus a `LAID` line: what `arrivingPhases` lays into a dry vessel, and every node's phase code and phase volumes. `hook-u.pl` runs the scratch copy of `hook-t.pl` first |
 | `campaign/campaign.sh` | The one full campaign: cold random, bundled random, bundled defaults, 1000 seeds, 8 workers, classified. Run from the worktree root. `COLD_SEEDS` and `BUNDLED_SEEDS` narrow it to a recheck |
 
 ## History
@@ -62,3 +63,4 @@ perl summaryB.pl out/base-673-jobs.tsv out/raised-651-jobs.tsv
 - 2026-11-03: `carried/hook-t.pl`, `traceT.sh` and `t1-form.patch` added for `JUNCTION_TABLES_REVIEW.md`. In a `BALANCE` trace line `~~` separates the nodes and pipes. Logs: `junction-tables-logs-2026-11-03.tar.gz`.
 - 2026-11-03: `campaign/campaign.sh` and `carried/hook-p.pl` added; `hook-t.pl` gained `step.noCarriedTables` and an `EMPTY` trace line per dry vessel in `arrivingPhases`. Logs: `campaign-logs-2026-11-03.tar.gz`, with the three reports, the baselines in `campaign/ref/`, the replays and the rule-off runs.
 - 2026-11-03: `campaign.sh` gained `COLD_SEEDS` and `BUNDLED_SEEDS` for `DRY_TANK_ARRIVAL_REVIEW.md`'s recheck. Logs: `dry-tank-arrival-logs-2026-11-03.tar.gz`.
+- 2026-11-03: `hook-u.pl` and `traceU.sh` added for `FINAL_LANE_REVIEW.md`. `DryIceProbe.describe` skips the CO2 shares on a basis without CO2, so it runs bundled seeds: pass `-DholdFuzz.cold=false` after the script's options. Logs: `final-lane-logs-2026-11-03.tar.gz`.

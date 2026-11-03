@@ -92,7 +92,7 @@ final class DryIceProbe {
             for(var p:n.inventory().solids().populations()){solidKg+=p.massKg();crystals.append(p.material().id()).append('=').append(String.format(Locale.ROOT,"%.4g",p.massKg())).append("kg ");}
             b.append("    node ").append(i).append(" id=").append(n.id()).append(' ').append(n.kind()).append(" z=").append(n.elevation())
              .append(String.format(Locale.ROOT," P=%.1f T=%.3f m=%.4g liq=%.4g vap=%.4g water=%.3g",st.pressure(),st.temperature(),st.mass(),st.liquidVolume(),st.vaporVolume(),st.waterVolume()))
-             .append(String.format(Locale.ROOT," molL=%.4g molV=%.4g xCO2=%.4g yCO2=%.4g",lt,vt,lt>0?l[co2]/lt:0,vt>0?v[co2]/vt:0))
+             .append(String.format(Locale.ROOT," molL=%.4g molV=%.4g xCO2=%.4g yCO2=%.4g",lt,vt,co2>=0&&lt>0?l[co2]/lt:0,co2>=0&&vt>0?v[co2]/vt:0))
              .append(" solidKg=").append(String.format(Locale.ROOT,"%.4g",solidKg)).append(' ').append(crystals).append('\n');
         }
         for(int i=0;i<g.pipes().size();i++){var p=g.pipes().get(i);
