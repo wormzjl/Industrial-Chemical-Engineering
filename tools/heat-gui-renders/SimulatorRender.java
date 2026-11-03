@@ -615,6 +615,28 @@ public final class SimulatorRender {
             }));
         }
         SimulatorPrototypes.grid(out, "17-file-and-repair", List.of("Open: the bundled example first, then the player's own files, an autosave beside its file (light door)", "After an update: what changed (light door)", "Open (dark door)", "After an update (dark door)"), pages);
+        // Delete (owner 2026-11-04): on a file row, off on an example with its hover, and the prompt that confirms it.
+        var deleting = new ArrayList<BufferedImage>();
+        for (var skin : SKINS) {
+            int file = 0;
+            while (!entries.get(file).name().equals("CDU train")) file++;
+            int mine = file;
+            deleting.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> list(d, FileColumns.open(entries, mine, T))));
+            deleting.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> {
+                var l = FileColumns.open(entries, 0, T);
+                list(d, l);
+                var key = com.wormzjl.icheme.client.gui.common.DialogColumns.footer(d.w, d.h, l.keys().length).get(FileColumns.OPEN_DELETE);
+                tooltip(d, l.off()[FileColumns.OPEN_DELETE], key.x() + key.w() / 2, key.y() + 6);
+            }));
+            deleting.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> {
+                FileColumns.drawChanges(d.c, d.skin, T.get("flowsheet.file.delete_title", "CDU train"), FileColumns.deleting(T), "", d.w, d.h);
+                var slots = com.wormzjl.icheme.client.gui.common.DialogColumns.footer(d.w, d.h, 2);
+                d.skin.button(d.c, slots.get(0), T.get("flowsheet.file.cancel"), Skin.Press.REST, false);
+                d.skin.button(d.c, slots.get(1), T.get("flowsheet.file.delete"), Skin.Press.PRIMARY, false);
+            }));
+        }
+        SimulatorPrototypes.grid(out, "17b-open-delete", List.of("Open: a file of yours chosen, Delete on (light door)", "An example chosen: Delete off, its hover (light door)", "Delete confirms first (light door)",
+                "A file chosen (dark door)", "An example chosen (dark door)", "Delete confirms (dark door)"), deleting);
         var prompts = new ArrayList<BufferedImage>();
         for (var skin : SKINS) {
             prompts.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> unsavedPrompt(d)));

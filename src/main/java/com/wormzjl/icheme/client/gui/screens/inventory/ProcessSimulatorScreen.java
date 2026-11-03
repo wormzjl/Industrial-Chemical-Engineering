@@ -89,7 +89,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private static final int RATE_TICKS = 10;
 
     private enum Dialog {
-        NONE, OPEN, SAVE_AS, TEMPLATES, COLUMN_TEMPLATES, REPLACE, CHANGES, SAVE_TEMPLATE, SAVE_COLUMN, UNSAVED;
+        NONE, OPEN, SAVE_AS, TEMPLATES, COLUMN_TEMPLATES, REPLACE, CHANGES, SAVE_TEMPLATE, SAVE_COLUMN, UNSAVED, DELETE;
 
         /** Whether it asks for a name. */
         boolean names() {
@@ -149,6 +149,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private String openingName = "";
     /** The file name the sheet in {@link #opening} keeps once loaded: none for an example. */
     private @Nullable String openingFile;
+    /** Open's row the delete prompt asks about. */
+    private FileColumns.@Nullable Entry deleting;
     /** What a prompt holds back until the player answers it. */
     private @Nullable Runnable pending;
     /** The file this sheet last came from or went to, which its autosave stands beside. */
@@ -505,6 +507,12 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             add(new Column.Button("dialog/load", lang("flowsheet.file.open"), true, null), slots.get(1).moved(left, top));
             return;
         }
+        if (dialog == Dialog.DELETE) {
+            var slots = DialogColumns.footer(w, h, 2);
+            add(new Column.Button("dialog/cancel", lang("flowsheet.file.cancel"), true, null), slots.get(0).moved(left, top));
+            add(new Column.Button("dialog/delete", lang("flowsheet.file.delete"), true, null), slots.get(1).moved(left, top)).primary(true);
+            return;
+        }
         var list = listing(x);
         var slots = DialogColumns.footer(w, h, list.keys().length);
         for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], list.off()[i] == null, list.off()[i]), slots.get(i).moved(left, top));
@@ -776,7 +784,23 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private void dialogKey(String key) {
         var x = context();
         if (key.equals("cancel")) {
-            dialog = Dialog.NONE;
+            // The delete prompt's Cancel goes back to Open, its row still chosen.
+            dialog = dialog == Dialog.DELETE ? Dialog.OPEN : Dialog.NONE;
+            deleting = null;
+            return;
+        }
+        if (key.equals("delete")) {
+            var entry = deleting;
+            deleting = null;
+            if (entry != null) {
+                try {
+                    FileColumns.delete(folder(), entry);
+                    fileName = FileColumns.nameAfterDelete(folder(), fileName, entry);
+                } catch (IOException refused) {
+                    host.say(new SimulatorHost.Said("file.delete_failed", List.of(), true));
+                }
+            }
+            openDialog();
             return;
         }
         if (key.equals("save")) {
@@ -810,12 +834,19 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             dialog = Dialog.NONE;
             return;
         }
-        if (dialog == Dialog.OPEN && index == 1) {
+        if (dialog == Dialog.OPEN && index == FileColumns.OPEN_FOLDER) {
             Util.getPlatform().openPath(folder());
             return;
         }
-        if (dialog == Dialog.OPEN && index == 2) {
+        if (dialog == Dialog.OPEN && index == FileColumns.OPEN_CLIPBOARD) {
             fromClipboard();
+            return;
+        }
+        if (dialog == Dialog.OPEN && index == FileColumns.OPEN_DELETE) {
+            if (chosen >= 0 && chosen < files.size() && FileColumns.deletable(files.get(chosen))) {
+                deleting = files.get(chosen);
+                dialog = Dialog.DELETE;
+            }
             return;
         }
         if (dialog == Dialog.COLUMN_TEMPLATES && index == 2) {
@@ -1023,6 +1054,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         skin().page(canvas, new Rect(0, 0, w, h));
         if (dialog.names()) skin().title(canvas, 10, 10, lang(dialog == Dialog.SAVE_AS ? "flowsheet.file.save_title" : dialog == Dialog.SAVE_TEMPLATE ? "flowsheet.file.template_title" : "flowsheet.file.column_title"));
         else if (dialog == Dialog.UNSAVED) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.unsaved_title"), FileColumns.unsaved(ProcessSimulatorScreen::lang), lang("flowsheet.file.unsaved_foot"), w, h);
+        else if (dialog == Dialog.DELETE && deleting != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.delete_title", deleting.name()), FileColumns.deleting(ProcessSimulatorScreen::lang), "", w, h);
         else if (dialog == Dialog.CHANGES && opening != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.changes_title", openingName), FileColumns.changes(opening, fluids, ProcessSimulatorScreen::columnDefaults, ProcessSimulatorScreen::lang), lang("flowsheet.file.changes_foot"), w, h);
         else FileColumns.draw(canvas, skin(), listing(x), w, h);
         g.pose().popPose();

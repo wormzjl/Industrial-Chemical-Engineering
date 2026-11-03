@@ -15,6 +15,7 @@ import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.UnitTypes;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -172,11 +173,47 @@ public final class FileColumns {
         }
     }
 
+    /** Open's keys by place: Cancel, Folder, From clipboard, Delete, Open (the primary). */
+    public static final int OPEN_FOLDER = 1, OPEN_CLIPBOARD = 2, OPEN_DELETE = 3, OPEN_OPEN = 4;
+
     public static Listing open(List<Entry> entries, int chosen, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Row>();
         for (var entry : entries) rows.add(new Row(new String[]{entry.name(), entry.size(), entry.saved(), entry.state()}, entry.warn()));
+        var off = new String[5];
+        if (chosen < 0 || chosen >= entries.size()) off[OPEN_DELETE] = t.get("flowsheet.file.delete_choose_sheet");
+        else if (!deletable(entries.get(chosen))) off[OPEN_DELETE] = t.get("flowsheet.file.delete_example");
         return new Listing(t.get("flowsheet.file.open_title"), new String[]{t.get("flowsheet.file.name"), t.get("flowsheet.file.size"), t.get("flowsheet.file.saved"), t.get("flowsheet.file.state")}, new int[]{0, 170, 226, 330}, rows, chosen,
-                new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.folder"), t.get("flowsheet.file.from_clipboard"), t.get("flowsheet.file.open")}, 3);
+                new String[]{t.get("flowsheet.file.cancel"), t.get("flowsheet.file.folder"), t.get("flowsheet.file.from_clipboard"), t.get("flowsheet.file.delete"), t.get("flowsheet.file.open")}, OPEN_OPEN, off);
+    }
+
+    /** Whether Open's Delete takes an entry: any of the player's own files, an autosave or a damaged one too; never an example, which has no file. */
+    public static boolean deletable(Entry entry) {
+        return !entry.example() && entry.file() != null;
+    }
+
+    /**
+     * Deletes the player's file of {@code entry} from {@code folder}, and only that file: its autosave has a row of its own. The path must be a
+     * direct child of the folder and a regular file, never a link; anything else is refused and nothing changes. Deleting cannot be undone, so
+     * the screen asks first ({@link #deleting}).
+     */
+    public static void delete(Path folder, Entry entry) throws IOException {
+        if (!deletable(entry)) throw new IOException("not one of the player's files");
+        var home = folder.toAbsolutePath().normalize();
+        var path = home.resolve(entry.file().getFileName().toString()).normalize();
+        if (!home.equals(path.getParent()) || !path.equals(entry.file().toAbsolutePath().normalize())) throw new IOException("outside the folder");
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("not a regular file");
+        Files.delete(path);
+    }
+
+    /** The file name a sheet keeps after {@code deleted} went: none where it was the sheet's own file, so Save asks for a name. */
+    public static @Nullable String nameAfterDelete(Path folder, @Nullable String name, Entry deleted) {
+        if (name == null || deleted.file() == null) return name;
+        return file(folder, name).toAbsolutePath().normalize().equals(deleted.file().toAbsolutePath().normalize()) ? null : name;
+    }
+
+    /** What the delete prompt says: one line, the file cannot be restored. */
+    public static List<Change> deleting(HeatControlColumn.Texts t) {
+        return List.of(new Change(t.get("flowsheet.file.delete_kind"), t.get("flowsheet.file.delete_line"), true));
     }
 
     /** What the unsaved-changes prompt says. */

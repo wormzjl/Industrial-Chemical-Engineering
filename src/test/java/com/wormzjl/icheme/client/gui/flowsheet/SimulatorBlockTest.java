@@ -419,7 +419,7 @@ class SimulatorBlockTest {
         assertNull(FileColumns.columnTemplates(list, 1, SheetUnits.DEFAULT, t).off()[1], "your own can go");
         assertNotNull(FileColumns.columnTemplates(list, -1, SheetUnits.DEFAULT, t).off()[1], "nothing chosen, nothing to delete");
         assertNull(FileColumns.columnTemplates(list, 0, SheetUnits.DEFAULT, t).off()[3], "Load stays on");
-        assertEquals(4, FileColumns.open(List.of(), -1, t).off().length, "a list with no reasons has a place for each key");
+        assertEquals(5, FileColumns.open(List.of(), -1, t).off().length, "a place for each key");
         assertTrue(t.missing.isEmpty(), () -> "missing " + t.missing);
     }
 
@@ -494,7 +494,8 @@ class SimulatorBlockTest {
     @Test
     void theDialogsKeysAreThereAndEveryTextHasItsLine() {
         var t = new SheetFixture.Texts();
-        assertEquals(List.of("Cancel", "Folder", "From clipboard", "Open"), List.of(FileColumns.open(List.of(), -1, t).keys()));
+        assertEquals(List.of("Cancel", "Folder", "From clipboard", "Delete", "Open"), List.of(FileColumns.open(List.of(), -1, t).keys()));
+        assertEquals(FileColumns.OPEN_OPEN, FileColumns.open(List.of(), -1, t).primary(), "Open stays the primary key, at the right");
         assertEquals(List.of("Cancel", "Delete", "Save current", "Load"), List.of(FileColumns.columnTemplates(List.of(), -1, SheetUnits.DEFAULT, t).keys()));
         var stream = new FileColumns.StreamTemplate("Air", Map.of("Water", 1.0), 300, 2e5, 2);
         var rows = FileColumns.streamTemplates(List.of(stream, new FileColumns.StreamTemplate("Oil", Map.of("Water", 1.0), Double.NaN, Double.NaN, Double.NaN)), -1, SheetUnits.DEFAULT, t).rows();
