@@ -86,7 +86,7 @@ class SimulatorColumnsTest {
         return doors;
     }
 
-    private static void assertFits(Measure m, Column column, Rect area, String what) {
+    static void assertFits(Measure m, Column column, Rect area, String what) {
         for (var p : column.rows()) {
             assertTrue(p.rect().x() >= area.x() && p.rect().right() <= area.right(), what + ": a row inside its area");
             for (var t : p.texts()) assertTrue(m.width(t) <= p.rect().w(), what + ": a text cut: " + t);
@@ -111,11 +111,11 @@ class SimulatorColumnsTest {
     }
 
     /** A column of fixed width, as it stands and less the bar a long one takes. */
-    private static void assertFixedFits(Measure m, List<? extends Column.Row> rows, int width, String what) {
+    static void assertFixedFits(Measure m, List<? extends Column.Row> rows, int width, String what) {
         for (int w : new int[]{width, width - ScrollView.BAR - 4}) assertFits(m, Column.place(rows, 0, 0, w, m, Column.Metrics.COMPACT), new Rect(0, 0, w, 400), what + " at " + w);
     }
 
-    private static void assertDoorFits(Measure m, Door door, String what) {
+    static void assertDoorFits(Measure m, Door door, String what) {
         for (int width = 300; width <= 790; width += 7) {
             var areas = DoorFrame.areas(door, width, SimulatorFrame.DOOR_H);
             var columns = DoorFrame.columns(door, width);
