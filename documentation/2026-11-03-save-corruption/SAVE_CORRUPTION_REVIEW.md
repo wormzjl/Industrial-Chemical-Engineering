@@ -267,7 +267,9 @@ Replace "A damaged facts section refuses the world and leaves its files untouche
 
 ## 8. Owner decisions
 
-| | Question | Recommended | Alternative |
+All decided on 2026-11-03. S5 was set by the owner's direction ("registry first"). The others were decided by "Accept, plan W5", which accepted every recommended option.
+
+| | Question | Decided (recommended) | Alternative |
 |---|---|---|---|
 | S1 | When a part is damaged | Automatic OLDER GENERATION with a notice | Refuse, and recover only after an explicit opt-in |
 | S2 | When no generation holds a vessel | Starts empty, booked as lost, notice, bytes in quarantine | Refuse |
@@ -281,7 +283,9 @@ Replace "A damaged facts section refuses the world and leaves its files untouche
 | S10 | An IChemE block the registry never saw | Register it from the block, as today | Remove it (strict registry first). That is right only after a torn autosave, and it deletes the player's newest builds after a hard kill |
 | S11 | A registration that cannot be placed | Held: it keeps its contents, joins no flow, and is listed | It keeps simulating with no block, as today |
 
-## 9. Work packages (once the owner decides)
+## 9. Work packages
+
+W5a and W5b are planned in [REGISTRY_FIRST_PLAN.md](REGISTRY_FIRST_PLAN.md).
 
 - **W1. Generations and pins (P1, P2).** Code: `FluidCheckpointStore` (`Backend.writeCore`, the deletion rule, `cleanOrphans`) and pins. Gate: `FluidCheckpointStoreTest`.
 - **W2. Ladder rungs 3 and 4.** Code: `FluidCheckpointStore.load`, `FluidFacts.rebuild` given per-vessel sources, the quarantine, a ledger line (an append-only facts field) and the status notice. Gates: the damaged corpus images, plus one test per rung.
