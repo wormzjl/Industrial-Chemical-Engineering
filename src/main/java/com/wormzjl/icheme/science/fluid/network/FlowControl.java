@@ -8,25 +8,20 @@ import com.wormzjl.icheme.science.machine.PositiveDisplacement;
 public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Mover,FlowControl.Valve {
     record Passive() implements FlowControl {}
     /**
-     * A device that moves fluid from its connection's first end (its suction) to its second at a set suction volume flow,
-     * up to a pressure-rise limit: the liquid pump and the gas compressor (decisions D1, D2, D7, D8 of
-     * documentation/2026-09-26-phase-ports-and-compressor). The solver runs both on one set of modes
-     * ({@code PUMP_TARGET}, {@code PUMP_HEAD_LIMIT}, {@code CLOSED},
-     * {@code INLET_WRONG_PHASE}), rows, shutoff band and carry; they differ only in the rise limit, the shaft work and the
-     * inlet phase they admit. A pump has one more, {@code PUMP_SUCTION_LIMIT} (cavitation); a compressor draws gas, which
-     * has no vapour pressure to fall below, and never takes it. Every quantity reads the suction only (decision D4): the stream the first end draws, and the
-     * first end's pressure.
-     *
-     * <p>A mover on its own law ({@link #onLaw}, mode {@code MOVER_LAW}, batch 2026-11-03-rotating-machinery) has one row
-     * instead of the switch: its rise falls with its flow ({@link #lawResidual}). A {@link Machine} is always on its curve;
-     * a set-flow pump or compressor is on the corner law of a positive-displacement machine under form F2.
+     * A device that moves fluid from its connection's first end (its suction) to its second: the liquid pump and the gas
+     * compressor (decisions D1, D2, D7, D8 of documentation/2026-09-26-phase-ports-and-compressor). Every mover runs on its
+     * own law, one row whose rise falls with the flow ({@link #lawResidual}, mode {@code MOVER_LAW}; batch
+     * 2026-11-03-rotating-machinery, form F2b, the owner's choice of 2026-11-04). A set-flow pump or compressor is a
+     * positive-displacement machine: its set flow is the displacement, its rise limit the relief rise
+     * ({@link PositiveDisplacement}). A {@link Machine} is on its curve. Movers share the modes, the shutoff band and the
+     * carry; they differ in the law, the shaft work and the inlet phase they admit. A pump has one more mode,
+     * {@code PUMP_SUCTION_LIMIT} (cavitation); a compressor draws gas, which has no vapour pressure to fall below, and never
+     * takes it. Every quantity reads the suction only (decision D4): the stream the first end draws, and the first end's
+     * pressure.
      */
     sealed interface Mover extends FlowControl permits Pump,Compressor,Machine {
         /** The largest suction volume flow a device's controls take (m3/s). */
         double MAXIMUM_VOLUME_FLOW=10;
-        /** Form F2 of the batch's quick check (plan section 4.2): set-flow movers on the corner law instead of the mode switch.
-         * A measurement switch until the owner's form is chosen. */
-        boolean CORNER_LAW=Boolean.getBoolean("icheme.fluid.cornerLaw");
         /** Configured suction volume flow (m3/s), retained while switched off. */
         double requestedVolumeFlow();
         /** Whether the constructed mover is commanded on; one-block devices retain their enabled behavior. */
@@ -35,8 +30,6 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         default double targetVolumeFlow(){return enabled()?requestedVolumeFlow():0;}
         /** Whether it moves liquid (a pump) or gas (a compressor). */
         boolean liquid();
-        /** Whether it runs on its own law ({@code MOVER_LAW}) instead of the set-flow modes. */
-        default boolean onLaw(){return CORNER_LAW;}
         /**
          * The largest pressure rise (Pa) the device can add over what its suction draws: {@code suctionDensity} (kg/m3) is
          * the density of the stream the first end draws, {@code suctionPressure} (Pa) the first end's driving pressure,
@@ -180,7 +173,6 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         }
         @Override public double requestedVolumeFlow(){return law.ratedFlow()*speed;}
         @Override public boolean liquid(){return law.liquid();}
-        @Override public boolean onLaw(){return true;}
         /** The curve's rise at no flow. */
         @Override public double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return law.rise(0,speed,suctionDensity,suctionPressure,k);
@@ -199,7 +191,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         }
         @Override public String deviceName(){return liquid()?"pump":"compressor";}
     }
-    /** The corner law of a set-flow mover under form F2: its set flow is the displacement, its rise limit the relief rise. */
+    /** The corner law of a set-flow mover (form F2b): its set flow is the displacement, its rise limit the relief rise. */
     private static PositiveDisplacement corner(Mover mover,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
         return new PositiveDisplacement(mover.targetVolumeFlow(),mover.riseLimit(suctionDensity,suctionPressure,referenceDensity,k));
     }
@@ -241,18 +233,17 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * The regime of one connection in a solve. {@code INLET_WRONG_PHASE} (decision D6) is a mover refused for a whole
      * slice because its supply is the wrong phase or dry ({@link InletPhase}): in the solver it is {@code CLOSED} (flow exactly
      * zero, never reopened within the slice), and it persists as an endpoint mode so the next slice's hysteresis reads it.
-     * Endpoint modes are saved as ordinals (checkpoint format 11, unit format 4).
+     * Endpoint modes are state, saved as ordinals in the checkpoint format only.
      *
-     * <p>{@code PUMP_SUCTION_LIMIT} (owner decision D59 (4)) is a liquid pump that cavitates: its target flow would pull its
-     * suction below the bubble pressure of the liquid it draws (water's saturation pressure; for a hydrocarbon liquid a
-     * two-phase supplier's own pressure, owner decision K6 of 2026-10-18), so the row {@code P_suction = P_bubble} replaces
-     * the target-flow row, as the head limit does, and the flow is what the suction line delivers at that pressure. It
-     * persists as an endpoint mode like the head limit. The velocity cap is no mode: it is part of every throttling
-     * line's law ({@code PassiveStepSolver.saturated}, 2026-10-18).
+     * <p>{@code PUMP_SUCTION_LIMIT} (owner decision D59 (4)) is a liquid pump that cavitates: its law would pull its suction
+     * below the bubble pressure of the liquid it draws (water's saturation pressure; for a hydrocarbon liquid a two-phase
+     * supplier's own pressure, owner decision K6 of 2026-10-18), so the row {@code P_suction = P_bubble} replaces the law's
+     * row and the flow is what the suction line delivers at that pressure. It persists as an endpoint mode. The velocity
+     * cap is no mode: it is part of every throttling line's law ({@code PassiveStepSolver.saturated}, 2026-10-18).
      *
-     * <p>{@code MOVER_LAW} (batch 2026-11-03-rotating-machinery) is a mover on its own law ({@link Mover#onLaw}): one row,
-     * the rise falling with the flow, in place of {@code PUMP_TARGET} and {@code PUMP_HEAD_LIMIT}. It closes on a reverse
-     * drive and takes the suction limit as they do.
+     * <p>{@code MOVER_LAW} (batch 2026-11-03-rotating-machinery) is a running mover: one row, the rise falling with the
+     * flow ({@link Mover#lawResidual}). It closes on a reverse drive and takes the suction limit. The set-flow pair it
+     * replaced, a target row and a head-limit row, is gone (form F2b, 2026-11-04).
      */
-    enum Mode { PASSIVE, PUMP_TARGET, PUMP_HEAD_LIMIT, VALVE_REGULATING, VALVE_OPEN, CLOSED, INLET_WRONG_PHASE, PUMP_SUCTION_LIMIT, VALVE_CONFLICT, MOVER_LAW }
+    enum Mode { PASSIVE, VALVE_REGULATING, VALVE_OPEN, CLOSED, INLET_WRONG_PHASE, PUMP_SUCTION_LIMIT, VALVE_CONFLICT, MOVER_LAW }
 }

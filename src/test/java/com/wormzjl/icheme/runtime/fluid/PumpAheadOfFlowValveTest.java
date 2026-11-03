@@ -47,8 +47,8 @@ class PumpAheadOfFlowValveTest {
         assertEquals(pump,modeOf(result,island.graph(),FlowControl.Pump.class),name);
         assertEquals(valve,modeOf(result,island.graph(),FlowControl.ControlValve.class),name);
     }
-    @Test void aTargetBelowThePumpsRateRegulatesWithThePumpOnItsHeadLimit() {
-        assertLine(line(5,true),"a pump ahead of the valve",5,FlowControl.Mode.PUMP_HEAD_LIMIT,FlowControl.Mode.VALVE_REGULATING);
+    @Test void aTargetBelowThePumpsRateRegulatesWithThePumpNearItsReliefRise() {
+        assertLine(line(5,true),"a pump ahead of the valve",5,FlowControl.Mode.MOVER_LAW,FlowControl.Mode.VALVE_REGULATING);
     }
     @Test void aClosedValveLeavesThePumpAtShutoff() {
         assertLine(line(0,true),"a pump behind a closed valve",0,FlowControl.Mode.CLOSED,FlowControl.Mode.CLOSED);
@@ -56,7 +56,7 @@ class PumpAheadOfFlowValveTest {
     @Test void aTargetAboveThePumpsRateChangesNothing() {
         var w=line(50,true);w.assertKeptUp("above the pump's rate");
         var island=w.coordinator.snapshots().getFirst();var result=island.lastResult().orElseThrow();
-        assertEquals(FlowControl.Mode.PUMP_TARGET,modeOf(result,island.graph(),FlowControl.Pump.class));
+        assertEquals(FlowControl.Mode.MOVER_LAW,modeOf(result,island.graph(),FlowControl.Pump.class));
         assertEquals(FlowControl.Mode.VALVE_OPEN,modeOf(result,island.graph(),FlowControl.ControlValve.class));
         assertEquals(RATE*result.graph().reservoirs().getFirst().state().mass()/result.graph().reservoirs().getFirst().state().volume(),result.averageMassFlows()[0],.05);
     }

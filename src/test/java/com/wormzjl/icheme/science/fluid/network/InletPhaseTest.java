@@ -241,8 +241,8 @@ class InletPhaseTest extends PortFixture {
         for(var s:run.slices()){modes.add(String.valueOf(s.endpointModes().getFirst()));drawn.add(s.averageMassFlows()[0]*interval);}
         var tank=run.last().reservoirs().getFirst().state();
         System.out.println("INLET_PHASE_RUN fixture5 modes="+modes+" drawnKg="+drawn+" tankWater="+tank.waterLiquid()*mw[water]+"kg accepted="+run.accepted()+" rejected="+run.rejected()+" reasons="+run.reasons());
-        assertEquals(FlowControl.Mode.PUMP_TARGET,run.slices().get(0).endpointModes().getFirst());
-        assertEquals(FlowControl.Mode.PUMP_TARGET,run.slices().get(1).endpointModes().getFirst());
+        assertEquals(FlowControl.Mode.MOVER_LAW,run.slices().get(0).endpointModes().getFirst());
+        assertEquals(FlowControl.Mode.MOVER_LAW,run.slices().get(1).endpointModes().getFirst());
         for(int i=0;i<2;i++)assertEquals(target*interval*997,drawn.get(i),.01*target*interval*997,"slice "+i+" on target");
         assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,run.slices().get(2).endpointModes().getFirst(),"admitted with 1 % of the slice's draw gas");
         for(int i=3;i<8;i++){assertEquals(FlowControl.Mode.INLET_WRONG_PHASE,run.slices().get(i).endpointModes().getFirst(),"refused from slice 3: "+modes);assertEquals(0.0,drawn.get(i));}

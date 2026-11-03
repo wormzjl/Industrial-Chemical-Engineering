@@ -19,9 +19,9 @@ gradle.projectsEvaluated {
         systemProperty 'holdFuzz.defaults', root.findProperty('holdFuzzDefaults') ?: 'false'
         systemProperty 'holdFuzz.counters', root.findProperty('holdFuzzCounters') ?: 'false'
         systemProperty 'holdFuzz.pipeBetween', root.findProperty('holdFuzzPipeBetween') ?: 'true'
-        // Batch 2026-11-03-rotating-machinery: -PholdFuzzCornerLaw=true runs form F2 (set-flow movers on the corner law),
-        // -PholdFuzzMachines=true the centrifugal variant (each in-line mover a machine on its curve, rated from its settings).
-        systemProperty 'icheme.fluid.cornerLaw', root.findProperty('holdFuzzCornerLaw') ?: 'false'
+        // Batch 2026-11-03-rotating-machinery: -PholdFuzzMachines=true runs the centrifugal variant (each in-line mover a machine
+        // on its curve, rated from its settings). Form F2b, the set-flow movers' corner law, is the code's only law since
+        // the owner's choice of 2026-11-04; -PholdFuzzCornerLaw switched it before (commits 218f9c5ff, ffae9fc4d).
         systemProperty 'holdFuzz.machines', root.findProperty('holdFuzzMachines') ?: 'false'
         systemProperty 'holdFuzz.out', root.findProperty('holdFuzzOut') ?: new File(here, 'logs/report.txt').absolutePath
         testLogging { showStandardStreams = true }

@@ -92,6 +92,12 @@ class FluidPumpedFillLineTest {
             }
         }
         IslandCoordinator.Snapshot island(){return coordinator.snapshot(1);}
+        /** The share of its set flow the mover on connection {@code edge} moved over the last slice, on its suction's density:
+         * one on its law short of its relief rise (batch 2026-11-03-rotating-machinery, form F2b). */
+        double delivered(int edge) {
+            var island=island();var pipe=island.graph().pipes().get(edge);var drawn=island.graph().reservoirs().get(pipe.first()).state();
+            return island.lastResult().orElseThrow().averageMassFlows()[edge]/(drawn.mass()/drawn.volume())/((FlowControl.Mover)pipe.control()).targetVolumeFlow();
+        }
         String describe() {
             var s=coordinator.observe(1);var text=new StringBuilder(String.format("online %d, committed %d, %d jobs, %.1f s of work, %s, %s",
                     online,s.clock().committedTick(),jobs,work/1e9,s.status(),s.certificate()));
@@ -149,7 +155,8 @@ class FluidPumpedFillLineTest {
         var island=rig.island();var result=island.lastResult().orElseThrow();
         assertTrue(island.status().startsWith("FULL"),rig.describe());
         assertTrue(island.clock().committedTick()>=20*590,"the island keeps up with online time: "+rig.describe());
-        assertEquals(FlowControl.Mode.PUMP_TARGET,result.endpointModes().get(1));
+        assertEquals(FlowControl.Mode.MOVER_LAW,result.endpointModes().get(1));
+        assertEquals(1,rig.delivered(1),.005,"the pump holds its set flow: "+rig.describe());
         double[] flows=result.averageMassFlows();
         assertTrue(flows[flows.length-1]>.8*flows[1],"through-flow reaches the void: "+Arrays.toString(flows));
         assertTrue(liquidFraction(tanks(island.graph()).getFirst().state())>.95,rig.describe());
@@ -164,7 +171,8 @@ class FluidPumpedFillLineTest {
         var rig=new Rig("GPUPRPRPRPRPRPR");rig.run(20*120,s->s.clock().committedTick()>=40);
         System.out.println("six-tank fill: "+rig.describe());
         assertTrue(rig.island().clock().committedTick()>=40,"past its first two seconds: "+rig.describe());
-        assertEquals(FlowControl.Mode.PUMP_TARGET,rig.island().lastResult().orElseThrow().endpointModes().get(1));
+        assertEquals(FlowControl.Mode.MOVER_LAW,rig.island().lastResult().orElseThrow().endpointModes().get(1));
+        assertEquals(1,rig.delivered(1),.005,"on at the pump's set flow: "+rig.describe());
     }
 
     /**

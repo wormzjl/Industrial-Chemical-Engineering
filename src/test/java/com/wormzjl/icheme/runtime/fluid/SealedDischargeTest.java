@@ -74,7 +74,7 @@ class SealedDischargeTest {
             var result=s.lastResult().orElseThrow();
             System.out.println("OWN_END_DISCHARGE island "+s.id()+" modes="+result.endpointModes()+" flows="+java.util.Arrays.toString(result.averageMassFlows()));
             for(int e=0;e<s.graph().pipes().size();e++)if(s.graph().pipes().get(e).control() instanceof FlowControl.Pump) {
-                assertNotEquals(FlowControl.Mode.PUMP_HEAD_LIMIT,result.endpointModes().get(e),"the pump moves nothing");
+                assertNotEquals(FlowControl.Mode.MOVER_LAW,result.endpointModes().get(e),"the pump moves nothing");
                 assertEquals(0,result.averageMassFlows()[e],1e-12,"the pump moves nothing");
             }
         }

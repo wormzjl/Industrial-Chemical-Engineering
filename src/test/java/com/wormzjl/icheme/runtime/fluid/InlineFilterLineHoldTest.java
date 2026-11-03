@@ -57,13 +57,13 @@ class InlineFilterLineHoldTest {
         w.runTo(end+after);
     }
 
-    /** The whole line, in the client's order: no hold, and the pump runs at its target through the regulating valve. */
+    /** The whole line, in the client's order: no hold, and the pump runs on its law through the regulating valve. */
     @Test void theInGameLineNeverHolds() {
         var w=new EventPathWorld();run(w,LINE.length,2400);w.assertKeptUp("in-game line");
         var island=w.coordinator.snapshots().stream().filter(s->s.graph().pipes().size()>=6).findFirst().orElseThrow();
         var modes=island.lastResult().orElseThrow().endpointModes();
         System.out.println("F8_END "+w.describe(island.id())+" modes="+modes);
-        assertTrue(modes.contains(FlowControl.Mode.PUMP_TARGET)&&modes.contains(FlowControl.Mode.VALVE_REGULATING),"the pump delivers its target through the valve: "+modes);
+        assertTrue(modes.contains(FlowControl.Mode.MOVER_LAW)&&modes.contains(FlowControl.Mode.VALVE_REGULATING),"the pump delivers through the valve: "+modes);
     }
     /** Every intermediate dead end the line passes through (the pump into one pipe, into the filter alone, into the
      * filter and a pipe, into the valve with nothing past it), each run for two minutes on its own. */
@@ -90,9 +90,9 @@ class InlineFilterLineHoldTest {
             ends.put(layout,island.lastResult().map(PassiveIntervalSolver.Result::endpointModes).orElse(List.of()));pumpOwners.put(layout,w.registry.owner(pump));
         }
         ends.forEach((layout,modes)->System.out.println("F8_LAYOUT "+layout+" "+modes));
-        // A pump that can deliver runs at its target: through the valve regulating at its set point, or through the filter.
-        for(String layout:List.of("GPMPVPO","GPMPFPVPO"))assertTrue(ends.get(layout).containsAll(List.of(FlowControl.Mode.PUMP_TARGET,FlowControl.Mode.VALVE_REGULATING)),layout+": "+ends.get(layout));
-        assertTrue(ends.get("GPMPFPO").contains(FlowControl.Mode.PUMP_TARGET),"GPMPFPO: "+ends.get("GPMPFPO"));
+        // A pump that can deliver runs on its law: through the valve regulating at its set point, or through the filter.
+        for(String layout:List.of("GPMPVPO","GPMPFPVPO"))assertTrue(ends.get(layout).containsAll(List.of(FlowControl.Mode.MOVER_LAW,FlowControl.Mode.VALVE_REGULATING)),layout+": "+ends.get(layout));
+        assertTrue(ends.get("GPMPFPO").contains(FlowControl.Mode.MOVER_LAW),"GPMPFPO: "+ends.get("GPMPFPO"));
         // A pump discharging into a dead end carries nothing: owner decision D18 (2026-09-28) leaves the whole dead-end branch,
         // the pump included, out of the solve (it stood at its shutoff, closed, while it was solved; restated for the owner
         // to confirm, PHASE_PORTS_REVIEW.md "Boundary split, dead ends and rest").

@@ -235,7 +235,7 @@ class ColumnRunTest {
         world.runTo(3400);
         assertNull(world.ledger.column(unit),"the unit left with its ports");
     }
-    /** A pump on the feed line, ahead of the boundary valve: the valve meters its small flow with the pump on its head limit, closed before the first demand (merge review, finding 2). */
+    /** A pump on the feed line, ahead of the boundary valve: the valve meters its small flow with the pump on its law near its relief rise, below its set flow, closed before the first demand (merge review, finding 2). */
     @Test void aPumpOnTheFeedLineRidesBehindItsValve() {
         pumped=true;var r=rig(0);var world=r.world();long unit=r.unit();
         world.runTo(3000);
@@ -244,7 +244,11 @@ class ColumnRunTest {
         assertTrue(u.totals().taken().total()>40,"the column took its feed: "+u.totals().taken().total()+" mol, "+r.ops().status(unit));
         var island=world.coordinator.snapshots().stream().filter(s->s.graph().pipes().stream().anyMatch(p->p.control() instanceof FlowControl.Pump)).findFirst().orElseThrow();
         var result=island.lastResult().orElseThrow();
-        for(int e=0;e<island.graph().pipes().size();e++)if(island.graph().pipes().get(e).control() instanceof FlowControl.Pump)assertEquals(FlowControl.Mode.PUMP_HEAD_LIMIT,result.endpointModes().get(e));
+        for(int e=0;e<island.graph().pipes().size();e++)if(island.graph().pipes().get(e).control() instanceof FlowControl.Pump pump) {
+            assertEquals(FlowControl.Mode.MOVER_LAW,result.endpointModes().get(e));
+            var drawn=island.graph().reservoirs().get(island.graph().pipes().get(e).first()).state();
+            assertTrue(result.averageMassFlows()[e]<.995*pump.targetVolumeFlow()*drawn.mass()/drawn.volume(),"the valve meters less than the pump's set flow");
+        }
     }
     /** A hold tells nobody: an island whose job runs past the last wake and then holds books nothing, and a look a cycle later runs the overdue cycle (merge review, finding 14). */
     @Test void heldPortsDoNotFreezeTheColumn() {

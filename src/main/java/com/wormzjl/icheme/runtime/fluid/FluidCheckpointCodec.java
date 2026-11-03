@@ -85,10 +85,13 @@ import java.util.function.Function;
  *
  * <p>31 (batch 2026-11-03-rotating-machinery, W2): control tag 5 is a machine on its curve (its law's liquid flag, rated
  * flow, head and efficiency, its speed and enabled flag).</p>
+ *
+ * <p>32 (the same batch, form F2b): the endpoint modes lose {@code PUMP_TARGET} and {@code PUMP_HEAD_LIMIT}, every mover
+ * running on its law, so the mode ordinals move.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=31;
+    public static final int VERSION=32;
     /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */

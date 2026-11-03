@@ -17,16 +17,19 @@ class FlowControlTest {
     private PassiveStepSolver.Result run(double pa,double pb,int component,FlowControl control,double dt) {
         return new PassiveStepSolver(model).solve(line(pa,pb,component,control),dt,()->{});
     }
-    /** Now a compressor on methane (decision D2; a liquid-only pump refuses gas, decision D1; test name kept): its target is the suction volume
-     * flow at inlet conditions, and its gas power the polytropic work at η_p 0.78 on suction properties (batch
+    /** Now a compressor on methane (decision D2; a liquid-only pump refuses gas, decision D1; test name kept): its setting is the suction volume
+     * flow at inlet conditions, which it delivers on its corner law up to its relief rise (batch 2026-11-03-rotating-machinery,
+     * form F2b: 99.99994 % at half the relief rise), and its gas power the polytropic work at η_p 0.78 on suction properties (batch
      * 2026-11-03-rotating-machinery, plan 3.2 and 4.4), {@code σ (P_s/ρ_s)(r^(1/σ) − 1)/η_p} per kilogram with
      * {@code σ = η_p k/(k − 1)} and k from the suction's start state. A ratio of 3 lifts 1 atm suction by 203 kPa, above
      * the 99 kPa the discharge vessel stands higher. */
     @Test void pumpMeetsItsSuctionFlowTargetAndAccountsForAddedEnergy() {
         var graph=line(101325,200000,0,new FlowControl.Compressor(.001,3));
         var result=new PassiveStepSolver(model).solve(graph,.1,()->{});var suction=result.states().getFirst();
-        assertEquals(.001,result.massFlows()[0]/(suction.mass()/suction.volume()),1e-10);
-        assertEquals(FlowControl.Mode.PUMP_TARGET,result.modes().getFirst());assertTrue(result.devicePressureChanges()[0]>0);assertTrue(result.pumpWorkJoule()>0);
+        double corner=new com.wormzjl.icheme.science.machine.PositiveDisplacement(.001,2*suction.pressure()).flow(result.devicePressureChanges()[0],1);
+        assertEquals(corner,result.massFlows()[0]/(suction.mass()/suction.volume()),1e-8*corner,"the corner's suction volume flow at the rise held");
+        assertEquals(.001,corner,1e-5*.001,"its setting, to a hundred-thousandth at half its relief rise");
+        assertEquals(FlowControl.Mode.MOVER_LAW,result.modes().getFirst());assertTrue(result.devicePressureChanges()[0]>0);assertTrue(result.pumpWorkJoule()>0);
         double q=result.massFlows()[0],head=result.devicePressureChanges()[0],p=suction.pressure(),rho=suction.mass()/suction.volume();
         double eta=.78,k=model.heatCapacityRatio(graph.reservoirs().getFirst().state()),sigma=eta*k/(k-1);
         assertTrue(k>1.25&&k<1.32,"methane's ideal-gas k at 350 K, about 1.28: "+k);

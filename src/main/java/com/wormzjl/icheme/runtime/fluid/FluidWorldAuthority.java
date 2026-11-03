@@ -955,8 +955,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 else if(pipe.control() instanceof FlowControl.Valve&&ControlConstraints.standing(snapshot.graph()).get(i))status+=" / STANDING_OPEN: a lower flow target on this line regulates";
                 if(pipe.control() instanceof FlowControl.Mover mover) {
                     String inlet=mode==FlowControl.Mode.INLET_WRONG_PHASE?inletReason(snapshot.graph(),i,result.advancedSeconds()):"";
-                    if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet);
-                    else {status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;}
+                    // The share of its set flow a set-flow mover moved, on its suction's density; a machine has no set flow.
+                    var drawn=snapshot.graph().reservoirs().get(pipe.first());
+                    double delivered=mover instanceof FlowControl.Machine||drawn.empty()||!(mover.targetVolumeFlow()>0)?Double.NaN
+                            :q[i]/(drawn.state().mass()/drawn.state().volume())/mover.targetVolumeFlow();
+                    if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet,delivered);
+                    else {status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
                     // The limit on the suction stream the mover draws (its own junction, what arrives at its inlet; decision
                     // D4): a pump's setting is the rise for water and scales with the suction density, a compressor's is the
                     // ratio over the suction pressure.

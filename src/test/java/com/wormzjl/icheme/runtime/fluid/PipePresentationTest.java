@@ -218,20 +218,27 @@ class PipePresentationTest {
 
     private final FlowControl.Pump pump=new FlowControl.Pump(2,500000);
 
+    /** A pump on its law short of its set flow (its relief lifting, or a velocity cap; batch 2026-11-03-rotating-machinery,
+     * form F2b) is a device error like a refusal, with the share it delivers; at its set flow it runs. */
     @Test void operatingLimitsAndRefusalsAreDeviceErrorsOnAnAdvancingIsland() {
-        for(var mode:new FlowControl.Mode[]{FlowControl.Mode.PUMP_HEAD_LIMIT,FlowControl.Mode.PUMP_SUCTION_LIMIT,FlowControl.Mode.INLET_WRONG_PHASE,FlowControl.Mode.CLOSED}) {
-            String status=PipePresentation.pumpStatus("FULL",pump,mode,"ERROR: pump inlet is not liquid (from generator)");
+        for(var mode:new FlowControl.Mode[]{FlowControl.Mode.MOVER_LAW,FlowControl.Mode.PUMP_SUCTION_LIMIT,FlowControl.Mode.INLET_WRONG_PHASE,FlowControl.Mode.CLOSED}) {
+            String status=PipePresentation.pumpStatus("FULL",pump,mode,"ERROR: pump inlet is not liquid (from generator)",.6);
             assertTrue(status.startsWith("ERROR: pump"));assertTrue(status.endsWith(" / FULL"));assertFalse(status.contains("HELD"));
         }
-        assertTrue(PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.PUMP_HEAD_LIMIT,"").contains("requested flow unavailable"));
+        assertEquals("ERROR: pump delivers 60 % of its set flow; requested flow unavailable / FULL",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.MOVER_LAW,"",.6));
+        assertEquals("FULL / pump running",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.MOVER_LAW,"",.996),"what rounds to its set flow runs");
+        var machine=new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalPump(.01,50,.7),1,true);
+        assertEquals("FULL / pump running",PipePresentation.pumpStatus("FULL",machine,FlowControl.Mode.MOVER_LAW,"",Double.NaN),"a machine has no set flow");
+        assertEquals("compressor delivers 40 % of its set flow; requested flow unavailable",PipePresentation.shortfall(new FlowControl.Compressor(1,3),FlowControl.Mode.MOVER_LAW,.4));
+        assertEquals("",PipePresentation.shortfall(new FlowControl.Compressor(1,3),FlowControl.Mode.CLOSED,0),"only a running mover falls short");
         String inlet="ERROR: pump inlet is not liquid (from generator)";
-        assertEquals(inlet+" / FULL",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.INLET_WRONG_PHASE,inlet));
+        assertEquals(inlet+" / FULL",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.INLET_WRONG_PHASE,inlet,Double.NaN));
     }
 
     @Test void offIsNormalAndPresentationDoesNotHideARealSolverFailure() {
-        assertFalse(PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.PUMP_TARGET,"").contains("ERROR:"));
-        assertFalse(PipePresentation.pumpStatus("FULL",new FlowControl.Pump(2,500000,false),FlowControl.Mode.CLOSED,"").contains("ERROR:"));
-        assertTrue(PipePresentation.pumpStatus("HELD: numerical failure",pump,FlowControl.Mode.PUMP_HEAD_LIMIT,"").contains("HELD: numerical failure"));
+        assertFalse(PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.MOVER_LAW,"",1).contains("ERROR:"));
+        assertFalse(PipePresentation.pumpStatus("FULL",new FlowControl.Pump(2,500000,false),FlowControl.Mode.CLOSED,"",Double.NaN).contains("ERROR:"));
+        assertTrue(PipePresentation.pumpStatus("HELD: numerical failure",pump,FlowControl.Mode.MOVER_LAW,"",.6).contains("HELD: numerical failure"));
     }
 
     private static final EquipmentShape.Kind[] MOVERS={EquipmentShape.Kind.PUMP,EquipmentShape.Kind.COMPRESSOR,EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR};
