@@ -197,6 +197,44 @@ class DeviceColumnTest {
             }
     }
 
+    /**
+     * N1 (the owner's pick A, 2026-11-03): the Name group leads the door, one wide entry (key {@code name}) under a one-line
+     * plate, whole at every width; every row after it stands lower by the group's own height, so no widget moves with what
+     * the name holds. Prints each kind's page against the design view (NAME_FIT): the pump's and the compressor's 330 px
+     * and the valve's 323 px pages take a bar with it, as the batch README records.
+     */
+    @Test
+    void theNameGroupLeadsTheDoorAndMovesTheRestByItsHeight() {
+        var texts = new HeatControlColumnTest.Recording();
+        var group = DeviceColumn.name(texts);
+        assertEquals("Name", group.title());
+        assertEquals(List.of("name"), group.rows().stream().map(r -> ((Column.Wide) r).key()).toList());
+        int view = FluidGuiLayout.doorView(FluidGuiLayout.HEIGHT);
+        for (var kind : Kind.values()) {
+            var plain = input(kind, true, kind == Kind.PUMP || kind == Kind.COMPRESSOR || kind == Kind.GENERATOR, kind == Kind.VALVE ? DeviceColumn.Valve.MASS_FLOW : DeviceColumn.Valve.NONE, 4, "Fully open / target limited", "volume");
+            var named = new DeviceColumn.Input(plain.kind(), plain.canEdit(), plain.switchable(), plain.powerOn(), plain.pressureUnit(), plain.temperatureUnit(), plain.flowTime(),
+                    plain.valve(), plain.opening(), plain.recoverable(), plain.level(), plain.junction(), List.of(group), plain.phases(), plain.readings());
+            for (int width : new int[]{300, 464, 790}) {
+                var before = place(plain, texts, width);
+                var after = place(named, texts, width);
+                var lead = after.rows().getFirst();
+                assertSame(group, lead.row(), kind + " at " + width + ": the Name group first");
+                assertEquals(1, lead.texts().size(), kind + " at " + width + ": its plate in one line");
+                var entry = after.rows().get(1);
+                var slot = entry.slots().get("name");
+                assertTrue(slot.inside(entry.rect()) && slot.w() >= 40, kind + " at " + width + ": the entry " + slot);
+                int shift = after.bounds().h() - before.bounds().h();
+                for (int i = 0; i < before.rows().size(); i++)
+                    for (var e : before.rows().get(i).slots().entrySet())
+                        assertEquals(e.getValue().y() + shift, after.rows().get(i + 2).slots().get(e.getKey()).y(), kind + " at " + width + ": " + e.getKey() + " moves by the group's height");
+                after.slots();
+                assertInLine(after, kind + " named at " + width);
+                if (width == 464) System.out.printf(java.util.Locale.ROOT, "NAME_FIT %-12s %3d px named, %3d px before, in a %d px view%s%n", kind, after.bounds().h(), before.bounds().h(), view, after.bounds().h() > view ? ": a bar" : "");
+            }
+        }
+        assertEquals(Set.of(), texts.missing);
+    }
+
     private static List<String> keys(Column column, Class<? extends Column.Row> type) {
         var out = new ArrayList<String>();
         for (var p : column.rows()) if (type.isInstance(p.row())) out.addAll(p.slots().keySet());

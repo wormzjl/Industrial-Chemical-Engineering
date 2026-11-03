@@ -148,7 +148,45 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     }
 
     private List<Column.Row> rows() {
-        return AssemblyColumn.rows(input(), AssemblyScreen::lang);
+        return AssemblyColumn.rows(input(), names(), AssemblyScreen::lang);
+    }
+
+    /** The column's structure, from the client's cells; null where none is loaded. */
+    private EquipmentStructure.@Nullable Vessel column() {
+        var level = minecraft == null ? null : minecraft.level;
+        return level == null ? null : EquipmentStructure.find(level, menu.cell());
+    }
+
+    /** Whether the Structure page names the column (N1, the owner's pick A): a player who may build, the column loaded. The server checks the same, and its reach. */
+    private boolean names() {
+        return minecraft != null && minecraft.player != null && minecraft.player.mayBuild() && column() != null;
+    }
+
+    /** The column's name as the client's cells hold it. */
+    private String currentName() {
+        var column = column();
+        return column == null || minecraft == null || minecraft.level == null ? "" : EquipmentStructure.name(minecraft.level, column);
+    }
+
+    /** Whether Apply has a name to send: the typed name, cleaned, differs from the column's. */
+    private boolean renames() {
+        return nameDraft != null && names() && !com.wormzjl.icheme.science.equipment.DeviceName.clean(nameDraft).equals(currentName());
+    }
+
+    /** The name as typed, sent with the Structure page's Apply, and the name it last followed: the draft follows the column's name while the player has not changed it. */
+    private @Nullable String nameDraft, nameShown;
+    private @Nullable SkinField nameBox;
+
+    /** The Name group's entry (N1). */
+    private SkinField nameEntry(Column.Field f, Rect slot) {
+        if (nameDraft == null) nameDraft = nameShown = currentName();
+        var box = new SkinField(font, slot.x(), slot.y(), slot.w(), slot.h(), Component.literal(lang("fluid.name")), AssemblyScreen::skin);
+        box.setMaxLength(com.wormzjl.icheme.science.equipment.DeviceName.MAX);
+        box.setValue(nameDraft);
+        box.setResponder(text -> nameDraft = text);
+        box.setTooltip(Tooltip.create(Component.literal(lang("fluid.name") + "\n" + f.hint())));
+        nameBox = box;
+        return addRenderableWidget(box);
     }
 
     /** The Operation page's snapshot where its door shows: a complete structure on its Operation tab, with an operation to show. */
@@ -196,10 +234,10 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         var tabs = AssemblyColumn.tabs(operation(), complete(), AssemblyScreen::lang);
         var tabSlots = AssemblyColumn.tabSlots(imageWidth);
         for (int i = 0; i < tabs.size(); i++) push(tabs.get(i), tabSlots.get(i));
-        var footer = AssemblyColumn.footer(imageWidth, imageHeight);
+        var footer = AssemblyColumn.footer(imageWidth, imageHeight, operationView() == null && names() ? 3 : 2);
         var operating = operationView();
         var buttons = operating != null ? OperationColumn.footerButtons(OperationColumn.applies(operationInput(operating), drafts), AssemblyScreen::lang)
-                : AssemblyColumn.footerButtons(AssemblyScreen::lang);
+                : names() ? AssemblyColumn.footerButtons(renames(), AssemblyScreen::lang) : AssemblyColumn.footerButtons(AssemblyScreen::lang);
         apply = null;
         for (int i = 0; i < buttons.size(); i++) {
             var button = SkinButton.of(buttons.get(i), footer.get(i).moved(leftPos, topPos), this::act, AssemblyScreen::skin);
@@ -219,7 +257,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             var rows = rows();
             door.layout(AssemblyColumn.area(imageWidth, imageHeight), rows, GuiCanvas.measure(font));
             door.keep((field, slot) -> {
-                throw new IllegalStateException("No entry on the assembly door");
+                if (field.key().equals("name")) return nameEntry(field, slot);
+                throw new IllegalStateException("No entry on the assembly door but the name's");
             }, (spec, slot) -> addRenderableWidget(SkinButton.of(spec, slot, this::act, AssemblyScreen::skin)));
             door.place(leftPos, topPos);
         }
@@ -259,7 +298,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     /** What the widgets show and where they stand: the page, the tabs, the selected part (its name may wrap), the door's buttons. */
     private List<String> signature() {
         var out = new ArrayList<String>();
-        out.add(drawing() + " " + operation());
+        out.add(drawing() + " " + operation() + " " + names());
         for (var b : AssemblyColumn.tabs(operation(), complete(), AssemblyScreen::lang)) out.add(b.key() + " " + b.active() + " " + b.latched());
         if (drawing()) {
             var in = input();
@@ -296,6 +335,12 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             case "start" -> command(AssemblyNetwork.Action.START, List.of());
             case "stop" -> command(AssemblyNetwork.Action.STOP, List.of());
             case "apply" -> {
+                // The Structure page's Apply sends the name (N1); the Operation page's, the set points.
+                if (operationView() == null) {
+                    var column = column();
+                    if (column != null && renames()) com.wormzjl.icheme.network.EquipmentNetwork.rename(column.controller(), nameDraft);
+                    break;
+                }
                 var view = operationView();
                 var values = view == null ? null : OperationColumn.parse(view.setpoints(), drafts, units());
                 if (values != null) {
@@ -358,13 +403,28 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         }
     }
 
+    /** The name entry follows the column's name (another player's rename, this one's answered) while the player has not changed it. */
+    private void followName() {
+        String now = currentName();
+        if (nameShown == null || now.equals(nameShown)) return;
+        if (nameDraft != null && nameDraft.equals(nameShown) && (nameBox == null || !nameBox.isFocused())) {
+            nameDraft = now;
+            if (nameBox != null) nameBox.setValue(now);
+        }
+        nameShown = now;
+    }
+
     @Override
     protected void containerTick() {
         super.containerTick();
         follow();
         refresh();
         var operating = operationView();
-        if (operating == null) return;
+        followName();
+        if (operating == null) {
+            if (apply != null) apply.active = renames();
+            return;
+        }
         // An entry the player has not edited follows the set points in force; Apply follows what is typed, without a rebuild.
         var values = OperationColumn.values(operating.setpoints(), units());
         for (var e : entries.entrySet())

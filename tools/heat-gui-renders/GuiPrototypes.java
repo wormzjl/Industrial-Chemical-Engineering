@@ -80,7 +80,6 @@ public final class GuiPrototypes {
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         out.addAll(OperationPrototypes.operation());
-        out.addAll(names());
         return out;
     }
 
@@ -347,13 +346,14 @@ public final class GuiPrototypes {
         listView.drawBar(d.c, d.skin);
         // The door column, narrowed for its bar where it is taller than its area (KitDoor).
         String name = selected == null ? null : AssemblyColumn.text(diagram.part(selected).name(), t);
-        var rows = AssemblyColumn.rows(AssemblyColumn.input(slots.size(), report, queued, name, selected != null), t);
+        // N1 (the owner's pick A): a player who may build names the column first on the door, sent with the footer's Apply.
+        var rows = AssemblyColumn.rows(AssemblyColumn.input(slots.size(), report, queued, name, selected != null), true, t);
         var door = AssemblyColumn.area(d.w, d.h);
         int tall = Column.place(rows, door.x(), door.y(), door.w(), d.m, Column.Metrics.COMPACT).bounds().h();
-        d.column(rows, door.x(), door.y(), tall > door.h() ? door.w() - ScrollView.BAR - 4 : door.w(), Map.of());
-        var footer = AssemblyColumn.footer(d.w, d.h);
-        var keys = AssemblyColumn.footerButtons(t);
-        for (int i = 0; i < keys.size(); i++) d.skin.button(d.c, footer.get(i), keys.get(i).text(), Skin.Press.REST, false);
+        d.column(rows, door.x(), door.y(), tall > door.h() ? door.w() - ScrollView.BAR - 4 : door.w(), Map.of("name", "T-101"));
+        var footer = AssemblyColumn.footer(d.w, d.h, 3);
+        var keys = AssemblyColumn.footerButtons(true, t);
+        for (int i = 0; i < keys.size(); i++) d.skin.button(d.c, footer.get(i), keys.get(i).text(), keys.get(i).key().equals("apply") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
         if (d.skin == PanelSkin.LIGHT)
             System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view, list %d lines in %d px%n", "assembly" + (selected == null ? "" : " selected"), tall, door.h(),
                     parts.lines().size(), lines.h());
@@ -530,13 +530,20 @@ public final class GuiPrototypes {
         d.skin.title(d.c, 10, 10, title);
         var values = new java.util.HashMap<String, String>();
         for (var size : sheet.sizes()) values.put(size.key(), size.value());
-        d.column(DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG), 10, DialogColumns.TOP, 150, values);
+        // N1 (the owner's pick A): the Name group leads the door, sent with Apply beside Done.
+        values.put("name", moving ? "AC-101" : "D-101");
+        var rows = new ArrayList<Column.Row>();
+        rows.add(DeviceColumn.name(TEXTS));
+        rows.addAll(DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG));
+        d.column(rows, 10, DialogColumns.TOP, 150, values);
+        if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", "datasheet" + (moving ? " unit" : ""),
+                Column.place(rows, 10, DialogColumns.TOP, 150, d.m, Column.Metrics.COMPACT).bounds().h(), d.h - DialogColumns.TOP - DialogColumns.FOOTER);
         var box = d.well(new Rect(166, 25, d.w - 171, d.h - 60));
         var glass = DialogColumns.glass(sheet, false, box.w() - ScrollView.BAR - 2, d.m, DIALOG);
         d.c.clip(box);
         DialogColumns.draw(d.c, glass, new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()), 0);
         d.c.unclip();
-        dialogFooter(d, "Done");
+        dialogFooter(d, "Done", TEXTS.get("apply"));
     }
 
     static Prototype vessel() {
@@ -574,13 +581,15 @@ public final class GuiPrototypes {
      * asks for it. Fields show {@code drafts} by key. Returns the glass's inner box.
      */
     static Rect device(Door d, DeviceColumn.Input in, Map<String, String> drafts) {
-        return device(d, List.of(), in, drafts);
-    }
-
-    /** {@link #device(Door, DeviceColumn.Input, Map)} with {@code lead}, rows before the device's own (an option sheet's). */
-    static Rect device(Door d, List<Column.Row> lead, DeviceColumn.Input in, Map<String, String> drafts) {
         int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
-        var rows = new ArrayList<Column.Row>(lead);
+        // N1 (the owner's pick A): an editor's door leads with the Name group, as FluidDeviceScreen's does for a device that
+        // takes a name (a plain pipe takes none).
+        var rows = new ArrayList<Column.Row>();
+        drafts = new java.util.HashMap<>(drafts);
+        if (in.canEdit() && in.kind() != Kind.PIPE) {
+            rows.add(DeviceColumn.name(TEXTS));
+            drafts.putIfAbsent("name", NAMES.getOrDefault(in.kind(), ""));
+        }
         rows.addAll(DeviceColumn.rows(in, TEXTS));
         var column = Column.place(rows, 10, top, side - 10, d.m, Column.Metrics.COMPACT);
         var view = new ScrollView();
@@ -690,49 +699,9 @@ public final class GuiPrototypes {
         });
     }
 
-    // ---- N1: where the device's name is entered (option sheet; the owner picks one) ----
-
-    /** The pump's page as the three name entries draw it. */
-    static List<Prototype> names() {
-        return List.of(nameOption("name-a"), nameOption("name-b"), nameDialog(), nameOption("name-c"));
-    }
-
-    static Prototype nameOption(String file) {
-        var in = new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
-                phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.20", "bar"),
-                meter("throughput", "554.8", "kmol/h"), meter("pressure_change", "2.40", "bar")));
-        return devicePage(file, WINDOW[0], WINDOW[1], in, (d, s) -> {
-            switch (file) {
-                case "name-a" -> d.title("P-101 · Centrifugal pump");
-                case "name-b" -> {
-                    d.title("P-101 · Centrifugal pump");
-                    d.skin.button(d.c, new Rect(d.w - 28 - 6 - 54, 5, 54, 18), "Rename", Skin.Press.REST, false);
-                }
-                default -> {
-                    d.skin.field(d.c, new Rect(10, 6, 54, 16), "P-101", "Name", false);
-                    d.skin.title(d.c, 68, 10, "Centrifugal pump");
-                    d.skin.iconKey(d.c, new Rect(d.w - 28, 5, 18, 18), Skin.Icon.THEME, false);
-                }
-            }
-            d.tabs(0, "Overview", "Datasheet");
-            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
-            var lead = file.equals("name-a") ? List.<Column.Row>of(new Column.Group("Name", null, List.of(new Column.Wide("name", null)))) : List.<Column.Row>of();
-            var box = device(d, lead, in, Map.of("name", "P-101", "volumeFlow", "12.0", "maximumAddedPressure", "5.00"));
-            contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "92.1", "511"}, new String[]{"Ethanol", "7.9", "43.8"}));
-            d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
-        });
-    }
-
-    /** Option B's dialog, opened by the Rename key. */
-    static Prototype nameDialog() {
-        var rows = List.<Column.Row>of(new Column.Paragraph("Shown first in its screens' titles and on its nameplate. Empty clears it.", Palette.MUTED),
-                new Column.Wide("name", null));
-        return new Prototype("name-b-dialog", 230, dialogHeight(rows, 230) + 12, (d, s) -> {
-            d.skin.title(d.c, 10, 10, "Rename P-101");
-            d.column(rows, 10, DialogColumns.TOP, d.w - 20, Map.of("name", "P-101"));
-            dialogFooter(d, "Cancel", "Save");
-        });
-    }
+    /** The names the device pages' Name entries show (N1), by kind. */
+    static final Map<Kind, String> NAMES = Map.of(Kind.PUMP, "P-101", Kind.COMPRESSOR, "K-101", Kind.VALVE, "FV-101", Kind.GENERATOR, "F-101", Kind.RESERVOIR, "TK-101",
+            Kind.VOID, "FL-101", Kind.FILTER, "S-101", Kind.HEAT_SIDE, "E-101");
 
     /** The valve, the tallest page, in a {@link #WINDOW} window; and in a 1366 by 768 one, where scale 2 still leaves it a bar. */
     static List<Prototype> valve() {
