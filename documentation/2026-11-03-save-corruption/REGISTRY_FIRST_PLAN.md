@@ -153,6 +153,12 @@ For each registration of the chunk:
 - **The shift.** A restore uses shift 0, because the registry knows the origin. `EquipmentRefresh.anchor` is used only for a layout refresh.
 - **Blocked cells.** With any cell blocked, the structure's members are held. The shells written get stamp 0 (`layoutIncomplete`), so a later load completes it once the player clears the cells.
 - **Binding.** Members bind through `restoreFluidBinding`, with the record's shape. Its geometry branch (`reregister` when `spec.geometry` differs) now reads the record's shape. A geometry that differs for the same shape is a code change to `fluidGeometry`, and the registry takes the derived geometry, as today.
+- **Built in step 6** (`EquipmentStructure.serveRealignment`, `realign`):
+  - The queue: the authority indexes each record's origin by the chunks its box spans (built at start, kept by `structure(origin, record)`). A chunk load queues the structures it touches (`EquipmentStructure.realignLater`). `RegistryRealignment.serve` serves them after the devices, within the same 1 ms: at most 8 checks a tick, none after a rebuild.
+  - Waiting: a structure waits while the layout refresh has it queued, and until every chunk of its box and of the blocks beside it is block-ticking. One with a chunk of its box not loaded leaves the queue; its next load queues it again.
+  - The check: a structure whose layout cells all stand as its own (a shell cell of its origin and shape, an interior cell) is left as it is, and holds on its registrations are released. Stamps stay the layout refresh's.
+  - The rebuild shares `survey`, `write` and `settle` with the layout refresh. Same-origin cells of another shape, and interior cells that no shell cell reaches, count as the structure's own. When cells of its origin reach beyond the record's box, the region is widened and read again on a later tick. Every shell cell takes the record's paint. A shell cell that is not a node releases its fluid identity.
+  - Removal: `dismantle` follows the restore flag (`FluidDeviceBlock.quietly`).
 
 ### 4.5 Operator commands and notices
 
@@ -176,7 +182,7 @@ Each step is one commit and runs only the tests that its files can load.
 | 3 | Held registrations: compilation, state, commands (4.1, 4.5 commands). **Done** (see the batch README) | `PhysicalFluidTopologyTest` (a held tank is its own island, a held pipe parts its line); `WorldTopologyLedgerTest` (a hold survives an exact load, queued or applied, and never reaches facts). GameTest `RegistryFirstGameTests`: hold, list, then drop |
 | 4 | `stateFor`, the restore flag, the kind check, the queue, one-block re-alignment (4.2, 4.3). **Done** (see the batch README) | `stateFor` round trip over every kind and fitting. GameTests a to d (section 7) |
 | 5 | Rack cells placed again from their lane registrations (4.2 item 3), with the rack frame as a fact (schema 9). **Done** (see the batch README) | GameTest e; `WorldTopologyLedgerTest` (a frame leaves with its lane); `FluidFactsCompatTest` with the new `compat/fluid/schema-9` image |
-| 6 | Structures (4.4) | GameTests f and g. `equipmentGates` only if refresh code changed |
+| 6 | Structures (4.4). **Done** (see the batch README) | GameTests f and g. `equipmentGates` only if refresh code changed |
 | 7 | Notices, lang keys (4.5) | `LanguageFilesTest`; `tools/localization/check.js` |
 | 8 | Learning from blocks (3.4): built in step 2; what is left is its world-level check | GameTest h, and the schema-7 image still loads |
 
@@ -195,6 +201,8 @@ Owner requirement (2026-11-03): the system must be lag-free, above all during sa
 | A vessel's restate at load | one map read for its record; the shell cells walked only when the paint differs | O(1) per vessel, as a rule |
 | Chunk load | the chunk queued; no block placed, no solve | O(devices of the chunk) to queue |
 | Re-alignment | at most 32 devices and 1 ms per tick (4.2) | 1 ms per tick |
+| A structure's check (4.4) | one read per layout cell, once per load of the structure; no write while it stands as recorded | at most 8 checks in the tick's 1 ms; a check is not split, so its cost grows with the structure's cells |
+| A structure's rebuild (4.4) | the cells written, as a layout refresh writes them | at most one per tick, only after damage |
 
 Measurement:
 - The re-alignment's cost goes into `FluidRuntimeDiagnostics` (built in step 4): `realignChunks` (loaded chunks that queued registrations), `realignChecked`, `realignPlaced`, `realignRestated`, `realignHeld`, `realignReleased`, and `realignNanos` (the serving ticks' time).
@@ -210,6 +218,7 @@ The save itself, before W5 (outside this plan, proposal W6 in the review, sectio
 Each test edits the world or the registry directly, so it needs no crash. Each removes everything it registers, because GameTest areas are not cleared between batches. Use a fresh `fluidGameTestRunId` after a failed run.
 
 Structure records persist in the GameTest world as registrations do. Once re-alignment places structures (step 6), a record left behind would rebuild its structure in a later run. Step 4 re-aligns one-block devices only, so the check moves to step 6. Before step 6, check that every GameTest that places a structure ends with its dismantle (breaking a shell or interior cell runs it), or clears its record (`FluidWorldAuthority.structure(origin, null)`). `EquipmentCompatGameTests` clears cells without the dismantle on purpose in two tests.
+- Checked before step 6: every such test ends with its dismantle or a retired removal, both of which clear the record. The exception is `CoolingTowerGameTests`, which leaves its tower whole; re-alignment finds nothing to do there.
 
 - **a. Broken pipe.** A registered pipe whose block was set to air behind the authority's back is placed again with the same identity.
 - **b. Broken vessel.** A registered one-block reservoir removed the same way comes back with its contents.
@@ -222,6 +231,9 @@ Structure records persist in the GameTest world as registrations do. Once re-ali
 - **e. Rack.** A rack cell removed behind the authority's back is rebuilt with its lanes. Built in step 5 as `aLostRackCellIsSetBackWithItsLanes`: a corner cell removed comes back as the corner it was, and a straight rack turned the other way faces as laid again.
 - **f. Drum.** A drum whose shells were removed is rebuilt from its structure record, its contents kept.
 - **g. Constructor edit.** A drum whose shell shape differs from its record is rebuilt to the record.
+- Built in step 6:
+  - f as `aLostDrumIsRebuiltFromItsRecordWithWhatItHeld`. The drum holds nitrogen. A stone in one of its cells holds it, and the drum is released once the cell is free.
+  - g as `aDrumOfAnotherShapeIsRebuiltToItsRecord`. A taller drum of the same origin stands in its place, so the region is widened.
 - **h. Learning.** A schema-7 world's painted pipe learns its paint into the registry at its chunk's first load.
 - **i. Nothing to do.** An ordinary placed network re-aligns nothing (all counters zero) across a save and a reload.
 - **j. Unknown block.** An IChemE block the registry never saw registers fresh (today's path, kept).

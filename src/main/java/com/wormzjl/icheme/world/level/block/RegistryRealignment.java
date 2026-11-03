@@ -33,9 +33,14 @@ import java.util.List;
  * </ul>
  * A rack lane is checked at its rack cell: the cell takes the frame the registry holds for its lanes, or a free cell gets
  * a rack of that frame, and its copy rebuilds the lanes from their registrations; a lane the cell cannot carry is held.
- * A held registration whose block or lane stands again is released. Structures follow in step 6. A registration is
- * served once its own chunk is loaded: neighbours in a chunk that is not loaded keep their saved joints, and their own
- * load settles both sides (FluidDeviceBlock.connectedState).
+ * A held registration whose block or lane stands again is released. A registration is served once its own chunk is
+ * loaded: neighbours in a chunk that is not loaded keep their saved joints, and their own load settles both sides
+ * (FluidDeviceBlock.connectedState).
+ *
+ * <p>A structure the registry records (plan 4.4) is checked once every chunk of its box and of the blocks beside it is
+ * block-ticking, after the layout refresh when that has it queued: one whose cells stand as its record says is left as it
+ * is; any other is rebuilt to its record where the record puts it, its cells placed where the world is free; with a cell
+ * another block holds, its registrations are held ({@link EquipmentStructure#serveRealignment}).</p>
  */
 public final class RegistryRealignment {
     private RegistryRealignment() {}
@@ -44,6 +49,8 @@ public final class RegistryRealignment {
     static final int DEVICES = 32;
     /** And no more checks after this long within a level tick. */
     static final long BUDGET_NANOS = 1_000_000L;
+    /** At most this many structures checked a level tick, in the time the devices left, and none after one rebuilt (plan 4.4). */
+    static final int STRUCTURES = 8;
 
     /** What one check did to the world. */
     public enum Outcome { NOTHING, PLACED, RESTATED, HELD }
@@ -53,21 +60,40 @@ public final class RegistryRealignment {
         static final Check NONE = new Check(Outcome.NOTHING, false);
     }
 
-    /** Serves {@code level}'s queue for this tick, from its level tick. */
+    /** Serves {@code level}'s queue for this tick, from its level tick: its devices, then its structures in the time left. */
     public static void serve(ServerLevel level) {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         if (world == null) return;
         String dimension = level.dimension().location().toString();
         long start = System.nanoTime();
-        int checked = 0, placed = 0, restated = 0, held = 0, released = 0;
-        for (long id; checked < DEVICES && System.nanoTime() - start < BUDGET_NANOS && (id = world.nextRealignment(dimension)) != 0; checked++) {
-            Check check;
+        var tally = new Tally();
+        for (long id; tally.checked < DEVICES && System.nanoTime() - start < BUDGET_NANOS && (id = world.nextRealignment(dimension)) != 0; ) {
             try {
-                check = realign(level, world, id);
+                tally.add(realign(level, world, id));
             } catch (RuntimeException failed) {
+                tally.checked++;
                 IChemE.LOGGER.error("fluid_realign failed device={}", id, failed);
-                continue;
             }
+        }
+        EquipmentStructure.serveRealignment(level, world, start + BUDGET_NANOS, STRUCTURES, tally::add);
+        if (tally.checked == 0) return;
+        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChecked, tally.checked);
+        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignPlaced, tally.placed);
+        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignRestated, tally.restated);
+        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignHeld, tally.held);
+        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignReleased, tally.released);
+        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignNanos, System.nanoTime() - start);
+        if (tally.placed + tally.restated + tally.held + tally.released > 0)
+            IChemE.LOGGER.info("fluid_realign dimension={} checked={} placed={} restated={} held={} released={}", dimension, tally.checked, tally.placed, tally.restated, tally.held,
+                    tally.released);
+    }
+
+    /** One serving tick's checks, by outcome: a structure counts as one, whatever number of cells it placed. */
+    private static final class Tally {
+        int checked, placed, restated, held, released;
+
+        void add(Check check) {
+            checked++;
             switch (check.outcome()) {
                 case PLACED -> placed++;
                 case RESTATED -> restated++;
@@ -76,15 +102,6 @@ public final class RegistryRealignment {
             }
             if (check.released()) released++;
         }
-        if (checked == 0) return;
-        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChecked, checked);
-        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignPlaced, placed);
-        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignRestated, restated);
-        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignHeld, held);
-        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignReleased, released);
-        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignNanos, System.nanoTime() - start);
-        if (placed + restated + held + released > 0)
-            IChemE.LOGGER.info("fluid_realign dimension={} checked={} placed={} restated={} held={} released={}", dimension, checked, placed, restated, held, released);
     }
 
     /** Re-aligns the cell of registration {@code id} of {@code level}'s dimension to it. */

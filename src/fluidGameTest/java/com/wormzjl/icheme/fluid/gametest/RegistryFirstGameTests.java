@@ -3,18 +3,24 @@ package com.wormzjl.icheme.fluid.gametest;
 import com.mojang.authlib.GameProfile;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.registry.ModItems;
+import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.PipeRoute;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
+import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.world.item.PipelineToolItem;
+import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.PipeAnchor;
 import com.wormzjl.icheme.world.level.block.PipeLaying;
 import com.wormzjl.icheme.world.level.block.PipeRackBlock;
 import com.wormzjl.icheme.world.level.block.RegistryRealignment;
+import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
 import net.minecraft.commands.CommandSource;
@@ -40,6 +46,8 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -363,6 +371,162 @@ public final class RegistryFirstGameTests {
                     if (failure[0] != null) helper.fail(failure[0]);
                 })
                 .thenSucceed();
+    }
+
+    /**
+     * Step 6, GameTest f (plan 4.4): a drum holding nitrogen whose cells were removed behind the authority's back is
+     * rebuilt from its structure record, with its identity, its paint and what it held. A cell another block holds is left
+     * out and the drum held; once the cell is free and the chunk loads again, the cell is placed and the drum released.
+     */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-realign-drum")
+    public static void aLostDrumIsRebuiltFromItsRecordWithWhatItHeld(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var shape = EquipmentShape.drum(3, 3, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
+        var origin = helper.absolutePos(new BlockPos(1, 1, 1));
+        var layout = ShapeRasterizer.layout(shape);
+        var cells = cells(origin, layout);
+        var node = cell(origin, ShapeRasterizer.fluidCell(shape));
+        var ports = ShapeRasterizer.ports(shape);
+        var nozzle = ports.stream().max(Comparator.comparingInt(ShapeRasterizer.Port::dy)).orElseThrow();
+        var face = Direction.fromDelta(nozzle.dx(), nozzle.dy(), nozzle.dz());
+        var nozzles = new HashSet<ShapeRasterizer.Cell>();
+        for (var port : ports) nozzles.add(port.cell());
+        var blocked = cell(origin, layout.shell().stream().filter(c -> !c.equals(ShapeRasterizer.fluidCell(shape)) && !nozzles.contains(c)).findFirst().orElseThrow());
+        var paint = new Paint(0x587246, 0x383E42);
+        EquipmentStructure.place(level, origin, shape, paint, Integer.MAX_VALUE);
+        long id = world.at(position(level, node)).orElseThrow().device().id();
+        // Some nitrogen in the drum, through its top nozzle: a generator one pipe above it, until the drum holds 10 mol (a
+        // full charge of its 28 m³ takes thousands of ticks through one pipe).
+        var pipe = cell(origin, nozzle.cell()).relative(face);
+        var generator = pipe.relative(face);
+        level.setBlock(generator, ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), 3);
+        var nitrogen = FluidDeviceSpec.nitrogen(com.wormzjl.icheme.science.material.MaterialRuntime.active()).composition();
+        TankCharge.run(world, ((FluidDeviceBlockEntity) level.getBlockEntity(generator)).fluidIdentity(), new FluidDeviceSpec(1, 298.15, 200000, nitrogen));
+        level.setBlock(pipe, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        String[] failure = {null};
+        double[] before = {0};
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(moles(world, id) > 10, "Waiting for nitrogen in the drum"))
+                .thenExecute(() -> {
+                    level.removeBlock(generator, false);
+                    level.removeBlock(pipe, false);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(world.capture().world().events().isEmpty() && alone(world, id), "Waiting for the drum to stand alone"))
+                .thenExecute(() -> {
+                    before[0] = moles(world, id);
+                    FluidDeviceBlock.quietly(() -> {
+                        for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                    });
+                    if (world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id || world.structure(position(level, origin)) == null)
+                        failure[0] = "cells removed quietly touched the registry";
+                    level.setBlock(blocked, Blocks.STONE.defaultBlockState(), 3);
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(held(world, id) && shellStands(level, node, id), "Waiting for the drum to be rebuilt round the stone and held"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && !level.getBlockState(blocked).is(Blocks.STONE)) failure[0] = "the stone in a cell of the drum was overwritten";
+                    level.setBlock(blocked, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(!held(world, id) && standsAs(level, origin, shape) && !Double.isNaN(moles(world, id)), "Waiting for the drum to be whole and released"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id) failure[0] = "the drum's registration changed";
+                    if (failure[0] == null && !(moles(world, id) > .99 * before[0])) failure[0] = "the drum lost what it held: " + before[0] + " -> " + moles(world, id);
+                    for (var c : layout.shell()) {
+                        var shell = (EquipmentShellBlockEntity) level.getBlockEntity(cell(origin, c));
+                        if (failure[0] == null && (shell.stale() || !shell.paint().equals(paint))) failure[0] = "cell " + c + " was left stale or lost its paint";
+                    }
+                    if (failure[0] == null && !level.getEntitiesOfClass(ItemEntity.class, new AABB(origin).inflate(8)).isEmpty()) failure[0] = "the rebuild dropped an item";
+                    level.removeBlock(node, false);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, node)).isEmpty() && world.structure(position(level, origin)) == null, "Waiting for the drum and its record to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 6, GameTest g (plan 4.4): a drum whose cells a taller drum of the same origin holds (one built there after the
+     * registry's last save) is rebuilt to its record: the cells only the taller drum had are cleared, every shell cell takes
+     * the record's shape and paint, and the drum keeps its registration.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-realign-shape")
+    public static void aDrumOfAnotherShapeIsRebuiltToItsRecord(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var recorded = EquipmentShape.drum(3, 3, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
+        var built = EquipmentShape.drum(3, 5, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
+        var origin = helper.absolutePos(new BlockPos(1, 1, 1));
+        var paint = new Paint(0xE25303, 0xF7B500);
+        var other = new Paint(0x587246, 0x383E42);
+        EquipmentStructure.place(level, origin, recorded, paint, Integer.MAX_VALUE);
+        var node = cell(origin, ShapeRasterizer.fluidCell(recorded));
+        long id = world.at(position(level, node)).orElseThrow().device().id();
+        var recordCells = cells(origin, ShapeRasterizer.layout(recorded));
+        var builtLayout = ShapeRasterizer.layout(built);
+        var builtCells = cells(origin, builtLayout);
+        var every = new HashSet<>(recordCells);
+        every.addAll(builtCells);
+        String[] failure = {null};
+        FluidDeviceBlock.quietly(() -> {
+            for (var at : recordCells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+            for (var c : builtLayout.shell()) {
+                var at = cell(origin, c);
+                level.setBlock(at, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), 3);
+                ((EquipmentShellBlockEntity) level.getBlockEntity(at)).bind(built, c, other);
+            }
+            for (var c : builtLayout.interior()) level.setBlock(cell(origin, c), ModBlocks.EQUIPMENT_INTERIOR.get().defaultBlockState(), 3);
+        });
+        var record = world.structure(position(level, origin));
+        if (record == null || !record.shape().equals(recorded) || world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id)
+            failure[0] = "cells replaced quietly touched the registry";
+        requeue(world, level, builtCells);
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(standsAs(level, origin, recorded) && shellStands(level, node, id), "Waiting for the drum to be rebuilt to its record"))
+                .thenExecute(() -> {
+                    var kept = new HashSet<>(recordCells);
+                    for (var at : builtCells)
+                        if (failure[0] == null && !kept.contains(at) && !level.getBlockState(at).isAir()) failure[0] = "a cell only the taller drum had stands at " + at.toShortString();
+                    for (var c : ShapeRasterizer.layout(recorded).shell())
+                        if (failure[0] == null && !((EquipmentShellBlockEntity) level.getBlockEntity(cell(origin, c))).paint().equals(paint)) failure[0] = "cell " + c + " did not take the record's paint";
+                    if (failure[0] == null && world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id) failure[0] = "the drum's registration changed";
+                    if (failure[0] == null && held(world, id)) failure[0] = "the whole drum is held";
+                    level.removeBlock(node, false);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, node)).isEmpty() && world.structure(position(level, origin)) == null, "Waiting for the drum and its record to leave"))
+                .thenExecute(() -> {
+                    for (var at : every) if (failure[0] == null && !level.getBlockState(at).isAir()) failure[0] = "a ghost block at " + at.toShortString();
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /** The cells of {@code layout} at {@code origin}, shell first. */
+    private static List<BlockPos> cells(BlockPos origin, ShapeRasterizer.Layout layout) {
+        var cells = new ArrayList<BlockPos>();
+        for (var list : List.of(layout.shell(), layout.interior()))
+            for (var c : list) cells.add(cell(origin, c));
+        return cells;
+    }
+
+    private static BlockPos cell(BlockPos origin, ShapeRasterizer.Cell c) {
+        return origin.offset(c.x(), c.y(), c.z());
+    }
+
+    /** Whether every cell of {@code shape}'s layout at {@code origin} stands as its own: a shell cell of that origin and shape, an interior cell. */
+    private static boolean standsAs(ServerLevel level, BlockPos origin, EquipmentShape shape) {
+        var layout = ShapeRasterizer.layout(shape);
+        for (var c : layout.shell())
+            if (!(level.getBlockEntity(cell(origin, c)) instanceof EquipmentShellBlockEntity shell) || !origin.equals(shell.origin()) || !shape.equals(shell.shape())) return false;
+        for (var c : layout.interior()) if (!level.getBlockState(cell(origin, c)).is(ModBlocks.EQUIPMENT_INTERIOR.get())) return false;
+        return true;
+    }
+
+    /** Whether the shell cell at {@code at} stands for registration {@code id}. */
+    private static boolean shellStands(ServerLevel level, BlockPos at, long id) {
+        return level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && shell.fluidIdentity() == id;
     }
 
     /** Queues the registrations of the chunks of {@code cells} again, as their chunks' next load does. */

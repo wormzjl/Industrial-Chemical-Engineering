@@ -60,6 +60,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Registrations whose chunk loaded, by dimension, each queued once until the re-alignment checks it (REGISTRY_FIRST_PLAN.md 4.2). */
     private final Map<String,ArrayDeque<Long>> realignment=new HashMap<>();
     private final Set<Long> realigning=new HashSet<>();
+    /** The origins of the structures the registry records, by dimension and by chunk of their box: a chunk load queues them for their re-alignment (plan 4.4). */
+    private final Map<String,Map<Long,Set<PhysicalFluidTopology.Position>>> structureChunks=new HashMap<>();
     /** Engine-owned presentation: loaded devices and open menus, updated on their island's bucket only. */
     private final FluidPresentation<com.wormzjl.icheme.world.inventory.FluidDeviceMenu> presentation;
     /** Complete immutable snapshots from the last bucket; bounded by loaded/open devices, never player replies. */
@@ -92,6 +94,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var savedTopology=data.world().orElseGet(()->WorldTopologyLedger.Snapshot.empty(catalog));savedTopology.basis().requireCurrent(catalog);
         FluidPropertyReloadGuard.validateSolids(catalog.solids(),data.checkpoint(),savedTopology);observedSolidData=catalog;
         topology=new WorldTopologyLedger(savedTopology);
+        topology.builds().structures().forEach((origin,structure)->indexStructure(origin,structure,true));
         presentation=new FluidPresentation<>(new PresentationHost(),topology.onlineTick());
         var settings=new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,options.adaptiveCadence(),options.initialCadenceTicks(),options.certificates());
         // Island clocks read the world's online tick: one epoch increment per tick advances every island.
@@ -210,8 +213,20 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The registry's record of the structure whose origin is {@code origin}, or null. */
     public WorldTopologyLedger.Structure structure(PhysicalFluidTopology.Position origin){owned();return topology.structure(origin);}
-    /** Records the structure whose origin is {@code origin}; null removes it. */
-    public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure){owned();topology.structure(origin,structure);data.setDirty();}
+    /** Records the structure whose origin is {@code origin}; null removes it. A load of a chunk of its box queues it for its re-alignment. */
+    public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure) {
+        owned();var old=topology.structure(origin);if(old!=null)indexStructure(origin,old,false);
+        topology.structure(origin,structure);if(structure!=null)indexStructure(origin,structure,true);data.setDirty();
+    }
+    /** Adds or removes the structure at {@code origin} in the index of the chunks its box spans. */
+    private void indexStructure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure,boolean add) {
+        var shape=structure.shape();var chunks=structureChunks.computeIfAbsent(origin.dimension(),k->new HashMap<>());
+        for(int x=origin.x()>>4;x<=(origin.x()+shape.sizeX()-1)>>4;x++)for(int z=origin.z()>>4;z<=(origin.z()+shape.sizeZ()-1)>>4;z++) {
+            long chunk=net.minecraft.world.level.ChunkPos.asLong(x,z);
+            if(add)chunks.computeIfAbsent(chunk,k->new HashSet<>()).add(origin);
+            else{var at=chunks.get(chunk);if(at!=null&&at.remove(origin)&&at.isEmpty())chunks.remove(chunk);}
+        }
+    }
     /** Applied events that did nothing for the player who asked (a recovery that found no cake or a full inventory), by event, for their reply. Bounded. */
     private final LinkedHashMap<UUID,String> refusedEvents=new LinkedHashMap<>();
     private void refuseEvent(UUID event,String reason){refusedEvents.put(event,reason);if(refusedEvents.size()>WorldTopologyLedger.MAXIMUM_EVENTS)refusedEvents.remove(refusedEvents.keySet().iterator().next());}
@@ -723,7 +738,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /**
      * Rebind placed devices, queue missing registrations, then mark their presentation buckets. This also rebuilds an
-     * empty authority after a format reset, including equipment spanning chunks. Never loads a chunk or runs a solve.
+     * empty authority after a format reset, including equipment spanning chunks. The chunk's registrations, and the
+     * structures recorded over it, are queued for their re-alignment (REGISTRY_FIRST_PLAN.md 4.2, 4.4). Never loads a chunk
+     * or runs a solve.
      */
     public void loadedChunk(ResourceKey<Level> dimension,long chunk) {
         owned();if(closed)return;
@@ -755,6 +772,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var devices=registry.chunk(name,chunk);
         if(!devices.isEmpty())FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChunks);
         for(long id:devices){presentation.markDirty(id);if(realigning.add(id))realignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);}
+        var structures=structureChunks.getOrDefault(name,Map.of()).get(chunk);
+        if(structures!=null)for(var origin:structures)EquipmentStructure.realignLater(level,new net.minecraft.core.BlockPos(origin.x(),origin.y(),origin.z()));
     }
     /**
      * The next registration of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued
@@ -1284,7 +1303,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();structureChunks.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation

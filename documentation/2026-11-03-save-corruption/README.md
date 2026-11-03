@@ -2,7 +2,7 @@
 
 Purpose: how save corruption can damage an IChemE world, and how to stop it from causing total data loss, as an extension of the backward-compat facts/state system (owner 2026-11-03: "Research about how to handle eventual save corruption to prevent total data loss"; "I'd imagine it will be somehow combined with the backward compat system").
 
-Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is being built: steps 1 to 5 of 8 are done. The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is being built: steps 1 to 6 of 8 are done. The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -23,6 +23,7 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
 - Changed (W5b step 3): `PhysicalFluidTopology.Device` (`held`, `withHeld`; `joins`), `FluidFacts.topologyState` (held lists), `FluidCheckpointCodec.topology`, `FluidWorldAuthority` (`hold`, `held`, `drop`; the column start refuses a held device), `InstrumentService.discardHost`, new `runtime/fluid/HeldDevicesCommand` (attached to `/icheme` in `EquipmentStructure.registerCommands`); tests `PhysicalFluidTopologyTest`, `WorldTopologyLedgerTest`; new GameTest class `RegistryFirstGameTests`.
 - Changed (W5b step 4): `FluidDeviceBlock` (`stateFor`, `fittings`, the restore flag `registered` with `quietly`, which also covers `onRemove`), `FluidDeviceBlockEntity` (`bind(world, device)`, `standsFor`, the kind check in `bindIdentity`), `PipeLaying` (the renamed flag), `FluidWorldAuthority` (the re-alignment queue, `nextRealignment`, `holdWithoutLevel` at start), `FluidRuntimeDiagnostics` (`realign…` counters), `IChemE.onLevelTickPost`, new `world/level/block/RegistryRealignment`; GameTests `RegistryFirstGameTests` (3 new), `PipeLayingGameTests` (the new `bind` signature).
 - Changed (W5b step 5): `WorldTopologyLedger` (`RackFrame`, `RackShape`, `Builds.racks`, `rack`; a frame leaves with its lane), `FluidFacts` (schema 9), `FluidWorldAuthority.rackFrame`, `PipeRackBlock` (`frame`, `stateFor`; `onRemove` follows the restore flag), `PipeRackBlockEntity` (`bind` learns frames, `carries`, `frames`), `PipeLaying.lay` (records frames), `RegistryRealignment.lane`; tests `WorldTopologyLedgerTest`, `FluidFactsCompatTest`; corpus image `src/test/resources/compat/fluid/schema-9`; GameTest `RegistryFirstGameTests` (1 new).
+- Changed (W5b step 6): `EquipmentStructure` (`refresh` split into `survey`, `write`, `settle`; new `realignLater`, `serveRealignment`, `realign`, `stands`, `members`; `dismantle` follows the restore flag), `EquipmentRefresh.plan` with a fixed shift, `FluidWorldAuthority` (structure chunk index; `loadedChunk` queues structures), `RegistryRealignment.serve` (structures after devices); tests `EquipmentRefreshTest`; GameTests `RegistryFirstGameTests` (2 new).
 - Read: `runtime/fluid/FluidCheckpointStore`, `FluidSavedData`, `FluidCheckpointCodec` (core seal) and `FluidFacts.rebuild`.
 - `FluidWorldAuthority.loadedChunk`, `PhysicalFluidTopology.Device`, `FluidDeviceBlockEntity` (`bindIdentity`, saved fields), `PipeRackBlockEntity`, `EquipmentShellBlockEntity`, `EquipmentStructure.restoreFluidBinding`, `EquipmentRefresh`, `runtime/instrument/InstrumentService.Store` and `runtime/assembly/AssemblyStore`.
 - Vanilla and NeoForge 21.1.219: `SavedData`, `DimensionDataStorage`, `IOUtilities`, `Util.safeReplaceFile`, `LevelStorageSource`, `ChunkMap.handleChunkLoadFailure` and `scheduleUnload`, `ChunkStatusTasks`, `RegionFile` and `ChunkEvent.Load`.
@@ -74,10 +75,24 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
   - Gates: `WorldTopologyLedgerTest` 12/12 (new: a frame is a lane's and leaves with it), `FluidFactsCompatTest` 15/15 (schema-9 image added; images 1-8 read with no frames), `FluidCheckpointCodecTest` 11/11, `FluidCheckpointFormatTest` 8/8, `FluidCheckpointStoreTest` 9/9, `PipeLineCompatTest` 8/8; fluid GameTests 45/45 on the fresh run id `save-w5-step5c` (new: `registry-first-realign-rack`, GameTest e, which logged the corner cell placed and the turned rack restated).
   - Two earlier runs failed in the new test only, both test faults. In `save-w5-step5`, its cells were not cleared first, so a start cell was refused. It threw before its cleanup, and the two tanks it left failed the world-wide cleanup check of `fluid-world-unloaded`. In `save-w5-step5b`, it read the frames before the lanes' removals applied. Code guide: waits for the merge.
 
+- 2026-11-04: W5b step 6, the commit that adds this line. Structures rebuilt from their records (plan 4.4).
+  - Queue: the authority indexes each record's origin by the chunks of its box, and a chunk load queues the structures it touches. They are served after the devices in the same 1 ms: at most 8 checks a tick, none after a rebuild. A structure waits while the layout refresh has it queued (plan section 8), and until its box and the blocks beside it are block-ticking.
+  - Check: a structure whose layout cells all stand as its own is left as it is, and holds on its registrations are released. Cost: one read per cell, once per load.
+  - Rebuild: `refresh` was split into `survey`, `write` and `settle`, which the restore shares.
+    - The restore keeps the record's origin (`EquipmentRefresh.plan` with shift 0) and paints every shell cell with the record's paint.
+    - Cells of the same origin with another shape count as its own, as do interior cells that no shell cell reaches. When such cells reach beyond the record's box, a wider region is read.
+    - Members bind through `restoreFluidBinding`.
+    - With a cell left out, the members are held and the written cells keep no stamp.
+    - `dismantle` follows the restore flag.
+  - Checked before the step: each GameTest that places a structure ends with its dismantle or a retired removal. The exception is `CoolingTowerGameTests`, which leaves its tower whole and intact.
+  - Gates: `EquipmentRefreshTest` 8/8 (equipmentGates; new: a restore keeps its origin), `ColumnSuspensionTest` 2/2, `ExchangerCouplingTest` 13/13; fluid GameTests 47/47 on the fresh run id `save-w5-step6b` (new: `registry-first-realign-drum` for GameTest f, `registry-first-realign-shape` for g).
+    - In f, the stone held the drum. Once the stone was gone, the layout refresh placed the cell first (the written cells had no stamp), then the re-alignment released the drum. This is the order plan section 8 asks for.
+  - The first run, `save-w5-step6`, failed in f only, a test fault: a 28 m³ drum cannot reach 2 bar through one pipe in 1,200 ticks (about 2,300 mol at the 100 m/s cap). f now charges until the drum holds 10 mol. Its leftovers failed the cleanup check of `fluid-world-unloaded`. Code guide: waits for the merge.
+
 ## Open items
 
-- W5 steps 6-8 per REGISTRY_FIRST_PLAN.md section 5. Next: step 6, structures rebuilt from their records (GameTests f and g).
-- Before step 6: every GameTest that places a structure must end with its dismantle or clear its record (plan section 7).
+- W5 steps 7-8 per REGISTRY_FIRST_PLAN.md section 5. Next: step 7, the notices and their lang keys (plan 4.5).
+- One in-game check of a rebuilt structure (rendering, light) to offer the owner after step 6 (plan section 8); not started unasked.
 - Tooling cleanup before the merge: the rack-frame probe `tmp/rack-frame/ambiguity.jsh` (plan 3.1) moves to a `tools/` folder.
 - A pipe's sight glass is an accessory of the registration (accessory store). Check in step 6 or 8 that a re-placed pipe shows it again, through `deviceLoaded` → `instruments.bind`; no GameTest covers it yet.
 - W6 (save encoding off the server thread): proposed, owner to decide.
