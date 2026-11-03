@@ -9,10 +9,11 @@ import java.util.Map;
  * A unit on its sheet (batch 2026-11-02-process-simulator, plan section 3.2): its settings, the stream on each wired port and
  * the run's thermo. A free outlet writes a stream of its own, which leaves the sheet, so mass closes and the run says so.
  *
- * @param wires    the stream on each wired port
- * @param passages its sized passages' laws (D19); {@link Passages#TYPED} while it has no size
+ * @param wires     the stream on each wired port
+ * @param passages  its sized passages' laws (D19); {@link Passages#TYPED} while it has no size
+ * @param utilities the feeds whose flow it sets, and what it reads to set them
  */
-public record WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo, Passages passages) {
+public record WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo, Passages passages, Utilities utilities) {
     /** A sized passage's drop is found again while it moves by more than this, Pa: a thousandth of a bar. */
     private static final double SAME_DROP = 100;
     /** At most this often: the coils' drop rises with the vapour a lower outlet pressure gives, and settles in a few. */
@@ -20,6 +21,23 @@ public record WiredUnit(String id, Params params, Map<String, String> wires, Flo
 
     public WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo) {
         this(id, params, wires, thermo, Passages.TYPED);
+    }
+
+    public WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo, Passages passages) {
+        this(id, params, wires, thermo, passages, Utilities.NONE);
+    }
+
+    /**
+     * The sheet feeds of water alone on the unit's {@linkplain Port#utility utility} ports, by port, whose flow the unit sets
+     * ({@code COOLER_MODEL_PLAN.md} section 8): the run gives them no source of their own. A pumparound's return is its draw less
+     * {@code pumparoundFall} (K), the sheet's design basis, as sizing reads it: the column model has no circulation.
+     */
+    public record Utilities(Map<String, Flowsheet.Feed> feeds, double pumparoundFall) {
+        public static final Utilities NONE = new Utilities(Map.of(), com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis.DEFAULT.paFall());
+
+        public Utilities {
+            feeds = Map.copyOf(feeds);
+        }
     }
 
     /**

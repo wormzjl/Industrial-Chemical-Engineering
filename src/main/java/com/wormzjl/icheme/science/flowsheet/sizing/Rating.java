@@ -21,6 +21,8 @@ public record Rating(List<Reading> readings, Map<String, Double> values) {
     public static final String WATER = "water", WATER_VOLUME = "water_volume";
     /** On a water cooler whose inlet stands above the air's split, the duty an air cooler ahead of it would take down to the split, MW (section 3 item 4). */
     public static final String AIR_AHEAD = "air_ahead";
+    /** An air cooler's fans at design flow ({@code COOLER_MODEL_PLAN.md} section 8): their speed, a share of full from 0 to 1, and their power, W. */
+    public static final String FANS = "fans", FAN_POWER = "fan_power";
 
     public Rating {
         readings = List.copyOf(readings);

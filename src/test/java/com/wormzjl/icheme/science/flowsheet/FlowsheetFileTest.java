@@ -145,7 +145,10 @@ final class FlowsheetFileTest {
         assertTrue(logged(run, "unit.removed"), () -> "log " + run.log());
         assertEquals("retired_gizmo", sheet.units().get(2).type());
         assertEquals(.2, sheet.units().get(2).params().number("bore"));
-        assertEquals(FlowsheetRun.Outcome.SOLVED, run.outcomes().get("T-1/pa 1"), "a heat side on the door's duty stands alone");
+        // PA 1's coolant is a feed of water alone, whose flow the column sets from its draw tray (COOLER_MODEL_PLAN.md section 8): it
+        // waits for the column, which the removed type keeps from running.
+        assertEquals(FlowsheetRun.Outcome.NOT_SOLVED, run.outcomes().get("T-1/pa 1 utility"), "a regulated heat side waits for its column");
+        assertEquals(FlowsheetRun.Outcome.NOT_SOLVED, run.outcomes().get("T-1/pa 1"));
         assertTrue(run.streams().containsKey("O-1") && !run.streams().containsKey("T-5"));
     }
 
@@ -202,8 +205,9 @@ final class FlowsheetFileTest {
         var run = run(sheet);
         assertFalse(run.outcomes().containsKey("T-1/pa 1"), "the row's heat side went with it");
         assertTrue(notes(run).anyMatch(note -> note.key().equals("stream.open") && note.arguments().equals(List.of("PA 1 RETURN"))), () -> "its return is an open pill: log " + run.log());
-        assertEquals(FlowsheetRun.Outcome.SOLVED, run.outcomes().get("T-1/pa 2"), "PA 2 keeps its wires");
-        assertEquals(run.streams().get("P-3").enthalpy() + 1.5e7, run.streams().get("P-4").enthalpy(), 1, "and its duty");
+        // PA 2's water waits for the column, which the removed type keeps from running (section 8); its side and its wires stand.
+        assertTrue(run.outcomes().containsKey("T-1/pa 2") && run.outcomes().containsKey("T-1/pa 2 utility"), "PA 2 keeps its wires");
+        assertEquals(-1.5e7, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(sheet.units().stream().filter(unit -> unit.id().equals("T-1")).findFirst().orElseThrow().params()).pumparounds().getFirst().duty(), 1, "and its duty");
         assertTrue(run.streams().containsKey("P-1"), "the row's coolant stands as a feed with nowhere to go");
         assertEquals("pa/1/in", sheet.streams().stream().filter(stream -> stream.id().equals("P-1")).findFirst().orElseThrow().to().port(), "the sheet keeps the end, so Undo finds it");
     }

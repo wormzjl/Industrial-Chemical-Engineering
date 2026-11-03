@@ -15,8 +15,6 @@ import org.jetbrains.annotations.Nullable;
  * by the outlet, a key keeps the player's, and the type's own rows rate it, as a Fixed size is rated.
  */
 public final class CoolerSizing {
-    /** Tower water's full rise, K: the world's tower takes it back from 35 °C to 25 °C. */
-    static final double RANGE = 10;
     /** What a free water side's tubes carry the water at, Pa: the sample's cooling water supply. Liquid water's state hardly reads it. */
     static final double TOWER_WATER_PRESSURE = 4e5;
 
@@ -30,15 +28,30 @@ public final class CoolerSizing {
      */
     public static double waterReturn(double inlet) {
         double in = inlet - HeatSides.TOWER_WATER_TEMPERATURE;
-        return HeatSides.TOWER_WATER_TEMPERATURE + Math.max(0, Math.min(RANGE, Math.max(in - RANGE, in / 4)));
+        return HeatSides.TOWER_WATER_TEMPERATURE + Math.max(0, Math.min(HeatSides.WATER_RANGE, Math.max(in - HeatSides.WATER_RANGE, in / 4)));
     }
 
     /**
-     * The tower water that takes {@code in} to {@code out} at the run's flow: its supply at 25 °C and its return ({@link
-     * #waterReturn}), the same moles. Null where the stream is not cooled, or the basis holds no water.
+     * Where a column's free water side returns, K (section 8): as a regulated side's water, {@link HeatSides#coolingWaterOutlet} from
+     * 25 °C below the process cold end {@code coldEnd}; where that cold end leaves the tower water no rise, section 3's return on the
+     * process inlet {@code inlet}, which the side's approach row then reads.
      */
+    public static double columnReturn(double coldEnd, double inlet) {
+        double back = HeatSides.coolingWaterOutlet(HeatSides.TOWER_WATER_TEMPERATURE, coldEnd);
+        return back > HeatSides.TOWER_WATER_TEMPERATURE ? back : waterReturn(inlet);
+    }
+
+    /** The tower water that takes {@code in} to {@code out} at the run's flow, back at section 3's return ({@link #waterReturn}). */
     static @Nullable Water water(FlowStream in, FlowStream out, FlowThermo thermo) {
-        double removed = in.enthalpy() - out.enthalpy(), back = waterReturn(in.temperature());
+        return water(in, out, waterReturn(in.temperature()), thermo);
+    }
+
+    /**
+     * The tower water that takes {@code in} to {@code out} at the run's flow: its supply at 25 °C and its return at {@code back} K, the
+     * same moles. Null where the stream is not cooled, the water does not rise, or the basis holds no water.
+     */
+    static @Nullable Water water(FlowStream in, FlowStream out, double back, FlowThermo thermo) {
+        double removed = in.enthalpy() - out.enthalpy();
         int water = thermo.axis().indexOf(SplitTable.WATER);
         if (in.empty() || !(removed > 0) || water < 0 || !(back > HeatSides.TOWER_WATER_TEMPERATURE)) return null;
         double[] one = new double[thermo.axis().size()];

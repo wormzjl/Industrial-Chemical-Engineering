@@ -150,6 +150,13 @@ public final class SheetSizing {
         public Sized(Map<String, SizedLine> lines, Map<String, SizedUnit> units, List<PressurePath> paths) {
             this(lines, units, paths, Map.of());
         }
+
+        /** What every air cooler's fans draw at design flow, W, members too: the sheet's load on the electricity network to come (section 8). */
+        public double fanPower() {
+            double power = 0;
+            for (var unit : units.values()) power += unit.rating().values().getOrDefault(Rating.FAN_POWER, 0.);
+            return power;
+        }
     }
 
     /**
@@ -498,11 +505,12 @@ public final class SheetSizing {
 
         /**
          * A heat pair's water side from {@code hotIn} to {@code hotOut}, the process on the shell: the sheet's stream on {@code in}
-         * and {@code out} where the port is wired, else tower water (C2).
+         * and {@code out} where the port is wired, else tower water (C2), back where a regulated side's water would leave: under the
+         * process cold end, {@code hotOut}, the receiver or the pumparound's return ({@code COOLER_MODEL_PLAN.md} section 8).
          */
         private ExchangerSizing.@Nullable Load water(String unit, String in, String out, FlowStream hotIn, FlowStream hotOut) {
             return wired(unit, in) ? ExchangerSizing.Load.of(false, stream(unit, in), stream(unit, out), hotIn, hotOut, basis, thermo, scratch)
-                    : ExchangerSizing.Load.cooled(hotIn, hotOut, basis, thermo, scratch);
+                    : ExchangerSizing.Load.cooled(hotIn, hotOut, CoolerSizing.columnReturn(hotOut.temperature(), hotIn.temperature()), basis, thermo, scratch);
         }
 
         /**
@@ -528,8 +536,11 @@ public final class SheetSizing {
             return airCooler(entry, AirCoolerSizing.Load.of(stream(id, "in"), stream(id, "out"), basis, thermo, scratch));
         }
 
+        /** An air cooler, with its fans' speed and power on the size it holds or Auto proposes ({@code COOLER_MODEL_PLAN.md} section 8). */
         private static SizedUnit airCooler(UnitEntry entry, AirCoolerSizing.@Nullable Load load) {
-            return sized(entry, AirCoolerSizing.Size.class, size -> AirCoolerSizing.rate(load, size), () -> AirCoolerSizing.auto(load));
+            var sized = sized(entry, AirCoolerSizing.Size.class, size -> AirCoolerSizing.rate(load, size), () -> AirCoolerSizing.auto(load));
+            var fans = sized.size() instanceof AirCoolerSizing.Size size ? AirCoolerSizing.fans(load, size) : null;
+            return fans == null ? sized : new SizedUnit(sized.size(), sized.rating().with(Rating.FANS, fans.speed()).with(Rating.FAN_POWER, fans.power()));
         }
 
         /** A heater's coils in series are one pair; set apart, each takes its share of the fire. */

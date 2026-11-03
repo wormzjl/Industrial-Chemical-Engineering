@@ -80,20 +80,62 @@ public final class AirCoolerSizing {
      * A cooler at design flow.
      *
      * @param mean    the stream at its mean temperature
-     * @param needed  the bare surface the duty needs, m², infinite if the air cannot take it there
+     * @param needed  the bare surface the duty needs at full fans, m², infinite if the air cannot take it there
      * @param outlet  how far its outlet stands above the air, K
+     * @param stream  the stream's side at design flow, which the fans' films are put on; null on a load given whole
+     * @param duty    W at design flow
      */
-    public record Load(LineSizing.Carried mean, double needed, double outlet) {
+    public record Load(LineSizing.Carried mean, double needed, double outlet, ExchangerRating.@Nullable Side stream, double duty) {
+        /** A load given whole, whose fans this stage cannot read. */
+        public Load(LineSizing.Carried mean, double needed, double outlet) {
+            this(mean, needed, outlet, null, 0);
+        }
+
         /** The cooler between these streams, null if it passes no heat. */
         public static @Nullable Load of(FlowStream in, FlowStream out, DesignBasis basis, FlowThermo thermo, MixtureViscosity.Workspace scratch) {
             double removed = in.enthalpy() - out.enthalpy(), air = HeatSides.AIR_TEMPERATURE;
             if (in.empty() || !(removed > 0)) return null;
-            var side = ExchangerRating.side(thermo, in, Math.min(out.temperature(), air), in.temperature());
-            var fans = new ExchangerRating.Side(side.curve().withFilms(HeatSides.airFilms(1)), side.massFlow(), side.inlet());
-            double flow = basis.designFlow(), needed = ExchangerRating.rate(fans.at(flow), ExchangerRating.Side.sink(air), removed * flow).area();
+            double flow = basis.designFlow();
+            var side = ExchangerRating.side(thermo, in, Math.min(out.temperature(), air), in.temperature()).at(flow);
             var mean = thermo.atTemperature((in.temperature() + out.temperature()) / 2, in.pressure(), in.amountsView(), in.solids());
-            return new Load(LineSizing.Carried.of(mean, flow, thermo, scratch), needed, out.temperature() - air);
+            return new Load(LineSizing.Carried.of(mean, flow, thermo, scratch), needed(side, removed * flow, 1), out.temperature() - air, side, removed * flow);
         }
+
+        /** The bare surface {@code duty} W needs from {@code side} with the fans at {@code fans} of full speed, m². */
+        private static double needed(ExchangerRating.Side side, double duty, double fans) {
+            var filmed = new ExchangerRating.Side(side.curve().withFilms(HeatSides.airFilms(fans)), side.massFlow(), side.inlet());
+            return ExchangerRating.rate(filmed, ExchangerRating.Side.sink(HeatSides.AIR_TEMPERATURE), duty).area();
+        }
+    }
+
+    /**
+     * An air cooler's fans at design flow ({@code COOLER_MODEL_PLAN.md} section 8): the share of full speed, from 0, natural draught
+     * through open louvers, to 1, and the power they draw, W.
+     */
+    public record Fans(double speed, double power) {
+    }
+
+    /** Bisections of the fans' speed: a millionth of full speed. */
+    private static final int FAN_STEPS = 20;
+
+    /**
+     * The fans of {@code size} that remove {@code load}'s duty against 25 °C air: the least speed whose films leave the face's bare
+     * surface enough, its power by the fan laws ({@link HeatSides#fanPower}). Natural draught that holds the duty stills them, the
+     * louvers throttling; a face short at full speed runs full, and its surface row says so. Null where the load has no stream.
+     */
+    public static @Nullable Fans fans(@Nullable Load load, Size size) {
+        var stream = load == null ? null : load.stream();
+        if (stream == null) return null;
+        double surface = size.surface();
+        if (Load.needed(stream, load.duty(), 0) <= surface) return new Fans(0, 0);
+        if (!(load.needed() <= surface)) return new Fans(1, HeatSides.fanPower(surface, 1));
+        double slow = 0, fast = 1;
+        for (int step = 0; step < FAN_STEPS; step++) {
+            double middle = (slow + fast) / 2;
+            if (Load.needed(stream, load.duty(), middle) <= surface) fast = middle;
+            else slow = middle;
+        }
+        return new Fans(fast, HeatSides.fanPower(surface, fast));
     }
 
     /** The smallest air cooler Auto knows, the size it gives a member with no need. */

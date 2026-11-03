@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet.sizing;
 
 import com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,6 +20,19 @@ final class CoolerSizingTest {
         assertEquals(35 + KELVIN, CoolerSizing.waterReturn(45 + KELVIN), 1e-9);
         assertEquals(30 + KELVIN, CoolerSizing.waterReturn(40 + KELVIN), 1e-9);
         assertEquals(26.25 + KELVIN, CoolerSizing.waterReturn(30 + KELVIN), 1e-9);
+    }
+
+    /**
+     * A regulated side's water (section 8): its full 10 K rise, but 5 K under the process cold end; at or under its inlet it cannot
+     * hold that end. A column's free side takes the same from 25 °C, and section 3's return where the cold end leaves it no rise.
+     */
+    @Test void regulatedWaterStopsFiveKelvinUnderTheColdEnd() {
+        assertEquals(35 + KELVIN, HeatSides.coolingWaterOutlet(25 + KELVIN, 59 + KELVIN), 1e-9);
+        assertEquals(54 + KELVIN, HeatSides.coolingWaterOutlet(50 + KELVIN, 59 + KELVIN), 1e-9);
+        assertEquals(54 + KELVIN, HeatSides.coolingWaterOutlet(55 + KELVIN, 59 + KELVIN), 1e-9);
+        assertEquals(30 + KELVIN, CoolerSizing.columnReturn(35 + KELVIN, 40 + KELVIN), 1e-9);
+        assertEquals(35 + KELVIN, CoolerSizing.columnReturn(150 + KELVIN, 250 + KELVIN), 1e-9);
+        assertEquals(CoolerSizing.waterReturn(110 + KELVIN), CoolerSizing.columnReturn(28 + KELVIN, 110 + KELVIN), 1e-9);
     }
 
     @Test void theCoolerProposesAirFromFortyDegrees() {

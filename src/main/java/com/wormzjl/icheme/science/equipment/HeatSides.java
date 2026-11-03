@@ -42,6 +42,19 @@ public final class HeatSides {
      */
     public static final double TOWER_WATER_TEMPERATURE=298.15;
     /**
+     * Cooling water's rise across a cooler, K, and the least difference it keeps below the process side's cold end (batch
+     * 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} sections 3 and 8): a 10 K range, a 5 K approach.
+     */
+    public static final double WATER_RANGE=10,WATER_APPROACH=5;
+    /**
+     * Where cooling water that comes in at {@code inlet} leaves a regulated side whose process cold end stands at {@code coldEnd},
+     * K: its full range, but {@link #WATER_APPROACH} under the cold end ({@code COOLER_MODEL_PLAN.md} section 8). At or under the
+     * inlet, the water cannot hold that cold end at any flow.
+     */
+    public static double coolingWaterOutlet(double inlet,double coldEnd){
+        return Math.min(inlet+WATER_RANGE,coldEnd-WATER_APPROACH);
+    }
+    /**
      * Where an air-then-water condenser's air hands the overhead to its water trim, K: the split, but never below the
      * receiver (the trim then has no duty) nor above the top vapour (the air then has none).
      */

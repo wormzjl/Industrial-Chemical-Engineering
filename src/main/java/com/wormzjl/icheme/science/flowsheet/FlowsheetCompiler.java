@@ -28,14 +28,37 @@ public final class FlowsheetCompiler {
         var calculations = new ArrayList<Calculation>();
         var wires = new HashMap<String, Map<String, String>>();
         var outlets = new HashMap<String, List<String>>();
-        var live = livePorts(sheet);
+        var utilities = new HashMap<String, Map<String, Flowsheet.Feed>>();
+        var utilityPorts = new HashSet<Live>();
+        var live = livePorts(sheet, utilityPorts);
         for (var stream : sheet.streams()) {
-            if (claims(stream, stream.from(), Port.Direction.OUT, live, wires)) outlets.computeIfAbsent(stream.from().unit(), k -> new ArrayList<>()).add(stream.id());
+            boolean out = claims(stream, stream.from(), Port.Direction.OUT, live, wires);
+            boolean in = claims(stream, stream.to(), Port.Direction.IN, live, wires);
+            if (out) outlets.computeIfAbsent(stream.from().unit(), k -> new ArrayList<>()).add(stream.id());
+            // A feed of water alone on a utility port is the unit's to set (COOLER_MODEL_PLAN.md section 8): its side writes it.
+            else if (in && stream.from() == null && stream.feed() != null && utilityPorts.contains(new Live(stream.to(), Port.Direction.IN)) && waterAlone(stream.feed(), thermo))
+                utilities.computeIfAbsent(stream.to().unit(), k -> new HashMap<>()).put(stream.to().port(), stream.feed());
             else calculations.add(source(stream, thermo));
-            claims(stream, stream.to(), Port.Direction.IN, live, wires);
         }
-        for (var unit : sheet.units()) calculations.addAll(unit(unit, sheet.sizing(), wires.getOrDefault(unit.id(), Map.of()), outlets.getOrDefault(unit.id(), List.of()), thermo));
+        double fall = sheet.sizing().basis().paFall();
+        for (var unit : sheet.units())
+            calculations.addAll(unit(unit, sheet.sizing(), wires.getOrDefault(unit.id(), Map.of()), outlets.getOrDefault(unit.id(), List.of()), new WiredUnit.Utilities(utilities.getOrDefault(unit.id(), Map.of()), fall), thermo));
         return calculations;
+    }
+
+    /** Whether {@code feed} is water and nothing else: cooling water as a liquid, steam as a vapour. */
+    private static boolean waterAlone(Flowsheet.Feed feed, FlowThermo thermo) {
+        int water = thermo.axis().indexOf(com.wormzjl.icheme.science.column.operation.SplitTable.WATER);
+        if (water < 0) return false;
+        for (var solid : feed.solids()) if (solid.massFlow() > 0) return false;
+        double[] amounts = amounts(feed, thermo);
+        for (int i = 0; i < amounts.length; i++) if (i != water && amounts[i] != 0) return false;
+        return amounts[water] > 0 && parked(feed, thermo).isEmpty();
+    }
+
+    /** A feed as it was typed: the first guess of a side that sets its flow. */
+    public static FlowStream typed(Flowsheet.Feed feed, FlowThermo thermo) {
+        return thermo.atTemperature(feed.temperature(), feed.pressure(), amounts(feed, thermo), solids(feed, thermo));
     }
 
     /**
@@ -95,14 +118,17 @@ public final class FlowsheetCompiler {
      * that gives no ports, whatever its streams name, as its placeholder keeps them. A stream on any other end stays, and that
      * end is open.
      */
-    private static Set<Live> livePorts(Flowsheet sheet) {
+    private static Set<Live> livePorts(Flowsheet sheet, Set<Live> utilities) {
         var live = new HashSet<Live>();
         var placeholders = new HashSet<String>();
         for (var unit : sheet.units()) {
             try {
                 var model = UnitTypes.model(unit.type());
                 if (model == null) placeholders.add(unit.id());
-                else for (var port : model.ports(unit.params())) live.add(new Live(unit.id(), port.id(), port.direction()));
+                else for (var port : model.ports(unit.params())) {
+                    live.add(new Live(unit.id(), port.id(), port.direction()));
+                    if (port.utility()) utilities.add(new Live(unit.id(), port.id(), port.direction()));
+                }
             } catch (FlowsheetFailure noPorts) {
                 placeholders.add(unit.id());
             }
@@ -145,11 +171,11 @@ public final class FlowsheetCompiler {
     }
 
     /** A unit with a size runs its passages' laws at the run's flow; one with none, its door's drops (sizing plan section 3.11, D19). */
-    private static List<Calculation> unit(Flowsheet.Unit unit, SizingFacts sizing, Map<String, String> wires, List<String> outlets, FlowThermo thermo) {
+    private static List<Calculation> unit(Flowsheet.Unit unit, SizingFacts sizing, Map<String, String> wires, List<String> outlets, WiredUnit.Utilities utilities, FlowThermo thermo) {
         var model = UnitTypes.model(unit.type());
         if (model == null) return List.of(refused(unit, outlets, "unit.removed", unit.type()));
         try {
-            var wired = new WiredUnit(unit.id(), unit.params(), Map.copyOf(wires), thermo, SizedPassages.of(sizing, unit, thermo));
+            var wired = new WiredUnit(unit.id(), unit.params(), Map.copyOf(wires), thermo, SizedPassages.of(sizing, unit, thermo), utilities);
             for (var port : model.ports(unit.params())) if (port.required() && wired.wire(port.id()) == null) throw new FlowsheetFailure("unit.free_inlet", port.id());
             return model.calculations(wired);
         } catch (FlowsheetFailure refusal) {

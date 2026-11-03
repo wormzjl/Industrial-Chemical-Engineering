@@ -15,6 +15,7 @@ import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
 import com.wormzjl.icheme.science.column.v3.V3SolveStrategy;
 import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.flowsheet.Board;
 import com.wormzjl.icheme.science.flowsheet.Calculation;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
@@ -33,6 +34,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.ToDoubleFunction;
 
 /**
  * The column as one block (batch 2026-11-02-process-simulator, plan sections 3.3 and 3.11): the calculator's own solve, with its
@@ -42,7 +44,10 @@ import java.util.Locale;
  * column is no loop. The condenser's duty is an answer, and reaches its side by a link. A free side leaves the heat to a utility.
  * Each pair is checked once the sheet stands, for heat that cannot flow that way. An air-then-water condenser ({@code
  * COOLER_MODEL_PLAN.md} section 6, C2) has the exchanger's pair on its water trim: the water takes the trim's share, the overhead from
- * the split to the receiver as the world's solve reads it, and the air the rest. The block reads both shares.
+ * the split to the receiver as the world's solve reads it, and the air the rest. The block reads both shares. A heat side whose inlet
+ * is a sheet feed of water alone sets that feed's flow ({@code COOLER_MODEL_PLAN.md} section 8), as a plant's controller opens its
+ * valve: cooling water to carry the duty to 5 K under the process cold end, 10 K above its inlet at most; steam to leave as saturated
+ * condensate. A calculation of its own writes the feed, so the side reads it as any inlet.
  *
  * <p>V3 has no feed pressure, so the stream is flashed at its own enthalpy to the feed tray's solved pressure, which gives V3's
  * feed temperature. V3's feed is hydrocarbons: water joins as steam if it is vapour there. The products come back through the world's
@@ -67,6 +72,12 @@ public final class ColumnUnit implements UnitModel {
     private static final int FEED_ROUNDS = 3;
     /** Liquid water up to this share of a stream's moles is a trace, not a phase. */
     private static final double TRACE = 1e-9;
+    /**
+     * A regulated side's flow is found again while its outlet's pressure moves by more than this (Pa), at most this often; its
+     * condensate stands this far under its saturation (K), a liquid the flash reads as one.
+     */
+    private static final double SAME_PRESSURE = 100, SUBCOOLED = 1e-3;
+    private static final int SETTLING = 5;
     /** The calculator's learned start, on the budget the game ships with. */
     private static final V3InitializationOptions START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
 
@@ -95,9 +106,9 @@ public final class ColumnUnit implements UnitModel {
     @Override public List<Port> ports(Params params) {
         var door = ColumnDoor.of(params);
         var ports = new ArrayList<>(List.of(Port.in(FEED), Port.out(OVERHEAD), Port.out(DISTILLATE), Port.out(WATER), Port.out(BOTTOMS)));
-        if (door.condenser().waterCooled()) ports.addAll(List.of(Port.optionalIn(CONDENSER_IN), Port.out(CONDENSER_OUT)));
-        if (ColumnComponents.kettleRequired(door.reboilerDuty())) ports.addAll(List.of(Port.optionalIn(REBOILER_IN), Port.out(REBOILER_OUT)));
-        for (var pumparound : door.pumparounds()) ports.addAll(List.of(Port.optionalIn(pumparoundIn(pumparound)), Port.out(pumparoundOut(pumparound))));
+        if (door.condenser().waterCooled()) ports.addAll(List.of(Port.utilityIn(CONDENSER_IN), Port.out(CONDENSER_OUT)));
+        if (ColumnComponents.kettleRequired(door.reboilerDuty())) ports.addAll(List.of(Port.utilityIn(REBOILER_IN), Port.out(REBOILER_OUT)));
+        for (var pumparound : door.pumparounds()) ports.addAll(List.of(Port.utilityIn(pumparoundIn(pumparound)), Port.out(pumparoundOut(pumparound))));
         for (var steam : door.steam()) ports.add(Port.optionalIn(steamPort(steam)));
         for (var draw : door.draws()) ports.add(Port.out(drawPort(draw)));
         if (ColumnComponents.ejectorRequired(door.topPressure())) ports.add(Port.optionalIn(MOTIVE));
@@ -110,13 +121,18 @@ public final class ColumnUnit implements UnitModel {
         var calculations = new ArrayList<Calculation>();
         calculations.add(solve.calculation());
         if (u.wire(CONDENSER_IN) != null) {
-            calculations.add(side(u, "condenser", CONDENSER_IN, CONDENSER_OUT, CONDENSER_DROP, door.condenserDrop(), solve.condenserHeat(), null));
+            String heat = solve.condenserHeat();
+            if (u.utilities().feeds().containsKey(CONDENSER_IN))
+                calculations.add(utility(u, "condenser", CONDENSER_IN, CONDENSER_DROP, door.condenserDrop(), List.of(), List.of(heat), board -> board.link(heat), cooling(u, CONDENSER_IN, board -> door.condenserTemperature())));
+            calculations.add(side(u, "condenser", CONDENSER_IN, CONDENSER_OUT, CONDENSER_DROP, door.condenserDrop(), heat, null));
             calculations.add(check(u, "condenser check", u.out(CONDENSER_OUT), null, (board, report) -> {
                 if (!board.stream(u.out(CONDENSER_OUT)).empty()) report.reading("margin", door.condenserTemperature() - board.stream(u.out(CONDENSER_OUT)).temperature());
                 if (!board.stream(u.out(CONDENSER_OUT)).empty() && board.stream(u.out(CONDENSER_OUT)).temperature() >= door.condenserTemperature()) report.note(Note.warning(u.id(), "column.condenser_hot"));
             }));
         } else if (u.wire(CONDENSER_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", CONDENSER_IN);
         if (u.wire(REBOILER_IN) != null) {
+            if (u.utilities().feeds().containsKey(REBOILER_IN))
+                calculations.add(utility(u, "reboiler", REBOILER_IN, REBOILER_DROP, door.reboilerDrop(), List.of(), List.of(solve.bottomsTemperature()), board -> -door.reboilerDuty(), steam(u, solve.bottomsTemperature())));
             calculations.add(side(u, "reboiler", REBOILER_IN, REBOILER_OUT, REBOILER_DROP, door.reboilerDrop(), null, -door.reboilerDuty()));
             calculations.add(check(u, "reboiler check", u.out(REBOILER_OUT), u.out(BOTTOMS), (board, report) -> {
                 var steam = board.stream(u.out(REBOILER_OUT));
@@ -131,8 +147,11 @@ public final class ColumnUnit implements UnitModel {
                 if (u.wire(out) != null) throw new FlowsheetFailure("unit.free_inlet", in);
                 continue;
             }
-            calculations.add(side(u, "pa " + pumparound.id(), in, out, pumparoundDrop(pumparound), pumparound.drop(), null, -pumparound.duty()));
             String tray = solve.drawTemperature(pumparound);
+            double fall = u.utilities().pumparoundFall();
+            if (u.utilities().feeds().containsKey(in))
+                calculations.add(utility(u, "pa " + pumparound.id(), in, pumparoundDrop(pumparound), pumparound.drop(), List.of(), List.of(tray), board -> -pumparound.duty(), cooling(u, in, board -> board.link(tray) - fall)));
+            calculations.add(side(u, "pa " + pumparound.id(), in, out, pumparoundDrop(pumparound), pumparound.drop(), null, -pumparound.duty()));
             calculations.add(new Calculation(u.part("pa " + pumparound.id() + " check"), u.id(), List.of(u.out(out)), List.of(), List.of(tray), List.of(), Calculation.Kind.CHECK, (board, report) -> {
                 var cold = board.stream(u.out(out));
                 if (!cold.empty()) report.reading("margin", board.link(tray) - cold.temperature());
@@ -164,6 +183,95 @@ public final class ColumnUnit implements UnitModel {
             u.write(board, report, out, u.thermo().heated(stream, watts, pressure));
             report.reading("duty", watts);
         });
+    }
+
+    /**
+     * What a regulated side asks of its feed ({@code COOLER_MODEL_PLAN.md} section 8): the flow, as a share of the typed one, that
+     * carries {@code watts} into it with the side's outlet at {@code pressure}; NaN keeps the typed flow.
+     */
+    private interface Rule {
+        double share(Board board, Report report, FlowStream typed, double watts, double pressure);
+    }
+
+    /**
+     * The feed of a heat side that sets its flow ({@code COOLER_MODEL_PLAN.md} section 8): the sheet's feed of water alone on
+     * {@code in}, which this calculation writes in place of a source, at its typed temperature, pressure and makeup and at the flow
+     * {@code rule} asks for {@code watts}; the side then takes it as any inlet. The typed flow is the first guess, and stays where the
+     * rule cannot set one. A sized passage's drop moves with the flow, so the flow is found again at each drop until the side's outlet
+     * pressure settles.
+     */
+    private static Calculation utility(WiredUnit u, String name, String in, String passage, double drop, List<String> reads, List<String> links, ToDoubleFunction<Board> watts, Rule rule) {
+        var feed = u.utilities().feeds().get(in);
+        String wire = u.wire(in);
+        return new Calculation(u.part(name + " utility"), u.id(), reads, List.of(wire), links, List.of(), Calculation.Kind.STEP, (board, report) -> {
+            var thermo = u.thermo();
+            var typed = com.wormzjl.icheme.science.flowsheet.FlowsheetCompiler.typed(feed, thermo);
+            double heat = watts.applyAsDouble(board);
+            var scratch = new Report();
+            double pressure = WiredUnit.after(typed, u.drop(passage, typed, drop, scratch));
+            double share = rule.share(board, scratch, typed, heat, pressure);
+            for (int tries = 0; tries < SETTLING && share > 0; tries++) {
+                double next = WiredUnit.after(typed, u.drop(passage, scaled(thermo, typed, share), drop, scratch));
+                if (Math.abs(next - pressure) <= SAME_PRESSURE) break;
+                pressure = next;
+                share = rule.share(board, scratch, typed, heat, pressure);
+            }
+            share = rule.share(board, report, typed, heat, pressure);
+            var stream = Double.isNaN(share) ? typed : scaled(thermo, typed, share);
+            board.stream(wire, stream);
+            report.enters(stream.mass(), stream.enthalpy());
+            if (!Double.isNaN(share)) report.note(Note.info(wire, "flow.set_by", u.id()));
+        });
+    }
+
+    /**
+     * Cooling water's rule: the flow that takes the heat from its inlet to {@link HeatSides#coolingWaterOutlet}, 5 K under the
+     * process cold end {@code coldEnd} (K) at most. Water that comes in there or above cannot hold it, and keeps its typed flow with a
+     * warning; a feed that holds vapour is no cooling water, and keeps its own.
+     */
+    private static Rule cooling(WiredUnit u, String port, ToDoubleFunction<Board> coldEnd) {
+        return (board, report, typed, watts, pressure) -> {
+            var thermo = u.thermo();
+            if (thermo.vapourShare(typed) > TRACE || watts < 0) return Double.NaN;
+            if (watts == 0) return 0;
+            double outlet = HeatSides.coolingWaterOutlet(typed.temperature(), coldEnd.applyAsDouble(board));
+            if (!(outlet > typed.temperature())) {
+                report.note(Note.warning(u.id(), "column.water_hot", port));
+                return Double.NaN;
+            }
+            return watts / (thermo.atTemperature(outlet, pressure, typed.amountsView(), typed.solids()).enthalpy() - typed.enthalpy());
+        };
+    }
+
+    /**
+     * Steam's rule: the flow whose condensing gives the kettle's duty, the condensate leaving saturated at the side's outlet pressure.
+     * Steam no hotter than the bottoms cannot heat them, and keeps its typed flow, which the reboiler's check reads as {@code
+     * column.reboiler_cold}; steam hotter than them that condenses no hotter can give them its superheat alone, and keeps its typed
+     * flow with {@code column.steam_low}. A feed of liquid water is no steam, and keeps its own.
+     */
+    private static Rule steam(WiredUnit u, String bottomsTemperature) {
+        return (board, report, typed, watts, pressure) -> {
+            var thermo = u.thermo();
+            if (!(thermo.vapourShare(typed) > TRACE) || watts > 0) return Double.NaN;
+            if (watts == 0) return 0;
+            double saturation = EjectorUnit.saturation(thermo, pressure);
+            double bottoms = board.link(bottomsTemperature);
+            if (typed.temperature() <= bottoms) return Double.NaN;
+            if (saturation <= bottoms) {
+                report.note(Note.warning(u.id(), "column.steam_low"));
+                return Double.NaN;
+            }
+            double given = typed.enthalpy() - thermo.atTemperature(saturation - SUBCOOLED, pressure, typed.amountsView(), typed.solids()).enthalpy();
+            return given > 0 ? -watts / given : Double.NaN;
+        };
+    }
+
+    /** {@code typed} at {@code share} of its flow, in the same state; none at a share of 0. */
+    private static FlowStream scaled(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, FlowStream typed, double share) {
+        if (share == 0) return FlowStream.empty(typed.amountsView().length);
+        double[] amounts = typed.amounts();
+        for (int i = 0; i < amounts.length; i++) amounts[i] *= share;
+        return thermo.atTemperature(typed.temperature(), typed.pressure(), amounts, typed.solids());
     }
 
     private static Calculation check(WiredUnit u, String name, String read, @Nullable String other, Calculation.Law law) {
@@ -213,6 +321,11 @@ public final class ColumnUnit implements UnitModel {
             return u.part("draw tray " + pumparound.id());
         }
 
+        /** The bottoms' temperature (K), which a kettle's steam must condense above; minus infinity with no bottoms. */
+        String bottomsTemperature() {
+            return u.part("bottoms temperature");
+        }
+
         Calculation calculation() {
             var reads = new ArrayList<String>();
             reads.add(u.wire(FEED));
@@ -223,6 +336,7 @@ public final class ColumnUnit implements UnitModel {
             var gives = new ArrayList<String>();
             if (u.wire(CONDENSER_IN) != null) gives.add(condenserHeat());
             for (var pumparound : door.pumparounds()) if (u.wire(pumparoundIn(pumparound)) != null) gives.add(drawTemperature(pumparound));
+            if (u.utilities().feeds().containsKey(REBOILER_IN)) gives.add(bottomsTemperature());
             return new Calculation(u.id(), u.id(), reads, writes, List.of(), gives, Calculation.Kind.BLOCK, this);
         }
 
@@ -406,7 +520,9 @@ public final class ColumnUnit implements UnitModel {
             u.write(board, report, OVERHEAD, product("overhead_vapor", result));
             u.write(board, report, DISTILLATE, product("distillate_liquid", result));
             u.write(board, report, WATER, ejected != null ? ejected.water() : product(FREE_WATER, result));
-            u.write(board, report, BOTTOMS, product("bottoms_liquid", result));
+            var bottoms = product("bottoms_liquid", result);
+            u.write(board, report, BOTTOMS, bottoms);
+            if (u.utilities().feeds().containsKey(REBOILER_IN)) board.link(bottomsTemperature(), bottoms.empty() ? Double.NEGATIVE_INFINITY : bottoms.temperature());
             for (var draw : door.draws()) u.write(board, report, drawPort(draw), product(String.format(Locale.ROOT, "side_liquid_tray_%02d", draw.tray()), result));
             var ledger = result == null ? null : result.dutyLedger().orElseThrow();
             double condenser = ledger == null ? 0 : ledger.condenserWatts() - (ejected == null ? 0 : ejected.heat());

@@ -98,7 +98,12 @@ public final class ExchangerSizing {
          * where nothing is cooled.
          */
         public static @Nullable Load cooled(FlowStream in, FlowStream out, DesignBasis basis, FlowThermo thermo, MixtureViscosity.Workspace scratch) {
-            var water = CoolerSizing.water(in, out, thermo);
+            return cooled(in, out, CoolerSizing.waterReturn(in.temperature()), basis, thermo, scratch);
+        }
+
+        /** As {@link #cooled(FlowStream, FlowStream, DesignBasis, FlowThermo, MixtureViscosity.Workspace)}, the water back at {@code back} K: a column's side (section 8). */
+        public static @Nullable Load cooled(FlowStream in, FlowStream out, double back, DesignBasis basis, FlowThermo thermo, MixtureViscosity.Workspace scratch) {
+            var water = CoolerSizing.water(in, out, back, thermo);
             if (water == null) return null;
             var load = of(false, water.supply(), water.back(), in, out, basis, thermo, scratch);
             if (load == null) return null;
