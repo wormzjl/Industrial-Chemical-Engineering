@@ -53,6 +53,10 @@ public final class ColumnDoors {
      * Run says why. A feed's parts are what its line last held, or what the sheet sets.
      */
     public static @Nullable V3ColumnInput input(SheetContext x, String id) {
+        return input(x, id, ColumnDoor.of(x.editor().unit(id).params()));
+    }
+
+    private static @Nullable V3ColumnInput input(SheetContext x, String id, ColumnDoor door) {
         var stream = x.into(id, "feed");
         if (stream == null) return null;
         var axis = x.fluids().axis();
@@ -73,7 +77,7 @@ public final class ColumnDoors {
             temperature = last.temperature();
         } else return null;
         try {
-            return ColumnDoor.of(x.editor().unit(id).params()).input(x.fluids().pack(), flows, temperature);
+            return door.input(x.fluids().pack(), flows, temperature);
         } catch (IllegalArgumentException refused) {
             return null;
         }
@@ -131,7 +135,7 @@ public final class ColumnDoors {
                 var pumps = new ArrayList<ColumnComponents.Pump>();
                 for (var row : unit.params().rows("pumparounds")) pumps.add(pump(row.text("pump", ColumnComponents.Pump.STANDARD.name())));
                 var rows = CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, door.condenser(), pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps,
-                        x.host().stores() && !x.host().reader() && input(x, id) != null, door.units(), ColumnComponents.kettleRequired(door.reboilerDuty())), x.t());
+                        x.host().stores() && !x.host().reader() && input(x, id, door) != null, door.units(), ColumnComponents.kettleRequired(door.reboilerDuty())), x.t());
                 var right = new ArrayList<>(rows.right());
                 right.add(right.size() - 1, Door.group(x.text("door.group.tube_sides"), Door.entry("tube", x.text("door.drop"), x.units().pressure().symbol())));
                 // The ejector on the vapour line (W10), where the top is under ambient pressure: the ejector tile's two pressures.
@@ -139,7 +143,7 @@ public final class ColumnDoors {
                     right.add(right.size() - 1, Door.group(x.text("door.group.ejector"), Door.entry("ejector_discharge", x.text("door.discharge"), x.units().pressure().symbol()),
                             Door.entry("ejector_motive", x.text("door.motive"), x.units().pressure().symbol())));
                 columns = List.of(right);
-                glass = ColumnGlass.connections(x, unit);
+                glass = ColumnGlass.connections(x, unit, door);
             }
             default -> {
                 var in = new CalculatorColumn.ColumnInput(false, true, symbol, x.units().pressure().symbol(), x.units().molesUnit(), view.connection, view.index, view.spread(door), door.draws().size() < V3ColumnInput.MAX_SIDE_DRAWS, door.pumparounds().size() < MAX_PA, door.steam().size() < MAX_STEAM);
@@ -150,7 +154,7 @@ public final class ColumnDoors {
                 var feed = x.props(x.into(id, "feed"));
                 left.add(Door.group(x.text("door.group.feed"), Door.meter(c(x, "field.flow"), feed == null ? "" : x.units().moles(feed.moles()), x.units().molesUnit()),
                         Door.meter(c(x, "field.temperature"), feed == null ? "" : x.units().t(feed.temperature()), symbol), new Column.Field("s3", c(x, "field.tray"), "", null)));
-                columns = List.of(left, wired(x, unit, rows.right(), view));
+                columns = List.of(left, wired(x, unit, door, rows.right(), view));
                 glass = ColumnGlass.drawing(x, id, door, view);
             }
         }
@@ -170,9 +174,9 @@ public final class ColumnDoors {
     }
 
     /** A wired steam feed's flow and temperature are the stream's: its entries turn to meters. */
-    private static List<Column.Row> wired(SheetContext x, Flowsheet.Unit unit, List<Column.Row> rows, Door.View view) {
+    private static List<Column.Row> wired(SheetContext x, Flowsheet.Unit unit, ColumnDoor door, List<Column.Row> rows, Door.View view) {
         if (view.connection != Connection.STEAM) return rows;
-        var steam = ColumnDoor.of(unit.params()).steam();
+        var steam = door.steam();
         if (view.index >= steam.size()) return rows;
         var stream = x.into(unit.id(), "steam/" + steam.get(view.index).id());
         if (stream == null) return rows;

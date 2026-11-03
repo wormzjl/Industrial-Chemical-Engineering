@@ -93,7 +93,7 @@ final class ColumnGlass {
     }
 
     /** The block's connection points: what each carries, read from the last run. */
-    static Door.Glass connections(SheetContext x, Flowsheet.Unit unit) {
+    static Door.Glass connections(SheetContext x, Flowsheet.Unit unit, ColumnDoor door) {
         return (c, skin, box) -> {
             var u = x.units();
             int x0 = box.x() + 4, y = box.y() + 4;
@@ -104,7 +104,6 @@ final class ColumnGlass {
             y += 14;
             var results = x.state().shown(unit.id());
             int r = 0;
-            var door = ColumnDoor.of(unit.params());
             var ports = new ArrayList<>(UnitTypes.model("column").ports(unit.params()));
             ports.sort(java.util.Comparator.comparingInt(port -> rank(port.id())));
             for (var port : ports) {
@@ -114,7 +113,7 @@ final class ColumnGlass {
                 c.text(point(x, door, port.id()), x0 + at[0], y, Palette.TEXT);
                 c.text(stream == null ? x.text("door.none") : stream.name(), x0 + at[1], y, Palette.MUTED);
                 if (props != null) c.text(u.t(props.temperature()) + " " + u.temperature().symbol(), x0 + at[2], y, Palette.ACCENT);
-                double heat = results == null ? Double.NaN : heat(results, unit, port.id());
+                double heat = results == null ? Double.NaN : heat(results, unit, door, port.id());
                 if (!Double.isNaN(heat)) c.text(SheetUnits.megawatts(Math.abs(heat)) + " MW", x0 + at[3], y, Palette.ACCENT);
                 r++;
                 y += 14;
@@ -123,9 +122,9 @@ final class ColumnGlass {
     }
 
     /** The heat of a pair, shown on its inlet: a part's reading, {@code T-101/pa 1}; air then water's, its trim's. */
-    private static double heat(SheetResults results, Flowsheet.Unit unit, String port) {
+    private static double heat(SheetResults results, Flowsheet.Unit unit, ColumnDoor door, String port) {
         // Air then water's pair is its trim's (C1): the water's share, not the whole condenser.
-        if (port.equals("condenser_in")) return results.reading(unit.id(), ColumnDoor.of(unit.params()).condenser() == ColumnComponents.Condenser.AIR_THEN_WATER ? "condenser_water" : "condenser");
+        if (port.equals("condenser_in")) return results.reading(unit.id(), door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER ? "condenser_water" : "condenser");
         if (port.equals("reboiler_in")) return results.reading(unit.id(), "reboiler");
         if (port.startsWith("pa/") && port.endsWith("/in")) return results.part(unit.id(), "pa " + port.split("/")[1], "duty");
         return Double.NaN;

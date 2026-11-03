@@ -124,6 +124,11 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private boolean committed;
     /** True while the widgets are built again: the game clears the focus then, which ends no edit. */
     private boolean rebuilding;
+    /** The context and door the last build placed its widgets on: a frame that rebuilds draws these, not a third door. */
+    private @Nullable Built built;
+
+    private record Built(SheetContext context, @Nullable Door door) {
+    }
     private SimulatorFrame.Tab tab = SimulatorFrame.Tab.FLOWSHEET;
     private int category;
     private SimulatorFrame frame = new SimulatorFrame(SimulatorFrame.DOOR_W, SimulatorFrame.DOOR_H);
@@ -342,8 +347,9 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         entries.clear();
         var x = context();
         if (tab == SimulatorFrame.Tab.SIZING && !SizingPage.open(x)) tab = SimulatorFrame.Tab.FLOWSHEET;
-        signature = signature(x);
         var shown = shownDoor(x);
+        built = new Built(x, shown);
+        signature = signature(x, shown);
         if (dialog != Dialog.NONE) dialogWidgets();
         else if (shown != null) doorWidgets(shown);
         else simulatorWidgets(x);
@@ -542,8 +548,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         }
     }
 
-    private String signature(SheetContext x) {
-        var shown = shownDoor(x);
+    /** What decides whether the widgets stand, for the context and door this frame draws: a door is built once a frame. */
+    private String signature(SheetContext x, @Nullable Door shown) {
         var text = new StringBuilder().append(tab).append(dialog).append(door).append(doorView.tab).append(doorView.connection).append(doorView.index).append(doorView.phase).append(doorView.results).append(doorView.metric);
         text.append(gestures.selected()).append(gestures.naming() == null ? "" : gestures.naming().target()).append(category).append(resultsState.view).append(host.running() == null).append(editor.canUndo()).append(editor.canRedo()).append(SimulatorPage.runDue(x, host));
         text.append(x.units());
@@ -1016,10 +1022,15 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             rebuildKeepingFocus();
         }
         var x = context();
-        if (!signature(x).equals(signature)) rebuildWidgets();
+        var shown = shownDoor(x);
+        if (!signature(x, shown).equals(signature)) {
+            // The rebuild built the frame's door again, on a context it read anew: draw that one.
+            rebuildWidgets();
+            x = built.context();
+            shown = built.door();
+        }
         hovered = null;
         var skin = skin();
-        var shown = shownDoor(x);
         if (dialog != Dialog.NONE) {
             drawDialog(g, x);
         } else if (shown != null) {
