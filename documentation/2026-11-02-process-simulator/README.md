@@ -2,7 +2,7 @@
 
 Purpose: an in-game process simulator: a dedicated block, a drag-and-drop flowsheet with a palette below, feed streams from the Fluid Generator's page, every unit including the column, Run on the client, a Results tab, flowsheet files under `.minecraft/IChemE`, and a compatibility system (owner request 2026-11-02: "make some design drawings for me to approve before moving to implementation").
 
-Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026-11-02, and D23 on 2026-11-03. W1 to W10, W10b and sizing's S1 to S3, S4a, S3b, S4b, S5 and S4c are built on the branch, which carries main 0.19.0, with column operation in it (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026-11-02, and D23 on 2026-11-03. W1 to W10, W10b, sizing's S1 to S3, S4a, S3b, S4b, S5 and S4c, and the cooler model's C1 are built on the branch, which carries main 0.19.0, with column operation in it (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -123,6 +123,26 @@ Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md
   - Context: plants size on a summer dry bulb of 30 to 40 °C. The game's constant 25 °C sets both floors about 10 K lower.
   - No code changed, no test ran.
 - 2026-11-03: Cooler model decided: the owner's "Ok for the plan, also allow air-then-water approach in column condenser configuration". T1 as revised, and a third condenser type, `AIR_THEN_WATER` ([COOLER_MODEL_PLAN.md](COOLER_MODEL_PLAN.md) sections 6 and 7): air to max(receiver, 40 °C), a water trim exchanger below in a new `trim_condenser` slot with its own count, the water share recorded by the solve and owed to the trim's water side. Found while designing it: `EXCHANGER_APPROACH` reads the least difference along an exchanger, so a free water side fixed at 25 → 35 °C reads yellow on every inlet under 45 °C and red at 35 °C and under; its range now shrinks for cool inlets (plan section 3 item 3), and the trim's water returns at 30 °C. A 45 °C split is the other form, for the owner. Built in three packages by one writer. No code changed, no test ran.
+
+- 2026-11-03: C1 (`97df0ff8c` and the documents commit after it): the world side of the column's air-then-water condenser ([COOLER_MODEL_PLAN.md](COOLER_MODEL_PLAN.md) sections 6 and 7). `Condenser.AIR_THEN_WATER` and `Units.trim` (facts, append-only, 1 where absent; images `shapes-7.snbt`, `designs-2.snbt`), the split `HeatSides.AIR_SPLIT_TEMPERATURE` (40 °C) and `airSplit`, the blueprint's `trim_condenser` slot (air banks, then trim shells, the condensate after the trim), `ColumnStarts` taking the water sides from `ColumnBlueprint.waterCooled`, `SplitTable.condenserWaterPerFeed` (state) from the solve, the cycle's room and the water's debt on that share, the calculator's third key with a Trim shells stepper, and the diagram's pair. On the Tia Juana column the trim takes nothing at a 45 °C receiver, 0.37 of 43.84 MW at 38 °C and 1.78 of 44.36 MW at 30 °C (C1 findings). Gates, filtered: a first pass of 21 classes, 208 tests, 6 failures, each fixed: the two corpus images written and copied in, a widget gate grouped by the trim row, the solve gate moved to the network's basis, the matcher taught a header between two counted steps (C1 findings), and `ColumnBlockTest`, C3's (open items). Then `CalculatorColumnTest`, `AssemblyParallelTest`, `AssemblyMatcherTest`, `ExchangerBlueprintTest`, `ColumnSolveTest`, `EquipmentShapeCompatTest` and `SentDesignTagsTest`, 0 failures; after the diagram's widening `AssemblyDiagramTest` (5), `AssemblyPortColoursTest` (2) and `AssemblyColumnTest` (8), 0 failures. The first pass's others passed and nothing they load changed after it: `ColumnComponentsTest`, `ColumnBlueprintTest`, `ColumnWireTest`, `EquipmentNetworkCodecTest`, `ColumnCycleTest`, `ColumnRunTest`, `FluidFactsCompatTest`, `FluidCheckpointCodecTest`, `FluidCheckpointFormatTest`, `ConstructorColumnTest`, `SheetLayoutTest`. The relay is held by `ColumnRunTest`; no GameTest added (the fluid GameTests compile with `test` and run in the final lane). Sheets in the main checkout's `research/2026-11-02-process-simulator/renders-c1/`. No dev client ran.
+
+## C1 findings
+
+- The trim is small on a crude column. On Tia Juana light (the network's basis) with an air-then-water condenser the top tray stands at 78.5, 75.7 and 72.9 °C for receivers at 45, 38 and 30 °C. The split is 45.0, 40.0 and 40.0 °C. The trim takes 0, 0.37 and 1.78 MW of 43.33, 43.84 and 44.36 MW (0 %, 0.8 %, 4.0 %); the air the rest. Below 40 °C the overhead is mostly condensed: the trim subcools, about 0.18 MW per K. The 45 °C split of plan section 6 would give the trim the 40 to 45 °C band as well.
+- The matcher could not complete a design with banks above 1 and trim shells above 1: it read the air coolers' merge header, which splits straight into the trim's shells, as a branch. A merge whose ways on are the next counted step's units now hands that split to the step (`AssemblyMatcher.merge`). One bank into several shells, and several banks into one shell, matched before.
+
+## C1 decisions
+
+Mine, each reversible:
+
+- The split constant is `HeatSides.AIR_SPLIT_TEMPERATURE`, next to `AIR_TEMPERATURE` in `science.equipment`, which the world and the sizing package both read.
+- The solve resolves the water's share by the design's condenser, carried by the job (`Solves.condenser`, water-cooled where a design is missing): the whole duty for an exchanger, none for an air cooler, the trim's for air then water. The runtime reads only the table, so an exchanger's cycles and debts are bit for bit as before.
+- The overhead is the top tray's vapour with its water vapour (V3's inspection node 1), flashed at the condenser node's pressure at the split and at the receiver; the share is bounded by the whole duty; the air takes the whole less the water.
+- An outlet island's booking difference, which the column books to the condenser, owes the water the same share (owner's choice, open items).
+- The trim slot takes the water condenser's own form (process on the shell, water on the tubes), an air cooler its wrong kind; the air step's wrong kind is an exchanger passing the overhead on its shell.
+- The calculator labels the condenser's own count Banks for both air forms; the trim's Trim shells shows only with air then water. Its widgets below move with that row, as with the kettle's.
+- `TrimUnits` is written on every design. A design written before it reads 1.
+- The diagram's ejector moves 24 px left where a trim stands, so the air cooler and the trim keep 94 px boxes for "Air cooler × 2" and "Water trim × 3".
 
 ## W10 findings
 
@@ -459,6 +479,11 @@ Taken alone, each reversible:
   - One Cooler tile, on which sizing proposes Air from 40 °C and Water below. Water is green from 35 °C.
   - A water cooler with a hot inlet reads what an air cooler ahead of it would take.
   - The column's condenser gains a third type, air then water (plan section 6): air to max(receiver, 40 °C), a water trim below, in the world and on the sheet.
+  - C1 (the world) is built; C2 (science and sizing) and C3 (screen) are next.
+- C1 left for C3: `ColumnBlockTest.everySlotTheConstructorBuildsHasOneDrawnPart` fails on `AIR_THEN_WATER` until `ColumnBlock` draws the trim. `ColumnDoors` sets `AIR_COOLER` for the key `condenser:air_then_water` and has no `units/trim` case: its default branch parses "trim" as a pumparound index and would throw, once a door holds air then water.
+- C1 left for C2: `ColumnDoor`, `ColumnUnit`, `SizedPassages`, `SheetSizing` and Send to block do not know the trim; a door reads the trim count 1.
+- Owner to choose, C1: an outlet island's booking difference owes the water the table's share (A, as built), or all of it to the trim, which stands at the receiver's state (B). Its size was not measured.
+- C1 left: no client has run an air-then-water column; the relay is held by `ColumnRunTest` on a 40 % share, not on a solved table in a world.
 - W10 left: no client has drawn the tile, its door, the block's port or the Ejector group. The world's device waits for column operation's stage C (D21).
 - W10b left: a vent with no gas, at a top above P_c, takes no steam; real sets are also sized for leaking air, which the game does not model. Below about 1.5 kPa S1 does not count a second booster's steam. The gate column's vent is a light product, not a VDU's off-gas: no vacuum preset exists to show the 1 % case on the block.
 - The merge package: the code guide chapter, with the rule of plan 3.10 and the crude packages `thermo-materials.md` still names, and the tooling cleanup.

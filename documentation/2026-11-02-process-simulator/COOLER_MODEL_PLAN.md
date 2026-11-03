@@ -96,7 +96,7 @@ The owner, approving the plan: "also allow air-then-water approach in column con
 
 ## 7. Build order (one writer)
 
-- C1, world: the enum value, `Units.trim`, the blueprint's trim slot, `ColumnStarts`, the water share in `SplitTable` and `ColumnOperation`, the calculator's and the constructor's choice, `AssemblyDiagram`, corpus images.
+- C1, world: the enum value, `Units.trim`, the blueprint's trim slot, `ColumnStarts`, the water share in `SplitTable` and `ColumnOperation`, the calculator's and the constructor's choice, `AssemblyDiagram`, corpus images. Built 2026-11-03 (`97df0ff8c`); the constructor has no condenser choice of its own (it takes the imported design's), so nothing changed there.
 - C2, simulator science and sizing: sections 3 and 6.
   - Coolant temperatures and the 25 °C cap.
   - Free water sides' loads and their water flow.
