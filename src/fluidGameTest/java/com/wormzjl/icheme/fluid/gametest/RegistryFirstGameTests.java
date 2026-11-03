@@ -4,14 +4,21 @@ import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
+import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
+import com.wormzjl.icheme.world.level.block.RegistryRealignment;
+import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -87,6 +94,178 @@ public final class RegistryFirstGameTests {
                     if (failure[0] != null) helper.fail(failure[0]);
                 })
                 .thenSucceed();
+    }
+
+    /**
+     * Step 4 (plan 4.3): every one-block device stands as its registration. Each block, with each fitting, placed alone; the
+     * block {@link FluidDeviceBlock#stateFor} gives for what it registered is the block placed.
+     */
+    @GameTest(template = "empty", timeoutTicks = 200, batch = "registry-first-state")
+    public static void everyOneBlockDeviceStandsAsItsRegistration(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var pipe = ModBlocks.FLUID_PIPE.get().defaultBlockState();
+        var placed = List.of(
+                ModBlocks.FLUID_RESERVOIR.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.NORTH),
+                ModBlocks.FLUID_GENERATOR.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.EAST),
+                ModBlocks.FLUID_VOID.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.SOUTH),
+                ModBlocks.INLINE_FILTER.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.WEST),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.UP),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.EAST).setValue(FluidDeviceBlock.SHUTOFF, FluidDeviceBlock.Shutoff.OPEN),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.NORTH).setValue(FluidDeviceBlock.SHUTOFF, FluidDeviceBlock.Shutoff.CLOSED),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.DOWN).setValue(FluidDeviceBlock.SHUTOFF, FluidDeviceBlock.Shutoff.CHECK),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.EAST).setValue(FluidDeviceBlock.PRESSURE_CONTROL, true),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.WEST).setValue(FluidDeviceBlock.INLINE_FILTER, true),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.NORTH).setValue(FluidDeviceBlock.INLINE_MOVER, FluidDeviceBlock.InlineMover.PUMP),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.SOUTH).setValue(FluidDeviceBlock.INLINE_MOVER, FluidDeviceBlock.InlineMover.COMPRESSOR));
+        var cells = new ArrayList<BlockPos>();
+        String[] failure = {null};
+        // Two blocks apart, so none connects.
+        for (int i = 0; i < placed.size(); i++) {
+            var at = helper.absolutePos(new BlockPos(1 + 2 * (i % 4), 1 + 2 * (i / 4), 1));
+            cells.add(at);
+            level.setBlock(at, placed.get(i), 3);
+            var stood = FluidDeviceBlock.stateFor(world.at(position(level, at)).orElseThrow().device());
+            if (failure[0] == null && !placed.get(i).equals(stood)) failure[0] = "placed " + placed.get(i) + ", stands as " + stood;
+        }
+        for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the blocks' registrations to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 4, GameTests a to c (plan section 7): blocks lost behind the authority's back, as in a chunk saved after the
+     * fluid store, are set back from the registry. An intact line re-aligns nothing. Then a pipe gone (a), the charged tank
+     * gone (b) and a filter where a pipe stood (c): each block comes back with its identity, the tank with its charge, the
+     * filter's block takes no pipe's registration, and nothing drops.
+     */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-realign-line")
+    public static void aBrokenLineIsSetBackFromTheRegistry(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var west = helper.absolutePos(new BlockPos(1, 1, 1));
+        var first = west.east();
+        var second = west.east(2);
+        var east = west.east(3);
+        var cells = List.of(west, first, second, east);
+        level.setBlock(west, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        level.setBlock(first, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        level.setBlock(second, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        level.setBlock(east, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        long[] ids = cells.stream().mapToLong(at -> world.at(position(level, at)).orElseThrow().device().id()).toArray();
+        var charge = new TankCharge(helper, world, east, Direction.SOUTH, 200000);
+        String[] failure = {null};
+        double[] before = {0};
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(charge.charged() && joined(world, ids[0], ids[3]), "Waiting for the charged line"))
+                .thenExecute(() -> {
+                    for (long id : ids) {
+                        var check = RegistryRealignment.realign(level, world, id);
+                        if (failure[0] == null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the intact line was re-aligned at #" + id + ": " + check;
+                    }
+                    before[0] = moles(world, ids[3]);
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(first, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(east, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(second, ModBlocks.INLINE_FILTER.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.EAST), 3);
+                    });
+                    for (int i = 0; i < ids.length && failure[0] == null; i++)
+                        if (world.at(position(level, cells.get(i))).map(r -> r.device().id()).orElse(0L) != ids[i]) failure[0] = "a block edited quietly touched the registry at " + cells.get(i).toShortString();
+                    var filter = (FluidDeviceBlockEntity) level.getBlockEntity(second);
+                    if (failure[0] == null && filter.bind(world, world.registrations().get(ids[2]).device())) failure[0] = "a filter block bound a pipe's registration";
+                    try {
+                        filter.bindIdentity(ids[2]);
+                        if (failure[0] == null) failure[0] = "a filter block took a pipe's identity";
+                    } catch (IllegalStateException expected) {
+                        // The kind check.
+                    }
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(stands(level, first, ids[1]) && stands(level, second, ids[2]) && stands(level, east, ids[3]), "Waiting for the line to be set back"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && !level.getBlockState(second).is(ModBlocks.FLUID_PIPE.get())) failure[0] = "the filter block was not set back to a pipe";
+                    if (failure[0] == null && !level.getBlockState(east).is(ModBlocks.FLUID_RESERVOIR.get())) failure[0] = "the tank was not set back";
+                    for (int i = 0; i < ids.length && failure[0] == null; i++)
+                        if (world.at(position(level, cells.get(i))).map(r -> r.device().id()).orElse(0L) != ids[i]) failure[0] = "the line's registrations changed at " + cells.get(i).toShortString();
+                    if (failure[0] == null && !(moles(world, ids[3]) > .99 * before[0])) failure[0] = "the tank lost its charge: " + before[0] + " -> " + moles(world, ids[3]);
+                    if (failure[0] == null && !level.getEntitiesOfClass(ItemEntity.class, new AABB(west).inflate(6)).isEmpty()) failure[0] = "a replaced block dropped an item";
+                    for (int i = 0; i + 1 < cells.size() && failure[0] == null; i++)
+                        if (!level.getBlockState(cells.get(i)).getValue(FluidDeviceBlock.connection(Direction.EAST)) || !level.getBlockState(cells.get(i + 1)).getValue(FluidDeviceBlock.connection(Direction.WEST)))
+                            failure[0] = "the line is not connected between " + cells.get(i).toShortString() + " and " + cells.get(i + 1).toShortString();
+                    for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the line's registrations to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 4, GameTest d (decision S11): a pipe whose cell holds stone is held and listed, never the stone overwritten, and
+     * its tanks part. Once the stone is gone and the chunk loads again, the pipe stands, is released, and joins them again.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-realign-blocked")
+    public static void aBlockedCellHoldsItsPipeUntilItIsFree(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var west = helper.absolutePos(new BlockPos(1, 1, 1));
+        var pipe = west.east();
+        var east = west.east(2);
+        var cells = List.of(west, pipe, east);
+        level.setBlock(west, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        level.setBlock(pipe, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        level.setBlock(east, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        long westId = world.at(position(level, west)).orElseThrow().device().id();
+        long pipeId = world.at(position(level, pipe)).orElseThrow().device().id();
+        long eastId = world.at(position(level, east)).orElseThrow().device().id();
+        String[] failure = {null};
+        var said = new ArrayList<String>();
+        var operator = operator(level, west, said);
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(joined(world, westId, eastId), "Waiting for the line to join its tanks"))
+                .thenExecute(() -> {
+                    FluidDeviceBlock.quietly(() -> level.setBlock(pipe, Blocks.STONE.defaultBlockState(), 3));
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(held(world, pipeId) && !joined(world, westId, eastId), "Waiting for the blocked pipe to be held"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && !level.getBlockState(pipe).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    said.clear();
+                    level.getServer().getCommands().performPrefixedCommand(operator, "icheme devices held");
+                    if (failure[0] == null && said.stream().noneMatch(line -> line.startsWith("#" + pipeId + " pipe at ") && line.endsWith("its cell holds minecraft:stone")))
+                        failure[0] = "the listing does not name the blocked pipe: " + said;
+                    level.setBlock(pipe, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(stands(level, pipe, pipeId) && !held(world, pipeId) && joined(world, westId, eastId), "Waiting for the pipe to stand and join its tanks again"))
+                .thenExecute(() -> {
+                    for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the line's registrations to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /** Queues the registrations of the chunks of {@code cells} again, as their chunks' next load does. */
+    private static void requeue(FluidWorldAuthority world, ServerLevel level, List<BlockPos> cells) {
+        cells.stream().map(at -> new ChunkPos(at).toLong()).distinct().forEach(chunk -> world.loadedChunk(level.dimension(), chunk));
+    }
+
+    /** Whether the block at {@code at} is bound to registration {@code id}. */
+    private static boolean stands(ServerLevel level, BlockPos at, long id) {
+        return level.getBlockEntity(at) instanceof FluidDeviceBlockEntity entity && entity.fluidIdentity() == id;
+    }
+
+    private static boolean held(FluidWorldAuthority world, long id) {
+        var record = world.registrations().get(id);
+        return record != null && record.device().held();
     }
 
     private static PhysicalFluidTopology.Position position(ServerLevel level, BlockPos at) {

@@ -195,13 +195,13 @@ public final class PipeLayingGameTests {
             long firstLine = firstPipe.fluidIdentity();
             helper.assertTrue(laidPaint.equals(world.linePaint(firstLine)), "The registry does not hold the pipe's paint: " + world.linePaint(firstLine));
             world.paint(firstLine, FLAME_RED, FLAME_RED);
-            firstPipe.bind(world, firstLine);
+            firstPipe.bind(world, world.registrations().get(firstLine).device());
             helper.assertTrue(firstPipe.paint() == FLAME_RED && firstPipe.secondary() == FLAME_RED, "The pipe did not take the registry's paint");
             world.paint(firstLine, Paint.BARE, Paint.BARE);
-            firstPipe.bind(world, firstLine);
+            firstPipe.bind(world, world.registrations().get(firstLine).device());
             helper.assertTrue(new WorldTopologyLedger.LinePaint(FLAME_RED, FLAME_RED).equals(world.linePaint(firstLine)), "The painted pipe did not teach the registry");
             world.paint(firstLine, SKY_BLUE, FLAME_RED);
-            firstPipe.bind(world, firstLine);
+            firstPipe.bind(world, world.registrations().get(firstLine).device());
             // Aimed at the laid lane's slot from under the tier, the nearest free slot is taken instead.
             var laid = ((PipeRackBlockEntity) level.getBlockEntity(straight)).lanes().getFirst();
             double across = RackGeometry.centre(RackGeometry.position(laid.option()), laid.width());

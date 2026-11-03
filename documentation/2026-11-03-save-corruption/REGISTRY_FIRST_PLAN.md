@@ -117,27 +117,28 @@ Each is one map read per block or vessel. A block entity never writes the regist
 
 ### 4.2 The queue
 
-- `FluidWorldAuthority.loadedChunk` keeps its binding and its "register a block that has none" (S10). It then queues the chunk for re-alignment. It places no block itself.
-- The queue is served on the level tick, beside `EquipmentStructure.onLevelTick`. Each tick serves at most 32 devices and stops after 1 ms, whichever comes first (section 6). Measure both with the counters.
-- A registration is served once every chunk its block needs is loaded and block-ticking, as refresh requires (`shouldTickBlocksAt`).
-- The queue never loads a chunk and never solves. A dimension that has no level holds its registrations and lists them.
+- `FluidWorldAuthority.loadedChunk` keeps its binding and its "register a block that has none" (S10). It then queues the chunk's registrations for re-alignment, each once (built in step 4: a queue per dimension in the authority, `nextRealignment`). It places no block itself.
+- The queue is served on the level tick (`RegistryRealignment.serve`, from `IChemE.onLevelTickPost`). Each tick serves at most 32 devices and stops after 1 ms, whichever comes first (section 6). Measure both with the counters.
+- A one-block device is served once its own chunk is loaded. Neighbours in a chunk that is not loaded keep their saved joints, and their own load settles both sides (`FluidDeviceBlock.connectedState`, review D1). A registration whose chunk unloaded before it was served is dropped from the queue; its next load queues it again. Structures (step 6) wait until every chunk they need is loaded and block-ticking, as refresh requires (`shouldTickBlocksAt`).
+- The queue never loads a chunk and never solves. A dimension that has no level holds its registrations and lists them (built in step 4: at the authority's start, every such registration but a column's port is held in one queued event, with one warning line).
 
 For each registration of the chunk:
 
 1. Skip a column port.
-2. **One-block device:**
-   - Block present and same kind: restate the block state (facing, fittings) and the block entity (joints, bore, paint) where they differ.
-   - Block missing, or another `FluidDeviceBlock` at the cell: place `FluidDeviceBlock.stateFor(device)` with the restore flag, then `bindIdentity(id)`.
+2. **One-block device** (built in step 4, `RegistryRealignment.realign`):
+   - Block present and same kind: restate the block state (facing, fittings) and the block entity (joints, bore, paint) where they differ. A lever's open or closed position stays as drawn, because it follows the commit (`refreshGeometry`). Connections alone never count as a difference.
+   - Block missing (air or a replaceable block), or another `FluidDeviceBlock` at the cell: place `FluidDeviceBlock.stateFor(device)` with the restore flag and without shape updates, then `bindIdentity(id)`. Then connect it and update its neighbours' shapes, as the laying tool does: the block's joints are set before any neighbour reads them.
    - Another block at the cell: hold.
+   - A held registration whose block stands again (present, restated or placed) is released.
 3. **Rack lane:** handled per cell. A rack block present with the lane: restate. A rack missing: place a `PipeRackBlock` if the cell is free, and let its block entity rebuild the lanes from their registrations, as it does at load. Else hold every lane of the cell.
 4. **Structure member:** handled per structure (4.4).
 
 ### 4.3 Placing one-block devices
 
-- **`FluidDeviceBlock.stateFor(Device)`.** A new function, the inverse of the arguments `loadedChunk` and `onPlace` pass to `place(...)`: kind → block, `FACING`, cutoff, pressure valve, filter, `INLINE_MOVER`.
-- **The restore flag.** It works like the laying tool's `laying` flag. While it is set, `onPlace` does not register, and the placer binds the existing identity instead.
+- **`FluidDeviceBlock.stateFor(Device)`.** A new function, the inverse of the arguments `loadedChunk` and `onPlace` pass to `place(...)`: kind → block, `FACING`, cutoff, pressure valve, filter, `INLINE_MOVER` (`FluidDeviceBlock.fittings`). No connection and no sight glass. Null for a device no such block stands for: a structure's (it has ports), a rack lane, a column's port, a heat side.
+- **The restore flag.** The laying tool's `laying` flag, renamed `FluidDeviceBlock.registered`, set through `FluidDeviceBlock.quietly(...)`. While it is set, `onPlace` does not register, and `onRemove` neither removes the registration nor recovers instruments. The placer binds the existing identity instead.
 - **A replaced IChemE block** drops no item (S9) and gives no recovery. Its old block entity's instruments are not recovered: accessories belong to the registration, by identity.
-- **The kind check.** `bindIdentity` refuses a registration of another kind: an `IllegalStateException`, as for another position. `loadedChunk` then queues the cell instead of binding it.
+- **The kind check.** A block binds only a one-block registration of its kind (`FluidDeviceBlockEntity.standsFor`). `bindIdentity` refuses another: an `IllegalStateException`, as for another position. `bind(world, device)` returns false instead, at `onLoad` and at `loadedChunk`, and the cell waits for its re-alignment, which `loadedChunk` queues.
 
 ### 4.4 Structures
 
@@ -156,7 +157,7 @@ For each registration of the chunk:
 - **Notices:**
   - the affected island's status line names the held devices;
   - a chat line tells operators on join while any registration is held;
-  - a re-alignment log line has the form `fluid_realign chunk=… placed=… restated=… held=… learned=…`.
+  - a re-alignment log line has the form `fluid_realign dimension=… checked=… placed=… restated=… held=… released=…` (built in step 4): one line per serving tick that changed something, because the queue serves devices, not chunks. Learning is counted nowhere: it happens at bind (step 2).
 - **Text.** The command replies are operator text in English, as every other `/icheme` command's (`Component.literal`): no lang keys. The chat line and the status words are player text: new `en_us` keys in step 7, with every other lang file updated in the same commit (AGENTS.md, Translations).
 
 ## 5. Order of work
@@ -168,7 +169,7 @@ Each step is one commit and runs only the tests that its files can load.
 | 1 | `Builds` in the snapshot, schema 8, encoding, validation. No behaviour change. **Done** (see the batch README) | `FluidFactsCompatTest` (with the new `compat/fluid/schema-8` image), facts round trip |
 | 2 | Write paths (3.3), the block-entity restatement (3.5) and learning (3.4, moved here from step 8). **Done** (see the batch README) | GameTests: the painted lay in `PipeLayingGameTests` (registry holds the paints, restatement, learning, paint leaves with a dismantled lane); `EquipmentCompatGameTests` structure record (built, restated, learned, dismantled). The save and reload round trip is the step-1 unit tests' |
 | 3 | Held registrations: compilation, state, commands (4.1, 4.5 commands). **Done** (see the batch README) | `PhysicalFluidTopologyTest` (a held tank is its own island, a held pipe parts its line); `WorldTopologyLedgerTest` (a hold survives an exact load, queued or applied, and never reaches facts). GameTest `RegistryFirstGameTests`: hold, list, then drop |
-| 4 | `stateFor`, the restore flag, the kind check, the queue, one-block re-alignment (4.2, 4.3) | `stateFor` round trip over every kind and fitting. GameTests a to d (section 7) |
+| 4 | `stateFor`, the restore flag, the kind check, the queue, one-block re-alignment (4.2, 4.3). **Done** (see the batch README) | `stateFor` round trip over every kind and fitting. GameTests a to d (section 7) |
 | 5 | Rack cells placed again from their lane registrations (4.2 item 3) | GameTest e |
 | 6 | Structures (4.4) | GameTests f and g. `equipmentGates` only if refresh code changed |
 | 7 | Notices, lang keys (4.5) | `LanguageFilesTest`; `tools/localization/check.js` |
@@ -191,7 +192,7 @@ Owner requirement (2026-11-03): the system must be lag-free, above all during sa
 | Re-alignment | at most 32 devices and 1 ms per tick (4.2) | 1 ms per tick |
 
 Measurement:
-- The re-alignment's cost goes into `FluidRuntimeDiagnostics`: chunks queued, devices checked, placed, held, and nanoseconds per served tick.
+- The re-alignment's cost goes into `FluidRuntimeDiagnostics` (built in step 4): `realignChunks` (loaded chunks that queued registrations), `realignChecked`, `realignPlaced`, `realignRestated`, `realignHeld`, `realignReleased`, and `realignNanos` (the serving ticks' time).
 - One fluid GameTest batch reads them. No campaign is needed: no solver code changes, only `compile` for held devices. Run the campaign only if step 3 changes `compile` beyond held devices.
 
 The save itself, before W5 (outside this plan, proposal W6 in the review, section 9):
@@ -203,7 +204,7 @@ The save itself, before W5 (outside this plan, proposal W6 in the review, sectio
 
 Each test edits the world or the registry directly, so it needs no crash. Each removes everything it registers, because GameTest areas are not cleared between batches. Use a fresh `fluidGameTestRunId` after a failed run.
 
-Structure records persist in the GameTest world as registrations do. Once re-alignment places structures (steps 4 and 6), a record left behind would rebuild its structure in a later run. Before step 4, check that every GameTest that places a structure ends with its dismantle (breaking a shell or interior cell runs it), or clears its record (`FluidWorldAuthority.structure(origin, null)`). `EquipmentCompatGameTests` clears cells without the dismantle on purpose in two tests.
+Structure records persist in the GameTest world as registrations do. Once re-alignment places structures (step 6), a record left behind would rebuild its structure in a later run. Step 4 re-aligns one-block devices only, so the check moves to step 6. Before step 6, check that every GameTest that places a structure ends with its dismantle (breaking a shell or interior cell runs it), or clears its record (`FluidWorldAuthority.structure(origin, null)`). `EquipmentCompatGameTests` clears cells without the dismantle on purpose in two tests.
 
 - **a. Broken pipe.** A registered pipe whose block was set to air behind the authority's back is placed again with the same identity.
 - **b. Broken vessel.** A registered one-block reservoir removed the same way comes back with its contents.
@@ -212,6 +213,7 @@ Structure records persist in the GameTest world as registrations do. Once re-ali
   - A pipe registration whose cell holds stone is held and listed.
   - Its vessel neighbour sees no flow.
   - After the stone is removed and the chunk is re-queued, the pipe is placed and released.
+- Built in step 4 (`RegistryFirstGameTests`): a to c as `aBrokenLineIsSetBackFromTheRegistry` (it first checks that an intact line re-aligns nothing, the core of i), d as `aBlockedCellHoldsItsPipeUntilItIsFree`, and the `stateFor` round trip as `everyOneBlockDeviceStandsAsItsRegistration`. Each runs in a batch of its own, because a re-queued chunk also queues its neighbours' registrations. "Behind the authority's back" is `FluidDeviceBlock.quietly`, and a chunk's next load is `FluidWorldAuthority.loadedChunk`.
 - **e. Rack.** A rack cell removed behind the authority's back is rebuilt with its lanes.
 - **f. Drum.** A drum whose shells were removed is rebuilt from its structure record, its contents kept.
 - **g. Constructor edit.** A drum whose shell shape differs from its record is rebuilt to the record.

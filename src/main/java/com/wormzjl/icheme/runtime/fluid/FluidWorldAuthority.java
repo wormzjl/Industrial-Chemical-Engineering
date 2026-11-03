@@ -57,6 +57,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final Set<Long> unboundBindings=new HashSet<>();
     /** Equipment whose remaining chunks must load before its complete structure can be registered. */
     private final Map<PhysicalFluidTopology.Position,EquipmentStructure.Vessel> unboundStructures=new LinkedHashMap<>();
+    /** Registrations whose chunk loaded, by dimension, each queued once until the re-alignment checks it (REGISTRY_FIRST_PLAN.md 4.2). */
+    private final Map<String,ArrayDeque<Long>> realignment=new HashMap<>();
+    private final Set<Long> realigning=new HashSet<>();
     /** Engine-owned presentation: loaded devices and open menus, updated on their island's bucket only. */
     private final FluidPresentation<com.wormzjl.icheme.world.inventory.FluidDeviceMenu> presentation;
     /** Complete immutable snapshots from the last bucket; bounded by loaded/open devices, never player replies. */
@@ -135,6 +138,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var world=new FluidWorldAuthority(server);SERVERS.put(server,world);
         var early=EARLY_CHUNKS.remove(server);
         if(early!=null)for(var loaded:early)world.loadedChunk(loaded.dimension(),loaded.chunk());
+        world.holdWithoutLevel();
     }
     /** Retain early chunk loads as well as normal ones; called only on this server's thread. */
     public static void loadedChunk(MinecraftServer server,ResourceKey<Level> dimension,long chunk) {
@@ -728,7 +732,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             else if(entity instanceof FluidDeviceBlockEntity pipe) {
                 var position=new PhysicalFluidTopology.Position(name,cell.getX(),cell.getY(),cell.getZ());
                 var record=registry.at(position).orElseGet(()->place(position,pipe.kind(),PhysicalFluidTopology.Direction.valueOf(pipe.getBlockState().getValue(FluidDeviceBlock.FACING).name()),FluidDeviceBlock.cutoff(pipe.getBlockState()),FluidDeviceBlock.hasPressureValve(pipe.getBlockState()),FluidDeviceBlock.hasFilter(pipe.getBlockState()),FluidDeviceBlock.hasMover(pipe.getBlockState())?pipe.getBlockState().getValue(FluidDeviceBlock.INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE,pipe.kind()==TopologyCompiler.Kind.PIPE?pipe.joints():PhysicalFluidTopology.ALL_FACES));
-                pipe.bind(this,record.device().id());
+                pipe.bind(this,record.device());
             } else if(entity instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&shell.shape().fluidDevice()) {
                 var origin=shell.origin();
                 unboundStructures.put(new PhysicalFluidTopology.Position(name,origin.getX(),origin.getY(),origin.getZ()),new EquipmentStructure.Vessel(origin,shell.shape()));
@@ -741,7 +745,35 @@ public final class FluidWorldAuthority implements AutoCloseable {
                     ||at.z<(origin.getZ()>>4)||at.z>((origin.getZ()+vessel.shape().sizeZ()-1)>>4))continue;
             if(EquipmentStructure.restoreFluidBinding(level,vessel))it.remove();
         }
-        for(long id:registry.chunk(name,chunk))presentation.markDirty(id);
+        var devices=registry.chunk(name,chunk);
+        if(!devices.isEmpty())FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChunks);
+        for(long id:devices){presentation.markDirty(id);if(realigning.add(id))realignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);}
+    }
+    /**
+     * The next registration of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued
+     * (registry first, REGISTRY_FIRST_PLAN.md 4.2). Each registration of a loaded chunk is queued once, at the load.
+     */
+    public long nextRealignment(String dimension) {
+        owned();var queue=closed?null:realignment.get(dimension);if(queue==null)return 0;
+        Long id=queue.poll();if(queue.isEmpty())realignment.remove(dimension);
+        if(id==null)return 0;realigning.remove(id);return id;
+    }
+    /**
+     * Holds every registration whose dimension has no level (REGISTRY_FIRST_PLAN.md 4.2): no block can stand for it, so it
+     * keeps what it holds and joins nothing until a level of that dimension loads its chunk again. One queued event.
+     */
+    private void holdWithoutLevel() {
+        var levels=new HashSet<String>();for(var level:server.getAllLevels())levels.add(level.dimension().location().toString());
+        var edits=new ArrayList<WorldTopologyLedger.Edit>();
+        for(var r:registrations().values()) {
+            var d=r.device();
+            if(!d.port()&&!d.held()&&!levels.contains(d.position().dimension()))
+                edits.add(new WorldTopologyLedger.Edit(d.id(),new WorldTopologyLedger.Registration(d.withHeld(true),r.spec(),Math.addExact(r.revision(),1))));
+        }
+        if(edits.isEmpty())return;
+        edits.sort(Comparator.comparingLong(WorldTopologyLedger.Edit::id));
+        submit(edits,topology.nextIdentity());
+        IChemE.LOGGER.warn("fluid_realign held={} reason=NO_LEVEL: their dimensions have no level; /icheme devices held lists them",edits.size());
     }
     /** A device's block entity loaded or was bound: marked for its bucket, never presented at once. */
     public void deviceLoaded(long id){owned();if(!closed){presentation.deviceLoaded(id);if(instruments!=null)instruments.bind(instrumentHost(id));}}
@@ -1245,7 +1277,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation

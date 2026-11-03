@@ -125,11 +125,20 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
         if(held.primary()==paint&&held.secondary()==secondary)return false;
         paint=held.primary();secondary=held.secondary();return true;
     }
-    /** Server: binds the registration {@code id} at this block, or marks it loaded when already bound; either way the block takes its build facts. */
-    public void bind(FluidWorldAuthority world,long id) {
-        if(identity!=id){bindIdentity(id);return;}
+    /**
+     * Server: binds registered device {@code d} at this block, or marks it loaded when already bound; either way the block
+     * takes its build facts. A device this block does not stand for, of another kind or not of one block, is not bound:
+     * the re-alignment sets the block the registry holds (REGISTRY_FIRST_PLAN.md 4.3). Whether it is bound.
+     */
+    public boolean bind(FluidWorldAuthority world,PhysicalFluidTopology.Device d) {
+        if(!standsFor(d))return false;
+        long id=d.id();
+        if(identity!=id){bindIdentity(id);return true;}
         world.deviceLoaded(id);if(restatePaint(world,id))sync();
+        return true;
     }
+    /** Whether this block is the one {@code d} stands as: one block of {@code d}'s kind. */
+    public boolean standsFor(PhysicalFluidTopology.Device d){return d.kind()==kind()&&d.ports().isEmpty()&&d.position().lane()==0;}
     @Override public long fluidIdentity(){return identity;}
     public TopologyCompiler.Kind kind(){return ((FluidDeviceBlock)getBlockState().getBlock()).kind();}
     /** The bore the line has at this block: a pipe's or filter's own, else that of a pipe it meets (0 when none). */
@@ -143,6 +152,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
             var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),worldPosition.getX(),worldPosition.getY(),worldPosition.getZ());
             var record=world.at(p).orElseThrow();
             if(record.device().id()!=id)throw new IllegalStateException("Fluid identity belongs to a different position");
+            if(!standsFor(record.device()))throw new IllegalStateException("Fluid identity belongs to another kind of device");
             bore=record.device().geometry().diameter();joints=record.device().joints();
             restatePaint(world,id);computeFaces();
         }
@@ -157,7 +167,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
             var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),worldPosition.getX(),worldPosition.getY(),worldPosition.getZ());
             world.at(p).ifPresent(record->{
-                bind(world,record.device().id());
+                if(!bind(world,record.device()))return;
                 // Drawn geometry: onLoad runs once the chunk is in the level (Level.tickBlockEntities), so its loaded
                 // neighbours are readable; a neighbour loaded before this block drew no line here, so both sides refresh.
                 // Neighbours in unloaded chunks keep their saved joints (FluidDeviceBlock.connectedState).

@@ -105,7 +105,7 @@ public final class PipeLaying {
         // The blocks and lanes bind to their queued registrations, then take their connections: every new block's joints
         // are set before any neighbour reads them, as EquipmentStructure.place sets its cells before it reconnects them.
         var racks = new ArrayList<PipeRackBlockEntity>();
-        FluidDeviceBlock.laying = true;
+        FluidDeviceBlock.registered = true;
         try {
             for (int i = 0; i < path.size(); i++) {
                 var lane = lanes.get(i);
@@ -120,7 +120,7 @@ public final class PipeLaying {
                 if (level.getBlockEntity(path.get(i)) instanceof FluidDeviceBlockEntity entity) entity.bindIdentity(records.get(i).device().id());
             }
         } finally {
-            FluidDeviceBlock.laying = false;
+            FluidDeviceBlock.registered = false;
         }
         for (var host : edited) if (level.getBlockEntity(host) instanceof PipeRackBlockEntity rack) racks.add(rack);
         // Racks take their lanes' new joints first, so the pipes next door see them when they connect.

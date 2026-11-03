@@ -180,10 +180,39 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
             if(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)FluidWorldAuthority.find(level.getServer()).ifPresent(w->w.instruments().recoverLegacy(entity.fluidIdentity(),level,position));
         }
     }
-    /** Server thread: the laying tool is placing the blocks of a line it registered itself ({@link PipeLaying}). */
-    static boolean laying;
+    /**
+     * Server thread: the blocks being placed or replaced stand for registrations that already exist, so placing one registers
+     * nothing and replacing one removes no registration and recovers nothing. The laying tool sets it for a line it
+     * registered itself ({@link PipeLaying}), the re-alignment for a block it sets back ({@link RegistryRealignment}).
+     */
+    static boolean registered;
+    /** Runs {@code change} with {@link #registered} set: block edits that follow the registry, never edit it. */
+    public static void quietly(Runnable change){boolean was=registered;registered=true;try{change.run();}finally{registered=was;}}
+    /**
+     * The block state registered device {@code d} stands as (registry first, batch 2026-11-03-save-corruption,
+     * REGISTRY_FIRST_PLAN.md 4.3): its kind's block with its facing and fittings, the inverse of what {@link #onPlace} and
+     * a chunk load register from a block. No connection and no sight glass: the placer connects it, and accessories
+     * belong to the registration. Null for a device no block of this class stands for: a structure's, a rack lane, a
+     * column's port, a heat side.
+     */
+    public static @Nullable BlockState stateFor(PhysicalFluidTopology.Device d) {
+        if(!d.ports().isEmpty()||d.position().lane()!=0)return null;
+        var block=switch(d.kind()){
+            case RESERVOIR->com.wormzjl.icheme.registry.ModBlocks.FLUID_RESERVOIR.get();case PIPE->com.wormzjl.icheme.registry.ModBlocks.FLUID_PIPE.get();
+            case GENERATOR->com.wormzjl.icheme.registry.ModBlocks.FLUID_GENERATOR.get();case VOID->com.wormzjl.icheme.registry.ModBlocks.FLUID_VOID.get();
+            case FILTER->com.wormzjl.icheme.registry.ModBlocks.INLINE_FILTER.get();default->null;};
+        return block==null?null:fittings(block.defaultBlockState(),d);
+    }
+    /** {@code state} with {@code d}'s facing and, on a pipe, its fittings: cutoff, pressure valve, filter, in-line mover. Connections and sight glass are kept. */
+    public static BlockState fittings(BlockState state,PhysicalFluidTopology.Device d) {
+        state=state.setValue(FACING,Direction.valueOf(d.facing().name()));
+        if(!state.hasProperty(INLINE_MOVER))return state;
+        var mover=switch(d.control()){case com.wormzjl.icheme.science.fluid.network.FlowControl.Pump p->InlineMover.PUMP;case com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor c->InlineMover.COMPRESSOR;default->InlineMover.NONE;};
+        return state.setValue(SHUTOFF,Shutoff.of(d.cutoff())).setValue(PRESSURE_CONTROL,d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Valve)
+                .setValue(INLINE_FILTER,d.inlineFilter()).setValue(INLINE_MOVER,mover);
+    }
     @Override protected void onPlace(BlockState state,Level level,BlockPos position,BlockState previous,boolean moved) {
-        super.onPlace(state,level,position,previous,moved);if(!(level instanceof ServerLevel serverLevel)||laying)return;
+        super.onPlace(state,level,position,previous,moved);if(!(level instanceof ServerLevel serverLevel)||registered)return;
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
             var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),position.getX(),position.getY(),position.getZ());
             if(previous.getBlock()!=this) {
@@ -196,7 +225,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     }
     @Override public BlockState playerWillDestroy(Level level,BlockPos pos,BlockState state,Player player){if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)h.instruments().recoverOnBreak(!player.isCreative());return super.playerWillDestroy(level,pos,state,player);}
     @Override protected void onRemove(BlockState state,Level level,BlockPos position,BlockState replacement,boolean moved) {
-        if(state.getBlock()!=replacement.getBlock()&&level instanceof ServerLevel serverLevel)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
+        if(!registered&&state.getBlock()!=replacement.getBlock()&&level instanceof ServerLevel serverLevel)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
             var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),position.getX(),position.getY(),position.getZ());world.at(p).ifPresent(r->{boolean drops=!(level.getBlockEntity(position) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)||h.instruments().recoverOnBreak();world.instruments().recover(r.device().id(),level,position,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(state),drops);world.remove(r.device().id());});
         });
         super.onRemove(state,level,position,replacement,moved);

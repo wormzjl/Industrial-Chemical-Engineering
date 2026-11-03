@@ -222,9 +222,14 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
         gameEventBus.addListener(IChemE::onLevelTickPost);
     }
-    /** The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves). */
+    /**
+     * The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves), and the
+     * re-alignment checks a few registrations of the chunks that loaded (registry first; it never solves either).
+     */
     private static void onLevelTickPost(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
-        if(!event.getLevel().isClientSide())com.wormzjl.icheme.world.level.block.FloatingRoofs.carry(event.getLevel());
+        if(event.getLevel().isClientSide())return;
+        com.wormzjl.icheme.world.level.block.FloatingRoofs.carry(event.getLevel());
+        if(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)com.wormzjl.icheme.world.level.block.RegistryRealignment.serve(level);
     }
     /** A player who leaves watches no tank any more. */
     private static void onPlayerLoggedOut(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
