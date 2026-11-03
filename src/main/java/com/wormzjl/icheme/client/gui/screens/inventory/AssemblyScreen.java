@@ -566,6 +566,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        SkinField.clickOutside(this, mx, my);
         double x = mx - leftPos, y = my - topPos;
         if (door() && door.press(x, y, button) || drawing() && listView.press(x, y, button) || operationView() != null && glassView.press(x, y, button)) return true;
         if (drawing() && button == 0) {

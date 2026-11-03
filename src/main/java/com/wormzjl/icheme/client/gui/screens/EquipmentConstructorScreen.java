@@ -917,6 +917,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        SkinField.clickOutside(this, x, y);
         return door.press(x, y, button) || super.mouseClicked(x, y, button);
     }
 

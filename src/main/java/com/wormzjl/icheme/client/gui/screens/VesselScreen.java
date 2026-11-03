@@ -308,6 +308,7 @@ public final class VesselScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        SkinField.clickOutside(this, x, y);
         return door.press(x - left, y - top, button) || glassView.press(x - left, y - top, button) || super.mouseClicked(x, y, button);
     }
 

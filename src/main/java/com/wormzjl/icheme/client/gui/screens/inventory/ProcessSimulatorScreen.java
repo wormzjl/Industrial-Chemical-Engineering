@@ -118,6 +118,10 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private @Nullable Flowsheet rateSheet, seenSheet;
     private int changedAt;
     private final Map<String, SkinField> entries = new HashMap<>();
+    /** An entry's edit ended (a click elsewhere, another entry, Enter): the next frame shows what the sheet took. */
+    private boolean committed;
+    /** True while the widgets are built again: the game clears the focus then, which ends no edit. */
+    private boolean rebuilding;
     private SimulatorFrame.Tab tab = SimulatorFrame.Tab.FLOWSHEET;
     private int category;
     private SimulatorFrame frame = new SimulatorFrame(SimulatorFrame.DOOR_W, SimulatorFrame.DOOR_H);
@@ -413,6 +417,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             box.setValue(values.getOrDefault(field.key(), ""));
             box.setEditable(editor.editable());
             box.setResponder(text -> write.write(field.key(), text));
+            box.onCommit(this::commit);
             entries.put(field.key(), box);
             return addRenderableWidget(box);
         }, (spec, slot) -> addRenderableWidget(SkinButton.of(spec, slot, press, ProcessSimulatorScreen::skin)));
@@ -462,6 +467,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             box.setEditable(editor.editable());
             if (slot.hint() != null) box.setHint(Component.literal(slot.hint()));
             box.setResponder(text -> shown.actions().entry(slot.key(), text));
+            box.onCommit(this::commit);
+            entries.put(slot.key(), box);
             addRenderableWidget(box);
         }
     }
@@ -498,6 +505,36 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         var list = listing(x);
         var slots = DialogColumns.footer(w, h, list.keys().length);
         for (int i = 0; i < slots.size(); i++) add(new Column.Button("dialog/" + i, list.keys()[i], list.off()[i] == null, list.off()[i]), slots.get(i).moved(left, top));
+    }
+
+    /**
+     * An entry's edit ended. Each keystroke already wrote the sheet; this ends the coalescing step, so the next edit is an
+     * undo step of its own, and asks the next frame to show the values the sheet took (and, on the Sizing tab, the new rating).
+     */
+    private void commit() {
+        if (rebuilding) return;
+        editor.endStep();
+        committed = true;
+    }
+
+    /** The widgets built again, the entry that has the focus (one clicked into as the last edit ended) kept focused at its cursor. */
+    private void rebuildKeepingFocus() {
+        String key = entries.entrySet().stream().filter(e -> e.getValue() == getFocused() && e.getValue().isFocused()).map(Map.Entry::getKey).findFirst().orElse(null);
+        int cursor = key == null ? 0 : entries.get(key).getCursorPosition();
+        rebuildWidgets();
+        var box = key == null ? null : entries.get(key);
+        if (box == null) return;
+        setFocused(box);
+        box.setCursorPosition(cursor);
+    }
+
+    @Override protected void rebuildWidgets() {
+        rebuilding = true;
+        try {
+            super.rebuildWidgets();
+        } finally {
+            rebuilding = false;
+        }
     }
 
     private String signature(SheetContext x) {
@@ -843,6 +880,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     // ---- Events ----
 
     @Override public boolean mouseClicked(double x, double y, int button) {
+        SkinField.clickOutside(this, x, y);
         if (dialog != Dialog.NONE) {
             var list = dialog.lists() ? listing(context()) : null;
             if (list != null) {
@@ -946,6 +984,10 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             reading.join().run();
             reading = null;
             rebuildWidgets();
+        }
+        if (committed) {
+            committed = false;
+            rebuildKeepingFocus();
         }
         var x = context();
         if (!signature(x).equals(signature)) rebuildWidgets();

@@ -181,6 +181,7 @@ public final class GaugeScreen extends AbstractContainerScreen<GaugeMenu> {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        SkinField.clickOutside(this, x, y);
         return door.press(x - leftPos, y - topPos, button) || super.mouseClicked(x, y, button);
     }
 
