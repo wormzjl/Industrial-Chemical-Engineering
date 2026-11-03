@@ -1,6 +1,6 @@
 # Sizing stage plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. S1 to S3 and S4a, the science and formats half of S4, are built; the rest is not. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. S1 to S3, S4a, S3b, S4b, S5 and S4c (Auto's 20 % spare, section 3.5, owner 2026-11-03) are built. Section 4 gives the probe's least sizes; the batch README's S4c findings give Auto's picks with the spare. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
 
 ## 1. Expected behaviour
 
@@ -219,6 +219,8 @@ A valve takes its line's bore: the world's valve has no Cv. Section 3.12 gives t
 
 Auto takes the smallest size that meets every limit, Must and Should. Where none does, it takes the smallest that meets the Musts and comes nearest the Shoulds, and the row stays yellow. Where no Must can be met, the row is red.
 
+The spare (S4c). Auto proposes the equipment to build, not the least size that holds the need. The owner, 2026-11-03: "The equipment comes with fixed sizes, the model can propose a minimum sizing but in reality this precision isn't really necessary, let it propose the actual equipment to build instead", with "20 % spare". On the three capacity Musts that have no Should before them, Auto first tries the sizes whose capacity holds 1.20 × the need (`Limit.AUTO_SPARE`, a RULE row), in the order of the table below. These are an exchanger's or a kettle's surface (`EXCHANGER_SURFACE`, the column's condenser, PA coolers and kettle among them), an air cooler's bare surface (`AIR_COOLER_SURFACE`, the air-cooled condenser among them), and a heater's duty (`HEATER_DUTY`). Where none of those sizes meets every limit, the search over every size decides, as before. A heater's type (section 3.10) and its count of cabins stay set by the bare duty, so the spare picks the size within them and never adds a cabin. An exchanger's shells and an air cooler's banks are part of the order, so the spare may take one more where fewer cannot hold it. The Musts still read the bare need ("min 243 m²"), so a Fixed size between the need and the spare is green. `EXCHANGER_OVER_NEED` (at most 100 %) stays. Every other item keeps its rule: column flood, drum and tank holds, the pump window, the valve share and the lines. Size all still sizes once (section 3.1, item 3).
+
 Sizing reads a steady run only. A run that failed, stopped or did not close leaves no state to size: every line and unit has no size, and one red Must, `RUN_STEADY` (World: `FlowsheetRun.Status`).
 
 | Item | Auto varies, in this order |
@@ -386,6 +388,7 @@ They follow W1 to W9 of the main plan. Each ends with the tests it can affect an
 | S4a | Pressure paths, the run on sized drops, the facts and their format, Size all and the rating as pure functions | The sample's paths against the probe's; a sized unit's drop follows a changed flow; the sample sized moves as section 3.11 says; an unsized run moves no number; a corpus image; an old sheet opens |
 | S3b | Member counts: identical units in parallel on the condenser, the kettle and each PA cooler, in the design, the assembly, the world's condenser and sizing | Two shells hold what one holds at half the feed; N units between a split and a merge, a count or size fault; the air-cooled condenser sizes on banks; corpus images |
 | S4b | The tab and its four views, lamps, Auto, Fixed and type keys, Size all's wiring | Column-builder gates; sheets rendered from shipped code |
+| S4c | Auto's 20 % spare on exchanger, air cooler and heater capacity (owner, 2026-11-03; section 3.5) | Auto holds 1.20 × the need where a size can, falls back where none can; the heater's type and count stay on the bare duty; a Fixed size between the need and the spare is green; the sample's picks |
 | S5 | Send to block, the constructor's list, the coverage gate: every equipment kind declares its sizing or says why it has none; code guide chapter | Import gate; coverage gate |
 
 The ejector is W10 of the main plan, after S5.
