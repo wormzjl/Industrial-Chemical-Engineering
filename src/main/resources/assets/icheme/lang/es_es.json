@@ -1597,7 +1597,7 @@
   "gui.icheme.fluid.solids.hint": "Edita los sólidos en suspensión por separado de la composición del fluido.",
   "gui.icheme.fluid.apply.hint": "Pone estos controles en cola para la siguiente actualización de la simulación.",
   "gui.icheme.fluid.name": "Nombre",
-  "gui.icheme.fluid.name.hint": "Se muestra junto al tipo en la franja de título de este dispositivo y en su placa de identificación. Como máximo 32 caracteres; vacío lo borra. Después pulsa Aplicar.",
+  "gui.icheme.fluid.name.hint": "Se muestra junto al tipo en la franja de título de este dispositivo y en su placa de identificación. Como máximo 32 caracteres; vacío lo borra. Después pulsa Intro o Aplicar.",
   "gui.icheme.fluid.apply_name.hint": "Envía el nombre. Los títulos y la placa de identificación lo muestran al instante.",
   "gui.icheme.fluid.close.hint": "Cierra esta pantalla de proceso.",
   "gui.icheme.fluid.recover.hint": "Recupera los sólidos que retiene ahora este filtro.",

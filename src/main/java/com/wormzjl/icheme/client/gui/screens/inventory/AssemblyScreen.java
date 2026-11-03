@@ -8,6 +8,7 @@ import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Text;
 import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.OperationColumn;
+import com.wormzjl.icheme.client.gui.common.ProcessUi;
 import com.wormzjl.icheme.client.gui.common.TitleStrip;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
@@ -185,7 +186,13 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return TitleStrip.place(imageWidth, AssemblyColumn.theme(imageWidth).w(), title.getString(), GuiCanvas.measure(font));
     }
 
-    /** The name's entry in the title strip (N1): the name as typed, sent with Apply; its hint while empty. */
+    /** Saves the typed name by the rename path (N1): Enter in the entry, and Apply. */
+    private void saveName() {
+        var column = column();
+        if (column != null && renames()) com.wormzjl.icheme.network.EquipmentNetwork.rename(column.controller(), nameDraft);
+    }
+
+    /** The name's entry in the title strip (N1): the name as typed, saved by Enter or Apply; its hint while empty. */
     private SkinField nameEntry(Rect slot) {
         if (nameDraft == null) nameDraft = nameShown = currentName();
         var box = new SkinField(font, leftPos + slot.x(), topPos + slot.y(), slot.w(), slot.h(), Component.literal(lang("fluid.name")), AssemblyScreen::skin);
@@ -193,6 +200,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         box.setValue(nameDraft);
         box.setResponder(text -> nameDraft = text);
         box.setHint(Component.literal(lang("fluid.name")));
+        box.onEnter(this::saveName);
         box.setTooltip(Tooltip.create(Component.literal(lang("fluid.name") + "\n" + lang("fluid.name.hint"))));
         nameBox = box;
         return addRenderableWidget(box);
@@ -223,6 +231,13 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         var area = AssemblyColumn.area(w, h);
         int tall = Column.place(OperationColumn.rows(operationInput(view), AssemblyScreen::lang), area.x(), area.y(), area.w(), m, Column.Metrics.COMPACT).bounds().h();
         return tall <= area.h() && OperationColumn.height(view) <= AssemblyColumn.glass(w, h, true).h() - 4;
+    }
+
+    /** A focused entry keeps its keys: the name's letters (the inventory key among them) do not close the screen; Enter saves the name. */
+    @Override
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        if (ProcessUi.textKeyPressed(this, key, scan, modifiers)) return true;
+        return super.keyPressed(key, scan, modifiers);
     }
 
     @Override
@@ -347,8 +362,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             case "stop" -> command(AssemblyNetwork.Action.STOP, List.of());
             case "apply" -> {
                 // Apply sends the name typed in the title strip (N1), and on the Operation page the set points.
-                var column = column();
-                if (column != null && renames()) com.wormzjl.icheme.network.EquipmentNetwork.rename(column.controller(), nameDraft);
+                saveName();
                 var view = operationView();
                 if (view == null || !OperationColumn.applies(operationInput(view), drafts)) break;
                 var values = OperationColumn.parse(view.setpoints(), drafts, units());

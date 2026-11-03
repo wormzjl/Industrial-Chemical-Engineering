@@ -1597,7 +1597,7 @@
   "gui.icheme.fluid.solids.hint": "悬浮固体与流体组成分开编辑。",
   "gui.icheme.fluid.apply.hint": "把这些控制排队，等下一次模拟更新。",
   "gui.icheme.fluid.name": "名称",
-  "gui.icheme.fluid.name.hint": "显示在这台设备标题栏的类型旁和铭牌上。最多 32 个字符；留空则清除。然后按“应用”。",
+  "gui.icheme.fluid.name.hint": "显示在这台设备标题栏的类型旁和铭牌上。最多 32 个字符；留空则清除。然后按回车键或“应用”。",
   "gui.icheme.fluid.apply_name.hint": "发送名称。标题和铭牌随即显示它。",
   "gui.icheme.fluid.close.hint": "关闭这个工艺界面。",
   "gui.icheme.fluid.recover.hint": "回收这个过滤器当前捕集的固体。",

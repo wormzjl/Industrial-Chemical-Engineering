@@ -96,8 +96,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean canEdit(){return !menu.debug()&&menu.clientData()!=null;}
     /** A tank with contents shows Copy in the footer's second push slot, where Apply would stand. */
     private boolean copies(){var data=menu.clientData();return data!=null&&tank()&&!tower()&&data.view().state()!=null;}
-    /** Whether the title strip holds the name's entry: an editor of a device that takes a name, with a footer slot for its Apply (a tank's Copy holds it: an open item). */
-    private boolean names(){return canEdit()&&nameable()&&!copies();}
+    /** Whether the title strip holds the name's entry: an editor of a device that takes a name. Enter saves it, Apply sends it with the controls. */
+    private boolean names(){return canEdit()&&nameable();}
+    /** Saves the typed name by the rename path (N1), as Apply does: Enter in the entry; a tank with contents has Copy in Apply's slot. */
+    private void saveName(){if(canEdit()&&renames())com.wormzjl.icheme.network.EquipmentNetwork.rename(menu.position(),nameDraft);}
     /** Whether Apply sends this device's controls: every kind but a tank (an induced-draught tower's aside), a filter, and a heat side off its Control tab or with nothing to control. */
     private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()));}
     private boolean constructedMover(){var data=menu.clientData();return data!=null&&datasheet!=null&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
@@ -279,8 +281,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(data==null)return;
         if(copies()){var copy=footer.get(1);doorAction("copy",copy.x(),by,copy.width(),this::copyContents);}
         // A heat side applies its control from its Control tab only.
-        // Apply sends the controls, and the name typed in the title strip (N1): a tank, a filter or a heat side with nothing to control applies the name alone.
-        if(canEdit()&&(controlsApply()||names())){var apply=footer.get(1);var key=doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);if(!controlsApply())key.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.apply_name.hint")));}
+        // Apply sends the controls, and the name typed in the title strip (N1): a filter or a heat side with nothing to control applies the name alone; a tank with contents shows Copy there, and Enter saves its name.
+        if(canEdit()&&(controlsApply()||names()&&!copies())){var apply=footer.get(1);var key=doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);if(!controlsApply())key.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.apply_name.hint")));}
         if(page==CONTROL){
             buildControl();
             if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
@@ -416,7 +418,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         return new SlurryFeed(fields.get("solidFraction").value()/100,grades);
     }
     private void apply(){
-        if(canEdit()&&renames())com.wormzjl.icheme.network.EquipmentNetwork.rename(menu.position(),nameDraft);
+        saveName();
         if(!controlsApply())return;
         if(!canEdit())return;
         // A compressor's ratio outside its bounds is named with them (the bounds Controls validates with), not the generic message.
@@ -992,7 +994,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** The name's entry in the title strip (N1): the name as typed, at most DeviceName.MAX characters, sent with Apply; its hint while empty. */
     private EditBox nameBox(Rect slot){
         var box=new SkinField(font,leftPos+slot.x(),topPos+slot.y(),slot.w(),slot.h(),Component.literal(tr("name")),FluidDeviceScreen::skin);
-        box.setMaxLength(com.wormzjl.icheme.science.equipment.DeviceName.MAX);box.setValue(nameDraft==null?"":nameDraft);box.setResponder(v->nameDraft=v);box.setHint(Component.literal(tr("name")));
+        box.setMaxLength(com.wormzjl.icheme.science.equipment.DeviceName.MAX);box.setValue(nameDraft==null?"":nameDraft);box.setResponder(v->nameDraft=v);box.setHint(Component.literal(tr("name")));box.onEnter(this::saveName);
         box.setTooltip(Tooltip.create(Component.literal(tr("name")+"\n"+tr("name.hint"))));
         editors.put("name",addRenderableWidget(box));return box;
     }

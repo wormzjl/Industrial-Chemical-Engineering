@@ -169,6 +169,11 @@ public final class VesselScreen extends Screen {
         return minecraft == null || minecraft.level == null ? "" : EquipmentStructure.name(minecraft.level, vessel);
     }
 
+    /** Saves the typed name by the rename path (N1): Enter in the entry, and Apply. */
+    private void saveName() {
+        if (renames()) com.wormzjl.icheme.network.EquipmentNetwork.rename(vessel.controller(), nameDraft);
+    }
+
     /** Whether Apply has a name to send: the typed name, cleaned, differs from the structure's. */
     private boolean renames() {
         return nameDraft != null && !com.wormzjl.icheme.science.equipment.DeviceName.clean(nameDraft).equals(currentName());
@@ -198,9 +203,7 @@ public final class VesselScreen extends Screen {
         apply = null;
         if (names()) {
             var at = footer.getLast();
-            apply = new SkinButton(left + at.x(), top + at.y(), at.w(), at.h(), Component.literal(tr("fluid.apply")), b -> {
-                if (renames()) com.wormzjl.icheme.network.EquipmentNetwork.rename(vessel.controller(), nameDraft);
-            }, VesselScreen::skin).primary(true);
+            apply = new SkinButton(left + at.x(), top + at.y(), at.w(), at.h(), Component.literal(tr("fluid.apply")), b -> saveName(), VesselScreen::skin).primary(true);
             apply.setTooltip(Tooltip.create(Component.literal(tr("fluid.apply_name.hint"))));
             apply.active = renames();
             addRenderableWidget(apply);
@@ -214,6 +217,7 @@ public final class VesselScreen extends Screen {
             box.setValue(nameDraft);
             box.setResponder(text -> nameDraft = text);
             box.setHint(Component.literal(tr("fluid.name")));
+            box.onEnter(this::saveName);
             box.setTooltip(Tooltip.create(Component.literal(tr("fluid.name") + "\n" + tr("fluid.name.hint"))));
             nameBox = addRenderableWidget(box);
         }

@@ -1597,7 +1597,7 @@
   "gui.icheme.fluid.solids.hint": "懸濁固体を流体組成とは別に編集します。",
   "gui.icheme.fluid.apply.hint": "これらの操作を次のシミュレーション更新に予約します。",
   "gui.icheme.fluid.name": "名前",
-  "gui.icheme.fluid.name.hint": "この機器のタイトル帯で種類の横と、銘板に表示されます。最大 32 文字、空欄で消去。その後「適用」を押してください。",
+  "gui.icheme.fluid.name.hint": "この機器のタイトル帯で種類の横と、銘板に表示されます。最大 32 文字、空欄で消去。その後 Enter キーか「適用」を押してください。",
   "gui.icheme.fluid.apply_name.hint": "名前を送信します。タイトルと銘板にすぐ表示されます。",
   "gui.icheme.fluid.close.hint": "このプロセス画面を閉じます。",
   "gui.icheme.fluid.recover.hint": "このフィルターが現在捕集している固体を回収します。",

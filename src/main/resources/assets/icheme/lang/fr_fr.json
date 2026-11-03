@@ -1597,7 +1597,7 @@
   "gui.icheme.fluid.solids.hint": "Modifier les solides en suspension indépendamment de la composition du fluide.",
   "gui.icheme.fluid.apply.hint": "Mettre ces commandes en file pour la prochaine mise à jour de la simulation.",
   "gui.icheme.fluid.name": "Nom",
-  "gui.icheme.fluid.name.hint": "Affiché à côté du type dans le bandeau de titre de cet appareil et sur sa plaque signalétique. 32 caractères au plus ; vide l'efface. Puis appuyez sur Appliquer.",
+  "gui.icheme.fluid.name.hint": "Affiché à côté du type dans le bandeau de titre de cet appareil et sur sa plaque signalétique. 32 caractères au plus ; vide l'efface. Puis appuyez sur Entrée ou Appliquer.",
   "gui.icheme.fluid.apply_name.hint": "Envoie le nom. Les titres et la plaque signalétique l'affichent aussitôt.",
   "gui.icheme.fluid.close.hint": "Fermer cet écran de procédé.",
   "gui.icheme.fluid.recover.hint": "Récupérer les solides actuellement retenus par ce filtre.",

@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.client.gui.common.kit;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -16,6 +17,7 @@ public final class SkinField extends EditBox {
     private final Supplier<Skin> skin;
     private final Font font;
     private String hint = "";
+    private Runnable enter;
 
     public SkinField(Font font, int x, int y, int width, int height, Component message, Supplier<Skin> skin) {
         super(font, x, y, width, height, message);
@@ -29,6 +31,21 @@ public final class SkinField extends EditBox {
     public void setHint(Component hint) {
         super.setHint(hint);
         this.hint = hint.getString();
+    }
+
+    /** What Enter does while the field has the focus (N1: the name's entry saves the name); none keeps the game's own keys. */
+    public SkinField onEnter(Runnable action) {
+        enter = action;
+        return this;
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        if (enter != null && isFocused() && (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER)) {
+            enter.run();
+            return true;
+        }
+        return super.keyPressed(key, scan, modifiers);
     }
 
     @Override
