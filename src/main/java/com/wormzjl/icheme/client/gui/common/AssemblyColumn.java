@@ -69,22 +69,17 @@ public final class AssemblyColumn {
         return new Rect(width - 28, 5, 18, 18);
     }
 
-    /** The title's room: the title row less the theme key. */
-    public static int title(int width) {
-        return width - 54;
-    }
-
     /** The tabs' slots at y 29, as every fluid screen places its tabs ({@code FluidGuiLayout.tabs}). */
     public static List<Rect> tabSlots(int width) {
         return FluidGuiLayout.tabs(width, 2).stream().map(s -> new Rect(s.x(), 29, s.width(), 18)).toList();
     }
 
-    /** The footer's push buttons, Close and Datasheet, sharing the door's width. */
-    /** The footer's {@code count} push buttons' slots: two (Close and Datasheet, or Close and the Operation page's Apply), three where the door names the column (N1). */
+    /** The footer's {@code count} push buttons' slots: two (Close and Datasheet, or Close and the Operation page's Apply), three where the title strip names the column (N1). */
     public static List<Rect> footer(int width, int height, int count) {
         return DialogColumns.footer(width, height, count);
     }
 
+    /** The footer's push buttons, Close and Datasheet, sharing the door's width. */
     public static List<Rect> footer(int width, int height) {
         return DialogColumns.footer(width, height, 2);
     }
@@ -170,19 +165,7 @@ public final class AssemblyColumn {
                 new Column.Button("tab:operation", t.get(KEY + "tab.operation"), complete && !operation, t.get(KEY + "tab.operation.hint"), operation));
     }
 
-    /**
-     * {@link #rows(Input, HeatControlColumn.Texts)}, led by the Name group where {@code named} (N1, the owner's pick A,
-     * 2026-11-03): a player who may build names the column there, sent with Apply.
-     */
-    public static List<Column.Row> rows(Input in, boolean named, HeatControlColumn.Texts t) {
-        if (!named) return rows(in, t);
-        var out = new ArrayList<Column.Row>();
-        out.add(DeviceColumn.name((key, args) -> t.get("fluid." + key, args)));
-        out.addAll(rows(in, t));
-        return out;
-    }
-
-    /** The footer's push buttons where the door names the column (N1): Close, Datasheet, then Apply (key {@code apply}), on while the typed name differs from the column's. */
+    /** The footer's push buttons where the title strip names the column (N1): Close, Datasheet, then Apply (key {@code apply}), on while the typed name differs from the column's. */
     public static List<Column.Button> footerButtons(boolean renames, HeatControlColumn.Texts t) {
         var out = new ArrayList<>(footerButtons(t));
         out.add(new Column.Button("apply", t.get("fluid.apply"), renames, t.get("fluid.apply_name.hint")));

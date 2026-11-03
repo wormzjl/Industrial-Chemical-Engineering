@@ -3,9 +3,11 @@ package com.wormzjl.icheme.client.gui.screens;
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.MachineAnimation;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
+import com.wormzjl.icheme.client.gui.common.TitleStrip;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
+import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
@@ -147,12 +149,14 @@ public final class VesselScreen extends Screen {
         return found;
     }
 
-    /** The door: the Name group first for a player who may build (N1, the owner's pick A), then the sizes and the moving parts' switch. */
+    /** The door: the sizes and the moving parts' switch. */
     private List<Column.Row> rows() {
-        var rows = new ArrayList<Column.Row>();
-        if (names()) rows.add(com.wormzjl.icheme.client.gui.common.DeviceColumn.name((key, args) -> tr("fluid." + key, args)));
-        rows.addAll(DialogColumns.vessel(sheet.sizes(), moving, MachineAnimation.running(), VesselScreen::tr));
-        return rows;
+        return DialogColumns.vessel(sheet.sizes(), moving, MachineAnimation.running(), VesselScreen::tr);
+    }
+
+    /** The title strip (N1, the owner 2026-11-03: "You can put the equipment name here"): the kind's plate, the name after it; the datasheet has no theme key. */
+    private TitleStrip.Strip strip() {
+        return TitleStrip.place(panelWidth, 0, title.getString(), GuiCanvas.measure(font));
     }
 
     /** Whether this player may name the structure: the server checks the same, and its reach (EquipmentNetwork.Rename). */
@@ -187,7 +191,7 @@ public final class VesselScreen extends Screen {
         var rows = rows();
         door.layout(new Rect(10, DialogColumns.TOP, DOOR, panelHeight - DialogColumns.TOP - DialogColumns.FOOTER), rows, m);
         door.keep(this::size, (spec, slot) -> addRenderableWidget(SkinButton.of(spec, slot, this::act, VesselScreen::skin)));
-        // Done alone, or Done and Apply (primary, at the right) where the door shows the name's entry.
+        // Done alone, or Done and Apply (primary, at the right) where the title strip holds the name's entry.
         var footer = DialogColumns.footer(panelWidth, panelHeight, names() ? 2 : 1);
         var done = footer.getFirst();
         addRenderableWidget(new SkinButton(left + done.x(), top + done.y(), done.w(), done.h(), Component.translatable("gui.done"), b -> onClose(), VesselScreen::skin));
@@ -200,6 +204,18 @@ public final class VesselScreen extends Screen {
             apply.setTooltip(Tooltip.create(Component.literal(tr("fluid.apply_name.hint"))));
             apply.active = renames();
             addRenderableWidget(apply);
+        }
+        nameBox = null;
+        var namePlace = strip().name();
+        if (names() && namePlace != null) {
+            if (nameDraft == null) nameDraft = nameShown = currentName();
+            var box = new SkinField(font, left + namePlace.x(), top + namePlace.y(), namePlace.w(), namePlace.h(), Component.literal(tr("fluid.name")), VesselScreen::skin);
+            box.setMaxLength(com.wormzjl.icheme.science.equipment.DeviceName.MAX);
+            box.setValue(nameDraft);
+            box.setResponder(text -> nameDraft = text);
+            box.setHint(Component.literal(tr("fluid.name")));
+            box.setTooltip(Tooltip.create(Component.literal(tr("fluid.name") + "\n" + tr("fluid.name.hint"))));
+            nameBox = addRenderableWidget(box);
         }
         door.place(left, top);
     }
@@ -223,18 +239,8 @@ public final class VesselScreen extends Screen {
         if (apply != null) apply.active = renames();
     }
 
-    /** A size the player chose, as the constructor's LCD entry shows it: read here, not edited; or the name's entry (N1), edited and sent with Apply. */
+    /** A size the player chose, as the constructor's LCD entry shows it: read here, not edited. */
     private AbstractWidget size(Column.Field f, Rect slot) {
-        if (f.key().equals("name")) {
-            if (nameDraft == null) nameDraft = nameShown = currentName();
-            var box = new SkinField(font, slot.x(), slot.y(), slot.w(), slot.h(), Component.literal(tr("fluid.name")), VesselScreen::skin);
-            box.setMaxLength(com.wormzjl.icheme.science.equipment.DeviceName.MAX);
-            box.setValue(nameDraft);
-            box.setResponder(text -> nameDraft = text);
-            box.setTooltip(Tooltip.create(Component.literal(tr("fluid.name") + "\n" + f.hint())));
-            nameBox = box;
-            return addRenderableWidget(box);
-        }
         var box = new SkinField(font, slot.x(), slot.y(), slot.w(), slot.h(), Component.literal(f.label()), VesselScreen::skin);
         sheet.sizes().stream().filter(s -> s.key().equals(f.key())).findFirst().ifPresent(s -> box.setValue(s.value()));
         box.setEditable(false);
@@ -270,9 +276,19 @@ public final class VesselScreen extends Screen {
         var canvas = new GuiCanvas(g, font, left, top);
         g.pose().pushPose();
         g.pose().translate(left, top, 0);
-        skin.title(canvas, 10, 10, font.plainSubstrByWidth(com.wormzjl.icheme.science.equipment.DeviceName.titled(minecraft == null || minecraft.level == null ? "" : EquipmentStructure.name(minecraft.level, vessel),
-                title.getString(), (n, kind) -> Component.translatable("gui.icheme.device.named", n, kind).getString()), panelWidth - 20));
+        // The title strip: the kind on its plate, the name after it (the entry, or a reader's text).
+        var strip = strip();
+        skin.title(canvas, TitleStrip.TITLE_X, TitleStrip.TITLE_Y, strip.kind());
+        String stripHover = null;
+        if (strip.kind().length() < title.getString().length() && strip.plate().contains(mouseX - left, mouseY - top)) stripHover = title.getString();
+        if (strip.name() != null && nameBox == null) {
+            String name = currentName(), shown = TitleStrip.text(name, strip.name(), GuiCanvas.measure(font));
+            int[] at = TitleStrip.textAt(strip.name());
+            skin.text(canvas, shown, at[0], at[1], Palette.TEXT);
+            if (shown.length() < name.length() && strip.name().contains(mouseX - left, mouseY - top)) stripHover = name;
+        }
         hovered = door.draw(canvas, skin, mouseX - left, mouseY - top);
+        if (stripHover != null) hovered = stripHover;
         if (glassBox != null) {
             // The glass's lines, its bar inside its right edge where they are taller than it.
             var glass = DialogColumns.glass(sheet, false, glassBox.w() - ScrollView.BAR - 2, GuiCanvas.measure(font), VesselScreen::tr);

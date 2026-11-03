@@ -133,7 +133,8 @@ class AssemblyColumnTest {
                         }
                 var display = AssemblyColumn.display(width);
                 for (var s : statuses) assertTrue(M.width(s) <= display.w(), at + ": the status cut: " + s);
-                assertTrue(M.width(t.get("assembly.title")) <= AssemblyColumn.title(width) && AssemblyColumn.theme(width).right() == width - 10, at + ": the title row");
+                assertEquals(t.get("assembly.title"), TitleStrip.place(width, AssemblyColumn.theme(width).w(), t.get("assembly.title"), M).kind(), at + ": the title whole");
+                assertEquals(width - 10, AssemblyColumn.theme(width).right(), at + ": the theme key");
                 var tabs = AssemblyColumn.tabs(false, false, t);
                 var tabSlots = AssemblyColumn.tabSlots(width);
                 for (int i = 0; i < tabs.size(); i++) {
@@ -151,12 +152,11 @@ class AssemblyColumnTest {
     }
 
     /**
-     * N1 (the owner's pick A, 2026-11-03): where a player may build, the Structure page's door leads with the Name group, and
-     * its footer holds Close, Datasheet and Apply (on while the typed name differs), each whole in its slot at every width.
-     * The column after the group keeps its widgets' order; prints the door against its area at the design size (NAME_FIT).
+     * N1: where a player may build, the column's name stands in the title strip (TitleStripTest), and the Structure page's
+     * footer holds Close, Datasheet and Apply (on while the typed name differs), each whole in its slot at every width.
      */
     @Test
-    void aNamedDoorLeadsWithTheNameAndItsFooterAddsApply() {
+    void aNamingFooterAddsApply() {
         var t = new HeatControlColumnTest.Recording("gui.icheme.");
         assertEquals(List.of("close", "datasheet", "apply"), AssemblyColumn.footerButtons(true, t).stream().map(Column.Button::key).toList());
         assertTrue(AssemblyColumn.footerButtons(true, t).getLast().active() && !AssemblyColumn.footerButtons(false, t).getLast().active(), "Apply on while the name differs");
@@ -169,20 +169,6 @@ class AssemblyColumnTest {
                     var r = footer.get(i);
                     assertTrue(r.x() >= 10 && r.right() <= width - 10 && r.y() > height - AssemblyColumn.DIVIDER && M.width(keys.get(i).text()) <= r.w() - 6, at + ": a footer key " + r);
                 }
-                var area = AssemblyColumn.area(width, height);
-                for (var name : NAMES)
-                    for (var in : inputs(name))
-                        for (boolean bar : new boolean[]{false, true}) {
-                            int w = area.w() - (bar ? ScrollView.BAR + 4 : 0);
-                            var rows = AssemblyColumn.rows(in, true, t);
-                            assertEquals("Name", ((Column.Group) rows.getFirst()).title(), at);
-                            assertEquals(AssemblyColumn.rows(in, t), rows.subList(1, rows.size()), at + ": the door as before after the name");
-                            var column = Column.place(rows, area.x(), area.y(), w, M, Column.Metrics.COMPACT);
-                            assertFits(column, at + (bar ? " narrowed" : "") + " named " + in);
-                            if (width == 464 && height == 254 && !bar && name == null && in.fix() < 0)
-                                System.out.printf(java.util.Locale.ROOT, "NAME_FIT ASSEMBLY %d px named, %d px before, in a %d px area%n", column.bounds().h(),
-                                        Column.place(AssemblyColumn.rows(in, t), area.x(), area.y(), w, M, Column.Metrics.COMPACT).bounds().h(), area.h());
-                        }
             }
         assertEquals(Set.of(), t.missing);
     }

@@ -1,4 +1,5 @@
 import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
+import com.wormzjl.icheme.client.gui.common.TitleStrip;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
 import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
@@ -80,7 +81,60 @@ public final class GuiPrototypes {
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         out.addAll(OperationPrototypes.operation());
+        out.add(titleStrip());
         return out;
+    }
+
+    // ---- N1's title strip (the owner 2026-11-03: "You can put the equipment name here") ----
+
+    /** A 32-character name of the widest letters, and a 32-character name as a plant would write it. */
+    static final String WIDEST = "W".repeat(32), LONG = "CDU-1 crude charge pump P-101A/B";
+
+    /** One strip a row: the screen, its width, its theme key, the kind, the name, an editor's entry or a reader's text. */
+    record StripCase(String screen, int width, int key, String kind, String name, boolean editor) {
+    }
+
+    static final List<StripCase> STRIPS = List.of(
+            new StripCase("device", 448, 18, "Centrifugal pump", "P-101", true),
+            new StripCase("device", 448, 18, "Centrifugal pump", "", true),
+            new StripCase("device", 448, 18, "Centrifugal pump", WIDEST, true),
+            new StripCase("device", 448, 18, "Centrifugal pump", LONG, false),
+            new StripCase("device", 448, 18, "Circulating fluidized-bed boiler", LONG, true),
+            new StripCase("device", 790, 18, "Natural-draft cooling tower", LONG, true),
+            new StripCase("assembly", 448, 18, "Distillation column", "T-101", true),
+            new StripCase("datasheet", 400, 0, "Circulating fluidized-bed boiler", WIDEST, true),
+            new StripCase("datasheet", 400, 0, "Drum", "", false));
+
+    /** Each case on its own band of door, its screen and width beside it; prints each name place's width (STRIP). */
+    static Prototype titleStrip() {
+        int band = 30;
+        return new Prototype("title-strip", 1000, STRIPS.size() * (band + 6) + 4 + band + 6, (d, s) -> {
+            for (int i = 0; i <= STRIPS.size(); i++) {
+                int dy = 4 + i * (band + 6);
+                if (i == STRIPS.size()) {
+                    // The constructor's header as built: its 200 px panel holds the kind and Change, no room for the entry.
+                    d.skin.page(d.c, new Rect(0, dy, ConstructorColumn.PANEL, band));
+                    String title = ConstructorColumn.title(LONG, "Horizontal drum", "Drum", d.m, (nm, k) -> nm + " · " + k);
+                    d.skin.title(d.c, 10, dy + 10, title);
+                    d.c.text("constructor 200 px, as built (no room for a " + TitleStrip.NAME + " px entry)", 810, dy + 10, Palette.MUTED);
+                    continue;
+                }
+                var k = STRIPS.get(i);
+                d.skin.page(d.c, new Rect(0, dy, k.width(), band));
+                var strip = TitleStrip.place(k.width(), k.key(), k.kind(), d.m);
+                d.skin.title(d.c, TitleStrip.TITLE_X, TitleStrip.TITLE_Y + dy, strip.kind());
+                if (k.key() > 0) d.skin.iconKey(d.c, new Rect(k.width() - 10 - k.key(), 5 + dy, k.key(), 18), Skin.Icon.THEME, false);
+                var place = strip.name() == null ? null : strip.name().moved(0, dy);
+                if (place != null && k.editor()) d.skin.field(d.c, place, k.name(), TEXTS.get("name"), false);
+                else if (place != null) {
+                    int[] at = TitleStrip.textAt(place);
+                    d.skin.text(d.c, TitleStrip.text(k.name(), place, d.m), at[0], at[1], Palette.TEXT);
+                }
+                d.c.text(k.screen() + " " + k.width() + " px, " + (k.editor() ? "editor" : "reader"), 810, dy + 10, Palette.MUTED);
+                if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "STRIP %-9s %3d px %-34s name place %s px%n", k.screen(), k.width(), k.kind(),
+                        strip.name() == null ? "none" : Integer.toString(strip.name().w()));
+            }
+        });
     }
 
     // ---- The column calculator: the shipped CalculatorColumn on its door (GUI_REVIEW.md order 5) ----
@@ -320,6 +374,7 @@ public final class GuiPrototypes {
         var diagram = AssemblyDiagram.of(trays);
         var slots = ColumnBlueprint.of(trays).slots();
         d.title(t.get(AssemblyColumn.KEY + "title"));
+        d.name("T-101", true);
         var tabs = AssemblyColumn.tabs(false, false, t);
         var tabSlots = AssemblyColumn.tabSlots(d.w);
         for (int i = 0; i < tabs.size(); i++) {
@@ -350,11 +405,11 @@ public final class GuiPrototypes {
         if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s block at scale %.2f in %d by %d px%n", "assembly " + d.w + "x" + d.h, block.scale(), split.drawing().w(), split.drawing().h());
         // The door column, narrowed for its bar where it is taller than its area (KitDoor).
         String name = selected == null ? null : AssemblyColumn.text(diagram.part(selected).name(), t);
-        // N1 (the owner's pick A): a player who may build names the column first on the door, sent with the footer's Apply.
-        var rows = AssemblyColumn.rows(AssemblyColumn.input(slots.size(), report, queued, name, selected != null), true, t);
+        // N1 (the owner 2026-11-03): a player who may build names the column in the title strip, sent with the footer's Apply.
+        var rows = AssemblyColumn.rows(AssemblyColumn.input(slots.size(), report, queued, name, selected != null), t);
         var door = AssemblyColumn.area(d.w, d.h);
         int tall = Column.place(rows, door.x(), door.y(), door.w(), d.m, Column.Metrics.COMPACT).bounds().h();
-        d.column(rows, door.x(), door.y(), tall > door.h() ? door.w() - ScrollView.BAR - 4 : door.w(), Map.of("name", "T-101"));
+        d.column(rows, door.x(), door.y(), tall > door.h() ? door.w() - ScrollView.BAR - 4 : door.w(), Map.of());
         var footer = AssemblyColumn.footer(d.w, d.h, 3);
         var keys = AssemblyColumn.footerButtons(true, t);
         for (int i = 0; i < keys.size(); i++) d.skin.button(d.c, footer.get(i), keys.get(i).text(), keys.get(i).key().equals("apply") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
@@ -530,14 +585,12 @@ public final class GuiPrototypes {
 
     /** A datasheet: the door's sizes and switch, the glass's notes and nozzles, as VesselScreen draws them. */
     static void datasheet(Door d, String title, DialogColumns.Sheet sheet, boolean moving) {
-        d.skin.title(d.c, 10, 10, title);
+        // N1 (the owner 2026-11-03): the name in the title strip, sent with Apply beside Done; the datasheet has no theme key.
+        d.title(title, 0);
+        d.name(moving ? "AC-101" : "D-101", true);
         var values = new java.util.HashMap<String, String>();
         for (var size : sheet.sizes()) values.put(size.key(), size.value());
-        // N1 (the owner's pick A): the Name group leads the door, sent with Apply beside Done.
-        values.put("name", moving ? "AC-101" : "D-101");
-        var rows = new ArrayList<Column.Row>();
-        rows.add(DeviceColumn.name(TEXTS));
-        rows.addAll(DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG));
+        var rows = DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG);
         d.column(rows, 10, DialogColumns.TOP, 150, values);
         if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", "datasheet" + (moving ? " unit" : ""),
                 Column.place(rows, 10, DialogColumns.TOP, 150, d.m, Column.Metrics.COMPACT).bounds().h(), d.h - DialogColumns.TOP - DialogColumns.FOOTER);
@@ -585,15 +638,10 @@ public final class GuiPrototypes {
      */
     static Rect device(Door d, DeviceColumn.Input in, Map<String, String> drafts) {
         int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
-        // N1 (the owner's pick A): an editor's door leads with the Name group, as FluidDeviceScreen's does for a device that
-        // takes a name (a plain pipe takes none).
-        var rows = new ArrayList<Column.Row>();
-        drafts = new java.util.HashMap<>(drafts);
-        if (in.canEdit() && in.kind() != Kind.PIPE) {
-            rows.add(DeviceColumn.name(TEXTS));
-            drafts.putIfAbsent("name", NAMES.getOrDefault(in.kind(), ""));
-        }
-        rows.addAll(DeviceColumn.rows(in, TEXTS));
+        // N1 (the owner 2026-11-03): the name in the title strip, an entry for an editor of a device that takes one (a plain pipe takes none).
+        // A tank with contents holds Copy where Apply would stand: its name reads as text (an open item).
+        if (in.kind() != Kind.PIPE) d.name(NAMES.getOrDefault(in.kind(), ""), in.canEdit() && in.kind() != Kind.RESERVOIR);
+        var rows = DeviceColumn.rows(in, TEXTS);
         var column = Column.place(rows, 10, top, side - 10, d.m, Column.Metrics.COMPACT);
         var view = new ScrollView();
         view.layout(new Rect(8, top, side - 6, bottom - top), side + 3, column.bounds().h());
@@ -604,9 +652,6 @@ public final class GuiPrototypes {
             if (p.row() instanceof Column.Field f) {
                 var r = p.slots().get(f.key());
                 if (view.visible(r)) d.skin.field(d.c, view.onScreen(r), drafts.getOrDefault(f.key(), ""), "", false);
-            } else if (p.row() instanceof Column.Wide wide) {
-                var r = p.slots().get(wide.key());
-                if (view.visible(r)) d.skin.field(d.c, view.onScreen(r), drafts.getOrDefault(wide.key(), ""), "", false);
             } else if (p.row() instanceof Column.Buttons b)
                 for (var spec : b.buttons()) {
                     var r = p.slots().get(spec.key());
@@ -702,7 +747,7 @@ public final class GuiPrototypes {
         });
     }
 
-    /** The names the device pages' Name entries show (N1), by kind. */
+    /** The names the device pages' title strips show (N1), by kind. */
     static final Map<Kind, String> NAMES = Map.of(Kind.PUMP, "P-101", Kind.COMPRESSOR, "K-101", Kind.VALVE, "FV-101", Kind.GENERATOR, "F-101", Kind.RESERVOIR, "TK-101",
             Kind.VOID, "FL-101", Kind.FILTER, "S-101", Kind.HEAT_SIDE, "E-101");
 
@@ -790,10 +835,29 @@ public final class GuiPrototypes {
             return HeatDiagramRender.tr(key, args);
         }
 
+        /** The title strip as last placed: the kind's plate and the name's place (N1). */
+        TitleStrip.Strip strip;
+
         /** The title plate and the theme key with its contrast sign, as FluidDeviceScreen draws them. */
         void title(String text) {
-            skin.title(c, 10, 10, text);
-            skin.iconKey(c, new Rect(w - 28, 5, 18, 18), Skin.Icon.THEME, false);
+            title(text, 18);
+        }
+
+        /** The title strip (N1): the kind's plate, the theme key {@code key} px wide at the right (0: none, as the datasheet). */
+        void title(String text, int key) {
+            strip = TitleStrip.place(w, key, text, m);
+            skin.title(c, TitleStrip.TITLE_X, TitleStrip.TITLE_Y, strip.kind());
+            if (key > 0) skin.iconKey(c, new Rect(w - 10 - key, 5, key, 18), Skin.Icon.THEME, false);
+        }
+
+        /** The name in the title strip (N1): an editor's LCD entry (its hint while empty), a reader's text. */
+        void name(String name, boolean editor) {
+            if (strip == null || strip.name() == null) return;
+            if (editor) skin.field(c, strip.name(), name, TEXTS.get("name"), false);
+            else {
+                int[] at = TitleStrip.textAt(strip.name());
+                skin.text(c, TitleStrip.text(name, strip.name(), m), at[0], at[1], Palette.TEXT);
+            }
         }
 
         /** Tabs side by side at y 29, {@code current} latched. */

@@ -63,15 +63,6 @@ public final class DeviceColumn {
     /** The phases' colours, as the old rail drew them: organic, aqueous, vapour, solids. */
     public static final int[] PHASE_COLOURS = {0xFFD6A65A, 0xFF549BD2, 0xFFB3C0CA, 0xFFA28565};
 
-    /**
-     * A device's name (N1; the owner's pick A, 2026-11-03): a Name group first on the door, one wide LCD entry (key
-     * {@code name}) that Apply sends with the door's controls. Its keys sit under {@code gui.icheme.fluid.}, read through
-     * {@code t}; the device, assembly and datasheet screens share it.
-     */
-    public static Column.Group name(HeatControlColumn.Texts t) {
-        return new Column.Group(t.get("name"), t.get("name.hint"), List.of(new Column.Wide("name", t.get("name.hint"))));
-    }
-
     public static List<Column.Row> rows(Input in, HeatControlColumn.Texts t) {
         var rows = new ArrayList<>(in.lead());
         if (in.switchable()) rows.add(new Column.Group(t.get("heat_group.control"), null, List.of(new Column.Buttons(List.of(
