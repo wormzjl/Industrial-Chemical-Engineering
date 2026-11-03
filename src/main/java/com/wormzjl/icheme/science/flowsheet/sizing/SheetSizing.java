@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetEngine;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
@@ -174,11 +175,16 @@ public final class SheetSizing {
      * what it gives. Nothing is sized twice. A run that is not steady sizes nothing: the sheet stays, every item red.
      */
     public static SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo) {
+        return sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE);
+    }
+
+    /** {@link #sizeAll(Flowsheet, FlowsheetRun, FlowThermo)}, its re-run telling {@code progress} where it stands, as a run does. */
+    public static SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo, FlowsheetSolver.Progress progress) {
         if (run.status() != FlowsheetRun.Status.STEADY) return new SizeAll(sheet, run, rate(sheet, run, thermo));
         var proposal = pass(sheet, run, thermo, Entries.of(sheet, false));
         var sized = applied(sheet, proposal);
         if (!moves(sheet, sized)) return new SizeAll(sized, run, proposal);
-        var rerun = FlowsheetEngine.run(sized, thermo.catalog(), thermo.checkpoint(), run);
+        var rerun = FlowsheetEngine.run(sized, thermo.catalog(), thermo.checkpoint(), run, progress);
         if (rerun.status() == FlowsheetRun.Status.STOPPED) throw new CancellationException();
         return new SizeAll(sized, rerun, rate(sized, rerun, thermo));
     }

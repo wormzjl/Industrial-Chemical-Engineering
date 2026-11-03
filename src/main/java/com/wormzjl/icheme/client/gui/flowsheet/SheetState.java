@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Report;
+import com.wormzjl.icheme.science.flowsheet.sizing.SizedPassages;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -25,6 +26,11 @@ public final class SheetState {
         SOLVED, WARNING, FAILED, NONE, ACTIVE
     }
 
+    /** What a job in hand does: run, Size all (with its run again), or rate the sizes at a run's end. */
+    public enum Task {
+        RUN, SIZE, RATE
+    }
+
     /**
      * A run in hand, as its host reports it.
      *
@@ -32,7 +38,10 @@ public final class SheetState {
      * @param unit  what it is solving, or null before the first calculation
      * @param start where that block's solve set out from, or null
      */
-    public record Running(double seconds, int pass, int passes, @Nullable String unit, Report.@Nullable Start start) {
+    public record Running(double seconds, int pass, int passes, @Nullable String unit, Report.@Nullable Start start, Task task) {
+        public Running(double seconds, int pass, int passes, @Nullable String unit, Report.@Nullable Start start) {
+            this(seconds, pass, passes, unit, start, Task.RUN);
+        }
     }
 
     private final Flowsheet sheet;
@@ -128,19 +137,49 @@ public final class SheetState {
         return from;
     }
 
-    /** What changed since {@code ran}, and all that lies downstream of it in {@code sheet}. */
+    /** Whether {@code a} and {@code b} hold the same units and lines by id: what a rating needs to read one's items on the other's run. */
+    public static boolean sameShape(Flowsheet a, Flowsheet b) {
+        return ids(a.units().stream().map(Flowsheet.Unit::id).toList()).equals(ids(b.units().stream().map(Flowsheet.Unit::id).toList()))
+                && ids(a.streams().stream().map(Flowsheet.Stream::id).toList()).equals(ids(b.streams().stream().map(Flowsheet.Stream::id).toList()));
+    }
+
+    private static Set<String> ids(List<String> ids) {
+        return new HashSet<>(ids);
+    }
+
+    /** Whether {@code a} and {@code b} hold the same facts for a solve and for sizing: a name or a place changes nothing. */
+    public static boolean same(Flowsheet a, Flowsheet b) {
+        if (!a.sizing().equals(b.sizing()) || a.units().size() != b.units().size() || a.streams().size() != b.streams().size()) return false;
+        var units = new HashMap<String, String>();
+        var streams = new HashMap<String, String>();
+        for (var unit : b.units()) units.put(unit.id(), unit(unit));
+        for (var stream : b.streams()) streams.put(stream.id(), stream(stream));
+        for (var unit : a.units()) if (!unit(unit).equals(units.get(unit.id()))) return false;
+        for (var stream : a.streams()) if (!stream(stream).equals(streams.get(stream.id()))) return false;
+        return true;
+    }
+
+    /**
+     * What changed since {@code ran}, and all that lies downstream of it in {@code sheet}. A size whose drops a unit's run reads
+     * ({@link SizedPassages#reads}) is one of its facts.
+     */
     private static Set<String> greyed(Flowsheet sheet, Flowsheet ran) {
         var stale = new HashSet<String>();
         var units = new HashMap<String, String>();
+        var reads = new HashMap<String, List<Object>>();
         var streams = new HashMap<String, String>();
         var was = new HashMap<String, Flowsheet.Stream>();
-        for (var unit : ran.units()) units.put(unit.id(), unit(unit));
+        for (var unit : ran.units()) {
+            units.put(unit.id(), unit(unit));
+            reads.put(unit.id(), SizedPassages.reads(ran.sizing(), unit));
+        }
         for (var stream : ran.streams()) {
             streams.put(stream.id(), stream(stream));
             was.put(stream.id(), stream);
         }
         var work = new ArrayDeque<String>();
-        for (var unit : sheet.units()) if (!unit(unit).equals(units.get(unit.id()))) work.add(unit.id());
+        for (var unit : sheet.units())
+            if (!unit(unit).equals(units.get(unit.id())) || !SizedPassages.reads(sheet.sizing(), unit).equals(reads.get(unit.id()))) work.add(unit.id());
         for (var stream : sheet.streams()) {
             if (stream(stream).equals(streams.get(stream.id()))) continue;
             stale.add(stream.id());
@@ -164,6 +203,11 @@ public final class SheetState {
                 if (stream.to() != null) work.add(stream.to().unit());
             }
         }
+    }
+
+    /** Whether edits have greyed anything since the run. */
+    public boolean edited() {
+        return !stale.isEmpty();
     }
 
     /** Whether edits have greyed a unit or stream. */
@@ -209,10 +253,12 @@ public final class SheetState {
         String key = "flowsheet.status.";
         if (running != null) {
             String seconds = SheetUnits.number(1, running.seconds());
-            if (running.unit() == null) return new Status(t.get(key + "starting", seconds), Palette.ACCENT);
+            if (running.task() == Task.RATE) return new Status(t.get(key + "rating", seconds), Palette.ACCENT);
+            if (running.unit() == null) return new Status(t.get(key + (running.task() == Task.SIZE ? "sizing" : "starting"), seconds), Palette.ACCENT);
             String unit = NoteText.subject(running.unit(), sheet);
             if (running.start() != null) unit = t.get(key + (running.start() == Report.Start.LEARNED ? "from_learned" : "from_last"), unit);
-            return new Status(running.pass() == 0 ? t.get(key + "running_step", seconds, unit) : t.get(key + "running", seconds, running.pass(), running.passes(), unit), Palette.ACCENT);
+            String text = running.pass() == 0 ? t.get(key + "running_step", seconds, unit) : t.get(key + "running", seconds, running.pass(), running.passes(), unit);
+            return new Status(running.task() == Task.SIZE ? t.get(key + "sizing_run", text) : text, Palette.ACCENT);
         }
         if (results == null) return new Status(t.get(key + "ready"), Palette.MUTED);
         var run = results.run();

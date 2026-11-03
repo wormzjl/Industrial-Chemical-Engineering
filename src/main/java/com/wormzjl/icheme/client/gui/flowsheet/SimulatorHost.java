@@ -63,6 +63,36 @@ public interface SimulatorHost {
         if (runner != null) runner.alone(sheet, unit);
     }
 
+    /** Starts Size all of {@code sheet} on the last run in the background (plan section 3.1). */
+    default void size(Flowsheet sheet) {
+        var runner = runner();
+        if (runner != null) runner.size(sheet);
+    }
+
+    /** Rates {@code sheet}'s items at their sizes on the last run, quietly in the background. */
+    default void rate(Flowsheet sheet) {
+        var runner = runner();
+        if (runner != null) runner.rate(sheet);
+    }
+
+    /** The last rating, or null. */
+    default SimulatorRunner.@Nullable Rated rated() {
+        var runner = runner();
+        return runner == null ? null : runner.rated();
+    }
+
+    /** Whether a quiet rating is in hand. */
+    default boolean rating() {
+        var runner = runner();
+        return runner != null && runner.rating();
+    }
+
+    /** Why the last Size all or rating broke, or null. */
+    default @Nullable String broken() {
+        var runner = runner();
+        return runner == null ? null : runner.broken();
+    }
+
     /** Stops the run in hand. */
     default void stop() {
         var runner = runner();

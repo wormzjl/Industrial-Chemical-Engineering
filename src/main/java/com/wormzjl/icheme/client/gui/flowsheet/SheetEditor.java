@@ -7,6 +7,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -576,5 +577,25 @@ public final class SheetEditor {
 
     public boolean basis(Flowsheet.Basis basis, @Nullable String key) {
         return apply(new Flowsheet(basis, sheet.units(), sheet.streams(), sheet.settings(), sheet.sizing(), sheet.unknown()), key);
+    }
+
+    // ---- Sizing ----
+
+    /** Takes Size all's sheet, which the caller has copied, as one step: Undo takes it back whole. A sheet holding the same facts adds no step. */
+    public boolean sized(Flowsheet next) {
+        if (SheetState.same(sheet, next)) return false;
+        return apply(next, null);
+    }
+
+    /** Sets the sheet's sizing facts. */
+    public boolean sizing(SizingFacts facts, @Nullable String key) {
+        return apply(new Flowsheet(sheet.basis(), sheet.units(), sheet.streams(), sheet.settings(), facts, sheet.unknown()), key);
+    }
+
+    /** Sets the sizing facts and {@code unit}'s settings, which the caller has copied, in one step: a member's count is its column door's (S3b). */
+    public boolean sizing(SizingFacts facts, String unit, Params params, @Nullable String key) {
+        var units = new ArrayList<Flowsheet.Unit>();
+        for (var u : sheet.units()) units.add(u.id().equals(unit) ? new Flowsheet.Unit(u.id(), u.type(), u.name(), u.x(), u.y(), params, u.unknown()) : u);
+        return apply(new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), facts, sheet.unknown()), key);
     }
 }
