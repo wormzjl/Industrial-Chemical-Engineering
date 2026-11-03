@@ -30,6 +30,8 @@ Batch 2026-11-02-process-simulator, after W10, 2026-11-03. The owner asked to "F
 - **A: keep booster first.** This is right for a deep-cut top with zero reflux. To be consistent, the condenser must work at the ejector's discharge pressure; V3 solves it at the top tray's pressure today. The reflux then returns through its valve and flashes on the top tray. With reflux, the ejector still lifts the reflux vapour.
 - **C: a switch per column** between the two layouts. It matches both real layouts, but it adds a mode.
 
+The owner answered on 2026-11-03: "This needs some abstraction, a single ejector + condenser should abstract various conditions and the model doesn't have to be that accurate", and "No back compat needed this thing isn't implemented yet". The answer to this review is the proposal W10b in [SIZING_PLAN.md](SIZING_PLAN.md) section 3.12. It keeps B+'s order without an aftercondenser slot, because the block's single condenser stands for the set's condensers. The sub-choices above about the placement and the heat no longer apply.
+
 ## Sources
 
 - [P1] US 7,267,747, background: FIG. 1 precondenser systems; FIG. 2 deep-cut systems, with the primary ejector ahead of the condensers. https://patents.google.com/patent/US7267747

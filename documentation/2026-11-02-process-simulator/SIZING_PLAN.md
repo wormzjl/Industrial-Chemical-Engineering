@@ -345,6 +345,58 @@ A jet law in the world compressor's isothermal heads was tried first. It has one
 - The column block takes the Motive port where the top is under ambient pressure (`ejectorRequired`). The door's Equipment page holds an Ejector group with the same two pressures (`ejector_discharge`, `ejector_motive`, the tile's defaults where absent). The load is the top tray's vapour, hydrocarbons and steam, at that tray's temperature and pressure. The steam joins the free-water product at its temperature and pressure (the condenser's where V3 leaves no free water). The heat it gives up there joins the condenser's duty, as a link when the condenser's cold side is wired, else as a utility, and in the `condenser` reading. V3 still solves at its own pressures, so no product's pressure moves.
 - Sizing: `EjectorSizing`, on the tile and as the block's member `ejector`, ahead of the condenser. The suction bore reads `VACUUM_SPEED` at the suction's pressure. Auto tries the bores that pass 1.20 × the load's volume first (`AUTO_SPARE`, spare-first). The stage rows read the compression and the suction for one stage. A wired port reads `EJECTOR_MOTIVE` (Must, against the need) and `EJECTOR_MOTIVE_SPARE` (Should, 20 % over it). A free port reads neither. The block's condenser member condenses the motive steam with the overhead, on the duty that holds its heat.
 
+**Proposal W10b: one ejector and one condenser (2026-11-03, for the owner).** After the VDU review ([VDU_OVERHEAD_REVIEW.md](VDU_OVERHEAD_REVIEW.md)), the owner said: "This needs some abstraction, a single ejector + condenser should abstract various conditions and the model doesn't have to be that accurate", "Also think about how to define steam requirement for the ejector", and "No back compat needed this thing isn't implemented yet". `runtime/` has no ejector model, so no compatibility work is needed.
+
+- **Expected behaviour.** The condenser makes the vacuum; the ejector set only removes what does not condense. A set compresses in stages, and an intercondenser after each stage condenses its steam, so the later stages lift gas only. Steam that the condenser cannot condense at the top pressure must first be lifted to a pressure where it condenses. That is the deep-cut VDU's booster.
+- **Layout.** The block's condenser works at the top pressure, as V3 solves it, and drains to the receiver. One ejector takes the receiver's vapour outlet, and the offgas valve follows it. The block's single condenser also stands for the set's intercondensers and aftercondenser: the set's heat joins the condenser's duty, as W10's steam heat does now.
+- **Products.** The set's discharge (the vent plus the motive steam) is cooled to the condenser's temperature at the discharge pressure. Its free water joins the water product. The rest leaves through the Overhead port at the discharge pressure.
+- **Steam law, S1 (recommended).** `m_motive = k · c(P_m) · [G · ln(P_d / P_s) + W · ln(P_c / P_s)⁺]`.
+  - `G` is the vent's gas (everything but water) as air: each kg counts √(29 / M) kg, the vendors' rule [EJ-VEND]. That is 3.8 for hydrogen and 0.54 for M 100. `W` is the vent's water: each kg counts 1.27 kg of air.
+  - `P_s` is the vent's pressure (the condenser's), and `P_d` the door's discharge, 1.2 bar.
+  - `P_c` is twice water's vapour pressure at the vent's temperature: 14.7 kPa at 40 °C. The set's first intercondenser condenses the steam there. ⁺ means max(x, 0): above `P_c` the condenser has already taken the water.
+  - `k = 1.6` kg of steam per kg of air per e-fold of compression. This is El-Dessouky's own air figure at its best stage, 30 to 120 kPa: 2.21 kg/kg ÷ ln 4 = 1.594 [WT-EJ]. The log is the limit of many stages, each followed by an intercondenser.
+  - `c(P_m) = PCF(P_m) / PCF(1000 kPa)`, held flat above 1500 kPa: the law's motive factor, kept. It is 1.35 at 3 bar, 1.12 at 7 bar and 0.93 at 15 bar and above.
+- **Against today's law.** Steam per kg of air, on 10 bar motive steam, discharging at 120 kPa:
+
+| Suction, kPa | 80 | 50 | 30 | 20 | 12 | 5 | 2 |
+|---|---|---|---|---|---|---|---|
+| One stage, El-Dessouky (today) | 0.78 | 1.29 | 2.21 | 3.39 | 5.81 | 14.6 | 38.5 |
+| The set, S1 | 0.65 | 1.40 | 2.22 | 2.87 | 3.68 | 5.08 | 6.55 |
+
+  - From 5 kPa, a three-stage El-Dessouky chain with an intercondenser after each stage takes 4.10 kg/kg. S1 takes 5.08, which is 24 % more.
+  - A single-stage El-Dessouky booster lifts water from 2 to 14.7 kPa on 3.99 kg/kg. S1 takes 4.05.
+  - Check: `tools/process-simulator/vacuum-set-law.js`.
+- **Cases.** The vent is at 40 °C, and its gas is saturated with water.
+
+| Case | Vent | S1 steam | S2 steam |
+|---|---|---|---|
+| Chemical column, 30 kPa | 50 kg/h N₂, 10 kg/h water | 113 kg/h | 142 kg/h |
+| Column at 80 kPa | 100 kg/h gas (M 29), 6 kg/h water | 65 kg/h | 70 kg/h |
+| VDU case A, 10.6 kPa | 500 kg/h gas (M 30), 682 kg/h water | 2.36 t/h | 5.27 t/h |
+| Deep cut, 2 kPa | 500 kg/h gas, 10 t/h stripping steam that passes | 43.7 t/h | 86.3 t/h |
+
+  W10's gate column lifted 94.6 kg/s on 47.2 kg/s of steam. S1 lifts only the vent.
+- **Other forms.**
+  - S2: one term, with the whole vent lifted to `P_d`. It is simpler, but it doubles the steam wherever water reaches the set (cases 3 and 4).
+  - S3: a chain of El-Dessouky stages with a stage count, and boosters below `P_c`. It is closer to vendor data, but it needs more code and keeps the fitted-range notice.
+- **What S1 deletes.**
+  - El-Dessouky's pressure core, `TCF` and `(P_m/P_s)^0.015`.
+  - The fitted range and its notice.
+  - `EJECTOR_COMPRESSION` and `EJECTOR_STAGES`: they are one stage's limits, and the set has none.
+  - "One tile is one stage": a tile is now a whole set, so no chain of tiles is needed.
+- **What S1 changes.**
+  - `EjectorLaw`: S1.
+  - `ColumnUnit.ejector`: the load becomes V3's vapour product at the condenser; the products as above.
+  - `EjectorUnit`: S1; its discharge stays as it is.
+  - `EjectorSizing`: reads the vent's volume; the stage rows go.
+  - The block's drawing: the ejector moves to the off-gas line after the receiver, with its Motive port.
+  - `ColumnBlueprint`: the offgas link becomes receiver vapour outlet → ejector → offgas valve, and the overhead link the condenser only. `AssemblyDiagram` follows.
+  - Texts and renders.
+- **Risks.**
+  - A vent with no gas, at a top above `P_c`, gives the ejector no load and no steam. Real sets are also sized for the air that leaks in, which the game does not model.
+  - Below about 1.5 kPa (`P_c / P_s` over 10), a real set needs two boosters, and the second lifts the first's steam. S1 does not count that steam.
+  - The set's heat lands on the condenser's surface at the condenser's temperature difference. That asks for more surface than a hot aftercondenser would need, an excess in line with the owner's rule.
+
 ## 4. The sample's result
 
 | Item | Size | Closest limit |
