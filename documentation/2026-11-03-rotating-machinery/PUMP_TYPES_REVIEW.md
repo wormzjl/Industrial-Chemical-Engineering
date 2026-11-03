@@ -28,4 +28,6 @@ Batch `2026-11-03-rotating-machinery`, branch `claude/sad-elgamal-92e0e4` (W4). 
 - **Not proposed:** two-stage BB2, BB3, BB5, VS6, VS1. The 300 m cap stays inside single-stage practice. Raise them only if the owner raises the head cap past about 450 m.
 - **Recommendation: A.** In a refinery mod, the large pump is mostly hot or light hydrocarbon (crude charge, residue, pumparounds), where API 610 requires a radially split casing. A keeps one size switch and one large drawing. C is optional, for the owner to choose.
 
+**Owner pick 2026-11-04: A** ("Build A"), built on the same branch (`ProcessUnit.betweenBearingsPump`); C not taken.
+
 Sources: [A] API 610 radially split casing clause (10th ed. via ifsolutions.com/?p=2914 and the purchase-spec clause at lawinsider.com/clause/pressure-temperature). [K] KSB RPHb/RPHbd product page (ksb.com, R23B). [R] `../2026-10-15-custom-equipment-rendering/MACHINES_SCALE_RESEARCH.md` §1 (Goulds, Flowserve, Sulzer, KSB, Trillium sheets).

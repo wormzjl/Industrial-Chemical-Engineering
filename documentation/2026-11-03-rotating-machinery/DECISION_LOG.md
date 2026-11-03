@@ -15,6 +15,8 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 - **D7 (Q7), revised the same day.** First taken as recommended: 10 J per FE and 5.86 W per stress unit. Then the owner: "Create duty a bit overrated, research about actual water wheel duty". Create's water wheel is a 2 m stream wheel (paddles about 1 block from the axis, turned by water flowing past the rim), its large wheel 4 to 5 m. Real stream wheels of those sizes give 0.2 to 0.6 kW and 0.6 to 1.4 kW. Then the owner: "FE needs to match SU to prevent loopholes". Now: 2.5 J per FE (Mekanism's joule), and one FE per tick trades for 34.13 su, the rate of both Create electricity addons (16,384 su for 480 FE/t; config `create.stressPerFE`). A stress unit is `20 × 2.5 / 34.13` = 1.46 W: water wheel 0.38 kW, large wheel 0.75 kW, the middle of real stream wheels. No separate watt rate exists, so no FE and Create round trip gains energy, in either direction.
 - **D8 (Q8).** Create drives industrial shafts only; industrial shafts driving Create is later work.
 - **D9 (Q9).** Process simulator support after both batches merge.
+- **D10 (2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
+- **D11 (2026-11-04).** Owner: "review the pump types used in refinery, current large pump seems to be wrong type", then "Build A" (`PUMP_TYPES_REVIEW.md`). Above 0.4 m discharge the pump is an API 610 BB2 (radially split, between bearings, top suction and top discharge) instead of the BB1. The owner approves the moved nozzle pipe blocks of the four large sizes (sides to top).
 
 ## Taken under the standing instruction
 

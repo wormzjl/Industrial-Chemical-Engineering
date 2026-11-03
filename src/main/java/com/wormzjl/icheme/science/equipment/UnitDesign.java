@@ -196,7 +196,7 @@ public abstract class UnitDesign {
     /** The constructor's middle line: what the unit holds or does. */
     public abstract Line held(EquipmentShape shape);
 
-    /** The vessel screen's kind line's key suffix after {@code kind.<kind>} (a pump above {@link ProcessUnit#OH2_MAX} is split). */
+    /** The vessel screen's kind line's key suffix after {@code kind.<kind>} (a pump above {@link ProcessUnit#OH2_MAX} is radially split between bearings). */
     public String variant(EquipmentShape shape) {
         return "";
     }

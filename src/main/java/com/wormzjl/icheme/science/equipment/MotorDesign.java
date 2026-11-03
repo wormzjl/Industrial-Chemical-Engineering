@@ -170,6 +170,11 @@ final class MotorDesign extends UnitDesign {
         return (kw > LOW_VOLTAGE ? 1.15 : 1) * ProcessUnit.motorDiameter(kw);
     }
 
+    /** The highest base under a shaft at {@code y} of radius {@code rs} that still leaves its coupling guard room ({@link ProcessUnit#coupling}). */
+    static double guarded(double y, double rs) {
+        return y - Math.max(rs + .04, 2.2 * rs) - .06;
+    }
+
     @Override
     void build(ProcessUnit u) {
         var duty = u.shape.duty();
@@ -177,14 +182,20 @@ final class MotorDesign extends UnitDesign {
         int h = u.shape.support();
         double floor = h == 0 ? PLINTH : h, deck = floor + BASEPLATE, front = .2;
         var role = generator ? EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT : EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT;
-        double a, y, drive, half;
+        double a, y, drive, half, plinth = PLINTH;
         if (kw <= LOW_VOLTAGE) {
             // A TEFC motor: its fan cowl to the front, its drive end at the back, its shaft on the lowest cell centre
-            // whose feet stand on the baseplate.
+            // whose feet stand on the baseplate. At grade the concrete block rises to bring the baseplate up under its
+            // feet, as a pump's does (its shaft's height is the cell centre's).
             double r = ProcessUnit.motorDiameter(kw) / 2, fin = .025 + .06 * r, length = 3.2 * r + .1;
             half = r + fin + .08;
             a = ProcessUnit.centre(half + .12);
             y = Math.ceil(deck + r + .04 - .5) + .5;
+            if (h == 0) {
+                plinth = Math.max(PLINTH, Math.min(y - r - .02, guarded(y, rs)) - BASEPLATE);
+                floor = plinth;
+                deck = floor + BASEPLATE;
+            }
             drive = front + length;
             u.motor(Frame.of(new double[]{a, y, drive}, 2, -1), r, 0, length, 0, deck, ProcessUnit.MotorDetail.FULL);
         } else {
@@ -192,6 +203,12 @@ final class MotorDesign extends UnitDesign {
             half = r + .4 * terminal + .05;
             a = ProcessUnit.centre(half + .12);
             y = Math.ceil(deck + r + .1 - .5) + .5;
+            if (h == 0) {
+                // At grade the block rises to the base frame's beams under the feet, no posts.
+                plinth = Math.max(PLINTH, Math.min(y - r - ProcessUnit.BEAM, guarded(y, rs)) - BASEPLATE);
+                floor = plinth;
+                deck = floor + BASEPLATE;
+            }
             front = .35;
             drive = front + length;
             u.largeMotor(a, y, front, across, length, deck);
@@ -201,7 +218,7 @@ final class MotorDesign extends UnitDesign {
         u.coupling(a, y, drive, face, 1, rs, deck, ProcessUnit.shown(rpm), role);
         // The baseplate and the plinth or table under it.
         double z0 = front - .2, z1 = face - .2;
-        u.box(new double[]{a - half, floor, z0}, new double[]{a + half, deck, z1}, Material.STEELWORK, true);
-        u.driverBase(a - half - .1, a + half + .1, z0 - .05, z1 + .1, PLINTH, h);
+        u.baseplate(a - half, a + half, floor, deck, z0, z1);
+        u.driverBase(a - half - .1, a + half + .1, z0 - .05, z1 + .1, plinth, h);
     }
 }

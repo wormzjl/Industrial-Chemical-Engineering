@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * A centrifugal pump casing by its design point ({@link ProcessUnit#pump}; batch 2026-11-03-rotating-machinery, W4):
  * rated flow, rated head and speed class (2 or 4 poles). Its discharge carries the flow at 3 m/s; its impeller follows
- * the head and the speed. API 610 OH2 up to a {@link ProcessUnit#OH2_MAX} discharge, BB1 axially split above, up to
+ * the head and the speed. API 610 OH2 up to a {@link ProcessUnit#OH2_MAX} discharge, BB2 radially split between bearings above, both nozzles on top, up to
  * 0.6 m. It has no motor of its own: its shaft end takes a driver through a shaft block (owner decision D4). Its plinth
  * stands at grade; the constructor's Up lifts it onto a deck. A pump saved before its design point takes the datasheet's
  * values of its discharge (decision A3): the flow at 3 m/s, 100 m, 2 poles.

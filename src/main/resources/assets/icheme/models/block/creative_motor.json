@@ -4,7 +4,7 @@
     "particle": "icheme:block/equipment_motor",
     "motor": "icheme:block/equipment_motor",
     "base": "icheme:block/equipment_steelwork",
-    "shaft": "icheme:block/equipment_machine",
+    "shaft": "icheme:block/shaft_steel",
     "box": "icheme:block/equipment_actuator"
   },
   "elements": [

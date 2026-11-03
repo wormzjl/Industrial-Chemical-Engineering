@@ -260,7 +260,7 @@ class ProcessUnitTest {
                         Role.SOLIDS_OUTLET, "1-", Role.QUENCH, "1+", Role.LIQUID_OUTLET, "1-", Role.SYNGAS, "0+")));
         for (var kind : Kind.values()) assertEquals(kind.unit(), expected.containsKey(kind), kind + " has its nozzles' faces listed");
         for (var shape : everySize()) {
-            var sides = shape.kind() == Kind.PUMP && shape.diameter() > ProcessUnit.OH2_MAX ? Map.of(Role.SUCTION, "0-", Role.DISCHARGE, "0+") : expected.get(shape.kind());
+            var sides = shape.kind() == Kind.PUMP && shape.diameter() > ProcessUnit.OH2_MAX ? Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+") : expected.get(shape.kind());
             var nozzles = shape.nozzles();
             assertEquals(sides.keySet(), new HashSet<>(nozzles.stream().map(EquipmentShape.Nozzle::role).toList()), shape.toString());
             assertEquals(sides.size(), nozzles.size(), shape.toString());
