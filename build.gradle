@@ -495,11 +495,12 @@ def columnGates = gateGroup('column', 'science/column/v3',
         ['science/material', 'science/math', 'science/equipment/ColumnDesign*', 'science/fluid/transport/MixtureViscosity*',
          'science/thermo/IdealGasFunction*', 'science/thermo/PairInteractions*', 'science/thermo/PengRobinsonKernel*',
          'science/thermo/ThermoComponent*', 'science/thermo/TraceTruncationPolicy*', 'world/inventory/ColumnCalculatorV3Menu*',
-         'world/level/block/entity/ColumnCalculatorV3BlockEntity*', 'world/level/block/entity/ColumnInputPreset*'],
+         'world/level/block/entity/ColumnCalculatorV3BlockEntity*', 'world/level/block/entity/ColumnInputPreset*', 'network/ColumnWire*',
+         'science/equipment/ColumnComponents*'],
         ['network/ColumnCodecs*', 'science/material/CatalogScopedExtension*', 'science/material/Cdu17FixtureExtension*',
          'science/material/Cdu17TestCatalog*', 'science/material/MaterialTestBasis*', 'science/material/PilotCryogenicTestCatalog*',
          'science/material/TjlReferenceExtension*', 'science/thermo/PengRobinson78*', 'science/thermo/PhaseProperties*'],
-        ['column/**', 'materials/**', 'science/column/**'], ['data/icheme/neural/**', 'natives/**'])
+        ['column/**', 'materials/**', 'science/column/**', 'compat/presets/**'], ['data/icheme/neural/**', 'natives/**', 'assets/icheme/columnpreset/**', 'assets/icheme/mixturepreset/**'])
 def equipmentGates = gateGroup('equipment', 'science/equipment',
         ['science/material', 'science/math', 'science/fluid/topology/TopologyCompiler*', 'science/thermo/IdealGasFunction*',
          'science/thermo/PengRobinsonKernel*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*',
@@ -512,7 +513,7 @@ def equipmentGates = gateGroup('equipment', 'science/equipment',
          'science/fluid/network/HeatControl*', 'science/fluid/network/HeatCurve*', 'science/fluid/network/HeatLaw*',
          'science/fluid/network/HeatSide*', 'science/fluid/network/PipeResistance*', 'science/fluid/network/VesselGeometry*',
          'world/level/block/entity/ColumnDesignTags*', 'world/level/block/entity/EquipmentConstructorBlockEntity*',
-         'world/level/block/entity/EquipmentShellBlockEntity*'],
+         'world/level/block/entity/EquipmentShellBlockEntity*', 'world/level/block/entity/DeviceNames*'],
         ['science/column/v3/V3TestInputs*', 'science/column/v3/HollandB12Thermo*', 'science/column/v3/HollandExample32Data*', 'science/column/v3/V3HollandExample32*'],
         ['column/**', 'compat/**', 'materials/**'], ['assets/icheme/parts/**', 'assets/icheme/lang/**'])
 
