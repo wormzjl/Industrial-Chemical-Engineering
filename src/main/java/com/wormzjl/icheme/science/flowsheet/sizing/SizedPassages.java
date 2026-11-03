@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.Passages;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
+import com.wormzjl.icheme.science.flowsheet.unit.CoolerUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.FiredHeaterUnit;
 import com.wormzjl.icheme.science.fluid.network.PipeResistance;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
@@ -47,8 +48,10 @@ public final class SizedPassages {
                     if (!size.kettle()) laws.put("shell_drop", (in, out) -> shell(size, in, 1, thermo));
                 }
             }
-            case "air_cooler" -> {
-                if (facts.unit(id).size() instanceof AirCoolerSizing.Size size && UnitSize.built(size) != null) laws.put("drop", outlet((in, out) -> bank(size, in, out, 1, thermo)));
+            case "cooler" -> {
+                // Air: its banks at the stream's mean; Water: its shell, where the process passes (C2).
+                if (facts.unit(id).size() instanceof AirCoolerSizing.Size size && UnitSize.built(size) != null) laws.put(CoolerUnit.DROP, outlet((in, out) -> bank(size, in, out, 1, thermo)));
+                if (exchanger(facts.unit(id).size(), false) instanceof ExchangerSizing.Size size) laws.put(CoolerUnit.DROP, (in, out) -> shell(size, in, 1, thermo));
             }
             case "fired_heater" -> {
                 if (facts.unit(id).size() instanceof HeaterSizing.Size size && UnitSize.built(size) != null)
@@ -59,8 +62,11 @@ public final class SizedPassages {
                 // A member stands as many times as its door counts (S3b), each unit at the size its facts hold.
                 var door = ColumnDoor.of(unit.params());
                 var units = door.units();
-                if (door.condenser() == ColumnComponents.Condenser.EXCHANGER && exchanger(facts.unit(SheetSizing.member(id, "condenser")).size(), false) instanceof ExchangerSizing.Size size)
-                    laws.put(ColumnUnit.CONDENSER_DROP, (in, out) -> tube(size.withShells(units.condenser()), in, 1, thermo));
+                // The sheet's water passes an exchanger's tubes, or an air-then-water condenser's trim's (C2).
+                boolean trim = door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER;
+                int water = trim ? units.trim() : units.condenser();
+                if (door.condenser().waterCooled() && exchanger(facts.unit(SheetSizing.member(id, trim ? SheetSizing.TRIM : "condenser")).size(), false) instanceof ExchangerSizing.Size size)
+                    laws.put(ColumnUnit.CONDENSER_DROP, (in, out) -> tube(size.withShells(water), in, 1, thermo));
                 if (exchanger(facts.unit(SheetSizing.member(id, "reboiler")).size(), true) instanceof ExchangerSizing.Size size)
                     laws.put(ColumnUnit.REBOILER_DROP, (in, out) -> tube(size.withShells(units.kettle()), in, 1, thermo));
                 for (int i = 0; i < door.pumparounds().size(); i++) {
@@ -82,10 +88,10 @@ public final class SizedPassages {
     public static List<Object> reads(SizingFacts facts, Flowsheet.Unit unit) {
         String id = unit.id();
         return switch (unit.type()) {
-            case "exchanger", "kettle", "air_cooler", "fired_heater" -> Arrays.asList(facts.unit(id).size());
+            case "exchanger", "kettle", "cooler", "fired_heater" -> Arrays.asList(facts.unit(id).size());
             case "column" -> {
                 var door = ColumnDoor.of(unit.params());
-                var read = new ArrayList<Object>(Arrays.asList(facts.unit(SheetSizing.member(id, "condenser")).size(), facts.unit(SheetSizing.member(id, "reboiler")).size(), door.units()));
+                var read = new ArrayList<Object>(Arrays.asList(facts.unit(SheetSizing.member(id, "condenser")).size(), facts.unit(SheetSizing.member(id, SheetSizing.TRIM)).size(), facts.unit(SheetSizing.member(id, "reboiler")).size(), door.units(), door.condenser()));
                 for (var pumparound : door.pumparounds()) read.add(facts.unit(SheetSizing.member(id, "pa " + pumparound.id() + " cooler")).size());
                 yield read;
             }
@@ -95,13 +101,13 @@ public final class SizedPassages {
 
     /**
      * What {@code in} loses through {@code passage} of {@code size} at {@code flow} times its rate, Pa, on its way to {@code out}:
-     * an exchanger's shell by {@code shell_drop}, its tubes by any other; a bank; a heater's coils. Null where {@code size} has no
+     * an exchanger's shell by {@code shell_drop} or a water cooler's {@code drop}, its tubes by any other; a bank; a heater's coils. Null where {@code size} has no
      * law the constructor builds.
      */
     public static @Nullable Double drop(@Nullable UnitSize size, String passage, FlowStream in, @Nullable FlowStream out, double flow, FlowThermo thermo) {
         if (size == null || UnitSize.built(size) == null) return null;
         return switch (size) {
-            case ExchangerSizing.Size exchanger -> passage.equals("shell_drop") ? exchanger.kettle() ? null : (Double) shell(exchanger, in, flow, thermo) : (Double) tube(exchanger, in, flow, thermo);
+            case ExchangerSizing.Size exchanger -> passage.equals("shell_drop") || passage.equals(CoolerUnit.DROP) ? exchanger.kettle() ? null : (Double) shell(exchanger, in, flow, thermo) : (Double) tube(exchanger, in, flow, thermo);
             case AirCoolerSizing.Size cooler -> bank(cooler, in, out, flow, thermo);
             case HeaterSizing.Size heater -> coils(heater, passage, in, out, flow, thermo);
             default -> null;

@@ -72,7 +72,7 @@ public final class ResultsPage {
             switch (unit.type()) {
                 case "fired_heater" -> fired += duty;
                 case "exchanger", "kettle" -> recovered += Math.abs(duty);
-                case "air_cooler" -> cooled += Math.abs(duty);
+                case "cooler" -> cooled += Math.abs(duty);
                 default -> {
                 }
             }
@@ -309,7 +309,7 @@ public final class ResultsPage {
         String id = unit.id();
         double power = results.reading(id, "power"), duty = results.reading(id, "duty");
         // A cooler takes heat out of its stream, and reads below zero as the sheet's other coolers would.
-        if (unit.type().equals("air_cooler")) duty = -Math.abs(duty);
+        if (unit.type().equals("cooler")) duty = -Math.abs(duty);
         String work = !Double.isNaN(power) ? SheetUnits.number(1, power / 1e3) + " kW" : !Double.isNaN(duty) ? SheetUnits.megawatts(duty) + " MW" : "0";
         switch (unit.type()) {
             case "exchanger", "kettle" -> rows.add(new String[]{SheetUnits.megawatts(Math.abs(duty)) + " MW", x.text("results.sides", stateOf(x, x.into(id, "tube_in"), x.outOf(id, "tube_out"), false), stateOf(x, x.into(id, "shell_in"), x.outOf(id, "shell_out"), false))});

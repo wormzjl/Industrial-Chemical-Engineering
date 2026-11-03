@@ -4,6 +4,7 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnInspection;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.NozzleBore;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.equipment.SentDesign;
@@ -16,6 +17,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
+import com.wormzjl.icheme.science.flowsheet.unit.CoolerUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.FiredHeaterUnit;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver;
@@ -47,6 +49,8 @@ import java.util.function.Supplier;
  */
 public final class SheetSizing {
     private static final String OIL = "oil", WATER = "water", GAS = "gas", COLUMN = "column";
+    /** An air-then-water condenser's water exchanger, a member beside its air cooler, {@code condenser} (C2). */
+    public static final String TRIM = "trim";
     private static final String FEED = "feed", BOTTOMS = "bottoms", DISTILLATE = "distillate", OVERHEAD = "overhead", DRAW = "draw/", STEAM = "steam/";
 
     private SheetSizing() {
@@ -132,11 +136,19 @@ public final class SheetSizing {
      *
      * @param lines by stream, in sheet order, then each block's member lines
      * @param units by unit, in sheet order, each block's members under it
-     * @param paths the pressure paths, by the streams they start on, in sheet order
+     * @param paths      the pressure paths, by the streams they start on, in sheet order
+     * @param condensers each column's proposed condenser type, by its id (C2): the door's type is the player's and sets its ports,
+     *                   so sizing rates the door's and only shows this one
      */
-    public record Sized(Map<String, SizedLine> lines, Map<String, SizedUnit> units, List<PressurePath> paths) {
+    public record Sized(Map<String, SizedLine> lines, Map<String, SizedUnit> units, List<PressurePath> paths, Map<String, ColumnComponents.Condenser> condensers) {
         public Sized {
             paths = List.copyOf(paths);
+            condensers = Map.copyOf(condensers);
+        }
+
+        /** A sizing with no column's proposal. */
+        public Sized(Map<String, SizedLine> lines, Map<String, SizedUnit> units, List<PressurePath> paths) {
+            this(lines, units, paths, Map.of());
         }
     }
 
@@ -243,7 +255,8 @@ public final class SheetSizing {
 
     /**
      * A column's door as {@code proposal} leaves it, null where nothing moves: the column's diameter where the column is on Auto, and
-     * each member's count where that member is on Auto: the condenser's, the kettle's and each pumparound cooler's.
+     * each member's count where that member is on Auto: the condenser's, an air-then-water condenser's trim's (C2), the kettle's and
+     * each pumparound cooler's. Its condenser's type stays the player's.
      */
     private static com.google.gson.@Nullable JsonObject door(Flowsheet.Unit unit, SizingFacts facts, Sized proposal) {
         var door = ColumnDoor.of(unit.params());
@@ -255,7 +268,11 @@ public final class SheetSizing {
             moved = true;
         }
         var counts = door.units();
-        Integer condenser = proposedCount(unit.id(), "condenser", facts, proposal), kettle = proposedCount(unit.id(), "reboiler", facts, proposal);
+        Integer condenser = proposedCount(unit.id(), "condenser", facts, proposal), kettle = proposedCount(unit.id(), "reboiler", facts, proposal), trim = proposedCount(unit.id(), TRIM, facts, proposal);
+        if (door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER && trim != null && trim != counts.trim()) {
+            json.addProperty(ColumnDoor.TRIM_UNITS, trim);
+            moved = true;
+        }
         if (condenser != null && condenser != counts.condenser()) {
             json.addProperty(ColumnDoor.CONDENSER_UNITS, condenser);
             moved = true;
@@ -362,6 +379,8 @@ public final class SheetSizing {
         private final Map<String, SizedLine> memberLines = new LinkedHashMap<>();
         private final Map<String, Flowsheet.Unit> byId = new HashMap<>();
         private final Map<String, Flowsheet.Stream> streams = new HashMap<>();
+        /** Each column's proposed condenser type. */
+        private final Map<String, ColumnComponents.Condenser> condensers = new LinkedHashMap<>();
         /** Each heater's duty at design flow, MW, whose spare its path gives. */
         private final Map<String, Double> heaters = new LinkedHashMap<>();
 
@@ -415,7 +434,7 @@ public final class SheetSizing {
             }
             var all = new LinkedHashMap<>(lines);
             all.putAll(memberLines);
-            return new Sized(Collections.unmodifiableMap(all), Collections.unmodifiableMap(ordered), paths);
+            return new Sized(Collections.unmodifiableMap(all), Collections.unmodifiableMap(ordered), paths, condensers);
         }
 
         /** A run that failed, stopped or did not close: what it left is no steady state, so every item holds one red reading, and the size it was given. */
@@ -442,7 +461,7 @@ public final class SheetSizing {
                 case COLUMN -> column(id, entry, unit.params());
                 case "exchanger" -> exchanger(id, entry, false);
                 case "kettle" -> exchanger(id, entry, true);
-                case "air_cooler" -> airCooler(id, entry);
+                case "cooler" -> cooler(id, entry);
                 case "fired_heater" -> heater(id, entry);
                 case "compressor" -> compressor(id, entry);
                 case "drum" -> drum(id, entry);
@@ -459,9 +478,46 @@ public final class SheetSizing {
             return new SizedUnit(size, rate.apply(size));
         }
 
+        /**
+         * An exchanger or a kettle. An exchanger with one side free and the other cooled has tower water on the free side (C2), as the
+         * run gives it; a free side that heats is a utility this model has no temperature for, so it stays unsized.
+         */
         private SizedUnit exchanger(String id, UnitEntry entry, boolean kettle) {
+            if (!kettle && wired(id, "tube_in") != wired(id, "shell_in")) {
+                boolean tube = wired(id, "tube_in");
+                return exchanger(entry, ExchangerSizing.Load.cooled(stream(id, tube ? "tube_in" : "shell_in"), stream(id, tube ? "tube_out" : "shell_out"), basis, thermo, scratch));
+            }
             var shellOut = !kettle ? stream(id, "shell_out") : stream(id, "liquid").empty() ? stream(id, GAS) : stream(id, "liquid");
             return exchanger(entry, ExchangerSizing.Load.of(kettle, stream(id, "tube_in"), stream(id, "tube_out"), stream(id, kettle ? "feed" : "shell_in"), shellOut, basis, thermo, scratch));
+        }
+
+        /** Whether {@code unit}'s {@code port} has a stream on it. */
+        private boolean wired(String unit, String port) {
+            return wires.getOrDefault(unit, Map.of()).containsKey(port);
+        }
+
+        /**
+         * A heat pair's water side from {@code hotIn} to {@code hotOut}, the process on the shell: the sheet's stream on {@code in}
+         * and {@code out} where the port is wired, else tower water (C2).
+         */
+        private ExchangerSizing.@Nullable Load water(String unit, String in, String out, FlowStream hotIn, FlowStream hotOut) {
+            return wired(unit, in) ? ExchangerSizing.Load.of(false, stream(unit, in), stream(unit, out), hotIn, hotOut, basis, thermo, scratch)
+                    : ExchangerSizing.Load.cooled(hotIn, hotOut, basis, thermo, scratch);
+        }
+
+        /**
+         * A Cooler (C2): its type is the player's key, else its kept size's, else the proposal by its outlet ({@link CoolerSizing#type}).
+         * Air sizes an air cooler; Water an exchanger on tower water, which shows the duty an air cooler ahead of it would take.
+         */
+        private SizedUnit cooler(String id, UnitEntry entry) {
+            var in = stream(id, "in");
+            var out = stream(id, "out");
+            var kept = SizingFacts.UnitFacts.typeOf(entry.size());
+            var type = entry.type() != null ? entry.type() : kept != null ? kept : CoolerSizing.type(out.temperature());
+            if (type != UnitType.WATER_COOLER) return airCooler(entry, AirCoolerSizing.Load.of(in, out, basis, thermo, scratch));
+            var sized = exchanger(entry, ExchangerSizing.Load.cooled(in, out, basis, thermo, scratch));
+            double ahead = CoolerSizing.airAhead(in, out, thermo);
+            return ahead > 0 && !sized.rating().readings().isEmpty() ? new SizedUnit(sized.size(), sized.rating().with(Rating.AIR_AHEAD, ahead * basis.designFlow() / 1e6)) : sized;
         }
 
         private static SizedUnit exchanger(UnitEntry entry, ExchangerSizing.@Nullable Load load) {
@@ -554,7 +610,8 @@ public final class SheetSizing {
         /**
          * The block's members, from the run's own profile (section 3.6): the condenser on the top tray's vapour, a kettle on the
          * bottom tray's liquid, the receiver on the condensate, the reflux pump, and each pumparound's cooler and pump on the
-         * circulation its fall gives. Each cooler's cold side is the sheet's, at the door's duty.
+         * circulation its fall gives. Each cooler's cold side is the sheet's, at the door's duty, or tower water where its port is free
+         * (C2). An air-then-water condenser has its air cooler to the split and its water trim below it, each a member.
          */
         private void members(String id, Block block) {
             var out = new LinkedHashMap<String, SizedUnit>();
@@ -585,16 +642,35 @@ public final class SheetSizing {
             thermo.checkpoint().run();
             // A member's count is its door's (S3b): a kept size is rated at it, and Auto proposes one, the fewest units first.
             var counts = door.units();
+            // The proposal reads the top vapour and the receiver (C2); the door's type is the player's, and its members are sized on it.
+            condensers.put(id, CoolerSizing.condenser(top.temperatureKelvin(), condenser.temperatureKelvin()));
+            // An air-then-water condenser's air cools the overhead to the split, and its water trim from there to the receiver.
+            var split = condensed;
+            // A twin whose member has no duty stays the player's: that member reads TWIN_IDLE at its kept size, or the smallest.
+            var idle = door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER ? CoolerSizing.twinIdle(top.temperatureKelvin(), condenser.temperatureKelvin()) : null;
+            if (door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER) {
+                double at = HeatSides.airSplit(top.temperatureKelvin(), condenser.temperatureKelvin());
+                split = idle == CoolerSizing.Idle.AIR ? overhead : idle == CoolerSizing.Idle.TRIM ? condensed : thermo.atTemperature(at, condenser.pressurePascal(), condensing, SolidInventory.EMPTY);
+            }
             if (door.condenser() == ColumnComponents.Condenser.EXCHANGER) {
-                var load = ExchangerSizing.Load.of(false, stream(id, "condenser_in"), stream(id, "condenser_out"), overhead, condensed, basis, thermo, scratch);
+                var load = water(id, "condenser_in", "condenser_out", overhead, condensed);
                 var sized = exchanger(counted(entries.unit(member(id, "condenser")), counts.condenser()), load);
                 out.put(member(id, "condenser"), sized);
                 if (load != null && sized.size() instanceof ExchangerSizing.Size size) coolerDrop = ExchangerSizing.shellDrop(load, size);
+            } else if (idle == CoolerSizing.Idle.AIR) {
+                out.put(member(id, "condenser"), idle(counted(entries.unit(member(id, "condenser")), counts.condenser()), AirCoolerSizing.smallest().withBanks(counts.condenser())));
             } else {
-                var load = AirCoolerSizing.Load.of(overhead, condensed, basis, thermo, scratch);
+                var load = AirCoolerSizing.Load.of(overhead, split, basis, thermo, scratch);
                 var sized = airCooler(counted(entries.unit(member(id, "condenser")), counts.condenser()), load);
                 out.put(member(id, "condenser"), sized);
                 if (load != null && sized.size() instanceof AirCoolerSizing.Size size) coolerDrop = AirCoolerSizing.drop(load, size);
+            }
+            if (idle == CoolerSizing.Idle.TRIM) out.put(member(id, TRIM), idle(counted(entries.unit(member(id, TRIM)), counts.trim()), ExchangerSizing.smallest().withShells(counts.trim())));
+            else if (door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER) {
+                var load = water(id, "condenser_in", "condenser_out", split, condensed);
+                var sized = exchanger(counted(entries.unit(member(id, TRIM)), counts.trim()), load);
+                out.put(member(id, TRIM), sized);
+                if (load != null && sized.size() instanceof ExchangerSizing.Size size) coolerDrop += ExchangerSizing.shellDrop(load, size);
             }
             int stages = solved.stageCount();
             if (ColumnComponents.kettleRequired(door.reboilerDuty())) {
@@ -635,7 +711,7 @@ public final class SheetSizing {
                 var draw = nodes.get(pumparound.drawTray());
                 var hot = circulation(solved, draw, -pumparound.duty());
                 var cooled = thermo.atTemperature(hot.temperature() - basis.paFall(), hot.pressure(), hot.amounts(), SolidInventory.EMPTY);
-                var load = ExchangerSizing.Load.of(false, stream(id, "pa/" + pumparound.id() + "/in"), stream(id, "pa/" + pumparound.id() + "/out"), hot, cooled, basis, thermo, scratch);
+                var load = water(id, "pa/" + pumparound.id() + "/in", "pa/" + pumparound.id() + "/out", hot, cooled);
                 var cooler = exchanger(counted(entries.unit(member(id, name + " cooler")), counts.cooler(i)), load);
                 out.put(member(id, name + " cooler"), cooler);
                 var drawLine = memberLine(member(id, name + " draw"), hot, new Service.Ends(true, true), block.nozzle(EquipmentShape.Role.PUMPAROUND_DRAW, i + 1));
@@ -647,6 +723,12 @@ public final class SheetSizing {
                 out.put(member(id, name + " pump"), pump(member(id, name + " pump"), drawLine, hot, paRise, level));
             }
             members.put(id, out);
+        }
+
+        /** An idle twin member (C2): its kept size, else {@code smallest}, built or not, and yellow on {@link Limit#TWIN_IDLE}. */
+        private static SizedUnit idle(UnitEntry entry, UnitSize smallest) {
+            var size = entry.size() != null ? entry.size() : smallest;
+            return new SizedUnit(size, new Rating(List.of(UnitSize.reading(UnitSize.built(size)), Limit.TWIN_IDLE.read(0))));
         }
 
         /** {@code entry} with its kept size at {@code count} units in parallel: a member's count is its door's. Auto's entry stays. */
@@ -846,7 +928,7 @@ public final class SheetSizing {
                     else if (port.equals("shell_in")) through(walk, id, id, "shell_drop", params.number("shell_drop", 0), streamId, "shell_out", steps, seen, sized, paths);
                     else end(walk, id, null, steps, null, paths);
                 }
-                case "air_cooler" -> through(walk, id, id, "drop", params.number("drop", 0), streamId, "out", steps, seen, sized, paths);
+                case "cooler" -> through(walk, id, id, CoolerUnit.DROP, params.number(CoolerUnit.DROP, 0), streamId, "out", steps, seen, sized, paths);
                 case "fired_heater" -> {
                     switch (port) {
                         case "in" -> through(walk, id, id, FiredHeaterUnit.COILS, params.number(FiredHeaterUnit.RADIANT_DROP, 0) + params.number(FiredHeaterUnit.CONVECTION_DROP, 0), streamId, "out", steps, seen, sized, paths);
@@ -883,7 +965,9 @@ public final class SheetSizing {
             String id = unit.id();
             var door = ColumnDoor.of(unit.params());
             if (port.equals("condenser_in")) {
-                through(walk, id, member(id, "condenser"), ColumnUnit.CONDENSER_DROP, door.condenserDrop(), streamId, "condenser_out", steps, seen, sized, paths);
+                // An air-then-water condenser's water passes through its trim's tubes.
+                var member = member(id, door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER ? TRIM : "condenser");
+                through(walk, id, member, ColumnUnit.CONDENSER_DROP, door.condenserDrop(), streamId, "condenser_out", steps, seen, sized, paths);
                 return;
             }
             if (port.equals("reboiler_in")) {

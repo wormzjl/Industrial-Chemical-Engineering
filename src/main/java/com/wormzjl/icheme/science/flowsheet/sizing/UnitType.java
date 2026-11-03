@@ -15,7 +15,11 @@ public enum UnitType {
     STANDING_DRUM(EquipmentShape.Kind.DRUM),
     LYING_DRUM(EquipmentShape.Kind.DRUM),
     PISTON(EquipmentShape.Kind.COMPRESSOR),
-    TURBO(EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR);
+    TURBO(EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR),
+    /** The Cooler tile on air (C2, {@code COOLER_MODEL_PLAN.md} section 3 item 4): an air cooler. */
+    AIR_COOLER(EquipmentShape.Kind.AIR_COOLER),
+    /** The Cooler tile on tower water: an exchanger with the process on its shell and the water on its tubes. */
+    WATER_COOLER(EquipmentShape.Kind.EXCHANGER);
 
     private final EquipmentShape.Kind kind;
 

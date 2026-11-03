@@ -36,6 +36,12 @@ public final class HeatSides {
      */
     public static final double AIR_SPLIT_TEMPERATURE=AIR_TEMPERATURE+15;
     /**
+     * Tower water as it comes to a cooler, K: 25 °C, what the world's cooling tower is calibrated to give back from 35 °C water on
+     * 25 °C air at 50 % humidity (batch 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 1). The simulator gives
+     * it to every free cooling side; no cooler takes a stream below its coolant's inlet.
+     */
+    public static final double TOWER_WATER_TEMPERATURE=298.15;
+    /**
      * Where an air-then-water condenser's air hands the overhead to its water trim, K: the split, but never below the
      * receiver (the trim then has no duty) nor above the top vapour (the air then has none).
      */

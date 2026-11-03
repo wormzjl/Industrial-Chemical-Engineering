@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.google.gson.JsonParser;
+import com.wormzjl.icheme.science.column.operation.ColumnSolve;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
@@ -119,8 +120,12 @@ final class FlowsheetColumnTest {
     }
 
     private static V3ColumnResult calculator() {
+        return calculator(BASE);
+    }
+
+    private static V3ColumnResult calculator(V3ColumnInput input) {
         var options = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
-        var outcome = MaterialRuntime.with(CATALOG, BASE.packageId(), () -> V3ColumnCalculator.calculate(BASE, V3SolveControl.UNBOUNDED, 0, 0, options, V3NeuralRegistry.bundled().bind(CATALOG, BASE), V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO));
+        var outcome = MaterialRuntime.with(CATALOG, input.packageId(), () -> V3ColumnCalculator.calculate(input, V3SolveControl.UNBOUNDED, 0, 0, options, V3NeuralRegistry.bundled().bind(CATALOG, input), V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO));
         return ((V3ColumnOutcome.Success) outcome).result();
     }
 
@@ -140,6 +145,33 @@ final class FlowsheetColumnTest {
         assertEquals(-ledger.condenserWatts(), run.reports().get("T").readings().get("condenser"), 0);
         assertEquals(ledger.reboilerWatts(), run.reports().get("T").readings().get("reboiler"), 0);
         assertEquals(run.reports().get("T").readings().get("energy_gap"), run.heatGap(), 1, "free sides book their heat: what is left is what the two thermo models differ by");
+    }
+
+    /**
+     * C2 ({@code COOLER_MODEL_PLAN.md} section 6): an air-then-water condenser with a 35 °C receiver reads its air's share and its
+     * water's, which sum to its duty; the water's is the world's trim ({@link ColumnSolve#trim}) on the calculator's own column, the
+     * overhead from the 40 °C split to the receiver. Its free water side warns of nothing at 35 °C.
+     */
+    @Test void anAirThenWaterCondenserSplitsItsDutyAsTheWorldDoes() {
+        double receiver = 308.15;
+        var params = ColumnDoor.from(BASE, ColumnComponents.Condenser.AIR_THEN_WATER);
+        params.json().addProperty("condenser_temperature", receiver);
+        var input = ColumnDoor.of(params).input(CATALOG.packages().get(BASE.packageId()), BASE.feedComponentMolarFlowsMolPerSecond(), BASE.feedTemperatureKelvin());
+        var direct = calculator(input);
+        var sheet = new Sheet().unit("T", "column", params).feed("feed", "T", "feed", crude(BASE.feedTemperatureKelvin(), feedTray(direct)))
+                .product("overhead", "T", "overhead").product("distillate", "T", "distillate").product("water", "T", "water").product("bottoms", "T", "bottoms");
+        for (int row = 1; row <= BASE.sideDraws().size(); row++) sheet.product("draw " + row, "T", "draw/" + row);
+        var run = sheet.run();
+        assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
+        var readings = run.reports().get("T").readings();
+        double whole = readings.get("condenser"), air = readings.get("condenser_air"), water = readings.get("condenser_water");
+        assertEquals(whole, air + water, 1e-12 * whole, "the two shares are the duty");
+        assertTrue(water > 0 && water < air, () -> "the trim takes a small share: " + readings);
+        var model = MaterialRuntime.with(CATALOG, NETWORK, () -> FluidThermodynamics.forNetwork(CATALOG, NETWORK));
+        double world = -MaterialRuntime.with(CATALOG, NETWORK, () -> ColumnSolve.trim(model, direct.inspection().orElseThrow(), input.componentBasis(), AXIS, receiver, -whole, () -> {
+        }));
+        assertEquals(world, water, 1e-9 * whole, "the world's share on the same column");
+        assertFalse(run.reports().get("T").notes().stream().anyMatch(note -> note.key().equals("column.condenser_coolant")));
     }
 
     /** A door holding a package gone from this version takes the sheet's, as it does for a feed its own cannot hold. */
@@ -184,7 +216,7 @@ final class FlowsheetColumnTest {
     private static Sheet sample(String furnace) {
         return new Sheet().unit("P-101", "pump", "{\"pressure\":14e5}").unit("T-101", "column", door(ColumnComponents.Condenser.EXCHANGER))
                 .unit("E-101", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":473.15,\"tube_drop\":0.5e5,\"shell_drop\":0.3e5}")
-                .unit("H-101", "fired_heater", furnace).unit("V-101", "valve", "{\"pressure\":2.72e5}").unit("E-102", "air_cooler", "{\"temperature\":343.15,\"drop\":0.2e5}").unit("P-102", "pump", "{\"pressure\":6e5}")
+                .unit("H-101", "fired_heater", furnace).unit("V-101", "valve", "{\"pressure\":2.72e5}").unit("E-102", "cooler", "{\"temperature\":343.15,\"drop\":0.2e5}").unit("P-102", "pump", "{\"pressure\":6e5}")
                 .line("S-1", "P-101", "out", "T-101", "pa/1/in").line("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in").line("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in")
                 .line("S-4", "T-101", "pa/3/out", "E-101", "tube_in").line("S-5", "E-101", "tube_out", "H-101", "in").line("S-6", "H-101", "out", "V-101", "in").line("S-7", "V-101", "out", "T-101", "feed")
                 .feed("STEAM", "T-101", "steam/1", water(BASE.steamFeeds().getFirst().temperatureKelvin(), 3.5e5, BASE.steamFeeds().getFirst().molarFlowMolPerSecond()))

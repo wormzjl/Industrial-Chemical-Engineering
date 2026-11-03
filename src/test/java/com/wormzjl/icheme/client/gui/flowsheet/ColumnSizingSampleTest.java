@@ -289,6 +289,32 @@ class ColumnSizingSampleTest {
     }
 
     /**
+     * The owner (C2 addendum): "it's pointless to use twin cooler config if you don't need to cool below 40C". The sample's T-101
+     * held on air then water at its own 59 °C receiver gives its trim no duty in the run, so sizing proposes Air, gives the trim the
+     * smallest exchanger and reads it yellow on the one Should row, never red.
+     */
+    @Test
+    void aTwinCondenserAboveTheSplitLeavesItsTrimIdle() {
+        var twin = door(sheet, json -> json.addProperty("condenser", "AIR_THEN_WATER"), "CWS", "CWR");
+        var twinRun = FlowsheetEngine.run(twin, SheetFixture.CATALOG, () -> {
+        });
+        assertEquals(FlowsheetRun.Status.STEADY, twinRun.status(), () -> twinRun.log().toString());
+        var readings = twinRun.reports().get(T).readings();
+        assertEquals(0, readings.get("condenser_water"), 1e-6 * readings.get("condenser"), "no trim duty above the split");
+        var twinSized = size(twin, twinRun, thermo, SheetSizing.Entries.DEFAULT);
+        assertEquals(com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.AIR_COOLER, twinSized.condensers().get(T));
+        var trim = twinSized.units().get(SheetSizing.member(T, SheetSizing.TRIM));
+        System.out.println("TWIN IDLE\t" + trim.size() + "\t" + text(trim.rating()));
+        assertEquals(ExchangerSizing.smallest(), trim.size());
+        assertEquals(Lamp.YELLOW, trim.rating().reading(Limit.TWIN_IDLE).lamp(), () -> text(trim.rating()));
+        assertEquals(Lamp.YELLOW, trim.rating().lamp(), () -> text(trim.rating()));
+        var air = twinSized.units().get(SheetSizing.member(T, "condenser"));
+        assertInstanceOf(AirCoolerSizing.Size.class, air.size());
+        assertNull(air.rating().reading(Limit.TWIN_IDLE));
+        assertNotEquals(Lamp.RED, air.rating().lamp(), () -> text(air.rating()));
+    }
+
+    /**
      * A column with reboiler duty boils its bottom tray's liquid in S2's kettle, on what its reboiler pair brings: water at 100 bar
      * and 800 K, hot enough over a crude bottom near 350 °C, as steam at 20 bar is not.
      */

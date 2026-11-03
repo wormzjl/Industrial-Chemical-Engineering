@@ -24,11 +24,13 @@ import java.util.List;
  * one row moves no other row's wires. Pressures, temperatures and flows are SI, and a duty keeps the column's sign: positive adds
  * heat to it, so a pumparound's is negative.
  *
- * @param condenser      what condenses the overhead; an exchanger has a cooling pair, an air cooler none
+ * @param condenser      what condenses the overhead; an exchanger has a cooling pair, an air cooler none, air then water a pair on its
+ *                       water trim
  * @param condenserDrop  the drop across the condenser's cold side (Pa)
  * @param reboilerDrop   the drop across the kettle's tube side (Pa)
  * @param units          how many identical units stand in parallel on the condenser, the kettle and each pumparound's cooler
- *                       (S3b): {@code condenser_units}, {@code kettle_units} and a pumparound row's {@code units}, 1 where absent
+ *                       (S3b): {@code condenser_units}, {@code kettle_units}, {@code trim_units} (C2) and a pumparound row's
+ *                       {@code units}, 1 where absent
  * @param ejector        the ejector on the vapour line where the top is under ambient pressure (W10): {@code ejector_discharge} and
  *                       {@code ejector_motive}, the tile's defaults where absent
  */
@@ -79,12 +81,15 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
         }
         return new ColumnDoor(p.text("package", ""), p.text("assay", ""), (int) p.number("stages"), (int) p.number("feed_stage"), p.number("top_pressure"), p.number("stage_drop"), p.number("diameter", 0),
                 p.number("condenser_temperature"), p.number("reflux"), p.number("reboiler_duty"), condenser(p), p.number("condenser_drop", 0), p.number("reboiler_drop", 0), draws, steam, pumparounds,
-                new ColumnComponents.Units(units(p, CONDENSER_UNITS), units(p, KETTLE_UNITS), coolers),
+                new ColumnComponents.Units(units(p, CONDENSER_UNITS), units(p, KETTLE_UNITS), coolers, units(p, TRIM_UNITS)),
                 new Ejector(p.number(EJECTOR_DISCHARGE, EjectorUnit.DISCHARGE_PRESSURE), p.number(EJECTOR_MOTIVE, EjectorUnit.MOTIVE_PRESSURE)));
     }
 
-    /** The settings that hold the member counts: the door's two and a pumparound row's own. */
-    public static final String CONDENSER_UNITS = "condenser_units", KETTLE_UNITS = "kettle_units", UNITS = "units";
+    /**
+     * The settings that hold the member counts: the door's three and a pumparound row's own. {@code trim_units} is an air-then-water
+     * condenser's water trim shells (C2), 1 where absent; with that condenser {@code condenser_units} counts its air cooler's banks.
+     */
+    public static final String CONDENSER_UNITS = "condenser_units", KETTLE_UNITS = "kettle_units", TRIM_UNITS = "trim_units", UNITS = "units";
 
     /** A member count: 1 where absent, a whole number from 1 to {@link ColumnComponents#MAX_UNITS}, else refused by name. */
     private static int units(Params p, String key) {

@@ -300,14 +300,41 @@ final class FlowsheetUnitsTest {
     }
 
     @Test void anAirCoolerRemovesHeatAndCannotAddIt() {
-        var run = closes(sheet().unit("A", "air_cooler", "{\"temperature\":320,\"drop\":1e4}")
+        var run = closes(sheet().unit("A", "cooler", "{\"temperature\":320,\"drop\":1e4}")
                 .feed("in", "A", "in", feed(380, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
         assertEquals(320, run.streams().get("out").temperature(), 1e-9);
         assertEquals(run.streams().get("in").enthalpy() - run.streams().get("out").enthalpy(), reading(run, "A", "duty"), 1e-3);
-        var heats = closes(sheet().unit("A", "air_cooler", "{\"temperature\":400}")
+        var heats = closes(sheet().unit("A", "cooler", "{\"temperature\":400}")
                 .feed("in", "A", "in", feed(380, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
         assertEquals(380, heats.streams().get("out").temperature(), 1e-3, "the stream passes");
         assertTrue(logged(heats, "cooler.heats"));
+    }
+
+    /**
+     * C2: air and tower water come in at 25 °C, so a Cooler's outlet or duty target below it stops there and says so, as does an
+     * exchanger's set side against a free side; a free side that heats stays as it is.
+     */
+    @Test void aCoolerStopsAtItsCoolant() {
+        var outlet = closes(sheet().unit("A", "cooler", "{\"temperature\":283.15}")
+                .feed("in", "A", "in", feed(360, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
+        assertEquals(298.15, outlet.streams().get("out").temperature(), 1e-9);
+        assertTrue(logged(outlet, "cooler.coolant"));
+        var duty = closes(sheet().unit("A", "cooler", "{\"target\":\"duty\",\"duty\":1e9}")
+                .feed("in", "A", "in", feed(360, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
+        assertEquals(298.15, duty.streams().get("out").temperature(), 1e-9);
+        assertEquals(duty.streams().get("in").enthalpy() - duty.streams().get("out").enthalpy(), reading(duty, "A", "duty"), 1e-3);
+        var held = closes(sheet().unit("A", "cooler", "{\"temperature\":303.15}")
+                .feed("in", "A", "in", feed(360, 3e5, PURE_WATER, 100)).product("out", "A", "out").run());
+        assertEquals(303.15, held.streams().get("out").temperature(), 1e-9);
+        assertFalse(logged(held, "cooler.coolant"), "30 °C stands");
+        var free = closes(sheet().unit("E", "exchanger", "{\"side\":\"shell\",\"temperature\":283.15}")
+                .feed("in", "E", "shell_in", feed(360, 3e5, PURE_WATER, 100)).product("out", "E", "shell_out").run());
+        assertEquals(298.15, free.streams().get("out").temperature(), 1e-9);
+        assertTrue(logged(free, "cooler.coolant"));
+        var heated = closes(sheet().unit("E", "exchanger", "{\"side\":\"shell\",\"temperature\":283.15}")
+                .feed("in", "E", "shell_in", feed(270, 3e5, NITROGEN, 100)).product("out", "E", "shell_out").run());
+        assertEquals(283.15, heated.streams().get("out").temperature(), 1e-9, "a free side that heats is out of scope");
+        assertFalse(logged(heated, "cooler.coolant"));
     }
 
     @Test void aFiredHeaterTakesBothDropsAndStopsAtItsLimit() {
@@ -418,9 +445,11 @@ final class FlowsheetUnitsTest {
         }
     }
 
+    /** Cooled by a refrigerant's cold side, as no air or tower water can take water under 25 °C (C2). */
     @Test void waterColdEnoughToFreezeStaysALiquidStandIn() {
-        var run = closes(sheet().unit("A", "air_cooler", "{\"target\":\"duty\",\"duty\":1.2e6}")
-                .feed("in", "A", "in", feed(300, 5e5, PURE_WATER, 100)).product("out", "A", "out").run());
+        var run = closes(sheet().unit("E", "exchanger", "{\"target\":\"duty\",\"side\":\"shell\",\"duty\":-1.2e6}")
+                .feed("in", "E", "shell_in", feed(300, 5e5, PURE_WATER, 100)).product("out", "E", "shell_out")
+                .feed("cold", "E", "tube_in", feed(110, 5e5, NITROGEN, 5000)).product("cold out", "E", "tube_out").run());
         assertTrue(run.streams().get("out").temperature() < 273, "no ice on a stream (D23): the energy still closes");
     }
 

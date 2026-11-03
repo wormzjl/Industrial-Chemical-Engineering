@@ -83,8 +83,30 @@ public final class ExchangerSizing {
      * @param coldEnd   K
      * @param approach  the least difference along it, K
      * @param waterOut  cooling water's outlet, °C, null if its cold side is no water
+     * @param tower     a free water side's tower water at design flow, null where both sides are the sheet's
      */
-    public record Load(boolean kettle, LineSizing.Carried tube, LineSizing.@Nullable Carried shell, Limit tubeDrop, @Nullable Limit shellDrop, double needed, double duty, double hotEnd, double coldEnd, double approach, @Nullable Double waterOut) {
+    public record Load(boolean kettle, LineSizing.Carried tube, LineSizing.@Nullable Carried shell, Limit tubeDrop, @Nullable Limit shellDrop, double needed, double duty, double hotEnd, double coldEnd, double approach, @Nullable Double waterOut,
+                       @Nullable Tower tower) {
+        /** A load whose two sides are the sheet's. */
+        public Load(boolean kettle, LineSizing.Carried tube, LineSizing.@Nullable Carried shell, Limit tubeDrop, @Nullable Limit shellDrop, double needed, double duty, double hotEnd, double coldEnd, double approach, @Nullable Double waterOut) {
+            this(kettle, tube, shell, tubeDrop, shellDrop, needed, duty, hotEnd, coldEnd, approach, waterOut, null);
+        }
+
+        /**
+         * A free cooling side's load (C2, {@code COOLER_MODEL_PLAN.md} section 3 item 3): {@code in} cooled to {@code out} against
+         * tower water from 25 °C to its return ({@link CoolerSizing#waterReturn}), on the tubes, the process on the shell; null
+         * where nothing is cooled.
+         */
+        public static @Nullable Load cooled(FlowStream in, FlowStream out, DesignBasis basis, FlowThermo thermo, MixtureViscosity.Workspace scratch) {
+            var water = CoolerSizing.water(in, out, thermo);
+            if (water == null) return null;
+            var load = of(false, water.supply(), water.back(), in, out, basis, thermo, scratch);
+            if (load == null) return null;
+            double flow = basis.designFlow();
+            var tower = new Tower(water.supply().mass() * flow, LineSizing.Carried.of(water.supply(), flow, thermo, scratch).volume() * 3600);
+            return new Load(load.kettle, load.tube, load.shell, load.tubeDrop, load.shellDrop, load.needed, load.duty, load.hotEnd, load.coldEnd, load.approach, load.waterOut, tower);
+        }
+
         /**
          * The unit between these streams, null if it passes no heat. A free side's outlet leaves no surface to read, so an exchanger
          * with a utility on one side has no load either.
@@ -111,7 +133,7 @@ public final class ExchangerSizing {
             var waterOut = Service.water(coldIn.state()) ? (Double) (coldOut.temperature() - 273.15) : null;
             var tube = LineSizing.Carried.of(tubeIn, flow, thermo, scratch);
             var shell = kettle ? null : LineSizing.Carried.of(shellIn, flow, thermo, scratch);
-            return new Load(kettle, tube, shell, drop(tubeIn, tubeOut, !tubeHot, thermo), kettle ? null : drop(shellIn, shellOut, tubeHot, thermo), needed, duty, hotEnd, coldEnd, approach, waterOut);
+            return new Load(kettle, tube, shell, drop(tubeIn, tubeOut, !tubeHot, thermo), kettle ? null : drop(shellIn, shellOut, tubeHot, thermo), needed, duty, hotEnd, coldEnd, approach, waterOut, null);
         }
 
         /** The row a side answers to, by the world's film along it: what boils, what comes in as a gas or to condense, or a liquid. */
@@ -122,7 +144,16 @@ public final class ExchangerSizing {
         }
     }
 
-    /** Every limit of {@code load} read at {@code size}, any size. Null load, nothing to read. */
+    /** The smallest exchanger Auto knows, the size it gives a member with no need. */
+    public static Size smallest() {
+        return EXCHANGERS.getFirst();
+    }
+
+    /** A free side's tower water at design flow: kg/s, and m³/h. */
+    public record Tower(double mass, double volume) {
+    }
+
+    /** Every limit of {@code load} read at {@code size}, any size, and a free side's water beside them. Null load, nothing to read. */
     public static Rating rate(@Nullable Load load, Size size) {
         if (load == null) return Rating.NONE;
         double surface = size.surface();
@@ -139,7 +170,9 @@ public final class ExchangerSizing {
         if (load.kettle()) readings.add(Limit.KETTLE_FLUX.read(load.duty() / 1e3 / surface));
         var water = load.waterOut();
         if (water != null) readings.add(Limit.EXCHANGER_WATER_OUT.read(water));
-        return new Rating(readings);
+        var rating = new Rating(readings);
+        var tower = load.tower();
+        return tower == null ? rating : rating.with(Rating.WATER, tower.mass()).with(Rating.WATER_VOLUME, tower.volume());
     }
 
     /** What {@code load}'s shell side loses at {@code size} at design flow, bar: 0 on a kettle, whose shell boils in a pool. */

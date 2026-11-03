@@ -328,6 +328,65 @@ final class FlowsheetFileTest {
         assertEquals(List.of("sheet.sizing.units.J-1.size"), refusal.arguments(), "a suction no ejector has is damage");
     }
 
+    /**
+     * C2: the Cooler keeps its type key, Water with an exchanger's size, and an air-then-water column door its trim's shells; a door
+     * saved before the count reads one shell.
+     */
+    @Test void aCoolerKeepsItsTypeAndADoorItsTrim() throws IOException {
+        byte[] bytes = Files.readAllBytes(CORPUS.resolve("format-1-coolers.json"));
+        var sheet = FlowsheetFile.read(bytes);
+        assertEquals(UnitType.WATER_COOLER, sheet.sizing().unit("A-1").type());
+        assertEquals(new ExchangerSizing.Size(false, 1, 1., 6), sheet.sizing().unit("A-1").size());
+        assertEquals(UnitType.AIR_COOLER, sheet.sizing().unit("A-2").type());
+        var door = sheet.units().get(2).params();
+        assertEquals("AIR_THEN_WATER", door.text("condenser", ""));
+        assertEquals(3, door.number(com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.TRIM_UNITS));
+        assertEquals(new ExchangerSizing.Size(false, 3, 1.25, 5), sheet.sizing().unit("T-1/trim").size());
+        assertEquals(tree(bytes), tree(FlowsheetFile.write(sheet)), "the count and the key write back");
+        // A whole door reads the count, one where absent; a count past a member step's most is refused by name.
+        var whole = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.from(CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG), com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.AIR_THEN_WATER);
+        assertEquals(1, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(whole).units().trim(), "one shell where absent");
+        whole.json().addProperty("trim_units", 3);
+        assertEquals(3, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(whole).units().trim());
+        whole.json().addProperty("trim_units", 7);
+        assertEquals(List.of("trim_units"), assertThrows(FlowsheetFailure.class, () -> com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(whole)).arguments());
+    }
+
+    /**
+     * C2: a unit saved as an air cooler reads as a Cooler held on Air, its kept size with it, and writes back under today's name; a
+     * key it already holds stands.
+     */
+    @Test void anAirCoolerReadsAsACoolerHeldOnAir() throws IOException {
+        var json = tree(Files.readAllBytes(CORPUS.resolve("format-1-coolers.json")));
+        unit(json, "A-1").addProperty("type", "air_cooler");
+        unit(json, "A-2").addProperty("type", "air_cooler");
+        var units = json.getAsJsonObject("sizing").getAsJsonObject("units");
+        units.remove("A-1");
+        var kept = JsonParser.parseString("{\"mode\": \"FIXED\", \"size\": {\"kind\": \"AIR_COOLER\", \"width\": 2.0, \"length\": 5, \"parallel\": 2, \"series\": 1}}").getAsJsonObject();
+        units.add("A-1", kept);
+        units.getAsJsonObject("A-2").addProperty("type", "WATER_COOLER");
+        var sheet = FlowsheetFile.read(bytes(json));
+        assertEquals("cooler", sheet.units().get(0).type());
+        assertEquals(UnitType.AIR_COOLER, sheet.sizing().unit("A-1").type());
+        assertEquals(SizingFacts.Mode.FIXED, sheet.sizing().unit("A-1").mode());
+        assertEquals(new AirCoolerSizing.Size(2, 5, new com.wormzjl.icheme.science.equipment.ProcessUnit.Bank(2, 1)), sheet.sizing().unit("A-1").size(), "its kept size stays");
+        assertEquals(UnitType.WATER_COOLER, sheet.sizing().unit("A-2").type(), "a key it holds stands");
+        var written = tree(FlowsheetFile.write(sheet));
+        assertEquals("cooler", unit(written, "A-1").get("type").getAsString());
+        assertEquals("AIR_COOLER", written.getAsJsonObject("sizing").getAsJsonObject("units").getAsJsonObject("A-1").get("type").getAsString());
+        assertEquals(sheet, FlowsheetFile.read(FlowsheetFile.write(sheet)));
+        var bare = image();
+        var row = new JsonObject();
+        row.addProperty("id", "A-9");
+        row.addProperty("type", "air_cooler");
+        row.addProperty("name", "E-9");
+        row.addProperty("x", 0);
+        row.addProperty("y", 0);
+        row.add("params", new JsonObject());
+        bare.getAsJsonArray("units").add(row);
+        assertEquals(UnitType.AIR_COOLER, FlowsheetFile.read(bytes(bare)).sizing().unit("A-9").type(), "a sheet never sized gains the key");
+    }
+
     private static void damagedFact(String where, Consumer<JsonObject> damage) {
         var json = sized();
         damage.accept(json.getAsJsonObject("sizing"));

@@ -136,6 +136,14 @@ public enum Limit {
     EXCHANGER_WATER_OUT(SHOULD, most(45), "°C", "[BLOG]", QUIET),
     KETTLE_FLUX(SHOULD, most(38), "kW/m²", "[ET]"),
 
+    /**
+     * An air-then-water condenser's member that takes no duty, MW (C2): a trim below a receiver at the air's split or above it, or
+     * an air cooler above a top vapour at it or below it. The twin stays the player's choice; the other member alone does the work.
+     * The owner, 2026-11-03: "I mean the user can decide, but it's pointless to use twin cooler config if you don't need to cool
+     * below 40C".
+     */
+    TWIN_IDLE(SHOULD, above(0), "MW", "plan section 6"),
+
     // ---- Air coolers ----
     AIR_COOLER_SURFACE(MUST, given(Sense.LEAST), "m²", "World"),
     AIR_COOLER_OUTLET(SHOULD, least(15), "K", "[HALL-R]"),

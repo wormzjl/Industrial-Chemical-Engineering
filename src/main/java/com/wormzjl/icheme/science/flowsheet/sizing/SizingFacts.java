@@ -72,13 +72,18 @@ public record SizingFacts(DesignBasis basis, JsonObject basisUnknown, Map<String
             return new UnitFacts(mode, type, size, hold, sizeUnknown.deepCopy(), unknown.deepCopy());
         }
 
-        /** What {@code size} is built as, null for a size of a class with one type. */
+        /**
+         * What {@code size} is built as, null for a size of a class with one type. On a Cooler an air cooler's size is Air and an
+         * exchanger's Water; an exchanger tile holds no type, so its size's type is never asked.
+         */
         public static @Nullable UnitType typeOf(@Nullable UnitSize size) {
             return switch (size) {
                 case HeaterSizing.Size heater -> heater.type();
                 case CompressorSizing.Size compressor -> compressor.type();
                 case DrumSizing.Size drum -> drum.type();
                 case TankSizing.Size tank -> tank.type();
+                case AirCoolerSizing.Size cooler -> UnitType.AIR_COOLER;
+                case ExchangerSizing.Size exchanger -> exchanger.kettle() ? null : UnitType.WATER_COOLER;
                 case null, default -> null;
             };
         }

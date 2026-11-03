@@ -96,6 +96,11 @@ public final class AirCoolerSizing {
         }
     }
 
+    /** The smallest air cooler Auto knows, the size it gives a member with no need. */
+    public static Size smallest() {
+        return SIZES.getFirst();
+    }
+
     /** Every limit of {@code load} read at {@code size}. Null load, nothing to read. */
     public static Rating rate(@Nullable Load load, Size size) {
         if (load == null) return Rating.NONE;

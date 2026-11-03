@@ -198,7 +198,7 @@ public final class SizingPage {
             case PumpSizing.Size p -> "pump";
             case EjectorSizing.Size e -> "ejector";
             case ExchangerSizing.Size e -> e.kettle() ? "kettle" : "exchanger";
-            case AirCoolerSizing.Size a -> "air_cooler";
+            case AirCoolerSizing.Size a -> "cooler";
             case DrumSizing.Size d -> "drum";
             case null, default -> null;
         };
@@ -212,10 +212,12 @@ public final class SizingPage {
         return tile == null ? "" : x.t().get(Tiles.name(tile));
     }
 
-    /** The type in use: the player's key, else the size's. */
+    /** The type in use: the player's key, else the size's where its tile is built as types (an exchanger tile's size is no Water cooler). */
     private static @Nullable UnitType type(SheetContext x, String id, @Nullable UnitSize size) {
         var held = facts(x).unit(id).type();
-        return held != null ? held : SizingFacts.UnitFacts.typeOf(size);
+        if (held != null) return held;
+        var typed = SizingFacts.UnitFacts.typeOf(size);
+        return Tiles.builtAs(tile(x, id, size), typed) ? typed : null;
     }
 
     // ---- Words and numbers ----

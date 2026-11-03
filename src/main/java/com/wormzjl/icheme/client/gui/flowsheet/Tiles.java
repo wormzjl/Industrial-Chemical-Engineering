@@ -39,7 +39,7 @@ public final class Tiles {
             new Category("streams", List.of(new Tile(FEED, Symbol.FEED, true), new Tile(PRODUCT, Symbol.PRODUCT, true))),
             new Category("piping", List.of(new Tile("valve", Symbol.VALVE, true), new Tile("mixer", Symbol.MIXER, true), new Tile("splitter", Symbol.SPLITTER, true), new Tile("filter", Symbol.FILTER, true))),
             new Category("vessels", List.of(new Tile("column", Symbol.COLUMN_TOP, true), new Tile("drum", Symbol.DRUM, true), new Tile("storage_tank", Symbol.TANK, true), new Tile("adsorber", Symbol.ADSORBER, false), new Tile("cyclone", Symbol.CYCLONE, false))),
-            new Category("heat", List.of(new Tile("exchanger", Symbol.EXCHANGER, true), new Tile("kettle", Symbol.KETTLE, true), new Tile("air_cooler", Symbol.AIR_COOLER, true), new Tile("fired_heater", Symbol.HEATER, true), new Tile("cooling_tower", Symbol.COOLING_TOWER, false))),
+            new Category("heat", List.of(new Tile("exchanger", Symbol.EXCHANGER, true), new Tile("kettle", Symbol.KETTLE, true), new Tile("cooler", Symbol.AIR_COOLER, true), new Tile("fired_heater", Symbol.HEATER, true), new Tile("cooling_tower", Symbol.COOLING_TOWER, false))),
             new Category("machines", List.of(new Tile("pump", Symbol.PUMP, true), new Tile("compressor", Symbol.COMPRESSOR, true), new Tile("ejector", Symbol.EJECTOR, true), new Tile("steam_turbine", Symbol.TURBINE, false))),
             new Category("reactors", List.of(new Tile("stirred_reactor", Symbol.REACTOR, false), new Tile("trickle_bed", Symbol.TRICKLE, false), new Tile("ebullated_bed", Symbol.EBULLATED, false), new Tile("fcc_converter", Symbol.FCC, false), new Tile("delayed_coker", Symbol.COKER, false))),
             new Category("solid_fuel", List.of(new Tile("cfb_boiler", Symbol.CFB, false), new Tile("fluid_bed_gasifier", Symbol.FLUID_GAS, false), new Tile("grate_boiler", Symbol.GRATE, false), new Tile("fixed_bed_gasifier", Symbol.FIXED_GAS, false))));
@@ -74,7 +74,7 @@ public final class Tiles {
         if (tile == null) return null;
         var facts = sizing.unit(unit.id());
         var type = facts.type() != null ? facts.type() : SizingFacts.UnitFacts.typeOf(facts.size());
-        if (type == null || !TYPED.getOrDefault(unit.type(), List.of()).contains(type)) return tile;
+        if (!builtAs(unit.type(), type)) return tile;
         return switch (type) {
             case VERTICAL_HEATER -> Symbol.HEATER;
             case CABIN_HEATER -> Symbol.CABIN;
@@ -84,6 +84,9 @@ public final class Tiles {
             case LYING_DRUM -> facts.size() instanceof DrumSizing.Size drum && drum.boot() ? Symbol.BOOT_DRUM : Symbol.LYING;
             case PISTON -> Symbol.COMPRESSOR;
             case TURBO -> Symbol.TURBO;
+            // The Cooler's two (C2); C3 gives the water cooler a symbol of its own.
+            case AIR_COOLER -> Symbol.AIR_COOLER;
+            case WATER_COOLER -> Symbol.EXCHANGER;
         };
     }
 
@@ -92,7 +95,13 @@ public final class Tiles {
             "fired_heater", List.of(UnitType.VERTICAL_HEATER, UnitType.CABIN_HEATER),
             "storage_tank", List.of(UnitType.FLOATING_ROOF, UnitType.SPHERE),
             "drum", List.of(UnitType.STANDING_DRUM, UnitType.LYING_DRUM),
-            "compressor", List.of(UnitType.PISTON, UnitType.TURBO));
+            "compressor", List.of(UnitType.PISTON, UnitType.TURBO),
+            "cooler", List.of(UnitType.AIR_COOLER, UnitType.WATER_COOLER));
+
+    /** Whether a unit of tile {@code tile} can be built as {@code type}: an exchanger's size is no Water cooler on an exchanger tile. */
+    public static boolean builtAs(@Nullable String tile, @Nullable UnitType type) {
+        return type != null && TYPED.getOrDefault(tile, List.of()).contains(type);
+    }
 
     /** The name's key of a unit of {@code type}, a removed one's too. */
     /** A removed type's own name, as a person would write it. */
@@ -115,7 +124,7 @@ public final class Tiles {
             case "column" -> "T";
             case "drum" -> "D";
             case "storage_tank" -> "TK";
-            case "exchanger", "kettle", "air_cooler" -> "E";
+            case "exchanger", "kettle", "cooler" -> "E";
             case "fired_heater" -> "H";
             case "pump" -> "P";
             case "compressor" -> "K";

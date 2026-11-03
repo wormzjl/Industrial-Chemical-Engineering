@@ -193,7 +193,7 @@ class SheetEditorTest {
         Map<String, List<String>> keys = new LinkedHashMap<>();
         keys.put("valve", List.of("target", "drop"));
         keys.put("exchanger", List.of("target", "side", "temperature", "duty", "area", "tube_drop", "shell_drop"));
-        keys.put("air_cooler", List.of("target", "temperature", "duty", "drop"));
+        keys.put("cooler", List.of("target", "temperature", "duty", "drop"));
         keys.put("fired_heater", List.of("coils", "target", "temperature", "duty", "radiant_drop", "convection_drop"));
         keys.forEach((type, names) -> {
             var params = SheetEditor.defaults(type, SheetFixture::column);

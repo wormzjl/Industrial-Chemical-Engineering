@@ -353,14 +353,56 @@ final class SheetSizingTest {
         assertNotNull(kettle.rating().reading(Limit.KETTLE_FLUX));
     }
 
-    @Test void aFreeSideLeavesNoSurfaceToRead() {
+    /**
+     * C2: a free side that cools is tower water from 25 °C, sized against it, with its water beside the rows: 23.9 kg/s a MW over its
+     * full 10 K, back at 35 °C from a hot inlet. A free side that heats has no utility temperature, so it leaves no surface to read.
+     */
+    @Test void aFreeCoolingSideIsSizedOnTowerWater() {
         var sized = new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":360}").feed("hot", "E", "shell_in", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "E", "shell_out").sized();
-        assertNull(sized.units().get("E").size());
-        assertEquals(Lamp.NONE, sized.units().get("E").rating().lamp(), "not green: its rows have no input");
+        var unit = sized.units().get("E");
+        assertTrue(unit.size() instanceof ExchangerSizing.Size, () -> "sized: " + unit.size());
+        assertEquals(35, unit.rating().reading(Limit.EXCHANGER_WATER_OUT).value(), 1e-9, "back at 35 °C");
+        double duty = on(() -> at(420, 8e5, scaled(DRY_CRUDE, 300)).enthalpy() - at(360, 8e5, scaled(DRY_CRUDE, 300)).enthalpy()) * DesignBasis.DEFAULT.designFlow() / 1e6;
+        assertEquals(23.9, unit.rating().values().get(Rating.WATER) / duty, .2, "kg/s per MW over 10 K");
+        assertEquals(unit.rating().values().get(Rating.WATER) * 3.6, unit.rating().values().get(Rating.WATER_VOLUME), .01 * unit.rating().values().get(Rating.WATER) * 3.6, "about a tonne a cubic metre");
+        var heats = new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":460}").feed("cold", "E", "shell_in", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "E", "shell_out").sized();
+        assertNull(heats.units().get("E").size());
+        assertEquals(Lamp.NONE, heats.units().get("E").rating().lamp(), "not green: its rows have no input");
+    }
+
+    private static SheetSizing.Sized cooled(double outlet, @org.jetbrains.annotations.Nullable UnitType type) {
+        var units = type == null ? Map.<String, SheetSizing.UnitEntry>of() : Map.of("A", new SheetSizing.UnitEntry(null, type, null, null, false));
+        return new Sheet().unit("A", "cooler", "{\"target\":\"outlet\",\"temperature\":" + outlet + "}").feed("hot", "A", "in", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "A", "out")
+                .sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), units));
+    }
+
+    /**
+     * C2: the Cooler proposes Air at 40 °C and above, Water below; Water is green from 35 °C, yellow under it on its 10 K approach,
+     * red at 25 °C, where the run stops it; held on Air, 30 °C is yellow on the air's 15 K. A water cooler from a hot inlet reads
+     * what an air cooler ahead of it would take down to 40 °C.
+     */
+    @Test void aCoolerProposesItsTypeByItsOutlet() {
+        assertTrue(cooled(313.15, null).units().get("A").size() instanceof AirCoolerSizing.Size, "air at 40 °C");
+        var warm = cooled(310.15, null).units().get("A");
+        assertTrue(warm.size() instanceof ExchangerSizing.Size, "water under 40 °C");
+        assertEquals(Lamp.GREEN, warm.rating().lamp(), () -> "37 °C on water: " + warm.rating().readings());
+        assertTrue(warm.rating().values().get(Rating.AIR_AHEAD) > 0);
+        var cool = cooled(303.15, null).units().get("A");
+        assertEquals(Lamp.YELLOW, cool.rating().lamp());
+        assertFalse(cool.rating().reading(Limit.EXCHANGER_APPROACH).met(), "30 °C is 5 K over the water");
+        var cold = cooled(283.15, null).units().get("A");
+        assertEquals(Lamp.RED, cold.rating().lamp(), "stopped at 25 °C: needs refrigeration");
+        var air = cooled(303.15, UnitType.AIR_COOLER).units().get("A");
+        assertTrue(air.size() instanceof AirCoolerSizing.Size, "the key holds the player's type");
+        assertFalse(air.rating().reading(Limit.AIR_COOLER_OUTLET).met());
+        var water = cooled(340, UnitType.WATER_COOLER).units().get("A");
+        assertTrue(water.size() instanceof ExchangerSizing.Size);
+        double ahead = on(() -> at(420, 8e5, scaled(DRY_CRUDE, 300)).enthalpy() - at(340, 8e5, scaled(DRY_CRUDE, 300)).enthalpy()) * DesignBasis.DEFAULT.designFlow() / 1e6;
+        assertEquals(ahead, water.rating().values().get(Rating.AIR_AHEAD), 1e-6 * ahead, "the whole, where the outlet stands above 40 °C");
     }
 
     @Test void anAirCoolerStandsOnItsStreamsAndAMixerHasNoSize() {
-        var sized = new Sheet().unit("A", "air_cooler", "{\"target\":\"outlet\",\"temperature\":340}").unit("M", "mixer", "{}").feed("one", "M", "in/1", 420, 8e5, scaled(DRY_CRUDE, 150)).feed("two", "M", "in/2", 420, 8e5, scaled(DRY_CRUDE, 150))
+        var sized = new Sheet().unit("A", "cooler", "{\"target\":\"outlet\",\"temperature\":340}").unit("M", "mixer", "{}").feed("one", "M", "in/1", 420, 8e5, scaled(DRY_CRUDE, 150)).feed("two", "M", "in/2", 420, 8e5, scaled(DRY_CRUDE, 150))
                 .line("oil", "M", "out", "A", "in").product("out", "A", "out").sized();
         assertNotNull(sized.units().get("A").size());
         assertNull(sized.units().get("M").size());

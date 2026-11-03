@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet;
 
-import com.wormzjl.icheme.science.flowsheet.unit.AirCoolerUnit;
+import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
+import com.wormzjl.icheme.science.flowsheet.unit.CoolerUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.ExchangerUnit;
@@ -28,7 +29,12 @@ public final class UnitTypes {
      * @param types today's type by what it was called
      * @param ports by today's type, today's port by what it was called
      */
-    public record Aliases(Map<String, String> types, Map<String, Map<String, String>> ports) {
+    public record Aliases(Map<String, String> types, Map<String, Map<String, String>> ports, Map<String, UnitType> held) {
+        /** Aliases that hold no type key. */
+        public Aliases(Map<String, String> types, Map<String, Map<String, String>> ports) {
+            this(types, ports, Map.of());
+        }
+
         String type(String type) {
             return types.getOrDefault(type, type);
         }
@@ -36,10 +42,18 @@ public final class UnitTypes {
         String port(String type, String port) {
             return ports.getOrDefault(type, Map.of()).getOrDefault(port, port);
         }
+
+        /** The type key a unit read under {@code type}, an old name, holds where its sizing keeps none; null for none. */
+        @Nullable UnitType held(String type) {
+            return held.get(type);
+        }
     }
 
-    /** No type or port has changed its name yet. */
-    public static final Aliases ALIASES = new Aliases(Map.of(), Map.of());
+    /**
+     * The air cooler tile became the Cooler (C2, {@code COOLER_MODEL_PLAN.md} section 3 item 4): a unit saved as {@code air_cooler}
+     * reads as a Cooler held on Air, so what the player built stays an air cooler.
+     */
+    public static final Aliases ALIASES = new Aliases(Map.of("air_cooler", "cooler"), Map.of(), Map.of("air_cooler", UnitType.AIR_COOLER));
 
     private static final Map<String, UnitModel> MODELS = Map.ofEntries(
             Map.entry("valve", new ValveUnit()),
@@ -50,7 +64,7 @@ public final class UnitTypes {
             Map.entry("storage_tank", new VesselUnit(true)),
             Map.entry("exchanger", new ExchangerUnit(false)),
             Map.entry("kettle", new ExchangerUnit(true)),
-            Map.entry("air_cooler", new AirCoolerUnit()),
+            Map.entry("cooler", new CoolerUnit()),
             Map.entry("fired_heater", new FiredHeaterUnit()),
             Map.entry("column", new ColumnUnit()),
             Map.entry("pump", new MoverUnit(new FlowControl.Pump(1, 1))),

@@ -153,7 +153,7 @@ public final class SimulatorRender {
         return new Sheet().unit("P-101", "pump", 84, 117, "{\"target\":\"outlet\",\"pressure\":14e5,\"rise\":2e5}").unit("T-101", "column", 372, 20, columnDoor())
                 .unit("E-101", "exchanger", 130, 309, "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":473.15,\"duty\":1e6,\"area\":100,\"tube_drop\":0.5e5,\"shell_drop\":0.3e5}")
                 .unit("H-101", "fired_heater", 214, 257, "{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"duty\":1e7,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}")
-                .unit("V-101", "valve", 306, 287, "{\"target\":\"outlet\",\"pressure\":2.80e5,\"drop\":1e5}").unit("E-102", "air_cooler", 40, 359, "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}")
+                .unit("V-101", "valve", 306, 287, "{\"target\":\"outlet\",\"pressure\":2.80e5,\"drop\":1e5}").unit("E-102", "cooler", 40, 359, "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}")
                 .unit("P-102", "pump", 600, 182, "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}")
                 .feed("CRUDE", "P-101", "in", crude(298.15, 8e5), 28, 130).line("S-1", "P-101", "out", "T-101", "pa/1/in").line("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in").line("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in")
                 .line("S-4", "T-101", "pa/3/out", "E-101", "tube_in", new Flowsheet.Point(362, 258), new Flowsheet.Point(362, 238), new Flowsheet.Point(116, 238), new Flowsheet.Point(116, 323))

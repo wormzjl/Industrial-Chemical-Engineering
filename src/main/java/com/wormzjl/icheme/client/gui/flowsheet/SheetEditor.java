@@ -221,7 +221,7 @@ public final class SheetEditor {
                 p.addProperty("tube_drop", .3e5);
                 p.addProperty("shell_drop", .3e5);
             }
-            case "air_cooler" -> {
+            case "cooler" -> {
                 p.addProperty("target", "outlet");
                 p.addProperty("temperature", 323.15);
                 p.addProperty("duty", 1e6);

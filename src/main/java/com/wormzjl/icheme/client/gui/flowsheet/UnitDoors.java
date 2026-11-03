@@ -171,7 +171,7 @@ public final class UnitDoors {
                 r.readings(Door.meter(x.text("door.duty"), r.reading("duty", 1e6, 2), "MW"), Door.meter(x.text("door.approach"), r.reading("approach", 1, 1), "K"), Door.meter(x.text("door.area_needed"), r.reading("area_needed", 1, 0), "m²"));
                 if (unit.type().equals("exchanger") && view.tab == 0) glass = heat(x, unit, HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE);
             }
-            case "air_cooler" -> {
+            case "cooler" -> {
                 r.group("target", r.choice("target", "outlet", "outlet", "duty"));
                 r.group("set_point", r.text("target", "outlet").equals("duty") ? r.entry("duty", x.text("door.duty"), Quantity.MEGAWATT) : r.entry("temperature", x.text("door.outlet"), Quantity.TEMPERATURE));
                 if (sized(x, unit)) r.group("drops_flow", drop(r, x, "drop", "door.drop"));
@@ -289,7 +289,7 @@ public final class UnitDoors {
         return new SheetState.Status(switch (unit.type()) {
             case "exchanger", "kettle" -> x.text("door.status.exchanger", SheetUnits.megawatts(duty), SheetUnits.number(1, results.reading(unit.id(), "approach")));
             case "fired_heater" -> x.text("door.status.heater", SheetUnits.megawatts(Math.abs(duty)), SheetUnits.number(1, unit.params().number("limit", 0) / 1e6));
-            case "air_cooler" -> x.text("door.status.duty", SheetUnits.megawatts(Math.abs(duty)));
+            case "cooler" -> x.text("door.status.duty", SheetUnits.megawatts(Math.abs(duty)));
             case "pump", "compressor" -> {
                 var p = x.props(x.into(unit.id(), "in"));
                 yield p == null ? x.text("door.status.solved") : x.text("door.status.mover", Door.upper(StreamDoors.phaseName(x, p)), SheetUnits.number(1, p.vapour()));

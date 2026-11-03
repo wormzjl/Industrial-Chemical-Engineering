@@ -60,7 +60,7 @@ public final class SelectionColumn {
                 addOut(x, rows, x.outOf(unit.id(), "shell_out"), "panel.shell_out");
                 rows.add(Door.meter(x.text("door.approach"), read.of("approach", 1, 1), "K"));
             }
-            case "air_cooler" -> rows.add(Door.meter(x.text("door.duty"), read.of("duty", 1e6, 2), "MW"));
+            case "cooler" -> rows.add(Door.meter(x.text("door.duty"), read.of("duty", 1e6, 2), "MW"));
             case "fired_heater" -> {
                 rows.add(Door.meter(x.text("door.duty"), read.of("duty", 1e6, 2), "MW"));
                 rows.add(Door.meter(x.text("door.vapour_out"), read.of("vapour", .01, 1), "%"));

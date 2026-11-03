@@ -281,7 +281,7 @@ public final class SheetLayout {
                 default -> new int[]{w, 24, R};
             };
             // The owner's sheet: the cooler's inlet at its right end, the sample's residue running back to the left.
-            case "air_cooler" -> new int[]{in ? w : 0, 8, in ? R : L};
+            case "cooler" -> new int[]{in ? w : 0, 8, in ? R : L};
             // A cabin's convection box sits on its radiant box, narrower: its coil ends stand on the box's sides.
             case "fired_heater" -> symbol == Symbol.CABIN ? switch (id) {
                 case "convection_in" -> new int[]{16, 18, L};

@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet.unit;
 
+import com.wormzjl.icheme.science.column.operation.ColumnSolve;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
@@ -39,7 +40,9 @@ import java.util.Locale;
  * pass after the first starts from the last state. A heat side is a calculation of its own. A pumparound or the reboiler has its
  * duty on the door, so what passes through its cold side depends on nothing the column solves, and heating the feed of the same
  * column is no loop. The condenser's duty is an answer, and reaches its side by a link. A free side leaves the heat to a utility.
- * Each pair is checked once the sheet stands, for heat that cannot flow that way.
+ * Each pair is checked once the sheet stands, for heat that cannot flow that way. An air-then-water condenser ({@code
+ * COOLER_MODEL_PLAN.md} section 6, C2) has the exchanger's pair on its water trim: the water takes the trim's share, the overhead from
+ * the split to the receiver as the world's solve reads it, and the air the rest. The block reads both shares.
  *
  * <p>V3 has no feed pressure, so the stream is flashed at its own enthalpy to the feed tray's solved pressure, which gives V3's
  * feed temperature. V3's feed is hydrocarbons: water joins as steam if it is vapour there. The products come back through the world's
@@ -88,14 +91,11 @@ public final class ColumnUnit implements UnitModel {
         return "pa/" + pumparound.id() + "/out";
     }
 
-    private static boolean exchanger(ColumnDoor door) {
-        return door.condenser() == ColumnComponents.Condenser.EXCHANGER;
-    }
 
     @Override public List<Port> ports(Params params) {
         var door = ColumnDoor.of(params);
         var ports = new ArrayList<>(List.of(Port.in(FEED), Port.out(OVERHEAD), Port.out(DISTILLATE), Port.out(WATER), Port.out(BOTTOMS)));
-        if (exchanger(door)) ports.addAll(List.of(Port.optionalIn(CONDENSER_IN), Port.out(CONDENSER_OUT)));
+        if (door.condenser().waterCooled()) ports.addAll(List.of(Port.optionalIn(CONDENSER_IN), Port.out(CONDENSER_OUT)));
         if (ColumnComponents.kettleRequired(door.reboilerDuty())) ports.addAll(List.of(Port.optionalIn(REBOILER_IN), Port.out(REBOILER_OUT)));
         for (var pumparound : door.pumparounds()) ports.addAll(List.of(Port.optionalIn(pumparoundIn(pumparound)), Port.out(pumparoundOut(pumparound))));
         for (var steam : door.steam()) ports.add(Port.optionalIn(steamPort(steam)));
@@ -194,6 +194,8 @@ public final class ColumnUnit implements UnitModel {
         private final int components;
         private @Nullable V3NeuralSeed warm;
         private @Nullable V3ColumnDisplayResult display;
+        /** The basis of the last input solved, on which its profile's fractions stand. */
+        private @Nullable V3ComponentBasis basis;
         /** The feed tray's pressure the last solve left (Pa): tray hydraulics march it from the column's own traffic. */
         private double feedTray = Double.NaN;
 
@@ -228,7 +230,7 @@ public final class ColumnUnit implements UnitModel {
             var thermo = u.thermo();
             var feed = board.stream(u.wire(FEED));
             if (feed.empty()) {
-                write(board, report, null, null);
+                write(board, report, null, null, 0);
                 return;
             }
             if (!feed.solids().empty()) throw new FlowsheetFailure("column.solids");
@@ -259,11 +261,16 @@ public final class ColumnUnit implements UnitModel {
                 if (wire != null && !board.stream(wire).empty() && board.stream(wire).pressure() < nodes.get(row.stage()).pressurePascal()) report.note(Note.warning(u.id(), "column.inlet_pressure", steamPort(row)));
             }
             var ejected = ejector(board, report, result);
-            write(board, report, result, ejected);
-            report.display(display);
             var ledger = result.dutyLedger().orElseThrow();
             double motiveHeat = ejected == null ? 0 : ejected.heat();
-            report.reading("condenser", -ledger.condenserWatts() + motiveHeat);
+            double whole = ledger.condenserWatts() - motiveHeat, water = water(result, whole);
+            write(board, report, result, ejected, water);
+            report.display(display);
+            report.reading("condenser", -whole);
+            report.reading("condenser_air", water - whole);
+            report.reading("condenser_water", -water);
+            // A free condenser's coolant, air or tower water, comes in at 25 °C: a receiver there or below it cannot be held (C2).
+            if (u.wire(CONDENSER_IN) == null && door.condenserTemperature() <= CoolerUnit.COOLANT) report.note(Note.warning(u.id(), "column.condenser_coolant"));
             report.reading("reboiler", ledger.reboilerWatts());
             report.reading("feed_temperature", flashed.temperature());
             heatIn += flashed.enthalpy();
@@ -299,6 +306,20 @@ public final class ColumnUnit implements UnitModel {
             double heat = steam.enthalpy() + free.enthalpy() - water.enthalpy();
             report.reading("ejector_heat", heat);
             return new Ejected(steam, water, heat);
+        }
+
+        /**
+         * The share of the condenser's {@code whole} duty (W, column sign) its water takes: all of it on an exchanger, none on an air
+         * cooler, and on air then water the trim's, the overhead from the split to the receiver, as the world's solve reads it
+         * ({@link ColumnSolve#trim}).
+         */
+        private double water(V3ColumnResult result, double whole) {
+            var thermo = u.thermo();
+            return switch (door.condenser()) {
+                case EXCHANGER -> whole;
+                case AIR_COOLER -> 0;
+                case AIR_THEN_WATER -> ColumnSolve.trim(thermo.model(), result.inspection().orElseThrow(), java.util.Objects.requireNonNull(basis), thermo.axis(), door.condenserTemperature(), whole, thermo.checkpoint());
+            };
         }
 
         /** V3 on the stream as flashed: its hydrocarbons are the feed, its water a steam feed if it is vapour there. */
@@ -368,6 +389,7 @@ public final class ColumnUnit implements UnitModel {
         }
 
         private V3ColumnResult run(V3ColumnInput input) {
+            basis = input.componentBasis();
             var outcome = ColumnUnit.solve(input, warm, u.thermo().catalog(), u.thermo().checkpoint());
             if (outcome instanceof V3ColumnOutcome.Success success) {
                 display = V3ColumnDisplayResult.fromAccepted(success);
@@ -376,8 +398,11 @@ public final class ColumnUnit implements UnitModel {
             throw new FlowsheetFailure("column.failed", ((V3ColumnOutcome.Failure) outcome).summary());
         }
 
-        /** The outlets and links of {@code result}, or of no flow. Free sides book their heat here, because only a solved column has any. */
-        private void write(Board board, Report report, @Nullable V3ColumnResult result, @Nullable Ejected ejected) {
+        /**
+         * The outlets and links of {@code result}, or of no flow. Free sides book their heat here, because only a solved column has any.
+         * The condenser's water side takes {@code water} (W, column sign) of its duty, and the air the rest.
+         */
+        private void write(Board board, Report report, @Nullable V3ColumnResult result, @Nullable Ejected ejected, double water) {
             u.write(board, report, OVERHEAD, product("overhead_vapor", result));
             u.write(board, report, DISTILLATE, product("distillate_liquid", result));
             u.write(board, report, WATER, ejected != null ? ejected.water() : product(FREE_WATER, result));
@@ -385,8 +410,10 @@ public final class ColumnUnit implements UnitModel {
             for (var draw : door.draws()) u.write(board, report, drawPort(draw), product(String.format(Locale.ROOT, "side_liquid_tray_%02d", draw.tray()), result));
             var ledger = result == null ? null : result.dutyLedger().orElseThrow();
             double condenser = ledger == null ? 0 : ledger.condenserWatts() - (ejected == null ? 0 : ejected.heat());
-            if (u.wire(CONDENSER_IN) != null) board.link(condenserHeat(), -condenser);
-            else if (ledger != null) report.duty(condenser);
+            if (u.wire(CONDENSER_IN) != null) {
+                board.link(condenserHeat(), -water);
+                if (ledger != null && condenser != water) report.duty(condenser - water);
+            } else if (ledger != null) report.duty(condenser);
             if (ledger != null && u.wire(REBOILER_IN) == null) report.duty(ledger.reboilerWatts());
             for (var pumparound : door.pumparounds()) {
                 if (u.wire(pumparoundIn(pumparound)) != null) board.link(drawTemperature(pumparound), result == null ? Double.POSITIVE_INFINITY : result.inspection().orElseThrow().nodes().get(pumparound.drawTray()).temperatureKelvin());

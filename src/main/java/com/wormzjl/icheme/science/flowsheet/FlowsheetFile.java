@@ -92,8 +92,9 @@ public final class FlowsheetFile {
         var basis = basis(root.object("basis"));
         var units = new ArrayList<Flowsheet.Unit>();
         var types = new HashMap<String, String>();
+        var held = new LinkedHashMap<String, UnitType>();
         for (var row : root.rows("units")) {
-            var unit = unit(row, aliases);
+            var unit = unit(row, aliases, held);
             if (types.putIfAbsent(unit.id(), unit.type()) != null) throw damaged(row.path);
             units.add(unit);
         }
@@ -105,6 +106,8 @@ public final class FlowsheetFile {
             streams.add(stream);
         }
         var sizing = sizing(root.optionalObject("sizing"));
+        // A unit read under an old type's name keeps the type it was, where its sizing holds no key of its own (C2: an air cooler).
+        for (var entry : held.entrySet()) if (sizing.unit(entry.getKey()).type() == null) sizing = sizing.with(entry.getKey(), sizing.unit(entry.getKey()).typed(entry.getValue()));
         return new Flowsheet(basis, units, streams, settings(root.optionalObject("settings")), sizing, root.rest);
     }
 
@@ -287,8 +290,11 @@ public final class FlowsheetFile {
         return new Flowsheet.Basis(fields.id("package"), fields.text("revision"), fields.texts("components"), fields.rest);
     }
 
-    private static Flowsheet.Unit unit(Fields fields, UnitTypes.Aliases aliases) {
-        return new Flowsheet.Unit(fields.id("id"), aliases.type(fields.id("type")), fields.text("name"), fields.whole("x"), fields.whole("y"), new Params(fields.object("params").rest), fields.rest);
+    private static Flowsheet.Unit unit(Fields fields, UnitTypes.Aliases aliases, Map<String, UnitType> held) {
+        String id = fields.id("id"), type = fields.id("type");
+        var key = aliases.held(type);
+        if (key != null) held.put(id, key);
+        return new Flowsheet.Unit(id, aliases.type(type), fields.text("name"), fields.whole("x"), fields.whole("y"), new Params(fields.object("params").rest), fields.rest);
     }
 
     private static Flowsheet.Stream stream(Fields fields, Map<String, String> types, UnitTypes.Aliases aliases) {

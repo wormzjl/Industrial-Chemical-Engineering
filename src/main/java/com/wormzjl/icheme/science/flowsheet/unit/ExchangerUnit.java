@@ -18,7 +18,8 @@ import java.util.List;
 /**
  * A heat exchanger or a kettle reboiler (batch 2026-11-02-process-simulator, plan section 3.2): target Outlet, Duty or Area. An
  * outlet or a duty names a {@code side}, and that side solves alone, so the graph splits and a loop through the other side is
- * no loop of this unit's. The duty reaches the other side as a link. A free pair's inlet leaves the heat to a utility. Area needs
+ * no loop of this unit's. The duty reaches the other side as a link. A free pair's inlet leaves the heat to a utility: one that
+ * cools is tower water at 25 °C, so it stops the set side there ({@link CoolerUnit#coolant}, C2). Area needs
  * both inlets, so it is one calculation. A rating reads both inlets afterwards, and says the surface the duty needs and whether
  * the heat crosses. A kettle's shell boils its feed and has a gas and a liquid outlet. The drops are typed until the unit has a
  * size; then each side's comes from its law at the run's flow (sizing plan section 3.11, D19). A kettle's pool has no law.
@@ -68,7 +69,7 @@ public final class ExchangerUnit implements UnitModel {
         boolean both = tube != null && shell != null;
         calculations.add(new Calculation(u.part(onTube ? TUBE : SHELL), u.id(), List.of(onTube ? tube : shell), outlets(u, onTube), List.of(), both ? List.of(link) : List.of(), Calculation.Kind.STEP, (board, report) -> {
             var in = board.stream(onTube ? tube : shell);
-            var out = set(u, target, onTube, in, report);
+            var out = set(u, target, onTube, in, !both, report);
             write(u, board, report, onTube, out);
             double heat = in.empty() ? 0 : out.enthalpy() - in.enthalpy();
             if (both) board.link(link, heat);
@@ -95,10 +96,19 @@ public final class ExchangerUnit implements UnitModel {
         return WiredUnit.after(in, u.drop(drop, in, u.params().number(drop, 0), report));
     }
 
-    private static FlowStream set(WiredUnit u, String target, boolean tube, FlowStream in, Report report) {
+    /**
+     * The set side's outlet. Against a free side that cools it, tower water at 25 °C, an outlet or a duty past the water stops there
+     * and says so (C2); a free side that heats is out of this model's scope and gives what is asked.
+     */
+    private static FlowStream set(WiredUnit u, String target, boolean tube, FlowStream in, boolean free, Report report) {
         if (in.empty()) return in;
         double pressure = pressure(u, tube, in, report);
-        return target.equals("outlet") ? u.thermo().atTemperature(u.params().number("temperature"), pressure, in.amounts(), in.solids()) : u.thermo().heated(in, u.params().number("duty"), pressure);
+        var thermo = u.thermo();
+        if (!free) return target.equals("outlet") ? thermo.atTemperature(u.params().number("temperature"), pressure, in.amounts(), in.solids()) : thermo.heated(in, u.params().number("duty"), pressure);
+        var cooled = target.equals("outlet") ? CoolerUnit.coolant(thermo, in, thermo.atTemperature(u.params().number("temperature"), pressure, in.amounts(), in.solids()))
+                : CoolerUnit.removing(thermo, in, -u.params().number("duty"), pressure);
+        if (cooled.capped()) report.note(Note.warning(u.id(), "cooler.coolant"));
+        return cooled.stream();
     }
 
     private void write(WiredUnit u, Board board, Report report, boolean tube, FlowStream out) {

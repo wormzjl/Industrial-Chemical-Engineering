@@ -247,9 +247,10 @@ public final class ColumnSolve {
      * The duty an air-then-water condenser's water trim takes, W (column sign, removed: negative), of the whole
      * {@code condenser} duty ({@code COOLER_MODEL_PLAN.md} section 6): the overhead, the top tray's vapour with its water
      * vapour, cooled at the condenser's pressure from the split ({@link HeatSides#airSplit}) to the receiver. None where the
-     * split is the receiver, the whole where it is the top vapour, never beyond the whole. The air takes the rest.
+     * split is the receiver, the whole where it is the top vapour, never beyond the whole. The air takes the rest. The simulator's
+     * column block reads its condenser's water share here too ({@code ColumnUnit}), so the sheet and the world split alike.
      */
-    static double trim(FluidThermodynamics model, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis,
+    public static double trim(FluidThermodynamics model, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis,
                        List<String> axis, double receiver, double condenser, Runnable checkpoint) {
         var top = inspection.nodes().get(1);
         int water = axis.indexOf(SplitTable.WATER);

@@ -28,7 +28,14 @@ public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> 
      * an air cooler that condenses the overhead to the split ({@link HeatSides#airSplit}) and a water exchanger, the trim,
      * that cools it from there to the receiver (batch 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 6).
      */
-    public enum Condenser { AIR_COOLER, EXCHANGER, AIR_THEN_WATER }
+    public enum Condenser {
+        AIR_COOLER, EXCHANGER, AIR_THEN_WATER;
+
+        /** Whether water takes some of the duty, so the condenser has a water side: an exchanger's whole, a trim's share. */
+        public boolean waterCooled() {
+            return this != AIR_COOLER;
+        }
+    }
 
     /** A standard pump on its base, or an In-line Pump fitted on a pipe. */
     public enum Pump { STANDARD, IN_LINE }
