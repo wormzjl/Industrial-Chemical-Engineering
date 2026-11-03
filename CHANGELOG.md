@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- Tooling cleanup of the process simulator: the two coverage tables that only tests read, `FlowsheetCatalog` and `SizingCoverage`, move to `src/test`, and the mod no longer ships them; the batch's probes and renders stay in `tools/process-simulator/`, `tools/device-names/` and `tools/heat-gui-renders/` (batch `2026-11-02-process-simulator`, `MERGE_REVIEW.md`).
+
 ## [0.19.3] - 2026-11-03
 
 ### Added
