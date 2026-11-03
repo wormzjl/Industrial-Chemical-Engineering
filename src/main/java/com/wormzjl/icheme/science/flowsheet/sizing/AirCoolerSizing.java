@@ -78,8 +78,13 @@ public final class AirCoolerSizing {
         readings.add(UnitSize.reading(UnitSize.built(size)));
         readings.add(Limit.AIR_COOLER_SURFACE.against(HeatSides.airCoolerSurface(size.width(), size.length(), size.bank()), load.needed()));
         readings.add(Limit.AIR_COOLER_OUTLET.read(load.outlet()));
-        readings.add(Limit.AIR_COOLER_DROP.read(load.mean().drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), 1)));
+        readings.add(Limit.AIR_COOLER_DROP.read(drop(load, size)));
         return new Rating(readings);
+    }
+
+    /** What {@code load}'s tubes lose at {@code size} at design flow, bar. */
+    public static double drop(Load load, Size size) {
+        return load.mean().drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), 1);
     }
 
     /** The least face that meets every limit, by its fewest bays. No load, no size. */

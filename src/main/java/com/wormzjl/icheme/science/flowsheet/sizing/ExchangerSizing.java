@@ -128,13 +128,18 @@ public final class ExchangerSizing {
         readings.add(Limit.EXCHANGER_APPROACH.read(load.approach()));
         readings.add(Limit.EXCHANGER_OVER_NEED.read(100 * (surface / load.needed() - 1)));
         readings.add(load.tubeDrop().read(load.tube().drop(HeatSides.tubePassage(size.shell(), size.tubes()), size.shells())));
-        var shell = load.shell();
         var row = load.shellDrop();
-        if (shell != null && row != null) readings.add(row.read(shell.drop(HeatSides.shellPassage(size.shell(), size.tubes()), size.shells())));
+        if (load.shell() != null && row != null) readings.add(row.read(shellDrop(load, size)));
         if (load.kettle()) readings.add(Limit.KETTLE_FLUX.read(load.duty() / 1e3 / surface));
         var water = load.waterOut();
         if (water != null) readings.add(Limit.EXCHANGER_WATER_OUT.read(water));
         return new Rating(readings);
+    }
+
+    /** What {@code load}'s shell side loses at {@code size} at design flow, bar: 0 on a kettle, whose shell boils in a pool. */
+    public static double shellDrop(Load load, Size size) {
+        var shell = load.shell();
+        return shell == null ? 0 : shell.drop(HeatSides.shellPassage(size.shell(), size.tubes()), size.shells());
     }
 
     /** The fewest shells, then the least surface, that meets every limit. No load, no size. */

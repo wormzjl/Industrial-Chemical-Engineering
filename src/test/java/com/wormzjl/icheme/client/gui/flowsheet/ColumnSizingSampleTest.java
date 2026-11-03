@@ -1,0 +1,312 @@
+package com.wormzjl.icheme.client.gui.flowsheet;
+
+import com.wormzjl.icheme.science.flowsheet.FlowThermo;
+import com.wormzjl.icheme.science.flowsheet.Flowsheet;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetEngine;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
+import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.ColumnSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
+import com.wormzjl.icheme.science.flowsheet.sizing.DrumSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.Lamp;
+import com.wormzjl.icheme.science.flowsheet.sizing.Limit;
+import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.Rating;
+import com.wormzjl.icheme.science.flowsheet.sizing.Service;
+import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
+import com.wormzjl.icheme.science.material.MaterialRuntime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.CancellationException;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * S3's gate on a real steady run of the sample (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.4 to 3.6 and 4),
+ * a slow gate: T-101 by real solves at its trial diameters, its ten members and ten member lines against the probe's
+ * {@code sizing-sample.tsv}, P-102's NPSH from the draw tray's height, Stop inside a trial, and the re-run at a new diameter.
+ *
+ * <p>Floods carry a tolerance of 0.5 % of flood: the column's learned start and hydraulic correction run on wall-clock budgets, which can
+ * move the last digits on a loaded machine, and no gate here measures time.
+ */
+class ColumnSizingSampleTest {
+    private static final double FLOOD = .5, ONE = .5, HUNDREDTH = .005, TENTH = .05;
+    private static final String T = "T-101";
+
+    private static Flowsheet sheet;
+    private static FlowsheetRun run;
+    private static FlowThermo thermo;
+    private static SheetSizing.Sized sized;
+
+    @BeforeAll
+    static void sizeTheSample() {
+        sheet = SheetFixture.sample();
+        run = FlowsheetEngine.run(sheet, SheetFixture.CATALOG, () -> {
+        });
+        assertEquals(FlowsheetRun.Status.STEADY, run.status());
+        thermo = new FlowThermo(SheetFixture.FLUIDS.model(), SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
+        });
+        sized = size(sheet, run, thermo, SheetSizing.Entries.DEFAULT);
+        for (var e : sized.units().entrySet()) System.out.println("UNIT\t" + e.getKey() + "\t" + e.getValue().size() + "\t" + text(e.getValue().rating()));
+        for (var e : sized.lines().entrySet()) System.out.println("LINE\t" + e.getKey() + "\t" + e.getValue().line().service() + "\t" + e.getValue().size() + "\t" + text(e.getValue().rating()));
+    }
+
+    private static SheetSizing.Sized size(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo, SheetSizing.Entries entries) {
+        return MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.size(sheet, run, thermo, entries));
+    }
+
+    private static String text(Rating rating) {
+        var out = new StringBuilder(rating.lamp().toString());
+        for (var r : rating.readings()) out.append(String.format(Locale.ROOT, " %s=%.4g[%.4g,%.4g]", r.limit(), r.value(), r.low(), r.high()));
+        return out.toString();
+    }
+
+    private static SheetSizing.SizedUnit unit(String member) {
+        return sized.units().get(SheetSizing.member(T, member));
+    }
+
+    private static SheetSizing.SizedLine line(String member) {
+        return sized.lines().get(SheetSizing.member(T, member));
+    }
+
+    private static double read(Rating rating, Limit limit) {
+        return rating.reading(limit).value();
+    }
+
+    private static void closest(Rating rating, Limit limit) {
+        assertEquals(Lamp.GREEN, rating.lamp(), () -> text(rating));
+        assertSame(limit, rating.closest().limit(), () -> text(rating));
+    }
+
+    @Test
+    void theColumnTakesEightMetres() {
+        var column = sized.units().get(T);
+        assertEquals(8.0, ((ColumnSizing.Size) column.size()).diameter());
+        closest(column.rating(), Limit.COLUMN_FLOOD);
+        assertEquals(71.3, read(column.rating(), Limit.COLUMN_FLOOD), FLOOD);
+        assertEquals(40, read(column.rating(), Limit.COLUMN_TRAYS));
+        assertNull(sized.rerun(), "the door's diameter stands, so the sheet does not run again and no stream moves");
+    }
+
+    @Test
+    void sevenAndAHalfMetresFloodsPastTheShould() {
+        var size = ((ColumnSizing.Size) sized.units().get(T).size());
+        var kept = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(7.5, size.layout()), null, null, null, null, null))));
+        var rating = kept.units().get(T).rating();
+        assertEquals(Lamp.YELLOW, rating.lamp(), () -> text(rating));
+        assertEquals(80.9, read(rating, Limit.COLUMN_FLOOD), FLOOD);
+        assertEquals(1, read(rating, Limit.COLUMN_SOLVES));
+        // At one traffic flood goes as one over the area: 71.3 × (8 / 7.5)² is 81.1.
+        assertEquals(read(sized.units().get(T).rating(), Limit.COLUMN_FLOOD) * 64 / 56.25, read(rating, Limit.COLUMN_FLOOD), 1);
+        assertNotNull(kept.rerun(), "a kept 7.5 m runs the sheet again");
+    }
+
+    /**
+     * The probe's 3 × 1.25 × 4 m rested on the top tray's vapour flashed by the world at V3's temperature, 19 % of it liquid and so
+     * denser; that inlet holds less heat than V3's condenser takes out. Heated back by that duty, the inlet is the gas the column
+     * sends, faster through the shell: 3 × 1.25 × 4 m loses over 0.20 bar, no four shells meet both the drop and the cap, and five
+     * of 1.00 × 3 m do, on the curves' 782 m² against the probe's 862.
+     */
+    @Test
+    void theCondenserIsSetByItsShellDrop() {
+        var condenser = unit("condenser");
+        assertEquals(new ExchangerSizing.Size(false, 5, 1, 3), condenser.size());
+        closest(condenser.rating(), Limit.EXCHANGER_DROP_GAS);
+        assertEquals(.15, read(condenser.rating(), Limit.EXCHANGER_DROP_GAS), HUNDREDTH);
+        assertEquals(782, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
+        var probes = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, null, null, null))));
+        var kept = probes.units().get(SheetSizing.member(T, "condenser")).rating();
+        assertEquals(Lamp.YELLOW, kept.lamp(), () -> text(kept));
+        assertTrue(read(kept, Limit.EXCHANGER_DROP_GAS) > .2);
+    }
+
+    /** The probe held the boot as a cylinder, 7.0 min; the world's boot has its head too, and holds 7.7. The drum is the same. */
+    @Test
+    void theReceiversBootSetsIt() {
+        var receiver = unit("receiver");
+        assertEquals(new DrumSizing.Size(UnitType.LYING_DRUM, 4, 10, true), receiver.size());
+        closest(receiver.rating(), Limit.DRUM_BOOT_HOLD);
+        assertEquals(7.7, read(receiver.rating(), Limit.DRUM_BOOT_HOLD), TENTH);
+    }
+
+    /** What the world's flash makes of the top tray's vapour at V3's own temperature: printed for the batch's report. */
+    @Test
+    void theTopTraysVapourAsTheWorldFlashesIt() {
+        var inspection = run.reports().get(T).display().inspection().orElseThrow();
+        var top = inspection.nodes().get(1);
+        var ids = inspection.input().componentBasis().componentIds();
+        var axis = thermo.axis();
+        double[] amounts = new double[axis.size()];
+        for (int i = 0; i < ids.size(); i++) if (axis.indexOf(ids.get(i)) >= 0) amounts[axis.indexOf(ids.get(i))] += top.vaporFractions().get(i) * top.vaporMolPerSecond();
+        amounts[axis.size() - 1] += top.waterVaporMolPerSecond();
+        double[] flash = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
+            var state = thermo.atTemperature(top.temperatureKelvin(), top.pressurePascal(), amounts, com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY);
+            return new double[]{state.mass(), thermo.model().vaporMass(state.state()), state.state().waterLiquid(), state.temperature()};
+        });
+        var overhead = line("overhead");
+        System.out.printf(Locale.ROOT, "TOP\t%.2f K\tvapour %.4f of %.3f kg/s\twater liquid %.4f mol/s\toverhead line %s at %.4g kg/m3%n", flash[3], flash[1], flash[0], flash[2], overhead.line().service(), overhead.line().density());
+        assertSame(Service.GAS, overhead.line().service(), "heated back by the condenser's duty, the overhead is a gas in the world too");
+    }
+
+    @Test
+    void theRefluxPumpRunsNearItsTop() {
+        var pump = unit("reflux pump");
+        assertEquals(new PumpSizing.Size(.2), pump.size());
+        closest(pump.rating(), Limit.PUMP_RATED);
+        assertEquals(119, read(pump.rating(), Limit.PUMP_RATED), ONE);
+    }
+
+    @Test
+    void eachPumparoundTakesItsCoolerAndPump() {
+        double[] needs = {224, 223, 117}, rated = {110, 93, 78}, pumps = {.25, .3, .25};
+        for (int i = 0; i < 3; i++) {
+            var cooler = unit("pa " + (i + 1) + " cooler");
+            assertEquals(new ExchangerSizing.Size(false, 1, 1, 3), cooler.size(), "PA " + (i + 1));
+            assertEquals(225, read(cooler.rating(), Limit.EXCHANGER_SURFACE), ONE);
+            assertEquals(needs[i], cooler.rating().reading(Limit.EXCHANGER_SURFACE).low(), needs[i] * .02, "PA " + (i + 1) + ": the curves' need, within 2 % of the probe's one LMTD");
+            var pump = unit("pa " + (i + 1) + " pump");
+            assertEquals(new PumpSizing.Size(pumps[i]), pump.size(), "PA " + (i + 1));
+            closest(pump.rating(), Limit.PUMP_RATED);
+            assertEquals(rated[i], read(pump.rating(), Limit.PUMP_RATED), ONE);
+        }
+    }
+
+    @Test
+    void theMemberLinesTakeTheProbesBores() {
+        Object[][] probe = {{"overhead", Service.GAS, .8}, {"receiver out", Service.SUCTION_BOILING, .35}, {"pump out", Service.LIQUID, .25}, {"reflux", Service.LIQUID, .2},
+                {"pa 1 draw", Service.DRAW, .5}, {"pa 1 return", Service.LIQUID, .3}, {"pa 2 draw", Service.DRAW, .6}, {"pa 2 return", Service.LIQUID, .3},
+                {"pa 3 draw", Service.DRAW, .45}, {"pa 3 return", Service.LIQUID, .25}};
+        var wrong = new ArrayList<String>();
+        for (var row : probe) {
+            var line = line((String) row[0]);
+            if (line.line().service() != row[1] || line.size().bore() != (double) row[2] || line.size().runs() != 1 || line.rating().lamp() != Lamp.GREEN)
+                wrong.add(row[0] + ": " + line.line().service() + " " + line.size() + " " + text(line.rating()));
+        }
+        assertTrue(wrong.isEmpty(), String.join("\n", wrong));
+        assertEquals(31, sized.lines().size(), "21 sheet lines and 10 members");
+    }
+
+    @Test
+    void p102ReadsItsDrawTraysHeight() {
+        var pump = sized.units().get("P-102").rating();
+        assertEquals(31.1, read(pump, Limit.PUMP_NPSH), TENTH);
+        closest(pump, Limit.PUMP_RATED);
+    }
+
+    @Test
+    void theBlocksMembersStandUnderIt() {
+        var ids = List.copyOf(sized.units().keySet());
+        int at = ids.indexOf(T);
+        assertEquals(List.of("condenser", "receiver", "reflux pump", "pa 1 cooler", "pa 1 pump", "pa 2 cooler", "pa 2 pump", "pa 3 cooler", "pa 3 pump"),
+                ids.subList(at + 1, at + 10).stream().map(id -> id.substring(T.length() + 1)).toList());
+    }
+
+    /** Stop reaches a trial: the sticky stop the run thread sets throws at the first checkpoint inside the column solver. */
+    @Test
+    void stopReachesATrial() {
+        var inside = new boolean[1];
+        var stopping = new FlowThermo(SheetFixture.FLUIDS.model(), SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
+            if (StackWalker.getInstance().walk(frames -> frames.anyMatch(f -> f.getClassName().contains("V3ColumnCalculator")))) {
+                inside[0] = true;
+                throw new CancellationException();
+            }
+        });
+        var size = (ColumnSizing.Size) sized.units().get(T).size();
+        var entries = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(8.5, size.layout()), null, null, null, null, null)));
+        assertThrows(CancellationException.class, () -> size(sheet, run, stopping, entries));
+        assertTrue(inside[0]);
+    }
+
+    /** No process number moves but a column's: the re-run at Auto's diameter is the sheet run with that diameter on its door. */
+    @Test
+    void aNewDiameterMovesTheProcessOnlyThroughTheColumn() {
+        var wide = door(sheet, 9);
+        var wideRun = FlowsheetEngine.run(wide, SheetFixture.CATALOG, () -> {
+        });
+        assertEquals(FlowsheetRun.Status.STEADY, wideRun.status());
+        var resized = size(wide, wideRun, thermo, SheetSizing.Entries.DEFAULT);
+        assertEquals(8.0, ((ColumnSizing.Size) resized.units().get(T).size()).diameter());
+        var rerun = resized.rerun();
+        assertNotNull(rerun);
+        assertEquals(FlowsheetRun.Status.STEADY, rerun.status());
+        for (var stream : run.streams().entrySet()) {
+            var again = rerun.streams().get(stream.getKey());
+            assertEquals(stream.getValue().temperature(), again.temperature(), .05, stream.getKey());
+            assertEquals(stream.getValue().total(), again.total(), 1e-4 * Math.max(1, stream.getValue().total()), stream.getKey());
+        }
+        closest(resized.units().get(T).rating(), Limit.COLUMN_FLOOD);
+        assertEquals(read(sized.units().get(T).rating(), Limit.COLUMN_FLOOD), read(resized.units().get(T).rating(), Limit.COLUMN_FLOOD), FLOOD);
+    }
+
+    /**
+     * An air-cooled condenser is S2's air cooler on the overhead; the cooling water's lines go with the exchanger. The sample's
+     * overhead needs more bare surface at air 25 °C than the world's largest bank holds, and an air cooler has no count, so it is
+     * red on its surface: one bank cannot condense this column.
+     */
+    @Test
+    void anAirCooledCondenserTakesAnAirCooler() {
+        var air = door(sheet, json -> json.addProperty("condenser", "AIR_COOLER"), "CWS", "CWR");
+        var airRun = FlowsheetEngine.run(air, SheetFixture.CATALOG, () -> {
+        });
+        assertEquals(FlowsheetRun.Status.STEADY, airRun.status(), () -> airRun.log().toString());
+        var airSized = size(air, airRun, thermo, SheetSizing.Entries.DEFAULT);
+        var condenser = airSized.units().get(SheetSizing.member(T, "condenser"));
+        assertInstanceOf(AirCoolerSizing.Size.class, condenser.size());
+        assertEquals(Lamp.RED, condenser.rating().lamp(), () -> text(condenser.rating()));
+        assertSame(Limit.AIR_COOLER_SURFACE, condenser.rating().closest().limit(), () -> text(condenser.rating()));
+        System.out.println("AIR\t" + condenser.size() + "\t" + text(condenser.rating()));
+        assertNotNull(airSized.units().get(SheetSizing.member(T, "reflux pump")).size());
+    }
+
+    /**
+     * A column with reboiler duty boils its bottom tray's liquid in S2's kettle, on what its reboiler pair brings: water at 100 bar
+     * and 800 K, hot enough over a crude bottom near 350 °C, as steam at 20 bar is not.
+     */
+    @Test
+    void aReboiledColumnTakesAKettle() {
+        var reboiled = door(sheet, json -> json.addProperty("reboiler_duty", 5e6));
+        var streams = new ArrayList<>(reboiled.streams());
+        var amounts = new java.util.LinkedHashMap<String, Double>();
+        amounts.put("Water", 1500.);
+        streams.add(new Flowsheet.Stream("HPS", "HPS", null, new Flowsheet.End(T, "reboiler_in"), new Flowsheet.Feed(800, 100e5, amounts, List.of())));
+        streams.add(new Flowsheet.Stream("HPC", "HPC", new Flowsheet.End(T, "reboiler_out"), null, null));
+        var kettled = new Flowsheet(reboiled.basis(), reboiled.units(), streams, reboiled.settings(), reboiled.unknown());
+        var kettleRun = FlowsheetEngine.run(kettled, SheetFixture.CATALOG, () -> {
+        });
+        assertEquals(FlowsheetRun.Status.STEADY, kettleRun.status(), () -> kettleRun.log().toString());
+        var reboiler = size(kettled, kettleRun, thermo, SheetSizing.Entries.DEFAULT).units().get(SheetSizing.member(T, "reboiler"));
+        assertInstanceOf(ExchangerSizing.Size.class, reboiler.size());
+        assertTrue(((ExchangerSizing.Size) reboiler.size()).kettle());
+        assertNotNull(reboiler.rating().reading(Limit.KETTLE_FLUX), () -> text(reboiler.rating()));
+        System.out.println("KETTLE\t" + reboiler.size() + "\t" + text(reboiler.rating()));
+        assertNotEquals(Lamp.RED, reboiler.rating().lamp(), () -> text(reboiler.rating()));
+    }
+
+    /** {@code sheet} with T-101's door at {@code diameter}. */
+    private static Flowsheet door(Flowsheet sheet, double diameter) {
+        return door(sheet, json -> json.addProperty("diameter", diameter));
+    }
+
+    /** {@code sheet} with T-101's door changed by {@code change}, and without the streams {@code dropped}. */
+    private static Flowsheet door(Flowsheet sheet, java.util.function.Consumer<com.google.gson.JsonObject> change, String... dropped) {
+        var units = new ArrayList<Flowsheet.Unit>();
+        for (var unit : sheet.units()) {
+            if (!unit.id().equals(T)) {
+                units.add(unit);
+                continue;
+            }
+            var json = unit.params().json().deepCopy();
+            change.accept(json);
+            units.add(new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), new Params(json), unit.unknown()));
+        }
+        var streams = sheet.streams().stream().filter(stream -> !List.of(dropped).contains(stream.id())).toList();
+        return new Flowsheet(sheet.basis(), units, streams, sheet.settings(), sheet.unknown());
+    }
+}

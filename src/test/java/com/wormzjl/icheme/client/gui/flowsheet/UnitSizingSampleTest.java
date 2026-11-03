@@ -33,16 +33,16 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * S2's gate on a real steady run of the sample (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 4), a slow gate: the
  * sheet's units take the probe's size and closest limit, from {@code sizing-sample.tsv}. T-101 and its ten members (the condenser,
- * the receiver, the reflux pump, three pumparound coolers and their pumps, and the member lines) stay for S3.
+ * the receiver, the reflux pump, three pumparound coolers and their pumps, and the member lines) are S3's, in
+ * {@link ColumnSizingSampleTest}.
  *
  * <p>Two surfaces leave the probe's, because the probe holds one heat capacity along a duty and the curves hold the real one, which
  * rises with temperature, so more of the heat passes where the difference is wide. E-101 needs 440 m², not 444, and keeps its size. E-102
  * needs 724 m², not 741, and that moves it: 6 × 4 bays of 2.0 × 5 m hold it on 145 m² of face, where the probe's 5 × 3 of 2.5 × 6 m take 150.
  * The two gates below rebuild the probe's number from the same streams, so what moved is the form and nothing else.
  *
- * <p>P-102 draws from T-101, whose nozzle height S3 gives. Until then its NPSH rows are not read at all, so its lamp says nothing of
- * them: the first gate holds that, and the second gives it the probe's height and reads the probe's number. V-101's share of its
- * path and H-101's spare wait for S4 in the same way.
+ * <p>P-102 draws from T-101's tray, whose height the column's own layout gives, and an entry with the probe's height reads the same.
+ * V-101's share of its path and H-101's spare wait for S4: their rows are not read at all until an entry gives them.
  */
 class UnitSizingSampleTest {
     /** Where the probe's P-102 draws: T-101's D 8.0 m skirt, its bottom space and the 22 trays over them. */
@@ -107,16 +107,15 @@ class UnitSizingSampleTest {
     }
 
     @Test
-    void p102ReadsNoNpshUntilItsNozzleHasAHeight() {
+    void p102ReadsItsDrawTraysHeight() {
         var unit = alone.units().get("P-102");
         assertEquals(new PumpSizing.Size(.15), unit.size());
         closest(unit.rating(), Limit.PUMP_RATED);
         assertEquals(71, read(unit.rating(), Limit.PUMP_RATED), ONE);
         assertEquals(135, read(unit.rating(), Limit.PUMP_FLOW), ONE);
         assertEquals(51, read(unit.rating(), Limit.PUMP_HEAD), ONE);
-        assertNull(unit.rating().reading(Limit.PUMP_NPSH), "not read at all, so it lights nothing");
-        assertNull(unit.rating().reading(Limit.PUMP_NPSH_WORLD));
-        assertEquals(31.1, read(given.units().get("P-102").rating(), Limit.PUMP_NPSH), TENTH, "the probe's height gives the probe's number");
+        assertEquals(31.1, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "the column's own layout gives the probe's height");
+        assertEquals(31.1, read(given.units().get("P-102").rating(), Limit.PUMP_NPSH), TENTH, "and so does the probe's height given as an entry");
     }
 
     @Test
@@ -228,16 +227,8 @@ class UnitSizingSampleTest {
     }
 
     @Test
-    void theColumnWaitsForS3() {
-        var unit = alone.units().get("T-101");
-        assertNull(unit.size());
-        assertEquals(Lamp.NONE, unit.rating().lamp());
-    }
-
-    @Test
     void everyLineStandsSizedInSheetOrder() {
-        assertEquals(21, alone.lines().size());
-        assertEquals("CRUDE", alone.lines().keySet().iterator().next());
+        assertEquals(sheet.streams().stream().map(Flowsheet.Stream::id).toList(), alone.lines().keySet().stream().limit(21).toList(), "the block's member lines come after");
         assertEquals(.7, alone.lines().get("S-6").size().bore());
         assertEquals(Lamp.GREEN, alone.lines().get("S-6").rating().lamp());
     }

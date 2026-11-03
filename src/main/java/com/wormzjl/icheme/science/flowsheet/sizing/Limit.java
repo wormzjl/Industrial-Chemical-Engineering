@@ -141,11 +141,12 @@ public enum Limit {
     HEATER_SPARE(MUST, least(0), "bar", "World", QUIET),
 
     // ---- Columns ----
+    /** 1 if the column solves at this diameter, 0 if not: a trial that does not solve is no fit. */
+    COLUMN_SOLVES(MUST, least(1), "", "World: `V3ColumnCalculator`", QUIET),
     COLUMN_FLOOD_WORLD(MUST, most(100), "%", "World: `V3TrayHydraulics`", QUIET),
     COLUMN_FLOOD(SHOULD, most(80), "%", "[NPTEL], [KIST]"),
     COLUMN_DIAMETER(MUST, most(EquipmentShape.MAX_COLUMN_DIAMETER), "m", "World", QUIET),
     COLUMN_TRAYS(MUST, most(ColumnTrays.MAX_TRAYS), "", "World", QUIET),
-    COLUMN_NOZZLE(MUST, given(Sense.MOST), "m", "World: `NozzleBore.largest`", QUIET),
     COLUMN_DOWNCOMER(SHOULD, most(.18), "m/s", "[KIST]"),
     COLUMN_TRAY_DROP(SHOULD, most(1), "kPa", "[TRAY-X]"),
     COLUMN_SUMP(SHOULD, least(5), "min", "[ET]"),

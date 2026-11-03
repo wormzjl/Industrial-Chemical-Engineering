@@ -48,11 +48,19 @@ public final class PumpSizing {
          * @param height the static head from the nozzle it draws from to grade (m), null if that is not known yet
          */
         public static Load of(LineSizing.Line suction, LineSizing.Size size, FlowStream in, FlowStream out, @Nullable Double height, FlowThermo thermo) {
+            return of(suction, size, in, out.pressure() - in.pressure(), height, thermo);
+        }
+
+        /**
+         * A pump with no sheet streams of its own, a block's member: it draws {@code liquid} at its source's pressure and adds
+         * {@code rise} (Pa), which the caller adds up from the loop it serves.
+         */
+        public static Load of(LineSizing.Line suction, LineSizing.Size size, FlowStream liquid, double rise, @Nullable Double height, FlowThermo thermo) {
             if (!suction.flows()) return NONE;
             double weight = suction.density() * PassiveStepSolver.GRAVITY, reference = thermo.model().pumpReferenceDensity() * PassiveStepSolver.GRAVITY;
             Double npsh = null;
-            if (height != null) npsh = (in.pressure() + weight * height - 1e5 * LineSizing.drop(suction, size, suction.length()) - thermo.bubblePressure(in.temperature(), in.amountsView())) / weight;
-            return new Load(suction.volume() * 3600, (out.pressure() - in.pressure()) / weight, Limit.PUMP_HEAD.value() / reference, npsh);
+            if (height != null) npsh = (liquid.pressure() + weight * height - 1e5 * LineSizing.drop(suction, size, suction.length()) - thermo.bubblePressure(liquid.temperature(), liquid.amountsView())) / weight;
+            return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, npsh);
         }
 
         boolean flows() {

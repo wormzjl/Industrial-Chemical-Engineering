@@ -10,7 +10,7 @@ import org.jetbrains.annotations.Nullable;
  * what the constructor can build: {@link #shape} is what Send to block stores, and a size it refuses reads red in {@link #built}, so
  * a rate function never throws for a Fixed size. Every number a rating reads comes from the shape's own laws.
  */
-public sealed interface UnitSize permits PumpSizing.Size, ExchangerSizing.Size, AirCoolerSizing.Size, HeaterSizing.Size, CompressorSizing.Size, DrumSizing.Size, TankSizing.Size, ValveSizing.Size {
+public sealed interface UnitSize permits PumpSizing.Size, ExchangerSizing.Size, AirCoolerSizing.Size, HeaterSizing.Size, CompressorSizing.Size, DrumSizing.Size, TankSizing.Size, ValveSizing.Size, ColumnSizing.Size {
     /** The shape one of these builds, null for a unit the constructor has no kind for. Throws {@link IllegalArgumentException} for a size it refuses. */
     @Nullable EquipmentShape shape();
 
