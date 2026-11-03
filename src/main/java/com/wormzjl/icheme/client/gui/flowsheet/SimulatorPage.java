@@ -39,7 +39,7 @@ public final class SimulatorPage {
         for (var t : SimulatorFrame.Tab.values()) {
             boolean sizing = t == SimulatorFrame.Tab.SIZING;
             String label = x.text("tab." + t.name().toLowerCase(java.util.Locale.ROOT));
-            slots.add(new Slot(sizing ? off("tab/" + t.ordinal(), label, x.text(x.state().steady() ? "hint.sizing_later" : "hint.sizing")) : Door.position("tab/" + t.ordinal(), label, t == tab), tabs.get(t.ordinal())));
+            slots.add(new Slot(sizing && !SizingPage.open(x) ? off("tab/" + t.ordinal(), label, x.text("hint.sizing")) : Door.position("tab/" + t.ordinal(), label, t == tab), tabs.get(t.ordinal())));
         }
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE, reader = host.reader();
         var file = frame.fileKeys();
@@ -47,6 +47,15 @@ public final class SimulatorPage {
         slots.add(new Slot(new Column.Button("file/open", x.text("file.open"), !editor.locked(), null), file.get(1)));
         slots.add(new Slot(new Column.Button("file/save", x.text("file.save"), host.stores() && !reader, host.stores() ? null : x.text("hint.block")), file.get(2)));
         slots.add(new Slot(new Column.Button("file/save_as", x.text(narrow ? "file.save_as_short" : "file.save_as"), true, null), file.get(3)));
+        if (tab == SimulatorFrame.Tab.SIZING) slots.addAll(SizingPage.footer(x, frame, host, editor));
+        else footer(slots, x, frame, host, editor, reader);
+        var soft = softKeys(x.units(), x.t());
+        var at = frame.softKeys();
+        for (int i = 0; i < 4; i++) slots.add(new Slot(soft.get(i), at.get(i)));
+        return slots;
+    }
+
+    private static void footer(List<Slot> slots, SheetContext x, SimulatorFrame frame, SimulatorHost host, SheetEditor editor, boolean reader) {
         var foot = frame.footer();
         boolean running = host.running() != null;
         slots.add(new Slot(new Column.Button("close", x.t().get("fluid.close"), true, null), foot.get(0)));
@@ -56,10 +65,6 @@ public final class SimulatorPage {
             slots.add(new Slot(new Column.Button("undo", x.text("frame.undo"), editor.canUndo(), null), foot.get(3)));
             slots.add(new Slot(new Column.Button("redo", x.text("frame.redo"), editor.canRedo(), null), foot.get(4)));
         }
-        var soft = softKeys(x.units(), x.t());
-        var at = frame.softKeys();
-        for (int i = 0; i < 4; i++) slots.add(new Slot(soft.get(i), at.get(i)));
-        return slots;
     }
 
     /** The display keys. */
@@ -202,6 +207,19 @@ public final class SimulatorPage {
         BasisPage.draw(c, x, skin.well(c, new Rect(door + 9, 71, w - door - 14, bottom - 71)));
     }
 
+    /** The Sizing tab under its widgets. */
+    public static void sizing(Canvas c, Skin skin, SheetContext x, SizingPage.State state, SimulatorFrame frame, int w) {
+        int bottom = frame.bottom(), door = SimulatorFrame.SIZING_DOOR;
+        skin.vDivider(c, door + 3, SimulatorFrame.DOOR_TOP, bottom);
+        SizingPage.draw(c, x, state, skin.well(c, glass(frame, w)));
+    }
+
+    /** The Sizing tab's glass, before the skin's edge. */
+    public static Rect glass(SimulatorFrame frame, int w) {
+        int door = SimulatorFrame.SIZING_DOOR;
+        return new Rect(door + 9, 71, w - door - 14, frame.bottom() - 71);
+    }
+
     /** What the status says on a tab, a refusal or a gesture's prompt first; {@code holder} is who edits a sheet this player only reads. */
     public static SheetState.Status status(SheetContext x, SimulatorFrame.Tab tab, ResultsPage.State results, SheetGestures gestures, SheetEditor editor, boolean compact, @Nullable String holder) {
         if (x.differing().isEmpty()) return said(x, tab, results, gestures, editor, compact, holder);
@@ -223,6 +241,7 @@ public final class SimulatorPage {
         if (lifted != null) return new SheetState.Status(x.text("status.reconnect", editor.stream(lifted).name()), Palette.ACCENT);
         if (tab == SimulatorFrame.Tab.RESULTS) return new SheetState.Status(ResultsPage.status(x, results), Palette.ACCENT);
         if (tab == SimulatorFrame.Tab.BASIS) return new SheetState.Status(BasisPage.status(x), Palette.ACCENT);
+        if (tab == SimulatorFrame.Tab.SIZING) return SizingPage.status(x);
         var status = x.state().status(x.t(), x.units(), compact);
         return holder == null ? status : new SheetState.Status(x.text("status.reader", holder, Door.lower(status.text())), status.tone());
     }
@@ -279,7 +298,7 @@ public final class SimulatorPage {
     }
 
     /** Draws the page the screen stands on; returns the hover. */
-    public static @Nullable String draw(Canvas c, Skin skin, SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SheetView view, SheetGestures gestures, ResultsPage.State results, int category, SheetEditor editor, KitDoor kit, String title, @Nullable String holder, double mouseX, double mouseY) {
+    public static @Nullable String draw(Canvas c, Skin skin, SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SheetView view, SheetGestures gestures, ResultsPage.State results, SizingPage.State sizing, int category, SheetEditor editor, KitDoor kit, String title, @Nullable String holder, double mouseX, double mouseY) {
         int w = frame.status().w() + 20, h = frame.bottom() + SimulatorFrame.BOTTOM;
         back(c, skin, status(x, tab, results, gestures, editor, frame.size() != SimulatorFrame.Size.WIDE, holder), title, frame, w, h);
         switch (tab) {
@@ -299,14 +318,17 @@ public final class SimulatorPage {
                 kit.place(ResultsPage.rows(x, results), x.m());
                 return kit.draw(c, skin, mouseX, mouseY);
             }
+            case SIZING -> {
+                sizing(c, skin, x, sizing, frame, w);
+                kit.place(SizingPage.rows(x, sizing), x.m());
+                return kit.draw(c, skin, mouseX, mouseY);
+            }
             case BASIS -> {
                 basis(c, skin, x, frame, w);
                 kit.place(BasisPage.rows(x), x.m());
                 return kit.draw(c, skin, mouseX, mouseY);
             }
-            default -> {
-                return null;
-            }
         }
+        return null;
     }
 }

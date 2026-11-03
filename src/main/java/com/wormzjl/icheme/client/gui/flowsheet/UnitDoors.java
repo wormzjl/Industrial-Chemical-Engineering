@@ -20,6 +20,10 @@ import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.UnitSize;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -160,14 +164,18 @@ public final class UnitDoors {
                     case "area" -> r.entry("area", x.text("door.area"), Quantity.PLAIN);
                     default -> r.entry("temperature", x.text("door.outlet"), Quantity.TEMPERATURE);
                 });
-                r.group("drops", r.entry("tube_drop", x.text("door.tube"), Quantity.PRESSURE), r.entry("shell_drop", x.text("door.shell"), Quantity.PRESSURE));
+                boolean kettle = unit.type().equals("kettle");
+                // Sized (plan section 3.11 item 3), a side's drop is its law's at the run's flow: a meter. A kettle's shell is its pool, with no law.
+                if (sized(x, unit)) r.group("drops_flow", drop(r, x, "tube_drop", "door.tube"), kettle ? r.entry("shell_drop", x.text("door.shell"), Quantity.PRESSURE) : drop(r, x, "shell_drop", "door.shell"));
+                else r.group("drops", r.entry("tube_drop", x.text("door.tube"), Quantity.PRESSURE), r.entry("shell_drop", x.text("door.shell"), Quantity.PRESSURE));
                 r.readings(Door.meter(x.text("door.duty"), r.reading("duty", 1e6, 2), "MW"), Door.meter(x.text("door.approach"), r.reading("approach", 1, 1), "K"), Door.meter(x.text("door.area_needed"), r.reading("area_needed", 1, 0), "m²"));
                 if (unit.type().equals("exchanger") && view.tab == 0) glass = heat(x, unit, HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE);
             }
             case "air_cooler" -> {
                 r.group("target", r.choice("target", "outlet", "outlet", "duty"));
                 r.group("set_point", r.text("target", "outlet").equals("duty") ? r.entry("duty", x.text("door.duty"), Quantity.MEGAWATT) : r.entry("temperature", x.text("door.outlet"), Quantity.TEMPERATURE));
-                r.group("drops", r.entry("drop", x.text("door.drop"), Quantity.PRESSURE));
+                if (sized(x, unit)) r.group("drops_flow", drop(r, x, "drop", "door.drop"));
+                else r.group("drops", r.entry("drop", x.text("door.drop"), Quantity.PRESSURE));
                 r.readings(Door.meter(x.text("door.duty"), r.reading("duty", 1e6, 2), "MW"));
             }
             case "fired_heater" -> {
@@ -176,7 +184,9 @@ public final class UnitDoors {
                 boolean apart = r.text("coils", "series").equals("apart");
                 r.group("set_point", r.text("target", "outlet").equals("duty") ? r.entry("duty", x.text("door.duty"), Quantity.MEGAWATT) : r.entry("temperature", x.text("door.coil_outlet"), Quantity.TEMPERATURE), r.entry("limit", x.text("door.limit"), Quantity.MEGAWATT));
                 if (apart) r.group("convection", r.choice("convection_target", "outlet", "outlet", "duty"), r.text("convection_target", "outlet").equals("duty") ? r.entry("convection_duty", x.text("door.duty"), Quantity.MEGAWATT) : r.entry("convection_temperature", x.text("door.outlet"), Quantity.TEMPERATURE));
-                r.group("drops", r.entry("radiant_drop", x.text("door.radiant"), Quantity.PRESSURE), r.entry("convection_drop", x.text("door.convection"), Quantity.PRESSURE));
+                if (!sized(x, unit)) r.group("drops", r.entry("radiant_drop", x.text("door.radiant"), Quantity.PRESSURE), r.entry("convection_drop", x.text("door.convection"), Quantity.PRESSURE));
+                else if (apart) r.group("drops_flow", drop(r, x, "radiant_drop", "door.radiant"), drop(r, x, "convection_drop", "door.convection"));
+                else r.group("drops_flow", drop(r, x, "coils", "door.coils"));
                 r.readings(Door.meter(x.text("door.duty"), r.reading("duty", 1e6, 2), "MW"), Door.meter(x.text("door.vapour_out"), r.reading("vapour", .01, 1), "%"));
                 if (view.tab == 0) glass = heat(x, unit, HeatSides.Unit.FIRED_HEATER, HeatSides.Side.RADIANT);
             }
@@ -213,6 +223,24 @@ public final class UnitDoors {
         if (heat.equals("temperature")) rows.add(r.entry("temperature", x.text("door.temperature"), Quantity.TEMPERATURE));
         if (heat.equals("duty")) rows.add(r.entry("duty", x.text("door.duty"), Quantity.MEGAWATT));
         r.group("heat", rows.toArray(Column.Row[]::new));
+    }
+
+    /** Whether the unit holds a size the constructor builds, whose law the run reads for its drops ({@code SizedPassages.of}). */
+    static boolean sized(SheetContext x, Flowsheet.Unit unit) {
+        var size = x.editor().sheet().sizing().unit(unit.id()).size();
+        boolean law = switch (size) {
+            case ExchangerSizing.Size exchanger -> exchanger.kettle() == unit.type().equals("kettle");
+            case AirCoolerSizing.Size cooler -> true;
+            case HeaterSizing.Size heater -> true;
+            case null, default -> false;
+        };
+        return law && UnitSize.built(size) != null;
+    }
+
+    /** A drop the run read off a sized side, in the player's pressure unit. */
+    private static Column.Reading drop(Rows r, SheetContext x, String key, String label) {
+        var u = x.units();
+        return Door.meter(key, x.text(label), r.reading(key, u.pressure().si(1), 2), u.pressure().symbol());
     }
 
     private static String reading(SheetContext x, Flowsheet.Unit unit, String key, SheetUnits u) {
@@ -488,7 +516,7 @@ public final class UnitDoors {
     private static Glass sketch(SheetContext x, Flowsheet.Unit unit) {
         return new Glass() {
             @Override public void draw(Canvas c, Skin skin, Rect box) {
-                var symbol = Tiles.symbol(unit.type());
+                var symbol = Tiles.symbol(unit, x.editor().sheet().sizing());
                 var p = new FlowsheetPainter(c, box.x(), box.y(), 1, 1);
                 int gx = box.w() / 2 - symbol.w / 2, gy = symbol == Symbol.PUMP ? MID - 13 : MID - symbol.h / 2, inX = gx - 96, outX = gx + symbol.w + 40;
                 var in = x.streams(unit.id(), true);

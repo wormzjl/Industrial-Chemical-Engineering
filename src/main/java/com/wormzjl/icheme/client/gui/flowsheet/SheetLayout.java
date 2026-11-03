@@ -216,7 +216,7 @@ public final class SheetLayout {
     }
 
     private Box box(Flowsheet.Unit unit, List<Port> ports, Set<Live> held) {
-        var symbol = runs(unit) ? Tiles.symbol(unit.type()) : null;
+        var symbol = runs(unit) ? Tiles.symbol(unit, sheet.sizing()) : null;
         if (symbol == null) return placeholder(unit, ports, held);
         if (unit.type().equals("column")) return column(unit, ports, held);
         int w = symbol.w, h = symbol.h;
@@ -225,7 +225,7 @@ public final class SheetLayout {
         var at = new ArrayList<Place>();
         int inlets = 0, outlets = 0;
         for (var port : ports) {
-            int[] spot = spot(unit, port, w, h, port.direction() == Port.Direction.IN ? inlets : outlets, ports);
+            int[] spot = spot(unit, symbol, port, w, h, port.direction() == Port.Direction.IN ? inlets : outlets, ports);
             if (port.direction() == Port.Direction.IN) inlets++;
             else outlets++;
             at.add(place(unit, port, unit.x() + spot[0], unit.y() + spot[1], side(spot[2]), held));
@@ -247,7 +247,7 @@ public final class SheetLayout {
     private static final int L = 0, R = 1, T = 2, B = 3;
 
     /** A port's spot in its symbol's box and the side it leaves by. */
-    private static int[] spot(Flowsheet.Unit unit, Port port, int w, int h, int order, List<Port> ports) {
+    private static int[] spot(Flowsheet.Unit unit, Symbol symbol, Port port, int w, int h, int order, List<Port> ports) {
         String id = port.id();
         boolean in = port.direction() == Port.Direction.IN;
         return switch (unit.type()) {
@@ -276,7 +276,13 @@ public final class SheetLayout {
             };
             // The owner's sheet: the cooler's inlet at its right end, the sample's residue running back to the left.
             case "air_cooler" -> new int[]{in ? w : 0, 8, in ? R : L};
-            case "fired_heater" -> switch (id) {
+            // A cabin's convection box sits on its radiant box, narrower: its coil ends stand on the box's sides.
+            case "fired_heater" -> symbol == Symbol.CABIN ? switch (id) {
+                case "convection_in" -> new int[]{16, 18, L};
+                case "convection_out" -> new int[]{58, 18, R};
+                case "in", "radiant_in" -> new int[]{0, 56, L};
+                default -> new int[]{w, 46, R};
+            } : switch (id) {
                 case "convection_in" -> new int[]{7, 20, L};
                 case "convection_out" -> new int[]{51, 20, R};
                 case "in", "radiant_in" -> new int[]{0, 66, L};

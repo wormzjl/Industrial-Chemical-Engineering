@@ -98,7 +98,8 @@ public enum Limit {
     // ---- Pumps, section 3.4 ----
     PUMP_FLOW(MUST, most(FlowControl.Mover.MAXIMUM_VOLUME_FLOW * 3600), "m³/h", "World: `FluidNetwork.Controls`", QUIET),
     /** A rise for the world's reference fluid, so a head in metres takes that fluid's density. */
-    PUMP_HEAD(MUST, most(FlowControl.Pump.MAXIMUM_ADDED_PRESSURE), "Pa", "World: 2 MPa at water reference", QUIET),
+    // Its bound is the world's added pressure, Pa; a pump reads it as head, m of its own liquid, against that pressure as head of the reference liquid.
+    PUMP_HEAD(MUST, most(FlowControl.Pump.MAXIMUM_ADDED_PRESSURE), "m", "World: 2 MPa at water reference", QUIET),
     PUMP_NPSH_WORLD(MUST, above(0), "m", "World: `PUMP_SUCTION_LIMIT`", QUIET),
     PUMP_NPSH(SHOULD, least(1), "m", "[HI-961]", QUIET),
     PUMP_RATED(SHOULD, within(70, 120), "%", "[API610]"),

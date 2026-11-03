@@ -1,5 +1,9 @@
 package com.wormzjl.icheme.client.gui.flowsheet;
 
+import com.wormzjl.icheme.science.flowsheet.Flowsheet;
+import com.wormzjl.icheme.science.flowsheet.sizing.DrumSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
+import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import java.util.ArrayList;
 import java.util.List;
 import org.jetbrains.annotations.Nullable;
@@ -60,6 +64,35 @@ public final class Tiles {
         var tile = tile(type);
         return tile == null ? null : tile.symbol();
     }
+
+    /**
+     * A unit's symbol: its tile's, until the sizing holds its type (plan section 3.10), the type the player keeps or the one its
+     * size is built as. A lying drum with a boot shows the boot.
+     */
+    public static @Nullable Symbol symbol(Flowsheet.Unit unit, SizingFacts sizing) {
+        var tile = symbol(unit.type());
+        if (tile == null) return null;
+        var facts = sizing.unit(unit.id());
+        var type = facts.type() != null ? facts.type() : SizingFacts.UnitFacts.typeOf(facts.size());
+        if (type == null || !TYPED.getOrDefault(unit.type(), List.of()).contains(type)) return tile;
+        return switch (type) {
+            case VERTICAL_HEATER -> Symbol.HEATER;
+            case CABIN_HEATER -> Symbol.CABIN;
+            case FLOATING_ROOF -> Symbol.TANK;
+            case SPHERE -> Symbol.SPHERE;
+            case STANDING_DRUM -> Symbol.DRUM;
+            case LYING_DRUM -> facts.size() instanceof DrumSizing.Size drum && drum.boot() ? Symbol.BOOT_DRUM : Symbol.LYING;
+            case PISTON -> Symbol.COMPRESSOR;
+            case TURBO -> Symbol.TURBO;
+        };
+    }
+
+    /** The types each typed tile is built as. */
+    private static final java.util.Map<String, List<UnitType>> TYPED = java.util.Map.of(
+            "fired_heater", List.of(UnitType.VERTICAL_HEATER, UnitType.CABIN_HEATER),
+            "storage_tank", List.of(UnitType.FLOATING_ROOF, UnitType.SPHERE),
+            "drum", List.of(UnitType.STANDING_DRUM, UnitType.LYING_DRUM),
+            "compressor", List.of(UnitType.PISTON, UnitType.TURBO));
 
     /** The name's key of a unit of {@code type}, a removed one's too. */
     /** A removed type's own name, as a person would write it. */

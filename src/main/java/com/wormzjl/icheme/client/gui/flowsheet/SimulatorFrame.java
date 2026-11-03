@@ -29,7 +29,7 @@ public final class SimulatorFrame {
         FLOWSHEET, RESULTS, SIZING, BASIS
     }
 
-    public static final int BOTTOM = 38, PANEL = 182, RESULT_DOOR = 168, BASIS_DOOR = 200, DOOR_TOP = 74, CATEGORY_H = 18;
+    public static final int BOTTOM = 38, PANEL = 182, RESULT_DOOR = 168, BASIS_DOOR = 200, SIZING_DOOR = 180, DOOR_TOP = 74, CATEGORY_H = 18;
     /** The design minimum and the size a door takes. */
     public static final int LEAST_W = 464, LEAST_H = 254, DOOR_W = 790, DOOR_H = 524;
 
@@ -118,6 +118,23 @@ public final class SimulatorFrame {
         x += 64;
         keys.add(new Rect(x, y, 50, 18));
         x += 54;
+        if (size != Size.TINY) for (int i = 0; i < 2; i++) {
+            keys.add(new Rect(x, y, 50, 18));
+            x += 54;
+        }
+        return keys;
+    }
+
+    /** The Sizing tab's footer: Close, Size all, Send to block (narrower where the window is), then Undo and Redo where they fit. */
+    public List<Rect> sizingFooter() {
+        int y = h - 27, x = 10, send = size.narrow() ? 50 : 84;
+        var keys = new ArrayList<Rect>();
+        keys.add(new Rect(x, y, 50, 18));
+        x += 54;
+        keys.add(new Rect(x, y, 60, 18));
+        x += 64;
+        keys.add(new Rect(x, y, send, 18));
+        x += send + 4;
         if (size != Size.TINY) for (int i = 0; i < 2; i++) {
             keys.add(new Rect(x, y, 50, 18));
             x += 54;

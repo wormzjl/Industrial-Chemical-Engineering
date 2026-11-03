@@ -31,6 +31,8 @@ import com.wormzjl.icheme.client.gui.flowsheet.SheetView;
 import com.wormzjl.icheme.client.gui.flowsheet.SimulatorFrame;
 import com.wormzjl.icheme.client.gui.flowsheet.SimulatorHost;
 import com.wormzjl.icheme.client.gui.flowsheet.SimulatorPage;
+import com.wormzjl.icheme.client.gui.flowsheet.SimulatorRunner;
+import com.wormzjl.icheme.client.gui.flowsheet.SizingPage;
 import com.wormzjl.icheme.client.gui.flowsheet.StreamDoors;
 import com.wormzjl.icheme.client.gui.flowsheet.StreamProps;
 import com.wormzjl.icheme.client.gui.flowsheet.UnitDoors;
@@ -82,6 +84,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private static final int AUTOSAVE_TICKS = 1200;
     /** How long a word that is no warning stays on the status line. */
     private static final int SAID_TICKS = 160;
+    /** How long a sheet stands still before its sizes are rated again: half a second, so typing asks once. */
+    private static final int RATE_TICKS = 10;
 
     private enum Dialog {
         NONE, OPEN, SAVE_AS, TEMPLATES, COLUMN_TEMPLATES, REPLACE, CHANGES, SAVE_TEMPLATE, SAVE_COLUMN, UNSAVED;
@@ -105,6 +109,14 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private final StreamProps.Fluids fluids;
     private final KitDoor kit = new KitDoor();
     private final ResultsPage.State resultsState = new ResultsPage.State();
+    private final SizingPage.State sizingState = new SizingPage.State();
+    /** The sheet Size all started from: its edit lands only on that sheet. */
+    private @Nullable Flowsheet sizingFrom;
+    private SimulatorRunner.@Nullable Rated applied;
+    /** What the last quiet rating was asked for, so one edit asks once. */
+    private SimulatorHost.@Nullable Finished rateLast;
+    private @Nullable Flowsheet rateSheet, seenSheet;
+    private int changedAt;
     private final Map<String, SkinField> entries = new HashMap<>();
     private SimulatorFrame.Tab tab = SimulatorFrame.Tab.FLOWSHEET;
     private int category;
@@ -214,6 +226,13 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     /** What the frame and every key read: worked out once for a sheet and a run, since a sheet's signature strings are not a frame's work. Only the run's clock is new each time. */
     private SheetContext context() {
         host.lock(editor);
+        var rated = host.rated();
+        if (rated != null && rated.edit() && rated != applied && host.running() == null) {
+            // Size all's sizes land as one step, on the sheet it started from; an edit since, which a run's lock leaves none of, keeps its own.
+            applied = rated;
+            if (editor.sheet() == sizingFrom) editor.sized(rated.sheet().copy());
+            sizingFrom = null;
+        }
         var last = host.last();
         if (stated == null || statedSheet != editor.sheet() || statedRun != last) {
             statedSheet = editor.sheet();
@@ -275,6 +294,27 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             saidAt = ticks;
         }
         if (now != null && !now.warn() && ticks - saidAt >= SAID_TICKS) host.say(null);
+        rateWhenDue();
+    }
+
+    /**
+     * The Sizing tab's lamps hold for the run on show at the sheet's sizes (plan section 3.1 item 5). A block's stored run comes
+     * without them, and an edit of a size moves them: a quiet rating rebuilds them once the sheet has stood still a moment.
+     */
+    private void rateWhenDue() {
+        var sheet = editor.sheet();
+        if (sheet != seenSheet) {
+            seenSheet = sheet;
+            changedAt = ticks;
+        }
+        var last = host.last();
+        if (tab != SimulatorFrame.Tab.SIZING || last == null || host.running() != null || host.rating() || ticks - changedAt < RATE_TICKS) return;
+        if (rateLast == last && rateSheet == sheet) return;
+        var rated = host.rated();
+        rateLast = last;
+        rateSheet = sheet;
+        if (rated != null && rated.run() == last && SheetState.same(rated.sheet(), sheet)) return;
+        host.rate(sheet);
     }
 
     /** The editor's own copy, beside its file: what stays when the block goes. It takes the sheet as it stands, and a reader has nothing of its own to keep. */
@@ -293,6 +333,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         frame = new SimulatorFrame(width, height);
         entries.clear();
         var x = context();
+        if (tab == SimulatorFrame.Tab.SIZING && !SizingPage.open(x)) tab = SimulatorFrame.Tab.FLOWSHEET;
         signature = signature(x);
         var shown = shownDoor(x);
         if (dialog != Dialog.NONE) dialogWidgets();
@@ -302,7 +343,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
 
     private SkinButton add(Column.Button spec, Rect at) {
         var button = SkinButton.of(spec, at, door == null || dialog != Dialog.NONE ? this::act : this::actDoor, ProcessSimulatorScreen::skin);
-        if (spec.key().equals("run") && spec.active()) button.primary(true);
+        if ((spec.key().equals("run") || spec.key().equals("size_all")) && spec.active()) button.primary(true);
         addRenderableWidget(button);
         return button;
     }
@@ -323,8 +364,10 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             if (selected != null && !(selected.unit() ? editor.unit(selected.id()) == null : editor.stream(selected.id()) == null)) panelWidgets(x, selected);
             for (var slot : SimulatorPage.canvasKeys(x, frame, canvasBox, category)) add(slot.button(), slot.rect());
             nameWidget();
-        } else if (tab == SimulatorFrame.Tab.RESULTS) pageWidgets(ResultsPage.rows(x, resultsState), Map.of(), SimulatorFrame.RESULT_DOOR);
-        else if (tab == SimulatorFrame.Tab.BASIS) pageWidgets(BasisPage.rows(x), BasisPage.values(x), SimulatorFrame.BASIS_DOOR);
+        } else if (tab == SimulatorFrame.Tab.RESULTS) pageWidgets(ResultsPage.rows(x, resultsState), Map.of(), SimulatorFrame.RESULT_DOOR, (key, text) -> {
+        });
+        else if (tab == SimulatorFrame.Tab.BASIS) pageWidgets(BasisPage.rows(x), BasisPage.values(x), SimulatorFrame.BASIS_DOOR, (key, text) -> BasisPage.entry(context(), key, text));
+        else if (tab == SimulatorFrame.Tab.SIZING) pageWidgets(SizingPage.rows(x, sizingState), SizingPage.values(x, sizingState), SimulatorFrame.SIZING_DOOR, (key, text) -> SizingPage.entry(context(), sizingState, key, text));
     }
 
     /** The contrast sign; its hover names the panel shown. */
@@ -355,9 +398,9 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         keep(panel.values(), (key, text) -> panelEntry(x, selected, key, text), this::actPanel);
     }
 
-    private void pageWidgets(List<Column.Row> rows, Map<String, String> values, int width) {
+    private void pageWidgets(List<Column.Row> rows, Map<String, String> values, int width, Entry write) {
         kit.layout(new Rect(10, SimulatorFrame.DOOR_TOP, width - 10, height - SimulatorFrame.BOTTOM - SimulatorFrame.DOOR_TOP), rows, GuiCanvas.measure(font));
-        keep(values, (key, text) -> BasisPage.entry(context(), key, text), this::act);
+        keep(values, write, this::act);
     }
 
     private interface Entry {
@@ -464,6 +507,11 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         text.append(x.units());
         if (shown != null) for (var rows : shown.columns()) text.append(rows.size()).append(SimulatorPage.keys(rows));
         if (shown != null) text.append(shown.glass().slots(new Rect(0, 0, 400, 400)).stream().map(Door.Slot::key).toList());
+        if (tab == SimulatorFrame.Tab.SIZING) {
+            text.append(sizingState.view).append(sizingState.unit).append(sizingState.line).append(sizingState.path).append(SimulatorPage.keys(SizingPage.rows(x, sizingState)));
+            // A new rating's sizes fill the entries, but not under the player's hands: the next rebuild after typing takes them.
+            if (!(getFocused() instanceof SkinField)) text.append(System.identityHashCode(SizingPage.sized(x))).append(SizingPage.open(x)).append(SizingPage.sizes(x));
+        }
         return text.toString();
     }
 
@@ -475,6 +523,10 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         switch (key) {
             case "close" -> onClose();
             case "run" -> host.run(editor.sheet());
+            case "size_all" -> {
+                sizingFrom = editor.sheet();
+                host.size(editor.sheet());
+            }
             case "stop" -> host.stop();
             case "undo" -> editor.undo();
             case "redo" -> editor.redo();
@@ -498,7 +550,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
                 else if (key.equals("category-") || key.equals("category+")) category = Math.floorMod(category + (key.endsWith("+") ? 1 : -1), com.wormzjl.icheme.client.gui.flowsheet.Tiles.CATEGORIES.size());
                 else if (key.startsWith("unit/")) unitKey(key.substring(5));
                 else if (key.startsWith("dialog/")) dialogKey(key.substring(7));
-                else ResultsPage.press(resultsState, key);
+                else if (!SizingPage.press(x, sizingState, key)) ResultsPage.press(resultsState, key);
             }
         }
         rebuild();
@@ -816,6 +868,12 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             if (id != null) ResultsPage.toggle(resultsState, id);
             return id != null;
         }
+        if (tab == SimulatorFrame.Tab.SIZING) {
+            var c = context();
+            if (!SizingPage.pick(sizingState, SizingPage.click(c, sizingState, c.m(), SimulatorFrame.inner(SimulatorPage.glass(frame, width)), x, y))) return false;
+            rebuildWidgets();
+            return true;
+        }
         if (tab != SimulatorFrame.Tab.FLOWSHEET) return false;
         var tile = frame.tileAt(category, SimulatorFrame.inner(frame.tileWell()), x, y);
         if (tile != null) return gestures.carry(tile);
@@ -842,6 +900,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     @Override public boolean mouseScrolled(double x, double y, double dx, double dy) {
         if (door != null) return kit.wheel(x - doorLeft(), y - doorTop(), dy);
         if (tab == SimulatorFrame.Tab.FLOWSHEET && canvasBox.contains(x, y)) view.wheel(dy, x, y);
+        if (tab == SimulatorFrame.Tab.SIZING && SimulatorPage.glass(frame, width).contains(x, y)) SizingPage.scroll(sizingState, dy);
         return true;
     }
 
@@ -903,7 +962,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             g.pose().popPose();
         } else {
             var canvas = new GuiCanvas(g, font, 0, 0);
-            hovered = SimulatorPage.draw(canvas, skin, x, tab, frame, view, gestures, resultsState, category, editor, kit, title.getString(), host.holder(), mouseX, mouseY);
+            hovered = SimulatorPage.draw(canvas, skin, x, tab, frame, view, gestures, resultsState, sizingState, category, editor, kit, title.getString(), host.holder(), mouseX, mouseY);
         }
         super.render(g, mouseX, mouseY, partial);
         KitDoor.hint(g, font, hovered, mouseX, mouseY);
