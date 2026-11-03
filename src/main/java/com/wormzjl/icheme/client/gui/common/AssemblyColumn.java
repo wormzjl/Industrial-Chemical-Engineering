@@ -20,7 +20,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * A column's assembly screen as a panel door (batch 2026-10-28-gui-toolkit, GUI_REVIEW.md order 4): the title and the
  * theme key; the Structure and Operation tabs, the page shown latched; the status said once, on the message display; the
- * HMI glass at the left, with the drawing ({@link AssemblyFlowsheet}) and the parts list (each part's mark and word teal
+ * HMI glass at the left, with the drawing (the simulator's column block, {@code AssemblyBlock}) and the parts list (each part's mark and word teal
  * connected, yellow misplaced, red missing, every second part on a band); the door column at the right, with Check (Check
  * parts, a summary line) and Selected (the part, Open unit); Close and Datasheet on the footer. Each group's widget rows
  * come before its texts, and the summary is one line in every state, so no widget moves while the engine's answers come.
@@ -37,6 +37,8 @@ public final class AssemblyColumn {
     public static final int TOP = 74, FOOT = 38, DIVIDER = 35;
     /** The parts list's narrowest and widest, the gap between the drawing and the list, a part's mark and its room before the name. */
     public static final int LIST_MIN = 110, LIST_MAX = 260, GAP = 10, MARK = 10;
+    /** The drawing's part of the glass, width over height: the list takes what a drawing of this shape leaves at the glass's height (the old drawing's 680 by 724, so the split stays where it stood). */
+    private static final int DRAWING_W = 680, DRAWING_H = 724;
 
     // ---- The frame ----
 
@@ -97,7 +99,7 @@ public final class AssemblyColumn {
      * drawing's part is the rest, the drawing centred in it.
      */
     public static Split split(Rect box) {
-        int byHeight = (int) Math.ceil(AssemblyDiagram.WIDTH * box.h() / (double) AssemblyDiagram.HEIGHT);
+        int byHeight = (int) Math.ceil(DRAWING_W * box.h() / (double) DRAWING_H);
         int list = Math.min(box.w(), Math.min(LIST_MAX, Math.max(LIST_MIN, box.w() - byHeight - GAP)));
         return new Split(new Rect(box.x(), box.y(), Math.max(0, box.w() - list - GAP), box.h()), new Rect(box.right() - list, box.y(), list, box.h()));
     }
@@ -194,6 +196,18 @@ public final class AssemblyColumn {
 
     // ---- The parts list on the glass ----
 
+    /** The report of {@code slot} in {@code report}, or null (no report yet). */
+    public static @Nullable SlotReport slot(@Nullable AssemblyReport report, Slot slot) {
+        if (report == null) return null;
+        for (var s : report.slots()) if (s.slot().equals(slot)) return s;
+        return null;
+    }
+
+    /** A slot's colour group: the report's, red before it. */
+    public static AssemblyReport.Colour colour(@Nullable SlotReport r) {
+        return r == null ? AssemblyReport.Colour.RED : r.state().colour;
+    }
+
     /** A slot's state in one word, as a key under {@link #KEY}: connected, misplaced, missing or not loaded; not checked before a report. */
     public static String word(@Nullable SlotReport r) {
         if (r == null) return "word.not_validated";
@@ -219,8 +233,8 @@ public final class AssemblyColumn {
         var out = new ArrayList<Part>();
         for (var slot : slots) {
             var part = diagram.part(slot);
-            var r = AssemblyFlowsheet.slot(report, slot);
-            out.add(new Part(part == null ? slot.part() : text(part.name(), t), t.get(KEY + word(r)), Look.of(AssemblyFlowsheet.colour(r)).stroke()));
+            var r = slot(report, slot);
+            out.add(new Part(part == null ? slot.part() : text(part.name(), t), t.get(KEY + word(r)), Look.of(colour(r)).stroke()));
         }
         return out;
     }

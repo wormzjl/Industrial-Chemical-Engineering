@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.client.gui.common;
 
+import com.wormzjl.icheme.client.PortColours;
 import com.wormzjl.icheme.science.assembly.Blueprint;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
@@ -17,9 +18,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * The column GUI's drawing over the design table (batch 2026-10-26-multi-machine-framework, plan sections 5.5 and 8):
- * one part per slot of the blueprint, inside the drawing, none over another; a square for every port a line starts from
- * or ends at.
+ * A column assembly's parts and ports over the design table (batch 2026-10-26-multi-machine-framework, plan sections 5.5
+ * and 8): one part per slot of the blueprint; a port for every nozzle a line starts from or ends at, each with its own
+ * colour for the laying tool.
  */
 class AssemblyDiagramTest {
     private static final int TRAYS = 20, SUMP = TRAYS + 1;
@@ -52,30 +53,20 @@ class AssemblyDiagramTest {
     }
 
     @Test
-    void everySlotHasOnePartInsideTheDrawingAndNoPartCoversAnother() {
+    void everySlotHasOnePart() {
         int checked = 0;
         for (var trays : designs()) {
             var blueprint = ColumnBlueprint.of(trays);
-            var diagram = AssemblyDiagram.of(trays);
-            var parts = diagram.parts();
+            var parts = AssemblyDiagram.of(trays).parts();
             assertEquals(blueprint.slots().size(), parts.size(), trays::toString);
             assertEquals(new HashSet<>(blueprint.slots()), new HashSet<>(parts.stream().map(AssemblyDiagram.Part::slot).toList()), trays::toString);
-            for (var p : parts) {
-                assertTrue(p.x() >= 0 && p.y() >= 0 && p.x() + p.w() <= AssemblyDiagram.WIDTH && p.y() + p.h() <= AssemblyDiagram.HEIGHT, p::toString);
-                for (var q : parts)
-                    if (p != q)
-                        assertFalse(p.x() < q.x() + q.w() && q.x() < p.x() + p.w() && p.y() < q.y() + q.h() && q.y() < p.y() + p.h(), () -> p + " over " + q);
-            }
-            for (var w : diagram.wires())
-                for (int i = 0; i + 3 < w.points().length; i += 2)
-                    assertTrue(w.points()[i] == w.points()[i + 2] || w.points()[i + 1] == w.points()[i + 3], "lines run across or down");
             checked++;
         }
         assertEquals(1400 * Condenser.values().length, checked);
     }
 
     /**
-     * Every text the drawing names, and every text the screen builds from a report (its status line, its words, a part's
+     * Every text the parts name, and every text the screen builds from a report (its status line, its words, a part's
      * state with each detail the matcher writes, a port's state), has its English line: the hover texts are judged here,
      * as the bridge cannot hover in the game.
      */
@@ -90,10 +81,8 @@ class AssemblyDiagramTest {
         for (var trays : designs()) {
             var d = AssemblyDiagram.of(trays);
             for (var p : d.parts()) {
-                for (var t : java.util.Arrays.asList(p.label(), p.name(), p.where(), p.wanted())) if (t != null) keys.add(t.key());
+                for (var t : java.util.Arrays.asList(p.name(), p.where(), p.wanted())) if (t != null) keys.add(t.key());
             }
-            for (var l : d.labels()) keys.add(l.text().key());
-            for (var p : d.pills()) keys.add(p.text().key());
         }
         // The screen's own texts (AssemblyScreen).
         keys.addAll(List.of("title", "validate", "open_unit", "datasheet", "tab.operation", "tab.structure", "no_design", "operation", "queued",
@@ -101,7 +90,7 @@ class AssemblyDiagramTest {
                 "word.misplaced", "word.missing", "word.not_loaded", "state.not_validated", "state.ok", "state.missing", "state.missing.terminal",
                 "state.missing.returns", "state.missing.found", "state.open_end", "state.open_end.unconnected", "state.not_loaded", "state.wrong_kind",
                 "state.backwards", "state.wrong_port", "state.wrong_port.returns", "state.valve_reversed", "state.extra_valve", "state.wrong_order",
-                "state.branched", "state.shared", "state.unit_count", "state.unit_shapes", "label.units"));
+                "state.branched", "state.shared", "state.unit_count", "state.unit_shapes", "tool.line"));
         for (var f : List.of("drum", "drum_no_boot", "drum_standing", "control_valve", "inline_pump", "other")) keys.add("found." + f);
         var missing = keys.stream().map(k -> AssemblyDiagram.KEY + k).filter(k -> !lang.contains(k)).sorted().toList();
         assertEquals(List.of(), missing);
@@ -112,37 +101,36 @@ class AssemblyDiagramTest {
         for (var role : Role.values()) assertTrue(lang.contains("gui.icheme.vessel.role." + role.name().toLowerCase(java.util.Locale.ROOT)), role::name);
     }
 
-    /** S3b: a member with identical units in parallel says how many in its label; a member of one unit keeps its plain label. */
+    /** An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): the air cooler, then its trim, which feeds the drum. */
     @Test
-    void aMemberWithUnitsInParallelSaysHowMany() {
-        var units = new ColumnComponents.Units(3, 2, List.of(2, 1));
-        var trays = new ColumnTrays(TRAYS, 10, List.of(), List.of(18), List.of(new Pumparound(4, 2), new Pumparound(8, 6)),
-                new ColumnComponents(Condenser.EXCHANGER, Pump.STANDARD, List.of(Pump.STANDARD, Pump.STANDARD), false, true, units));
-        var d = AssemblyDiagram.of(trays);
-        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.exchanger"), 3), d.part(ColumnBlueprint.CONDENSER).label());
-        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.reboiler"), 2), d.part(ColumnBlueprint.REBOILER).label());
-        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.pa_cooler", 1), 2), d.part(ColumnBlueprint.pumparoundCooler(1)).label());
-        assertEquals(AssemblyDiagram.Text.of("label.pa_cooler", 2), d.part(ColumnBlueprint.pumparoundCooler(2)).label());
-        var one = AssemblyDiagram.of(new ColumnTrays(TRAYS, 10, List.of(), List.of(18), List.of(), new ColumnComponents(Condenser.AIR_COOLER, Pump.STANDARD, List.of(), false, true)));
-        assertEquals(AssemblyDiagram.Text.of("label.air_cooler"), one.part(ColumnBlueprint.CONDENSER).label());
-    }
-
-    /** An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): the air cooler's banks, then the trim's shells, left to right on the overhead line. */
-    @Test
-    void anAirThenWaterCondenserDrawsItsAirCoolerThenItsTrim() {
+    void anAirThenWaterCondenserPipesItsAirCoolerToItsTrim() {
         var units = new ColumnComponents.Units(2, 1, List.of(), 3);
         var d = AssemblyDiagram.of(new ColumnTrays(TRAYS, 10, List.of(), List.of(18), List.of(), new ColumnComponents(Condenser.AIR_THEN_WATER, Pump.STANDARD, List.of(), true, true, units)));
-        var air = d.part(ColumnBlueprint.CONDENSER);
-        var trim = d.part(ColumnBlueprint.TRIM_CONDENSER);
-        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.air_cooler"), 2), air.label());
-        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.trim"), 3), trim.label());
-        assertEquals(air.y(), trim.y(), "on one line");
-        assertTrue(air.x() + air.w() < trim.x(), "the air cooler first");
+        assertTrue(d.ports().stream().anyMatch(p -> p.slot().equals(ColumnBlueprint.CONDENSER) && p.partner().equals(ColumnBlueprint.TRIM_CONDENSER)), "the air cooler feeds the trim");
         assertTrue(d.ports().stream().anyMatch(p -> p.slot().equals(ColumnBlueprint.RECEIVER) && p.partner().equals(ColumnBlueprint.TRIM_CONDENSER)), "the trim feeds the drum");
     }
 
+    /** The laying tool tells a column's nozzles apart by colour: each port its own, found by its role and number; a nozzle the design pipes nothing to, none. */
     @Test
-    void everyPortALineStartsFromOrEndsAtHasASquare() {
+    void everyPortHasItsOwnColourForTheLayingTool() {
+        for (var trays : designs()) {
+            var diagram = AssemblyDiagram.of(trays);
+            var colours = new HashSet<Integer>();
+            for (var port : diagram.ports()) {
+                // A receiver SIDE port takes any nozzle number; other roles match exactly.
+                int colour = PortColours.assembly(diagram, port.slot(), port.role(), port.ordinal() < 0 ? 3 : port.ordinal());
+                assertTrue(colour >= 0, port::toString);
+                assertTrue(colours.add(colour), () -> "a repeated colour: " + port + " " + trays);
+            }
+        }
+        var diagram = AssemblyDiagram.of(new ColumnTrays(TRAYS, 10, List.of(), List.of(18), List.of(), new ColumnComponents(Condenser.EXCHANGER, Pump.STANDARD, List.of(), false, true)));
+        assertEquals(-1, PortColours.assembly(diagram, ColumnBlueprint.CONDENSER, Role.TUBE_INLET, 0));
+        assertEquals(-1, PortColours.assembly(diagram, ColumnBlueprint.COLUMN, Role.DRAW, ColumnTrays.MAX_DRAWS));
+        assertEquals(-1, PortColours.assembly(diagram, ColumnBlueprint.pumparoundCooler(5), Role.SHELL_INLET, 0));
+    }
+
+    @Test
+    void everyPortALineStartsFromOrEndsAtIsListed() {
         for (var trays : designs()) {
             var blueprint = ColumnBlueprint.of(trays);
             var diagram = AssemblyDiagram.of(trays);

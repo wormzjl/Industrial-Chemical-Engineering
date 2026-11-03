@@ -1038,7 +1038,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private final HeatFlowsheet.Data flowData=new HeatFlowsheet.Data(){
         @Override public String value(HeatDiagram.Value value){return heatValue(value);}
         @Override public String state(String slot){return partState(slot);}
-        @Override public String text(AssemblyDiagram.Text text){return AssemblyScreen.text(text).getString();}
+        @Override public String text(AssemblyDiagram.Text text){return Component.translatable(HeatDiagram.KEY+text.key(),text.args().toArray()).getString();}
     };
     /** A line part's hover: its name and its state in the column's words. */
     private static Component partHover(String slot,String state,String detail,long at){

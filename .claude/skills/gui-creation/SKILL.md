@@ -16,7 +16,7 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
    owner pick; build only the picked one.
 3. Build the rows in a builder class with no Minecraft classes (as `HeatControlColumn`, `DeviceColumn`,
    `DialogColumns`, `ConstructorColumn`, `AssemblyColumn`, `CalculatorColumn`), so the gates and the render tool place
-   the same rows the screen draws. A drawing with hit tests goes in its own Minecraft-free class (`AssemblyFlowsheet`).
+   the same rows the screen draws. A drawing with hit tests goes in its own Minecraft-free class (`AssemblyBlock`, `HeatFlowsheet`).
 4. Gate it (below), render the shipped code again, look at every sheet, then commit.
 5. No dev-client check unless the owner asks for one.
 

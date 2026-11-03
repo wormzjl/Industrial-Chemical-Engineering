@@ -154,10 +154,10 @@ Worked example: `GaugeScreen` with `DialogColumns.gauge`.
 ## 7. A drawing on the glass
 
 - A Minecraft-free class drawing on the kit's `Canvas`: `GuiCanvas` in the game, `Java2dCanvas` in the tool.
-- Sizes and hit tests are pure methods of that class (`AssemblyFlowsheet`), so a test can click it.
+- Sizes and hit tests are pure methods of that class (`AssemblyBlock`, `HeatFlowsheet`), so a test can click it.
 - Draw inside `skin.well(canvas, rect)`, which returns the box inside the glass. The glass keeps the screens' dark
   `Palette` in both themes.
-- Gates: `AssemblyDiagramTest`, `HeatDiagramTest`.
+- Gates: `AssemblyBlockTest`, `HeatDiagramTest`.
 
 ## 8. Finish
 

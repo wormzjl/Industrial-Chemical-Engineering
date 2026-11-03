@@ -5,7 +5,6 @@ import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Part;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Text;
-import com.wormzjl.icheme.client.gui.common.AssemblyFlowsheet;
 import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.OperationColumn;
@@ -61,7 +60,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     private static final String KEY = AssemblyDiagram.KEY;
 
     /** The parts' names and places, which the list and the hovers read. */
-    private final @Nullable AssemblyFlowsheet flowsheet;
+    private final @Nullable AssemblyDiagram diagram;
     /** The drawing: the sheet's column block of the column's component design. */
     private final @Nullable AssemblyBlock block;
     private final List<Slot> slots;
@@ -92,7 +91,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         var column = level == null ? null : EquipmentStructure.find(level, menu.cell());
         var t = column == null ? null : column.shape().trays();
         ColumnTrays trays = t != null && t.components() != null ? t : null;
-        flowsheet = trays == null ? null : new AssemblyFlowsheet(AssemblyDiagram.of(trays));
+        diagram = trays == null ? null : AssemblyDiagram.of(trays);
         block = trays == null ? null : new AssemblyBlock(trays);
         slots = trays == null ? List.of() : ColumnBlueprint.of(trays).slots();
         inventoryLabelY = 10_000;
@@ -122,7 +121,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     private AssemblyView view() {
         var view = menu.view();
         if (view != null) return view;
-        return flowsheet == null ? AssemblyView.NO_DESIGN : AssemblyView.NOT_VALIDATED;
+        return diagram == null ? AssemblyView.NO_DESIGN : AssemblyView.NOT_VALIDATED;
     }
 
     private @Nullable AssemblyReport report() {
@@ -140,11 +139,11 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
 
     /** Whether the drawing shows, with the door column: a designed column, on its Structure tab. */
     private boolean drawing() {
-        return flowsheet != null && view().status() != AssemblyView.Status.NO_DESIGN && !operation();
+        return diagram != null && view().status() != AssemblyView.Status.NO_DESIGN && !operation();
     }
 
     private AssemblyColumn.Input input() {
-        var part = selected == null || flowsheet == null ? null : flowsheet.diagram.part(selected);
+        var part = selected == null || diagram == null ? null : diagram.part(selected);
         String name = selected == null ? null : part == null ? selected.part() : AssemblyColumn.text(part.name(), AssemblyScreen::lang);
         boolean opens = selected != null && !selected.equals(ColumnBlueprint.COLUMN) && member(selected) != AssemblyReport.NONE;
         return AssemblyColumn.input(slots.size(), report(), queued, name, opens);
@@ -379,7 +378,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         if (slot == null) return AssemblyReport.NONE;
         if (slot.equals(ColumnBlueprint.COLUMN)) return menu.origin().asLong();
         var report = report();
-        var r = AssemblyFlowsheet.slot(report, slot);
+        var r = AssemblyColumn.slot(report, slot);
         return r != null && r.member() != AssemblyReport.NONE && report.members().contains(r.member()) ? r.member() : AssemblyReport.NONE;
     }
 
@@ -458,7 +457,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             var area = split.list();
             canvas.vLine(area.x() - AssemblyColumn.GAP / 2, box.y() - 1, box.bottom(), Palette.LINE);
             var lines = new Rect(area.x(), area.y(), area.w() - ScrollView.BAR - 2, area.h());
-            var parts = AssemblyColumn.parts(AssemblyColumn.parts(slots, flowsheet.diagram, report(), AssemblyScreen::lang), AssemblyColumn.words(AssemblyScreen::lang),
+            var parts = AssemblyColumn.parts(AssemblyColumn.parts(slots, diagram, report(), AssemblyScreen::lang), AssemblyColumn.words(AssemblyScreen::lang),
                     lines.w(), GuiCanvas.measure(font));
             listView.layout(area, area.right() - ScrollView.BAR, parts.height());
             canvas.clip(area);
@@ -536,13 +535,13 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     private void glassHover(double x, double y) {
         if (list != null && listBox != null && listBox.contains(x, y)) {
             int i = AssemblyColumn.entry(list, listBox, listView.offset(), y);
-            var part = i < 0 ? null : flowsheet.diagram.part(slots.get(i));
+            var part = i < 0 ? null : diagram.part(slots.get(i));
             if (part != null) hovered = stateText(part).getString();
             return;
         }
         if (drawingBox == null || !drawingBox.contains(x, y)) return;
         var hit = block.part(x, y);
-        var part = hit == null ? null : flowsheet.diagram.part(hit);
+        var part = hit == null ? null : diagram.part(hit);
         if (part != null) hovered = stateText(part).getString();
     }
 
@@ -623,7 +622,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     private Component stateText(Part part) {
         var name = text(part.name());
         var where = text(part.where());
-        var r = AssemblyFlowsheet.slot(report(), part.slot());
+        var r = AssemblyColumn.slot(report(), part.slot());
         if (r == null) return tr("state.not_validated", name, where);
         return stateText(name, where, part.wanted() == null ? null : text(part.wanted()), r.state(), r.detail(), r.at());
     }

@@ -2,7 +2,7 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.wormzjl.icheme.client.gui.common.AssemblyFlowsheet;
+import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.FlowsheetPainter;
@@ -107,9 +107,9 @@ public final class AssemblyBlock {
 
     /** A part's look: the tower neutral while it is in place (or before a check), every other part by its check's colour, red before one. */
     public static Look look(Slot slot, @Nullable AssemblyReport report) {
-        var r = AssemblyFlowsheet.slot(report, slot);
+        var r = AssemblyColumn.slot(report, slot);
         if (slot.equals(ColumnBlueprint.COLUMN) && (r == null || r.state() == AssemblyReport.State.OK)) return SheetPainter.NONE;
-        return Look.of(AssemblyFlowsheet.colour(r));
+        return Look.of(AssemblyColumn.colour(r));
     }
 
     /**
