@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** 78a779996 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example; Delete in Open; a drag on empty canvas pans; each dialog's confirming key primary; Run lit when out of date; a column frame's empty inside pans; door flows and pressures on the display keys; the client consolidation: `Reader`, the glass in `UnitGlass`, `ColumnGlass` and `SizingGlass`, `SheetUnits.KMOL_PER_HOUR`, `Door.View.press`, one footer builder, templates through the paste rule; a door built once a frame)
+**Snapshot:** 303270643 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example; Delete in Open; a drag on empty canvas pans; each dialog's confirming key primary; Run lit when out of date; a column frame's empty inside pans; door flows and pressures on the display keys; the client consolidation: `Reader`, the glass in `UnitGlass`, `ColumnGlass` and `SizingGlass`, `SheetUnits.KMOL_PER_HOUR`, `Door.View.press`, one footer builder, templates through the paste rule; a door built once a frame; the autosave off the render thread)
 
 Up: [code guide](README.md)
 
@@ -63,6 +63,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `UnitGlass`, `ColumnGlass`, `SizingGlass`, `Reader` (record) | The glass beside a unit's and the column's door and the Sizing table (split from their doors and page); one reading of a unit's results in the display units | A door's rows |
 | `FlowsheetExamples` | The bundled example flowsheets Open lists first: `assets/icheme/flowsheet_examples/index.json` and its files, read through a `Function<String, InputStream>` (the screen passes `ColumnTemplates.resources`, the resource manager); a file that does not read is listed with its reason, never thrown | The examples |
 | `SheetEditor`, `SheetGestures`, `SheetClipboard` | Edits with undo and redo, the mouse, one clipboard | Editing |
+| `SheetAutosave` (`CLIENT`) | The autosave's one writer, off the render thread; the newest sheet wins | Tick |
 | `SheetLayout`, `SheetPainter`, `Symbol` (enum, the symbol atlas), `Tiles`, `SheetView` | Boxes, ports, routes and hit tests (reads a stream's saved `route`); drawing; the palette; pan and zoom | Drawing |
 | `ColumnBlock`, `AssemblyBlock` | The column block's drawing, and the assembly screen drawn as one | The column on the glass |
 | `SheetState`, `SheetResults` (record), `StreamProps` (record), `NoteText` | Looks, greying and status; results; a note in the player's units | What a state shows |
@@ -195,7 +196,7 @@ The file keeps fields it does not know and refuses a newer format and an older o
   - `BasisPage`: the package, the design basis, the solver settings.
 - **Tick:** each tick the screen does four things.
   - It lets the block host upload a finished run (`SimulatorBlockHost.ranOut`).
-  - It autosaves every 1200 ticks.
+  - It autosaves every 1200 ticks, through `SheetAutosave.CLIENT`: one writer thread for the client (no daemon, started when there is work), the newest sheet wins. A failed write hands its sheet back, and the next tick says `store.autosave_failed` on the status line; the next autosave tries again.
   - It clears a spent status line.
   - It re-rates the Sizing tab when that is due.
 - **Close:** `onClose` lets the host send the sheet once more (`settle`). `removed()` autosaves, closes the host (the runner's job stops) and restores the window scale.
