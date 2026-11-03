@@ -100,6 +100,16 @@ public final class SheetLayout {
         public int segments() {
             return points.length / 2 - 1;
         }
+
+        /**
+         * The design point the {@code first} end stands at: the first or the last point, or, on a lone pill (both ends open on
+         * one route point), which has no points, the pill's place.
+         */
+        public int[] at(boolean first) {
+            if (points.length >= 2) return first ? new int[]{points[0], points[1]} : new int[]{points[points.length - 2], points[points.length - 1]};
+            var pill = start != null ? start : end;
+            return pill != null ? new int[]{pill.x(), pill.y()} : new int[]{midX, midY};
+        }
     }
 
     public enum Kind {

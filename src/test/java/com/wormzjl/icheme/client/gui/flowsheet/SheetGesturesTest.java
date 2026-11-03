@@ -1,7 +1,10 @@
 package com.wormzjl.icheme.client.gui.flowsheet;
 
+import com.google.gson.JsonObject;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFile;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -308,5 +311,83 @@ class SheetGesturesTest {
         drag(600, 400, 640, 400);
         assertEquals(x + 40, view.canvasX(0), 1e-9);
         assertArrayEquals(before, FlowsheetFile.write(editor.sheet()));
+    }
+    // ---- A lone pill: both ends open on one route point, a line with no points (crash 2026-11-03 23:43, overlay on an empty array) ----
+
+    /** The line sheet with a lone feed pill "lf" at (120, 400) and a lone product pill "lp" at (520, 400). */
+    private void lonePills() {
+        var line = SheetFixture.line();
+        var streams = new ArrayList<>(line.streams());
+        streams.add(new Flowsheet.Stream("lf", "LONE-FEED", null, null, SheetFixture.water(100), List.of(new Flowsheet.Point(120, 400)), new JsonObject()));
+        streams.add(new Flowsheet.Stream("lp", "LONE-PROD", null, null, null, List.of(new Flowsheet.Point(520, 400)), new JsonObject()));
+        editor = SheetFixture.editor(new Flowsheet(SheetFixture.basis(), line.units(), streams, FlowsheetSolver.Settings.DEFAULT));
+        gestures = new SheetGestures(editor, view, doors::add);
+    }
+
+    /** A right click on the lone pill of {@code id}: it lifts the pill's end; the overlay's elbow starts at the pill. */
+    private void liftLone(String id, int x, int y) {
+        assertEquals(0, editor.layout().line(id).points().length, "a lone pill has no points");
+        gestures.press(cx(x), cy(y), 1, time);
+        time += 1000;
+        gestures.release(cx(x), cy(y), 1);
+        assertEquals(SheetGestures.Mode.RECONNECT, gestures.mode());
+        assertEquals(id, gestures.lifted());
+        gestures.drag(cx(x + 60), cy(y - 40));
+        var overlay = gestures.overlay();
+        assertNotNull(overlay);
+        assertEquals(x, overlay.wire()[0], "the elbow starts at the pill");
+        assertEquals(y, overlay.wire()[1]);
+    }
+
+    @Test
+    void aLoneFeedPillsEndLandsOnAFreeOutletAndThePillStays() {
+        lonePills();
+        liftLone("lf", 120, 400);
+        var outlet = editor.layout().place("q", "out");
+        click(outlet.x(), outlet.y(), 0);
+        assertEquals(SheetGestures.Mode.IDLE, gestures.mode());
+        var stream = editor.stream("lf");
+        assertEquals("out", stream.from().port(), "the lifted start lands on the outlet");
+        assertNull(stream.to(), "the other end stays open");
+        var pill = editor.layout().line("lf").end();
+        assertNotNull(pill);
+        assertEquals(120, pill.x(), "at the pill");
+        assertEquals(400, pill.y());
+    }
+
+    @Test
+    void aLoneProductPillsEndLandsOnAFreeInlet() {
+        lonePills();
+        liftLone("lp", 520, 400);
+        var inlet = editor.layout().place("q", "in");
+        click(inlet.x(), inlet.y(), 0);
+        assertEquals(SheetGestures.Mode.IDLE, gestures.mode());
+        var stream = editor.stream("lp");
+        assertEquals("in", stream.to().port(), "the lifted end lands on the inlet");
+        assertNull(stream.from(), "the other end stays open");
+        var pill = editor.layout().line("lp").start();
+        assertNotNull(pill);
+        assertEquals(520, pill.x(), "at the pill");
+        assertEquals(400, pill.y());
+    }
+
+    @Test
+    void aLonePillsEndOnEmptyCanvasLeavesALineFromThePill() {
+        lonePills();
+        liftLone("lf", 120, 400);
+        click(640, 304, 0);
+        var line = editor.layout().line("lf");
+        assertTrue(line.points().length >= 4, "a line now");
+        assertEquals(640, line.start().x(), "the lifted start at the point");
+        assertEquals(304, line.start().y());
+        assertEquals(120, line.end().x(), "the other end at the pill");
+        assertEquals(400, line.end().y());
+        lonePills();
+        liftLone("lp", 520, 400);
+        click(640, 304, 0);
+        line = editor.layout().line("lp");
+        assertTrue(line.points().length >= 4, "a line now");
+        assertEquals(520, line.start().x(), "the other end at the pill");
+        assertEquals(640, line.end().x(), "the lifted end at the point");
     }
 }

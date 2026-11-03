@@ -411,8 +411,9 @@ public final class SheetGestures {
             case RECONNECT -> {
                 var line = layout().line(id);
                 if (line == null) return null;
-                int[] p = line.points();
-                int fx = start ? p[p.length - 2] : p[0], fy = start ? p[p.length - 1] : p[1];
+                // The end that stays: the last point while the start is lifted. A lone pill has no points; its other end stays at the pill.
+                int[] fixed = line.at(!start);
+                int fx = fixed[0], fy = fixed[1];
                 var end = start ? line.stream().from() : line.stream().to();
                 var freed = end == null ? null : layout().place(end.unit(), end.port());
                 return new Overlay(elbow(fx, fy, cx, cy), id, freed, rings(start, id), null, line.stream().name(), cx, cy);
