@@ -92,7 +92,7 @@ public final class HeatSides {
             // A kettle's bundle (TEMA AKT): two tube passes as an exchanger's; its shell is a vessel ({@link #pool}).
             case KETTLE->List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,ProcessUnit.tubeSurface(d,l),tubePassage(d,l)));
             case AIR_COOLER->List.of(new Definition(Side.PROCESS,EquipmentShape.Role.PROCESS_INLET,EquipmentShape.Role.PROCESS_OUTLET,
-                    BARE_PER_FACE*shape.bank().bays()*ProcessUnit.bundleFace(d,l),airCoolerPassage(d,l,shape.bank())));
+                    airCoolerSurface(d,l,shape.bank()),airCoolerPassage(d,l,shape.bank())));
             case FIRED_HEATER->{double duty=ProcessUnit.heaterDuty(shape.kind(),d,l);
                 double convection=coilArea(Side.CONVECTION,duty),radiant=coilArea(Side.RADIANT,duty);
                 yield List.of(new Definition(Side.CONVECTION,EquipmentShape.Role.CONVECTION_INLET,EquipmentShape.Role.CONVECTION_OUTLET,convection,heaterPassage(convection,duty)),
@@ -100,6 +100,8 @@ public final class HeatSides {
             default->List.of();
         };
     }
+    /** An air cooler bank's bare tube surface, m², bays {@code width} by {@code length} m. */
+    public static double airCoolerSurface(double width,double length,ProcessUnit.Bank bank){return BARE_PER_FACE*bank.bays()*ProcessUnit.bundleFace(width,length);}
     /** A fired heater coil's bare tube, m², for the heater's duty {@code duty} (MW): its share of the duty at its mean flux. */
     static double coilArea(Side coil,double duty) {
         return coil==Side.RADIANT?ProcessUnit.RADIANT_SHARE*duty*1000/ProcessUnit.RADIANT_FLUX:(1-ProcessUnit.RADIANT_SHARE)*duty*1000/CONVECTION_FLUX;

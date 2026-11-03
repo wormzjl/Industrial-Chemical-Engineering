@@ -27,8 +27,6 @@ import java.util.List;
  */
 public final class ExchangerUnit implements UnitModel {
     private static final String TUBE_IN = "tube_in", TUBE_OUT = "tube_out", TUBE = "tube", SHELL = "shell";
-    /** Beyond each end of a curve, so the ends of the span are never its last knots (K). */
-    private static final double SPAN = 1;
     private final boolean kettle;
 
     public ExchangerUnit(boolean kettle) {
@@ -131,20 +129,14 @@ public final class ExchangerUnit implements UnitModel {
     private static double passed(WiredUnit u, FlowStream tube, FlowStream shell, double area, Report report) {
         var hot = tube.temperature() > shell.temperature() ? tube : shell;
         var cold = hot == tube ? shell : tube;
-        var hotSide = side(u, hot, cold, hot);
-        var coldSide = side(u, hot, cold, cold);
+        var hotSide = ExchangerRating.side(u.thermo(), hot, cold.temperature(), hot.temperature());
+        var coldSide = ExchangerRating.side(u.thermo(), cold, cold.temperature(), hot.temperature());
         double duty = ExchangerRating.duty(hotSide, coldSide, area, hot.temperature(), cold.temperature());
         report.reading("duty", duty);
         report.reading("approach", ExchangerRating.rate(hotSide, coldSide, duty).approach());
         return hot == tube ? -duty : duty;
     }
 
-    /** One side of the rating, as its fluid: a heat curve holds no solids. */
-    private static ExchangerRating.Side side(WiredUnit u, FlowStream hot, FlowStream cold, FlowStream of) {
-        var solids = of.solids().moments();
-        double fluid = of.mass() - solids.mass();
-        return new ExchangerRating.Side(u.thermo().curve(of, of.pressure(), cold.temperature() - SPAN, hot.temperature() + SPAN), fluid, (of.enthalpy() - solids.enthalpy(of.temperature(), of.pressure())) / fluid);
-    }
 
     /** What the duty asks of the surface. It runs after both sides, reads the inlets and changes nothing. */
     private static Calculation rating(WiredUnit u, String tube, String shell, boolean onTube, String link) {
@@ -159,7 +151,7 @@ public final class ExchangerUnit implements UnitModel {
                 report.note(Note.warning(u.id(), "exchanger.heat_cross"));
                 return;
             }
-            var result = ExchangerRating.rate(side(u, hot, cold, hot), side(u, hot, cold, cold), Math.abs(into));
+            var result = ExchangerRating.rate(ExchangerRating.side(u.thermo(), hot, cold.temperature(), hot.temperature()), ExchangerRating.side(u.thermo(), cold, cold.temperature(), hot.temperature()), Math.abs(into));
             report.reading("approach", result.approach());
             if (Double.isFinite(result.area())) report.reading("area_needed", result.area());
             else report.note(Note.warning(u.id(), "exchanger.heat_cross"));
