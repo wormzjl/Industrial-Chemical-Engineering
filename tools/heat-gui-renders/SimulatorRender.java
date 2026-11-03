@@ -261,8 +261,10 @@ public final class SimulatorRender {
         var x = s.context();
         var frame = new SimulatorFrame(d.w, d.h);
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE;
-        SimulatorPage.back(d.c, d.skin, SimulatorPage.status(x, s.tab, s.results, s.gestures, s.editor, narrow, s.host.holder()), HeatDiagramRender.tr("block.icheme.process_simulator"), frame, d.w, d.h);
-        keys(d, SimulatorPage.frameKeys(x, s.tab, frame, s.host, s.editor));
+        var status = SimulatorPage.status(x, s.tab, s.results, s.gestures, s.editor, narrow, s.host.holder());
+        if (RUN_OPTION == 'B') runInStatus(d, status, frame);
+        else SimulatorPage.back(d.c, d.skin, status, HeatDiagramRender.tr("block.icheme.process_simulator"), frame, d.w, d.h);
+        keys(d, RUN_OPTION == '-' ? SimulatorPage.frameKeys(x, s.tab, frame, s.host, s.editor) : runOption(d, SimulatorPage.frameKeys(x, s.tab, frame, s.host, s.editor), frame));
         d.skin.iconKey(d.c, frame.theme(), Skin.Icon.THEME, false);
         switch (s.tab) {
             case FLOWSHEET -> {
@@ -325,6 +327,113 @@ public final class SimulatorRender {
             if (slot.button()) d.skin.button(d.c, slot.rect(), slot.text(), slot.latched() ? Skin.Press.CURRENT : Skin.Press.REST, false);
             else d.skin.field(d.c, slot.rect(), slot.text(), slot.hint() == null ? "" : slot.hint(), false);
         }
+    }
+
+    // ---- The Run key's options (-Donly=run-key; the owner, 2026-11-04: "Make run button more obvious") ----
+
+    /** The option drawn: '-' as built, else A to D; {@link #RUN_STALE} the results out of date (the sheet changed since the run). */
+    static char RUN_OPTION = '-';
+    static boolean RUN_STALE;
+    private static final int GO = 0xFF2E9E46, GO_LIGHT = 0xFF86DB95, GO_DARK = 0xFF1A6A2C, AMBER = 0xFFF0A800, AMBER_LIGHT = 0xFFFFD670, AMBER_DARK = 0xFF9A6A00,
+            HALT = 0xFFB8392B, HALT_LIGHT = 0xFFE58A7F, HALT_DARK = 0xFF7A2219;
+
+    /** A push button with its own face, a sign before its word: ▶ (run) or ■ (stop). */
+    private static void signKey(GuiPrototypes.Door d, Rect r, String text, int face, int light, int dark, int ink, boolean stop) {
+        d.skin.button(d.c, r, "", Skin.Press.PRIMARY, false);
+        int x0 = r.x(), y0 = r.y(), x1 = r.right(), y1 = r.bottom();
+        d.c.fill(x0 + 2, y0 + 2, x1 - 2, y1 - 2, face);
+        d.c.fill(x0 + 2, y0 + 2, x1 - 3, y0 + 3, light);
+        d.c.fill(x0 + 2, y0 + 3, x0 + 3, y1 - 3, light);
+        d.c.fill(x0 + 3, y1 - 3, x1 - 2, y1 - 2, dark);
+        d.c.fill(x1 - 3, y0 + 3, x1 - 2, y1 - 3, dark);
+        int tw = d.m.width(text), sx = x0 + (r.w() - tw - 9) / 2, sy = y0 + (r.h() - 7) / 2;
+        if (stop) d.c.fill(sx, sy + 1, sx + 5, sy + 6, ink);
+        else for (int i = 0; i < 7; i++) d.c.fill(sx, sy + i, sx + 1 + Math.min(i, 6 - i), sy + i + 1, ink);
+        d.c.text(text, sx + 9, y0 + (r.h() - 8) / 2 + 1, ink);
+    }
+
+    private static boolean dark(GuiPrototypes.Door d) {
+        return d.skin == PanelSkin.DARK;
+    }
+
+    /** The frame's keys as an option places them; it draws its own Run (and in D its Stop) and returns the rest for {@link #keys}. */
+    private static List<SimulatorPage.Slot> runOption(GuiPrototypes.Door d, List<SimulatorPage.Slot> slots, SimulatorFrame frame) {
+        var rest = new ArrayList<SimulatorPage.Slot>();
+        var foot = frame.footer();
+        String run = T.get("flowsheet.frame.run"), stop = T.get("flowsheet.frame.stop");
+        // The footer's keys right of Run move: A's Run takes two slots, B's Run leaves the footer, D's Run and Stop both leave.
+        int shift = switch (RUN_OPTION) {
+            case 'A' -> 64;
+            case 'B' -> -64;
+            case 'D' -> -118;
+            default -> 0;
+        };
+        for (var slot : slots) {
+            var key = slot.button().key();
+            var r = slot.rect();
+            boolean footer = r.y() == foot.get(0).y();
+            if (key.equals("run")) {
+                switch (RUN_OPTION) {
+                    case 'A' -> signKey(d, new Rect(r.x(), r.y(), 124, r.h()), run, GO, GO_LIGHT, GO_DARK, 0xFFFFFFFF, false);
+                    case 'C' -> {
+                        if (RUN_STALE) signKey(d, r, run, AMBER, AMBER_LIGHT, AMBER_DARK, 0xFF1A1A1A, false);
+                        else signKey(d, r, run, 0xFF1F5FBF, 0xFF6A9BE8, 0xFF143F80, 0xFFFFFFFF, false);
+                    }
+                    case 'D' -> {
+                        var file = frame.fileKeys().getFirst();
+                        signKey(d, new Rect(file.x() - 8 - 2 * 60 - 4, file.y(), 60, file.h()), run, GO, GO_LIGHT, GO_DARK, 0xFFFFFFFF, false);
+                    }
+                    default -> {
+                    }
+                }
+                continue;
+            }
+            if (key.equals("stop") && RUN_OPTION == 'D') {
+                var file = frame.fileKeys().getFirst();
+                var at = new Rect(file.x() - 8 - 60, file.y(), 60, file.h());
+                if (slot.button().active()) signKey(d, at, stop, HALT, HALT_LIGHT, HALT_DARK, 0xFFFFFFFF, true);
+                else d.skin.button(d.c, at, stop, Skin.Press.OFF, false);
+                continue;
+            }
+            rest.add(footer && List.of("stop", "undo", "redo").contains(key) ? new SimulatorPage.Slot(slot.button(), new Rect(r.x() + shift, r.y(), r.w(), r.h())) : slot);
+        }
+        return rest;
+    }
+
+    /** B: the frame with a shorter status window and Run at its right end, where the run's result reads. */
+    private static void runInStatus(GuiPrototypes.Door d, SheetState.Status status, SimulatorFrame frame) {
+        d.skin.page(d.c, new Rect(0, 0, d.w, d.h));
+        d.skin.title(d.c, 10, 8, HeatDiagramRender.tr("block.icheme.process_simulator"));
+        var full = frame.status();
+        var line = new Rect(full.x(), full.y(), full.w() - 72, full.h());
+        d.skin.status(d.c, line, d.m.cut(status.text(), line.w() - 4), status.tone());
+        signKey(d, new Rect(line.right() + 8, full.y() - 6, 64, 17), T.get("flowsheet.frame.run"), GO, GO_LIGHT, GO_DARK, 0xFFFFFFFF, false);
+        d.skin.hDivider(d.c, 8, d.w - 8, d.h - 35);
+        d.skin.softKeys(d.c, frame.softTray());
+    }
+
+    /** Each option on the crude unit: the results current, and out of date after a feed edit. */
+    private static void runKey(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
+        var host = new Host(false, null);
+        Consumer<Scene> edited = s -> StreamDoors.door(s.context(), "CRUDE", new Door.View()).actions().entry("temperature", "30");
+        String[] names = {"today", "a-wide-green", "b-in-status", "c-lit-when-stale", "d-top-row"};
+        String[] titles = {"Today: the blue primary key in the footer", "A: a green ▶ Run, double width, in the footer", "B: ▶ Run at the right end of the status window, where the result reads",
+                "C: ▶ Run in the footer, lit amber while the results are out of date", "D: ▶ Run and ■ Stop on the top row, before the file keys"};
+        char[] options = {'-', 'A', 'B', 'C', 'D'};
+        for (int i = 0; i < options.length; i++) {
+            char option = options[i];
+            BiConsumer<GuiPrototypes.Door, Skin> current = scene(sheet, run, seconds, host, nothing()), stale = scene(sheet, run, seconds, host, edited);
+            sheet(out, "run-key-" + names[i], W, H, List.of(titles[i] + ", results current", titles[i] + ", after a feed edit (results out of date)"), List.of((d, skin) -> {
+                RUN_OPTION = option;
+                RUN_STALE = false;
+                current.accept(d, skin);
+            }, (d, skin) -> {
+                RUN_OPTION = option;
+                RUN_STALE = true;
+                stale.accept(d, skin);
+            }));
+        }
+        RUN_OPTION = '-';
     }
 
     // ---- The sheets ----
@@ -1025,6 +1134,11 @@ public final class SimulatorRender {
         // -Donly=c3: C3's sheets alone.
         if ("c3".equals(System.getProperty("only"))) {
             c3(out, sheet, run, seconds);
+            return;
+        }
+        // -Donly=run-key: the Run key's options, each with its results current and out of date.
+        if ("run-key".equals(System.getProperty("only"))) {
+            runKey(out, sheet, run, seconds);
             return;
         }
         // -Donly=send: S5's sheets alone.

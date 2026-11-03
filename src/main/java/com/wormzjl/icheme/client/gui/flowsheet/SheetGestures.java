@@ -51,7 +51,9 @@ public final class SheetGestures {
     private Mode mode = Mode.IDLE;
     private @Nullable Selection selected;
     private @Nullable Naming naming;
-    private double pressX, pressY, lastX, lastY;
+    // The cursor (lastX, lastY) follows every move; a pan steps from where the last drag left it (heldX, heldY), because the game sends
+    // mouseMoved before each mouseDragged at the same point (MouseHandler.handleAccumulatedMovement), which left a pan from the cursor at 0.
+    private double pressX, pressY, lastX, lastY, heldX, heldY;
     private boolean moved;
     private long lastClick = -DOUBLE * 2;
     private @Nullable SheetLayout.Hit lastHit;
@@ -110,8 +112,8 @@ public final class SheetGestures {
     /** A press at a canvas point; {@code button} 0 left, 1 right; {@code time} in ms. Whether it took it. */
     public boolean press(double x, double y, int button, long time) {
         if (mode == Mode.NAME) commit(naming == null ? "" : naming.text());
-        pressX = lastX = x;
-        pressY = lastY = y;
+        pressX = lastX = heldX = x;
+        pressY = lastY = heldY = y;
         moved = false;
         if (mode == Mode.RECONNECT) return reconnecting(x, y, button);
         if (button == 1) return lift(x, y);
@@ -196,7 +198,7 @@ public final class SheetGestures {
         if (Math.abs(x - pressX) > STILL || Math.abs(y - pressY) > STILL) moved = true;
         double dx = (x - pressX) / view.zoom(), dy = (y - pressY) / view.zoom();
         switch (mode) {
-            case PAN -> view.pan(x - lastX, y - lastY);
+            case PAN -> view.pan(x - heldX, y - heldY);
             case MOVE_UNIT -> {
                 if (moved) editor.moveUnit(id, snap(unitX + dx), snap(unitY + dy), step);
             }
@@ -211,8 +213,8 @@ public final class SheetGestures {
             default -> {
             }
         }
-        lastX = x;
-        lastY = y;
+        lastX = heldX = x;
+        lastY = heldY = y;
     }
 
     /** The cursor moved with no button held. */

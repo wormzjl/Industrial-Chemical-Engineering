@@ -56,10 +56,19 @@ class SheetGesturesTest {
         time += 1000;
     }
 
+    /**
+     * A drag as the game sends it, in four steps: each a mouseMoved, then a mouseDragged at the same point
+     * ({@code MouseHandler.handleAccumulatedMovement}). The canvas points are taken before the press, for a pan moves the view under them.
+     */
     private void drag(double x0, double y0, double x1, double y1) {
-        gestures.press(cx(x0), cy(y0), 0, time);
-        gestures.drag(cx(x1), cy(y1));
-        gestures.release(cx(x1), cy(y1), 0);
+        double a = cx(x0), b = cy(y0), c = cx(x1), d = cy(y1);
+        gestures.press(a, b, 0, time);
+        for (int i = 1; i <= 4; i++) {
+            double x = a + (c - a) * i / 4, y = b + (d - b) * i / 4;
+            gestures.move(x, y);
+            gestures.drag(x, y);
+        }
+        gestures.release(c, d, 0);
         time += 1000;
     }
 
@@ -124,6 +133,20 @@ class SheetGesturesTest {
         assertFalse(gestures.commit("V-101"));
         assertEquals("P-101", editor.unit("p").name());
         assertEquals(SheetEditor.NAME_USED, editor.refusal().key());
+    }
+
+    /** The owner, 2026-11-04: "Clicking in empty space should drag the whole flowsheet". */
+    @Test
+    void aDragOnEmptyCanvasPansTheSheetAndMovesNothingOnIt() {
+        assertNull(editor.layout().at(600, 400, view.zoom()), "an empty point");
+        byte[] before = FlowsheetFile.write(editor.sheet());
+        double x0 = view.canvasX(0), y0 = view.canvasY(0);
+        drag(600, 400, 640, 370);
+        assertEquals(x0 + 40, view.canvasX(0), 1e-9, "the sheet follows the cursor across");
+        assertEquals(y0 - 30, view.canvasY(0), 1e-9, "and up");
+        assertArrayEquals(before, FlowsheetFile.write(editor.sheet()), "no unit, segment or pill moved");
+        assertFalse(editor.undo(), "a pan is no edit");
+        assertEquals(SheetGestures.Mode.IDLE, gestures.mode());
     }
 
     @Test
