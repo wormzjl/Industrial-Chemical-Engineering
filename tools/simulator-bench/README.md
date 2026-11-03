@@ -50,6 +50,7 @@ Phases:
   - `layout`: `SheetLayout.of` alone;
   - `save`: the autosave, `FlowsheetFile.save`.
 - `open`: one 10 kB sheet parsed, then Open's listing of 50 such files with the bundled example, and its rows' heap.
+- `size-stages`: Size all split as `SheetSizing.sizeAll` runs it: the proposal pass (a column on Auto tries its diameters), the applied copy, the re-run warm from the run where the sizes move it, and the rating. CPU, wall, bytes and checkpoints by stage, the mean of `-Drounds` rounds (default 3) after 2; the re-run's passes and units. Counters, not a timing claim; not in the default list.
 - `ram`: retained heap, used after a full GC with and without, of:
   - the catalog;
   - the network thermo;
@@ -82,3 +83,4 @@ Draw calls follow `DrawCallTest`'s count: a batch of fills is one call, a text i
 - 2026-11-04: written for the batch's performance review. Smoke-checked with 0.3 s windows; the review's numbers come from a run with the owner's 60 and 60 s windows at the commit the review names.
 - 2026-11-04: baseline at `a958cecd2`, all 18 phases, beside another project's simulator (17–34 % CPU): `PERFORMANCE_REVIEW.md`. Then `histo`, with `-Druns=20`, found the shape caches: 12.4 MB a Run on a new input, up to 211 MB. The driver now logs the top CPU users of any process.
 - 2026-11-04: after `3e39dbc39`, `histo -Druns=20` on runner threads holds 0.4 MB, flat.
+- 2026-11-04: `size-stages` added (P8). The crude unit's Size all: proposal pass 1.58 s CPU, 1.71 GB, 280k checkpoints (24.6 %); applied copy 0; re-run 4.81 s, 5.46 GB, 887k checkpoints (74.9 %), 2 passes, T-101 4.7 s and 773k checkpoints from the learned seed; rating 31 ms, 10 MB. The machine was shared (CPU beside the load).

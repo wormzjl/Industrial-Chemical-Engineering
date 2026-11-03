@@ -555,6 +555,72 @@ public final class SimulatorBench {
         timed("rate", () -> MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(solved.sheet(), solved.run(), thermo())));
     }
 
+    /** One stage's sums: thread CPU, wall, bytes allocated, checkpoints. */
+    static final class Stage {
+        long cpu, wall, alloc, checkpoints;
+        int n;
+    }
+
+    static <T> T stage(Map<String, Stage> stages, String name, long[] checkpoints, Supplier<T> body) {
+        long c = THREADS.getCurrentThreadCpuTime(), w = System.nanoTime(), a = THREADS.getCurrentThreadAllocatedBytes(), k = checkpoints[0];
+        T out = body.get();
+        var s = stages.computeIfAbsent(name, x -> new Stage());
+        s.cpu += THREADS.getCurrentThreadCpuTime() - c;
+        s.wall += System.nanoTime() - w;
+        s.alloc += THREADS.getCurrentThreadAllocatedBytes() - a;
+        s.checkpoints += checkpoints[0] - k;
+        s.n++;
+        return out;
+    }
+
+    /**
+     * Size all split as {@code SheetSizing.sizeAll} runs it: the proposal pass (a column on Auto tries its diameters), the applied
+     * copy, the re-run warm from the run where the sizes move it, and the rating. Counters by stage; -Drounds measured rounds after two.
+     */
+    static void sizeStagesPhase() throws Exception {
+        var sheet = crudeUnit();
+        var run = run(sheet, null, new Units());
+        var moves = SheetSizing.class.getDeclaredMethod("moves", Flowsheet.class, Flowsheet.class);
+        moves.setAccessible(true);
+        long[] checkpoints = {0};
+        var counted = MaterialRuntime.with(CATALOG, NETWORK, () -> new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> checkpoints[0]++));
+        int rounds = Integer.getInteger("rounds", 3);
+        var stages = new LinkedHashMap<String, Stage>();
+        for (int round = 0; round < rounds + 2; round++) {
+            if (round == 2) stages.clear();
+            var units = new Units[1];
+            int at = round;
+            MaterialRuntime.with(CATALOG, NETWORK, () -> {
+                var proposal = stage(stages, "proposal pass (column trials)", checkpoints, () -> SheetSizing.pass(sheet, run, counted, SheetSizing.Entries.of(sheet, false)));
+                var sized = stage(stages, "applied copy", checkpoints, () -> SheetSizing.applied(sheet, proposal));
+                boolean moved;
+                try {
+                    moved = (boolean) moves.invoke(null, sheet, sized);
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException(e);
+                }
+                var rerun = !moved ? run : stage(stages, "re-run, warm from the run", checkpoints, () -> {
+                    units[0] = new Units();
+                    return FlowsheetEngine.run(sized, CATALOG, () -> {
+                        checkpoints[0]++;
+                        units[0].checkpoint();
+                    }, run, units[0]);
+                });
+                stage(stages, "rating", checkpoints, () -> SheetSizing.rate(sized, rerun, counted));
+                if (units[0] != null) {
+                    units[0].close();
+                    if (at >= 2) say("round %d: re-run %s in %d passes; by unit: %s", at - 1,rerun.status(), units[0].passes, units[0].spent.entrySet().stream().filter(e -> e.getValue()[0] > 5_000_000)
+                            .map(e -> String.format(Locale.ROOT, "%s %.0f ms, %d calcs, %d checkpoints", e.getKey(), ms(e.getValue()[0]), e.getValue()[2], e.getValue()[3])).toList());
+                }
+                return null;
+            });
+        }
+        say("Size all by stage, mean of %d rounds after 2 (CPU under the machine's load, see machine.txt):", rounds);
+        long cpu = stages.values().stream().mapToLong(s -> s.cpu).sum();
+        stages.forEach((k, s) -> say("  %-32s %d of %d rounds; CPU %8.1f ms (%4.1f %%), wall %8.1f ms, allocated %8.1f MB, checkpoints %8.0f", k, s.n, rounds, ms(s.cpu) / rounds,
+                100.0 * s.cpu / cpu, ms(s.wall) / rounds, s.alloc / 1048576.0 / rounds, s.checkpoints / (double) rounds));
+    }
+
     static void framePhase(String page) throws Exception {
         var screen = page(solved(), page);
         var one = new Counting();
@@ -755,6 +821,7 @@ public final class SimulatorBench {
             case "run" -> runPhase(false);
             case "run-warm" -> runPhase(true);
             case "size" -> sizePhase();
+            case "size-stages" -> sizeStagesPhase();
             case "frame" -> framePhase(p[1]);
             case "edit" -> editPhase(p[1]);
             case "ram" -> ramPhase();
