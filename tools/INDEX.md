@@ -9,7 +9,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
 | [pump-sprites/](pump-sprites/README.md) | Baked sprites of pumps, couplings and motors; their probes and renders | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
-| [driver-sounds/](driver-sounds/README.md) | Original motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In progress since 2026-11-03 |
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |

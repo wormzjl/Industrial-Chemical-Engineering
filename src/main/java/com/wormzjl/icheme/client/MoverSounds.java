@@ -107,11 +107,12 @@ public final class MoverSounds {
                     ||target.position().distToCenterSqr(mc.player.position())>24*24)stop();
             else refreshVolume();
         }
-        /** The casing's gain, {@link UnitDesign#soundGain(EquipmentShape, double)} of its size and speed share (decision D13). */
+        /** The casing's gain and pitch, {@link UnitDesign#soundGain(EquipmentShape, double)} and {@link UnitDesign#soundPitch} of its size and speed share (decision D13). */
         private void refreshVolume(){
             var state=STATES.get(target);
             volume=state!=null&&level.getBlockEntity(target.position()) instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null
                     ?UnitDesign.soundGain(shell.shape(),speed(state)):0;
+            pitch=UnitDesign.soundPitch(state==null?1:speed(state));
         }
     }
     /**

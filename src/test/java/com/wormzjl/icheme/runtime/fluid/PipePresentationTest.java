@@ -283,6 +283,9 @@ class PipePresentationTest {
             assertEquals(full,UnitDesign.soundGain(shape,1.3));
             for(double speed=.1;speed<=1;speed+=.1)assertTrue(UnitDesign.soundGain(shape,speed)>UnitDesign.soundGain(shape,speed-.1));
         }
+        // The pitch is the speed share (a machine's tones scale with its shaft speed), between Minecraft's 0.5 and 1.
+        assertEquals(1F,UnitDesign.soundPitch(1));assertEquals(1F,UnitDesign.soundPitch(1.3));
+        assertEquals(.8F,UnitDesign.soundPitch(.8),1e-6);assertEquals(.5F,UnitDesign.soundPitch(.5));assertEquals(.5F,UnitDesign.soundPitch(.2));
         assertFalse(UnitDesign.driver(EquipmentShape.Kind.GEARBOX));
         assertEquals(0,UnitDesign.soundGain(EquipmentShape.unit(EquipmentShape.Kind.GEARBOX,UnitDesign.of(EquipmentShape.Kind.GEARBOX).minSize(),1,EquipmentShape.Heading.NORTH,0)));
     }

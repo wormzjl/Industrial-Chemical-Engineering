@@ -285,6 +285,15 @@ public abstract class UnitDesign {
      */
     public static final double SPEED_EXPONENT = 2.5;
 
+    /**
+     * A running loop's pitch at a speed share (decision D13, owner 2026-11-04): a machine's tones (blade pass, vane
+     * pass, fan, slots) are its shaft speed times a fixed count, so the pitch is the speed share, down to 0.5, where
+     * Minecraft stops lowering it; 1 at full speed and above.
+     */
+    public static float soundPitch(double speed) {
+        return (float) Math.clamp(speed, .5, 1);
+    }
+
     /** Whether a kind sounds as a driver, its own loop at its own cells: a motor, its mirror the generator, or a steam turbine. */
     public static boolean driver(EquipmentShape.Kind kind) {
         return kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.STEAM_TURBINE;

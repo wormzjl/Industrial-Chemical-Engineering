@@ -1,8 +1,8 @@
-"""Original driver loops (motor, steam turbine); authoring only, never part of the mod runtime.
+"""Original machine loops (pump and compressor casings, motor, steam turbine); authoring only, never part of the mod runtime.
 
 The same route as tools/pump-compressor-controls/make_loops.py: periodic tones whose cycles fit the loop exactly,
 plus noise shaped in the frequency domain over the whole loop (so it is periodic too), mono 24 kHz Vorbis, 3 s.
-No recordings or external audio. Usage: make_driver_loops.py <output folder>.
+No recordings or external audio. Usage: make_loops.py <output folder>.
 """
 from pathlib import Path
 import json
@@ -52,15 +52,30 @@ turbine = (.9 * noise(7202, band(3000, .8) + .35 * band(800, .7))
            + tones([(2400, .30, 0), (4800, .12, 1.1), (3600, .06, .4), (50, .35, 0), (150, .12, .9)]))
 turbine *= 1 + .06 * np.cos(2 * np.pi * 2 * t)  # a slow steam surge, two per second
 
-reference = sf.read(Path(__file__).parent.parent.parent / "src/main/resources/assets/icheme/sounds/pump_running.ogg")[0]
-level = float(np.sqrt(np.mean(reference ** 2)))
-for name, sound in (("motor_running", motor), ("turbine_running", turbine)):
+# The casings without their drivers' hum (decision D13): the hum is the motor loop's now. The wash keeps the
+# 2026-10-23 loops' noise spectrum (rising from 90 Hz, peak about 700 Hz).
+wash = (frequency / 300) * np.exp(-frequency / 700)
+wash[frequency < 90] = 0
+# A centrifugal pump: the liquid's wash through the casing, its vane pass (2,950 rpm x 6 vanes, about 300 Hz) with
+# its harmonics, and a slow three-per-second flow ripple.
+pump = (noise(7101, wash) * (1 + .12 * np.cos(2 * np.pi * 3 * t))
+        + tones([(300, .55, 0), (600, .2, .8), (900, .07, 1.7)]))
+# A compressor: the gas rush, pulsing six times a second (a reciprocating machine's valves and throws), and a faint
+# impeller or valve tone.
+compressor = ((noise(7102, wash + .4 * band(1500, .7)) + tones([(450, .25, 0), (900, .1, .6)]))
+              * (1 + .28 * np.cos(2 * np.pi * 6 * t)))
+
+# Each loop's RMS: the 2026-10-23 pump and compressor loops' levels, the drivers at the pump's; the volume law
+# (UnitDesign.soundGain) sets the loudness in game.
+PUMP_RMS, COMPRESSOR_RMS = .0926, .1109
+for name, sound, level in (("pump_running", pump, PUMP_RMS), ("compressor_running", compressor, COMPRESSOR_RMS),
+                           ("motor_running", motor, PUMP_RMS), ("turbine_running", turbine, PUMP_RMS)):
     sound = sound - np.mean(sound)
-    sound *= level / np.sqrt(np.mean(sound ** 2))  # the pump loop's RMS: the volume law sets the loudness
+    sound *= level / np.sqrt(np.mean(sound ** 2))
     path = output / (name + ".ogg")
     sf.write(path, sound, rate, format="OGG", subtype="VORBIS")
     decoded, decoded_rate = sf.read(path)
     print(json.dumps(dict(asset=name, bytes=path.stat().st_size, frames=len(decoded), rate=decoded_rate,
                           rms=float(np.sqrt(np.mean(decoded ** 2))), peak=float(np.max(np.abs(decoded))),
                           seam_step=float(abs(decoded[0] - decoded[-1])),
-                          typical_step=float(np.mean(np.abs(np.diff(decoded)))), pump_rms=level)))
+                          typical_step=float(np.mean(np.abs(np.diff(decoded)))))))
