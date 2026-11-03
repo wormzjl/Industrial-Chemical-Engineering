@@ -364,11 +364,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /**
      * A Start (plan 4.1): the column's origin, its setpoints, the pipe blocks in front of its nozzles, its ports, and the
      * registrations of a water-cooled condenser's two sides, every shell's (empty for an air cooler): those the column does
-     * not hold are its water sides (C6b, S3b).
+     * not hold are its water sides (C6b, S3b); and the bare tube of its air condenser's banks, m² (U2: 0 for none).
      */
     public record ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,
-                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser) {
-        public ColumnStart{condenser=List.copyOf(condenser);}
+                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface) {
+        public ColumnStart{condenser=List.copyOf(condenser);if(!(airSurface>=0)||!Double.isFinite(airSurface))throw new IllegalArgumentException("Invalid air condenser surface");}
+        public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser){this(master,setpoints,nozzles,spots,condenser,0);}
         public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots){this(master,setpoints,nozzles,spots,List.of());}
     }
     /** The most devices a column holds: its members and the pipes between them. */
@@ -437,7 +438,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(water.size()>ColumnUnit.MAXIMUM_CONDENSERS)return "the condenser has more than "+ColumnUnit.MAXIMUM_CONDENSERS+" shells";
         // A restart keeps the set points the player applied while they fit the design's ports (C7); else the design's.
         var setpoints=existing!=null&&compatible(existing.setpoints(),request.setpoints())?existing.setpoints():request.setpoints();
-        var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water);
+        var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water,null,false,request.airSurface());
         var was=existing;topology.column(running);
         try{submit(edits,id);}catch(IllegalArgumentException|IllegalStateException refused){if(was!=null)topology.column(was);else topology.removeColumn(unit);return "the column's ports do not fit its lines: "+refused.getMessage();}
         columns.refresh();
@@ -665,6 +666,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             switch(heat.lines()) {
                 case BYPASS->next.put(PhysicalFluidTopology.sideIdentity(side),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.bypass(l.valve()));
                 case RATIO->next.put(PhysicalFluidTopology.sideIdentity(side),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.feed(l.valve(),heat.control().target()));
+                // A column condenser's water (U2): the column sets the flow, the water rising its range (COOLER_MODEL_PLAN.md section 8).
+                case FEED->next.put(PhysicalFluidTopology.sideIdentity(side),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.column(l.valve(),com.wormzjl.icheme.science.equipment.HeatSides.WATER_RANGE));
                 case NONE->{}
             }
         });
@@ -673,12 +676,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The status a side's lines add (W8), ending in " / ", or nothing for a side without lines. */
     private String linesStatus(long id,HeatUnit heat) {
         var asked=heat.lines();if(asked==com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE)return "";
-        var l=lines.get(id);boolean ratio=asked==com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.RATIO;
-        String fallback=ratio?"the ratio holds nothing":"the internal bypass controls";
+        var l=lines.get(id);boolean ratio=asked==com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.RATIO,column=asked==com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.FEED;
+        String fallback=ratio?"the ratio holds nothing":column?"the water flows as its line lets it":"the internal bypass controls";
         if(l==null||l.status()==Lines.Status.NOT_VALIDATED)return "LINES NOT CHECKED: "+fallback+" / ";
         if(l.status()==Lines.Status.CHECKED)return "LINES NOT COMPLETE: "+l.missing()+" part"+(l.missing()==1?"":"s")+" not in place; "+fallback+" / ";
-        if(l.status()==Lines.Status.UNMETERED)return "LINES NOT COMPLETE: the "+(ratio?"feed":"bypass")+" valve needs its flowmeter to regulate; "+fallback+" / ";
-        return ratio?"LINES COMPLETE: the feed valve holds the ratio / ":"LINES COMPLETE: the bypass valve controls / ";
+        if(l.status()==Lines.Status.UNMETERED)return "LINES NOT COMPLETE: the "+(ratio||column?"feed":"bypass")+" valve needs its flowmeter to regulate; "+fallback+" / ";
+        return ratio?"LINES COMPLETE: the feed valve holds the ratio / ":column?"LINES COMPLETE: the column sets the feed valve / ":"LINES COMPLETE: the bypass valve controls / ";
     }
     /**
      * Rebind placed devices, queue missing registrations, then mark their presentation buckets. This also rebuilds an

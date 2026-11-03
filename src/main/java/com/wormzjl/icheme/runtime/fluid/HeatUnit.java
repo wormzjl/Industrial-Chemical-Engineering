@@ -26,9 +26,12 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
      * {@code OUTLET_TEMPERATURE} and {@code DUTY} act on the unit's own actuator (W4): an exchanger side's or a kettle's tubes'
      * bypass (steam that leaves uncondensed), an air cooler's fans. {@code FIRING} is a fired heater's coil, firing to its set point (W6).
      * {@code RATIO} is an exchanger side's feed held at its target times the other side's feed, by a valve on its feed (W8):
-     * it needs the exchanger's lines ({@link #lines}), and holds nothing until they are complete.
+     * it needs the exchanger's lines ({@link #lines}), and holds nothing until they are complete. {@code COLUMN} (U2, batch
+     * 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 8) is the water side of a column condenser's
+     * exchanger: the column sets the mass flow of a valve on its own feed to carry the heat it owes the water to its regulated
+     * outlet. It needs the exchanger's lines; until they are complete the water flows as its line lets it, as before.
      */
-    public enum Mode { OFF, OUTLET_TEMPERATURE, DUTY, FIRING, RATIO }
+    public enum Mode { OFF, OUTLET_TEMPERATURE, DUTY, FIRING, RATIO, COLUMN }
     /**
      * @param mode     what the controller holds
      * @param target   the held value: K for an outlet or set temperature, W for a duty, the feed's share of the other side's for a ratio
@@ -54,6 +57,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
         if(unit==HeatSides.Unit.FIRED_HEATER&&(control.mode()!=Mode.FIRING||!(control.target()>0)))throw new IllegalArgumentException("A fired heater's coil fires to a set point");
         if(unit!=HeatSides.Unit.FIRED_HEATER&&control.mode()==Mode.FIRING)throw new IllegalArgumentException("Only a fired heater's coil fires");
         if(unit!=HeatSides.Unit.EXCHANGER&&control.mode()==Mode.RATIO)throw new IllegalArgumentException("Only an exchanger's side holds a ratio");
+        if(unit!=HeatSides.Unit.EXCHANGER&&control.mode()==Mode.COLUMN)throw new IllegalArgumentException("Only an exchanger's side takes a column's water flow");
     }
     /** A fired heater's set point when built, K: 300 °C, its burners lit. */
     public static final Control FIRING=new Control(Mode.FIRING,573.15,0,1);
@@ -80,7 +84,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
         double manual=unit==HeatSides.Unit.AIR_COOLER?control.share():1-control.share();
         return switch(control.mode()) {
             // A ratio works the feed valve, not the heat: the side's bypass holds its manual share.
-            case OFF,RATIO->control.lowLimit()>0?new HeatControl(HeatControl.Target.MANUAL,0,control.lowLimit(),manual):null;
+            case OFF,RATIO,COLUMN->control.lowLimit()>0?new HeatControl(HeatControl.Target.MANUAL,0,control.lowLimit(),manual):null;
             case OUTLET_TEMPERATURE->new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,control.target(),control.lowLimit(),manual);
             case DUTY->new HeatControl(HeatControl.Target.DUTY,control.target(),control.lowLimit(),manual);
             case FIRING->null;
@@ -90,7 +94,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
     public boolean controllable(){return unit==HeatSides.Unit.EXCHANGER||unit==HeatSides.Unit.AIR_COOLER||unit==HeatSides.Unit.KETTLE&&side==HeatSides.Side.TUBE;}
     /**
      * The real lines this side's control asks for (W8, plan section 7): an exchanger side held at an outlet temperature or
-     * a duty has a bypass, one held at a ratio a valve on its feed; every other side none. Its exchanger validates them as
+     * a duty has a bypass, one held at a ratio a valve on its feed, a column's water side a valve and a flowmeter on its feed; every other side none. Its exchanger validates them as
      * an assembly; until they are complete, a bypass control works the side's internal bypass and a ratio holds nothing.
      */
     public com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines lines() {
@@ -98,6 +102,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
         return switch(control.mode()) {
             case OUTLET_TEMPERATURE,DUTY->com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.BYPASS;
             case RATIO->com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.RATIO;
+            case COLUMN->com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.FEED;
             default->com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE;
         };
     }

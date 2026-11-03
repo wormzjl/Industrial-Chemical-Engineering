@@ -69,8 +69,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
 
     /** Heat put in transit to each condenser shell's water at {@code tick}, J (one shell's share): by a cycle, or {@code booked} by an outlet's island, whose job decides when it lands. */
     record Owed(long tick,double joule,boolean booked) {}
-    /** The condenser holds at most this many seconds of its design duty its water has not taken, and its water leaves at least this far below the condensate (C6b, plan section 10). */
-    static final double CONDENSER_HOLD_SECONDS=60,APPROACH_KELVIN=5;
+    /** The condenser holds at most this many seconds of its design duty its water has not taken, and its water leaves at least this far below the condensate (C6b, plan section 10; U2: the simulator's approach). */
+    static final double CONDENSER_HOLD_SECONDS=60,APPROACH_KELVIN=com.wormzjl.icheme.science.equipment.HeatSides.WATER_APPROACH;
+    /** The heat each condenser shell's water was owed per second by the cycle at {@code tick}, W: what a feed valve the column sets carries (U2). */
+    record Duty(long tick,double watts) {}
     /** Arrivals at an inlet over online ticks {@code start} to {@code end}, with their solids: already in the account, a cycle takes none of it before its time. */
     record Span(long start,long end,Account arrived,SolidInventory solids) {}
     /** What an outlet gave over online ticks {@code start} to {@code end}, mol: already off the account. */
@@ -100,6 +102,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         long tableTick,applied;double solvedCondenser;String note="";
         /** The heat booked into the condenser's transit, dated: what the water side reads through the fence (C6b). */
         final ArrayDeque<Owed> owed=new ArrayDeque<>();
+        /** Each cycle's heat rate owed to a condenser shell's water, dated (U2). State: a reload starts it from the table. */
+        final ArrayDeque<Duty> water=new ArrayDeque<>();
+        /** The air condenser's fans at the last cycle, a share of full speed, and their power, W (U2; NaN: no fans known). */
+        double fans=Double.NaN,fanPower=Double.NaN;
         final Map<Long,ArrayDeque<Span>> spans=new HashMap<>();
         final Map<Long,ArrayDeque<Gift>> gifts=new HashMap<>();
         final Map<Long,ArrayDeque<Credit>> credits=new HashMap<>();
@@ -209,8 +215,29 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     /** The run of unit {@code unit}, or null. */
     Run run(long unit){return runs.get(unit);}
-    /** The status line of unit {@code unit}: its run's, or STOPPED. */
-    public String status(long unit){var r=runs.get(unit);return r==null?"STOPPED":r.status;}
+    /** The status line of unit {@code unit}: its run's, or STOPPED; with the cooling water its valves pass (U2). */
+    public String status(long unit){var r=runs.get(unit);return r==null?"STOPPED":r.status+water(topology.column(unit));}
+    /**
+     * The cooling water a column's valves pass, for its status (U2): their flow targets as their islands last committed them,
+     * kg/s, and the water's regulated outlet, the inlet as read there plus its range under the ceiling, °C; empty where the
+     * column sets no valve. A presentation read: it moves no island.
+     */
+    private String water(ColumnUnit u) {
+        if(u==null)return "";
+        double flow=0,outlet=Double.NaN,ceiling=Math.max(1,u.setpoints().condenserTemperature()-APPROACH_KELVIN);int set=0;
+        for(long side:waterSides(u)) {
+            long id=PhysicalFluidTopology.sideIdentity(side);var operation=coordinator.operation(id);
+            Long valveOwner=operation==null||!operation.column()?null:registry.owner(operation.valve()),sideOwner=registry.owner(side);
+            if(valveOwner==null||sideOwner==null)continue;
+            var graph=coordinator.presentation(valveOwner).graph();
+            for(var pipe:graph.pipes())if(pipe.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve law
+                    &&law.source()==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW&&graph.reservoirs().get(pipe.first()).id()==operation.valve())flow+=law.massTarget();
+            var sideGraph=coordinator.presentation(sideOwner).graph();
+            for(var pipe:sideGraph.pipes())if(pipe.id()==id)outlet=Math.min(sideGraph.reservoirs().get(pipe.first()).state().temperature()+operation.rise(),ceiling);
+            set++;
+        }
+        return set==0?"":String.format(Locale.ROOT,flow>=10?"; cooling water %.0f kg/s, out at %.1f °C":"; cooling water %.3g kg/s, out at %.1f °C",flow,outlet-273.15);
+    }
     /** The last cycle of unit {@code unit}, or null. */
     public ColumnCycle.Step last(long unit){var r=runs.get(unit);return r==null?null:r.last;}
     /**
@@ -257,10 +284,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             var pa=t.pumparoundPerFeed();
             for(int j=0;j<pa.length;j++)duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.PUMPAROUND,j,
                     step==null||j>=step.pumparounds().length?0:step.pumparounds()[j]/seconds,pa[j]*f));
+            // An air condenser's fans (U2): their power at the last cycle, and at the set feed, for the electricity network to come.
+            double atSet=t.fans(u.airSurface(),f);
+            if(!Double.isNaN(atSet))duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.FANS,0,
+                    step==null||Double.isNaN(r.fanPower)?0:r.fanPower,com.wormzjl.icheme.science.equipment.HeatSides.fanPower(u.airSurface(),atSet)));
         }
         var solve=t==null?null:new com.wormzjl.icheme.science.column.operation.OperationView.Solve(r.solvedBy,r.warm,Math.max(0,now-r.tableTick)/20.0);
         return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,step==null?ColumnCycle.Limit.NONE:step.limit(),step==null?0:step.alpha(),r.ruleA,
-                r.pending==null?null:r.pending.trigger,r.failed,r.status,true,true,set,streams,duties,solve);
+                r.pending==null?null:r.pending.trigger,r.failed,r.status+water(u),true,true,set,streams,duties,solve);
     }
     /** Installs a solved split table and its products' partial molar enthalpies (J/mol) for unit {@code unit} (C5). */
     public void table(long unit,SplitTable table,double[][] enthalpy) {
@@ -434,8 +465,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             // The water's hold is of its own share: an air-then-water condenser's trim takes part of the duty (COOLER_MODEL_PLAN.md section 6).
             condenserRoom=CONDENSER_HOLD_SECONDS*Math.abs(t.condenserWaterPerFeed())*u.setpoints().designFeedRate()-sides.size()*owed;
         }
-        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;},r.ruleA);
+        // An air condenser holds at most what its built banks take with their fans at full speed (U2): past it, the column is limited.
+        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,t.airFeed(u.airSurface()),(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;},r.ruleA);
         r.last=step;
+        // The fans at the feed the cycle took, and their power by the cube of their speed (HeatSides.fanPower).
+        r.fans=t.fans(u.airSurface(),step.feedMoles()/(CYCLE_TICKS/20.0));
+        r.fanPower=Double.isNaN(r.fans)?Double.NaN:com.wormzjl.icheme.science.equipment.HeatSides.fanPower(u.airSurface(),r.fans);
         if(step.trip()!=null) {
             // The model has no steady state for this input (a capability limit): the inlets close, a solve of the state the
             // column was given may lift it.
@@ -462,8 +497,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         topology.column(u.withStations(true,stations).withTotals(totals));
         // The totals book the whole duty; the water is owed its share, the air takes the rest (COOLER_MODEL_PLAN.md section 6).
         owe(r,u,tick,-step.condenser()*t.waterShare(),false);
+        // Each shell's water heat rate, for a valve the column sets (U2).
+        if(!sides.isEmpty()) {
+            r.water.addLast(new Duty(tick,Math.max(0,-step.condenser()*t.waterShare())/(CYCLE_TICKS/20.0)/sides.size()));
+            while(r.water.size()>1&&r.water.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)r.water.removeFirst();
+        }
         levels(r,u,available,tick,true);
         r.status=step.limit()==ColumnCycle.Limit.NONE?"RUNNING":String.format(Locale.ROOT,"LIMITED: %s, %.0f %%",step.limit().name().toLowerCase(Locale.ROOT),100*step.alpha());
+        if(!Double.isNaN(r.fans))r.status+=String.format(Locale.ROOT,"; air fans %.0f %%, %.1f kW",100*r.fans,r.fanPower/1000);
         r.phase=step.limit()==ColumnCycle.Limit.NONE?com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING:com.wormzjl.icheme.science.column.operation.OperationView.Phase.LIMITED;
         if(r.ruleA)r.status+=", inputs cut together (rule A)";
         // A new solve where the state taken left the table's bands, or the setpoints moved (plan section 6).
@@ -643,6 +684,17 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double later=0;for(var g:queue)later+=g.start()>=fence?g.moles():g.moles()*(g.end()-fence)/(double)(g.end()-g.start());
         return later;
     }
+    /**
+     * The heat a condenser shell's water was owed per second by the last cycle at or before {@code through}, W: read as of the
+     * fence, so a plan does not depend on when its job runs. Before any such cycle (a start, a reload) the table's water duty
+     * at the set feed, shared by the shells.
+     */
+    private double waterRate(Run r,ColumnUnit u,long through) {
+        Duty last=null;for(var d:r.water)if(d.tick()<=through)last=d;
+        if(last!=null)return last.watts();
+        int shells=Math.max(1,waterSides(u).size());
+        return r.table==null?0:Math.max(0,-r.table.condenserWaterPerFeed()*u.setpoints().feedRate())/shells;
+    }
     /** The heat partner of the registered side {@code side}, or 0. */
     private long partnerOf(long side) {
         if(side==0)return 0;var r=registry.registrations().get(side);
@@ -680,7 +732,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         Long unit=waterSides.get(side);var r=unit==null?null:runs.get(unit);
         if(r!=null) {
             double due=transit;for(var o:r.owed)if(o.tick()>start-FENCE_TICKS)due-=o.joule();
-            return com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,Math.max(1,topology.column(unit).setpoints().condenserTemperature()-APPROACH_KELVIN));
+            var u=topology.column(unit);
+            // The heat a valve the column sets carries (U2): the shell's share of the last cycle's water duty through the fence,
+            // and a backlog beyond a cycle's lump and the slice over the condenser's hold.
+            double rate=waterRate(r,u,start-FENCE_TICKS),excess=Math.max(0,due-rate*(seconds+CYCLE_TICKS/20.0));
+            return com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,Math.max(1,u.setpoints().condenserTemperature()-APPROACH_KELVIN),rate+excess/CONDENSER_HOLD_SECONDS);
         }
         var held=registry.registrations().get(partner-PhysicalFluidTopology.sideIdentity(0));
         return held!=null&&held.device().suspended()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.NONE:null;

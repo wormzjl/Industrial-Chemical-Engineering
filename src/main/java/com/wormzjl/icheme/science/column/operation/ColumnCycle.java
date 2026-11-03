@@ -133,6 +133,16 @@ public final class ColumnCycle {
      */
     public static Step step(SplitTable table, Setpoints setpoints, double seconds, Account feed, List<Account> steam, double[] room,
                             double condenserRoom, ProductEnergy energy, boolean ruleA) {
+        return step(table, setpoints, seconds, feed, steam, room, condenserRoom, Double.POSITIVE_INFINITY, energy, ruleA);
+    }
+
+    /**
+     * One cycle whose air condenser holds at most {@code airFeed} mol/s of feed with its fans at full speed (U2,
+     * {@code COOLER_MODEL_PLAN.md} section 8; {@link SplitTable#airFeed}): a duty past full fans cuts the throughput as a
+     * cooling water shortage does.
+     */
+    public static Step step(SplitTable table, Setpoints setpoints, double seconds, Account feed, List<Account> steam, double[] room,
+                            double condenserRoom, double airFeed, ProductEnergy energy, boolean ruleA) {
         Objects.requireNonNull(table, "table");
         int m = table.axis().size();
         double[] steamPerFeed = setpoints.steamPerFeed();
@@ -169,6 +179,11 @@ public final class ColumnCycle {
                 alpha = alphaCondenser;
                 limit = Limit.CONDENSER;
             }
+        }
+        double alphaAir = Math.max(0, airFeed) * seconds / demand;
+        if (alphaAir < alpha) {
+            alpha = alphaAir;
+            limit = Limit.CONDENSER;
         }
         if (ruleA)
             for (int j = 0; j < steam.size(); j++) {

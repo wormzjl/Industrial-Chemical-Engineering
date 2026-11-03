@@ -20,9 +20,11 @@ import java.util.Objects;
  * not given yet. Both stay while the column is stopped: a station's {@code device} is then 0, and on a running column
  * where its design lost that port. {@code condensers} are the registrations of its water-cooled condenser's water sides,
  * outside the column (C6b: the column is their heat partner), one a shell in parallel (S3b, facts schema 8), or none.
- * {@code leaving}: the column was dismantled, and its unit goes once its ports have left.</p>
+ * {@code leaving}: the column was dismantled, and its unit goes once its ports have left. {@code airSurface}: the bare tube of
+ * its air condenser's banks as its Start found them, m², whose fans hold the air's duty (U2, batch 2026-11-02-process-simulator,
+ * facts schema 9); 0 where it has none or a save before it, whose air then takes any duty, as before.</p>
  */
-public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving) {
+public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface) {
     /** The most stations a saved unit may hold. A column has at most eleven today (ColumnTrays): a feed, two steams, an off-gas, a sour water, a distillate, four draws, a bottoms. */
     public static final int MAXIMUM_STATIONS=16;
     /** The most condenser water sides: one a shell, as many as a design's condenser count allows. */
@@ -33,6 +35,8 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
     public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,long condenser){this(id,master,running,setpoints,stations,totals,condenser==0?List.of():List.of(condenser),null,false);}
     /** Without engine state. */
     public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers){this(id,master,running,setpoints,stations,totals,condensers,null,false);}
+    /** Without an air condenser's surface. */
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving){this(id,master,running,setpoints,stations,totals,condensers,state,leaving,0);}
     public ColumnUnit {
         Objects.requireNonNull(master);Objects.requireNonNull(setpoints);Objects.requireNonNull(totals);stations=List.copyOf(stations);
         if(id<=0||master.lane()!=0||stations.size()>MAXIMUM_STATIONS)throw new IllegalArgumentException("Invalid column unit");
@@ -46,6 +50,7 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         if(state!=null&&!running)throw new IllegalArgumentException("A stopped column has no engine state");
         condensers=List.copyOf(condensers);
         if(condensers.size()>MAXIMUM_CONDENSERS||condensers.stream().anyMatch(c->c<=0)||new HashSet<>(condensers).size()!=condensers.size())throw new IllegalArgumentException("Invalid condenser sides");
+        if(!(airSurface>=0)||!Double.isFinite(airSurface))throw new IllegalArgumentException("Invalid air condenser surface");
     }
 
     /** The first condenser water side, or 0 for none. */
@@ -90,11 +95,11 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         return kept;
     }
     /** These stations, running or not; a stopped column forgets its engine state. */
-    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condensers,value?state:null,leaving);}
-    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condensers,state,leaving);}
-    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condensers,state,leaving);}
-    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,value,leaving);}
-    public ColumnUnit leave(){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,state,true);}
+    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condensers,value?state:null,leaving,airSurface);}
+    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condensers,state,leaving,airSurface);}
+    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condensers,state,leaving,airSurface);}
+    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,value,leaving,airSurface);}
+    public ColumnUnit leave(){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,state,true,airSurface);}
 
     /**
      * A running unit's engine state (plan section 12): its split table and the products' partial molar enthalpies (J/mol), the

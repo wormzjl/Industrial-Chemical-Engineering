@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.HeatSides;
+import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
@@ -244,7 +245,10 @@ public final class ColumnSolve {
             case AIR_COOLER -> SplitTable.WATER_NEVER;
             case AIR_THEN_WATER -> HeatSides.AIR_SPLIT_TEMPERATURE;
         };
-        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled, waterBelow);
+        // The air's surface per feed at each fan step (U2): an air cooler's from the top to the receiver, air then water's to the split.
+        double[] air = job.condenser() == ColumnComponents.Condenser.EXCHANGER ? new double[0]
+                : airArea(model, success.result().inspection().orElseThrow(), basis, axis, setpoints.condenserTemperature(), job.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER, rate, checkpoint);
+        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled, waterBelow, air);
         return new Solved(table, enthalpy, success.result().warmSeed().orElse(null), solved.condenserPerFeed() * rate,
                 success.diagnostics().solvePath(), note);
     }
@@ -258,6 +262,13 @@ public final class ColumnSolve {
      */
     public static double trim(FluidThermodynamics model, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis,
                        List<String> axis, double receiver, double condenser, Runnable checkpoint) {
+        double[] overhead = overhead(inspection, basis, axis);
+        double p = inspection.nodes().getFirst().pressurePascal();
+        return trim(inspection.nodes().get(1).temperatureKelvin(), receiver, condenser, t -> model.flashTP(t, p, overhead.clone(), checkpoint).enthalpy());
+    }
+
+    /** The overhead, mol/s on the axis: the top tray's vapour (V3's inspection node 1) with its water vapour. */
+    private static double[] overhead(com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis, List<String> axis) {
         var top = inspection.nodes().get(1);
         int water = axis.indexOf(SplitTable.WATER);
         double[] overhead = new double[axis.size()];
@@ -267,8 +278,49 @@ public final class ColumnSolve {
             if (i >= 0 && i != water) overhead[i] += top.vaporMolPerSecond() * y.get(c);
         }
         if (water >= 0) overhead[water] += top.waterVaporMolPerSecond();
-        double p = inspection.nodes().getFirst().pressurePascal();
-        return trim(top.temperatureKelvin(), receiver, condenser, t -> model.flashTP(t, p, overhead.clone(), checkpoint).enthalpy());
+        return overhead;
+    }
+
+    /**
+     * An air condenser's bare tube per mol/s of feed, m², at each fan step of {@link SplitTable#airArea} (U2, {@code COOLER_MODEL_PLAN.md}
+     * section 8): the overhead marched at the condenser's pressure from the top tray down to the air's outlet against 25 °C air, with the
+     * films of the world's air coolers at that speed ({@link HeatSides#airFilms}), every tube row meeting fresh air. The outlet is the
+     * receiver, or the split of an air-then-water condenser ({@code trimmed}); none where the overhead arrives there already; the most
+     * a double holds where the air cannot reach it.
+     */
+    static double[] airArea(FluidThermodynamics model, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis,
+                            List<String> axis, double receiver, boolean trimmed, double rate, Runnable checkpoint) {
+        double[] overhead = overhead(inspection, basis, axis), area = new double[SplitTable.FAN_STEPS + 1];
+        double top = inspection.nodes().get(1).temperatureKelvin(), outlet = trimmed ? HeatSides.airSplit(top, receiver) : receiver;
+        if (outlet >= top || !(rate > 0)) return area;
+        if (outlet <= HeatSides.AIR_TEMPERATURE) {
+            Arrays.fill(area, Double.MAX_VALUE);
+            return area;
+        }
+        double[] weights = model.molecularWeights();
+        double mass = 0;
+        for (int i = 0; i < overhead.length; i++) mass += overhead[i] * weights[i];
+        var curve = HeatCurve.sample(model, overhead, inspection.nodes().getFirst().pressurePascal(), outlet, top, HeatSides.airFilms(1), checkpoint);
+        double in = curve.enthalpy(curve.knots() - 1), out = curve.enthalpy(0);
+        for (int k = 0; k <= SplitTable.FAN_STEPS; k++)
+            area[k] = exposure(curve.withFilms(HeatSides.airFilms(k / (double) SplitTable.FAN_STEPS)), in, out) * mass / rate;
+        return area;
+    }
+
+    /** The bare tube per kg/s, m² s/kg, that brings a stream on {@code curve} from {@code in} down to {@code out} (J/kg) against 25 °C air: a bisection of the march. */
+    static double exposure(HeatCurve curve, double in, double out) {
+        double low = 0, high = 1;
+        while (curve.march(in, 1, high, HeatSides.AIR_TEMPERATURE) > out) {
+            low = high;
+            high *= 2;
+            if (high > 1e12) return Double.MAX_VALUE;
+        }
+        for (int i = 0; i < 60 && high - low > 1e-9 * high; i++) {
+            double middle = (low + high) / 2;
+            if (curve.march(in, 1, middle, HeatSides.AIR_TEMPERATURE) > out) low = middle;
+            else high = middle;
+        }
+        return high;
     }
 
     /**

@@ -150,6 +150,39 @@ class ColumnCycleTest {
     }
 
     /**
+     * An air condenser (U2, COOLER_MODEL_PLAN.md section 8): the table's surface per feed at each fan step gives the least fan
+     * speed a built face needs, still fans where natural draught holds, and the most feed full fans hold; a duty past full fans
+     * limits the cycle as a cooling water shortage does. A table with no air, or a face not known, limits nothing.
+     */
+    @Test
+    void anAirCondensersFaceBoundsItsFeedAndSetsItsFans() {
+        var whole = table();
+        double[] area = {100, 93.75, 87.5, 81.25, 75, 68.75, 62.5, 56.25, 50};
+        var air = new SplitTable(whole.axis(), whole.products(), whole.reboilerPerFeed(), whole.pumparoundPerFeed(), whole.condenserPerFeed(), whole.reference(),
+                whole.held(), 0, SplitTable.WATER_NEVER, area);
+        assertEquals(0, air.fans(60, .5), "natural draught holds 120 m² per mol/s");
+        assertEquals(.4, air.fans(40, .5), 1e-12);
+        assertEquals(.45, air.fans(38.75, .5), 1e-12, "between the steps, linear in the surface");
+        assertEquals(1, air.fans(20, .5), "short at full fans");
+        assertEquals(.5, air.airFeed(25), 1e-12, "25 m² hold 0.5 mol/s at full fans");
+        assertTrue(Double.isNaN(whole.fans(40, .5)) && whole.airFeed(40) == Double.POSITIVE_INFINITY, "no air, no fans and no bound");
+        assertTrue(Double.isNaN(air.fans(0, .5)) && air.airFeed(0) == Double.POSITIVE_INFINITY, "a face not known bounds nothing");
+        var feed = new Account(new double[] {300, 400, 300, 0}, -1.4e8);
+        var steam = new Account(new double[] {0, 0, 0, 1000}, -2.3e8);
+        double[] room = {1e9, 1e9, 1e9, 1e9, 1e9};
+        // 100 mol/s set; a face of 2500 m² holds 50 mol/s at full fans.
+        var step = ColumnCycle.step(air, setpoints(), 5, feed, List.of(steam), room, Double.POSITIVE_INFINITY, air.airFeed(2500), (k, n) -> energy(air, k, n), false);
+        assertEquals(ColumnCycle.Limit.CONDENSER, step.limit());
+        assertEquals(.5, step.alpha(), 1e-12, "half the feed");
+        var free = ColumnCycle.step(air, setpoints(), 5, feed, List.of(steam), room, Double.POSITIVE_INFINITY, air.airFeed(6000), (k, n) -> energy(air, k, n), false);
+        assertEquals(ColumnCycle.Limit.NONE, free.limit());
+        assertEquals(1, free.alpha(), 1e-12);
+        assertThrows(IllegalArgumentException.class, () -> new SplitTable(whole.axis(), whole.products(), 0, whole.pumparoundPerFeed(), whole.condenserPerFeed(),
+                whole.reference(), whole.held(), 0, SplitTable.WATER_NEVER, new double[] {1, 2}), "one area a fan step");
+        assertEquals(HeatSides.fanPower(40, 1) * .064, HeatSides.fanPower(40, .4), 1e-9, "the power by the cube of the speed");
+    }
+
+    /**
      * Where an outlet's booking difference goes (C1b, the owner's "divide by temperature"): a water-cooled condenser's water
      * takes every one, an air cooler's none, an air-then-water condenser's trim those offered below the 40 °C split.
      */

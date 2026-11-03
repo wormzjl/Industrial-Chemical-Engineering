@@ -35,9 +35,16 @@ import java.util.Objects;
  *                          below this temperature, to the air otherwise ({@code COOLER_MODEL_PLAN.md} section 6, the owner's "divide
  *                          by temperature"): {@link #WATER_ALWAYS} for a water-cooled condenser, {@link #WATER_NEVER} for an air cooler,
  *                          the split for an air-then-water condenser
+ * @param airArea           m² of an air condenser's bare tube per mol/s of feed that cools the overhead from the top tray to the air's
+ *                          outlet (the receiver, or an air-then-water condenser's split) against 25 °C air, with the fans at each
+ *                          {@link #FAN_STEPS}th of full speed from natural draught (0) to full (1): the law of the world's air
+ *                          coolers ({@code HeatSides.airFilms}; U2, {@code COOLER_MODEL_PLAN.md} section 8). Empty where the
+ *                          condenser has no air; {@link Double#MAX_VALUE} where the air cannot reach that outlet
  */
 public record SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
-                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow) {
+                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea) {
+    /** The fan speeds {@link #airArea} is given at: natural draught, then each eighth of full speed. */
+    public static final int FAN_STEPS = 8;
     /** The water's id on the network axis. */
     public static final String WATER = "Water";
     /** {@link #waterBelow} of a water-cooled condenser, whose water takes every difference, and of an air cooler, whose water takes none. */
@@ -118,6 +125,15 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         if (!Double.isFinite(condenserWaterPerFeed) || condenserWaterPerFeed * condenserPerFeed < 0 || Math.abs(condenserWaterPerFeed) > Math.abs(condenserPerFeed))
             throw new IllegalArgumentException("The condenser's water takes a share of its duty, not " + condenserWaterPerFeed + " of " + condenserPerFeed);
         if (!(waterBelow >= 0) || !Double.isFinite(waterBelow)) throw new IllegalArgumentException("Invalid water temperature " + waterBelow);
+        airArea = airArea.clone();
+        if (airArea.length != 0 && airArea.length != FAN_STEPS + 1) throw new IllegalArgumentException("An air area per fan step");
+        for (double a : airArea) if (!(a >= 0) || !Double.isFinite(a)) throw new IllegalArgumentException("Invalid air area " + a);
+    }
+
+    /** A table whose condenser has no air the world models (a water-cooled one, or one solved before U2). */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, new double[0]);
     }
 
     /**
@@ -139,6 +155,39 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
     /** The share of the condenser duty its cooling water takes, 0 to 1; 0 where the duty is 0. */
     public double waterShare() {
         return condenserPerFeed == 0 ? 0 : condenserWaterPerFeed / condenserPerFeed;
+    }
+
+    @Override
+    public double[] airArea() {
+        return airArea.clone();
+    }
+
+    /**
+     * The most feed, mol/s, an air condenser of {@code surface} m² of bare tube holds with its fans at full speed (U2): infinite
+     * where the table has no air, the air has no duty, or the surface is not known (0).
+     */
+    public double airFeed(double surface) {
+        if (airArea.length == 0 || !(surface > 0)) return Double.POSITIVE_INFINITY;
+        double full = airArea[FAN_STEPS];
+        return full > 0 ? surface / full : Double.POSITIVE_INFINITY;
+    }
+
+    /**
+     * The least fan speed, 0 to 1, at which an air condenser of {@code surface} m² of bare tube holds {@code feed} mol/s (U2): 0
+     * where natural draught holds it (the louvers throttle, the fans stand still), 1 where full speed does not, between the
+     * steps linear in the surface needed; NaN where the table has no air or the surface is not known.
+     */
+    public double fans(double surface, double feed) {
+        if (airArea.length == 0 || !(surface > 0)) return Double.NaN;
+        if (!(feed > 0)) return 0;
+        double per = surface / feed;
+        if (airArea[0] <= per) return 0;
+        for (int k = 1; k <= FAN_STEPS; k++)
+            if (airArea[k] <= per) {
+                double slow = airArea[k - 1], fast = airArea[k];
+                return (k - 1 + (slow - per) / (slow - fast)) / FAN_STEPS;
+            }
+        return 1;
     }
 
     /** Whether the cooling water takes the booking difference of an outlet that offered its product at {@code temperature} K (NaN unknown: a water-cooled condenser's water only). */

@@ -1028,7 +1028,8 @@ public final class IslandCoordinator {
         for(long pipe:island.sides) {
             var side=coupled.get(pipe);if(side==null||side.kind==SideKind.RADIANT)continue;
             var held=ports.heatRead(pipe,side.partner,start,slice.seconds(),transits.getOrDefault(side.pair(),0.));
-            if(held!=null){reads.put(pipe,held);continue;}
+            // A column's condenser read by its water side carries the valve the column sets, where its lines are complete (U2).
+            if(held!=null){reads.put(pipe,held.ceiling()>0&&held.operation()==null?held.withOperation(operations.get(pipe)):held);continue;}
             var other=other(side);var otherSide=coupled.get(side.partner);
             if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)materialise(other);
             // A convection coil reads its radiant coil's heat as of the slice start (F1); one in this island plans it per step.
@@ -1115,6 +1116,8 @@ public final class IslandCoordinator {
         operations=Map.copyOf(next);
         for(long id:changed){Long owner=sideOwners.get(id);if(owner!=null)toWake.add(owner);}
     }
+    /** The real valve side connection {@code side}'s control works (W8), or null for none. */
+    public @org.jetbrains.annotations.Nullable ExchangerRelay.Operation operation(long side){owned();return operations.get(side);}
     /** The heat each exchanger holds in transit, J (the energy owed to its streams), by pair key: the lower of its two sides' connection ids. */
     public Map<Long,Double> transits(){owned();return Map.copyOf(transits);}
     /**

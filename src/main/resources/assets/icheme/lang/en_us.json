@@ -932,6 +932,7 @@
   "gui.icheme.assembly.operation.duty.reboiler": "Reboiler",
   "gui.icheme.assembly.operation.duty.pumparound": "Pumparound",
   "gui.icheme.assembly.operation.duty.pumparound.n": "Pumparound %s",
+  "gui.icheme.assembly.operation.duty.fans": "Air fans (power)",
   "gui.icheme.assembly.operation.solve": "Last solve",
   "gui.icheme.assembly.operation.solve.none": "None yet",
   "gui.icheme.assembly.operation.solve.warm": "Warm route",

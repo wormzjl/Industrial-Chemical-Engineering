@@ -6,6 +6,8 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnOperatingPoint;
+import com.wormzjl.icheme.science.equipment.HeatSides;
+import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.ArrayList;
@@ -199,6 +201,95 @@ class ColumnSolveTest {
             }
             before = water;
         }
+    }
+
+    /**
+     * U2's numbers on the crude column on the network's basis (Tia Juana light, its design's receiver): an exchanger's water valve
+     * with water at 25, 30 and 40 °C, its flow Q / (h(T_out) - h(T_in)) and its outlet, 10 K up but 5 K under the receiver; an air
+     * cooler's fans on Auto's banks (the fewest banks, then the least face, that hold the need at full fans with the 20 % spare),
+     * their speed and power; and air then water at a 30 °C receiver, its air's fans and its trim's water. Prints them for the batch.
+     */
+    @Test void theCondensersUtilitiesOnTheDefaultColumn() {
+        var catalog = MaterialCatalog.bundled();
+        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
+        var axis = model.components();
+        double[] feed = new double[axis.size()];
+        for (int c = 0; c < design.componentBasis().componentCount(); c++) {
+            int i = axis.indexOf(design.componentBasis().componentId(c));
+            if (i >= 0) feed[i] += design.feedComponentMolarFlowsMolPerSecond()[c];
+        }
+        double rate = Arrays.stream(feed).sum();
+        var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
+        var s = Setpoints.of(ColumnOperatingPoint.of(design));
+        java.util.function.BiFunction<ColumnComponents.Condenser, Double, SplitTable> solve = (condenser, receiver) -> {
+            var setpoints = new Setpoints(s.designFeedRate(), s.feedRate(), receiver, s.refluxRatio(), s.reboilerPerFeed(), s.steamPerFeed(), s.drawsPerFeed(), s.pumparoundsPerFeed());
+            var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, Double.NaN, steam), null, condenser),
+                    model, catalog, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
+            return assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString).table();
+        };
+        double receiver = s.condenserTemperature();
+        // The exchanger: its water valve at three water temperatures.
+        var exchanger = solve.apply(ColumnComponents.Condenser.EXCHANGER, receiver);
+        assertEquals(0, exchanger.airArea().length, "a water-cooled condenser has no air");
+        double q = -exchanger.condenserWaterPerFeed() * rate, before = 0;
+        for (double celsius : new double[] {25, 30, 40}) {
+            double in = 273.15 + celsius, out = HeatSides.coolingWaterOutlet(in, receiver), rise = water(model, out) - water(model, in);
+            double flow = rise > 0 ? q / rise : Double.NaN;
+            System.out.printf(java.util.Locale.ROOT, "U2_EXCHANGER receiver=%.1f C water=%.0f C out=%.1f C duty=%.3f MW flow=%.1f kg/s%n", receiver - 273.15, celsius, out - 273.15, q / 1e6, flow);
+            if (rise > 0) {
+                assertTrue(flow > before, "hotter water takes more: " + flow + " after " + before);
+                before = flow;
+            } else assertTrue(in >= receiver - HeatSides.WATER_APPROACH, "only water at or over the ceiling takes nothing");
+        }
+        // The air cooler: Auto's banks, then their fans at the set feed.
+        var air = solve.apply(ColumnComponents.Condenser.AIR_COOLER, receiver);
+        fans("U2_AIR_COOLER receiver=" + String.format(java.util.Locale.ROOT, "%.1f C", receiver - 273.15), air, rate, -air.condenserPerFeed() * rate);
+        // Air then water at a 30 °C receiver: the air's fans, and the trim's water on 25 °C tower water.
+        var trimmed = solve.apply(ColumnComponents.Condenser.AIR_THEN_WATER, 303.15);
+        fans("U2_AIR_THEN_WATER receiver=30.0 C", trimmed, rate, -(trimmed.condenserPerFeed() - trimmed.condenserWaterPerFeed()) * rate);
+        double trim = -trimmed.condenserWaterPerFeed() * rate;
+        for (double celsius : new double[] {25, 20}) {
+            double in = 273.15 + celsius, out = HeatSides.coolingWaterOutlet(in, 303.15), rise = water(model, out) - water(model, in);
+            System.out.printf(java.util.Locale.ROOT, "U2_TRIM receiver=30.0 C water=%.0f C out=%.1f C duty=%.3f MW flow=%s%n", celsius, out - 273.15, trim / 1e6,
+                    rise > 0 ? String.format(java.util.Locale.ROOT, "%.1f kg/s", trim / rise) : "none: the water stands at the ceiling");
+        }
+    }
+
+    /** Auto's air cooler for {@code table}'s air at {@code rate} mol/s of feed and its fans there; printed after {@code label}. */
+    private static void fans(String label, SplitTable table, double rate, double duty) {
+        double[] area = table.airArea();
+        assertEquals(SplitTable.FAN_STEPS + 1, area.length);
+        for (int k = 1; k < area.length; k++) assertTrue(area[k] <= area[k - 1], "faster fans need less surface: " + Arrays.toString(area));
+        double need = area[SplitTable.FAN_STEPS] * rate, held = need * 1.2;
+        double[] best = null;
+        for (int banks = 1; banks <= ColumnComponents.MAX_UNITS && best == null; banks++) {
+            double[] found = null;
+            for (var bay : ProcessUnit.bays())
+                for (int parallel = 1; parallel <= ProcessUnit.Bank.MAX_PARALLEL; parallel++)
+                    for (int series = 1; series <= ProcessUnit.Bank.MAX_SERIES; series++) {
+                        var bank = new ProcessUnit.Bank(parallel, series);
+                        double surface = banks * HeatSides.airCoolerSurface(bay[0], (int) bay[1], bank), face = bank.bays() * ProcessUnit.bundleFace(bay[0], (int) bay[1]);
+                        if (surface >= held && (found == null || face < found[1] || face == found[1] && bank.bays() < found[2]))
+                            found = new double[] {banks, face, bank.bays(), surface, bay[0], bay[1], parallel, series};
+                    }
+            best = found;
+        }
+        assertNotNull(best, "Auto holds the need: " + need + " m²");
+        double surface = best[3], speed = table.fans(surface, rate), power = HeatSides.fanPower(surface, speed);
+        System.out.printf(java.util.Locale.ROOT, "%s air=%.3f MW need=%.0f m² at full fans (%.0f at natural draught); Auto %d bank(s) of %d x %d bays of %.2f x %.0f m, %.0f m²; fans %.1f %%, %.1f kW (%.1f kW at full); full fans hold %.2f of the set feed%n",
+                label, duty / 1e6, need, area[0] * rate, (int) best[0], (int) best[6], (int) best[7], best[4], best[5], surface, 100 * speed, power / 1e3, HeatSides.fanPower(surface, 1) / 1e3,
+                table.airFeed(surface) / rate);
+        assertTrue(speed < 1, "Auto's spare leaves the fans under full speed: " + speed);
+        assertEquals(HeatSides.fanPower(surface, 1) * speed * speed * speed, power, 1e-9 * power, "the power by the cube of the speed");
+    }
+
+    /** Water's specific enthalpy at {@code t} K and 3 bar on {@code model}, J/kg. */
+    private static double water(FluidThermodynamics model, double t) {
+        var n = new double[model.componentCount()];
+        n[model.components().indexOf(SplitTable.WATER)] = 1;
+        var state = model.flashTP(t, 300_000, n, () -> {});
+        return state.enthalpy() / state.mass();
     }
 
     private static double dot(double[] a, double[] b) {

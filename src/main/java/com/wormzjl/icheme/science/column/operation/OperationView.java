@@ -41,7 +41,9 @@ public record OperationView(Phase phase, ColumnCycle.Limit limit, double alpha, 
     }
 
     public enum DutyKind {
-        CONDENSER, REBOILER, PUMPAROUND
+        CONDENSER, REBOILER, PUMPAROUND,
+        /** An air condenser's fans, W of electric power (U2): at the last cycle's feed, and at the set feed on the table in force. */
+        FANS
     }
 
     /** A duty, W: what the last cycle booked at its throughput, what the last solve gave at its feed (negative: heat removed). */

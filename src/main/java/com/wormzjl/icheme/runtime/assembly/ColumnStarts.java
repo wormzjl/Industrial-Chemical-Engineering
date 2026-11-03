@@ -8,6 +8,8 @@ import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.column.operation.PortConditions;
 import com.wormzjl.icheme.science.column.operation.Setpoints;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import java.util.ArrayList;
@@ -84,7 +86,17 @@ public final class ColumnStarts {
                         var member = EquipmentStructure.at(level, BlockPos.of(unit));
                         if (member != null) condenser.addAll(EquipmentStructure.heatSides(world, level, member));
                     }
-        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser), null);
+        // An air condenser's banks, every one's bare tube: what its fans hold (U2, COOLER_MODEL_PLAN.md section 8).
+        double air = 0;
+        if (!ColumnBlueprint.CONDENSER.equals(cooled))
+            for (var s : entry.report().slots())
+                if (s.slot().equals(ColumnBlueprint.CONDENSER))
+                    for (long unit : s.units()) {
+                        var member = EquipmentStructure.at(level, BlockPos.of(unit));
+                        if (member != null && member.shape().kind() == EquipmentShape.Kind.AIR_COOLER)
+                            for (var side : HeatSides.of(member.shape())) air += side.area();
+                    }
+        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser, air), null);
     }
 
     private static PhysicalFluidTopology.Direction opposite(PhysicalFluidTopology.Direction d) {
