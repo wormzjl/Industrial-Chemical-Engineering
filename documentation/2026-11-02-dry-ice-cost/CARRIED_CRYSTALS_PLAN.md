@@ -1,9 +1,9 @@
 # Carried crystals plan: mode (a), then form G
 
-Correction, 2026-11-03, from the build ([CARRIED_CRYSTALS_REVIEW.md](CARRIED_CRYSTALS_REVIEW.md)); the plan below stands as written. The orchestrating session chose these as option A; the owner has not decided on them.
+Correction, 2026-11-03, from the build ([CARRIED_CRYSTALS_REVIEW.md](CARRIED_CRYSTALS_REVIEW.md)); the plan below stands as written. The orchestrating session chose these as option A, and the owner chose A the same day.
 
 - The Physics section's continuous V-L family is false at higher CO2. Below the triple point PR78 states three fluid phases, and the lean liquid saturates near 15 % CO2. So the filter also excludes a dense supersaturated liquid with CO2 taken out (gap statement, `crystalLean`), and a held-out split (`beyondStandIn`) replaces the fallback named in the Design section, which does not close the window.
-- The density tables stay fluid-only (`fluidPH`): the Design section's removal of that site holds cold seed 244. It is today's code. The arrival site and `adopt`'s crystal branches are removed.
+- The density tables stay fluid-only (`fluidPH`): the Design section's removal of that site holds cold seed 244. It is today's code. Later the same day a point the fluid phases refuse became carried ([JUNCTION_TABLES_REVIEW.md](JUNCTION_TABLES_REVIEW.md)). The arrival site and `adopt`'s crystal branches are removed.
 - The 855 row of the reference table is right: (b+) + G is 797 ms, 0 holds, 243 jobs. A build note misread it as 9 holds.
 - "A removal moves no number" does not hold for the arrival site, which moves the worlds. It holds for `adopt`.
 

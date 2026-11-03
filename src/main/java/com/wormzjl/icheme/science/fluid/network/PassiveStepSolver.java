@@ -2814,9 +2814,16 @@ public final class PassiveStepSolver {
         final double[] floors;
         /** Per unknown junction, its bulk density and density times velocity limit as a function of its own pressure: the
          * PH equilibrium of what it holds at TABLE points spaced in ln P over the hull (a flashing LNG junction is vapour at
-         * 1 atm and liquid at its bubble pressure, and its caps follow); null where the engine answers nothing. */
+         * 1 atm and liquid at its bubble pressure, and its caps follow); null where the engine answers nothing. A junction
+         * stated as one hydrocarbon liquid has a table only where it flashes inside the hull, from the hull's low end up to
+         * its stated pressure, and reads it only below {@link #flashFrom}. */
         final double[][] tableP,tableRho,tableRhoV;static final int TABLE=5;
-        /** The tables keyed by the junction state they were built for (a mint's state is the first step's), over one hull. */
+        /** Per unknown junction, the pressure from which it reads its stated data and not its table: the first table point
+         * of a liquid junction that holds no vapour; infinite for a table of a junction stated two-phase or still flashing at
+         * its stated pressure. A junction that stays there balances bit for bit as it would with no table. */
+        final double[] flashFrom;
+        /** The tables keyed by the junction state they were built for (a mint's state is the first step's), over one hull
+         * ({low, top, flashFrom} in the fourth row); a liquid junction that does not flash keeps an entry with no table. */
         static final Map<FluidThermodynamics.State,double[][]> TABLE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
         /** Per pump connection, whether the balance put it on its suction limit: its suction junction is anchored at the
          * liquid's bubble pressure ({@link #suctionFloors}) and the pump passes what the suction line delivers there. */
@@ -2829,6 +2836,7 @@ public final class PassiveStepSolver {
             this.fixedOpenings=fixedOpenings.length==graph.pipes().size()?fixedOpenings.clone():new double[graph.pipes().size()];if(fixedOpenings.length!=graph.pipes().size())Arrays.fill(this.fixedOpenings,Double.NaN);
             this.buffers=buffers;
             tableP=new double[graph.reservoirs().size()][];tableRho=new double[graph.reservoirs().size()][];tableRhoV=new double[graph.reservoirs().size()][];
+            flashFrom=new double[graph.reservoirs().size()];Arrays.fill(flashFrom,Double.POSITIVE_INFINITY);
             suctionLimited=new boolean[graph.pipes().size()];nodeEdges=incidence(graph);lastQ=new double[graph.pipes().size()][2];
             this.graph=graph;this.modes=modes;edges=graph.pipes().size();nodes=graph.reservoirs().size();
             closed=new boolean[edges];hardClosed=new boolean[edges];unknown=new int[nodes];Arrays.fill(unknown,-1);anchor=new double[nodes];Arrays.fill(anchor,Double.NaN);
@@ -2852,21 +2860,32 @@ public final class PassiveStepSolver {
             double margin=rhoMax*GRAVITY*(zHigh-zLow)+1;low=Math.max(low-margin-rises,1e-3*high);high+=margin+rises;
             for(int j=0;j<nodes;j++) {
                 if(unknown[j]<0)continue;var s=graph.reservoirs().get(j).state();if(!FluidThermodynamics.holdsFluid(s))continue;
-                if(!(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS)&&(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(s,FluidThermodynamics.WATER))))continue;
+                boolean vapour=FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS),liquid=!vapour&&FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL);
+                if(!liquid&&!(vapour&&(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(s,FluidThermodynamics.WATER))))continue;
+                // A liquid is a liquid from its stated pressure up. Below its bubble pressure it flashes and its density falls
+                // sixty times, which the balance must see: read as a liquid, the junctions under a 1.35 MPa LNG line with a
+                // 1.25 MPa bubble point fell to 1 atm still liquid and 40 K superheated, and flashing them one by one stalled
+                // Newton (cold seed 907, whose start the crystal competition's 2 K of heat had made two-phase).
+                double top=liquid?Math.min(high,s.pressure()):high;if(!(top>low))continue;
                 var cached=TABLE_CACHE.get(s);
-                if(cached!=null&&cached[0][0]==low&&cached[0][TABLE-1]==high){tableP[j]=cached[0];tableRho[j]=cached[1];tableRhoV[j]=cached[2];continue;}
-                double[] held=PhaseLayout.totalAmounts(s);double h=s.enthalpy();double[] tp=new double[TABLE],tr=new double[TABLE],tv=new double[TABLE];boolean ok=true;
-                for(int k=0;k<TABLE&&ok;k++) {
-                    tp[k]=low*DeterministicMath.exp(DeterministicMath.log(high/low)*k/(TABLE-1));
-                    // The fluid phases alone: a table point in the two-liquid window is refused and the junction keeps its stated
-                    // density. With the crystals carried here cold seed 244 held 20 times with a 12 s job, on the rows of junctions
-                    // holding vapour and near-pure carbon dioxide at 1 atm (0 holds, 422 ms fluid-only); seed 907 holds 19 and 10.
-                    try{var at=model.fluidPH(s.temperature(),tp[k],h,held.clone(),checkpoint);
+                if(cached!=null&&cached[3][0]==low&&cached[3][1]==top){if(cached[1]!=null){tableP[j]=cached[0];tableRho[j]=cached[1];tableRhoV[j]=cached[2];flashFrom[j]=cached[3][2];}continue;}
+                double[] held=PhaseLayout.totalAmounts(s);double h=s.enthalpy();double[] tp=new double[TABLE],tr=new double[TABLE],tv=new double[TABLE];boolean ok=true;double flash=Double.POSITIVE_INFINITY;
+                for(int k=0;k<TABLE;k++)tp[k]=low*DeterministicMath.exp(DeterministicMath.log(top/low)*k/(TABLE-1));
+                for(int k=0;k<TABLE&&ok&&flash==Double.POSITIVE_INFINITY;k++) {
+                    // A two-phase junction reads the fluid phases first: with the crystals carried at every point cold seed 244
+                    // held 20 times with a 12 s job, on the rows of junctions holding vapour and near-pure carbon dioxide at 1 atm
+                    // (0 holds, 422 ms fluid-only). A point they refuse, the two-liquid window every LNG flash ends in, is carried:
+                    // with no table a junction read its stated density at every pressure, and under a line opened to a void it
+                    // fell from 980 to 225 kPa where its density carries the flow at about 1 MPa (cold seed 651's job 88 stalled).
+                    try{var at=liquid?null:model.fluidPH(s.temperature(),tp[k],h,held.clone(),checkpoint);
+                        if(at==null)at=model.equilibriumPH(s.temperature(),tp[k],h,held.clone(),checkpoint);
                         if(at==null||!FluidThermodynamics.holdsFluid(at)){ok=false;break;}
-                        tr[k]=at.mass()/at.volume();tv[k]=tr[k]*model.velocityLimit(at);}
+                        tr[k]=at.mass()/at.volume();tv[k]=tr[k]*model.velocityLimit(at);
+                        if(liquid&&!FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS)){flash=tp[k];for(int i=k+1;i<TABLE;i++){tr[i]=tr[k];tv[i]=tv[k];}}}
                     catch(IllegalArgumentException refused){ok=false;}
                 }
-                if(ok){tableP[j]=tp;tableRho[j]=tr;tableRhoV[j]=tv;TABLE_CACHE.put(s,new double[][]{tp,tr,tv});}
+                if(flash==tp[0]){TABLE_CACHE.put(s,new double[][]{tp,null,null,{low,top,flash}});continue;}
+                if(ok){tableP[j]=tp;tableRho[j]=tr;tableRhoV[j]=tv;flashFrom[j]=flash;TABLE_CACHE.put(s,new double[][]{tp,tr,tv,{low,top,flash}});}
             }
         }
         /** The held data of open connection {@code e}: each end's density, viscosity, cap, column and end pressure, its one-way
@@ -2930,6 +2949,8 @@ public final class PassiveStepSolver {
             double slope=(up.enthalpy()/up.mass()-at.enthalpy()/at.mass())/dt;
             return slope>0?model.saturationPressure(t+(h-at.enthalpy()/at.mass())/slope):saturation;
         }
+        /** Whether junction {@code node} reads its table at {@code pressure}, not its stated data. */
+        private boolean tabled(int node,double pressure){return tableP[node]!=null&&pressure<flashFrom[node];}
         /** Linear interpolation of {@code table} in ln P at {@code pressure}, clamped to the table's range. */
         private double at(int node,double[] table,double pressure) {
             double[] tp=tableP[node];if(pressure<=tp[0])return table[0];if(pressure>=tp[TABLE-1])return table[TABLE-1];
@@ -2970,12 +2991,14 @@ public final class PassiveStepSolver {
             var pipe=graph.pipes().get(e);
             double dz=graph.reservoirs().get(pipe.second()).elevation()-graph.reservoirs().get(pipe.first()).elevation();
             int a=pipe.first(),b=pipe.second();double area=pipe.minimumArea();
-            double rhoA=tableP[a]!=null?at(a,tableRho[a],pa):rho[e][0]*scale(a,pa),capA=tableP[a]!=null?at(a,tableRhoV[a],pa)*area:cap[e][0]*scale(a,pa),colA=tableP[a]!=null?rhoA:column[e][0]*scale(a,pa);
+            boolean tableA=tabled(a,pa);
+            double rhoA=tableA?at(a,tableRho[a],pa):rho[e][0]*scale(a,pa),capA=tableA?at(a,tableRhoV[a],pa)*area:cap[e][0]*scale(a,pa),colA=tableA?rhoA:column[e][0]*scale(a,pa);
             double rise=mover[e]?riseLimit((FlowControl.Mover)pipe.control(),rhoA,pa):0;
             double forward=pa-pb-colA*GRAVITY*dz+rise;
             if(forward>0)return allowed[e][0]?runFlow(e,0,forward,rhoA,mu[e][0],capA):0;
             if(mover[e])return 0;
-            double rhoB=tableP[b]!=null?at(b,tableRho[b],pb):rho[e][1]*scale(b,pb),capB=tableP[b]!=null?at(b,tableRhoV[b],pb)*area:cap[e][1]*scale(b,pb),colB=tableP[b]!=null?rhoB:column[e][1]*scale(b,pb);
+            boolean tableB=tabled(b,pb);
+            double rhoB=tableB?at(b,tableRho[b],pb):rho[e][1]*scale(b,pb),capB=tableB?at(b,tableRhoV[b],pb)*area:cap[e][1]*scale(b,pb),colB=tableB?rhoB:column[e][1]*scale(b,pb);
             double reverse=pa-pb-colB*GRAVITY*dz;
             if(reverse<0)return allowed[e][1]?-runFlow(e,1,-reverse,rhoB,mu[e][1],capB):0;
             return 0;
@@ -3081,7 +3104,7 @@ public final class PassiveStepSolver {
                     if(closed[e]||!(pipe.control() instanceof FlowControl.Mover pump))continue;
                     double pa=endAt(e,0,p),pb=endAt(e,1,p);
                     double dz=graph.reservoirs().get(b).elevation()-graph.reservoirs().get(a).elevation();
-                    double rhoA=tableP[a]!=null?at(a,tableRho[a],pa):rho[e][0]*scale(a,pa);
+                    double rhoA=tabled(a,pa)?at(a,tableRho[a],pa):rho[e][0]*scale(a,pa);
                     if(mode==FlowControl.Mode.PUMP_TARGET&&pb-pa+rhoA*GRAVITY*dz>riseLimit(pump,rhoA,pa)*(1+1e-9)){modes.set(e,FlowControl.Mode.PUMP_HEAD_LIMIT);prescribed[e]=Double.NaN;mover[e]=true;changed=true;continue;}
                     double floor=suctionFloor(e,checkpoint);
                     if((mode==FlowControl.Mode.PUMP_TARGET||mode==FlowControl.Mode.PUMP_HEAD_LIMIT)&&graph.reservoirs().get(a).junction()&&floor<Double.POSITIVE_INFINITY&&pa<floor*(1-1e-9)) {

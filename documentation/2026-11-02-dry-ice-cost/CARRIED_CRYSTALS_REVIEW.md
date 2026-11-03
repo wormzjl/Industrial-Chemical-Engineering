@@ -1,6 +1,6 @@
 # Carried crystals review: mode (a), then form G
 
-Base 59b69d873. Plan: [CARRIED_CRYSTALS_PLAN.md](CARRIED_CRYSTALS_PLAN.md). Option A below is the orchestrating session's reversible decision; the owner decides between A, B and C. Not run: campaign, final lane, `slowGates`, GameTests. Code guide, CHANGELOG, version: wait for the owner's word.
+Base 59b69d873. Plan: [CARRIED_CRYSTALS_PLAN.md](CARRIED_CRYSTALS_PLAN.md). The owner chose option A (2026-11-03); B and C are rejected. Its fluid-only tables and proposal 1 were then amended: [JUNCTION_TABLES_REVIEW.md](JUNCTION_TABLES_REVIEW.md). Not run: campaign, final lane, `slowGates`, GameTests. Code guide, CHANGELOG, version: wait for the owner's word.
 ## Expected behaviour
 LNG let down to 1 atm is vapour, liquid and frost. At step level (D23) that is vapour and one fluid liquid, with no crystal booked. PR78 has no frost, so below the triple point it continues them as three fluid phases: V, a CO2-lean liquid L1 and a near-pure CO2 liquid L2. A depositing pipe closes by settling: below the deposition velocity a particle takes D/v_s to reach the wall.
 ## What the code did
@@ -8,10 +8,10 @@ Every step flash ran the crystal competition, 5 to 24 times a fluid flash, and `
 ## What was built
 - Mode (a) as planned: `FLUID_CARRYING_CRYSTALS`, a `TrialFilter`, the three shapes; kernel work about 1/5 of the competition. Form G as planned: `PassiveIntervalSolver.settlesWithin`. Solid plan lines 79 and 93 amended.
 - Design change (A). The plan's continuous V-L family is false at higher CO2: L1 saturates near 15 % (113.2 K, 101 kPa, 3 % CO2), both products are cut, and the plan's fallback does not close it. Added: a gap statement, a dense trial that is a supersaturated non-stand-in liquid with CO2 taken out is no phase (`crystalLean`, parameter-free: the CO2 lost exceeds what the other species together lose), and `beyondStandIn`, the stand-in held out, the rest split alone, the stand-in returned. N2-rich beside ethane-rich liquid stays the `LIQUID_LIQUID` hold.
-- Removed: the arrival site and `adopt`'s crystal branches. `adopt` moves no number (768: 20606552 checkpoints both); the arrival site moves worlds, in their favour. The `adopt` reason on the 90 K floor moved to `carriedSplit`. The density tables stay fluid-only (`fluidPH`), today's code.
+- Removed: the arrival site and `adopt`'s crystal branches. `adopt` moves no number (768: 20606552 checkpoints both); the arrival site moves worlds, in their favour. The `adopt` reason on the 90 K floor moved to `carriedSplit`. The density tables stay fluid-only (`fluidPH`), today's code; since amended, see the header.
 - `singleRoot` is `LIQUID` in both one-liquid branches: all nine worlds keep their checkpoints, and no difference on 18805 single-phase grid states, so no test pins it.
 ## Options
-Worst ms / holds on 244; 907. A: (a) + G with fluid-only tables, 750 / 0; 984 / 19. B: the plan's form, no G: 750 / 12; 3234 / 10, with 651 at 5875 ms. C: carried tables: 12281 / 20; 1156 / 10 without G, and 1312 / 14; 703 / 10 with G. C swaps the dead world: 907 lives (tanks 371 + 26 kg either way), 244 stalls at slice 2745, job 84 of 181. Recommended: A.
+Worst ms / holds on 244; 907. A: (a) + G with fluid-only tables, 750 / 0; 984 / 19. B: the plan's form, no G: 750 / 12; 3234 / 10, with 651 at 5875 ms. C: carried tables: 12281 / 20; 1156 / 10 without G, and 1312 / 14; 703 / 10 with G. C swaps the dead world: 907 lives (tanks 371 + 26 kg either way), 244 stalls at slice 2745, job 84 of 181. Recommended and chosen: A.
 ## Nine worlds
 Worst job CPU ms / holds / jobs over 2 s, serial, nothing else running. (a) has no G and an earlier form of `crystalLean`. Last column: the largest job of (a) + G.
 
@@ -40,7 +40,7 @@ Refusals left: tally, none carried in TP, PH or UV over the nine worlds (907 end
 - Unchanged and passing with their bounds: `CrystalFlushBudgetTest` (10000) and the other 12 named classes. New: `CarriedCrystalsTest`, 10 tests; a refresh's UV and PH equal today's to 15 digits.
 ## Risks in the plan
 A closure picks a regime: yes on (a) alone, restored by G. 651's margin 2.7x. 244's job 57 no longer the worst. 683's stall at 0.354 gone. 855's 0.1059 gone under G, not explained. Between frost line and metastable dew line a gas stays one vapour: `PrecipitatedSolidsTest` and `LiquidCo2LetDownTest` pass, no run to a floor seen.
-## Proposals for the owner (nothing built)
+## Proposals for the owner (1 (i) built, the rest not)
 1. 907's start stall. Expected: LNG at 154.8 K, 2.6 MPa, 2.66 % CO2 has its bubble point at 1.25 MPa and dew point at 0.44 MPa, so the liquid flashes at the first junction below 1.25 MPa and the junctions settle two-phase (today 137 to 399 kPa). Code: the competition's crystal heats the mint by about 2 K and states it two-phase; without it the mint at 1.35 MPa is rightly liquid, and `BalanceNet` builds tables only for a junction that holds both phases. The next pass drops four junctions to 1 atm as liquid, 40 K superheated; `phaseCorrection` flashes one, and Newton stalls on its outlet (residual 146, a neighbour at 2 Pa). The fluid-only table refusals add 9 holds that (b+) does not have. Options: (i) tables for a liquid junction whose hull reaches its bubble pressure, recommended, the balance is where a flashing junction's density belongs; (ii) flash a whole superheated run in one pass; (iii) C, no.
 2. PH steps. Expected: CH4 with 40 % CO2 at 1 MPa has a three-phase point at 151.39 K, where H rises 2900 J/mol at constant T, like boiling (2.8 % at 541 kPa: 370 J/mol at 139.01 K). Code: carried PH refuses those targets ("lies in a step of H(T)") and the adapter bisects; the competition's `binaryThreePhase` has no carried twin. No world meets them. Options: (i) leave it, recommended until a world does; (ii) a lever rule in `closedPh`.
 ## Open
