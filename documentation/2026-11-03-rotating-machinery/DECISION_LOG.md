@@ -17,6 +17,7 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 - **D9 (Q9).** Process simulator support after both batches merge.
 - **D10 (2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
 - **D11 (2026-11-04).** Owner: "review the pump types used in refinery, current large pump seems to be wrong type", then "Build A" (`PUMP_TYPES_REVIEW.md`). Above 0.4 m discharge the pump is an API 610 BB2 (radially split, between bearings, top suction and top discharge) instead of the BB1. The owner approves the moved nozzle pipe blocks of the four large sizes (sides to top).
+- **D12 (2026-11-04).** The OH2 suction spools at 0.10 and 0.15 m stay as they are (1.2 m): shortening them would move their pipe blocks one block in and disconnect placed pumps. Owner: "Keep them".
 
 ## Taken under the standing instruction
 
