@@ -16,6 +16,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
+import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.FiredHeaterUnit;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
@@ -446,6 +447,7 @@ public final class SheetSizing {
                 case "compressor" -> compressor(id, entry);
                 case "drum" -> drum(id, entry);
                 case "storage_tank" -> tank(id, entry);
+                case "ejector" -> ejector(id, entry, unit.params());
                 default -> null;
             };
         }
@@ -510,6 +512,24 @@ public final class SheetSizing {
             return sized(entry, TankSizing.Size.class, size -> TankSizing.rate(load, size), () -> type != null ? TankSizing.auto(load, type) : TankSizing.auto(load));
         }
 
+        /** An ejector on its suction's load, with what its law needs and what a wired Motive port brings (W10). */
+        private SizedUnit ejector(String id, UnitEntry entry, Params params) {
+            var readings = readings(id);
+            boolean wired = wires.getOrDefault(id, Map.of()).containsKey(EjectorUnit.MOTIVE);
+            var load = EjectorSizing.Load.of(stream(id, EjectorUnit.SUCTION), params.number("discharge", EjectorUnit.DISCHARGE_PRESSURE), readings.getOrDefault("need", 0.), wired ? readings.get("motive") : null, basis);
+            return ejector(entry, load);
+        }
+
+        private static SizedUnit ejector(UnitEntry entry, EjectorSizing.Load load) {
+            return sized(entry, EjectorSizing.Size.class, size -> EjectorSizing.rate(load, size), () -> EjectorSizing.auto(load));
+        }
+
+        /** What the run read on unit {@code id}, nothing where it has no report. */
+        private Map<String, Double> readings(String id) {
+            var report = run.reports().get(id);
+            return report == null ? Map.of() : report.readings();
+        }
+
         // ---- The column and its block ----
 
         /** The column at the diameter Auto or the player gives, then its members: a column whose run shows no profile has no size. */
@@ -547,7 +567,17 @@ public final class SheetSizing {
             // condenser takes out. Near the dew point the world's flash and V3's differ, so the top tray's vapour flashed at V3's
             // temperature would hold less heat than V3 condenses, and the curves would cross; this way the two sides balance.
             var vapour = ColumnSizing.stream(thermo, solved, top.vaporFractions(), top.vaporMolPerSecond(), top.waterVaporMolPerSecond(), top.temperatureKelvin(), top.pressurePascal());
-            var condensed = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), vapour.amounts(), SolidInventory.EMPTY);
+            // Where the top is under ambient pressure, the ejector lifts that vapour (W10), and its motive steam condenses with it: the
+            // condenser's duty already holds the steam's heat.
+            var readings = readings(id);
+            double[] condensing = vapour.amounts();
+            if (ColumnComponents.ejectorRequired(door.topPressure())) {
+                boolean wired = wires.getOrDefault(id, Map.of()).containsKey(EjectorUnit.MOTIVE);
+                var load = EjectorSizing.Load.of(vapour, door.ejector().discharge(), readings.getOrDefault("ejector_need", 0.), wired ? readings.get("ejector_motive") : null, basis);
+                out.put(member(id, "ejector"), ejector(entries.unit(member(id, "ejector")), load));
+                condensing[condensing.length - 1] += readings.getOrDefault("ejector_motive", 0.) / EjectorUnit.waterMass(thermo);
+            }
+            var condensed = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), condensing, SolidInventory.EMPTY);
             var overhead = thermo.heated(condensed, block.condenser(), top.pressurePascal());
             double coolerDrop = 0;
             thermo.checkpoint().run();

@@ -69,6 +69,10 @@ public final class SelectionColumn {
                 rows.add(Door.meter(x.text("door.power"), read.of("power", 1e3, 1), "kW"));
                 rows.add(Door.meter(x.text("door.rise"), read.of("rise", u.pressure().si(1), 2), u.pressure().symbol()));
             }
+            case "ejector" -> {
+                rows.add(Door.meter(x.text("door.steam_in"), read.of("motive", 1 / 3600., 0), "kg/h"));
+                rows.add(Door.meter(x.text("door.compression"), read.of("compression", 1, 1), ""));
+            }
             case "drum", "storage_tank" -> {
                 rows.add(Door.meter(x.text("door.temperature"), read.temperature(u), u.temperature().symbol()));
                 rows.add(Door.meter(x.text("door.pressure"), read.pressure(u), u.pressure().symbol()));

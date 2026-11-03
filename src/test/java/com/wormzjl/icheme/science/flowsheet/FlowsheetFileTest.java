@@ -6,6 +6,7 @@ import com.google.gson.JsonParser;
 import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
+import com.wormzjl.icheme.science.flowsheet.sizing.EjectorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.LineSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
@@ -311,6 +312,20 @@ final class FlowsheetFileTest {
         assertEquals(2, door.number("kettle_units"));
         assertEquals(1, ((AirCoolerSizing.Size) FlowsheetFile.read(bytes(sized())).sizing().unit("A-1").size()).banks(), "a size saved before the count is one bank");
         damagedFact("sheet.sizing.units.A-1.size", sizing -> fact(sizing, "units", "A-1").getAsJsonObject("size").addProperty("banks", 7));
+    }
+
+    /** W10: an ejector's suction is a fact, the tile's and a column block member's, and a column door keeps its ejector's pressures. A door saved before them reads the tile's defaults ({@code ColumnEjectorTest}). */
+    @Test void anEjectorKeepsItsSuctionAndItsPressures() throws IOException {
+        var sheet = FlowsheetFile.read(Files.readAllBytes(CORPUS.resolve("format-1-ejector.json")));
+        assertEquals(new EjectorSizing.Size(.25), sheet.sizing().unit("J-1").size());
+        assertEquals(new EjectorSizing.Size(.8), sheet.sizing().unit("T-1/ejector").size());
+        var door = sheet.units().get(1).params();
+        assertEquals(1.2e5, door.number("ejector_discharge"));
+        assertEquals(1e6, door.number("ejector_motive"));
+        var json = JsonParser.parseString(Files.readString(CORPUS.resolve("format-1-ejector.json"))).getAsJsonObject();
+        fact(json.getAsJsonObject("sizing"), "units", "J-1").getAsJsonObject("size").addProperty("suction", -1);
+        var refusal = assertThrows(FlowsheetFailure.class, () -> FlowsheetFile.read(bytes(json)));
+        assertEquals(List.of("sheet.sizing.units.J-1.size"), refusal.arguments(), "a suction no ejector has is damage");
     }
 
     private static void damagedFact(String where, Consumer<JsonObject> damage) {

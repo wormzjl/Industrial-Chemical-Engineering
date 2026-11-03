@@ -135,6 +135,10 @@ public final class ColumnDoors {
                         x.host().stores() && !x.host().reader() && input(x, id) != null, door.units(), ColumnComponents.kettleRequired(door.reboilerDuty())), x.t());
                 var right = new ArrayList<>(rows.right());
                 right.add(right.size() - 1, Door.group(x.text("door.group.tube_sides"), Door.entry("tube", x.text("door.drop"), x.units().pressure().symbol())));
+                // The ejector on the vapour line (W10), where the top is under ambient pressure: the ejector tile's two pressures.
+                if (ColumnComponents.ejectorRequired(door.topPressure()))
+                    right.add(right.size() - 1, Door.group(x.text("door.group.ejector"), Door.entry("ejector_discharge", x.text("door.discharge"), x.units().pressure().symbol()),
+                            Door.entry("ejector_motive", x.text("door.motive"), x.units().pressure().symbol())));
                 columns = List.of(right);
                 glass = connections(x, unit);
             }
@@ -262,6 +266,8 @@ public final class ColumnDoors {
         values.put("s7", u.p(door.topPressure()));
         values.put("s9", SheetUnits.number(2, door.diameter()));
         values.put("tube", u.p(door.condenserDrop()));
+        values.put("ejector_discharge", u.p(door.ejector().discharge()));
+        values.put("ejector_motive", u.p(door.ejector().motive()));
         for (int i = 0; i < door.draws().size(); i++) {
             var d = door.draws().get(i);
             values.put("d" + i + "rate", SheetUnits.number(1, d.flow() * KMOL));
@@ -310,6 +316,8 @@ public final class ColumnDoors {
             case "s6" -> editor.set(id, "reflux", value, step);
             case "s7" -> editor.set(id, "top_pressure", pascal, step);
             case "s9" -> editor.set(id, "diameter", value, step);
+            case "ejector_discharge" -> editor.set(id, ColumnDoor.EJECTOR_DISCHARGE, pascal, step);
+            case "ejector_motive" -> editor.set(id, ColumnDoor.EJECTOR_MOTIVE, pascal, step);
             case "tube" -> {
                 var json = copy(x, id);
                 json.addProperty("condenser_drop", pascal);
@@ -500,7 +508,7 @@ public final class ColumnDoors {
 
     /** A connection point's place in the list: what goes in, the pairs, what comes out. */
     private static int rank(String port) {
-        return port.equals("feed") ? 0 : port.startsWith("steam/") ? 1 : port.startsWith("condenser") ? 2 : port.startsWith("reboiler") ? 3 : port.startsWith("pa/") ? 4 : port.equals("overhead") ? 5 : port.equals("distillate") ? 6
+        return port.equals("feed") ? 0 : port.startsWith("steam/") || port.equals("motive") ? 1 : port.startsWith("condenser") ? 2 : port.startsWith("reboiler") ? 3 : port.startsWith("pa/") ? 4 : port.equals("overhead") ? 5 : port.equals("distillate") ? 6
                 : port.equals("water") ? 7 : port.startsWith("draw/") ? 8 : 9;
     }
 

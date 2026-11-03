@@ -19,6 +19,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.ColumnSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
 import com.wormzjl.icheme.science.flowsheet.sizing.DrumSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.EjectorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.Lamp;
@@ -195,6 +196,7 @@ public final class SizingPage {
         if (unit != null) return unit.type();
         return switch (size) {
             case PumpSizing.Size p -> "pump";
+            case EjectorSizing.Size e -> "ejector";
             case ExchangerSizing.Size e -> e.kettle() ? "kettle" : "exchanger";
             case AirCoolerSizing.Size a -> "air_cooler";
             case DrumSizing.Size d -> "drum";
@@ -285,6 +287,7 @@ public final class SizingPage {
     public static String sizeText(SheetContext x, @Nullable UnitSize size) {
         String text = switch (size) {
             case PumpSizing.Size p -> x.text("sizing.size.pump", metres(p.discharge()));
+            case EjectorSizing.Size e -> x.text("sizing.size.ejector", metres(e.suction()));
             case ExchangerSizing.Size e -> x.text("sizing.size.exchanger", metres(e.shell()), e.tubes());
             case AirCoolerSizing.Size a -> x.text("sizing.size.air_cooler", a.bank().parallel(), a.bank().series(), SheetUnits.number(1, a.width()), a.length());
             case HeaterSizing.Size h -> x.text("sizing.size.heater", SheetUnits.number(1, h.diameter()), h.length());
@@ -357,6 +360,7 @@ public final class SizingPage {
         String hint = x.text("sizing.fixed_hint");
         switch (size) {
             case PumpSizing.Size p -> group.add(Door.entry(KEY + "size/discharge", x.text("sizing.discharge"), "m"));
+            case EjectorSizing.Size e -> group.add(Door.entry(KEY + "size/suction", x.text("sizing.suction"), "m"));
             case ExchangerSizing.Size e -> {
                 group.add(new Column.Setting(KEY + "size/count", x.text("sizing.shells"), Integer.toString(e.shells()), "", hint, edits));
                 group.add(Door.entry(KEY + "size/shell", x.text("sizing.shell"), "m"));
@@ -462,6 +466,7 @@ public final class SizingPage {
         if (state.view == View.UNITS && unit != null) {
             switch (size(x, unit, sized)) {
                 case PumpSizing.Size p -> values.put(KEY + "size/discharge", metres(p.discharge()));
+                case EjectorSizing.Size e -> values.put(KEY + "size/suction", metres(e.suction()));
                 case ExchangerSizing.Size e -> {
                     values.put(KEY + "size/shell", metres(e.shell()));
                     values.put(KEY + "size/tubes", Integer.toString(e.tubes()));
@@ -570,6 +575,7 @@ public final class SizingPage {
         int whole = (int) Math.round(value);
         return switch (size) {
             case PumpSizing.Size p -> field.equals("discharge") ? new PumpSizing.Size(value) : null;
+            case EjectorSizing.Size e -> field.equals("suction") ? new EjectorSizing.Size(value) : null;
             case ExchangerSizing.Size e -> switch (field) {
                 case "count" -> e.withShells(whole);
                 case "shell" -> new ExchangerSizing.Size(e.kettle(), e.shells(), value, e.tubes());

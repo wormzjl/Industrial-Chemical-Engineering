@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.flowsheet;
 
 import com.wormzjl.icheme.science.flowsheet.unit.AirCoolerUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
+import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.ExchangerUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.FiredHeaterUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.FilterUnit;
@@ -53,7 +54,8 @@ public final class UnitTypes {
             Map.entry("fired_heater", new FiredHeaterUnit()),
             Map.entry("column", new ColumnUnit()),
             Map.entry("pump", new MoverUnit(new FlowControl.Pump(1, 1))),
-            Map.entry("compressor", new MoverUnit(new FlowControl.Compressor(1, 2))));
+            Map.entry("compressor", new MoverUnit(new FlowControl.Compressor(1, 2))),
+            Map.entry("ejector", new EjectorUnit()));
 
     private UnitTypes() {
     }

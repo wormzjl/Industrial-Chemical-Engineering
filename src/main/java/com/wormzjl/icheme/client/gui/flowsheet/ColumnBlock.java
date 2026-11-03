@@ -313,11 +313,16 @@ public final class ColumnBlock {
             pipe(Service.HOT, true, mid, ty, mid, vapour, e0, vapour);
             pipe(Service.HOT, true, e1, vapour, condenser - 8, vapour);
             part(ColumnBlueprint.EJECTOR, Shape.EJECTOR, (e0 + e1) / 2, vapour, new Rect(e0, vapour - 4, e1 - e0, 8), "");
+            // Its motive steam (W10) from the frame's left side, under the cooling water's pair, which stands one pitch higher: a line
+            // from above would cross the water's supply.
+            int motive = ty - 28;
+            pipe(Service.HOT, true, bx, motive, e0 + 4, motive, e0 + 4, vapour - 4);
+            spots.put("motive", new Spot(bx, motive, SheetLayout.Side.LEFT));
         } else pipe(Service.HOT, true, mid, ty, mid, vapour, condenser - 8, vapour);
         pipe(Service.HOT, true, condenser + 8, vapour, d0, vapour);
         if (air) part(ColumnBlueprint.CONDENSER, Shape.AIR_CONDENSER, condenser, vapour, new Rect(condenser - 8, vapour - 7, 16, 14), "");
         else {
-            int cold = ty - 54, back = ty - 34;
+            int cold = ejector ? ty - 56 : ty - 54, back = ejector ? ty - 42 : ty - 34;
             pipe(Service.COLD, true, bx, cold, condenser + 4, cold, condenser + 4, vapour - 7);
             pipe(Service.COLD, true, condenser - 4, vapour - 7, condenser - 4, back, bx, back);
             part(ColumnBlueprint.CONDENSER, Shape.CONDENSER, condenser, vapour, new Rect(condenser - 8, vapour - 8, 16, 16), "");

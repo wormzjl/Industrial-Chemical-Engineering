@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.flowsheet.unit;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
+import com.wormzjl.icheme.science.column.v3.V3ColumnInspection;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
 import com.wormzjl.icheme.science.column.v3.V3ColumnResult;
 import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
@@ -44,10 +45,15 @@ import java.util.Locale;
  * <p>V3 has no feed pressure, so the stream is flashed at its own enthalpy to the feed tray's solved pressure, which gives V3's
  * feed temperature. V3's feed is hydrocarbons: water joins as steam if it is vapour there. The products come back through the world's
  * flash at V3's temperature and pressure; what the two thermo models then differ by is read out as the block's energy gap.
+ *
+ * <p>Where the top is under ambient pressure, an ejector on the vapour line lifts the top tray's vapour into the condenser (main plan
+ * W10): its Motive steam port takes the ejector tile's rule ({@link EjectorUnit#motive}). The steam condenses with the overhead and
+ * leaves as free water at the water product's temperature, and the heat it gives up joins the condenser's duty. V3 solves the column
+ * at its own pressures, so the products stay at them: the ejector moves no product's pressure.
  */
 public final class ColumnUnit implements UnitModel {
-    private static final String FEED = "feed", OVERHEAD = "overhead", DISTILLATE = "distillate", WATER = "water", BOTTOMS = "bottoms", DRAW = "draw/";
-    private static final String CONDENSER_IN = "condenser_in", CONDENSER_OUT = "condenser_out", REBOILER_IN = "reboiler_in", REBOILER_OUT = "reboiler_out";
+    private static final String FEED = "feed", OVERHEAD = "overhead", DISTILLATE = "distillate", WATER = "water", BOTTOMS = "bottoms", DRAW = "draw/", FREE_WATER = "free_water";
+    private static final String MOTIVE = "motive", CONDENSER_IN = "condenser_in", CONDENSER_OUT = "condenser_out", REBOILER_IN = "reboiler_in", REBOILER_OUT = "reboiler_out";
     /** The passages of the condenser's and the kettle's sheet sides, by the door's drops. */
     public static final String CONDENSER_DROP = "condenser_drop", REBOILER_DROP = "reboiler_drop";
     /**
@@ -94,6 +100,7 @@ public final class ColumnUnit implements UnitModel {
         for (var pumparound : door.pumparounds()) ports.addAll(List.of(Port.optionalIn(pumparoundIn(pumparound)), Port.out(pumparoundOut(pumparound))));
         for (var steam : door.steam()) ports.add(Port.optionalIn(steamPort(steam)));
         for (var draw : door.draws()) ports.add(Port.out(drawPort(draw)));
+        if (ColumnComponents.ejectorRequired(door.topPressure())) ports.add(Port.optionalIn(MOTIVE));
         return ports;
     }
 
@@ -176,6 +183,10 @@ public final class ColumnUnit implements UnitModel {
         });
     }
 
+    /** The ejector's motive steam, the free water it joins, and the heat it gives the condenser (W). */
+    private record Ejected(FlowStream steam, FlowStream water, double heat) {
+    }
+
     /** The block's own solve. It keeps the last state, so each pass starts from it. */
     private static final class Solve implements Calculation.Law {
         private final WiredUnit u;
@@ -204,6 +215,7 @@ public final class ColumnUnit implements UnitModel {
             var reads = new ArrayList<String>();
             reads.add(u.wire(FEED));
             for (var steam : door.steam()) if (u.wire(steamPort(steam)) != null) reads.add(u.wire(steamPort(steam)));
+            if (u.wire(MOTIVE) != null) reads.add(u.wire(MOTIVE));
             var writes = new ArrayList<>(List.of(u.out(OVERHEAD), u.out(DISTILLATE), u.out(WATER), u.out(BOTTOMS)));
             for (var draw : door.draws()) writes.add(u.out(drawPort(draw)));
             var gives = new ArrayList<String>();
@@ -216,7 +228,7 @@ public final class ColumnUnit implements UnitModel {
             var thermo = u.thermo();
             var feed = board.stream(u.wire(FEED));
             if (feed.empty()) {
-                write(board, report, null);
+                write(board, report, null, null);
                 return;
             }
             if (!feed.solids().empty()) throw new FlowsheetFailure("column.solids");
@@ -246,16 +258,58 @@ public final class ColumnUnit implements UnitModel {
                 String wire = u.wire(steamPort(row));
                 if (wire != null && !board.stream(wire).empty() && board.stream(wire).pressure() < nodes.get(row.stage()).pressurePascal()) report.note(Note.warning(u.id(), "column.inlet_pressure", steamPort(row)));
             }
-            write(board, report, result);
+            var ejected = ejector(board, report, result);
+            write(board, report, result, ejected);
             report.display(display);
             var ledger = result.dutyLedger().orElseThrow();
-            report.reading("condenser", -ledger.condenserWatts());
+            double motiveHeat = ejected == null ? 0 : ejected.heat();
+            report.reading("condenser", -ledger.condenserWatts() + motiveHeat);
             report.reading("reboiler", ledger.reboilerWatts());
             report.reading("feed_temperature", flashed.temperature());
             heatIn += flashed.enthalpy();
             double heatOut = 0;
             for (var product : result.streams()) heatOut += product(product.streamId(), result).enthalpy();
-            report.reading("energy_gap", heatIn + ledger.condenserWatts() + ledger.reboilerWatts() + ledger.stageHeatTotalWatts() - heatOut);
+            if (ejected != null) {
+                heatIn += ejected.steam().enthalpy();
+                heatOut += ejected.water().enthalpy() - product(FREE_WATER, result).enthalpy();
+            }
+            report.reading("energy_gap", heatIn + ledger.condenserWatts() - motiveHeat + ledger.reboilerWatts() + ledger.stageHeatTotalWatts() - heatOut);
+        }
+
+        /**
+         * The ejector on the vapour line, null where the top needs none: the top tray's vapour is its load, at that tray's pressure. Its
+         * steam joins the free water at the water product's temperature and pressure, or the condenser's where V3 leaves none, and what
+         * it gives up there is the heat the condenser takes from it, so the block's energy closes as before.
+         */
+        private @Nullable Ejected ejector(Board board, Report report, V3ColumnResult result) {
+            if (!ColumnComponents.ejectorRequired(door.topPressure())) return null;
+            var thermo = u.thermo();
+            var inspection = result.inspection().orElseThrow();
+            var load = vapour(inspection, inspection.nodes().get(1));
+            if (load.empty()) return null;
+            String wire = u.wire(MOTIVE);
+            var steam = EjectorUnit.motive(u.id() + "/ejector", "ejector_", thermo, load, wire == null ? null : board.stream(wire), door.ejector().motive(), door.ejector().discharge(), report);
+            var free = product(FREE_WATER, result);
+            var condenser = inspection.nodes().get(0);
+            double[] amounts = free.amounts();
+            for (int i = 0; i < components; i++) amounts[i] += steam.amountsView()[i];
+            var water = thermo.atTemperature(free.empty() ? condenser.temperatureKelvin() : free.temperature(), free.empty() ? condenser.pressurePascal() : free.pressure(), amounts, steam.solids());
+            double heat = steam.enthalpy() + free.enthalpy() - water.enthalpy();
+            report.reading("ejector_heat", heat);
+            return new Ejected(steam, water, heat);
+        }
+
+        /** {@code node}'s vapour, its hydrocarbons and its steam, on the sheet's axis at its temperature and pressure. */
+        private FlowStream vapour(V3ColumnInspection inspection, V3ColumnInspection.Node node) {
+            var axis = u.thermo().axis();
+            var ids = inspection.input().componentBasis().componentIds();
+            double[] amounts = new double[components];
+            for (int i = 0; i < ids.size(); i++) {
+                int at = axis.indexOf(ids.get(i));
+                if (at >= 0) amounts[at] += node.vaporFractions().get(i) * node.vaporMolPerSecond();
+            }
+            amounts[components - 1] += node.waterVaporMolPerSecond();
+            return u.thermo().atTemperature(node.temperatureKelvin(), node.pressurePascal(), amounts, SolidInventory.EMPTY);
         }
 
         /** V3 on the stream as flashed: its hydrocarbons are the feed, its water a steam feed if it is vapour there. */
@@ -334,15 +388,16 @@ public final class ColumnUnit implements UnitModel {
         }
 
         /** The outlets and links of {@code result}, or of no flow. Free sides book their heat here, because only a solved column has any. */
-        private void write(Board board, Report report, @Nullable V3ColumnResult result) {
+        private void write(Board board, Report report, @Nullable V3ColumnResult result, @Nullable Ejected ejected) {
             u.write(board, report, OVERHEAD, product("overhead_vapor", result));
             u.write(board, report, DISTILLATE, product("distillate_liquid", result));
-            u.write(board, report, WATER, product("free_water", result));
+            u.write(board, report, WATER, ejected != null ? ejected.water() : product(FREE_WATER, result));
             u.write(board, report, BOTTOMS, product("bottoms_liquid", result));
             for (var draw : door.draws()) u.write(board, report, drawPort(draw), product(String.format(Locale.ROOT, "side_liquid_tray_%02d", draw.tray()), result));
             var ledger = result == null ? null : result.dutyLedger().orElseThrow();
-            if (u.wire(CONDENSER_IN) != null) board.link(condenserHeat(), ledger == null ? 0 : -ledger.condenserWatts());
-            else if (ledger != null) report.duty(ledger.condenserWatts());
+            double condenser = ledger == null ? 0 : ledger.condenserWatts() - (ejected == null ? 0 : ejected.heat());
+            if (u.wire(CONDENSER_IN) != null) board.link(condenserHeat(), -condenser);
+            else if (ledger != null) report.duty(condenser);
             if (ledger != null && u.wire(REBOILER_IN) == null) report.duty(ledger.reboilerWatts());
             for (var pumparound : door.pumparounds()) {
                 if (u.wire(pumparoundIn(pumparound)) != null) board.link(drawTemperature(pumparound), result == null ? Double.POSITIVE_INFINITY : result.inspection().orElseThrow().nodes().get(pumparound.drawTray()).temperatureKelvin());

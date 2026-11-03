@@ -197,6 +197,11 @@ public final class UnitDoors {
                 if (unit.type().equals("pump")) meters.add(Door.meter(x.text("door.head"), r.reading("head", 1, 1), "m"));
                 r.readings(meters.toArray(Column.Row[]::new));
             }
+            case "ejector" -> {
+                r.group("pressure", r.entry("discharge", x.text("door.discharge"), Quantity.PRESSURE), r.entry("motive", x.text("door.motive"), Quantity.PRESSURE));
+                r.readings(Door.meter(x.text("door.steam_need"), r.reading("need", 1 / 3600., 0), "kg/h"), Door.meter(x.text("door.steam_in"), r.reading("motive", 1 / 3600., 0), "kg/h"),
+                        Door.meter(x.text("door.compression"), r.reading("compression", 1, 1), ""));
+            }
             default -> throw new IllegalArgumentException("No door for " + unit.type());
         }
         if (glass == null) glass = view.tab == 1 ? streams(x, unit) : sketch(x, unit);
@@ -295,6 +300,7 @@ public final class UnitDoors {
                 yield rest == null ? x.text("door.status.solved") : x.text("door.status.rest", rest.name());
             }
             case "valve" -> x.text("door.status.valve", SheetUnits.number(1, 100 * results.reading(unit.id(), "vapour")));
+            case "ejector" -> x.text("door.status.ejector", SheetUnits.number(0, 3600 * results.reading(unit.id(), "motive")), SheetUnits.number(1, results.reading(unit.id(), "compression")));
             default -> x.text("door.status.solved");
         }, Palette.ACCENT);
     }

@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ColumnSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.DrumSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.EjectorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
@@ -57,6 +58,7 @@ public class SizingCoverageTest {
         var components = new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
                 new ColumnComponents.Units(3, 2, List.of(2)));
         out.add(new ColumnSizing.Size(4, new ColumnTrays(30, 20, List.of(10), List.of(31), List.of(new ColumnTrays.Pumparound(10, 8)), components)));
+        out.add(new EjectorSizing.Size(UnitSize.grid(EquipmentShape.Kind.EJECTOR)[3]));
         out.add(new ValveSizing.Size(.3));
         return out;
     }

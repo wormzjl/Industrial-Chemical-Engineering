@@ -253,6 +253,12 @@ public final class SheetLayout {
         return switch (unit.type()) {
             case "pump" -> new int[]{in ? 0 : w, 13, in ? L : R};
             case "compressor" -> new int[]{in ? 0 : w, 19, in ? L : R};
+            // The motive nozzle on the axis at the left end, the suction's branch on top of the chest, the diffuser's exit at the right.
+            case "ejector" -> switch (id) {
+                case "suction" -> new int[]{10, 0, T};
+                case "motive" -> new int[]{0, h / 2, L};
+                default -> new int[]{w, h / 2, R};
+            };
             case "mixer" -> in ? new int[]{0, stacked(order, ports.size() - 1, h), L} : new int[]{w, h / 2, R};
             case "splitter" -> in ? new int[]{0, h / 2, L} : new int[]{w, stacked(order, ports.size() - 1, h), R};
             case "drum", "storage_tank" -> switch (id) {

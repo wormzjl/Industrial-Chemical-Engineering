@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
+import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -241,6 +242,10 @@ public final class SheetEditor {
                 p.addProperty("target", "rise");
                 p.addProperty("pressure", 5e5);
                 p.addProperty("rise", 2e5);
+            }
+            case "ejector" -> {
+                p.addProperty("discharge", EjectorUnit.DISCHARGE_PRESSURE);
+                p.addProperty("motive", EjectorUnit.MOTIVE_PRESSURE);
             }
             case "column" -> {
                 return column.get();

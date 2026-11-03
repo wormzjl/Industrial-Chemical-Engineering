@@ -29,13 +29,21 @@ public final class NoteText {
         var raw = note.arguments();
         var out = new ArrayList<Object>(raw);
         switch (note.key()) {
-            case "mixer.pressures" -> {
+            case "mixer.pressures", "ejector.motive_pressure" -> {
                 out.set(0, pressure(raw.get(0), units));
                 out.set(1, pressure(raw.get(1), units));
             }
             case "heater.limit" -> {
                 out.set(0, watts(raw.get(0)));
                 out.set(1, watts(raw.get(1)));
+            }
+            case "ejector.range" -> {
+                out.set(0, SheetUnits.number(1, Double.parseDouble(raw.get(0))));
+                out.set(1, pressure(raw.get(1), units));
+            }
+            case "ejector.motive_short" -> {
+                out.set(0, hourly(raw.get(0)));
+                out.set(1, hourly(raw.get(1)));
             }
             case "run.mass_gap" -> {
                 out.set(0, flow(raw.get(0)));
@@ -53,6 +61,10 @@ public final class NoteText {
 
     private static String watts(String watts) {
         return SheetUnits.megawatts(Double.parseDouble(watts)) + " MW";
+    }
+
+    private static String hourly(String kilograms) {
+        return SheetUnits.number(0, 3600 * Double.parseDouble(kilograms)) + " kg/h";
     }
 
     private static String flow(String kilograms) {

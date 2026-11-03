@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
 import com.wormzjl.icheme.science.flowsheet.sizing.DrumSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.EjectorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.LineSizing;
@@ -167,6 +168,7 @@ public final class FlowsheetFile {
                 case "COMPRESSOR" -> new CompressorSizing.Size(fields.name("type", UnitType.class), fields.number("size"), fields.whole("length"));
                 case "DRUM" -> new DrumSizing.Size(fields.name("type", UnitType.class), fields.number("diameter"), fields.whole("length"), fields.bool("boot"));
                 case "TANK" -> new TankSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("shell"));
+                case "EJECTOR" -> new EjectorSizing.Size(fields.number("suction"));
                 default -> throw damaged(fields.path + ".kind");
             };
         } catch (IllegalArgumentException invalid) {
@@ -258,6 +260,10 @@ public final class FlowsheetFile {
                 json.addProperty("count", tank.count());
                 json.addProperty("diameter", tank.diameter());
                 json.addProperty("shell", tank.shell());
+            }
+            case EjectorSizing.Size ejector -> {
+                json.addProperty("kind", "EJECTOR");
+                json.addProperty("suction", ejector.suction());
             }
             default -> throw new IllegalArgumentException("A " + size.getClass().getSimpleName() + " is no fact: it follows from the sheet");
         }

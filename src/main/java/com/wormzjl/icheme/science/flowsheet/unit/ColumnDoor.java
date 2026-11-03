@@ -29,10 +29,12 @@ import java.util.List;
  * @param reboilerDrop   the drop across the kettle's tube side (Pa)
  * @param units          how many identical units stand in parallel on the condenser, the kettle and each pumparound's cooler
  *                       (S3b): {@code condenser_units}, {@code kettle_units} and a pumparound row's {@code units}, 1 where absent
+ * @param ejector        the ejector on the vapour line where the top is under ambient pressure (W10): {@code ejector_discharge} and
+ *                       {@code ejector_motive}, the tile's defaults where absent
  */
 public record ColumnDoor(String packageId, String assayId, int stages, int feedStage, double topPressure, double stageDrop, double diameter,
                          double condenserTemperature, double reflux, double reboilerDuty, ColumnComponents.Condenser condenser, double condenserDrop, double reboilerDrop,
-                         List<Draw> draws, List<Steam> steam, List<Pumparound> pumparounds, ColumnComponents.Units units) {
+                         List<Draw> draws, List<Steam> steam, List<Pumparound> pumparounds, ColumnComponents.Units units, Ejector ejector) {
     /** A side draw on {@code tray} (mol/s). */
     public record Draw(String id, int tray, double flow) {
     }
@@ -40,6 +42,13 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
     /** A steam feed into {@code stage} (mol/s, K), which a wired Steam port replaces. */
     public record Steam(String id, int stage, double flow, double temperature) {
     }
+
+    /** The ejector's discharge pressure and its motive steam's (Pa), as the ejector tile's door sets them. */
+    public record Ejector(double discharge, double motive) {
+    }
+
+    /** The settings of the ejector's two pressures. */
+    public static final String EJECTOR_DISCHARGE = "ejector_discharge", EJECTOR_MOTIVE = "ejector_motive";
 
     /** A pumparound; {@code drop} is its cooler's cold side (Pa). */
     public record Pumparound(String id, int returnTray, int drawTray, double duty, V3PumparoundSpec.Split split, double drop) {
@@ -70,7 +79,8 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
         }
         return new ColumnDoor(p.text("package", ""), p.text("assay", ""), (int) p.number("stages"), (int) p.number("feed_stage"), p.number("top_pressure"), p.number("stage_drop"), p.number("diameter", 0),
                 p.number("condenser_temperature"), p.number("reflux"), p.number("reboiler_duty"), condenser(p), p.number("condenser_drop", 0), p.number("reboiler_drop", 0), draws, steam, pumparounds,
-                new ColumnComponents.Units(units(p, CONDENSER_UNITS), units(p, KETTLE_UNITS), coolers));
+                new ColumnComponents.Units(units(p, CONDENSER_UNITS), units(p, KETTLE_UNITS), coolers),
+                new Ejector(p.number(EJECTOR_DISCHARGE, EjectorUnit.DISCHARGE_PRESSURE), p.number(EJECTOR_MOTIVE, EjectorUnit.MOTIVE_PRESSURE)));
     }
 
     /** The settings that hold the member counts: the door's two and a pumparound row's own. */

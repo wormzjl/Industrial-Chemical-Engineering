@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "basis": {
+    "package": "icheme:tjl20_methane_nitrogen",
+    "revision": "crude-regrouped-r1",
+    "components": ["Methane", "Nitrogen", "Water"]
+  },
+  "units": [
+    {"id": "J-1", "type": "ejector", "name": "J-101", "x": 40, "y": 80, "params": {"discharge": 120000.0, "motive": 1000000.0}},
+    {"id": "T-1", "type": "column", "name": "T-101", "x": 240, "y": 80, "params": {"diameter": 6.5, "condenser": "AIR_COOLER", "top_pressure": 12000.0, "ejector_discharge": 120000.0, "ejector_motive": 1000000.0}}
+  ],
+  "streams": [
+    {"id": "F", "name": "LOAD", "to": {"unit": "J-1", "port": "suction"}, "feed": {"temperature": 323.15, "pressure": 20000.0, "amounts": {"Nitrogen": 10.0, "Water": 0.5}}},
+    {"id": "M", "name": "STEAM", "to": {"unit": "J-1", "port": "motive"}, "feed": {"temperature": 460.0, "pressure": 1000000.0, "amounts": {"Water": 20.0}}},
+    {"id": "S-1", "name": "S-1", "from": {"unit": "J-1", "port": "discharge"}}
+  ],
+  "sizing": {
+    "basis": {"design_flow": 1.2, "line_length": 50.0, "pa_fall": 50.0},
+    "units": {
+      "J-1": {"mode": "FIXED", "size": {"kind": "EJECTOR", "suction": 0.25, "later": "a size field of a later version"}},
+      "T-1/ejector": {"mode": "AUTO", "size": {"kind": "EJECTOR", "suction": 0.8}}
+    },
+    "lines": {}
+  },
+  "settings": {"flow_tolerance": 1.0E-4, "temperature_tolerance": 0.01, "max_passes": 50, "lowest_factor": -5.0, "highest_factor": 0.0}
+}
