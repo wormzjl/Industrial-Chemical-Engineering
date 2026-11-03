@@ -35,10 +35,12 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayerFactory;
@@ -167,8 +169,8 @@ public final class RegistryFirstGameTests {
      * Step 4, GameTests a to c (plan section 7): blocks lost behind the authority's back, as in a chunk saved after the
      * fluid store, are set back from the registry. An intact line re-aligns nothing. Then a pipe gone (a), the charged tank
      * gone (b) and a filter where a pipe stood (c): each block comes back with its identity, the tank with its charge, the
-     * filter's block takes no pipe's registration, and nothing drops. The first pipe carries a sight glass: it comes back
-     * with it, and the glass leaves with the pipe (step 8).
+     * filter's block takes no pipe's registration, and nothing drops. The first pipe carries a sight glass: while its block
+     * does not draw it, an in-line filter is refused; the pipe comes back with it, and the glass leaves with the pipe (step 8).
      */
     @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-realign-line")
     public static void aBrokenLineIsSetBackFromTheRegistry(GameTestHelper helper) {
@@ -197,6 +199,17 @@ public final class RegistryFirstGameTests {
                         var check = RegistryRealignment.realign(level, world, id);
                         if (failure[0] == null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the intact line was re-aligned at #" + id + ": " + check;
                     }
+                    // The block no longer draws the glass, its record kept: the fitting slot stays taken, and an in-line
+                    // filter is refused before it reaches the store.
+                    FluidDeviceBlock.quietly(() -> level.setBlock(first, level.getBlockState(first).setValue(FluidDeviceBlock.SIGHT_GLASS, false), 3));
+                    if (failure[0] == null && !world.instruments().occupied(ids[1])) failure[0] = "a pipe whose record holds a sight glass is not occupied";
+                    var fitter = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "RegistryFirstFitter"));
+                    fitter.setGameMode(GameType.SURVIVAL);
+                    var item = new ItemStack(ModItems.INLINE_FILTER.get());
+                    fitter.setItemInHand(InteractionHand.MAIN_HAND, item);
+                    var fitted = item.getItem().onItemUseFirst(item, new UseOnContext(fitter, InteractionHand.MAIN_HAND, new BlockHitResult(Vec3.atCenterOf(first), Direction.UP, first, false)));
+                    if (failure[0] == null && (fitted.consumesAction() || item.getCount() != 1 || FluidDeviceBlock.hasFilter(level.getBlockState(first)) || world.registrations().get(ids[1]).device().inlineFilter()))
+                        failure[0] = "a filter was fitted on a pipe whose record holds a sight glass: " + fitted + ", " + level.getBlockState(first);
                     before[0] = moles(world, ids[3]);
                     FluidDeviceBlock.quietly(() -> {
                         level.setBlock(first, Blocks.AIR.defaultBlockState(), 3);

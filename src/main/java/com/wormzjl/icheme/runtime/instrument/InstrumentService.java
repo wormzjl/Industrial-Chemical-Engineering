@@ -31,7 +31,11 @@ public final class InstrumentService {
 
     /** {@code store} is the overworld's, opened by {@link Store#open} before the fluid authority starts anything. */
     public InstrumentService(MinecraftServer server,FluidWorldAuthority world,Store store){this.server=server;this.world=world;this.store=store;}
-    public boolean occupied(long host){return !store.sensors(host).isEmpty()||!store.host(host).isEmpty()||store.pending().stream().anyMatch(p->p.key().host()==host&&p.install());}
+    /**
+     * Whether {@code host} carries an accessory or has one on its way: a pipe fitting, a sensor, a gauge or a pending
+     * install. The store is the fact (registry first), so a fitting counts even where its block no longer draws it.
+     */
+    public boolean occupied(long host){return store.legacy(host)!=null||!store.sensors(host).isEmpty()||!store.host(host).isEmpty()||store.pending().stream().anyMatch(p->p.key().host()==host&&p.install());}
     public boolean observes(long host){return watchers.values().stream().anyMatch(set->set.stream().anyMatch(t->t.key().host()==host));}
     public void request(ServerPlayer player,InteractionHand hand,boolean remove){if(remove&&requestSensorRemoval(player,hand))return;if(player.isSpectator()||!player.mayBuild())return;var held=player.getItemInHand(hand);GaugeSettings.Kind kind=held.getItem() instanceof GaugeItem g?g.kind():null;if(!remove&&kind==null||remove&&!held.is(ModItems.ACCESSORY_WRENCH.get()))return;double reach=player.blockInteractionRange();var hosts=InstrumentHosts.nearby(player.level(),player.getEyePosition(),8);var selected=InstrumentHosts.select(hosts,player.getEyePosition(),player.getLookAngle(),reach,kind,remove);if(!remove){var pipeHit=InstrumentHosts.pipeSelection(player,kind);if(pipeHit!=null)selected=pipeHit;}
         InstrumentHosts.Host host;String mount;UUID instance;Instrument.Type type;GaugeSettings settings=null;
