@@ -101,7 +101,7 @@ class AssemblyDiagramTest {
                 "word.misplaced", "word.missing", "word.not_loaded", "state.not_validated", "state.ok", "state.missing", "state.missing.terminal",
                 "state.missing.returns", "state.missing.found", "state.open_end", "state.open_end.unconnected", "state.not_loaded", "state.wrong_kind",
                 "state.backwards", "state.wrong_port", "state.wrong_port.returns", "state.valve_reversed", "state.extra_valve", "state.wrong_order",
-                "state.branched", "state.shared", "state.unit_count", "state.unit_shapes", "port", "port.needed"));
+                "state.branched", "state.shared", "state.unit_count", "state.unit_shapes", "port", "port.needed", "label.units"));
         for (var s : com.wormzjl.icheme.science.assembly.AssemblyReport.PortState.values()) keys.add("port." + s.name().toLowerCase(java.util.Locale.ROOT));
         for (var f : List.of("drum", "drum_no_boot", "drum_standing", "control_valve", "inline_pump", "other")) keys.add("found." + f);
         var missing = keys.stream().map(k -> AssemblyDiagram.KEY + k).filter(k -> !lang.contains(k)).sorted().toList();
@@ -111,6 +111,21 @@ class AssemblyDiagramTest {
             if (kind.designed() || kind == com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.DRUM)
                 assertTrue(lang.contains("gui.icheme.vessel.title." + kind.name().toLowerCase(java.util.Locale.ROOT)), kind::name);
         for (var role : Role.values()) assertTrue(lang.contains("gui.icheme.vessel.role." + role.name().toLowerCase(java.util.Locale.ROOT)), role::name);
+    }
+
+    /** S3b: a member with identical units in parallel says how many in its label; a member of one unit keeps its plain label. */
+    @Test
+    void aMemberWithUnitsInParallelSaysHowMany() {
+        var units = new ColumnComponents.Units(3, 2, List.of(2, 1));
+        var trays = new ColumnTrays(TRAYS, 10, List.of(), List.of(18), List.of(new Pumparound(4, 2), new Pumparound(8, 6)),
+                new ColumnComponents(Condenser.EXCHANGER, Pump.STANDARD, List.of(Pump.STANDARD, Pump.STANDARD), false, true, units));
+        var d = AssemblyDiagram.of(trays);
+        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.exchanger"), 3), d.part(ColumnBlueprint.CONDENSER).label());
+        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.reboiler"), 2), d.part(ColumnBlueprint.REBOILER).label());
+        assertEquals(AssemblyDiagram.Text.of("label.units", AssemblyDiagram.Text.of("label.pa_cooler", 1), 2), d.part(ColumnBlueprint.pumparoundCooler(1)).label());
+        assertEquals(AssemblyDiagram.Text.of("label.pa_cooler", 2), d.part(ColumnBlueprint.pumparoundCooler(2)).label());
+        var one = AssemblyDiagram.of(new ColumnTrays(TRAYS, 10, List.of(), List.of(18), List.of(), new ColumnComponents(Condenser.AIR_COOLER, Pump.STANDARD, List.of(), false, true)));
+        assertEquals(AssemblyDiagram.Text.of("label.air_cooler"), one.part(ColumnBlueprint.CONDENSER).label());
     }
 
     @Test

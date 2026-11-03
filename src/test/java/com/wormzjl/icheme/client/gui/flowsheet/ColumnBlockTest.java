@@ -96,6 +96,10 @@ class ColumnBlockTest {
                                             draws.add(row);
                                         }
                                         json.add("draws", draws);
+                                        // Member counts (S3b), drawn last so the rows above stand as before them.
+                                        json.addProperty("condenser_units", 1 + r.nextInt(ColumnComponents.MAX_UNITS));
+                                        json.addProperty("kettle_units", 1 + r.nextInt(ColumnComponents.MAX_UNITS));
+                                        for (var row : pumparounds) row.getAsJsonObject().addProperty("units", 1 + r.nextInt(ColumnComponents.MAX_UNITS));
                                         check.accept(new Params(json));
                                     }
         assertTrue(count > 5000, "the sweep ran: " + count);

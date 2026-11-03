@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet.sizing;
 
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
@@ -21,7 +22,8 @@ import java.util.List;
  * twice the need and within both drops. A kettle's shell is a pool, so it has no shell drop and reads its flux.
  */
 public final class ExchangerSizing {
-    private static final int MOST_SHELLS = 6;
+    /** The most shells Auto tries: as many as a column member step takes in parallel (S3b). */
+    private static final int MOST_SHELLS = ColumnComponents.MAX_UNITS;
     private static final List<Size> EXCHANGERS = sizes(EquipmentShape.Kind.EXCHANGER), KETTLES = sizes(EquipmentShape.Kind.KETTLE);
 
     private ExchangerSizing() {
@@ -61,6 +63,10 @@ public final class ExchangerSizing {
 
         @Override public int count() {
             return shells;
+        }
+
+        public Size withShells(int next) {
+            return new Size(kettle, next, shell, tubes);
         }
     }
 

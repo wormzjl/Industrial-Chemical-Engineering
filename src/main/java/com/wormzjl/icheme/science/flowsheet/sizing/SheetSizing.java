@@ -184,20 +184,16 @@ public final class SheetSizing {
     }
 
     /**
-     * {@code sheet} with every Auto item at {@code proposal}'s size: a column's door at its diameter, every other size a fact; a
-     * Fixed item stays as the player keeps it. Facts of an item the sheet no longer holds go. A copy: {@code sheet} is unchanged.
+     * {@code sheet} with every Auto item at {@code proposal}'s size: a column's door at its diameter and at its Auto members' counts
+     * (S3b), every other size a fact; a Fixed item stays as the player keeps it. Facts of an item the sheet no longer holds go. A
+     * copy: {@code sheet} is unchanged.
      */
     public static Flowsheet applied(Flowsheet sheet, Sized proposal) {
         var facts = sheet.sizing();
         var units = new ArrayList<Flowsheet.Unit>();
         for (var unit : sheet.units()) {
-            boolean auto = facts.unit(unit.id()).mode() == SizingFacts.Mode.AUTO;
-            if (auto && unit.type().equals(COLUMN) && proposal.units().get(unit.id()) instanceof SizedUnit sized && sized.size() instanceof ColumnSizing.Size size
-                    && size.diameter() != ColumnDoor.of(unit.params()).diameter()) {
-                var json = unit.params().json().deepCopy();
-                json.addProperty("diameter", size.diameter());
-                units.add(new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), new Params(json), unit.unknown().deepCopy()));
-            } else units.add(unit);
+            var json = unit.type().equals(COLUMN) ? door(unit, facts, proposal) : null;
+            units.add(json == null ? unit : new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), new Params(json), unit.unknown().deepCopy()));
         }
         for (var entry : proposal.units().entrySet()) {
             var held = facts.unit(entry.getKey());
@@ -209,6 +205,46 @@ public final class SheetSizing {
             if (held.mode() == SizingFacts.Mode.AUTO) facts = facts.with(entry.getKey(), held.with(entry.getValue().size()));
         }
         return new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), pruned(sheet, facts), sheet.unknown());
+    }
+
+    /**
+     * A column's door as {@code proposal} leaves it, null where nothing moves: the column's diameter where the column is on Auto, and
+     * each member's count where that member is on Auto: the condenser's, the kettle's and each pumparound cooler's.
+     */
+    private static com.google.gson.@Nullable JsonObject door(Flowsheet.Unit unit, SizingFacts facts, Sized proposal) {
+        var door = ColumnDoor.of(unit.params());
+        var json = unit.params().json().deepCopy();
+        boolean moved = false;
+        if (facts.unit(unit.id()).mode() == SizingFacts.Mode.AUTO && proposal.units().get(unit.id()) instanceof SizedUnit sized && sized.size() instanceof ColumnSizing.Size size
+                && size.diameter() != door.diameter()) {
+            json.addProperty("diameter", size.diameter());
+            moved = true;
+        }
+        var counts = door.units();
+        Integer condenser = proposedCount(unit.id(), "condenser", facts, proposal), kettle = proposedCount(unit.id(), "reboiler", facts, proposal);
+        if (condenser != null && condenser != counts.condenser()) {
+            json.addProperty(ColumnDoor.CONDENSER_UNITS, condenser);
+            moved = true;
+        }
+        if (kettle != null && kettle != counts.kettle()) {
+            json.addProperty(ColumnDoor.KETTLE_UNITS, kettle);
+            moved = true;
+        }
+        for (int i = 0; i < door.pumparounds().size(); i++) {
+            Integer cooler = proposedCount(unit.id(), "pa " + door.pumparounds().get(i).id() + " cooler", facts, proposal);
+            if (cooler != null && cooler != counts.cooler(i) && json.get("pumparounds") instanceof com.google.gson.JsonArray rows && rows.get(i) instanceof com.google.gson.JsonObject row) {
+                row.addProperty(ColumnDoor.UNITS, cooler);
+                moved = true;
+            }
+        }
+        return moved ? json : null;
+    }
+
+    /** How many units Auto proposes for {@code block}'s member {@code member}: null where the member is Fixed or has no size. */
+    private static @Nullable Integer proposedCount(String block, String member, SizingFacts facts, Sized proposal) {
+        String id = member(block, member);
+        if (facts.unit(id).mode() != SizingFacts.Mode.AUTO || !(proposal.units().get(id) instanceof SizedUnit sized) || sized.size() == null) return null;
+        return sized.size().count();
     }
 
     /** {@code facts} without the rows of items {@code sheet} no longer holds: a member goes with its block, a line with its stream. */
@@ -234,6 +270,7 @@ public final class SheetSizing {
             var was = before.units().get(i);
             var now = after.units().get(i);
             if (now.type().equals(COLUMN) && ColumnDoor.of(now.params()).diameter() != ColumnDoor.of(was.params()).diameter()) return true;
+            // A member's count moves the run through its passage's law, which SizedPassages reads with the door's counts.
             if (!SizedPassages.reads(after.sizing(), now).equals(SizedPassages.reads(before.sizing(), was))) return true;
         }
         return false;
@@ -481,14 +518,16 @@ public final class SheetSizing {
             var overhead = thermo.heated(condensed, block.condenser(), top.pressurePascal());
             double coolerDrop = 0;
             thermo.checkpoint().run();
+            // A member's count is its door's (S3b): a kept size is rated at it, and Auto proposes one, the fewest units first.
+            var counts = door.units();
             if (door.condenser() == ColumnComponents.Condenser.EXCHANGER) {
                 var load = ExchangerSizing.Load.of(false, stream(id, "condenser_in"), stream(id, "condenser_out"), overhead, condensed, basis, thermo, scratch);
-                var sized = exchanger(entries.unit(member(id, "condenser")), load);
+                var sized = exchanger(counted(entries.unit(member(id, "condenser")), counts.condenser()), load);
                 out.put(member(id, "condenser"), sized);
                 if (load != null && sized.size() instanceof ExchangerSizing.Size size) coolerDrop = ExchangerSizing.shellDrop(load, size);
             } else {
                 var load = AirCoolerSizing.Load.of(overhead, condensed, basis, thermo, scratch);
-                var sized = airCooler(entries.unit(member(id, "condenser")), load);
+                var sized = airCooler(counted(entries.unit(member(id, "condenser")), counts.condenser()), load);
                 out.put(member(id, "condenser"), sized);
                 if (load != null && sized.size() instanceof AirCoolerSizing.Size size) coolerDrop = AirCoolerSizing.drop(load, size);
             }
@@ -498,7 +537,7 @@ public final class SheetSizing {
                 // The bottom tray's liquid, boiled by the duty the column's reboiler puts in, as the condenser's sides balance.
                 var feed = ColumnSizing.liquid(thermo, solved, nodes.get(stages));
                 var boiled = thermo.heated(feed, block.reboiler(), nodes.get(stages + 1).pressurePascal());
-                out.put(member(id, "reboiler"), exchanger(entries.unit(member(id, "reboiler")), ExchangerSizing.Load.of(true, stream(id, "reboiler_in"), stream(id, "reboiler_out"), feed, boiled, basis, thermo, scratch)));
+                out.put(member(id, "reboiler"), exchanger(counted(entries.unit(member(id, "reboiler")), counts.kettle()), ExchangerSizing.Load.of(true, stream(id, "reboiler_in"), stream(id, "reboiler_out"), feed, boiled, basis, thermo, scratch)));
             }
             thermo.checkpoint().run();
             var condensate = ColumnSizing.liquid(thermo, solved, condenser);
@@ -532,7 +571,7 @@ public final class SheetSizing {
                 var hot = circulation(solved, draw, -pumparound.duty());
                 var cooled = thermo.atTemperature(hot.temperature() - basis.paFall(), hot.pressure(), hot.amounts(), SolidInventory.EMPTY);
                 var load = ExchangerSizing.Load.of(false, stream(id, "pa/" + pumparound.id() + "/in"), stream(id, "pa/" + pumparound.id() + "/out"), hot, cooled, basis, thermo, scratch);
-                var cooler = exchanger(entries.unit(member(id, name + " cooler")), load);
+                var cooler = exchanger(counted(entries.unit(member(id, name + " cooler")), counts.cooler(i)), load);
                 out.put(member(id, name + " cooler"), cooler);
                 var drawLine = memberLine(member(id, name + " draw"), hot, new Service.Ends(true, true), block.nozzle(EquipmentShape.Role.PUMPAROUND_DRAW, i + 1));
                 var returnLine = memberLine(member(id, name + " return"), cooled, Service.Ends.OPEN, block.nozzle(EquipmentShape.Role.RETURN, i + 1));
@@ -543,6 +582,16 @@ public final class SheetSizing {
                 out.put(member(id, name + " pump"), pump(member(id, name + " pump"), drawLine, hot, paRise, level));
             }
             members.put(id, out);
+        }
+
+        /** {@code entry} with its kept size at {@code count} units in parallel: a member's count is its door's. Auto's entry stays. */
+        private static UnitEntry counted(UnitEntry entry, int count) {
+            UnitSize size = switch (entry.size()) {
+                case ExchangerSizing.Size exchanger -> exchanger.withShells(count);
+                case AirCoolerSizing.Size cooler -> cooler.withBanks(count);
+                case null, default -> entry.size();
+            };
+            return new UnitEntry(size, entry.type(), entry.height(), entry.hold(), entry.kept());
         }
 
         /** The liquid a pumparound circulates to give {@code heat} W across its fall, at its draw tray. */

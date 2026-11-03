@@ -96,7 +96,7 @@ public final class ColumnSizing {
             try {
                 // The shell carries the door's steam rows: water the feed brings joins V3's steam on the feed tray, through the feed nozzle.
                 var steam = door.steam().stream().map(s -> new V3SteamFeedSpec(s.stage(), s.flow(), s.temperature())).toList();
-                layout = ColumnDesign.layout(at(solved, steam, solved.columnDiameterMetres()), new ColumnComponents.Choices(door.condenser(), ColumnComponents.Pump.STANDARD, List.of()).fit(door.pumparounds().size()));
+                layout = ColumnDesign.layout(at(solved, steam, solved.columnDiameterMetres()), door.choices(ColumnComponents.Pump.STANDARD, List.of()));
             } catch (IllegalArgumentException refused) {
                 return null;
             }

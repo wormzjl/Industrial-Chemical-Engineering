@@ -56,14 +56,19 @@ public final class SizedPassages {
                         laws.put(coil, outlet((in, out) -> coils(size, coil, in, out, 1, thermo)));
             }
             case "column" -> {
+                // A member stands as many times as its door counts (S3b), each unit at the size its facts hold.
                 var door = ColumnDoor.of(unit.params());
+                var units = door.units();
                 if (door.condenser() == ColumnComponents.Condenser.EXCHANGER && exchanger(facts.unit(SheetSizing.member(id, "condenser")).size(), false) instanceof ExchangerSizing.Size size)
-                    laws.put(ColumnUnit.CONDENSER_DROP, (in, out) -> tube(size, in, 1, thermo));
+                    laws.put(ColumnUnit.CONDENSER_DROP, (in, out) -> tube(size.withShells(units.condenser()), in, 1, thermo));
                 if (exchanger(facts.unit(SheetSizing.member(id, "reboiler")).size(), true) instanceof ExchangerSizing.Size size)
-                    laws.put(ColumnUnit.REBOILER_DROP, (in, out) -> tube(size, in, 1, thermo));
-                for (var pumparound : door.pumparounds())
+                    laws.put(ColumnUnit.REBOILER_DROP, (in, out) -> tube(size.withShells(units.kettle()), in, 1, thermo));
+                for (int i = 0; i < door.pumparounds().size(); i++) {
+                    var pumparound = door.pumparounds().get(i);
+                    int shells = units.cooler(i);
                     if (exchanger(facts.unit(SheetSizing.member(id, "pa " + pumparound.id() + " cooler")).size(), false) instanceof ExchangerSizing.Size size)
-                        laws.put(ColumnUnit.pumparoundDrop(pumparound), (in, out) -> tube(size, in, 1, thermo));
+                        laws.put(ColumnUnit.pumparoundDrop(pumparound), (in, out) -> tube(size.withShells(shells), in, 1, thermo));
+                }
             }
             default -> {
             }
@@ -79,8 +84,9 @@ public final class SizedPassages {
         return switch (unit.type()) {
             case "exchanger", "kettle", "air_cooler", "fired_heater" -> Arrays.asList(facts.unit(id).size());
             case "column" -> {
-                var read = new ArrayList<Object>(Arrays.asList(facts.unit(SheetSizing.member(id, "condenser")).size(), facts.unit(SheetSizing.member(id, "reboiler")).size()));
-                for (var pumparound : ColumnDoor.of(unit.params()).pumparounds()) read.add(facts.unit(SheetSizing.member(id, "pa " + pumparound.id() + " cooler")).size());
+                var door = ColumnDoor.of(unit.params());
+                var read = new ArrayList<Object>(Arrays.asList(facts.unit(SheetSizing.member(id, "condenser")).size(), facts.unit(SheetSizing.member(id, "reboiler")).size(), door.units()));
+                for (var pumparound : door.pumparounds()) read.add(facts.unit(SheetSizing.member(id, "pa " + pumparound.id() + " cooler")).size());
                 yield read;
             }
             default -> List.of();
@@ -129,11 +135,11 @@ public final class SizedPassages {
         return LineSizing.Carried.of(in, flow, thermo, new MixtureViscosity.Workspace()).drop(HeatSides.shellPassage(size.shell(), size.tubes()), size.shells()) * 1e5;
     }
 
-    /** What the stream loses through {@code size}'s bank between {@code in} and {@code out} at {@code flow} times its rate, Pa: at its mean temperature. */
+    /** What the stream loses through {@code size}'s banks in parallel between {@code in} and {@code out} at {@code flow} times its rate, Pa: at its mean temperature. */
     public static double bank(AirCoolerSizing.Size size, FlowStream in, @Nullable FlowStream out, double flow, FlowThermo thermo) {
         double mean = out == null ? in.temperature() : (in.temperature() + out.temperature()) / 2;
         var state = thermo.atTemperature(mean, in.pressure(), in.amountsView(), in.solids());
-        return LineSizing.Carried.of(state, flow, thermo, new MixtureViscosity.Workspace()).drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), 1) * 1e5;
+        return LineSizing.Carried.of(state, flow, thermo, new MixtureViscosity.Workspace()).drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), size.banks()) * 1e5;
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet.sizing;
 
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
@@ -27,27 +28,51 @@ public final class AirCoolerSizing {
 
     private static List<Size> sizes() {
         var sizes = new ArrayList<Size>();
-        for (var bay : ProcessUnit.bays())
-            for (int parallel = 1; parallel <= ProcessUnit.Bank.MAX_PARALLEL; parallel++)
-                for (int series = 1; series <= ProcessUnit.Bank.MAX_SERIES; series++) sizes.add(new Size(bay[0], (int) bay[1], new ProcessUnit.Bank(parallel, series)));
-        sizes.sort(Comparator.comparingDouble(Size::face).thenComparingInt(size -> size.bank().bays()));
+        for (int banks = 1; banks <= ColumnComponents.MAX_UNITS; banks++)
+            for (var bay : ProcessUnit.bays())
+                for (int parallel = 1; parallel <= ProcessUnit.Bank.MAX_PARALLEL; parallel++)
+                    for (int series = 1; series <= ProcessUnit.Bank.MAX_SERIES; series++) sizes.add(new Size(bay[0], (int) bay[1], new ProcessUnit.Bank(parallel, series), banks));
+        sizes.sort(Comparator.comparingInt(Size::banks).thenComparingDouble(Size::face).thenComparingInt(size -> size.bank().bays()));
         return List.copyOf(sizes);
     }
 
     /**
-     * A bank.
+     * A bank, or identical banks in parallel (S3b).
      *
      * @param width  a bay's, m
      * @param length a bay's, m
+     * @param banks  identical banks in parallel, each taking its share of the stream, 1 to {@link ColumnComponents#MAX_UNITS}
      */
-    public record Size(double width, int length, ProcessUnit.Bank bank) implements UnitSize {
-        /** The whole bank's bundle face, m². */
+    public record Size(double width, int length, ProcessUnit.Bank bank, int banks) implements UnitSize {
+        public Size {
+            if (banks < 1 || banks > ColumnComponents.MAX_UNITS) throw new IllegalArgumentException("Invalid air cooler banks " + banks);
+        }
+
+        /** One bank. */
+        public Size(double width, int length, ProcessUnit.Bank bank) {
+            this(width, length, bank, 1);
+        }
+
+        /** One bank's bundle face, m². */
         public double face() {
             return bank.bays() * ProcessUnit.bundleFace(width, length);
         }
 
+        /** All its banks' bare surface, m². */
+        public double surface() {
+            return banks * HeatSides.airCoolerSurface(width, length, bank);
+        }
+
+        public Size withBanks(int next) {
+            return new Size(width, length, bank, next);
+        }
+
         @Override public EquipmentShape shape() {
             return UnitSize.unit(EquipmentShape.Kind.AIR_COOLER, width, length, bank);
+        }
+
+        @Override public int count() {
+            return banks;
         }
     }
 
@@ -76,18 +101,18 @@ public final class AirCoolerSizing {
         if (load == null) return Rating.NONE;
         var readings = new ArrayList<Reading>();
         readings.add(UnitSize.reading(UnitSize.built(size)));
-        readings.add(Limit.AIR_COOLER_SURFACE.against(HeatSides.airCoolerSurface(size.width(), size.length(), size.bank()), load.needed()));
+        readings.add(Limit.AIR_COOLER_SURFACE.against(size.surface(), load.needed()));
         readings.add(Limit.AIR_COOLER_OUTLET.read(load.outlet()));
         readings.add(Limit.AIR_COOLER_DROP.read(drop(load, size)));
         return new Rating(readings);
     }
 
-    /** What {@code load}'s tubes lose at {@code size} at design flow, bar. */
+    /** What {@code load}'s tubes lose at {@code size} at design flow, bar, its banks in parallel. */
     public static double drop(Load load, Size size) {
-        return load.mean().drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), 1);
+        return load.mean().drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), size.banks());
     }
 
-    /** The least face that meets every limit, by its fewest bays. No load, no size. */
+    /** The fewest banks, then the least face, that meets every limit, by its fewest bays. No load, no size. */
     public static Selection.Choice<Size> auto(@Nullable Load load) {
         if (load == null) return new Selection.Choice<>(null, Rating.NONE);
         return Selection.smallest(SIZES, size -> rate(load, size));

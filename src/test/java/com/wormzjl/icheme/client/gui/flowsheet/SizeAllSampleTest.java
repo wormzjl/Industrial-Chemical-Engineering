@@ -148,6 +148,20 @@ class SizeAllSampleTest {
         assertEquals(SizingFacts.NONE, sheet.sizing(), "the sheet it was given stays as it was");
     }
 
+    /**
+     * S3b: Auto's member counts reach the door, as the column's diameter does. The condenser's five shells are the design's count,
+     * which the assembly asks for and builds (at most {@code ColumnComponents.MAX_UNITS}); each cooler keeps one shell.
+     */
+    @Test
+    void theCondensersFiveShellsReachTheDoor() {
+        var door = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(all.sheet().units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params());
+        assertEquals(new com.wormzjl.icheme.science.equipment.ColumnComponents.Units(5, 1, List.of(1, 1, 1)), door.units());
+        var choices = door.choices(com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.STANDARD, List.of());
+        assertEquals(5, choices.units().condenser(), "a design the calculator and the assembly take");
+        assertEquals(1, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(sheet.units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params()).units().condenser(),
+                "the sheet it was given keeps its door");
+    }
+
     /** A run that has just ended rates every size with no trial column: each column reads its own run's trays. */
     @Test
     void aRatingSolvesNoColumn() {

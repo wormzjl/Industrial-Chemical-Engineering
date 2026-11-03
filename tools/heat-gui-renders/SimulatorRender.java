@@ -557,7 +557,7 @@ public final class SimulatorRender {
     private static Flowsheet withDoor(Flowsheet sheet, Consumer<JsonObject> change) {
         var units = new ArrayList<Flowsheet.Unit>();
         for (var unit : sheet.units()) units.add(unit.id().equals("T-101") ? new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), edited(unit.params(), change), unit.unknown()) : unit);
-        return new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), sheet.unknown());
+        return new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), sheet.sizing(), sheet.unknown());
     }
 
     private static void otherBlocks(GuiPrototypes.Door d) {
@@ -619,13 +619,52 @@ public final class SimulatorRender {
             var feed = new Flowsheet.Feed(stream.feed().temperature(), stream.feed().pressure(), amounts, stream.feed().solids());
             streams.add(new Flowsheet.Stream(stream.id(), stream.name(), stream.from(), stream.to(), feed, stream.route(), stream.unknown()));
         }
-        return new Flowsheet(basis, units, streams, sheet.settings(), sheet.unknown());
+        return new Flowsheet(basis, units, streams, sheet.settings(), sheet.sizing(), sheet.unknown());
+    }
+
+    /** {@code sheet} with unit {@code id}'s door changed by {@code change}, and without the streams {@code dropped}. */
+    private static Flowsheet withDoor(Flowsheet sheet, String id, Consumer<JsonObject> change, String... dropped) {
+        var units = new ArrayList<Flowsheet.Unit>();
+        for (var unit : sheet.units()) {
+            if (!unit.id().equals(id)) {
+                units.add(unit);
+                continue;
+            }
+            var json = unit.params().json().deepCopy();
+            change.accept(json);
+            units.add(new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), new com.wormzjl.icheme.science.flowsheet.Params(json), unit.unknown()));
+        }
+        var streams = sheet.streams().stream().filter(stream -> !List.of(dropped).contains(stream.id())).toList();
+        return new Flowsheet(sheet.basis(), units, streams, sheet.settings(), sheet.sizing(), sheet.unknown());
+    }
+
+    /**
+     * S3b's sheets (batch 2026-11-02-process-simulator): members in parallel on T-101's Equipment page and on its block. Five
+     * condenser shells, as Size all leaves the sample, and two PA 1 cooler shells; an air-cooled condenser of two banks; a
+     * reboiled column with two kettles. A count changes no stream, so the counted sample keeps the sample's run.
+     */
+    private static void memberCounts(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
+        var host = new Host(false, null);
+        var counted = withDoor(sheet, "T-101", json -> {
+            json.addProperty(com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.CONDENSER_UNITS, 5);
+            json.getAsJsonArray("pumparounds").get(0).getAsJsonObject().addProperty(com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.UNITS, 2);
+        });
+        var air = withDoor(counted, "T-101", json -> {
+            json.addProperty("condenser", ColumnComponents.Condenser.AIR_COOLER.name());
+            json.addProperty(com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.CONDENSER_UNITS, 2);
+            json.addProperty("reboiler_duty", 5e6);
+            json.addProperty(com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.KETTLE_UNITS, 2);
+        }, "CWS", "CWR");
+        grid(out, "28-member-counts-door", DW, DH, List.of("The Equipment page: five condenser shells, two PA 1 cooler shells", "An air-cooled condenser of two banks, and two kettles"),
+                List.of(unit(counted, run, "T-101", 3), unit(air, null, "T-101", 3)));
+        sheet(out, "29-member-counts-block", W, H, List.of("The block: five condenser shells (×5 over the line into it), two PA 1 cooler shells (×2 by its cooler)", "Two air cooler banks and two kettles, not solved"),
+                List.of(scene(counted, run, seconds, host, nothing()), scene(air, null, 0, host, nothing())));
     }
 
     private static Flowsheet withType(Flowsheet sheet, String id, String type) {
         var units = new ArrayList<Flowsheet.Unit>();
         for (var unit : sheet.units()) units.add(unit.id().equals(id) ? new Flowsheet.Unit(unit.id(), type, unit.name(), unit.x(), unit.y(), unit.params(), unit.unknown()) : unit);
-        return new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), sheet.unknown());
+        return new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), sheet.sizing(), sheet.unknown());
     }
 
     public static void main(String[] args) throws Exception {
@@ -641,6 +680,11 @@ public final class SimulatorRender {
         });
         double seconds = (System.nanoTime() - start) / 1e9;
         System.out.printf("sample: %s, %d streams, %d loops, %.1f s, notes %s%n", run.status(), run.streams().size(), run.loops().size(), seconds, com.wormzjl.icheme.client.gui.flowsheet.NoteText.all(run));
+        // -Donly=member-counts: S3b's two sheets alone.
+        if ("member-counts".equals(System.getProperty("only"))) {
+            memberCounts(out, sheet, run, seconds);
+            return;
+        }
         var more = vessels();
         var moreRun = FlowsheetEngine.run(more, CATALOG, () -> {
         });

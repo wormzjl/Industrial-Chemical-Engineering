@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.flowsheet;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
 import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
@@ -293,6 +294,23 @@ final class FlowsheetFileTest {
         assertEquals(new LineSizing.Size(.3, 1), line.size());
         assertEquals(SizingFacts.LineFacts.AUTO, facts.line("F"), "a line with no row is on Auto");
         assertEquals(sheet, FlowsheetFile.read(FlowsheetFile.write(sheet)));
+    }
+
+    /**
+     * S3b: an air cooler's banks in parallel, one where absent, and a column door's member counts; a count past the most a member
+     * step takes is damage.
+     */
+    @Test void membersInParallelKeepTheirCounts() throws IOException {
+        var sheet = FlowsheetFile.read(Files.readAllBytes(CORPUS.resolve("format-1-counts.json")));
+        var facts = sheet.sizing();
+        assertEquals(2, ((AirCoolerSizing.Size) facts.unit("A-1").size()).banks());
+        assertEquals(3, facts.unit("T-1/condenser").size().count());
+        assertEquals(2, facts.unit("T-1/reboiler").size().count());
+        var door = sheet.units().get(2).params();
+        assertEquals(3, door.number("condenser_units"));
+        assertEquals(2, door.number("kettle_units"));
+        assertEquals(1, ((AirCoolerSizing.Size) FlowsheetFile.read(bytes(sized())).sizing().unit("A-1").size()).banks(), "a size saved before the count is one bank");
+        damagedFact("sheet.sizing.units.A-1.size", sizing -> fact(sizing, "units", "A-1").getAsJsonObject("size").addProperty("banks", 7));
     }
 
     private static void damagedFact(String where, Consumer<JsonObject> damage) {

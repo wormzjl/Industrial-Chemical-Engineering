@@ -232,12 +232,31 @@ public final class GuiPrototypes {
     static final ColumnTrays ASSEMBLY = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
             new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true));
 
+    /**
+     * S3b: the same column asking for three condenser shells, two kettles and two shells on its PA cooler. Two condenser shells
+     * stand in parallel (a count fault), the kettles are in place, and one PA cooler shell is another size.
+     */
+    static final ColumnTrays COUNTED = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
+            new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                    new ColumnComponents.Units(3, 2, List.of(2))));
+
     /** A check of {@link #ASSEMBLY}: an in-line pump where the reflux pump goes (misplaced), no feed valve, the PA cooler's line open; the rest in place. */
     static AssemblyReport assemblyReport() {
-        var slots = ColumnBlueprint.of(ASSEMBLY).slots();
-        var faults = Map.of(ColumnBlueprint.REFLUX_PUMP, new AssemblyReport.SlotReport(ColumnBlueprint.REFLUX_PUMP, AssemblyReport.State.WRONG_KIND, 1003, AssemblyReport.NONE, "INLINE_PUMP"),
+        return assemblyReport(ASSEMBLY, Map.of(ColumnBlueprint.REFLUX_PUMP, new AssemblyReport.SlotReport(ColumnBlueprint.REFLUX_PUMP, AssemblyReport.State.WRONG_KIND, 1003, AssemblyReport.NONE, "INLINE_PUMP"),
                 ColumnBlueprint.FEED_VALVE, new AssemblyReport.SlotReport(ColumnBlueprint.FEED_VALVE, AssemblyReport.State.MISSING, AssemblyReport.NONE, AssemblyReport.NONE, ""),
-                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.OPEN_END, 1012, AssemblyReport.NONE, "unconnected"));
+                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.OPEN_END, 1012, AssemblyReport.NONE, "unconnected")));
+    }
+
+    /** A check of {@link #COUNTED}: two condenser shells where the design asks for three, the kettles in parallel, a PA cooler shell of another size. */
+    static AssemblyReport countedReport() {
+        return assemblyReport(COUNTED, Map.of(ColumnBlueprint.CONDENSER, new AssemblyReport.SlotReport(ColumnBlueprint.CONDENSER, AssemblyReport.State.UNIT_COUNT, 1001, AssemblyReport.NONE, "2:3", List.of(1101L)),
+                ColumnBlueprint.REBOILER, new AssemblyReport.SlotReport(ColumnBlueprint.REBOILER, AssemblyReport.State.OK, 1002, AssemblyReport.NONE, "", List.of(1102L)),
+                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.UNIT_SHAPES, 1012, 1112, "", List.of(1112L))));
+    }
+
+    /** A check of {@code trays}: {@code faults} where they are, every other slot in place. */
+    static AssemblyReport assemblyReport(ColumnTrays trays, Map<Slot, AssemblyReport.SlotReport> faults) {
+        var slots = ColumnBlueprint.of(trays).slots();
         var reports = new ArrayList<AssemblyReport.SlotReport>();
         var members = new ArrayList<Long>();
         for (int i = 0; i < slots.size(); i++) {
@@ -248,17 +267,23 @@ public final class GuiPrototypes {
         }
         // Each drawn port of a unit in place is connected; a faulted unit's still need their pipes.
         var ports = new ArrayList<AssemblyReport.PortReport>();
-        for (var m : AssemblyDiagram.of(ASSEMBLY).ports())
+        for (var m : AssemblyDiagram.of(trays).ports())
             for (var r : reports)
                 if (r.slot().equals(m.slot()) && r.member() != AssemblyReport.NONE)
-                    ports.add(new AssemblyReport.PortReport(r.member(), m.role(), Math.max(0, m.ordinal()), r.state() == AssemblyReport.State.OK ? AssemblyReport.PortState.CONNECTED : AssemblyReport.PortState.NEEDED));
+                    for (long unit : r.units())
+                        ports.add(new AssemblyReport.PortReport(unit, m.role(), Math.max(0, m.ordinal()), r.state() == AssemblyReport.State.OK ? AssemblyReport.PortState.CONNECTED : AssemblyReport.PortState.NEEDED));
         return new AssemblyReport(reports, ports, java.util.Set.of(), members);
     }
 
-    /** Nothing selected after a check; then the reflux pump selected while the next check is queued. */
+    /** Nothing selected after a check; then the reflux pump selected while the next check is queued; then S3b's members in parallel, the condenser selected. */
     static List<Prototype> assembly() {
         return List.of(new Prototype("assembly", 464, 254, (d, s) -> assemblyDoor(d, null, false)),
-                new Prototype("assembly-selected", 464, 254, (d, s) -> assemblyDoor(d, ColumnBlueprint.REFLUX_PUMP, true)));
+                new Prototype("assembly-selected", 464, 254, (d, s) -> assemblyDoor(d, ColumnBlueprint.REFLUX_PUMP, true)),
+                new Prototype("assembly-member-counts", 464, 254, (d, s) -> assemblyDoor(d, COUNTED, countedReport(), ColumnBlueprint.CONDENSER, false)));
+    }
+
+    static void assemblyDoor(Door d, Slot selected, boolean queued) {
+        assemblyDoor(d, ASSEMBLY, assemblyReport(), selected, queued);
     }
 
     /**
@@ -266,11 +291,10 @@ public final class GuiPrototypes {
      * Operation off until the structure is complete), the status once, the glass with the drawing and the parts list, the
      * door column, the footer under its divider.
      */
-    static void assemblyDoor(Door d, Slot selected, boolean queued) {
+    static void assemblyDoor(Door d, ColumnTrays trays, AssemblyReport report, Slot selected, boolean queued) {
         var t = DIALOG;
-        var report = assemblyReport();
-        var diagram = AssemblyDiagram.of(ASSEMBLY);
-        var slots = ColumnBlueprint.of(ASSEMBLY).slots();
+        var diagram = AssemblyDiagram.of(trays);
+        var slots = ColumnBlueprint.of(trays).slots();
         d.title(t.get(AssemblyColumn.KEY + "title"));
         var tabs = AssemblyColumn.tabs(false, false, t);
         var tabSlots = AssemblyColumn.tabSlots(d.w);

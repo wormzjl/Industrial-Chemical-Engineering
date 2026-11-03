@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -187,6 +188,22 @@ final class UnitSizingTest {
         var choice = AirCoolerSizing.auto(thick);
         assertTrue(choice.rating().reading(Limit.AIR_COOLER_DROP).met());
         assertTrue(choice.size().bank().parallel() > 1, "trains in parallel carry it");
+    }
+
+    /** S3b: a duty past the largest bank takes identical banks in parallel, the fewest first; each carries its share, so the drop falls. */
+    @Test void aDutyPastTheLargestBankTakesBanksInParallel() {
+        double largest = banks().stream().mapToDouble(AirCoolerSizing.Size::surface).max().orElseThrow();
+        var big = new AirCoolerSizing.Load(E_102.mean(), 1.5 * largest, 45);
+        var choice = AirCoolerSizing.auto(big);
+        assertEquals(Lamp.GREEN, choice.rating().lamp(), choice.rating().toString());
+        assertEquals(2, choice.size().banks());
+        assertEquals(2, choice.size().count());
+        assertEquals(2 * choice.size().withBanks(1).surface(), choice.size().surface(), 1e-9);
+        assertEquals(Lamp.RED, AirCoolerSizing.rate(big, choice.size().withBanks(1)).lamp(), "one of them is short");
+        assertTrue(AirCoolerSizing.drop(big, choice.size()) <= AirCoolerSizing.drop(big, choice.size().withBanks(1)) / 2 * (1 + 1e-9),
+                "half the flow each: half the drop where the flow is laminar, less where it is turbulent");
+        assertEquals(1, AirCoolerSizing.auto(E_102).size().banks(), "a duty one bank holds keeps one");
+        assertThrows(IllegalArgumentException.class, () -> choice.size().withBanks(com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS + 1));
     }
 
     @Test void anOutletTooCloseToTheAirIsYellowAndHidesNothingASizeCanChange() {

@@ -162,7 +162,7 @@ public final class FlowsheetFile {
             return switch (kind) {
                 case "PUMP" -> new PumpSizing.Size(fields.number("discharge"));
                 case "EXCHANGER" -> new ExchangerSizing.Size(fields.bool("kettle"), fields.whole("shells"), fields.number("shell"), fields.whole("tubes"));
-                case "AIR_COOLER" -> new AirCoolerSizing.Size(fields.number("width"), fields.whole("length"), new ProcessUnit.Bank(fields.whole("parallel"), fields.whole("series")));
+                case "AIR_COOLER" -> new AirCoolerSizing.Size(fields.number("width"), fields.whole("length"), new ProcessUnit.Bank(fields.whole("parallel"), fields.whole("series")), fields.whole("banks", 1));
                 case "HEATER" -> new HeaterSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("length"));
                 case "COMPRESSOR" -> new CompressorSizing.Size(fields.name("type", UnitType.class), fields.number("size"), fields.whole("length"));
                 case "DRUM" -> new DrumSizing.Size(fields.name("type", UnitType.class), fields.number("diameter"), fields.whole("length"), fields.bool("boot"));
@@ -229,6 +229,8 @@ public final class FlowsheetFile {
                 json.addProperty("length", cooler.length());
                 json.addProperty("parallel", cooler.bank().parallel());
                 json.addProperty("series", cooler.bank().series());
+                // Identical banks in parallel (S3b): one where absent.
+                if (cooler.banks() > 1) json.addProperty("banks", cooler.banks());
             }
             case HeaterSizing.Size heater -> {
                 json.addProperty("kind", "HEATER");

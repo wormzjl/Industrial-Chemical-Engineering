@@ -110,7 +110,8 @@ class ColumnSizingSampleTest {
      * The probe's 3 × 1.25 × 4 m rested on the top tray's vapour flashed by the world at V3's temperature, 19 % of it liquid and so
      * denser; that inlet holds less heat than V3's condenser takes out. Heated back by that duty, the inlet is the gas the column
      * sends, faster through the shell: 3 × 1.25 × 4 m loses over 0.20 bar, no four shells meet both the drop and the cap, and five
-     * of 1.00 × 3 m do, on the curves' 782 m² against the probe's 862.
+     * of 1.00 × 3 m do, on the curves' 782 m² against the probe's 862. A kept size stands at its door's count (S3b): the probe's
+     * shells on a door of three, and the same size on a door of one, which is short of surface.
      */
     @Test
     void theCondenserIsSetByItsShellDrop() {
@@ -119,10 +120,15 @@ class ColumnSizingSampleTest {
         closest(condenser.rating(), Limit.EXCHANGER_DROP_GAS);
         assertEquals(.15, read(condenser.rating(), Limit.EXCHANGER_DROP_GAS), HUNDREDTH);
         assertEquals(782, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
-        var probes = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, null, false))));
-        var kept = probes.units().get(SheetSizing.member(T, "condenser")).rating();
+        var probe = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, null, false)));
+        var three = size(door(sheet, json -> json.addProperty("condenser_units", 3)), run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
+        assertEquals(new ExchangerSizing.Size(false, 3, 1.25, 4), three.size());
+        var kept = three.rating();
         assertEquals(Lamp.YELLOW, kept.lamp(), () -> text(kept));
         assertTrue(read(kept, Limit.EXCHANGER_DROP_GAS) > .2);
+        var one = size(sheet, run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
+        assertEquals(new ExchangerSizing.Size(false, 1, 1.25, 4), one.size(), "the door's one shell");
+        assertEquals(Lamp.RED, one.rating().lamp(), () -> text(one.rating()));
     }
 
     /** The probe held the boot as a cylinder, 7.0 min; the world's boot has its head too, and holds 7.7. The drum is the same. */
@@ -249,8 +255,8 @@ class ColumnSizingSampleTest {
 
     /**
      * An air-cooled condenser is S2's air cooler on the overhead; the cooling water's lines go with the exchanger. The sample's
-     * overhead needs more bare surface at air 25 °C than the world's largest bank holds, and an air cooler has no count, so it is
-     * red on its surface: one bank cannot condense this column.
+     * overhead needs 1949 m² of bare surface at air 25 °C, more than the world's largest bank holds, 1468: one bank is red on its
+     * surface, and Auto takes the fewest banks in parallel that condense it (S3b), two, each carrying half the overhead.
      */
     @Test
     void anAirCooledCondenserTakesAnAirCooler() {
@@ -260,10 +266,20 @@ class ColumnSizingSampleTest {
         assertEquals(FlowsheetRun.Status.STEADY, airRun.status(), () -> airRun.log().toString());
         var airSized = size(air, airRun, thermo, SheetSizing.Entries.DEFAULT);
         var condenser = airSized.units().get(SheetSizing.member(T, "condenser"));
-        assertInstanceOf(AirCoolerSizing.Size.class, condenser.size());
-        assertEquals(Lamp.RED, condenser.rating().lamp(), () -> text(condenser.rating()));
-        assertSame(Limit.AIR_COOLER_SURFACE, condenser.rating().closest().limit(), () -> text(condenser.rating()));
         System.out.println("AIR\t" + condenser.size() + "\t" + text(condenser.rating()));
+        var banks = assertInstanceOf(AirCoolerSizing.Size.class, condenser.size());
+        assertEquals(2, banks.banks());
+        assertNotEquals(Lamp.RED, condenser.rating().lamp(), () -> text(condenser.rating()));
+        assertEquals(1949, condenser.rating().reading(Limit.AIR_COOLER_SURFACE).low(), 10);
+        var kept = size(air, airRun, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(banks, null, null, null, false))))
+                .units().get(SheetSizing.member(T, "condenser"));
+        assertEquals(banks.withBanks(1), kept.size(), "kept on a door of one bank");
+        assertEquals(Lamp.RED, kept.rating().lamp(), () -> text(kept.rating()));
+        assertSame(Limit.AIR_COOLER_SURFACE, kept.rating().closest().limit(), () -> text(kept.rating()));
+        // Size all writes the count to the door, which the design then asks the assembly for.
+        var applied = SheetSizing.applied(air, airSized);
+        var door = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(applied.units().stream().filter(u -> u.id().equals(T)).findFirst().orElseThrow().params());
+        assertEquals(2, door.units().condenser());
         assertNotNull(airSized.units().get(SheetSizing.member(T, "reflux pump")).size());
     }
 

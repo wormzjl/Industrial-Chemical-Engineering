@@ -182,6 +182,8 @@ A trial solves the column alone with the run's feed at one diameter. Flood and t
 
 **Members.** Each member slot of the block is sized by its own class: the condenser as an exchanger with the sheet's cooling pair, or as an air cooler; a kettle where the reboiler needs one; the receiver as a drum; the reflux and pumparound pumps; each pumparound's cooler; and the ten member lines. A pumparound circulates what its fall takes from its duty. A member pump's head is the loop's lift from the column's own nozzle levels (`EquipmentShape.minimumSkirt` plus `ColumnTrays.trayHeight`), plus the sized lines' and coolers' drops at design flow, plus a 0.7 bar valve.
 
+As built (S3b): the condenser, the kettle and each pumparound's cooler stand as 1 to 6 identical units in parallel, each taking an equal share of the stream. The count is the door's, as the column's diameter is: a kept size is rated at it, Auto proposes one with its size, the fewest units first, and Size all writes an Auto member's count to the door, which the design and the assembly then ask for. A member's sized law in the run reads the door's count too. An air cooler's surface is its banks' sum, and each bank's drop reads its share of the flow.
+
 | Limit | Kind | Value | Source |
 |---|---|---|---|
 | Diameter, T/T, boot | Must | ≤ 10 m, ≤ 64 m, `bootFor` has room | World |
@@ -223,7 +225,7 @@ Sizing reads a steady run only. A run that failed, stopped or did not close leav
 |---|---|
 | Line | Bore through the usual sizes, then parallel runs to 4, with a yellow lamp over one |
 | Exchanger | Fewest shells to 6, then least surface, under twice the need and within both drops. Without the cap the sample's condenser takes 2 × 1.75 × 6 m, 220 % over the need, where it now takes 3 × 1.25 × 4 m, 63 % over |
-| Air cooler | Least face within its drop |
+| Air cooler | Fewest banks to 6 (S3b), then least face within its drop |
 | Heater | The type by duty, then the least duty that holds |
 | Compressor | The type by inlet flow, then the smallest frame |
 | Pump | Smallest discharge whose rated flow fits the window |
@@ -253,6 +255,8 @@ Sheets 24 to 27. One tab with four views: Units, Lines, Pressure, Build. The lef
 Sizes, Auto or Fixed, are facts of the sheet: new fields with defaults, under the sheet's own rule (main plan, section 3.9). Lamps, values and paths are state, rebuilt when the tab opens. An old sheet opens with every item on Auto and no size yet. A tile's type is a fact of the same kind: no type means Auto.
 
 As built (S4a): an optional `sizing` section, written only once a fact is held. It holds the basis (`design_flow`, `line_length`, `pa_fall`); `units` by id (a member's id is `block/member`), each with `mode` (`AUTO` or `FIXED`, by name), `type`, `hold` and `size` (`kind` and the size's own fields); `lines` by stream id, each with `mode`, `service`, `length` and `size` (`bore`, `runs`). A column's size is its door's diameter and a valve's its inlet line's bore, so neither stores one. Unknown fields are kept at every level. A damaged fact refuses the file and names where. The format number stays 1: a reader of 1 that predates the section keeps it as an unknown field, writes it back, and runs on the doors' drops, which is the sheet's behaviour before it was sized. The corpus image is `compat/flowsheet/format-1-sizing.json`.
+
+As built (S3b): an air cooler's size gains `banks`, its identical banks in parallel, 1 where absent and written only above 1. A column's door gains its member counts, `condenser_units`, `kettle_units` and a pumparound row's `units`, 1 where absent, 1 to 6. The format number stays 1. The corpus image is `compat/flowsheet/format-1-counts.json`.
 
 ### 3.10 Types
 
@@ -380,6 +384,7 @@ They follow W1 to W9 of the main plan. Each ends with the tests it can affect an
 | S2 | Units: pump, exchanger, kettle, air cooler, heater, compressor, drum, tank, valve; one rule both sizes and rates; the type proposals; the surface from `HeatCurve` | Per class: the size holds, one step down fails, Fixed reports the same limits; each tile's proposal on both sides of its limit; the door's surface against the world's at one duty |
 | S3 | Column and members: trial diameters in the run thread, re-run on a new diameter, circulation, member heads | Stop reaches a trial; the sample's flood at each diameter; no process number moves but a column's |
 | S4a | Pressure paths, the run on sized drops, the facts and their format, Size all and the rating as pure functions | The sample's paths against the probe's; a sized unit's drop follows a changed flow; the sample sized moves as section 3.11 says; an unsized run moves no number; a corpus image; an old sheet opens |
+| S3b | Member counts: identical units in parallel on the condenser, the kettle and each PA cooler, in the design, the assembly, the world's condenser and sizing | Two shells hold what one holds at half the feed; N units between a split and a merge, a count or size fault; the air-cooled condenser sizes on banks; corpus images |
 | S4b | The tab and its four views, lamps, Auto, Fixed and type keys, Size all's wiring | Column-builder gates; sheets rendered from shipped code |
 | S5 | Send to block, the constructor's list, the coverage gate: every equipment kind declares its sizing or says why it has none; code guide chapter | Import gate; coverage gate |
 
@@ -439,4 +444,4 @@ The owner accepted all ten as written on 2026-11-03.
 - **Trial cost**: a warm column took about 0.7 s on the sample, so six trials take about 4 s. It runs in the run's thread, so nothing blocks. S3's walk starts at the flood estimate, so the sample tries one diameter, 7.5 m, beside the door's 8.0 m, which solves nothing; a door at 9.0 m tries 8.0 and 7.5 m, then runs the sheet once more. Not timed: no gate measures time.
 - **Condensing drop**: the world's law prices a shell at its inlet vapour, so a condenser's drop reads high. It sets the sample's condenser at 5 shells of 1.00 m.
 - **A column at a far diameter**: a trial can fail to solve. It reads red on `COLUMN_SOLVES`, and the search moves on.
-- **One air cooler bank**: an air cooler has no count. The sample's overhead needs 1949 m² of bare surface at air 25 °C, and the largest bank holds 1468, so an air-cooled condenser on this column is red. The owner chose a bank count on 2026-11-03; S3b builds a count of identical units in parallel for the column's member steps.
+- **One air cooler bank**: an air cooler had no count. The sample's overhead needs 1949 m² of bare surface at air 25 °C, and the largest bank holds 1468, so an air-cooled condenser on this column was red. The owner chose a bank count on 2026-11-03; S3b built a count of identical units in parallel for the column's member steps, and the condenser now takes 2 banks of 3.0 × 6 m with 4 × 4 bays, 1957 m², drop 0.19 bar, green.

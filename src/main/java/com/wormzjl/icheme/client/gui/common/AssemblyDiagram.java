@@ -132,7 +132,7 @@ public final class AssemblyDiagram {
             d.utility(368, 29, 368, 12);
             d.label(374, 14, t("utility.motive_steam"), Align.LEFT);
         } else d.wire(true, 260, 120, 260, 40, 459, 40);
-        d.part(CONDENSER, Glyph.UNIT, 460, 24, 120, 32, t(air ? "label.air_cooler" : "label.exchanger"), t("part.condenser"),
+        d.part(CONDENSER, Glyph.UNIT, 460, 24, 120, 32, units(t(air ? "label.air_cooler" : "label.exchanger"), c.units().condenser()), t("part.condenser"),
                 t(vac ? "where.condenser_ejector" : "where.condenser"), t(air ? "wanted.air_cooler" : "wanted.condenser"));
         if (!air) {
             d.utility(530, 23, 530, 8);
@@ -170,7 +170,7 @@ public final class AssemblyDiagram {
             d.wire(false, 289, out, 345 - pr, out);
             d.pump(pumparoundPump(i), 345, out, kind, false, t("part.pa_pump", i), t("where.pa_pump", i));
             d.wire(true, 345 + pr, out, 419, out);
-            d.part(pumparoundCooler(i), Glyph.UNIT, 420, top, 80, 52, t("label.pa_cooler", i), t("part.pa_cooler", i), t("where.pa_cooler", i), t("wanted.pa_cooler"));
+            d.part(pumparoundCooler(i), Glyph.UNIT, 420, top, 80, 52, units(t("label.pa_cooler", i), c.units().cooler(i - 1)), t("part.pa_cooler", i), t("where.pa_cooler", i), t("wanted.pa_cooler"));
             d.wire(true, 420, back, 289, back);
             d.label(362, top + 24, t(kind == ColumnComponents.Pump.STANDARD ? "label.standard" : "label.inline"), Align.LEFT);
             d.utility(500, back + 4, 522, back + 4);
@@ -190,7 +190,7 @@ public final class AssemblyDiagram {
 
         // The bottom: the kettle on the bottoms, or (sump steam, no vapour return) the bottoms straight out.
         if (ket) {
-            d.part(REBOILER, Glyph.UNIT, 90, 640, 120, 34, t("label.reboiler"), t("part.reboiler"), t("where.reboiler"), t("wanted.reboiler"));
+            d.part(REBOILER, Glyph.UNIT, 90, 640, 120, 34, units(t("label.reboiler"), c.units().kettle()), t("part.reboiler"), t("where.reboiler"), t("wanted.reboiler"));
             d.wire(true, 260, 620, 260, 657, 211, 657);
             d.wire(true, 150, 640, 150, 580, 231, 580);
             d.utility(110, 639, 110, 622);
@@ -248,6 +248,11 @@ public final class AssemblyDiagram {
             port(COLUMN, Role.VAPOUR_RETURN, 0, 232, 580, REBOILER);
             port(REBOILER, Role.LIQUID_OUTLET, 0, 90, 657, BOTTOMS_VALVE);
         } else port(COLUMN, Role.BOTTOMS, 0, 260, 620, BOTTOMS_VALVE);
+    }
+
+    /** A member's label with its count of identical units in parallel (S3b), "× N" past one. */
+    private static Text units(Text label, int count) {
+        return count == 1 ? label : t("label.units", label, count);
     }
 
     private static Text t(String key, Object... args) {
