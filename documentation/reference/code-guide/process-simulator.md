@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** 0a04faffb (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-03 · **Updated:** 2026-11-03 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each)
+**Snapshot:** cbd4b9410 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2)
 
 Up: [code guide](README.md)
 
@@ -25,8 +25,8 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | --- | --- | --- |
 | **Science core (`science/flowsheet/`)** | | |
 | `Flowsheet` | The sheet's facts: basis, units, streams, settings, sizing facts, unknown fields kept | What a file and the block hold |
-| `FlowsheetFile` | The JSON format: `read`, `save`; keeps unknown fields, refuses a newer format (`file.newer`) | `FORMAT` |
-| `FlowsheetCompiler` | A sheet into `Calculation`s, plus warm-start estimates from the last steady run; a unit that cannot run becomes a failing calculation; routes a utility port's water feed to its unit (`waterAlone`, `livePorts`) | `compile`, `estimates`, `typed` |
+| `FlowsheetFile` | The JSON format: `read`, `save`; keeps unknown fields, refuses a newer format (`file.newer`) and an older one (`file.older`) | `FORMAT` |
+| `FlowsheetCompiler` | A sheet into `Calculation`s, plus warm-start estimates from the last steady run; reads the sheet's ends as roles (`Wiring.roles`); a unit that cannot run becomes a failing calculation; routes a utility port's water feed to its unit (`waterAlone`, `livePorts`) | `compile`, `estimates`, `typed` |
 | `Calculation` (record, `Kind` STEP/BLOCK/CHECK) | One graph node: reads, writes, needs (links), gives (links), a `Law` | How a unit becomes graph nodes |
 | `FlowGraph` (pp) | Strongly connected groups in order and the fewest tears (deterministic, `TRIALS` 200 000); links are never torn | Order and tears |
 | `FlowsheetSolver` | Runs the plan: a group without tears once; a torn group one plain pass, then bounded Wegstein (one factor per tear); closes mass and heat; `Settings` (flow tolerance 1e-4, temperature 0.01 K, 30 passes, Wegstein factor −5..0) | `run`, `result` |
@@ -35,7 +35,8 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `Board` | The run's known stream states and link values | Reads and writes of a pass |
 | `Report`, `Note` | One calculation's readings, notes and boundary terms (enters, duty, leaves); a note's severity, subject, key (a suffix of `gui.icheme.flowsheet.`) and SI arguments | The log and door status |
 | `FlowStream` (record), `StreamThermo`, `FlowThermo` | T, P, amounts on the package axis (water last), enthalpy, mass, phases; the world's flash as a stream thermo, with an enthalpy search | Every stream state |
-| `UnitModel`, `UnitTypes` (`ALIASES`: `air_cooler` → `cooler`), `WiredUnit` (record, with `Utilities`), `Port` (record: id, direction, required, utility), `Params` | A tile's ports and calculations; a unit with its settings, wires, thermo, passages and regulated utility feeds | Adding a unit |
+| `UnitModel`, `UnitTypes` (`ALIASES`: `air_cooler` → `cooler`), `WiredUnit` (record, with `Utilities`), `Port` (record: id, direction, required, utility), `Params` | A tile's ports (the roles its calculations read), its reversible passages (`passages`) and calculations; a unit with its settings, wires, thermo, passages and regulated utility feeds | Adding a unit |
+| `Passage` (record: `a`, `b`, `in`, `out`; `THROUGH`, `named`), `Wiring` | A reversible passage's two ends and the roles its model reads them by; a sheet's ends read as roles: the first stream on either end decides which is the inlet ([ports and passages](#ports-and-passages)) | Port sides |
 | `Passages` | A unit's passage drop laws: typed drops while it has no size, sized laws (`SizedPassages`) once it has one | Drops in the run |
 | `EjectorLaw` | The vacuum set's steam law S1 (K = 1.6) | Ejector steam |
 | `FlowsheetFailure` | A law's refusal, carrying a note key | Failing units |
@@ -126,7 +127,7 @@ flowchart TD
 
 | Format | Version | Where | Kind |
 | --- | --- | --- | --- |
-| Flowsheet file and block body's sheet | `FlowsheetFile.FORMAT` = 1 | `science/flowsheet/FlowsheetFile` | Fact: corpus `compat/flowsheet/format-1*.json` (`FlowsheetFileTest`) |
+| Flowsheet file and block body's sheet | `FlowsheetFile.FORMAT` = 2 (passage ends, option B) | `science/flowsheet/FlowsheetFile` | No compatibility (owner 2026-11-04): another format is refused; corpus `compat/flowsheet/format-2*.json` (`FlowsheetFileTest`) |
 | Block body | `SheetBody.FORMAT` = 1 | `science/flowsheet/SheetBody` | Fact (the sheet inside it) |
 | Run results | `SimulatorResults.FORMAT` = 1 | `network/SimulatorResults` | State: dropped on a mismatch, rebuilt by a run |
 | Sent designs | `SentDesignTags` (fields 2) | `world/level/block/entity/SentDesignTags` | Fact: corpus `compat/simulator/designs-<n>.snbt` (`SentDesignTagsTest`) |
@@ -134,7 +135,19 @@ flowchart TD
 | Simulator packets | `ProcessSimulatorNetwork.PROTOCOL` = "2" | `network/ProcessSimulatorNetwork` | Wire |
 | Constructor packets | `EquipmentNetwork.PROTOCOL` = "equipment-17" | `network/EquipmentNetwork` | Wire |
 
-The file keeps fields it does not know and refuses a newer format. `SheetLayout` reads a stream's `route`, so a change to it is a format change.
+The file keeps fields it does not know and refuses a newer format and an older one, which it would misread: a sheet file needs no compatibility (owner 2026-11-04), so a format change re-records the corpus and the block keeps an old body as unreadable (`KeptSheets`). `SheetLayout` reads a stream's `route`, so a change to it is a format change.
+
+</details>
+
+<details><summary>Ports and passages</summary>
+
+<a id="ports-and-passages"></a>A unit's ports are the roles its calculations read (`UnitModel.ports`). A passage that works either way in a plant is a `Passage` (`UnitModel.passages`, PORT_SIDES_REVIEW.md option B): the sheet shows its two ends, and the streams on them say which is the inlet.
+
+- **Passages:** the valve, the filter, the cooler and the series heater (`a`, `b`); the apart heater's two coils (`convection_a`/`_b`, `radiant_a`/`_b`); the exchanger's tube and shell sides (`tube_a`/`_b`, `shell_a`/`_b`); the kettle's tubes; and in the column only the heat members' utility sides (owner, "Column components like heat exchanger utility side only"): `condenser_a`/`_b` (the condenser's water, or its trim's), `reboiler_a`/`_b`, `pa/<id>/a`/`b`.
+- **Fixed:** machines (pump, compressor, ejector), the mixer, the splitter, vessels (drum and tank), the column's process ports, stripping steam and placeholders.
+- **`Wiring`:** an end that is a stream's `to` is the inlet, one that is a `from` the outlet, and the other end takes the other role. The first stream on either end decides. An end against that, or an end that names a role, plays none and stays open. `Wiring.roles(sheet)` names every end by its role, and the compiler, `SheetSizing` (its path walk included) and the doors and pages (`SheetContext.into`, `outOf`, `streams`, through `SheetEditor.roles`) read that sheet; the layout and the editor read the ends. The exchanger stays counterflow whichever ends carry its sides: its model reads roles.
+- **Editing:** `SheetEditor.takes` lets a free passage end take a stream's start or its end; once one end holds a stream, the other takes only the other role. Two ends of one passage wired the same way give `PASSAGE` (`flowsheet.refused.passage`); two fixed ports of one direction still give `PORT_SIDE`. A drag from a free end offers rings of both kinds (`SheetGestures.drawRings`). Where nothing decides (a free end to a pill, or to another free end), the stream leaves the end it is drawn out of, so a pill is a product (owner 2026-11-04, "product"); a passage is fed by landing a Feed on the end wanted. A free inlet of a fixed unit still starts a feed.
+- **Drawing:** an end stands where it stands whichever way its stream runs: `a` where the inlet stood, so the cooler now draws `a` on its left like every passage. A column side entered by its second end turns its pipes' arrows (`ColumnBlock.of(unit, door, reversed)`). A free end's hover reads both roles (`flowsheet.port.either`).
 
 </details>
 
@@ -239,7 +252,8 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | A utility feed's flow | `FlowsheetCompiler`, `WiredUnit.Utilities`, `ColumnUnit` | `UtilityRegulationTest` |
 | A Sizing row or lamp | `Limit`, the unit's sizer | `LimitTest`, `UnitSizingTest`, `CoolerSizingTest`, `SheetSizingTest`; the sample: `UnitSizingSampleTest`, `ColumnSizingSampleTest` (slow) |
 | Lines and paths | `LineSizing`, `Service`, `PressurePath`, `SheetSizing` | `LineSizingTest`, `ServiceTest`, `LineSizingSampleTest`, `SizeAllSampleTest` (slow) |
-| The file | `FlowsheetFile` | `FlowsheetFileTest` (26, the corpus) |
+| Which end of a passage is its inlet | `Passage`, `Wiring`, `UnitModel.passages`, `SheetEditor.takes` | `WiringTest`, `PassageEndsTest` |
+| The file | `FlowsheetFile` | `FlowsheetFileTest` (27, the corpus) |
 | The block's store, uploads and packets ([packets](#packets-and-protocol), [block](#the-block-and-its-store)) | `SheetStore`, `SheetBody`, `ProcessSimulatorNetwork`, `ProcessSimulatorBlockEntity` | `SheetStoreTest`, `SimulatorBlockTest`, `ProcessSimulatorGameTests` |
 | Sent designs and Import | `SheetSizing.designs`, `SentDesign`, `SentDesignTags`, `EquipmentNetwork` | `SentDesignTagsTest` (the corpus), `ProcessSimulatorGameTests.aConstructorImportsTheNearestSimulatorsDesign` |
 | The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`, `DrawCallTest` (draw calls); renders: `tools/heat-gui-renders/SimulatorRender.java` (`-Dcount`: draw calls per page) |
@@ -248,7 +262,7 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 
 ## Tests that pin it
 
-- `test`: `science/flowsheet/` (`FlowGraphTest`, `FlowsheetSolverTest`, `FlowsheetUnitsTest`, `FlowsheetColumnDoorTest`, `FlowsheetFileTest`, `SheetStoreTest`, `EjectorTest`), `science/flowsheet/sizing/` (`LimitTest`, `ServiceTest`, `LineSizingTest`, `UnitSizingTest`, `SheetSizingTest`, `CoolerSizingTest`), `client/gui/flowsheet/` (the screen tests above, `DrawCallTest`, `SimulatorBlockTest`, `SimulatorRunnerTest`, the two coverage tests), `network/ColumnWireTest`, `world/level/block/entity/SentDesignTagsTest`.
+- `test`: `science/flowsheet/` (`FlowGraphTest`, `FlowsheetSolverTest`, `FlowsheetUnitsTest`, `FlowsheetColumnDoorTest`, `FlowsheetFileTest`, `SheetStoreTest`, `EjectorTest`, `WiringTest`), `science/flowsheet/sizing/` (`LimitTest`, `ServiceTest`, `LineSizingTest`, `UnitSizingTest`, `SheetSizingTest`, `CoolerSizingTest`), `client/gui/flowsheet/` (the screen tests above, `PassageEndsTest`, `DrawCallTest`, `SimulatorBlockTest`, `SimulatorRunnerTest`, the two coverage tests), `network/ColumnWireTest`, `world/level/block/entity/SentDesignTagsTest`.
 - `holdGates` (slow, `slowGateClasses`): `FlowsheetColumnTest`, `ColumnEjectorTest`, `SimulatorRunTest`, `LineSizingSampleTest`, `UnitSizingSampleTest`, `ColumnSizingSampleTest`, `SizeAllSampleTest`, `UtilityRegulationTest`.
 - `runColumnGameTestServer` (namespace `icheme_column_test`): `ProcessSimulatorGameTests` (11): the old id, a reload with no update tag, a damaged sheet kept, the constructor's Import, a second player reads, uploads only from the screen near the block, a bad upload refused, the holder freed on disconnect, away and when the block goes, a replay that runs no solver.
 - Shared fixture: `client/gui/flowsheet/SheetFixture` (the sample sheet).
@@ -265,4 +279,5 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | Link | A value passed between calculations that is not a stream; never torn |
 | Holder | The one player who edits a block's sheet; others read |
 | Utility feed | A sheet feed of water alone on a utility port; its unit sets its flow |
+| Passage, end, role | A passage works either way; the sheet shows its two ends (`a`, `b`); a role (`in`, `out`, `tube_in`) is what the model reads, and the streams say which end plays which |
 | Auto, Fixed | A size Auto proposes (with the 20 % spare) or one the player keeps |
