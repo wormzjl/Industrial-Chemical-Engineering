@@ -15,6 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -119,13 +120,18 @@ public final class ColumnTemplates {
     }
 
     private static V3ClientPresets library(Minecraft minecraft) {
-        return new V3ClientPresets(minecraft.gameDirectory.toPath(), name -> {
+        return new V3ClientPresets(minecraft.gameDirectory.toPath(), resources(minecraft));
+    }
+
+    /** The mod's client assets by path ({@code assets/icheme/...}), through the resource manager; null where there is none. */
+    static Function<String, InputStream> resources(Minecraft minecraft) {
+        return name -> {
             try {
                 return minecraft.getResourceManager().getResource(ResourceLocation.fromNamespaceAndPath("icheme", name.substring("assets/icheme/".length()))).orElseThrow().open();
             } catch (IOException | NoSuchElementException e) {
                 return null;
             }
-        });
+        };
     }
 
     /** The column templates of {@code snapshot} applied to {@code base}, named by {@code names}. */

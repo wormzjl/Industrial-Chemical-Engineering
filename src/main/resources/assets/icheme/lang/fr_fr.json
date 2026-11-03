@@ -2454,6 +2454,8 @@
   "gui.icheme.flowsheet.file.from": "Source",
   "gui.icheme.flowsheet.file.bundled": "Intégré",
   "gui.icheme.flowsheet.file.yours": "Perso",
+  "gui.icheme.flowsheet.file.example": "Exemple",
+  "gui.icheme.flowsheet.example.crude_unit": "Distillation du brut (CDU)",
   "gui.icheme.flowsheet.file.name": "Nom",
   "gui.icheme.flowsheet.file.size": "Taille",
   "gui.icheme.flowsheet.file.saved": "Enregistré",

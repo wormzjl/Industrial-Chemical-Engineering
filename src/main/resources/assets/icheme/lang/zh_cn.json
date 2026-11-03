@@ -2454,6 +2454,8 @@
   "gui.icheme.flowsheet.file.from": "来源",
   "gui.icheme.flowsheet.file.bundled": "内置",
   "gui.icheme.flowsheet.file.yours": "自定义",
+  "gui.icheme.flowsheet.file.example": "示例",
+  "gui.icheme.flowsheet.example.crude_unit": "原油蒸馏装置 (CDU)",
   "gui.icheme.flowsheet.file.name": "名称",
   "gui.icheme.flowsheet.file.size": "大小",
   "gui.icheme.flowsheet.file.saved": "保存于",

@@ -58,8 +58,15 @@ public final class FileColumns {
     public record Row(String[] cells, boolean warn) {
     }
 
-    /** A flowsheet file as Open lists it. */
-    public record Entry(Path file, String name, String size, String saved, String state, boolean warn, boolean opens) {
+    /** A flowsheet file as Open lists it; a bundled example has no file and holds its sheet, or null where it does not read. */
+    public record Entry(@Nullable Path file, String name, String size, String saved, String state, boolean warn, boolean opens, boolean example, @Nullable Flowsheet sheet) {
+        public Entry(Path file, String name, String size, String saved, String state, boolean warn, boolean opens) {
+            this(file, name, size, saved, state, warn, opens, false, null);
+        }
+    }
+
+    /** What opening an entry loads, and the file name the sheet then keeps: none for an example, so it stays unsaved and Save asks for a name. */
+    public record Opened(Flowsheet sheet, @Nullable String name) {
     }
 
     private FileColumns() {
@@ -94,6 +101,55 @@ public final class FileColumns {
         return entries;
     }
 
+    /** What Open lists: the bundled examples first, then the folder's files. A folder that does not list leaves the examples alone. */
+    public static List<Entry> entries(Path folder, List<FlowsheetExamples.Example> examples, HeatControlColumn.Texts t) {
+        var entries = new ArrayList<Entry>();
+        for (var example : examples) entries.add(example(example, t));
+        try {
+            entries.addAll(entries(folder, t));
+        } catch (IOException unreadable) {
+            // The folder's rows stay out, as an unreadable folder lists none.
+        }
+        return entries;
+    }
+
+    private static Entry example(FlowsheetExamples.Example example, HeatControlColumn.Texts t) {
+        String name = t.get("flowsheet.example." + example.stem()), saved = t.get("flowsheet.file.example");
+        var sheet = example.sheet();
+        if (sheet == null) return new Entry(null, name, "", saved, t.get(refusedState(example.refused())), true, false, true, null);
+        long unknown = unknown(sheet);
+        return new Entry(null, name, size(sheet, t), saved, state(unknown, t), unknown != 0, true, true, sheet);
+    }
+
+    /** The sheet an entry opens. */
+    public static Opened opened(Entry entry) throws IOException {
+        if (entry.example()) {
+            if (entry.sheet() == null) throw new IOException("unreadable example");
+            return new Opened(entry.sheet(), null);
+        }
+        return new Opened(FlowsheetFile.open(entry.file()), entry.name());
+    }
+
+    private static long unknown(Flowsheet sheet) {
+        return sheet.units().stream().filter(u -> Tiles.symbol(u.type()) == null).count();
+    }
+
+    private static String size(Flowsheet sheet, HeatControlColumn.Texts t) {
+        return t.get(sheet.units().size() == 1 ? "flowsheet.file.unit" : "flowsheet.file.units", sheet.units().size());
+    }
+
+    private static String state(long unknown, HeatControlColumn.Texts t) {
+        return unknown == 0 ? t.get("flowsheet.file.ready") : t.get(unknown == 1 ? "flowsheet.file.look_one" : "flowsheet.file.look", unknown);
+    }
+
+    private static String refusedState(@Nullable String key) {
+        return switch (key == null ? "" : key) {
+            case "file.newer" -> "flowsheet.file.newer_state";
+            case "file.older" -> "flowsheet.file.older_state";
+            default -> "flowsheet.file.damaged_state";
+        };
+    }
+
     private static long modified(Path file) {
         try {
             return Files.getLastModifiedTime(file).toMillis();
@@ -107,16 +163,10 @@ public final class FileColumns {
         String name = stem.equals(AUTOSAVE) ? t.get("flowsheet.file.autosave") : stem.startsWith(AUTOSAVE_BLOCK) ? t.get("flowsheet.file.autosave_block", stem.substring(AUTOSAVE_BLOCK.length(), Math.min(stem.length(), AUTOSAVE_BLOCK.length() + 8))) : stem.endsWith(AUTOSAVE_OF) ? t.get("flowsheet.file.autosave_of", stem.substring(0, stem.length() - AUTOSAVE_OF.length())) : stem;
         try {
             var sheet = FlowsheetFile.open(file);
-            long unknown = sheet.units().stream().filter(u -> Tiles.symbol(u.type()) == null).count();
-            String size = t.get(sheet.units().size() == 1 ? "flowsheet.file.unit" : "flowsheet.file.units", sheet.units().size());
-            return new Entry(file, name, size, when, unknown == 0 ? t.get("flowsheet.file.ready") : t.get(unknown == 1 ? "flowsheet.file.look_one" : "flowsheet.file.look", unknown), unknown != 0, true);
+            long unknown = unknown(sheet);
+            return new Entry(file, name, size(sheet, t), when, state(unknown, t), unknown != 0, true);
         } catch (FlowsheetFailure refused) {
-            String state = switch (refused.key()) {
-                case "file.newer" -> "flowsheet.file.newer_state";
-                case "file.older" -> "flowsheet.file.older_state";
-                default -> "flowsheet.file.damaged_state";
-            };
-            return new Entry(file, name, "", when, t.get(state), true, false);
+            return new Entry(file, name, "", when, t.get(refusedState(refused.key())), true, false);
         } catch (IOException gone) {
             return new Entry(file, name, "", when, t.get("flowsheet.file.damaged_state"), true, false);
         }

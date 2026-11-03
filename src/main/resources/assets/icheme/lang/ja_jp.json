@@ -2454,6 +2454,8 @@
   "gui.icheme.flowsheet.file.from": "出典",
   "gui.icheme.flowsheet.file.bundled": "同梱",
   "gui.icheme.flowsheet.file.yours": "自分の",
+  "gui.icheme.flowsheet.file.example": "サンプル",
+  "gui.icheme.flowsheet.example.crude_unit": "原油蒸留装置 (CDU)",
   "gui.icheme.flowsheet.file.name": "名前",
   "gui.icheme.flowsheet.file.size": "サイズ",
   "gui.icheme.flowsheet.file.saved": "保存日時",

@@ -2454,6 +2454,8 @@
   "gui.icheme.flowsheet.file.from": "Origen",
   "gui.icheme.flowsheet.file.bundled": "Incluida",
   "gui.icheme.flowsheet.file.yours": "Tuya",
+  "gui.icheme.flowsheet.file.example": "Ejemplo",
+  "gui.icheme.flowsheet.example.crude_unit": "Unidad de crudo (CDU)",
   "gui.icheme.flowsheet.file.name": "Nombre",
   "gui.icheme.flowsheet.file.size": "Tamaño",
   "gui.icheme.flowsheet.file.saved": "Guardado",

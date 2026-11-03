@@ -2454,6 +2454,8 @@
   "gui.icheme.flowsheet.file.from": "From",
   "gui.icheme.flowsheet.file.bundled": "Bundled",
   "gui.icheme.flowsheet.file.yours": "Yours",
+  "gui.icheme.flowsheet.file.example": "Example",
+  "gui.icheme.flowsheet.example.crude_unit": "Crude unit (CDU)",
   "gui.icheme.flowsheet.file.name": "Name",
   "gui.icheme.flowsheet.file.size": "Size",
   "gui.icheme.flowsheet.file.saved": "Saved",

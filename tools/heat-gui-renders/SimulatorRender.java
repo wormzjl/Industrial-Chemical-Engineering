@@ -16,6 +16,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.ColumnDoors;
 import com.wormzjl.icheme.client.gui.flowsheet.Door;
 import com.wormzjl.icheme.client.gui.flowsheet.DoorFrame;
 import com.wormzjl.icheme.client.gui.flowsheet.FileColumns;
+import com.wormzjl.icheme.client.gui.flowsheet.FlowsheetExamples;
 import com.wormzjl.icheme.client.gui.flowsheet.ResultsPage;
 import com.wormzjl.icheme.client.gui.flowsheet.SelectionColumn;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetClipboard;
@@ -137,12 +138,6 @@ public final class SimulatorRender {
         return new Flowsheet.Feed(temperature, pressure, amounts, List.of());
     }
 
-    static Flowsheet.Feed water(double temperature, double pressure, double flow) {
-        var amounts = new LinkedHashMap<String, Double>();
-        amounts.put("Water", flow);
-        return new Flowsheet.Feed(temperature, pressure, amounts, List.of());
-    }
-
     static Params columnDoor() {
         var door = ColumnDoor.from(BASE, ColumnComponents.Condenser.EXCHANGER);
         door.json().addProperty("condenser_drop", .3e5);
@@ -150,21 +145,16 @@ public final class SimulatorRender {
         return door;
     }
 
+    /** The bundled crude unit example (FlowsheetExamples), as a player opens it from Open. */
     static Flowsheet sample() {
-        var steam = BASE.steamFeeds().getFirst();
-        return new Sheet().unit("P-101", "pump", 84, 117, "{\"target\":\"outlet\",\"pressure\":14e5,\"rise\":2e5}").unit("T-101", "column", 372, 20, columnDoor())
-                .unit("E-101", "exchanger", 130, 309, "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":473.15,\"duty\":1e6,\"area\":100,\"tube_drop\":0.5e5,\"shell_drop\":0.3e5}")
-                .unit("H-101", "fired_heater", 214, 257, "{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"duty\":1e7,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}")
-                .unit("V-101", "valve", 306, 287, "{\"target\":\"outlet\",\"pressure\":2.80e5,\"drop\":1e5}").unit("E-102", "cooler", 40, 359, "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}")
-                .unit("P-102", "pump", 600, 182, "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}")
-                .feed("CRUDE", "P-101", "in", crude(298.15, 8e5), 28, 130).line("S-1", "P-101", "out", "T-101", "pa/1/a").line("S-2", "T-101", "pa/1/b", "T-101", "pa/2/a").line("S-3", "T-101", "pa/2/b", "T-101", "pa/3/a")
-                .line("S-4", "T-101", "pa/3/b", "E-101", "tube_a", new Flowsheet.Point(362, 258), new Flowsheet.Point(362, 238), new Flowsheet.Point(116, 238), new Flowsheet.Point(116, 323))
-                .line("S-5", "E-101", "tube_b", "H-101", "a").line("S-6", "H-101", "b", "V-101", "a").line("S-7", "V-101", "b", "T-101", "feed")
-                .feed("STEAM", "T-101", "steam/1", water(steam.temperatureKelvin(), 3.5e5, steam.molarFlowMolPerSecond()), 316, 319)
-                .feed("CWS", "T-101", "condenser_a", water(303.15, 4e5, 190000 / 3.6), 316, 28).product("CWR", "T-101", "condenser_b", 316, 48)
-                .product("OFFGAS", "T-101", "overhead", 690, 8).product("NAPHTHA", "T-101", "distillate", 690, 97).product("WATER", "T-101", "water", 690, 76).product("KERO", "T-101", "draw/1", 690, 151)
-                .line("S-8", "T-101", "draw/2", "P-102", "in").product("DIESEL", "P-102", "out", 690, 195).product("AGO", "T-101", "draw/3", 690, 249)
-                .line("S-9", "T-101", "bottoms", "E-101", "shell_a").line("S-10", "E-101", "shell_b", "E-102", "a", new Flowsheet.Point(146, 343), new Flowsheet.Point(24, 343), new Flowsheet.Point(24, 372)).product("RESIDUE", "E-102", "b", 146, 372).build();
+        var example = FlowsheetExamples.read(ClassLoader::getSystemResourceAsStream).stream().filter(e -> e.stem().equals("crude_unit")).findFirst().orElseThrow();
+        if (example.sheet() == null) throw new IllegalStateException("crude_unit does not read: " + example.refused());
+        return example.sheet();
+    }
+
+    /** The bundled examples, for Open's rows. */
+    static List<FlowsheetExamples.Example> examples() {
+        return FlowsheetExamples.read(ClassLoader::getSystemResourceAsStream);
     }
 
     /** The doors the crude unit does not hold: the same crude through a drum, its oil split three ways. */
@@ -599,6 +589,9 @@ public final class SimulatorRender {
     private static void opened(Path out) throws Exception {
         var folder = Path.of("tmp/w6/flowsheets");
         Files.createDirectories(folder);
+        try (var old = Files.list(folder)) {
+            for (var file : old.toList()) Files.delete(file);
+        }
         var sheet = sample();
         FlowsheetFile.save(folder.resolve("CDU train.json"), sheet);
         var removed = withType(sheet, "H-101", "old_heater");
@@ -607,7 +600,7 @@ public final class SimulatorRender {
         Files.writeString(folder.resolve("Broken.json"), "{ not a flowsheet");
         FlowsheetFile.save(FileColumns.autosave(folder, "CDU train", "unused"), sheet);
         FlowsheetFile.save(FileColumns.autosave(folder, null, "3f2a1c9e-7b10-4e55-9c1a-0d2f6e8b4a77"), sheet);
-        var entries = FileColumns.entries(folder, T);
+        var entries = FileColumns.entries(folder, examples(), T);
         var pages = new ArrayList<BufferedImage>();
         for (var skin : SKINS) {
             int ready = 0;
@@ -621,7 +614,7 @@ public final class SimulatorRender {
                 d.skin.button(d.c, slots.get(1), T.get("flowsheet.file.open"), Skin.Press.PRIMARY, false);
             }));
         }
-        SimulatorPrototypes.grid(out, "17-file-and-repair", List.of("Open: the player's own files, an autosave beside its file (light door)", "After an update: what changed (light door)", "Open (dark door)", "After an update (dark door)"), pages);
+        SimulatorPrototypes.grid(out, "17-file-and-repair", List.of("Open: the bundled example first, then the player's own files, an autosave beside its file (light door)", "After an update: what changed (light door)", "Open (dark door)", "After an update (dark door)"), pages);
         var prompts = new ArrayList<BufferedImage>();
         for (var skin : SKINS) {
             prompts.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> unsavedPrompt(d)));
@@ -984,6 +977,11 @@ public final class SimulatorRender {
         // -Donly=ejector: W10's sheets alone, on a sheet of their own.
         if ("ejector".equals(System.getProperty("only"))) {
             ejector(out);
+            return;
+        }
+        // -Donly=open: Open, with the bundled examples first, and its prompts (sheets 17 and 25), with no run.
+        if ("open".equals(System.getProperty("only"))) {
+            opened(out);
             return;
         }
         var sheet = sample();

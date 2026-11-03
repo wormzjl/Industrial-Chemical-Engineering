@@ -19,6 +19,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.ColumnDoors;
 import com.wormzjl.icheme.client.gui.flowsheet.Door;
 import com.wormzjl.icheme.client.gui.flowsheet.DoorFrame;
 import com.wormzjl.icheme.client.gui.flowsheet.FileColumns;
+import com.wormzjl.icheme.client.gui.flowsheet.FlowsheetExamples;
 import com.wormzjl.icheme.client.gui.flowsheet.ResultsPage;
 import com.wormzjl.icheme.client.gui.flowsheet.SelectionColumn;
 import com.wormzjl.icheme.client.gui.flowsheet.SheetContext;
@@ -146,6 +147,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private final Map<String, String> clientRevisions;
     private @Nullable Flowsheet opening;
     private String openingName = "";
+    /** The file name the sheet in {@link #opening} keeps once loaded: none for an example. */
+    private @Nullable String openingFile;
     /** What a prompt holds back until the player answers it. */
     private @Nullable Runnable pending;
     /** The file this sheet last came from or went to, which its autosave stands beside. */
@@ -709,12 +712,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         chosen = -1;
         dialog = Dialog.OPEN;
         read(() -> {
-            try {
-                var listed = FileColumns.entries(folder(), ProcessSimulatorScreen::lang);
-                return () -> files = listed;
-            } catch (IOException unreadable) {
-                return () -> files = List.of();
-            }
+            var listed = FileColumns.entries(folder(), FlowsheetExamples.read(ColumnTemplates.resources(minecraft)), ProcessSimulatorScreen::lang);
+            return () -> files = listed;
         });
     }
 
@@ -793,7 +792,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         if (key.equals("load")) {
             dialog = Dialog.NONE;
             if (opening != null) {
-                fileName = openingName;
+                fileName = openingFile;
                 replaceWith(opening);
             }
             return;
@@ -840,15 +839,16 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
                 var entry = files.get(chosen);
                 if (!entry.opens()) return;
                 try {
-                    var sheet = FlowsheetFile.open(entry.file());
-                    if (!FileColumns.changes(sheet, fluids, ProcessSimulatorScreen::columnDefaults, ProcessSimulatorScreen::lang).isEmpty()) {
-                        opening = sheet;
+                    var opened = FileColumns.opened(entry);
+                    if (!FileColumns.changes(opened.sheet(), fluids, ProcessSimulatorScreen::columnDefaults, ProcessSimulatorScreen::lang).isEmpty()) {
+                        opening = opened.sheet();
                         openingName = entry.name();
+                        openingFile = opened.name();
                         dialog = Dialog.CHANGES;
                         return;
                     }
-                    fileName = entry.name();
-                    replaceWith(sheet);
+                    fileName = opened.name();
+                    replaceWith(opened.sheet());
                     return;
                 } catch (IOException gone) {
                     return;
