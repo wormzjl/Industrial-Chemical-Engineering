@@ -76,7 +76,7 @@ public enum Service {
         if (chosen != null) return chosen;
         var state = stream.state();
         if (state == null || stream.empty()) return null;
-        double vapour = 100 * thermo.model().vaporMass(state) / (state.mass() - state.solidMoments().mass());
+        double vapour = vapourShare(state, thermo.model());
         if (vapour > Limit.SERVICE_VAPOUR.value()) return vapour(state, thermo.model());
         if (vapour > Limit.SERVICE_TWO_PHASE.value()) return TWO_PHASE;
         if (ends.leavesTray()) return DRAW;
@@ -84,8 +84,18 @@ public enum Service {
             double spare = (stream.pressure() - thermo.bubblePressure(stream.temperature(), stream.amountsView())) / 1e5;
             return spare <= Limit.SERVICE_BOILING.value() ? SUCTION_BOILING : SUCTION_COLD;
         }
+        return water(state) ? WATER : LIQUID;
+    }
+
+    /** Vapour's share of a state's fluid by mass, %. Solids do not move it. */
+    static double vapourShare(FluidThermodynamics.State state, FluidThermodynamics model) {
+        return 100 * model.vaporMass(state) / (state.mass() - state.solidMoments().mass());
+    }
+
+    /** Whether a state's liquid is water. */
+    static boolean water(FluidThermodynamics.State state) {
         double oil = Arrays.stream(state.liquidView()).sum();
-        return 100 * state.waterLiquid() / (oil + state.waterLiquid()) > Limit.SERVICE_WATER.value() ? WATER : LIQUID;
+        return 100 * state.waterLiquid() / (oil + state.waterLiquid()) > Limit.SERVICE_WATER.value();
     }
 
     /** A vapour under ambient answers to its absolute pressure, whatever its gas: a limit in bar per 100 m means nothing there. */

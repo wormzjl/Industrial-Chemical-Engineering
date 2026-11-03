@@ -23,6 +23,7 @@ import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Axis;
 import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Sense;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
+import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 
 /**
@@ -33,6 +34,10 @@ import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
  * <p>Numbers stand in the unit the plan writes them in, so a row reads as its line of the plan.
  */
 public enum Limit {
+    // ---- Every item, section 3.5 ----
+    /** 1 if the run is steady, 0 if not. A sizing reads only a steady run's streams; on any other run every item holds this one reading. */
+    RUN_STEADY(MUST, least(1), "", "World: `FlowsheetRun.Status`"),
+
     // ---- Every line, section 3.3 ----
     LINE_BORE(MUST, most(PipeSizes.MAX_BORE), "m", "World: `PipeSizes.MAX_BORE`", QUIET),
     /** The line's state gives this one: the lesser of 100 m/s and the isothermal acoustic bound. */
@@ -42,6 +47,10 @@ public enum Limit {
     LINE_SOLIDS(MUST, given(Sense.ABOVE), "m/s", "World: `SolidMobility`"),
     /** Auto pays this one: it takes parallel runs, section 3.5, before it leaves a run outside a service's limits. */
     LINE_RUNS(SHOULD, most(1), "", "This plan", PAID),
+
+    // ---- Every unit, section 3.1 ----
+    /** 1 if the constructor builds this size, 0 if not. */
+    UNIT_SHAPE(MUST, least(1), "", "World: `EquipmentShape`", QUIET),
 
     // ---- Which service, section 3.3: S1's decisions are in the batch README ----
     /** Above this mole share of a liquid, it is water. */
@@ -102,8 +111,12 @@ public enum Limit {
     COMPRESSOR_STAGE_TURBO(SHOULD, most(3), "", "[PEREZ]"),
     COMPRESSOR_DISCHARGE(SHOULD, most(150), "°C", "[WEAK]"),
     COMPRESSOR_DISCHARGE_HYDROGEN(SHOULD, most(135), "°C", "[API618]"),
+    /** Above this mole share of hydrogen, a gas takes the hydrogen row: the standard says hydrogen-rich and gives no share here. */
+    COMPRESSOR_HYDROGEN(RULE, most(50), "%", "This plan"),
 
     // ---- Exchangers ----
+    /** Above this vapour share by mass the world's film leaves liquid, so a side stops reading the liquid drop. */
+    EXCHANGER_SIDE(RULE, most(100 * HeatCurve.LIQUID_UNTIL), "%", "World: `HeatCurve.LIQUID_UNTIL`"),
     EXCHANGER_SURFACE(MUST, given(Sense.LEAST), "m²", "World"),
     EXCHANGER_HOT_END(MUST, above(0), "K", "World: counterflow", QUIET),
     EXCHANGER_COLD_END(MUST, above(0), "K", "World: counterflow", QUIET),

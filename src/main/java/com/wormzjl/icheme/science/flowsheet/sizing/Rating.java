@@ -46,7 +46,7 @@ public record Rating(List<Reading> readings) {
         return true;
     }
 
-    /** How far past the Musts it stands, 0 if it meets them. */
+    /** How far past the Musts it stands, 0 if it meets them. What every size misses cancels, so it hides nothing a size can change. */
     double mustMiss() {
         return miss(Limit.Kind.MUST);
     }
@@ -58,7 +58,7 @@ public record Rating(List<Reading> readings) {
 
     private double miss(Limit.Kind kind) {
         double miss = 0;
-        for (var reading : readings) if (reading.limit().kind() == kind && !reading.met()) miss = Math.max(miss, reading.load());
+        for (var reading : readings) if (reading.limit().kind() == kind && !reading.met()) miss += reading.load();
         return miss;
     }
 }
