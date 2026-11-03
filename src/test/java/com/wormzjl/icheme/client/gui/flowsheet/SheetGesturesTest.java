@@ -5,6 +5,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFile;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
+import com.wormzjl.icheme.science.flowsheet.Port;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -324,8 +325,11 @@ class SheetGesturesTest {
         gestures = new SheetGestures(editor, view, doors::add);
     }
 
-    /** A right click on the lone pill of {@code id}: it lifts the pill's end; the overlay's elbow starts at the pill. */
-    private void liftLone(String id, int x, int y) {
+    /**
+     * A right click on the lone pill of {@code id}: a feed's pill is its source, so its downstream end lifts and only inlets
+     * ring; a product's pill is its sink, so its upstream end lifts and only outlets ring. The overlay's elbow starts at the pill.
+     */
+    private void liftLone(String id, int x, int y, Port.Direction rings) {
         assertEquals(0, editor.layout().line(id).points().length, "a lone pill has no points");
         gestures.press(cx(x), cy(y), 1, time);
         time += 1000;
@@ -337,57 +341,65 @@ class SheetGesturesTest {
         assertNotNull(overlay);
         assertEquals(x, overlay.wire()[0], "the elbow starts at the pill");
         assertEquals(y, overlay.wire()[1]);
+        assertFalse(overlay.rings().isEmpty(), "a free port takes it");
+        assertTrue(overlay.rings().stream().allMatch(r -> r.direction() == rings), "only " + rings + " ports ring");
     }
 
     @Test
-    void aLoneFeedPillsEndLandsOnAFreeOutletAndThePillStays() {
+    void aLoneFeedPillsEndLandsOnAFreeInletAndThePillStaysItsSource() {
         lonePills();
-        liftLone("lf", 120, 400);
-        var outlet = editor.layout().place("q", "out");
-        click(outlet.x(), outlet.y(), 0);
-        assertEquals(SheetGestures.Mode.IDLE, gestures.mode());
-        var stream = editor.stream("lf");
-        assertEquals("out", stream.from().port(), "the lifted start lands on the outlet");
-        assertNull(stream.to(), "the other end stays open");
-        var pill = editor.layout().line("lf").end();
-        assertNotNull(pill);
-        assertEquals(120, pill.x(), "at the pill");
-        assertEquals(400, pill.y());
-    }
-
-    @Test
-    void aLoneProductPillsEndLandsOnAFreeInlet() {
-        lonePills();
-        liftLone("lp", 520, 400);
+        liftLone("lf", 120, 400, Port.Direction.IN);
         var inlet = editor.layout().place("q", "in");
         click(inlet.x(), inlet.y(), 0);
         assertEquals(SheetGestures.Mode.IDLE, gestures.mode());
-        var stream = editor.stream("lp");
-        assertEquals("in", stream.to().port(), "the lifted end lands on the inlet");
-        assertNull(stream.from(), "the other end stays open");
-        var pill = editor.layout().line("lp").start();
+        var stream = editor.stream("lf");
+        assertEquals("q", stream.to().unit(), "the feed now feeds the unit");
+        assertEquals("in", stream.to().port());
+        assertNull(stream.from(), "its source stays open");
+        assertNotNull(stream.feed(), "and keeps its feed");
+        var pill = editor.layout().line("lf").start();
         assertNotNull(pill);
-        assertEquals(520, pill.x(), "at the pill");
+        assertEquals(120, pill.x(), "the source pill stays");
         assertEquals(400, pill.y());
     }
 
     @Test
-    void aLonePillsEndOnEmptyCanvasLeavesALineFromThePill() {
+    void aLoneProductPillsEndLandsOnAFreeOutletAndThePillStaysItsSink() {
         lonePills();
-        liftLone("lf", 120, 400);
+        liftLone("lp", 520, 400, Port.Direction.OUT);
+        var outlet = editor.layout().place("q", "out");
+        click(outlet.x(), outlet.y(), 0);
+        assertEquals(SheetGestures.Mode.IDLE, gestures.mode());
+        var stream = editor.stream("lp");
+        assertEquals("q", stream.from().unit(), "the unit now makes the product");
+        assertEquals("out", stream.from().port());
+        assertNull(stream.to(), "its sink stays open");
+        var pill = editor.layout().line("lp").end();
+        assertNotNull(pill);
+        assertEquals(520, pill.x(), "the sink pill stays");
+        assertEquals(400, pill.y());
+    }
+
+    @Test
+    void aLonePillsEndOnEmptyCanvasLeavesALineFromThePillThatKeepsItsRole() {
+        lonePills();
+        liftLone("lf", 120, 400, Port.Direction.IN);
         click(640, 304, 0);
         var line = editor.layout().line("lf");
         assertTrue(line.points().length >= 4, "a line now");
-        assertEquals(640, line.start().x(), "the lifted start at the point");
-        assertEquals(304, line.start().y());
-        assertEquals(120, line.end().x(), "the other end at the pill");
-        assertEquals(400, line.end().y());
+        assertEquals(120, line.start().x(), "the feed's source pill stays at the pill");
+        assertEquals(400, line.start().y());
+        assertEquals(640, line.end().x(), "its downstream end at the point");
+        assertEquals(304, line.end().y());
+        assertNotNull(editor.stream("lf").feed(), "still a feed");
         lonePills();
-        liftLone("lp", 520, 400);
+        liftLone("lp", 520, 400, Port.Direction.OUT);
         click(640, 304, 0);
         line = editor.layout().line("lp");
         assertTrue(line.points().length >= 4, "a line now");
-        assertEquals(520, line.start().x(), "the other end at the pill");
-        assertEquals(640, line.end().x(), "the lifted end at the point");
+        assertEquals(520, line.end().x(), "the product's sink pill stays at the pill");
+        assertEquals(400, line.end().y());
+        assertEquals(640, line.start().x(), "its upstream end at the point");
+        assertEquals(304, line.start().y());
     }
 }

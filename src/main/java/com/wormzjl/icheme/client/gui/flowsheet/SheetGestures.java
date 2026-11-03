@@ -304,7 +304,8 @@ public final class SheetGestures {
         var line = layout().line(hit.stream());
         if (line == null) return false;
         id = hit.stream();
-        if (hit.kind() == SheetLayout.Kind.PILL) start = hit.start();
+        // A lone pill (no points) is a feed's source or a product's sink: its other end is the one that goes to a unit.
+        if (hit.kind() == SheetLayout.Kind.PILL) start = line.points().length == 0 ? !hit.start() : hit.start();
         else if (hit.kind() == SheetLayout.Kind.NAME) start = nearerStart(line.points(), segmentAt(line), view.designX(x), view.designY(y));
         else start = nearerStart(line.points(), hit.segment(), view.designX(x), view.designY(y));
         selected = null;
