@@ -130,6 +130,15 @@ The turbine is a connection in the steam island:
 - **Work out.** `W = ṁ η_is Δh_is`, with `Δh_is = k/(k − 1) (P_in/ρ_in) (1 − (P_out/P_in)^((k−1)/k))` on the inlet's real `P/ρ` (524 kJ/kg against the steam tables' 528 for 40 bar, 400 °C to 4 bar). The exhaust takes `h_in − W/ṁ`, and the PH flash gives its temperature and wetness. Work leaving the fluid is new: today work is clipped at zero.
 - η_is from the design (S4).
 
+### 3.5 Efficiencies of a design (W1, decision A5)
+
+The constructor asks no efficiency; the design takes one from its size (`science/machine/**`):
+
+- **Pump:** Corripio's correlation (Seider, Seader and Lewin, example 16.5) of the rated flow, held outside 50 to 5000 gpm: 0.44 for the smallest pumps, 0.70 at 100 m³/h, 0.86 for the largest. The example of section 1.1 then takes 24.8 kW of shaft power instead of 24.2; its motor stays 30 kW.
+- **Motor:** the IE3 table by pole count (IEC 60034-30-1, EU 2019/1781 annex I table 2), held above 200 kW: 30 kW 2-pole 93.3 %, 1 MW 2-pole 95.8 %. A small 8-pole motor is 7.5 points below a 4-pole one, so the speed class picks its column.
+- **Steam turbine:** 0.45 (single stage, 15 kg/kWh on the example's steam) up to 300 kW, 0.76 (multistage, 9 kg/kWh) from 3 MW, in log power between: 0.61 at 1 MW. A 30 kW turbine for the 24 kW pump uses 0.10 kg/s, not the 0.07 of section 1.3 at 65 %.
+- **Centrifugal compressor:** η_p 0.78 unless the design states its own.
+
 ## 4. Speed, flow control and convergence
 
 ### 4.1 Who sets the speed
