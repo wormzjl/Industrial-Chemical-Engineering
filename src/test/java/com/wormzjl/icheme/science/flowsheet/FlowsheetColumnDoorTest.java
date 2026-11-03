@@ -75,7 +75,7 @@ final class FlowsheetColumnDoorTest {
     private static FlowsheetRun alone(Flowsheet.Feed feed) {
         var unit = new Flowsheet.Unit("T", "column", "T", 0, 0, ColumnDoor.from(BASE, ColumnComponents.Condenser.AIR_COOLER));
         var line = new Flowsheet.Stream("feed", "feed", null, new Flowsheet.End("T", "feed"), feed);
-        return FlowsheetEngine.run(new Flowsheet(new Flowsheet.Basis(NETWORK, "test", AXIS), List.of(unit), List.of(line), FlowsheetSolver.Settings.DEFAULT), CATALOG, () -> {
+        return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(new Flowsheet(new Flowsheet.Basis(NETWORK, "test", AXIS), List.of(unit), List.of(line), FlowsheetSolver.Settings.DEFAULT), CATALOG, () -> {
         });
     }
 

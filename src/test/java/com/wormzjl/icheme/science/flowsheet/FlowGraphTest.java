@@ -56,10 +56,10 @@ class FlowGraphTest {
 
     /** Among equal tears the loop cuts at a block's outlet, so every pass feeds the block a stream it has worked out. */
     @Test void aLoopTearsAtABlocksOutlet() {
-        var loop = new ArrayList<>(List.of(unit("a", "s3", "s1"), unit("b", "s1", "s2"), unit("column", "s2", "s3").asBlock()));
+        var loop = new ArrayList<>(List.of(unit("a", "s3", "s1"), unit("b", "s1", "s2"), FlowsheetRuns.block(unit("column", "s2", "s3"))));
         assertEquals(List.of("s3"), FlowGraph.plan(loop).getFirst().tears());
         loop.set(2, unit("column", "s2", "s3"));
-        loop.set(1, unit("b", "s1", "s2").asBlock());
+        loop.set(1, FlowsheetRuns.block(unit("b", "s1", "s2")));
         assertEquals(List.of("s2"), FlowGraph.plan(loop).getFirst().tears());
     }
 

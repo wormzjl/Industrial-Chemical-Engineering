@@ -84,7 +84,7 @@ final class FlowsheetUnitsTest {
 
         FlowsheetRun run() {
             var basis = new Flowsheet.Basis(PACKAGE, "test", AXIS);
-            return FlowsheetEngine.run(new Flowsheet(basis, units, streams, FlowsheetSolver.Settings.DEFAULT), CATALOG, () -> {
+            return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(new Flowsheet(basis, units, streams, FlowsheetSolver.Settings.DEFAULT), CATALOG, () -> {
             });
         }
     }

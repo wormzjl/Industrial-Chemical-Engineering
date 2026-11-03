@@ -48,11 +48,6 @@ public final class AirCoolerSizing {
             if (banks < 1 || banks > ColumnComponents.MAX_UNITS) throw new IllegalArgumentException("Invalid air cooler banks " + banks);
         }
 
-        /** One bank. */
-        public Size(double width, int length, ProcessUnit.Bank bank) {
-            this(width, length, bank, 1);
-        }
-
         /** One bank's bundle face, m². */
         public double face() {
             return bank.bays() * ProcessUnit.bundleFace(width, length);
@@ -86,11 +81,6 @@ public final class AirCoolerSizing {
      * @param duty    W at design flow
      */
     public record Load(LineSizing.Carried mean, double needed, double outlet, ExchangerRating.@Nullable Side stream, double duty) {
-        /** A load given whole, whose fans this stage cannot read. */
-        public Load(LineSizing.Carried mean, double needed, double outlet) {
-            this(mean, needed, outlet, null, 0);
-        }
-
         /** The cooler between these streams, null if it passes no heat. */
         public static @Nullable Load of(FlowStream in, FlowStream out, DesignBasis basis, FlowThermo thermo, MixtureViscosity.Workspace scratch) {
             double removed = in.enthalpy() - out.enthalpy(), air = HeatSides.AIR_TEMPERATURE;
@@ -146,8 +136,7 @@ public final class AirCoolerSizing {
     /** Every limit of {@code load} read at {@code size}. Null load, nothing to read. */
     public static Rating rate(@Nullable Load load, Size size) {
         if (load == null) return Rating.NONE;
-        var readings = new ArrayList<Reading>();
-        readings.add(UnitSize.reading(UnitSize.built(size)));
+        var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.AIR_COOLER_SURFACE.against(size.surface(), load.needed()));
         readings.add(Limit.AIR_COOLER_OUTLET.read(load.outlet()));
         readings.add(Limit.AIR_COOLER_DROP.read(drop(load, size)));
@@ -156,7 +145,7 @@ public final class AirCoolerSizing {
 
     /** What {@code load}'s tubes lose at {@code size} at design flow, bar, its banks in parallel. */
     public static double drop(Load load, Size size) {
-        return load.mean().drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), size.banks());
+        return SizedPassages.bank(size, load.mean());
     }
 
     /**
@@ -164,8 +153,8 @@ public final class AirCoolerSizing {
      * need with {@link Limit#AUTO_SPARE}: one more bank where fewer cannot hold the spare. No load, no size.
      */
     public static Selection.Choice<Size> auto(@Nullable Load load) {
-        if (load == null) return new Selection.Choice<>(null, Rating.NONE);
-        double held = load.needed() * (1 + Limit.AUTO_SPARE.value() / 100);
+        if (load == null) return Selection.Choice.none();
+        double held = Selection.spared(load.needed());
         return Selection.smallest(Selection.spareFirst(SIZES, Size::surface, held), size -> rate(load, size));
     }
 }

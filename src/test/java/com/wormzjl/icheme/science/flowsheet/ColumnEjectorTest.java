@@ -65,7 +65,7 @@ final class ColumnEjectorTest {
     }
 
     private static FlowsheetRun run(Flowsheet sheet, FlowsheetRun last) {
-        return FlowsheetEngine.run(sheet, CATALOG, () -> {
+        return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, CATALOG, () -> {
         }, last);
     }
 
@@ -90,7 +90,7 @@ final class ColumnEjectorTest {
 
     @Test void theMotivePortClosesFreeAndWired() {
         assertTrue(ColumnComponents.ejectorRequired(TOP));
-        double waterMass = MaterialRuntime.with(CATALOG, NETWORK, () -> EjectorUnit.waterMass(THERMO));
+        double waterMass = MaterialRuntime.with(CATALOG, NETWORK, () -> THERMO.waterMass());
         var free = run(sheet(null), null);
         closes(free);
         double need = reading(free, "ejector_need"), heat = reading(free, "ejector_heat");

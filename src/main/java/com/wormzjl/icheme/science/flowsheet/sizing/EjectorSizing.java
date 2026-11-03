@@ -72,8 +72,7 @@ public final class EjectorSizing {
     /** Every limit of {@code load} read at {@code size}. */
     public static Rating rate(Load load, Size size) {
         if (!load.flows()) return Rating.NONE;
-        var readings = new ArrayList<Reading>();
-        readings.add(UnitSize.reading(UnitSize.built(size)));
+        var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.VACUUM_SPEED.read(load.flow() / size.passes(1), load.suction()));
         var motive = load.motive();
         if (motive != null) {
@@ -85,8 +84,8 @@ public final class EjectorSizing {
 
     /** The smallest suction that meets every limit, the ones that pass the load with its spare first. No load, no size. */
     public static Selection.Choice<Size> auto(Load load) {
-        if (!load.flows()) return new Selection.Choice<>(null, Rating.NONE);
-        double held = load.flow() * (1 + Limit.AUTO_SPARE.value() / 100);
+        if (!load.flows()) return Selection.Choice.none();
+        double held = Selection.spared(load.flow());
         return Selection.smallest(Selection.spareFirst(SIZES, size -> size.passes(Limit.VACUUM_SPEED.value(load.suction())), held), size -> rate(load, size));
     }
 }

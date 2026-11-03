@@ -229,9 +229,7 @@ public enum Limit {
     TYPE_DRUM_STANDING(RULE, most(5), "", "[SCR-VES], [TOW]"),
     TYPE_PISTON(SHOULD, most(15000), "m³/h", "[COMP-X], [GALL]"),
     /** Under the smallest frame no turbo exists. */
-    TYPE_TURBO(MUST, least(ProcessUnit.turboFlow(UnitDesign.of(EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR).minSize())), "m³/h", "World"),
-    /** A turbine that exhausts under this condenses. */
-    TYPE_TURBINE(RULE, least(PhaseLayout.AMBIENT_PRESSURE / 1e5), "bara", "Physics");
+    TYPE_TURBO(MUST, least(ProcessUnit.turboFlow(UnitDesign.of(EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR).minSize())), "m³/h", "World");
 
     public enum Kind {
         /** Missed, the row is red: the world refuses it, its own model says it fails, or the constructor cannot build it. */

@@ -109,17 +109,9 @@ public final class FlowsheetSolver {
      * its stream in {@code estimates}. {@code given} holds streams that come from outside these calculations, as when one unit
      * solves alone.
      */
-    public static FlowsheetRun run(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint, Map<String, FlowStream> estimates) {
-        return run(calculations, axis, thermo, settings, checkpoint, estimates, Progress.NONE, Map.of());
-    }
-
     public static FlowsheetRun run(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint, Map<String, FlowStream> estimates, Progress progress,
                                    Map<String, FlowStream> given) {
         return new FlowsheetSolver(calculations, List.copyOf(axis), thermo, settings, checkpoint, estimates, progress, given).run();
-    }
-
-    public static FlowsheetRun run(List<Calculation> calculations, List<String> axis, StreamThermo thermo, Settings settings, Runnable checkpoint) {
-        return run(calculations, axis, thermo, settings, checkpoint, Map.of());
     }
 
     private FlowsheetRun run() {

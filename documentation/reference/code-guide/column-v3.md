@@ -35,7 +35,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | Class | Role | Read it for |
 | --- | --- | --- |
 | **Game glue** | | |
-| [ColumnWire][wire] | A column's input, component choices and display result on the wire, for Save design, a constructor's template and a run's stored results; every decoder bounds what it reads | `WIRE_SCHEMA_VERSION`, `readInput`, `readChoices` |
+| [ColumnWire][wire] | A column's input, component choices and display result on the wire, for Save design, a constructor's template and a run's stored results; every decoder bounds what it reads; it carries no schema number (wire formats need no compatibility work) | `readInput`, `readChoices` |
 | [V3InspectionCodec][inspection-codec] | Bounded byte form of per-node inspection + audit, shared by wire and NBT | `encode`/`decode` |
 | [ProcessSolveCoordinator][coordinator] | The one server-thread router of worker completions (an island, a running column's `ColumnUnitCompletion`) | `drainCompletedCalculations`, `stopCalculations` |
 | [ProcessSolveServices][services] | Lifecycle adapter: a running column's solve (`ColumnUnitCommand`, admitted under the solve deadline) and the fluid islands | `submitColumnUnit`, `submitFluidIsland`, `drainCompletions` |
@@ -207,7 +207,7 @@ Data: presets and packages are JSON under `src/main/resources/data/icheme/materi
 | Format | Version | Where |
 | --- | --- | --- |
 | Scientific input schema | `V3ColumnInput.SCHEMA_VERSION = 1` | Wire, NBT, digest |
-| Wire schema | `ColumnWire.WIRE_SCHEMA_VERSION = 18` (the number the calculator's wire reached: 16 when the server preset packet was removed, 17 the saved design, 18 its operating point) | `ColumnWire` |
+| Wire | No number: the packets that carry a column (`ProcessSimulatorNetwork.PROTOCOL`, `EquipmentNetwork.PROTOCOL`) version it | `ColumnWire` |
 | Inspection blob | Unversioned, <= 262,144 bytes, length-checked | `V3InspectionCodec`, wire and the simulator's results |
 | Saved design | `ColumnDesignTags` (NBT `Design`) | The simulator block, the constructor ([equipment.md](equipment.md)) |
 

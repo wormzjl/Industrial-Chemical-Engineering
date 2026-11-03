@@ -87,11 +87,6 @@ public final class ExchangerSizing {
      */
     public record Load(boolean kettle, LineSizing.Carried tube, LineSizing.@Nullable Carried shell, Limit tubeDrop, @Nullable Limit shellDrop, double needed, double duty, double hotEnd, double coldEnd, double approach, @Nullable Double waterOut,
                        @Nullable Tower tower) {
-        /** A load whose two sides are the sheet's. */
-        public Load(boolean kettle, LineSizing.Carried tube, LineSizing.@Nullable Carried shell, Limit tubeDrop, @Nullable Limit shellDrop, double needed, double duty, double hotEnd, double coldEnd, double approach, @Nullable Double waterOut) {
-            this(kettle, tube, shell, tubeDrop, shellDrop, needed, duty, hotEnd, coldEnd, approach, waterOut, null);
-        }
-
         /**
          * A free cooling side's load (C2, {@code COOLER_MODEL_PLAN.md} section 3 item 3): {@code in} cooled to {@code out} against
          * tower water from 25 °C to its return ({@link CoolerSizing#waterReturn}), on the tubes, the process on the shell; null
@@ -162,14 +157,13 @@ public final class ExchangerSizing {
     public static Rating rate(@Nullable Load load, Size size) {
         if (load == null) return Rating.NONE;
         double surface = size.surface();
-        var readings = new ArrayList<Reading>();
-        readings.add(UnitSize.reading(UnitSize.built(size)));
+        var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.EXCHANGER_SURFACE.against(surface, load.needed()));
         readings.add(Limit.EXCHANGER_HOT_END.read(load.hotEnd()));
         readings.add(Limit.EXCHANGER_COLD_END.read(load.coldEnd()));
         readings.add(Limit.EXCHANGER_APPROACH.read(load.approach()));
         readings.add(Limit.EXCHANGER_OVER_NEED.read(100 * (surface / load.needed() - 1)));
-        readings.add(load.tubeDrop().read(load.tube().drop(HeatSides.tubePassage(size.shell(), size.tubes()), size.shells())));
+        readings.add(load.tubeDrop().read(SizedPassages.tube(size, load.tube())));
         var row = load.shellDrop();
         if (load.shell() != null && row != null) readings.add(row.read(shellDrop(load, size)));
         if (load.kettle()) readings.add(Limit.KETTLE_FLUX.read(load.duty() / 1e3 / surface));
@@ -183,7 +177,7 @@ public final class ExchangerSizing {
     /** What {@code load}'s shell side loses at {@code size} at design flow, bar: 0 on a kettle, whose shell boils in a pool. */
     public static double shellDrop(Load load, Size size) {
         var shell = load.shell();
-        return shell == null ? 0 : shell.drop(HeatSides.shellPassage(size.shell(), size.tubes()), size.shells());
+        return shell == null ? 0 : SizedPassages.shell(size, shell);
     }
 
     /**
@@ -191,8 +185,8 @@ public final class ExchangerSizing {
      * {@link Limit#AUTO_SPARE}: one more shell where fewer cannot hold the spare. No load, no size.
      */
     public static Selection.Choice<Size> auto(@Nullable Load load) {
-        if (load == null) return new Selection.Choice<>(null, Rating.NONE);
-        double held = load.needed() * (1 + Limit.AUTO_SPARE.value() / 100);
+        if (load == null) return Selection.Choice.none();
+        double held = Selection.spared(load.needed());
         return Selection.smallest(Selection.spareFirst(load.kettle() ? KETTLES : EXCHANGERS, Size::surface, held), size -> rate(load, size));
     }
 }

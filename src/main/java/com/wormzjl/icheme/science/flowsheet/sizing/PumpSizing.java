@@ -71,8 +71,7 @@ public final class PumpSizing {
     /** Every limit of {@code load} read at {@code size}. */
     public static Rating rate(Load load, Size size) {
         if (!load.flows()) return Rating.NONE;
-        var readings = new ArrayList<Reading>();
-        readings.add(UnitSize.reading(UnitSize.built(size)));
+        var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.PUMP_FLOW.read(load.flow()));
         readings.add(Limit.PUMP_HEAD.against(load.head(), load.mostHead()));
         var npsh = load.npsh();
@@ -86,7 +85,7 @@ public final class PumpSizing {
 
     /** The smallest discharge that meets every limit. No flow, no size. */
     public static Selection.Choice<Size> auto(Load load) {
-        if (!load.flows()) return new Selection.Choice<>(null, Rating.NONE);
+        if (!load.flows()) return Selection.Choice.none();
         return Selection.smallest(SIZES, size -> rate(load, size));
     }
 }

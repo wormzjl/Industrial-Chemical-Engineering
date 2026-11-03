@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.equipment.VesselPlacement;
+import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -261,8 +262,8 @@ public final class ConstructorColumn {
 
     /** A block member's own name: {@code condenser}, {@code pa 2 cooler}. */
     private static String member(String member, HeatControlColumn.Texts t) {
-        String[] words = member.split(" ");
-        if (words.length == 3 && words[0].equals("pa")) return t.get("flowsheet.sizing.member.pa_" + words[2], words[1]);
+        var pa = SheetSizing.PumparoundMember.of(member);
+        if (pa != null) return t.get("flowsheet.sizing.member." + pa.key(), pa.pumparound());
         return t.get("flowsheet.sizing.member." + member.replace(' ', '_'));
     }
 

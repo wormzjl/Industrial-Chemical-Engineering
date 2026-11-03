@@ -178,7 +178,7 @@ public final class SimulatorBench {
         var sheet = crudeUnit();
         var run = run(sheet, null, new Units());
         if (run.status() != FlowsheetRun.Status.STEADY) throw new IllegalStateException("crude unit ran " + run.status());
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo()));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo(), FlowsheetSolver.Progress.NONE));
         var finished = new SimulatorHost.Finished(all.sheet(), all.run(), 4.0);
         var sized = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(all.sheet(), all.run(), thermo()));
         return new Solved(all.sheet(), all.run(), finished, new SimulatorRunner.Rated(all.sheet(), finished, sized, false));
@@ -549,7 +549,7 @@ public final class SimulatorBench {
     static void sizePhase() throws Exception {
         var sheet = crudeUnit();
         var run = run(sheet, null, new Units());
-        timed("size", () -> MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo())));
+        timed("size", () -> MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo(), FlowsheetSolver.Progress.NONE)));
         var solved = solved();
         timed("rate", () -> MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(solved.sheet(), solved.run(), thermo())));
     }
@@ -818,7 +818,7 @@ public final class SimulatorBench {
         var warm = run(sheet, cold, units);
         out.append("warm checkpoints ").append(units.checkpoints).append('\n');
         dump(out, "warm", warm, 0, new java.util.IdentityHashMap<>());
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, cold, thermo()));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, cold, thermo(), FlowsheetSolver.Progress.NONE));
         out.append("size sheet ").append(new String(FlowsheetFile.write(all.sheet()), StandardCharsets.UTF_8)).append('\n');
         dump(out, "size", all.run(), 0, new java.util.IdentityHashMap<>());
         Files.writeString(OUT.resolve("results.txt"), out);

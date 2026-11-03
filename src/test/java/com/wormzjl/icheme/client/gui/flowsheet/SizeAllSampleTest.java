@@ -35,14 +35,14 @@ class SizeAllSampleTest {
     @BeforeAll
     static void sizeTheSample() {
         sheet = SheetFixture.sample();
-        run = FlowsheetEngine.run(sheet, SheetFixture.CATALOG, () -> {
+        run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, run.status());
         thermo = new FlowThermo(SheetFixture.FLUIDS.model(), SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
         });
         MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
             proposal = SheetSizing.pass(sheet, run, thermo, SheetSizing.Entries.DEFAULT);
-            all = SheetSizing.sizeAll(sheet, run, thermo);
+            all = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.sizeAll(sheet, run, thermo);
             return null;
         });
         for (var path : proposal.paths()) {

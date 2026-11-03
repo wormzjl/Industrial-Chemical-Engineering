@@ -45,7 +45,7 @@ class LineSizingSampleTest {
     @Test
     void theSheetsLinesEqualTheProbes() {
         var sheet = SheetFixture.sample();
-        var run = FlowsheetEngine.run(sheet, SheetFixture.CATALOG, () -> {
+        var run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, run.status());
         assertEquals(sheet.streams().size(), PROBE.size(), "every line on the sheet");

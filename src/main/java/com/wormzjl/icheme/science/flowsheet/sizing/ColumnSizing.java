@@ -20,7 +20,6 @@ import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -125,11 +124,8 @@ public final class ColumnSizing {
         var axis = thermo.axis();
         var ids = solved.componentBasis().componentIds();
         double[] amounts = new double[axis.size()];
-        for (int i = 0; i < ids.size(); i++) {
-            int at = axis.indexOf(ids.get(i));
-            if (at >= 0) amounts[at] += fractions.get(i) * flow;
-        }
-        amounts[axis.size() - 1] += water;
+        for (int i = 0; i < ids.size(); i++) ColumnUnit.add(amounts, axis, ids.get(i), fractions.get(i), flow);
+        amounts[thermo.water()] += water;
         return thermo.atTemperature(temperature, pressure, amounts, SolidInventory.EMPTY);
     }
 
@@ -181,9 +177,8 @@ public final class ColumnSizing {
 
     /** Every limit of {@code load} read at {@code size}: the door's diameter on the run's own solve, another on its trial. */
     public static Rating rate(Load load, Size size, Trials trials) {
-        var readings = new ArrayList<Reading>();
         var shape = UnitSize.built(size);
-        readings.add(UnitSize.reading(shape));
+        var readings = UnitSize.readings(shape);
         double d = size.diameter(), area = Math.PI * d * d / 4;
         readings.add(Limit.COLUMN_DIAMETER.read(d));
         readings.add(Limit.COLUMN_TRAYS.read(load.solved().stageCount()));

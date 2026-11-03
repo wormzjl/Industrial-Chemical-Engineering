@@ -75,7 +75,7 @@ public final class EjectorUnit implements UnitModel {
         if (!(discharge > load.pressure())) throw new FlowsheetFailure("ejector.rise");
         if (!(motive > discharge)) throw new FlowsheetFailure("ejector.motive");
         double[] amounts = load.amountsView(), weights = thermo.model().molecularWeights();
-        int water = amounts.length - 1;
+        int water = thermo.water();
         double gas = 0;
         for (int i = 0; i < water; i++) gas += EjectorLaw.asAir(amounts[i] * weights[i], 1e3 * weights[i]);
         double condensing = EjectorLaw.CONDENSING * thermo.model().saturationPressure(load.temperature());
@@ -97,16 +97,14 @@ public final class EjectorUnit implements UnitModel {
     private static FlowStream wired(String id, String prefix, FlowThermo thermo, FlowStream wired, double need, double motive, Report report) {
         report.reading(prefix + "motive", wired.mass());
         if (wired.mass() < need * (1 - SHORT)) report.note(Note.warning(id, "ejector.motive_short", String.valueOf(wired.mass()), String.valueOf(need)));
-        if (!wired.empty() && wired.amountsView()[wired.amountsView().length - 1] * waterMass(thermo) < STEAM_SHARE * wired.mass()) report.note(Note.warning(id, "ejector.motive_water"));
+        if (!wired.empty() && wired.amountsView()[thermo.water()] * thermo.waterMass() < STEAM_SHARE * wired.mass()) report.note(Note.warning(id, "ejector.motive_water"));
         if (!wired.empty() && wired.pressure() < motive) report.note(Note.warning(id, "ejector.motive_pressure", String.valueOf(wired.pressure()), String.valueOf(motive)));
         return wired;
     }
 
     /** {@code mass} kg/s of water as steam at {@code pressure}, dry at its saturation temperature: the motive utility. */
     public static FlowStream utility(FlowThermo thermo, double mass, double pressure) {
-        double[] amounts = new double[thermo.axis().size()];
-        amounts[amounts.length - 1] = mass / waterMass(thermo);
-        return thermo.atTemperature(saturation(thermo, pressure), pressure, amounts, SolidInventory.EMPTY);
+        return thermo.atTemperature(saturation(thermo, pressure), pressure, thermo.waterAlone(mass / thermo.waterMass()), SolidInventory.EMPTY);
     }
 
     /** The least temperature at which water at {@code pressure} is all steam in the world's model, K. */
@@ -118,10 +116,5 @@ public final class EjectorUnit implements UnitModel {
             else low = middle;
         }
         return high;
-    }
-
-    /** Water's molar mass in the world's data, kg/mol. */
-    public static double waterMass(FlowThermo thermo) {
-        return thermo.model().molecularWeight(thermo.axis().size() - 1);
     }
 }

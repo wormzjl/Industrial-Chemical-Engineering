@@ -83,9 +83,8 @@ public final class TankSizing {
     /** Every limit of {@code load} read at {@code size}, either type. */
     public static Rating rate(Load load, Size size) {
         if (!load.flows()) return Rating.NONE;
-        var readings = new ArrayList<Reading>();
         var shape = UnitSize.built(size);
-        readings.add(UnitSize.reading(shape));
+        var readings = UnitSize.readings(shape);
         boolean roof = size.type() == UnitType.FLOATING_ROOF;
         readings.add((roof ? Limit.TANK_DIAMETER : Limit.SPHERE_DIAMETER).read(size.diameter()));
         if (roof) {
@@ -102,14 +101,10 @@ public final class TankSizing {
         return new Rating(readings);
     }
 
-    /** The proposed type, on the fewest vessels of the least volume. No liquid, no size. */
-    public static Selection.Choice<Size> auto(Load load) {
-        return auto(load, type(load));
-    }
-
-    /** {@code type}'s fewest vessels of the least volume: the player's type, on Auto's size. */
-    public static Selection.Choice<Size> auto(Load load, UnitType type) {
-        if (!load.flows()) return new Selection.Choice<>(null, Rating.NONE);
+    /** {@code type}'s fewest vessels of the least volume: the player's type, on Auto's size, or the proposed type where it is null. No liquid, no size. */
+    public static Selection.Choice<Size> auto(Load load, @Nullable UnitType type) {
+        if (!load.flows()) return Selection.Choice.none();
+        if (type == null) type = type(load);
         return Selection.smallest(type == UnitType.FLOATING_ROOF ? ROOF : SPHERE, size -> rate(load, size));
     }
 }

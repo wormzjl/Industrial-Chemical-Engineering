@@ -176,10 +176,8 @@ public final class SizingPage {
 
     /** A member's own name: {@code condenser}, {@code pa 2 cooler}. */
     public static String member(SheetContext x, String member) {
-        if (member.startsWith("pa ")) {
-            String[] words = member.split(" ");
-            if (words.length == 3) return x.text("sizing.member.pa_" + words[2], words[1]);
-        }
+        var pa = SheetSizing.PumparoundMember.of(member);
+        if (pa != null) return x.text("sizing.member." + pa.key(), pa.pumparound());
         return x.text("sizing.member." + member.replace(' ', '_'));
     }
 
@@ -630,11 +628,11 @@ public final class SizingPage {
             case "condenser" -> json.addProperty(ColumnDoor.CONDENSER_UNITS, units);
             case "reboiler" -> json.addProperty(ColumnDoor.KETTLE_UNITS, units);
             default -> {
-                if (!member.startsWith("pa ") || !member.endsWith(" cooler") || !(json.get("pumparounds") instanceof JsonArray rows)) return null;
-                String pa = member.substring(3, member.length() - " cooler".length());
+                var pa = SheetSizing.PumparoundMember.of(member);
+                if (pa == null || !pa.part().equals(SheetSizing.PumparoundMember.COOLER) || !(json.get("pumparounds") instanceof JsonArray rows)) return null;
                 var door = ColumnDoor.of(column.params());
                 for (int i = 0; i < door.pumparounds().size(); i++)
-                    if (door.pumparounds().get(i).id().equals(pa) && rows.get(i) instanceof JsonObject row) {
+                    if (door.pumparounds().get(i).id().equals(pa.pumparound()) && rows.get(i) instanceof JsonObject row) {
                         row.addProperty(ColumnDoor.UNITS, units);
                         return json;
                     }

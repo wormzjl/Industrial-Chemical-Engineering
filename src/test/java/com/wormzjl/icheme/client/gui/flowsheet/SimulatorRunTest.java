@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class SimulatorRunTest {
     private static final Flowsheet SAMPLE = SheetFixture.sample();
     /** The run on its own, on the caller, with no progress: what every other run here must equal. */
-    private static final FlowsheetRun ONE = FlowsheetEngine.run(SAMPLE, SheetFixture.CATALOG, () -> {
+    private static final FlowsheetRun ONE = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(SAMPLE, SheetFixture.CATALOG, () -> {
     });
 
     private static void ended() throws InterruptedException {
@@ -200,7 +200,7 @@ class SimulatorRunTest {
     @Test
     void stopReachesInsideAColdColumnOnTheGamesPath() throws InterruptedException {
         var count = new AtomicInteger();
-        FlowsheetEngine.run(SAMPLE, SheetFixture.CATALOG, count::incrementAndGet);
+        com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(SAMPLE, SheetFixture.CATALOG, count::incrementAndGet);
         int deep = 0;
         // Spread through the first pass, whose cold column takes most of a run's checkpoints.
         for (double share : new double[]{.05, .15, .3}) {

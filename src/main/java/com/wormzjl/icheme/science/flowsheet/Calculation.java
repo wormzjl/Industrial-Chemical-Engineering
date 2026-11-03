@@ -47,9 +47,4 @@ public record Calculation(String id, String unit, List<String> reads, List<Strin
     public static Calculation of(String id, List<String> reads, List<String> writes, Law law) {
         return new Calculation(id, id, reads, writes, List.of(), List.of(), Kind.STEP, law);
     }
-
-    /** This calculation as a block's own solve. */
-    public Calculation asBlock() {
-        return new Calculation(id, unit, reads, writes, needs, gives, Kind.BLOCK, law);
-    }
 }

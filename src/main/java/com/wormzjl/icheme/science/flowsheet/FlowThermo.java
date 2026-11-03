@@ -70,6 +70,23 @@ public final class FlowThermo implements StreamThermo {
         return axis().indexOf(catalog.requirePackage(packageId).canonicalId(component));
     }
 
+    /** Where water stands on the axis: last, after the package's components. */
+    public int water() {
+        return model.componentCount() - 1;
+    }
+
+    /** Water's molar mass in the world's data, kg/mol. */
+    public double waterMass() {
+        return model.molecularWeight(water());
+    }
+
+    /** {@code moles} mol/s of water and nothing else, on the axis. */
+    public double[] waterAlone(double moles) {
+        double[] amounts = new double[model.componentCount()];
+        amounts[water()] = moles;
+        return amounts;
+    }
+
     private FlowStream stream(FluidThermodynamics.State state, double[] amounts) {
         return new FlowStream(state.temperature(), state.pressure(), amounts, state.enthalpy(), state.mass(), state);
     }

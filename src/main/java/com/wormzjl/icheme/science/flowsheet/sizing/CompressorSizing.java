@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -110,8 +111,7 @@ public final class CompressorSizing {
         if (!load.flows()) return Rating.NONE;
         int stages = size.stages(load.ratio());
         double stage = Math.pow(load.ratio(), 1. / stages), discharge = load.suction() * Math.pow(stage, load.exponent()) - 273.15;
-        var readings = new ArrayList<Reading>();
-        readings.add(UnitSize.reading(UnitSize.built(size)));
+        var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.COMPRESSOR_RATIO.read(load.ratio()));
         readings.add(Limit.COMPRESSOR_LIQUID.read(load.liquid()));
         readings.add(size.type() == UnitType.PISTON ? Limit.TYPE_PISTON.read(load.flow()) : Limit.TYPE_TURBO.read(load.flow()));
@@ -121,18 +121,15 @@ public final class CompressorSizing {
         return new Rating(readings);
     }
 
-    /** The proposed type's smallest frame. No flow, no size. */
-    public static Selection.Choice<Size> auto(Load load) {
-        return auto(load, type(load));
-    }
-
     /**
-     * {@code type}'s smallest frame: the player's type, on Auto's size. Frames whose displacement holds the flow with
-     * {@link Limit#AUTO_SPARE} come first (S4c); the type stays on the design flow, as its rows are ranges, not capacities.
+     * {@code type}'s smallest frame: the player's type, on Auto's size, or the proposed type where it is null. Frames whose
+     * displacement holds the flow with {@link Limit#AUTO_SPARE} come first (S4c); the type stays on the design flow, as its rows are
+     * ranges, not capacities. No flow, no size.
      */
-    public static Selection.Choice<Size> auto(Load load, UnitType type) {
-        if (!load.flows()) return new Selection.Choice<>(null, Rating.NONE);
-        double held = load.flow() * (1 + Limit.AUTO_SPARE.value() / 100);
+    public static Selection.Choice<Size> auto(Load load, @Nullable UnitType type) {
+        if (!load.flows()) return Selection.Choice.none();
+        if (type == null) type = type(load);
+        double held = Selection.spared(load.flow());
         return Selection.smallest(Selection.spareFirst(type == UnitType.PISTON ? PISTON : TURBO, size -> size.displacement(size.stages(load.ratio())), held), size -> rate(load, size));
     }
 }

@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.VesselPlacement;
+import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.ProcessSimulatorBlockEntity;
@@ -17,7 +18,6 @@ import com.wormzjl.icheme.world.level.block.entity.SentDesignTags;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
@@ -161,7 +161,7 @@ public final class EquipmentNetwork {
 
         /** The designs it carries; a design this build cannot read is left out. */
         public List<SentDesign> listed() {
-            return SentDesignTags.read(designs.getList("Designs", Tag.TAG_COMPOUND)).designs();
+            return SentDesignTags.read(SentDesignTags.unwrap(designs)).designs();
         }
 
         @Override
@@ -342,14 +342,13 @@ public final class EquipmentNetwork {
         if (!(context.player() instanceof ServerPlayer player)) return;
         var at = request.position();
         var constructor = editable(player, at);
-        var listed = new CompoundTag();
         if (constructor == null) {
-            PacketDistributor.sendToPlayer(player, new ImportListAnswer(at, Component.translatable("message.icheme.equipment.not_editable"), listed));
+            PacketDistributor.sendToPlayer(player, new ImportListAnswer(at, Component.translatable("message.icheme.equipment.not_editable"), new CompoundTag()));
             return;
         }
         var simulator = constructor.simulator(IMPORT_REACH);
         var designs = simulator.map(ProcessSimulatorBlockEntity::listed).orElse(List.of());
-        listed.put("Designs", SentDesignTags.write(designs, List.of()));
+        var listed = SentDesignTags.wrap(designs);
         var message = simulator.isEmpty() ? Component.translatable("message.icheme.equipment.no_calculator", IMPORT_REACH)
                 : designs.isEmpty() ? Component.translatable("message.icheme.equipment.no_design") : Component.empty();
         PacketDistributor.sendToPlayer(player, new ImportListAnswer(at, message, listed));
@@ -402,8 +401,8 @@ public final class EquipmentNetwork {
         if (sent.tag().isEmpty()) return Component.translatable("gui.icheme.equipment_constructor.import.saved");
         if (sent.member().isEmpty()) return Component.literal(sent.tag());
         String member = sent.member();
-        String[] words = member.split(" ");
-        var own = words.length == 3 && words[0].equals("pa") ? Component.translatable("gui.icheme.flowsheet.sizing.member.pa_" + words[2], words[1])
+        var pa = SheetSizing.PumparoundMember.of(member);
+        var own = pa != null ? Component.translatable("gui.icheme.flowsheet.sizing.member." + pa.key(), pa.pumparound())
                 : Component.translatable("gui.icheme.flowsheet.sizing.member." + member.replace(' ', '_'));
         return Component.translatable("gui.icheme.equipment_constructor.import.member", sent.tag(), own);
     }

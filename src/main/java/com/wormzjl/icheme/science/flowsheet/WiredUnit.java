@@ -19,14 +19,6 @@ public record WiredUnit(String id, Params params, Map<String, String> wires, Flo
     /** At most this often: the coils' drop rises with the vapour a lower outlet pressure gives, and settles in a few. */
     private static final int MOST_TRIES = 20;
 
-    public WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo) {
-        this(id, params, wires, thermo, Passages.TYPED);
-    }
-
-    public WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo, Passages passages) {
-        this(id, params, wires, thermo, passages, Utilities.NONE);
-    }
-
     /**
      * The sheet feeds of water alone on the unit's {@linkplain Port#utility utility} ports, by port, whose flow the unit sets
      * ({@code COOLER_MODEL_PLAN.md} section 8): the run gives them no source of their own. A pumparound's return is its draw less

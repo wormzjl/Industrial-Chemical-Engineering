@@ -23,22 +23,11 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
  * results send. Each decoder bounds what it reads. Wire formats need no compatibility work.
  */
 public final class ColumnWire {
-    // Version 15 supports two-terminal-stage pots and total-tray presentation; 17 carries the saved column design;
-    // 18 its operating point.
-    public static final int WIRE_SCHEMA_VERSION = 18;
-
-    // Both peers must use the same engine-scheduled inspection protocol. 12: the dataset revision is the package's data
-    // identity, every record's declared revision (up to MaterialCatalog.MAX_IDENTITY characters). 13: Save design.
-    // 14: a saved design's operating point.
-
     private static final int MAX_IDENTIFIER_LENGTH = 128;
     private static final int MAX_COMPONENT_IDENTIFIER_LENGTH = 64;
-    private static final int MAX_DIAGNOSTICS = 32;
-    private static final int MAX_DIAGNOSTIC_LENGTH = 256;
     private static final int MAX_REVISION_LENGTH = 128;
     private static final int MAX_STREAM_LABEL_LENGTH = 48;
     private static final int MAX_PHASE_LENGTH = 16;
-    /** A rejection's reason, which names a design's refused nozzle, carries a diagnostic's length. */
     // Smallest encoding every declared element of a bounded list can occupy: a VarInt is at least one byte and a
     // double is exactly eight. A declared count that cannot fit in the remaining bytes is a forged length, not a
     // short read, so the decoder rejects it before allocating the list.
@@ -354,14 +343,6 @@ public final class ColumnWire {
         };
     }
 
-    private static void writeWireSchema(RegistryFriendlyByteBuf buffer) {
-        buffer.writeVarInt(WIRE_SCHEMA_VERSION);
-    }
-
-    private static void requireWireSchema(RegistryFriendlyByteBuf buffer) {
-        if (buffer.readVarInt() != WIRE_SCHEMA_VERSION) throw new DecoderException("Unsupported V3 wire schema");
-    }
-
     private static int readCount(RegistryFriendlyByteBuf buffer, int maximum, String description) {
         return readCount(buffer, maximum, description, 0);
     }
@@ -379,11 +360,6 @@ public final class ColumnWire {
             throw new DecoderException("Truncated V3 " + description + " list");
         }
         return count;
-    }
-
-    private static long nonNegative(long value, String description) {
-        if (value < 0L) throw new DecoderException("Negative V3 " + description);
-        return value;
     }
 
     private static double finite(double value, String description) {

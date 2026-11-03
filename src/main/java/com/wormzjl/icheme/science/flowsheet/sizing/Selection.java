@@ -21,6 +21,15 @@ public final class Selection {
      * @param size null with nothing to size
      */
     public record Choice<S>(@Nullable S size, Rating rating) {
+        /** No size: nothing to size for. */
+        public static <S> Choice<S> none() {
+            return new Choice<>(null, Rating.NONE);
+        }
+    }
+
+    /** {@code need} with {@link Limit#AUTO_SPARE}: what Auto sizes for (S4c). */
+    public static double spared(double need) {
+        return need * (1 + Limit.AUTO_SPARE.value() / 100);
     }
 
     /**

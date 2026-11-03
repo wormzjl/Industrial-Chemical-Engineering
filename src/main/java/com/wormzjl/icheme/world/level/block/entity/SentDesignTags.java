@@ -15,6 +15,8 @@ import net.minecraft.nbt.Tag;
  * The wire carries the same tags; the server takes an upload only when it reads whole, with no repair.
  */
 public final class SentDesignTags {
+    private static final String PACKET = "Designs";
+
     private SentDesignTags() {
     }
 
@@ -56,6 +58,18 @@ public final class SentDesignTags {
         for (var design : designs) list.add(write(design));
         for (var entry : unread) list.add(entry.copy());
         return list;
+    }
+
+    /** A packet's designs: {@code designs} under {@code Designs}, as {@link #unwrap} reads them. */
+    public static CompoundTag wrap(List<SentDesign> designs) {
+        var tag = new CompoundTag();
+        tag.put(PACKET, write(designs, List.of()));
+        return tag;
+    }
+
+    /** The list a packet's {@link #wrap} carries. */
+    public static ListTag unwrap(CompoundTag tag) {
+        return tag.getList(PACKET, Tag.TAG_COMPOUND);
     }
 
     /** Never throws. */

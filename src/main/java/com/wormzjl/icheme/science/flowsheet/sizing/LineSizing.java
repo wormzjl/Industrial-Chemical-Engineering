@@ -182,7 +182,7 @@ public final class LineSizing {
 
     /** The smallest usual size that meets every limit, by {@link Selection}: bore first, then parallel runs. No flow, no size. */
     public static Selection.Choice<Size> auto(Line line) {
-        if (!line.flows()) return new Selection.Choice<>(null, Rating.NONE);
+        if (!line.flows()) return Selection.Choice.none();
         return Selection.smallest(SIZES, size -> rate(line, size));
     }
 }

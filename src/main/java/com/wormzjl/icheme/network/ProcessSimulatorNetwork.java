@@ -13,7 +13,6 @@ import com.wormzjl.icheme.world.level.block.entity.ProcessSimulatorBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.SentDesignTags;
 import java.util.List;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -101,9 +100,7 @@ public final class ProcessSimulatorNetwork {
                 ByteBufCodecs.COMPOUND_TAG, SendDesigns::designs, SendDesigns::new);
 
         public static SendDesigns of(int container, List<SentDesign> designs) {
-            var tag = new CompoundTag();
-            tag.put("Designs", SentDesignTags.write(designs, List.of()));
-            return new SendDesigns(container, tag);
+            return new SendDesigns(container, SentDesignTags.wrap(designs));
         }
 
         @Override
@@ -157,6 +154,20 @@ public final class ProcessSimulatorNetwork {
         return player.containerMenu instanceof ProcessSimulatorMenu menu && menu.containerId == container && menu.stillValid(player) ? menu : null;
     }
 
+    /** The block of {@code player}'s menu on {@code container} while {@code player} holds its sheet; else null, the read-only answer sent. */
+    private static @Nullable ProcessSimulatorBlockEntity held(ServerPlayer player, int container) {
+        var menu = menu(player, container);
+        var block = menu == null ? null : menu.block();
+        if (block != null && player.getUUID().equals(block.store().holder())) return block;
+        PacketDistributor.sendToPlayer(player, new Answer(container, ProcessSimulatorMenu.READ_ONLY, ""));
+        return null;
+    }
+
+    /** An answer whose detail is {@code why}, clipped to what the wire carries. */
+    private static Answer clipped(int container, String key, String why) {
+        return new Answer(container, key, why.substring(0, Math.min(why.length(), MAX_DETAIL)));
+    }
+
     private static void upload(SheetPart part, IPayloadContext context) {
         if (context.player() instanceof ServerPlayer player) receive(player, part);
     }
@@ -182,18 +193,14 @@ public final class ProcessSimulatorNetwork {
 
     /** A design from {@code player}. */
     public static void receive(ServerPlayer player, SaveDesign design) {
-        var menu = menu(player, design.container);
-        var block = menu == null ? null : menu.block();
-        if (block == null || !player.getUUID().equals(block.store().holder())) {
-            PacketDistributor.sendToPlayer(player, new Answer(design.container, ProcessSimulatorMenu.READ_ONLY, ""));
-            return;
-        }
+        var block = held(player, design.container);
+        if (block == null) return;
         try {
             block.saveDesign(ColumnDesign.of(design.input, design.choices));
             PacketDistributor.sendToPlayer(player, new Answer(design.container, DESIGN_SAVED, ""));
         } catch (IllegalArgumentException refused) {
             String why = String.valueOf(refused.getMessage());
-            PacketDistributor.sendToPlayer(player, new Answer(design.container, DESIGN_REFUSED, why.substring(0, Math.min(why.length(), MAX_DETAIL))));
+            PacketDistributor.sendToPlayer(player, clipped(design.container, DESIGN_REFUSED, why));
         }
     }
 
@@ -203,17 +210,13 @@ public final class ProcessSimulatorNetwork {
 
     /** Send to block's designs from {@code player}: only the holder's, read whole, at most {@link SentDesign#MAX}; they replace what the block held. */
     public static void receive(ServerPlayer player, SendDesigns designs) {
-        var menu = menu(player, designs.container);
-        var block = menu == null ? null : menu.block();
-        if (block == null || !player.getUUID().equals(block.store().holder())) {
-            PacketDistributor.sendToPlayer(player, new Answer(designs.container, ProcessSimulatorMenu.READ_ONLY, ""));
-            return;
-        }
-        var list = designs.designs.getList("Designs", Tag.TAG_COMPOUND);
+        var block = held(player, designs.container);
+        if (block == null) return;
+        var list = SentDesignTags.unwrap(designs.designs);
         var read = SentDesignTags.read(list);
         if (!read.whole() || read.designs().isEmpty() || list.size() > SentDesign.MAX) {
             String why = read.repairs().isEmpty() ? "count " + list.size() : read.repairs().getFirst();
-            PacketDistributor.sendToPlayer(player, new Answer(designs.container, DESIGNS_REFUSED, why.substring(0, Math.min(why.length(), MAX_DETAIL))));
+            PacketDistributor.sendToPlayer(player, clipped(designs.container, DESIGNS_REFUSED, why));
             return;
         }
         block.send(read.designs());

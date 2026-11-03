@@ -63,7 +63,7 @@ public final class HeaterSizing {
 
     /** The duty Auto sizes for: the design duty with {@link Limit#AUTO_SPARE}, MW. */
     private static double spared(Load load) {
-        return load.duty() * (1 + Limit.AUTO_SPARE.value() / 100);
+        return Selection.spared(load.duty());
     }
 
     /** The type for {@code load}: a vertical while the largest holds the duty with its spare (S4c). */
@@ -74,8 +74,7 @@ public final class HeaterSizing {
     /** Every limit of {@code load} read at {@code size}, any type and any count. No duty, nothing to read. */
     public static Rating rate(Load load, Size size) {
         if (!(load.duty() > 0)) return Rating.NONE;
-        var readings = new ArrayList<Reading>();
-        readings.add(UnitSize.reading(UnitSize.built(size)));
+        var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.HEATER_DUTY.against(size.held(), load.duty()));
         readings.add(size.type() == UnitType.VERTICAL_HEATER ? Limit.HEATER_VERTICAL.read(load.duty()) : Limit.HEATER_CABIN.read(load.duty()));
         var spare = load.spare();
@@ -83,18 +82,14 @@ public final class HeaterSizing {
         return new Rating(readings);
     }
 
-    /** The proposed type's least duty that holds. No duty, no size. */
-    public static Selection.Choice<Size> auto(Load load) {
-        return auto(load, type(load));
-    }
-
     /**
-     * {@code type}'s least duty that holds: the player's type, on Auto's size. Cabins are counted to hold the duty with
-     * {@link Limit#AUTO_SPARE} (S4c), and the least size that holds it comes first; where none of the type does, the least that
-     * holds the bare duty.
+     * {@code type}'s least duty that holds: the player's type, on Auto's size, or the proposed type where it is null. Cabins are
+     * counted to hold the duty with {@link Limit#AUTO_SPARE} (S4c), and the least size that holds it comes first; where none of the
+     * type does, the least that holds the bare duty. No duty, no size.
      */
-    public static Selection.Choice<Size> auto(Load load, UnitType type) {
-        if (!(load.duty() > 0)) return new Selection.Choice<>(null, Rating.NONE);
+    public static Selection.Choice<Size> auto(Load load, @Nullable UnitType type) {
+        if (!(load.duty() > 0)) return Selection.Choice.none();
+        if (type == null) type = type(load);
         int count = type == UnitType.CABIN_HEATER ? Math.max(1, (int) Math.ceil(spared(load) / Limit.TYPE_CABIN_LARGEST.value())) : 1;
         var sizes = (type == UnitType.CABIN_HEATER ? CABIN : VERTICAL).stream().map(size -> new Size(size.type(), count, size.diameter(), size.length())).toList();
         return Selection.smallest(Selection.spareFirst(sizes, Size::held, spared(load)), size -> rate(load, size));

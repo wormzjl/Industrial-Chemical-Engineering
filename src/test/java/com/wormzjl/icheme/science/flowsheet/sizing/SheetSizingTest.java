@@ -191,7 +191,7 @@ final class SheetSizingTest {
             assertEquals(3, load.ratio(), 1e-12);
             assertEquals(0, load.liquid(), 1e-9);
             assertEquals(1.1 * in.state().volume() * 3600, load.flow(), 1e-6);
-            assertEquals(CompressorSizing.rate(load, CompressorSizing.auto(load).size()), CompressorSizing.auto(load).rating());
+            assertEquals(CompressorSizing.rate(load, CompressorSizing.auto(load, null).size()), CompressorSizing.auto(load, null).rating());
             return null;
         });
     }
@@ -231,7 +231,7 @@ final class SheetSizingTest {
 
         SheetSizing.Sized sized(SheetSizing.Entries entries) {
             var sheet = flowsheet();
-            var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
+            var run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, CATALOG, () -> {
             });
             assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
             return on(() -> SheetSizing.pass(sheet, run, THERMO, entries));
@@ -288,7 +288,7 @@ final class SheetSizingTest {
     /** A 2 × 6 m drum's oil leaves beside its saddle, where its flange has room for less than a pipe's largest. */
     @Test void aSizedDrumsNozzleBoundsItsLine() {
         var size = new DrumSizing.Size(UnitType.LYING_DRUM, 2, 6, true);
-        var sized = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("D", new SheetSizing.UnitEntry(size, null, null, null, false))));
+        var sized = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("D", new SheetSizing.UnitEntry(size, null, null, false))));
         var shape = size.shape();
         double bore = PipeSizes.MAX_BORE;
         for (int k = 0; k < shape.nozzles().size(); k++) if (shape.nozzles().get(k).role() == EquipmentShape.Role.LIQUID_OUTLET) bore = NozzleBore.largest(shape, k);
@@ -306,22 +306,16 @@ final class SheetSizingTest {
         assertTrue(narrow.rating().reading(Limit.PUMP_NPSH).value() < auto.value(), "a narrower line leaves less");
     }
 
-    @Test void aGivenHeightRaisesItByItsOwnHead() {
-        var low = separator().sized().units().get("P").rating().reading(Limit.PUMP_NPSH).value();
-        var high = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("P", new SheetSizing.UnitEntry(null, null, 7., null, false)))).units().get("P").rating().reading(Limit.PUMP_NPSH).value();
-        assertEquals(7, high - low, 1e-9);
-    }
-
     @Test void aPlayersSizeIsRatedAndAutoFillsTheRest() {
         var fixed = new PumpSizing.Size(.6);
-        var sized = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("P", new SheetSizing.UnitEntry(fixed, null, null, null, false))));
+        var sized = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("P", new SheetSizing.UnitEntry(fixed, null, null, false))));
         assertEquals(fixed, sized.units().get("P").size());
         assertEquals(Lamp.YELLOW, sized.units().get("P").rating().lamp(), "far under its rated flow");
         assertNotNull(sized.units().get("D").size());
     }
 
     @Test void aTypeKeyStandsOverTheProposal() {
-        var kept = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("T", new SheetSizing.UnitEntry(null, UnitType.SPHERE, null, null, false))));
+        var kept = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("T", new SheetSizing.UnitEntry(null, UnitType.SPHERE, null, false))));
         assertEquals(UnitType.SPHERE, ((TankSizing.Size) kept.units().get("T").size()).type());
         assertEquals(UnitType.FLOATING_ROOF, ((TankSizing.Size) separator().sized().units().get("T").size()).type(), "water at 340 K under its roof");
     }
@@ -371,7 +365,7 @@ final class SheetSizingTest {
     }
 
     private static SheetSizing.Sized cooled(double outlet, @org.jetbrains.annotations.Nullable UnitType type) {
-        var units = type == null ? Map.<String, SheetSizing.UnitEntry>of() : Map.of("A", new SheetSizing.UnitEntry(null, type, null, null, false));
+        var units = type == null ? Map.<String, SheetSizing.UnitEntry>of() : Map.of("A", new SheetSizing.UnitEntry(null, type, null, false));
         return new Sheet().unit("A", "cooler", "{\"target\":\"outlet\",\"temperature\":" + outlet + "}").feed("hot", "A", "a", 420, 8e5, scaled(DRY_CRUDE, 300)).product("out", "A", "b")
                 .sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), units));
     }
@@ -412,7 +406,7 @@ final class SheetSizingTest {
     // ---- S4a: the run on sized drops (D19), the facts, Size all ----
 
     private static FlowsheetRun run(Flowsheet sheet) {
-        var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
+        var run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
         return run;
@@ -460,7 +454,7 @@ final class SheetSizingTest {
     @Test void aTypeKeyIsAFactTheRatingReads() {
         var sheet = separator().flowsheet().with(SizingFacts.NONE.with("T", SizingFacts.UnitFacts.AUTO.typed(UnitType.SPHERE)));
         var run = run(sheet);
-        var all = on(() -> SheetSizing.sizeAll(sheet, run, THERMO));
+        var all = on(() -> com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.sizeAll(sheet, run, THERMO));
         var held = all.sheet().sizing().unit("T");
         assertEquals(UnitType.SPHERE, held.type());
         assertEquals(UnitType.SPHERE, ((TankSizing.Size) held.size()).type());
@@ -475,7 +469,7 @@ final class SheetSizingTest {
                 .with("gone", SizingFacts.UnitFacts.AUTO.with(new PumpSizing.Size(.2)));
         var sheet = separator().flowsheet().with(facts);
         var run = run(sheet);
-        var all = on(() -> SheetSizing.sizeAll(sheet, run, THERMO));
+        var all = on(() -> com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.sizeAll(sheet, run, THERMO));
         var applied = all.sheet().sizing();
         assertEquals(fixed, applied.unit("P").size());
         assertEquals(SizingFacts.Mode.FIXED, applied.unit("P").mode());

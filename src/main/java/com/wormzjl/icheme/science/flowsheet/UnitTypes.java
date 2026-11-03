@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.flowsheet;
 
-import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import com.wormzjl.icheme.science.flowsheet.unit.CoolerUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
@@ -19,42 +18,10 @@ import java.util.Map;
 
 /**
  * The tiles that run, by the stable type strings a flowsheet file holds (batch 2026-11-02-process-simulator, plan section 3.2).
- * One tile for each function: a drum's or a heater's kind is the sizing stage's, and the run needs none. A renamed type or port gets
- * an alias; a removed one reads as a placeholder.
+ * One tile for each function: a drum's or a heater's kind is the sizing stage's, and the run needs none. A type this list does not
+ * hold reads as a placeholder. Sheet files have no compatibility (owner, 2026-11-04): a renamed type or port gets no alias.
  */
 public final class UnitTypes {
-    /**
-     * What a type or a port was called. A file is read through this, so a sheet holds today's names.
-     *
-     * @param types today's type by what it was called
-     * @param ports by today's type, today's port by what it was called
-     */
-    public record Aliases(Map<String, String> types, Map<String, Map<String, String>> ports, Map<String, UnitType> held) {
-        /** Aliases that hold no type key. */
-        public Aliases(Map<String, String> types, Map<String, Map<String, String>> ports) {
-            this(types, ports, Map.of());
-        }
-
-        String type(String type) {
-            return types.getOrDefault(type, type);
-        }
-
-        String port(String type, String port) {
-            return ports.getOrDefault(type, Map.of()).getOrDefault(port, port);
-        }
-
-        /** The type key a unit read under {@code type}, an old name, holds where its sizing keeps none; null for none. */
-        @Nullable UnitType held(String type) {
-            return held.get(type);
-        }
-    }
-
-    /**
-     * The air cooler tile became the Cooler (C2, {@code COOLER_MODEL_PLAN.md} section 3 item 4): a unit saved as {@code air_cooler}
-     * reads as a Cooler held on Air, so what the player built stays an air cooler.
-     */
-    public static final Aliases ALIASES = new Aliases(Map.of("air_cooler", "cooler"), Map.of(), Map.of("air_cooler", UnitType.AIR_COOLER));
-
     private static final Map<String, UnitModel> MODELS = Map.ofEntries(
             Map.entry("valve", new ValveUnit()),
             Map.entry("mixer", new MixerUnit()),

@@ -1,7 +1,5 @@
 package com.wormzjl.icheme.client.gui.flowsheet;
 
-import com.wormzjl.icheme.science.equipment.ColumnTrays;
-import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
@@ -45,12 +43,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * V-101's share and H-101's spare read P-101's pressure path, which ends at V-101's set outlet (S4a).
  */
 class UnitSizingSampleTest {
-    /** Where the probe's P-102 draws: T-101's D 8.0 m skirt, its bottom space and the 22 trays over them. */
-    private static final double DRAW_HEIGHT = EquipmentShape.minimumSkirt(8) + ColumnTrays.bottomSpace(8) + 22 * ColumnTrays.SPACING;
     /** Probe values stand in the table's printed places. */
     private static final double TENTH = .05, ONE = .5, HUNDREDTH = .005;
 
-    private static SheetSizing.Sized alone, given;
+    private static SheetSizing.Sized alone;
     private static FlowsheetRun run;
     private static FlowThermo thermo;
     private static Flowsheet sheet;
@@ -58,16 +54,13 @@ class UnitSizingSampleTest {
     @BeforeAll
     static void sizeTheSample() {
         sheet = SheetFixture.sample();
-        run = FlowsheetEngine.run(sheet, SheetFixture.CATALOG, () -> {
+        run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, run.status());
         thermo = new FlowThermo(SheetFixture.FLUIDS.model(), SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
         });
-        var later = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(),
-                Map.of("P-102", new SheetSizing.UnitEntry(null, null, DRAW_HEIGHT, null, false)));
         MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
             alone = SheetSizing.pass(sheet, run, thermo, SheetSizing.Entries.DEFAULT);
-            given = SheetSizing.pass(sheet, run, thermo, later);
             return null;
         });
     }
@@ -112,7 +105,6 @@ class UnitSizingSampleTest {
         assertEquals(135, read(unit.rating(), Limit.PUMP_FLOW), ONE);
         assertEquals(51, read(unit.rating(), Limit.PUMP_HEAD), ONE);
         assertEquals(31.1, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "the column's own layout gives the probe's height");
-        assertEquals(31.1, read(given.units().get("P-102").rating(), Limit.PUMP_NPSH), TENTH, "and so does the probe's height given as an entry");
     }
 
     /**
@@ -147,7 +139,7 @@ class UnitSizingSampleTest {
     @Test
     void e101KeptOneStepDownIsRatedByTheSameRule() {
         var kept = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.pass(sheet, run, thermo,
-                new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-101", new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 1, .75, 6), null, null, null, false))))).units().get("E-101");
+                new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-101", new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 1, .75, 6), null, null, false))))).units().get("E-101");
         assertEquals(new ExchangerSizing.Size(false, 1, .75, 6), kept.size());
         assertEquals(Lamp.RED, kept.rating().lamp());
         assertSame(Limit.EXCHANGER_SURFACE, kept.rating().closest().limit());
@@ -190,7 +182,7 @@ class UnitSizingSampleTest {
     @Test
     void e102() {
         var unit = alone.units().get("E-102");
-        assertEquals(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(6, 3)), unit.size(), "S4c: the least face that holds 1.2 × the curve's need, 869 m²; 6 × 4 bays of 2.0 × 5 m held the bare need");
+        assertEquals(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(6, 3), 1), unit.size(), "S4c: the least face that holds 1.2 × the curve's need, 869 m²; 6 × 4 bays of 2.0 × 5 m held the bare need");
         closest(unit.rating(), Limit.AIR_COOLER_SURFACE);
         var surface = unit.rating().reading(Limit.AIR_COOLER_SURFACE);
         assertEquals(903, surface.value(), ONE);
@@ -211,7 +203,7 @@ class UnitSizingSampleTest {
     @Test
     void theProbesBankStillHoldsItsDutyWhenThePlayerKeepsIt() {
         var kept = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.pass(sheet, run, thermo,
-                new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-102", new SheetSizing.UnitEntry(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(5, 3)), null, null, null, false))))).units().get("E-102");
+                new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-102", new SheetSizing.UnitEntry(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(5, 3), 1), null, null, false))))).units().get("E-102");
         assertEquals(Lamp.GREEN, kept.rating().lamp());
         assertEquals(752, read(kept.rating(), Limit.AIR_COOLER_SURFACE), ONE);
         assertEquals(.05, read(kept.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH);
@@ -226,10 +218,10 @@ class UnitSizingSampleTest {
     void theUnstabilisedNaphthaTakesASphereAndTheResidueARoof() {
         var naphtha = tile("NAPHTHA");
         assertEquals(2.299, naphtha.bubble(), 2.299 * .0005, "both bisect to a ratio of 1.0005, from other bounds");
-        assertEquals(new TankSizing.Size(UnitType.SPHERE, 1, 17, 1), TankSizing.auto(naphtha).size());
+        assertEquals(new TankSizing.Size(UnitType.SPHERE, 1, 17, 1), TankSizing.auto(naphtha, null).size());
         var residue = tile("RESIDUE");
         assertTrue(residue.bubble() < .015);
-        assertEquals(new TankSizing.Size(UnitType.FLOATING_ROOF, 1, 30, 18), TankSizing.auto(residue).size());
+        assertEquals(new TankSizing.Size(UnitType.FLOATING_ROOF, 1, 30, 18), TankSizing.auto(residue, null).size());
     }
 
     @Test

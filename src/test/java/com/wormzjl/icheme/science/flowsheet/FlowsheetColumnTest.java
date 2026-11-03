@@ -81,7 +81,7 @@ final class FlowsheetColumnTest {
         }
 
         FlowsheetRun run(FlowsheetRun last) {
-            return FlowsheetEngine.run(new Flowsheet(new Flowsheet.Basis(NETWORK, "test", AXIS), units, streams, FlowsheetSolver.Settings.DEFAULT), CATALOG, () -> {
+            return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(new Flowsheet(new Flowsheet.Basis(NETWORK, "test", AXIS), units, streams, FlowsheetSolver.Settings.DEFAULT), CATALOG, () -> {
             }, last);
         }
     }

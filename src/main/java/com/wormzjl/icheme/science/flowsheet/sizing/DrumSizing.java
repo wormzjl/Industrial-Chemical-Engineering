@@ -120,9 +120,8 @@ public final class DrumSizing {
     /** Every limit of {@code load} read at {@code size}, either type. */
     public static Rating rate(Load load, Size size) {
         if (!load.flows()) return Rating.NONE;
-        var readings = new ArrayList<Reading>();
         var shape = UnitSize.built(size);
-        readings.add(UnitSize.reading(shape));
+        var readings = UnitSize.readings(shape);
         readings.add(Limit.DRUM_DIAMETER.read(size.diameter()));
         readings.add(Limit.DRUM_LENGTH.read(size.length()));
         boolean boot = size.boot() && size.lying();
@@ -142,14 +141,10 @@ public final class DrumSizing {
         return new Rating(readings);
     }
 
-    /** The proposed type's least volume. No flow, no size. */
-    public static Selection.Choice<Size> auto(Load load) {
-        return load.flows() ? auto(load, type(load)) : new Selection.Choice<>(null, Rating.NONE);
-    }
-
-    /** {@code type}'s least volume: the player's type, on Auto's size. */
-    public static Selection.Choice<Size> auto(Load load, UnitType type) {
-        if (!load.flows()) return new Selection.Choice<>(null, Rating.NONE);
+    /** {@code type}'s least volume: the player's type, on Auto's size, or the proposed type where it is null. No flow, no size. */
+    public static Selection.Choice<Size> auto(Load load, @Nullable UnitType type) {
+        if (!load.flows()) return Selection.Choice.none();
+        if (type == null) type = type(load);
         var sizes = type == UnitType.STANDING_DRUM ? STANDING : load.twoLiquids() ? BOOTED : LYING;
         return Selection.smallest(sizes, size -> rate(load, size));
     }

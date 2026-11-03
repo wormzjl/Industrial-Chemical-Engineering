@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.flowsheet.sizing;
 
-import com.wormzjl.icheme.science.column.operation.SplitTable;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
@@ -41,24 +40,16 @@ public final class CoolerSizing {
         return back > HeatSides.TOWER_WATER_TEMPERATURE ? back : waterReturn(inlet);
     }
 
-    /** The tower water that takes {@code in} to {@code out} at the run's flow, back at section 3's return ({@link #waterReturn}). */
-    static @Nullable Water water(FlowStream in, FlowStream out, FlowThermo thermo) {
-        return water(in, out, waterReturn(in.temperature()), thermo);
-    }
-
     /**
      * The tower water that takes {@code in} to {@code out} at the run's flow: its supply at 25 °C and its return at {@code back} K, the
-     * same moles. Null where the stream is not cooled, the water does not rise, or the basis holds no water.
+     * same moles. Null where the stream is not cooled or the water does not rise.
      */
     static @Nullable Water water(FlowStream in, FlowStream out, double back, FlowThermo thermo) {
         double removed = in.enthalpy() - out.enthalpy();
-        int water = thermo.axis().indexOf(SplitTable.WATER);
-        if (in.empty() || !(removed > 0) || water < 0 || !(back > HeatSides.TOWER_WATER_TEMPERATURE)) return null;
-        double[] one = new double[thermo.axis().size()];
-        one[water] = 1;
+        if (in.empty() || !(removed > 0) || !(back > HeatSides.TOWER_WATER_TEMPERATURE)) return null;
+        double[] one = thermo.waterAlone(1);
         double rise = thermo.atTemperature(back, TOWER_WATER_PRESSURE, one, SolidInventory.EMPTY).enthalpy() - thermo.atTemperature(HeatSides.TOWER_WATER_TEMPERATURE, TOWER_WATER_PRESSURE, one, SolidInventory.EMPTY).enthalpy();
-        double[] moles = new double[one.length];
-        moles[water] = removed / rise;
+        double[] moles = thermo.waterAlone(removed / rise);
         return new Water(thermo.atTemperature(HeatSides.TOWER_WATER_TEMPERATURE, TOWER_WATER_PRESSURE, moles, SolidInventory.EMPTY), thermo.atTemperature(back, TOWER_WATER_PRESSURE, moles, SolidInventory.EMPTY));
     }
 

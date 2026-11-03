@@ -50,7 +50,7 @@ final class WiringTest {
     }
 
     private static FlowsheetRun run(Flowsheet sheet) {
-        return FlowsheetEngine.run(sheet, CATALOG, () -> {
+        return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, CATALOG, () -> {
         });
     }
 

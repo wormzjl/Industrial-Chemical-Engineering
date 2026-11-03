@@ -120,7 +120,7 @@ final class EjectorTest {
     }
 
     private static FlowsheetRun run(Flowsheet sheet) {
-        return FlowsheetEngine.run(sheet, CATALOG, () -> {
+        return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, CATALOG, () -> {
         });
     }
 
@@ -150,7 +150,7 @@ final class EjectorTest {
 
     /** {@code share} of the need, wired: steam at the door's pressure, superheated a little. */
     private static Flowsheet wired(double share) {
-        double waterMass = on(() -> EjectorUnit.waterMass(THERMO));
+        double waterMass = on(() -> THERMO.waterMass());
         return sheet(feed(460, MOTIVE, "Water", share * need() / waterMass, "Water", 0));
     }
 
@@ -170,7 +170,7 @@ final class EjectorTest {
         assertEquals(need, reading(run, "need"), 1e-9 * need, "the law's need");
         assertEquals(need, reading(run, "motive"), 1e-9 * need, "the utility gives the need");
         assertEquals(DISCHARGE, out.pressure(), 0, "flashed at the discharge pressure");
-        double waterMass = on(() -> EjectorUnit.waterMass(THERMO));
+        double waterMass = on(() -> THERMO.waterMass());
         for (int i = 0; i < AXIS.size(); i++)
             assertEquals(load.amounts()[i] + (i == WATER ? need / waterMass : 0), out.amounts()[i], 1e-9 * out.total(), AXIS.get(i) + ": the load and the motive leave together");
         assertEquals(load.mass() + need, out.mass(), 1e-9 * out.mass());
@@ -205,7 +205,7 @@ final class EjectorTest {
     }
 
     @Test void aWiredMotiveThatIsNotSteamWarns() {
-        double waterMass = on(() -> EjectorUnit.waterMass(THERMO));
+        double waterMass = on(() -> THERMO.waterMass());
         var sheet = sheet(feed(460, MOTIVE, "Water", need() / waterMass, FluidMaterialCatalog.NITROGEN, need() / waterMass));
         var run = closes(on(() -> run(sheet)));
         assertTrue(noted(run, "ejector.motive_water"));

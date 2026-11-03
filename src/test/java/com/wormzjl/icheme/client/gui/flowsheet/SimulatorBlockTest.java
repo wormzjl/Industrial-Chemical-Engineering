@@ -481,7 +481,7 @@ class SimulatorBlockTest {
         var streams = List.of(new Flowsheet.Stream("f", "F", null, new Flowsheet.End("d", "in"), SheetFixture.water(100), List.of(new Flowsheet.Point(10, 70)), new JsonObject()),
                 new Flowsheet.Stream("g", "G", new Flowsheet.End("d", "gas"), null, null, List.of(new Flowsheet.Point(400, 40)), new JsonObject()));
         var sheet = new Flowsheet(SheetFixture.basis(), units, streams, FlowsheetSolver.Settings.DEFAULT);
-        var run = com.wormzjl.icheme.science.flowsheet.FlowsheetEngine.run(sheet, SheetFixture.CATALOG, () -> {
+        var run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, SheetFixture.CATALOG, () -> {
         });
         var editor = SheetFixture.editor(sheet);
         var x = new SheetContext(editor, new SheetState(editor.sheet(), sheet, run, 1, null), SheetUnits.DEFAULT, new SheetFixture.Texts(), SheetFixture.M, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());

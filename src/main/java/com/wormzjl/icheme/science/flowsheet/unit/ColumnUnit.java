@@ -61,8 +61,10 @@ import java.util.function.ToDoubleFunction;
  * at its own pressures, so the products stay at them: the ejector moves no product's pressure.
  */
 public final class ColumnUnit implements UnitModel {
-    private static final String FEED = "feed", OVERHEAD = "overhead", DISTILLATE = "distillate", WATER = "water", BOTTOMS = "bottoms", DRAW = "draw/", FREE_WATER = "free_water";
-    private static final String MOTIVE = "motive", CONDENSER_IN = "condenser_in", CONDENSER_OUT = "condenser_out", REBOILER_IN = "reboiler_in", REBOILER_OUT = "reboiler_out";
+    /** The column's ports; a draw's, a steam row's and a pumparound's carry their row's id after their prefix. */
+    public static final String FEED = "feed", OVERHEAD = "overhead", DISTILLATE = "distillate", WATER = "water", BOTTOMS = "bottoms", DRAW = "draw/", STEAM = "steam/", PUMPAROUND = "pa/";
+    public static final String CONDENSER_IN = "condenser_in", CONDENSER_OUT = "condenser_out", REBOILER_IN = "reboiler_in", REBOILER_OUT = "reboiler_out";
+    private static final String FREE_WATER = "free_water", MOTIVE = "motive";
     /** The passages of the condenser's and the kettle's sheet sides, by the door's drops. */
     public static final String CONDENSER_DROP = "condenser_drop", REBOILER_DROP = "reboiler_drop";
     /**
@@ -84,8 +86,20 @@ public final class ColumnUnit implements UnitModel {
     /** The calculator's learned start, on the budget the game ships with. */
     private static final V3InitializationOptions START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
 
-    private static String drawPort(ColumnDoor.Draw draw) {
+    public static String drawPort(ColumnDoor.Draw draw) {
         return DRAW + draw.id();
+    }
+
+    /**
+     * Adds {@code flow} mol/s at the share {@code fraction} of {@code component} onto {@code amounts}, on the sheet's {@code axis}: the
+     * column's products and its sizing's tray streams. No share adds nothing; a share of a component the axis lacks fails the
+     * column, for dropping it would lose its moles.
+     */
+    public static void add(double[] amounts, List<String> axis, String component, double fraction, double flow) {
+        if (fraction == 0) return;
+        int at = axis.indexOf(component);
+        if (at < 0) throw new FlowsheetFailure("column.component");
+        amounts[at] += fraction * flow;
     }
 
     /** Whether what leaves by {@code port} leaves a tray or the sump, as a liquid at its boiling point with only the column's own head behind it. */
@@ -93,16 +107,16 @@ public final class ColumnUnit implements UnitModel {
         return port.equals(BOTTOMS) || port.startsWith(DRAW);
     }
 
-    private static String steamPort(ColumnDoor.Steam steam) {
-        return "steam/" + steam.id();
+    public static String steamPort(ColumnDoor.Steam steam) {
+        return STEAM + steam.id();
     }
 
-    private static String pumparoundIn(ColumnDoor.Pumparound pumparound) {
-        return "pa/" + pumparound.id() + "/in";
+    public static String pumparoundIn(ColumnDoor.Pumparound pumparound) {
+        return PUMPAROUND + pumparound.id() + "/in";
     }
 
-    private static String pumparoundOut(ColumnDoor.Pumparound pumparound) {
-        return "pa/" + pumparound.id() + "/out";
+    public static String pumparoundOut(ColumnDoor.Pumparound pumparound) {
+        return PUMPAROUND + pumparound.id() + "/out";
     }
 
 
@@ -127,7 +141,7 @@ public final class ColumnUnit implements UnitModel {
         var passages = new ArrayList<Passage>();
         if (door.condenser().waterCooled()) passages.add(Passage.named("condenser"));
         if (ColumnComponents.kettleRequired(door.reboilerDuty())) passages.add(Passage.named("reboiler"));
-        for (var pumparound : door.pumparounds()) passages.add(new Passage("pa/" + pumparound.id() + "/a", "pa/" + pumparound.id() + "/b", pumparoundIn(pumparound), pumparoundOut(pumparound)));
+        for (var pumparound : door.pumparounds()) passages.add(new Passage(PUMPAROUND + pumparound.id() + "/a", PUMPAROUND + pumparound.id() + "/b", pumparoundIn(pumparound), pumparoundOut(pumparound)));
         return passages;
     }
 
@@ -192,7 +206,7 @@ public final class ColumnUnit implements UnitModel {
 
     /** The passage of a pumparound cooler's sheet side, by its row: what its member's size gives once sized. */
     public static String pumparoundDrop(ColumnDoor.Pumparound pumparound) {
-        return "pa/" + pumparound.id() + "/drop";
+        return PUMPAROUND + pumparound.id() + "/drop";
     }
 
     /**
@@ -498,13 +512,11 @@ public final class ColumnUnit implements UnitModel {
             String wire = u.wire(steamPort(row));
             var wired = wire == null ? null : board.stream(wire);
             if (wired == null || wired.empty()) {
-                double[] amounts = new double[components];
-                amounts[components - 1] = row.flow();
-                var entered = thermo.atTemperature(row.temperature(), pressure, amounts, SolidInventory.EMPTY);
+                var entered = thermo.atTemperature(row.temperature(), pressure, thermo.waterAlone(row.flow()), SolidInventory.EMPTY);
                 if (wired == null) report.enters(entered.mass(), entered.enthalpy());
                 return entered;
             }
-            if (wired.amountsView()[components - 1] != wired.total()) throw new FlowsheetFailure("column.steam_water", row.id());
+            if (wired.amountsView()[thermo.water()] != wired.total()) throw new FlowsheetFailure("column.steam_water", row.id());
             return wired;
         }
 
@@ -540,7 +552,7 @@ public final class ColumnUnit implements UnitModel {
          * supply under its stage's pressure is the steam check's, once the sheet stands.
          */
         private void steamChecks(List<FlowStream> supplies, List<FlowStream> valved, Report report) {
-            double kilograms = EjectorUnit.waterMass(u.thermo());
+            double kilograms = u.thermo().waterMass();
             for (int i = 0; i < supplies.size(); i++) {
                 var row = door.steam().get(i);
                 var supply = supplies.get(i);
@@ -633,12 +645,7 @@ public final class ColumnUnit implements UnitModel {
                 if (!stream.streamId().equals(id)) continue;
                 var axis = u.thermo().axis();
                 double[] amounts = new double[components];
-                for (var fraction : stream.moleFractions()) {
-                    if (fraction.moleFraction() == 0) continue;
-                    int at = axis.indexOf(fraction.componentId());
-                    if (at < 0) throw new FlowsheetFailure("column.component");
-                    amounts[at] += fraction.moleFraction() * stream.molarFlowMolPerSecond();
-                }
+                for (var fraction : stream.moleFractions()) add(amounts, axis, fraction.componentId(), fraction.moleFraction(), stream.molarFlowMolPerSecond());
                 return u.thermo().atTemperature(stream.temperatureKelvin(), stream.pressurePascal(), amounts, SolidInventory.EMPTY);
             }
             return FlowStream.empty(components);

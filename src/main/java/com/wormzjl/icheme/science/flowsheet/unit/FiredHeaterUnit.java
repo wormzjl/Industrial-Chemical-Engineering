@@ -43,17 +43,11 @@ public final class FiredHeaterUnit implements UnitModel {
         var p = u.params();
         double limit = p.number("limit", Double.POSITIVE_INFINITY);
         if (!apart(p)) {
-            return List.of(u.through("in", "out", (board, report) -> {
-                var in = board.stream(u.wire("in"));
-                var out = fire(u, report, in, p.text("target", "outlet"), "temperature", "duty", limit, COILS, p.number("radiant_drop", 0) + p.number("convection_drop", 0));
-                u.write(board, report, "out", out);
-                report.reading("duty", out.enthalpy() - in.enthalpy());
-                report.reading("vapour", u.thermo().vapourShare(out));
-            }));
+            return List.of(u.through("in", "out", (board, report) -> radiant(u, board, report, "in", "out", limit, COILS, p.number(RADIANT_DROP, 0) + p.number(CONVECTION_DROP, 0))));
         }
         if (u.wire(CONVECTION_IN) == null) {
             if (u.wire(CONVECTION_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", CONVECTION_IN);
-            return List.of(u.through(RADIANT_IN, RADIANT_OUT, (board, report) -> radiant(u, board, report, 0, limit)));
+            return List.of(u.through(RADIANT_IN, RADIANT_OUT, (board, report) -> radiant(u, board, report, RADIANT_IN, RADIANT_OUT, limit, RADIANT_DROP, p.number(RADIANT_DROP, 0))));
         }
         String taken = u.part("taken");
         var convection = new Calculation(u.part("convection"), u.id(), List.of(u.wire(CONVECTION_IN)), List.of(u.out(CONVECTION_OUT)), List.of(), List.of(taken), Calculation.Kind.STEP, (board, report) -> {
@@ -66,15 +60,16 @@ public final class FiredHeaterUnit implements UnitModel {
         var radiant = new Calculation(u.part("radiant"), u.id(), List.of(u.wire(RADIANT_IN)), List.of(u.out(RADIANT_OUT)), List.of(taken), List.of(), Calculation.Kind.STEP, (board, report) -> {
             var in = board.stream(u.wire(RADIANT_IN));
             if (in.empty()) board.stream(u.out(RADIANT_OUT), in);
-            else radiant(u, board, report, board.link(taken), limit);
+            else radiant(u, board, report, RADIANT_IN, RADIANT_OUT, limit - board.link(taken), RADIANT_DROP, p.number(RADIANT_DROP, 0));
         });
         return List.of(convection, radiant);
     }
 
-    private static void radiant(WiredUnit u, Board board, Report report, double taken, double limit) {
-        var in = board.stream(u.wire(RADIANT_IN));
-        var out = fire(u, report, in, u.params().text("target", "outlet"), "temperature", "duty", limit - taken, RADIANT_DROP, u.params().number(RADIANT_DROP, 0));
-        u.write(board, report, RADIANT_OUT, out);
+    /** The last coil, or both in series, fired to the door's target within {@code limit}. */
+    private static void radiant(WiredUnit u, Board board, Report report, String inlet, String outlet, double limit, String passage, double typed) {
+        var in = board.stream(u.wire(inlet));
+        var out = fire(u, report, in, u.params().text("target", "outlet"), "temperature", "duty", limit, passage, typed);
+        u.write(board, report, outlet, out);
         report.reading("duty", out.enthalpy() - in.enthalpy());
         report.reading("vapour", u.thermo().vapourShare(out));
     }
@@ -85,7 +80,7 @@ public final class FiredHeaterUnit implements UnitModel {
      */
     private static FlowStream fire(WiredUnit u, Report report, FlowStream in, String target, String temperature, String duty, double limit, String passage, double typed) {
         double pressure = u.passages().passage(passage) == null ? WiredUnit.after(in, typed)
-                : u.leaving(passage, in, typed, at -> held(u, in, target, temperature, duty, limit, fired(u, in, target, temperature, duty, at)), report).pressure();
+                : u.leaving(passage, in, typed, at -> held(u, in, limit, fired(u, in, target, temperature, duty, at)), report).pressure();
         var out = fired(u, in, target, temperature, duty, pressure);
         double heat = out.enthalpy() - in.enthalpy();
         if (heat < 0 || heat > limit) {
@@ -102,7 +97,7 @@ public final class FiredHeaterUnit implements UnitModel {
     }
 
     /** {@code out} as the fire can give it: none below the inlet, at most {@code limit}. */
-    private static FlowStream held(WiredUnit u, FlowStream in, String target, String temperature, String duty, double limit, FlowStream out) {
+    private static FlowStream held(WiredUnit u, FlowStream in, double limit, FlowStream out) {
         double heat = out.enthalpy() - in.enthalpy();
         return heat < 0 || heat > limit ? u.thermo().heated(in, heat < 0 ? 0 : limit, out.pressure()) : out;
     }

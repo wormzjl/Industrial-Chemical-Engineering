@@ -52,7 +52,6 @@ public final class SheetSizing {
     private static final String OIL = "oil", WATER = "water", GAS = "gas", COLUMN = "column";
     /** An air-then-water condenser's water exchanger, a member beside its air cooler, {@code condenser} (C2). */
     public static final String TRIM = "trim";
-    private static final String FEED = "feed", BOTTOMS = "bottoms", DISTILLATE = "distillate", OVERHEAD = "overhead", DRAW = "draw/", STEAM = "steam/";
 
     private SheetSizing() {
     }
@@ -73,12 +72,11 @@ public final class SheetSizing {
      *
      * @param size   kept and rated; null for Auto's
      * @param type   null for the proposal
-     * @param height a pump's static head over grade, m; by default its source's nozzle's: a column's tray, a drum's half level, grade
      * @param hold   a drum's entry, min, or a tank's, h; null for the row's
      * @param kept   a column keeps its door's diameter, rated there with no trial
      */
-    public record UnitEntry(@Nullable UnitSize size, @Nullable UnitType type, @Nullable Double height, @Nullable Double hold, boolean kept) {
-        public static final UnitEntry AUTO = new UnitEntry(null, null, null, null, false);
+    public record UnitEntry(@Nullable UnitSize size, @Nullable UnitType type, @Nullable Double hold, boolean kept) {
+        public static final UnitEntry AUTO = new UnitEntry(null, null, null, false);
     }
 
     /** What a sizing reads beyond the run. An item with no entry is on Auto; a member's key is its block's id, a slash and its own. */
@@ -101,9 +99,9 @@ public final class SheetSizing {
             var units = new HashMap<String, UnitEntry>();
             facts.units().forEach((id, unit) -> {
                 boolean fixed = unit.mode() == SizingFacts.Mode.FIXED;
-                units.put(id, new UnitEntry(all || fixed ? unit.size() : null, unit.type(), null, unit.hold(), fixed));
+                units.put(id, new UnitEntry(all || fixed ? unit.size() : null, unit.type(), unit.hold(), fixed));
             });
-            if (all) for (var unit : sheet.units()) if (unit.type().equals(COLUMN)) units.put(unit.id(), new UnitEntry(null, facts.unit(unit.id()).type(), null, null, true));
+            if (all) for (var unit : sheet.units()) if (unit.type().equals(COLUMN)) units.put(unit.id(), new UnitEntry(null, facts.unit(unit.id()).type(), null, true));
             var lines = new HashMap<String, LineEntry>();
             facts.lines().forEach((id, line) -> lines.put(id, new LineEntry(line.service(), line.length(), all || line.mode() == SizingFacts.Mode.FIXED ? line.size() : null)));
             return new Entries(facts.basis(), lines, units);
@@ -176,6 +174,30 @@ public final class SheetSizing {
     }
 
     /**
+     * A pumparound's member, {@code pa 2 cooler}: its pumparound's id and its part, {@code cooler}, {@code pump}, {@code draw} or
+     * {@code return}. Its own name is the lang line {@code sizing.member.pa_<part>} with the id as its argument.
+     */
+    public record PumparoundMember(String pumparound, String part) {
+        public static final String COOLER = "cooler";
+        private static final String HEAD = "pa";
+
+        public static String name(String pumparound, String part) {
+            return HEAD + " " + pumparound + " " + part;
+        }
+
+        /** The pumparound member {@code member} names, or null for a member of none. */
+        public static @Nullable PumparoundMember of(String member) {
+            String[] words = member.split(" ");
+            return words.length == 3 && words[0].equals(HEAD) ? new PumparoundMember(words[1], words[2]) : null;
+        }
+
+        /** The tail of its own name's lang key, after {@code sizing.member.}. */
+        public String key() {
+            return HEAD + "_" + part;
+        }
+    }
+
+    /**
      * What Send to block stores ({@code SIZING_PLAN.md} section 3.7): each unit and member at the size the tab shows, the player's where
      * the sheet holds one, else the rating's, in the rating's order. A column goes at its door's diameter with its components and member
      * counts. A unit the constructor has no kind for (a valve: the pipe tool lays it at its line's bore) or a size it refuses is left out,
@@ -220,13 +242,9 @@ public final class SheetSizing {
     /**
      * Size all (section 3.1): proposes every Auto item's size, applies the proposals to a copy of {@code sheet}, and where that
      * moves the run (a column's diameter, a sized unit's drops) runs the copy once, warm from {@code run}, and rates every item on
-     * what it gives. Nothing is sized twice. A run that is not steady sizes nothing: the sheet stays, every item red.
+     * what it gives. Nothing is sized twice. A run that is not steady sizes nothing: the sheet stays, every item red. Its re-run tells
+     * {@code progress} where it stands, as a run does.
      */
-    public static SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo) {
-        return sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE);
-    }
-
-    /** {@link #sizeAll(Flowsheet, FlowsheetRun, FlowThermo)}, its re-run telling {@code progress} where it stands, as a run does. */
     public static SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo, FlowsheetSolver.Progress progress) {
         if (run.status() != FlowsheetRun.Status.STEADY) return new SizeAll(sheet, run, rate(sheet, run, thermo));
         var proposal = pass(sheet, run, thermo, Entries.of(sheet, false));
@@ -290,7 +308,7 @@ public final class SheetSizing {
             moved = true;
         }
         for (int i = 0; i < door.pumparounds().size(); i++) {
-            Integer cooler = proposedCount(unit.id(), "pa " + door.pumparounds().get(i).id() + " cooler", facts, proposal);
+            Integer cooler = proposedCount(unit.id(), PumparoundMember.name(door.pumparounds().get(i).id(), PumparoundMember.COOLER), facts, proposal);
             if (cooler != null && cooler != counts.cooler(i) && json.get("pumparounds") instanceof com.google.gson.JsonArray rows && rows.get(i) instanceof com.google.gson.JsonObject row) {
                 row.addProperty(ColumnDoor.UNITS, cooler);
                 moved = true;
@@ -353,18 +371,18 @@ public final class SheetSizing {
 
         /** The nozzle a sheet port of the column leaves or enters by: feed, bottoms, a draw, a steam row. */
         double nozzle(String port) {
-            if (port.equals(FEED)) return nozzle(EquipmentShape.Role.FEED, 1);
-            if (port.equals(BOTTOMS)) return nozzle(EquipmentShape.Role.BOTTOMS, 1);
-            for (int i = 0; i < door.draws().size(); i++) if (port.equals(DRAW + door.draws().get(i).id())) return nozzle(EquipmentShape.Role.DRAW, i + 1);
-            for (int i = 0; i < door.steam().size(); i++) if (port.equals(STEAM + door.steam().get(i).id())) return nozzle(EquipmentShape.Role.STEAM, i + 1);
+            if (port.equals(ColumnUnit.FEED)) return nozzle(EquipmentShape.Role.FEED, 1);
+            if (port.equals(ColumnUnit.BOTTOMS)) return nozzle(EquipmentShape.Role.BOTTOMS, 1);
+            for (int i = 0; i < door.draws().size(); i++) if (port.equals(ColumnUnit.drawPort(door.draws().get(i)))) return nozzle(EquipmentShape.Role.DRAW, i + 1);
+            for (int i = 0; i < door.steam().size(); i++) if (port.equals(ColumnUnit.steamPort(door.steam().get(i)))) return nozzle(EquipmentShape.Role.STEAM, i + 1);
             return PipeSizes.MAX_BORE;
         }
 
         /** Where a pump on {@code port} draws from over grade, m: a draw's tray or the sump; null for a port that leaves no tray. */
         @Nullable Double level(String port) {
             if (size == null) return null;
-            if (port.equals(BOTTOMS)) return size.level(load.solved().stageCount() + 1);
-            for (var draw : door.draws()) if (port.equals(DRAW + draw.id())) return size.level(draw.tray());
+            if (port.equals(ColumnUnit.BOTTOMS)) return size.level(load.solved().stageCount() + 1);
+            for (var draw : door.draws()) if (port.equals(ColumnUnit.drawPort(draw))) return size.level(draw.tray());
             return null;
         }
     }
@@ -557,13 +575,13 @@ public final class SheetSizing {
             var load = new HeaterSizing.Load(heat * basis.designFlow() / 1e6, null);
             heaters.put(id, load.duty());
             var type = entry.type();
-            return sized(entry, HeaterSizing.Size.class, size -> HeaterSizing.rate(load, size), () -> type != null ? HeaterSizing.auto(load, type) : HeaterSizing.auto(load));
+            return sized(entry, HeaterSizing.Size.class, size -> HeaterSizing.rate(load, size), () -> HeaterSizing.auto(load, type));
         }
 
         private SizedUnit compressor(String id, UnitEntry entry) {
             var load = CompressorSizing.Load.of(stream(id, "in"), stream(id, "out"), basis, thermo, scratch);
             var type = entry.type();
-            return sized(entry, CompressorSizing.Size.class, size -> CompressorSizing.rate(load, size), () -> type != null ? CompressorSizing.auto(load, type) : CompressorSizing.auto(load));
+            return sized(entry, CompressorSizing.Size.class, size -> CompressorSizing.rate(load, size), () -> CompressorSizing.auto(load, type));
         }
 
         private SizedUnit drum(String id, UnitEntry entry) {
@@ -572,13 +590,13 @@ public final class SheetSizing {
 
         private static SizedUnit drum(UnitEntry entry, DrumSizing.Load load) {
             var type = entry.type();
-            return sized(entry, DrumSizing.Size.class, size -> DrumSizing.rate(load, size), () -> type != null ? DrumSizing.auto(load, type) : DrumSizing.auto(load));
+            return sized(entry, DrumSizing.Size.class, size -> DrumSizing.rate(load, size), () -> DrumSizing.auto(load, type));
         }
 
         private SizedUnit tank(String id, UnitEntry entry) {
             var load = TankSizing.Load.of(stream(id, OIL), stream(id, WATER), entry.hold(), basis, thermo);
             var type = entry.type();
-            return sized(entry, TankSizing.Size.class, size -> TankSizing.rate(load, size), () -> type != null ? TankSizing.auto(load, type) : TankSizing.auto(load));
+            return sized(entry, TankSizing.Size.class, size -> TankSizing.rate(load, size), () -> TankSizing.auto(load, type));
         }
 
         /** An ejector on its suction's load, with what its law needs and what a wired Motive port brings (W10). */
@@ -607,7 +625,7 @@ public final class SheetSizing {
             var display = report == null ? null : report.display();
             if (display == null) return SizedUnit.NONE;
             var door = ColumnDoor.of(params);
-            var load = ColumnSizing.Load.of(door, display, stream(id, BOTTOMS), basis, thermo);
+            var load = ColumnSizing.Load.of(door, display, stream(id, ColumnUnit.BOTTOMS), basis, thermo);
             if (load == null) return new SizedUnit(null, new Rating(List.of(UnitSize.reading(null))));
             var trials = new ColumnSizing.Trials(load, thermo.catalog(), thermo.checkpoint());
             // A kept column stands at its door's diameter, which reads the run's own trays: no trial solves.
@@ -644,10 +662,10 @@ public final class SheetSizing {
             double[] condensing = vapour.amounts();
             if (ColumnComponents.ejectorRequired(door.topPressure())) {
                 boolean wired = wires.getOrDefault(id, Map.of()).containsKey(EjectorUnit.MOTIVE);
-                var vent = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), stream(id, OVERHEAD).amounts(), SolidInventory.EMPTY);
+                var vent = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), stream(id, ColumnUnit.OVERHEAD).amounts(), SolidInventory.EMPTY);
                 var load = EjectorSizing.Load.of(vent, readings.getOrDefault("ejector_need", 0.), wired ? readings.get("ejector_motive") : null, basis);
                 out.put(member(id, "ejector"), ejector(entries.unit(member(id, "ejector")), load));
-                condensing[condensing.length - 1] += readings.getOrDefault("ejector_motive", 0.) / EjectorUnit.waterMass(thermo);
+                condensing[thermo.water()] += readings.getOrDefault("ejector_motive", 0.) / thermo.waterMass();
             }
             var condensed = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), condensing, SolidInventory.EMPTY);
             var overhead = thermo.heated(condensed, block.condenser(), top.pressurePascal());
@@ -666,7 +684,7 @@ public final class SheetSizing {
                 split = idle == CoolerSizing.Idle.AIR ? overhead : idle == CoolerSizing.Idle.TRIM ? condensed : thermo.atTemperature(at, condenser.pressurePascal(), condensing, SolidInventory.EMPTY);
             }
             if (door.condenser() == ColumnComponents.Condenser.EXCHANGER) {
-                var load = water(id, "condenser_in", "condenser_out", overhead, condensed);
+                var load = water(id, ColumnUnit.CONDENSER_IN, ColumnUnit.CONDENSER_OUT, overhead, condensed);
                 var sized = exchanger(counted(entries.unit(member(id, "condenser")), counts.condenser()), load);
                 out.put(member(id, "condenser"), sized);
                 if (load != null && sized.size() instanceof ExchangerSizing.Size size) coolerDrop = ExchangerSizing.shellDrop(load, size);
@@ -680,7 +698,7 @@ public final class SheetSizing {
             }
             if (idle == CoolerSizing.Idle.TRIM) out.put(member(id, TRIM), idle(counted(entries.unit(member(id, TRIM)), counts.trim()), ExchangerSizing.smallest().withShells(counts.trim())));
             else if (door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER) {
-                var load = water(id, "condenser_in", "condenser_out", split, condensed);
+                var load = water(id, ColumnUnit.CONDENSER_IN, ColumnUnit.CONDENSER_OUT, split, condensed);
                 var sized = exchanger(counted(entries.unit(member(id, TRIM)), counts.trim()), load);
                 out.put(member(id, TRIM), sized);
                 if (load != null && sized.size() instanceof ExchangerSizing.Size size) coolerDrop += ExchangerSizing.shellDrop(load, size);
@@ -691,22 +709,22 @@ public final class SheetSizing {
                 // The bottom tray's liquid, boiled by the duty the column's reboiler puts in, as the condenser's sides balance.
                 var feed = ColumnSizing.liquid(thermo, solved, nodes.get(stages));
                 var boiled = thermo.heated(feed, block.reboiler(), nodes.get(stages + 1).pressurePascal());
-                out.put(member(id, "reboiler"), exchanger(counted(entries.unit(member(id, "reboiler")), counts.kettle()), ExchangerSizing.Load.of(true, stream(id, "reboiler_in"), stream(id, "reboiler_out"), feed, boiled, basis, thermo, scratch)));
+                out.put(member(id, "reboiler"), exchanger(counted(entries.unit(member(id, "reboiler")), counts.kettle()), ExchangerSizing.Load.of(true, stream(id, ColumnUnit.REBOILER_IN), stream(id, ColumnUnit.REBOILER_OUT), feed, boiled, basis, thermo, scratch)));
             }
             thermo.checkpoint().run();
             var condensate = ColumnSizing.liquid(thermo, solved, condenser);
             var receiverEntry = entries.unit(member(id, "receiver"));
-            var receiver = drum(receiverEntry, DrumSizing.Load.of(stream(id, OVERHEAD), condensate, stream(id, WATER), receiverEntry.hold(), basis, thermo, scratch));
+            var receiver = drum(receiverEntry, DrumSizing.Load.of(stream(id, ColumnUnit.OVERHEAD), condensate, stream(id, ColumnUnit.WATER), receiverEntry.hold(), basis, thermo, scratch));
             out.put(member(id, "receiver"), receiver);
             var drum = receiver.size() == null ? null : UnitSize.built(receiver.size());
 
             // The condensate leaves the receiver for the pump, and leaves it above the top tray's pressure, where the reflux enters.
             thermo.checkpoint().run();
-            var overheadLine = memberLine(member(id, OVERHEAD), overhead, Service.Ends.OPEN, block.nozzle(EquipmentShape.Role.VAPOUR_OUTLET, 1));
+            var overheadLine = memberLine(member(id, ColumnUnit.OVERHEAD), overhead, Service.Ends.OPEN, block.nozzle(EquipmentShape.Role.VAPOUR_OUTLET, 1));
             var suction = memberLine(member(id, "receiver out"), condensate, new Service.Ends(false, true), drum == null ? PipeSizes.MAX_BORE : oilNozzle(drum));
             var pumped = thermo.atTemperature(condensate.temperature(), top.pressurePascal(), condensate.amounts(), SolidInventory.EMPTY);
             var pumpOut = memberLine(member(id, "pump out"), pumped, Service.Ends.OPEN, PipeSizes.MAX_BORE);
-            double share = condensate.total() > 0 ? Math.max(0, 1 - stream(id, DISTILLATE).total() / condensate.total()) : 0;
+            double share = condensate.total() > 0 ? Math.max(0, 1 - stream(id, ColumnUnit.DISTILLATE).total() / condensate.total()) : 0;
             double[] back = condensate.amounts();
             for (int i = 0; i < back.length; i++) back[i] *= share;
             var reflux = memberLine(member(id, "reflux"), thermo.atTemperature(condensate.temperature(), top.pressurePascal(), back, SolidInventory.EMPTY), Service.Ends.OPEN, block.nozzle(EquipmentShape.Role.REFLUX, 1));
@@ -720,20 +738,19 @@ public final class SheetSizing {
             for (int i = 0; i < door.pumparounds().size(); i++) {
                 thermo.checkpoint().run();
                 var pumparound = door.pumparounds().get(i);
-                String name = "pa " + pumparound.id();
                 var draw = nodes.get(pumparound.drawTray());
                 var hot = circulation(solved, draw, -pumparound.duty());
                 var cooled = thermo.atTemperature(hot.temperature() - basis.paFall(), hot.pressure(), hot.amounts(), SolidInventory.EMPTY);
-                var load = water(id, "pa/" + pumparound.id() + "/in", "pa/" + pumparound.id() + "/out", hot, cooled);
-                var cooler = exchanger(counted(entries.unit(member(id, name + " cooler")), counts.cooler(i)), load);
-                out.put(member(id, name + " cooler"), cooler);
-                var drawLine = memberLine(member(id, name + " draw"), hot, new Service.Ends(true, true), block.nozzle(EquipmentShape.Role.PUMPAROUND_DRAW, i + 1));
-                var returnLine = memberLine(member(id, name + " return"), cooled, Service.Ends.OPEN, block.nozzle(EquipmentShape.Role.RETURN, i + 1));
+                var load = water(id, ColumnUnit.pumparoundIn(pumparound), ColumnUnit.pumparoundOut(pumparound), hot, cooled);
+                var cooler = exchanger(counted(entries.unit(member(id, PumparoundMember.name(pumparound.id(), PumparoundMember.COOLER))), counts.cooler(i)), load);
+                out.put(member(id, PumparoundMember.name(pumparound.id(), PumparoundMember.COOLER)), cooler);
+                var drawLine = memberLine(member(id, PumparoundMember.name(pumparound.id(), "draw")), hot, new Service.Ends(true, true), block.nozzle(EquipmentShape.Role.PUMPAROUND_DRAW, i + 1));
+                var returnLine = memberLine(member(id, PumparoundMember.name(pumparound.id(), "return")), cooled, Service.Ends.OPEN, block.nozzle(EquipmentShape.Role.RETURN, i + 1));
                 double shell = load != null && cooler.size() instanceof ExchangerSizing.Size s ? ExchangerSizing.shellDrop(load, s) : 0;
                 Double level = size == null ? null : size.level(pumparound.drawTray());
                 double up = size == null ? 0 : size.level(pumparound.returnTray()) - size.level(pumparound.drawTray());
                 double paRise = drawLine.line().density() * PassiveStepSolver.GRAVITY * up + 1e5 * (drop(drawLine) + drop(returnLine) + shell + Limit.VALVE_DROP.value());
-                out.put(member(id, name + " pump"), pump(member(id, name + " pump"), drawLine, hot, paRise, level));
+                out.put(member(id, PumparoundMember.name(pumparound.id(), "pump")), pump(member(id, PumparoundMember.name(pumparound.id(), "pump")), drawLine, hot, paRise, level));
             }
             members.put(id, out);
         }
@@ -751,7 +768,7 @@ public final class SheetSizing {
                 case AirCoolerSizing.Size cooler -> cooler.withBanks(count);
                 case null, default -> entry.size();
             };
-            return new UnitEntry(size, entry.type(), entry.height(), entry.hold(), entry.kept());
+            return new UnitEntry(size, entry.type(), entry.hold(), entry.kept());
         }
 
         /** The liquid a pumparound circulates to give {@code heat} W across its fall, at its draw tray. */
@@ -765,7 +782,7 @@ public final class SheetSizing {
         private SizedUnit pump(String id, SizedLine suction, FlowStream liquid, double rise, @Nullable Double height) {
             var entry = entries.unit(id);
             if (suction.size() == null) return SizedUnit.NONE;
-            var load = PumpSizing.Load.of(suction.line(), suction.size(), liquid, rise, entry.height() != null ? entry.height() : height, thermo);
+            var load = PumpSizing.Load.of(suction.line(), suction.size(), liquid, rise, height, thermo);
             return sized(entry, PumpSizing.Size.class, size -> PumpSizing.rate(load, size), () -> PumpSizing.auto(load));
         }
 
@@ -832,7 +849,7 @@ public final class SheetSizing {
         private SizedUnit pump(String id, UnitEntry entry) {
             var sized = inlet(id);
             if (sized == null || sized.size() == null) return SizedUnit.NONE;
-            var load = PumpSizing.Load.of(sized.line(), sized.size(), stream(id, "in"), stream(id, "out"), height(id, entry), thermo);
+            var load = PumpSizing.Load.of(sized.line(), sized.size(), stream(id, "in"), stream(id, "out"), height(id), thermo);
             return Sizing.sized(entry, PumpSizing.Size.class, size -> PumpSizing.rate(load, size), () -> PumpSizing.auto(load));
         }
 
@@ -846,8 +863,7 @@ public final class SheetSizing {
          * receiver's half level for the distillate, and its underside, over the boot, for the water; anything else at grade. Null
          * where the column has no size.
          */
-        private @Nullable Double height(String id, UnitEntry entry) {
-            if (entry.height() != null) return entry.height();
+        private @Nullable Double height(String id) {
             var wired = wires.getOrDefault(id, Map.of()).get("in");
             var stream = wired == null ? null : streams.get(wired);
             return stream == null || stream.from() == null ? (Double) 0. : level(stream.from());
@@ -889,7 +905,7 @@ public final class SheetSizing {
                 var flow = run.streams().get(stream.id());
                 String start = flow == null || flow.empty() ? null : start(stream);
                 if (start == null) continue;
-                var level = stream.from() == null || stream.from().port().equals(OVERHEAD) ? null : level(stream.from());
+                var level = stream.from() == null || stream.from().port().equals(ColumnUnit.OVERHEAD) ? null : level(stream.from());
                 double head = level == null ? 0 : flow.mass() / flow.state().volume() * PassiveStepSolver.GRAVITY * level / 1e5;
                 walk(new Walk(start, flow.pressure() / 1e5, head), stream.id(), new ArrayList<>(), new java.util.HashSet<>(), sized, paths);
             }
@@ -910,7 +926,7 @@ public final class SheetSizing {
             return switch (unit.type()) {
                 case "pump", "compressor", "drum", "storage_tank" -> unit.id();
                 case "kettle" -> port.equals("tube_out") ? null : unit.id();
-                case COLUMN -> port.equals("condenser_out") || port.equals("reboiler_out") || port.startsWith("pa/") ? null : unit.id();
+                case COLUMN -> port.equals(ColumnUnit.CONDENSER_OUT) || port.equals(ColumnUnit.REBOILER_OUT) || port.startsWith(ColumnUnit.PUMPAROUND) ? null : unit.id();
                 case "valve" -> set(unit) ? unit.id() : null;
                 default -> null;
             };
@@ -977,25 +993,25 @@ public final class SheetSizing {
         private void column(Walk walk, Flowsheet.Unit unit, String port, String streamId, List<PressurePath.Step> steps, java.util.Set<String> seen, Map<String, SizedUnit> sized, List<PressurePath> paths) {
             String id = unit.id();
             var door = ColumnDoor.of(unit.params());
-            if (port.equals("condenser_in")) {
+            if (port.equals(ColumnUnit.CONDENSER_IN)) {
                 // An air-then-water condenser's water passes through its trim's tubes.
                 var member = member(id, door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER ? TRIM : "condenser");
-                through(walk, id, member, ColumnUnit.CONDENSER_DROP, door.condenserDrop(), streamId, "condenser_out", steps, seen, sized, paths);
+                through(walk, id, member, ColumnUnit.CONDENSER_DROP, door.condenserDrop(), streamId, ColumnUnit.CONDENSER_OUT, steps, seen, sized, paths);
                 return;
             }
-            if (port.equals("reboiler_in")) {
-                through(walk, id, member(id, "reboiler"), ColumnUnit.REBOILER_DROP, door.reboilerDrop(), streamId, "reboiler_out", steps, seen, sized, paths);
+            if (port.equals(ColumnUnit.REBOILER_IN)) {
+                through(walk, id, member(id, "reboiler"), ColumnUnit.REBOILER_DROP, door.reboilerDrop(), streamId, ColumnUnit.REBOILER_OUT, steps, seen, sized, paths);
                 return;
             }
             for (var pumparound : door.pumparounds()) {
-                if (port.equals("pa/" + pumparound.id() + "/in")) {
-                    through(walk, id, member(id, "pa " + pumparound.id() + " cooler"), ColumnUnit.pumparoundDrop(pumparound), pumparound.drop(), streamId, "pa/" + pumparound.id() + "/out", steps, seen, sized, paths);
+                if (port.equals(ColumnUnit.pumparoundIn(pumparound))) {
+                    through(walk, id, member(id, PumparoundMember.name(pumparound.id(), PumparoundMember.COOLER)), ColumnUnit.pumparoundDrop(pumparound), pumparound.drop(), streamId, ColumnUnit.pumparoundOut(pumparound), steps, seen, sized, paths);
                     return;
                 }
             }
             var block = blocks.get(id);
-            Integer stage = port.equals(FEED) ? (Integer) door.feedStage() : null;
-            for (var row : door.steam()) if (port.equals(STEAM + row.id())) stage = row.stage();
+            Integer stage = port.equals(ColumnUnit.FEED) ? (Integer) door.feedStage() : null;
+            for (var row : door.steam()) if (port.equals(ColumnUnit.steamPort(row))) stage = row.stage();
             Double tray = block == null || stage == null ? null : block.inspection().nodes().get(stage).pressurePascal() / 1e5;
             end(walk, id, tray, steps, null, paths);
         }

@@ -18,19 +18,11 @@ public final class FlowsheetEngine {
     private FlowsheetEngine() {
     }
 
-    public static FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint) {
-        return run(sheet, catalog, checkpoint, null);
-    }
-
     /**
      * {@code last}, this sheet's last run if it has one, starts its loops; see {@link FlowsheetCompiler#estimates}. A stream flashes
      * on the world's own package, so a sheet drawn on another, or on one since removed, asks for it. Amounts go by component id, so
      * a sheet given that package keeps every one it has a place for.
      */
-    public static FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, @Nullable FlowsheetRun last) {
-        return run(sheet, catalog, checkpoint, last, FlowsheetSolver.Progress.NONE);
-    }
-
     public static FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, @Nullable FlowsheetRun last, FlowsheetSolver.Progress progress) {
         return solving(sheet, catalog, thermo -> {
             var calculations = FlowsheetCompiler.compile(sheet, thermo);

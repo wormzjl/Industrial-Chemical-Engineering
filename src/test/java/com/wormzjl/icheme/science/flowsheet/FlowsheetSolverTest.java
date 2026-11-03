@@ -27,7 +27,7 @@ class FlowsheetSolverTest {
     }
 
     private static FlowsheetRun run(List<Calculation> calculations) {
-        return FlowsheetSolver.run(calculations, AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, () -> {});
+        return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.solve(calculations, AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, () -> {});
     }
 
     private static Calculation feed(String out, double amount, double temperature) {
@@ -96,7 +96,7 @@ class FlowsheetSolverTest {
         var run = run(calculations);
         assertEquals(Status.STEADY, run.status());
         assertEquals(25, run.streams().get("mixed").total(), 1e-3);
-        var plain = FlowsheetSolver.run(calculations, AXIS, THERMO, new FlowsheetSolver.Settings(1e-4, .01, 30, 0, 0), () -> {});
+        var plain = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.solve(calculations, AXIS, THERMO, new FlowsheetSolver.Settings(1e-4, .01, 30, 0, 0), () -> {});
         assertEquals(Status.STEADY, plain.status());
         assertTrue(run.loops().getFirst().passes() < plain.loops().getFirst().passes(), run.loops() + " against " + plain.loops());
     }
@@ -115,11 +115,11 @@ class FlowsheetSolverTest {
             board.stream("preheated", stream(cold.temperature() + q / (CP * amount), BAR, amount));
             board.stream("rundown", hot.empty() ? hot : stream(hot.temperature() - q / (CP * amount), BAR, amount));
         });
-        var column = Calculation.of("column", List.of("fired"), List.of("bottoms"), (board, report) -> {
+        var column = FlowsheetRuns.block(Calculation.of("column", List.of("fired"), List.of("bottoms"), (board, report) -> {
             var s = board.stream("fired");
             board.stream("bottoms", stream(s.temperature() - drop, BAR, s.total()));
             report.duty(-drop * CP * s.total());
-        }).asBlock();
+        }));
         var run = run(List.of(feed("cold", amount, 300), exchanger, heat("preheated", "fired", furnace), column));
         assertEquals(Status.STEADY, run.status());
         assertEquals(300 + (rise - drop) / (1 - effectiveness), run.streams().get("bottoms").temperature(), .02);
@@ -221,7 +221,7 @@ class FlowsheetSolverTest {
     /** Stop keeps what was solved, and solves nothing more. */
     @Test void stopKeepsWhatWasSolved() {
         int[] seen = {0};
-        var run = FlowsheetSolver.run(List.of(feed("a", 10, 300), heat("a", "b", 100), heat("b", "c", 100)), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, () -> {
+        var run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.solve(List.of(feed("a", 10, 300), heat("a", "b", 100), heat("b", "c", 100)), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, () -> {
             if (++seen[0] == 5) throw new CancellationException();
         });
         assertEquals(Status.STOPPED, run.status());
@@ -243,7 +243,7 @@ class FlowsheetSolverTest {
                 board.stream("b", board.stream("a"));
             }
         };
-        var solved = FlowsheetSolver.run(List.of(feed("a", 10, 300), Calculation.of("eats", List.of("a"), List.of("b"), eats)), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, checkpoint);
+        var solved = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.solve(List.of(feed("a", 10, 300), Calculation.of("eats", List.of("a"), List.of("b"), eats)), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, checkpoint);
         assertEquals(Status.STOPPED, solved.status(), "not STEADY, though the last calculation returned");
         assertEquals(Outcome.NOT_SOLVED, solved.outcomes().get("eats"));
         stop[0] = false;
@@ -255,7 +255,7 @@ class FlowsheetSolverTest {
                 throw new FlowsheetFailure("column.failed", "eaten");
             }
         };
-        var failed = FlowsheetSolver.run(List.of(feed("a", 10, 300), Calculation.of("fails", List.of("a"), List.of("b"), fails)), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, checkpoint);
+        var failed = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.solve(List.of(feed("a", 10, 300), Calculation.of("fails", List.of("a"), List.of("b"), fails)), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, checkpoint);
         assertEquals(Status.STOPPED, failed.status(), "not FAILED");
         assertTrue(failed.log().isEmpty(), "and no unit is blamed for it");
     }
@@ -268,7 +268,7 @@ class FlowsheetSolverTest {
             board.stream("next", board.stream("back"));
         });
         var back = Calculation.of("mix", List.of("a", "next"), List.of("back"), (board, report) -> board.stream("back", board.stream("a")));
-        var run = FlowsheetSolver.run(List.of(feed("a", 10, 300), back, unit), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, () -> {
+        var run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.solve(List.of(feed("a", 10, 300), back, unit), AXIS, THERMO, FlowsheetSolver.Settings.DEFAULT, () -> {
         });
         assertEquals(1, run.loops().size());
         assertEquals(run.loops().getFirst().passes(), run.passes().size(), "one record a pass");
@@ -288,7 +288,7 @@ class FlowsheetSolverTest {
     /** The same stream through a block's two calculations is no loop: a heat side reads the door's duty, not the block's solve. */
     @Test void aBlocksHeatSideIsNoLoop() {
         double duty = 2000;
-        var block = Calculation.of("T-101", List.of("feed"), List.of("bottoms"), (board, report) -> board.stream("bottoms", board.stream("feed"))).asBlock();
+        var block = FlowsheetRuns.block(Calculation.of("T-101", List.of("feed"), List.of("bottoms"), (board, report) -> board.stream("bottoms", board.stream("feed"))));
         var side = heat("cold", "feed", duty);
         var run = run(List.of(feed("cold", 10, 300), side, block));
         assertEquals(Status.STEADY, run.status());

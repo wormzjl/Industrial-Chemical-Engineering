@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class StreamFlowBasisTest {
     private static final Flowsheet SHEET = SheetFixture.water();
-    private static final FlowsheetRun RUN = FlowsheetEngine.run(SHEET, SheetFixture.CATALOG, () -> {
+    private static final FlowsheetRun RUN = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(SHEET, SheetFixture.CATALOG, () -> {
     });
     private static final SheetGestures.Selection FEED = new SheetGestures.Selection(false, "FEED"), OUT = new SheetGestures.Selection(false, "OUT");
 

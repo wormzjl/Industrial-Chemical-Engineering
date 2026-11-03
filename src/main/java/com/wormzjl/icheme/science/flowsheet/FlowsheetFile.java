@@ -34,11 +34,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * The flowsheet file (batch 2026-11-02-process-simulator, plan section 3.9): a sheet's facts as one JSON document, for the player's
@@ -83,10 +81,6 @@ public final class FlowsheetFile {
     }
 
     public static Flowsheet read(byte[] bytes) {
-        return read(bytes, UnitTypes.ALIASES);
-    }
-
-    static Flowsheet read(byte[] bytes, UnitTypes.Aliases aliases) {
         var root = new Fields(parse(bytes), "sheet");
         int format = root.whole("format");
         if (format > FORMAT) throw new FlowsheetFailure("file.newer", String.valueOf(format), String.valueOf(FORMAT));
@@ -94,24 +88,20 @@ public final class FlowsheetFile {
         if (format < FORMAT) throw new FlowsheetFailure("file.older", String.valueOf(format), String.valueOf(FORMAT));
         var basis = basis(root.object("basis"));
         var units = new ArrayList<Flowsheet.Unit>();
-        var types = new HashMap<String, String>();
-        var held = new LinkedHashMap<String, UnitType>();
+        var unitIds = new HashSet<String>();
         for (var row : root.rows("units")) {
-            var unit = unit(row, aliases, held);
-            if (types.putIfAbsent(unit.id(), unit.type()) != null) throw damaged(row.path);
+            var unit = unit(row);
+            if (!unitIds.add(unit.id())) throw damaged(row.path);
             units.add(unit);
         }
         var streams = new ArrayList<Flowsheet.Stream>();
         var ids = new HashSet<String>();
         for (var row : root.rows("streams")) {
-            var stream = stream(row, types, aliases);
+            var stream = stream(row);
             if (!ids.add(stream.id())) throw damaged(row.path);
             streams.add(stream);
         }
-        var sizing = sizing(root.optionalObject("sizing"));
-        // A unit read under an old type's name keeps the type it was, where its sizing holds no key of its own (C2: an air cooler).
-        for (var entry : held.entrySet()) if (sizing.unit(entry.getKey()).type() == null) sizing = sizing.with(entry.getKey(), sizing.unit(entry.getKey()).typed(entry.getValue()));
-        return new Flowsheet(basis, units, streams, settings(root.optionalObject("settings")), sizing, root.rest);
+        return new Flowsheet(basis, units, streams, settings(root.optionalObject("settings")), sizing(root.optionalObject("sizing")), root.rest);
     }
 
     // ---- Sizing's facts (sizing plan section 3.9): absent on a sheet never sized, which reads as every item on Auto, no size ----
@@ -293,17 +283,14 @@ public final class FlowsheetFile {
         return new Flowsheet.Basis(fields.id("package"), fields.text("revision"), fields.texts("components"), fields.rest);
     }
 
-    private static Flowsheet.Unit unit(Fields fields, UnitTypes.Aliases aliases, Map<String, UnitType> held) {
-        String id = fields.id("id"), type = fields.id("type");
-        var key = aliases.held(type);
-        if (key != null) held.put(id, key);
-        return new Flowsheet.Unit(id, aliases.type(type), fields.text("name"), fields.whole("x"), fields.whole("y"), new Params(fields.object("params").rest), fields.rest);
+    private static Flowsheet.Unit unit(Fields fields) {
+        return new Flowsheet.Unit(fields.id("id"), fields.id("type"), fields.text("name"), fields.whole("x"), fields.whole("y"), new Params(fields.object("params").rest), fields.rest);
     }
 
-    private static Flowsheet.Stream stream(Fields fields, Map<String, String> types, UnitTypes.Aliases aliases) {
+    private static Flowsheet.Stream stream(Fields fields) {
         String id = fields.id("id"), name = fields.text("name");
-        var from = end(fields.optionalObject("from"), types, aliases);
-        var to = end(fields.optionalObject("to"), types, aliases);
+        var from = end(fields.optionalObject("from"));
+        var to = end(fields.optionalObject("to"));
         var spec = fields.optionalObject("feed");
         var route = new ArrayList<Flowsheet.Point>();
         for (var corner : fields.optionalRows("route")) route.add(new Flowsheet.Point(corner.whole("x"), corner.whole("y"), corner.rest));
@@ -311,10 +298,9 @@ public final class FlowsheetFile {
     }
 
     /** An end keeps what it names: a unit this sheet does not hold, or a port its unit has lost, leaves the end open in the compiler. */
-    private static Flowsheet.@Nullable End end(@Nullable Fields fields, Map<String, String> types, UnitTypes.Aliases aliases) {
+    private static Flowsheet.@Nullable End end(@Nullable Fields fields) {
         if (fields == null) return null;
-        String unit = fields.id("unit"), port = fields.id("port"), type = types.get(unit);
-        return new Flowsheet.End(unit, type == null ? port : aliases.port(type, port), fields.rest);
+        return new Flowsheet.End(fields.id("unit"), fields.id("port"), fields.rest);
     }
 
     private static Flowsheet.Feed feed(Fields fields) {

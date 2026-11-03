@@ -65,10 +65,10 @@ final class UnitSizingTest {
     @Test void noFlowNoSizeNoLamp() {
         assertNull(PumpSizing.auto(PumpSizing.Load.NONE).size());
         assertEquals(Lamp.NONE, PumpSizing.rate(PumpSizing.Load.NONE, new PumpSizing.Size(.3)).lamp());
-        assertNull(DrumSizing.auto(DrumSizing.Load.NONE).size());
-        assertNull(TankSizing.auto(TankSizing.Load.NONE).size());
-        assertNull(CompressorSizing.auto(CompressorSizing.Load.NONE).size());
-        assertNull(HeaterSizing.auto(new HeaterSizing.Load(0, null)).size());
+        assertNull(DrumSizing.auto(DrumSizing.Load.NONE, null).size());
+        assertNull(TankSizing.auto(TankSizing.Load.NONE, null).size());
+        assertNull(CompressorSizing.auto(CompressorSizing.Load.NONE, null).size());
+        assertNull(HeaterSizing.auto(new HeaterSizing.Load(0, null), null).size());
         assertNull(ExchangerSizing.auto(null).size());
         assertNull(AirCoolerSizing.auto(null).size());
     }
@@ -76,7 +76,7 @@ final class UnitSizingTest {
     // ---- Exchangers ----
 
     private static ExchangerSizing.Load exchanger(double needed, LineSizing.Carried tube, LineSizing.Carried shell, Limit shellDrop) {
-        return new ExchangerSizing.Load(false, tube, shell, Limit.EXCHANGER_DROP_LIQUID, shellDrop, needed, 2e7, 80, 45, 45, null);
+        return new ExchangerSizing.Load(false, tube, shell, Limit.EXCHANGER_DROP_LIQUID, shellDrop, needed, 2e7, 80, 45, 45, null, null);
     }
 
     private static List<ExchangerSizing.Size> exchangers() {
@@ -122,7 +122,7 @@ final class UnitSizingTest {
     }
 
     @Test void curvesThatTouchAreRedAndAutoStillAnswers() {
-        var load = new ExchangerSizing.Load(false, E_101.tube(), E_101.shell(), Limit.EXCHANGER_DROP_LIQUID, Limit.EXCHANGER_DROP_LIQUID, Double.POSITIVE_INFINITY, 2e7, 5, -3, -3, null);
+        var load = new ExchangerSizing.Load(false, E_101.tube(), E_101.shell(), Limit.EXCHANGER_DROP_LIQUID, Limit.EXCHANGER_DROP_LIQUID, Double.POSITIVE_INFINITY, 2e7, 5, -3, -3, null, null);
         var choice = ExchangerSizing.auto(load);
         assertEquals(Lamp.RED, choice.rating().lamp());
         assertNotNull(choice.size());
@@ -131,7 +131,7 @@ final class UnitSizingTest {
     }
 
     @Test void aSmallApproachIsYellowAndHidesNothingASizeCanChange() {
-        var tight = new ExchangerSizing.Load(false, E_101.tube(), E_101.shell(), Limit.EXCHANGER_DROP_LIQUID, Limit.EXCHANGER_DROP_LIQUID, 440, 2e7, 8, 6, 6, null);
+        var tight = new ExchangerSizing.Load(false, E_101.tube(), E_101.shell(), Limit.EXCHANGER_DROP_LIQUID, Limit.EXCHANGER_DROP_LIQUID, 440, 2e7, 8, 6, 6, null, null);
         var choice = ExchangerSizing.auto(tight);
         assertEquals(Lamp.YELLOW, choice.rating().lamp());
         assertSame(Limit.EXCHANGER_APPROACH, choice.rating().closest().limit());
@@ -139,7 +139,7 @@ final class UnitSizingTest {
     }
 
     @Test void coolingWaterOutReadsOnlyOnWater() {
-        var water = new ExchangerSizing.Load(false, E_101.tube(), E_101.shell(), Limit.EXCHANGER_DROP_LIQUID, Limit.EXCHANGER_DROP_LIQUID, 440, 2e7, 80, 45, 45, 46.);
+        var water = new ExchangerSizing.Load(false, E_101.tube(), E_101.shell(), Limit.EXCHANGER_DROP_LIQUID, Limit.EXCHANGER_DROP_LIQUID, 440, 2e7, 80, 45, 45, 46., null);
         var size = ExchangerSizing.auto(E_101).size();
         assertEquals(Lamp.YELLOW, ExchangerSizing.rate(water, size).lamp());
         assertNull(ExchangerSizing.rate(E_101, size).reading(Limit.EXCHANGER_WATER_OUT));
@@ -147,7 +147,7 @@ final class UnitSizingTest {
 
     @Test void aKettleHasNoShellDropAndReadsItsFlux() {
         var steam = liquid(10, 4, 1.5e-5);
-        var load = new ExchangerSizing.Load(true, steam, null, Limit.EXCHANGER_DROP_GAS, null, 100, 6e6, 40, 30, 30, null);
+        var load = new ExchangerSizing.Load(true, steam, null, Limit.EXCHANGER_DROP_GAS, null, 100, 6e6, 40, 30, 30, null, null);
         var choice = ExchangerSizing.auto(load);
         assertEquals(Lamp.GREEN, choice.rating().lamp());
         assertTrue(choice.size().kettle());
@@ -161,12 +161,12 @@ final class UnitSizingTest {
 
     // ---- Air coolers ----
 
-    private static final AirCoolerSizing.Load E_102 = new AirCoolerSizing.Load(liquid(60, 800, 2e-3), 724, 45);
+    private static final AirCoolerSizing.Load E_102 = new AirCoolerSizing.Load(liquid(60, 800, 2e-3), 724, 45, null, 0);
 
     private static List<AirCoolerSizing.Size> banks() {
         var sizes = new ArrayList<AirCoolerSizing.Size>();
         for (var bay : ProcessUnit.bays())
-            for (int parallel = 1; parallel <= 6; parallel++) for (int series = 1; series <= 4; series++) sizes.add(new AirCoolerSizing.Size(bay[0], (int) bay[1], new ProcessUnit.Bank(parallel, series)));
+            for (int parallel = 1; parallel <= 6; parallel++) for (int series = 1; series <= 4; series++) sizes.add(new AirCoolerSizing.Size(bay[0], (int) bay[1], new ProcessUnit.Bank(parallel, series), 1));
         return sizes;
     }
 
@@ -183,10 +183,10 @@ final class UnitSizingTest {
     }
 
     @Test void oneStepDownFailsItsSurfaceAndAThickLiquidItsDrop() {
-        var down = AirCoolerSizing.rate(E_102, new AirCoolerSizing.Size(2, 5, new ProcessUnit.Bank(5, 4)));
+        var down = AirCoolerSizing.rate(E_102, new AirCoolerSizing.Size(2, 5, new ProcessUnit.Bank(5, 4), 1));
         assertEquals(Lamp.RED, down.lamp());
         assertSame(Limit.AIR_COOLER_SURFACE, down.closest().limit());
-        var thick = new AirCoolerSizing.Load(liquid(150, 800, .2), 400, 45);
+        var thick = new AirCoolerSizing.Load(liquid(150, 800, .2), 400, 45, null, 0);
         var choice = AirCoolerSizing.auto(thick);
         assertTrue(choice.rating().reading(Limit.AIR_COOLER_DROP).met());
         assertTrue(choice.size().bank().parallel() > 1, "trains in parallel carry it");
@@ -195,7 +195,7 @@ final class UnitSizingTest {
     /** S3b: a duty past the largest bank takes identical banks in parallel, the fewest first; each carries its share, so the drop falls. */
     @Test void aDutyPastTheLargestBankTakesBanksInParallel() {
         double largest = banks().stream().mapToDouble(AirCoolerSizing.Size::surface).max().orElseThrow();
-        var big = new AirCoolerSizing.Load(E_102.mean(), 1.5 * largest, 45);
+        var big = new AirCoolerSizing.Load(E_102.mean(), 1.5 * largest, 45, null, 0);
         var choice = AirCoolerSizing.auto(big);
         assertEquals(Lamp.GREEN, choice.rating().lamp(), choice.rating().toString());
         assertEquals(2, choice.size().banks());
@@ -209,7 +209,7 @@ final class UnitSizingTest {
     }
 
     @Test void anOutletTooCloseToTheAirIsYellowAndHidesNothingASizeCanChange() {
-        var close = new AirCoolerSizing.Load(E_102.mean(), 724, 10);
+        var close = new AirCoolerSizing.Load(E_102.mean(), 724, 10, null, 0);
         var choice = AirCoolerSizing.auto(close);
         assertEquals(Lamp.YELLOW, choice.rating().lamp());
         assertEquals(AirCoolerSizing.auto(E_102).size(), choice.size());
@@ -226,7 +226,7 @@ final class UnitSizingTest {
 
     @Test void aHeaterTakesTheLeastDutyThatHoldsTheSpare() {
         var load = new HeaterSizing.Load(86.2, null);
-        var choice = HeaterSizing.auto(load);
+        var choice = HeaterSizing.auto(load, null);
         assertEquals(new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 12, 45), choice.size(), "11 × 41 m held the bare 86.2 MW before S4c");
         assertTrue(choice.size().held() >= SPARE * load.duty());
         assertEquals(Lamp.GREEN, choice.rating().lamp());
@@ -238,10 +238,10 @@ final class UnitSizingTest {
 
     @Test void aHeaterPastTheLargestCabinTakesACount() {
         double largest = Limit.TYPE_CABIN_LARGEST.value();
-        var one = HeaterSizing.auto(new HeaterSizing.Load(largest / SPARE - 1e-9, null));
+        var one = HeaterSizing.auto(new HeaterSizing.Load(largest / SPARE - 1e-9, null), null);
         assertEquals(1, one.size().count());
         assertEquals(Lamp.GREEN, one.rating().lamp());
-        var two = HeaterSizing.auto(new HeaterSizing.Load(largest / SPARE + 1, null));
+        var two = HeaterSizing.auto(new HeaterSizing.Load(largest / SPARE + 1, null), null);
         assertEquals(2, two.size().count());
         assertEquals(Lamp.GREEN, two.rating().lamp());
         assertTrue(two.size().held() < 2 * largest, "the count shares the duty");
@@ -284,7 +284,7 @@ final class UnitSizingTest {
         assertEquals(Lamp.GREEN, cooler.rating().lamp());
         assertTrue(cooler.size().surface() >= SPARE * E_102.needed(), cooler.size().toString());
         assertEquals(E_102.needed(), cooler.rating().reading(Limit.AIR_COOLER_SURFACE).low(), 1e-9);
-        var heater = HeaterSizing.auto(new HeaterSizing.Load(86.2, null));
+        var heater = HeaterSizing.auto(new HeaterSizing.Load(86.2, null), null);
         assertEquals(Lamp.GREEN, heater.rating().lamp());
         assertTrue(heater.size().held() >= SPARE * 86.2, heater.size().toString());
         assertEquals(86.2, heater.rating().reading(Limit.HEATER_DUTY).low(), 1e-9);
@@ -293,7 +293,7 @@ final class UnitSizingTest {
     /** My call, S4c: the bank count is part of Auto's order, so where one bank holds the need but not the spare, it takes two. */
     @Test void theSpareTakesOneMoreBankWhereOneCannotHoldIt() {
         double largest = banks().stream().mapToDouble(AirCoolerSizing.Size::surface).max().orElseThrow();
-        var load = new AirCoolerSizing.Load(E_102.mean(), .9 * largest, 45);
+        var load = new AirCoolerSizing.Load(E_102.mean(), .9 * largest, 45, null, 0);
         var choice = AirCoolerSizing.auto(load);
         assertEquals(Lamp.GREEN, choice.rating().lamp());
         assertEquals(2, choice.size().banks());
@@ -318,12 +318,12 @@ final class UnitSizingTest {
      */
     @Test void theHeatersTypeAndCountFollowTheSparedDuty() {
         double vertical = Limit.HEATER_VERTICAL.value();
-        var cabin = HeaterSizing.auto(new HeaterSizing.Load(vertical / 1.1, null));
+        var cabin = HeaterSizing.auto(new HeaterSizing.Load(vertical / 1.1, null), null);
         assertEquals(UnitType.CABIN_HEATER, cabin.size().type(), "the largest vertical holds the duty, not its spare");
         assertTrue(cabin.size().held() >= SPARE * vertical / 1.1);
         assertEquals(Lamp.GREEN, cabin.rating().lamp());
         double largest = Limit.TYPE_CABIN_LARGEST.value();
-        var two = HeaterSizing.auto(new HeaterSizing.Load(largest, null));
+        var two = HeaterSizing.auto(new HeaterSizing.Load(largest, null), null);
         assertEquals(2, two.size().count(), "one cabin holds the duty, not its spare");
         assertTrue(two.size().held() >= SPARE * largest);
         assertEquals(Lamp.GREEN, two.rating().lamp());
@@ -333,7 +333,7 @@ final class UnitSizingTest {
     /** S4c: a compressor's frames that hold the flow with the spare come first; its type stays on the design flow. */
     @Test void aCompressorHoldsTheSpareWithinItsType() {
         var load = gas(10000, 3);
-        var choice = CompressorSizing.auto(load);
+        var choice = CompressorSizing.auto(load, null);
         assertEquals(UnitType.PISTON, choice.size().type());
         assertEquals(Lamp.GREEN, choice.rating().lamp());
         assertTrue(choice.size().displacement(choice.size().stages(3)) >= SPARE * 10000, choice.size().toString());
@@ -392,7 +392,7 @@ final class UnitSizingTest {
 
     @Test void aCompressorTakesItsTypesSmallestFrame() {
         var load = gas(10000, 3);
-        var choice = CompressorSizing.auto(load);
+        var choice = CompressorSizing.auto(load, null);
         var size = choice.size();
         assertEquals(UnitType.PISTON, size.type());
         assertEquals(Lamp.GREEN, choice.rating().lamp());
@@ -404,7 +404,7 @@ final class UnitSizingTest {
         assertEquals(Lamp.YELLOW, down.lamp(), "a step under the flow");
         assertSame(Limit.COMPRESSOR_DISPLACEMENT, down.closest().limit());
         var turbo = gas(20000, 8);
-        var impellers = CompressorSizing.auto(turbo);
+        var impellers = CompressorSizing.auto(turbo, null);
         assertEquals(new CompressorSizing.Size(UnitType.TURBO, .6, 2), impellers.size(), "0.5 m takes 19500 m³/h; two impellers hold 2.8 a stage");
         assertEquals(Lamp.GREEN, impellers.rating().lamp());
     }
@@ -456,7 +456,7 @@ final class UnitSizingTest {
 
     @Test void aDrumTakesItsTypesLeastVolume() {
         var load = drum(.0215);
-        var choice = DrumSizing.auto(load);
+        var choice = DrumSizing.auto(load, null);
         var size = choice.size();
         assertEquals(new DrumSizing.Size(UnitType.STANDING_DRUM, 1.5, 7, false), size);
         assertEquals(Lamp.GREEN, choice.rating().lamp());
@@ -477,7 +477,7 @@ final class UnitSizingTest {
 
     @Test void aSecondLiquidTakesABootAndItsOwnHold() {
         var load = new DrumSizing.Load(.2, .05, .002, 5, 700, 5);
-        var choice = DrumSizing.auto(load);
+        var choice = DrumSizing.auto(load, null);
         var size = choice.size();
         assertEquals(UnitType.LYING_DRUM, size.type());
         assertTrue(size.boot());
@@ -498,10 +498,10 @@ final class UnitSizingTest {
     }
 
     @Test void aDrumsEntryMovesItsHold() {
-        var size = DrumSizing.auto(drum(.0215)).size();
+        var size = DrumSizing.auto(drum(.0215), null).size();
         var longer = new DrumSizing.Load(.5, .0215, 0, 5, 700, 10);
         assertFalse(DrumSizing.rate(longer, size).reading(Limit.DRUM_HOLD).met());
-        assertTrue(DrumSizing.auto(longer).size().shape().volume() > size.shape().volume());
+        assertTrue(DrumSizing.auto(longer, null).size().shape().volume() > size.shape().volume());
     }
 
     // ---- Tanks ----
@@ -514,7 +514,7 @@ final class UnitSizingTest {
 
     @Test void aTankTakesTheFewestVesselsThenTheLeastVolume() {
         var load = new TankSizing.Load(100, .1, 24);
-        var choice = TankSizing.auto(load);
+        var choice = TankSizing.auto(load, null);
         var size = choice.size();
         assertEquals(new TankSizing.Size(UnitType.FLOATING_ROOF, 1, 19, 11), size);
         assertEquals(Lamp.GREEN, choice.rating().lamp());
@@ -525,7 +525,7 @@ final class UnitSizingTest {
     }
 
     @Test void aLargeHoldTakesACount() {
-        var choice = TankSizing.auto(new TankSizing.Load(3000, .1, 24));
+        var choice = TankSizing.auto(new TankSizing.Load(3000, .1, 24), null);
         assertEquals(3, choice.size().count());
         assertEquals(40, choice.size().diameter(), 0);
         assertEquals(Lamp.GREEN, choice.rating().lamp());
@@ -538,14 +538,14 @@ final class UnitSizingTest {
         assertSame(Limit.ROOF_BUBBLE_WORLD, roof.closest().limit());
         var warm = new TankSizing.Load(100, .9, 24);
         assertEquals(Lamp.YELLOW, TankSizing.rate(warm, new TankSizing.Size(UnitType.FLOATING_ROOF, 1, 19, 11)).lamp());
-        var sphere = TankSizing.auto(new TankSizing.Load(100, 19, 24));
+        var sphere = TankSizing.auto(new TankSizing.Load(100, 19, 24), null);
         assertEquals(Lamp.YELLOW, sphere.rating().lamp(), "1.1 times 19 bar");
         assertEquals(20.9, sphere.rating().reading(Limit.SPHERE_DESIGN).value(), 1e-9);
     }
 
     @Test void aTanksEntryMovesItsHold() {
-        var day = TankSizing.auto(new TankSizing.Load(100, .1, 24)).size();
-        var two = TankSizing.auto(new TankSizing.Load(100, .1, 48)).size();
+        var day = TankSizing.auto(new TankSizing.Load(100, .1, 24), null).size();
+        var two = TankSizing.auto(new TankSizing.Load(100, .1, 48), null).size();
         assertTrue(two.diameter() > day.diameter());
     }
 
@@ -574,14 +574,14 @@ final class UnitSizingTest {
         sizes.add(PumpSizing.auto(PUMP).size());
         sizes.add(ExchangerSizing.auto(E_101).size());
         sizes.add(AirCoolerSizing.auto(E_102).size());
-        sizes.add(HeaterSizing.auto(new HeaterSizing.Load(86.2, null)).size());
-        sizes.add(HeaterSizing.auto(new HeaterSizing.Load(10, null)).size());
-        sizes.add(CompressorSizing.auto(gas(10000, 3)).size());
-        sizes.add(CompressorSizing.auto(gas(20000, 8)).size());
-        sizes.add(DrumSizing.auto(drum(.0215)).size());
-        sizes.add(DrumSizing.auto(new DrumSizing.Load(.2, .05, .002, 5, 700, 5)).size());
-        sizes.add(TankSizing.auto(new TankSizing.Load(100, .1, 24)).size());
-        sizes.add(TankSizing.auto(new TankSizing.Load(100, 2, 24)).size());
+        sizes.add(HeaterSizing.auto(new HeaterSizing.Load(86.2, null), null).size());
+        sizes.add(HeaterSizing.auto(new HeaterSizing.Load(10, null), null).size());
+        sizes.add(CompressorSizing.auto(gas(10000, 3), null).size());
+        sizes.add(CompressorSizing.auto(gas(20000, 8), null).size());
+        sizes.add(DrumSizing.auto(drum(.0215), null).size());
+        sizes.add(DrumSizing.auto(new DrumSizing.Load(.2, .05, .002, 5, 700, 5), null).size());
+        sizes.add(TankSizing.auto(new TankSizing.Load(100, .1, 24), null).size());
+        sizes.add(TankSizing.auto(new TankSizing.Load(100, 2, 24), null).size());
         for (var size : sizes) {
             assertNotNull(size);
             assertTrue(size.shape() instanceof EquipmentShape, size.toString());

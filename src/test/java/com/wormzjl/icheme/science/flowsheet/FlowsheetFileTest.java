@@ -87,7 +87,7 @@ final class FlowsheetFileTest {
     }
 
     private static FlowsheetRun run(Flowsheet sheet) {
-        return FlowsheetEngine.run(sheet, CATALOG, () -> {
+        return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, CATALOG, () -> {
         });
     }
 
@@ -210,15 +210,6 @@ final class FlowsheetFileTest {
         assertEquals(-1.5e7, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(sheet.units().stream().filter(unit -> unit.id().equals("T-1")).findFirst().orElseThrow().params()).pumparounds().getFirst().duty(), 1, "and its duty");
         assertTrue(run.streams().containsKey("P-1"), "the row's coolant stands as a feed with nowhere to go");
         assertEquals("pa/1/a", sheet.streams().stream().filter(stream -> stream.id().equals("P-1")).findFirst().orElseThrow().to().port(), "the sheet keeps the end, so Undo finds it");
-    }
-
-    @Test void aRenamedTypeAndPortReadByTheirAliases() {
-        var aliases = new UnitTypes.Aliases(Map.of("flash_drum", "drum"), Map.of("drum", Map.of("vapour", "gas")));
-        var json = image();
-        unit(json, "D-1").addProperty("type", "flash_drum");
-        stream(json, "G-1").getAsJsonObject("from").addProperty("port", "vapour");
-        byte[] written = FlowsheetFile.write(FlowsheetFile.read(bytes(json), aliases));
-        assertEquals(image(), tree(written), "a sheet holds today's names");
     }
 
     private static void damaged(String where, Consumer<JsonObject> damage) {
@@ -354,41 +345,6 @@ final class FlowsheetFileTest {
         assertEquals(3, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(whole).units().trim());
         whole.json().addProperty("trim_units", 7);
         assertEquals(List.of("trim_units"), assertThrows(FlowsheetFailure.class, () -> com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(whole)).arguments());
-    }
-
-    /**
-     * C2: a unit saved as an air cooler reads as a Cooler held on Air, its kept size with it, and writes back under today's name; a
-     * key it already holds stands.
-     */
-    @Test void anAirCoolerReadsAsACoolerHeldOnAir() throws IOException {
-        var json = tree(Files.readAllBytes(CORPUS.resolve("format-2-coolers.json")));
-        unit(json, "A-1").addProperty("type", "air_cooler");
-        unit(json, "A-2").addProperty("type", "air_cooler");
-        var units = json.getAsJsonObject("sizing").getAsJsonObject("units");
-        units.remove("A-1");
-        var kept = JsonParser.parseString("{\"mode\": \"FIXED\", \"size\": {\"kind\": \"AIR_COOLER\", \"width\": 2.0, \"length\": 5, \"parallel\": 2, \"series\": 1}}").getAsJsonObject();
-        units.add("A-1", kept);
-        units.getAsJsonObject("A-2").addProperty("type", "WATER_COOLER");
-        var sheet = FlowsheetFile.read(bytes(json));
-        assertEquals("cooler", sheet.units().get(0).type());
-        assertEquals(UnitType.AIR_COOLER, sheet.sizing().unit("A-1").type());
-        assertEquals(SizingFacts.Mode.FIXED, sheet.sizing().unit("A-1").mode());
-        assertEquals(new AirCoolerSizing.Size(2, 5, new com.wormzjl.icheme.science.equipment.ProcessUnit.Bank(2, 1)), sheet.sizing().unit("A-1").size(), "its kept size stays");
-        assertEquals(UnitType.WATER_COOLER, sheet.sizing().unit("A-2").type(), "a key it holds stands");
-        var written = tree(FlowsheetFile.write(sheet));
-        assertEquals("cooler", unit(written, "A-1").get("type").getAsString());
-        assertEquals("AIR_COOLER", written.getAsJsonObject("sizing").getAsJsonObject("units").getAsJsonObject("A-1").get("type").getAsString());
-        assertEquals(sheet, FlowsheetFile.read(FlowsheetFile.write(sheet)));
-        var bare = image();
-        var row = new JsonObject();
-        row.addProperty("id", "A-9");
-        row.addProperty("type", "air_cooler");
-        row.addProperty("name", "E-9");
-        row.addProperty("x", 0);
-        row.addProperty("y", 0);
-        row.add("params", new JsonObject());
-        bare.getAsJsonArray("units").add(row);
-        assertEquals(UnitType.AIR_COOLER, FlowsheetFile.read(bytes(bare)).sizing().unit("A-9").type(), "a sheet never sized gains the key");
     }
 
     private static void damagedFact(String where, Consumer<JsonObject> damage) {

@@ -50,8 +50,7 @@ public final class FlowsheetCompiler {
 
     /** Whether {@code feed} is water and nothing else: cooling water as a liquid, steam as a vapour. */
     private static boolean waterAlone(Flowsheet.Feed feed, FlowThermo thermo) {
-        int water = thermo.axis().indexOf(com.wormzjl.icheme.science.column.operation.SplitTable.WATER);
-        if (water < 0) return false;
+        int water = thermo.water();
         for (var solid : feed.solids()) if (solid.massFlow() > 0) return false;
         double[] amounts = amounts(feed, thermo);
         for (int i = 0; i < amounts.length; i++) if (i != water && amounts[i] != 0) return false;
@@ -73,7 +72,7 @@ public final class FlowsheetCompiler {
         for (var stream : sheet.streams()) {
             if (stream.feed() != null && stream.from() != null) {
                 try {
-                    estimates.put(stream.id(), thermo.atTemperature(stream.feed().temperature(), stream.feed().pressure(), amounts(stream.feed(), thermo), solids(stream.feed(), thermo)));
+                    estimates.put(stream.id(), typed(stream.feed(), thermo));
                 } catch (CancellationException stop) {
                     throw stop;
                 } catch (RuntimeException noState) {
@@ -146,7 +145,7 @@ public final class FlowsheetCompiler {
         var feed = stream.feed();
         return Calculation.of("feed " + stream.id(), List.of(), List.of(stream.id()), (board, report) -> {
             if (feed == null) throw new FlowsheetFailure("stream.open", stream.name());
-            var flow = thermo.atTemperature(feed.temperature(), feed.pressure(), amounts(feed, thermo), solids(feed, thermo));
+            var flow = typed(feed, thermo);
             board.stream(stream.id(), flow);
             report.enters(flow.mass(), flow.enthalpy());
             for (var id : parked(feed, thermo)) report.note(Note.warning(stream.id(), "basis.parked", id));

@@ -46,4 +46,11 @@ public sealed interface UnitSize permits PumpSizing.Size, ExchangerSizing.Size, 
     static Reading reading(@Nullable EquipmentShape shape) {
         return Limit.UNIT_SHAPE.read(shape == null ? 0 : 1);
     }
+
+    /** A rating's readings, opened with {@link #reading} of {@code shape}. */
+    static java.util.ArrayList<Reading> readings(@Nullable EquipmentShape shape) {
+        var readings = new java.util.ArrayList<Reading>();
+        readings.add(reading(shape));
+        return readings;
+    }
 }

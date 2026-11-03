@@ -72,7 +72,7 @@ public final class SizedPassages {
                 for (int i = 0; i < door.pumparounds().size(); i++) {
                     var pumparound = door.pumparounds().get(i);
                     int shells = units.cooler(i);
-                    if (exchanger(facts.unit(SheetSizing.member(id, "pa " + pumparound.id() + " cooler")).size(), false) instanceof ExchangerSizing.Size size)
+                    if (exchanger(facts.unit(SheetSizing.member(id, SheetSizing.PumparoundMember.name(pumparound.id(), SheetSizing.PumparoundMember.COOLER))).size(), false) instanceof ExchangerSizing.Size size)
                         laws.put(ColumnUnit.pumparoundDrop(pumparound), (in, out) -> tube(size.withShells(shells), in, 1, thermo));
                 }
             }
@@ -92,7 +92,7 @@ public final class SizedPassages {
             case "column" -> {
                 var door = ColumnDoor.of(unit.params());
                 var read = new ArrayList<Object>(Arrays.asList(facts.unit(SheetSizing.member(id, "condenser")).size(), facts.unit(SheetSizing.member(id, SheetSizing.TRIM)).size(), facts.unit(SheetSizing.member(id, "reboiler")).size(), door.units(), door.condenser()));
-                for (var pumparound : door.pumparounds()) read.add(facts.unit(SheetSizing.member(id, "pa " + pumparound.id() + " cooler")).size());
+                for (var pumparound : door.pumparounds()) read.add(facts.unit(SheetSizing.member(id, SheetSizing.PumparoundMember.name(pumparound.id(), SheetSizing.PumparoundMember.COOLER))).size());
                 yield read;
             }
             default -> List.of();
@@ -133,19 +133,34 @@ public final class SizedPassages {
 
     /** What {@code in} loses through {@code size}'s tubes at {@code flow} times its rate, Pa, its shells in parallel. */
     public static double tube(ExchangerSizing.Size size, FlowStream in, double flow, FlowThermo thermo) {
-        return LineSizing.Carried.of(in, flow, thermo, new MixtureViscosity.Workspace()).drop(HeatSides.tubePassage(size.shell(), size.tubes()), size.shells()) * 1e5;
+        return tube(size, LineSizing.Carried.of(in, flow, thermo, new MixtureViscosity.Workspace())) * 1e5;
+    }
+
+    /** What {@code carried} loses through {@code size}'s tubes, bar, its shells in parallel: the sizer's at design flow, the run's at its own. */
+    static double tube(ExchangerSizing.Size size, LineSizing.Carried carried) {
+        return carried.drop(HeatSides.tubePassage(size.shell(), size.tubes()), size.shells());
     }
 
     /** What {@code in} loses through {@code size}'s shells at {@code flow} times its rate, Pa. */
     public static double shell(ExchangerSizing.Size size, FlowStream in, double flow, FlowThermo thermo) {
-        return LineSizing.Carried.of(in, flow, thermo, new MixtureViscosity.Workspace()).drop(HeatSides.shellPassage(size.shell(), size.tubes()), size.shells()) * 1e5;
+        return shell(size, LineSizing.Carried.of(in, flow, thermo, new MixtureViscosity.Workspace())) * 1e5;
+    }
+
+    /** What {@code carried} loses through {@code size}'s shells, bar. */
+    static double shell(ExchangerSizing.Size size, LineSizing.Carried carried) {
+        return carried.drop(HeatSides.shellPassage(size.shell(), size.tubes()), size.shells());
     }
 
     /** What the stream loses through {@code size}'s banks in parallel between {@code in} and {@code out} at {@code flow} times its rate, Pa: at its mean temperature. */
     public static double bank(AirCoolerSizing.Size size, FlowStream in, @Nullable FlowStream out, double flow, FlowThermo thermo) {
         double mean = out == null ? in.temperature() : (in.temperature() + out.temperature()) / 2;
         var state = thermo.atTemperature(mean, in.pressure(), in.amountsView(), in.solids());
-        return LineSizing.Carried.of(state, flow, thermo, new MixtureViscosity.Workspace()).drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), size.banks()) * 1e5;
+        return bank(size, LineSizing.Carried.of(state, flow, thermo, new MixtureViscosity.Workspace())) * 1e5;
+    }
+
+    /** What {@code mean}, the stream at its mean temperature, loses through {@code size}'s banks in parallel, bar. */
+    static double bank(AirCoolerSizing.Size size, LineSizing.Carried mean) {
+        return mean.drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), size.banks());
     }
 
     /**

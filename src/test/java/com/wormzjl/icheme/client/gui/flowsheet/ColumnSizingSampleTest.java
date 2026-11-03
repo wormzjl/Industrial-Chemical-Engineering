@@ -48,7 +48,7 @@ class ColumnSizingSampleTest {
     @BeforeAll
     static void sizeTheSample() {
         sheet = SheetFixture.sample();
-        run = FlowsheetEngine.run(sheet, SheetFixture.CATALOG, () -> {
+        run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, run.status());
         thermo = new FlowThermo(SheetFixture.FLUIDS.model(), SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
@@ -97,7 +97,7 @@ class ColumnSizingSampleTest {
     @Test
     void sevenAndAHalfMetresFloodsPastTheShould() {
         var size = ((ColumnSizing.Size) sized.units().get(T).size());
-        var kept = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(7.5, size.layout()), null, null, null, false))));
+        var kept = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(7.5, size.layout()), null, null, false))));
         var rating = kept.units().get(T).rating();
         assertEquals(Lamp.YELLOW, rating.lamp(), () -> text(rating));
         assertEquals(80.9, read(rating, Limit.COLUMN_FLOOD), FLOOD);
@@ -120,7 +120,7 @@ class ColumnSizingSampleTest {
         closest(condenser.rating(), Limit.EXCHANGER_DROP_GAS);
         assertEquals(.15, read(condenser.rating(), Limit.EXCHANGER_DROP_GAS), HUNDREDTH);
         assertEquals(782, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
-        var probe = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, null, false)));
+        var probe = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, false)));
         var three = size(door(sheet, json -> json.addProperty("condenser_units", 3)), run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
         assertEquals(new ExchangerSizing.Size(false, 3, 1.25, 4), three.size());
         var kept = three.rating();
@@ -228,7 +228,7 @@ class ColumnSizingSampleTest {
             }
         });
         var size = (ColumnSizing.Size) sized.units().get(T).size();
-        var entries = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(8.5, size.layout()), null, null, null, false)));
+        var entries = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(8.5, size.layout()), null, null, false)));
         assertThrows(CancellationException.class, () -> size(sheet, run, stopping, entries));
         assertTrue(inside[0]);
     }
@@ -240,11 +240,11 @@ class ColumnSizingSampleTest {
     @Test
     void aNewDiameterMovesTheProcessOnlyThroughTheColumn() {
         var wide = door(sheet, 9);
-        var wideRun = FlowsheetEngine.run(wide, SheetFixture.CATALOG, () -> {
+        var wideRun = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(wide, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, wideRun.status());
-        var resized = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.sizeAll(wide, wideRun, thermo));
-        var plain = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
+        var resized = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.sizeAll(wide, wideRun, thermo));
+        var plain = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.sizeAll(sheet, run, thermo));
         assertEquals(8.0, ((ColumnSizing.Size) resized.sized().units().get(T).size()).diameter());
         assertEquals(8.0, resized.sheet().units().stream().filter(u -> u.id().equals(T)).findFirst().orElseThrow().params().number("diameter"));
         assertEquals(plain.sheet().sizing(), resized.sheet().sizing(), "the same sizes from either door");
@@ -266,7 +266,7 @@ class ColumnSizingSampleTest {
     @Test
     void anAirCooledCondenserTakesAnAirCooler() {
         var air = door(sheet, json -> json.addProperty("condenser", "AIR_COOLER"), "CWS", "CWR");
-        var airRun = FlowsheetEngine.run(air, SheetFixture.CATALOG, () -> {
+        var airRun = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(air, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, airRun.status(), () -> airRun.log().toString());
         var airSized = size(air, airRun, thermo, SheetSizing.Entries.DEFAULT);
@@ -276,7 +276,7 @@ class ColumnSizingSampleTest {
         assertEquals(2, banks.banks());
         assertNotEquals(Lamp.RED, condenser.rating().lamp(), () -> text(condenser.rating()));
         assertEquals(1949, condenser.rating().reading(Limit.AIR_COOLER_SURFACE).low(), 10);
-        var kept = size(air, airRun, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(banks, null, null, null, false))))
+        var kept = size(air, airRun, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(banks, null, null, false))))
                 .units().get(SheetSizing.member(T, "condenser"));
         assertEquals(banks.withBanks(1), kept.size(), "kept on a door of one bank");
         assertEquals(Lamp.RED, kept.rating().lamp(), () -> text(kept.rating()));
@@ -296,7 +296,7 @@ class ColumnSizingSampleTest {
     @Test
     void aTwinCondenserAboveTheSplitLeavesItsTrimIdle() {
         var twin = door(sheet, json -> json.addProperty("condenser", "AIR_THEN_WATER"), "CWS", "CWR");
-        var twinRun = FlowsheetEngine.run(twin, SheetFixture.CATALOG, () -> {
+        var twinRun = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(twin, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, twinRun.status(), () -> twinRun.log().toString());
         var readings = twinRun.reports().get(T).readings();
@@ -327,7 +327,7 @@ class ColumnSizingSampleTest {
         streams.add(new Flowsheet.Stream("HPS", "HPS", null, new Flowsheet.End(T, "reboiler_a"), new Flowsheet.Feed(800, 100e5, amounts, List.of())));
         streams.add(new Flowsheet.Stream("HPC", "HPC", new Flowsheet.End(T, "reboiler_b"), null, null));
         var kettled = new Flowsheet(reboiled.basis(), reboiled.units(), streams, reboiled.settings(), reboiled.sizing(), reboiled.unknown());
-        var kettleRun = FlowsheetEngine.run(kettled, SheetFixture.CATALOG, () -> {
+        var kettleRun = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(kettled, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, kettleRun.status(), () -> kettleRun.log().toString());
         var reboiler = size(kettled, kettleRun, thermo, SheetSizing.Entries.DEFAULT).units().get(SheetSizing.member(T, "reboiler"));

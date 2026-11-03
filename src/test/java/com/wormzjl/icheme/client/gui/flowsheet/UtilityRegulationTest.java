@@ -249,7 +249,7 @@ class UtilityRegulationTest {
     }
 
     private static FlowsheetRun steady(Flowsheet sheet) {
-        var run = FlowsheetEngine.run(sheet, SheetFixture.CATALOG, () -> {
+        var run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> run.log().toString());
         return run;
