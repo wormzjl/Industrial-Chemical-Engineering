@@ -230,7 +230,8 @@ public final class RegistryFirstGameTests {
 
     /**
      * Step 4, GameTest d (decision S11): a pipe whose cell holds stone is held and listed, never the stone overwritten, and
-     * its tanks part. Once the stone is gone and the chunk loads again, the pipe stands, is released, and joins them again.
+     * its tanks part; their status lines name it (step 7). Once the stone is gone and the chunk loads again, the pipe
+     * stands, is released, and joins them again.
      */
     @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-realign-blocked")
     public static void aBlockedCellHoldsItsPipeUntilItIsFree(GameTestHelper helper) {
@@ -262,11 +263,16 @@ public final class RegistryFirstGameTests {
                     level.getServer().getCommands().performPrefixedCommand(operator, "icheme devices held");
                     if (failure[0] == null && said.stream().noneMatch(line -> line.startsWith("#" + pipeId + " pipe at ") && line.endsWith("its cell holds minecraft:stone")))
                         failure[0] = "the listing does not name the blocked pipe: " + said;
+                    // Step 7 (plan 4.5): the status line of a tank beside it names the held pipe.
+                    var named = FluidWorldAuthority.HELD_DEVICE + pipe.getX() + ", " + pipe.getY() + ", " + pipe.getZ() + " / ";
+                    for (long tank : new long[]{westId, eastId})
+                        if (failure[0] == null && !world.view(tank).status().startsWith(named)) failure[0] = "tank #" + tank + "'s status does not name the held pipe: " + world.view(tank).status();
                     level.setBlock(pipe, Blocks.AIR.defaultBlockState(), 3);
                     requeue(world, level, cells);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(stands(level, pipe, pipeId) && !held(world, pipeId) && joined(world, westId, eastId), "Waiting for the pipe to stand and join its tanks again"))
                 .thenExecute(() -> {
+                    if (failure[0] == null && world.view(westId).status().contains(FluidWorldAuthority.HELD_DEVICE)) failure[0] = "the released pipe is still named: " + world.view(westId).status();
                     for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the line's registrations to leave"))

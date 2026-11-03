@@ -170,6 +170,14 @@ For each registration of the chunk:
   - a chat line tells operators on join while any registration is held;
   - a re-alignment log line has the form `fluid_realign dimension=… checked=… placed=… restated=… held=… released=…` (built in step 4): one line per serving tick that changed something, because the queue serves devices, not chunks. Learning is counted nowhere: it happens at bind (step 2).
 - **Text.** The command replies are operator text in English, as every other `/icheme` command's (`Component.literal`): no lang keys. The chat line and the status words are player text: new `en_us` keys in step 7, with every other lang file updated in the same commit (AGENTS.md, Translations).
+- **Built in step 7:**
+  - "Affected island" means every island with a device that a held device would join as built, and the held device's own islands.
+    - `PhysicalRegistry.heldBeside` finds them in one pass over the held devices' contacts.
+    - The authority derives them again only when the registry's facts change (`WorldTopologyLedger.version`).
+    - A device with no island takes the held devices it touches itself.
+  - The status line starts with `HELD DEVICE: x, y, z` (and `(and n more)` when there are several), naming the held device of lowest identity. The device screen shows it in words (`gui.icheme.fluid.status.held_device`, `…held_devices`).
+  - An operator (permission 2) who joins while any registration is held gets one chat line with the count (`message.icheme.device_held`, `…devices_held`).
+  - Four keys were added to all five lang files in one commit.
 
 ## 5. Order of work
 
@@ -183,7 +191,7 @@ Each step is one commit and runs only the tests that its files can load.
 | 4 | `stateFor`, the restore flag, the kind check, the queue, one-block re-alignment (4.2, 4.3). **Done** (see the batch README) | `stateFor` round trip over every kind and fitting. GameTests a to d (section 7) |
 | 5 | Rack cells placed again from their lane registrations (4.2 item 3), with the rack frame as a fact (schema 9). **Done** (see the batch README) | GameTest e; `WorldTopologyLedgerTest` (a frame leaves with its lane); `FluidFactsCompatTest` with the new `compat/fluid/schema-9` image |
 | 6 | Structures (4.4). **Done** (see the batch README) | GameTests f and g. `equipmentGates` only if refresh code changed |
-| 7 | Notices, lang keys (4.5) | `LanguageFilesTest`; `tools/localization/check.js` |
+| 7 | Notices, lang keys (4.5). **Done** (see the batch README) | `LanguageFilesTest`; `tools/localization/check.js` |
 | 8 | Learning from blocks (3.4): built in step 2; what is left is its world-level check | GameTest h, and the schema-7 image still loads |
 
 ## 6. Cost: no lag at edits, saves and loads

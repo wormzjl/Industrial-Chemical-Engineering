@@ -223,6 +223,32 @@ public final class PhysicalRegistry {
     public List<Long> members(long island){return members.getOrDefault(island,List.of());}
     /** What the compiler said about a device (a dead end, no boundary, an invalid pump), or null. */
     public String diagnostic(long device){return diagnostics.get(device);}
+    /**
+     * The held registrations beside the network, for its status lines (registry first, REGISTRY_FIRST_PLAN.md 4.5): by
+     * device, each held device itself and each applied device it would join as built were its block placed; by island,
+     * the islands of those devices. A held device joins nothing, so its neighbours read a dead end; this names why.
+     * {@code held} are the applied held registrations, few as a rule: one pass over their contacts.
+     */
+    public HeldBeside heldBeside(Collection<WorldTopologyLedger.Registration> held) {
+        var devices=new HashMap<Long,List<Long>>();var islands=new HashMap<Long,List<Long>>();
+        for(var record:held) {
+            var d=record.device();var placed=d.withHeld(false);var beside=new TreeSet<Long>();beside.add(d.id());
+            for(var contact:d.contacts()) {
+                var neighbour=PhysicalFluidTopology.across(topology::activeAt,WorldTopologyLedger.Registration::device,d,contact.cell(),contact.direction());
+                if(neighbour!=null&&!neighbour.device().held()&&placed.mechanicallyJoins(neighbour.device(),contact.cell(),contact.direction()))beside.add(neighbour.device().id());
+            }
+            var touched=new TreeSet<Long>();
+            for(long id:beside){devices.computeIfAbsent(id,k->new ArrayList<>()).add(d.id());touched.addAll(islandsOf(id));}
+            for(long island:touched)islands.computeIfAbsent(island,k->new ArrayList<>()).add(d.id());
+        }
+        return new HeldBeside(devices,islands);
+    }
+    /** {@link #heldBeside}: the held registrations beside each device and each island, in identity order. */
+    public record HeldBeside(Map<Long,List<Long>> devices,Map<Long,List<Long>> islands) {
+        public static final HeldBeside NONE=new HeldBeside(Map.of(),Map.of());
+        /** The held registrations beside device {@code id}, or beside island {@code owner} when it has one. */
+        public List<Long> of(long id,Long owner){return owner==null?devices.getOrDefault(id,List.of()):islands.getOrDefault(owner,List.of());}
+    }
     /** The compiled connections a device's view reports. */
     public List<PhysicalFluidTopology.View> pipeViews(long device){return pipeViews.getOrDefault(device,List.of());}
     /** A tank's compiled connections by the face each leaves it by (compiled pipe id to face), from the same compile as its island. */

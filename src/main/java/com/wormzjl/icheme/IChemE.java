@@ -219,8 +219,21 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onServerStopping);
         gameEventBus.addListener(IChemE::onServerStopped);
         gameEventBus.addListener(IChemE::onFluidChunkLoaded);
+        gameEventBus.addListener(IChemE::onPlayerLoggedIn);
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
         gameEventBus.addListener(IChemE::onLevelTickPost);
+    }
+    /**
+     * An operator who joins while fluid devices are held is told how many, once (registry first, batch
+     * 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 4.5); {@code /icheme devices held} lists them.
+     */
+    private static void onPlayerLoggedIn(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        if(!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)||!player.server.isSameThread()||!player.hasPermissions(2))return;
+        com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(player.server).ifPresent(world->{
+            int held=world.held().size();
+            if(held>0)player.sendSystemMessage(held==1?net.minecraft.network.chat.Component.translatable("message.icheme.device_held")
+                    :net.minecraft.network.chat.Component.translatable("message.icheme.devices_held",held));
+        });
     }
     /**
      * The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves), and the

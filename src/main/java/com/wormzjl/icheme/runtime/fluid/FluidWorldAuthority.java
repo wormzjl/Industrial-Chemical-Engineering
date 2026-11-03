@@ -1006,6 +1006,28 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** A device's view, as a presentation read: queued events are not applied (they apply on the engine's tick), and a
      * certified island is materialised to now but never woken by it. */
     /** A device in no island: the column that holds it and runs it (C7, plan section 13), or why it has none. */
+    /** The held registrations beside the network ({@link PhysicalRegistry#heldBeside}), derived again when the registry's facts change. */
+    private PhysicalRegistry.HeldBeside heldBeside=PhysicalRegistry.HeldBeside.NONE;
+    private long heldBesideVersion=-1;
+    /**
+     * The status clause that names the held registrations beside device {@code id}, or beside its island {@code owner}
+     * (registry first, REGISTRY_FIRST_PLAN.md 4.5): the position of the one of lowest identity and how many more, ending in
+     * " / "; empty when none is. Its words are the client's (FluidDeviceScreen).
+     */
+    private String heldClause(long id,Long owner) {
+        if(heldBesideVersion!=topology.version()) {
+            heldBesideVersion=topology.version();var held=new ArrayList<WorldTopologyLedger.Registration>();
+            for(var r:topology.active().values())if(r.device().held())held.add(r);
+            held.sort(Comparator.comparingLong(r->r.device().id()));
+            heldBeside=held.isEmpty()?PhysicalRegistry.HeldBeside.NONE:registry.heldBeside(held);
+        }
+        var near=heldBeside.of(id,owner);if(near.isEmpty())return "";
+        var first=topology.active().get(near.getFirst());if(first==null)return "";
+        var p=first.device().position();
+        return HELD_DEVICE+p.x()+", "+p.y()+", "+p.z()+(near.size()>1?" (and "+(near.size()-1)+" more)":"")+" / ";
+    }
+    /** The status clause of a held registration beside a device's network: its position, as {@link #heldClause} writes it. */
+    public static final String HELD_DEVICE="HELD DEVICE: ";
     private String islandless(PhysicalFluidTopology.Device d,long id){
         var u=d.suspendedBy()==0?null:topology.column(d.suspendedBy());
         if(u!=null)return "COLUMN: part of the column at "+u.master().x()+", "+u.master().y()+", "+u.master().z()+", running";
@@ -1020,7 +1042,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** {@code islands} caches island reads, so one bucket reads each island once however many of its devices it presents. */
     private FluidView view(long id,Map<Long,IslandCoordinator.Snapshot> islands) {
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.viewBuilds);var registration=registrations().get(id);if(registration==null)return new FluidView(id,0,0,topology.onlineTick(),"REMOVED",null,0,List.of());
-        Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);
+        Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),heldClause(id,null)+islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);
         var snapshot=islands.computeIfAbsent(owner,this::presented);FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
         for(int i=0;i<snapshot.graph().reservoirs().size();i++)if(snapshot.graph().reservoirs().get(i).id()==id){nodeIndex=i;var node=snapshot.graph().reservoirs().get(i);empty=node.empty();if(!empty)state=FluidView.State.from(node.state(),node.kind()==PassiveNetwork.NodeKind.RESERVOIR?node.inventory().volume():node.state().volume());break;}
         InlineFilter filter=null;if(registration.device().filter()){state=null;for(var p:snapshot.graph().pipes())if(p.id()==PhysicalFluidTopology.filterIdentity(id))filter=p.filter();}
@@ -1075,6 +1097,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(registry.diagnostic(id)!=null)status=registry.diagnostic(id)+" / "+status;
         var active=topology.active().get(id);if(active==null||active.revision()!=registration.revision())status="WAITING: configuration event / "+status;
         if(unboundBindings.contains(id))status="UNBOUND: saved inventory retained / "+status;
+        status=heldClause(id,owner)+status;
         var routes=new ArrayList<FluidView.PipeRoute>();
         for(var historyEntry:history)for(var pipe:snapshot.graph().pipes())if(pipe.id()==historyEntry.pipeId()) {
             routes.add(new FluidView.PipeRoute(pipe.id(),nodeLabel(snapshot.graph().reservoirs().get(pipe.first()).id()),nodeLabel(snapshot.graph().reservoirs().get(pipe.second()).id())));

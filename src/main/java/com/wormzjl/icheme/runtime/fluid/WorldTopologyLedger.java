@@ -266,6 +266,8 @@ public final class WorldTopologyLedger {
     }
     /** The build facts as the next snapshot holds them. */
     public Builds builds(){owned();if(builds==null)builds=new Builds(paints,structures,racks);return builds;}
+    /** A count that moves with every change of the registry's facts (a commit, an identity, a recovery, a column), so a reader can tell when what it derived is stale. Build facts leave it alone. */
+    public long version(){owned();return version;}
     /** The paint of line {@code id}, or null for a bare line: a live read, no copy. */
     public LinePaint paint(long id){owned();return paints.get(id);}
     /** The structure whose origin is {@code origin}, or null: a live read, no copy. */
