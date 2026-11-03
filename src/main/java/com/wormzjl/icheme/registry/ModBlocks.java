@@ -80,6 +80,10 @@ public final class ModBlocks {
     private static final DeferredRegister<SoundEvent> SOUNDS=DeferredRegister.create(Registries.SOUND_EVENT,IChemE.MOD_ID);
     public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_RUNNING=loop("pump_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> COMPRESSOR_RUNNING=loop("compressor_running");
+    /** The drivers' own loops, apart from their machine's casing loop (decision D13); the generator plays the motor's sound. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> MOTOR_RUNNING=loop("motor_running");
+    public static final DeferredHolder<SoundEvent,SoundEvent> GENERATOR_RUNNING=loop("generator_running");
+    public static final DeferredHolder<SoundEvent,SoundEvent> TURBINE_RUNNING=loop("turbine_running");
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {

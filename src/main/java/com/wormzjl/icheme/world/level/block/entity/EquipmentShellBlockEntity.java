@@ -188,6 +188,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      */
     private void trackMoving() {
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.MoverSounds.track(this);
+        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.track(this);
         moving = new int[0];
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
@@ -271,6 +272,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         com.wormzjl.icheme.runtime.instrument.InstrumentHosts.unloaded(this);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.InstrumentRenderer.forget(worldPosition);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.MoverSounds.forget(this);
+        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.forget(this);
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);

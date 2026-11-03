@@ -95,7 +95,6 @@ public final class MoverSounds {
     private static final class Loop extends AbstractTickableSoundInstance {
         private final Target target;
         private final ClientLevel level;
-        private EquipmentShape shape;
         private Loop(FluidNetwork.MoverState state,ClientLevel level) {
             super((state.compressor()?ModBlocks.COMPRESSOR_RUNNING:ModBlocks.PUMP_RUNNING).get(),SoundSource.BLOCKS,RandomSource.create());
             this.target=state.target();this.level=level;looping=true;delay=0;volume=0;pitch=1;refreshVolume();
@@ -108,10 +107,16 @@ public final class MoverSounds {
                     ||target.position().distToCenterSqr(mc.player.position())>24*24)stop();
             else refreshVolume();
         }
+        /** The casing's gain, {@link UnitDesign#soundGain(EquipmentShape, double)} of its size and speed share (decision D13). */
         private void refreshVolume(){
-            if(level.getBlockEntity(target.position()) instanceof EquipmentShellBlockEntity shell&&shell.shape()!=shape){
-                shape=shell.shape();volume=shape==null?0:UnitDesign.soundGain(shape);
-            }
+            var state=STATES.get(target);
+            volume=state!=null&&level.getBlockEntity(target.position()) instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null
+                    ?UnitDesign.soundGain(shell.shape(),speed(state)):0;
         }
     }
+    /**
+     * A mover's speed share. Every mover is a set-flow pump or compressor today: 1 while it runs. W3 takes the share
+     * from the shaft train's driver, published with the mover's state. Its driver's own loop is {@link DriverSounds}.
+     */
+    private static double speed(FluidNetwork.MoverState state){return state.running()?1:0;}
 }

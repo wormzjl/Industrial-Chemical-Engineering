@@ -251,17 +251,43 @@ public abstract class UnitDesign {
         return design;
     }
 
-    /**
-     * A constructed mover's running-loop gain, 0.10 to 0.60 over its kind's size range (its main size, and its stage or
-     * throw count where it has one); 0 for any other unit. Sound only: dimensions impose no hydraulic limits.
-     */
+    /** A running-loop gain at full speed ({@link #soundGain(EquipmentShape, double)}). */
     public static float soundGain(EquipmentShape shape) {
+        return soundGain(shape, 1);
+    }
+
+    /**
+     * A running loop's gain, one law for a mover's casing and for a driver (decision D13, batch
+     * 2026-11-03-rotating-machinery): 0.10 to 0.60 over the part's size range, times the speed share to the power
+     * {@link #SPEED_EXPONENT}; 0 for any other unit. A casing's size is its kind's size range (its main size, and its
+     * stage or throw count where it has one); a driver's is its rated power on a log scale over its kind's powers. The
+     * gain stays at or below 1: in Minecraft a volume above 1 widens the range instead of raising the loudness. Sound
+     * only: dimensions impose no hydraulic limits.
+     */
+    public static float soundGain(EquipmentShape shape, double speed) {
         java.util.Objects.requireNonNull(shape);
-        if(!shape.kind().mover())return 0;
-        var design=of(shape.kind());double size=(shape.diameter()-design.minSize())/(design.maxSize()-design.minSize());
-        int least=design.minLength(shape.diameter()),most=design.maxLength(shape.diameter());
-        if(most>least)size=(size+(shape.tangentLength()-least)/(most-least))/2;
-        return (float)(.10+.50*Math.clamp(size,0,1));
+        double size;
+        if(shape.kind().mover()){
+            var design=of(shape.kind());size=(shape.diameter()-design.minSize())/(design.maxSize()-design.minSize());
+            int least=design.minLength(shape.diameter()),most=design.maxLength(shape.diameter());
+            if(most>least)size=(size+(shape.tangentLength()-least)/(most-least))/2;
+        }else if(driver(shape.kind())){
+            boolean turbine=shape.kind()==EquipmentShape.Kind.STEAM_TURBINE;
+            double least=turbine?SteamTurbineDesign.MIN_POWER:MotorDesign.POWERS.getFirst(),most=turbine?SteamTurbineDesign.MAX_POWER:MotorDesign.POWERS.getLast();
+            size=Math.log(shape.duty().power()/least)/Math.log(most/least);
+        }else return 0;
+        return (float)((.10+.50*Math.clamp(size,0,1))*Math.pow(Math.clamp(speed,0,1),SPEED_EXPONENT));
+    }
+
+    /**
+     * A rotating machine's sound power rises about as its speed to the fifth (the fan law, 50 log N dB), its sound
+     * pressure, which a loop's gain scales, as the root of that: half speed is 0.18 of the full-speed gain.
+     */
+    public static final double SPEED_EXPONENT = 2.5;
+
+    /** Whether a kind sounds as a driver, its own loop at its own cells: a motor, its mirror the generator, or a steam turbine. */
+    public static boolean driver(EquipmentShape.Kind kind) {
+        return kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.STEAM_TURBINE;
     }
 
     // ---- Formats ----------------------------------------------------------------------------------------------------

@@ -263,5 +263,28 @@ class PipePresentationTest {
         // The pump range ends at 0.6 m (its suction a pipe's largest, 0.8 m): a 0.4 m pump sits 0.35 / 0.55 along it.
         assertEquals(.10+.50*.35/.55,UnitDesign.soundGain(shape(EquipmentShape.Kind.PUMP,.4,1,EquipmentShape.Heading.NORTH)),1e-6);
     }
+    @Test void aDriverSoundsByItsPowerAndEveryLoopFallsWithTheSpeedShare(){
+        // Decision D13: a driver's gain spans 0.10 to 0.60 over its kind's powers on a log scale; a loop's gain is that
+        // times the speed share to the 2.5th, so it never passes 1 (above 1 Minecraft widens the range, not the loudness).
+        var motor=EquipmentShape.Kind.MOTOR;var design=UnitDesign.of(motor);float previous=0;
+        for(double kw:design.sizes()){float gain=UnitDesign.soundGain(shape(motor,kw,1,EquipmentShape.Heading.NORTH));assertTrue(gain>previous);previous=gain;}
+        assertEquals(.10F,UnitDesign.soundGain(shape(motor,.75,1,EquipmentShape.Heading.NORTH)),1e-6);
+        assertEquals(.60F,UnitDesign.soundGain(shape(motor,20000,1,EquipmentShape.Heading.NORTH)),1e-6);
+        assertEquals(UnitDesign.soundGain(shape(motor,250,1,EquipmentShape.Heading.NORTH)),
+                UnitDesign.soundGain(shape(EquipmentShape.Kind.GENERATOR,250,1,EquipmentShape.Heading.NORTH)));
+        // A 1 MW turbine sits ln(1000/55) / ln(45000/55) along the turbine's powers.
+        var turbine=EquipmentShape.unit(EquipmentShape.Kind.STEAM_TURBINE,.5,1,EquipmentShape.Heading.NORTH,0).withDuty(MachineDuty.turbine(1000,MachineDuty.Steam.HP,450));
+        assertEquals(.10+.50*Math.log(1000/55.)/Math.log(45000/55.),UnitDesign.soundGain(turbine),1e-6);
+        for(var shape:List.of(turbine,shape(motor,250,1,EquipmentShape.Heading.NORTH),shape(EquipmentShape.Kind.PUMP,.4,1,EquipmentShape.Heading.NORTH))){
+            float full=UnitDesign.soundGain(shape);
+            assertEquals(full,UnitDesign.soundGain(shape,1));
+            assertEquals(full*Math.pow(.5,2.5),UnitDesign.soundGain(shape,.5),1e-6);
+            assertEquals(0,UnitDesign.soundGain(shape,0));
+            assertEquals(full,UnitDesign.soundGain(shape,1.3));
+            for(double speed=.1;speed<=1;speed+=.1)assertTrue(UnitDesign.soundGain(shape,speed)>UnitDesign.soundGain(shape,speed-.1));
+        }
+        assertFalse(UnitDesign.driver(EquipmentShape.Kind.GEARBOX));
+        assertEquals(0,UnitDesign.soundGain(EquipmentShape.unit(EquipmentShape.Kind.GEARBOX,UnitDesign.of(EquipmentShape.Kind.GEARBOX).minSize(),1,EquipmentShape.Heading.NORTH,0)));
+    }
     private static EquipmentShape shape(EquipmentShape.Kind kind,double size,int count,EquipmentShape.Heading front){return EquipmentShape.unit(kind,size,count,front,UnitDesign.of(kind).defaultSupport(size,count));}
 }
