@@ -84,7 +84,7 @@ public final class Tiles {
             case LYING_DRUM -> facts.size() instanceof DrumSizing.Size drum && drum.boot() ? Symbol.BOOT_DRUM : Symbol.LYING;
             case PISTON -> Symbol.COMPRESSOR;
             case TURBO -> Symbol.TURBO;
-            // The Cooler's two (C2); C3 gives the water cooler a symbol of its own.
+            // The Cooler's two (C2): on Water it is drawn as the exchanger it is (owner, 2026-11-03).
             case AIR_COOLER -> Symbol.AIR_COOLER;
             case WATER_COOLER -> Symbol.EXCHANGER;
         };

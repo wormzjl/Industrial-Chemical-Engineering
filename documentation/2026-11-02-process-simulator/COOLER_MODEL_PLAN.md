@@ -106,7 +106,7 @@ The owner, approving the plan: "also allow air-then-water approach in column con
   - The air-ahead reading.
   - Built 2026-11-03 (C2 in the batch README's history): `CoolerUnit` and the free side's cap, `CoolerSizing` (the return rule, the two proposals, the air-ahead duty), tower-water loads in `ExchangerSizing`, the `cooler` tile with the `air_cooler` alias held on Air, `trim_units` on the door, `ColumnUnit`'s two shares, the `trim` member, and the idle twin member's `TWIN_IDLE` row (the owner's addendum, README C2 decisions).
 - C3, screen: the Cooler door and its type keys, the column door's condenser choice, `ColumnBlock`, the palette, both languages, renders.
-  - Built 2026-11-03 (C3 in the batch README's history): the door's third key and the trim's stepper, the trim on the block, the Cooler's Air and Water keys, sizing's water, air-ahead, fan and condenser lines, the results' air, trim and steam rows, "Flow set by", and the U2 screen keys (the Column key, the `FEED` lines' drawing, the fans row in kW), in English and Chinese. The water cooler's own symbol waits for the owner's pick of four options.
+  - Built 2026-11-03 (C3 in the batch README's history): the door's third key and the trim's stepper, the trim on the block, the Cooler's Air and Water keys, sizing's water, air-ahead, fan and condenser lines, the results' air, trim and steam rows, "Flow set by", and the U2 screen keys (the Column key, the `FEED` lines' drawing, the fans row in kW), in English and Chinese. The water cooler draws the exchanger's symbol (the owner: "Should be the same as heat exchanges").
 
 ## 8. Utility regulation (owner, 2026-11-03)
 

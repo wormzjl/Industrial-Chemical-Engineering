@@ -112,15 +112,6 @@ final class SimulatorIcons {
         return path;
     }
 
-    /** A wave from ({@code x0}, {@code y}) to ({@code x1}, {@code y}), {@code crests} crests of amplitude {@code a}: water. */
-    static Path2D wave(double x0, double x1, double y, int crests, double a) {
-        var path = new Path2D.Double();
-        path.moveTo(x0, y);
-        double step = (x1 - x0) / (2 * crests);
-        for (int i = 0; i < 2 * crests; i++) path.quadTo(x0 + (i + .5) * step, y + (i % 2 == 0 ? -2 * a : 2 * a), x0 + (i + 1) * step, y);
-        return path;
-    }
-
     /** A vessel standing up: a cylinder between 2:1 heads, a quarter of its width deep. */
     static Area standing(double x0, double y0, double x1, double y1) {
         double head = (x1 - x0) / 4;
@@ -236,46 +227,6 @@ final class SimulatorIcons {
                 for (var s : pen.fine) graphics.draw(s);
                 graphics.setStroke(new BasicStroke(.75f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 4f, new float[]{2.5f, 1.5f}, 0));
                 for (var s : pen.dash) graphics.draw(s);
-            }
-        }
-    }
-
-    /** The water cooler's shape on the owner's option sheet (C3, {@code CoolerOptions.java}): 'A' to 'D'. The pick stays; the others go. */
-    static char waterCooler = 'A';
-
-    /** The Cooler on Water (C2's {@code WATER_COOLER}), in the exchanger's 64 by 28 box, so its tile keeps the exchanger's ports. */
-    private static void waterCooler(Pen p) {
-        switch (waterCooler) {
-            case 'A' -> {
-                // The exchanger's shell, its tubes as waves of water: no baffles, its water nozzles over it.
-                p.body(oval(0, 4, 12, 24), rect(6, 4, 10, 24), rect(10, 2, 12, 26), rect(12, 4, 52, 24), rect(52, 2, 54, 26), oval(52, 4, 64, 24), rect(54, 4, 58, 24));
-                p.body(rect(14.4, 0, 17.6, 4), rect(46.4, 0, 49.6, 4));
-                p.mark(wave(15, 49, 10.5, 4, 1.4), wave(15, 49, 17.5, 4, 1.4));
-                p.mark(line(10, 4, 10, 24), line(12, 4, 12, 24), line(52, 4, 52, 24), line(54, 4, 54, 24));
-            }
-            case 'B' -> {
-                // A hairpin (double pipe): two legs, their return bend, the inner pipe a fine line through them.
-                var bend = new Area(clipped(oval(34, 2, 62, 26), rect(48, 2, 62, 26)));
-                bend.subtract(new Area(clipped(oval(42, 10, 54, 18), rect(48, 10, 54, 18))));
-                p.body(rect(4, 2, 48, 10), rect(4, 18, 48, 26), bend, rect(0, 0, 4, 12), rect(0, 16, 4, 28));
-                p.fine(path(0, 6, 48, 6), path(0, 22, 48, 22), clipped(oval(38, 6, 58, 22), rect(48, 6, 58, 22)));
-                p.mark(line(4, 0, 4, 12), line(4, 16, 4, 28));
-                p.mark(wave(10, 42, 14, 3, 1.2));
-            }
-            case 'C' -> {
-                // A box cooler: the process coil in a bath of water, its level a wave.
-                p.body(rect(6, 6, 58, 28), rect(0, 12, 6, 16), rect(58, 12, 64, 16), rect(4, 4, 8, 7), rect(56, 4, 60, 7));
-                p.mark(wave(8, 56, 10, 5, 1));
-                p.mark(path(6, 14, 14, 14, 14, 24, 22, 24, 22, 16, 30, 16, 30, 24, 38, 24, 38, 16, 46, 16, 46, 24, 52, 24, 52, 14, 58, 14));
-            }
-            default -> {
-                // The exchanger as it is, a drop of water on its shell.
-                p.body(oval(0, 4, 12, 24), rect(6, 4, 10, 24), rect(10, 2, 12, 26), rect(12, 4, 52, 24), rect(52, 2, 54, 26), oval(52, 4, 64, 24), rect(54, 4, 58, 24));
-                p.body(rect(14.4, 24, 17.6, 28), rect(46.4, 24, 49.6, 28));
-                var drop = new Area(circle(32, 16.5, 4.2));
-                drop.add(new Area(poly(28.1, 15, 32, 7.5, 35.9, 15)));
-                p.solid(drop);
-                p.mark(line(10, 4, 10, 24), line(12, 4, 12, 24), line(52, 4, 52, 24), line(54, 4, 54, 24));
             }
         }
     }
@@ -486,7 +437,6 @@ final class SimulatorIcons {
                 p.mark(line(9, 42, 41, 42));
                 p.dash(line(8, 47, 42, 47));
             }
-            case WATER_COOLER -> waterCooler(p);
             case MISSING -> p.body(rect(0, 0, w, h));
         }
     }
