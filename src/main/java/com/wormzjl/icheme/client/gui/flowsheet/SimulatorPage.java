@@ -230,7 +230,7 @@ public final class SimulatorPage {
     public static void sizing(Canvas c, Skin skin, SheetContext x, SizingPage.State state, SimulatorFrame frame, int w) {
         int bottom = frame.bottom(), door = SimulatorFrame.SIZING_DOOR;
         skin.vDivider(c, door + 3, SimulatorFrame.DOOR_TOP, bottom);
-        SizingPage.draw(c, x, state, skin.well(c, glass(frame, w)));
+        SizingGlass.draw(c, x, state, skin.well(c, glass(frame, w)));
     }
 
     /** The Sizing tab's glass, before the skin's edge. */

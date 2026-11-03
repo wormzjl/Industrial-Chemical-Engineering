@@ -33,6 +33,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.SimulatorFrame;
 import com.wormzjl.icheme.client.gui.flowsheet.SimulatorHost;
 import com.wormzjl.icheme.client.gui.flowsheet.SimulatorPage;
 import com.wormzjl.icheme.client.gui.flowsheet.SimulatorRunner;
+import com.wormzjl.icheme.client.gui.flowsheet.SizingGlass;
 import com.wormzjl.icheme.client.gui.flowsheet.SizingPage;
 import com.wormzjl.icheme.client.gui.flowsheet.StreamDoors;
 import com.wormzjl.icheme.client.gui.flowsheet.StreamProps;
@@ -937,7 +938,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         }
         if (tab == SimulatorFrame.Tab.SIZING) {
             var c = context();
-            if (!SizingPage.pick(sizingState, SizingPage.click(c, sizingState, c.m(), SimulatorFrame.inner(SimulatorPage.glass(frame, width)), x, y))) return false;
+            if (!SizingGlass.pick(sizingState, SizingGlass.click(c, sizingState, c.m(), SimulatorFrame.inner(SimulatorPage.glass(frame, width)), x, y))) return false;
             rebuildWidgets();
             return true;
         }
@@ -967,7 +968,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     @Override public boolean mouseScrolled(double x, double y, double dx, double dy) {
         if (door != null) return kit.wheel(x - doorLeft(), y - doorTop(), dy);
         if (tab == SimulatorFrame.Tab.FLOWSHEET && canvasBox.contains(x, y)) view.wheel(dy, x, y);
-        if (tab == SimulatorFrame.Tab.SIZING && SimulatorPage.glass(frame, width).contains(x, y)) SizingPage.scroll(sizingState, dy);
+        if (tab == SimulatorFrame.Tab.SIZING && SimulatorPage.glass(frame, width).contains(x, y)) SizingGlass.scroll(sizingState, dy);
         return true;
     }
 

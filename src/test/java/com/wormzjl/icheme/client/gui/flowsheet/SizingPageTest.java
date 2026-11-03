@@ -186,16 +186,16 @@ class SizingPageTest {
         var box = new Rect(189, 77, 1400, 400);
         for (var view : SizingPage.View.values()) {
             state.view = view;
-            SizingPage.draw(new Recording(texts.measure), x, state, box);
+            SizingGlass.draw(new Recording(texts.measure), x, state, box);
         }
         state.view = SizingPage.View.UNITS;
         // The head is one line where the columns fit: the third row down is the third unit.
-        String key = SizingPage.click(x, state, texts.measure, box, box.x() + 30, box.y() + 4 + 12 + 2 * 12 + 4);
+        String key = SizingGlass.click(x, state, texts.measure, box, box.x() + 30, box.y() + 4 + 12 + 2 * 12 + 4);
         assertEquals("T-101/condenser", key);
-        assertTrue(SizingPage.pick(state, key));
+        assertTrue(SizingGlass.pick(state, key));
         assertEquals("T-101/condenser", state.unit);
         state.view = SizingPage.View.PRESSURE;
-        assertTrue(SizingPage.pick(state, SizingPage.click(x, state, texts.measure, box, box.x() + 30, box.y() + 4 + 12 + 12 + 4)));
+        assertTrue(SizingGlass.pick(state, SizingGlass.click(x, state, texts.measure, box, box.x() + 30, box.y() + 4 + 12 + 12 + 4)));
         assertEquals(1, state.path);
         assertEquals(List.of(), texts.missing.stream().toList());
     }
@@ -212,10 +212,10 @@ class SizingPageTest {
         units.put("E-102", new SheetSizing.SizedUnit(units.get("E-102").size(), units.get("E-102").rating().with(Rating.FANS, .72).with(Rating.FAN_POWER, 67.8e3)));
         units.put("E-101", new SheetSizing.SizedUnit(units.get("E-101").size(), units.get("E-101").rating().with(Rating.WATER, 938.8).with(Rating.WATER_VOLUME, 3390)));
         var sized = new SheetSizing.Sized(sized().lines(), units, sized().paths(), Map.of("T-101", ColumnComponents.Condenser.AIR_THEN_WATER));
-        assertEquals(List.of(x.text("sizing.value.fans", "72 %", "67.8"), x.text("sizing.value.fan_total", "67.8")), SizingPage.beside(x, sized, "E-102"));
-        assertEquals(x.text("sizing.value.water", "939", "3390"), SizingPage.beside(x, sized, "E-101").getFirst());
-        assertEquals(x.text("sizing.value.condenser", x.text("sizing.condenser.air_then_water")), SizingPage.beside(x, sized, "T-101").getFirst());
-        assertEquals(List.of(x.text("sizing.value.fan_total", "67.8")), SizingPage.beside(x, sized, null), "the sheet's fans with nothing picked");
+        assertEquals(List.of(x.text("sizing.value.fans", "72 %", "67.8"), x.text("sizing.value.fan_total", "67.8")), SizingGlass.beside(x, sized, "E-102"));
+        assertEquals(x.text("sizing.value.water", "939", "3390"), SizingGlass.beside(x, sized, "E-101").getFirst());
+        assertEquals(x.text("sizing.value.condenser", x.text("sizing.condenser.air_then_water")), SizingGlass.beside(x, sized, "T-101").getFirst());
+        assertEquals(List.of(x.text("sizing.value.fan_total", "67.8")), SizingGlass.beside(x, sized, null), "the sheet's fans with nothing picked");
         assertEquals(List.of(), texts.missing.stream().toList());
     }
 
@@ -224,7 +224,7 @@ class SizingPageTest {
         var texts = new SheetFixture.Texts();
         var x = context(texts, SheetFixture.editor(SHEET), STEADY, false);
         var canvas = new Recording(texts.measure);
-        SizingPage.draw(canvas, x, new SizingPage.State(), new Rect(189, 77, 270, 300));
+        SizingGlass.draw(canvas, x, new SizingPage.State(), new Rect(189, 77, 270, 300));
         for (var text : canvas.texts) assertTrue(text.x() + texts.measure.width(text.text()) <= 189 + 270 + 4 || text.x() >= 189 + 270, "a cell inside the glass: " + text.text());
     }
 
