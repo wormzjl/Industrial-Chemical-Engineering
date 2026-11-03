@@ -7,6 +7,7 @@ import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
+import com.wormzjl.icheme.runtime.instrument.Instrument;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.PipeRoute;
@@ -60,6 +61,8 @@ import java.util.UUID;
 @PrefixGameTestTemplate(false)
 public final class RegistryFirstGameTests {
     private RegistryFirstGameTests() {}
+
+    private static final int SKY_BLUE = 0x2271B3, FLAME_RED = 0xA72920;
 
     /**
      * Step 3 (decision S11): a held tank keeps what it holds and joins no flow, apart from the line it stood on; the
@@ -164,7 +167,8 @@ public final class RegistryFirstGameTests {
      * Step 4, GameTests a to c (plan section 7): blocks lost behind the authority's back, as in a chunk saved after the
      * fluid store, are set back from the registry. An intact line re-aligns nothing. Then a pipe gone (a), the charged tank
      * gone (b) and a filter where a pipe stood (c): each block comes back with its identity, the tank with its charge, the
-     * filter's block takes no pipe's registration, and nothing drops.
+     * filter's block takes no pipe's registration, and nothing drops. The first pipe carries a sight glass: it comes back
+     * with it, and the glass leaves with the pipe (step 8).
      */
     @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-realign-line")
     public static void aBrokenLineIsSetBackFromTheRegistry(GameTestHelper helper) {
@@ -186,6 +190,9 @@ public final class RegistryFirstGameTests {
         helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(charge.charged() && joined(world, ids[0], ids[3]), "Waiting for the charged line"))
                 .thenExecute(() -> {
+                    // As the fitting item installs it: the block draws the glass, the accessory store holds it.
+                    level.setBlock(first, level.getBlockState(first).setValue(FluidDeviceBlock.SIGHT_GLASS, true).setValue(FluidDeviceBlock.SIGHT_GLASS_AXIS, Direction.Axis.Y), 3);
+                    world.instruments().legacyInstalled(ids[1], Instrument.Type.SIGHT_GLASS);
                     for (long id : ids) {
                         var check = RegistryRealignment.realign(level, world, id);
                         if (failure[0] == null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the intact line was re-aligned at #" + id + ": " + check;
@@ -212,6 +219,9 @@ public final class RegistryFirstGameTests {
                 .thenExecute(() -> {
                     if (failure[0] == null && !level.getBlockState(second).is(ModBlocks.FLUID_PIPE.get())) failure[0] = "the filter block was not set back to a pipe";
                     if (failure[0] == null && !level.getBlockState(east).is(ModBlocks.FLUID_RESERVOIR.get())) failure[0] = "the tank was not set back";
+                    var glass = level.getBlockState(first);
+                    if (failure[0] == null && !(FluidDeviceBlock.hasSightGlass(glass) && glass.getValue(FluidDeviceBlock.SIGHT_GLASS_AXIS) != Direction.Axis.X))
+                        failure[0] = "the re-placed pipe does not show its sight glass across its run: " + glass;
                     for (int i = 0; i < ids.length && failure[0] == null; i++)
                         if (world.at(position(level, cells.get(i))).map(r -> r.device().id()).orElse(0L) != ids[i]) failure[0] = "the line's registrations changed at " + cells.get(i).toShortString();
                     if (failure[0] == null && !(moles(world, ids[3]) > .99 * before[0])) failure[0] = "the tank lost its charge: " + before[0] + " -> " + moles(world, ids[3]);
@@ -223,6 +233,9 @@ public final class RegistryFirstGameTests {
                 })
                 .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the line's registrations to leave"))
                 .thenExecute(() -> {
+                    // The glass the break refunded.
+                    level.getEntitiesOfClass(ItemEntity.class, new AABB(west).inflate(6)).forEach(ItemEntity::discard);
+                    if (failure[0] == null && world.instruments().fitting(ids[1]) != null) failure[0] = "the sight glass record stayed after its pipe left";
                     if (failure[0] != null) helper.fail(failure[0]);
                 })
                 .thenSucceed();
@@ -504,6 +517,110 @@ public final class RegistryFirstGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, node)).isEmpty() && world.structure(position(level, origin)) == null, "Waiting for the drum and its record to leave"))
                 .thenExecute(() -> {
                     for (var at : every) if (failure[0] == null && !level.getBlockState(at).isAir()) failure[0] = "a ghost block at " + at.toShortString();
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 8, GameTests h and i (plan 3.4): a world saved before the registry held paints (schema 7) and rack frames
+     * (schema 8) fills them at its chunks' first load. A painted line laid through three racks loses its paints and frames
+     * from the registry, as such a facts read leaves them. At its chunks' next load its pipes and lanes teach the registry
+     * what they show, and the re-alignment that follows finds nothing to set back: no block placed, restated or held.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-learning")
+    public static void aLineSavedBeforeTheRegistryHeldItsPaintTeachesItAtLoad(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var west = helper.absolutePos(new BlockPos(0, 1, 1));
+        var first = west.east();
+        var straight = west.east(2);
+        var corner = west.east(3);
+        var turned = corner.south();
+        var last = turned.south();
+        var south = last.south();
+        var placed = List.of(west, first, straight, corner, turned, last, south);
+        var cells = List.of(straight, corner, turned);
+        for (var at : placed) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(west, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        level.setBlock(south, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        // The racks of GameTest e, and a painted tool.
+        var racks = ModBlocks.PIPE_RACK.get();
+        level.setBlock(straight, racks.placed(level, straight, Direction.EAST, false), 3);
+        level.setBlock(corner, racks.placed(level, corner, Direction.SOUTH, false), 3);
+        level.setBlock(turned, racks.placed(level, turned, Direction.SOUTH, false), 3);
+        var player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "RegistryFirstLearning"));
+        player.setGameMode(GameType.SURVIVAL);
+        player.setPos(west.getX() + 2.5, west.getY(), west.getZ() - 1.5);
+        var tool = new ItemStack(ModItems.PIPE_LAYING_TOOL.get());
+        tool.set(ModItems.PIPE_LAYING_SETTINGS.get(), new PipelineToolItem.Settings(.1));
+        tool.set(ModItems.PIPE_LAYING_PAINT.get(), SKY_BLUE);
+        tool.set(ModItems.PIPE_LAYING_SECONDARY.get(), FLAME_RED);
+        player.setItemInHand(InteractionHand.MAIN_HAND, tool);
+        player.getInventory().add(new ItemStack(ModItems.FLUID_PIPE.get(), 5));
+        var start = new PipeAnchor.Click(west, Direction.EAST);
+        var end = new PipeAnchor.Click(south, Direction.NORTH);
+        double outside = PipeSizes.outside(.1);
+        String[] failure = {null};
+        var from = PipeAnchor.resolve(level, start, outside);
+        var to = PipeAnchor.resolve(level, end, outside);
+        if (from.anchor() == null || to.anchor() == null) failure[0] = "the line's ends were refused: " + from.refusal() + ", " + to.refusal();
+        else {
+            var route = PipeRoute.search(from.anchor().end(), from.anchor().leaving(), to.anchor().end(), outside, PipeAnchor.space(level), PipeRoute.Limits.DEFAULT);
+            var refusal = route.found() ? PipeLaying.lay(player, InteractionHand.MAIN_HAND, start, end, List.of(first, straight, corner, turned, last), route.options()) : null;
+            if (!route.found()) failure[0] = "no route through the racks: " + route;
+            else if (refusal != null) failure[0] = "the line was refused: " + refusal.getString();
+        }
+        var paint = new WorldTopologyLedger.LinePaint(SKY_BLUE, FLAME_RED);
+        long[] lanes = new long[cells.size()];
+        var frames = new ArrayList<WorldTopologyLedger.RackFrame>();
+        for (int i = 0; i < cells.size() && failure[0] == null; i++) {
+            lanes[i] = ((PipeRackBlockEntity) level.getBlockEntity(cells.get(i))).lanes().getFirst().identity();
+            frames.add(PipeRackBlock.frame(level.getBlockState(cells.get(i))));
+        }
+        // The line's pipes and lanes, which the lay painted.
+        long[] line = failure[0] != null ? new long[0] : new long[]{((FluidDeviceBlockEntity) level.getBlockEntity(first)).fluidIdentity(), lanes[0], lanes[1], lanes[2],
+                ((FluidDeviceBlockEntity) level.getBlockEntity(last)).fluidIdentity()};
+        for (long id : line) if (failure[0] == null && !paint.equals(world.linePaint(id))) failure[0] = "the lay did not record line #" + id + "'s paint: " + world.linePaint(id);
+        long westTank = world.at(position(level, west)).orElseThrow().device().id();
+        long southTank = world.at(position(level, south)).orElseThrow().device().id();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || joined(world, westTank, southTank), "Waiting for the line to join its tanks"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) return;
+                    // As a facts read of schema 7 leaves them: the line bare, the lanes without frames.
+                    for (long id : line) world.paint(id, Paint.BARE, Paint.BARE);
+                    for (long id : lanes) world.rackFrame(id, null);
+                    requeue(world, level, placed);
+                    for (long id : line) if (failure[0] == null && !paint.equals(world.linePaint(id))) failure[0] = "line #" + id + " did not teach its paint: " + world.linePaint(id);
+                    for (int i = 0; i < lanes.length && failure[0] == null; i++)
+                        if (!frames.get(i).equals(world.rackFrame(lanes[i]))) failure[0] = "lane #" + lanes[i] + " did not teach its frame: " + world.rackFrame(lanes[i]);
+                    // What the queued checks find on the world the load left: nothing to set back.
+                    for (var at : placed) {
+                        long id = world.at(position(level, at)).map(r -> r.device().id()).orElse(0L);
+                        var check = id == 0 ? null : RegistryRealignment.realign(level, world, id);
+                        if (failure[0] == null && check != null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the learnt line was re-aligned at #" + id + ": " + check;
+                    }
+                    for (long id : lanes) {
+                        var check = RegistryRealignment.realign(level, world, id);
+                        if (failure[0] == null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the learnt run was re-aligned at #" + id + ": " + check;
+                    }
+                })
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    for (var at : List.of(first, last))
+                        if (failure[0] == null && !(level.getBlockEntity(at) instanceof FluidDeviceBlockEntity pipe && pipe.paint() == SKY_BLUE && pipe.secondary() == FLAME_RED)) failure[0] = "pipe " + at.toShortString() + " lost its paint";
+                    for (int i = 0; i < cells.size() && failure[0] == null; i++) {
+                        var lane = ((PipeRackBlockEntity) level.getBlockEntity(cells.get(i))).lanes().getFirst();
+                        if (lane.paint() != SKY_BLUE || lane.secondary() != FLAME_RED || !PipeRackBlock.frame(level.getBlockState(cells.get(i))).equals(frames.get(i))) failure[0] = "rack " + cells.get(i).toShortString() + " changed";
+                    }
+                    if (failure[0] == null && !joined(world, westTank, southTank)) failure[0] = "the tanks parted";
+                    for (var at : placed) level.removeBlock(at, false);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(Arrays.stream(lanes).allMatch(id -> world.committedDevice(id).isEmpty())
+                        && placed.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the line's removals to apply"))
+                .thenExecute(() -> {
+                    for (long id : line) if (failure[0] == null && world.linePaint(id) != null) failure[0] = "line #" + id + "'s paint stayed after it left";
                     if (failure[0] != null) helper.fail(failure[0]);
                 })
                 .thenSucceed();

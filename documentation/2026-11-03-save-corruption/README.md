@@ -2,7 +2,7 @@
 
 Purpose: how save corruption can damage an IChemE world, and how to stop it from causing total data loss, as an extension of the backward-compat facts/state system (owner 2026-11-03: "Research about how to handle eventual save corruption to prevent total data loss"; "I'd imagine it will be somehow combined with the backward compat system").
 
-Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is being built: steps 1 to 7 of 8 are done. The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is built: steps 1 to 8 are done, not merged. The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -25,6 +25,7 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
 - Changed (W5b step 5): `WorldTopologyLedger` (`RackFrame`, `RackShape`, `Builds.racks`, `rack`; a frame leaves with its lane), `FluidFacts` (schema 9), `FluidWorldAuthority.rackFrame`, `PipeRackBlock` (`frame`, `stateFor`; `onRemove` follows the restore flag), `PipeRackBlockEntity` (`bind` learns frames, `carries`, `frames`), `PipeLaying.lay` (records frames), `RegistryRealignment.lane`; tests `WorldTopologyLedgerTest`, `FluidFactsCompatTest`; corpus image `src/test/resources/compat/fluid/schema-9`; GameTest `RegistryFirstGameTests` (1 new).
 - Changed (W5b step 6): `EquipmentStructure` (`refresh` split into `survey`, `write`, `settle`; new `realignLater`, `serveRealignment`, `realign`, `stands`, `members`; `dismantle` follows the restore flag), `EquipmentRefresh.plan` with a fixed shift, `FluidWorldAuthority` (structure chunk index; `loadedChunk` queues structures), `RegistryRealignment.serve` (structures after devices); tests `EquipmentRefreshTest`; GameTests `RegistryFirstGameTests` (2 new).
 - Changed (W5b step 7): `PhysicalRegistry.heldBeside` (`HeldBeside`), `WorldTopologyLedger.version`, `FluidWorldAuthority` (`heldClause`, `HELD_DEVICE`), `FluidDeviceScreen.statusText`, `IChemE.onPlayerLoggedIn`; lang files `en_us`, `zh_cn`, `fr_fr`, `es_es`, `ja_jp` (4 keys each); GameTest `RegistryFirstGameTests` (d extended).
+- Changed (W5b step 8): `RegistryRealignment` (`sightGlass`, used by `place` and `restate`), `InstrumentService.fitting`; GameTest `RegistryFirstGameTests` (h new, a extended).
 - Read: `runtime/fluid/FluidCheckpointStore`, `FluidSavedData`, `FluidCheckpointCodec` (core seal) and `FluidFacts.rebuild`.
 - `FluidWorldAuthority.loadedChunk`, `PhysicalFluidTopology.Device`, `FluidDeviceBlockEntity` (`bindIdentity`, saved fields), `PipeRackBlockEntity`, `EquipmentShellBlockEntity`, `EquipmentStructure.restoreFluidBinding`, `EquipmentRefresh`, `runtime/instrument/InstrumentService.Store` and `runtime/assembly/AssemblyStore`.
 - Vanilla and NeoForge 21.1.219: `SavedData`, `DimensionDataStorage`, `IOUtilities`, `Util.safeReplaceFile`, `LevelStorageSource`, `ChunkMap.handleChunkLoadFailure` and `scheduleUnload`, `ChunkStatusTasks`, `RegionFile` and `ChunkEvent.Load`.
@@ -104,11 +105,22 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
     - Fluid GameTests 47/47 on the fresh run id `save-w5-step7`. GameTest d now checks that both tanks beside the held pipe name it, and that the name is gone once the pipe is released.
   - Not checked in game: the translated status line on the device screen. Code guide: waits for the merge.
 
+- 2026-11-04: W5b step 8, the commit that adds this line. The world-level check of learning (plan 3.4), and the sight glass of a re-placed pipe (plan 4.3).
+  - GameTest h (with i): a painted line through three racks has its paints and frames cleared from the registry, as a schema-7 facts read leaves them. The chunks' next load (`loadedChunk`) teaches both back from the pipes and lanes. The re-alignment check of each registration of the line then finds nothing to set back.
+  - Sight glass:
+    - Expected: the accessory store holds a pipe's glass, so a pipe the registry sets back shows it again.
+    - Found: `stateFor` places no glass, so a re-placed pipe came back bare while the store kept the record. An axial fitting could then be installed on it, and `Store.installLegacy` threw after the fitting's registry edit had applied.
+    - Fix: `RegistryRealignment.sightGlass` gives a placed or restated pipe the glass its record holds. Its window takes the run's default axis, the one the glass geometry already falls back to. A glass that only the block shows is left. GameTest a now carries a glass on its first pipe.
+  - Gates: `FluidFactsCompatTest` 15/15 (all ten corpus images, schema 7 included, still load), `AccessoryStoreCompatTest` 8/8, `GaugeAccessoriesTest` 13/13, `SensorStoreTest` 4/4. Fluid GameTests 48/48 on the fresh run id `save-w5-step8b` (new: `registry-first-learning`).
+  - The first run, `save-w5-step8`, failed in h only, a test fault: h waited on the re-alignment counters, which count only while diagnostics are enabled. Its leftovers then failed the cleanup check of `registeredpipesandreservoirskeepsimulatingacrossunloadedchunks`. h now calls the checks directly, as a and e do. Code guide: waits for the merge.
+
 ## Open items
 
-- W5 step 8 per REGISTRY_FIRST_PLAN.md section 5. Next: GameTest h (a schema-7 world's painted pipe learns its paint) and the check that the schema-7 image still loads.
+- W5 is complete. Merge preparation (final lane, CHANGELOG, version, code guide, tooling cleanup) waits for the owner.
 - One in-game check of a rebuilt structure (rendering, light) to offer the owner after step 6 (plan section 8); not started unasked.
 - Tooling cleanup before the merge: the rack-frame probe `tmp/rack-frame/ambiguity.jsh` (plan 3.1) moves to a `tools/` folder.
-- A pipe's sight glass is an accessory of the registration (accessory store). Check in step 6 or 8 that a re-placed pipe shows it again, through `deviceLoaded` → `instruments.bind`; no GameTest covers it yet.
+- A restored sight glass faces the run's default axis, not the one its player chose: the fitting record keeps no axis. Option: an append-only axis field in the accessory facts, with a corpus image. Owner to decide.
+- `InstrumentService.occupied` does not count a pipe fitting. A pipe block that lost its glass flag outside the re-alignment still lets an axial fitting reach `Store.installLegacy`, which throws, until its chunk loads again. Proposal: count the fitting in `occupied`. Owner to decide.
+- GameTest i after a constructor edit (plan section 8) is not built.
 - W6 (save encoding off the server thread): proposed, owner to decide.
 - `SolidMaterialCatalog.validate` still says "create a fresh world". The start guard reaches it only when the basis check misses a change to the solid data. Its text changes with P8 (review G9).

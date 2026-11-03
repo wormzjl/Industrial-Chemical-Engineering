@@ -143,6 +143,7 @@ For each registration of the chunk:
 - **`FluidDeviceBlock.stateFor(Device)`.** A new function, the inverse of the arguments `loadedChunk` and `onPlace` pass to `place(...)`: kind → block, `FACING`, cutoff, pressure valve, filter, `INLINE_MOVER` (`FluidDeviceBlock.fittings`). No connection and no sight glass. Null for a device no such block stands for: a structure's (it has ports), a rack lane, a column's port, a heat side.
 - **The restore flag.** The laying tool's `laying` flag, renamed `FluidDeviceBlock.registered`, set through `FluidDeviceBlock.quietly(...)`. While it is set, `onPlace` does not register, and `onRemove` neither removes the registration nor recovers instruments. The placer binds the existing identity instead.
 - **A replaced IChemE block** drops no item (S9) and gives no recovery. Its old block entity's instruments are not recovered: accessories belong to the registration, by identity.
+- **The sight glass (built in step 8).** The accessory store holds a pipe's glass as its pipe fitting; the block state draws it. A pipe that the re-alignment places or restates takes the glass its record holds (`RegistryRealignment.sightGlass`), with its window on the run's default axis, the axis the glass geometry already falls back to. A glass that only the block shows is left as it is. Before step 8, a re-placed pipe came back bare while the store kept the glass. An axial fitting could then be installed on it, and `Store.installLegacy` threw after the fitting's registry edit had applied.
 - **The kind check.** A block binds only a one-block registration of its kind (`FluidDeviceBlockEntity.standsFor`). `bindIdentity` refuses another: an `IllegalStateException`, as for another position. `bind(world, device)` returns false instead, at `onLoad` and at `loadedChunk`, and the cell waits for its re-alignment, which `loadedChunk` queues.
 
 ### 4.4 Structures
@@ -192,7 +193,7 @@ Each step is one commit and runs only the tests that its files can load.
 | 5 | Rack cells placed again from their lane registrations (4.2 item 3), with the rack frame as a fact (schema 9). **Done** (see the batch README) | GameTest e; `WorldTopologyLedgerTest` (a frame leaves with its lane); `FluidFactsCompatTest` with the new `compat/fluid/schema-9` image |
 | 6 | Structures (4.4). **Done** (see the batch README) | GameTests f and g. `equipmentGates` only if refresh code changed |
 | 7 | Notices, lang keys (4.5). **Done** (see the batch README) | `LanguageFilesTest`; `tools/localization/check.js` |
-| 8 | Learning from blocks (3.4): built in step 2; what is left is its world-level check | GameTest h, and the schema-7 image still loads |
+| 8 | Learning from blocks (3.4): built in step 2; what is left is its world-level check. The sight glass of a re-placed pipe (4.3). **Done** (see the batch README) | GameTest h (with i), the sight glass in GameTest a; `FluidFactsCompatTest` (the schema-7 image still loads) |
 
 ## 6. Cost: no lag at edits, saves and loads
 
@@ -245,6 +246,11 @@ Structure records persist in the GameTest world as registrations do. Once re-ali
 - **h. Learning.** A schema-7 world's painted pipe learns its paint into the registry at its chunk's first load.
 - **i. Nothing to do.** An ordinary placed network re-aligns nothing (all counters zero) across a save and a reload.
 - **j. Unknown block.** An IChemE block the registry never saw registers fresh (today's path, kept).
+- Built in step 8:
+  - h with i as `aLineSavedBeforeTheRegistryHeldItsPaintTeachesItAtLoad`. The painted line of GameTest e loses its paints and frames from the registry, as a schema-7 facts read leaves them. The chunks' next load teaches both back, and the re-alignment check of each of its registrations finds nothing to set back. The checks are called directly: the diagnostics counters count only while diagnostics are enabled.
+  - i: an intact line or rack run re-aligns nothing in a, e and h. The facts' save and reload round trip is the step-1 unit tests'. A GameTest cannot unload its own chunks, so a chunk's next load is `loadedChunk`. i after a constructor edit (section 8) is not built.
+  - j is the set-up of every test here: each places blocks the registry never saw, and they register fresh.
+  - a also carries a sight glass on its first pipe (4.3): the re-placed pipe shows it again, across its run, and the glass record leaves with the pipe.
 
 ## 8. Risks and checks
 

@@ -6,10 +6,13 @@ import com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
+import com.wormzjl.icheme.runtime.instrument.Instrument;
 import com.wormzjl.icheme.science.equipment.RackGeometry;
+import com.wormzjl.icheme.science.equipment.SightGlassGeometry;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -119,7 +122,7 @@ public final class RegistryRealignment {
         Outcome outcome;
         if (present.getBlock() == wanted.getBlock()) outcome = restate(level, world, at, present, d) ? Outcome.RESTATED : Outcome.NOTHING;
         else if (present.isAir() || present.canBeReplaced() || present.getBlock() instanceof FluidDeviceBlock) {
-            place(level, at, wanted, d);
+            place(level, world, at, wanted, d);
             outcome = Outcome.PLACED;
         } else return world.hold(id, true) ? new Check(Outcome.HELD, false) : Check.NONE;
         return new Check(outcome, d.held() && world.hold(id, false));
@@ -192,9 +195,9 @@ public final class RegistryRealignment {
         return frames.isEmpty() ? null : PipeRackBlock.frame(frames.getFirst());
     }
 
-    /** The block of {@code d} stands at {@code at}: it takes {@code d}'s facing and fittings, and its identity. Whether anything changed. */
+    /** The block of {@code d} stands at {@code at}: it takes {@code d}'s facing, fittings and sight glass, and its identity. Whether anything changed. */
     private static boolean restate(ServerLevel level, FluidWorldAuthority world, BlockPos at, BlockState present, PhysicalFluidTopology.Device d) {
-        var fitted = FluidDeviceBlock.fittings(present, d);
+        var fitted = sightGlass(FluidDeviceBlock.fittings(present, d), world, d.id());
         // A lever's drawn position follows the commit, not a queued toggle (FluidDeviceBlockEntity.refreshGeometry).
         if (FluidDeviceBlock.hasShutoff(present) && FluidDeviceBlock.hasShutoff(fitted)) fitted = fitted.setValue(FluidDeviceBlock.SHUTOFF, present.getValue(FluidDeviceBlock.SHUTOFF));
         boolean changed = fitted != present;
@@ -214,17 +217,30 @@ public final class RegistryRealignment {
     /**
      * Places {@code d}'s block at {@code at}, which is free or holds another fluid device block. The block takes its joints
      * from the registration before any neighbour reads them, as the laying tool places a line (PipeLaying.lay); then it
-     * connects, and its neighbours redraw.
+     * connects, takes the sight glass its accessory record holds ({@link #sightGlass}), and its neighbours redraw.
      */
-    private static void place(ServerLevel level, BlockPos at, BlockState wanted, PhysicalFluidTopology.Device d) {
+    private static void place(ServerLevel level, FluidWorldAuthority world, BlockPos at, BlockState wanted, PhysicalFluidTopology.Device d) {
         FluidDeviceBlock.quietly(() -> level.setBlock(at, wanted, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE));
         if (!(level.getBlockEntity(at) instanceof FluidDeviceBlockEntity entity)) return;
         entity.bindIdentity(d.id());
-        var connected = FluidDeviceBlock.connectedState(level.getBlockState(at), level, at);
+        var connected = sightGlass(FluidDeviceBlock.connectedState(level.getBlockState(at), level, at), world, d.id());
         FluidDeviceBlock.quietly(() -> level.setBlock(at, connected, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE));
         // The neighbours meet the new block, or part from the one it replaced, as at a placement.
         connected.updateNeighbourShapes(level, at, Block.UPDATE_CLIENTS);
         level.blockUpdated(at, connected.getBlock());
         entity.refreshGeometry(d.geometry().diameter(), true);
+    }
+
+    /**
+     * {@code state} with the sight glass the accessory store holds for pipe {@code id}: the store is the fact, the block
+     * state draws it (plan 4.3). The window takes its run's default axis, as {@link SightGlassGeometry.Key} draws a window
+     * that lies along the run. A glass the block already shows is kept. A run that cannot carry one stays bare, and the
+     * record stays for the break to refund.
+     */
+    private static BlockState sightGlass(BlockState state, FluidWorldAuthority world, long id) {
+        if (state.getValue(FluidDeviceBlock.SIGHT_GLASS) || !FluidDeviceBlock.supportsSightGlass(state)) return state;
+        if (world.instruments().fitting(id) != Instrument.Type.SIGHT_GLASS) return state;
+        var window = SightGlassGeometry.towards(FluidDeviceBlock.connectionMask(state), state.getValue(FluidDeviceBlock.FACING).ordinal(), 0, 0, 0);
+        return state.setValue(FluidDeviceBlock.SIGHT_GLASS, true).setValue(FluidDeviceBlock.SIGHT_GLASS_AXIS, Direction.Axis.valueOf(window.name()));
     }
 }
