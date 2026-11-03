@@ -37,6 +37,12 @@ public enum Limit {
     // ---- Every item, section 3.5 ----
     /** 1 if the run is steady, 0 if not. A sizing reads only a steady run's streams; on any other run every item holds this one reading. */
     RUN_STEADY(MUST, least(1), "", "World: `FlowsheetRun.Status`"),
+    /**
+     * Auto's spare over the design need (S4c), on the three capacity Musts with no Should before them: an exchanger's or kettle's
+     * surface, an air cooler's, a heater's duty. Auto first tries the sizes that hold the need and this much more. The owner's
+     * decision of 2026-11-03: "let it propose the actual equipment to build instead", with "20 % spare". The lamps read the bare need.
+     */
+    AUTO_SPARE(RULE, least(20), "%", "This plan"),
 
     // ---- Every line, section 3.3 ----
     LINE_BORE(MUST, most(PipeSizes.MAX_BORE), "m", "World: `PipeSizes.MAX_BORE`", QUIET),

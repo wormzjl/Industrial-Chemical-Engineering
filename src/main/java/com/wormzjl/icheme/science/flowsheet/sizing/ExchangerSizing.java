@@ -148,9 +148,13 @@ public final class ExchangerSizing {
         return shell == null ? 0 : shell.drop(HeatSides.shellPassage(size.shell(), size.tubes()), size.shells());
     }
 
-    /** The fewest shells, then the least surface, that meets every limit. No load, no size. */
+    /**
+     * The fewest shells, then the least surface, that meets every limit, first among those whose surface holds the need with
+     * {@link Limit#AUTO_SPARE}: one more shell where fewer cannot hold the spare. No load, no size.
+     */
     public static Selection.Choice<Size> auto(@Nullable Load load) {
         if (load == null) return new Selection.Choice<>(null, Rating.NONE);
-        return Selection.smallest(load.kettle() ? KETTLES : EXCHANGERS, size -> rate(load, size));
+        double held = load.needed() * (1 + Limit.AUTO_SPARE.value() / 100);
+        return Selection.smallest(Selection.spareFirst(load.kettle() ? KETTLES : EXCHANGERS, Size::surface, held), size -> rate(load, size));
     }
 }

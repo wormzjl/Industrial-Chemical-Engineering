@@ -112,9 +112,13 @@ public final class AirCoolerSizing {
         return load.mean().drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), size.banks());
     }
 
-    /** The fewest banks, then the least face, that meets every limit, by its fewest bays. No load, no size. */
+    /**
+     * The fewest banks, then the least face, that meets every limit, by its fewest bays, first among those whose surface holds the
+     * need with {@link Limit#AUTO_SPARE}: one more bank where fewer cannot hold the spare. No load, no size.
+     */
     public static Selection.Choice<Size> auto(@Nullable Load load) {
         if (load == null) return new Selection.Choice<>(null, Rating.NONE);
-        return Selection.smallest(SIZES, size -> rate(load, size));
+        double held = load.needed() * (1 + Limit.AUTO_SPARE.value() / 100);
+        return Selection.smallest(Selection.spareFirst(SIZES, Size::surface, held), size -> rate(load, size));
     }
 }

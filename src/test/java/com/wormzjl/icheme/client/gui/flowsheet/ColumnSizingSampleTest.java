@@ -167,13 +167,18 @@ class ColumnSizingSampleTest {
         assertEquals(119, read(pump.rating(), Limit.PUMP_RATED), ONE);
     }
 
+    /**
+     * S4c: Auto holds 1.2 × the need where a size can. PA 1 and PA 2 need 222 and 223 m², so 267 m² with the spare: 4 m tubes,
+     * 300 m², where the least that held the bare need was 3 m, 225 m². PA 3's 225 m² already holds 1.2 × its 117.
+     */
     @Test
     void eachPumparoundTakesItsCoolerAndPump() {
-        double[] needs = {224, 223, 117}, rated = {110, 93, 78}, pumps = {.25, .3, .25};
+        double[] needs = {224, 223, 117}, rated = {110, 93, 78}, pumps = {.25, .3, .25}, surfaces = {300, 300, 225};
+        int[] tubes = {4, 4, 3};
         for (int i = 0; i < 3; i++) {
             var cooler = unit("pa " + (i + 1) + " cooler");
-            assertEquals(new ExchangerSizing.Size(false, 1, 1, 3), cooler.size(), "PA " + (i + 1));
-            assertEquals(225, read(cooler.rating(), Limit.EXCHANGER_SURFACE), ONE);
+            assertEquals(new ExchangerSizing.Size(false, 1, 1, tubes[i]), cooler.size(), "PA " + (i + 1));
+            assertEquals(surfaces[i], read(cooler.rating(), Limit.EXCHANGER_SURFACE), ONE);
             assertEquals(needs[i], cooler.rating().reading(Limit.EXCHANGER_SURFACE).low(), needs[i] * .02, "PA " + (i + 1) + ": the curves' need, within 2 % of the probe's one LMTD");
             var pump = unit("pa " + (i + 1) + " pump");
             assertEquals(new PumpSizing.Size(pumps[i]), pump.size(), "PA " + (i + 1));

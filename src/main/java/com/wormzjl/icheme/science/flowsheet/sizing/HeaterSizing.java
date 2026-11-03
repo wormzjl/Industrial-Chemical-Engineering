@@ -82,11 +82,15 @@ public final class HeaterSizing {
         return auto(load, type(load));
     }
 
-    /** {@code type}'s least duty that holds: the player's type, on Auto's size. */
+    /**
+     * {@code type}'s least duty that holds: the player's type, on Auto's size. The least that holds the duty with
+     * {@link Limit#AUTO_SPARE} comes first; the count of cabins stays set by the bare duty, so the spare never adds a cabin.
+     */
     public static Selection.Choice<Size> auto(Load load, UnitType type) {
         if (!(load.duty() > 0)) return new Selection.Choice<>(null, Rating.NONE);
         int count = type == UnitType.CABIN_HEATER ? Math.max(1, (int) Math.ceil(load.duty() / Limit.TYPE_CABIN_LARGEST.value())) : 1;
         var sizes = (type == UnitType.CABIN_HEATER ? CABIN : VERTICAL).stream().map(size -> new Size(size.type(), count, size.diameter(), size.length())).toList();
-        return Selection.smallest(sizes, size -> rate(load, size));
+        double held = load.duty() * (1 + Limit.AUTO_SPARE.value() / 100);
+        return Selection.smallest(Selection.spareFirst(sizes, Size::held, held), size -> rate(load, size));
     }
 }

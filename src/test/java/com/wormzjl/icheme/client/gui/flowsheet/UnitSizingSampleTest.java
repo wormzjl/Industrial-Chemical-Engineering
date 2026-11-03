@@ -115,22 +115,26 @@ class UnitSizingSampleTest {
         assertEquals(31.1, read(given.units().get("P-102").rating(), Limit.PUMP_NPSH), TENTH, "and so does the probe's height given as an entry");
     }
 
+    /**
+     * S4c: Auto takes the least surface that holds 1.2 × the need, 528 m²: a 1.25 m shell with 5 m tubes, 586 m², where the bare
+     * need's least was the plan's 1.00 × 6 m, 450 m². Its wider shell and shorter tubes lose less on both sides.
+     */
     @Test
     void e101() {
         var unit = alone.units().get("E-101");
-        assertEquals(new ExchangerSizing.Size(false, 1, 1, 6), unit.size());
+        assertEquals(new ExchangerSizing.Size(false, 1, 1.25, 5), unit.size());
         closest(unit.rating(), Limit.EXCHANGER_SURFACE);
         var surface = unit.rating().reading(Limit.EXCHANGER_SURFACE);
-        assertEquals(450, surface.value(), ONE);
+        assertEquals(586, surface.value(), ONE);
         assertEquals(440, surface.low(), ONE, "the curves' surface");
         assertEquals(444, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
         assertEquals(81.8, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
         assertEquals(46.7, read(unit.rating(), Limit.EXCHANGER_COLD_END), TENTH);
         assertEquals(46.7, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);
-        assertEquals(2, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE);
+        assertEquals(33, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE);
         var drops = unit.rating().readings().stream().filter(reading -> reading.limit() == Limit.EXCHANGER_DROP_LIQUID).toList();
-        assertEquals(.44, drops.get(0).value(), HUNDREDTH, "the tube side");
-        assertEquals(.15, drops.get(1).value(), HUNDREDTH, "the shell side");
+        assertEquals(.17, drops.get(0).value(), HUNDREDTH, "the tube side, 0.44 on 1.00 × 6 m");
+        assertEquals(.06, drops.get(1).value(), HUNDREDTH, "the shell side, 0.15 on 1.00 × 6 m");
     }
 
     private static double probesSurface() {
@@ -154,13 +158,14 @@ class UnitSizingSampleTest {
         assertEquals(.41, drops.get(1).value(), HUNDREDTH);
     }
 
+    /** S4c: the bare 86.2 MW sets the type and the one cabin; the spare sets the size: 12.0 × 45 m holds 105.4 MW, the least over 1.2 × 86.2 = 103.4, where 11.0 × 41 m held 87.6. */
     @Test
     void h101TakesACabin() {
         var unit = alone.units().get("H-101");
-        assertEquals(new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 11, 41), unit.size());
+        assertEquals(new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 12, 45), unit.size());
         closest(unit.rating(), Limit.HEATER_DUTY);
         var duty = unit.rating().reading(Limit.HEATER_DUTY);
-        assertEquals(87.6, duty.value(), TENTH);
+        assertEquals(105.4, duty.value(), TENTH);
         assertEquals(86.2, duty.low(), TENTH);
         assertEquals(path("P-101").spare(), read(unit.rating(), Limit.HEATER_SPARE), 0, "its path's spare, to V-101's set outlet");
     }
@@ -185,15 +190,15 @@ class UnitSizingSampleTest {
     @Test
     void e102() {
         var unit = alone.units().get("E-102");
-        assertEquals(new AirCoolerSizing.Size(2, 5, new ProcessUnit.Bank(6, 4)), unit.size(), "the least face on the curve's need");
+        assertEquals(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(6, 3)), unit.size(), "S4c: the least face that holds 1.2 × the curve's need, 869 m²; 6 × 4 bays of 2.0 × 5 m held the bare need");
         closest(unit.rating(), Limit.AIR_COOLER_SURFACE);
         var surface = unit.rating().reading(Limit.AIR_COOLER_SURFACE);
-        assertEquals(726, surface.value(), ONE);
+        assertEquals(903, surface.value(), ONE);
         assertEquals(724, surface.low(), ONE, "the curve's surface");
         assertEquals(741, probesBareSurface(), ONE, "the probe's one capacity, from the same streams");
         itsCapacityRises("S-10", run.streams().get("S-10").temperature(), run.streams().get("RESIDUE").temperature());
         assertEquals(45, read(unit.rating(), Limit.AIR_COOLER_OUTLET), TENTH);
-        assertEquals(.07, read(unit.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH);
+        assertEquals(.045, read(unit.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH);
     }
 
     private static double probesBareSurface() {

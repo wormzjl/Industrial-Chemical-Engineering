@@ -72,16 +72,21 @@ class SizeAllSampleTest {
      * the physics: H-101's radiant coil starts where its convection coil ends, 0.46 bar lower, so more of the crude flashes in it
      * (0.11 bar more than the probe's march, which restarted the radiant coil at the inlet's pressure), and the built cabin's coils
      * hold 87.6 MW, not the design's 86.2, on the same 11 passes (0.05 bar more); and the transfer line S-6, which the probe left
-     * out because it ended at H-101's outlet, is a step of the path. 3.66 + 0.16 + 0.03 = 3.85 bar.
+     * out because it ended at H-101's outlet, is a step of the path. 3.66 + 0.16 + 0.03 = 3.85 bar on S4a's least sizes.
+     *
+     * <p>S4c's spare moves four steps, each by its unit's size. PA 1 and PA 2 coolers take 4 m tubes, not 3: longer, 0.36 and 0.40
+     * bar, not 0.30 and 0.33. E-101 takes a 1.25 m shell with 5 m tubes, not 1.00 × 6 m: more tubes, shorter, 0.17, not 0.44. H-101's
+     * cabin of 12.0 × 45 m holds 105.4 MW on 13 passes of 8 MW, not 87.6 on 11: each pass carries 11/13 of the crude on a pass 2 %
+     * longer, 1.48 bar, not 2.11. The path loses 3.07 bar.
      */
     @Test
     void p101sPathIsTheProbesStair() {
         var path = path(proposal, "P-101");
         String[] items = {"S-1", "T-101/pa 1 cooler", "S-2", "T-101/pa 2 cooler", "S-3", "T-101/pa 3 cooler", "S-4", "E-101", "S-5", "H-101", "S-6"};
-        double[] lost = {.12, .30, .10, .33, .04, .29, .04, .44, .04, 2.11, .03};
+        double[] lost = {.12, .36, .10, .40, .04, .29, .04, .17, .04, 1.48, .03};
         assertEquals(List.of(items), path.steps().stream().map(PressurePath.Step::item).toList());
         for (int i = 0; i < lost.length; i++) assertEquals(lost[i], path.steps().get(i).lost(), HUNDREDTH, items[i]);
-        assertEquals(3.85, path.lost(), HUNDREDTH);
+        assertEquals(3.07, path.lost(), HUNDREDTH);
         assertEquals(14.00, path.from(), HUNDREDTH);
         assertTrue(path.set());
         assertEquals("V-101", path.taker());
@@ -92,18 +97,19 @@ class SizeAllSampleTest {
     /**
      * The residue's path: the probe's 0.99 bar, the sump's head with the doors' drops, to a product nothing holds. It loses 0.48,
      * not the probe's 0.47: S2's heat curves give E-102 724 m² where the probe's one heat capacity gave 741, which picks another
-     * bank, 0.07 bar where the probe's lost 0.05 (plan section 4).
+     * bank, 0.07 bar where the probe's lost 0.05 (plan section 4). S4c's spare takes larger units on it: E-101's 1.25 m shell, whose
+     * residue side loses 0.06, not 0.15, and E-102's 6 × 3 bays of 2.5 × 6 m, 0.04, not 0.07. The path loses 0.37.
      */
     @Test
     void theResiduesPathIsTheProbes() {
         var residue = proposal.paths().stream().filter(p -> p.start().equals("T-101") && p.end().equals("RESIDUE")).findFirst().orElseThrow();
         assertEquals(List.of("S-9", "E-101", "S-10", "E-102", "RESIDUE"), residue.steps().stream().map(PressurePath.Step::item).toList());
-        double[] lost = {.005, .15, .09, .07, .17};
+        double[] lost = {.005, .06, .09, .045, .17};
         for (int i = 0; i < lost.length; i++) assertEquals(lost[i], residue.steps().get(i).lost(), HUNDREDTH, residue.steps().get(i).item());
         assertEquals(.49, residue.head(), HUNDREDTH);
         assertEquals(2.22, residue.to(), HUNDREDTH);
         assertEquals(.99, residue.available(), HUNDREDTH);
-        assertEquals(.48, residue.lost(), HUNDREDTH);
+        assertEquals(.37, residue.lost(), HUNDREDTH);
         assertFalse(residue.set());
         assertSame(com.wormzjl.icheme.science.flowsheet.sizing.Rating.NONE, residue.rating());
     }
@@ -115,6 +121,11 @@ class SizeAllSampleTest {
      * square of the flow: at 11.3 bar the coil's crude flashes less than at the design's 5, so its law loses less than the square
      * law says, and S-6 stands 0.11 bar above the plan's. The tolerances are the plan's "about": its last printed digit, and S-6's
      * 0.11 within 0.15.
+     *
+     * <p>S4c: with the 20 % spare the sized units are larger and lose less. The coils' 13 passes lose 1.07 bar at the run's flow,
+     * and the sized steps 2.09 bar in all, so S-6 stands at 11.9 bar, 0.7 above S4a's least sizes. At 11.9 bar still less crude
+     * flashes, a vapour share of 0.52, not 0.54; the furnace fires 73.9 MW, not 74.25, and the feed reaches the column at 349.8 °C, not
+     * 350.5. The tolerances stay.
      */
     @Test
     void theSampleSizedMovesAsThePlanSays() {
@@ -122,13 +133,13 @@ class SizeAllSampleTest {
         var after = all.run().streams();
         assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
         assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
-        assertEquals(11.2, after.get("S-6").pressure() / 1e5, .15);
+        assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
         assertEquals(78.37, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
-        assertEquals(74.25, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
+        assertEquals(73.93, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
         assertEquals(359.5, before.get("S-7").temperature() - 273.15, .1);
-        assertEquals(350.5, after.get("S-7").temperature() - 273.15, .15);
+        assertEquals(349.8, after.get("S-7").temperature() - 273.15, .15);
         assertEquals(.71, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);
-        assertEquals(.54, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH);
+        assertEquals(.52, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH);
     }
 
     /** Nothing is sized twice: every Auto item holds the size Size all proposed, and that is the size its rating reads. */

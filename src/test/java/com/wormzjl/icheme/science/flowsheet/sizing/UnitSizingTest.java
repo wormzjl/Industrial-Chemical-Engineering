@@ -96,13 +96,14 @@ final class UnitSizingTest {
         assertEquals(ExchangerSizing.rate(E_101, size), choice.rating(), "Fixed reads the same limits");
         for (var other : exchangers()) {
             boolean smaller = other.shells() < size.shells() || other.shells() == size.shells() && other.surface() < size.surface();
-            if (smaller) assertNotEquals(Lamp.GREEN, ExchangerSizing.rate(E_101, other).lamp(), other.toString());
+            if (smaller && other.surface() >= SPARE * E_101.needed()) assertNotEquals(Lamp.GREEN, ExchangerSizing.rate(E_101, other).lamp(), other.toString());
         }
     }
 
-    @Test void oneStepDownFailsItsSurface() {
-        var size = ExchangerSizing.auto(E_101).size();
-        var down = ExchangerSizing.rate(E_101, new ExchangerSizing.Size(false, size.shells(), size.shell(), size.tubes() - 1));
+    @Test void underTheNeedFailsItsSurface() {
+        var size = exchangers().stream().filter(other -> other.surface() < E_101.needed() && ExchangerSizing.rate(E_101, other).reading(Limit.UNIT_SHAPE).met())
+                .max(java.util.Comparator.comparingDouble(ExchangerSizing.Size::surface)).orElseThrow();
+        var down = ExchangerSizing.rate(E_101, size);
         assertEquals(Lamp.RED, down.lamp());
         assertSame(Limit.EXCHANGER_SURFACE, down.closest().limit());
     }
@@ -175,6 +176,7 @@ final class UnitSizingTest {
         assertEquals(Lamp.GREEN, choice.rating().lamp());
         assertEquals(AirCoolerSizing.rate(E_102, size), choice.rating(), "Fixed reads the same limits");
         for (var other : banks()) {
+            if (other.surface() < SPARE * E_102.needed()) continue;
             if (other.face() < size.face()) assertNotEquals(Lamp.GREEN, AirCoolerSizing.rate(E_102, other).lamp(), other.toString());
             if (other.face() == size.face()) assertTrue(other.bank().bays() >= size.bank().bays(), "its fewest bays");
         }
@@ -221,14 +223,15 @@ final class UnitSizingTest {
         assertEquals(UnitType.CABIN_HEATER, HeaterSizing.type(new HeaterSizing.Load(largest + .01, null)));
     }
 
-    @Test void aHeaterTakesTheLeastDutyThatHolds() {
+    @Test void aHeaterTakesTheLeastDutyThatHoldsTheSpare() {
         var load = new HeaterSizing.Load(86.2, null);
         var choice = HeaterSizing.auto(load);
-        assertEquals(new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 11, 41), choice.size());
+        assertEquals(new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 12, 45), choice.size(), "11 × 41 m held the bare 86.2 MW before S4c");
+        assertTrue(choice.size().held() >= SPARE * load.duty());
         assertEquals(Lamp.GREEN, choice.rating().lamp());
         assertEquals(HeaterSizing.rate(load, choice.size()), choice.rating(), "Fixed reads the same limits");
         var down = HeaterSizing.rate(load, new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 11, 40));
-        assertEquals(Lamp.RED, down.lamp(), "one step down");
+        assertEquals(Lamp.RED, down.lamp(), "one step under the bare need's least");
         assertSame(Limit.HEATER_DUTY, down.closest().limit());
     }
 
@@ -240,7 +243,7 @@ final class UnitSizingTest {
         var two = HeaterSizing.auto(new HeaterSizing.Load(largest + 1, null));
         assertEquals(2, two.size().count());
         assertEquals(Lamp.GREEN, two.rating().lamp());
-        assertTrue(two.size().held() < 1.2 * (largest + 1), "the count shares the duty");
+        assertTrue(two.size().held() < 2 * largest, "the count shares the duty");
     }
 
     @Test void aKeptTypeReadsItsOwnLimits() {
@@ -263,6 +266,78 @@ final class UnitSizingTest {
         var rating = HeaterSizing.rate(new HeaterSizing.Load(86.2, null), new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 11.5, 41));
         assertEquals(Lamp.RED, rating.lamp());
         assertSame(Limit.UNIT_SHAPE, rating.closest().limit());
+    }
+
+    // ---- Auto's spare, S4c ----
+
+    private static final double SPARE = 1 + Limit.AUTO_SPARE.value() / 100;
+
+    /** S4c: Auto proposes the equipment to build, the first size in its order that holds the need with the spare; the Musts read the bare need. */
+    @Test void autoHoldsTheSpareWhereASizeCan() {
+        assertEquals(1.2, SPARE, 1e-12, "the owner's 20 %, 2026-11-03");
+        var exchanger = ExchangerSizing.auto(E_101);
+        assertEquals(Lamp.GREEN, exchanger.rating().lamp());
+        assertTrue(exchanger.size().surface() >= SPARE * E_101.needed(), exchanger.size().toString());
+        assertEquals(E_101.needed(), exchanger.rating().reading(Limit.EXCHANGER_SURFACE).low(), 1e-9, "the Must reads the bare need");
+        var cooler = AirCoolerSizing.auto(E_102);
+        assertEquals(Lamp.GREEN, cooler.rating().lamp());
+        assertTrue(cooler.size().surface() >= SPARE * E_102.needed(), cooler.size().toString());
+        assertEquals(E_102.needed(), cooler.rating().reading(Limit.AIR_COOLER_SURFACE).low(), 1e-9);
+        var heater = HeaterSizing.auto(new HeaterSizing.Load(86.2, null));
+        assertEquals(Lamp.GREEN, heater.rating().lamp());
+        assertTrue(heater.size().held() >= SPARE * 86.2, heater.size().toString());
+        assertEquals(86.2, heater.rating().reading(Limit.HEATER_DUTY).low(), 1e-9);
+    }
+
+    /** My call, S4c: the bank count is part of Auto's order, so where one bank holds the need but not the spare, it takes two. */
+    @Test void theSpareTakesOneMoreBankWhereOneCannotHoldIt() {
+        double largest = banks().stream().mapToDouble(AirCoolerSizing.Size::surface).max().orElseThrow();
+        var load = new AirCoolerSizing.Load(E_102.mean(), .9 * largest, 45);
+        var choice = AirCoolerSizing.auto(load);
+        assertEquals(Lamp.GREEN, choice.rating().lamp());
+        assertEquals(2, choice.size().banks());
+        assertTrue(choice.size().surface() >= SPARE * load.needed());
+    }
+
+    /** Where no size holds the spare, today's search over every size decides: the least that holds the bare need. */
+    @Test void whereNoSizeHoldsTheSpareAutoFallsBack() {
+        double largest = Limit.HEATER_VERTICAL.value();
+        var load = new HeaterSizing.Load(largest / 1.1, null);
+        var choice = HeaterSizing.auto(load);
+        assertEquals(UnitType.VERTICAL_HEATER, choice.size().type());
+        assertEquals(Lamp.GREEN, choice.rating().lamp());
+        assertTrue(choice.size().held() < SPARE * load.duty(), "no vertical holds the spare");
+        var plain = Selection.smallest(verticals(), size -> HeaterSizing.rate(load, size));
+        assertEquals(plain.size(), choice.size(), "today's least duty that holds");
+    }
+
+    /** My call, S4c: the type and the count of cabins stay set by the bare duty; the spare picks the size within them. */
+    @Test void theHeatersTypeAndCountStayOnTheBareDuty() {
+        double vertical = Limit.HEATER_VERTICAL.value();
+        assertEquals(UnitType.VERTICAL_HEATER, HeaterSizing.auto(new HeaterSizing.Load(vertical / 1.1, null)).size().type(), "a cabin would hold the spare; the type stays");
+        double cabin = Limit.TYPE_CABIN_LARGEST.value();
+        var two = HeaterSizing.auto(new HeaterSizing.Load(2 * cabin, null));
+        assertEquals(2, two.size().count(), "three cabins would hold the spare; the count stays");
+        assertEquals(Lamp.GREEN, two.rating().lamp());
+    }
+
+    /** A Fixed size between the need and the spare holds the need, so its lamp is green; the spare is only Auto's order. */
+    @Test void aFixedSizeBetweenTheNeedAndTheSpareIsGreen() {
+        var heater = new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 11, 41);
+        assertTrue(heater.held() >= 86.2 && heater.held() < SPARE * 86.2);
+        assertEquals(Lamp.GREEN, HeaterSizing.rate(new HeaterSizing.Load(86.2, null), heater).lamp());
+        var between = exchangers().stream().filter(size -> size.surface() >= E_101.needed() && size.surface() < SPARE * E_101.needed() && ExchangerSizing.rate(E_101, size).lamp() == Lamp.GREEN).findFirst();
+        assertTrue(between.isPresent(), "a size under the spare that meets every limit");
+        assertTrue(ExchangerSizing.rate(E_101, between.get()).reading(Limit.EXCHANGER_SURFACE).met());
+    }
+
+    private static List<HeaterSizing.Size> verticals() {
+        var design = com.wormzjl.icheme.science.equipment.UnitDesign.of(EquipmentShape.Kind.VERTICAL_HEATER);
+        var sizes = new ArrayList<HeaterSizing.Size>();
+        for (double size : UnitSize.grid(EquipmentShape.Kind.VERTICAL_HEATER))
+            for (int length = design.minLength(size); length <= design.maxLength(size); length++) sizes.add(new HeaterSizing.Size(UnitType.VERTICAL_HEATER, 1, size, length));
+        sizes.sort(java.util.Comparator.comparingDouble(HeaterSizing.Size::held));
+        return sizes;
     }
 
     // ---- Compressors ----

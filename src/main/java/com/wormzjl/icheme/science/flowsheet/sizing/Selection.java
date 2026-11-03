@@ -2,7 +2,10 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Function;
+import java.util.function.ToDoubleFunction;
 
 /**
  * Auto (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 3.5): a search over sizes that calls the rate function
@@ -18,6 +21,19 @@ public final class Selection {
      * @param size null with nothing to size
      */
     public record Choice<S>(@Nullable S size, Rating rating) {
+    }
+
+    /**
+     * {@code sizes} in the order Auto tries them with a spare (S4c): first those whose {@code capacity} holds {@code held}, then the
+     * rest, each part in the order given. Where none of the first part meets every limit, the first size that does is the first of
+     * {@code sizes} that does, so {@link #smallest} on this order falls back to today's search.
+     */
+    public static <S> List<S> spareFirst(List<S> sizes, ToDoubleFunction<S> capacity, double held) {
+        var first = new ArrayList<S>(sizes.size());
+        var rest = new ArrayList<S>();
+        for (var size : sizes) (capacity.applyAsDouble(size) >= held ? first : rest).add(size);
+        first.addAll(rest);
+        return first;
     }
 
     /**
