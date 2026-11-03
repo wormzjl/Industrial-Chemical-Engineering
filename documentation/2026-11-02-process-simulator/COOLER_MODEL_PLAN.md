@@ -92,7 +92,7 @@ The owner, approving the plan: "also allow air-then-water approach in column con
   - Water when the top vapour is at or below 40 °C.
   - A key keeps the player's choice.
 - **GUI.** The calculator's and the constructor's condenser choice take the third key, and `AssemblyDiagram` draws the pair.
-- **Other form, for the owner.** A split at 45 °C puts the air at 20 K. That is nearer a plant's air outlet where a trim follows (55 to 60 °C on a 35 to 40 °C summer). The trim then keeps the full 10 K water range, with half the water. The air-ahead reading of section 3 item 4 would move to 45 °C with it. The plan keeps 40 °C, the floor the owner approved.
+- **Decided.** The owner kept 40 °C (2026-11-03, "Keep 40 °C"). A 45 °C split would have put the air at 20 K and halved the trim's water.
 
 ## 7. Build order (one writer)
 
