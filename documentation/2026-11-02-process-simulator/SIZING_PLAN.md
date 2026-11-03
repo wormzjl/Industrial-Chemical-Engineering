@@ -347,6 +347,12 @@ A jet law in the world compressor's isothermal heads was tried first. It has one
 
 **Proposal W10b: one ejector and one condenser (2026-11-03, for the owner).** After the VDU review ([VDU_OVERHEAD_REVIEW.md](VDU_OVERHEAD_REVIEW.md)), the owner said: "This needs some abstraction, a single ejector + condenser should abstract various conditions and the model doesn't have to be that accurate", "Also think about how to define steam requirement for the ejector", and "No back compat needed this thing isn't implemented yet". `runtime/` has no ejector model, so no compatibility work is needed.
 
+**The owner's answer (2026-11-03): "No it should be before the condenser, doesn't need to be modeled explicitly".**
+- The ejector stays ahead of the condenser, as W10 built it, in the world's `ColumnBlueprint` and in the block's drawing.
+- The block does not model the ejector's flows. The products stay at V3's pressures. The steam joins the free water, and its heat joins the condenser's duty, as W10 built.
+- These bullets below are withdrawn: Layout, Products, and the drawing and `ColumnBlueprint` items under "What S1 changes".
+- The steam law S1 stands. The block's load becomes the condenser's vent: V3's vapour product at the condenser. It is no longer the top tray's vapour.
+
 - **Expected behaviour.** The condenser makes the vacuum; the ejector set only removes what does not condense. A set compresses in stages, and an intercondenser after each stage condenses its steam, so the later stages lift gas only. Steam that the condenser cannot condense at the top pressure must first be lifted to a pressure where it condenses. That is the deep-cut VDU's booster.
 - **Layout.** The block's condenser works at the top pressure, as V3 solves it, and drains to the receiver. One ejector takes the receiver's vapour outlet, and the offgas valve follows it. The block's single condenser also stands for the set's intercondensers and aftercondenser: the set's heat joins the condenser's duty, as W10's steam heat does now.
 - **Products.** The set's discharge (the vent plus the motive steam) is cooled to the condenser's temperature at the discharge pressure. Its free water joins the water product. The rest leaves through the Overhead port at the discharge pressure.
