@@ -55,7 +55,7 @@ Speed handling: speed frozen in a step and updated between steps keeps the Newto
 | 10 MW | 200,000 | 50,000 | 29,300 |
 
 - Parity with the Create addons: 20 × r_FE W ↔ 34.13 su, so r_su [W/su] = 0.586 × r_FE [J/FE]. At parity a loop FE → motor → Create → addon generator → FE returns at most the product of its efficiencies. Off parity, one direction gains energy.
-- Recommendation: 10 J per FE with 5.86 W per su. 10 to 100 kW devices draw 50 to 500 FE/t, 1 to 10 MW 5,000 to 50,000 FE/t (late game, reachable).
+- First recommendation: 10 J per FE with 5.86 W per su. Taken after the owner's two corrections (Create duty overrated; FE must match SU): 2.5 J per FE with the addons' 34.13 su per FE/t, so 1.46 W per su. 10 to 100 kW devices draw 200 to 2,000 FE/t, 1 to 10 MW 20,000 to 200,000 FE/t.
 
 ## 3. NeoForge energy capability (1.21.1)
 
@@ -98,15 +98,17 @@ Real stream wheels:
 - Historic: an undershot mill wheel about 3 hp (2.2 kW), larger and fed by a race; a medieval overshot wheel up to 40 to 60 hp [Wikipedia].
 - Estimates: a 2 m wheel, 1 m wide, 0.5 m immersed, 1 to 2 m/s: 0.06 to 0.9 kW, about 0.3 kW at 1.5 m/s and η 0.35. A 4 to 5 m wheel, about 1 m² immersed: 0.6 kW at 1.5 m/s, 1.4 kW at 2 m/s. With a head (breastshot or overshot, P ≈ 7000 Q H): several kW, but Create gives no extra for a head.
 
-| Source | su | 1.5 W/su | Real counterpart |
+| Source | su | 1.46 W/su | Real counterpart |
 |---|---|---|---|
 | Water wheel | 256 | 0.38 kW | 2 m stream wheel, 0.2 to 0.6 kW |
-| Large water wheel | 512 | 0.77 kW | 4 to 5 m stream wheel, 0.6 to 1.4 kW |
+| Large water wheel | 512 | 0.75 kW | 4 to 5 m stream wheel, 0.6 to 1.4 kW |
 | Hand crank | 256 | 0.38 kW | a strong person for minutes (75 W all day, about 400 W for an hour on a bicycle) |
-| Windmill, 8 to 128 sails | 512 to 8,192 | 0.77 to 12 kW | |
-| Steam engine per boiler level | 16,384 | 24.6 kW, 4.5 % of 543 kW of heat | Watt-era engines, 3 to 5 % |
-| Level-18 boiler | 294,912 | 442 kW | |
-| Creative motor at 256 rpm | 4,194,304 | 6.3 MW | |
+| Windmill, 8 to 128 sails | 512 to 8,192 | 0.75 to 12 kW | |
+| Steam engine per boiler level | 16,384 | 24 kW, 4.4 % of 543 kW of heat | Watt-era engines, 3 to 5 % |
+| Level-18 boiler | 294,912 | 432 kW | |
+| Creative motor at 256 rpm | 4,194,304 | 6.1 MW | |
+
+- 1.46 W per su is 20 × 2.5 J / 34.13 su: Mekanism's joule per FE at the Create addons' exchange rate. Real stream wheels, the addons' rate and Mekanism's FE agree.
 
 - One boiler level takes 0.2 kg/s of water: about 543 kW of heat for 10 bar steam from 15 °C.
 - The first pass's 5.86 W per su (parity with the addons at 10 J per FE) made the water wheel 1.5 kW, about four times a real 2 m stream wheel.
