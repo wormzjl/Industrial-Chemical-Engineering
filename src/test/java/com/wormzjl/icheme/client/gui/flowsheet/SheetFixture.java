@@ -98,7 +98,7 @@ final class SheetFixture {
         return new Flowsheet.Feed(temperature, pressure, amounts, List.of());
     }
 
-    /** The design sheets' crude unit, as `SimulatorRender` draws it. */
+    /** The design sheets' crude unit, as `SimulatorRender` draws it. V-101 sets 2.80 bar, not the design sheets' 2.72, so its path keeps a spare (S4c). */
     static Flowsheet sample() {
         var door = ColumnDoor.from(BASE, ColumnComponents.Condenser.EXCHANGER);
         door.json().addProperty("condenser_drop", .3e5);
@@ -111,7 +111,7 @@ final class SheetFixture {
         var units = List.of(unit("P-101", "pump", "{\"target\":\"outlet\",\"pressure\":14e5,\"rise\":2e5}"), new Flowsheet.Unit("T-101", "column", "T-101", 0, 0, door),
                 unit("E-101", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":473.15,\"duty\":1e6,\"area\":100,\"tube_drop\":0.5e5,\"shell_drop\":0.3e5}"),
                 unit("H-101", "fired_heater", "{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":638.15,\"duty\":1e7,\"limit\":90e6,\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}"),
-                unit("V-101", "valve", "{\"target\":\"outlet\",\"pressure\":2.72e5,\"drop\":1e5}"), unit("E-102", "air_cooler", "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}"),
+                unit("V-101", "valve", "{\"target\":\"outlet\",\"pressure\":2.80e5,\"drop\":1e5}"), unit("E-102", "air_cooler", "{\"target\":\"outlet\",\"temperature\":343.15,\"duty\":1e6,\"drop\":0.2e5}"),
                 unit("P-102", "pump", "{\"target\":\"outlet\",\"pressure\":6e5,\"rise\":2e5}"));
         var streams = List.of(stream("CRUDE", null, "", "P-101", "in", new Flowsheet.Feed(298.15, 8e5, crude, List.of())), stream("S-1", "P-101", "out", "T-101", "pa/1/in", null), stream("S-2", "T-101", "pa/1/out", "T-101", "pa/2/in", null),
                 stream("S-3", "T-101", "pa/2/out", "T-101", "pa/3/in", null), stream("S-4", "T-101", "pa/3/out", "E-101", "tube_in", null), stream("S-5", "E-101", "tube_out", "H-101", "in", null), stream("S-6", "H-101", "out", "V-101", "in", null),

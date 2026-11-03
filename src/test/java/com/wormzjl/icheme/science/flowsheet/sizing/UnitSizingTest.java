@@ -217,10 +217,11 @@ final class UnitSizingTest {
 
     // ---- Heaters ----
 
+    /** S4c: a vertical while the largest holds the duty with Auto's spare. */
     @Test void aHeaterIsVerticalWhileTheLargestHoldsIt() {
         double largest = Limit.HEATER_VERTICAL.value();
-        assertEquals(UnitType.VERTICAL_HEATER, HeaterSizing.type(new HeaterSizing.Load(largest, null)));
-        assertEquals(UnitType.CABIN_HEATER, HeaterSizing.type(new HeaterSizing.Load(largest + .01, null)));
+        assertEquals(UnitType.VERTICAL_HEATER, HeaterSizing.type(new HeaterSizing.Load(largest / SPARE - 1e-9, null)), "on the edge, short of the product's last bit");
+        assertEquals(UnitType.CABIN_HEATER, HeaterSizing.type(new HeaterSizing.Load(largest / SPARE + .01, null)));
     }
 
     @Test void aHeaterTakesTheLeastDutyThatHoldsTheSpare() {
@@ -237,10 +238,10 @@ final class UnitSizingTest {
 
     @Test void aHeaterPastTheLargestCabinTakesACount() {
         double largest = Limit.TYPE_CABIN_LARGEST.value();
-        var one = HeaterSizing.auto(new HeaterSizing.Load(largest, null));
+        var one = HeaterSizing.auto(new HeaterSizing.Load(largest / SPARE - 1e-9, null));
         assertEquals(1, one.size().count());
         assertEquals(Lamp.GREEN, one.rating().lamp());
-        var two = HeaterSizing.auto(new HeaterSizing.Load(largest + 1, null));
+        var two = HeaterSizing.auto(new HeaterSizing.Load(largest / SPARE + 1, null));
         assertEquals(2, two.size().count());
         assertEquals(Lamp.GREEN, two.rating().lamp());
         assertTrue(two.size().held() < 2 * largest, "the count shares the duty");
@@ -299,11 +300,11 @@ final class UnitSizingTest {
         assertTrue(choice.size().surface() >= SPARE * load.needed());
     }
 
-    /** Where no size holds the spare, today's search over every size decides: the least that holds the bare need. */
+    /** Where no size holds the spare, today's search over every size decides: the least that holds the bare need. A held type stays the player's. */
     @Test void whereNoSizeHoldsTheSpareAutoFallsBack() {
         double largest = Limit.HEATER_VERTICAL.value();
         var load = new HeaterSizing.Load(largest / 1.1, null);
-        var choice = HeaterSizing.auto(load);
+        var choice = HeaterSizing.auto(load, UnitType.VERTICAL_HEATER);
         assertEquals(UnitType.VERTICAL_HEATER, choice.size().type());
         assertEquals(Lamp.GREEN, choice.rating().lamp());
         assertTrue(choice.size().held() < SPARE * load.duty(), "no vertical holds the spare");
@@ -311,14 +312,51 @@ final class UnitSizingTest {
         assertEquals(plain.size(), choice.size(), "today's least duty that holds");
     }
 
-    /** My call, S4c: the type and the count of cabins stay set by the bare duty; the spare picks the size within them. */
-    @Test void theHeatersTypeAndCountStayOnTheBareDuty() {
+    /**
+     * The orchestrator's reading of the owner's "always have enough excess" (S4c): the type and the count of cabins follow the
+     * duty with the spare; the lamps read the bare duty.
+     */
+    @Test void theHeatersTypeAndCountFollowTheSparedDuty() {
         double vertical = Limit.HEATER_VERTICAL.value();
-        assertEquals(UnitType.VERTICAL_HEATER, HeaterSizing.auto(new HeaterSizing.Load(vertical / 1.1, null)).size().type(), "a cabin would hold the spare; the type stays");
-        double cabin = Limit.TYPE_CABIN_LARGEST.value();
-        var two = HeaterSizing.auto(new HeaterSizing.Load(2 * cabin, null));
-        assertEquals(2, two.size().count(), "three cabins would hold the spare; the count stays");
+        var cabin = HeaterSizing.auto(new HeaterSizing.Load(vertical / 1.1, null));
+        assertEquals(UnitType.CABIN_HEATER, cabin.size().type(), "the largest vertical holds the duty, not its spare");
+        assertTrue(cabin.size().held() >= SPARE * vertical / 1.1);
+        assertEquals(Lamp.GREEN, cabin.rating().lamp());
+        double largest = Limit.TYPE_CABIN_LARGEST.value();
+        var two = HeaterSizing.auto(new HeaterSizing.Load(largest, null));
+        assertEquals(2, two.size().count(), "one cabin holds the duty, not its spare");
+        assertTrue(two.size().held() >= SPARE * largest);
         assertEquals(Lamp.GREEN, two.rating().lamp());
+        assertEquals(largest, two.rating().reading(Limit.HEATER_DUTY).low(), 1e-9, "the Must reads the bare duty");
+    }
+
+    /** S4c: a compressor's frames that hold the flow with the spare come first; its type stays on the design flow. */
+    @Test void aCompressorHoldsTheSpareWithinItsType() {
+        var load = gas(10000, 3);
+        var choice = CompressorSizing.auto(load);
+        assertEquals(UnitType.PISTON, choice.size().type());
+        assertEquals(Lamp.GREEN, choice.rating().lamp());
+        assertTrue(choice.size().displacement(choice.size().stages(3)) >= SPARE * 10000, choice.size().toString());
+        assertEquals(10000, choice.rating().reading(Limit.COMPRESSOR_DISPLACEMENT).low(), 1e-9, "the Should reads the bare flow");
+        assertEquals(UnitType.PISTON, CompressorSizing.type(gas(14000, 3)), "a piston at 14000 m³/h, though its spare is 16800");
+    }
+
+    private static PressurePath setPath(double spare, String taker) {
+        return new PressurePath("P", 10, 0, "D", 9 - spare, true, taker, List.of(new PressurePath.Step("S", PressurePath.Step.LINE, 1, 0)));
+    }
+
+    /** S4c: a set path with no valve at its end reads its spare over its losses, at least 20 %; a valve's path keeps the valve's rows. */
+    @Test void aSetPathWithNoValveKeepsTwentyPercentOverItsLosses() {
+        assertEquals(Lamp.RED, setPath(-.05, null).rating().lamp(), "below 0 the Must");
+        assertEquals(Lamp.YELLOW, setPath(.1, null).rating().lamp(), "10 % of its 1 bar");
+        assertEquals(Lamp.YELLOW, setPath(0, null).rating().lamp());
+        assertEquals(Lamp.GREEN, setPath(.2, null).rating().lamp(), "on 20 %");
+        assertEquals(Lamp.GREEN, setPath(.5, null).rating().lamp());
+        assertEquals(10, setPath(.1, null).rating().reading(Limit.PATH_EXCESS).value(), 1e-9);
+        var valve = setPath(.1, "V").rating();
+        assertNull(valve.reading(Limit.PATH_EXCESS), "a valve's path reads the valve's share instead");
+        assertEquals(Lamp.GREEN, valve.lamp());
+        assertEquals(Rating.NONE, new PressurePath("P", 10, 0, "PRODUCT", 9.1, false, null, List.of(new PressurePath.Step("S", PressurePath.Step.LINE, 1, 0))).rating(), "an end the sheet does not set");
     }
 
     /** A Fixed size between the need and the spare holds the need, so its lamp is green; the spare is only Auto's order. */
@@ -360,8 +398,10 @@ final class UnitSizingTest {
         assertEquals(Lamp.GREEN, choice.rating().lamp());
         assertEquals(CompressorSizing.rate(load, size), choice.rating(), "Fixed reads the same limits");
         assertTrue(size.frame() >= 10000);
-        var down = CompressorSizing.rate(load, new CompressorSizing.Size(UnitType.PISTON, size.size() - .05, size.length()));
-        assertEquals(Lamp.YELLOW, down.lamp(), "one step down");
+        double bore = size.size();
+        while (new CompressorSizing.Size(UnitType.PISTON, bore, size.length()).displacement(1) >= 10000) bore = Math.round((bore - .05) * 100) / 100.;
+        var down = CompressorSizing.rate(load, new CompressorSizing.Size(UnitType.PISTON, bore, size.length()));
+        assertEquals(Lamp.YELLOW, down.lamp(), "a step under the flow");
         assertSame(Limit.COMPRESSOR_DISPLACEMENT, down.closest().limit());
         var turbo = gas(20000, 8);
         var impellers = CompressorSizing.auto(turbo);

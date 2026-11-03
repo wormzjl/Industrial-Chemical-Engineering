@@ -56,9 +56,15 @@ public record PressurePath(String start, double from, double head, String end, d
         return available() - lost();
     }
 
-    /** Its lamp: a set end's spare; none for an end the sheet does not set. */
+    /**
+     * Its lamp: a set end's spare; none for an end the sheet does not set. A set end with no valve also reads its spare over its
+     * losses (S4c), as the valve's own rows read it where one takes the spare. A path that loses nothing has no losses to grow.
+     */
     public Rating rating() {
-        return set ? new Rating(List.of(Limit.PATH_SPARE.read(spare()))) : Rating.NONE;
+        if (!set) return Rating.NONE;
+        var spare = Limit.PATH_SPARE.read(spare());
+        double lost = lost();
+        return taker == null && lost > 0 ? new Rating(List.of(spare, Limit.PATH_EXCESS.read(100 * spare() / lost))) : new Rating(List.of(spare));
     }
 
     /** Whether {@code item} is one of its steps. */

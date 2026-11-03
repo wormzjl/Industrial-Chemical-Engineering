@@ -126,9 +126,13 @@ public final class CompressorSizing {
         return auto(load, type(load));
     }
 
-    /** {@code type}'s smallest frame: the player's type, on Auto's size. */
+    /**
+     * {@code type}'s smallest frame: the player's type, on Auto's size. Frames whose displacement holds the flow with
+     * {@link Limit#AUTO_SPARE} come first (S4c); the type stays on the design flow, as its rows are ranges, not capacities.
+     */
     public static Selection.Choice<Size> auto(Load load, UnitType type) {
         if (!load.flows()) return new Selection.Choice<>(null, Rating.NONE);
-        return Selection.smallest(type == UnitType.PISTON ? PISTON : TURBO, size -> rate(load, size));
+        double held = load.flow() * (1 + Limit.AUTO_SPARE.value() / 100);
+        return Selection.smallest(Selection.spareFirst(type == UnitType.PISTON ? PISTON : TURBO, size -> size.displacement(size.stages(load.ratio())), held), size -> rate(load, size));
     }
 }

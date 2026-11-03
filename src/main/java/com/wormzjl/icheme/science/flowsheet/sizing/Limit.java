@@ -38,9 +38,10 @@ public enum Limit {
     /** 1 if the run is steady, 0 if not. A sizing reads only a steady run's streams; on any other run every item holds this one reading. */
     RUN_STEADY(MUST, least(1), "", "World: `FlowsheetRun.Status`"),
     /**
-     * Auto's spare over the design need (S4c), on the three capacity Musts with no Should before them: an exchanger's or kettle's
-     * surface, an air cooler's, a heater's duty. Auto first tries the sizes that hold the need and this much more. The owner's
-     * decision of 2026-11-03: "let it propose the actual equipment to build instead", with "20 % spare". The lamps read the bare need.
+     * Auto's spare over the design need (S4c): an exchanger's or kettle's surface, an air cooler's, a heater's duty, its type and its
+     * count of cabins, and a compressor's displacement. Auto first tries the sizes that hold the need and this much more. The owner's
+     * decisions of 2026-11-03: "let it propose the actual equipment to build instead", with "20 % spare", and "always have enough
+     * excess". The lamps read the bare need.
      */
     AUTO_SPARE(RULE, least(20), "%", "This plan"),
 
@@ -142,7 +143,7 @@ public enum Limit {
 
     // ---- Fired heaters ----
     HEATER_DUTY(MUST, given(Sense.LEAST), "MW", "World: `heaterDuty`"),
-    /** Also the type's threshold, section 3.10: a vertical while the largest holds the design duty, a cabin above. */
+    /** Also the type's threshold, section 3.10: a vertical while the largest holds the design duty with {@link #AUTO_SPARE}, a cabin above. */
     HEATER_VERTICAL(MUST, most(largestHeater(EquipmentShape.Kind.VERTICAL_HEATER)), "MW", "World: `heaterDuty`", QUIET),
     HEATER_CABIN(SHOULD, least(23), "MW", "[FH-TYPE]", QUIET),
     HEATER_SPARE(MUST, least(0), "bar", "World", QUIET),
@@ -191,6 +192,13 @@ public enum Limit {
     // ---- Pressure paths, section 3.6 ----
     /** What a path to a pressure the sheet sets has left at design flow, past its sized drops: a valve at its end takes it. */
     PATH_SPARE(MUST, least(0), "bar", "World", QUIET),
+    /**
+     * A set path with no valve at its end: its spare over what it loses at design flow (S4c). Its losses go as the flow squared, so
+     * 20 % holds √1.2 = 1.095 × the design flow, about 120 % of the steady flow at the default basis. A path that ends at a valve
+     * reads the valve's rows instead.
+     * The orchestrator's reading of the owner's "always have enough excess", 2026-11-03.
+     */
+    PATH_EXCESS(SHOULD, least(20), "%", "This plan", QUIET),
 
     // ---- Valves and ejectors ----
     VALVE_SHARE(SHOULD, least(20), "%", "[HALL-V]"),

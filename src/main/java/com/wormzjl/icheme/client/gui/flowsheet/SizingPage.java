@@ -1076,13 +1076,21 @@ public final class SizingPage {
             if (lamp == Lamp.YELLOW) yellow++;
             if (first == null && lamp == Lamp.RED) first = missed(x, entry.getKey(), entry.getValue().rating());
         }
-        for (var path : sized.paths()) if (path.rating().lamp() == Lamp.RED) {
+        for (var path : sized.paths()) {
+            var lamp = path.rating().lamp();
+            if (lamp == Lamp.YELLOW) yellow++;
+            if (lamp != Lamp.RED) continue;
             red++;
             if (first == null) first = missed(x, path.start(), path.rating());
         }
         if (first == null && yellow > 0) for (var entry : sized.units().entrySet())
             if (entry.getValue().rating().lamp() == Lamp.YELLOW) {
                 first = missed(x, entry.getKey(), entry.getValue().rating());
+                break;
+            }
+        if (first == null && yellow > 0) for (var path : sized.paths())
+            if (path.rating().lamp() == Lamp.YELLOW) {
+                first = missed(x, path.start(), path.rating());
                 break;
             }
         String lamps = red + yellow == 0 ? x.text("sizing.all_met") : first == null ? x.text("sizing.missed", red, yellow) : x.text("sizing.missed_first", red, yellow, first);

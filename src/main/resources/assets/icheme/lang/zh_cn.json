@@ -1446,6 +1446,7 @@
   "gui.icheme.flowsheet.limit.roof_bubble": "泡点压力",
   "gui.icheme.flowsheet.limit.sphere_design": "设计压力",
   "gui.icheme.flowsheet.limit.path_spare": "路径余压",
+  "gui.icheme.flowsheet.limit.path_excess": "余压占损失比",
   "gui.icheme.flowsheet.limit.valve_share": "阀压降占比",
   "gui.icheme.flowsheet.limit.valve_drop": "阀压降",
   "gui.icheme.flowsheet.limit.ejector_compression": "压缩比",

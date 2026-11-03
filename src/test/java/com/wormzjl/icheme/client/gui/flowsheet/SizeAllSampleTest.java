@@ -68,7 +68,7 @@ class SizeAllSampleTest {
     /**
      * P-101's path: the probe's stair, step by step, to V-101, which holds its outlet and takes the rest. The probe ended the path at
      * V-101's inlet on the doors' drops, 9.00 bar, so V-101's own 2.28 counted as spent; here V-101 is the path's end at its set
-     * 2.72 bar, the spare is what it takes, and a run on sized drops leaves it the same. Two steps differ from the probe's, both by
+     * 2.80 bar (2.72 before S4c), the spare is what it takes, and a run on sized drops leaves it the same. Two steps differ from the probe's, both by
      * the physics: H-101's radiant coil starts where its convection coil ends, 0.46 bar lower, so more of the crude flashes in it
      * (0.11 bar more than the probe's march, which restarted the radiant coil at the inlet's pressure), and the built cabin's coils
      * hold 87.6 MW, not the design's 86.2, on the same 11 passes (0.05 bar more); and the transfer line S-6, which the probe left
@@ -90,7 +90,7 @@ class SizeAllSampleTest {
         assertEquals(14.00, path.from(), HUNDREDTH);
         assertTrue(path.set());
         assertEquals("V-101", path.taker());
-        assertEquals(2.72, path.to(), HUNDREDTH);
+        assertEquals(2.80, path.to(), HUNDREDTH);
         assertEquals(path.from() - path.to() - path.lost(), path.spare(), 1e-12);
     }
 
@@ -126,6 +126,9 @@ class SizeAllSampleTest {
      * and the sized steps 2.09 bar in all, so S-6 stands at 11.9 bar, 0.7 above S4a's least sizes. At 11.9 bar still less crude
      * flashes, a vapour share of 0.52, not 0.54; the furnace fires 73.9 MW, not 74.25, and the feed reaches the column at 349.8 °C, not
      * 350.5. The tolerances stay.
+     *
+     * <p>S4c also raises V-101's set outlet from 2.72 to 2.80 bar ("always have enough excess"): the feed flashes less across the
+     * valve and reaches the column 0.24 K warmer, 359.70 °C before sizing and 350.02 after. Upstream of the valve nothing moves.
      */
     @Test
     void theSampleSizedMovesAsThePlanSays() {
@@ -136,8 +139,8 @@ class SizeAllSampleTest {
         assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
         assertEquals(78.37, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
         assertEquals(73.93, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
-        assertEquals(359.5, before.get("S-7").temperature() - 273.15, .1);
-        assertEquals(349.8, after.get("S-7").temperature() - 273.15, .15);
+        assertEquals(359.7, before.get("S-7").temperature() - 273.15, .1);
+        assertEquals(350.0, after.get("S-7").temperature() - 273.15, .15);
         assertEquals(.71, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);
         assertEquals(.52, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH);
     }
