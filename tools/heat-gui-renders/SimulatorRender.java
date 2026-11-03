@@ -51,6 +51,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.UnitTypes;
 import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.Proposal;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
@@ -789,7 +790,7 @@ public final class SimulatorRender {
         var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
         });
         long start = System.nanoTime();
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
         double took = (System.nanoTime() - start) / 1e9;
         System.out.printf("sized: run %s, %d units, %d lines, %d paths, %.1f s%n", all.run().status(), all.sized().units().size(), all.sized().lines().size(), all.sized().paths().size(), took);
         var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds + took);
@@ -843,8 +844,8 @@ public final class SimulatorRender {
     private static void send(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
         var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
         });
-        var first = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
-        var second = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(first.sheet(), first.run(), thermo, FlowsheetSolver.Progress.NONE));
+        var first = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+        var second = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(first.sheet(), first.run(), thermo, FlowsheetSolver.Progress.NONE));
         int red1 = SizingPage.reds(first.sized()), red2 = SizingPage.reds(second.sized());
         var designs = SheetSizing.designs(second.sheet(), second.sized());
         System.out.printf("send: first Size all %d red, second %d red; %d designs%n", red1, red2, designs.size());
@@ -955,7 +956,7 @@ public final class SimulatorRender {
                 List.of((d, s) -> door(d, ColumnDoors.door(new Scene(vacuum, null, 0, host).context(), "T-101", equipment))));
 
         // The Sizing tab after Size all: the free port's bore, the wired ports' motive rows.
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
         for (var id : List.of("J-101", "J-102", "J-103")) {
             var unit = all.sized().units().get(id);
             System.out.printf("sized %s: %s, lamp %s, closest %s%n", id, unit.size(), unit.rating().lamp(), unit.rating().closest());
@@ -1016,7 +1017,7 @@ public final class SimulatorRender {
         grid(out, "04-feed-set-by", DW, DH, List.of("CWS: its flow set by T-101; the entry is the first guess, the readings what the run gave"), List.of(stream(sheet, run, "CWS", 0)));
         var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
         });
-        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
         var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds);
         var sized = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
         System.out.printf("sized: E-102 %s, values %s; T-101 proposes %s; fans %.1f kW%n", all.sized().units().get("E-102").size(), all.sized().units().get("E-102").rating().values(), all.sized().condensers().get("T-101"),
