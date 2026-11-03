@@ -1,6 +1,6 @@
 # Rotating machinery: plan
 
-Batch `2026-11-03-rotating-machinery`. Base `744ef4513` (main, 0.19.3). Branch `claude/realistic-pump-compressor-6fdfd9`. Status: Planned, revision 1 (2026-11-03). Nothing is built; section 13 holds the owner's questions.
+Batch `2026-11-03-rotating-machinery`. Base `744ef4513` (main, 0.19.3). Branch `claude/realistic-pump-compressor-6fdfd9`. Status: Planned, revision 2 (2026-11-03) with the owner's answers to Q1 to Q10 and the revised Create rate (section 13, [DECISION_LOG.md](DECISION_LOG.md)). Implementation starts with W1.
 
 Evidence: [MACHINE_RESEARCH_REVIEW.md](MACHINE_RESEARCH_REVIEW.md) (engineering and Minecraft conventions, with sources). Worked numbers: `tmp/rotating-machinery/examples.js`, `curves.js` and `curves2.js` (they move to `tools/rotating-machinery/` at the cleanup).
 
@@ -22,7 +22,7 @@ Owner note the same day: "The model shouldn't be too deep into the details, reme
 Short answers:
 
 1. **Convergence.** A pump curve is a smooth law that falls with flow. It replaces today's switch between "hold the set flow" and "hold the head limit", which is where the old pump holds came from. The drivers stay outside the Newton: they set a speed once per slice, as the heat units' controllers do. So the realistic model should not make convergence worse; one change needs care, the compressor's hotter discharge (section 4.4). The 200-seed quick check decides it before anything else is built.
-2. **Casings and drivers.** A pump, compressor or turbine casing ends at a shaft coupling. A motor, turbine, creative motor or gearbox joins it through shaft blocks. Old placed machines keep their drawn motor and keep running (section 10).
+2. **Casings and drivers.** A pump, compressor or turbine casing ends at a shaft coupling. A motor, turbine, creative motor or gearbox joins it through shaft blocks. Old placed pumps and compressors rebuild as casings and wait for a driver (owner D4, section 10).
 3. **Shafts.** A shaft block on one axis. Drawn diameter from the train's torque, three times the real one so it shows: 2 to 8 px (section 5.3).
 4. **Motor and turbine.** A motor drawn from its rated power (frame grows with the fourth root of the power, as today's drawn motors). One steam turbine kind for mechanical drive: casing, governor and trip valves, bearings, coupling. The generator, gear, exciter, cooler and condenser go (section 6).
 5. **Duty.** The constructor asks a motor for its rated power, speed class and drive (fixed or variable speed); a turbine for its rated power, inlet steam and exhaust pressure. A pump asks its rated flow and head, a compressor its rated flow and head or ratio.
@@ -30,7 +30,7 @@ Short answers:
 7. **Creative motor.** A block with a set speed and a power limit.
 8. **Control.** Start and stop, a speed set point or a regulated flow or pressure for variable-speed drives, protection trips (overload, no power, no steam). Section 9.
 9. **Simulator.** The same Minecraft-free machine classes serve the simulator's units; the work lands after both batches merge (section 11, Q9).
-10. **Create.** Optional dependency. A Create coupling block brings Create rotation into an industrial train; the gearbox raises its speed up to 64 times. One stress unit (su) is 5.86 W by default, the parity with Create's electricity addons at 10 J per FE: a water wheel's 256 su is 1.5 kW, inside the 0.2 to 4 kW of a real 3 m wheel (section 8).
+10. **Create.** Optional dependency. A Create coupling block brings Create rotation into an industrial train; the gearbox raises its speed up to 64 times. One stress unit (su) is 1.5 W by default, from real stream wheels of Create's sizes: the water wheel's 256 su is 0.38 kW, the large wheel's 512 su 0.77 kW (section 8).
 
 ## 1. Expected behaviour (the plant first)
 
@@ -67,7 +67,7 @@ A reciprocating compressor delivers its displacement whatever the discharge pres
 - A motor draws its shaft power over its efficiency: the 24 kW pump takes 26 kW, the compressor's 830 kW shaft 865 kW.
 - Other mods' machines draw 20 to 400 FE/t (Mekanism's crusher 20, digital miner 400); generators give 20 to 200 FE/t early, a few thousand mid game, 10⁵ and more late.
 - Create's stress unit behaves as power: a network's capacity is Σ capacity × rpm, its load Σ impact × rpm. Gearing changes speed, not power. An overstressed network stops whole. Create runs at most 256 rpm (its config; faster breaks blocks).
-- A real 3 m overshot wheel gives 2 to 4 kW, an undershot one 0.2 to 0.4 kW; Create's water wheel gives 256 su.
+- Create's water wheel has paddles about 1 block from its axis (a 2 m wheel) and turns when water flows past its rim: a stream (undershot) wheel. A real 2 m stream wheel gives 0.2 to 0.6 kW (measured: 219 W at 0.31 m³/s, 0.6 kW in a 1.2 m/s channel). The large wheel fills 3 × 3 blocks (about 4 to 5 m); a real one in a stream gives 0.6 to 1.4 kW, several kW only when fed from above. Create gives them 256 and 512 su.
 
 ## 2. What the code does today
 
@@ -222,18 +222,19 @@ Every new model keeps one free block between nozzle pipe blocks (`ProcessUnitTes
 ## 7. Electricity (FE)
 
 - **RF port.** A structure cell with the NeoForge block capability `Capabilities.EnergyStorage.BLOCK` (receive only). Other mods push FE into it every tick; that is their protocol, not process work. It fills a buffer of two slices at full rating at the longest cadence (2 × 20 s), and takes up to twice the rated draw per tick.
-- **Booking.** The engine takes `P_elec Δt / (J per FE)` at each slice commit of the machine's train, and on the presentation cadence for a train whose islands rest. `P_elec = P_shaft / η_motor`, with η from the IE3 table, less 3 % for a variable-speed drive. Booking per period avoids rounding small loads to whole FE per tick. A buffer that runs out trips the motor (`NO POWER`) at the next slice (restart: owner Q6).
+- **Booking.** The engine takes `P_elec Δt / (J per FE)` at each slice commit of the machine's train, and on the presentation cadence for a train whose islands rest. `P_elec = P_shaft / η_motor`, with η from the IE3 table, less 3 % for a variable-speed drive. Booking per period avoids rounding small loads to whole FE per tick. A buffer that runs out trips the motor (`NO POWER`) at the next slice. It restarts by itself once its buffer holds one slice of its draw (owner D6, A2); an `OVERLOAD` trip waits for the player's reset.
 - **Air cooler.** Fan power (today's formula) over η_motor. Without FE the fans stop and the louvers give natural draught (0.25); a regulating cooler reports `LIMITED`.
-- **Ratio.** Default 10 J per FE, config `energy.joulesPerFE`. The 24 kW pump draws 130 FE/t; the 865 kW compressor motor 4,325 FE/t; a 10 MW machine 50,000 FE/t, the class of Mekanism's laser (4,000) to nucleosynthesizer (40,000). Mekanism's own 2.5 J per FE would quadruple these and forces the Create rate down to 1.5 W per su (a 0.38 kW water wheel), section 8.
+- **Ratio.** Default 10 J per FE, config `energy.joulesPerFE`. The 24 kW pump draws 130 FE/t; the 865 kW compressor motor 4,325 FE/t; a 10 MW machine 50,000 FE/t, the class of Mekanism's laser (4,000) to nucleosynthesizer (40,000). Mekanism's own 2.5 J per FE would quadruple these.
 - `energy.machinesNeedPower` (default true): false lets a pack without energy mods run motors and fans free.
 
 ## 8. Create (optional)
 
 - **Packaging.** `neoforge.mods.toml`: Create `optional`. Gradle: Create, Ponder and Flywheel `compileOnly` with a dev runtime. Replace Catnip's `Outliner` with our own outline drawing in `EquipmentGhost` and `PipeLayingClient`. Own textures for the constructor and the interior cell. The GameTest that calls `BlockMovementChecks` runs only with Create. The `data/create` tag stays (inert without Create).
 - **Compat module.** `compat/create/**` holds one block, the Create coupling: a Create `KineticBlockEntity` on one face, an industrial shaft end on the other, at Create's speed. It registers only when `ModList.isLoaded("create")`, behind one guarded entry point; no other class names a Create type. The industrial gearbox stays our own block in every pack. A world opened without Create loses the couplings, as it loses every Create block.
-- **Power rule.** Default 1 su = 5.86 W, config `create.wattsPerStressUnit`. Create's electricity addons (Crafts & Additions, New Age) both trade 16,384 su for 480 FE/t. At 10 J per FE, parity is 0.586 × 10 = 5.86 W per su. At parity, a loop FE → motor → Create → alternator → FE returns at most its efficiencies; above or below it, one direction makes energy. The config warns when the two values leave parity.
-- What the rule gives: water wheel 256 su = 1.5 kW; large water wheel 3.0 kW; windmill 3 to 48 kW; steam engine 96 kW per boiler level, a level-18 boiler 1.73 MW; creative motor at 256 rpm 24.6 MW.
-- **Draw.** The coupling's stress impact follows the train's demand each slice: `impact = P_demand / (W per su × |rpm|)` (100 kW at 256 rpm: 66 su/rpm), registered through `BlockStressValues`. It reads the network's capacity and load (`updateFromNetwork`) and never takes more than the headroom: short of headroom, the train is power limited as a turbine short of steam, and the player's Create network does not stop.
+- **Power rule.** Default 1 su = 1.5 W, config `create.wattsPerStressUnit`, from real stream wheels of Create's sizes (owner 2026-11-03: "Create duty a bit overrated, research about actual water wheel duty"; research review section 5). Both of Create's wheels then sit in the middle of their real ranges: water wheel 256 su = 0.38 kW (real 2 m stream wheel 0.2 to 0.6 kW), large water wheel 512 su = 0.77 kW (real 4 to 5 m stream wheel 0.6 to 1.4 kW).
+- What else it gives: hand crank 0.38 kW (a strong person's short effort); windmill 0.77 to 12 kW; steam engine 24.6 kW per boiler level, 4.5 % of the boiler's 543 kW of heat (Watt-era engines ran at 3 to 5 %); a level-18 boiler 442 kW; creative motor at 256 rpm 6.3 MW. The 24 kW pump needs about 16,500 su (gearbox included): 64 water wheels or one boiler level.
+- **No energy loop.** Create's electricity addons (Crafts & Additions, New Age) both trade 16,384 su for 480 FE/t, which is parity with 0.586 × (J per FE) W per su: 5.86 W per su at 10 J per FE. Create into industrial shafts at 1.5 W per su sits below parity: the loop FE → addon motor → Create → coupling → our generator → FE returns 0.26 of its energy times its efficiencies. If industrial shafts ever drive Create (D8 leaves it for later), that direction takes the parity rate, 5.86 W per su, so no round trip gains energy.
+- **Draw.** The coupling's stress impact follows the train's demand each slice: `impact = P_demand / (W per su × |rpm|)` (100 kW at 256 rpm: 260 su/rpm), registered through `BlockStressValues`. It reads the network's capacity and load (`updateFromNetwork`) and never takes more than the headroom: short of headroom, the train is power limited as a turbine short of steam, and the player's Create network does not stop.
 - **Speeds.** Create runs at most 256 rpm (its config); the gearbox raises it up to 64 times, to 16,384 rpm. Industrial shafts are not Create kinetics, so Create's cap never applies to them.
 - Industrial driving Create (a turbine turning Create machines) is owner Q8. Its Create side must stay below Create's maximum speed.
 
@@ -252,9 +253,9 @@ Prototypes first (`gui-creation` skill), owner picks, then build.
 ## 10. Saves (AGENTS.md "Saves and data formats")
 
 - Fluid facts schema 8: the new device kinds, the machine's design point and law kind, the driver's settings, the FE buffer's content (energy the player put in), the gearbox ratio, the creative motor's set points. Corpus image `compat/fluid/schema-8`.
-- Equipment shape fields 6: the pump's and compressor's design point, a `driver` field. Its default `INTEGRAL` is the behaviour before the field: the old structure keeps its drawn motor and its layout, runs without a shaft and needs no FE (owner Q4). New builds take `SHAFT`. Corpus image `compat/equipment/shapes-6.snbt`.
-- Old movers' controls keep their meaning: the set flow is the set flow; the added pressure or ratio is the relief (F2) or the shutoff at full speed.
-- Old steam turbines (drawing only) rebuild to the new layout. Their nozzles move: the owner approves the moved nozzle pipe blocks (AGENTS.md), or they keep the old kind until rebuilt (owner Q5).
+- Equipment shape fields 6: the pump's and compressor's design point, the motor's and turbine's duty. An old pump's missing design point takes today's datasheet values (A3). Corpus image `compat/equipment/shapes-6.snbt`.
+- No backward compatibility for constructed movers (owner D4): old placed pumps and compressors rebuild to the casing layout through the layout refresh, without their drawn motor (and gear); they stand closed with `NO DRIVER` until the player joins a driver. Their registrations, identity and settings stay; the set flow is still the set flow.
+- Old steam turbines (drawing only) rebuild to the new layout; the owner approves the moved nozzle pipe blocks (owner D5).
 - State format bump for the new modes; state is rebuilt.
 
 ## 11. Process simulator (owner Q9)
@@ -268,17 +269,20 @@ The simulator's units call the same Minecraft-free classes (`science/machine/**`
 | W0 | Owner answers; GUI option sheets for the new screens and constructor rows | owner picks |
 | W1 | `science/machine/**`: curves, heads, power, steam rate, sizes; tests | unit tests |
 | W2 | Fluid laws (3.1 to 3.4), form F1 or F2, energy booking, turbine connection; harness variant | quick check, then one campaign |
-| W3 | Shaft trains: blocks, registry, per-slice driver logic, island coupling, trips; facts schema 8 | unit tests, GameTests, corpus |
-| W4 | Equipment: casings, motor, turbine, gearbox, creative motor, shaft drawing; shape fields 6 | layout table, `pipesApart`, renders |
-| W5 | RF port, buffers, booking, air cooler; config | unit tests, GameTest |
-| W6 | Create optional: packaging, outline, textures; compat coupling; config | build without Create, GameTest with |
+| W3 | Shaft trains: blocks, registry, per-slice driver logic, island coupling, trips, the generator; facts schema 8 | unit tests, GameTests, corpus |
+| W4 | Equipment: casings, motor, turbine, gearbox, creative motor, generator, shaft drawing; constructor rows; shape fields 6 | layout table, `pipesApart`, renders, owner picks |
+| W5 | RF port, buffers, booking, auto restart, generator output; air cooler and cooling-tower fans; config | unit tests, GameTest |
+| W6a | Create and KubeJS optional: packaging, own outline drawing, own textures, the GameTest | build and GameTests without Create and with it |
+| W6b | The Create coupling (after W3) | GameTest with Create |
 | W7 | Screens and controls, lang | gates, renders |
 | W8 | Simulator support (after both merge) | simulator tests |
-| W9 | Final lane, code guide, tooling cleanup, CHANGELOG, version (minor) | final lane |
+| W9 | Final lane, code guide, tooling cleanup, CHANGELOG, version (minor) — only when the owner says so | final lane |
 
-W4 and W6 do not touch the solver; they can run beside W2 and W3.
+W4 and W6a touch neither the solver nor each other; they run as their own sessions beside W1 and W2. W4 defines the shape fields (the design points and duties); W1 takes plain numbers; W3 joins them at registration.
 
 ## 13. Owner questions
+
+Answered 2026-11-03: "Q4 no backward compat, Q6 auto start, Others as recommended". So Q1 to Q3, Q5 and Q7 to Q9 take the recommended option; Q4 takes (b); Q6 takes (b); Q10 joins the batch whole (reading A1). Then, on Q7: "Create duty a bit overrated, research about actual water wheel duty": the Create rate became 1.5 W per su from real stream wheels; FE stays 10 J per FE (D7 revised). Decisions D1 to D9 and A1 to A4: [DECISION_LOG.md](DECISION_LOG.md). The questions as asked:
 
 - **Q1. Law form.** F2 (smooth laws for every mover, mode switch deleted) if the quick check measures it no worse than F1, else F1. Recommended: measure both, take F2 if no worse.
 - **Q2. Flow control.** Between slices (recommended, the heat-unit pattern; the set flow arrives in 10 to 20 s) or inside the Newton (immediate, keeps every switch).

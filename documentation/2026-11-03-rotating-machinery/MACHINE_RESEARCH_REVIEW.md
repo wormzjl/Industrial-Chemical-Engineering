@@ -83,21 +83,33 @@ Speed handling: speed frozen in a step and updated between steps keeps the Newto
 
 ## 5. Water wheels and the stress rate
 
-- Overshot and breastshot wheels: P ≈ 7000 Q H W at about 70 %; best speed 21/√D rpm (12 rpm at 3 m; Create uses 8). Undershot stream wheels: P ≈ 100 A v³ W at about 20 %.
-- Built wheels (Cumbria): 4.0 m × 0.8 m at 100 L/s, 3.5 kW; 4.1 m × 1 m at 200 L/s, 6 kW.
-- For Create's one-block-wide wheels: 3 m overshot 2.1 to 4.2 kW, 5 m 3.5 to 7 kW, undershot in a 1.5 to 2 m/s stream 0.17 to 0.4 kW.
-- One boiler level takes 0.2 kg/s of water: about 543 kW of heat for 10 bar steam from 15 °C.
+Revised 2026-11-03 after the owner's "Create duty a bit overrated, research about actual water wheel duty". The first pass took Create's wheels as 3 m and 5 m overshot-capable wheels and proposed 5.86 W per su; Create's code gives smaller, stream-driven wheels.
 
-| Source | su | 5.86 W/su | 10 W/su |
+What Create's wheels are (source, `mc1.21.1/dev`):
+
+- Water wheel: one block; `WaterWheelBlock` particles at radius 1 to 1.125 blocks, so paddles about 1 block from the axis (a 2 m wheel, 1 block wide). `WaterWheelBlockEntity` samples the 4 cells beside the axis in the wheel's plane; a cell counts when its fluid flows tangentially (|dot| > 0.5). The score is clamped to ±1, so one flowing cell gives the full 8 rpm and 256 su. Rechecked every 60 ticks.
+- Large water wheel: a 3 × 3 footprint of structural blocks (`LargeWaterWheelBlock`), samples 12 cells 2 blocks out (about a 4 to 5 m wheel); `getSize()` = 2, so 4 rpm and 512 su.
+- Water flowing past the rim, not a head of water, drives both: they are stream (undershot) wheels. Falling water counts the same way.
+
+Real stream wheels:
+
+- Power `P = η × ½ ρ A v³`, η about 0.2 for a plain wheel, up to 0.45 to 0.6 in tests; best rim speed about 0.4 of the water speed.
+- Measured: a 2 m flat-blade wheel on an irrigation channel, up to 219 W at 0.313 m³/s, 46 % peak [semarakilmu]; a floating 2 m wheel, 0.6 kW in a 1.2 m/s channel [researcherslinks]; a curved-blade pico wheel, 187 W at 59 % [unri]; a vendor's 2 m wheel at 1.5 m/s, 200 to 400 W (unsourced).
+- Historic: an undershot mill wheel about 3 hp (2.2 kW), larger and fed by a race; a medieval overshot wheel up to 40 to 60 hp [Wikipedia].
+- Estimates: a 2 m wheel, 1 m wide, 0.5 m immersed, 1 to 2 m/s: 0.06 to 0.9 kW, about 0.3 kW at 1.5 m/s and η 0.35. A 4 to 5 m wheel, about 1 m² immersed: 0.6 kW at 1.5 m/s, 1.4 kW at 2 m/s. With a head (breastshot or overshot, P ≈ 7000 Q H): several kW, but Create gives no extra for a head.
+
+| Source | su | 1.5 W/su | Real counterpart |
 |---|---|---|---|
-| Water wheel, hand crank | 256 | 1.5 kW | 2.6 kW |
-| Large water wheel | 512 | 3.0 kW | 5.1 kW |
-| Windmill, 8 to 128 sails | 512 to 8,192 | 3.0 to 48 kW | 5.1 to 82 kW |
-| Steam engine per boiler level | 16,384 | 96 kW (18 % of its heat) | 164 kW (30 %) |
-| Level-18 boiler | 294,912 | 1.73 MW | 2.95 MW |
-| Creative motor at 256 rpm | 4,194,304 | 24.6 MW | 42 MW |
+| Water wheel | 256 | 0.38 kW | 2 m stream wheel, 0.2 to 0.6 kW |
+| Large water wheel | 512 | 0.77 kW | 4 to 5 m stream wheel, 0.6 to 1.4 kW |
+| Hand crank | 256 | 0.38 kW | a strong person for minutes (75 W all day, about 400 W for an hour on a bicycle) |
+| Windmill, 8 to 128 sails | 512 to 8,192 | 0.77 to 12 kW | |
+| Steam engine per boiler level | 16,384 | 24.6 kW, 4.5 % of 543 kW of heat | Watt-era engines, 3 to 5 % |
+| Level-18 boiler | 294,912 | 442 kW | |
+| Creative motor at 256 rpm | 4,194,304 | 6.3 MW | |
 
-- The hand crank (256 su) is 20 to 34 times a person's sustained 75 W at these rates: a gameplay exception.
+- One boiler level takes 0.2 kg/s of water: about 543 kW of heat for 10 bar steam from 15 °C.
+- The first pass's 5.86 W per su (parity with the addons at 10 J per FE) made the water wheel 1.5 kW, about four times a real 2 m stream wheel.
 
 ## 6. Create as an optional dependency
 
@@ -143,4 +155,6 @@ Minecraft (sections 2 to 7):
 - Older wikis (1.16 to 1.20): https://github-wiki-see.page/m/EnigmaticaModpacks/Enigmatica6/wiki/Immersive-Engineering , https://m.ftbwiki.org/Stirling_Dynamo , https://www.minecraft-guides.com/mod/powah-rearchitected/
 - NeoForge 1.21.1 docs: https://docs.neoforged.net/docs/1.21.1/inventories/capabilities/ , https://docs.neoforged.net/docs/1.21.1/gettingstarted/modfiles/ , https://docs.neoforged.net/docs/1.21.1/resources/server/conditions/ ; source: https://github.com/neoforged/NeoForge/tree/1.21.1
 - Supplementaries' Create compat: https://github.com/MehVahdJukaar/Supplementaries/blob/1.21/common/src/main/java/net/mehvahdjukaar/supplementaries/integration/CompatHandler.java
+- Create's wheels: https://raw.githubusercontent.com/Creators-of-Create/Create/mc1.21.1/dev/src/main/java/com/simibubi/create/content/kinetics/waterwheel/WaterWheelBlockEntity.java (and `WaterWheelBlock`, `LargeWaterWheelBlock`, `LargeWaterWheelBlockEntity` in the same folder)
+- Measured stream wheels: [semarakilmu] https://semarakilmu.com.my/journals/index.php/fluid_mechanics_thermal_sciences/article/view/3703 ; [researcherslinks] https://researcherslinks.com/current-issues/MODELING-SIMULATION-AND-FABRICATION/31/5/3135 ; [unri] https://jom.unri.ac.id/index.php/JOMFTEKNIK/article/view/19588 , https://jnse.ejournal.unri.ac.id/index.php/JOMFTEKNIK/article/view/20062 ; in-stream wheels (abstract only): https://econbiz.de/Record/the-effect-of-blade-depth-ratio-and-flow-velocity-on-the-performance-of-in-stream-undershot-water-wheels-brandon-toole-matthew/10014243129
 - Water wheels and human power: https://en.wikipedia.org/wiki/Water_wheel , https://jonathan-smith-n15k.squarespace.com/hydro , Quaranta and Revelli, RSER 97:414–427 (2018), https://iris.polito.it/handle/11583/2712517 , https://en.wikipedia.org/wiki/Human_power ; aliasing: https://en.wikipedia.org/wiki/Wagon-wheel_effect
