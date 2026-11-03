@@ -25,6 +25,7 @@ import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
 import com.wormzjl.icheme.science.flowsheet.WiredUnit;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
+import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import org.jetbrains.annotations.Nullable;
 
@@ -150,6 +151,19 @@ public final class ColumnUnit implements UnitModel {
 
     private static Calculation check(WiredUnit u, String name, String read, @Nullable String other, Calculation.Law law) {
         return new Calculation(u.part(name), u.id(), other == null ? List.of(read) : List.of(read, other), List.of(), List.of(), List.of(), Calculation.Kind.CHECK, law);
+    }
+
+    /**
+     * One solve of {@code input}: warm from {@code seed} when there is one, and from the learned start if that does not answer, as a
+     * pass's change can leave the warm start behind. The block's solve and the sizing stage's trial diameters both take it.
+     */
+    public static V3ColumnOutcome solve(V3ColumnInput input, @Nullable V3NeuralSeed seed, MaterialCatalog catalog, Runnable checkpoint) {
+        double screen = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
+        return MaterialRuntime.with(catalog, input.packageId(), () -> {
+            var outcome = seed == null ? null : V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
+            if (!(outcome instanceof V3ColumnOutcome.Success)) outcome = V3ColumnCalculator.calculate(input, checkpoint::run, 0, 0, START, V3NeuralRegistry.bundled().bind(catalog, input), screen);
+            return outcome;
+        });
     }
 
     /** The block's own solve. It keeps the last state, so each pass starts from it. */
@@ -300,21 +314,13 @@ public final class ColumnUnit implements UnitModel {
             return true;
         }
 
-        /** Warm from the last state when there is one, and cold if that does not answer: a pass's change can leave the warm start behind. */
         private V3ColumnResult run(V3ColumnInput input) {
-            var catalog = u.thermo().catalog();
-            Runnable checkpoint = u.thermo().checkpoint();
-            var seed = warm;
-            double screen = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
-            return MaterialRuntime.with(catalog, input.packageId(), () -> {
-                var outcome = seed == null ? null : V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
-                if (!(outcome instanceof V3ColumnOutcome.Success)) outcome = V3ColumnCalculator.calculate(input, checkpoint::run, 0, 0, START, V3NeuralRegistry.bundled().bind(catalog, input), screen);
-                if (outcome instanceof V3ColumnOutcome.Success success) {
-                    display = V3ColumnDisplayResult.fromAccepted(success);
-                    return success.result();
-                }
-                throw new FlowsheetFailure("column.failed", ((V3ColumnOutcome.Failure) outcome).summary());
-            });
+            var outcome = ColumnUnit.solve(input, warm, u.thermo().catalog(), u.thermo().checkpoint());
+            if (outcome instanceof V3ColumnOutcome.Success success) {
+                display = V3ColumnDisplayResult.fromAccepted(success);
+                return success.result();
+            }
+            throw new FlowsheetFailure("column.failed", ((V3ColumnOutcome.Failure) outcome).summary());
         }
 
         /** The outlets and links of {@code result}, or of no flow. Free sides book their heat here, because only a solved column has any. */
