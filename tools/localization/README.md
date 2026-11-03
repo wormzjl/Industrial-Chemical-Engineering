@@ -2,7 +2,7 @@
 
 Purpose: find missing translation keys and check translated language files against `en_us.json`.
 
-Batch: `2026-11-03-localization` (fr_fr, es_es, ja_jp added; zh_cn completed and reviewed).
+Batch: `2026-11-03-localization`, merged 2026-11-03 as 0.19.3 (fr_fr, es_es, ja_jp added; zh_cn completed and reviewed).
 
 ## How to run
 

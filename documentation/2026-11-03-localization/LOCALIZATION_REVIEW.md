@@ -46,4 +46,5 @@ The 16 fixes were of four kinds:
 ## Tests (first commit)
 
 - `HeatDiagramTest` (`noLanguageKeyIsDefinedTwice` reads en_us): 5/5 passed after the en_us change. No other test reads a lang file except for its own English lines, and no test reads fr, es, ja or zh.
-- Code guide: `client-gui.md` lang paragraph updated; the snapshot line waits for the merge.
+- Code guide: `client-gui.md` lang paragraph; `client-gui.md`, `verification.md` and `README.md` snapshots at 013cfa3c6.
+- Merge: 0.19.3. No final lane (owner: "no need to test again"); no `src/main` code changed, so `test slowGates` and the campaign could not move.
