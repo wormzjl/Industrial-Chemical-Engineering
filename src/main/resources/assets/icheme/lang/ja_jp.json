@@ -464,7 +464,7 @@
   "gui.icheme.equipment_constructor.import": "インポート",
   "gui.icheme.equipment_constructor.import.hint": "%s ブロック以内で最も近い塔計算機に保存された設計をインポートします: トレイ、原料、サイドドロー、ポンプアラウンド、蒸気、塔径、成分。塔はインポートした設計かテンプレートからのみ建造できます。",
   "gui.icheme.equipment_constructor.importing": "塔の設計をインポート中…",
-  "gui.icheme.equipment_constructor.import_needed": "設計またはテンプレートをインポートしてください",
+  "gui.icheme.equipment_constructor.import_needed": "設計またはテンプレートをインポート",
   "gui.icheme.equipment_constructor.templates": "テンプレート",
   "gui.icheme.equipment_constructor.templates.hint": "塔のテンプレートを選びます: 同梱のものと、塔計算機の「テンプレート」で保存したもの。トレイ、原料、サイドドロー、ポンプアラウンド、蒸気、塔径を設定し、空冷器と標準ポンプが付きます。",
   "gui.icheme.equipment_constructor.group.templates": "テンプレート",

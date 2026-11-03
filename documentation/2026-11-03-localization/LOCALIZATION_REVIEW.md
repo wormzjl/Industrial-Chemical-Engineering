@@ -34,10 +34,16 @@ The 16 fixes were of four kinds:
 
 ## Not verified
 
-- **GUI fit.** `UnitTextTest` checks only English widths. A French, Spanish or Japanese label longer than its slot can still be clipped. The translators kept labels short, but no width gate or in-game check covered them.
+- **GUI fit outside the unit texts.** `UnitTextTest` now measures every language, but only the constructor and vessel texts it always covered. The calculator, fluid device and assembly screens have no width gate in any language.
 - **Native review.** The translations were written by a model and are not reviewed by native speakers.
 
-## Tests
+## Gates (owner: "Yes, add the gate")
+
+- `LanguageFilesTest` (quick suite, new): every lang file beside en_us has its keys, no extra key, no key twice, the same line breaks, and the same arguments shown as Minecraft reads them. A line with a `%` that is neither `%s` nor `%%` shows raw, without its arguments. Proved on a planted file: it caught a missing key, a dropped argument and a `%d`.
+- `UnitTextTest` (equipmentGates): measures each language over en_us, as the game falls back. Full-width glyphs count 9 px (unifont at half scale plus spacing). The first run failed 57 distinct lines (fr 29, es 27, ja 1, zh 0). They were shortened: fr 27 keys, es 27, ja 1. fr `nozzle.unplaced` is now "%s : aucune place". Kettle lines use "~" for about. Two datasheet lines lose a detail (fr `tank.access` the gauging, es `grate_boiler.bi_drum` "sobre").
+- Results: `LanguageFilesTest` 2/2, `UnitTextTest` 1/1, `HeatDiagramTest` 5/5.
+
+## Tests (first commit)
 
 - `HeatDiagramTest` (`noLanguageKeyIsDefinedTwice` reads en_us): 5/5 passed after the en_us change. No other test reads a lang file except for its own English lines, and no test reads fr, es, ja or zh.
 - Code guide: `client-gui.md` lang paragraph updated; the snapshot line waits for the merge.

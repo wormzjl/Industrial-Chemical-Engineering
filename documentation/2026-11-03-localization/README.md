@@ -16,11 +16,11 @@ Status: In progress since 2026-11-03 on `claude/localization-keys-translations-c
 
 ## History
 
-- 2026-11-03: key review; nozzle-role keys added to en_us; fr_fr, es_es and ja_jp translated (six Opus agents, two halves per language); zh_cn completed and reviewed (two Opus agents). All five files pass `check.js` at 1785 keys. `HeatDiagramTest` 5/5 passed.
+- 2026-11-03: key review; nozzle-role keys added to en_us; fr_fr, es_es and ja_jp translated (six Opus agents, two halves per language); zh_cn completed and reviewed (two Opus agents). All five files pass `check.js` at 1785 keys. `HeatDiagramTest` 5/5 passed (`cbc4bdd7f`).
+- 2026-11-03: gates. New `LanguageFilesTest` (keys, arguments, line breaks per language); `UnitTextTest` measures every language. 55 too-wide fr, es and ja lines shortened. Both gates green; the lang gate proved on a planted broken file.
 
 ## Open items
 
-- GUI fit of the translated labels: no gate. Option: extend `UnitTextTest`'s width check to every lang file.
-- A gate for the translated files (key parity, format specifiers), so the next English change cannot leave them behind unnoticed.
+- GUI fit outside the unit texts (calculator, fluid device, assembly screens) is not measured in other languages.
 - Native-speaker review of fr, es, ja and zh.
 - Merge preparation (version, code-guide snapshot) waits for the owner.

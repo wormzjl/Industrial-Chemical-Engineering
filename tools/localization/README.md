@@ -16,13 +16,14 @@ Run every script from the repository root with Node.js. They read `src/main/reso
 | `stale-translations.js <locale> [out.json]` | Missing keys, stale keys, and keys whose English changed after the translation was last written. The last check uses the git history of both files. |
 | `split.js <en_us.json> <n> <work dir>` | Splits `en_us` into `n` chunk files `en-<i>.json`, for parallel translators. |
 | `merge.js <locale> <work dir>` | Joins `<xx>-1.json`, `<xx>-2.json`, … into `lang/<locale>.json` in `en_us` key order. |
+| `width.js "<text>"…` | A line's width in GUI pixels as `UnitTextTest.width` counts it (full-width glyphs 9). |
 | `glossary.md` | Process-engineering terms for fr, es and ja. zh_cn takes its terms from its own existing lines. |
 
 Workflow for a new or updated language: `split.js` → translate each chunk → `check.js` per chunk → `merge.js` → `check.js` on the whole file → `status-words.js`.
 
 ## Entry points and limits
 
-- Only `en_us.json` is gated in Gradle (`HeatDiagramTest.noLanguageKeyIsDefinedTwice`, the builders' `everyTextThe…HasItsEnglishLine`, `UnitTextTest` widths). The other languages have no gate, and no check that a translated label fits its GUI width.
+- Gradle gates: `LanguageFilesTest` (quick suite: every lang file has en_us's keys, the arguments Minecraft fills, the same line breaks, no key twice); `UnitTextTest` (equipmentGates: every language's unit texts fit the constructor and vessel screens); `HeatDiagramTest.noLanguageKeyIsDefinedTwice` and the builders' `everyTextThe…HasItsEnglishLine` for en_us. Other screens' widths in other languages are not measured.
 - `scan.js` cannot see keys built from enum names or server data. Check those families by hand: nozzle roles (`message.icheme.pipe_laying.role.*`), vessel kinds, side words, material names from `data/icheme/materials`.
 
 ## History
