@@ -1,6 +1,6 @@
 # Sizing stage plan
 
-Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. Nothing here is built. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
+Batch [2026-11-02-process-simulator](README.md). Status: the owner approved these criteria on 2026-11-02 and the simplifications on 2026-11-03 (section 6). Drawings: sheets 24 to 28. S1 is built; the rest is not. It follows [PROCESS_SIMULATOR_PLAN.md](PROCESS_SIMULATOR_PLAN.md).
 
 ## 1. Expected behaviour
 
@@ -61,7 +61,7 @@ Three entries in the tab's Design group, for the whole sheet.
 | Entry | Default | Why | Source |
 |---|---|---|---|
 | Design flow | 110 % of steady | Rated 110 % of normal; +10 % for surge and reflux. Every limit applies at this flow | [ET], [MARG], [BRAN] |
-| Line length | 50 m with fittings | Only the Pressure view reads it; each line can hold its own | This plan |
+| Line length | 50 m with fittings | The Pressure view reads it, and so does Vacuum vapour's drop, which is a share of the pressure over the line; each line can hold its own | This plan |
 | PA fall | 60 K | The column model has no circulation; a fall across the cooler gives it | This plan, unsourced |
 
 ### 3.3 Lines
@@ -378,7 +378,7 @@ The owner accepted all ten as written on 2026-11-03.
 | No fouling allowance | None in the world | Same |
 | Static head only from nozzle heights | Others count 0 | Safe side for NPSH |
 | A pump's head from its sheet rise | P-102's 51 m ignores its 21 m of static gain | Oversizes the datasheet only |
-| One Line length | The Pressure view only | A long line can set its own |
+| One Line length | The Pressure view and Vacuum vapour's drop | A long line can set its own |
 | Fixed tray geometry | Weir load below | None: the world's law prices it |
 | A wide-baffle shell | Drops 10 times under Kern's at 0.4 D, equal at 0.93 D | Real U falls with wider baffles; the world's does not |
 | One LMTD in the probe | None on the sample's duties | The code uses `HeatCurve`, so a boiling or gas side reads true there |

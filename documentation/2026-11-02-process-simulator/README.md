@@ -2,7 +2,7 @@
 
 Purpose: an in-game process simulator: a dedicated block, a drag-and-drop flowsheet with a palette below, feed streams from the Fluid Generator's page, every unit including the column, Run on the client, a Results tab, flowsheet files under `.minecraft/IChemE`, and a compatibility system (owner request 2026-11-02: "make some design drawings for me to approve before moving to implementation").
 
-Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026-11-02, and D23 on 2026-11-03. W1 to W9 are built on the branch, which carries main 0.19.0, with column operation in it (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-02. The owner took decisions D1 to D22 on 2026-11-02, and D23 on 2026-11-03. W1 to W9 and sizing's S1 are built on the branch, which carries main 0.19.0, with column operation in it (D10). Not merged (branch `claude/in-game-process-simulator-93dd9a`). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -47,6 +47,8 @@ Added by the column block: `client/gui/flowsheet/ColumnBlock`; `SheetLayout.Box`
 
 Added by W9: `client/gui/flowsheet/FlowsheetCatalog`; the block's `SheetId`, sent in `ProcessSimulatorMenu.Opening`; `FileColumns.Change`. Removed: the old screen's methods of `V3EditorDraft`, `V3ClientPresets.mixtureJson`, two `IChemE.columnV3` getters with their config entries.
 
+Added by S1: `science/flowsheet/sizing` (`Limit`, the table; `Bound`; `Reading`, `Rating`, `Lamp`, `Selection`, the one rule; `DesignBasis`; `Service`; `LineSizing`). Moved down so the table can read them: `FlowControl.Mover.MAXIMUM_VOLUME_FLOW`, `Pump.MAXIMUM_ADDED_PRESSURE`, `Compressor.MAXIMUM_PRESSURE_RATIO`, `EquipmentShape.MAX_VOLUME`. Opened: `NetworkReduction.viscosity`, `ColumnSolve.SUPERHEAT`, `ProcessUnit.turboFlow`, `ColumnUnit.leavesTray`. Gates: `LimitTest`, `LineSizingTest`, `ServiceTest`, and `LineSizingSampleTest` under `slowGates`.
+
 Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md) (the feasibility, sizing and ejector probes), `tools/heat-gui-renders/` (`SimulatorPrototypes.java`, `SimulatorIcons.java`, `SimulatorSizing.java`: the design sheets; `SimulatorRender.java`: the built screen; `SymbolAtlas.java`: bakes the atlas).
 
 ## History
@@ -75,6 +77,30 @@ Tool folders: [tools/process-simulator/](../../tools/process-simulator/README.md
 - 2026-11-03: W9 (`96b9b1fd3`, `ef04b17bb`, `7f074f4bf`, `f0640669c`, `f1aad39f1`): `FlowsheetCatalog` with exhaustive switches over the three kinds, gated by `FlowsheetPaletteCoverageTest` (5); it found no tile for a cooling tower, now drawn and off. `AGENTS.md`: the run outside the engine schedule, and the new-equipment rule. Each block its own autosave, Delete off with a hover, the boot's hover, the repair dialog's Component, Field and Data rows, a unit's open outlet in its Streams table, the block's notes clear of every line and part, three inlet names on the tower, gates for a dropped column and a ring on sheet 02. The old screen's code removed. `zh_cn`: 486 lines, the 4 changed ones, the old block key gone, and the door and panel sweeps run in Chinese too. Gates: 118 quick in `client.gui.flowsheet.*` and `HeatDiagramTest`, the 3 draft classes (32), `SimulatorRunTest` (5) on `slowGates`, `ProcessSimulatorGameTests` (11), 0 failures. `renders-w6/` refreshed; `renders-zh/` holds every sheet in Chinese, in the main checkout's `research/`. The code guide chapter and the tooling cleanup wait for the merge package.
 
 - 2026-11-03: the owner accepted the ten simplifications of `SIZING_PLAN.md` section 6 as written ("Accept all ten"), which opens S1. The plan's P-102 line now follows W7's reading: the run gives no warning, so the sizing stage clears none.
+
+- 2026-11-03: S1 (`9a3b9cfd5`, `788205ecd`): `science/flowsheet/sizing`. No screen, no format, no language line, no run result moved. On a real steady run of the sample the 21 sheet lines equal the probe: bore, count, deciding limit, and drop to its three places, all green, on the first run, with WATER now on the Water row. S-6 and S-7 keep their drops on the world's viscosity, because at Re 1e7 the wall's roughness sets them. The Two-phase floor moves no line: S-6 runs 15.1 m/s, S-7 23.4. The world's own speed bound, `velocityLimit`, is 100 m/s on all 21. Gates, filtered, 0 failures: `LimitTest` (12), `LineSizingTest` (13), `ServiceTest` (14), `LineSizingSampleTest` (1, on `slowGates`), `FluidDeviceSpecDomainTest`, `FluidPacketCodecTest`, `FlowsheetColumnDoorTest`. The ten member lines stay for S3.
+
+## S1 decisions
+
+Taken alone, each reversible:
+
+- A gas is water above 95 mole % of the gas phase, the Water row's own share, `SERVICE_STEAM`. Below it a stream is Gas.
+- Saturated steam ends 5 K over the saturation at the steam's partial pressure: V3's rule for a steam feed, `ColumnSolve.SUPERHEAT`. So wet steam above 95 % by mass and steam a few kelvin over its line are both saturated. With no margin a player's 139 °C at 3.5 bar, 0.1 K over, would take 60 m/s as a dry line. Above water's critical point no saturation exists, and steam is superheated.
+- Vacuum vapour is a vapour under ambient, 1.01325 bara, as the brief read it, and whatever its gas: a limit of 0.2 bar/100 m means nothing at 0.1 bara, so it comes before Steam. Speed is 60 m/s on both sides of ambient. The drop nearly closes too: 5 % of 1.013 bar over the default 50 m is 0.101 bar/100 m, against Gas's 0.11. One step stays: Vacuum vapour has no ρv² row, so a vapour of 3.2 kg/m³ at 0.9 bara may run 60 m/s in a 0.8 m line, ρv² 11500, where at 1.02 bara it holds 6000 and about 43 m/s. No law in the world reads it.
+- Vacuum vapour's drop reads the line's length, as a share of its pressure. Plan section 3.2 and the simplification row now say so.
+- Two-phase's floor is a Should, `TWO_PHASE_SPEED`. Where ρv² and the floor leave no usual bore, Auto takes the nearest, yellow.
+- "A liquid" means past the vapour's tests. So the order is vapour, two phases, Water, Draw, Suction, Liquid, and condensate at 1 % vapour is Two-phase, not Water.
+- A line with no flow has no service, no size and `Lamp.NONE`, and a Fixed size on it is not red.
+- Density and viscosity are the world's, not the probe's McAdams: `state.mass() / state.volume()` and `NetworkReduction.viscosity`, the phases' own by volume, now public. It is the bulk average the pipe law reads.
+- A line's mass follows the world's bulk end. With a liquid it carries all of it, solids too, at the slurry's density and viscosity, and the mass the solids add counts. A gas with no liquid carries only itself (`bulkDrawsGas`, owner decision D33). The vapour tests count fluid only, so solids do not move a service.
+- `Limit` is an enum: its name is the stable id, and the compiler keeps ids unique. Its kinds are Must, Should, and a third, Rule: a threshold that picks a service or a type and lights no lamp. The section 3.3 thresholds, the largest cabin, a drum's L/D of 5, a sphere's 1.1 and a turbine's ambient are Rules. Section 3.10's other thresholds are rows with a lamp.
+- Units are symbols only, and a row's meaning stands in its comment: science holds no sentences.
+- `PUMP_HEAD` holds the world's 2 MPa, not 204 m: metres need the model's `pumpReferenceDensity`, which is an instance's, so S2 divides.
+- A row has a rank. Closest may name it; Quiet only when it fails (the probe's `quiet`); Paid is the Runs row, which Auto pays only if that buys every other limit. So one run that misses by 3 % stands against three runs that miss by 2 %.
+- `EJECTOR_STAGES` under 1.3 mbar says 4: the plan names 3 down to there and no more.
+- A bore the wall's roughness fills rates as an infinite drop, so a Fixed size there is red and not an exception.
+- The nozzle is one number, `Line.nozzle`: the caller gives the smaller of a line's two ends.
+- The sample gate is a slow gate, 7 s for a real column, and stands beside `SheetFixture` in `client/gui/flowsheet`.
 
 ## W9 decisions
 
@@ -177,6 +203,10 @@ Taken alone, each reversible:
 
 - Engine finding 2 of `tools/process-simulator/README.md` is with the owner, and `FlowThermo` keeps its TP search for it. Findings 1 and 3 are fixed on main (0.18.1).
 - Owner to validate: P-102's silence (W7 findings): the proposal is to leave the law.
+- Owner to decide, S1: slurry lines. Plan section 7 says streams carry no solids; they do. `Flowsheet.Feed.solids` reaches `FlowStream`, the units carry them, a filter takes them out and the column refuses them. Expected: a slurry line slower than its solids' deposition speed closes in the world. What the code does: `SolidMobility` has that law (10 times the settling speed, and a bore rule, a packing rule and an immobile-liquid rule), the plan has no row for it, so such a line lights green. Options: A, a Must row reading `SolidMobility`, one reading on a line with solids, recommended, because red is for what the world refuses; B, a Should row with Durand's speed, as section 7 proposes; C, leave it, and correct section 7's sentence.
+- Owner to decide, S1: Water comes before Draw and Suction, as the plan orders it. So cooling water into a pump takes 3 m/s, where [THAK] gives a water suction 0.3 to 1.5 m/s, and a water draw takes 3 m/s against a draw's 0.9. Option: Water after Draw and Suction, which moves no sample line. The player can choose the service either way.
+- S1 left: the Must reads the 100 m/s cap, and the world's `velocityLimit` is the lesser of that and an acoustic bound. They agree on all 21 sample lines. A dense two-phase line at low pressure can fall under 100 m/s, and ρv² stops Auto there long before; a Fixed size is not checked against it.
+- Follow-up outside this batch: `ColumnSolve` line 164 reads inverted. `saturationPressure(t - SUPERHEAT) < feedPressure` is true when the feed is NOT 5 K over saturation, against V3's own `T >= Tsat + 5`, so a hot feed's water follows the distillate and a cold feed's goes in as a steam feed, which V3 refuses. Read from the code; not run, and not changed.
 - Owner to validate: `option-c-rearranged.png` and the block built from it (D23): built without an answer. The tower moved right by 72 and down by 62 within a stored unit's corner; no released sheet holds one.
 - Column block left: no client has drawn it. At 1280 by 720, scale 2, the sample opens at zoom 0.43, under the label scale of 0.5, because a sheet can be no shorter than its column's frame: names and valves wait for one Zoom in.
 - W8 left: no client has run it. Not exercised: the real open and replay packets, a real second player, a real disconnect (a mock player cannot log in beside KubeJS, so the gate takes `Entity.remove`, the last step of that path), the liveness check's "still here" answer (a fake player is on no player list), the system clipboard, the autosave tick, Copy on a live tank (a source gate holds it).
@@ -189,4 +219,5 @@ Taken alone, each reversible:
 - W9 left: 693 older English lines have no Chinese (assembly 234, fluid 173, column 109, constructor 46, pipe laying 41, heat 21, and less): the column door's tabs and plates and the exchanger's drawing stand in English in a Chinese game. They are older batches' lines, outside W9.
 - W9 left: no client has run the block id. A GameTest holds its save and load; the path from `Opening` to the file on the client ran in no game. `V3CompositionDraft` and the draft's composition path are reached only by tests. `tools/cloud-science-harness` keeps a stub naming the two removed getters, an archive of its batch.
 - W10: the Motive steam port; the block has none until then. The merge package: the code guide chapter, with the rule of plan 3.10 and the crude packages `thermo-materials.md` still names, and the tooling cleanup.
+- S2 to S4 inherit: `Selection.smallest` takes sizes smallest first, so S2 sorts an exchanger's sizes by shells and surface. `Line.nozzle` waits for S2 and S3. `Limit`'s Should rows for the drum's and the tank's holds are the entries' defaults; S4 makes them entries.
 - Not measured: option B of D11, a reboiler stream, a column with nitrogen on the plain start, a run's peak heap; the sizing rules on any sheet but the sample; the ejector law on a real vacuum column; a compressor's or a drum's type proposal.
