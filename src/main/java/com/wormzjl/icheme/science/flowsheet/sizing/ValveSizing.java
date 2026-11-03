@@ -24,8 +24,8 @@ public final class ValveSizing {
     /**
      * A valve on its path.
      *
-     * @param drop bar
-     * @param path what the whole path loses, the valve with it (bar), null until the Pressure view gives it: then its row does not read
+     * @param drop bar: at design flow, what its path leaves it once a path ends at it; else the run's
+     * @param path what the whole path loses, the valve with it (bar), null where no path ends at it: then its share and spare do not read
      */
     public record Load(double drop, @Nullable Double path) {
         public static Load of(FlowStream in, FlowStream out, @Nullable Double path) {
@@ -38,7 +38,10 @@ public final class ValveSizing {
         var readings = new ArrayList<Reading>();
         readings.add(Limit.VALVE_DROP.read(load.drop()));
         var path = load.path();
-        if (path != null) readings.add(Limit.VALVE_SHARE.read(100 * load.drop() / path));
+        if (path != null) {
+            readings.add(Limit.PATH_SPARE.read(load.drop()));
+            readings.add(Limit.VALVE_SHARE.read(100 * load.drop() / path));
+        }
         return new Rating(readings);
     }
 }

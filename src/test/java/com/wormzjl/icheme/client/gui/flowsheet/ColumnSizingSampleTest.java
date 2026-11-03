@@ -59,7 +59,7 @@ class ColumnSizingSampleTest {
     }
 
     private static SheetSizing.Sized size(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo, SheetSizing.Entries entries) {
-        return MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.size(sheet, run, thermo, entries));
+        return MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.pass(sheet, run, thermo, entries));
     }
 
     private static String text(Rating rating) {
@@ -92,20 +92,18 @@ class ColumnSizingSampleTest {
         closest(column.rating(), Limit.COLUMN_FLOOD);
         assertEquals(71.3, read(column.rating(), Limit.COLUMN_FLOOD), FLOOD);
         assertEquals(40, read(column.rating(), Limit.COLUMN_TRAYS));
-        assertNull(sized.rerun(), "the door's diameter stands, so the sheet does not run again and no stream moves");
     }
 
     @Test
     void sevenAndAHalfMetresFloodsPastTheShould() {
         var size = ((ColumnSizing.Size) sized.units().get(T).size());
-        var kept = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(7.5, size.layout()), null, null, null, null, null))));
+        var kept = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(7.5, size.layout()), null, null, null, false))));
         var rating = kept.units().get(T).rating();
         assertEquals(Lamp.YELLOW, rating.lamp(), () -> text(rating));
         assertEquals(80.9, read(rating, Limit.COLUMN_FLOOD), FLOOD);
         assertEquals(1, read(rating, Limit.COLUMN_SOLVES));
         // At one traffic flood goes as one over the area: 71.3 × (8 / 7.5)² is 81.1.
         assertEquals(read(sized.units().get(T).rating(), Limit.COLUMN_FLOOD) * 64 / 56.25, read(rating, Limit.COLUMN_FLOOD), 1);
-        assertNotNull(kept.rerun(), "a kept 7.5 m runs the sheet again");
     }
 
     /**
@@ -121,7 +119,7 @@ class ColumnSizingSampleTest {
         closest(condenser.rating(), Limit.EXCHANGER_DROP_GAS);
         assertEquals(.15, read(condenser.rating(), Limit.EXCHANGER_DROP_GAS), HUNDREDTH);
         assertEquals(782, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
-        var probes = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, null, null, null))));
+        var probes = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, null, false))));
         var kept = probes.units().get(SheetSizing.member(T, "condenser")).rating();
         assertEquals(Lamp.YELLOW, kept.lamp(), () -> text(kept));
         assertTrue(read(kept, Limit.EXCHANGER_DROP_GAS) > .2);
@@ -219,30 +217,34 @@ class ColumnSizingSampleTest {
             }
         });
         var size = (ColumnSizing.Size) sized.units().get(T).size();
-        var entries = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(8.5, size.layout()), null, null, null, null, null)));
+        var entries = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(8.5, size.layout()), null, null, null, false)));
         assertThrows(CancellationException.class, () -> size(sheet, run, stopping, entries));
         assertTrue(inside[0]);
     }
 
-    /** No process number moves but a column's: the re-run at Auto's diameter is the sheet run with that diameter on its door. */
+    /**
+     * No process number moves but a column's: Size all from a door at 9.0 m takes the same sizes as from 8.0 m, and its one re-run,
+     * on 8.0 m and those sizes' drops, is the 8.0 m sheet's Size all run.
+     */
     @Test
     void aNewDiameterMovesTheProcessOnlyThroughTheColumn() {
         var wide = door(sheet, 9);
         var wideRun = FlowsheetEngine.run(wide, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, wideRun.status());
-        var resized = size(wide, wideRun, thermo, SheetSizing.Entries.DEFAULT);
-        assertEquals(8.0, ((ColumnSizing.Size) resized.units().get(T).size()).diameter());
-        var rerun = resized.rerun();
-        assertNotNull(rerun);
-        assertEquals(FlowsheetRun.Status.STEADY, rerun.status());
-        for (var stream : run.streams().entrySet()) {
-            var again = rerun.streams().get(stream.getKey());
+        var resized = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.sizeAll(wide, wideRun, thermo));
+        var plain = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
+        assertEquals(8.0, ((ColumnSizing.Size) resized.sized().units().get(T).size()).diameter());
+        assertEquals(8.0, resized.sheet().units().stream().filter(u -> u.id().equals(T)).findFirst().orElseThrow().params().number("diameter"));
+        assertEquals(plain.sheet().sizing(), resized.sheet().sizing(), "the same sizes from either door");
+        assertEquals(FlowsheetRun.Status.STEADY, resized.run().status());
+        for (var stream : plain.run().streams().entrySet()) {
+            var again = resized.run().streams().get(stream.getKey());
             assertEquals(stream.getValue().temperature(), again.temperature(), .05, stream.getKey());
             assertEquals(stream.getValue().total(), again.total(), 1e-4 * Math.max(1, stream.getValue().total()), stream.getKey());
         }
-        closest(resized.units().get(T).rating(), Limit.COLUMN_FLOOD);
-        assertEquals(read(sized.units().get(T).rating(), Limit.COLUMN_FLOOD), read(resized.units().get(T).rating(), Limit.COLUMN_FLOOD), FLOOD);
+        closest(resized.sized().units().get(T).rating(), Limit.COLUMN_FLOOD);
+        assertEquals(read(plain.sized().units().get(T).rating(), Limit.COLUMN_FLOOD), read(resized.sized().units().get(T).rating(), Limit.COLUMN_FLOOD), FLOOD);
     }
 
     /**
@@ -277,7 +279,7 @@ class ColumnSizingSampleTest {
         amounts.put("Water", 1500.);
         streams.add(new Flowsheet.Stream("HPS", "HPS", null, new Flowsheet.End(T, "reboiler_in"), new Flowsheet.Feed(800, 100e5, amounts, List.of())));
         streams.add(new Flowsheet.Stream("HPC", "HPC", new Flowsheet.End(T, "reboiler_out"), null, null));
-        var kettled = new Flowsheet(reboiled.basis(), reboiled.units(), streams, reboiled.settings(), reboiled.unknown());
+        var kettled = new Flowsheet(reboiled.basis(), reboiled.units(), streams, reboiled.settings(), reboiled.sizing(), reboiled.unknown());
         var kettleRun = FlowsheetEngine.run(kettled, SheetFixture.CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, kettleRun.status(), () -> kettleRun.log().toString());
@@ -307,6 +309,6 @@ class ColumnSizingSampleTest {
             units.add(new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), new Params(json), unit.unknown()));
         }
         var streams = sheet.streams().stream().filter(stream -> !List.of(dropped).contains(stream.id())).toList();
-        return new Flowsheet(sheet.basis(), units, streams, sheet.settings(), sheet.unknown());
+        return new Flowsheet(sheet.basis(), units, streams, sheet.settings(), sheet.sizing(), sheet.unknown());
     }
 }

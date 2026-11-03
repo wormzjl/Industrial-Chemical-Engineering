@@ -12,6 +12,8 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetEngine;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
+import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
+import com.wormzjl.icheme.science.flowsheet.unit.FiredHeaterUnit;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
@@ -60,19 +62,14 @@ public final class SheetSizing {
     /**
      * What the player or a later stage gives a unit.
      *
-     * @param size   null for Auto
+     * @param size   kept and rated; null for Auto's
      * @param type   null for the proposal
      * @param height a pump's static head over grade, m; by default its source's nozzle's: a column's tray, a drum's half level, grade
-     * @param path   what a valve's whole path loses, bar: S4's
-     * @param spare  the pressure a heater's path has spare, bar: S4's
-     * @param hold   a drum's entry, min, or a tank's, h: S4's; null for the row's
+     * @param hold   a drum's entry, min, or a tank's, h; null for the row's
+     * @param kept   a column keeps its door's diameter, rated there with no trial
      */
-    public record UnitEntry(@Nullable UnitSize size, @Nullable UnitType type, @Nullable Double height, @Nullable Double path, @Nullable Double spare, @Nullable Double hold) {
-        public static final UnitEntry AUTO = new UnitEntry(null, null, null, null, null, null);
-
-        UnitEntry with(UnitSize size) {
-            return new UnitEntry(size, type, height, path, spare, hold);
-        }
+    public record UnitEntry(@Nullable UnitSize size, @Nullable UnitType type, @Nullable Double height, @Nullable Double hold, boolean kept) {
+        public static final UnitEntry AUTO = new UnitEntry(null, null, null, null, false);
     }
 
     /** What a sizing reads beyond the run. An item with no entry is on Auto; a member's key is its block's id, a slash and its own. */
@@ -84,6 +81,25 @@ public final class SheetSizing {
             units = Map.copyOf(units);
         }
 
+        /**
+         * What {@code sheet}'s facts give a sizing. For Size all ({@code all} false), a Fixed item keeps its size and a Fixed column
+         * its door's diameter, and an Auto item gives only its type and entries, so Auto proposes its size. For a rating ({@code all}
+         * true), every item keeps the size it holds and every column its door's diameter, so nothing is proposed that a solve
+         * must find.
+         */
+        public static Entries of(Flowsheet sheet, boolean all) {
+            var facts = sheet.sizing();
+            var units = new HashMap<String, UnitEntry>();
+            facts.units().forEach((id, unit) -> {
+                boolean fixed = unit.mode() == SizingFacts.Mode.FIXED;
+                units.put(id, new UnitEntry(all || fixed ? unit.size() : null, unit.type(), null, unit.hold(), fixed));
+            });
+            if (all) for (var unit : sheet.units()) if (unit.type().equals(COLUMN)) units.put(unit.id(), new UnitEntry(null, facts.unit(unit.id()).type(), null, null, true));
+            var lines = new HashMap<String, LineEntry>();
+            facts.lines().forEach((id, line) -> lines.put(id, new LineEntry(line.service(), line.length(), all || line.mode() == SizingFacts.Mode.FIXED ? line.size() : null)));
+            return new Entries(facts.basis(), lines, units);
+        }
+
         private LineEntry line(String stream) {
             return lines.getOrDefault(stream, LineEntry.AUTO);
         }
@@ -92,18 +108,6 @@ public final class SheetSizing {
             return units.getOrDefault(id, UnitEntry.AUTO);
         }
 
-        /** These entries with every size {@code sized} chose kept, as a Fixed size is. */
-        private Entries keeping(Sized sized) {
-            var lines = new HashMap<>(this.lines);
-            sized.lines().forEach((id, line) -> {
-                if (line.size() != null) lines.put(id, new LineEntry(line(id).service(), line(id).length(), line.size()));
-            });
-            var units = new HashMap<>(this.units);
-            sized.units().forEach((id, unit) -> {
-                if (unit.size() != null) units.put(id, unit(id).with(unit.size()));
-            });
-            return new Entries(basis, lines, units);
-        }
     }
 
     /** @param size null with no flow */
@@ -120,13 +124,26 @@ public final class SheetSizing {
     }
 
     /**
-     * A sheet, sized.
+     * A sheet, sized: state, rebuilt whenever it is asked for, never saved.
      *
      * @param lines by stream, in sheet order, then each block's member lines
      * @param units by unit, in sheet order, each block's members under it
-     * @param rerun the run at the chosen diameters, whose streams every rating reads; null when every column keeps its door's
+     * @param paths the pressure paths, by the streams they start on, in sheet order
      */
-    public record Sized(Map<String, SizedLine> lines, Map<String, SizedUnit> units, @Nullable FlowsheetRun rerun) {
+    public record Sized(Map<String, SizedLine> lines, Map<String, SizedUnit> units, List<PressurePath> paths) {
+        public Sized {
+            paths = List.copyOf(paths);
+        }
+    }
+
+    /**
+     * What Size all leaves.
+     *
+     * @param sheet the sheet with every Auto item at its proposal: one edit, which Undo takes back whole
+     * @param run   the run the ratings read: the sheet's run again where a size moves it, else the one it was given
+     * @param sized every item rated at its size on that run
+     */
+    public record SizeAll(Flowsheet sheet, FlowsheetRun run, Sized sized) {
     }
 
     /** A member's key: its block's id, a slash and its own. */
@@ -134,29 +151,92 @@ public final class SheetSizing {
         return block + "/" + member;
     }
 
-    /** {@code run}'s streams on {@code sheet}, read on {@code thermo}'s own package. */
-    public static Sized size(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo, Entries entries) {
-        var first = new Sizing(sheet, run, thermo, entries).all();
-        var diameters = new HashMap<String, Double>();
-        for (var unit : sheet.units())
-            if (unit.type().equals(COLUMN) && first.units().get(unit.id()).size() instanceof ColumnSizing.Size size && size.diameter() != ColumnDoor.of(unit.params()).diameter())
-                diameters.put(unit.id(), size.diameter());
-        if (diameters.isEmpty()) return first;
+    /**
+     * One sizing of {@code run}'s streams on {@code sheet} at {@code entries}, read on {@code thermo}'s own package: what Auto
+     * proposes there, and every item rated. A column on Auto tries its diameters.
+     */
+    public static Sized pass(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo, Entries entries) {
+        return new Sizing(sheet, run, thermo, entries).all();
+    }
+
+    /**
+     * Rates every item of {@code sheet} at the size its facts hold, on a run that has just ended (section 3.1 item 5): no trial
+     * column, as each column keeps its door's diameter and reads the run's own trays, and no proposal is applied. An item with no
+     * size yet shows what Auto would propose. Cheap enough to rebuild the lamps whenever a reader opens the tab.
+     */
+    public static Sized rate(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo) {
+        return pass(sheet, run, thermo, Entries.of(sheet, true));
+    }
+
+    /**
+     * Size all (section 3.1): proposes every Auto item's size, applies the proposals to a copy of {@code sheet}, and where that
+     * moves the run (a column's diameter, a sized unit's drops) runs the copy once, warm from {@code run}, and rates every item on
+     * what it gives. Nothing is sized twice. A run that is not steady sizes nothing: the sheet stays, every item red.
+     */
+    public static SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo) {
+        if (run.status() != FlowsheetRun.Status.STEADY) return new SizeAll(sheet, run, rate(sheet, run, thermo));
+        var proposal = pass(sheet, run, thermo, Entries.of(sheet, false));
+        var sized = applied(sheet, proposal);
+        if (!moves(sheet, sized)) return new SizeAll(sized, run, proposal);
+        var rerun = FlowsheetEngine.run(sized, thermo.catalog(), thermo.checkpoint(), run);
+        if (rerun.status() == FlowsheetRun.Status.STOPPED) throw new CancellationException();
+        return new SizeAll(sized, rerun, rate(sized, rerun, thermo));
+    }
+
+    /**
+     * {@code sheet} with every Auto item at {@code proposal}'s size: a column's door at its diameter, every other size a fact; a
+     * Fixed item stays as the player keeps it. Facts of an item the sheet no longer holds go. A copy: {@code sheet} is unchanged.
+     */
+    public static Flowsheet applied(Flowsheet sheet, Sized proposal) {
+        var facts = sheet.sizing();
         var units = new ArrayList<Flowsheet.Unit>();
         for (var unit : sheet.units()) {
-            var diameter = diameters.get(unit.id());
-            if (diameter == null) units.add(unit);
-            else {
+            boolean auto = facts.unit(unit.id()).mode() == SizingFacts.Mode.AUTO;
+            if (auto && unit.type().equals(COLUMN) && proposal.units().get(unit.id()) instanceof SizedUnit sized && sized.size() instanceof ColumnSizing.Size size
+                    && size.diameter() != ColumnDoor.of(unit.params()).diameter()) {
                 var json = unit.params().json().deepCopy();
-                json.addProperty("diameter", diameter);
-                units.add(new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), new Params(json), unit.unknown()));
-            }
+                json.addProperty("diameter", size.diameter());
+                units.add(new Flowsheet.Unit(unit.id(), unit.type(), unit.name(), unit.x(), unit.y(), new Params(json), unit.unknown().deepCopy()));
+            } else units.add(unit);
         }
-        var copy = new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), sheet.unknown());
-        var rerun = FlowsheetEngine.run(copy, thermo.catalog(), thermo.checkpoint(), run);
-        if (rerun.status() == FlowsheetRun.Status.STOPPED) throw new CancellationException();
-        var again = new Sizing(copy, rerun, thermo, entries.keeping(first)).all();
-        return new Sized(again.lines(), again.units(), rerun);
+        for (var entry : proposal.units().entrySet()) {
+            var held = facts.unit(entry.getKey());
+            var size = entry.getValue().size();
+            if (held.mode() == SizingFacts.Mode.AUTO && !(size instanceof ColumnSizing.Size) && !(size instanceof ValveSizing.Size)) facts = facts.with(entry.getKey(), held.with(size));
+        }
+        for (var entry : proposal.lines().entrySet()) {
+            var held = facts.line(entry.getKey());
+            if (held.mode() == SizingFacts.Mode.AUTO) facts = facts.with(entry.getKey(), held.with(entry.getValue().size()));
+        }
+        return new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), pruned(sheet, facts), sheet.unknown());
+    }
+
+    /** {@code facts} without the rows of items {@code sheet} no longer holds: a member goes with its block, a line with its stream. */
+    public static SizingFacts pruned(Flowsheet sheet, SizingFacts facts) {
+        var ids = new java.util.HashSet<String>();
+        for (var unit : sheet.units()) ids.add(unit.id());
+        for (var stream : sheet.streams()) ids.add(stream.id());
+        var kept = facts;
+        for (var id : facts.units().keySet()) if (!ids.contains(root(id))) kept = kept.with(id, SizingFacts.UnitFacts.AUTO);
+        for (var id : facts.lines().keySet()) if (!ids.contains(root(id))) kept = kept.with(id, SizingFacts.LineFacts.AUTO);
+        return kept;
+    }
+
+    /** The item an id belongs to: a member's block. */
+    private static String root(String id) {
+        int slash = id.indexOf('/');
+        return slash < 0 ? id : id.substring(0, slash);
+    }
+
+    /** Whether {@code after}'s facts move its run from {@code before}'s: a column's diameter, or a size a passage's law reads. */
+    private static boolean moves(Flowsheet before, Flowsheet after) {
+        for (int i = 0; i < after.units().size(); i++) {
+            var was = before.units().get(i);
+            var now = after.units().get(i);
+            if (now.type().equals(COLUMN) && ColumnDoor.of(now.params()).diameter() != ColumnDoor.of(was.params()).diameter()) return true;
+            if (!SizedPassages.reads(after.sizing(), now).equals(SizedPassages.reads(before.sizing(), was))) return true;
+        }
+        return false;
     }
 
     /**
@@ -209,6 +289,10 @@ public final class SheetSizing {
         /** Each block's members, in the door's order. */
         private final Map<String, Map<String, SizedUnit>> members = new HashMap<>();
         private final Map<String, SizedLine> memberLines = new LinkedHashMap<>();
+        private final Map<String, Flowsheet.Unit> byId = new HashMap<>();
+        private final Map<String, Flowsheet.Stream> streams = new HashMap<>();
+        /** Each heater's duty at design flow, MW, whose spare its path gives. */
+        private final Map<String, Double> heaters = new LinkedHashMap<>();
 
         Sizing(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo, Entries entries) {
             this.sheet = sheet;
@@ -216,7 +300,9 @@ public final class SheetSizing {
             this.thermo = thermo;
             this.entries = entries;
             basis = entries.basis();
+            for (var unit : sheet.units()) byId.put(unit.id(), unit);
             for (var stream : sheet.streams()) {
+                streams.put(stream.id(), stream);
                 wire(stream.from(), stream.id());
                 wire(stream.to(), stream.id());
             }
@@ -245,9 +331,20 @@ public final class SheetSizing {
                 var block = members.get(unit.id());
                 if (block != null) ordered.putAll(block);
             }
+            // The paths read every size; a heater's spare and a valve's share read the paths.
+            var paths = paths(ordered);
+            heaters.forEach((id, duty) -> {
+                if (!(ordered.get(id).size() instanceof HeaterSizing.Size size)) return;
+                var path = paths.stream().filter(p -> p.set() && p.passes(id)).findFirst();
+                ordered.put(id, new SizedUnit(size, HeaterSizing.rate(new HeaterSizing.Load(duty, path.map(PressurePath::spare).orElse(null)), size)));
+            });
+            for (var path : paths) {
+                if (path.taker() == null || !(ordered.get(path.taker()) instanceof SizedUnit valve) || valve.size() == null) continue;
+                ordered.put(path.taker(), new SizedUnit(valve.size(), ValveSizing.rate(new ValveSizing.Load(path.spare(), path.lost() + path.spare()))));
+            }
             var all = new LinkedHashMap<>(lines);
             all.putAll(memberLines);
-            return new Sized(Collections.unmodifiableMap(all), Collections.unmodifiableMap(ordered), null);
+            return new Sized(Collections.unmodifiableMap(all), Collections.unmodifiableMap(ordered), paths);
         }
 
         /** A run that failed, stopped or did not close: what it left is no steady state, so every item holds one red reading, and the size it was given. */
@@ -256,7 +353,7 @@ public final class SheetSizing {
             for (var stream : sheet.streams()) lines.put(stream.id(), new SizedLine(LineSizing.Line.NONE, entries.line(stream.id()).size(), rating));
             var ordered = new LinkedHashMap<String, SizedUnit>();
             for (var unit : sheet.units()) ordered.put(unit.id(), new SizedUnit(entries.unit(unit.id()).size(), rating));
-            return new Sized(Collections.unmodifiableMap(lines), Collections.unmodifiableMap(ordered), null);
+            return new Sized(Collections.unmodifiableMap(lines), Collections.unmodifiableMap(ordered), List.of());
         }
 
         /** What is on {@code port}: a wired line, or a free outlet's own stream. */
@@ -314,7 +411,10 @@ public final class SheetSizing {
                 var in = stream(id, coil + "in");
                 if (!in.empty()) heat += stream(id, coil + "out").enthalpy() - in.enthalpy();
             }
-            var load = new HeaterSizing.Load(heat * basis.designFlow() / 1e6, entry.spare());
+            // Auto picks on the duty; the coils' passes follow the duty held, so the spare barely moves with the size, and its path
+            // rates it once every size is known.
+            var load = new HeaterSizing.Load(heat * basis.designFlow() / 1e6, null);
+            heaters.put(id, load.duty());
             var type = entry.type();
             return sized(entry, HeaterSizing.Size.class, size -> HeaterSizing.rate(load, size), () -> type != null ? HeaterSizing.auto(load, type) : HeaterSizing.auto(load));
         }
@@ -351,7 +451,9 @@ public final class SheetSizing {
             var load = ColumnSizing.Load.of(door, display, stream(id, BOTTOMS), basis, thermo);
             if (load == null) return new SizedUnit(null, new Rating(List.of(UnitSize.reading(null))));
             var trials = new ColumnSizing.Trials(load, thermo.catalog(), thermo.checkpoint());
-            var sized = sized(entry, ColumnSizing.Size.class, size -> ColumnSizing.rate(load, size, trials), () -> ColumnSizing.auto(load, trials));
+            // A kept column stands at its door's diameter, which reads the run's own trays: no trial solves.
+            var sized = entry.kept() && !(entry.size() instanceof ColumnSizing.Size) ? new SizedUnit(load.size(load.diameter()), ColumnSizing.rate(load, load.size(load.diameter()), trials))
+                    : sized(entry, ColumnSizing.Size.class, size -> ColumnSizing.rate(load, size, trials), () -> ColumnSizing.auto(load, trials));
             var readings = report.readings();
             var block = new Block(door, load, (ColumnSizing.Size) sized.size(), display.inspection().orElseThrow(), readings.getOrDefault("condenser", 0.), readings.getOrDefault("reboiler", 0.));
             blocks.put(id, block);
@@ -538,26 +640,183 @@ public final class SheetSizing {
         private @Nullable Double height(String id, UnitEntry entry) {
             if (entry.height() != null) return entry.height();
             var wired = wires.getOrDefault(id, Map.of()).get("in");
-            for (var stream : sheet.streams()) {
-                if (!stream.id().equals(wired) || stream.from() == null) continue;
-                var block = blocks.get(stream.from().unit());
-                if (block != null) {
-                    var level = block.level(stream.from().port());
-                    if (level != null) return level;
-                    var receiver = members.getOrDefault(stream.from().unit(), Map.of()).get(member(stream.from().unit(), "receiver"));
-                    var drum = receiver == null || receiver.size() == null ? null : UnitSize.built(receiver.size());
-                    if (drum == null) return null;
-                    return stream.from().port().equals(WATER) ? drum.support() : drum.support() + drum.diameter() / 2;
-                }
-                for (var unit : sheet.units()) if (unit.id().equals(stream.from().unit()) && unit.type().equals(COLUMN)) return null;
-            }
-            return 0.;
+            var stream = wired == null ? null : streams.get(wired);
+            return stream == null || stream.from() == null ? (Double) 0. : level(stream.from());
         }
 
+        /**
+         * How high over grade the liquid leaving by {@code from} stands, m: a column's tray or sump, as the column stands sized; its
+         * receiver's half level for the distillate, and its underside, over the boot, for the water; null where the column has no
+         * size; grade for anything else.
+         */
+        private @Nullable Double level(Flowsheet.End from) {
+            var block = blocks.get(from.unit());
+            if (block != null) {
+                var level = block.level(from.port());
+                if (level != null) return level;
+                var receiver = members.getOrDefault(from.unit(), Map.of()).get(member(from.unit(), "receiver"));
+                var drum = receiver == null || receiver.size() == null ? null : UnitSize.built(receiver.size());
+                if (drum == null) return null;
+                return from.port().equals(WATER) ? drum.support() : drum.support() + drum.diameter() / 2;
+            }
+            var unit = byId.get(from.unit());
+            return unit != null && unit.type().equals(COLUMN) ? null : (Double) 0.;
+        }
+
+        /** A valve on its inlet line's bore, at the drop the run gives it until a path ends at it and gives its drop at design flow. */
         private SizedUnit valve(String id, UnitEntry entry) {
             var sized = inlet(id);
             if (sized == null || sized.size() == null) return SizedUnit.NONE;
-            return new SizedUnit(new ValveSizing.Size(sized.size().bore()), ValveSizing.rate(ValveSizing.Load.of(stream(id, "in"), stream(id, "out"), entry.path())));
+            return new SizedUnit(new ValveSizing.Size(sized.size().bore()), ValveSizing.rate(ValveSizing.Load.of(stream(id, "in"), stream(id, "out"), null)));
+        }
+
+        // ---- Pressure paths, section 3.6 ----
+
+        /** Every path, from each stream that starts one, through the sizes {@code sized} holds. */
+        private List<PressurePath> paths(Map<String, SizedUnit> sized) {
+            var paths = new ArrayList<PressurePath>();
+            for (var stream : sheet.streams()) {
+                thermo.checkpoint().run();
+                var flow = run.streams().get(stream.id());
+                String start = flow == null || flow.empty() ? null : start(stream);
+                if (start == null) continue;
+                var level = stream.from() == null || stream.from().port().equals(OVERHEAD) ? null : level(stream.from());
+                double head = level == null ? 0 : flow.mass() / flow.state().volume() * PassiveStepSolver.GRAVITY * level / 1e5;
+                walk(new Walk(start, flow.pressure() / 1e5, head), stream.id(), new ArrayList<>(), new java.util.HashSet<>(), sized, paths);
+            }
+            return paths;
+        }
+
+        /** Where a path starts. */
+        private record Walk(String start, double from, double head) {
+        }
+
+        /** What a path on {@code stream} starts from, null where the stream only passes on from a unit's side. */
+        private @Nullable String start(Flowsheet.Stream stream) {
+            var from = stream.from();
+            if (from == null) return stream.id();
+            var unit = byId.get(from.unit());
+            if (unit == null) return null;
+            String port = from.port();
+            return switch (unit.type()) {
+                case "pump", "compressor", "drum", "storage_tank" -> unit.id();
+                case "kettle" -> port.equals("tube_out") ? null : unit.id();
+                case COLUMN -> port.equals("condenser_out") || port.equals("reboiler_out") || port.startsWith("pa/") ? null : unit.id();
+                case "valve" -> set(unit) ? unit.id() : null;
+                default -> null;
+            };
+        }
+
+        /** Whether a valve holds its outlet, which ends a path and starts the next; one set to a drop is a step. */
+        private static boolean set(Flowsheet.Unit valve) {
+            return valve.params().text("target", "outlet").equals("outlet");
+        }
+
+        /** Walks on along {@code streamId}, its line one step, to the end of each path it reaches. */
+        private void walk(Walk walk, String streamId, List<PressurePath.Step> steps, java.util.Set<String> seen, Map<String, SizedUnit> sized, List<PressurePath> paths) {
+            if (!seen.add(streamId)) return;
+            var line = lines.get(streamId);
+            steps.add(new PressurePath.Step(streamId, PressurePath.Step.LINE, line == null ? 0 : drop(line), 0));
+            var stream = streams.get(streamId);
+            var to = stream == null ? null : stream.to();
+            var unit = to == null ? null : byId.get(to.unit());
+            if (unit == null) {
+                end(walk, streamId, null, steps, null, paths);
+                return;
+            }
+            String id = unit.id(), port = to.port();
+            var params = unit.params();
+            switch (unit.type()) {
+                case "exchanger", "kettle" -> {
+                    if (port.equals("tube_in")) through(walk, id, id, "tube_drop", params.number("tube_drop", 0), streamId, "tube_out", steps, seen, sized, paths);
+                    else if (port.equals("shell_in")) through(walk, id, id, "shell_drop", params.number("shell_drop", 0), streamId, "shell_out", steps, seen, sized, paths);
+                    else end(walk, id, null, steps, null, paths);
+                }
+                case "air_cooler" -> through(walk, id, id, "drop", params.number("drop", 0), streamId, "out", steps, seen, sized, paths);
+                case "fired_heater" -> {
+                    switch (port) {
+                        case "in" -> through(walk, id, id, FiredHeaterUnit.COILS, params.number(FiredHeaterUnit.RADIANT_DROP, 0) + params.number(FiredHeaterUnit.CONVECTION_DROP, 0), streamId, "out", steps, seen, sized, paths);
+                        case "convection_in" -> through(walk, id, id, FiredHeaterUnit.CONVECTION_DROP, params.number(FiredHeaterUnit.CONVECTION_DROP, 0), streamId, "convection_out", steps, seen, sized, paths);
+                        default -> through(walk, id, id, FiredHeaterUnit.RADIANT_DROP, params.number(FiredHeaterUnit.RADIANT_DROP, 0), streamId, "radiant_out", steps, seen, sized, paths);
+                    }
+                }
+                case COLUMN -> column(walk, unit, port, streamId, steps, seen, sized, paths);
+                case "valve" -> {
+                    if (set(unit)) end(walk, id, params.number("pressure") / 1e5, steps, id, paths);
+                    else {
+                        double typed = params.number("drop", 0);
+                        steps.add(new PressurePath.Step(id, "drop", typed / 1e5, typed / 1e5));
+                        onward(walk, id, "out", steps, seen, sized, paths);
+                    }
+                }
+                case "mixer", "filter" -> onward(walk, id, "out", steps, seen, sized, paths);
+                case "splitter" -> {
+                    for (var outlet : wires.getOrDefault(id, Map.of()).entrySet())
+                        if (!outlet.getKey().equals("in")) walk(walk, outlet.getValue(), new ArrayList<>(steps), new java.util.HashSet<>(seen), sized, paths);
+                }
+                case "drum" -> end(walk, id, params.text("pressure_mode", "inlet").equals("set") ? params.number("pressure") / 1e5 : null, steps, null, paths);
+                case "storage_tank" -> {
+                    var report = run.reports().get(id);
+                    var held = report == null ? null : report.readings().get("pressure");
+                    end(walk, id, held == null ? null : held / 1e5, steps, null, paths);
+                }
+                default -> end(walk, id, null, steps, null, paths);
+            }
+        }
+
+        /** A column's inlet: a heat pair's sheet side passes through its member's tubes; a feed or a steam row ends on its tray. */
+        private void column(Walk walk, Flowsheet.Unit unit, String port, String streamId, List<PressurePath.Step> steps, java.util.Set<String> seen, Map<String, SizedUnit> sized, List<PressurePath> paths) {
+            String id = unit.id();
+            var door = ColumnDoor.of(unit.params());
+            if (port.equals("condenser_in")) {
+                through(walk, id, member(id, "condenser"), ColumnUnit.CONDENSER_DROP, door.condenserDrop(), streamId, "condenser_out", steps, seen, sized, paths);
+                return;
+            }
+            if (port.equals("reboiler_in")) {
+                through(walk, id, member(id, "reboiler"), ColumnUnit.REBOILER_DROP, door.reboilerDrop(), streamId, "reboiler_out", steps, seen, sized, paths);
+                return;
+            }
+            for (var pumparound : door.pumparounds()) {
+                if (port.equals("pa/" + pumparound.id() + "/in")) {
+                    through(walk, id, member(id, "pa " + pumparound.id() + " cooler"), ColumnUnit.pumparoundDrop(pumparound), pumparound.drop(), streamId, "pa/" + pumparound.id() + "/out", steps, seen, sized, paths);
+                    return;
+                }
+            }
+            var block = blocks.get(id);
+            Integer stage = port.equals(FEED) ? (Integer) door.feedStage() : null;
+            for (var row : door.steam()) if (port.equals(STEAM + row.id())) stage = row.stage();
+            Double tray = block == null || stage == null ? null : block.inspection().nodes().get(stage).pressurePascal() / 1e5;
+            end(walk, id, tray, steps, null, paths);
+        }
+
+        /**
+         * A unit's side: one step, at design flow by {@code item}'s size where it has one the constructor builds, else the door's
+         * {@code typed} (Pa); then on along what leaves by {@code outlet}.
+         */
+        private void through(Walk walk, String unit, String item, String passage, double typed, String streamId, String outlet, List<PressurePath.Step> steps, java.util.Set<String> seen, Map<String, SizedUnit> sized, List<PressurePath> paths) {
+            var in = run.streams().get(streamId);
+            var out = stream(unit, outlet);
+            var size = sized.get(item) == null ? null : sized.get(item).size();
+            var law = in == null || in.empty() ? null : SizedPassages.drop(size, passage, in, out.empty() ? null : out, basis.designFlow(), thermo);
+            steps.add(new PressurePath.Step(item, passage, (law != null ? law : typed) / 1e5, typed / 1e5));
+            onward(walk, unit, outlet, steps, seen, sized, paths);
+        }
+
+        /** On along what leaves {@code unit} by {@code port}: a free outlet's own stream ends the path there. */
+        private void onward(Walk walk, String unit, String port, List<PressurePath.Step> steps, java.util.Set<String> seen, Map<String, SizedUnit> sized, List<PressurePath> paths) {
+            var wired = wires.getOrDefault(unit, Map.of()).get(port);
+            if (wired == null) end(walk, unit + ":" + port, null, steps, null, paths);
+            else walk(walk, wired, steps, seen, sized, paths);
+        }
+
+        /**
+         * The path's end: at {@code set} bar where the sheet sets it; else what the run delivers there on the doors' drops, which
+         * reads no head, so a delivered path has its head and the doors' drops to spend.
+         */
+        private static void end(Walk walk, String end, @Nullable Double set, List<PressurePath.Step> steps, @Nullable String taker, List<PressurePath> paths) {
+            double typed = 0;
+            for (var step : steps) typed += step.typed();
+            paths.add(new PressurePath(walk.start(), walk.from(), walk.head(), end, set != null ? set : walk.from() - typed, set != null, taker, steps));
         }
     }
 }

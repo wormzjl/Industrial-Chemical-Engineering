@@ -181,6 +181,10 @@ public enum Limit {
     /** A sphere's design pressure over its bubble pressure. */
     SPHERE_DESIGN_FACTOR(RULE, least(1.1), "", "[API-P]"),
 
+    // ---- Pressure paths, section 3.6 ----
+    /** What a path to a pressure the sheet sets has left at design flow, past its sized drops: a valve at its end takes it. */
+    PATH_SPARE(MUST, least(0), "bar", "World", QUIET),
+
     // ---- Valves and ejectors ----
     VALVE_SHARE(SHOULD, least(20), "%", "[HALL-V]"),
     VALVE_DROP(SHOULD, least(.7), "bar", "[HALL-V]"),

@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet;
 
+import com.wormzjl.icheme.science.flowsheet.sizing.SizedPassages;
+import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
 import com.wormzjl.icheme.science.fluid.state.ParticleSize;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import org.jetbrains.annotations.Nullable;
@@ -32,7 +34,7 @@ public final class FlowsheetCompiler {
             else calculations.add(source(stream, thermo));
             claims(stream, stream.to(), Port.Direction.IN, live, wires);
         }
-        for (var unit : sheet.units()) calculations.addAll(unit(unit, wires.getOrDefault(unit.id(), Map.of()), outlets.getOrDefault(unit.id(), List.of()), thermo));
+        for (var unit : sheet.units()) calculations.addAll(unit(unit, sheet.sizing(), wires.getOrDefault(unit.id(), Map.of()), outlets.getOrDefault(unit.id(), List.of()), thermo));
         return calculations;
     }
 
@@ -142,11 +144,12 @@ public final class FlowsheetCompiler {
         return populations.isEmpty() ? SolidInventory.EMPTY : new SolidInventory(populations);
     }
 
-    private static List<Calculation> unit(Flowsheet.Unit unit, Map<String, String> wires, List<String> outlets, FlowThermo thermo) {
+    /** A unit with a size runs its passages' laws at the run's flow; one with none, its door's drops (sizing plan section 3.11, D19). */
+    private static List<Calculation> unit(Flowsheet.Unit unit, SizingFacts sizing, Map<String, String> wires, List<String> outlets, FlowThermo thermo) {
         var model = UnitTypes.model(unit.type());
         if (model == null) return List.of(refused(unit, outlets, "unit.removed", unit.type()));
-        var wired = new WiredUnit(unit.id(), unit.params(), Map.copyOf(wires), thermo);
         try {
+            var wired = new WiredUnit(unit.id(), unit.params(), Map.copyOf(wires), thermo, SizedPassages.of(sizing, unit, thermo));
             for (var port : model.ports(unit.params())) if (port.required() && wired.wire(port.id()) == null) throw new FlowsheetFailure("unit.free_inlet", port.id());
             return model.calculations(wired);
         } catch (FlowsheetFailure refusal) {

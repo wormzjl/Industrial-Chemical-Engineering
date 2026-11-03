@@ -9,9 +9,58 @@ import java.util.Map;
  * A unit on its sheet (batch 2026-11-02-process-simulator, plan section 3.2): its settings, the stream on each wired port and
  * the run's thermo. A free outlet writes a stream of its own, which leaves the sheet, so mass closes and the run says so.
  *
- * @param wires the stream on each wired port
+ * @param wires    the stream on each wired port
+ * @param passages its sized passages' laws (D19); {@link Passages#TYPED} while it has no size
  */
-public record WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo) {
+public record WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo, Passages passages) {
+    /** A sized passage's drop is found again while it moves by more than this, Pa: a thousandth of a bar. */
+    private static final double SAME_DROP = 100;
+    /** At most this often: the coils' drop rises with the vapour a lower outlet pressure gives, and settles in a few. */
+    private static final int MOST_TRIES = 20;
+
+    public WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo) {
+        this(id, params, wires, thermo, Passages.TYPED);
+    }
+
+    /**
+     * What {@code in} loses through {@code passage}, Pa: its sized law at the run's flow, read at the inlet, else the door's
+     * {@code typed} estimate. A sized drop is a reading of the report, under the passage's name.
+     */
+    public double drop(String passage, FlowStream in, double typed, Report report) {
+        var law = passages.passage(passage);
+        if (law == null || in.empty()) return typed;
+        double drop = law.drop(in, null);
+        report.reading(passage, drop);
+        return drop;
+    }
+
+    /**
+     * What leaves {@code passage}: {@code outlet} at the pressure {@code in} keeps after it. A sized law that reads its outlet is
+     * found from the door's estimate, the outlet at each drop giving the next, until it settles.
+     */
+    public FlowStream leaving(String passage, FlowStream in, double typed, java.util.function.DoubleFunction<FlowStream> outlet, Report report) {
+        var law = passages.passage(passage);
+        if (law == null || !law.readsOutlet() || in.empty()) return outlet.apply(after(in, drop(passage, in, typed, report)));
+        double drop = typed;
+        var out = outlet.apply(after(in, drop));
+        for (int tries = 0; tries < MOST_TRIES; tries++) {
+            double next = law.drop(in, out);
+            boolean settled = Math.abs(next - drop) <= SAME_DROP;
+            drop = next;
+            out = outlet.apply(after(in, drop));
+            if (settled) break;
+        }
+        report.reading(passage, drop);
+        return out;
+    }
+
+    /** The pressure {@code in} keeps after losing {@code drop} Pa; none left is no state. */
+    public static double after(FlowStream in, double drop) {
+        double pressure = in.pressure() - drop;
+        if (!(pressure > 0)) throw new FlowsheetFailure("unit.pressure");
+        return pressure;
+    }
+
     /** The stream on {@code port}, null if the port is free. */
     public @Nullable String wire(String port) {
         return wires.get(port);

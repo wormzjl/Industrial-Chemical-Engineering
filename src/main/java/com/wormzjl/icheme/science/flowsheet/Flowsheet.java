@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.google.gson.JsonObject;
+import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
@@ -18,8 +19,9 @@ import java.util.Objects;
  * @param units    the tiles, in sheet order
  * @param streams  the lines between ports; an end with no port is a pill
  * @param settings the solver's numbers
+ * @param sizing   what the player keeps of sizing: sizes, modes, types and entries, by item id (sizing plan section 3.9)
  */
-public record Flowsheet(Basis basis, List<Unit> units, List<Stream> streams, FlowsheetSolver.Settings settings, JsonObject unknown) {
+public record Flowsheet(Basis basis, List<Unit> units, List<Stream> streams, FlowsheetSolver.Settings settings, SizingFacts sizing, JsonObject unknown) {
     /** The package, by its id and declared revision, and the component ids the sheet was drawn on. */
     public record Basis(String packageId, String revision, List<String> components, JsonObject unknown) {
         public Basis {
@@ -142,20 +144,26 @@ public record Flowsheet(Basis basis, List<Unit> units, List<Stream> streams, Flo
     public Flowsheet {
         Objects.requireNonNull(basis, "basis");
         Objects.requireNonNull(settings, "settings");
+        Objects.requireNonNull(sizing, "sizing");
         units = List.copyOf(units);
         streams = List.copyOf(streams);
         Objects.requireNonNull(unknown, "unknown");
     }
 
     public Flowsheet(Basis basis, List<Unit> units, List<Stream> streams, FlowsheetSolver.Settings settings) {
-        this(basis, units, streams, settings, new JsonObject());
+        this(basis, units, streams, settings, SizingFacts.NONE, new JsonObject());
+    }
+
+    /** This sheet with its sizing facts at {@code sizing}. */
+    public Flowsheet with(SizingFacts sizing) {
+        return new Flowsheet(basis, units, streams, settings, sizing, unknown);
     }
 
     /** A copy that shares nothing mutable: a {@link Params} and every {@code unknown} wrap a {@link JsonObject}. */
     public Flowsheet copy() {
         var units = this.units.stream().map(u -> new Unit(u.id(), u.type(), u.name(), u.x(), u.y(), new Params(u.params().json().deepCopy()), u.unknown().deepCopy())).toList();
         var streams = this.streams.stream().map(s -> new Stream(s.id(), s.name(), copy(s.from()), copy(s.to()), copy(s.feed()), s.route().stream().map(p -> new Point(p.x(), p.y(), p.unknown().deepCopy())).toList(), s.unknown().deepCopy())).toList();
-        return new Flowsheet(new Basis(basis.packageId(), basis.revision(), basis.components(), basis.unknown().deepCopy()), units, streams, settings, unknown.deepCopy());
+        return new Flowsheet(new Basis(basis.packageId(), basis.revision(), basis.components(), basis.unknown().deepCopy()), units, streams, settings, sizing.copy(), unknown.deepCopy());
     }
 
     private static @Nullable End copy(@Nullable End end) {

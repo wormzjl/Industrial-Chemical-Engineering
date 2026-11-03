@@ -43,7 +43,7 @@ class SheetEditorTest {
             streams.add(new Flowsheet.Stream(s.id(), s.name(), from, to, feed, s.route(), future()));
         }
         var settings = plain.settings();
-        return new Flowsheet(plain.basis(), units, streams, new FlowsheetSolver.Settings(settings.flowTolerance(), settings.temperatureTolerance(), settings.maxPasses(), settings.lowestFactor(), settings.highestFactor(), future()), future());
+        return new Flowsheet(plain.basis(), units, streams, new FlowsheetSolver.Settings(settings.flowTolerance(), settings.temperatureTolerance(), settings.maxPasses(), settings.lowestFactor(), settings.highestFactor(), future()), plain.sizing(), future());
     }
 
     /** A new type takes its own settings, so what a later version wrote in the old ones goes with them; the unit's own fields stay. */

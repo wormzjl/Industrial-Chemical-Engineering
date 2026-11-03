@@ -151,7 +151,7 @@ public final class SheetEditor {
     }
 
     private Flowsheet with(List<Flowsheet.Unit> units, List<Flowsheet.Stream> streams) {
-        return new Flowsheet(sheet.basis(), units, streams, sheet.settings(), sheet.unknown());
+        return new Flowsheet(sheet.basis(), units, streams, sheet.settings(), sheet.sizing(), sheet.unknown());
     }
 
     private Flowsheet withUnit(String id, UnaryOperator<Flowsheet.Unit> change) {
@@ -571,10 +571,10 @@ public final class SheetEditor {
     // ---- The sheet ----
 
     public boolean settings(FlowsheetSolver.Settings settings, @Nullable String key) {
-        return apply(new Flowsheet(sheet.basis(), sheet.units(), sheet.streams(), settings, sheet.unknown()), key);
+        return apply(new Flowsheet(sheet.basis(), sheet.units(), sheet.streams(), settings, sheet.sizing(), sheet.unknown()), key);
     }
 
     public boolean basis(Flowsheet.Basis basis, @Nullable String key) {
-        return apply(new Flowsheet(basis, sheet.units(), sheet.streams(), sheet.settings(), sheet.unknown()), key);
+        return apply(new Flowsheet(basis, sheet.units(), sheet.streams(), sheet.settings(), sheet.sizing(), sheet.unknown()), key);
     }
 }

@@ -3,6 +3,14 @@ package com.wormzjl.icheme.science.flowsheet;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
+import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.LineSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.Service;
+import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
+import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -23,6 +31,7 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -244,6 +253,71 @@ final class FlowsheetFileTest {
         damaged("sheet.streams[0].feed.solids[0].mass_flow", json -> feed(json).getAsJsonArray("solids").get(0).getAsJsonObject().remove("mass_flow"));
         damaged("sheet.settings", json -> json.getAsJsonObject("settings").addProperty("max_passes", 0));
         damaged("sheet.settings.flow_tolerance", json -> json.getAsJsonObject("settings").addProperty("flow_tolerance", "tight"));
+    }
+
+    // ---- Sizing's facts (sizing plan section 3.9) ----
+
+    private static final Path SIZED = CORPUS.resolve("format-1-sizing.json");
+
+    private static JsonObject sized() {
+        try {
+            return tree(Files.readAllBytes(SIZED));
+        } catch (IOException missing) {
+            throw new AssertionError("the sized image", missing);
+        }
+    }
+
+    /** A sheet saved before sizing opens with every item on Auto and no size, and saves with no sizing section. */
+    @Test void anUnsizedImageOpensOnAuto() {
+        var sheet = FlowsheetFile.read(imageBytes());
+        assertEquals(SizingFacts.NONE, sheet.sizing());
+        assertFalse(tree(FlowsheetFile.write(sheet)).has("sizing"));
+    }
+
+    /** Each mode, size, type and hold, a line's service and length, and the basis, as a sized sheet holds them. */
+    @Test void aSizedImageKeepsItsFacts() {
+        var sheet = FlowsheetFile.read(bytes(sized()));
+        var facts = sheet.sizing();
+        assertEquals(new DesignBasis(1.2, 80, 50), facts.basis());
+        assertEquals(SizingFacts.Mode.FIXED, facts.unit("P-1").mode());
+        assertEquals(new PumpSizing.Size(.15), facts.unit("P-1").size());
+        assertEquals(SizingFacts.Mode.FIXED, facts.unit("T-1").mode());
+        assertNull(facts.unit("T-1").size(), "a column's size is its door's diameter");
+        assertEquals(new ExchangerSizing.Size(true, 1, 1.25, 4), facts.unit("T-1/reboiler").size());
+        assertEquals(new CompressorSizing.Size(UnitType.PISTON, .6, 3), facts.unit("C-1").size());
+        assertEquals(UnitType.SPHERE, facts.unit("K-1").type());
+        assertEquals(48, facts.unit("K-1").hold(), 0);
+        var line = facts.line("S-1");
+        assertEquals(Service.LIQUID, line.service());
+        assertEquals(120, line.length(), 0);
+        assertEquals(new LineSizing.Size(.3, 1), line.size());
+        assertEquals(SizingFacts.LineFacts.AUTO, facts.line("F"), "a line with no row is on Auto");
+        assertEquals(sheet, FlowsheetFile.read(FlowsheetFile.write(sheet)));
+    }
+
+    private static void damagedFact(String where, Consumer<JsonObject> damage) {
+        var json = sized();
+        damage.accept(json.getAsJsonObject("sizing"));
+        var refusal = assertThrows(FlowsheetFailure.class, () -> FlowsheetFile.read(bytes(json)), where);
+        assertEquals("file.damaged", refusal.key(), where);
+        assertEquals(List.of(where), refusal.arguments());
+    }
+
+    private static JsonObject fact(JsonObject sizing, String rows, String id) {
+        return sizing.getAsJsonObject(rows).getAsJsonObject(id);
+    }
+
+    @Test void aDamagedFactRefusesTheFileAndSaysWhere() {
+        damagedFact("sheet.sizing.basis", sizing -> sizing.getAsJsonObject("basis").addProperty("design_flow", 0));
+        damagedFact("sheet.sizing.units.P-1.mode", sizing -> fact(sizing, "units", "P-1").addProperty("mode", "MANUAL"));
+        damagedFact("sheet.sizing.units.K-1.type", sizing -> fact(sizing, "units", "K-1").addProperty("type", "TEAPOT"));
+        damagedFact("sheet.sizing.units.K-1.hold", sizing -> fact(sizing, "units", "K-1").addProperty("hold", -1));
+        damagedFact("sheet.sizing.units.E-1.size.kind", sizing -> fact(sizing, "units", "E-1").getAsJsonObject("size").addProperty("kind", "FLANGE"));
+        damagedFact("sheet.sizing.units.E-1.size.shells", sizing -> fact(sizing, "units", "E-1").getAsJsonObject("size").addProperty("shells", "two"));
+        damagedFact("sheet.sizing.units.E-1.size", sizing -> fact(sizing, "units", "E-1").getAsJsonObject("size").addProperty("shells", 0));
+        damagedFact("sheet.sizing.lines.S-1.length", sizing -> fact(sizing, "lines", "S-1").addProperty("length", 0));
+        damagedFact("sheet.sizing.lines.S-1.service", sizing -> fact(sizing, "lines", "S-1").addProperty("service", "STEAM_AND_ICE"));
+        damagedFact("sheet.sizing.lines.S-2.size.runs", sizing -> fact(sizing, "lines", "S-2").getAsJsonObject("size").addProperty("runs", 1.5));
     }
 
     @Test void aSettingOfADoorIsTheRunsAndNotTheFiles() {

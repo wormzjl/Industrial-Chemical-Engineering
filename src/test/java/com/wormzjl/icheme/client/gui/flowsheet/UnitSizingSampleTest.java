@@ -42,13 +42,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * The two gates below rebuild the probe's number from the same streams, so what moved is the form and nothing else.
  *
  * <p>P-102 draws from T-101's tray, whose height the column's own layout gives, and an entry with the probe's height reads the same.
- * V-101's share of its path and H-101's spare wait for S4: their rows are not read at all until an entry gives them.
+ * V-101's share and H-101's spare read P-101's pressure path, which ends at V-101's set outlet (S4a).
  */
 class UnitSizingSampleTest {
     /** Where the probe's P-102 draws: T-101's D 8.0 m skirt, its bottom space and the 22 trays over them. */
     private static final double DRAW_HEIGHT = EquipmentShape.minimumSkirt(8) + ColumnTrays.bottomSpace(8) + 22 * ColumnTrays.SPACING;
-    /** What the probe's path to V-101 loses, V-101 with it: 3.66 + 2.28 bar. */
-    private static final double V_101_PATH = 5.94;
     /** Probe values stand in the table's printed places. */
     private static final double TENTH = .05, ONE = .5, HUNDREDTH = .005;
 
@@ -66,11 +64,10 @@ class UnitSizingSampleTest {
         thermo = new FlowThermo(SheetFixture.FLUIDS.model(), SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
         });
         var later = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(),
-                Map.of("P-102", new SheetSizing.UnitEntry(null, null, DRAW_HEIGHT, null, null, null), "V-101", new SheetSizing.UnitEntry(null, null, null, V_101_PATH, null, null),
-                        "H-101", new SheetSizing.UnitEntry(null, null, null, null, 5.34, null)));
+                Map.of("P-102", new SheetSizing.UnitEntry(null, null, DRAW_HEIGHT, null, false)));
         MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
-            alone = SheetSizing.size(sheet, run, thermo, SheetSizing.Entries.DEFAULT);
-            given = SheetSizing.size(sheet, run, thermo, later);
+            alone = SheetSizing.pass(sheet, run, thermo, SheetSizing.Entries.DEFAULT);
+            given = SheetSizing.pass(sheet, run, thermo, later);
             return null;
         });
     }
@@ -145,8 +142,8 @@ class UnitSizingSampleTest {
 
     @Test
     void e101KeptOneStepDownIsRatedByTheSameRule() {
-        var kept = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.size(sheet, run, thermo,
-                new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-101", new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 1, .75, 6), null, null, null, null, null))))).units().get("E-101");
+        var kept = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.pass(sheet, run, thermo,
+                new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-101", new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 1, .75, 6), null, null, null, false))))).units().get("E-101");
         assertEquals(new ExchangerSizing.Size(false, 1, .75, 6), kept.size());
         assertEquals(Lamp.RED, kept.rating().lamp());
         assertSame(Limit.EXCHANGER_SURFACE, kept.rating().closest().limit());
@@ -165,20 +162,24 @@ class UnitSizingSampleTest {
         var duty = unit.rating().reading(Limit.HEATER_DUTY);
         assertEquals(87.6, duty.value(), TENTH);
         assertEquals(86.2, duty.low(), TENTH);
-        assertNull(unit.rating().reading(Limit.HEATER_SPARE), "S4's");
-        assertEquals(5.34, read(given.units().get("H-101").rating(), Limit.HEATER_SPARE), 0);
+        assertEquals(path("P-101").spare(), read(unit.rating(), Limit.HEATER_SPARE), 0, "its path's spare, to V-101's set outlet");
     }
 
+    /** V-101 ends P-101's path at its set outlet and takes what the path leaves at design flow: its drop and its share read that. */
     @Test
-    void v101TakesItsLinesBore() {
+    void v101TakesItsLinesBoreAndItsPathsSpare() {
         var unit = alone.units().get("V-101");
         assertEquals(new ValveSizing.Size(.7), unit.size());
-        assertEquals(2.28, read(unit.rating(), Limit.VALVE_DROP), HUNDREDTH);
-        assertNull(unit.rating().reading(Limit.VALVE_SHARE), "S4's");
-        var rating = given.units().get("V-101").rating();
-        closest(rating, Limit.VALVE_SHARE);
-        assertEquals(1.19, V_101_PATH * Limit.VALVE_SHARE.value() / 100, HUNDREDTH, "the probe's 0.2 of the path");
-        assertEquals(100 * 2.28 / V_101_PATH, read(rating, Limit.VALVE_SHARE), .1);
+        var path = path("P-101");
+        assertEquals("V-101", path.taker());
+        assertEquals(path.spare(), read(unit.rating(), Limit.VALVE_DROP), 0);
+        assertEquals(path.spare(), read(unit.rating(), Limit.PATH_SPARE), 0);
+        assertEquals(100 * path.spare() / path.available(), read(unit.rating(), Limit.VALVE_SHARE), 1e-9);
+        assertEquals(Lamp.GREEN, unit.rating().lamp());
+    }
+
+    private static com.wormzjl.icheme.science.flowsheet.sizing.PressurePath path(String start) {
+        return alone.paths().stream().filter(path -> path.start().equals(start)).findFirst().orElseThrow();
     }
 
     @Test
@@ -204,8 +205,8 @@ class UnitSizingSampleTest {
 
     @Test
     void theProbesBankStillHoldsItsDutyWhenThePlayerKeepsIt() {
-        var kept = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.size(sheet, run, thermo,
-                new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-102", new SheetSizing.UnitEntry(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(5, 3)), null, null, null, null, null))))).units().get("E-102");
+        var kept = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.pass(sheet, run, thermo,
+                new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-102", new SheetSizing.UnitEntry(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(5, 3)), null, null, null, false))))).units().get("E-102");
         assertEquals(Lamp.GREEN, kept.rating().lamp());
         assertEquals(752, read(kept.rating(), Limit.AIR_COOLER_SURFACE), ONE);
         assertEquals(.05, read(kept.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH);
@@ -239,6 +240,6 @@ class UnitSizingSampleTest {
         var stopping = new FlowThermo(SheetFixture.FLUIDS.model(), SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
             if (asked.incrementAndGet() == 5) throw new CancellationException();
         });
-        MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> assertThrows(CancellationException.class, () -> SheetSizing.size(sheet, run, stopping, SheetSizing.Entries.DEFAULT)));
+        MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> assertThrows(CancellationException.class, () -> SheetSizing.pass(sheet, run, stopping, SheetSizing.Entries.DEFAULT)));
     }
 }

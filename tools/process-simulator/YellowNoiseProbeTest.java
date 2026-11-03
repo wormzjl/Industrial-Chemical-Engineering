@@ -69,7 +69,7 @@ final class YellowNoiseProbeTest {
                 continue;
             }
             var ratings = new LinkedHashMap<String, Rating>();
-            var sized = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.size(sheet, run, thermo, SheetSizing.Entries.DEFAULT));
+            var sized = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.pass(sheet, run, thermo, SheetSizing.Entries.DEFAULT));
             sized.lines().forEach((id, line) -> ratings.put(id, line.rating()));
             sized.units().forEach((id, unit) -> ratings.put(id, unit.rating()));
             int read = 0, yellow = 0, red = 0;

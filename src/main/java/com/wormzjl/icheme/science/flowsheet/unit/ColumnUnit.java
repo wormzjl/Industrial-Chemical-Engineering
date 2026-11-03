@@ -48,6 +48,8 @@ import java.util.Locale;
 public final class ColumnUnit implements UnitModel {
     private static final String FEED = "feed", OVERHEAD = "overhead", DISTILLATE = "distillate", WATER = "water", BOTTOMS = "bottoms", DRAW = "draw/";
     private static final String CONDENSER_IN = "condenser_in", CONDENSER_OUT = "condenser_out", REBOILER_IN = "reboiler_in", REBOILER_OUT = "reboiler_out";
+    /** The passages of the condenser's and the kettle's sheet sides, by the door's drops. */
+    public static final String CONDENSER_DROP = "condenser_drop", REBOILER_DROP = "reboiler_drop";
     /**
      * The feed is flashed to its tray's pressure, which only a solve can say, so it starts at the stream's own and goes round
      * while that moves the feed by more than this (K), at most this often. A stream at its tray's pressure solves once.
@@ -101,14 +103,14 @@ public final class ColumnUnit implements UnitModel {
         var calculations = new ArrayList<Calculation>();
         calculations.add(solve.calculation());
         if (u.wire(CONDENSER_IN) != null) {
-            calculations.add(side(u, "condenser", CONDENSER_IN, CONDENSER_OUT, door.condenserDrop(), solve.condenserHeat(), null));
+            calculations.add(side(u, "condenser", CONDENSER_IN, CONDENSER_OUT, CONDENSER_DROP, door.condenserDrop(), solve.condenserHeat(), null));
             calculations.add(check(u, "condenser check", u.out(CONDENSER_OUT), null, (board, report) -> {
                 if (!board.stream(u.out(CONDENSER_OUT)).empty()) report.reading("margin", door.condenserTemperature() - board.stream(u.out(CONDENSER_OUT)).temperature());
                 if (!board.stream(u.out(CONDENSER_OUT)).empty() && board.stream(u.out(CONDENSER_OUT)).temperature() >= door.condenserTemperature()) report.note(Note.warning(u.id(), "column.condenser_hot"));
             }));
         } else if (u.wire(CONDENSER_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", CONDENSER_IN);
         if (u.wire(REBOILER_IN) != null) {
-            calculations.add(side(u, "reboiler", REBOILER_IN, REBOILER_OUT, door.reboilerDrop(), null, -door.reboilerDuty()));
+            calculations.add(side(u, "reboiler", REBOILER_IN, REBOILER_OUT, REBOILER_DROP, door.reboilerDrop(), null, -door.reboilerDuty()));
             calculations.add(check(u, "reboiler check", u.out(REBOILER_OUT), u.out(BOTTOMS), (board, report) -> {
                 var steam = board.stream(u.out(REBOILER_OUT));
                 var bottoms = board.stream(u.out(BOTTOMS));
@@ -122,7 +124,7 @@ public final class ColumnUnit implements UnitModel {
                 if (u.wire(out) != null) throw new FlowsheetFailure("unit.free_inlet", in);
                 continue;
             }
-            calculations.add(side(u, "pa " + pumparound.id(), in, out, pumparound.drop(), null, -pumparound.duty()));
+            calculations.add(side(u, "pa " + pumparound.id(), in, out, pumparoundDrop(pumparound), pumparound.drop(), null, -pumparound.duty()));
             String tray = solve.drawTemperature(pumparound);
             calculations.add(new Calculation(u.part("pa " + pumparound.id() + " check"), u.id(), List.of(u.out(out)), List.of(), List.of(tray), List.of(), Calculation.Kind.CHECK, (board, report) -> {
                 var cold = board.stream(u.out(out));
@@ -133,16 +135,24 @@ public final class ColumnUnit implements UnitModel {
         return calculations;
     }
 
-    /** The utility side of a heat pair: {@code heat} W into it, from the door, or from {@code link} once the column has said. The column's duty carries the column's sign, so this side takes its negative. */
-    private static Calculation side(WiredUnit u, String name, String in, String out, double drop, @Nullable String link, @Nullable Double heat) {
+    /** The passage of a pumparound cooler's sheet side, by its row: what its member's size gives once sized. */
+    public static String pumparoundDrop(ColumnDoor.Pumparound pumparound) {
+        return "pa/" + pumparound.id() + "/drop";
+    }
+
+    /**
+     * The utility side of a heat pair: {@code heat} W into it, from the door, or from {@code link} once the column has said. The
+     * column's duty carries the column's sign, so this side takes its negative. It loses the door's {@code drop} (Pa), or once its
+     * member has a size, the member's tubes' law at the run's flow (D19).
+     */
+    private static Calculation side(WiredUnit u, String name, String in, String out, String passage, double drop, @Nullable String link, @Nullable Double heat) {
         return new Calculation(u.part(name), u.id(), List.of(u.wire(in)), List.of(u.out(out)), link == null ? List.of() : List.of(link), List.of(), Calculation.Kind.STEP, (board, report) -> {
             var stream = board.stream(u.wire(in));
             if (stream.empty()) {
                 u.write(board, report, out, stream);
                 return;
             }
-            double pressure = stream.pressure() - drop;
-            if (!(pressure > 0)) throw new FlowsheetFailure("unit.pressure");
+            double pressure = WiredUnit.after(stream, u.drop(passage, stream, drop, report));
             double watts = link == null ? heat : board.link(link);
             u.write(board, report, out, u.thermo().heated(stream, watts, pressure));
             report.reading("duty", watts);

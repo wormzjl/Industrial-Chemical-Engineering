@@ -20,8 +20,8 @@ import java.util.List;
  * outlet or a duty names a {@code side}, and that side solves alone, so the graph splits and a loop through the other side is
  * no loop of this unit's. The duty reaches the other side as a link. A free pair's inlet leaves the heat to a utility. Area needs
  * both inlets, so it is one calculation. A rating reads both inlets afterwards, and says the surface the duty needs and whether
- * the heat crosses. A kettle's shell boils its feed and has a gas and a liquid outlet. The drops are typed: a sized unit's
- * come from its flow (sizing plan section 3.11).
+ * the heat crosses. A kettle's shell boils its feed and has a gas and a liquid outlet. The drops are typed until the unit has a
+ * size; then each side's comes from its law at the run's flow (sizing plan section 3.11, D19). A kettle's pool has no law.
  *
  * <p>Sign: {@code duty} and the link are the heat into the named side.
  */
@@ -68,7 +68,7 @@ public final class ExchangerUnit implements UnitModel {
         boolean both = tube != null && shell != null;
         calculations.add(new Calculation(u.part(onTube ? TUBE : SHELL), u.id(), List.of(onTube ? tube : shell), outlets(u, onTube), List.of(), both ? List.of(link) : List.of(), Calculation.Kind.STEP, (board, report) -> {
             var in = board.stream(onTube ? tube : shell);
-            var out = set(u, target, onTube, in);
+            var out = set(u, target, onTube, in, report);
             write(u, board, report, onTube, out);
             double heat = in.empty() ? 0 : out.enthalpy() - in.enthalpy();
             if (both) board.link(link, heat);
@@ -78,7 +78,7 @@ public final class ExchangerUnit implements UnitModel {
         if (both) {
             calculations.add(new Calculation(u.part(onTube ? SHELL : TUBE), u.id(), List.of(onTube ? shell : tube), outlets(u, !onTube), List.of(link), List.of(), Calculation.Kind.STEP, (board, report) -> {
                 var in = board.stream(onTube ? shell : tube);
-                write(u, board, report, !onTube, in.empty() ? in : u.thermo().heated(in, -board.link(link), pressure(u, !onTube, in)));
+                write(u, board, report, !onTube, in.empty() ? in : u.thermo().heated(in, -board.link(link), pressure(u, !onTube, in, report)));
             }));
             calculations.add(rating(u, tube, shell, onTube, link));
         }
@@ -89,15 +89,15 @@ public final class ExchangerUnit implements UnitModel {
         return tube ? List.of(u.out(TUBE_OUT)) : shellOutlets().stream().map(u::out).toList();
     }
 
-    private static double pressure(WiredUnit u, boolean tube, FlowStream in) {
-        double pressure = in.pressure() - u.params().number(tube ? "tube_drop" : "shell_drop", 0);
-        if (!(pressure > 0)) throw new FlowsheetFailure("unit.pressure");
-        return pressure;
+    /** What a side keeps: its inlet's pressure less the door's drop, or its sized law's at the run's flow, read at the inlet. */
+    private static double pressure(WiredUnit u, boolean tube, FlowStream in, Report report) {
+        String drop = tube ? "tube_drop" : "shell_drop";
+        return WiredUnit.after(in, u.drop(drop, in, u.params().number(drop, 0), report));
     }
 
-    private static FlowStream set(WiredUnit u, String target, boolean tube, FlowStream in) {
+    private static FlowStream set(WiredUnit u, String target, boolean tube, FlowStream in, Report report) {
         if (in.empty()) return in;
-        double pressure = pressure(u, tube, in);
+        double pressure = pressure(u, tube, in, report);
         return target.equals("outlet") ? u.thermo().atTemperature(u.params().number("temperature"), pressure, in.amounts(), in.solids()) : u.thermo().heated(in, u.params().number("duty"), pressure);
     }
 
@@ -120,8 +120,8 @@ public final class ExchangerUnit implements UnitModel {
             var t = board.stream(tube);
             var s = board.stream(shell);
             double into = t.empty() || s.empty() || t.temperature() == s.temperature() ? 0 : passed(u, t, s, u.params().number("area"), report);
-            write(u, board, report, true, t.empty() ? t : u.thermo().heated(t, into, pressure(u, true, t)));
-            write(u, board, report, false, s.empty() ? s : u.thermo().heated(s, -into, pressure(u, false, s)));
+            write(u, board, report, true, t.empty() ? t : u.thermo().heated(t, into, pressure(u, true, t, report)));
+            write(u, board, report, false, s.empty() ? s : u.thermo().heated(s, -into, pressure(u, false, s, report)));
         });
     }
 

@@ -7,6 +7,20 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
+import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
+import com.wormzjl.icheme.science.flowsheet.sizing.DrumSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.LineSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.Service;
+import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
+import com.wormzjl.icheme.science.flowsheet.sizing.TankSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.UnitSize;
+import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import com.wormzjl.icheme.science.fluid.state.ParticleSize;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,7 +47,11 @@ import java.util.Map;
  * leave out: a removed type, a removed row's port, a removed component.
  */
 public final class FlowsheetFile {
-    /** The format this version writes. A new field needs no new number; only what an older reader would get wrong does. */
+    /**
+     * The format this version writes. A new field needs no new number; only what an older reader would get wrong does. Sizing's
+     * facts (S4) need none: a reader before them keeps the section as a later version's and writes it back, and runs the sheet on
+     * its doors' drops, which is all it ever did.
+     */
     public static final int FORMAT = 1;
     private static final Gson JSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().serializeNulls().create();
 
@@ -85,7 +103,163 @@ public final class FlowsheetFile {
             if (!ids.add(stream.id())) throw damaged(row.path);
             streams.add(stream);
         }
-        return new Flowsheet(basis, units, streams, settings(root.optionalObject("settings")), root.rest);
+        var sizing = sizing(root.optionalObject("sizing"));
+        return new Flowsheet(basis, units, streams, settings(root.optionalObject("settings")), sizing, root.rest);
+    }
+
+    // ---- Sizing's facts (sizing plan section 3.9): absent on a sheet never sized, which reads as every item on Auto, no size ----
+
+    private static SizingFacts sizing(@Nullable Fields fields) {
+        if (fields == null) return SizingFacts.NONE;
+        var basis = DesignBasis.DEFAULT;
+        var basisRest = new JsonObject();
+        var given = fields.optionalObject("basis");
+        if (given != null) {
+            try {
+                basis = new DesignBasis(given.number("design_flow", basis.designFlow()), given.number("line_length", basis.lineLength()), given.number("pa_fall", basis.paFall()));
+            } catch (IllegalArgumentException invalid) {
+                throw damaged(given.path);
+            }
+            basisRest = given.rest;
+        }
+        var units = new LinkedHashMap<String, SizingFacts.UnitFacts>();
+        var unitRows = fields.optionalObject("units");
+        if (unitRows != null) for (var id : new ArrayList<>(unitRows.rest.keySet())) units.put(id, unitFacts(unitRows.object(id)));
+        var lines = new LinkedHashMap<String, SizingFacts.LineFacts>();
+        var lineRows = fields.optionalObject("lines");
+        if (lineRows != null) for (var id : new ArrayList<>(lineRows.rest.keySet())) lines.put(id, lineFacts(lineRows.object(id)));
+        return new SizingFacts(basis, basisRest, units, lines, fields.rest);
+    }
+
+    private static SizingFacts.UnitFacts unitFacts(Fields fields) {
+        var mode = fields.name("mode", SizingFacts.Mode.class, SizingFacts.Mode.AUTO);
+        var type = fields.name("type", UnitType.class, null);
+        var hold = fields.optionalAmount("hold");
+        var size = fields.optionalObject("size");
+        return new SizingFacts.UnitFacts(mode, type, size == null ? null : unitSize(size), hold, size == null ? new JsonObject() : size.rest, fields.rest);
+    }
+
+    private static SizingFacts.LineFacts lineFacts(Fields fields) {
+        var mode = fields.name("mode", SizingFacts.Mode.class, SizingFacts.Mode.AUTO);
+        var service = fields.name("service", Service.class, null);
+        var length = fields.optionalAmount("length");
+        var size = fields.optionalObject("size");
+        LineSizing.Size line = null;
+        if (size != null) {
+            try {
+                line = new LineSizing.Size(size.number("bore"), size.whole("runs"));
+            } catch (IllegalArgumentException invalid) {
+                throw damaged(size.path);
+            }
+        }
+        return new SizingFacts.LineFacts(mode, service, length, line, size == null ? new JsonObject() : size.rest, fields.rest);
+    }
+
+    /** A size by its kind's name; one its record refuses is damage. One the constructor cannot build is a red lamp, not damage. */
+    private static UnitSize unitSize(Fields fields) {
+        String kind = fields.id("kind");
+        try {
+            return switch (kind) {
+                case "PUMP" -> new PumpSizing.Size(fields.number("discharge"));
+                case "EXCHANGER" -> new ExchangerSizing.Size(fields.bool("kettle"), fields.whole("shells"), fields.number("shell"), fields.whole("tubes"));
+                case "AIR_COOLER" -> new AirCoolerSizing.Size(fields.number("width"), fields.whole("length"), new ProcessUnit.Bank(fields.whole("parallel"), fields.whole("series")));
+                case "HEATER" -> new HeaterSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("length"));
+                case "COMPRESSOR" -> new CompressorSizing.Size(fields.name("type", UnitType.class), fields.number("size"), fields.whole("length"));
+                case "DRUM" -> new DrumSizing.Size(fields.name("type", UnitType.class), fields.number("diameter"), fields.whole("length"), fields.bool("boot"));
+                case "TANK" -> new TankSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("shell"));
+                default -> throw damaged(fields.path + ".kind");
+            };
+        } catch (IllegalArgumentException invalid) {
+            throw damaged(fields.path);
+        }
+    }
+
+    private static JsonObject sizing(SizingFacts facts) {
+        var json = new JsonObject();
+        var basis = new JsonObject();
+        basis.addProperty("design_flow", facts.basis().designFlow());
+        basis.addProperty("line_length", facts.basis().lineLength());
+        basis.addProperty("pa_fall", facts.basis().paFall());
+        json.add("basis", beside(basis, facts.basisUnknown()));
+        var units = new JsonObject();
+        facts.units().forEach((id, unit) -> {
+            var row = new JsonObject();
+            row.addProperty("mode", unit.mode().name());
+            if (unit.type() != null) row.addProperty("type", unit.type().name());
+            if (unit.hold() != null) row.addProperty("hold", unit.hold());
+            if (unit.size() != null) row.add("size", beside(unitSize(unit.size()), unit.sizeUnknown()));
+            units.add(id, beside(row, unit.unknown()));
+        });
+        json.add("units", units);
+        var lines = new JsonObject();
+        facts.lines().forEach((id, line) -> {
+            var row = new JsonObject();
+            row.addProperty("mode", line.mode().name());
+            if (line.service() != null) row.addProperty("service", line.service().name());
+            if (line.length() != null) row.addProperty("length", line.length());
+            if (line.size() != null) {
+                var size = new JsonObject();
+                size.addProperty("bore", line.size().bore());
+                size.addProperty("runs", line.size().runs());
+                row.add("size", beside(size, line.sizeUnknown()));
+            }
+            lines.add(id, beside(row, line.unknown()));
+        });
+        json.add("lines", lines);
+        return beside(json, facts.unknown());
+    }
+
+    private static JsonObject unitSize(UnitSize size) {
+        var json = new JsonObject();
+        switch (size) {
+            case PumpSizing.Size pump -> {
+                json.addProperty("kind", "PUMP");
+                json.addProperty("discharge", pump.discharge());
+            }
+            case ExchangerSizing.Size exchanger -> {
+                json.addProperty("kind", "EXCHANGER");
+                json.addProperty("kettle", exchanger.kettle());
+                json.addProperty("shells", exchanger.shells());
+                json.addProperty("shell", exchanger.shell());
+                json.addProperty("tubes", exchanger.tubes());
+            }
+            case AirCoolerSizing.Size cooler -> {
+                json.addProperty("kind", "AIR_COOLER");
+                json.addProperty("width", cooler.width());
+                json.addProperty("length", cooler.length());
+                json.addProperty("parallel", cooler.bank().parallel());
+                json.addProperty("series", cooler.bank().series());
+            }
+            case HeaterSizing.Size heater -> {
+                json.addProperty("kind", "HEATER");
+                json.addProperty("type", heater.type().name());
+                json.addProperty("count", heater.count());
+                json.addProperty("diameter", heater.diameter());
+                json.addProperty("length", heater.length());
+            }
+            case CompressorSizing.Size compressor -> {
+                json.addProperty("kind", "COMPRESSOR");
+                json.addProperty("type", compressor.type().name());
+                json.addProperty("size", compressor.size());
+                json.addProperty("length", compressor.length());
+            }
+            case DrumSizing.Size drum -> {
+                json.addProperty("kind", "DRUM");
+                json.addProperty("type", drum.type().name());
+                json.addProperty("diameter", drum.diameter());
+                json.addProperty("length", drum.length());
+                json.addProperty("boot", drum.boot());
+            }
+            case TankSizing.Size tank -> {
+                json.addProperty("kind", "TANK");
+                json.addProperty("type", tank.type().name());
+                json.addProperty("count", tank.count());
+                json.addProperty("diameter", tank.diameter());
+                json.addProperty("shell", tank.shell());
+            }
+            default -> throw new IllegalArgumentException("A " + size.getClass().getSimpleName() + " is no fact: it follows from the sheet");
+        }
+        return json;
     }
 
     /** Text that may be any JSON: damage shows as bad bytes or a syntax error here, and as a missing or ill-kinded field after. */
@@ -167,6 +341,7 @@ public final class FlowsheetFile {
         var streams = new JsonArray();
         for (var stream : sheet.streams()) streams.add(stream(stream));
         root.add("streams", streams);
+        if (sheet.sizing().any()) root.add("sizing", sizing(sheet.sizing()));
         root.add("settings", settings(sheet.settings()));
         return JSON.toJson(beside(root, sheet.unknown())).getBytes(StandardCharsets.UTF_8);
     }
@@ -345,6 +520,38 @@ public final class FlowsheetFile {
         int whole(String key, int fallback) {
             var value = take(key);
             return value == null ? fallback : whole(key, value);
+        }
+
+        boolean bool(String key) {
+            var value = need(key);
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) throw damaged(at(key));
+            return value.getAsBoolean();
+        }
+
+        /** A positive number, null if absent. */
+        @Nullable Double optionalAmount(String key) {
+            var value = take(key);
+            if (value == null) return null;
+            double amount = finite(key, value);
+            if (!(amount > 0)) throw damaged(at(key));
+            return amount;
+        }
+
+        /** An enum constant by its name; a name this version does not know is damage. */
+        <E extends Enum<E>> E name(String key, Class<E> type) {
+            String name = text(key);
+            try {
+                return Enum.valueOf(type, name);
+            } catch (IllegalArgumentException unknown) {
+                throw damaged(at(key));
+            }
+        }
+
+        <E extends Enum<E>> @Nullable E name(String key, Class<E> type, @Nullable E fallback) {
+            var value = rest.get(key);
+            if (value != null && !value.isJsonNull()) return name(key, type);
+            rest.remove(key);
+            return fallback;
         }
 
         Fields object(String key) {

@@ -35,8 +35,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -44,8 +46,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * S2's gate on real runs (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.5 and 3.11): the door's surface against
- * the world's kernels at one duty, the loads a stream gives, and the one entry point's order on small sheets. A run reads no sizes,
- * so nothing here moves one.
+ * the world's kernels at one duty, the loads a stream gives, and the one entry point's order on small sheets. S4a's (section 3.11
+ * item 3, D19): a sized unit's drop in the run, facts no passage reads, a type key's fact, and Size all's one edit.
  */
 final class SheetSizingTest {
     private static final String PACKAGE = FluidMaterialCatalog.NETWORK_PACKAGE;
@@ -232,7 +234,7 @@ final class SheetSizingTest {
             var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
             });
             assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
-            return on(() -> SheetSizing.size(sheet, run, THERMO, entries));
+            return on(() -> SheetSizing.pass(sheet, run, THERMO, entries));
         }
 
         SheetSizing.Sized sized() {
@@ -258,7 +260,7 @@ final class SheetSizingTest {
     @Test void aRunThatIsNotSteadySizesNothing() {
         var sheet = separator().flowsheet();
         for (var run : List.of(FlowsheetRun.none(), FlowsheetRun.refused(new Note(Note.Severity.ERROR, "D", "test", List.of())))) {
-            var sized = on(() -> SheetSizing.size(sheet, run, THERMO, SheetSizing.Entries.DEFAULT));
+            var sized = on(() -> SheetSizing.pass(sheet, run, THERMO, SheetSizing.Entries.DEFAULT));
             assertEquals(sheet.streams().size(), sized.lines().size());
             assertEquals(sheet.units().size(), sized.units().size());
             var items = new ArrayList<Rating>();
@@ -286,7 +288,7 @@ final class SheetSizingTest {
     /** A 2 × 6 m drum's oil leaves beside its saddle, where its flange has room for less than a pipe's largest. */
     @Test void aSizedDrumsNozzleBoundsItsLine() {
         var size = new DrumSizing.Size(UnitType.LYING_DRUM, 2, 6, true);
-        var sized = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("D", new SheetSizing.UnitEntry(size, null, null, null, null, null))));
+        var sized = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("D", new SheetSizing.UnitEntry(size, null, null, null, false))));
         var shape = size.shape();
         double bore = PipeSizes.MAX_BORE;
         for (int k = 0; k < shape.nozzles().size(); k++) if (shape.nozzles().get(k).role() == EquipmentShape.Role.LIQUID_OUTLET) bore = NozzleBore.largest(shape, k);
@@ -306,20 +308,20 @@ final class SheetSizingTest {
 
     @Test void aGivenHeightRaisesItByItsOwnHead() {
         var low = separator().sized().units().get("P").rating().reading(Limit.PUMP_NPSH).value();
-        var high = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("P", new SheetSizing.UnitEntry(null, null, 7., null, null, null)))).units().get("P").rating().reading(Limit.PUMP_NPSH).value();
+        var high = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("P", new SheetSizing.UnitEntry(null, null, 7., null, false)))).units().get("P").rating().reading(Limit.PUMP_NPSH).value();
         assertEquals(7, high - low, 1e-9);
     }
 
     @Test void aPlayersSizeIsRatedAndAutoFillsTheRest() {
         var fixed = new PumpSizing.Size(.6);
-        var sized = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("P", new SheetSizing.UnitEntry(fixed, null, null, null, null, null))));
+        var sized = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("P", new SheetSizing.UnitEntry(fixed, null, null, null, false))));
         assertEquals(fixed, sized.units().get("P").size());
         assertEquals(Lamp.YELLOW, sized.units().get("P").rating().lamp(), "far under its rated flow");
         assertNotNull(sized.units().get("D").size());
     }
 
     @Test void aTypeKeyStandsOverTheProposal() {
-        var kept = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("T", new SheetSizing.UnitEntry(null, UnitType.SPHERE, null, null, null, null))));
+        var kept = separator().sized(new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("T", new SheetSizing.UnitEntry(null, UnitType.SPHERE, null, null, false))));
         assertEquals(UnitType.SPHERE, ((TankSizing.Size) kept.units().get("T").size()).type());
         assertEquals(UnitType.FLOATING_ROOF, ((TankSizing.Size) separator().sized().units().get("T").size()).type(), "water at 340 K under its roof");
     }
@@ -363,5 +365,83 @@ final class SheetSizingTest {
         assertNotNull(sized.units().get("A").size());
         assertNull(sized.units().get("M").size());
         assertEquals(Lamp.NONE, sized.units().get("M").rating().lamp());
+    }
+
+    // ---- S4a: the run on sized drops (D19), the facts, Size all ----
+
+    private static FlowsheetRun run(Flowsheet sheet) {
+        var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
+        });
+        assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
+        return run;
+    }
+
+    /** Crude cooled on cooling water, the water in the tubes. */
+    private static Sheet cooler(double water) {
+        return new Sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":360}").feed("hot", "E", "shell_in", 420, 8e5, scaled(DRY_CRUDE, 300))
+                .feed("water", "E", "tube_in", 303, 4e5, pure(WATER, water)).product("hot out", "E", "shell_out").product("water out", "E", "tube_out");
+    }
+
+    /** Once a unit has a size, the run reads its law at the run's flow: twice the water loses near four times as much, turbulent. */
+    @Test void aSizedDropFollowsTheRunsFlow() {
+        var size = new ExchangerSizing.Size(false, 1, 1, 6);
+        var facts = SizingFacts.NONE.with("E", SizingFacts.UnitFacts.AUTO.with(size));
+        double[] drops = new double[2];
+        for (int k = 0; k < 2; k++) {
+            var run = run(cooler(10000 * (k + 1)).flowsheet().with(facts));
+            var in = run.streams().get("water");
+            drops[k] = run.reports().get("E/tube").readings().get("tube_drop");
+            assertEquals(on(() -> SizedPassages.tube(size, in, 1, THERMO)), drops[k], 1e-9, "the tubes' own law at the run's flow");
+            assertEquals(in.pressure() - drops[k], run.streams().get("water out").pressure(), 1e-6);
+        }
+        double ratio = drops[1] / drops[0];
+        assertTrue(ratio > Math.pow(2, 1.7) && ratio < 4, () -> "twice the flow: " + ratio);
+    }
+
+    /** Facts no passage reads move no number: a pump's, a drum's, a type, a line's, the basis. */
+    @Test void anUnsizedSheetsRunMovesNoNumber() {
+        var plain = separator().flowsheet();
+        var facts = SizingFacts.NONE.with("P", SizingFacts.UnitFacts.AUTO.with(new PumpSizing.Size(.3)).with(SizingFacts.Mode.FIXED))
+                .with("D", SizingFacts.UnitFacts.AUTO.with(new DrumSizing.Size(UnitType.LYING_DRUM, 2, 6, true))).with("T", SizingFacts.UnitFacts.AUTO.typed(UnitType.SPHERE))
+                .with("oil", SizingFacts.LineFacts.AUTO.with(new LineSizing.Size(.1, 1)).lasting(200.)).with(new DesignBasis(1.2, 80, 50));
+        var before = run(plain);
+        var after = run(plain.with(facts));
+        before.streams().forEach((id, stream) -> {
+            var other = after.streams().get(id);
+            assertEquals(stream.pressure(), other.pressure(), 0, id);
+            assertEquals(stream.enthalpy(), other.enthalpy(), 0, id);
+            assertArrayEquals(stream.amounts(), other.amounts(), id);
+        });
+    }
+
+    /** A type key's choice is a fact: Size all proposes in that type, and the rating reads the size it holds. */
+    @Test void aTypeKeyIsAFactTheRatingReads() {
+        var sheet = separator().flowsheet().with(SizingFacts.NONE.with("T", SizingFacts.UnitFacts.AUTO.typed(UnitType.SPHERE)));
+        var run = run(sheet);
+        var all = on(() -> SheetSizing.sizeAll(sheet, run, THERMO));
+        var held = all.sheet().sizing().unit("T");
+        assertEquals(UnitType.SPHERE, held.type());
+        assertEquals(UnitType.SPHERE, ((TankSizing.Size) held.size()).type());
+        assertEquals(held.size(), on(() -> SheetSizing.rate(all.sheet(), run, THERMO)).units().get("T").size());
+    }
+
+    /** Size all's one edit: Auto items take the proposal, Fixed items keep theirs, a deleted item's facts go, the sheet it was given stays. */
+    @Test void sizeAllTakesAutoAndKeepsFixed() {
+        var fixed = new PumpSizing.Size(.6);
+        var stale = new DrumSizing.Size(UnitType.LYING_DRUM, 9, 30, true);
+        var facts = SizingFacts.NONE.with("P", SizingFacts.UnitFacts.AUTO.with(fixed).with(SizingFacts.Mode.FIXED)).with("D", SizingFacts.UnitFacts.AUTO.with(stale))
+                .with("gone", SizingFacts.UnitFacts.AUTO.with(new PumpSizing.Size(.2)));
+        var sheet = separator().flowsheet().with(facts);
+        var run = run(sheet);
+        var all = on(() -> SheetSizing.sizeAll(sheet, run, THERMO));
+        var applied = all.sheet().sizing();
+        assertEquals(fixed, applied.unit("P").size());
+        assertEquals(SizingFacts.Mode.FIXED, applied.unit("P").mode());
+        assertEquals(all.sized().units().get("D").size(), applied.unit("D").size());
+        assertNotEquals(stale, applied.unit("D").size(), "Auto proposes again");
+        assertEquals(all.sized().lines().get("oil").size(), applied.line("oil").size());
+        assertEquals(SizingFacts.UnitFacts.AUTO, applied.unit("gone"));
+        assertEquals(facts, sheet.sizing(), "the sheet it was given stays");
+        assertSame(run, all.run(), "no size here moves the run");
     }
 }

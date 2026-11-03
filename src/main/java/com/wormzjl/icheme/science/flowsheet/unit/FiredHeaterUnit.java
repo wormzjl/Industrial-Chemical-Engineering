@@ -18,10 +18,12 @@ import java.util.List;
  * the fuel stays off the sheet. Its coils in series are one pair. Set apart, the convection coil is a second pair with its own
  * target, so steam can superheat there, and what it takes counts against the limit first. A coil at the limit falls short of its
  * outlet, as a real one does at full fire, and one set below its inlet passes the stream, as with the fire out; each says so.
- * The drops are typed until it has a size.
+ * The drops are typed until it has a size; then the coils' law gives them at the run's flow (sizing plan section 3.11, D19).
  */
 public final class FiredHeaterUnit implements UnitModel {
     private static final String CONVECTION_IN = "convection_in", CONVECTION_OUT = "convection_out", RADIANT_IN = "radiant_in", RADIANT_OUT = "radiant_out";
+    /** The passages, by the door's drops: both coils in series, or each set apart. */
+    public static final String COILS = "coils", CONVECTION_DROP = "convection_drop", RADIANT_DROP = "radiant_drop";
 
     private static boolean apart(Params params) {
         return params.text("coils", "series").equals("apart");
@@ -38,7 +40,7 @@ public final class FiredHeaterUnit implements UnitModel {
         if (!apart(p)) {
             return List.of(u.through("in", "out", (board, report) -> {
                 var in = board.stream(u.wire("in"));
-                var out = fire(u, report, in, p.text("target", "outlet"), "temperature", "duty", limit, p.number("radiant_drop", 0) + p.number("convection_drop", 0));
+                var out = fire(u, report, in, p.text("target", "outlet"), "temperature", "duty", limit, COILS, p.number("radiant_drop", 0) + p.number("convection_drop", 0));
                 u.write(board, report, "out", out);
                 report.reading("duty", out.enthalpy() - in.enthalpy());
                 report.reading("vapour", u.thermo().vapourShare(out));
@@ -51,7 +53,7 @@ public final class FiredHeaterUnit implements UnitModel {
         String taken = u.part("taken");
         var convection = new Calculation(u.part("convection"), u.id(), List.of(u.wire(CONVECTION_IN)), List.of(u.out(CONVECTION_OUT)), List.of(), List.of(taken), Calculation.Kind.STEP, (board, report) -> {
             var in = board.stream(u.wire(CONVECTION_IN));
-            var out = in.empty() ? in : fire(u, report, in, p.text("convection_target", "outlet"), "convection_temperature", "convection_duty", limit, p.number("convection_drop", 0));
+            var out = in.empty() ? in : fire(u, report, in, p.text("convection_target", "outlet"), "convection_temperature", "convection_duty", limit, CONVECTION_DROP, p.number(CONVECTION_DROP, 0));
             u.write(board, report, CONVECTION_OUT, out);
             board.link(taken, in.empty() ? 0 : out.enthalpy() - in.enthalpy());
             report.reading("duty", in.empty() ? 0 : out.enthalpy() - in.enthalpy());
@@ -66,16 +68,20 @@ public final class FiredHeaterUnit implements UnitModel {
 
     private static void radiant(WiredUnit u, Board board, Report report, double taken, double limit) {
         var in = board.stream(u.wire(RADIANT_IN));
-        var out = fire(u, report, in, u.params().text("target", "outlet"), "temperature", "duty", limit - taken, u.params().number("radiant_drop", 0));
+        var out = fire(u, report, in, u.params().text("target", "outlet"), "temperature", "duty", limit - taken, RADIANT_DROP, u.params().number(RADIANT_DROP, 0));
         u.write(board, report, RADIANT_OUT, out);
         report.reading("duty", out.enthalpy() - in.enthalpy());
         report.reading("vapour", u.thermo().vapourShare(out));
     }
 
-    private static FlowStream fire(WiredUnit u, Report report, FlowStream in, String target, String temperature, String duty, double limit, double drop) {
-        double pressure = in.pressure() - drop;
-        if (!(pressure > 0)) throw new FlowsheetFailure("unit.pressure");
-        var out = target.equals("duty") ? u.thermo().heated(in, u.params().number(duty), pressure) : u.thermo().atTemperature(u.params().number(temperature), pressure, in.amounts(), in.solids());
+    /**
+     * One pair fired to its target, within {@code limit}. Its coils lose the door's {@code typed} drop, or once the heater has a
+     * size their law along the heat at the run's flow, which reads the outlet: the pressure is found first, then fired at.
+     */
+    private static FlowStream fire(WiredUnit u, Report report, FlowStream in, String target, String temperature, String duty, double limit, String passage, double typed) {
+        double pressure = u.passages().passage(passage) == null ? WiredUnit.after(in, typed)
+                : u.leaving(passage, in, typed, at -> held(u, in, target, temperature, duty, limit, fired(u, in, target, temperature, duty, at)), report).pressure();
+        var out = fired(u, in, target, temperature, duty, pressure);
         double heat = out.enthalpy() - in.enthalpy();
         if (heat < 0 || heat > limit) {
             report.note(heat < 0 ? Note.warning(u.id(), "heater.cools") : Note.warning(u.id(), "heater.limit", String.valueOf(heat), String.valueOf(limit)));
@@ -84,5 +90,15 @@ public final class FiredHeaterUnit implements UnitModel {
         }
         report.duty(heat);
         return out;
+    }
+
+    private static FlowStream fired(WiredUnit u, FlowStream in, String target, String temperature, String duty, double pressure) {
+        return target.equals("duty") ? u.thermo().heated(in, u.params().number(duty), pressure) : u.thermo().atTemperature(u.params().number(temperature), pressure, in.amounts(), in.solids());
+    }
+
+    /** {@code out} as the fire can give it: none below the inlet, at most {@code limit}. */
+    private static FlowStream held(WiredUnit u, FlowStream in, String target, String temperature, String duty, double limit, FlowStream out) {
+        double heat = out.enthalpy() - in.enthalpy();
+        return heat < 0 || heat > limit ? u.thermo().heated(in, heat < 0 ? 0 : limit, out.pressure()) : out;
     }
 }
