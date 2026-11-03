@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-03-rotating-machinery/](2026-11-03-rotating-machinery/README.md) | Realistic pumps and compressors, separate motors and turbines on shafts, FE power, optional Create | Planned |
 | [2026-11-03-localization/](2026-11-03-localization/README.md) | Missing lang keys; fr_fr, es_es and ja_jp added; zh_cn completed and reviewed | Implemented 2026-11-03 (0.19.3) |
 | [2026-11-02-dry-ice-cost/](2026-11-02-dry-ice-cost/README.md) | Why cold CO2 crystal worlds reach the island wall budget; fix proposal | Implemented 2026-11-03 |
 | [2026-10-30-water-cooling-tower/](2026-10-30-water-cooling-tower/README.md) | Bounded parallel water-cooling cells and hollow natural-draft towers, coupled heat/mass transfer and real basins | Implemented 2026-11-02 |
