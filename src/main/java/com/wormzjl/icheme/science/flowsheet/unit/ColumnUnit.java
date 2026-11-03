@@ -3,7 +3,6 @@ package com.wormzjl.icheme.science.flowsheet.unit;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
-import com.wormzjl.icheme.science.column.v3.V3ColumnInspection;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
 import com.wormzjl.icheme.science.column.v3.V3ColumnResult;
 import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
@@ -46,8 +45,9 @@ import java.util.Locale;
  * feed temperature. V3's feed is hydrocarbons: water joins as steam if it is vapour there. The products come back through the world's
  * flash at V3's temperature and pressure; what the two thermo models then differ by is read out as the block's energy gap.
  *
- * <p>Where the top is under ambient pressure, an ejector on the vapour line lifts the top tray's vapour into the condenser (main plan
- * W10): its Motive steam port takes the ejector tile's rule ({@link EjectorUnit#motive}). The steam condenses with the overhead and
+ * <p>Where the top is under ambient pressure, an ejector set stands on the vapour line (main plan W10). It is not modelled apart: its
+ * load is what the condenser cannot condense, V3's vapour product at the condenser's temperature and pressure (W10b), and its Motive
+ * steam port takes the ejector tile's rule ({@link EjectorUnit#motive}). The steam condenses with the overhead and
  * leaves as free water at the water product's temperature, and the heat it gives up joins the condenser's duty. V3 solves the column
  * at its own pressures, so the products stay at them: the ejector moves no product's pressure.
  */
@@ -277,39 +277,28 @@ public final class ColumnUnit implements UnitModel {
         }
 
         /**
-         * The ejector on the vapour line, null where the top needs none: the top tray's vapour is its load, at that tray's pressure. Its
-         * steam joins the free water at the water product's temperature and pressure, or the condenser's where V3 leaves none, and what
-         * it gives up there is the heat the condenser takes from it, so the block's energy closes as before.
+         * The ejector set, null where the top needs none or the condenser vents nothing: its load is the vent, V3's vapour product at the
+         * condenser's temperature and pressure. Its steam joins the free water at the water product's temperature and pressure, or the
+         * condenser's where V3 leaves none, and what it gives up there is the heat the condenser takes from it, so the block's energy
+         * closes as before.
          */
         private @Nullable Ejected ejector(Board board, Report report, V3ColumnResult result) {
             if (!ColumnComponents.ejectorRequired(door.topPressure())) return null;
             var thermo = u.thermo();
             var inspection = result.inspection().orElseThrow();
-            var load = vapour(inspection, inspection.nodes().get(1));
-            if (load.empty()) return null;
+            var condenser = inspection.nodes().get(0);
+            var vent = product("overhead_vapor", result);
+            if (vent.empty()) return null;
+            var load = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), vent.amounts(), SolidInventory.EMPTY);
             String wire = u.wire(MOTIVE);
             var steam = EjectorUnit.motive(u.id() + "/ejector", "ejector_", thermo, load, wire == null ? null : board.stream(wire), door.ejector().motive(), door.ejector().discharge(), report);
             var free = product(FREE_WATER, result);
-            var condenser = inspection.nodes().get(0);
             double[] amounts = free.amounts();
             for (int i = 0; i < components; i++) amounts[i] += steam.amountsView()[i];
             var water = thermo.atTemperature(free.empty() ? condenser.temperatureKelvin() : free.temperature(), free.empty() ? condenser.pressurePascal() : free.pressure(), amounts, steam.solids());
             double heat = steam.enthalpy() + free.enthalpy() - water.enthalpy();
             report.reading("ejector_heat", heat);
             return new Ejected(steam, water, heat);
-        }
-
-        /** {@code node}'s vapour, its hydrocarbons and its steam, on the sheet's axis at its temperature and pressure. */
-        private FlowStream vapour(V3ColumnInspection inspection, V3ColumnInspection.Node node) {
-            var axis = u.thermo().axis();
-            var ids = inspection.input().componentBasis().componentIds();
-            double[] amounts = new double[components];
-            for (int i = 0; i < ids.size(); i++) {
-                int at = axis.indexOf(ids.get(i));
-                if (at >= 0) amounts[at] += node.vaporFractions().get(i) * node.vaporMolPerSecond();
-            }
-            amounts[components - 1] += node.waterVaporMolPerSecond();
-            return u.thermo().atTemperature(node.temperatureKelvin(), node.pressurePascal(), amounts, SolidInventory.EMPTY);
         }
 
         /** V3 on the stream as flashed: its hydrocarbons are the feed, its water a steam feed if it is vapour there. */

@@ -31,9 +31,7 @@ public record Bound(Sense sense, double low, Axis axis, List<Step> steps) {
         /** The pressure over ambient, barg. */
         GAUGE,
         /** The absolute pressure, bara. */
-        ABSOLUTE,
-        /** An ejector's suction, mbar. */
-        SUCTION
+        ABSOLUTE
     }
 
     /**

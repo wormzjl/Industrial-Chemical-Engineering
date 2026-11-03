@@ -836,7 +836,7 @@ public final class SimulatorRender {
     /**
      * Main plan W10's sheets (batch 2026-11-02-process-simulator): the lit ejector tile on a small vacuum sheet, its Motive port free,
      * wired at 1.1 times the need and at 0.9 times it; their doors; the column block's Motive steam port, and the door's Ejector group;
-     * the Sizing rows of the three.
+     * the Sizing rows of the three. W10b draws them again on the vacuum set's law S1.
      */
     private static void ejector(Path out) throws Exception {
         var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {

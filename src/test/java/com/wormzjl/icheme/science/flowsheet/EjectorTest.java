@@ -25,8 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Main plan W10's gate (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 3.12): the law reproduces the section's
- * table to its printed digits; the tile closes mass, energy and components on a free and a wired Motive port; a wired motive under
+ * Main plan W10's and W10b's gate (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 3.12): the vacuum set's law S1
+ * reproduces the section's table and cases ({@code tools/process-simulator/vacuum-set-law.js}); the tile closes mass, energy and components on a free and a wired Motive port; a wired motive under
  * the need is red, between it and 1.20 times it yellow; Auto's suction holds the load with its spare.
  */
 final class EjectorTest {
@@ -37,8 +37,8 @@ final class EjectorTest {
     });
     private static final List<String> AXIS = MODEL.components();
     private static final int WATER = AXIS.size() - 1;
-    /** Section 3.12's table: motive 1000 kPa, discharge 120 kPa, the load at 50 °C. */
-    private static final double MOTIVE = 1e6, DISCHARGE = 1.2e5, LOAD = 323.15;
+    /** Section 3.12's table: motive 1000 kPa, discharge 120 kPa; the tile's load at 50 °C, the cases' vent at 40 °C. */
+    private static final double MOTIVE = 1e6, DISCHARGE = 1.2e5, LOAD = 323.15, VENT = 313.15;
     /** The load: nitrogen with a little steam, at 20 kPa, mol/s. */
     private static final double SUCTION = 2e4, NITROGEN_FLOW = 10, STEAM_FLOW = .5;
 
@@ -46,35 +46,53 @@ final class EjectorTest {
         return MaterialRuntime.with(CATALOG, PACKAGE, test::get);
     }
 
-    @Test void theLawReproducesSection312sTable() {
-        double[] suctions = {50, 30, 20, 12};
-        double[][] table = {{1.64, 1.29, .69}, {2.80, 2.21, 1.19}, {4.30, 3.39, 1.82}, {7.37, 5.81, 3.13}};
-        double[] masses = {EjectorLaw.WATER, 29, 100};
-        for (int row = 0; row < suctions.length; row++)
-            for (int column = 0; column < masses.length; column++) {
-                double ratio = EjectorLaw.ratio(MOTIVE, suctions[row] * 1e3, DISCHARGE, LOAD, masses[column]);
-                assertEquals(table[row][column], Math.round(ratio * 100) / 100., 1e-9, suctions[row] + " kPa, M " + masses[column]);
-            }
-        // The column block's example: 5000 kg/h of M 100 at 12 kPa, to 120 kPa on 10 bar steam.
-        assertEquals(15640, Math.round(5000 * EjectorLaw.ratio(MOTIVE, 12e3, DISCHARGE, LOAD, 100) / 10) * 10., 1e-9);
-        // The vendors' load factors against air.
-        assertEquals(.26, Math.round(100 * EjectorLaw.ratio(MOTIVE, 12e3, DISCHARGE, LOAD, 29) / EjectorLaw.ratio(MOTIVE, 12e3, DISCHARGE, LOAD, 2)) / 100., 1e-9);
+    /** S1 on one kilogram of air, from {@code suction} kPa. */
+    private static double air(double suction) {
+        return EjectorLaw.steam(1, 0, MOTIVE, suction * 1e3, DISCHARGE, 0);
     }
 
-    @Test void pcfStaysAtItsLeastAboveTheEdgeWithZeroSlope() {
-        // Above 1500 kPa only (P_m / P_s)^0.015 moves the steam.
-        for (double motive : new double[]{1.6e6, 2e6, 3.5e6, 5e6})
-            assertEquals(Math.pow(motive / 1.5e6, .015), EjectorLaw.ratio(motive, 12e3, DISCHARGE, LOAD, 100) / EjectorLaw.ratio(1.5e6, 12e3, DISCHARGE, LOAD, 100), 1e-12, motive + " Pa");
-        double below = EjectorLaw.ratio(1.5e6 - 1, 12e3, DISCHARGE, LOAD, 100), at = EjectorLaw.ratio(1.5e6, 12e3, DISCHARGE, LOAD, 100), above = EjectorLaw.ratio(1.5e6 + 1, 12e3, DISCHARGE, LOAD, 100);
-        assertEquals(above - at, at - below, 1e-9 * at, "the same slope on both sides of the edge");
+    @Test void theSetLawReproducesSection312sTable() {
+        double[] suctions = {80, 50, 30, 20, 12, 5, 2};
+        double[] table = {.65, 1.40, 2.22, 2.87, 3.68, 5.08, 6.55};
+        for (int i = 0; i < suctions.length; i++) assertEquals(table[i], Math.round(air(suctions[i]) * 100) / 100., 1e-9, suctions[i] + " kPa");
+        // k: El-Dessouky's air at 30 -> 120 kPa, 2.21 kg/kg over ln 4.
+        assertEquals(2.21 / Math.log(4), EjectorLaw.K, .01);
+        // The vendors' rule: a kilogram of hydrogen counts 3.8 of air, of M 100 0.54, of water 1.269.
+        assertEquals(3.8, Math.round(10 * EjectorLaw.asAir(1, 2)) / 10., 1e-9);
+        assertEquals(.54, Math.round(100 * EjectorLaw.asAir(1, 100)) / 100., 1e-9);
+        assertEquals(1.269, Math.round(1000 * EjectorLaw.asAir(1, EjectorLaw.WATER)) / 1000., 1e-9);
     }
 
-    @Test void theFittedRangeIsTheCorrelations() {
-        assertTrue(EjectorLaw.fitted(MOTIVE, 30e3, DISCHARGE, LOAD), "2.80 kg/kg at a compression of 4");
-        assertFalse(EjectorLaw.fitted(MOTIVE, 12e3, DISCHARGE, LOAD), "7.37 kg/kg is past 4");
-        assertFalse(EjectorLaw.fitted(MOTIVE, 70e3, DISCHARGE, LOAD), "a compression of 1.71 is under 1.89");
-        assertFalse(EjectorLaw.fitted(5e6, 30e3, DISCHARGE, LOAD), "motive past 3500 kPa");
-        assertFalse(EjectorLaw.fitted(.9e5, 30e3, .85e5, LOAD), "motive under 100 kPa");
+    @Test void theWaterTermReadsTheWorldsVapourPressure() {
+        // The plan's tool took Antoine's 7.358 kPa at 40 °C; the world's Wagner-Pruss reads within a few parts in a thousand.
+        double psat = on(() -> MODEL.saturationPressure(VENT)), condensing = EjectorLaw.CONDENSING * psat;
+        assertEquals(7.358e3, psat, .01 * 7.358e3);
+        System.out.printf("world psat at 40 °C %.4f kPa, P_c %.3f kPa (Antoine 7.358, 14.72)%n", psat / 1e3, condensing / 1e3);
+        assertEquals(0, EjectorLaw.steam(0, 1, MOTIVE, 20e3, DISCHARGE, condensing), 0, "above P_c the condenser has taken the water");
+        assertEquals(EjectorLaw.K * Math.sqrt(29 / EjectorLaw.WATER) * Math.log(condensing / 5e3), EjectorLaw.steam(0, 1, MOTIVE, 5e3, DISCHARGE, condensing), 1e-12,
+                "below P_c the water is lifted to it, not to the discharge");
+    }
+
+    @Test void theMotiveFactorIsPcfOverItsValueAt10Bar() {
+        double[] bars = {3, 5, 7, 10, 15, 20, 35};
+        double[] factors = {1.35, 1.22, 1.12, 1.00, .93, .93, .93};
+        for (int i = 0; i < bars.length; i++) assertEquals(factors[i], Math.round(100 * EjectorLaw.motiveFactor(bars[i] * 1e5)) / 100., 1e-9, bars[i] + " bar");
+        assertEquals(EjectorLaw.motiveFactor(1.5e6), EjectorLaw.motiveFactor(5e6), 0, "flat above 15 bar");
+        double below = EjectorLaw.motiveFactor(1.5e6 - 1), at = EjectorLaw.motiveFactor(1.5e6), above = EjectorLaw.motiveFactor(1.5e6 + 1);
+        assertEquals(0, at - below, 1e-9, "zero slope at the edge");
+        assertEquals(0, above - at, 0);
+    }
+
+    @Test void theSetLawReproducesSection312sCases() {
+        double psat = on(() -> MODEL.saturationPressure(VENT)), condensing = EjectorLaw.CONDENSING * psat;
+        // {gas kg/h, M, suction kPa, water kg/h or NaN for the gas saturated with water at 40 °C, the plan's steam kg/h}
+        double[][] cases = {{50, 28, 30, Double.NaN, 113}, {100, 29, 80, Double.NaN, 65}, {500, 30, 10.6, Double.NaN, 2360}, {500, 30, 2, 1e4, 43700}};
+        for (var c : cases) {
+            double suction = c[2] * 1e3, water = Double.isNaN(c[3]) ? c[0] / c[1] * psat / (suction - psat) * EjectorLaw.WATER : c[3];
+            double steam = EjectorLaw.steam(EjectorLaw.asAir(c[0], c[1]), water, MOTIVE, suction, DISCHARGE, condensing);
+            System.out.printf("%.1f kPa: water %.0f kg/h, steam %.0f kg/h against the plan's %.0f%n", c[2], water, steam, c[4]);
+            assertEquals(c[4], steam, .02 * c[4], c[2] + " kPa: Antoine against the world's vapour pressure");
+        }
     }
 
     // ---- The tile ----
@@ -144,8 +162,11 @@ final class EjectorTest {
         var run = closes(on(() -> run(sheet(null))));
         var load = run.streams().get("load");
         var out = run.streams().get("out");
-        double molarMass = 1e3 * load.mass() / load.total();
-        double need = EjectorLaw.ratio(MOTIVE, SUCTION, DISCHARGE, load.temperature(), molarMass) * load.mass();
+        int nitrogen = AXIS.indexOf(FluidMaterialCatalog.NITROGEN);
+        double[] weights = MODEL.molecularWeights();
+        double condensing = EjectorLaw.CONDENSING * on(() -> MODEL.saturationPressure(load.temperature()));
+        assertTrue(condensing > SUCTION, "at 50 °C the load's water is lifted to P_c, not to the discharge");
+        double need = EjectorLaw.steam(EjectorLaw.asAir(load.amounts()[nitrogen] * weights[nitrogen], 1e3 * weights[nitrogen]), load.amounts()[WATER] * weights[WATER], MOTIVE, SUCTION, DISCHARGE, condensing);
         assertEquals(need, reading(run, "need"), 1e-9 * need, "the law's need");
         assertEquals(need, reading(run, "motive"), 1e-9 * need, "the utility gives the need");
         assertEquals(DISCHARGE, out.pressure(), 0, "flashed at the discharge pressure");
@@ -202,7 +223,5 @@ final class EjectorTest {
         assertTrue(passes >= held, () -> size + " passes " + passes + " m³/h of the " + held + " held");
         assertTrue(Math.PI / 4 * smaller * smaller * speed * 3600 < held, "the smallest that holds the spare");
         assertTrue(UnitSize.built(size) != null, "the constructor builds it");
-        assertEquals(Lamp.GREEN, sized.rating().reading(Limit.EJECTOR_STAGES).lamp(), "200 mbar: one stage");
-        assertEquals(Lamp.GREEN, sized.rating().reading(Limit.EJECTOR_COMPRESSION).lamp(), "a compression of 6");
     }
 }

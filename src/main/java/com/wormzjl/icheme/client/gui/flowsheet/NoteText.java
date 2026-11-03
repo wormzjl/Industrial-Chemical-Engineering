@@ -37,10 +37,6 @@ public final class NoteText {
                 out.set(0, watts(raw.get(0)));
                 out.set(1, watts(raw.get(1)));
             }
-            case "ejector.range" -> {
-                out.set(0, SheetUnits.number(1, Double.parseDouble(raw.get(0))));
-                out.set(1, pressure(raw.get(1), units));
-            }
             case "ejector.motive_short" -> {
                 out.set(0, hourly(raw.get(0)));
                 out.set(1, hourly(raw.get(1)));

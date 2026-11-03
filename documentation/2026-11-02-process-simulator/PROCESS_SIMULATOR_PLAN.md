@@ -362,7 +362,7 @@ Taken as defaults unless you say otherwise. Items marked D are in section 5.
 - **A heat cross**: a warning that names it, as free water on trays is. The run still ends.
 - **A pumparound's cold end**: not checked, because the model has no circulation rate.
 - **A target on the crude's outlet**: later. The pumparound's duty would become a result, and the block would read its port.
-- **Motive steam**: the ejector tile's rule (W10, [SIZING_PLAN.md](SIZING_PLAN.md) section 3.12). The steam leaves with the free water, and its heat joins the condenser's duty.
+- **Motive steam**: the ejector tile's rule (W10, [SIZING_PLAN.md](SIZING_PLAN.md) section 3.12), the vacuum set's law S1 on the condenser's vent since W10b. The steam leaves with the free water, and its heat joins the condenser's duty.
 - **A flooded column**: a warning above 100 % flood. The solve has no flood limit: T-101 took 24000 kmol/h in the no-way-out run.
 - **Spec modes**: each unit needs its choice of target: outlet, duty, area, rise (sheet 11).
 - **Pressure**: forward only, set by units. No pressure-driven flows. A sized unit's drops follow its flow (D19).

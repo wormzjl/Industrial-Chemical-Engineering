@@ -9,15 +9,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A steam ejector, one stage (batch 2026-11-02-process-simulator, main plan W10, {@code SIZING_PLAN.md} sections 3.4 and 3.12): the
- * suction bore that passes the load within the Vacuum vapour row of section 3.3, on the constructor's grid. Its stage rows read the
- * compression and the suction; a wired Motive port reads its steam against the law's need. Auto first tries the bores that pass
- * the load with {@link Limit#AUTO_SPARE} (the owner's "always have enough excess", 2026-11-03).
+ * A steam ejector set (batch 2026-11-02-process-simulator, main plan W10, W10b, {@code SIZING_PLAN.md} section 3.12): the suction
+ * bore that passes the load within the Vacuum vapour row of section 3.3, on the constructor's grid. A set has no stage limits; a
+ * wired Motive port reads its steam against the law's need. Auto first tries the bores that pass the load with
+ * {@link Limit#AUTO_SPARE} (the owner's "always have enough excess", 2026-11-03).
  */
 public final class EjectorSizing {
     private static final List<Size> SIZES = sizes();
-    /** A tile is one stage (section 3.12): a deeper vacuum takes a chain of tiles, with condensers between. */
-    private static final int STAGES = 1;
 
     private EjectorSizing() {
     }
@@ -49,22 +47,21 @@ public final class EjectorSizing {
      *
      * @param flow        the load's volume at its suction, m³/h
      * @param suction     the load's pressure, bara
-     * @param compression the discharge's pressure over the suction's
      * @param need        the motive steam the law needs, kg/h
      * @param motive      what a wired Motive port brings, kg/h; null for a free port, a utility that gives the need
      */
-    public record Load(double flow, double suction, double compression, double need, @Nullable Double motive) {
+    public record Load(double flow, double suction, double need, @Nullable Double motive) {
         /** An ejector with no load: no size, no lamp. */
-        public static final Load NONE = new Load(0, 1, 1, 0, null);
+        public static final Load NONE = new Load(0, 1, 0, null);
 
         /**
-         * The ejector on {@code load}, whose law needs {@code need} kg/s of steam to lift it to {@code discharge} Pa, with what
-         * {@code wired} brings (kg/s), null where its port is free.
+         * The ejector on {@code load}, whose law needs {@code need} kg/s of steam, with what {@code wired} brings (kg/s), null where
+         * its port is free.
          */
-        public static Load of(FlowStream load, double discharge, double need, @Nullable Double wired, DesignBasis basis) {
+        public static Load of(FlowStream load, double need, @Nullable Double wired, DesignBasis basis) {
             if (load.empty() || load.state() == null) return NONE;
             double flow = basis.designFlow() * 3600;
-            return new Load(load.state().volume() * flow, load.pressure() / 1e5, discharge / load.pressure(), need * flow, wired == null ? null : wired * flow);
+            return new Load(load.state().volume() * flow, load.pressure() / 1e5, need * flow, wired == null ? null : wired * flow);
         }
 
         boolean flows() {
@@ -78,8 +75,6 @@ public final class EjectorSizing {
         var readings = new ArrayList<Reading>();
         readings.add(UnitSize.reading(UnitSize.built(size)));
         readings.add(Limit.VACUUM_SPEED.read(load.flow() / size.passes(1), load.suction()));
-        readings.add(Limit.EJECTOR_COMPRESSION.read(load.compression()));
-        readings.add(Limit.EJECTOR_STAGES.read(STAGES, 1e3 * load.suction()));
         var motive = load.motive();
         if (motive != null) {
             readings.add(Limit.EJECTOR_MOTIVE.against(motive, load.need()));

@@ -65,9 +65,6 @@ final class LimitTest {
         assertEquals(15000, Limit.GAS_MOMENTUM.value(80), EXACT, "over 80");
         assertEquals(75, Limit.VACUUM_SPEED.value(.01), EXACT, "under 0.01 bara");
         assertEquals(60, Limit.VACUUM_SPEED.value(.05), EXACT, "the plan's last step");
-        assertEquals(1, Limit.EJECTOR_STAGES.value(120), EXACT);
-        assertEquals(2, Limit.EJECTOR_STAGES.value(100), EXACT);
-        assertEquals(3, Limit.EJECTOR_STAGES.value(5), EXACT);
     }
 
     @Test void aRowReadsBySense() {

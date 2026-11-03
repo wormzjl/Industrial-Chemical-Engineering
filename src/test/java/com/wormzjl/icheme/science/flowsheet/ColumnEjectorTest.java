@@ -22,9 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Main plan W10's gate on the column block (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 3.12): a small vacuum
- * sheet, the default preset's column with its top under ambient pressure. Its Motive steam port, free and wired, closes mass, energy
- * and components across the block: the steam leaves as free water, and its heat joins the condenser's duty. A slow gate: two solves.
+ * Main plan W10's and W10b's gate on the column block (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 3.12): a
+ * small vacuum sheet, the default preset's column with its top under ambient pressure. The ejector set's load is the condenser's
+ * vent, the block's Overhead product. Its Motive steam port, free and wired, closes mass, energy and components across the block:
+ * the steam leaves as free water, and its heat joins the condenser's duty. A slow gate: two solves.
  */
 final class ColumnEjectorTest {
     private static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
@@ -74,12 +75,17 @@ final class ColumnEjectorTest {
         return readings.get(key);
     }
 
-    /** Steady; what entered left, mass to the flash's digits; the block's own energy gap is the sheet's, as with no ejector. */
+    /**
+     * Steady; what entered left, mass to the flash's digits; the block's own energy gap is the sheet's, as with no ejector. That gap is
+     * what V3's thermo and the world's differ by, measured against V3's own condenser duty: 0.26 % at this 80 kPa top (W10b), where
+     * W10's bound read it against the duty with the whole overhead's steam in it.
+     */
     private static void closes(FlowsheetRun run) {
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
         assertEquals(0, run.massGap(), 1e-9 * run.massIn(), "mass");
         assertEquals(reading(run, "energy_gap"), run.heatGap(), 1, "the steam's heat is booked on the condenser: what is left is what the two thermo models differ by");
-        assertTrue(Math.abs(run.heatGap()) < 2e-3 * reading(run, "condenser"), () -> "heat gap " + run.heatGap());
+        double duty = reading(run, "condenser") - reading(run, "ejector_heat");
+        assertTrue(Math.abs(run.heatGap()) < 3e-3 * duty, () -> "heat gap " + run.heatGap() + " of V3's " + duty);
     }
 
     @Test void theMotivePortClosesFreeAndWired() {
@@ -91,9 +97,12 @@ final class ColumnEjectorTest {
         assertEquals(need, reading(free, "ejector_motive"), 1e-9 * need, "a free port is a utility at the need");
         assertTrue(heat / need > 2.0e6 && heat / need < 3.0e6, () -> "the steam gives up its latent heat and more: " + heat / need + " J/kg");
         double load = reading(free, "ejector_load");
-        double compression = reading(free, "ejector_compression");
-        assertTrue(load > 0 && compression > 1, () -> load + " kg/s at a compression of " + compression);
-        System.out.printf("free: load %.3f kg/s, compression %.2f, steam %.3f kg/s (%.2f kg/kg), heat %.2f MW, condenser %.2f MW%n", load, compression, need, need / load, heat / 1e6, reading(free, "condenser") / 1e6);
+        var vent = free.streams().get("overhead");
+        assertTrue(load > 0, "the condenser vents gas");
+        assertEquals(vent.mass(), load, 1e-9 * load, "the load is the condenser's vent, not the top tray's vapour");
+        double water = vent.amounts()[WATER] * waterMass / vent.mass();
+        System.out.printf("free: vent %.4f kg/s (water %.1f %%, gas %.1f %%), steam %.4f kg/s (%.2f kg/kg), heat %.3f MW, condenser %.2f MW%n",
+                load, 100 * water, 100 * (1 - water), need, need / load, heat / 1e6, reading(free, "condenser") / 1e6);
 
         // Wired at 1.1 times the need: the same column, so the same need; the water product carries the wired steam.
         var steam = new LinkedHashMap<String, Double>();

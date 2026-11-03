@@ -447,7 +447,7 @@ public final class SheetSizing {
                 case "compressor" -> compressor(id, entry);
                 case "drum" -> drum(id, entry);
                 case "storage_tank" -> tank(id, entry);
-                case "ejector" -> ejector(id, entry, unit.params());
+                case "ejector" -> ejector(id, entry);
                 default -> null;
             };
         }
@@ -513,10 +513,10 @@ public final class SheetSizing {
         }
 
         /** An ejector on its suction's load, with what its law needs and what a wired Motive port brings (W10). */
-        private SizedUnit ejector(String id, UnitEntry entry, Params params) {
+        private SizedUnit ejector(String id, UnitEntry entry) {
             var readings = readings(id);
             boolean wired = wires.getOrDefault(id, Map.of()).containsKey(EjectorUnit.MOTIVE);
-            var load = EjectorSizing.Load.of(stream(id, EjectorUnit.SUCTION), params.number("discharge", EjectorUnit.DISCHARGE_PRESSURE), readings.getOrDefault("need", 0.), wired ? readings.get("motive") : null, basis);
+            var load = EjectorSizing.Load.of(stream(id, EjectorUnit.SUCTION), readings.getOrDefault("need", 0.), wired ? readings.get("motive") : null, basis);
             return ejector(entry, load);
         }
 
@@ -567,13 +567,15 @@ public final class SheetSizing {
             // condenser takes out. Near the dew point the world's flash and V3's differ, so the top tray's vapour flashed at V3's
             // temperature would hold less heat than V3 condenses, and the curves would cross; this way the two sides balance.
             var vapour = ColumnSizing.stream(thermo, solved, top.vaporFractions(), top.vaporMolPerSecond(), top.waterVaporMolPerSecond(), top.temperatureKelvin(), top.pressurePascal());
-            // Where the top is under ambient pressure, the ejector lifts that vapour (W10), and its motive steam condenses with it: the
-            // condenser's duty already holds the steam's heat.
+            // Where the top is under ambient pressure, the ejector set lifts what the condenser vents, the overhead at the condenser's
+            // temperature and pressure (W10b), and its motive steam condenses with the vapour: the condenser's duty already holds the
+            // steam's heat.
             var readings = readings(id);
             double[] condensing = vapour.amounts();
             if (ColumnComponents.ejectorRequired(door.topPressure())) {
                 boolean wired = wires.getOrDefault(id, Map.of()).containsKey(EjectorUnit.MOTIVE);
-                var load = EjectorSizing.Load.of(vapour, door.ejector().discharge(), readings.getOrDefault("ejector_need", 0.), wired ? readings.get("ejector_motive") : null, basis);
+                var vent = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), stream(id, OVERHEAD).amounts(), SolidInventory.EMPTY);
+                var load = EjectorSizing.Load.of(vent, readings.getOrDefault("ejector_need", 0.), wired ? readings.get("ejector_motive") : null, basis);
                 out.put(member(id, "ejector"), ejector(entries.unit(member(id, "ejector")), load));
                 condensing[condensing.length - 1] += readings.getOrDefault("ejector_motive", 0.) / EjectorUnit.waterMass(thermo);
             }

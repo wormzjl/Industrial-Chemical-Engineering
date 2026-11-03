@@ -203,10 +203,6 @@ public enum Limit {
     // ---- Valves and ejectors ----
     VALVE_SHARE(SHOULD, least(20), "%", "[HALL-V]"),
     VALVE_DROP(SHOULD, least(.7), "bar", "[HALL-V]"),
-    /** The two stage rows read the run, not the size: no suction moves them (W10). */
-    EJECTOR_COMPRESSION(SHOULD, most(7), "", "[SK], [EJ-X]", QUIET),
-    /** The stages a suction needs. */
-    EJECTOR_STAGES(SHOULD, least(Axis.SUCTION, to(1.3, 4), to(13, 3), to(100, 2), rest(1)), "", "[WEAK], [EJ-X]", QUIET),
     /**
      * A wired Motive port's steam against what the ejector's law needs (W10, section 3.12): with less, the ejector cannot hold its
      * suction. A free port is a utility that gives the need, and reads neither motive row.

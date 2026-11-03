@@ -18,12 +18,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A steam ejector, one stage (batch 2026-11-02-process-simulator, main plan W10, {@code SIZING_PLAN.md} section 3.12). The door sets
- * the discharge pressure and the motive steam's. {@link EjectorLaw} gives the steam the suction's load takes; a free Motive port is a
+ * A steam ejector set: its stages and intercondensers as one tile (batch 2026-11-02-process-simulator, main plan W10, W10b,
+ * {@code SIZING_PLAN.md} section 3.12). The door sets the discharge pressure and the motive steam's. {@link EjectorLaw} gives the
+ * steam the suction's load takes; a free Motive port is a
  * utility that gives exactly that, dry at its saturation temperature, and a wired one brings what its stream brings, with a warning
  * where that is less than the need, not mostly water, or under the door's pressure. The discharge is the load and the motive mixed
- * adiabatically and flashed at the discharge pressure, so mass, energy and components close. Outside the correlation's fitted range
- * the law runs on with a notice.
+ * adiabatically and flashed at the discharge pressure, so mass, energy and components close.
  */
 public final class EjectorUnit implements UnitModel {
     public static final String SUCTION = "suction", MOTIVE = "motive", DISCHARGE = "discharge";
@@ -74,11 +74,15 @@ public final class EjectorUnit implements UnitModel {
     public static FlowStream motive(String id, String prefix, FlowThermo thermo, FlowStream load, @Nullable FlowStream wired, double motive, double discharge, Report report) {
         if (!(discharge > load.pressure())) throw new FlowsheetFailure("ejector.rise");
         if (!(motive > discharge)) throw new FlowsheetFailure("ejector.motive");
-        double molarMass = 1e3 * load.mass() / load.total();
-        double ratio = EjectorLaw.ratio(motive, load.pressure(), discharge, load.temperature(), molarMass), need = ratio * load.mass();
+        double[] amounts = load.amountsView(), weights = thermo.model().molecularWeights();
+        int water = amounts.length - 1;
+        double gas = 0;
+        for (int i = 0; i < water; i++) gas += EjectorLaw.asAir(amounts[i] * weights[i], 1e3 * weights[i]);
+        double condensing = EjectorLaw.CONDENSING * thermo.model().saturationPressure(load.temperature());
+        double need = EjectorLaw.steam(gas, amounts[water] * weights[water], motive, load.pressure(), discharge, condensing);
         report.reading(prefix + "load", load.mass());
         report.reading(prefix + "need", need);
-        report.reading(prefix + "ratio", ratio);
+        report.reading(prefix + "ratio", need / load.mass());
         report.reading(prefix + "compression", discharge / load.pressure());
         FlowStream steam;
         if (wired == null) {
@@ -86,9 +90,6 @@ public final class EjectorUnit implements UnitModel {
             report.enters(steam.mass(), steam.enthalpy());
             report.reading(prefix + "motive", need);
         } else steam = wired(id, prefix, thermo, wired, need, motive, report);
-        // The fitted range last: a door says its first warning, and what the player can fix comes first.
-        if (!EjectorLaw.fitted(motive, load.pressure(), discharge, load.temperature()))
-            report.note(Note.warning(id, "ejector.range", String.valueOf(discharge / load.pressure()), String.valueOf(motive)));
         return steam;
     }
 
@@ -121,8 +122,6 @@ public final class EjectorUnit implements UnitModel {
 
     /** Water's molar mass in the world's data, kg/mol. */
     public static double waterMass(FlowThermo thermo) {
-        double[] one = new double[thermo.axis().size()];
-        one[one.length - 1] = 1;
-        return thermo.atTemperature(HOTTEST, 1e5, one, SolidInventory.EMPTY).mass();
+        return thermo.model().molecularWeight(thermo.axis().size() - 1);
     }
 }
