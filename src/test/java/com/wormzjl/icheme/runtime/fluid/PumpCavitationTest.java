@@ -52,8 +52,13 @@ class PumpCavitationTest {
         for(var s:w.coordinator.snapshots()) {
             var result=s.lastResult().orElseThrow();
             System.out.println("PUMP_CAVITATION_696 island "+s.id()+" modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows()));
-            for(int e=0;e<s.graph().pipes().size();e++)if(s.graph().pipes().get(e).control() instanceof FlowControl.Pump)
-                assertEquals(FlowControl.Mode.CLOSED,result.endpointModes().get(e),"the pump stands at its shutoff against the full tank");
+            // At its shutoff a pump runs on its law with no net flow, its relief passing its whole displacement back (batch
+            // 2026-11-03-rotating-machinery, form F2e), or stands closed.
+            for(int e=0;e<s.graph().pipes().size();e++)if(s.graph().pipes().get(e).control() instanceof FlowControl.Pump) {
+                var mode=result.endpointModes().get(e);
+                assertTrue(mode==FlowControl.Mode.MOVER_LAW||mode==FlowControl.Mode.CLOSED,"the pump stands at its shutoff against the full tank: "+mode);
+                assertEquals(0,result.averageMassFlows()[e],1e-6,"with no net flow");
+            }
         }
     }
 

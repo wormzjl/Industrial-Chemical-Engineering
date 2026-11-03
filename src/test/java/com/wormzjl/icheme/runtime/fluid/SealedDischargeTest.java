@@ -40,8 +40,11 @@ class SealedDischargeTest {
             // The dead-head is decided per solve, after the island-level rest test, so the island is still solved: its
             // junctions' relaxation leaves roundoff flows (one unit in the last place of a 1 kg buffer).
             for(double q:result.averageMassFlows())assertEquals(0,q,1e-12,"nothing moves");
-            for(int e=0;e<s.graph().pipes().size();e++)if(s.graph().pipes().get(e).control() instanceof FlowControl.Pump)
-                assertEquals(FlowControl.Mode.CLOSED,result.endpointModes().get(e),"the pump stands at its shutoff");
+            // On its law at its relief rise (batch 2026-11-03-rotating-machinery, form F2e), or closed.
+            for(int e=0;e<s.graph().pipes().size();e++)if(s.graph().pipes().get(e).control() instanceof FlowControl.Pump) {
+                var mode=result.endpointModes().get(e);
+                assertTrue(mode==FlowControl.Mode.MOVER_LAW||mode==FlowControl.Mode.CLOSED,"the pump stands at its shutoff: "+mode);
+            }
         }
     }
 

@@ -1,57 +1,68 @@
 package com.wormzjl.icheme.science.machine;
 
 /**
- * A positive-displacement machine: a reciprocating compressor, and the legacy and in-line movers under form F2 (batch
- * 2026-11-03-rotating-machinery, plan section 3.3). It delivers its displacement {@code Q_d s} whatever the rise, until its
- * relief valve lifts and passes the delivery back to the suction.
+ * A positive-displacement machine: a reciprocating compressor, and the set-flow pumps and compressors (batch
+ * 2026-11-03-rotating-machinery, plan section 3.3, form F2e). In the share {@code u} of its displacement {@code Q_d s}
+ * it delivers and its rise {@code v} in relief rises, the law is two lines: the slip line {@code u = 1 − SLIP v}, the
+ * displacement less what leaks back past the pistons or rotors, and the relief line {@code u = m (1 − v) + δ}, the
+ * relief valve passing the whole displacement back over the last tenth of the rise (its accumulation, {@code m = 10}).
+ * The smooth minimum joins them, {@code u = (x + y − √((x − y)² + ε²))/2} for {@code x} and {@code y} the two lines: 99.80 %
+ * of the displacement at half the relief rise, 98.8 % at 90 %, 50 % at 95 %, 10 % at 99 %, nothing at the relief rise.
+ * The relief line's lift {@code δ = ε²/(4 (1 − SLIP))}, 1.0e-4 of the displacement, puts the rounded law's no flow
+ * exactly on the relief rise: a mover's rise limit is its law's rise at no flow, which a closed mover's reopening reads
+ * ({@code FlowControl.Mover#riseLimit}). Past the relief rise the relief line goes on, a reverse flow the mover's reverse
+ * closure ends; below no rise the slip line does, 0.4 % more per relief rise the suction stands above the discharge.
  *
- * <p>As the row every law mover states, {@code head − rise(Q) = 0}: the corner {@code (Q/(Q_d s))^m + (Δp/Δp_relief)^m = 1}
- * with m = 16, of the family of the velocity cap (98.7 % of the displacement at 90 % of the relief rise, none at the relief
- * rise). At or below no flow the rise is the relief rise: a reverse flow stands there, passed back by the relief valve until
- * the mover's reverse closure ends it. Past {@link #KNEE} of the displacement the rise goes on falling along a straight
- * line with the corner's slope there, −47.9 {@code Δp_relief/(Q_d s)}: a suction above the discharge blows through, 1.5 %
- * above the displacement at no rise. A finite rise at every flow holds the row's head derivative at one, so the row is
- * never empty; the corner first written as a norm, {@code ‖(u⁺, v⁺)‖₁₆ − 1}, had no gradient at all at no flow and no rise,
- * where a mover that cannot beat its discharge starts (W2's quick check, cold seed 200). A stopped machine is closed, so
- * the law asks a speed above zero.
+ * <p>Each line has a slope, so the law is never vertical, the set flow a prescribed flow that a flow valve or a velocity
+ * cap in series leaves singular, nor flat, a prescribed rise; its row ({@link #residual}) is linear on each line, with
+ * a flow derivative at every point and a rise derivative between {@code SLIP} and {@code m}. The forms measured before it
+ * (W2_FORMS_REVIEW.md, W2_CORNER_REVIEW.md): F2, the corner {@code u^16 + v^16 = 1} as a norm (no gradient at no flow and
+ * no rise); F2b, that corner as a rise with a line past 0.999 of the displacement (up to 1.5 % above the displacement at
+ * every rise below 77 % of the relief rise, and steep in the flow at the set flow); F2c, {@code u = 1 − v^64} as a flow
+ * (vertical: singular behind a flow valve; curved over the whole top sixth of the rise).
  *
  * @param displacement Q_d, the suction volume flow at rated speed and no rise, m³/s
  * @param reliefRise   Δp_relief, the rise at which the relief valve passes the whole delivery back, Pa
  */
 public record PositiveDisplacement(double displacement, double reliefRise) {
-    /** The corner's exponent m. */
-    public static final int EXPONENT = 16;
-    /** The share of the displacement past which the rise falls along a straight line. */
-    public static final double KNEE = .999;
-    /** The corner's rise at the knee, a share of the relief rise (0.772), and its slope there, relief rises per
-     * displacement (−47.9). */
-    static final double KNEE_RISE = root16(1 - power16(KNEE)), KNEE_SLOPE = -fall(KNEE);
+    /** The share of the displacement the slip loses per relief rise. */
+    public static final double SLIP = .004;
+    /** The relief line's slope, displacements per relief rise: the relief valve's accumulation is a tenth of the rise. */
+    public static final double RELIEF_SLOPE = 10;
+    /** The corner's rounding ε, in displacements: 1 % below both lines where they cross, at 90 % of the relief rise. */
+    public static final double ROUNDING = .02;
+    /** δ, the relief line's lift that puts no flow on the relief rise: {@code (1 − SLIP) δ = ε²/4} there. */
+    private static final double LIFT = ROUNDING * ROUNDING / (4 * (1 - SLIP));
 
     public PositiveDisplacement {
         if (!(displacement > 0) || !(reliefRise > 0) || !Double.isFinite(displacement) || !Double.isFinite(reliefRise))
             throw new IllegalArgumentException("Invalid displacement " + displacement + " m3/s or relief rise " + reliefRise + " Pa");
     }
 
-    /** The pressure rise, Pa, at suction volume flow {@code flow} (m³/s) and speed {@code speed}: the relief rise at or below
-     * no flow, the corner up to the knee, then the straight line, zero at 1.0151 of the displacement and negative past it. */
-    public double rise(double flow, double speed) {
-        double u = Math.max(0, flow / capacity(speed));
-        return reliefRise * (u <= KNEE ? root16(1 - power16(u)) : KNEE_RISE + KNEE_SLOPE * (u - KNEE));
-    }
-
-    /** {@code d(rise)/dQ}, Pa per m³/s: zero at or below no flow, the corner's slope up to the knee, the line's past it. */
-    public double riseSlope(double flow, double speed) {
-        double capacity = capacity(speed), u = Math.max(0, flow / capacity);
-        if (!(u > 0)) return 0;
-        return reliefRise / capacity * (u <= KNEE ? -fall(u) : KNEE_SLOPE);
-    }
-
-    /** The suction volume flow, m³/s, at pressure rise {@code rise} (Pa) and speed {@code speed}, the inverse of
-     * {@link #rise}: none at or above the relief rise, more than the displacement below the knee's rise. */
+    /** The suction volume flow, m³/s, at pressure rise {@code rise} (Pa) and speed {@code speed}. */
     public double flow(double rise, double speed) {
-        double capacity = capacity(speed), v = rise / reliefRise;
-        if (v >= 1) return 0;
-        return capacity * (v >= KNEE_RISE ? root16(1 - power16(v)) : KNEE + (v - KNEE_RISE) / KNEE_SLOPE);
+        return capacity(speed) * share(rise / reliefRise);
+    }
+
+    /** The rise, Pa, at suction volume flow {@code flow} and speed {@code speed}, the inverse of {@link #flow}: finite at every
+     * flow, the relief rise at no flow. */
+    public double rise(double flow, double speed) {
+        return reliefRise * level(flow / capacity(speed));
+    }
+
+    /** {@code d(rise)/dQ}, Pa per m³/s: between {@code −1/SLIP} and {@code −1/m} relief rises per displacement. */
+    public double riseSlope(double flow, double speed) {
+        double capacity = capacity(speed), u = flow / capacity, v = level(u);
+        // The flow's distances below the two lines, both positive on the law: dv/du = −(a + b)/(SLIP b + m a).
+        double a = 1 - SLIP * v - u, b = RELIEF_SLOPE * (1 - v) + LIFT - u;
+        return -reliefRise / capacity * (a + b) / (SLIP * b + RELIEF_SLOPE * a);
+    }
+
+    /** The law as a row, Pa: the relief rise times the flow less the law's flow at {@code rise}, over the displacement. Zero
+     * on the law; its flow derivative is the relief rise over the displacement at every point, its rise derivative between
+     * {@code SLIP} and {@code m}. */
+    public double residual(double flow, double rise, double speed) {
+        return reliefRise * (flow - flow(rise, speed)) / capacity(speed);
     }
 
     private double capacity(double speed) {
@@ -59,19 +70,19 @@ public record PositiveDisplacement(double displacement, double reliefRise) {
         return displacement * speed;
     }
 
-    /** The corner's fall, {@code −d(rise/Δp_relief)/du = (u/(1 − u^16)^(1/16))^15}, at a share {@code u} below one. */
-    private static double fall(double u) {
-        double t = u / root16(1 - power16(u)), t2 = t * t, t4 = t2 * t2, t8 = t4 * t4;
-        return t8 * t4 * t2 * t;
+    /** The share of the displacement at a rise of {@code v} relief rises: the smooth minimum of the two lines. */
+    private static double share(double v) {
+        double x = 1 - SLIP * v, y = RELIEF_SLOPE * (1 - v) + LIFT, d = x - y;
+        return .5 * (x + y - Math.sqrt(d * d + ROUNDING * ROUNDING));
     }
 
-    private static double power16(double x) {
-        double x2 = x * x, x4 = x2 * x2, x8 = x4 * x4;
-        return x8 * x8;
-    }
-
-    /** The sixteenth root by four square roots: correctly rounded steps, the same on every JVM. */
-    private static double root16(double x) {
-        return Math.sqrt(Math.sqrt(Math.sqrt(Math.sqrt(x))));
+    /** The rise in relief rises at which the law passes the share {@code u}: {@code (x − u)(y − u) = ε²/4} with both factors
+     * positive, the smaller root of {@code SLIP m v² − (A m + B SLIP) v + A B − ε²/4 = 0} ({@code A = 1 − u},
+     * {@code B = m + δ − u}), whose discriminant is {@code (A m − B SLIP)² + SLIP m ε²}; the root form without cancellation. */
+    private static double level(double u) {
+        double a = SLIP * RELIEF_SLOPE, along = 1 - u, across = RELIEF_SLOPE + LIFT - u, b = along * RELIEF_SLOPE + across * SLIP;
+        double c = along * across - .25 * ROUNDING * ROUNDING, e = along * RELIEF_SLOPE - across * SLIP;
+        double root = Math.sqrt(e * e + a * ROUNDING * ROUNDING);
+        return b > 0 ? 2 * c / (b + root) : (b - root) / (2 * a);
     }
 }

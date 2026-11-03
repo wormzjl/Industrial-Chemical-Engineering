@@ -4619,8 +4619,9 @@ public final class PassiveStepSolver {
             f[edgeOffset+edge]=(driving-loss)/pressureScale;
             if(boundaryClosed[edge]&&control<0)f[edgeOffset+edge]=flow;
             if(control>=0)f[control]=switch(modes.get(edge)) {
-                // A mover on its own law (batch 2026-11-03-rotating-machinery): the rise its law holds at its suction volume
-                // flow, on the trial's suction density and pressure, so the Jacobian carries both: the block sweep re-evaluates
+                // A mover on its own law (batch 2026-11-03-rotating-machinery): its head against the law at its suction volume
+                // flow (a set-flow mover's in the flow form, FlowControl.Mover#lawResidual), on the trial's suction density
+                // and pressure, so the Jacobian carries both: the block sweep re-evaluates
                 // this edge's rows for every perturbed column of its first node, and the sparsity already declares the
                 // actuator row on both endpoints' columns (buildSparsity).
                 case MOVER_LAW->lawResidual(graph,pipe,flow/suction.density,head,suction.density,st[a].pressure())/pressureScale;

@@ -81,7 +81,8 @@ class BackwardEulerStepTest {
     @Test void aPumpedTenMetreLiftOfWaterDeliversItsLiftWorkAsHeat() {
         double lift=10,gz=PassiveStepSolver.GRAVITY*lift;
         var lifted=pumpedLine(lift);var flat=pumpedLine(0);
-        assertEquals(flat.moved(),lifted.moved(),1e-9*lifted.moved(),"both lines run at the pump's target flow");
+        // Both lines run on the pump's law: the lift's 98 kPa of the 300 kPa limit costs a third of the slip (form F2e).
+        assertEquals(flat.moved(),lifted.moved(),com.wormzjl.icheme.science.machine.PositiveDisplacement.SLIP*lifted.moved(),"both lines run at the pump's set flow, less its slip");
         int water=model.components().indexOf("Water");
         double cp=(model.waterLiquid(298.16,2e5).molarEnthalpy()-model.waterLiquid(298.14,2e5).molarEnthalpy())/.02/model.molecularWeights()[water];
         double extraWork=lifted.work()-flat.work(),warmer=(lifted.heat()-flat.heat())/lifted.moved()/cp;

@@ -10,9 +10,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
     /**
      * A device that moves fluid from its connection's first end (its suction) to its second: the liquid pump and the gas
      * compressor (decisions D1, D2, D7, D8 of documentation/2026-09-26-phase-ports-and-compressor). Every mover runs on its
-     * own law, one row whose rise falls with the flow ({@link #lawResidual}, mode {@code MOVER_LAW}; batch
-     * 2026-11-03-rotating-machinery, form F2b, the owner's choice of 2026-11-04). A set-flow pump or compressor is a
-     * positive-displacement machine: its set flow is the displacement, its rise limit the relief rise
+     * own law, one row that ties its flow to its rise ({@link #lawResidual}, mode {@code MOVER_LAW}; batch
+     * 2026-11-03-rotating-machinery: the owner chose the law over the set-flow pair on 2026-11-04, form F2e). A set-flow pump
+     * or compressor is a positive-displacement machine: its set flow is the displacement, its rise limit the relief rise
      * ({@link PositiveDisplacement}). A {@link Machine} is on its curve. Movers share the modes, the shutoff band and the
      * carry; they differ in the law, the shaft work and the inlet phase they admit. A pump has one more mode,
      * {@code PUMP_SUCTION_LIMIT} (cavitation); a compressor draws gas, which has no vapour pressure to fall below, and never
@@ -51,8 +51,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         double lawRise(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k);
         /** {@code d(lawRise)/dQ}, Pa per m3/s. */
         double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k);
-        /** The law as the {@code MOVER_LAW} row, Pa: the head less the law's rise at {@code flow}. Its head derivative is one,
-         * so the row is never empty. */
+        /** The law as the {@code MOVER_LAW} row, Pa: zero on the law, rising with the flow and the head. By default the head
+         * less the law's rise at {@code flow}, whose head derivative is one, so the row is never empty; a set-flow mover
+         * states it in the flow form ({@link PositiveDisplacement#residual}), whose flow derivative is never zero. */
         default double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return head-lawRise(flow,suctionDensity,suctionPressure,referenceDensity,k);
         }
@@ -96,6 +97,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         }
         @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return corner(this,suctionDensity,suctionPressure,referenceDensity,k).riseSlope(flow,1);
+        }
+        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return corner(this,suctionDensity,suctionPressure,referenceDensity,k).residual(flow,head,1);
         }
         @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
         /** A liquid machine's refusal: a dry suction, or vapour above {@link #VAPOUR_REFUSE} of the fluid volume. */
@@ -146,6 +150,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return corner(this,suctionDensity,suctionPressure,referenceDensity,k).riseSlope(flow,1);
         }
+        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return corner(this,suctionDensity,suctionPressure,referenceDensity,k).residual(flow,head,1);
+        }
         @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
         /** A gas machine's refusal: a dry suction, a solid above the trace, or condensed phases above {@link #CONDENSED_REFUSE}
          * of the mass. */
@@ -191,7 +198,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         }
         @Override public String deviceName(){return liquid()?"pump":"compressor";}
     }
-    /** The corner law of a set-flow mover (form F2b): its set flow is the displacement, its rise limit the relief rise. */
+    /** The law of a set-flow mover (form F2e): its set flow is the displacement, its rise limit the relief rise. */
     private static PositiveDisplacement corner(Mover mover,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
         return new PositiveDisplacement(mover.targetVolumeFlow(),mover.riseLimit(suctionDensity,suctionPressure,referenceDensity,k));
     }
