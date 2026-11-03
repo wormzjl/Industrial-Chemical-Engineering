@@ -11,6 +11,7 @@ Up: [code guide](README.md)
 - A Sizing row, lamp, Auto size or Size all looks wrong; a pressure path or a line size disagrees with a hand calculation.
 - The block will not store, replay or hand over a sheet; an autosave or a flowsheet file will not open; Send to block or the constructor's Import misbehaves.
 - You change the flowsheet file, the block's tags or the sent designs: these are facts with corpus images.
+- You work on the simulator's screen, its pages and doors, its packets, or the block and its store. [client-gui.md](client-gui.md) keeps only the frame: where the screen is registered, the kit pieces it shares, and `CalculatorColumn` as the column door's builder.
 
 ## In one paragraph
 
@@ -113,17 +114,6 @@ flowchart TD
 
 </details>
 
-<details><summary>The block, the store, files and autosave</summary>
-
-- `process_simulator` replaced `column_calculator_v3`: the old id is an alias for the block, its item and its block entity (`ModBlocks`, `ModItems`, `ModBlockEntities`). It has no recipe.
-- Opening replays the stored bytes (`ProcessSimulatorNetwork.open`): one parse, no solve, no process state (AGENTS.md: a replay is a read of cached data).
-- `SheetStore`: the first player to open holds the sheet and edits; others read. The holder is freed on close, on leaving, on disconnect and when the block goes; one who is no longer at this block's screen holds nothing. The holder is not saved.
-- Uploads count only from the holder, near the block, with the screen open. `SheetBody` bounds them: 1 MiB unpacked, parts of 30 000 bytes. The client sends a body on Save, when a run ends and on close, never on an edit. An unreadable body opens empty and is kept (`KeptSheets`).
-- NBT: `SheetId`, `Sheet` (the body), `KeptSheets`, `Design` (the column's saved design, `ColumnDesignTags`), `Designs` (sent designs, `SentDesignTags`, unreadable entries kept). No update tag.
-- Files: `.minecraft/IChemE/flowsheets/<name>.json`; an autosave every 1200 ticks and on close, `<name>.autosave.json` beside a named file or `autosave-<sheet id>.json`. A reader never autosaves.
-
-</details>
-
 <details><summary>Send to block and Import</summary>
 
 - Save design (`simulator_save_design`) stores the column door's `ColumnDesign.of(input, choices)` on the block; a refusal names its reason.
@@ -158,6 +148,83 @@ The file keeps fields it does not know and refuses a newer format. `SheetLayout`
 
 </details>
 
+## The screen
+
+`client/gui/screens/inventory/ProcessSimulatorScreen` is the only Minecraft class of the screen. `IChemEClient.registerScreens` registers it on `ModMenus.PROCESS_SIMULATOR`. It is a plain `Screen` on a `ProcessSimulatorMenu` (`MenuAccess`), not an `AbstractContainerScreen`, so it has no slots and a typed E is text. A close, a disconnect and the block going all end it. It forwards events and draws. Everything it shows is built Minecraft-free in `client/gui/flowsheet/`, so `tools/heat-gui-renders/SimulatorRender.java` draws the same pages from shipped code.
+
+- **Window:** `WindowScale.apply` at design height 480. The least window is 464 × 254 (`SimulatorFrame.LEAST_W`, `LEAST_H`). A door takes 790 × 524 (`DOOR_W`, `DOOR_H`). `removed()` restores the scale.
+- **Frame and tabs:** `SimulatorFrame` gives the rectangles: title, tabs and file keys, the one status display, the canvas's well, the palette and the footer. The screen hit-tests them, and the render tool draws them. The tabs (`SimulatorFrame.Tab`) are FLOWSHEET, RESULTS, SIZING and BASIS. The Sizing tab opens only once the sheet can be sized (`SizingPage.open`). `SimulatorPage` says which keys stand where on each page.
+- **The sheet:**
+  - `SheetLayout` places boxes, ports and routes and answers hit tests.
+  - `SheetPainter` draws them with the `Symbol` atlas (`textures/gui/flowsheet/symbols.png`).
+  - `SheetView` pans and zooms.
+  - `SheetGestures` turns mouse events into edits.
+  - `SheetEditor` applies them, with undo and redo.
+  - `Tiles` is the palette.
+  - `ColumnBlock` draws a column with its members inside a boundary.
+  - `SheetState` greys what is stale and builds the status.
+- **Doors:** a click on a unit or a stream opens its door, a `Door` placed by `DoorFrame`.
+  - `UnitDoors` builds every unit's door.
+  - `ColumnDoors` builds the column's, through `client/gui/common/CalculatorColumn` (its tabs, the Templates dialog, Save design).
+  - `StreamDoors` builds a stream's: feed, flow, T and P, components, the clipboard's Copy and Paste.
+  - `SelectionColumn` lists Auto's sizes.
+  - `FileColumns` holds the Open and Save as dialogs and the file names.
+- **Pages:**
+  - `ResultsPage`: streams, units, the run log through `NoteText` in the player's units, and the balances.
+  - `SizingPage`: rows and lamps, Fixed and Auto, Size all, Send to block. It re-rates quietly 10 ticks after the last edit (`rateWhenDue`).
+  - `BasisPage`: the package, the design basis, the solver settings.
+- **Tick:** each tick the screen does four things.
+  - It lets the block host upload a finished run (`SimulatorBlockHost.ranOut`).
+  - It autosaves every 1200 ticks.
+  - It clears a spent status line.
+  - It re-rates the Sizing tab when that is due.
+- **Close:** `onClose` lets the host send the sheet once more (`settle`). `removed()` autosaves, closes the host (the runner's job stops) and restores the window scale.
+- **Host:** `SimulatorHost` is the screen's only link to running and storing. `SimulatorBlockHost` is the game's host: the runner plus the block's store. `SimulatorHost.NONE` serves the render tool and tests.
+
+## Packets and protocol
+
+`network/ProcessSimulatorNetwork`, protocol `"2"`, handlers on the server thread (`HandlerThread.MAIN`). Wire formats get no compatibility work (AGENTS.md).
+
+| Payload | Direction | Carries | Server rule |
+| --- | --- | --- | --- |
+| `simulator_sheet_part` (`SheetPart`) | both | container id, part index and count, bytes | To the client: the replay on open, in `SheetBody.parts`. To the server: an upload, which counts only from the holder whose menu is this container, near its block. A store lands with its last part, and a bad body is refused while the stored sheet stands. |
+| `simulator_save_design` (`SaveDesign`) | to server | container id, the column door's `V3ColumnInput` and `ColumnComponents.Choices` (`ColumnWire`) | Holder only. `ColumnDesign.of`, stored as the block's saved design. A refusal gives its reason. |
+| `simulator_send_designs` (`SendDesigns`) | to server | container id, a tag of `SentDesign`s (`SentDesignTags`) | Holder only. The list must be whole, not empty and at most 64. It replaces the earlier list. |
+| `simulator_answer` (`Answer`) | to client | container id, key (`store.saved`, `store.design_saved`, `store.design_refused`, `store.designs_sent`, `store.designs_refused`, or the menu's `READ_ONLY`), detail up to 256 characters | Each request's answer, shown on the status line |
+
+Opening needs no packet of its own. `ProcessSimulatorBlock.useWithoutItem` calls `ProcessSimulatorNetwork.open`, and `open` does four things:
+- it decides who edits (`block.opens`);
+- it opens the menu with an `Opening`: position, sheet id, reader flag, the holder's name for a reader, stored and damaged flags, and the server's catalog revision tokens for `RevisionNotice`;
+- it replays the stored body in parts;
+- it parses the body once, solves nothing and creates no process state.
+
+The constructor's Import uses `EquipmentNetwork` (`equipment-17`); see Send to block and Import above.
+
+## The block and its store
+
+- `process_simulator` replaced `column_calculator_v3`. The old id is an alias for the block, its item and its block entity (`ModBlocks`, `ModItems`, `ModBlockEntities`). It has no recipe.
+- `ProcessSimulatorBlockEntity` holds a `SheetStore`, the sheet id (a UUID made at the first open), the saved column design, and the sent designs with any unreadable entries. It has no update tag, so the sheet never rides in a chunk packet.
+- `SheetStore` has one holder.
+  - The first player to open holds the sheet and edits; others read.
+  - The holder is freed on close, on leaving, on disconnect and when the block goes.
+  - A player who is no longer at this block's screen holds nothing (`atThisBlock`).
+  - The holder is not saved.
+- Uploads count only from the holder, near the block, with the screen open.
+  - `SheetBody` bounds them: 1 MiB unpacked, parts of 30 000 bytes.
+  - The client sends a body on Save, when a run ends and on close, never on an edit.
+  - A body still on its way counts as read-only.
+  - An unreadable body opens empty and is kept (`KeptSheets`).
+- NBT:
+  - `SheetId`;
+  - `Sheet` (the body);
+  - `KeptSheets`;
+  - `Design` (the column's saved design, `ColumnDesignTags`);
+  - `Designs` (sent designs, `SentDesignTags`, unreadable entries kept).
+- Files on the client:
+  - A sheet is saved as `.minecraft/IChemE/flowsheets/<name>.json`.
+  - An autosave runs every 1200 ticks and on close. It writes `<name>.autosave.json` beside a named file, or `autosave-<sheet id>.json` for a sheet with no name. A player cannot use these names.
+  - A reader never autosaves.
+
 ## New equipment joins the simulator (plan 3.10)
 
 Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyCompiler.Kind` constant joins the simulator (AGENTS.md, New equipment). `FlowsheetCatalog` (`src/test/.../client/gui/flowsheet/`) maps each to its tile, MODELLED or DRAWING_ONLY, through switches without a default, so a new constant fails `compileTestJava`. `FlowsheetPaletteCoverageTest` holds each to a tile, a port rule and a lang line; one tile may hold several kinds. `SizingCoverage` (`src/test/.../science/flowsheet/sizing/`) does the same for sizing: each kind names its size class or why it has none (`SizingCoverageTest`).
@@ -173,9 +240,9 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | A Sizing row or lamp | `Limit`, the unit's sizer | `LimitTest`, `UnitSizingTest`, `CoolerSizingTest`, `SheetSizingTest`; the sample: `UnitSizingSampleTest`, `ColumnSizingSampleTest` (slow) |
 | Lines and paths | `LineSizing`, `Service`, `PressurePath`, `SheetSizing` | `LineSizingTest`, `ServiceTest`, `LineSizingSampleTest`, `SizeAllSampleTest` (slow) |
 | The file | `FlowsheetFile` | `FlowsheetFileTest` (26, the corpus) |
-| The block's store and uploads | `SheetStore`, `SheetBody`, `ProcessSimulatorNetwork` | `SheetStoreTest`, `SimulatorBlockTest`, `ProcessSimulatorGameTests` |
+| The block's store, uploads and packets ([packets](#packets-and-protocol), [block](#the-block-and-its-store)) | `SheetStore`, `SheetBody`, `ProcessSimulatorNetwork`, `ProcessSimulatorBlockEntity` | `SheetStoreTest`, `SimulatorBlockTest`, `ProcessSimulatorGameTests` |
 | Sent designs and Import | `SheetSizing.designs`, `SentDesign`, `SentDesignTags`, `EquipmentNetwork` | `SentDesignTagsTest` (the corpus), `ProcessSimulatorGameTests.aConstructorImportsTheNearestSimulatorsDesign` |
-| The screen | `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`; renders: `tools/heat-gui-renders/SimulatorRender.java` |
+| The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`; renders: `tools/heat-gui-renders/SimulatorRender.java` |
 | The runner and Stop | `SimulatorRunner` | `SimulatorRunnerTest`, `SimulatorRunTest` (slow: Stop inside a column) |
 | A new kind | `FlowsheetCatalog`, `SizingCoverage` (both in `src/test`) | `FlowsheetPaletteCoverageTest`, `SizingCoverageTest` |
 
