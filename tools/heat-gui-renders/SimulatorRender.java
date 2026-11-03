@@ -29,12 +29,15 @@ import com.wormzjl.icheme.client.gui.flowsheet.SheetView;
 import com.wormzjl.icheme.client.gui.flowsheet.SimulatorFrame;
 import com.wormzjl.icheme.client.gui.flowsheet.SimulatorHost;
 import com.wormzjl.icheme.client.gui.flowsheet.SimulatorPage;
+import com.wormzjl.icheme.client.gui.flowsheet.SimulatorRunner;
+import com.wormzjl.icheme.client.gui.flowsheet.SizingPage;
 import com.wormzjl.icheme.client.gui.flowsheet.StreamDoors;
 import com.wormzjl.icheme.client.gui.flowsheet.StreamProps;
 import com.wormzjl.icheme.client.gui.flowsheet.Tiles;
 import com.wormzjl.icheme.client.gui.flowsheet.UnitDoors;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetEngine;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFile;
@@ -42,6 +45,10 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.UnitTypes;
+import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
+import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -205,6 +212,7 @@ public final class SimulatorRender {
         double seconds;
         SimulatorFrame.Tab tab = SimulatorFrame.Tab.FLOWSHEET;
         ResultsPage.State results = new ResultsPage.State();
+        SizingPage.State sizing = new SizingPage.State();
         int category = 2;
         SheetLayout.Place hover;
         /** A runner's result, which stands instead of the scene's run; a client's data that differ from the server's. */
@@ -231,7 +239,7 @@ public final class SimulatorRender {
         for (var slot : slots) {
             var b = slot.button();
             if (b.soft()) d.skin.softKey(d.c, slot.rect(), b.text(), false);
-            else d.skin.button(d.c, slot.rect(), b.text(), b.key().equals("run") && b.active() ? Skin.Press.PRIMARY : SimulatorPage.press(b), false);
+            else d.skin.button(d.c, slot.rect(), b.text(), (b.key().equals("run") || b.key().equals("size_all")) && b.active() ? Skin.Press.PRIMARY : SimulatorPage.press(b), false);
         }
     }
 
@@ -281,6 +289,10 @@ public final class SimulatorRender {
             case RESULTS -> {
                 SimulatorPage.results(d.c, d.skin, x, s.results, frame, d.w);
                 rows(d, ResultsPage.rows(x, s.results), 10, SimulatorFrame.DOOR_TOP, SimulatorFrame.RESULT_DOOR - 10, Map.of());
+            }
+            case SIZING -> {
+                SimulatorPage.sizing(d.c, d.skin, x, s.sizing, frame, d.w);
+                rows(d, SizingPage.rows(x, s.sizing), 10, SimulatorFrame.DOOR_TOP, SimulatorFrame.SIZING_DOOR - 10, SizingPage.values(x, s.sizing));
             }
             case BASIS -> {
                 SimulatorPage.basis(d.c, d.skin, x, frame, d.w);
@@ -661,6 +673,96 @@ public final class SimulatorRender {
                 List.of(scene(counted, run, seconds, host, nothing()), scene(air, null, 0, host, nothing())));
     }
 
+    /** A host whose last run and rating stand as a sizing left them, with a Size all in hand or not. */
+    private record Sized(SimulatorHost.Finished finished, SimulatorRunner.Rated rated, SheetState.Running now) implements SimulatorHost {
+        @Override public SimulatorHost.Finished last() {
+            return finished;
+        }
+
+        @Override public SimulatorRunner.Rated rated() {
+            return rated;
+        }
+
+        @Override public SheetState.Running running() {
+            return now;
+        }
+
+        @Override public boolean canRun() {
+            return true;
+        }
+
+        @Override public boolean stores() {
+            return true;
+        }
+    }
+
+    /** The Sizing tab of a screen on the rating's sheet, after what {@code player} does. */
+    private static BiConsumer<GuiPrototypes.Door, Skin> sized(Sized host, Consumer<Scene> player) {
+        return scene(host.rated().sheet(), host.finished().run(), host.finished().seconds(), host, s -> {
+            s.finished = host.finished();
+            s.tab = SimulatorFrame.Tab.SIZING;
+            player.accept(s);
+        });
+    }
+
+    private static Flowsheet withSizing(Flowsheet sheet, SizingFacts facts) {
+        return new Flowsheet(sheet.basis(), sheet.units(), sheet.streams(), sheet.settings(), facts, sheet.unknown());
+    }
+
+    /**
+     * S4b's sheets (batch 2026-11-02-process-simulator): the Sizing tab's four views on a real Size all of the sample, a Fixed size
+     * rated red, a run that is not steady, the type keys, the exchanger's door before and after sizing, and Size all mid-run.
+     */
+    private static void sizing(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
+        var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
+        });
+        long start = System.nanoTime();
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.sizeAll(sheet, run, thermo));
+        double took = (System.nanoTime() - start) / 1e9;
+        System.out.printf("sized: run %s, %d units, %d lines, %d paths, %.1f s%n", all.run().status(), all.sized().units().size(), all.sized().lines().size(), all.sized().paths().size(), took);
+        var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds + took);
+        var host = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
+        // E-101 kept at a 0.75 m shell: Fixed, rated red, and greyed until the next run.
+        var held = all.sheet().sizing().unit("E-101");
+        var kept = held.size() instanceof ExchangerSizing.Size e ? new ExchangerSizing.Size(false, e.shells(), .75, e.tubes()) : new ExchangerSizing.Size(false, 1, .75, 6);
+        var fixed = withSizing(all.sheet(), all.sheet().sizing().with("E-101", held.with(SizingFacts.Mode.FIXED).with(kept)));
+        var fixedHost = new Sized(finished, new SimulatorRunner.Rated(fixed, finished, MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(fixed, all.run(), thermo)), false), null);
+        var unsteady = new SimulatorHost.Finished(all.sheet(), FlowsheetRun.none(), 0);
+        var unsteadyHost = new Sized(unsteady, new SimulatorRunner.Rated(all.sheet(), unsteady, MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(all.sheet(), FlowsheetRun.none(), thermo)), false), null);
+        sheet(out, "01-sizing-units", W, H, List.of("Units after Size all, E-101 selected", "T-101 selected: its block's members are rows under it", "E-101 kept Fixed at a 0.75 m shell: red, and greyed until the next run",
+                "A run that is not steady: every item red"), List.of(sized(host, s -> s.sizing.unit = "E-101"), sized(host, s -> s.sizing.unit = "T-101"), sized(fixedHost, s -> s.sizing.unit = "E-101"), sized(unsteadyHost, nothing())));
+        sheet(out, "02-sizing-lines", W, H, List.of("Lines: S-5 selected", "T-101's overhead selected"), List.of(sized(host, s -> {
+            s.sizing.view = SizingPage.View.LINES;
+            s.sizing.line = "S-5";
+        }), sized(host, s -> {
+            s.sizing.view = SizingPage.View.LINES;
+            s.sizing.line = SheetSizing.member("T-101", "overhead");
+        })));
+        int pump = 0;
+        for (int i = 0; i < all.sized().paths().size(); i++) if (all.sized().paths().get(i).start().equals("P-101")) pump = i;
+        int p101 = pump;
+        sheet(out, "03-sizing-pressure", W, H, List.of("Pressure: P-101's path", "The next path"), List.of(sized(host, s -> {
+            s.sizing.view = SizingPage.View.PRESSURE;
+            s.sizing.path = p101;
+        }), sized(host, s -> {
+            s.sizing.view = SizingPage.View.PRESSURE;
+            s.sizing.path = p101 + 1;
+        })));
+        sheet(out, "04-sizing-build", W, H, List.of("Build: what the constructor builds, and the lines"), List.of(sized(host, s -> s.sizing.view = SizingPage.View.BUILD)));
+        var vertical = withSizing(all.sheet(), all.sheet().sizing().with("H-101", all.sheet().sizing().unit("H-101").typed(UnitType.VERTICAL_HEATER)));
+        var verticalHost = new Sized(finished, new SimulatorRunner.Rated(vertical, finished, MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(vertical, all.run(), thermo)), false), null);
+        sheet(out, "05-sizing-types", W, H, List.of("H-101 as Auto proposes it", "Vertical kept: rated as a vertical heater", "The sheet draws H-101 as the type its size holds"),
+                List.of(sized(host, s -> s.sizing.unit = "H-101"), sized(verticalHost, s -> s.sizing.unit = "H-101"), sized(host, s -> s.tab = SimulatorFrame.Tab.FLOWSHEET)));
+        grid(out, "06-exchanger-door-sized", DW, DH, List.of("E-101 before sizing: the drops are the player's estimates", "E-101 sized: its drops are its law's at the run's flow"),
+                List.of(unit(sheet, run, "E-101", 0), unit(all.sheet(), all.run(), "E-101", 0)));
+        var plain = new SimulatorHost.Finished(sheet, run, seconds);
+        var proposed = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(sheet, run, thermo));
+        var rated = new SimulatorRunner.Rated(sheet, plain, proposed, false);
+        sheet(out, "07-size-all-running", W, H, List.of("A run's end rates Auto's proposal", "Size all in hand: Stop in its place, the sheet locked", "Size all running the sheet again"),
+                List.of(sized(new Sized(plain, rated, null), nothing()), sized(new Sized(plain, rated, new SheetState.Running(0.4, 0, 0, null, null, SheetState.Task.SIZE)), nothing()),
+                        sized(new Sized(plain, rated, new SheetState.Running(14.2, 2, 30, "T-101", com.wormzjl.icheme.science.flowsheet.Report.Start.LAST, SheetState.Task.SIZE)), nothing())));
+    }
+
     private static Flowsheet withType(Flowsheet sheet, String id, String type) {
         var units = new ArrayList<Flowsheet.Unit>();
         for (var unit : sheet.units()) units.add(unit.id().equals(id) ? new Flowsheet.Unit(unit.id(), type, unit.name(), unit.x(), unit.y(), unit.params(), unit.unknown()) : unit);
@@ -683,6 +785,11 @@ public final class SimulatorRender {
         // -Donly=member-counts: S3b's two sheets alone.
         if ("member-counts".equals(System.getProperty("only"))) {
             memberCounts(out, sheet, run, seconds);
+            return;
+        }
+        // -Donly=sizing: S4b's sheets alone.
+        if ("sizing".equals(System.getProperty("only"))) {
+            sizing(out, sheet, run, seconds);
             return;
         }
         var more = vessels();
