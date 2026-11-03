@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** 1ed994e46 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example; Delete in Open; a drag on empty canvas pans; each dialog's confirming key primary; Run lit when out of date; a column frame's empty inside pans; door flows and pressures on the display keys; the client consolidation: `Reader`, the glass in `UnitGlass`, `ColumnGlass` and `SizingGlass`, `SheetUnits.KMOL_PER_HOUR`, `Door.View.press`, one footer builder, templates through the paste rule; a door built once a frame; the autosave off the render thread, one waiting sheet per file; the column door's Results glass on the display keys, its profiles and drops too; the frame drawn in one batch that holds texts and sprites)
+**Snapshot:** b45327c9a (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example; Delete in Open; a drag on empty canvas pans; each dialog's confirming key primary; Run lit when out of date; a column frame's empty inside pans; door flows and pressures on the display keys; the client consolidation: `Reader`, the glass in `UnitGlass`, `ColumnGlass` and `SizingGlass`, `SheetUnits.KMOL_PER_HOUR`, `Door.View.press`, one footer builder, templates through the paste rule; a door built once a frame; the autosave off the render thread, one waiting sheet per file; the column door's Results glass on the display keys, its profiles and drops too; the frame drawn in one batch that holds texts and sprites; the science consolidation: no sheet aliases, `PumparoundMember`, `FlowThermo.water`, one drop rule in `SizedPassages`, `ColumnUnit.add`, and the splits `SizingFactsFile`, `JsonFields`, `ColumnSides`, `ColumnBlockSolve`, `Proposal`, `BlockSizing`, `PathWalk`)
 
 Up: [code guide](README.md)
 
@@ -25,7 +25,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | --- | --- | --- |
 | **Science core (`science/flowsheet/`)** | | |
 | `Flowsheet` | The sheet's facts: basis, units, streams, settings, sizing facts, unknown fields kept | What a file and the block hold |
-| `FlowsheetFile` | The JSON format: `read`, `save`; keeps unknown fields, refuses a newer format (`file.newer`) and an older one (`file.older`) | `FORMAT` |
+| `FlowsheetFile`, `SizingFactsFile` (pp), `JsonFields` (pp) | The JSON format: `read`, `save`; keeps unknown fields, refuses a newer format (`file.newer`) and an older one (`file.older`); sizing's facts in `SizingFactsFile`; each object's checked fields, `damaged` and `beside` in `JsonFields` | `FORMAT` |
 | `FlowsheetCompiler` | A sheet into `Calculation`s, plus warm-start estimates from the last steady run; reads the sheet's ends as roles (`Wiring.roles`); a unit that cannot run becomes a failing calculation; routes a utility port's water feed to its unit (`waterAlone`, `livePorts`) | `compile`, `estimates`, `typed` |
 | `Calculation` (record, `Kind` STEP/BLOCK/CHECK) | One graph node: reads, writes, needs (links), gives (links), a `Law` | How a unit becomes graph nodes |
 | `FlowGraph` (pp) | Strongly connected groups in order and the fewest tears (deterministic, `TRIALS` 200 000); links are never torn | Order and tears |
@@ -34,7 +34,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `FlowsheetRun` (record, `Status` STEADY/NOT_STEADY/FAILED/STOPPED) | Streams, outcomes, reports, loops, log, balances, order, passes | What the Results tab shows |
 | `Board` | The run's known stream states and link values | Reads and writes of a pass |
 | `Report`, `Note` | One calculation's readings, notes and boundary terms (enters, duty, leaves); a note's severity, subject, key (a suffix of `gui.icheme.flowsheet.`) and SI arguments | The log and door status |
-| `FlowStream` (record), `StreamThermo`, `FlowThermo` | T, P, amounts on the package axis (water last), enthalpy, mass, phases; the world's flash as a stream thermo, with an enthalpy search | Every stream state |
+| `FlowStream` (record), `StreamThermo`, `FlowThermo` | T, P, amounts on the package axis (water last), enthalpy, mass, phases; the world's flash as a stream thermo, with an enthalpy search; `FlowThermo.water()` (always last), `waterMass`, `waterAlone` | Every stream state |
 | `UnitModel`, `UnitTypes` (no aliases: a type it does not hold reads as a placeholder), `WiredUnit` (record, with `Utilities`), `Port` (record: id, direction, required, utility), `Params` | A tile's ports (the roles its calculations read), its reversible passages (`passages`) and calculations; a unit with its settings, wires, thermo, passages and regulated utility feeds | Adding a unit |
 | `Passage` (record: `a`, `b`, `in`, `out`; `THROUGH`, `named`), `Wiring` | A reversible passage's two ends and the roles its model reads them by; a sheet's ends read as roles: the first stream on either end decides which is the inlet ([ports and passages](#ports-and-passages)) | Port sides |
 | `Passages` | A unit's passage drop laws: typed drops while it has no size, sized laws (`SizedPassages`) once it has one | Drops in the run |
@@ -43,7 +43,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `SheetBody`, `SheetStore` | One gzip body (sheet and results) in parts, with its bounds; the block's body, kept unreadable bodies and the holder | The block's storage |
 | `RevisionNotice` | Client and server catalog revision tokens; a mismatch is a notice, never a block | Dedicated servers |
 | **Units (`science/flowsheet/unit/`)** | | |
-| `ColumnUnit`, `ColumnDoor` (record) | The column as one BLOCK calculation (`ColumnUnit.solve`: warm from the last seed, else the learned start) plus one calculation per heat side; the condenser duty reaches its side as a link; regulated utility feeds (cooling water, kettle steam, stripping steam through its inlet valve); the steam CHECK | The column on the sheet |
+| `ColumnUnit`, `ColumnDoor` (record), `ColumnSides` (pp), `ColumnBlockSolve` (pp) | The column as one BLOCK calculation (`ColumnBlockSolve`; `ColumnUnit.solve`: warm from the last seed, else the learned start) plus one calculation per heat side (`ColumnSides`); `ColumnUnit` holds the public port names and builders and `add` (a mole fraction onto the axis; an id the axis lacks fails the column); the condenser duty reaches its side as a link; regulated utility feeds (cooling water, kettle steam, stripping steam through its inlet valve); the steam CHECK | The column on the sheet |
 | `ExchangerUnit`, `ExchangerRating` | Exchanger or kettle, target Outlet, Duty or Area; counterflow surface and duty on the two heat curves | Heat units |
 | `CoolerUnit` | Target Outlet or Duty, coolant in at 25 °C; Air or Water is a sizing type only | Coolers |
 | `FiredHeaterUnit`, `MoverUnit`, `ValveUnit` (isenthalpic), `VesselUnit` (drum or tank flash), `MixerUnit` (lowest inlet pressure), `SplitterUnit`, `FilterUnit` (solids leave as cake), `EjectorUnit` | The other units | Each unit's balance |
@@ -54,7 +54,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `LineSizing`, `Service` (enum) | A line's bore, speed and drop (pipe resistance on the network's viscosity); the service picks its rows | Line sizes |
 | `PressurePath` (record) | From a set pressure through every step to its taker: available, lost, spare (bar) | Path rows |
 | `Selection` | Auto: the smallest size that rates well, those holding the need with the spare first | Auto |
-| `SheetSizing` | The whole sheet: `rate` (cheap, no trial columns), `sizeAll` (proposes, applies, re-runs once warm where a size moves the run), `designs` (the list Send to block hands over) | Size all, Send to block |
+| `SheetSizing`, `Proposal`, `BlockSizing` (pp), `PathWalk` (pp), `SizedPassages` | The whole sheet: `SheetSizing.rate` (cheap, no trial columns), `pass`, `designs` (the list Send to block hands over), the entries and results, `PumparoundMember` (`pa <id> <part>`, one builder and parser); `Proposal.sizeAll` (proposes, applies, re-runs once warm where a size moves the run), `applied`, `pruned`; `BlockSizing` a column and its members; `PathWalk` the pressure paths; `SizedPassages` each passage's drop rule, sizers and run alike | Size all, Send to block |
 | `DesignBasis` (record, `DEFAULT` 1.10 design flow, 50 m line length, 60 K pumparound fall), `SizingFacts`, `UnitType` | The sheet's sizing basis and each item's chosen size and type | Sizing facts |
 | **Client (`client/gui/flowsheet/`, Minecraft-free)** | | |
 | `SimulatorRunner`, `SimulatorHost` (`NONE`) | Runs one job at a time on the thread "IChemE simulator run" (daemon, lowest priority): Run, Solve alone, Size all, the quiet rate; Stop sets a flag the next checkpoint throws on | Threads and Stop |
@@ -74,7 +74,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `network/ProcessSimulatorNetwork` | The packets: sheet parts both ways, Save design, Send designs, answers | Protocol |
 | `network/SimulatorResults`, `network/ColumnWire` | A run's results as bytes (state); a column's input, choices and display result on the wire | Results and column wire |
 | `client/gui/screens/inventory/ProcessSimulatorScreen`, `SimulatorBlockHost` | The one Minecraft screen (design height 480): forwards events, draws, polls the runner, uploads, autosaves | The game side of the screen |
-| `science/equipment/SentDesign` (record), `world/level/block/entity/SentDesignTags` | One sent unit design (tag, member, count, shape, column) and its NBT | Send to block and Import |
+| `science/equipment/SentDesign` (record), `world/level/block/entity/SentDesignTags` | One sent unit design (tag, member, count, shape, column) and its NBT; `wrap`/`unwrap` the packets' `Designs` list | Send to block and Import |
 
 ## Main flow
 
@@ -111,7 +111,7 @@ flowchart TD
 - Each `Limit` row has a kind: MUST (red when broken), SHOULD (yellow), RULE (picks a type or a service, lights no lamp). A unit's lamp is its worst row; a sheet's is its worst unit.
 - The 20 % spare is the owner's "always have enough excess": `Limit.AUTO_SPARE` (RULE, at least 20 %) is what Auto adds to exchanger, kettle and air-cooler surface, heater duty, type and cabin count, and compressor displacement. The lamps read the bare need, so a sized unit is green with room. `PATH_EXCESS` (SHOULD, 20 %) and `EJECTOR_MOTIVE_SPARE` (SHOULD, 20 %) are spares on a path and on motive steam.
 - Auto (`Selection`) calls the same `rate` a Fixed size calls, so an Auto size is never rated by another rule.
-- `SheetSizing.sizeAll` sizes units that read no line first (a column with its members), pump NPSH and valve bores last. Where a size moves the run (a column's diameter, sized drops), it re-runs once, warm; a run that is not steady sizes nothing. The result is one undoable edit.
+- `Proposal.sizeAll` sizes units that read no line first (a column with its members), pump NPSH and valve bores last. Where a size moves the run (a column's diameter, sized drops), it re-runs once, warm; a run that is not steady sizes nothing. The result is one undoable edit.
 - A `PressurePath` runs from a set pressure through every step to its taker; `spare()` feeds the heater's and the valve's sizing. `PATH_SPARE` (MUST ≥ 0 bar) is red where a supply cannot reach its taker, a steam row's tray included.
 - `ColumnSizing` tries half-metre diameters with real solves; a trial that does not solve is red on `COLUMN_SOLVES`.
 - `AirCoolerSizing.fans` finds the fan speed (0..1) that holds the load on the chosen face; power goes with the cube of the speed. `Sized.fanPower()` is the sheet's total.
@@ -262,7 +262,7 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | A Sizing row or lamp | `Limit`, the unit's sizer | `LimitTest`, `UnitSizingTest`, `CoolerSizingTest`, `SheetSizingTest`; the sample: `UnitSizingSampleTest`, `ColumnSizingSampleTest` (slow) |
 | Lines and paths | `LineSizing`, `Service`, `PressurePath`, `SheetSizing` | `LineSizingTest`, `ServiceTest`, `LineSizingSampleTest`, `SizeAllSampleTest` (slow) |
 | Which end of a passage is its inlet | `Passage`, `Wiring`, `UnitModel.passages`, `SheetEditor.takes` | `WiringTest`, `PassageEndsTest` |
-| The file | `FlowsheetFile` | `FlowsheetFileTest` (27, the corpus) |
+| The file | `FlowsheetFile` | `FlowsheetFileTest` (25, the corpus) |
 | The bundled examples and Open's rows | `FlowsheetExamples`, `FileColumns.entries`, `FileColumns.opened`, `assets/icheme/flowsheet_examples/` | `FlowsheetExamplesTest`; the sample gates run the crude unit |
 | Open's Delete: which rows go, the folder guard, the open sheet's name | `FileColumns.deletable`, `delete`, `nameAfterDelete`, `ProcessSimulatorScreen` (`Dialog.DELETE`) | `OpenDeleteTest`, `SimulatorBlockTest` (the keys) |
 | The block's store, uploads and packets ([packets](#packets-and-protocol), [block](#the-block-and-its-store)) | `SheetStore`, `SheetBody`, `ProcessSimulatorNetwork`, `ProcessSimulatorBlockEntity` | `SheetStoreTest`, `SimulatorBlockTest`, `ProcessSimulatorGameTests` |
