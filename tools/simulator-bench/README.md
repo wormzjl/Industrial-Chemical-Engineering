@@ -60,7 +60,7 @@ Phases:
   - a rating;
   - the props caches;
   - 100 undo steps of three kinds.
-- `histo`: what one held cold Run's `FlowsheetRun` adds to the heap, by class, from the VM's class histogram with and without it. Not in the default list; it takes no timing.
+- `histo`: what one held cold Run's `FlowsheetRun` adds to the heap, by class, from the VM's class histogram with and without it. Then `-Druns` Runs (default 4) on feeds 1 K apart, results dropped, and what they leave by class. Each Run goes on its own thread, as `SimulatorRunner` starts one a job; `-Dsame=true` keeps them on the bench's thread, where `NetworkPhaseEngine`'s per-instance `ThreadLocal` workspaces stay about 270 kB a Run. Not in the default list; it takes no timing.
 
 What a frame covers: the screen's per-frame work.
 
@@ -81,3 +81,4 @@ Draw calls follow `DrawCallTest`'s count: a batch of fills is one call, a text i
 
 - 2026-11-04: written for the batch's performance review. Smoke-checked with 0.3 s windows; the review's numbers come from a run with the owner's 60 and 60 s windows at the commit the review names.
 - 2026-11-04: baseline at `a958cecd2`, all 18 phases, beside another project's simulator (17–34 % CPU): `PERFORMANCE_REVIEW.md`. Then `histo`, with `-Druns=20`, found the shape caches: 12.4 MB a Run on a new input, up to 211 MB. The driver now logs the top CPU users of any process.
+- 2026-11-04: after `3e39dbc39`, `histo -Druns=20` on runner threads holds 0.4 MB, flat.

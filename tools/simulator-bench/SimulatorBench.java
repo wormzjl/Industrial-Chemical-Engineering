@@ -705,7 +705,13 @@ public final class SimulatorBench {
             var editor = new SheetEditor(fresh(sheet), M, SimulatorBench::columnDefaults);
             var f = crude.feed();
             editor.setFeed("CRUDE", new Flowsheet.Feed(f.temperature() + i, f.pressure(), f.amounts(), f.solids()), null);
-            run(editor.sheet(), null, new Units());
+            // On a thread of its own, as SimulatorRunner starts one a job (-Dsame for the bench's own thread).
+            if (Boolean.getBoolean("same")) run(editor.sheet(), null, new Units());
+            else {
+                var job = new Thread(() -> run(editor.sheet(), null, new Units()), SimulatorRunner.THREAD);
+                job.start();
+                job.join();
+            }
             say("  after %d Runs on new feeds, results dropped: heap +%.1f kB", i, (used() - base) / 1024.0);
         }
         var end = histogram();
