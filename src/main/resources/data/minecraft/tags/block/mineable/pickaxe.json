@@ -9,6 +9,8 @@
     "icheme:inline_filter",
     "icheme:equipment_shell",
     "icheme:equipment_interior",
-    "icheme:equipment_constructor"
+    "icheme:equipment_constructor",
+    "icheme:shaft",
+    "icheme:creative_motor"
   ]
 }

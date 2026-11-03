@@ -1,0 +1,6 @@
+{
+  "parent": "icheme:block/shaft_4",
+  "display": {
+    "gui": { "rotation": [30, 225, 45], "translation": [0, 0, 0], "scale": [0.625, 0.625, 0.625] }
+  }
+}

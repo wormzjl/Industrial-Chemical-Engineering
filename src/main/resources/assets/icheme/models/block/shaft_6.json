@@ -1,0 +1,21 @@
+{
+  "parent": "block/block",
+  "textures": {
+    "particle": "icheme:block/equipment_machine",
+    "shaft": "icheme:block/equipment_machine"
+  },
+  "elements": [
+    {
+      "from": [5, 0, 5],
+      "to": [11, 16, 11],
+      "faces": {
+        "north": { "uv": [5, 0, 11, 16], "texture": "#shaft" },
+        "east": { "uv": [5, 0, 11, 16], "texture": "#shaft" },
+        "south": { "uv": [5, 0, 11, 16], "texture": "#shaft" },
+        "west": { "uv": [5, 0, 11, 16], "texture": "#shaft" },
+        "up": { "uv": [5, 5, 11, 11], "texture": "#shaft", "cullface": "up" },
+        "down": { "uv": [5, 5, 11, 11], "texture": "#shaft", "cullface": "down" }
+      }
+    }
+  ]
+}

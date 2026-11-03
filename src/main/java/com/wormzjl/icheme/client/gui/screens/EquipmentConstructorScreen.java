@@ -633,7 +633,7 @@ public final class EquipmentConstructorScreen extends Screen {
     private void diameter(int steps) {
         if (form.designed()) {
             var kind = form.kind();
-            diameter = ProcessUnit.snap(kind, diameter + steps * ProcessUnit.diameterStep(kind));
+            diameter = com.wormzjl.icheme.science.equipment.UnitDesign.of(kind).step(diameter, steps);
             tangentLength = unitLength(kind, tangentLength);
             return;
         }
@@ -669,7 +669,9 @@ public final class EquipmentConstructorScreen extends Screen {
         };
         if (form.designed()) {
             var kind = form.kind();
-            diameter = ProcessUnit.snap(kind, before.kind()!=kind&&kind.coolingTower()?(kind==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?8:60):diameter);
+            diameter = ProcessUnit.snap(kind, before.kind()!=kind&&kind.coolingTower()?(kind==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?8:60)
+                    // A machine rated in kW starts at 75 kW.
+                    :before.kind()!=kind&&"kW".equals(com.wormzjl.icheme.science.equipment.UnitDesign.of(kind).sizeUnit())?75:diameter);
             // A new kind starts at its design's second size and support; the same kind keeps the player's.
             tangentLength = unitLength(kind, before.kind() != kind ? ProcessUnit.defaultLength(kind, diameter) : tangentLength);
             if (before.kind() != kind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);

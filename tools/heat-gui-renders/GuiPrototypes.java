@@ -80,6 +80,86 @@ public final class GuiPrototypes {
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         out.addAll(OperationPrototypes.operation());
+        out.addAll(dutyOptions());
+        return out;
+    }
+
+    // ---- Option sheet (batch 2026-11-03-rotating-machinery, W4): the constructor's duty rows for a motor and a turbine ----
+
+    /** One option's Duty rows for the motor (A keys, B steppers, C speed stepper with drive keys). */
+    static List<Column.Row> motorDuty(char option) {
+        var rows = new ArrayList<Column.Row>();
+        var duty = new ArrayList<Column.Row>();
+        duty.add(new Column.Setting("power", "Power", "250", "kW", "Rated power, IEC steps", true));
+        switch (option) {
+            case 'A' -> {
+                rows.add(new Column.Group("Duty", null, duty));
+                rows.add(new Column.Group("Speed", "Poles: synchronous speed at 50 Hz", List.of(
+                        new Column.Buttons(List.of(new Column.Button("p2", "2-pole", true, null, false), new Column.Button("p4", "4-pole", true, null, true))),
+                        new Column.Buttons(List.of(new Column.Button("p6", "6-pole", true, null, false), new Column.Button("p8", "8-pole", true, null, false))))));
+                rows.add(new Column.Group("Drive", null, List.of(new Column.Buttons(List.of(new Column.Button("fixed", "Fixed", true, null, true),
+                        new Column.Button("variable", "Variable", true, null, false))))));
+            }
+            case 'B' -> {
+                duty.add(new Column.Setting("poles", "Poles", "4", "", null, true));
+                duty.add(new Column.Setting("drive", "Drive", "FIX", "", "FIX: fixed speed, VAR: variable-speed drive", true));
+                rows.add(new Column.Group("Duty", null, duty));
+            }
+            default -> {
+                duty.add(new Column.Setting("speed", "Speed", "1500", "rpm", "Synchronous speed: 2, 4, 6 or 8 poles at 50 Hz", true));
+                duty.add(new Column.Buttons(List.of(new Column.Button("fixed", "Fixed", true, null, true), new Column.Button("variable", "Variable", true, null, false))));
+                rows.add(new Column.Group("Duty", null, duty));
+            }
+        }
+        rows.add(new Column.Paragraph("Frame 0.75 m, 1,485 rpm, 6.9 kN·m", Palette.MUTED));
+        return rows;
+    }
+
+    /** One option's Duty rows for the steam turbine. */
+    static List<Column.Row> turbineDuty(char option) {
+        var rows = new ArrayList<Column.Row>();
+        var duty = new ArrayList<Column.Row>();
+        duty.add(new Column.Setting("power", "Power", "2500", "kW", "Rated shaft power", true));
+        switch (option) {
+            case 'A' -> {
+                rows.add(new Column.Group("Duty", null, duty));
+                rows.add(new Column.Group("Inlet steam", "MP 17 bar 300 °C, HP 42 bar 400 °C, VHP 100 bar 510 °C", List.of(new Column.Buttons(List.of(
+                        new Column.Button("mp", "MP", true, null, false), new Column.Button("hp", "HP", true, null, true), new Column.Button("vhp", "VHP", true, null, false))))));
+                rows.add(new Column.Group("Exhaust", null, List.of(new Column.Setting("exhaust", "Pressure", "450", "kPa", "10 to 20 kPa: condensing", true))));
+            }
+            case 'B' -> {
+                duty.add(new Column.Setting("inlet", "Inlet", "42", "bar", "17, 42 or 100 bar at 300, 400 or 510 °C", true));
+                duty.add(new Column.Setting("exhaust", "Exhaust", "450", "kPa", "10 to 20 kPa: condensing", true));
+                rows.add(new Column.Group("Duty", null, duty));
+            }
+            default -> {
+                rows.add(new Column.Group("Duty", null, duty));
+                rows.add(new Column.Group("Inlet steam", null, List.of(new Column.Buttons(List.of(
+                        new Column.Button("mp", "MP", true, null, false), new Column.Button("hp", "HP", true, null, true), new Column.Button("vhp", "VHP", true, null, false))))));
+                rows.add(new Column.Group("Exhaust", null, List.of(new Column.Buttons(List.of(new Column.Button("back", "Back press.", true, null, true),
+                        new Column.Button("vacuum", "Vacuum", true, null, false))), new Column.Setting("exhaust", "Pressure", "450", "kPa", null, true))));
+            }
+        }
+        rows.add(new Column.Paragraph("Casing 0.8 m, 9,000 rpm, 11 t/h", Palette.MUTED));
+        return rows;
+    }
+
+    static ConstructorColumn.Page dutyPage(List<Column.Row> duty) {
+        var rows = new ArrayList<>(duty);
+        rows.add(new Column.Group("Place", null, List.of(new Column.Setting("forward", "Forward", "3", "", null, true),
+                new Column.Setting("right", "Right", "0", "", null, true), new Column.Setting("up", "Up", "0", "", null, true))));
+        return new ConstructorColumn.Page(rows, List.of(new Column.Button("paint", "Paint", true, null), new Column.Button("build", "Build", true, null)), true);
+    }
+
+    static List<Prototype> dutyOptions() {
+        var out = new ArrayList<Prototype>();
+        for (char option : new char[]{'A', 'B', 'C'}) {
+            char o = option;
+            out.add(new Prototype("duty-" + Character.toLowerCase(o) + "-motor", 464, 254, (d, s) -> constructorDoor(d, dutyPage(motorDuty(o)), "Motor", "change",
+                    "Option " + o + ": motor", Palette.ACCENT, Map.of()), true));
+            out.add(new Prototype("duty-" + Character.toLowerCase(o) + "-turbine", 464, 254, (d, s) -> constructorDoor(d, dutyPage(turbineDuty(o)), "Steam turbine", "change",
+                    "Option " + o + ": steam turbine", Palette.ACCENT, Map.of()), true));
+        }
         return out;
     }
 
@@ -320,8 +400,8 @@ public final class GuiPrototypes {
 
     static List<Prototype> constructor() {
         var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
-        var drum = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.VERTICAL, 2, 6, 3, 3, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
-        var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
+        var drum = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.VERTICAL, 2, 6, 3, 3, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
+        var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var connections = ConstructorColumn.connections(new ConstructorColumn.Connections(2, 1, 1, STANDING, "4.5", false, -1, "back", true, false, false,
                 new ConstructorColumn.Outlet(0b1011, 0, STANDING)), DIALOG);
         var nozzles = ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(7, 2, new ConstructorColumn.Nozzle("pumparound_draw", 1, true, "18.5",
@@ -329,7 +409,7 @@ public final class GuiPrototypes {
         String volume = DIALOG.get(CONSTRUCTOR + "volume", "20.9", "46.4");
         // A column's design page with Import and Templates, and its Templates page: the bundled templates, the pot off, one of the player's.
         var columnDesign = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.COLUMN, 8, 6, 10, 3, 0, 0, new ProcessUnit.Bank(1, 1),
-                new ConstructorColumn.Imported(8, 42, 38), outlet, 16), DIALOG);
+                new ConstructorColumn.Imported(8, 42, 38), outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var templates = new ArrayList<ConstructorColumn.Template>();
         for (var name : List.of("Bonga", "Cold Lake Blend", "Dalia", "Tia Juana Light (default)", "Upper Zakum", "WTI Light - Export"))
             templates.add(new ConstructorColumn.Template(name, true, DIALOG.get(CONSTRUCTOR + "template.bundled", name)));

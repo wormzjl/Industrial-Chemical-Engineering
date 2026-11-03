@@ -127,6 +127,11 @@ public final class ProcessUnit {
         return UnitDesign.of(kind).sizeStep();
     }
 
+    /** Every main size of the kind, smallest first (a machine's rated powers are a list, not a grid). */
+    public static List<Double> sizes(Kind kind) {
+        return UnitDesign.of(kind).sizes();
+    }
+
     /** The least second size (tubes, a bay's length, throws, a radiant height or length; 1 where the kind has none). */
     public static int minLength(Kind kind, double diameter) {
         return UnitDesign.of(kind).minLength(diameter);
@@ -160,9 +165,7 @@ public final class ProcessUnit {
 
     /** A diameter on its kind's grid, cleared of rounding (0.30000000000000004 becomes 0.3). */
     public static double snap(Kind kind, double diameter) {
-        double step = diameterStep(kind), min = minDiameter(kind);
-        double k = Math.max(0, Math.min(Math.round((maxDiameter(kind) - min) / step), Math.round((diameter - min) / step)));
-        return Math.round((min + k * step) * 1000) / 1000.0;
+        return UnitDesign.of(kind).snap(diameter);
     }
 
     static void validate(Kind kind, double diameter, double length, Orientation orientation, int support, Bank bank) {
@@ -170,8 +173,7 @@ public final class ProcessUnit {
         String name = kind.name().toLowerCase(Locale.ROOT);
         if (!design.banks() && !bank.equals(Bank.ONE)) throw new IllegalArgumentException("Only air coolers are built in banks");
         if (!(diameter >= minDiameter(kind) - 1e-9 && diameter <= maxDiameter(kind) + 1e-9) || Math.abs(snap(kind, diameter) - diameter) > 1e-9)
-            throw new IllegalArgumentException("A " + name + "'s size must be " + minDiameter(kind) + " to " + maxDiameter(kind) + " m in " + diameterStep(kind)
-                    + " m steps, not " + diameter);
+            throw new IllegalArgumentException("A " + name + "'s size must be one of its sizes from " + minDiameter(kind) + " to " + maxDiameter(kind) + ", not " + diameter);
         if (length != Math.rint(length) || length < minLength(kind, diameter) || length > maxLength(kind, diameter))
             throw new IllegalArgumentException("A " + name + "'s " + (design.lengthInMetres() ? "length" : "count") + " must be " + minLength(kind, diameter) + " to "
                     + maxLength(kind, diameter) + (design.lengthInMetres() ? " whole metres" : "") + ", not " + length);
@@ -284,6 +286,33 @@ public final class ProcessUnit {
         return 1000 * 9.81 * pumpFlow(d) / 3600 * PUMP_HEAD / PUMP_EFFICIENCY / 1000;
     }
 
+    /**
+     * A centrifugal pump's discharge, m, for rated flow {@code flow}, m³/h: liquid at 3 m/s ({@link #pumpFlow}), up onto the
+     * 0.05 m grid, 0.05 to 0.6 m.
+     */
+    public static double pumpDischarge(double flow) {
+        return UnitDesign.upTo(Math.sqrt(4 * flow / 3600 / (3 * Math.PI)), SUCTION_STEP, SUCTION_STEP, .6);
+    }
+
+    /** A pump's shaft power at its design point, kW: water at its rated flow and head, at {@link #PUMP_EFFICIENCY}. */
+    public static double pumpPower(MachineDuty duty) {
+        return 9.81 * duty.flow() / 3600 * duty.head() / PUMP_EFFICIENCY;
+    }
+
+    /**
+     * This pump's impeller, m: from its design point's head and speed, {@code D = 60/(π n) √(2 g H)} (plan section 6), at
+     * least {@code least}, the casing that takes its discharge's throat (the drawing's proportions before the design point).
+     */
+    double impeller(double least) {
+        var duty = shape.duty();
+        return Math.max(least, 60 / (Math.PI * duty.speed()) * Math.sqrt(2 * 9.81 * duty.head()));
+    }
+
+    /** This pump's drawn shaft end radius: its rated power at its speed ({@link #shaftRadius}). */
+    double pumpShaft() {
+        return shaftRadius(pumpPower(shape.duty()), shape.duty().speed());
+    }
+
     /** A TEFC motor's body across, m, for {@code kw}: about 0.19 P^0.25 (0.32 m at 8 kW, 0.91 m at 530 kW). */
     static double motorDiameter(double kw) {
         return .19 * Math.sqrt(Math.sqrt(kw));
@@ -331,20 +360,21 @@ public final class ProcessUnit {
      * A balanced-opposed compressor's sizes, m, for bore {@code b} and {@code throwCount} ({@code MACHINES_HEATERS_SURVEY.md}):
      * its stroke; a cylinder's outside across (water jacket and valve pockets, 1.45 bores and 0.15 m: 2.5 bores small, 1.6
      * large) and length (the stroke and 0.5 to 0.9 m); a crosshead guide's half section and its length (3.5 strokes, 0.7 m
-     * at least), a distance piece's half section; the frame's half width, the crankshaft's height over the foundation and
-     * the frame's top (the crankshaft about half way up); the crank pitch; the cylinders' centres out from the crankshaft
+     * at least), a distance piece's half section; the frame's half width, the crankshaft's height over the foundation (a
+     * cell centre, half a metre up, so a shaft block meets its coupling; batch 2026-11-03-rotating-machinery), the
+     * bottles' reference height over it (0.5 + 0.35 b: where the crankshaft stood beside its synchronous motor, so a
+     * placed compressor keeps its nozzles; the cylinders' necks take the difference) and the frame's top (0.95 + 0.85 b);
+     * the crank pitch; the cylinders' centres out from the crankshaft
      * (whole metres: their bottles' nozzles run through cell centres; the distance piece takes the rest, 0.5 + 0.4 b at
-     * least); the suction and discharge bottles across; the synchronous motor's frame across, 0.3 + 1.1 (kW / rpm)^⅓
-     * (wider than long: 0.45 of that and 0.4 m), from {@link #compressorPower} ({@code MACHINES_SCALE_RESEARCH.md}).
+     * least); the suction and discharge bottles across ({@code MACHINES_SCALE_RESEARCH.md}). Its driver is a machine of its
+     * own (owner decision D4).
      */
     record Compressor(double bore, int throwCount, double stroke, double cylinder, double cylinderLength, double guide, double guideLength, double piece, double half,
-                      double crank, double frameTop, double pitch, double out, double suction, double discharge, double motor, double motorLength) {
+                      double crank, double bottles, double frameTop, double pitch, double out, double suction, double discharge) {
         static Compressor of(double b, int throwCount) {
-            double s = ProcessUnit.stroke(b), c = 1.45 * b + .15, lc = 2.2 * s + .3 + .3 * b, half = .45 + .3 * b, crank = .5 + .35 * b, guide = .25 + .2 * b;
+            double s = ProcessUnit.stroke(b), c = 1.45 * b + .15, lc = 2.2 * s + .3 + .3 * b, half = .45 + .3 * b, crank = .5, guide = .25 + .2 * b;
             double lg = Math.max(.7, 3.5 * s), out = Math.ceil(half + lg + .5 + .4 * b + lc / 2 - 1e-9), ds = 1.1 * b + .3;
-            double dm = .3 + 1.1 * DeterministicMath.cbrt(1000 * compressorPower(b, throwCount) / compressorSpeed(b));
-            return new Compressor(b, throwCount, s, c, lc, guide, lg, .8 * guide, half, crank, crank + .45 + .5 * b, Math.max(.55, (c + .3) / 2), out, ds, .85 * ds, dm,
-                    .45 * dm + .4);
+            return new Compressor(b, throwCount, s, c, lc, guide, lg, .8 * guide, half, crank, .5 + .35 * b, .95 + .85 * b, Math.max(.55, (c + .3) / 2), out, ds, .85 * ds);
         }
 
         /** The distance piece's length from the guide to the cylinder. */
@@ -374,14 +404,19 @@ public final class ProcessUnit {
             return .2 + .15 * bore;
         }
 
-        /** The discharge bottles' axis for a foundation {@code h} high: the cell centre under the cylinders at least {@link #gap} below them. */
-        double dischargeAxis(int h) {
-            return Math.floor(h + crank - cylinder / 2 - gap() - discharge / 2 - .5) + .5;
+        /** The suction bottles' axis for a foundation {@code h} high: {@link #gap} over cylinders at the bottles' reference height. */
+        double suctionAxis(int h) {
+            return h + bottles + cylinder / 2 + gap() + suction / 2;
         }
 
-        /** Whether a foundation {@code h} high keeps the discharge bottles 0.3 m and the motor 0.1 m over grade. */
+        /** The discharge bottles' axis for a foundation {@code h} high: the cell centre at least {@link #gap} under cylinders at the bottles' reference height. */
+        double dischargeAxis(int h) {
+            return Math.floor(h + bottles - cylinder / 2 - gap() - discharge / 2 - .5) + .5;
+        }
+
+        /** Whether a foundation {@code h} high keeps the discharge bottles 0.3 m over grade. */
         boolean clears(int h) {
-            return dischargeAxis(h) - discharge / 2 >= .3 && h + crank - motor / 2 >= .1;
+            return dischargeAxis(h) - discharge / 2 >= .3;
         }
     }
 
@@ -657,6 +692,12 @@ public final class ProcessUnit {
     private final List<Solid> largeSolids = new ArrayList<>(), largeVolumes = new ArrayList<>();
     static final int LARGE = 256;
     final List<Nozzle> nozzles = new ArrayList<>();
+    /** The machine's shaft ends ({@link EquipmentShape#shaftEnds}), in its frame. */
+    final List<EquipmentShape.ShaftEnd> shaftEnds = new ArrayList<>();
+    /** The centre of an electric machine's terminal box, its RF port (W5), in the frame; null without one. The motor drawings set it. */
+    double @org.jetbrains.annotations.Nullable [] terminal;
+    /** The last terminal box a motor drawing drew ({@link #motor}, {@link #largeMotor}): its centre in the frame. */
+    double @org.jetbrains.annotations.Nullable [] terminalBox;
     /** Fixed casting radii at nozzle roots, by nozzle index: the pipe-sized nozzle blends into each casting. */
     final Map<Integer, Double> nozzleRoots = new HashMap<>();
     /** The sleeves through a closed skirt, by nozzle index: drawn with the nozzle at its pipe's size ({@link Sleeve}). */
@@ -712,6 +753,15 @@ public final class ProcessUnit {
         return List.copyOf(nozzles);
     }
 
+    List<EquipmentShape.ShaftEnd> shaftEnds() {
+        return List.copyOf(shaftEnds);
+    }
+
+    /** The terminal box's centre in the frame (an electric machine's RF port), or null. */
+    double @org.jetbrains.annotations.Nullable [] terminal() {
+        return terminal == null ? null : terminal.clone();
+    }
+
     /** A heater's decks and ladders, for the access gates. */
     List<Deck> decks() {
         return List.copyOf(decks);
@@ -749,6 +799,11 @@ public final class ProcessUnit {
             double face = n.face()[n.axis()];
             if (n.sign() > 0) out[n.axis() + 3] = Math.max(out[n.axis() + 3], face);
             else out[n.axis()] = Math.min(out[n.axis()], face);
+        }
+        for (var s : shaftEnds) {
+            double face = s.face()[s.axis()];
+            if (s.sign() > 0) out[s.axis() + 3] = Math.max(out[s.axis() + 3], face);
+            else out[s.axis()] = Math.min(out[s.axis()], face);
         }
         return out;
     }
@@ -1210,38 +1265,38 @@ public final class ProcessUnit {
      * bell; the volute, its scroll growing from 0.55 to 0.88 impeller diameters round a hub, its throat turning up into
      * the cast discharge neck and flange on the casing's centre line; the cover's joint ring of studs; the bearing bracket
      * with a window each side showing the seal chamber and gland; the bearing housing (oil sump in front with its
-     * constant-level oiler, cooling fins behind, a vent on top); the coupling's half-round guard; the TEFC motor (fins,
-     * feet, fan cowl and grille, terminal box, lifting eyes). The casing stands on its centreline feet on pedestals (API
+     * constant-level oiler, cooling fins behind, a vent on top); the shaft end, its half coupling under a half-round
+     * guard on a block face, where a shaft block joins the driver (batch 2026-11-03-rotating-machinery, owner decision D4). The casing stands on its centreline feet on pedestals (API
      * 610 allows no foot under the bearing housing). From 0.1 m a seal pot (API 682 plans 52/53) stands on its post beside
      * the bracket, from 0.15 m a plan 11 flush line runs from the discharge neck to the gland. The baseplate's drain rim
      * stands on a grout line on a chamfered plinth; between the pump's flanges and the block faces the nozzles run as
-     * spools of the connected pipe. Sizes follow the discharge d: suction {@link #pumpSuction}, impeller 0.18 + 1.2 d, the
-     * motor {@link #motorDiameter} of {@link #pumpPower} across.
+     * spools of the connected pipe. Sizes follow the discharge d (the rated flow at 3 m/s): suction {@link #pumpSuction},
+     * impeller from the rated head and speed ({@link #impeller}), at least 0.18 + 1.2 d.
      */
     void pump() {
         if (shape.diameter() > OH2_MAX + 1e-9) {
             splitPump();
             return;
         }
-        double d = shape.diameter(), s = pumpSuction(d), di = .18 + 1.2 * d;
+        double d = shape.diameter(), s = pumpSuction(d), di = impeller(.18 + 1.2 * d);
         double rh = .45 * di, rv0 = .55 * di, rv1 = .88 * di, width = .4 * di + .06, joint = .82 * di, tj = .04 + .04 * di;
-        double plate = .15 + .1 * di, rm = motorDiameter(pumpPower(d)) / 2, lm = 3.2 * rm + .1, fin = .025 + .06 * rm;
-        double rb = .08 + .22 * di, lb = .3 + .6 * di, lk = .2 + .3 * di, guard = .12 + .2 * di, spacer = .15 + .25 * di, shaft = .03 + .05 * di;
+        double plate = .15 + .1 * di;
+        double rb = .08 + .22 * di, lb = .3 + .6 * di, lk = .2 + .3 * di, shaft = .03 + .05 * di, rs = pumpShaft();
         // Keep the established port clearances; the shared nozzle mesh draws the flange at the connection face.
         double ts = 1.3 * PipeSizes.flangeThickness(s), td = 1.3 * PipeSizes.flangeThickness(d);
         double bell = .08 + .7 * s, pot = d >= .1 ? .07 + .1 * d : 0;
-        double half = Math.max(Math.max(rv1, joint) + .14, Math.max(Math.max(rm + fin, guard) + .08, pot > 0 ? .55 * di + 2 * pot + .17 : 0));
+        double half = Math.max(Math.max(rv1, joint) + .14, Math.max(Math.max(rs + .09, rb + .03) + .08, pot > 0 ? .55 * di + 2 * pot + .17 : 0));
         double a = centre(half + .12);
         // Heights: a plinth of 0.15 to 0.45 m, a grout line, the baseplate; the shaft on the lowest cell centre whose casing
         // clears the baseplate by 0.06 m, the pedestals taking what the plinth does not.
         double y = Math.max(.5, Math.ceil(.15 + .04 + plate + .06 + rv1 - .5) + .5);
         double plinth = Math.max(.15, Math.min(.45, y - rv1 - .3 - plate - .04)), top = plinth + .04 + plate;
         // Along z: the line's spool, the suction neck and bell, the casing (its middle on a cell centre, the discharge's
-        // line), the cover, the bracket, the bearing housing, the spacer under its guard, the motor.
+        // line), the cover, the bracket, the bearing housing, the shaft end under its guard to the coupling face on a block face.
         double zc = Math.ceil(.25 + ts + bell + .3 * width - .5) + .5, z0 = zc - width / 2, z1 = zc + width / 2, zh = zc - .3 * width, zf = zh - bell - ts;
-        double zk = z1 + tj, zb0 = zk + lk, zb1 = zb0 + lb, zm0 = zb1 + .08 + spacer, zm1 = zm0 + lm, cowl = zm1 - .18 * lm, seal = zk + .45 * lk;
+        double zk = z1 + tj, zb0 = zk + lk, zb1 = zb0 + lb, coupling = Math.ceil(zb1 + .2 + rs - 1e-9), seal = zk + .45 * lk;
         var f = Frame.of(new double[]{a, y, 0}, 2, 1);
-        int n = sides(2 * rv1), nm = sides(2 * rm), nb = sides(2 * rb);
+        int n = sides(2 * rv1), nb = sides(2 * rb);
         // The suction bell, the volute and its hub, the cover with its joint ring of studs.
         mesh.frustum(f, .5 * s + .04, .43 * s + .04, zf + ts, zh, n, Material.MACHINE);
         scroll(a, y, z0, z1, zh, rh, rv0, rv1);
@@ -1269,16 +1324,8 @@ public final class ProcessUnit {
         box(new double[]{a + .9 * rb, oiler - .015, zb0 + .2 * lb - .015}, new double[]{xo, oiler + .015, zb0 + .2 * lb + .015}, Material.PIPE, false);
         mesh.cylinder(Frame.of(new double[]{xo, 0, zb0 + .2 * lb}, 1, 1), bulb, oiler, oiler + .13 + .05 * di, 8, Material.OPENING);
         mesh.cylinder(Frame.of(new double[]{a, 0, sump + .6 * (zb1 - sump)}, 1, 1), .025 + .01 * di, y + rb - .01, y + rb + .05, 8, Material.PIPE);
-        // The coupling guard, a half-round hood over the spacer.
-        var hood = new ArrayList<double[]>();
-        hood.add(new double[]{a - guard, top});
-        hood.add(new double[]{a + guard, top});
-        for (int k = 0; k <= 6; k++)
-            hood.add(new double[]{a + guard * DeterministicMath.cos(Math.PI * k / 6), y + guard * DeterministicMath.sin(Math.PI * k / 6)});
-        extrude(hood, zb1 + .04, zm0 - .03, Material.GUARD);
-        mesh.prism(f, shaft, zb1 + .03, zm0, 8, Material.PIPE);
-        solids.add(Solid.box(new double[]{a - guard, top, zb1 + .04}, new double[]{a + guard, y + guard, zm0 - .03}));
-        motor(f, rm, fin, zm0, cowl, zm1, nm, shaft, top, MotorDetail.FULL);
+        // The shaft end: the half coupling under its guard, the driver joined by a shaft block beyond the face.
+        coupling(a, y, zb1, coupling, 1, rs, top, shown(shape.duty().speed()), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
         // The casing's centreline feet near its cover on their pedestals.
         for (int side = -1; side <= 1; side += 2) {
             double inner = a + side * rh, outer = a + side * (rv1 + .1), px = a + side * (rv1 + .03);
@@ -1290,7 +1337,7 @@ public final class ProcessUnit {
         box(new double[]{a - hx, y + rh, zc - hz}, new double[]{a + hx, y + .98 * rv0, zc + hz}, Material.MACHINE, false);
         transition(1, a - hx, a + hx, zc - hz, zc + hz, y + .98 * rv0, a, zc, .5 * d + .025, neck, 4 * ((sides(d) + 3) / 4), Material.MACHINE, false);
         // The baseplate on its grout line and chamfered plinth: its drain rim and drain.
-        double zp0 = z0 - .1, zp1 = zm1 + .05;
+        double zp0 = z0 - .1, zp1 = coupling - .15;
         box(new double[]{a - half, plinth + .04, zp0}, new double[]{a + half, top, zp1}, Material.STEELWORK, true);
         for (int side = -1; side <= 1; side += 2) {
             box(new double[]{side < 0 ? a - half : a + half - .03, top, zp0}, new double[]{side < 0 ? a - half + .03 : a + half, top + .05, zp1}, Material.STEELWORK, false);
@@ -1339,26 +1386,25 @@ public final class ProcessUnit {
      * suction on the right seen from the constructor, the discharge on the left, both horizontal, half a metre under the
      * shaft) and stands on four feet; the upper half, the volute's round cover over the suction chambers either side of
      * it, is bolted on the split flange running the casing's length, with two lifting lugs. Seal chambers in windowed
-     * brackets and finned bearing housings at both ends; the coupling guard and a large motor with its top cooler behind,
-     * on one baseplate, grout line and plinth. Sizes follow the discharge d: suction {@link #pumpSuction}, impeller
-     * 0.35 + 0.8 d, the motor about 1.15 {@link #motorDiameter} of {@link #pumpPower} across.
+     * brackets and finned bearing housings at both ends; the shaft end's half coupling under its guard behind, on one
+     * baseplate, grout line and plinth. Sizes follow the discharge d: suction {@link #pumpSuction}, impeller from the
+     * rated head and speed ({@link #impeller}), at least 0.35 + 0.8 d.
      */
     void splitPump() {
-        double d = shape.diameter(), s = pumpSuction(d), di = .35 + .8 * d;
+        double d = shape.diameter(), s = pumpSuction(d), di = impeller(.35 + .8 * d);
         double rv = .9 * di, rc = .72 * di, wv = .5 * di, lc = 1.5 * di, split = .03 + .02 * di;
         double fs = 1.15 * PipeSizes.flange(s) / 2, ts = 1.3 * PipeSizes.flangeThickness(s), fd = 1.15 * PipeSizes.flange(d) / 2, td = 1.3 * PipeSizes.flangeThickness(d);
-        double rb = .1 + .2 * di, lb = .25 + .35 * di, lk = .2 + .25 * di, guard = .15 + .2 * di, spacer = .2 + .2 * di, shaft = .04 + .05 * di;
-        double across = 1.15 * motorDiameter(pumpPower(d)), lm = 1.7 * across + .2, plate = .2 + .1 * di;
+        double rb = .1 + .2 * di, lb = .25 + .35 * di, lk = .2 + .25 * di, shaft = .04 + .05 * di, rs = pumpShaft(), plate = .2 + .1 * di;
         // Across x: each nozzle's branch reaches a spool past the casing; the box holds both flanges and their block faces.
-        double reachS = rv + .25 * s + .15, reachD = rv + .25 * d + .15, deck = Math.max(rv + .2, across / 2 + .3);
+        double reachS = rv + .25 * s + .15, reachD = rv + .25 * d + .15, deck = rv + .2;
         double a = centre(Math.max(Math.max(reachS + ts, reachD + td) + EquipmentShape.STAND_OUT + .05, deck + .12));
         // Heights: a 0.3 m plinth, a grout line, the baseplate; the nozzles on the lowest cell centre whose larger flange
         // clears the baseplate by 0.06 m, the shaft half a metre over them.
         double plinth = .3, top = plinth + .04 + plate, yn = Math.ceil(top + Math.max(fs, fd) + .06 - .5) + .5, y = yn + .5, low = yn - .5 * s - .05;
         // Along z: the free end's housing and bracket, the casing (its middle, the nozzles' line, on a cell centre), the
-        // drive end's bracket and housing, the coupling under its guard, the motor.
+        // drive end's bracket and housing, the shaft end under its guard to the coupling face on a block face.
         double zc = Math.ceil(.15 + lb + lk + lc / 2 - .5) + .5, z0 = zc - lc / 2, z1 = zc + lc / 2;
-        double zf1 = z0 - lk, zf0 = zf1 - lb, zb0 = z1 + lk, zb1 = zb0 + lb, zm0 = zb1 + .08 + spacer, zm1 = zm0 + lm;
+        double zf1 = z0 - lk, zf0 = zf1 - lb, zb0 = z1 + lk, zb1 = zb0 + lb, face = Math.ceil(zb1 + .2 + rs - 1e-9);
         var f = Frame.of(new double[]{a, y, 0}, 2, 1);
         int n = sides(2 * rv), nb = sides(2 * rb);
         // The upper casing: the suction chambers, the volute between them, the end walls.
@@ -1412,18 +1458,10 @@ public final class ProcessUnit {
             }
             mesh.cylinder(Frame.of(new double[]{a, 0, (h0 + h1) / 2}, 1, 1), .025 + .01 * di, y + rb - .01, y + rb + .05, 8, Material.PIPE);
         }
-        // The coupling guard, a half-round hood over the spacer, and the motor.
-        var hood = new ArrayList<double[]>();
-        hood.add(new double[]{a - guard, top});
-        hood.add(new double[]{a + guard, top});
-        for (int k = 0; k <= 6; k++)
-            hood.add(new double[]{a + guard * DeterministicMath.cos(Math.PI * k / 6), y + guard * DeterministicMath.sin(Math.PI * k / 6)});
-        extrude(hood, zb1 + .04, zm0 - .03, Material.GUARD);
-        mesh.prism(f, shaft, zb1 + .03, zm0, 8, Material.PIPE);
-        solids.add(Solid.box(new double[]{a - guard, top, zb1 + .04}, new double[]{a + guard, y + guard, zm0 - .03}));
-        largeMotor(a, y, zm0, across, lm, top, false);
+        // The shaft end: the half coupling under its guard, the driver joined by a shaft block beyond the face.
+        coupling(a, y, zb1, face, 1, rs, top, shown(shape.duty().speed()), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
         // The baseplate on its grout line and chamfered plinth.
-        double zp0 = zf0 - .15, zp1 = zm1 + .1, base = deck + .12, chamfer = .04;
+        double zp0 = zf0 - .15, zp1 = face - .15, base = deck + .12, chamfer = .04;
         box(new double[]{a - deck, plinth + .04, zp0}, new double[]{a + deck, top, zp1}, Material.STEELWORK, true);
         box(new double[]{a - deck + .02, plinth, zp0 + .02}, new double[]{a + deck - .02, plinth + .04, zp1 - .02}, Material.CONCRETE, false);
         extrude(List.of(new double[]{a - base, 0}, new double[]{a + base, 0}, new double[]{a + base, plinth - chamfer}, new double[]{a + base - chamfer, plinth},
@@ -1606,6 +1644,8 @@ public final class ProcessUnit {
         }
         double y = o[1];
         motorBox(f, across, terminal, terminal + .55 * r, y + r - .02, y + 1.45 * r, -.35 * r, .35 * r, Material.MOTOR, false);
+        double tc = terminal + .275 * r;
+        terminalBox = new double[]{o[0] + tc * ax[0], y + 1.215 * r, o[2] + tc * ax[2]};
         if (full) {
             double[] conduit = {o[0] + (terminal + .27 * r) * ax[0], y + 1.2 * r, o[2] + (terminal + .27 * r) * ax[2]};
             mesh.cylinder(new Frame(conduit, across, top), .06 * r + .01, .35 * r, .35 * r + .05, 8, Material.MOTOR);
@@ -1807,14 +1847,15 @@ public final class ProcessUnit {
      * side's, each joined to every cylinder by a flanged neck. One suction header crosses the machine over its outboard
      * (front) end and drops into both suction bottles, the inlet on top of its middle; one discharge header joins both discharge bottles'
      * front heads in front of the frame, the outlet at the front of its middle (owner request 2026-10-17: one inlet, one
-     * outlet). The synchronous motor drives the crankshaft's back end through a guarded coupling ({@link #syncMotor}).
-     * Sizes from {@link Compressor}.
+     * outlet). The crankshaft's back end is its shaft end, a half coupling under its guard: its driver (a motor or a turbine)
+     * joins it through a shaft block (owner decision D4: the synchronous motor and its exciter went). Sizes from
+     * {@link Compressor}.
      */
     void compressor() {
         var c = Compressor.of(shape.diameter(), (int) shape.tangentLength());
         int throwCount = c.throwCount(), h = shape.support();
         double b = c.bore(), yc = h + c.crank(), ds = c.suction(), dd = c.discharge(), cyl = c.cylinder(), lc = c.cylinderLength(), gh = c.guide(), piece = c.piece();
-        double ysb = yc + cyl / 2 + c.gap() + ds / 2, ydb = c.dischargeAxis(h), pocket = b >= .3 ? .3 + .3 * b : 0;
+        double ysb = c.suctionAxis(h), ydb = c.dischargeAxis(h), pocket = b >= .3 ? .3 + .3 * b : 0;
         double hs = c.suctionHeader(), hd = c.dischargeHeader();
         double a = centre(c.out() + Math.max(lc / 2 + .12 + pocket + (pocket > 0 ? .12 : 0), Math.max(ds, dd) / 2) + .05);
         // Along z from the frame's front: an auxiliary end of 0.6 m, the throws at the crank pitch, 0.6 m to the drive end.
@@ -1938,11 +1979,9 @@ public final class ProcessUnit {
         header(hd, new double[]{xl, ydb, head}, new double[]{xl, ydb, zd}, new double[]{xr, ydb, zd}, new double[]{xr, ydb, head});
         double start = zd + .03, face = Math.floor(zd - hd / 2 - NECK);
         nozzles.add(new Nozzle(Role.DISCHARGE, new double[]{a, ydb, start}, 2, -1, start - face, ColumnStructure.size(hd, hd), 0));
-        // The guarded coupling and the synchronous motor.
-        double mz0 = end + .35, g = .15 + .15 * b;
-        mesh.cylinder(Frame.of(new double[]{a, yc, 0}, 2, 1), .1 + .1 * b, end, mz0, 12, Material.MACHINE);
-        box(new double[]{a - g, Math.max(h, yc - g), end + .03}, new double[]{a + g, yc + 1.2 * g, mz0 - .03}, Material.GUARD, true);
-        largeMotor(a, yc, mz0, c.motor(), c.motorLength(), 0, true);
+        // The shaft end: the crankshaft's half coupling under its guard, on the table.
+        double rpm = compressorSpeed(b), rs = shaftRadius(1000 * compressorPower(b, throwCount), rpm);
+        coupling(a, yc, end, Math.ceil(end + .2 + rs - 1e-9), 1, rs, h, shown(rpm), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
     }
 
     /**
@@ -2009,6 +2048,96 @@ public final class ProcessUnit {
     /** The width of a {@link #shaft}'s seal collar, m. */
     static double collar(double shaft) {
         return .02 + shaft / 2;
+    }
+
+    // ---- Shafts and couplings (batch 2026-11-03-rotating-machinery, W4; plan section 5.3) ---------------------------
+
+    /** A shaft's allowable shear stress for its drawn size, Pa (a plain steel shaft's 40 MPa, plan 5.3). */
+    static final double SHAFT_SHEAR = 40e6;
+
+    /** Rated torque, N·m, of {@code kw} at {@code rpm}. */
+    public static double torque(double kw, double rpm) {
+        return 1000 * kw / (2 * Math.PI * Math.max(rpm, 1) / 60);
+    }
+
+    /**
+     * A shaft's drawn diameter in pixels (1/16 m) for torque {@code t}, N·m: three times the torque diameter
+     * {@code (16 T / (π 40 MPa))^⅓}, so it shows, rounded to whole pixels, 2 to 8 (plan 5.3: a 24 kW pump train 2 px, a
+     * 1 MW motor at 1500 rpm 4 px, the Create side of a 1 MW gearbox 8 px). The shaft block (W3) draws the same.
+     */
+    public static int shaftPixels(double t) {
+        double d = DeterministicMath.cbrt(16 * Math.max(t, 0) / (Math.PI * SHAFT_SHEAR));
+        return (int) Math.max(2, Math.min(8, Math.round(3 * d * 16)));
+    }
+
+    /** A shaft's drawn radius, m, for {@code kw} at {@code rpm}. */
+    static double shaftRadius(double kw, double rpm) {
+        return shaftPixels(torque(kw, rpm)) / 32.0;
+    }
+
+    /**
+     * A turning part's shown speed, rev/s, for a real {@code rpm}: {@code min(real, 120 rpm)} (real speeds alias at frame
+     * rates; plan 5.3), on whole turns in {@link #MOTION_PERIOD}, at least one turn in it.
+     */
+    static double shown(double rpm) {
+        double turns = MOTION_PERIOD / 20.0;
+        return Math.max(1, Math.round(Math.min(rpm, 120) / 60 * turns)) / turns;
+    }
+
+    /**
+     * A machine's shaft end along frame z (batch 2026-11-03-rotating-machinery, W4): its shaft of radius {@code rs} at
+     * (x, y) from {@code from} (where it leaves its bearing) to the coupling face {@code face} (a block face, the shaft
+     * leaving towards {@code sign}), a half coupling's hub turning on it at the face, both a moving part at
+     * {@code speed} rev/s; a half-round guard over them standing on {@code floor}. The shaft block that joins the next
+     * machine stands beyond the face ({@link EquipmentShape.ShaftEnd#shaftBlock}).
+     */
+    void coupling(double x, double y, double from, double face, int sign, double rs, double floor, double speed, EquipmentShape.ShaftEnd.Role role) {
+        var f = Frame.of(new double[]{x, y, 0}, 2, 1);
+        double hub = Math.max(rs + .04, 2.2 * rs), width = .06 + rs, h0 = sign > 0 ? face - width : face, h1 = sign > 0 ? face : face + width;
+        double s0 = Math.min(from, face), s1 = Math.max(from, face);
+        mesh.part(motions.size());
+        mesh.prism(f, rs, s0, s1, 8, Material.PIPE);
+        mesh.cylinder(f, hub, h0, h1, 12, Material.FLANGE);
+        // The hub's bolts show it turning.
+        double ring = .75 * hub, zb = sign > 0 ? h0 - .015 : h1 + .015;
+        for (int k = 0; k < 4; k++) {
+            var at = f.at(k * Math.PI / 2 + Math.PI / 4, ring, zb);
+            box(new double[]{at[0] - .015, at[1] - .015, at[2] - .015}, new double[]{at[0] + .015, at[1] + .015, at[2] + .015}, Material.BOLT, false);
+        }
+        mesh.part(-1);
+        motions.add(Motion.turning(new double[]{x, y, (h0 + h1) / 2}, new double[]{0, 0, 1}, speed, 0));
+        // The guard: a half-round hood over the shaft and hub, on the base, stopping short of the coupling face.
+        double g = hub + .05, g0 = sign > 0 ? s0 + .02 : face + .01, g1 = sign > 0 ? face - .01 : s1 - .02;
+        if (g1 - g0 > .05 && y - floor > g) {
+            var hood = new ArrayList<double[]>();
+            hood.add(new double[]{x - g, floor});
+            hood.add(new double[]{x + g, floor});
+            for (int k = 0; k <= 6; k++) hood.add(new double[]{x + g * DeterministicMath.cos(Math.PI * k / 6), y + g * DeterministicMath.sin(Math.PI * k / 6)});
+            extrude(hood, g0, g1, Material.GUARD);
+            solids.add(Solid.box(new double[]{x - g, floor, g0}, new double[]{x + g, y + g, g1}));
+        } else solids.add(Solid.rod(new double[]{x, y, 0}, 2, Math.min(h0, h1), Math.max(h0, h1), hub, 0));
+        shaftEnds.add(new EquipmentShape.ShaftEnd(role, new double[]{x, y, face}, 2, sign));
+    }
+
+    /**
+     * A driver's base (batch 2026-11-03-rotating-machinery, W4) from {@code x0} to {@code x1} and {@code z0} to {@code z1}:
+     * at grade a chamfered concrete plinth {@code plinth} high; raised, a concrete table on four columns, its deck {@code support}
+     * metres up (so its shaft lines up with a machine on a deck). Returns the base's top.
+     */
+    double driverBase(double x0, double x1, double z0, double z1, double plinth, int support) {
+        if (support == 0) {
+            double chamfer = .04;
+            extrude(List.of(new double[]{x0, 0}, new double[]{x1, 0}, new double[]{x1, plinth - chamfer}, new double[]{x1 - chamfer, plinth},
+                    new double[]{x0 + chamfer, plinth}, new double[]{x0, plinth - chamfer}), z0, z1, Material.CONCRETE);
+            solids.add(Solid.box(new double[]{x0, 0, z0}, new double[]{x1, plinth, z1}));
+            return plinth;
+        }
+        double column = Math.min(.6, Math.max(.3, .25 * Math.min(x1 - x0, z1 - z0))), slab = Math.min(.6, Math.max(.3, support / 6.0));
+        var posts = new ArrayList<double[]>();
+        for (double px : new double[]{x0 + column / 2, x1 - column / 2})
+            for (double pz : new double[]{z0 + column / 2, z1 - column / 2}) posts.add(new double[]{px, pz});
+        concreteTable(x0, x1, z0, z1, support, slab, List.of(), column, posts);
+        return support;
     }
 
     /**
@@ -2106,15 +2235,14 @@ public final class ProcessUnit {
     }
 
     /**
-     * A large motor from {@code z0} along z, its shaft at (x, y) ({@code MACHINES_HEATERS_SURVEY.md}): a fabricated
-     * octagonal stator frame {@code across} wide and {@code length} long with banded ends, round end shields and the
-     * drive-end bearing; louvres on its sides; feet on a steel base frame on posts down to {@code floor}; a top-hat
-     * air-to-air cooler with its fan cowl; the terminal box on its side with its conduit down. A compressor's
-     * {@code synchronous} motor adds the outboard pedestal bearing with its sight glass and the brushless exciter beyond
-     * it, its rotor the flywheel (owner request 2026-10-17: a better motor than a box); a large pump's induction motor
-     * ends at its fan cowl.
+     * A large motor from {@code z0} along z, its shaft at (x, y), its drive end at the back ({@code z0 + length}; batch
+     * 2026-11-03-rotating-machinery: every machine's shaft end is at its back), {@code MACHINES_HEATERS_SURVEY.md}: a
+     * fabricated octagonal stator frame {@code across} wide and {@code length} long with banded ends, round end shields and
+     * the drive-end bearing; louvres on its sides; feet on a steel base frame on posts down to {@code floor}; a top-hat
+     * air-to-air cooler with its fan cowl at the front; the terminal box on its right side ({@link #terminalBox}) with its
+     * conduit down.
      */
-    void largeMotor(double x, double y, double z0, double across, double length, double floor, boolean synchronous) {
+    void largeMotor(double x, double y, double z0, double across, double length, double floor) {
         double r = across / 2, z1 = z0 + length, corner = r * (Math.sqrt(2) - 1); // tan(pi/8): half a side of the octagon of apothem r
         var octagon = new ArrayList<double[]>();
         for (int k = 0; k < 8; k++) {
@@ -2131,7 +2259,7 @@ public final class ProcessUnit {
         int n = sides(across);
         mesh.cylinder(axis, .82 * r, z0 + .02, z0 + .1, n, Material.MOTOR);
         mesh.cylinder(axis, .82 * r, z1 - .1, z1 - .02, n, Material.MOTOR);
-        mesh.cylinder(axis, .22 * r + .06, z0 - .02, z0 + .02, 12, Material.MOTOR);
+        mesh.cylinder(axis, .22 * r + .06, z1 - .02, z1 + .02, 12, Material.MOTOR);
         solids.add(Solid.rod(new double[]{x, y, 0}, 2, z0, z1, 1.04 * r, 0));
         // Enclosed: the octagon's inscribed cylinder (a point of the octagon outside it lies within 0.09 r of a face, so a
         // cell whose centre is there holds part of that face).
@@ -2142,18 +2270,16 @@ public final class ProcessUnit {
                 box(new double[]{Math.min(xf, xo), y - .25 * r, zl - .12 * length}, new double[]{Math.max(xf, xo), y + .3 * r, zl + .12 * length}, Material.OPENING, false);
         }
         // Feet on the base frame; the base frame's beams along z under the feet, on posts when the motor stands high.
-        double base = y - r, beam = Math.min(BEAM, base - floor), pedestal = z1 + .05, exciter = pedestal + .4, outer = Math.min(.9, .25 + .12 * across);
-        double zEnd = synchronous ? exciter + .2 + .4 * outer : z1 + .05;
-        double stand = Math.min(1, .3 + .15 * across) / 2, terminal = Math.min(1.2, .3 + .2 * across);
+        double base = y - r, beam = Math.min(BEAM, base - floor), terminal = Math.min(1.2, .3 + .2 * across);
         for (int side = -1; side <= 1; side += 2) {
             double xf = x + side * .78 * r;
             box(new double[]{xf - .16 * r, base, z0 + .15}, new double[]{xf + .16 * r, y - .55 * r, z1 - .15}, Material.MOTOR, false);
-            if (beam > .02) box(new double[]{xf - FLANGE_BEAM, base - beam, z0 - .05}, new double[]{xf + FLANGE_BEAM, base, zEnd + .05}, Material.STEELWORK, true);
+            if (beam > .02) box(new double[]{xf - FLANGE_BEAM, base - beam, z0 - .05}, new double[]{xf + FLANGE_BEAM, base, z1 + .05}, Material.STEELWORK, true);
             if (base - beam - floor > .05)
-                for (double zp : new double[]{z0 + .1, (z0 + zEnd) / 2, zEnd - .1})
+                for (double zp : new double[]{z0 + .1, (z0 + z1) / 2, z1 - .1})
                     box(new double[]{xf - POST / 2, floor, zp - POST / 2}, new double[]{xf + POST / 2, base - beam, zp + POST / 2}, Material.STEELWORK, true);
         }
-        // The top-hat cooler: its box with louvred sides and tube-plate ends, the fan cowl at its back end.
+        // The top-hat cooler: its box with louvred sides and tube-plate ends, the fan cowl at its front end.
         double cool = .6 * r, c0 = z0 + .12 * length, c1 = z1 - .12 * length;
         box(new double[]{x - .75 * r, y + r - .02, c0}, new double[]{x + .75 * r, y + r + cool, c1}, Material.MOTOR, true);
         volumes.add(Solid.box(new double[]{x - .75 * r + .05, y + r, c0 + .05}, new double[]{x + .75 * r - .05, y + r + cool - .05, c1 - .05}));
@@ -2161,24 +2287,16 @@ public final class ProcessUnit {
             double xf = x + side * .75 * r, xo = xf + side * .01;
             box(new double[]{Math.min(xf, xo), y + r + .2 * cool, c0 + .1}, new double[]{Math.max(xf, xo), y + r + .8 * cool, c1 - .1}, Material.OPENING, false);
         }
-        var cowl = Frame.of(new double[]{x, y + r + .55 * cool, 0}, 2, 1);
-        double rf = .35 * cool + .05, end = Math.min(z1 + .1, c1 + .3);
-        mesh.prism(cowl, rf, c1, end, 12, Material.MOTOR);
-        mesh.annulus(cowl, .85 * rf, rf, end, 12, 1, Material.MOTOR);
-        grilledFan(cowl, .85 * rf, end, Math.min(.15, .6 * (end - c1)), 12, synchronous ? CRANK_SPEED : PUMP_SPEED);
+        var cowl = Frame.of(new double[]{x, y + r + .55 * cool, 0}, 2, -1);
+        double rf = .35 * cool + .05, end = Math.max(z0 - .1, c0 - .3);
+        mesh.prism(cowl, rf, -c0, -end, 12, Material.MOTOR);
+        mesh.annulus(cowl, .85 * rf, rf, -end, 12, 1, Material.MOTOR);
+        grilledFan(cowl, .85 * rf, -end, Math.min(.15, .6 * (c0 - end)), 12, PUMP_SPEED);
         // The terminal box on the right side, its conduit to the ground.
         double zt = (z0 + z1) / 2;
         box(new double[]{x + r, y - .35 * r, zt - terminal / 2}, new double[]{x + r + .4 * terminal, y - .35 * r + .7 * terminal, zt + terminal / 2}, Material.MOTOR, false);
         mesh.bar(new double[]{x + r + .2 * terminal, floor + .02, zt}, new double[]{x + r + .2 * terminal, y - .35 * r, zt}, .08, new double[]{1, 0, 0}, Material.PIPE);
-        if (!synchronous) return;
-        // The outboard pedestal bearing and its sight glass; the exciter.
-        if (beam > .02) box(new double[]{x - .78 * r + FLANGE_BEAM, base - beam, pedestal}, new double[]{x + .78 * r - FLANGE_BEAM, base, exciter}, Material.STEELWORK, true);
-        box(new double[]{x - stand, beam > .02 ? base : floor, pedestal}, new double[]{x + stand, y - .1, exciter}, Material.MOTOR, true);
-        mesh.cylinder(axis, .12 + .06 * across, pedestal - .02, exciter + .02, 12, Material.MOTOR);
-        box(new double[]{x + stand, y - .3, (pedestal + exciter) / 2 - .05}, new double[]{x + stand + .02, y - .2, (pedestal + exciter) / 2 + .05}, Material.OPENING, false);
-        mesh.cylinder(axis, .05 + .02 * across, z1 - .02, pedestal, 8, Material.MACHINE);
-        mesh.cylinder(axis, outer / 2, exciter + .02, zEnd - .05, sides(outer), Material.MOTOR);
-        mesh.cylinder(axis, .4 * outer, zEnd - .05, zEnd, sides(.8 * outer), Material.MOTOR);
+        terminalBox = new double[]{x + r + .2 * terminal, y - .35 * r + .35 * terminal, zt};
     }
 
     /** A square flange plate across a throw's line from {@code x0} to {@code x1}, {@code half} out from its axis at (y, z). */

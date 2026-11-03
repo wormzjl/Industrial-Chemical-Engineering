@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "icheme:block/creative_motor" },
+    "facing=east": { "model": "icheme:block/creative_motor", "y": 90 },
+    "facing=south": { "model": "icheme:block/creative_motor", "y": 180 },
+    "facing=west": { "model": "icheme:block/creative_motor", "y": 270 }
+  }
+}

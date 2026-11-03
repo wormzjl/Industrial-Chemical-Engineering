@@ -43,6 +43,8 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.RECOVERED_SOLIDS.get());
                 output.accept(ModItems.FLUID_DEBUGGER.get());
                 output.accept(ModItems.EQUIPMENT_CONSTRUCTOR.get());
+                output.accept(ModItems.SHAFT.get());
+                output.accept(ModItems.CREATIVE_MOTOR.get());
             })
             .build());
 

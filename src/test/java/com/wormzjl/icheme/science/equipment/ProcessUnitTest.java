@@ -37,10 +37,9 @@ class ProcessUnitTest {
         var shapes = new ArrayList<EquipmentShape>();
         for (var kind : Kind.values()) {
             if (!kind.unit()) continue;
-            double step = ProcessUnit.diameterStep(kind);
-            boolean few = Math.round((ProcessUnit.maxDiameter(kind) - ProcessUnit.minDiameter(kind)) / step) < 9;
-            for (double d = ProcessUnit.minDiameter(kind); d <= ProcessUnit.maxDiameter(kind) + 1e-9; d += step) {
-                double size = ProcessUnit.snap(kind, d);
+            var sizes = ProcessUnit.sizes(kind);
+            boolean few = sizes.size() <= 9;
+            for (double size : sizes) {
                 boolean end = size == ProcessUnit.minDiameter(kind) || size == ProcessUnit.maxDiameter(kind);
                 int least = ProcessUnit.minLength(kind, size), most = ProcessUnit.maxLength(kind, size);
                 for (int length : (few || end) && most > least ? new int[]{least, most} : new int[]{least})
@@ -114,8 +113,7 @@ class ProcessUnitTest {
         // A new unit (2026-10-18, NEW_UNITS_PLAN.md) starts at its design's second size and support, inside its ranges at every size.
         for (var kind : Kind.values()) {
             if (!kind.unit()) continue;
-            for (double d = ProcessUnit.minDiameter(kind); d <= ProcessUnit.maxDiameter(kind) + 1e-9; d += ProcessUnit.diameterStep(kind)) {
-                double size = ProcessUnit.snap(kind, d);
+            for (double size : ProcessUnit.sizes(kind)) {
                 int length = ProcessUnit.defaultLength(kind, size), support = ProcessUnit.defaultSupport(kind, size, length);
                 assertTrue(length >= ProcessUnit.minLength(kind, size) && length <= ProcessUnit.maxLength(kind, size), kind + " " + size + " default length " + length);
                 assertTrue(support >= ProcessUnit.minSupport(kind, size, length) && support <= ProcessUnit.maxSupport(kind), kind + " " + size + " default support " + support);
@@ -182,15 +180,16 @@ class ProcessUnitTest {
         assertEquals(20, ProcessUnit.maxLength(Kind.VERTICAL_HEATER, 12));
         assertEquals(3, ProcessUnit.minSupport(Kind.VERTICAL_HEATER, 4, 8));
         assertEquals(0, ProcessUnit.maxSupport(Kind.PUMP));
-        // A compressor's lowest foundation keeps its discharge bottles 0.3 m and its motor 0.1 m over grade, and is the
-        // lowest that does.
+        // A compressor's lowest foundation keeps its discharge bottles 0.3 m over grade, and is the lowest that does; its
+        // discharge bottles clear the cylinders on the crankshaft's cell centre (batch 2026-11-03-rotating-machinery).
         for (double b = .15; b <= ProcessUnit.maxDiameter(Kind.COMPRESSOR) + 1e-9; b += .05)
             for (int throwsCount = 2; throwsCount <= ProcessUnit.MAX_THROWS; throwsCount += 2) {
                 double bore = ProcessUnit.snap(Kind.COMPRESSOR, b);
                 var c = ProcessUnit.Compressor.of(bore, throwsCount);
                 int h = ProcessUnit.minSupport(Kind.COMPRESSOR, bore, throwsCount);
                 assertTrue(c.clears(h) && (h == 1 || !c.clears(h - 1)), bore + " x " + throwsCount);
-                assertTrue(c.dischargeAxis(h) - c.discharge() / 2 >= .3 && h + c.crank() - c.motor() / 2 >= .1, bore + " x " + throwsCount);
+                assertTrue(c.dischargeAxis(h) - c.discharge() / 2 >= .3, bore + " x " + throwsCount);
+                assertTrue(h + c.crank() - c.cylinder() / 2 - c.dischargeAxis(h) - c.discharge() / 2 >= .05, bore + " x " + throwsCount);
             }
     }
 
@@ -245,7 +244,7 @@ class ProcessUnitTest {
                 Map.entry(Kind.EBULLATED_BED_REACTOR, Map.of(Role.EFFLUENT, "2-", Role.FEED, "2-", Role.HYDROGEN, "2+", Role.CATALYST_INLET, "1+", Role.CATALYST_OUTLET, "0+")),
                 Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1-", Role.DISCHARGE, "0-", Role.COOLANT_INLET, "2-", Role.COOLANT_OUTLET, "2+")),
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
-                Map.entry(Kind.CONDENSING_TURBINE, Map.of(Role.STEAM, "0+", Role.COOLANT_INLET, "1-", Role.COOLANT_OUTLET, "2-", Role.CONDENSATE, "2+", Role.VENT, "0-")),
+                Map.entry(Kind.MOTOR, Map.of()), Map.entry(Kind.GENERATOR, Map.of()), Map.entry(Kind.GEARBOX, Map.of()),
                 Map.entry(Kind.CYCLONE, Map.of(Role.FEED, "2-", Role.VAPOUR_OUTLET, "2+", Role.SOLIDS_OUTLET, "1-")),
                 Map.entry(Kind.FCC_CONVERTER, Map.of(Role.FEED, "2-", Role.STEAM, "2+", Role.AIR, "2-", Role.FUEL, "2-", Role.FLUE_GAS, "0-", Role.VAPOUR_OUTLET, "0+",
                         Role.CATALYST_INLET, "2-", Role.CATALYST_OUTLET, "2+")),
@@ -456,6 +455,46 @@ class ProcessUnitTest {
         throw new AssertionError(shape + " has no " + role);
     }
 
+    /**
+     * Batch 2026-11-03-rotating-machinery (W4): every machine's shaft end has its coupling's half in the machine and a
+     * free block beyond its coupling face for the shaft block, level, off the ground and a block clear of every nozzle's
+     * pipe; a gearbox has its input and its output, every other machine one end. A motor's and a generator's terminal box
+     * lies in the machine; no other kind has one.
+     */
+    @Test
+    void everyShaftEndMeetsAFreeBlockForItsShaft() {
+        int machines = 0;
+        for (var shape : everySize()) {
+            var shafts = ShapeRasterizer.shafts(shape);
+            var terminal = ShapeRasterizer.terminal(shape);
+            boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR;
+            assertEquals(electric, terminal != null, shape.toString());
+            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR) {
+                assertEquals(List.of(), shafts, shape.toString());
+                continue;
+            }
+            machines++;
+            assertEquals(shape.kind() == Kind.GEARBOX ? 2 : 1, shafts.size(), shape.toString());
+            var layout = ShapeRasterizer.layout(shape);
+            var occupied = new HashSet<ShapeRasterizer.Cell>(layout.shell());
+            occupied.addAll(layout.interior());
+            if (terminal != null) assertTrue(occupied.contains(terminal), shape + ": its terminal box at " + terminal);
+            for (var shaft : shafts) {
+                var block = shaft.block();
+                assertEquals(0, shaft.dy(), shape + ": a level shaft");
+                assertTrue(occupied.contains(shaft.cell()), shape + ": its coupling at " + shaft.cell());
+                assertFalse(occupied.contains(block), shape + ": no room for its shaft at " + block);
+                assertTrue(block.y() >= 0, shape + ": its shaft under the ground");
+                for (var port : ShapeRasterizer.ports(shape)) {
+                    int dx = Math.abs(block.x() - port.cell().x() - port.dx()), dy = Math.abs(block.y() - port.cell().y() - port.dy()),
+                            dz = Math.abs(block.z() - port.cell().z() - port.dz());
+                    assertTrue(Math.max(dx, Math.max(dy, dz)) >= 2, shape + ": its shaft touches the pipe of " + shape.nozzles().get(port.nozzle()).role());
+                }
+            }
+        }
+        assertTrue(machines > 200, machines + " machines");
+    }
+
     @Test
     void everyNozzleLeavesAFreeBlockForItsPipe() {
         for (var shape : everySize()) {
@@ -655,7 +694,6 @@ class ProcessUnitTest {
             String prefix = UnitDesign.of(kind).getClass().getSimpleName().replace("Design", "");
             for (var name : names) if (name.startsWith(prefix)) owners.computeIfAbsent(name, n -> EnumSet.noneOf(Kind.class)).add(kind);
         }
-        owners.get("SteamTurbineTrain").add(Kind.CONDENSING_TURBINE);
         owners.put("FluidizedBedParts", EnumSet.of(Kind.FLUIDIZED_BED_BOILER, Kind.FLUIDIZED_BED_GASIFIER));
         owners.put("HydroprocessingParts", EnumSet.of(Kind.TRICKLE_BED_REACTOR, Kind.EBULLATED_BED_REACTOR));
         var crossings = new ArrayList<String>();

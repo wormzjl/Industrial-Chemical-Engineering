@@ -75,7 +75,7 @@ public final class ConstructorColumn {
         ADSORBER(Category.VESSELS), CYCLONE(Category.VESSELS),
         EXCHANGER(Category.HEAT), KETTLE(Category.HEAT), AIR_COOLER(Category.HEAT), VERTICAL_HEATER(Category.HEAT), CABIN_HEATER(Category.HEAT), INDUCED_DRAFT_COOLING_TOWER(Category.HEAT), NATURAL_DRAFT_COOLING_TOWER(Category.HEAT),
         PUMP(Category.MACHINES), COMPRESSOR(Category.MACHINES), CENTRIFUGAL_COMPRESSOR(Category.MACHINES), EJECTOR(Category.MACHINES),
-        STEAM_TURBINE(Category.MACHINES), CONDENSING_TURBINE(Category.MACHINES),
+        STEAM_TURBINE(Category.MACHINES), MOTOR(Category.MACHINES), GENERATOR(Category.MACHINES), GEARBOX(Category.MACHINES),
         STIRRED_REACTOR(Category.REACTORS), TRICKLE_BED_REACTOR(Category.REACTORS), EBULLATED_BED_REACTOR(Category.REACTORS), FCC_CONVERTER(Category.REACTORS),
         DELAYED_COKER(Category.REACTORS),
         FLUIDIZED_BED_BOILER(Category.SOLID_FUEL), FLUIDIZED_BED_GASIFIER(Category.SOLID_FUEL), GRATE_BOILER(Category.SOLID_FUEL), FIXED_BED_GASIFIER(Category.SOLID_FUEL);
@@ -293,7 +293,7 @@ public final class ConstructorColumn {
             default -> {
                 // A unit's rows, as its design names them: its size, its second size and its support where it has them.
                 var design = UnitDesign.of(form.kind());
-                size.add(step("size", design.sizeRow(), size(in.diameter()), "m", t));
+                size.add(step("size", design.sizeRow(), design.sizeText(in.diameter()), design.sizeUnit(), t));
                 if (design.lengthRow() != null) size.add(step("length", design.lengthRow(), length, design.lengthInMetres() ? "m" : "", t));
                 if (design.supportRow() != null) size.add(step("support", design.supportRow(), support, "m", t));
             }

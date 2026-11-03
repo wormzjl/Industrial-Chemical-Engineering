@@ -31,6 +31,76 @@ public abstract class UnitDesign {
 
     public abstract double sizeStep();
 
+    /** Every main size a unit of the kind may take, smallest first: the grid from {@link #minSize()} by {@link #sizeStep()}. */
+    public List<Double> sizes() {
+        var out = new java.util.ArrayList<Double>();
+        long count = Math.round((maxSize() - minSize()) / sizeStep());
+        for (long k = 0; k <= count; k++) out.add(Math.round((minSize() + k * sizeStep()) * 1000) / 1000.0);
+        return out;
+    }
+
+    /** {@code size} on the kind's grid and inside its range, cleared of rounding (0.30000000000000004 becomes 0.3). */
+    public double snap(double size) {
+        double step = sizeStep(), min = minSize();
+        double k = Math.max(0, Math.min(Math.round((maxSize() - min) / step), Math.round((size - min) / step)));
+        return Math.round((min + k * step) * 1000) / 1000.0;
+    }
+
+    /** {@code size} moved {@code steps} places along the kind's sizes (the constructor's [−] and [+]). */
+    public double step(double size, int steps) {
+        return snap(size + steps * sizeStep());
+    }
+
+    // ---- Design point (shape fields 6, batch 2026-11-03-rotating-machinery) ------------------------------------------
+
+    /**
+     * Whether the kind's shape carries a design point ({@link MachineDuty}): a pump, a centrifugal compressor, a steam
+     * turbine, a motor, a generator, a gearbox. Its main and second sizes then follow from the design point.
+     */
+    public boolean hasDuty() {
+        return false;
+    }
+
+    /**
+     * The design point of a unit of these sizes where none was given: a shape saved before shape fields 6 (its
+     * behaviour then, decision A3), and the sizes the constructor and the tests step through. {@link MachineDuty#NONE}
+     * for a kind without one.
+     */
+    public MachineDuty duty(double size, int length) {
+        return MachineDuty.NONE;
+    }
+
+    /** The main size design point {@code duty} gives. */
+    public double size(MachineDuty duty) {
+        throw new IllegalArgumentException("This kind has no design point");
+    }
+
+    /** The second size design point {@code duty} gives. */
+    public int length(MachineDuty duty) {
+        return 1;
+    }
+
+    /** Checks {@code duty}'s ranges for the kind; throws {@link IllegalArgumentException} with the reason. */
+    void checkDuty(MachineDuty duty) {
+    }
+
+    /** Checks a shape's design point: in its ranges, and giving the shape's sizes; none for a kind without one. */
+    final void check(double size, int length, MachineDuty duty) {
+        if (!hasDuty()) {
+            if (!duty.equals(MachineDuty.NONE)) throw new IllegalArgumentException("This kind has no design point");
+            return;
+        }
+        checkDuty(duty);
+        if (Math.abs(size(duty) - size) > 1e-9 || length(duty) != length)
+            throw new IllegalArgumentException("A machine's sizes follow its design point: " + size(duty) + " and " + length(duty) + ", not " + size + " and " + length);
+    }
+
+    /** {@code value} rounded up onto a grid of {@code step} (a micrometre's rounding error kept on its step), within lo..hi. */
+    static double upTo(double value, double step, double lo, double hi) {
+        double k = Math.ceil(value / step - 1e-6);
+        return Math.max(lo, Math.min(hi, Math.round(k * step * 1000) / 1000.0));
+    }
+
     /** The least second size (length, height or count) at main size {@code size}; 1 where the kind has none. */
     public int minLength(double size) {
         return 1;
@@ -91,6 +161,16 @@ public abstract class UnitDesign {
     /** The constructor's row for the main size (its translation key under the constructor's prefix). */
     public abstract String sizeRow();
 
+    /** The main size's unit on the constructor's row: metres, or a machine's kilowatts. */
+    public String sizeUnit() {
+        return "m";
+    }
+
+    /** The main size as the constructor's row shows it. */
+    public String sizeText(double size) {
+        return size(size);
+    }
+
     /** The constructor's row for the second size, or {@code null} where the kind has none. */
     public String lengthRow() {
         return null;
@@ -141,7 +221,6 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.EBULLATED_BED_REACTOR, new EbullatedBedReactorDesign());
         DESIGNS.put(Kind.CENTRIFUGAL_COMPRESSOR, new CentrifugalCompressorDesign());
         DESIGNS.put(Kind.STEAM_TURBINE, new SteamTurbineDesign());
-        DESIGNS.put(Kind.CONDENSING_TURBINE, new CondensingTurbineDesign());
         DESIGNS.put(Kind.CYCLONE, new CycloneDesign());
         DESIGNS.put(Kind.FCC_CONVERTER, new FccConverterDesign());
         DESIGNS.put(Kind.DELAYED_COKER, new DelayedCokerDesign());
@@ -151,6 +230,9 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.FIXED_BED_GASIFIER, new FixedBedGasifierDesign());
         DESIGNS.put(Kind.INDUCED_DRAFT_COOLING_TOWER,new CoolingTowerDesign(false));
         DESIGNS.put(Kind.NATURAL_DRAFT_COOLING_TOWER,new CoolingTowerDesign(true));
+        DESIGNS.put(Kind.MOTOR, new MotorDesign(false));
+        DESIGNS.put(Kind.GENERATOR, new MotorDesign(true));
+        DESIGNS.put(Kind.GEARBOX, new GearboxDesign());
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */

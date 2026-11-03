@@ -39,8 +39,8 @@ final class CentrifugalCompressorDesign extends UnitDesign {
     /** The anchor machine (Elliott 32M4): its impeller diameter, m, its impellers, its flow, m³/h, and its shaft power, MW. */
     static final double ANCHOR = .65, ANCHOR_FLOW = 33000, ANCHOR_POWER = 2.5;
     static final int ANCHOR_STAGES = 4;
-    /** The impellers' tip speed, m/s (32M4: 0.65 m at 7,176 rpm). */
-    static final double TIP_SPEED = 245;
+    /** The impellers' tip speed, m/s (plan section 6: about 300 m/s; the 32M4 runs 0.65 m at 7,176 rpm, 245 m/s). */
+    static final double TIP_SPEED = 300;
     /** The suction and discharge nozzles over the impeller diameter (survey: 0.9 and 0.45). */
     static final double SUCTION = .9, DISCHARGE = .45;
     /** The table-top's slab and the walkways' width (the right-hand one wider to the stair tower), m. */
@@ -116,21 +116,75 @@ final class CentrifugalCompressorDesign extends UnitDesign {
 
     @Override
     public Line held(EquipmentShape shape) {
-        double d = shape.diameter();
-        return new Line("centrifugal_compressor.flow", whole(flow(d)), number(power(d, (int) shape.tangentLength())), whole(speed(d)));
+        var duty = shape.duty();
+        return new Line("centrifugal_compressor.flow", whole(duty.flow()), whole(duty.polytropicHead()), number(power(duty)));
     }
 
     @Override
     public List<Line> datasheet(EquipmentShape shape) {
         double d = shape.diameter();
         int stages = (int) shape.tangentLength();
+        var duty = shape.duty();
         return List.of(new Line("centrifugal_compressor", stages, size(d), size(CASING * d)),
-                new Line("centrifugal_compressor.duty", whole(flow(d)), number(power(d, stages)), whole(speed(d))));
+                new Line("centrifugal_compressor.duty", whole(duty.flow()), whole(duty.polytropicHead()), number(airRatio(duty.polytropicHead()))),
+                new Line("centrifugal_compressor.power", number(power(duty)), whole(speed(d))));
+    }
+
+    /** An impeller's polytropic head at the design point, kJ/kg (plan section 6: 30 to 40 kJ/kg each). */
+    static final double IMPELLER_HEAD = 35;
+    /** The least rated inlet flow, m³/h, and the polytropic heads, kJ/kg: two to nine impellers. */
+    static final double MIN_FLOW = 1000, MIN_HEAD = 1.5 * IMPELLER_HEAD, MAX_HEAD = 9.49 * IMPELLER_HEAD;
+
+    @Override
+    public boolean hasDuty() {
+        return true;
+    }
+
+    /** A train saved before its design point: its impellers' flow and head (each impeller {@link #IMPELLER_HEAD}). */
+    @Override
+    public MachineDuty duty(double size, int length) {
+        return MachineDuty.compressor(flow(size), IMPELLER_HEAD * length);
+    }
+
+    /** The impeller: the anchor's, scaled with the root of the rated inlet flow, up onto the 0.1 m grid. */
+    @Override
+    public double size(MachineDuty duty) {
+        return upTo(ANCHOR * Math.sqrt(duty.flow() / ANCHOR_FLOW), sizeStep(), minSize(), maxSize());
+    }
+
+    /** The impellers: the polytropic head at {@link #IMPELLER_HEAD} each, two to nine. */
+    @Override
+    public int length(MachineDuty duty) {
+        return (int) Math.max(minLength(0), Math.min(maxLength(0), Math.round(duty.polytropicHead() / IMPELLER_HEAD)));
+    }
+
+    @Override
+    void checkDuty(MachineDuty duty) {
+        if (!(duty.flow() >= MIN_FLOW && duty.flow() <= flow(maxSize()) + 1e-6))
+            throw new IllegalArgumentException("A centrifugal compressor's rated inlet flow is " + whole(MIN_FLOW) + " to " + whole(flow(maxSize())) + " m³/h, not " + duty.flow());
+        if (!(duty.polytropicHead() >= MIN_HEAD && duty.polytropicHead() <= MAX_HEAD))
+            throw new IllegalArgumentException("A centrifugal compressor's polytropic head is " + number(MIN_HEAD) + " to " + number(MAX_HEAD) + " kJ/kg, not " + duty.polytropicHead());
+        if (duty.head() != 0 || duty.power() != 0 || duty.poles() != 0 || duty.steam() != null || duty.exhaust() != 0 || duty.drive() != MachineDuty.Drive.FIXED)
+            throw new IllegalArgumentException("A centrifugal compressor's design point is its flow and polytropic head");
+    }
+
+    /**
+     * The pressure ratio air at 30 °C reaches over polytropic head {@code head}, kJ/kg, at a polytropic efficiency of 0.8
+     * (a reference for the constructor: the gas sets the real one).
+     */
+    static double airRatio(double head) {
+        double exponent = .4 / (1.4 * .8), rt = 8.314 * 303.15 / 28.96;
+        return Math.pow(1 + head * exponent / rt, 1 / exponent);
     }
 
     /** The inlet flow, m³/h: the anchor's, scaled with the impeller's area. */
     static double flow(double d) {
         return ANCHOR_FLOW * (d / ANCHOR) * (d / ANCHOR);
+    }
+
+    /** The shaft power at design point {@code duty}, MW: the anchor's, scaled with the rated flow and polytropic head. */
+    static double power(MachineDuty duty) {
+        return ANCHOR_POWER * duty.flow() / ANCHOR_FLOW * duty.polytropicHead() / (IMPELLER_HEAD * ANCHOR_STAGES);
     }
 
     /** The shaft power, MW: the anchor's, scaled with the flow and the impellers (the head per impeller fixed by the tip speed). */
@@ -165,9 +219,11 @@ final class CentrifugalCompressorDesign extends UnitDesign {
     private static void draw(ProcessUnit u, double ax, double zs) {
         double d = u.shape.diameter(), k = (d - .3) / 1.2;
         int stages = (int) u.shape.tangentLength(), h = u.shape.support();
-        double hm = .5 * Math.sqrt(Math.sqrt(power(d, stages)));
-        // The shaft: 1 D over the soleplates, or high enough for the motor's frame on its base.
-        double ys = h + .05 + Math.max(d, hm + .25);
+        // The driver bay's size (the step-up gear and motor this train drew before batch 2026-11-03-rotating-machinery):
+        // the table keeps their room, so a driver stands on it, and its console and water nozzles keep their places.
+        double hm = .5 * Math.sqrt(Math.sqrt(power(u.shape.duty())));
+        // The shaft: 1 D over the soleplates, on a cell centre, so a shaft block meets its coupling.
+        double ys = Math.ceil(h + .05 + d - .5) + .5;
         double r = CASING * d / 2, rb = 1.04 * r, xj = rb + .12 * d, length = (PLENUM + STAGE * stages + VOLUTE) * d;
         double zc0 = zs - PLENUM * d / 2, zc1 = zc0 + length, zp = zc0 + PLENUM * d, zw = zc1 - VOLUTE * d, zv = zc1 - VOLUTE * d / 2;
         var along = Frame.of(new double[]{ax, ys, 0}, 2, 1);
@@ -247,37 +303,11 @@ final class CentrifugalCompressorDesign extends UnitDesign {
                 u.line(.02 + .01 * d, Material.PIPE, new double[]{ax + .2 * d, ys - .25 * d, zd}, new double[]{ax + .2 * d, h, zd});
         }
 
-        // The coupling: the exposed shaft and its collar turning, then the guard to the gear.
-        double rs = .025 + .04 * d, zg0 = zb1 + .1 + .15 * d, zg1 = zg0 + Math.max(.3, .75 * d);
-        u.shaft(along, rs, new double[][]{{zb1 - .01, zg0 + .01}}, (zb1 + zg0) / 2);
-        double guard = .12 + .22 * d;
-        u.mesh.cylinder(along, guard, zg0, zg1, ProcessUnit.sides(2 * guard), Material.GUARD);
-        u.solids.add(Solid.rod(new double[]{ax, ys, 0}, 2, zg0, zg1, guard, 0));
-        // The step-up gear: its lower casing on a soleplate, the split flange, the upper cover over the bull gear, bearing
-        // caps on both ends (the pinion's in line with the compressor, the bull gear's with the motor), breather and cover.
-        double xm = ax - .6 * hm, xg = ax - .3 * hm, zG0 = zg1 + .08, zG1 = zG0 + 1.2 * hm;
-        u.box(new double[]{xg - hm, h + .05, zG0}, new double[]{xg + hm, ys - .04, zG1}, Material.MACHINE, true);
-        u.box(new double[]{xg - hm - .08, h, zG0 - .08}, new double[]{xg + hm + .08, h + .05, zG1 + .08}, Material.STEELWORK, false);
-        u.box(new double[]{xg - hm - .05, ys - .04, zG0 - .03}, new double[]{xg + hm + .05, ys + .04, zG1 + .03}, Material.MACHINE, true);
-        var outline = List.of(new double[]{xg - hm, ys + .04}, new double[]{xg + hm, ys + .04}, new double[]{xg + hm, ys + .5 * hm}, new double[]{xg + .3 * hm, ys + hm},
-                new double[]{xg - .7 * hm, ys + hm}, new double[]{xg - hm, ys + .7 * hm});
-        u.extrude(outline, zG0 + .02, zG1 - .02, Material.MACHINE);
-        u.solids.add(Solid.box(new double[]{xg - hm, ys, zG0}, new double[]{xg + hm, ys + hm, zG1}));
-        u.volumes.add(Solid.box(new double[]{xg - hm + .05, h + .1, zG0 + .05}, new double[]{xg + hm - .05, ys + .5 * hm, zG1 - .05}));
-        for (double[] cap : new double[][]{{ax, .18}, {xm, .25}}) {
-            var axis = Frame.of(new double[]{cap[0], ys, 0}, 2, 1);
-            double rc = cap[1] * hm + .02;
-            u.mesh.cylinder(axis, rc, zG0 - .08, zG0, 12, Material.MACHINE);
-            u.mesh.cylinder(axis, rc, zG1, zG1 + .08, 12, Material.MACHINE);
-        }
-        u.mesh.cylinder(Frame.of(new double[]{xg - .2 * hm, 0, zG0 + .3 * hm}, 1, 1), .04 + .02 * k, ys + hm, ys + hm + .12, 8, Material.MACHINE);
-        u.box(new double[]{xg - .55 * hm, ys + hm, zG0 + .55 * hm}, new double[]{xg + .1 * hm, ys + hm + .03, zG1 - .2 * hm}, Material.MACHINE, false);
-        // The motor's coupling guard and the motor (its fan turns).
-        double zm0 = zG1 + .08 + Math.max(.3, .7 * hm), guard2 = .1 + .25 * hm, lm = 4.5 * hm;
-        var motorAxis = Frame.of(new double[]{xm, ys, 0}, 2, 1);
-        u.mesh.cylinder(motorAxis, guard2, zG1 + .08, zm0 - .02, ProcessUnit.sides(2 * guard2), Material.GUARD);
-        u.solids.add(Solid.rod(new double[]{xm, ys, 0}, 2, zG1 + .08, zm0 - .02, guard2, 0));
-        u.largeMotor(xm, ys, zm0, 2 * hm, lm, h, false);
+        // The shaft end: the half coupling under its guard on the table; the driver bay behind it (the gear's and the
+        // motor's room), where a driver stands and joins it through a shaft block.
+        double rs = ProcessUnit.shaftRadius(1000 * power(u.shape.duty()), speed(d)), face = Math.ceil(zb1 + .2 + rs - 1e-9);
+        u.coupling(ax, ys, zb1, face, 1, rs, h, ProcessUnit.shown(speed(d)), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
+        double zg0 = zb1 + .1 + .15 * d, zg1 = zg0 + Math.max(.3, .75 * d), zG1 = zg1 + .08 + 1.2 * hm, zm0 = zG1 + .08 + Math.max(.3, .7 * hm), lm = 4.5 * hm;
 
         // The table-top's reach, and the half width q of its opening round the suction.
         double terminal = Math.min(1.2, .3 + .4 * hm), pd = .4 + .2 * k, pl = .6 + .4 * k, ph = 1.4 + .6 * k;
