@@ -110,7 +110,10 @@ public final class ColumnDesignTags {
         return tag.get(key) instanceof net.minecraft.nbt.NumericTag n ? n.getAsDouble() : Double.NaN;
     }
 
-    /** The components' fields: the condenser, the reflux pump, the pumparound pumps by name, and the two flags. */
+    /**
+     * The components' fields: the condenser, the reflux pump, the pumparound pumps by name, and the two flags; the member
+     * counts (shape fields 6): the condenser's, the kettle's and each pumparound cooler's units in parallel.
+     */
     public static CompoundTag writeComponents(ColumnComponents components) {
         var tag = new CompoundTag();
         tag.putString("Condenser", components.condenser().name());
@@ -120,6 +123,9 @@ public final class ColumnDesignTags {
         tag.put("PumparoundPumps", pumps);
         tag.putBoolean("Ejector", components.ejector());
         tag.putBoolean("Kettle", components.kettle());
+        tag.putInt("CondenserUnits", components.units().condenser());
+        tag.putInt("KettleUnits", components.units().kettle());
+        tag.putIntArray("CoolerUnits", components.units().coolers().stream().mapToInt(Integer::intValue).toArray());
         return tag;
     }
 
@@ -160,12 +166,23 @@ public final class ColumnDesignTags {
         return saved(parent.contains(key, Tag.TAG_COMPOUND) ? parent.getCompound(key) : new CompoundTag());
     }
 
-    /** The component fields of {@code tag} as written, before any rule reads them; a missing kind reads as an empty name. */
+    /**
+     * The component fields of {@code tag} as written, before any rule reads them; a missing kind reads as an empty name, a
+     * missing count as 1 (a design saved before the counts), a count of another type as 0, which the reader names.
+     */
     private static ShapeRepair.SavedComponents saved(CompoundTag tag) {
         var pumps = new ArrayList<String>();
         if (tag.get("PumparoundPumps") instanceof ListTag list)
             for (int i = 0; i < Math.min(list.size(), ColumnTrays.MAX_PUMPAROUNDS + 1); i++)
                 pumps.add(list.get(i) instanceof StringTag name ? name.getAsString() : String.valueOf(list.get(i)));
-        return new ShapeRepair.SavedComponents(tag.getString("Condenser"), tag.getString("RefluxPump"), pumps, tag.getBoolean("Ejector"), tag.getBoolean("Kettle"));
+        int[] coolers = tag.get("CoolerUnits") instanceof net.minecraft.nbt.IntArrayTag array ? array.getAsIntArray() : tag.contains("CoolerUnits") ? new int[] {0} : new int[0];
+        if (coolers.length > ColumnTrays.MAX_PUMPAROUNDS + 1) coolers = java.util.Arrays.copyOf(coolers, ColumnTrays.MAX_PUMPAROUNDS + 1);
+        return new ShapeRepair.SavedComponents(tag.getString("Condenser"), tag.getString("RefluxPump"), pumps, tag.getBoolean("Ejector"), tag.getBoolean("Kettle"),
+                count(tag, "CondenserUnits"), count(tag, "KettleUnits"), coolers);
+    }
+
+    private static int count(CompoundTag tag, String key) {
+        if (!tag.contains(key)) return 1;
+        return tag.get(key) instanceof net.minecraft.nbt.IntTag n ? n.getAsInt() : 0;
     }
 }

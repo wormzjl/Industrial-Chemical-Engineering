@@ -80,6 +80,8 @@ public final class AssemblyNetwork {
             b.writeLong(s.member());
             b.writeLong(s.at());
             b.writeUtf(s.detail(), MAX_TEXT);
+            b.writeVarInt(s.parallel().size());
+            for (long unit : s.parallel()) b.writeLong(unit);
         }
         b.writeVarInt(report.ports().size());
         for (var p : report.ports()) {
@@ -207,7 +209,12 @@ public final class AssemblyNetwork {
         for (int i = 0, n = count(b, MAX_SLOTS); i < n; i++) {
             String part = b.readUtf(MAX_TEXT);
             int index = b.readVarInt();
-            slots.add(new SlotReport(new Slot(part, index), b.readEnum(State.class), b.readLong(), b.readLong(), b.readUtf(MAX_TEXT)));
+            var state = b.readEnum(State.class);
+            long member = b.readLong(), at = b.readLong();
+            var detail = b.readUtf(MAX_TEXT);
+            var parallel = new ArrayList<Long>();
+            for (int k = 0, m = count(b, com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS - 1); k < m; k++) parallel.add(b.readLong());
+            slots.add(new SlotReport(new Slot(part, index), state, member, at, detail, parallel));
         }
         var ports = new ArrayList<PortReport>();
         for (int i = 0, n = count(b, MAX_PORTS); i < n; i++) {

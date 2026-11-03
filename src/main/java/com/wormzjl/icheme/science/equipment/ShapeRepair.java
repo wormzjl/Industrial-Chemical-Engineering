@@ -101,15 +101,56 @@ public final class ShapeRepair {
         }
     }
 
-    /** A column's component design as saved: its kinds by name and its two flags (batch 2026-10-26-multi-machine-framework). */
-    public record SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle) {
+    /**
+     * A column's component design as saved: its kinds by name and its two flags (batch 2026-10-26-multi-machine-framework);
+     * its member counts (batch 2026-11-02-process-simulator, S3b; shape fields 6), as written: a design saved before them
+     * reads 1 on every step, and a cooler count not saved reads 1.
+     */
+    public record SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle,
+                                  int condenserUnits, int kettleUnits, int[] coolerUnits) {
         public SavedComponents {
             pumparoundPumps = List.copyOf(pumparoundPumps);
+            coolerUnits = coolerUnits.clone();
         }
 
-        /** @throws IllegalArgumentException naming a kind this build does not have, or too many pumps */
+        /** A design saved before its member counts. */
+        public SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle) {
+            this(condenser, refluxPump, pumparoundPumps, ejector, kettle, 1, 1, new int[0]);
+        }
+
+        /** @throws IllegalArgumentException naming a kind this build does not have, too many pumps, or a count out of range */
         public ColumnComponents resolve() {
-            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle);
+            return resolve(repair -> {
+                throw new IllegalArgumentException(repair);
+            });
+        }
+
+        /**
+         * The design, a count out of range read as 1 and named to {@code repairs}: the kinds and the other counts stay.
+         *
+         * @throws IllegalArgumentException naming a kind this build does not have, or too many pumps
+         */
+        public ColumnComponents resolve(java.util.function.Consumer<String> repairs) {
+            int condenserCount = count(condenserUnits, "condenser units", repairs), kettleCount = count(kettleUnits, "kettle units", repairs);
+            var coolers = new ArrayList<Integer>();
+            for (int i = 0; i < Math.min(coolerUnits.length, pumparoundPumps.size()); i++) coolers.add(count(coolerUnits[i], "pumparound cooler " + (i + 1) + " units", repairs));
+            if (coolerUnits.length > pumparoundPumps.size()) repairs.accept("cooler units (" + coolerUnits.length + " for " + pumparoundPumps.size() + " pumparounds) -> " + pumparoundPumps.size());
+            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers));
+        }
+
+        private static int count(int saved, String field, java.util.function.Consumer<String> repairs) {
+            if (saved >= 1 && saved <= ColumnComponents.MAX_UNITS) return saved;
+            repairs.accept(field + " " + saved + " -> 1");
+            return 1;
+        }
+
+        @Override public boolean equals(Object o) {
+            return o instanceof SavedComponents s && condenser.equals(s.condenser) && refluxPump.equals(s.refluxPump) && pumparoundPumps.equals(s.pumparoundPumps)
+                    && ejector == s.ejector && kettle == s.kettle && condenserUnits == s.condenserUnits && kettleUnits == s.kettleUnits && Arrays.equals(coolerUnits, s.coolerUnits);
+        }
+
+        @Override public int hashCode() {
+            return Objects.hash(condenser, refluxPump, pumparoundPumps, ejector, kettle, condenserUnits, kettleUnits, Arrays.hashCode(coolerUnits));
         }
     }
 
@@ -201,7 +242,7 @@ public final class ShapeRepair {
             }
             if (saved.components() != null)
                 try {
-                    trays = trays.withComponents(saved.components().resolve());
+                    trays = trays.withComponents(saved.components().resolve(repairs::add));
                 } catch (IllegalArgumentException invalid) {
                     repairs.add("components (" + invalid.getMessage() + ") -> none");
                 }

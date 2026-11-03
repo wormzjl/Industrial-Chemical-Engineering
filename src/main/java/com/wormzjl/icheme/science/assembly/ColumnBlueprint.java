@@ -64,8 +64,9 @@ public final class ColumnBlueprint {
         if (c.ejector()) slots.add(EJECTOR);
         slots.addAll(List.of(CONDENSER, RECEIVER, OFFGAS_VALVE, WATER_VALVE, REFLUX_PUMP, REFLUX_TEE, REFLUX_VALVE, DISTILLATE_VALVE, FEED_VALVE));
 
-        var condenser = c.condenser() == ColumnComponents.Condenser.AIR_COOLER ? Step.of(CONDENSER, AIR_COOLER, EXCHANGER_CONDENSER)
-                : Step.of(CONDENSER, EXCHANGER_CONDENSER, AIR_COOLER);
+        // The heat-transfer members take their counts of identical units in parallel (S3b).
+        var condenser = (c.condenser() == ColumnComponents.Condenser.AIR_COOLER ? Step.of(CONDENSER, AIR_COOLER, EXCHANGER_CONDENSER)
+                : Step.of(CONDENSER, EXCHANGER_CONDENSER, AIR_COOLER)).withCount(c.units().condenser());
         var overhead = new ArrayList<Step>();
         if (c.ejector()) overhead.add(Step.of(EJECTOR, EJECTOR_UNIT));
         overhead.add(condenser);
@@ -92,13 +93,13 @@ public final class ColumnBlueprint {
             slots.add(pumparoundPump(i));
             slots.add(pumparoundCooler(i));
             // The pump and the cooler in either order: a cooler before the pump is common where the draw is hot.
-            var steps = List.of(pump(pumparoundPump(i), c.pumparoundPumps().get(i - 1)).withAnyOrder(), Step.of(pumparoundCooler(i), PA_COOLER));
+            var steps = List.of(pump(pumparoundPump(i), c.pumparoundPumps().get(i - 1)).withAnyOrder(), Step.of(pumparoundCooler(i), PA_COOLER).withCount(c.units().cooler(i - 1)));
             links.add(new Link("pumparound", Start.at(COLUMN, Role.PUMPAROUND_DRAW, i - 1), steps, new ToPort(new PortSpec(COLUMN, Role.RETURN, i - 1)),
                     false, pumparoundCooler(i)));
         }
         if (c.kettle()) {
             slots.add(REBOILER);
-            links.add(new Link("reboiler", Start.at(COLUMN, Role.BOTTOMS, 0), List.of(Step.of(REBOILER, KETTLE)), new AtUnit(), false, REBOILER));
+            links.add(new Link("reboiler", Start.at(COLUMN, Role.BOTTOMS, 0), List.of(Step.of(REBOILER, KETTLE).withCount(c.units().kettle())), new AtUnit(), false, REBOILER));
             links.add(new Link("vapour_return", Start.at(REBOILER, Role.VAPOUR_OUTLET, 0), List.of(), new ToPort(new PortSpec(COLUMN, Role.VAPOUR_RETURN, 0)),
                     false, REBOILER));
             links.add(new Link("bottoms", Start.at(REBOILER, Role.LIQUID_OUTLET, 0), List.of(Step.of(BOTTOMS_VALVE, VALVE)), new Outside(), false, BOTTOMS_VALVE));

@@ -53,12 +53,27 @@ public final class ColumnWire {
         buffer.writeEnum(choices.condenser());
         buffer.writeEnum(choices.refluxPump());
         writePumps(buffer, choices.pumparoundPumps());
+        // The member counts (S3b): the condenser's, the kettle's, each pumparound cooler's.
+        var units = choices.units();
+        buffer.writeVarInt(units.condenser());
+        buffer.writeVarInt(units.kettle());
+        buffer.writeVarInt(units.coolers().size());
+        for (int count : units.coolers()) buffer.writeVarInt(count);
     }
 
     static ColumnComponents.Choices readChoices(RegistryFriendlyByteBuf buffer) {
         var condenser = readKind(buffer, ColumnComponents.Condenser.class);
         var reflux = readKind(buffer, ColumnComponents.Pump.class);
-        return new ColumnComponents.Choices(condenser, reflux, readPumps(buffer));
+        var pumps = readPumps(buffer);
+        int condenserUnits = buffer.readVarInt(), kettleUnits = buffer.readVarInt();
+        int coolers = readCount(buffer, ColumnTrays.MAX_PUMPAROUNDS, "pumparound cooler", 1);
+        var counts = new ArrayList<Integer>(coolers);
+        for (int i = 0; i < coolers; i++) counts.add(buffer.readVarInt());
+        try {
+            return new ColumnComponents.Choices(condenser, reflux, pumps, new ColumnComponents.Units(condenserUnits, kettleUnits, counts));
+        } catch (IllegalArgumentException invalid) {
+            throw new DecoderException(invalid.getMessage());
+        }
     }
 
     private static void writePumps(RegistryFriendlyByteBuf buffer, List<ColumnComponents.Pump> pumps) {

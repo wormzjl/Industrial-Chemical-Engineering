@@ -583,6 +583,11 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             case WRONG_ORDER -> tr("state.wrong_order", name, where);
             case BRANCHED -> tr("state.branched", name, position(at));
             case SHARED -> tr("state.shared", name);
+            case UNIT_COUNT -> {
+                var counts = detail.split(":");
+                yield tr("state.unit_count", name, counts[0], counts.length > 1 ? counts[1] : "?");
+            }
+            case UNIT_SHAPES -> tr("state.unit_shapes", name, position(at));
         };
     }
 

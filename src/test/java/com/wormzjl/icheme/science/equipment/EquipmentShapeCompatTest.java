@@ -49,6 +49,11 @@ class EquipmentShapeCompatTest {
         // Shape fields 4 (batch 2026-10-28-column-operation): the operating point the calculator saved with the design.
         shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), COMPONENTS, TURNS,
                 OPERATING), Heading.WEST, EquipmentShape.minimumSkirt(3)));
+        // Shape fields 6 (batch 2026-11-02-process-simulator, S3b): two condenser shells, three kettles and two units on the pumparound's cooler.
+        var parallel = new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                new ColumnComponents.Units(2, 3, List.of(2)));
+        shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), parallel), Heading.SOUTH,
+                EquipmentShape.minimumSkirt(3)));
         for (var kind : Kind.values()) {
             if (!kind.designed()) continue;
             double size = ProcessUnit.minDiameter(kind);int length = ProcessUnit.defaultLength(kind, size);
@@ -68,6 +73,30 @@ class EquipmentShapeCompatTest {
             assertEquals(shape, read.shape(), shape.kind().toString());
             assertTrue(read.repairs().isEmpty(), shape.kind() + ": " + read.repairs());
         }
+    }
+
+    /**
+     * Member counts (S3b, shape fields 6): a design saved before them reads one unit on every step; a count out of range
+     * reads 1 and is named, the kinds and the other counts kept.
+     */
+    @Test
+    void memberCountsReadOneWhenAbsentAndAreRepairedOneAtATime() {
+        var built = everyKind().stream().filter(s -> s.trays() != null && s.trays().components() != null && s.trays().components().units().condenser() > 1).findFirst().orElseThrow();
+        var tag = saved(built);
+        var components = tag.getCompound("Components");
+        assertEquals(2, components.getInt("CondenserUnits"));
+        var older = tag.copy();
+        for (var key : List.of("CondenserUnits", "KettleUnits", "CoolerUnits")) older.getCompound("Components").remove(key);
+        var read = EquipmentShellBlockEntity.readShape(older);
+        assertEquals(List.of(), read.repairs());
+        assertEquals(new ColumnComponents.Units(1, 1, List.of(1)), read.shape().trays().components().units(), "an older design: one unit on every step");
+        var wrong = tag.copy();
+        wrong.getCompound("Components").putInt("CondenserUnits", ColumnComponents.MAX_UNITS + 1);
+        wrong.getCompound("Components").putIntArray("CoolerUnits", new int[]{0});
+        read = EquipmentShellBlockEntity.readShape(wrong);
+        assertEquals(List.of("condenser units 7 -> 1", "pumparound cooler 1 units 0 -> 1"), read.repairs());
+        assertEquals(new ColumnComponents.Units(1, 3, List.of(1)), read.shape().trays().components().units(), "the kettle's count kept");
+        assertEquals(built.trays().components().condenser(), read.shape().trays().components().condenser());
     }
 
     @Test
@@ -282,9 +311,26 @@ class EquipmentShapeCompatTest {
     private static final Path CORPUS = Path.of("src/test/resources/compat/equipment");
     /**
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
-     * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank).
+     * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank; 6: a
+     * column's member counts).
      */
-    private static final int SHAPE_FIELDS = 5;
+    private static final int SHAPE_FIELDS = 6;
+
+    /** A column's components as an image written before the member counts shows them. */
+    private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(
+            "(ColumnComponents\\[condenser=\\w+, refluxPump=\\w+, pumparoundPumps=\\[([A-Z_, ]*)\\], ejector=\\w+, kettle=\\w+)\\]");
+
+    /** {@code expected} as this build prints it: components written before the member counts read one unit on every step. */
+    private static String withUnits(String expected) {
+        var m = COMPONENTS_BEFORE_UNITS.matcher(expected);
+        var out = new StringBuilder();
+        while (m.find()) {
+            int pumps = m.group(2).isBlank() ? 0 : m.group(2).split(", ").length;
+            var units = new ColumnComponents.Units(1, 1, java.util.Collections.nCopies(pumps, 1));
+            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(m.group(1) + ", units=" + units + "]"));
+        }
+        return m.appendTail(out).toString();
+    }
 
     /**
      * Every corpus file's saved shell tags read with no repair, to the shapes recorded beside them. The file of this
@@ -313,6 +359,7 @@ class EquipmentShapeCompatTest {
                     // (ColumnTrays.tangentLength; batch 2026-10-27-column-sump), and a placed column refreshes to it.
                     var expected = entry.getString("Expected");
                     if(!expected.contains("towerBank="))expected=expected.substring(0,expected.length()-1)+", towerBank=TowerBank[columns=1, rows=1]]";
+                    expected = withUnits(expected);
                     if (read.shape().column()) expected = expected.replaceFirst("tangentLength=[0-9.]+", "tangentLength=" + read.shape().tangentLength());
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }

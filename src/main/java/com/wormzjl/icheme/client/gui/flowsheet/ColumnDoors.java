@@ -85,7 +85,7 @@ public final class ColumnDoors {
         var door = ColumnDoor.of(unit.params());
         var pumps = new ArrayList<ColumnComponents.Pump>();
         for (var row : unit.params().rows("pumparounds")) pumps.add(pump(row.text("pump", ColumnComponents.Pump.STANDARD.name())));
-        return new ColumnComponents.Choices(door.condenser(), pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps);
+        return door.choices(pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps);
     }
 
     private static @Nullable V3ColumnDisplayResult display(SheetContext x, String id) {
@@ -131,7 +131,8 @@ public final class ColumnDoors {
             case EQUIPMENT -> {
                 var pumps = new ArrayList<ColumnComponents.Pump>();
                 for (var row : unit.params().rows("pumparounds")) pumps.add(pump(row.text("pump", ColumnComponents.Pump.STANDARD.name())));
-                var rows = CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, door.condenser(), pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps, x.host().stores() && !x.host().reader() && input(x, id) != null), x.t());
+                var rows = CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, door.condenser(), pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps,
+                        x.host().stores() && !x.host().reader() && input(x, id) != null, door.units(), ColumnComponents.kettleRequired(door.reboilerDuty())), x.t());
                 var right = new ArrayList<>(rows.right());
                 right.add(right.size() - 1, Door.group(x.text("door.group.tube_sides"), Door.entry("tube", x.text("door.drop"), x.units().pressure().symbol())));
                 columns = List.of(right);
@@ -367,13 +368,33 @@ public final class ColumnDoors {
             case "condenser" -> editor.set(id, "condenser", (tail.equals("exchanger") ? ColumnComponents.Condenser.EXCHANGER : ColumnComponents.Condenser.AIR_COOLER).name(), null);
             case "reflux" -> editor.set(id, "reflux_pump", tail.toUpperCase(Locale.ROOT), null);
             default -> {
-                if (head.startsWith("pa")) {
+                if (head.startsWith("units/") && (head.endsWith("-") || head.endsWith("+"))) units(x, id, head.substring(6, head.length() - 1), head.endsWith("+") ? 1 : -1);
+                else if (head.startsWith("pa")) {
                     var json = copy(x, id);
                     json.getAsJsonArray("pumparounds").get(Integer.parseInt(head.substring(2))).getAsJsonObject().addProperty("pump", tail.toUpperCase(Locale.ROOT));
                     editor.setParams(id, new Params(json), null);
                 }
             }
         }
+    }
+
+    /**
+     * Steps a member count by {@code by}, within 1 to {@link ColumnComponents#MAX_UNITS}: {@code condenser} and {@code kettle}
+     * on the door, {@code pa<i>} on pumparound row {@code i}. One undo step each.
+     */
+    private static void units(SheetContext x, String id, String member, int by) {
+        var door = ColumnDoor.of(x.editor().unit(id).params());
+        var json = copy(x, id);
+        String step = "units " + id + " " + member;
+        switch (member) {
+            case "condenser" -> json.addProperty(ColumnDoor.CONDENSER_UNITS, Math.clamp(door.units().condenser() + by, 1, ColumnComponents.MAX_UNITS));
+            case "kettle" -> json.addProperty(ColumnDoor.KETTLE_UNITS, Math.clamp(door.units().kettle() + by, 1, ColumnComponents.MAX_UNITS));
+            default -> {
+                int i = Integer.parseInt(member.substring(2));
+                json.getAsJsonArray("pumparounds").get(i).getAsJsonObject().addProperty(ColumnDoor.UNITS, Math.clamp(door.units().cooler(i) + by, 1, ColumnComponents.MAX_UNITS));
+            }
+        }
+        x.editor().setParams(id, new Params(json), step);
     }
 
     private static void select(Door.View view, Connection connection, int index) {

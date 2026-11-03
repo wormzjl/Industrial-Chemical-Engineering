@@ -27,10 +27,12 @@ import java.util.List;
  * @param condenser      what condenses the overhead; an exchanger has a cooling pair, an air cooler none
  * @param condenserDrop  the drop across the condenser's cold side (Pa)
  * @param reboilerDrop   the drop across the kettle's tube side (Pa)
+ * @param units          how many identical units stand in parallel on the condenser, the kettle and each pumparound's cooler
+ *                       (S3b): {@code condenser_units}, {@code kettle_units} and a pumparound row's {@code units}, 1 where absent
  */
 public record ColumnDoor(String packageId, String assayId, int stages, int feedStage, double topPressure, double stageDrop, double diameter,
                          double condenserTemperature, double reflux, double reboilerDuty, ColumnComponents.Condenser condenser, double condenserDrop, double reboilerDrop,
-                         List<Draw> draws, List<Steam> steam, List<Pumparound> pumparounds) {
+                         List<Draw> draws, List<Steam> steam, List<Pumparound> pumparounds, ColumnComponents.Units units) {
     /** A side draw on {@code tray} (mol/s). */
     public record Draw(String id, int tray, double flow) {
     }
@@ -61,9 +63,29 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
         var steam = new ArrayList<Steam>();
         for (var row : p.rows("steam")) steam.add(new Steam(id(row, "steam", ids), (int) row.number("stage"), row.number("flow"), row.number("temperature")));
         var pumparounds = new ArrayList<Pumparound>();
-        for (var row : p.rows("pumparounds")) pumparounds.add(new Pumparound(id(row, "pa", ids), (int) row.number("return_tray"), (int) row.number("draw_tray"), row.number("duty"), split(row), row.number("drop", 0)));
+        var coolers = new ArrayList<Integer>();
+        for (var row : p.rows("pumparounds")) {
+            pumparounds.add(new Pumparound(id(row, "pa", ids), (int) row.number("return_tray"), (int) row.number("draw_tray"), row.number("duty"), split(row), row.number("drop", 0)));
+            coolers.add(units(row, UNITS));
+        }
         return new ColumnDoor(p.text("package", ""), p.text("assay", ""), (int) p.number("stages"), (int) p.number("feed_stage"), p.number("top_pressure"), p.number("stage_drop"), p.number("diameter", 0),
-                p.number("condenser_temperature"), p.number("reflux"), p.number("reboiler_duty"), condenser(p), p.number("condenser_drop", 0), p.number("reboiler_drop", 0), draws, steam, pumparounds);
+                p.number("condenser_temperature"), p.number("reflux"), p.number("reboiler_duty"), condenser(p), p.number("condenser_drop", 0), p.number("reboiler_drop", 0), draws, steam, pumparounds,
+                new ColumnComponents.Units(units(p, CONDENSER_UNITS), units(p, KETTLE_UNITS), coolers));
+    }
+
+    /** The settings that hold the member counts: the door's two and a pumparound row's own. */
+    public static final String CONDENSER_UNITS = "condenser_units", KETTLE_UNITS = "kettle_units", UNITS = "units";
+
+    /** A member count: 1 where absent, a whole number from 1 to {@link ColumnComponents#MAX_UNITS}, else refused by name. */
+    private static int units(Params p, String key) {
+        double n = p.number(key, 1);
+        if (n != Math.rint(n) || n < 1 || n > ColumnComponents.MAX_UNITS) throw new FlowsheetFailure("unit.setting", key);
+        return (int) n;
+    }
+
+    /** The components a Save design names: the condenser, the counts, and the pumps the door's rows hold, standard where none. */
+    public ColumnComponents.Choices choices(ColumnComponents.Pump reflux, List<ColumnComponents.Pump> pumps) {
+        return new ColumnComponents.Choices(condenser, reflux, pumps, units).fit(pumparounds.size());
     }
 
     private static String id(Params row, String kind, HashSet<String> ids) {

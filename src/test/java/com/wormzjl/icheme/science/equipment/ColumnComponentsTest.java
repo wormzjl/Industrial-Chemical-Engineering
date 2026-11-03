@@ -96,6 +96,21 @@ class ColumnComponentsTest {
         assertEquals(List.of(Pump.STANDARD, Pump.IN_LINE), Choices.DEFAULT.withPumparoundPump(1, Pump.IN_LINE).pumparoundPumps());
     }
 
+    /** S3b: member counts fit the designed pumparounds (a further cooler one unit), stay in 1 to {@code MAX_UNITS}, and a design without them reads one unit a step. */
+    @Test
+    void memberCountsFitThePumparoundsAndStayInRange() {
+        var units = ColumnComponents.Units.ONE.withCondenser(2).withKettle(3).withCooler(1, 4);
+        assertEquals(new ColumnComponents.Units(2, 3, List.of(1, 4)), units);
+        var design = ColumnDesign.of(crude(), new Choices(Condenser.AIR_COOLER, Pump.STANDARD, List.of(), units));
+        assertEquals(new ColumnComponents.Units(2, 3, List.of(1, 4, 1)), design.components().units(), "one count per pumparound, a further cooler one unit");
+        assertEquals(design.components().units(), design.components().choices().units(), "the Components page shows them again");
+        assertEquals(ColumnComponents.Units.ONE.fit(3), new ColumnComponents(Condenser.EXCHANGER, Pump.STANDARD, List.of(Pump.STANDARD, Pump.STANDARD, Pump.STANDARD), false, false).units());
+        assertThrows(IllegalArgumentException.class, () -> new ColumnComponents.Units(ColumnComponents.MAX_UNITS + 1, 1, List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ColumnComponents.Units(1, 0, List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ColumnComponents(Condenser.EXCHANGER, Pump.STANDARD, List.of(), false, false, new ColumnComponents.Units(1, 1, List.of(2))),
+                "no cooler count without its pumparound");
+    }
+
     /** Finding F1 through the save: a nozzle without a row by its tray on any side refuses the design and names itself (finding F3). */
     @Test
     void aDesignWhoseNozzleFindsNoRowIsNotSaved() {

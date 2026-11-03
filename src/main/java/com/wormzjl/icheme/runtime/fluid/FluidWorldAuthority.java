@@ -362,8 +362,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
                            PhysicalFluidTopology.Direction toward,double pressure,double temperature) {}
     /**
      * A Start (plan 4.1): the column's origin, its setpoints, the pipe blocks in front of its nozzles, its ports, and the
-     * registrations of a water-cooled condenser's two sides (empty for an air cooler): the one the column does not hold is
-     * its water side (C6b).
+     * registrations of a water-cooled condenser's two sides, every shell's (empty for an air cooler): those the column does
+     * not hold are its water sides (C6b, S3b).
      */
     public record ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,
                               List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser) {
@@ -429,9 +429,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
         // Stations a stopped column kept and this start no longer has (the design lost a port) keep their accounts, with no port.
         if(existing!=null)stations.addAll(existing.lost(stations));
-        // The condenser's water side: of its two sides, the one outside the column, partnered with one inside (C6b).
-        long water=0;
-        for(long side:request.condenser()){var r=registrations().get(side);if(r!=null&&!inside.containsKey(side)&&r.device().heat()!=null&&inside.containsKey(r.device().heat().partner()))water=side;}
+        // The condenser's water sides: of each shell's two sides, the one outside the column, partnered with one inside (C6b);
+        // one a shell in parallel (S3b).
+        var water=new ArrayList<Long>();
+        for(long side:request.condenser()){var r=registrations().get(side);if(r!=null&&!inside.containsKey(side)&&r.device().heat()!=null&&inside.containsKey(r.device().heat().partner())&&!water.contains(side))water.add(side);}
+        if(water.size()>ColumnUnit.MAXIMUM_CONDENSERS)return "the condenser has more than "+ColumnUnit.MAXIMUM_CONDENSERS+" shells";
         // A restart keeps the set points the player applied while they fit the design's ports (C7); else the design's.
         var setpoints=existing!=null&&compatible(existing.setpoints(),request.setpoints())?existing.setpoints():request.setpoints();
         var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water);

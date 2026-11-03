@@ -98,7 +98,8 @@ public final class AssemblyWalker implements PortGraph {
         return units.computeIfAbsent(origin, o -> {
             shells.put(o, shell);
             var shape = shell.shape();
-            return new Unit(o, shape.kind(), shape.orientation().horizontal(), shape.boot(), shape.nozzles().stream().map(EquipmentShape.Nozzle::role).toList());
+            return new Unit(o, shape.kind(), shape.orientation().horizontal(), shape.boot(), shape.nozzles().stream().map(EquipmentShape.Nozzle::role).toList(),
+                    new Size(shape.diameter(), shape.tangentLength(), shape.bank()));
         });
     }
 

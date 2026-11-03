@@ -43,9 +43,10 @@ final class FluidFacts {
      *  and appends the data's identity, the declared revision of every record it reads (owner decisions 2026-10-26).
      *  5 (batch 2026-10-27-heat-exchanger-design): a geometry's channel count, a heat side's unit on its registration.
      *  6 (batch 2026-10-28-column-operation): a registration's column unit (the running column that holds it), the column units.
-     *  7 (batch 2026-10-30-water-cooling-tower): a device spec's cooling tower. */
-    static final int SCHEMA=7;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 7. */
+     *  7 (batch 2026-10-30-water-cooling-tower): a device spec's cooling tower.
+     *  8 (batch 2026-11-02-process-simulator, S3b): a column unit's further condenser water sides, one a shell in parallel. */
+    static final int SCHEMA=8;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 8. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -300,7 +301,9 @@ final class FluidFacts {
                 .record(q->setpoints(q,s))
                 .list(u.stations(),(q,st)->{q.name(st.port()).count(st.index()).count(st.device()).count(st.valve()).record(a->account(a,st.account()));solids(q,Solid.of(st.solids()));})
                 .record(q->q.record(a->account(a,t.taken())).record(a->account(a,t.produced())).f64(t.reboiler()).f64(t.condenser()).f64(t.pumparounds()))
-                .count(u.condenser()).bool(u.leaving());
+                .count(u.condenser()).bool(u.leaving())
+                // Schema 8 (S3b): the condenser's further water sides, one a shell in parallel.
+                .list(u.condensers().isEmpty()?List.<Long>of():u.condensers().subList(1,u.condensers().size()),(q,side)->q.count(side));
     }
     private static ColumnUnit column(Record f) {
         long id=f.count(0);var master=position(f);boolean running=f.bool(false);
@@ -314,8 +317,12 @@ final class FluidFacts {
             required(taken,q,"taken total");required(produced,q,"produced total");
             return valid(q,"column totals",()->new ColumnUnit.Totals(taken,produced,reboiler,condenser,pumparounds));});
         long condenser=f.count(0);boolean leaving=f.bool(false);
+        // A unit written before schema 8 has one water side at most.
+        var further=f.list(List.<Long>of(),q->q.count(0));
+        var condensers=new ArrayList<Long>();if(condenser!=0)condensers.add(condenser);condensers.addAll(further);
+        if(condenser==0&&!further.isEmpty())throw f.invalid("column condenser sides");
         required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
-        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condenser,null,leaving));
+        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,null,leaving));
     }
     private static Fields setpoints(Fields q,com.wormzjl.icheme.science.column.operation.Setpoints s) {
         return q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())
@@ -584,7 +591,7 @@ final class FluidFacts {
                 }
                 var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
                         new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
-                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condenser(),null,u.leaving());
+                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condensers(),null,u.leaving());
             }
             columns.put(u.id(),settled(u,registrations));
         }
