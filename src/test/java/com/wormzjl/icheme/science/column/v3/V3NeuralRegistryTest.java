@@ -98,7 +98,7 @@ class V3NeuralRegistryTest {
             assertTrue(ready.await(5,TimeUnit.SECONDS));MaterialRuntime.publish(changed);release.countDown();
             var actual=pending.get(10,TimeUnit.SECONDS);assertArrayEquals(expected.temperatures(),actual.temperatures());
             assertEquals(catalog.requirePackage(MAIN).scientificRevision(),actual.propertyRevision());
-            assertFalse(MaterialRuntime.isCurrent(MAIN,actual.propertyRevision()));
+            assertFalse(isCurrent(MAIN,actual.propertyRevision()));
         } finally {release.countDown();}
         assertThrows(CancellationException.class,()->bound.predict(input,()->{throw new CancellationException();}));
     }
@@ -111,5 +111,11 @@ class V3NeuralRegistryTest {
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.read(stream(data.toString()),getClass()::getResourceAsStream));
         row.addProperty("payload","/data/icheme/neural/../escape.json");
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.read(stream(data.toString()),p->{throw new AssertionError("Unsafe path was opened");}));
+    }
+
+    /** A result is current only for the exact resolved scientific dataset (moved from MaterialRuntime, which had no other caller). */
+    private static boolean isCurrent(String packageId, String scientificRevision) {
+        var p = MaterialRuntime.current().packages().get(packageId);
+        return p != null && p.scientificRevision().equals(scientificRevision);
     }
 }

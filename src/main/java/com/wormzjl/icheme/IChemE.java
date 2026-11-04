@@ -12,9 +12,7 @@ import com.wormzjl.icheme.runtime.WorkerAllocation;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
-import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
 import com.wormzjl.icheme.science.column.v3.V3NeuralRegistry;
-import com.wormzjl.icheme.science.column.v3.V3NeuralInitializer;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -51,10 +49,6 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue FLUID_CERTIFICATE_TOLERANCE,FLUID_CERTIFICATE_BUDGET;
     private static final ModConfigSpec.IntValue FLUID_CERTIFICATE_MAXIMUM_INTERVALS,FLUID_REST_CONFIRM_INTERVALS,FLUID_REST_RECHECK_SECONDS;
     private static final ModConfigSpec.DoubleValue COLUMN_V3_LIQUID_SUPPLY_SCREEN_RATIO;
-    private static final ModConfigSpec.EnumValue<V3InitializationOptions.Mode> COLUMN_V3_INITIALIZER_MODE;
-    private static final ModConfigSpec.EnumValue<V3InitializationOptions.WetStart> COLUMN_V3_WET_START;
-    private static final ModConfigSpec.IntValue COLUMN_V3_LNN_ITERATIONS;
-    private static final ModConfigSpec.IntValue COLUMN_V3_LNN_MILLISECONDS;
     private static final ModConfigSpec.ConfigValue<String> EQUIPMENT_PRIMARY_COLOUR, EQUIPMENT_SECONDARY_COLOUR;
     private static final ModConfigSpec.DoubleValue EQUIPMENT_SHEEN;
 
@@ -125,23 +119,6 @@ public final class IChemE {
                 .defineInRange("restRecheckSeconds",0,0,86_400);
         builder.pop();
         builder.push("columnV3");
-        COLUMN_V3_INITIALIZER_MODE = builder
-                .comment("LNN_FIRST tries the bundled learned seed, then the current initializer as backup.",
-                        "LNN_ONLY never invokes current initialization. CURRENT_ONLY bypasses the model.",
-                        "One learned model ships: the regrouped-basis Transformer regrouped-seed-17041-epoch-160",
-                        "(data/icheme/neural/registry.json). There is no model selection.",
-                        "All routes retain physical acceptance checks. Captured at request admission.")
-                .defineEnum("initializerMode", V3InitializationOptions.Mode.LNN_FIRST);
-        COLUMN_V3_WET_START = builder
-                .comment("Learned seeds only: AUTO and PREDICTED_WET retain the model's validated wet mask.",
-                        "DRY_START clears the initial wet set; subsequent water physics and wet correction remain enabled.")
-                .defineEnum("lnnWetStartMode", V3InitializationOptions.WetStart.AUTO);
-        COLUMN_V3_LNN_ITERATIONS = builder
-                .comment("Maximum Newton iterations per learned correction pass; all passes also share the LNN time budget.")
-                .defineInRange("lnnMaxCorrectionIterations", 16, 1, 128);
-        COLUMN_V3_LNN_MILLISECONDS = builder
-                .comment("Shared inference/correction allowance in milliseconds; never extends the overall solve deadline.")
-                .defineInRange("lnnBudgetMilliseconds", 2_000, 1, 60_000);
         COLUMN_V3_LIQUID_SUPPLY_SCREEN_RATIO = builder
                 .comment("Request-only liquid-supply screen: reject a specification whose authored side draws withdraw",
                         "at least this fraction of the liquid that reflux, feed and authored pumparound condensation",
@@ -245,23 +222,6 @@ public final class IChemE {
                 new com.wormzjl.icheme.runtime.fluid.CertificatePolicy(FLUID_REST_DETECTION.getAsBoolean(),FLUID_CERTIFICATE_TOLERANCE.get(),FLUID_CERTIFICATE_BUDGET.get(),FLUID_CERTIFICATE_MAXIMUM_INTERVALS.getAsInt(),FLUID_REST_CONFIRM_INTERVALS.getAsInt(),FLUID_REST_RECHECK_SECONDS.getAsInt()));
     }
 
-    /**
-     * Read only on the logical server's admission thread; workers receive the immutable result.
-     *
-     * <p>The correction rule is the qualified one and is not configurable: it is part of what the
-     * bundled model was measured with, so a config that could separate them could not be qualified.</p>
-     */
-    public static V3InitializationOptions columnV3InitializationOptions() {
-        return new V3InitializationOptions(COLUMN_V3_INITIALIZER_MODE.get(), COLUMN_V3_WET_START.get(),
-                COLUMN_V3_LNN_ITERATIONS.get(), COLUMN_V3_LNN_MILLISECONDS.get(),
-                V3InitializationOptions.Correction.PROGRESS);
-    }
-
-    /** Resolve the safely published immutable bundled model on the admission thread. */
-    public static V3NeuralInitializer columnV3NeuralModel() {
-        return V3NeuralRegistry.bundled();
-    }
-
     /** Read on the server thread when admitting a V3 request, never from its worker. */
     public static double columnV3LiquidSupplyScreenRatio() {
         return COLUMN_V3_LIQUID_SUPPLY_SCREEN_RATIO.get();
@@ -270,8 +230,8 @@ public final class IChemE {
     private static void onServerStarting(ServerStartingEvent event) {
         MinecraftServer server = event.getServer();
         try {
-            if (columnV3InitializationOptions().mode() != V3InitializationOptions.Mode.CURRENT_ONLY)
-                columnV3NeuralModel(); // Parse the selected immutable artifact before admitting normal work.
+            // Parse the bundled model before admitting work, as the default config did: the simulator's column starts from it (ColumnUnit.START).
+            V3NeuralRegistry.bundled();
             ProcessSolveServices.ServerStarted started =
                     ProcessSolveServices.startServer(server, solveServiceConfig());
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.start(server);
