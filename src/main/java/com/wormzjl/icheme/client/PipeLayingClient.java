@@ -20,7 +20,6 @@ import com.wormzjl.icheme.world.level.block.PipeLaying;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
-import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.LightTexture;
@@ -96,7 +95,7 @@ public final class PipeLayingClient {
     private static @Nullable Slot slot;
     private static boolean armed = true;
     private static int age;
-    /** The outliner slots of the marks shown last tick: ports, open ends and an aimed rack's free slots. */
+    /** The outline slots of the marks shown last tick: ports, open ends and an aimed rack's free slots. */
     private static Set<Object> markSlots = Set.of();
 
     private PipeLayingClient() {
@@ -180,7 +179,6 @@ public final class PipeLayingClient {
     public static void tick(ClientTickEvent.Post event) {
         var mc = Minecraft.getInstance();
         var player = mc.player;
-        var outliner = Outliner.getInstance();
         if (!mc.options.keyUse.isDown()) armed = true;
         // Holding the tool is the request for the assemblies around the player (plan section 9).
         AssemblyToolClient.watch(player, player != null && mc.level != null && holding(player));
@@ -191,9 +189,9 @@ public final class PipeLayingClient {
                 sent = null;
                 plan = null;
                 refused = null;
-                for (var slot : List.of(START_SLOT, ROUTE_SLOT)) outliner.remove(slot);
-                for (var slot : REMOVE_SLOTS) outliner.remove(slot);
-                for (var slot : markSlots) outliner.remove(slot);
+                for (var slot : List.of(START_SLOT, ROUTE_SLOT)) Outlines.remove(slot);
+                for (var slot : REMOVE_SLOTS) Outlines.remove(slot);
+                for (var slot : markSlots) Outlines.remove(slot);
                 markSlots = Set.of();
             }
             return;
@@ -209,21 +207,21 @@ public final class PipeLayingClient {
         if (start != null) {
             if (hit == null) plan = null;
             else if (plan == null || !same(mc.level, plan.end, hit, outside) || age % RECHECK_TICKS == 0 && plan != refused) plan = plan(mc.level, hit, diameter);
-            outliner.showAABB(START_SLOT, new AABB(start.anchor.cell())).colored(START_COLOUR).lineWidth(1 / 16F);
+            Outlines.box(START_SLOT, new AABB(start.anchor.cell()), START_COLOUR, 1 / 16F);
             if (plan != null && plan.refusal != null)
-                outliner.showLine(ROUTE_SLOT, start.anchor.cell().getCenter(), (plan.anchor != null ? plan.anchor.cell() : plan.end.clicked()).getCenter()).colored(REFUSED_COLOUR).lineWidth(1 / 16F);
-            else outliner.remove(ROUTE_SLOT);
+                Outlines.line(ROUTE_SLOT, start.anchor.cell().getCenter(), (plan.anchor != null ? plan.anchor.cell() : plan.end.clicked()).getCenter(), REFUSED_COLOUR, 1 / 16F);
+            else Outlines.remove(ROUTE_SLOT);
             if (age % HUD_TICKS == 0) say(player, hud(player));
         } else {
             plan = null;
-            outliner.remove(START_SLOT);
-            outliner.remove(ROUTE_SLOT);
+            Outlines.remove(START_SLOT);
+            Outlines.remove(ROUTE_SLOT);
         }
         // While Shift is held, the pipe or lane a use would dismantle is outlined in red.
         var removed = start == null && player.isShiftKeyDown() && hit != null ? removable(mc.level, hit) : null;
         for (int i = 0; i < REMOVE_SLOTS.length; i++)
-            if (removed != null && i < removed.size()) outliner.showAABB(REMOVE_SLOTS[i], removed.get(i)).colored(REFUSED_COLOUR).lineWidth(1 / 16F);
-            else outliner.remove(REMOVE_SLOTS[i]);
+            if (removed != null && i < removed.size()) Outlines.box(REMOVE_SLOTS[i], removed.get(i), REFUSED_COLOUR, 1 / 16F);
+            else Outlines.remove(REMOVE_SLOTS[i]);
         if (start == null && hit != null && age % HUD_TICKS == 0) {
             var label = portLabel(mc.level, hit);
             if (label != null) say(player, label);
@@ -232,16 +230,16 @@ public final class PipeLayingClient {
         boolean routeRefused = start != null && plan != null && plan.refusal != null;
         slot = hit != null && !player.isShiftKeyDown() && (start == null || plan == null || routeRefused) ? slot(mc.level, hit, outside, routeRefused) : null;
         var shown = new HashSet<Object>();
-        ports(mc.level, player, outliner, shown);
-        openEnds(mc.level, player, outliner, shown);
-        freeSlots(mc.level, hit, outliner, shown);
+        ports(mc.level, player, shown);
+        openEnds(mc.level, player, shown);
+        freeSlots(mc.level, hit, shown);
         if (slot != null) {
             var aimed = slot;
             shown.add(AIM_SLOT);
-            outliner.showAABB(AIM_SLOT, square(aimed.cell, Direction.values()[aimed.through], RackGeometry.facePoint(aimed.frame, aimed.lane, aimed.through), Math.min(.45, aimed.lane.diameter() / 2 + .04)))
-                    .colored(aimed.refused ? REFUSED_COLOUR : START_COLOUR).lineWidth(1 / 32F);
+            Outlines.box(AIM_SLOT, square(aimed.cell, Direction.values()[aimed.through], RackGeometry.facePoint(aimed.frame, aimed.lane, aimed.through), Math.min(.45, aimed.lane.diameter() / 2 + .04)),
+                    aimed.refused ? REFUSED_COLOUR : START_COLOUR, 1 / 32F);
         }
-        for (var slot : markSlots) if (!shown.contains(slot)) outliner.remove(slot);
+        for (var slot : markSlots) if (!shown.contains(slot)) Outlines.remove(slot);
         markSlots = shown;
     }
 
@@ -420,7 +418,7 @@ public final class PipeLayingClient {
      * connected; other nozzles use their class colour, grey when connected. Re-shown from the client's port cells; at most
      * {@link #MAX_MARKS}, nearest first.
      */
-    private static void ports(Level level, LocalPlayer player, Outliner outliner, Set<Object> shown) {
+    private static void ports(Level level, LocalPlayer player, Set<Object> shown) {
         var marks = new ArrayList<Mark>();
         for (var shell : EquipmentShellBlockEntity.clientPortCells()) {
             if (shell.isRemoved() || shell.getLevel() != level || shell.shape() == null) continue;
@@ -440,14 +438,14 @@ public final class PipeLayingClient {
             boolean connected = connected(level, mark.cell, mark.face);
             int assemblyColour = shell == null ? -1 : AssemblyToolClient.colour(shell, mark.face);
             int colour = assemblyColour >= 0 ? assemblyColour : connected ? PortColours.CONNECTED : PortColours.of(mark.port);
-            outliner.showAABB(slot, square(mark.cell, mark.face, faceCentre(mark.face), .3)).colored(colour).lineWidth(1 / 32F);
+            Outlines.box(slot, square(mark.cell, mark.face, faceCentre(mark.face), .3), colour, 1 / 32F);
             // A watched assembly's port: a frame round the square (AssemblyToolClient).
             int frame = shell == null ? -1 : AssemblyToolClient.frame(shell, mark.face);
             if (frame < 0 && assemblyColour >= 0 && connected) frame = PortColours.CONNECTED;
             if (frame < 0) continue;
             var framed = slot + ":frame";
             shown.add(framed);
-            outliner.showAABB(framed, square(mark.cell, mark.face, faceCentre(mark.face), .4)).colored(frame).lineWidth(1 / 32F);
+            Outlines.box(framed, square(mark.cell, mark.face, faceCentre(mark.face), .4), frame, 1 / 32F);
         }
     }
 
@@ -459,7 +457,7 @@ public final class PipeLayingClient {
      * open face of a pipe, and on each open face of a rack lane at the lane's point there; at most {@link #MAX_MARKS},
      * nearest first.
      */
-    private static void openEnds(Level level, LocalPlayer player, Outliner outliner, Set<Object> shown) {
+    private static void openEnds(Level level, LocalPlayer player, Set<Object> shown) {
         var ends = new ArrayList<End>();
         for (var pipe : FluidDeviceBlockEntity.clientOpenEnds()) {
             if (pipe.isRemoved() || pipe.getLevel() != level) continue;
@@ -486,7 +484,7 @@ public final class PipeLayingClient {
         for (var end : ends.subList(0, Math.min(MAX_MARKS, ends.size()))) {
             var slot = "icheme:open:" + end.cell.asLong() + ":" + end.face.ordinal() + ":" + end.option;
             shown.add(slot);
-            outliner.showAABB(slot, square(end.cell, end.face, end.point, Math.min(.45, end.outside / 2 + .04))).colored(OPEN_COLOUR).lineWidth(1 / 32F);
+            Outlines.box(slot, square(end.cell, end.face, end.point, Math.min(.45, end.outside / 2 + .04)), OPEN_COLOUR, 1 / 32F);
         }
     }
 
@@ -499,7 +497,7 @@ public final class PipeLayingClient {
     }
 
     /** While a rack is aimed, a small cube on each tier position no lane takes: where a new lane may go. */
-    private static void freeSlots(Level level, @Nullable PipeAnchor.Click hit, Outliner outliner, Set<Object> shown) {
+    private static void freeSlots(Level level, @Nullable PipeAnchor.Click hit, Set<Object> shown) {
         if (hit == null || !(level.getBlockEntity(hit.clicked()) instanceof PipeRackBlockEntity rack)) return;
         var frame = rack.rack();
         int taken = RackGeometry.taken(frame, rack.drawnLanes());
@@ -509,7 +507,7 @@ public final class PipeLayingClient {
             double half = .04;
             var key = "icheme:free_slot:" + position;
             shown.add(key);
-            outliner.showAABB(key, new AABB(c[0] - half, c[1] - half, c[2] - half, c[0] + half, c[1] + half, c[2] + half).move(hit.clicked())).colored(FREE_COLOUR).lineWidth(1 / 32F);
+            Outlines.box(key, new AABB(c[0] - half, c[1] - half, c[2] - half, c[0] + half, c[1] + half, c[2] + half).move(hit.clicked()), FREE_COLOUR, 1 / 32F);
         }
     }
 

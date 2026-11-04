@@ -164,11 +164,19 @@ neoForge {
 }
 
 configurations {
+    // The optional mods' runtime jars (Create and KubeJS, see dependencies): dev runs, GameTests and tests load them,
+    // dependents of the mod never pull them.
+    optionalModRuntime {
+        canBeConsumed = false
+        canBeResolved = false
+    }
+    localRuntime.extendsFrom optionalModRuntime
     runtimeClasspath.extendsFrom localRuntime
     fluidGameTestImplementation.extendsFrom implementation
-    fluidGameTestRuntimeOnly.extendsFrom runtimeOnly
+    fluidGameTestCompileOnly.extendsFrom compileOnly
+    fluidGameTestRuntimeOnly.extendsFrom runtimeOnly, optionalModRuntime
     mcpCompatImplementation.extendsFrom implementation
-    mcpCompatRuntimeOnly.extendsFrom runtimeOnly
+    mcpCompatRuntimeOnly.extendsFrom runtimeOnly, optionalModRuntime
 }
 
 // Optional MCP test-client tooling never enters the production jar or ordinary test runtime.
@@ -203,22 +211,31 @@ dependencies {
             version { prefer '0.44.0' }
         }
     }
-    // Create's slim development jar deliberately excludes its companion libraries.
-    implementation("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
+    // Create (with its libraries Ponder, Catnip inside Ponder, Flywheel and Registrate) and KubeJS are optional mods: compiled
+    // against, loaded in dev runs, GameTests and tests through optionalModRuntime. -PwithoutCreate drops all five from
+    // those runtimes, for the check without Create. Create's slim development jar excludes its companion libraries.
+    def withoutCreate = providers.gradleProperty('withoutCreate').map { it != 'false' }.getOrElse(false)
+    compileOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
         transitive = false
     }
-    implementation("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
+    compileOnly("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
     compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
-    runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
-    implementation("com.tterrag.registrate:Registrate:${registrate_version}")
+    compileOnly("com.tterrag.registrate:Registrate:${registrate_version}")
+    compileOnly("dev.latvian.mods:kubejs-neoforge:${kubejs_version}")
+    if (!withoutCreate) {
+        optionalModRuntime("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
+            transitive = false
+        }
+        optionalModRuntime("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
+        optionalModRuntime("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
+        optionalModRuntime("com.tterrag.registrate:Registrate:${registrate_version}")
+        optionalModRuntime("dev.latvian.mods:kubejs-neoforge:${kubejs_version}")
+    }
 
     // JEI is an optional client integration: APIs at compile time, full mod only in dev runs.
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
     localRuntime("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
-
-    // Milestone 1 requires the KubeJS preset adapter. Its POM supplies Rhino and runtime helpers.
-    api("dev.latvian.mods:kubejs-neoforge:${kubejs_version}")
 
     testImplementation(platform("org.junit:junit-bom:${junit_version}"))
     testImplementation('org.junit.jupiter:junit-jupiter')
