@@ -474,6 +474,42 @@ class FluidFactsCompatTest {
     }
 
     /**
+     * {@code compat/fluid/island-sets/} (batch 2026-11-04-refinery-compounds, V3): two islands on different compound lists,
+     * nitrogen with methane and nitrogen with ethane, written at state format 31, whose package table names each island's
+     * list. It loads exactly, each island on its own list; its facts rebuild each island on the same list (nitrogen and what
+     * its stock holds) with every vessel bit for bit and nothing restated. When the image is missing the test writes it under
+     * {@code build/compat/fluid/}.
+     */
+    @Test void twoIslandsOnDifferentListsLoadEachOnItsOwnList() throws IOException {
+        var folder=CORPUS.resolve("island-sets");
+        if(!Files.isDirectory(folder)) {
+            var written=Path.of("build/compat/fluid/island-sets");write(image(setsWorld()),written);
+            fail("No island-sets corpus image: copy "+written.toAbsolutePath()+" to "+folder);
+        }
+        var image=read(folder);assertEquals(31,FluidCheckpointCodec.readCore(image.core()).stateFormat(),"the image is of state format 31");
+        var exact=load(image,key->key.on(model),CATALOG);assertEquals(FluidCheckpointStore.Route.EXACT,exact.route(),exact.reason());
+        var lists=exact.checkpoint().islands().stream().map(e->Set.copyOf(e.compounds())).collect(java.util.stream.Collectors.toSet());
+        assertEquals(Set.of(Set.of("Nitrogen","Methane"),Set.of("Nitrogen","Ethane")),lists,"each island on its own list");
+        var rebuilt=load(edited(image,core->core.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG);
+        assertEquals(FluidCheckpointStore.Route.FACTS,rebuilt.route());
+        assertEquals(lists,rebuilt.checkpoint().islands().stream().map(e->Set.copyOf(e.compounds())).collect(java.util.stream.Collectors.toSet()),"the facts rebuild each island on the same list");
+        assertEquals(contents(exact.checkpoint()),contents(rebuilt.checkpoint()),"every vessel, bit for bit");
+        assertEquals(WorldTopologyLedger.Restated.NONE,rebuilt.world().orElseThrow().restated(),"nothing restated");
+    }
+    /** Two lines, each a pair of 1 m3 vessels charged from a generator of nitrogen with methane, or with ethane, at 300 K and 3 bar, the generators then removed. */
+    private EventPathWorld setsWorld() {
+        var world=new EventPathWorld();var ids=model.components();var generators=new ArrayList<Long>();
+        for(var other:List.of("Methane","Ethane")) {
+            int z=generators.size()*4;var n=new double[ids.size()];n[ids.indexOf("Nitrogen")]=.5;n[ids.indexOf(other)]=.5;
+            generators.add(world.place(0,64,z,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,300,3e5,n),.05));
+            for(int x=1;x<=3;x++)world.place(x,64,z,Kind.PIPE,Direction.EAST,.05);
+            world.place(4,64,z,Kind.RESERVOIR,Direction.EAST);for(int x=5;x<=6;x++)world.place(x,64,z,Kind.PIPE,Direction.EAST,.05);world.place(7,64,z,Kind.RESERVOIR,Direction.EAST);
+        }
+        world.runTo(400);for(long g:generators)world.registry.submit(List.of(new WorldTopologyLedger.Edit(g,null)),world.ledger.nextIdentity(),null);
+        world.runTo(600);world.assertKeptUp("the two lines");
+        return world;
+    }
+    /**
      * Every corpus image rebuilds from its facts to the registry, vessel count and stock it was written with. The image
      * of this build's schema must exist (AGENTS.md: a facts-schema change adds one); when it is missing the test writes
      * it under {@code build/compat/fluid/} to be copied into the corpus.
