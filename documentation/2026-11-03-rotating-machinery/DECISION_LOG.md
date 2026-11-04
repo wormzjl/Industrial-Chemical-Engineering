@@ -62,6 +62,16 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D19 (Q13).** In-line pumps and compressors take request 11 whole, as constructed machines: the gas and liquid laws, the NPSH3 curve, health, wear, trips and repair. Their design point for NPSH3 is their set flow at a 2-pole speed (2950 rpm); the default 0.01 m³/s pump needs 1.7 m. Q11, Q12 and Q14 to Q17 stay open.
 
+2026-11-04, the owner on the rest of plan revision 3's questions: "All as recommended".
+
+- **D20 (Q11, Q12, Q14 to Q17).**
+  - **Q11 A.** A pump's suction floor is `p_v + 0.85 ρ_l g NPSH3(Q, s)` on the trial point, inside D17's lesser-of; the bubble floor is its `NPSH3 = 0` end.
+  - **Q12.** The gas onset reads suction pressure only, `α_T(p_s)`; no speed or impeller-type factor.
+  - **Q14 (a).** A spare part crafted per machine (impeller, valve set, seal kit), used on the casing, restores full health.
+  - **Q15.** Wet compressors as researched: centrifugal on the homogeneous mixture with `η_wet = η_p (1 − 0.5 w_l)` and droplet erosion; reciprocating liquid knock costs 0.5 health and trips.
+  - **Q16.** The physical wear intensity (peak near 2 × NPSH3), no size factor, the lives of plan 3.7 in the server config.
+  - **Q17.** W10a now; W10b to W10d after W3, W4 and W7.
+
 ## Taken under the standing instruction
 
 - **A1 (Q10, reading of "as recommended").** All three proposals join the batch: a generator (shaft power to FE, the motor's mirror), cooling-tower fans on the RF port, KubeJS made optional with Create.

@@ -352,7 +352,7 @@ Answered 2026-11-03: "Q4 no backward compat, Q6 auto start, Others as recommende
 - **Q7. Ratios.** (a) 10 J per FE and 5.86 W per su, at parity (recommended); (b) Mekanism's 2.5 J per FE, with the parity 1.47 W per su (a 0.38 kW water wheel); (c) 10 W per su, the best match to real wheels, with 17.1 J per FE.
 - **Q8. Create direction.** (a) Create drives industrial shafts only (recommended first); (b) also industrial drives Create.
 - **Q9. Simulator timing.** (a) After both batches merge (recommended); (b) on the simulator branch now.
-Revision 3 (request 11), open:
+Revision 3 (request 11): answered 2026-11-04, Q13 "in-line equipment is treated the same as normal equipment" (D19), the rest "All as recommended" (D20). The questions as asked:
 
 - **Q11. Cavitation in the flow.** (A) The suction floor of a constructed pump rises to `p_v + 0.85 ρ g NPSH3(Q, s)`, in D17's row: it starves at its breakdown NPSH (recommended; it moves worlds that draw from boiling drums, +22 kPa for the pump of 1.1). (B) The floor stays the bubble pressure; NPSH3 feeds only noise, wear and a notice (no world moves, no cavitation in the flow).
 - **Q12. Gas onset.** Pressure only, `α_T(p_s)` (recommended first); or also a speed factor (onset rises with speed, 1.25 to 2.3 times for 1.67 times speed) and an impeller-type factor (mixed flow about 2.5 times radial).
