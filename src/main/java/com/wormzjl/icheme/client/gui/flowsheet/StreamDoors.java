@@ -7,6 +7,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -36,17 +37,27 @@ public final class StreamDoors {
         return List.of(x.text("phase.organic"), x.text("phase.aqueous"), x.text("phase.gas"), x.text("phase.solid"));
     }
 
-    /** The phase keys, then the composition's table. */
+    /**
+     * The phase keys, then the phase's table: its components, or on the Solid key the solids the run carries (the owner,
+     * 2026-11-04, "Fill Solid key, drop tab"). Until the player picks a key, the door shows the phase that holds the most (the
+     * owner: OFFGAS, 99.6 % gas, opened on a trace liquid's composition; "The largest phase").
+     */
     static Door.Glass contents(SheetContext x, Flowsheet.Stream stream, Door.View view) {
         var keys = phaseKeys(x);
+        if (!view.phasePicked) view.phase = largest(x, stream);
         return new Door.Glass() {
             @Override public void draw(Canvas c, Skin skin, Rect box) {
                 var u = x.units();
                 var solved = x.solved(stream);
+                var below = new Rect(box.x(), box.y() + 20, box.w(), box.h() - 20);
+                if (view.phase == 3) {
+                    Door.table(c, below, new int[]{box.w() - 120, 60, 60}, solidRows(x, solved));
+                    return;
+                }
                 var table = new ArrayList<String[]>();
                 table.add(new String[]{x.text("label.component"), x.text("label.mole_percent"), u.molesUnit()});
                 for (var part : StreamProps.parts(solved, x.fluids(), view.phase)) if (part.percent() >= .005) table.add(new String[]{part.name(), SheetUnits.number(2, part.percent()), u.moles(part.moles())});
-                Door.table(c, new Rect(box.x(), box.y() + 20, box.w(), box.h() - 20), new int[]{box.w() - 120, 60, 60}, table);
+                Door.table(c, below, new int[]{box.w() - 120, 60, 60}, table);
             }
 
             @Override public List<Door.Slot> slots(Rect box) {
@@ -56,6 +67,32 @@ public final class StreamDoors {
                 return slots;
             }
         };
+    }
+
+    /** The phase with the most moles: organic, aqueous or gas; Solid where the stream carries solids and no fluid; organic before a run. */
+    private static int largest(SheetContext x, Flowsheet.Stream stream) {
+        var props = x.props(stream);
+        if (props == null) return 0;
+        var p = props.phases();
+        double[] shares = {p.organic(), p.aqueous(), p.gas()};
+        int best = 0;
+        for (int i = 1; i < shares.length; i++) if (shares[i] > shares[best]) best = i;
+        if (shares[best] > 0) return best;
+        var solved = x.solved(stream);
+        return solved != null && !solved.solids().populations().isEmpty() ? 3 : 0;
+    }
+
+    /** The solids a solved stream carries: a crystal by its component's name, a custom solid by its id; size in µm, kg/s. */
+    private static List<String[]> solidRows(SheetContext x, @Nullable FlowStream solved) {
+        var rows = new ArrayList<String[]>();
+        rows.add(new String[]{x.text("door.material"), x.text("door.size"), "kg/s"});
+        if (solved == null) return rows;
+        for (var p : solved.solids().populations()) {
+            var crystal = p.material().crystal();
+            String name = crystal == null ? p.material().id() : x.t().get("fluid.crystal_name", x.fluids().names().apply(crystal.component()));
+            rows.add(new String[]{name, SheetUnits.number(0, p.size().diameterMetres() * 1e6) + " µm", SheetUnits.reading(2, p.massKg())});
+        }
+        return rows;
     }
 
     // ---- A feed ----
@@ -339,15 +376,15 @@ public final class StreamDoors {
         rows.add(Door.name(x.text("door.name")));
         rows.add(Door.group(x.text("door.group.conditions"), Door.meter(x.text("door.pressure"), p == null ? "" : u.p(p.pressure()), u.pressure().symbol()), Door.meter(x.text("door.temperature"), p == null ? "" : u.t(p.temperature()), u.temperature().symbol())));
         rows.add(Door.group(x.text("door.group.flow"), Door.meter(x.text("door.mole_flow"), p == null ? "" : u.moles(p.moles()), u.molesUnit()), Door.meter(x.text("door.mass_flow"), p == null ? "" : u.tonnes(p.mass()), u.tonnesUnit()),
-                Door.meter(x.text("door.liquid_volume"), p == null ? "" : SheetUnits.number(1, u.time().display(p.liquidVolume())), u.time().unit("m³"))));
+                Door.meter(x.text("door.liquid_volume"), p == null ? "" : SheetUnits.reading(1, u.time().display(p.liquidVolume())), u.time().unit("m³"))));
         rows.add(Door.phases(x.text("door.group.phases"), p == null ? StreamProps.Phases.NONE : p.phases(), x.t()));
         rows.add(Door.group(x.text("door.group.readings"), Door.meter(x.text("door.density"), p == null ? "" : SheetUnits.number(1, p.density()), "kg/m³"), Door.meter(x.text("door.viscosity"), p == null ? "" : SheetUnits.number(2, p.liquidMu() * 1e3), "mPa s"),
                 Door.meter(x.text("door.mean_weight"), p == null ? "" : SheetUnits.number(1, p.weight()), "kg/kmol"), Door.meter(x.text("door.enthalpy"), p == null ? "" : SheetUnits.number(1, p.enthalpy() / 1e3), "kJ/kg")));
         String origin = from(x, stream);
         String status = view.said != null ? view.said : p == null ? x.text("door.status.not_solved") : origin == null ? x.text("door.status.open") : origin;
         boolean wired = stream.to() != null;
-        return new Door(x.text(wired ? "door.stream" : "door.product"), Door.tabs(Math.min(view.tab, 1), x.t().get("fluid.overview"), x.t().get("fluid.solids")), Math.min(view.tab, 1), status, p == null ? Palette.MUTED : Palette.ACCENT, false, List.of(rows), Map.of("name", stream.name()),
-                view.tab == 0 ? contents(x, stream, view) : solids(x, List.of()), List.of(Door.key("copy", x.text("door.copy"), p != null, x.text("hint.clipboard"))), new Door.Actions() {
+        return new Door(x.text(wired ? "door.stream" : "door.product"), List.of(), 0, status, p == null ? Palette.MUTED : Palette.ACCENT, false, List.of(rows), Map.of("name", stream.name()),
+                contents(x, stream, view), List.of(Door.key("copy", x.text("door.copy"), p != null, x.text("hint.clipboard"))), new Door.Actions() {
             @Override public void entry(String key, String text) {
                 if (key.equals("name")) x.editor().rename(stream.id(), text);
             }

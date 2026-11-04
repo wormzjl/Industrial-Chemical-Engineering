@@ -1093,6 +1093,11 @@ public final class SimulatorRender {
             runKey(out, sheet, run, seconds);
             return;
         }
+        // -Donly=stream-doors: OFFGAS and NAPHTHA's doors (10b): no tabs, the largest phase first, flows to three significant figures; -Dtime=PER_SECOND for the owner's /s.
+        if ("stream-doors".equals(System.getProperty("only"))) {
+            sheet(out, "10b-stream-doors", DW, DH, List.of("OFFGAS, opened", "NAPHTHA, opened"), List.of(stream(sheet, run, "OFFGAS", 0), stream(sheet, run, "NAPHTHA", 0)));
+            return;
+        }
         // -Donly=arrows-keys: the line heads and the keys on the title row (30, and 31 on a wide window).
         if ("arrows-keys".equals(System.getProperty("only"))) {
             arrowsKeys(out, sheet, run, seconds);

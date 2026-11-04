@@ -75,6 +75,8 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
     /** A door's view: the tab shown, the phase on the glass, the flow's basis on a feed's page; the screen keeps it while the door stands open. */
     public static final class View {
         public int tab, phase;
+        /** Whether the player picked the phase; until then a stream's door shows the phase that holds the most. */
+        public boolean phasePicked;
         /** The column door's selected connection, the results it shows, the tray and product in hand. */
         public CalculatorColumn.Connection connection = CalculatorColumn.Connection.NONE;
         public CalculatorColumn.View results = CalculatorColumn.View.PROFILES;
@@ -86,8 +88,10 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
         /** Takes a door's own view keys, {@code tab/<i>} and {@code phase/<i>}: whether {@code key} was one. */
         public boolean press(String key) {
             if (key.startsWith("tab/")) tab = Integer.parseInt(key.substring(4));
-            else if (key.startsWith("phase/")) phase = Integer.parseInt(key.substring(6));
-            else return false;
+            else if (key.startsWith("phase/")) {
+                phase = Integer.parseInt(key.substring(6));
+                phasePicked = true;
+            } else return false;
             return true;
         }
 

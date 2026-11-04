@@ -146,10 +146,6 @@ final class ColumnGlass {
         return x.units().drop(pascals) + " " + x.units().pressure().symbol();
     }
 
-    private static String percent(double value) {
-        return value != 0 && Math.abs(value) < .05 ? String.format(Locale.ROOT, "%.2g", value) : SheetUnits.number(1, value);
-    }
-
     private static String fraction(double value) {
         return String.format(Locale.ROOT, "%.5g", value);
     }
@@ -258,8 +254,8 @@ final class ColumnGlass {
             var header = productHeader(x);
             var rows = new ArrayList<List<String>>();
             for (var part : stream.moleFractions())
-                rows.add(List.of(material(part.componentId()), percent(part.moleFraction() * 100), percent(time.display(stream.molarFlowMolPerSecond() * part.moleFraction()) / 1000), percent(part.massFraction() * 100),
-                        percent(time.display(stream.massFlowKgPerSecond() * part.massFraction()))));
+                rows.add(List.of(material(part.componentId()), SheetUnits.reading(1, part.moleFraction() * 100), SheetUnits.reading(1, time.display(stream.molarFlowMolPerSecond() * part.moleFraction()) / 1000), SheetUnits.reading(1, part.massFraction() * 100),
+                        SheetUnits.reading(1, time.display(stream.massFlowKgPerSecond() * part.massFraction()))));
             if (CalculatorColumn.SheetBuilder.fits(header, rows, width - 80 + m.width(header.getFirst()), m)) return out.table(header, rows);
             return out.table(header.subList(0, 3), rows.stream().map(r -> r.subList(0, 3)).toList());
         }
@@ -284,7 +280,7 @@ final class ColumnGlass {
             out.blank();
             var rows = new ArrayList<List<String>>();
             var basis = inspection.input().componentBasis();
-            for (int i = 0; i < basis.componentCount(); i++) rows.add(List.of(material(basis.componentId(i)), node.liquidMolPerSecond() == 0 ? "—" : percent(node.liquidFractions().get(i) * 100), node.vaporMolPerSecond() == 0 ? "—" : percent(node.vaporFractions().get(i) * 100)));
+            for (int i = 0; i < basis.componentCount(); i++) rows.add(List.of(material(basis.componentId(i)), node.liquidMolPerSecond() == 0 ? "—" : SheetUnits.reading(1, node.liquidFractions().get(i) * 100), node.vaporMolPerSecond() == 0 ? "—" : SheetUnits.reading(1, node.vaporFractions().get(i) * 100)));
             return out.table(List.of(c(x, "component"), c(x, "liquid_percent"), c(x, "vapor_percent")), rows);
         }
 

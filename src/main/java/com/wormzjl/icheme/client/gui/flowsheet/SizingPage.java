@@ -216,6 +216,7 @@ public final class SizingPage {
     /** A number at the digits its size wants. */
     public static String number(double value) {
         if (!Double.isFinite(value)) return "";
+        if (SheetUnits.scientific(value)) return SheetUnits.e(value);
         double a = Math.abs(value);
         return SheetUnits.number(a >= 100 ? 0 : a >= 10 ? 1 : a >= .1 || a == 0 ? 2 : 3, value);
     }

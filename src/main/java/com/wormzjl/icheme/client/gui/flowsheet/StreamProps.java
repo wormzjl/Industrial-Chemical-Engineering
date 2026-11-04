@@ -67,7 +67,7 @@ public record StreamProps(double temperature, double pressure, double vapour, do
         return new StreamProps(s.temperature(), s.pressure(), 100 * vapour / total, all, s.mass(), volume, s.volume() > 0 ? s.mass() / s.volume() : Double.NaN, mu, gas, all == 0 ? 0 : s.mass() / all * 1000, s.mass() == 0 ? 0 : s.enthalpy() / s.mass(), phases);
     }
 
-    /** The parts a stream holds, by {@code phase}: 0 organic, 1 aqueous, 2 gas, 3 solid (none), any other the whole stream. */
+    /** The parts a stream holds, by {@code phase}: 0 organic, 1 aqueous, 2 gas, 3 none (a door lists the solids from {@link FlowStream#solids}), any other the whole stream. */
     public static List<Part> parts(@Nullable FlowStream stream, Fluids fluids, int phase) {
         var parts = new ArrayList<Part>();
         if (stream == null) return parts;

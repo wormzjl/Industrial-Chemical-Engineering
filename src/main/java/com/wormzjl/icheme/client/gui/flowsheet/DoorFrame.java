@@ -19,6 +19,7 @@ public final class DoorFrame {
 
     public static List<Rect> tabs(Door door, int w) {
         if (door.calculator()) return CalculatorColumn.tabSlots(w);
+        if (door.tabs().isEmpty()) return List.of();
         var tabs = new ArrayList<Rect>();
         for (var slot : FluidGuiLayout.tabs(w, door.tabs().size())) tabs.add(new Rect(slot.x(), 29, slot.width(), 18));
         return tabs;

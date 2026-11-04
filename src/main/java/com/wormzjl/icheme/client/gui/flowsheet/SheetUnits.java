@@ -34,7 +34,7 @@ public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.Pr
         return switch (basis) {
             case MOLE -> moles(moles);
             case MASS -> tonnes(mass);
-            case VOLUME -> density > 0 && Double.isFinite(density) ? number(1, time.display(mass / density)) : "";
+            case VOLUME -> density > 0 && Double.isFinite(density) ? reading(1, time.display(mass / density)) : "";
         };
     }
 
@@ -59,6 +59,33 @@ public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.Pr
             case MASS -> weighed ? perSecond * 1000 / kgPerMole : Double.NaN;
             case VOLUME -> weighed && density > 0 && Double.isFinite(density) ? perSecond * density / kgPerMole : Double.NaN;
         };
+    }
+
+    /**
+     * A reading that spans magnitudes (a flow, a share) to {@code digits} decimals; under 1 to three significant figures where
+     * those are more (the owner, 2026-11-04: OFFGAS, 0.032 kmol/s, read 0.0 and "The user can be very confused"; picked three
+     * significant figures); in E form where fixed digits would be mostly zeros ({@link #scientific}).
+     */
+    public static String reading(int digits, double value) {
+        if (scientific(value)) return e(value);
+        double a = Math.abs(value);
+        return number(a > 0 && a < 1 ? Math.max(digits, 2 - (int) Math.floor(Math.log10(a))) : digits, value);
+    }
+
+    /**
+     * Whether {@code value} reads in E form: under 0.01 or from a million, where fixed digits are mostly zeros (the owner,
+     * 2026-11-04: "Allow scientific display for the numbers when there is too much zero").
+     */
+    public static boolean scientific(double value) {
+        double a = Math.abs(value);
+        return Double.isFinite(a) && (a > 0 && a < .01 || a >= 1e6);
+    }
+
+    /** Three significant figures in E form, the exponent bare: 6.95E-4, 1.25E6. */
+    public static String e(double value) {
+        String s = String.format(Locale.ROOT, "%.2E", value);
+        int at = s.indexOf('E');
+        return s.substring(0, at + 1) + Integer.parseInt(s.substring(at + 1));
     }
 
     public static String number(int digits, double value) {
@@ -90,12 +117,12 @@ public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.Pr
 
     /** Mol/s as kmol over the chosen time. */
     public String moles(double perSecond) {
-        return number(1, time.display(perSecond) / 1000);
+        return reading(1, time.display(perSecond) / 1000);
     }
 
     /** Kg/s as tonnes over the chosen time. */
     public String tonnes(double perSecond) {
-        return number(2, time.display(perSecond) / 1000);
+        return reading(2, time.display(perSecond) / 1000);
     }
 
     /**

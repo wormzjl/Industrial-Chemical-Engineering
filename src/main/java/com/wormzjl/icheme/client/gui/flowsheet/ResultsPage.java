@@ -232,7 +232,7 @@ public final class ResultsPage {
         rows.add(row(x.text("label.vapour"), props, p -> SheetUnits.number(1, p.vapour())));
         rows.add(row(x.text("label.flow", u.molesUnit()), props, p -> u.moles(p.moles())));
         rows.add(row(x.text("label.flow", u.tonnesUnit()), props, p -> u.tonnes(p.mass())));
-        rows.add(row(x.text("label.liquid_volume", u.time().unit("m³")), props, p -> SheetUnits.number(1, u.time().display(p.liquidVolume()))));
+        rows.add(row(x.text("label.liquid_volume", u.time().unit("m³")), props, p -> SheetUnits.reading(1, u.time().display(p.liquidVolume()))));
         rows.add(row(x.text("label.density"), props, p -> SheetUnits.number(1, p.density())));
         rows.add(row(x.text("label.liquid_viscosity"), props, p -> mPa(p.liquidMu())));
         rows.add(row(x.text("label.gas_viscosity"), props, p -> mPa(p.gasMu())));
@@ -255,7 +255,7 @@ public final class ResultsPage {
                 double total = stream == null ? 0 : stream.total();
                 double share = total == 0 ? 0 : 100 * stream.amountsView()[i] / total;
                 used |= share > 0;
-                cells[k + 1] = stream == null ? "" : SheetUnits.number(2, share);
+                cells[k + 1] = stream == null ? "" : SheetUnits.reading(2, share);
             }
             if (used) comp.add(cells);
         }

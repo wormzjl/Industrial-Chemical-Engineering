@@ -152,4 +152,37 @@ class StreamFlowBasisTest {
             assertEquals(t.get("fluid." + basis.name().toLowerCase(java.util.Locale.ROOT) + "_basis_short"), label);
         }
     }
+
+    /** The owner, 2026-11-04: OFFGAS's 0.032 kmol/s read 0.0 ("The user can be very confused"); three significant figures. */
+    @Test
+    void aSmallFlowKeepsThreeSignificantFigures() {
+        assertEquals("0.0320", SheetUnits.reading(1, 0.032));
+        assertEquals("1.82E-3", SheetUnits.reading(2, 0.00182), "under 0.01 in E form");
+        assertEquals("250.0", SheetUnits.reading(1, 250), "a large flow keeps its decimals");
+        assertEquals("1.25", SheetUnits.reading(2, 1.25));
+        assertEquals("0.0", SheetUnits.reading(1, 0), "none reads none");
+        assertEquals("1.00E-12", SheetUnits.reading(1, 1e-12));
+        assertEquals("0.0100", SheetUnits.reading(2, 0.01), "0.01 still in fixed digits");
+        assertEquals("1.25E6", SheetUnits.reading(1, 1.25e6), "from a million in E form");
+        assertEquals("-6.95E-4", SheetUnits.reading(1, -6.95e-4));
+        assertEquals("0.0320", units(SheetUnits.Basis.MOLE).moles(32.0 / 3600), "32 mol/h in kmol/h");
+    }
+
+    /**
+     * A stream a unit makes has no tabs (the owner, 2026-11-04: "why there is a solid tab?"; its solids are on the Solid key), and
+     * its door opens on the phase that holds the most until the player picks one.
+     */
+    @Test
+    void aProductDoorOpensOnItsLargestPhaseAndKeepsThePlayersPick() {
+        var x = context(SheetFixture.editor(SHEET), SheetUnits.Basis.MOLE, true);
+        var view = new Door.View();
+        var out = StreamDoors.door(x, "OUT", view);
+        assertEquals(List.of(), out.tabs(), "no Solids tab");
+        var p = x.props(x.editor().stream("OUT")).phases();
+        assertTrue(p.aqueous() > 99, "the fixture's water leaves as liquid water: " + p);
+        assertEquals(1, view.phase, "the Aqueous key, not the empty Organic one");
+        assertTrue(view.press("phase/2"));
+        StreamDoors.door(x, "OUT", view);
+        assertEquals(2, view.phase, "the player's pick stays");
+    }
 }

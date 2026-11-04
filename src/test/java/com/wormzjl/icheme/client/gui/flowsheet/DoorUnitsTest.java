@@ -73,7 +73,7 @@ class DoorUnitsTest {
         assertEquals("kmol/min", heads.get(2));
         assertEquals("kg/min", heads.get(4));
         var node = new V3ColumnInspection.Node(373.15, 250_000, 100, 50, 10, 0, List.of(1.0), List.of(1.0));
-        assertEquals(List.of("100.0 °C", "250.0 kPa", "0.700 kPa", "6.0 kmol/min", "3.0 kmol/min", "0.6 kmol/min", "0.0 kmol/min"), values(ColumnGlass.nodePairs(x, node, 700)), "Tray");
+        assertEquals(List.of("100.0 °C", "250.0 kPa", "0.700 kPa", "6.0 kmol/min", "3.0 kmol/min", "0.600 kmol/min", "0.0 kmol/min"), values(ColumnGlass.nodePairs(x, node, 700)), "Tray: a flow under 1 to three significant figures");
         assertEquals(List.of("100.0 °C", "2.50 bar", "0.0070 bar", "360.0 kmol/h", "180.0 kmol/h", "36.0 kmol/h", "0.0 kmol/h"), values(ColumnGlass.nodePairs(context(editor, SheetUnits.DEFAULT), node, 700)),
                 "the default keys; a tray's drop two digits finer than a pressure");
         assertEquals("—", ColumnGlass.nodePairs(x, node, Double.NaN).get(2).get(1), "the condenser and the reboiler have no tray drop");
