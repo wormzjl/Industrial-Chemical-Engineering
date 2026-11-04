@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.ReferenceSpine;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
+import com.wormzjl.icheme.science.thermo.reference.AlphaDerivatives;
 import com.wormzjl.icheme.science.thermo.reference.HelmholtzFluid;
 import org.junit.jupiter.api.Test;
 
@@ -15,13 +16,14 @@ import org.junit.jupiter.api.Test;
  * high-temperature gas for the steam-cracking coil outlet (1033-1148 K at 0.15-0.25 MPa, P0 section 5).
  *
  * <ul>
- *   <li>Ideal gas of the bundled spine records against independent holdouts: NIST-JANAF N-023 (N2) and C-095 (CO2)
- *   Cp, H - H(298.15) and S at 1000, 1100 and 1200 K (janaf.nist.gov text tables, Chase 1998, read 2026-09-25); the
- *   Gurvich ethane Cp of the NIST WebBook (C74840, as in {@code ReferenceSpineTest}); methane against the ExoMol MM
+ *   <li>Ideal gas of the bundled spine records against open holdouts: the CoolProp alpha0 of N2 (Span et al. 2000) and
+ *   CO2 (Span and Wagner 1996), Cp, H - H(298.15) and S at 1000, 1100 and 1200 K through the Java oracle, above the joins
+ *   where the spines use NASA CEA (S anchored at the spine's own S(298.15), CEA's); the CoolProp ethane Cp (Buecker and
+ *   Wagner 2006, as in {@code ReferenceSpineTest}); until batch 2026-11-04-open-thermo-data the NIST-JANAF N-023 and C-095
+ *   and the WebBook Gurvich ethane tables; methane against the ExoMol MM
  *   line-list reference of WP10 at 1000, 1073, 1100, 1143 and 1200 K ({@code methane_cp_table.json}, columns
  *   {@code cp_reference} and {@code dh_reference}; nothing derived from it is bundled). D7: Cp 0.2 %,
- *   h(T) - h(298.15) 0.1 % or 20 J/mol, S within 0.02 J/(mol K) (the standard entropies differ from JANAF's by at most
- *   0.008).</li>
+ *   h(T) - h(298.15) 0.1 % or 20 J/mol, S within 0.02 J/(mol K).</li>
  *   <li>The residual enthalpy of the network's gas at 1073, 1100, 1143 and 1200 K and 0.15-0.25 MPa, pure and for a
  *   frozen CH4/C2H6/N2 coil-outlet mixture at 1123 K and 0.2 MPa: below 0.1 % of the sensible change h(T) - h(298.15).</li>
  *   <li>The residual against the Java oracle at each reference equation's upper range at 0.2 MPa (CH4 625 K, C2H6
@@ -29,11 +31,35 @@ import org.junit.jupiter.api.Test;
  * </ul>
  */
 class G3F3HighTemperatureIdealGasTest {
-    /** JANAF rows: T, Cp J/(mol K), S J/(mol K), H - H(298.15) J/mol (N-023 and C-095). */
-    static final double[][] JANAF_N2 = {{1000, 32.697, 228.170, 21463}, {1100, 33.241, 231.313, 24760}, {1200, 33.723, 234.226, 28109}};
-    static final double[][] JANAF_CO2 = {{1000, 54.308, 269.299, 33397}, {1100, 55.409, 274.528, 38884}, {1200, 56.342, 279.390, 44473}};
-    /** Gurvich ethane Cp (NIST WebBook C74840), J/(mol K). */
-    static final double[][] GURVICH_C2H6 = {{1000, 122.55}, {1100, 128.55}, {1200, 133.80}};
+    static final double[] HOLDOUT_TEMPERATURES = {1000, 1100, 1200};
+
+    /**
+     * Holdout rows from a CoolProp fluid's ideal part (the Java oracle at delta for 1 bar): T, Cp J/(mol K), S J/(mol K)
+     * anchored at {@code s298}, H - H(298.15) J/mol.
+     */
+    static double[][] coolPropRows(String fluidFile, double s298) {
+        var fluid = HelmholtzFluid.load(fluidFile);
+        var d = new AlphaDerivatives();
+        double h0 = idealEnthalpy(fluid, 298.15, d), s0 = idealEntropy(fluid, 298.15, d);
+        double[][] rows = new double[HOLDOUT_TEMPERATURES.length][];
+        for (int i = 0; i < rows.length; i++) {
+            double t = HOLDOUT_TEMPERATURES[i], tau = fluid.reducingTemperature() / t;
+            fluid.idealDerivatives(tau, 1, d);
+            double cp = fluid.gasConstant() * (1 - tau * tau * d.dTau2);
+            rows[i] = new double[] {t, cp, s298 + idealEntropy(fluid, t, d) - s0, idealEnthalpy(fluid, t, d) - h0};
+        }
+        return rows;
+    }
+    private static double idealEnthalpy(HelmholtzFluid fluid, double t, AlphaDerivatives d) {
+        double tau = fluid.reducingTemperature() / t;
+        fluid.idealDerivatives(tau, 1, d);
+        return fluid.gasConstant() * t * (1 + tau * d.dTau);
+    }
+    private static double idealEntropy(HelmholtzFluid fluid, double t, AlphaDerivatives d) {
+        double tau = fluid.reducingTemperature() / t, delta = 1e5 / (fluid.gasConstant() * t * fluid.reducingDensity());
+        fluid.idealDerivatives(tau, delta, d);
+        return fluid.gasConstant() * (tau * d.dTau - d.alpha);
+    }
     /** ExoMol MM line-list reference (P3_REFERENCES_WP8_WP10.md B.3/B.4; WP10 output): T, Cp, h(T) - h(298.15). */
     static final double[][] LINE_LIST_CH4 = {{1000, 72.796, 38469.5}, {1073, 75.710, 43891.5}, {1100, 76.725, 45949.4}, {1143, 78.271, 49282.2},
             {1200, 80.188, 53799.0}};
@@ -44,7 +70,8 @@ class G3F3HighTemperatureIdealGasTest {
     void idealGasAgainstTheHoldouts() {
         var table = new Table("G3 F3 ideal", "Species", "T K", "Cp spine", "Holdout", "dCp %", "dh J/mol (holdout dh)", "dS J/(mol K)", "Source");
         double worstCp = 0, worstH = 0, worstS = 0;
-        for (var set : new Object[][] {{"Nitrogen", JANAF_N2, "JANAF N-023"}, {"CarbonDioxide", JANAF_CO2, "JANAF C-095"}}) {
+        for (var set : new Object[][] {{"Nitrogen", coolPropRows("Nitrogen", spine("Nitrogen").entropy(298.15, 1e5)), "CoolProp alpha0 (Span 2000)"},
+                {"CarbonDioxide", coolPropRows("CarbonDioxide", spine("CarbonDioxide").entropy(298.15, 1e5)), "CoolProp alpha0 (Span-Wagner 1996)"}}) {
             var spine = spine((String) set[0]);
             for (double[] row : (double[][]) set[1]) {
                 double t = row[0], cp = spine.heatCapacity(t), dh = spine.enthalpy(t) - spine.enthalpy(298.15), s = spine.entropy(t, 1e5);
@@ -60,9 +87,9 @@ class G3F3HighTemperatureIdealGasTest {
             }
         }
         var ethane = spine("Ethane");
-        for (double[] row : GURVICH_C2H6) {
+        for (double[] row : coolPropRows("Ethane", ethane.entropy(298.15, 1e5))) {
             double dCp = 100 * (ethane.heatCapacity(row[0]) / row[1] - 1);
-            table.row("Ethane", number(row[0]), f("%.4f", ethane.heatCapacity(row[0])), f("%.2f", row[1]), f("%+.3f", dCp), "-", "-", "Gurvich (NIST WebBook)");
+            table.row("Ethane", number(row[0]), f("%.4f", ethane.heatCapacity(row[0])), f("%.3f", row[1]), f("%+.3f", dCp), "-", "-", "CoolProp alpha0 (Buecker-Wagner 2006)");
             assertTrue(Math.abs(dCp) <= 0.2, "C2H6 Cp at " + row[0]);
             worstCp = Math.max(worstCp, Math.abs(dCp));
         }
@@ -77,7 +104,7 @@ class G3F3HighTemperatureIdealGasTest {
             worstCp = Math.max(worstCp, Math.abs(dCp));
             worstH = Math.max(worstH, Math.abs(dh - row[2]));
         }
-        // The steam-cracking temperatures between the JANAF rows, for the record.
+        // The steam-cracking temperatures between the holdout rows, for the record.
         for (String species : SPECIES) {
             var s = spine(species);
             System.out.println(f("G3 F3 spine %s: Cp(1073) %.4f, Cp(1143) %.4f J/(mol K); h(1143) - h(298.15) %.1f J/mol; range %.3f..%.1f K",

@@ -34,15 +34,20 @@ class MethaneSpineTest {
         {1100, 76.725, 0.04, 0.21, 45949.4},
         {1200, 80.188, 0.10, 0.62, 53799.0},
     };
-    /** NIST-JANAF C-067 (Chase 1998) Cp at 1000, 1100 and 1200 K, J/(mol K): the documented disagreement (RRHO-like). */
-    private static final double[][] JANAF = {{1000, 71.795}, {1100, 75.529}, {1200, 78.833}};
+    /**
+     * NASA CEA thermo.inp CH4 (g 8/99, Gurvich 1991; Apache-2.0), interval 1000..6000 K, a1..a7 with R = 8.314510: the
+     * documented disagreement of a rigid-rotor-like table (the NIST-JANAF C-067 table until batch 2026-11-04-open-thermo-data,
+     * 1.4 to 1.8 % below the spine; CEA lies 1.2 to 1.7 % above it).
+     */
+    private static final double[] CEA_CH4 = {3.730042760e+06, -1.383501485e+04, 2.049107091e+01, -1.961974759e-03, 4.727313040e-07,
+            -3.728814690e-11, 1.623737207e-15};
 
     private static ReferenceSpine methane() { return MaterialCatalog.bundled().requireSpine(PilotCryogenicTestCatalog.PACKAGE_ID, "Methane"); }
 
     @Test
     void recordShapeGradeAndJoin() {
         var spine = methane();
-        assertEquals("spine-methane-r2", spine.revision());
+        assertEquals("spine-methane-r3", spine.revision());
         assertEquals(MaterialCoverage.Grade.QUALIFIED, spine.coverage().grade());
         assertEquals(2, spine.segments().size());
         var setzmannWagner = spine.segments().get(0);
@@ -68,8 +73,8 @@ class MethaneSpineTest {
 
     /**
      * D13 holdout: Cp within the D7 0.2 % of the line-list reference at every point from 300 to 1200 K, and
-     * h(T) - h(298.15 K) within 0.1 % or 20 J/mol. JANAF lies 1.2 to 2.0 % below the spine at 1000 to 1200 K, the
-     * rigid-rotor-like table the line list refutes (P3_REFERENCES_WP8_WP10.md B.5).
+     * h(T) - h(298.15 K) within 0.1 % or 20 J/mol. NASA CEA lies 1.2 to 1.7 % above the spine at 1000 to 1200 K (JANAF
+     * 1.4 to 1.8 % below it), the rigid-rotor-like tables the line list refutes (P3_REFERENCES_WP8_WP10.md B.5).
      */
     @Test
     void cpAndEnthalpyAgainstTheLineListReference() {
@@ -84,10 +89,12 @@ class MethaneSpineTest {
             assertTrue(Math.abs(deviation) <= 0.002, "Cp at " + t + " K: " + deviation);
             assertEquals(row[4], dh, Math.max(20, 0.001 * Math.abs(row[4])), "h at " + t + " K");
         }
-        for (double[] row : JANAF) {
-            double deviation = spine.heatCapacity(row[0]) / row[1] - 1;
-            System.out.printf("P3 WP9a methane against JANAF C-067 at %.0f K: %+.3f %% (documented disagreement)%n", row[0], 100 * deviation);
-            assertTrue(deviation > 0.012 && deviation < 0.020, "JANAF disagreement moved at " + row[0] + " K: " + deviation);
+        for (double t : new double[] {1000, 1100, 1200}) {
+            double[] a = CEA_CH4;
+            double cea = ReferenceSpine.CEA_GAS_CONSTANT * (a[0] / (t * t) + a[1] / t + a[2] + a[3] * t + a[4] * t * t + a[5] * t * t * t + a[6] * t * t * t * t);
+            double deviation = spine.heatCapacity(t) / cea - 1;
+            System.out.printf("methane against NASA CEA CH4 at %.0f K: %+.3f %% (documented disagreement)%n", t, 100 * deviation);
+            assertTrue(deviation < -0.010 && deviation > -0.018, "CEA disagreement moved at " + t + " K: " + deviation);
         }
     }
 

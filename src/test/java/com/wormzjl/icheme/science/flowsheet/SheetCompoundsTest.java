@@ -208,8 +208,8 @@ final class SheetCompoundsTest {
         var resources = new HashMap<>(CATALOG.resources());
         String key = "data/icheme/materials/properties/nitrogen.json";
         String nitrogen = resources.get(key);
-        assertTrue(nitrogen.contains("\"fluid-nitrogen-nist-r3\""), "the fixture's revision");
-        resources.put(key, nitrogen.replace("\"fluid-nitrogen-nist-r3\"", "\"fluid-nitrogen-nist-r4\""));
+        assertTrue(nitrogen.contains("\"fluid-nitrogen-coolprop-r4\""), "the fixture's revision");
+        resources.put(key, nitrogen.replace("\"fluid-nitrogen-coolprop-r4\"", "\"fluid-nitrogen-coolprop-r5\""));
         var edited = MaterialCatalog.parse(resources);
         var crude = sheet(NETWORK, CRUDE);
         var nitrogenous = sheet(NETWORK, with(CRUDE, "Nitrogen", .1));

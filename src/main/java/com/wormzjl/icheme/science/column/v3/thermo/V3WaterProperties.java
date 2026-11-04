@@ -8,7 +8,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
  * Pinned, dependency-free pure-water correlations for V3's free-water steam contract.
  *
  * <p>The saturation-pressure relation is the IAPWS Wagner--Pruss auxiliary equation. Vapor
- * enthalpy uses the NIST H2O(g) Shomate heat-capacity integral; its arbitrary reference cancels
+ * enthalpy integrates the water record's Shomate-form heat capacity (a fit to the IAPWS-95 ideal-gas Cp); its reference cancels
  * in column energy differences. Liquid enthalpy is deliberately reference-consistent through the
  * vaporization enthalpy correlation.</p>
  *
@@ -121,7 +121,7 @@ public final class V3WaterProperties {
     public static double vaporMolarEnthalpy(MaterialCatalog.Water water, double temperatureKelvin) {
         requireEnthalpyTemperature(water, temperatureKelvin);
         double t = temperatureKelvin / 1_000.0;
-        // NIST H2O(g), Shomate 500--1700 K; the smooth ideal-gas continuation is pinned for V3's lower envelope.
+        // The record's Shomate form, fitted to the IAPWS-95 ideal-gas Cp over 273.16..900 K (water-iapws95-shomate-r3).
         double kiloJoulesPerMol = water.shomate().get(0) * t + water.shomate().get(1) * t * t / 2.0 + water.shomate().get(2) * t * t * t / 3.0
                 + water.shomate().get(3) * t * t * t * t / 4.0 - water.shomate().get(4) / t + water.shomate().get(5) + water.shomate().get(6);
         return 1_000.0 * kiloJoulesPerMol;

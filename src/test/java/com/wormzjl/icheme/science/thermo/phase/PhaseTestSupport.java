@@ -173,7 +173,7 @@ final class PhaseTestSupport {
      * and {@code state} use: its saturation pressure, its liquid water at (T, P), its ideal-gas steam enthalpy and its
      * steam partial-pressure limit. The steam's heat capacity is the same Shomate polynomial's derivative
      * ({@code V3WaterProperties.dVaporMolarEnthalpyDT}); its entropy is that polynomial's Shomate entropy, anchored at the
-     * standard entropy of water vapour, 188.835 J/(mol K) at 298.15 K and 1e5 Pa (JANAF), minus {@code R ln(P/1e5)}. Past the
+     * standard entropy of water vapour, 188.835 J/(mol K) at 298.15 K and 1e5 Pa (CODATA key value), minus {@code R ln(P/1e5)}. Past the
      * record's range the heat capacity is held at the end value and the entropy integrates it, as the network's steam
      * (owner rule of 2026-10-16).
      */

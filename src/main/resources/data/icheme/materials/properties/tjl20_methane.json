@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "icheme:tjl20_methane",
   "component": "Methane",
-  "revision": "tjl20-methane-nist-r1",
+  "revision": "tjl20-methane-coolprop-r2",
   "source": "Frozen production reconstruction; see MATERIALS.md",
   "molecular_weight_kg_per_mol": 0.0160428,
   "normal_boiling_point_kelvin": 111.66,
@@ -23,12 +23,12 @@
     "type": "shifted_polynomial_5",
     "reference_kelvin": 298.15,
     "coefficients": [
-      35.605746481777615,
-      0.037000414354219455,
-      0.0001459299391720176,
-      -4.216765855568231e-07,
-      5.351033897511078e-10,
-      -2.715203964835217e-13
+      35.69961112703681,
+      0.03745371293968529,
+      0.00014001510902418902,
+      -3.8364158190634657e-7,
+      4.638601560435372e-10,
+      -2.2560825450036827e-13
     ]
   },
   "models": {

@@ -41,9 +41,9 @@ class PilotCryogenicCatalogTest {
      */
     private static final String[][] BUNDLED_PINS = {
         {"icheme:tjl19_dwsim", "icheme:tjl19_dwsim@crude-regrouped-r2"},
-        {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r2"},
-        {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r2"},
-        {"icheme:refinery", "icheme:refinery@refinery-tier1-r1"},
+        {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r3"},
+        {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r3"},
+        {"icheme:refinery", "icheme:refinery@refinery-tier1-r2"},
     };
     private static final String TJL20 = "icheme:tjl20_methane";
     /**
@@ -71,9 +71,9 @@ class PilotCryogenicCatalogTest {
                     "icheme:pilot_carbon_dioxide@pilot-carbon-dioxide-p3-r1"),
             "interactions=icheme:pilot_cryogenic@pilot-cryogenic-eppr78-r1",
             "group-interactions=icheme:eppr78_2022@eppr78-2022-si-table-s4-r2",
-            "water=icheme:water@water-iapws-shomate-r2");
-    private static final String PILOT_SPINE_REVISION = "spine:icheme:spine_nitrogen@spine-nitrogen-r2,icheme:spine_methane@spine-methane-r2,"
-            + "icheme:spine_ethane@spine-ethane-r2,icheme:spine_carbon_dioxide@spine-carbon_dioxide-r3,icheme:crystal_carbon_dioxide_i@crystal-carbon_dioxide-i-r2";
+            "water=icheme:water@water-iapws95-shomate-r3");
+    private static final String PILOT_SPINE_REVISION = "spine:icheme:spine_nitrogen@spine-nitrogen-r3,icheme:spine_methane@spine-methane-r3,"
+            + "icheme:spine_ethane@spine-ethane-r3,icheme:spine_carbon_dioxide@spine-carbon_dioxide-r4,icheme:crystal_carbon_dioxide_i@crystal-carbon_dioxide-i-r2";
 
     @Test
     void bundledPackageRevisionsAndSharedPhysicsAreUnchanged() {

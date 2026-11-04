@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "id": "icheme:water",
-  "revision": "water-iapws-shomate-r2",
-  "source": "IAPWS Wagner-Pruss auxiliary saturation; NIST H2O(g) Shomate; Watson latent heat; ice Ih below the melting line (crystal record and IAPWS R14-08 sublimation pressure, WP4 of batch 2026-09-24-coolprop-low-temperature)",
+  "revision": "water-iapws95-shomate-r3",
+  "source": "IAPWS Wagner-Pruss auxiliary saturation; vapour heat capacity: the Shomate form (A..E) fitted to the IAPWS-95 ideal-gas Cp (CoolProp Water.json EOS[0].alpha0, CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT)) over 273.16..900 K, worst 0.054 %, with F and H from the ATcT 1.220 formation enthalpy -241.808 kJ/mol (CoolProp master 9b35f538 INFO.STANDARD_STATE) so that h(298.15 K) = 0 (tools/open-thermo-data/derive.mjs, batch 2026-11-04-open-thermo-data); Watson latent heat; ice Ih below the melting line (crystal record and IAPWS R14-08 sublimation pressure, WP4 of batch 2026-09-24-coolprop-low-temperature)",
   "type": "iapws_shomate_watson",
   "viscosity": {
     "liquid": {
@@ -36,13 +36,13 @@
     1.80122502
   ],
   "shomate_coefficients": [
-    30.092,
-    6.832514,
-    6.793435,
-    -2.53448,
-    0.082139,
-    -250.881,
-    241.8264
+    29.58360914894472,
+    8.976473382580156,
+    3.708570255109174,
+    -1.0890520402148163,
+    0.09092705514016776,
+    -250.75296897288595,
+    241.808
   ],
   "ice": {
     "crystal": "icheme:crystal_ice_ih",

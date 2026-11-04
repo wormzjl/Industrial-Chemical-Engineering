@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "icheme:spine_nitrogen",
   "component": "Nitrogen",
-  "revision": "spine-nitrogen-r2",
-  "source": "P2 reference spine (batch 2026-09-24-coolprop-low-temperature, decision D6): CoolProp alpha0 from the triple point to 600 K (join at the smallest Cp step on a 25 K grid in P2; step now +0.0004 %), NASA CEA above; ATcT 1.220 formation enthalpy; CEA standard entropy. Built by tools/spine-join-measurement/build-spine-records.mjs. r2 (P3 WP9a): the CEA segments and the standard entropy with CEA's own gas constant 8.314510 J/(mol K) instead of 8.314472.",
+  "revision": "spine-nitrogen-r3",
+  "source": "P2 reference spine (batch 2026-09-24-coolprop-low-temperature, decision D6): CoolProp alpha0 from the triple point to 600 K (join at the smallest Cp step on a 25 K grid in P2; step now +0.0004 %), NASA CEA above; ATcT 1.220 formation enthalpy; CEA standard entropy. Built by tools/spine-join-measurement/build-spine-records.mjs. r2 (P3 WP9a): the CEA segments and the standard entropy with CEA's own gas constant 8.314510 J/(mol K) instead of 8.314472. r3 (batch 2026-11-04-open-thermo-data, O2): the |CEA - JANAF| entropy uncertainty removed; the high-temperature check is CEA against CoolProp.",
   "molar_mass_kg_per_mol": 0.02801348,
   "formation_enthalpy": {
     "value_j_per_mol": 0,
@@ -14,8 +14,7 @@
   "standard_entropy": {
     "value_j_per_mol_kelvin": 191.6097,
     "pressure_pascal": 100000,
-    "source": "NASA CEA thermo.inp N2 (tpis78) polynomial at 298.15 K and 1e5 Pa with R = 8.314510; CEA states no uncertainty, the uncertainty given is |CEA - JANAF| with JANAF N-023 S(298.15) = 191.609 (Chase 1998), a disagreement estimate",
-    "uncertainty_j_per_mol_kelvin": 0.0007
+    "source": "NASA CEA thermo.inp N2 (tpis78) polynomial at 298.15 K and 1e5 Pa with R = 8.314510; no uncertainty: CEA states none (the |CEA - JANAF| estimate of the earlier revision was removed, batch 2026-11-04-open-thermo-data, O2)"
   },
   "ideal_gas": {
     "maximum_cp_step_fraction": 0.005,
@@ -106,6 +105,6 @@
   },
   "coverage": {
     "grade": "qualified",
-    "evidence": "P2 ReferenceSpineTest: CoolProp segment equal to the Java Helmholtz oracle to 1e-9; CEA Cp within 0.2 % of JANAF N-023 at 1000, 1100 and 1200 K (D7); unchanged with R = 8.314510 (P3 WP9a)"
+    "evidence": "P2 ReferenceSpineTest: CoolProp segment equal to the Java Helmholtz oracle to 1e-9; CEA Cp within 0.2 % of the CoolProp alpha0 (Span et al. 2000) at 1000, 1100 and 1200 K (D7; -0.011 %; the JANAF N-023 holdout until r2); unchanged with R = 8.314510 (P3 WP9a)"
   }
 }

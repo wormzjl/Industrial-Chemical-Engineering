@@ -20,8 +20,9 @@ class TransientQualificationTest {
         // steps are scaled by 1 kPa / P0: the same decay in the same steps.
         double p0=102325,scale=1000/p0;
         var graph=new PassiveNetwork(List.of(tank(1,p0+.5,n),tank(2,p0-.5,n)),List.of(new PassiveNetwork.Pipe(1,0,1,new PipeResistance.Geometry(1,.01,0,0))));
-        // Independent ideal-gas limiting solution. NIST nitrogen viscosity at 350 K is 20.1172264699 uPa.s.
-        double gamma=1.4,mu=20.1172264699e-6,rate=gamma*p0*Math.PI*Math.pow(.01,4)/(64*mu),duration=10*1000/p0;
+        // Independent ideal-gas limiting solution. Nitrogen viscosity at 350 K and 1 atm, Lemmon and Jacobsen 2004 (CoolProp 8.0.0):
+        // 20.1174 uPa.s (tools/open-thermo-data; the NIST WebBook value of the same equation was 20.1172).
+        double gamma=1.4,mu=20.117366646758494e-6,rate=gamma*p0*Math.PI*Math.pow(.01,4)/(64*mu),duration=10*1000/p0;
         double expectedDifference=Math.exp(-rate*duration),expectedMass=(1-expectedDifference)*.0280134/(2*gamma*8.31446261815324*350);
         var defaults=PassiveIntervalSolver.Settings.defaults();
         var result=new PassiveIntervalSolver(model).solve(graph,duration,new PassiveIntervalSolver.Settings(defaults.initialStep()*scale,defaults.maximumStep()*scale,defaults.maximumAttempts()),()->{});

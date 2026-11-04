@@ -1,50 +1,51 @@
 {
   "source_commit": "c5c8af3d5444ccb6d1eb6fa07f7ce10df6027a42",
   "reference": "additive standard-liquid volume from selected component densities; accepted old-basis classical results",
+  "recaptured": "2026-11-04, batch 2026-11-04-open-thermo-data O2: the same capture on the open ideal-gas data (nitrogen, methane, water vapour); every target moved by 5e-8 to 1.2e-5",
   "targets": [
     {
       "preset": "tia_juana",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.020703082978408043,
-        "side_liquid_tray_18": 0.02892411541114882,
-        "side_liquid_tray_28": 0.011436544637646266
+        "side_liquid_tray_10": 0.020703093103381375,
+        "side_liquid_tray_18": 0.028924071843261574,
+        "side_liquid_tray_28": 0.011436583923850928
       }
     },
     {
       "preset": "wti_light_export",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.01900335750367469,
-        "side_liquid_tray_18": 0.02422687348003732,
-        "side_liquid_tray_28": 0.008833529741841073
+        "side_liquid_tray_10": 0.0190033936624613,
+        "side_liquid_tray_18": 0.024226895461542816,
+        "side_liquid_tray_28": 0.008833530175411435
       }
     },
     {
       "preset": "upper_zakum",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.020752298299421237,
-        "side_liquid_tray_18": 0.02865295627955716,
-        "side_liquid_tray_28": 0.011202803578717613
+        "side_liquid_tray_10": 0.020752278705616047,
+        "side_liquid_tray_18": 0.028652873386037912,
+        "side_liquid_tray_28": 0.011202938907985197
       }
     },
     {
       "preset": "bonga",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.023678557823011013,
-        "side_liquid_tray_18": 0.03133848075030262,
-        "side_liquid_tray_28": 0.012031350757212657
+        "side_liquid_tray_10": 0.023678496189206973,
+        "side_liquid_tray_18": 0.0313385780288744,
+        "side_liquid_tray_28": 0.012031479591407258
       }
     },
     {
       "preset": "dalia",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.0242423764935738,
-        "side_liquid_tray_18": 0.03405368981896664,
-        "side_liquid_tray_28": 0.01217991021805438
+        "side_liquid_tray_10": 0.024242557459861855,
+        "side_liquid_tray_18": 0.034053909048057975,
+        "side_liquid_tray_28": 0.01218001195582847
       }
     }
   ]

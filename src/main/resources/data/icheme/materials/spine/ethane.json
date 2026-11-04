@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "icheme:spine_ethane",
   "component": "Ethane",
-  "revision": "spine-ethane-r2",
-  "source": "P2 reference spine (batch 2026-09-24-coolprop-low-temperature, decision D6): CoolProp alpha0 from the triple point to 500 K (join at the smallest Cp step on a 25 K grid in P2; step now +0.0007 %), NASA CEA above; ATcT 1.220 formation enthalpy; CEA standard entropy. Built by tools/spine-join-measurement/build-spine-records.mjs. r2 (P3 WP9a): the CEA segments and the standard entropy with CEA's own gas constant 8.314510 J/(mol K) instead of 8.314472.",
+  "revision": "spine-ethane-r3",
+  "source": "P2 reference spine (batch 2026-09-24-coolprop-low-temperature, decision D6): CoolProp alpha0 from the triple point to 500 K (join at the smallest Cp step on a 25 K grid in P2; step now +0.0007 %), NASA CEA above; ATcT 1.220 formation enthalpy; CEA standard entropy. Built by tools/spine-join-measurement/build-spine-records.mjs. r2 (P3 WP9a): the CEA segments and the standard entropy with CEA's own gas constant 8.314510 J/(mol K) instead of 8.314472. r3 (batch 2026-11-04-open-thermo-data, O2): the high-temperature check is CEA against CoolProp.",
   "molar_mass_kg_per_mol": 0.03006904,
   "formation_enthalpy": {
     "value_j_per_mol": -84020,
@@ -97,6 +97,6 @@
   },
   "coverage": {
     "grade": "qualified",
-    "evidence": "P2 ReferenceSpineTest: CoolProp segment equal to the Java Helmholtz oracle to 1e-9; CEA Cp within 0.2 % of the NIST WebBook Gurvich table (C74840) at 1000, 1100 and 1200 K (D7); unchanged with R = 8.314510 (P3 WP9a)"
+    "evidence": "P2 ReferenceSpineTest: CoolProp segment equal to the Java Helmholtz oracle to 1e-9; CEA Cp within 0.2 % of the CoolProp alpha0 (Buecker and Wagner 2006) at 1000, 1100 and 1200 K (D7; -0.011 to -0.002 %; the NIST WebBook Gurvich table until r2); unchanged with R = 8.314510 (P3 WP9a)"
   }
 }

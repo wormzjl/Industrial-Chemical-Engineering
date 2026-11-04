@@ -15,9 +15,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Reference tests of the reference-spine records (batch 2026-09-24-coolprop-low-temperature, decisions D6, D7 and
- * D13): the CoolProp segments against the Java Helmholtz oracle, the CEA segments against the JANAF / Gurvich
- * holdouts, the anchors, the joins, determinism, and the loader's refusals. Methane's GERG-2008 segment and its
- * line-list holdout are in {@link MethaneSpineTest}.
+ * D13): the CoolProp segments against the Java Helmholtz oracle, the CEA segments against the CoolProp alpha0 above
+ * the join (the JANAF / Gurvich holdouts until batch 2026-11-04-open-thermo-data), the anchors, the joins,
+ * determinism, and the loader's refusals. Methane's GERG-2008 segment and its line-list holdout are in
+ * {@link MethaneSpineTest}.
  */
 class ReferenceSpineTest {
     private static final String[] SPECIES = {"nitrogen", "methane", "ethane", "carbon_dioxide"};
@@ -25,15 +26,6 @@ class ReferenceSpineTest {
     private static final String[] CEA_SPECIES = {"nitrogen", "ethane", "carbon_dioxide"};
     private static final Map<String, String> FLUID = Map.of("nitrogen", "Nitrogen", "methane", "Methane", "ethane", "Ethane",
             "carbon_dioxide", "CarbonDioxide");
-    /**
-     * Ideal-gas Cp holdouts at 1000, 1100 and 1200 K, J/(mol K): NIST-JANAF tables (Chase 1998, janaf.nist.gov N-023,
-     * C-095, read 2026-09-24) and, for ethane (not in JANAF), the Gurvich et al. table of the NIST WebBook (C74840).
-     * None of them is a source of the spine records.
-     */
-    private static final Map<String, double[]> HOLDOUT = Map.of(
-            "nitrogen", new double[] {32.697, 33.241, 33.723},
-            "ethane", new double[] {122.55, 128.55, 133.80},
-            "carbon_dioxide", new double[] {54.308, 55.409, 56.342});
 
     /** The spine records are bundled since P3 (main resources). */
     private static ReferenceSpine spine(String species) {
@@ -79,13 +71,16 @@ class ReferenceSpineTest {
     }
 
     /**
-     * P3 WP3: CO2's alpha0 below its triple point against the NIST-JANAF table C-095 (Chase 1998, janaf.nist.gov, read
-     * 2026-09-24; no 150 K row exists): Cp within 0.2 % (D7), h(T) - h(298.15) within 0.1 % or 20 J/mol, and
-     * s(T, 1 bar) within 0.02 J/(mol K) (the spine's S° is CEA's, 0.0076 below JANAF's since WP9a). The segment carries its own
-     * grade, estimated_declared_error; the record's qualified grade applies from the triple point.
+     * P3 WP3: CO2's alpha0 below its triple point against open references (batch 2026-11-04-open-thermo-data; the
+     * NIST-JANAF table C-095 until then): at 100 K the rigid-rotor harmonic-oscillator Cp, a linear molecule's 7/2 R plus
+     * Einstein functions of the fundamentals 1333, 667.4 (twice) and 2349.1 cm-1, where anharmonicity and Fermi resonance
+     * are negligible; at 200 K NASA CEA's CO2 polynomial (thermo.inp g 9/99, Gurvich 1991, Apache-2.0; its first interval
+     * starts there), Cp, h(T) - h(298.15) and s(T, 1 bar). Cp within 0.2 % (D7), h within 0.1 % or 20 J/mol, s within
+     * 0.02 J/(mol K) (the spine's S° is CEA's). The segment carries its own grade, estimated_declared_error; the record's
+     * qualified grade applies from the triple point.
      */
     @Test
-    void carbonDioxideBelowTheTriplePointAgainstJanaf() {
+    void carbonDioxideBelowTheTriplePointAgainstOpenReferences() {
         var co2 = spine("carbon_dioxide");
         var below = co2.segments().getFirst();
         assertEquals(90, below.minimumTemperature(), 0.0);
@@ -94,16 +89,40 @@ class ReferenceSpineTest {
         assertEquals(MaterialCoverage.Grade.ESTIMATED_DECLARED_ERROR, co2.coverageAt(150).grade());
         assertEquals(MaterialCoverage.Grade.QUALIFIED, co2.coverageAt(250).grade());
         assertEquals(MaterialCoverage.Grade.QUALIFIED, co2.coverage().grade());
-        // T, Cp J/(mol K), H - H(298.15) J/mol, S J/(mol K) of JANAF C-095.
-        double[][] janaf = {{100, 29.208, -6456, 179.009}, {200, 32.359, -3414, 199.975}};
-        for (double[] row : janaf) {
-            double t = row[0], cp = co2.heatCapacity(t), dh = co2.enthalpy(t) - co2.enthalpy(298.15), s = co2.entropy(t, 1e5);
-            System.out.printf("P3 CO2 below the triple point at %.0f K: Cp %.5f (JANAF %.3f, %+.3f %%), h - h(298.15) %.2f J/mol (JANAF %.0f), "
-                    + "s %.4f J/(mol K) (JANAF %.3f)%n", t, cp, row[1], 100 * (cp / row[1] - 1), dh, row[2], s, row[3]);
-            assertEquals(row[1], cp, 0.002 * row[1], "Cp at " + t);
-            assertEquals(row[2], dh, Math.max(20, 0.001 * Math.abs(row[2])), "h at " + t);
-            assertEquals(row[3], s, 0.02, "s at " + t);
-        }
+        // 100 K: the rigid-rotor harmonic-oscillator Cp (second radiation constant 1.438776877 cm K, R = 8.314462618).
+        double rrho = 8.314462618 * (3.5 + einstein(1333 * 1.438776877 / 100) + 2 * einstein(667.4 * 1.438776877 / 100)
+                + einstein(2349.1 * 1.438776877 / 100));
+        double cp100 = co2.heatCapacity(100);
+        System.out.printf("CO2 below the triple point at 100 K: Cp %.5f (rigid rotor, harmonic oscillators %.4f, %+.3f %%)%n", cp100, rrho, 100 * (cp100 / rrho - 1));
+        assertEquals(rrho, cp100, 0.002 * rrho, "Cp at 100 K");
+        // 200 K: NASA CEA CO2, first interval, R = 8.314510: Cp, h - h(298.15), s(1 bar) (tools/open-thermo-data/spine-checks.mjs).
+        double[] cea = {4.943650540e+04, -6.264116010e+02, 5.301725240e+00, 2.503813816e-03, -2.127308728e-07, -7.689988780e-10,
+                2.849677801e-13, -4.528198460e+04, -7.048279440e+00};
+        double t = 200, cp = co2.heatCapacity(t), dh = co2.enthalpy(t) - co2.enthalpy(298.15), s = co2.entropy(t, 1e5);
+        double ceaCp = ceaHeatCapacity(cea, t), ceaDh = ceaEnthalpy(cea, t) - ceaEnthalpy(cea, 298.15), ceaS = ceaEntropy(cea, t);
+        System.out.printf("CO2 below the triple point at 200 K: Cp %.5f (CEA %.4f, %+.3f %%), h - h(298.15) %.2f J/mol (CEA %.2f), "
+                + "s %.4f J/(mol K) (CEA %.4f)%n", cp, ceaCp, 100 * (cp / ceaCp - 1), dh, ceaDh, s, ceaS);
+        assertEquals(ceaCp, cp, 0.002 * ceaCp, "Cp at 200 K");
+        assertEquals(ceaDh, dh, Math.max(20, 0.001 * Math.abs(ceaDh)), "h at 200 K");
+        assertEquals(ceaS, s, 0.02, "s at 200 K");
+    }
+
+    private static double einstein(double x) { return x * x * Math.exp(x) / Math.pow(Math.expm1(x), 2); }
+    private static double ceaHeatCapacity(double[] a, double t) {
+        return ReferenceSpine.CEA_GAS_CONSTANT * (a[0] / (t * t) + a[1] / t + a[2] + a[3] * t + a[4] * t * t + a[5] * t * t * t + a[6] * t * t * t * t);
+    }
+    private static double ceaEnthalpy(double[] a, double t) {
+        return ReferenceSpine.CEA_GAS_CONSTANT * t * (-a[0] / (t * t) + a[1] * Math.log(t) / t + a[2] + a[3] * t / 2 + a[4] * t * t / 3
+                + a[5] * t * t * t / 4 + a[6] * t * t * t * t / 5 + a[7] / t);
+    }
+    private static double ceaEntropy(double[] a, double t) {
+        return ReferenceSpine.CEA_GAS_CONSTANT * (-a[0] / (2 * t * t) - a[1] / t + a[2] * Math.log(t) + a[3] * t + a[4] * t * t / 2
+                + a[5] * t * t * t / 3 + a[6] * t * t * t * t / 4 + a[8]);
+    }
+    private static double oracleHeatCapacity(HelmholtzFluid fluid, double t, AlphaDerivatives d) {
+        double tau = fluid.reducingTemperature() / t;
+        fluid.idealDerivatives(tau, 1, d);
+        return fluid.gasConstant() * (1 - tau * tau * d.dTau2);
     }
 
     private static double oracleEnthalpy(HelmholtzFluid fluid, double t, AlphaDerivatives d) {
@@ -119,11 +138,13 @@ class ReferenceSpineTest {
     }
 
     /**
-     * D7: the CEA segments' Cp within 0.2 % of the holdout at 1000, 1100 and 1200 K, evaluated with CEA's own gas
-     * constant 8.314510 (P3 WP9a; every CEA segment of every record carries it).
+     * D7: the CEA segments' Cp within 0.2 % of the CoolProp alpha0 at 1000, 1100 and 1200 K (above each join, where the
+     * spine does not use it; measured -0.011 to +0.014 %), evaluated with CEA's own gas constant 8.314510 (P3 WP9a; every
+     * CEA segment of every record carries it). Until batch 2026-11-04-open-thermo-data the holdouts were the NIST-JANAF and
+     * WebBook Gurvich tables.
      */
     @Test
-    void ceaSegmentAgainstTheHoldouts() {
+    void ceaSegmentAgainstCoolProp() {
         double[] temperatures = {1000, 1100, 1200};
         for (String species : SPECIES) {
             for (var segment : spine(species).segments())
@@ -131,12 +152,14 @@ class ReferenceSpineTest {
                     assertEquals(ReferenceSpine.CEA_GAS_CONSTANT, segment.gasConstant(), 0.0, species + " " + segment.revision());
         }
         assertTrue(spine("methane").segments().stream().noneMatch(s -> s.type().equals("nasa9")), "methane r2 has no CEA segment (D13)");
+        var derivatives = new AlphaDerivatives();
         for (String species : CEA_SPECIES) {
             var spine = spine(species);
+            var fluid = HelmholtzFluid.load(FLUID.get(species));
             for (int i = 0; i < temperatures.length; i++) {
-                double deviation = spine.heatCapacity(temperatures[i]) / HOLDOUT.get(species)[i] - 1;
-                System.out.printf("P3 WP9a CEA Cp %s at %.0f K: %.5f J/(mol K), holdout %.3f, deviation %+.3f %%%n", species, temperatures[i],
-                        spine.heatCapacity(temperatures[i]), HOLDOUT.get(species)[i], 100 * deviation);
+                double reference = oracleHeatCapacity(fluid, temperatures[i], derivatives), deviation = spine.heatCapacity(temperatures[i]) / reference - 1;
+                System.out.printf("CEA Cp %s at %.0f K: %.5f J/(mol K), CoolProp alpha0 %.5f, deviation %+.3f %%%n", species, temperatures[i],
+                        spine.heatCapacity(temperatures[i]), reference, 100 * deviation);
                 assertTrue(Math.abs(deviation) <= 0.002, species + " at " + temperatures[i] + " K: " + deviation);
             }
         }

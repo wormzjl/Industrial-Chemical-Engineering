@@ -32,19 +32,19 @@ class V3Tjl20MethanePropertyPackageTest {
         for (int component = 0; component < base.componentBasis().componentCount(); component++) assertEquals(oldFeed[component] * 0.995, feed[component + 1], 1e-15);
     }
 
-    @Test void methaneThermalFitMatchesIndependentNistShomateAndDifferentiatesConsistently() {
+    @Test void methaneThermalFitMatchesTheSetzmannWagnerIdealGasAndDifferentiatesConsistently() {
         var methane = V3CatalogPropertyPackage.require(TJL20).component(0);
         assertEquals(190.564, methane.criticalTemperatureKelvin());
         assertEquals(4_599_200, methane.criticalPressurePascal());
         assertEquals(0.01142, methane.acentricFactor());
         assertEquals(0, methane.idealGasEnthalpy(298.15));
-        // The reference is the published rational Shomate expression, not the fitted polynomial.
+        // The reference is the closed form the record was fitted to, not the fitted polynomial: the ideal-gas part of
+        // Setzmann and Wagner (1991) as CoolProp 8.0.0 states it (Methane.json alpha0, MIT); until batch
+        // 2026-11-04-open-thermo-data it was the NIST WebBook Shomate expression. Fit worst 0.013 J/(mol K), 0.21 J/mol.
         for (int point = 0; point <= 1000; point++) {
             double temperature = 298.15 + (900 - 298.15) * point / 1000;
-            double t = temperature / 1000;
-            double cp = -0.703029 + 108.4773 * t - 42.52157 * t * t + 5.862788 * t * t * t + 0.678565 / (t * t);
-            assertEquals(cp, methane.idealGasHeatCapacity(temperature), 0.05, "Cp at " + temperature);
-            assertEquals(shomateIntegral(t) - shomateIntegral(0.29815), methane.idealGasEnthalpy(temperature), 0.5,
+            assertEquals(setzmannWagnerHeatCapacity(temperature), methane.idealGasHeatCapacity(temperature), 0.05, "Cp at " + temperature);
+            assertEquals(setzmannWagnerEnthalpy(temperature) - setzmannWagnerEnthalpy(298.15), methane.idealGasEnthalpy(temperature), 0.5,
                     "H relative to 298.15 K at " + temperature);
             double derivative = (methane.idealGasEnthalpy(temperature + 0.001)
                     - methane.idealGasEnthalpy(temperature - 0.001)) / 0.002;
@@ -74,8 +74,17 @@ class V3Tjl20MethanePropertyPackageTest {
         }
     }
 
-    private static double shomateIntegral(double t) {
-        return 1000 * (-0.703029 * t + 108.4773 * t * t / 2 - 42.52157 * t * t * t / 3
-                + 5.862788 * t * t * t * t / 4 - 0.678565 / t);
+    /** CoolProp Methane.json EOS[0].alpha0: R = 8.31451, log_tau a = 3.0016, Planck-Einstein n_k at theta_k = v_k (K). */
+    private static final double R = 8.31451, LOG_TAU = 3.0016;
+    private static final double[] N = {0.008449, 4.6942, 3.4865, 1.6572, 1.4115}, THETA = {648, 1957, 3895, 5705, 15080};
+    private static double setzmannWagnerHeatCapacity(double temperature) {
+        double c = 1 + LOG_TAU;
+        for (int k = 0; k < N.length; k++) { double x = THETA[k] / temperature, e = Math.exp(-x); c += N[k] * x * x * e / ((1 - e) * (1 - e)); }
+        return R * c;
+    }
+    private static double setzmannWagnerEnthalpy(double temperature) {
+        double c = 1 + LOG_TAU;
+        for (int k = 0; k < N.length; k++) { double x = THETA[k] / temperature; c += N[k] * x / Math.expm1(x); }
+        return R * temperature * c;
     }
 }

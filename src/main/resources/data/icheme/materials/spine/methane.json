@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "icheme:spine_methane",
   "component": "Methane",
-  "revision": "spine-methane-r2",
-  "source": "Reference spine r2 (batch 2026-09-24-coolprop-low-temperature, decisions D6 and D13): CoolProp alpha0 (Setzmann and Wagner 1991) from the triple point to 425 K, the GERG-2008 ideal-gas function (Jaeschke and Schley 1995) from 425 to 1200 K (Cp step at the join +0.0058 %); methane's ideal gas is not available above 1200 K; ATcT 1.220 formation enthalpy; CEA standard entropy (R = 8.314510). Built by tools/spine-join-measurement/build-spine-records.mjs. r2 (P3 WP9a) replaces the NASA CEA (Gurvich 1991) segments above 375 K of r1.",
+  "revision": "spine-methane-r3",
+  "source": "Reference spine r2 (batch 2026-09-24-coolprop-low-temperature, decisions D6 and D13): CoolProp alpha0 (Setzmann and Wagner 1991) from the triple point to 425 K, the GERG-2008 ideal-gas function (Jaeschke and Schley 1995) from 425 to 1200 K (Cp step at the join +0.0058 %); methane's ideal gas is not available above 1200 K; ATcT 1.220 formation enthalpy; CEA standard entropy (R = 8.314510). Built by tools/spine-join-measurement/build-spine-records.mjs. r2 (P3 WP9a) replaces the NASA CEA (Gurvich 1991) segments above 375 K of r1. r3 (batch 2026-11-04-open-thermo-data, O2): the |CEA - JANAF| entropy uncertainty removed.",
   "molar_mass_kg_per_mol": 0.0160428,
   "formation_enthalpy": {
     "value_j_per_mol": -74513,
@@ -14,8 +14,7 @@
   "standard_entropy": {
     "value_j_per_mol_kelvin": 186.3711,
     "pressure_pascal": 100000,
-    "source": "NASA CEA thermo.inp CH4 (g 8/99) polynomial at 298.15 K and 1e5 Pa with R = 8.314510 (the polynomial is not a segment of this record); CEA states no uncertainty, the uncertainty given is |CEA - JANAF| with JANAF C-067 S(298.15) = 186.251 (Chase 1998), a disagreement estimate",
-    "uncertainty_j_per_mol_kelvin": 0.1201
+    "source": "NASA CEA thermo.inp CH4 (g 8/99) polynomial at 298.15 K and 1e5 Pa with R = 8.314510 (the polynomial is not a segment of this record); no uncertainty: CEA states none (the |CEA - JANAF| estimate of the earlier revision was removed, batch 2026-11-04-open-thermo-data, O2)"
   },
   "ideal_gas": {
     "maximum_cp_step_fraction": 0.005,

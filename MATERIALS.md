@@ -17,7 +17,7 @@ Copy `examples/material-override` into a world's `datapacks` directory, enable i
 `/reload`. The example replaces the property record `icheme:tjl20_methane` to give methane an illustrative
 standard-liquid density (357.0 instead of 356.07 kg/m³); it is an editing example, not a measured reference dataset.
 Its other fields are the bundled record's (a test keeps them so), except its `revision`
-(`tjl20-methane-nist-r1-example-density`): an edit declares itself with a bump of the edited record's revision. Methane
+(`tjl20-methane-coolprop-r2-example-density`): an edit declares itself with a bump of the edited record's revision. Methane
 belongs to the network package, so the bumped revision changes the network's fluid identity: on a running world the
 reload holds the fluid network until the data is restored or the world is reopened (see "Reloads"); a new world starts
 on the edited record.
@@ -80,7 +80,7 @@ Physical fields:
 Coefficient n has units J/(mol·K^(n+1)). Ideal-gas enthalpy is its analytic integral from 298.15 K, in J/mol,
 with zero enthalpy at that datum. Existing cubic fits retain their original evaluation order when E and F are zero.
 
-An optional `temperature_min_kelvin` gives the fit's own lower end where it lies above the record's (it must lie above the record's `temperature_min_kelvin` and at most 298.15 K). On the fluid network the fit's data range is the component's `fluid_domain` temperature range (else the record's own), raised to this end; past it the heat capacity is held at the end value and integrated, so enthalpy and entropy stay continuous with their slopes. Nitrogen declares 273.16 K: its fit's value there, 29.111 J/(mol·K), is within 0.05 % of the NIST zero-pressure Cp down to its 63.151 K triple point (owner decision D37). The column evaluates the polynomial itself, inside its package's range.
+An optional `temperature_min_kelvin` gives the fit's own lower end where it lies above the record's (it must lie above the record's `temperature_min_kelvin` and at most 298.15 K). On the fluid network the fit's data range is the component's `fluid_domain` temperature range (else the record's own), raised to this end; past it the heat capacity is held at the end value and integrated, so enthalpy and entropy stay continuous with their slopes. Nitrogen declares 273.16 K: its fit passes through the Span et al. 2000 ideal-gas value there, 29.116 J/(mol·K), within 0.05 % of the zero-pressure Cp down to its 63.151 K triple point (owner decision D37). The column evaluates the polynomial itself, inside its package's range.
 
 `models` is required and may contain only `pr78`, with `critical_temperature_kelvin`, `critical_pressure_pascal`, and
 dimensionless `acentric_factor`. A PR78 package requires those fields for each selected property dataset. NRTL is a mixture
@@ -167,7 +167,7 @@ six dimensionless `saturation_coefficients`, and seven `shomate_coefficients`. A
 Saturation coefficient order corresponds to reduced-temperature exponents [1, 1.5, 3, 3.5, 4, 7.5] in the
 Wagner–Pruss auxiliary equation. Shomate order is [A,B,C,D,E,F,−H] using t = T/1000: vapor enthalpy is
 1000 × (At + Bt²/2 + Ct³/3 + Dt⁴/4 − E/t + F − H) J/mol. The final array entry already contains −H.
-The existing NIST fit's lower-temperature continuation and reference-consistent Watson liquid enthalpy are preserved.
+The bundled A..E are a fit to the IAPWS-95 ideal-gas heat capacity over the record's 273.16 to 900 K, and F and H follow from the ATcT formation enthalpy so that the enthalpy is zero at 298.15 K (revision `water-iapws95-shomate-r3`, batch 2026-11-04-open-thermo-data; the NIST H2O(g) Shomate before). The reference-consistent Watson liquid enthalpy is preserved.
 
 Optional `ice` names a usable `crystal` of `Water` anchored at the record's `triple_point` and gives its `sublimation_pressure` (`type: "iapws_r14_08"`, three `coefficients`, three `exponents`, `source`; IAPWS R14-08 equation 6). On every package, free water below its melting line freezes as that crystal. The ice crystal record's revision is part of the fluid identity only, not of the column's identity: the column never reaches the water's melting line. On the network the record also supplies the saturation pressure and the ideal steam; liquid water is IAPWS-IF97 Region 1 in Java. The bundled `icheme:water` uses `icheme:crystal_ice_ih`. The water model of the network package must carry `ice`: loading, and so a `/reload`, refuses data without it, naming the water file and the field.
 
@@ -214,7 +214,7 @@ The bundled water model includes the [IAPWS SR6-08(2011) liquid-water correlatio
 equation 7/table 5, with coefficients converted from μPa·s to Pa·s. Its data range is the 0.1 MPa reference isobar
 and 253.15–383.15 K. This interval includes metastable liquid below freezing and above boiling; it is not a vapor
 correlation. The verification tests use independent table 8 values at 260, 298.15, and 375 K.
-The light-hydrocarbon records (`tjl19_*`, `tjl20_methane`) retain the installed DWSIM API curves and independent check points; nitrogen's tables come from the NIST WebBook and the pilot records' from CoolProp 8.0.0. The 12 active petroleum cuts use the shared Dalia liquid family described below. The five regrouped heavy vapor curves were re-evaluated through `AUX_VAPVISCi` with their reconstructed properties; all are estimated. The retired CDU17 data is available only to independent tests.
+The light-hydrocarbon records (`tjl19_*`, `tjl20_methane`) retain the installed DWSIM API curves and independent check points; nitrogen's and the pilot records' tables come from CoolProp 8.0.0 (nitrogen's from the NIST WebBook until batch 2026-11-04-open-thermo-data). The 12 active petroleum cuts use the shared Dalia liquid family described below. The five regrouped heavy vapor curves were re-evaluated through `AUX_VAPVISCi` with their reconstructed properties; all are estimated. The retired CDU17 data is available only to independent tests.
 
 DWSIM liquid curves sample `AUX_LIQVISCi(name,T,100000 Pa)`; vapor curves sample the dilute-gas auxiliary
 `AUX_VAPVISCi(component,T)`. Both declare the 0.1 MPa isobar in the catalog. These are conditional phase

@@ -1,119 +1,119 @@
 [
   {
     "temperatureKelvin": 300,
-    "partialPressurePascal": 3500.0,
-    "referenceVolume": 0.711422569252,
+    "partialPressurePascal": 3500,
+    "referenceVolume": 0.7114225692518632,
     "idealVolume": 0.7126682244131348,
-    "relativeError": 0.0017509356815099686,
-    "referenceViscosity": 9.759669153919999E-06,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=3.5&PHigh=3.5&PInc=1&T=300&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.0017509356817024813,
+    "referenceViscosity": 0.000009759669153918752,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 350,
-    "partialPressurePascal": 41500.0,
-    "referenceVolume": 0.0695184683381,
+    "partialPressurePascal": 41500,
+    "referenceVolume": 0.06951846833811345,
     "idealVolume": 0.07012197388803937,
-    "relativeError": 0.008681226217531757,
-    "referenceViscosity": 1.14305034335E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=41.5&PHigh=41.5&PInc=1&T=350&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.00868122621733658,
+    "referenceViscosity": 0.000011430503433466827,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 375,
     "partialPressurePascal": 100000,
-    "referenceVolume": 0.0307151016067,
+    "referenceVolume": 0.03071510160671538,
     "idealVolume": 0.031179234818074646,
-    "relativeError": 0.015110912453351721,
-    "referenceViscosity": 1.2304903780899999E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=100&PHigh=100&PInc=1&T=375&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.015110912452843461,
+    "referenceViscosity": 0.00001230490378086404,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 385,
     "partialPressurePascal": 150000,
-    "referenceVolume": 0.020914922149,
+    "referenceVolume": 0.020914922149047423,
     "idealVolume": 0.02134045405325998,
-    "relativeError": 0.02034585169518932,
-    "referenceViscosity": 1.26460759945E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=150&PHigh=150&PInc=1&T=385&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.020345851692875616,
+    "referenceViscosity": 0.000012646075994496446,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 400,
     "partialPressurePascal": 150000,
-    "referenceVolume": 0.0218069648107,
+    "referenceVolume": 0.02180696481068692,
     "idealVolume": 0.022171900315075307,
-    "relativeError": 0.016734814200105808,
-    "referenceViscosity": 1.32387864752E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=150&PHigh=150&PInc=1&T=400&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.016734814200715542,
+    "referenceViscosity": 0.000013238786475162376,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 600,
     "partialPressurePascal": 150000,
-    "referenceVolume": 0.0331570669056,
+    "referenceVolume": 0.03315706690562001,
     "idealVolume": 0.03325785047261296,
-    "relativeError": 0.003039580289170285,
-    "referenceViscosity": 2.14202560141E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=150&PHigh=150&PInc=1&T=600&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.0030395802885649914,
+    "referenceViscosity": 0.00002142025601412687,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 900,
     "partialPressurePascal": 150000,
-    "referenceVolume": 0.049855813699,
+    "referenceVolume": 0.04985581369896055,
     "idealVolume": 0.04988677570891944,
-    "relativeError": 0.0006210310818788312,
-    "referenceViscosity": 3.36822671492E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=150&PHigh=150&PInc=1&T=900&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.0006210310826706422,
+    "referenceViscosity": 0.00003368226714915323,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 380,
     "partialPressurePascal": 125000,
-    "referenceVolume": 0.0248315522638,
+    "referenceVolume": 0.024831552263803517,
     "idealVolume": 0.025275966359185848,
-    "relativeError": 0.01789715321316132,
-    "referenceViscosity": 1.2473850357999999E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=125&PHigh=125&PInc=1&T=380&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.017897153213016992,
+    "referenceViscosity": 0.000012473850357955486,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 450,
     "partialPressurePascal": 250000,
-    "referenceVolume": 0.014723005452,
+    "referenceVolume": 0.014723005451967424,
     "idealVolume": 0.01496603271267583,
-    "relativeError": 0.016506633884511457,
-    "referenceViscosity": 1.51987107159E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=250&PHigh=250&PInc=1&T=450&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.016506633886760547,
+    "referenceViscosity": 0.00001519871071587623,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 500,
     "partialPressurePascal": 400000,
-    "referenceVolume": 0.0102185155939,
+    "referenceVolume": 0.010218515593900959,
     "idealVolume": 0.01039307827269155,
-    "relativeError": 0.017082978167176854,
-    "referenceViscosity": 1.72174304099E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=400&PHigh=400&PInc=1&T=500&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.017082978167081375,
+    "referenceViscosity": 0.000017217430409859796,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 600,
     "partialPressurePascal": 800000,
-    "referenceVolume": 0.00613373228645,
+    "referenceVolume": 0.006133732286448653,
     "idealVolume": 0.00623584696361493,
-    "relativeError": 0.016648049245727714,
-    "referenceViscosity": 2.1365052770199997E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=800&PHigh=800&PInc=1&T=600&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.01664804924595087,
+    "referenceViscosity": 0.00002136505277020813,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 750,
     "partialPressurePascal": 1500000,
-    "referenceVolume": 0.00410355827599,
+    "referenceVolume": 0.004103558275986733,
     "idealVolume": 0.004157231309076619,
-    "relativeError": 0.013079632230559746,
-    "referenceViscosity": 2.76363751881E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=1500&PHigh=1500&PInc=1&T=750&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.013079632231366434,
+    "referenceViscosity": 0.000027636375188094772,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   },
   {
     "temperatureKelvin": 900,
     "partialPressurePascal": 2000000,
-    "referenceVolume": 0.00371088646637,
+    "referenceVolume": 0.00371088646637094,
     "idealVolume": 0.0037415081781689576,
-    "relativeError": 0.00825185897668046,
-    "referenceViscosity": 3.3758754546699994E-05,
-    "source": "https://webbook.nist.gov/cgi/fluid.cgi?ID=C7732185&Action=Data&Type=IsoTherm&Digits=12&PLow=2000&PHigh=2000&PInc=1&T=900&RefState=DEF&TUnit=K&PUnit=kPa&DUnit=mol%2Fl&HUnit=kJ%2Fmol&WUnit=m%2Fs&VisUnit=uPa*s&STUnit=N%2Fm"
+    "relativeError": 0.008251858976425108,
+    "referenceViscosity": 0.00003375875454674953,
+    "source": "IAPWS-95 (CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Water.json EOS[0], through the Java Helmholtz oracle, tools/open-thermo-data/OpenThermoOracleProbe.java), vapour root at T and p; viscosity IAPWS R12-08 (2008) without the critical enhancement at that density (tools/open-thermo-data/lib.mjs, checked against the release's table 4)"
   }
 ]

@@ -365,7 +365,7 @@ public final class FluidThermodynamics {
     private final double crystalCeiling;
     /**
      * The density a pump's "maximum pressure rise" is stated for: liquid water at 298.15 K and 101,325 Pa, from this
-     * model's own water (IF97 Region 1 at that state), 997.05 kg/m3 (NIST: 997.0). A
+     * model's own water (IF97 Region 1 at that state), 997.05 kg/m3 (IAPWS-95: 997.047). A
      * pump's rise limit on another fluid is the setting scaled by the density of
      * what it withdraws over this one: a head, so a pump that pushes water 500 kPa pushes nitrogen at 1 atm about
      * 575 Pa. See {@code PassiveStepSolver.riseLimit}.

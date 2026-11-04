@@ -70,7 +70,7 @@ class LegacyNetworkPathPinTest {
      * move, their gas volume, partial pressures, enthalpy and acoustic bound now those of {@code R T / p + B} steam; every
      * changed line runs only for a state or a phase holding water, so the dry probe states run no changed code.</p>
      */
-    static final String DIGEST = "02fec125e6b5a3502bf79a257554be4b3588352edd914c4bb66b59c0895902b0";
+    static final String DIGEST = "5dbe1a5b44708afa1d795d1bf4dfd052806dd6e4aeb69a0efd614d5f6680f155";
     /**
      * The revision string: the formulation tag {@code direct-liquid-v1:tp-engine-v1:range-continuation-v1} (the phases
      * decided by the equilibrium engine, every data range continued since the owner rule of 2026-10-16) and the fluid
@@ -89,12 +89,15 @@ class LegacyNetworkPathPinTest {
      * as both hold entries for the network's compounds. Since owner decision D7 (2026-11-04) the method is named by its
      * physics fields (model, ideal gas, missing pairs, column pressures, the liquid-mixture correction's revision), not by
      * {@code icheme:crude_pr78@crude-pr78-r1}: a pair library added for other compounds moves nothing here. Since W6 the
-     * isobutane and isopentane liquid viscosity tables are marked estimated past ChemSep's data end (r2).
+     * isobutane and isopentane liquid viscosity tables are marked estimated past ChemSep's data end (r2). Since O2 of batch
+     * 2026-11-04-open-thermo-data the NIST-derived records are re-derived from CoolProp, IAPWS-95 and ATcT (methane r2, nitrogen
+     * r4 with the pilot's CoolProp viscosity tables, water r3, the liquid calibration points), an owner-approved physics change:
+     * the digest moves with them.
      */
     static final String REVISION = String.join(";",
             "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:dalia-global-r1",
             "properties=" + String.join(",",
-                    "icheme:tjl20_methane@tjl20-methane-nist-r1",
+                    "icheme:tjl20_methane@tjl20-methane-coolprop-r2",
                     "icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1",
                     "icheme:tjl19_propane@tjl19-dwsim-10.2.3-r1",
                     "icheme:tjl19_isobutane@tjl19-dwsim-10.2.3-r1",
@@ -113,9 +116,9 @@ class LegacyNetworkPathPinTest {
                     "icheme:crude_pc10@crude-regrouped-r1",
                     "icheme:crude_pc11@crude-regrouped-r1",
                     "icheme:crude_pc12@crude-regrouped-r1",
-                    "icheme:fluid_nitrogen@fluid-nitrogen-nist-r3"),
+                    "icheme:fluid_nitrogen@fluid-nitrogen-coolprop-r4"),
             "interactions=icheme:tjl20@tjl20-frozen-kij-r1",
-            "water=icheme:water@water-iapws-shomate-r2",
+            "water=icheme:water@water-iapws95-shomate-r3",
             "viscosity=" + String.join(",",
                     viscosities("icheme:tjl20_methane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_ethane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
@@ -136,12 +139,12 @@ class LegacyNetworkPathPinTest {
                     viscosities("icheme:crude_pc10", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
                     viscosities("icheme:crude_pc11", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
                     viscosities("icheme:crude_pc12", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:fluid_nitrogen", "nitrogen-nist-viscosity-r2", "nitrogen-nist-viscosity-r2"),
+                    viscosities("icheme:fluid_nitrogen", "coolprop-8.0.0-saturated-liquid-r1", "coolprop-8.0.0-dilute-gas-r1"),
                     "icheme:water/liquid@iapws-sr6-2011-viscosity-r1"),
             "ice=icheme:crystal_ice_ih@crystal-ice-ih-r1",
-            "fluid-data=conditional_solute_log_tables@dwsim-conditional-solute-ambient-v2,liquid_volume_reference_points@nist-liquid-calibration-20260915")
+            "fluid-data=conditional_solute_log_tables@dwsim-conditional-solute-ambient-v2,liquid_volume_reference_points@coolprop-8.0.0-liquid-calibration-r1")
             + ":direct-liquid-v1:tp-engine-v1:range-continuation-v1"
-            + ":separate-free-water-v3:water-iapws-shomate-r2:fluid-domain-data-v1:catalog-volume-reference-v1";
+            + ":separate-free-water-v3:water-iapws95-shomate-r3:fluid-domain-data-v1:catalog-volume-reference-v1";
 
     /** A property record's two viscosities in the fluid identity: {@code id/liquid@revision,id/vapor@revision}. */
     private static String viscosities(String id, String liquid, String vapor) {

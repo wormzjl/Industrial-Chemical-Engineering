@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "icheme:spine_carbon_dioxide",
   "component": "CarbonDioxide",
-  "revision": "spine-carbon_dioxide-r3",
-  "source": "P2 reference spine (batch 2026-09-24-coolprop-low-temperature, decision D6): CoolProp alpha0 from the triple point to 975 K (join at the smallest Cp step on a 25 K grid in P2; step now -0.0068 %), NASA CEA above; ATcT 1.220 formation enthalpy; CEA standard entropy. Built by tools/spine-join-measurement/build-spine-records.mjs. r2 (P3 WP3): the same alpha0 continued below the triple point to 90 K as its own segment, graded estimated_declared_error, for the CO2-lean liquid in liquid methane (fixture F7). r3 (P3 WP9a): the CEA segments and the standard entropy with CEA's own gas constant 8.314510 J/(mol K) instead of 8.314472.",
+  "revision": "spine-carbon_dioxide-r4",
+  "source": "P2 reference spine (batch 2026-09-24-coolprop-low-temperature, decision D6): CoolProp alpha0 from the triple point to 975 K (join at the smallest Cp step on a 25 K grid in P2; step now -0.0068 %), NASA CEA above; ATcT 1.220 formation enthalpy; CEA standard entropy. Built by tools/spine-join-measurement/build-spine-records.mjs. r2 (P3 WP3): the same alpha0 continued below the triple point to 90 K as its own segment, graded estimated_declared_error, for the CO2-lean liquid in liquid methane (fixture F7). r3 (P3 WP9a): the CEA segments and the standard entropy with CEA's own gas constant 8.314510 J/(mol K) instead of 8.314472. r4 (batch 2026-11-04-open-thermo-data, O2): the |CEA - JANAF| entropy uncertainty removed; the checks are CEA against CoolProp and, below the triple point, the rigid-rotor harmonic-oscillator limit and CEA.",
   "molar_mass_kg_per_mol": 0.0440098,
   "formation_enthalpy": {
     "value_j_per_mol": -393477,
@@ -14,8 +14,7 @@
   "standard_entropy": {
     "value_j_per_mol_kelvin": 213.7874,
     "pressure_pascal": 100000,
-    "source": "NASA CEA thermo.inp CO2 (g 9/99) polynomial at 298.15 K and 1e5 Pa with R = 8.314510; CEA states no uncertainty, the uncertainty given is |CEA - JANAF| with JANAF C-095 S(298.15) = 213.795 (Chase 1998), a disagreement estimate",
-    "uncertainty_j_per_mol_kelvin": 0.0076
+    "source": "NASA CEA thermo.inp CO2 (g 9/99) polynomial at 298.15 K and 1e5 Pa with R = 8.314510; no uncertainty: CEA states none (the |CEA - JANAF| estimate of the earlier revision was removed, batch 2026-11-04-open-thermo-data, O2)"
   },
   "ideal_gas": {
     "maximum_cp_step_fraction": 0.005,
@@ -28,7 +27,7 @@
         "revision": "coolprop-ae81610e-carbon_dioxide-alpha0-subtriple",
         "coverage": {
           "grade": "estimated_declared_error",
-          "evidence": "Extrapolation: the Span-Wagner alpha0 is a sum of Planck-Einstein (harmonic-oscillator) terms on the rigid linear-rotor limit Cp0 = 3.5 R, analytic below the triple point, but the equation of state's range starts at the triple point 216.592 K, so nothing in the source qualifies it below. Held to JANAF C-095 (Chase 1998) at 100 and 200 K within 0.2 % by ReferenceSpineTest (P3: -0.008 % and +0.018 %); JANAF tabulates no 150 K value. Declared error 0.2 % in Cp from 90 K to the triple point."
+          "evidence": "Extrapolation: the Span-Wagner alpha0 is a sum of Planck-Einstein (harmonic-oscillator) terms on the rigid linear-rotor limit Cp0 = 3.5 R, analytic below the triple point, but the equation of state's range starts at the triple point 216.592 K, so nothing in the source qualifies it below. Held within 0.2 % by ReferenceSpineTest to the rigid-rotor harmonic-oscillator Cp at 100 K (fundamentals 1333, 667.4 twice and 2349.1 cm-1; +0.004 %) and to NASA CEA (Gurvich 1991) at 200 K (+0.011 %); until r3 to JANAF C-095 at 100 and 200 K (-0.008 % and +0.018 %). Declared error 0.2 % in Cp from 90 K to the triple point."
         },
         "gas_constant_j_per_mol_kelvin": 8.31451,
         "reducing_temperature_kelvin": 304.1282,
@@ -136,6 +135,6 @@
   },
   "coverage": {
     "grade": "qualified",
-    "evidence": "P2 ReferenceSpineTest: CoolProp segment equal to the Java Helmholtz oracle to 1e-9; CEA Cp within 0.2 % of JANAF C-095 at 1000, 1100 and 1200 K (D7); unchanged with R = 8.314510 (P3 WP9a). Applies from the triple point 216.592 K; the segment below it carries its own grade (estimated_declared_error)."
+    "evidence": "P2 ReferenceSpineTest: CoolProp segment equal to the Java Helmholtz oracle to 1e-9; CEA Cp within 0.2 % of the CoolProp alpha0 (Span and Wagner 1996) at 1000, 1100 and 1200 K (D7; -0.007 to +0.014 %; the JANAF C-095 holdout until r3); unchanged with R = 8.314510 (P3 WP9a). Applies from the triple point 216.592 K; the segment below it carries its own grade (estimated_declared_error)."
   }
 }

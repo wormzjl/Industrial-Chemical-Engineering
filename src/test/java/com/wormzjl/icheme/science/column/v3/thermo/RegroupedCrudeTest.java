@@ -79,6 +79,7 @@ class RegroupedCrudeTest {
         try(var stream=getClass().getResourceAsStream("/materials/column-draw-volume-targets.json")) {
             assertNotNull(stream);
             var targets=com.google.gson.JsonParser.parseReader(new java.io.InputStreamReader(stream,java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+            var missed=new java.util.ArrayList<String>();
             for(var element:targets.getAsJsonArray("targets")) {
                 var row=element.getAsJsonObject();String crude=row.get("preset").getAsString();
                 // Captured in the prescribed-drop mode; the shipped diameter marches a per-tray profile that
@@ -93,9 +94,11 @@ class RegroupedCrudeTest {
                         if(index>=0)volume+=product.molarFlowMolPerSecond()*fraction.moleFraction()*properties.properties().get(index).molecularWeight()/properties.properties().get(index).density();
                     }
                     double expected=target.getValue().getAsDouble();
-                    assertEquals(expected,volume,expected*1e-5,crude+" "+target.getKey());
+                    System.out.println("draw volume target "+crude+" "+target.getKey()+": "+volume+" m3/s (target "+expected+", "+(volume/expected-1)+")");
+                    if(!(Math.abs(volume-expected)<=expected*1e-5))missed.add(crude+" "+target.getKey()+": "+volume+" against "+expected);
                 }
             }
+            assertTrue(missed.isEmpty(),String.join("; ",missed));
         }
     }
 

@@ -38,7 +38,8 @@ import java.util.List;
  * but prepared temperatures, recomputed bit for bit.</p>
  */
 final class NetworkPhaseEngine {
-    /** The standard entropy of water vapour at 298.15 K and 1e5 Pa, J/(mol K) (JANAF): the steam's entropy anchor. */
+    /** The standard entropy of water vapour at 298.15 K and 1e5 Pa, J/(mol K) (CODATA key value, Cox, Wagman and Medvedev 1989;
+     * NASA CEA's H2O polynomial gives 188.829): the steam's entropy anchor. */
     static final double STEAM_STANDARD_ENTROPY=188.835;
     private final FluidTpEquilibrium engine;
     private final List<String> species;

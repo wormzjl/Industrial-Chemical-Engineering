@@ -109,7 +109,7 @@ public final class HydrocarbonModel {
      * The data range of a coefficient record's ideal-gas fit on package {@code packageId}, K, as {@code {minimum,
      * maximum}}: the component's fluid range where it declares one (the fit qualified there), its record's otherwise,
      * raised to the fit's own lower end where the record declares one (nitrogen's 273.16 K, owner decision D37,
-     * simplification S4: the heat capacity held below it is within 0.05 % of NIST's zero-pressure value down to the
+     * simplification S4: the heat capacity held below it is within 0.05 % of the Span et al. 2000 ideal-gas value down to the
      * triple point). Past it the translated model, and the phase engine's ideal gas of the same fit
      * ({@link NetworkPhaseEngine.CoefficientIdealGas}, which reads the translated model's ends), hold the heat capacity.
      */

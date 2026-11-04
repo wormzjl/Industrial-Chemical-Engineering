@@ -100,7 +100,7 @@ class TangentPlaneStabilityTest {
             if (gap.applyAsDouble(middle) > 0.0) below = middle; else above = middle;
         }
         double saturation = 0.5 * (below + above);
-        // PR78's nitrogen saturation pressure at 77.355 K is +1.23 % against NIST's 101.325 kPa (package evidence).
+        // PR78's nitrogen saturation pressure at 77.355 K is +1.23 % against the 101.325 kPa of its normal boiling point (package evidence).
         assertEquals(101_325.0 * 1.0123, saturation, 0.002 * 101_325.0);
 
         for (double p : new double[] {90_000.0, 95_000.0, 100_000.0, saturation * (1.0 - 1.0e-9)}) {

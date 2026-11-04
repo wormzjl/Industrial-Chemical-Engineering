@@ -126,6 +126,25 @@ class FluidFactsCompatTest {
         }
         return out;
     }
+    /**
+     * Prints, per vessel of a corpus image, what its load restated: the saved temperature, the amounts by compound, the
+     * saved and the restated energy (a material data change books the difference, AGENTS.md). Returns the restated energy.
+     */
+    private double printRestated(String name,FluidCheckpointCodec.Image image,FluidCheckpointStore.Loaded loaded) {
+        var core=FluidCheckpointCodec.readCore(image.core());var saved=new TreeMap<Long,FluidFacts.Vessel>();var axes=new HashMap<Long,List<String>>();
+        for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
+            for(var v:facts.vessels()){saved.put(v.id(),v);axes.put(v.id(),facts.components());}}
+        for(var e:loaded.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs()) {
+            var v=saved.get(n.id());if(v==null||n.kind()!=PassiveNetwork.NodeKind.RESERVOIR)continue;
+            var amounts=new StringBuilder();var axis=axes.get(n.id());
+            for(int c=0;c<axis.size();c++)if(v.moles()[c]!=0)amounts.append(' ').append(axis.get(c)).append('=').append(v.moles()[c]);
+            System.out.println("corpus "+name+" vessel "+n.id()+": T "+v.temperature()+" K, P "+v.pressure()+" Pa, water liquid "+v.waterLiquid()
+                    +" vapour "+v.waterVapor()+" mol,"+amounts+"; U "+v.energy()+" -> "+n.inventory().internalEnergy()+" J");
+        }
+        double booked=loaded.world().orElseThrow().restated().energy();
+        System.out.println("corpus "+name+": the load books "+booked+" J");
+        return booked;
+    }
     /** Amounts on the axis {@code components} on the world list, by compound id. */
     private double[] onWorld(double[] amounts,List<String> components) {
         var world=model.components();var out=new double[world.size()];
@@ -465,6 +484,14 @@ class FluidFactsCompatTest {
     private static final Path CORPUS=Path.of("src/test/resources/compat/fluid");
     /** The package the corpus images were written on: the network package before W6 (batch 2026-11-04-refinery-compounds). A load names the saved package in its reason. */
     private static final String CORPUS_PACKAGE="icheme:tjl20_methane_nitrogen";
+    /**
+     * The energy a corpus image's load books for the data change since it was written: O2 of batch
+     * 2026-11-04-open-thermo-data re-derived the ideal-gas Cp of nitrogen, methane and water vapour from open sources, so a
+     * vessel restated at its saved temperature holds {@code sum n_i (h_i,new(T) - h_i,old(T))} more energy. Computed apart
+     * from the engine by {@code tools/open-thermo-data/compat-energy.mjs} from the vessels' saved states and the records
+     * at the batch's parent (03e7b6138); the loads book these to 1e-8 J. Before O2 each was 0 (the same data).
+     */
+    private static final double SCHEMA_ONE_DATA_CHANGE=-10.2747985856,ISLAND_SETS_DATA_CHANGE=616.608360671,STEAM_V2_DATA_CHANGE=126.968251430;
     @Test void towerSettingsSurviveBothExactAndFactsOnlyLoads(){
         var world=corpusWorld();var saved=image(world);
         for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG))){
@@ -478,7 +505,7 @@ class FluidFactsCompatTest {
      * nitrogen with methane and nitrogen with ethane, written at state format 31, whose package table names each island's
      * list. It loads, by whatever route the data's identity gives (FACTS since owner decision D7 named the method by its
      * physics fields: the image names {@code icheme:crude_pr78@crude-pr78-r1}), each island on its own list with every vessel's
-     * amounts as saved, bit for bit, and its energy the same; its facts rebuild the same two lists to the same contents. A
+     * amounts as saved, bit for bit, and its energy the same (but for the data change of O2, batch 2026-11-04-open-thermo-data); its facts rebuild the same two lists to the same contents. A
      * fresh save of this build's two-list world loads exactly. When the image is missing the test writes it under
      * {@code build/compat/fluid/}.
      */
@@ -502,9 +529,10 @@ class FluidFactsCompatTest {
             for(int c=0;c<axis.size();c++)assertEquals(v.moles()[c],held[world.indexOf(axis.get(c))],"vessel "+n.id()+": "+axis.get(c)+", bit for bit");
         }
         assertEquals(saved.size(),vessels,"every vessel loads");
+        printRestated("island-sets",image,stored);
         var restated=stored.world().orElseThrow().restated();
         assertTrue(restated.removedMoles().isEmpty()&&restated.removedSolids().isEmpty(),"nothing removed");
-        assertEquals(0,restated.energy(),1e-9*energy,"the same physics gives the same energy");
+        assertEquals(ISLAND_SETS_DATA_CHANGE,restated.energy(),Math.max(1e-3,1e-9*energy),"the same physics gives the same energy, plus the data change of O2");
         var rebuilt=load(edited(image,c->c.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,rebuilt.route());
         assertEquals(lists,rebuilt.checkpoint().islands().stream().map(e->Set.copyOf(e.compounds())).collect(java.util.stream.Collectors.toSet()),"the facts rebuild each island on the same list");
@@ -544,6 +572,7 @@ class FluidFactsCompatTest {
                 var rebuilt=load(edited(image,core->core.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG);
                 assertEquals(FluidCheckpointStore.Route.FACTS,rebuilt.route(),folder.toString());
                 var ledger=rebuilt.world().orElseThrow();
+                printRestated(folder.getFileName().toString(),image,rebuilt);
                 assertEquals(Integer.parseInt(expected.getProperty("registrations")),ledger.active().size(),folder+": registrations");
                 // Schema 2 wrote joints; an image of schema 1 reads every registration with all six faces, as pipes were then.
                 assertEquals(Long.parseLong(expected.getProperty("laid","0")),ledger.active().values().stream().filter(r->r.device().joints()!=PhysicalFluidTopology.ALL_FACES).count(),folder+": laid pipes");
@@ -566,7 +595,7 @@ class FluidFactsCompatTest {
     /**
      * A world written before 2026-10-26 identifies its property basis by a hash of the package data (facts schema 1):
      * loaded as it is, it restates once onto the declared revisions, every amount kept, the same data giving the same
-     * energy, and saves as an exact checkpoint again.
+     * energy (since O2 of batch 2026-11-04-open-thermo-data, plus that data change), and saves as an exact checkpoint again.
      */
     @Test void aSchemaOneWorldRestatesOnceOntoTheDeclaredRevisions() throws IOException {
         var folder=CORPUS.resolve("schema-1");var image=read(folder);
@@ -575,13 +604,14 @@ class FluidFactsCompatTest {
         assertEquals(FluidCheckpointStore.Route.FACTS,restated.route());
         assertTrue(restated.reason().contains("property data of package "+CORPUS_PACKAGE+" changed"),restated.reason());
         var ledger=restated.world().orElseThrow();
+        printRestated("schema-1",image,restated);
         assertEquals(WorldTopologyLedger.FluidBasis.capture(CATALOG),ledger.basis());
         double total=Arrays.stream(moles(restated.checkpoint(),model.componentCount())).sum();
         assertEquals(Double.parseDouble(expected.getProperty("moles")),total,1e-12*total,"every amount kept");
         assertTrue(ledger.restated().removedMoles().isEmpty()&&ledger.restated().removedSolids().isEmpty());
         double energy=0;for(var e:restated.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs())
             if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)energy+=Math.abs(n.inventory().internalEnergy());
-        assertEquals(0,ledger.restated().energy(),1e-9*energy,"the same data gives the same energy");
+        assertEquals(SCHEMA_ONE_DATA_CHANGE,ledger.restated().energy(),Math.max(1e-3,1e-9*energy),"the same data gives the same energy, plus the data change of O2");
         var reloaded=new EventPathWorld(1,ledger,restated.checkpoint().islands());
         assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->key.on(model),CATALOG).route(),"restated once");
     }
@@ -630,7 +660,7 @@ class FluidFactsCompatTest {
         }
         assertEquals(1,vessels);
         // U = U_N2 + n_w (u_ig - p_w T dB/dT): the steam's residual energy, the nitrogen's own moving a few joules.
-        assertEquals(residual,energy,1e-3*Math.abs(residual),"the energy moves by the steam's residual energy");
+        assertEquals(residual+STEAM_V2_DATA_CHANGE,energy,1e-3*Math.abs(residual),"the energy moves by the steam's residual energy and the data change of O2");
         // dB/dT > 0 below the Boyle temperature, so the steam's own energy falls: -25.1 kJ for the image's 145.5 mol at 661 K and
         // 7.98 bar, -173 J/mol (SteamVirialTest checks dB/dT against IF97 Region 2).
         assertTrue(residual<0,"the steam's residual energy: "+residual+" J");
