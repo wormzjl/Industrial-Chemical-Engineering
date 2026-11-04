@@ -72,6 +72,15 @@ public final class CreativeMotorBlock extends HorizontalDirectionalBlock {
         return SHAPES.get(state.getValue(FACING));
     }
 
+    /** Using it opens its page (W7, reading A89): Off and On, its speed or what it regulates, its power limit. */
+    @Override
+    protected net.minecraft.world.InteractionResult useWithoutItem(BlockState state, net.minecraft.world.level.Level level, BlockPos pos, net.minecraft.world.entity.player.Player player,
+                                                                   net.minecraft.world.phys.BlockHitResult hit) {
+        if (player instanceof net.minecraft.server.level.ServerPlayer server)
+            com.wormzjl.icheme.network.MachineNetwork.open(server, pos, com.wormzjl.icheme.world.inventory.MachineMenu.REACH, false);
+        return net.minecraft.world.InteractionResult.sidedSuccess(level.isClientSide());
+    }
+
     /** A placed creative motor queues its part (W3). */
     @Override
     protected void onPlace(BlockState state, net.minecraft.world.level.Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {

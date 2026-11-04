@@ -20,6 +20,7 @@ public final class IChemEClient {
         event.register(ModMenus.FLUID_DEVICE.get(),com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen::new);
         event.register(ModMenus.GAUGE.get(), com.wormzjl.icheme.client.gui.screens.inventory.GaugeScreen::new);
         event.register(ModMenus.ASSEMBLY.get(), com.wormzjl.icheme.client.gui.screens.inventory.AssemblyScreen::new);
+        event.register(ModMenus.MACHINE.get(), com.wormzjl.icheme.client.gui.screens.inventory.MachineScreen::new);
         event.register(ModMenus.PIPELINE_TOOL.get(), com.wormzjl.icheme.client.gui.screens.inventory.PipelineToolScreen::new);
     }
 

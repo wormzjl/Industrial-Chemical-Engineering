@@ -50,9 +50,12 @@ import java.util.*;
  * its control's actuator, effort and limit, the stream at every port of its unit and an exchanger's lines part by part;
  * a pipe's inspection carries the line reading of the stream it carries.</p>
  * <p>{@code fluid-17}: a cooling tower's controls and accepted readings, and a basin display's fan speed.</p>
+ * <p>{@code fluid-18} (batch 2026-11-03-rotating-machinery, W7): a casing's or a turbine's view carries its
+ * {@link FluidView.Drive} (the Drive group, in place of the status line's SHAFT clause), a fan unit's its
+ * {@link FluidView.Power} (the Power group; NO POWER and UNMETERED stay on the status).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-17";
+    public static final String PROTOCOL="fluid-18";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;

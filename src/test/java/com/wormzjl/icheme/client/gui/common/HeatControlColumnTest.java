@@ -95,6 +95,9 @@ class HeatControlColumnTest {
                 }
                 if (mode != HeatUnit.Mode.RATIO && mode != HeatUnit.Mode.COLUMN) {
                     out.add(new Case("air cooler " + mode, new HeatControlColumn.Input(heat("AIR_COOLER", "PROCESS", false, "fans", 0.5, null, List.of()), applied, edit, true, mode, true, "C")));
+                    // W7 (reading A86): a fan unit's Power group, its store shown.
+                    out.add(new Case("air cooler powered " + mode, new HeatControlColumn.Input(heat("AIR_COOLER", "PROCESS", false, "fans", 0.5, null, List.of()), applied, edit, true, mode, true, "C",
+                            new DeviceColumn.Power("26.7", "534", "72"))));
                     if (mode == HeatUnit.Mode.OFF)
                         out.add(new Case("air cooler still", new HeatControlColumn.Input(heat("AIR_COOLER", "PROCESS", false, "fans", 0.0, null, List.of()), applied, edit, true, mode, false, "C")));
                     out.add(new Case("kettle tubes " + mode, new HeatControlColumn.Input(heat("KETTLE", "TUBE", true, "bypass", 0.1, null, List.of()), applied, edit, true, mode, true, "K")));
@@ -120,6 +123,19 @@ class HeatControlColumnTest {
             }
         assertEquals(Set.of(), texts.missing);
         assertTrue(texts.asked.size() > 30, "the cases ask for the column's texts: " + texts.asked.size());
+    }
+
+    /** W7 (reading A86): a fan unit's draw, FE per tick and store stand in a Power group of LED meters, last on the right; none without power. */
+    @Test
+    void aFanUnitsPowerIsAGroupOfMeters() {
+        var texts = new Recording();
+        var heat = heat("AIR_COOLER", "PROCESS", false, "fans", 0.5, null, List.of());
+        var right = HeatControlColumn.columns(new HeatControlColumn.Input(heat, null, true, true, HeatUnit.Mode.OFF, true, "C", new DeviceColumn.Power("26.7", "534", null)), texts).right();
+        var power = (Column.Group) right.getLast();
+        assertEquals(texts.get("device_group.power"), power.title());
+        assertEquals(List.of("power:draw", "power:fe"), power.rows().stream().map(r -> ((Column.Reading) r).key()).toList(), "no store, no store meter");
+        assertTrue(HeatControlColumn.columns(new HeatControlColumn.Input(heat, null, true, true, HeatUnit.Mode.OFF, true, "C"), texts).right().stream()
+                .noneMatch(r -> r instanceof Column.Group g && g.title().equals(texts.get("device_group.power"))));
     }
 
     /** Layout C's two columns, or one on a narrow screen, as FluidDeviceScreen.buildControl places them. */

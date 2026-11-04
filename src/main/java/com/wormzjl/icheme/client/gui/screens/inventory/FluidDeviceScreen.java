@@ -643,6 +643,17 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         boolean ratio=data.kind()==TopologyCompiler.Kind.COMPRESSOR&&view.devicePressureChange()!=null&&state!=null&&state.pressure()>0;
         if(ratio)rows.add(new DeviceColumn.Meter("pressure_ratio",value((state.pressure()+view.devicePressureChange())/state.pressure()),"",tr("pressure_ratio.hint",pressureValue(view.devicePressureChange())+" "+p)));
         else if(view.devicePressureChange()!=null)rows.add(meter("pressure_change",pressureValue(view.devicePressureChange()),p));
+        // A driven casing's readings (W7, build plan section 3): a pump's head, its speed share, the shaft power it takes
+        // and its efficiency (the fluid's power over the shaft's), from the view the bucket sent.
+        var drive=view.drive();
+        if(drive!=null&&!drive.driver().equals("STEAM_TURBINE")&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR)){
+            double density=state!=null&&state.volume()>0?state.mass()/state.volume():Double.NaN,rise=view.devicePressureChange()==null?Double.NaN:view.devicePressureChange();
+            if(data.kind()==TopologyCompiler.Kind.PUMP)rows.add(new DeviceColumn.Meter("head",value(rise/(density*9.80665)),"m",tr("head.hint")));
+            rows.add(meter("speed_share",value(100*drive.share()),"%"));
+            rows.add(meter("shaft_power",value(drive.shaftPower()/1000),"kW"));
+            double fluid=Math.abs(view.massFlow())/density*rise;
+            rows.add(new DeviceColumn.Meter("efficiency",drive.shaftPower()>0&&fluid>0&&data.kind()==TopologyCompiler.Kind.PUMP?value(100*fluid/drive.shaftPower()):"—","%",tr("efficiency.hint")));
+        }
         if(view.heat()!=null){var heat=view.heat();
             rows.add(meter("outlet_temperature",temperatureValue(heat.outletTemperature()),t));
             rows.add(new DeviceColumn.Meter("duty",value(Math.abs(heat.heatWatt())/1000),"kW",tr(heat.burners()!=null?"duty.fired":heat.heatWatt()<0?"duty.cooled":"duty.heated")));
@@ -708,7 +719,23 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // A paired heat side leads with its side selector, as its Control tab does.
         var lead=tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
         return new DeviceColumn.Input(data.kind(),canEdit(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
-            view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters());
+            view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters(),drive(),power());
+    }
+    /**
+     * A casing's or a turbine's Drive group (W7, owner decision D31, option A): the driver in one line, its state, Open
+     * driver; {@code NO DRIVER} where the casing has none and stands closed. Null for a device with no shaft.
+     */
+    private DeviceColumn.Drive drive(){
+        var d=menu.clientData().view().drive();if(d==null)return null;
+        if(d.driver().isEmpty())return new DeviceColumn.Drive(tr("no_driver"),null,false,false);
+        String kind=tr("driver."+d.driver().toLowerCase(Locale.ROOT)),rating=number(d.ratedPower()/1000);
+        String line=d.ratedPower()<=0?kind:d.poles()>0?tr("drive_line_poles",kind,rating,d.poles()):tr("drive_line",kind,rating);
+        return new DeviceColumn.Drive(line,tr("drive_state",d.status(),String.format(Locale.ROOT,"%.0f",d.speed())),true,d.fixed());
+    }
+    /** A fan unit's Power group (W7, reading A86): its draw, FE per tick and store; NO POWER or UNMETERED stay on the display. */
+    private DeviceColumn.Power power(){
+        var p=menu.clientData().view().power();if(p==null)return null;
+        return new DeviceColumn.Power(value(p.draw()/1000),String.format(Locale.ROOT,"%.0f",p.perTick()),p.store()==null?null:String.format(Locale.ROOT,"%.0f",100*p.store()));
     }
     private static boolean warning(String status){return status.contains("HELD")||status.contains("ERROR");}
     /**
@@ -908,7 +935,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     private FluidGuiLayout.ControlSlots controlSlots(){return FluidGuiLayout.control(imageWidth);}
     private int drawingRight(){return controlSlots().drawingRight();}
-    private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol());}
+    private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol(),power());}
     /**
      * The Control column on the GUI kit (batch 2026-10-28-gui-toolkit): placed once from the columns' widths, at compact
      * heights; its fields and buttons are kept at their slots and moved as it scrolls, so a scroll rebuilds nothing. Both
@@ -970,6 +997,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      */
     private void deviceAction(String action){
         if(action.startsWith("side:"))FluidNetwork.openPartner(menu);
+        else if(action.equals("open_driver"))com.wormzjl.icheme.network.MachineNetwork.openDriver(menu.containerId,menu.position(),menu.identity());
         else if(action.equals("recover")){FluidNetwork.recoverSolids(menu,revision);message=tr("waiting");}
         else{
             switch(action){

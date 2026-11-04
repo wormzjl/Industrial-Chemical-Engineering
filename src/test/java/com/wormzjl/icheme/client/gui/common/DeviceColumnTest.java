@@ -79,6 +79,54 @@ class DeviceColumnTest {
         assertTrue(texts.asked.size() > 60, "the cases ask for the column's texts: " + texts.asked.size());
     }
 
+    /**
+     * W7 (owner decision D31, option A): a casing's Drive group comes after its set points, with Open driver where it has a
+     * driver and NO DRIVER without; a fixed-speed train's set flow says the flow follows the line; a fan unit's Power group
+     * comes last. Each fits the door at every width, its words whole and its boxes in line.
+     */
+    @Test
+    void aCasingsDriveAndAFanUnitsPowerFitTheDoor() {
+        var texts = new HeatControlColumnTest.Recording();
+        var driven = new DeviceColumn.Drive(texts.get("drive_line_poles", texts.get("driver.motor"), "30.0", 2), texts.get("drive_state", "CURRENT LIMITED", "2950"), true, true);
+        var none = new DeviceColumn.Drive(texts.get("no_driver"), null, false, false);
+        var power = new DeviceColumn.Power("26.7", "534", "72");
+        for (var drive : List.of(driven, none))
+            for (boolean edit : new boolean[]{true, false}) {
+                var base = input(Kind.PUMP, edit, true, DeviceColumn.Valve.NONE, 8, "", "volume");
+                var in = new DeviceColumn.Input(base.kind(), edit, true, true, base.pressureUnit(), base.temperatureUnit(), base.flowTime(), base.valve(), null, false, null, null,
+                        List.of(), base.phases(), base.readings(), drive, power);
+                var rows = DeviceColumn.rows(in, texts);
+                int at = -1, phases = -1, readings = -1;
+                for (int i = 0; i < rows.size(); i++)
+                    if (rows.get(i) instanceof Column.Group g) {
+                        if (g.title().equals(texts.get("device_group.drive"))) at = i;
+                        if (g.title().equals(texts.get("device_group.phases"))) phases = i;
+                        if (g.title().equals(texts.get("device_group.readings"))) readings = i;
+                    }
+                assertTrue(at >= 0 && at < phases, "the Drive group stands before the plant's texts");
+                assertEquals(texts.get("device_group.power"), ((Column.Group) rows.getLast()).title());
+                assertTrue(readings < rows.size() - 1);
+                for (int width = 300; width <= 790; width += 7) {
+                    var column = Column.place(rows, 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT);
+                    for (var p : column.rows()) {
+                        for (var t : p.texts()) assertTrue(M.width(t) <= p.rect().w(), "a text cut at " + width + ": " + t);
+                        for (var s : p.slots().values()) assertTrue(s.inside(p.rect()) && s.w() >= 40, "a box at " + width + ": " + s);
+                    }
+                    assertEquals(drive.open(), widgets(column).containsKey("open_driver"), "Open driver only with a driver, at " + width);
+                    column.slots();
+                    assertInLine(column, "casing at " + width);
+                }
+                if (edit) {
+                    var flow = rows.stream().flatMap(r -> r instanceof Column.Group g ? g.rows().stream() : java.util.stream.Stream.of(r))
+                            .filter(r -> r instanceof Column.Field f && f.key().equals("volumeFlow")).map(r -> (Column.Field) r).findFirst().orElseThrow();
+                    assertEquals(texts.get("device_field.suction_flow" + (drive.fixed() ? ".fixed" : "") + ".hint"), flow.hint());
+                }
+            }
+        for (var key : List.of("head", "head.hint", "speed_share", "shaft_power", "efficiency", "efficiency.hint", "driver.steam_turbine", "driver.creative_motor", "drive_line"))
+            texts.get(key, "1", "2");
+        assertEquals(Set.of(), texts.missing);
+    }
+
     /** A fan tower's control keeps its words whole and in line at every width, for an editor and a reader, and a natural tower shows none. */
     @Test
     void aTowersControlFitsTheDoorAtEverySupportedWidth() {

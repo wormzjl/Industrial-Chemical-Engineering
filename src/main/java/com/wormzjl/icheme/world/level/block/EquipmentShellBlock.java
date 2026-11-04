@@ -147,6 +147,10 @@ public final class EquipmentShellBlock extends BaseEntityBlock {
      */
     public static void openOwn(ServerPlayer player, EquipmentStructure.Vessel vessel, BlockPos cell, boolean debug) {
         if (!vessel.shape().fluidDevice()) {
+            // A motor, generator or gearbox opens its own page (W7, reading A89), its datasheet a push button there.
+            var shape = vessel.shape();
+            double reach = com.wormzjl.icheme.world.inventory.MachineMenu.REACH + Math.max(shape.sizeX(), Math.max(shape.sizeY(), shape.sizeZ()));
+            if (!debug && ShaftParts.kind(shape.kind()) != null && com.wormzjl.icheme.network.MachineNetwork.open(player, vessel.origin(), reach, true)) return;
             AssemblyNetwork.datasheet(player, cell);
             return;
         }

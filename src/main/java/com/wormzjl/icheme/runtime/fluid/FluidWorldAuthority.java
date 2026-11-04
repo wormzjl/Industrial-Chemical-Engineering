@@ -166,7 +166,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         data.setDirty();
     }
     public static void stop(MinecraftServer server){find(server).ifPresent(FluidWorldAuthority::close);}
-    public static void forget(MinecraftServer server){EARLY_CHUNKS.remove(server);com.wormzjl.icheme.network.AssemblyNetwork.forget(server);var world=SERVERS.remove(server);if(world!=null)world.close();}
+    public static void forget(MinecraftServer server){EARLY_CHUNKS.remove(server);com.wormzjl.icheme.network.AssemblyNetwork.forget(server);com.wormzjl.icheme.network.MachineNetwork.forget(server);var world=SERVERS.remove(server);if(world!=null)world.close();}
     private void owned(){if(!server.isSameThread())throw new IllegalStateException("Fluid authority requires the logical server thread");}
     /** Every island of this world solves on a model built from the same captured options, so the
      * configured trace cutoff is one value for every worker and every retained solver: a retained
@@ -612,6 +612,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
         com.wormzjl.icheme.network.AssemblyNetwork.presentationTick(server, topology.onlineTick());
+        // The machine pages' views (W7, reading A85): on the same 100-tick buckets, only to the open pages.
+        com.wormzjl.icheme.network.MachineNetwork.presentationTick(server, topology.onlineTick());
         data.setDirty();
     }
     /**
@@ -793,6 +795,20 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
     }
     /** Ends every tank watch of a player who left. */
+    /**
+     * A casing's or a steam turbine's Drive group (W7, owner decision D31, option A): its train's driver (a turbine is its
+     * own), its status and speed, the casing's share and shaft power; {@code NO DRIVER} for a casing with none, where it
+     * stands closed; null for a device with no shaft unit. A read of what the trains last decided.
+     */
+    private FluidView.Drive drive(long id){
+        var own=shafts.unitOfDevice(id);if(own==null)return null;
+        var mine=shafts.view(own.id());double share=mine==null?0:Math.max(0,mine.share()),power=mine==null?0:mine.shaftPower();
+        var driver=own.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.STEAM_TURBINE?own:shafts.driverOf(id);
+        if(driver==null)return new FluidView.Drive("",0,0,"NO DRIVER",0,false,0,power);
+        var v=shafts.view(driver.id());String status=v==null?"":v.status();if(status.length()>256)status=status.substring(0,256);
+        return new FluidView.Drive(driver.kind().name(),driver.ratedPower(),driver.poles(),status,v==null?0:v.speed(),
+                driver.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR&&driver.drive()==com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED,share,power);
+    }
     public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);}
 
     /** The drivers each player watches (W3), by their structures' origins, within their dimension. */
@@ -1087,8 +1103,6 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(registry.diagnostic(id)!=null)status=registry.diagnostic(id)+" / "+status;
         var active=topology.active().get(id);if(active==null||active.revision()!=registration.revision())status="WAITING: configuration event / "+status;
         if(unboundBindings.contains(id))status="UNBOUND: saved inventory retained / "+status;
-        // A casing's or turbine's shaft (W3, reading A43): its driver's status word, speed and share.
-        var shaftLine=shafts.deviceLine(id);if(shaftLine!=null)status=status+" / "+shaftLine;
         var routes=new ArrayList<FluidView.PipeRoute>();
         for(var historyEntry:history)for(var pipe:snapshot.graph().pipes())if(pipe.id()==historyEntry.pipeId()) {
             routes.add(new FluidView.PipeRoute(pipe.id(),nodeLabel(snapshot.graph().reservoirs().get(pipe.first()).id()),nodeLabel(snapshot.graph().reservoirs().get(pipe.second()).id())));
@@ -1108,7 +1122,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(rates!=null&&!rates.status().equals("RUNNING"))view=view.withStatus(view.status()+" / "+rates.status());
         }
         // A fan unit's power (W5, reading A68): NO POWER, the notice UNMETERED, or its electric draw and store.
-        var power=electric.line(id);if(!power.isEmpty())view=view.withStatus(view.status()+" / "+power);
+        // W7 (reading A86): the draw and the store go to the Power group; NO POWER or UNMETERED stay on the display.
+        var power=electric.power(id);if(power!=null){view=view.withPower(power);if(!power.status().isEmpty())view=view.withStatus(view.status()+" / "+power.status());}
+        // A casing's or turbine's driver (W7, option A's Drive group; it replaces W3's SHAFT clause, reading A43).
+        var drive=drive(id);if(drive!=null)view=view.withDrive(drive);
         // A heat side (batch 2026-10-27-heat-exchanger-design): its outlet junction's temperature, the heat its HEAT boundaries
         // booked over the interval, an air cooler's fans and an exchanger side's bypass as planned, a fired heater's burners,
         // set point and most heat.

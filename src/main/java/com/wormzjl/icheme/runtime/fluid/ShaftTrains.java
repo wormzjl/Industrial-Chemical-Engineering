@@ -104,7 +104,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         final ShaftNetwork.Train train;
         /** Each driven member's shaft power at its last booking, W. */
         final Map<Long, Double> power = new HashMap<>();
-        double available, steamFlow, specificWork = Double.NaN, drop = Double.NaN, efficiency = Double.NaN, measured = Double.NaN, target = Double.NaN;
+        double available, steamFlow, inlet = Double.NaN, exhaust = Double.NaN, specificWork = Double.NaN, drop = Double.NaN, efficiency = Double.NaN, measured = Double.NaN, target = Double.NaN;
         boolean fresh = true, booked;
         long stepped = Long.MIN_VALUE;
         String status = "RUNNING";
@@ -455,6 +455,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                         if (b.kind() == ConservativeTransport.BoundaryTransfer.Kind.SHAFT && b.nodeId() == pipe.id()) work += b.totalEnergyJoule();
                     run.available = Math.max(0, -work / result.advancedSeconds());
                     run.steamFlow = Math.max(0, average[e]);
+                    run.inlet = suction.pressure();
+                    run.exhaust = solved.reservoirs().get(pipe.second()).state().pressure();
                     run.specificWork = run.steamFlow > 0 ? run.available / run.steamFlow : Double.NaN;
                     run.efficiency = t.design().efficiency();
                     run.drop = density > 0 ? SteamTurbine.isentropicDrop(suction.pressure(), density, solved.reservoirs().get(pipe.second()).state().pressure(), STEAM_K) : Double.NaN;
@@ -540,7 +542,10 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             if (g == null || g.kind() != ShaftNetwork.Kind.GENERATOR) continue;
             if (electric != null) electric.give(g.id(), run.output.getOrDefault(g.id(), 0.0), now);
             boolean on = com.wormzjl.icheme.science.machine.ElectricStore.onSpeed(driverSpeed * m.ratio(), g.designSpeed());
-            double load = on && electric != null ? electric.load(g.id(), ElectricStores.CADENCE * com.wormzjl.icheme.science.machine.ElectricStore.TICK_SECONDS) : 0;
+            // W7: a generator switched off takes no load; its output limit (0: none) caps the load its store has room for.
+            var s = g.settings();
+            double load = on && s.running() && electric != null ? electric.load(g.id(), ElectricStores.CADENCE * com.wormzjl.icheme.science.machine.ElectricStore.TICK_SECONDS) : 0;
+            if (s.powerLimit() > 0) load = Math.min(load, s.powerLimit());
             if (on) run.offSpeed.remove(g.id());
             else run.offSpeed.add(g.id());
             run.output.put(g.id(), load);
@@ -682,6 +687,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 : d != null && d.trip() != ShaftTrain.Trip.NONE ? u.kind().driver() ? ShaftTrain.tripped(d.trip()) : "DRIVER TRIPPED" : run.status;
         // A generator outside its speed window takes no load (W5, reading A64).
         if (u.kind() == ShaftNetwork.Kind.GENERATOR && train.fault() == ShaftNetwork.Fault.NONE && run.offSpeed.contains(unit)) status = "OFF SPEED";
+        // A generator switched off on its page (W7) takes no load.
+        if (u.kind() == ShaftNetwork.Kind.GENERATOR && train.fault() == ShaftNetwork.Fault.NONE && !u.settings().running()) status = "STOPPED";
         // A motor's or generator's store from a save before W5 runs free until wired (A73): the notice, non-blocking.
         if (store != null && "UNMETERED".equals(store.status()) && u.kind() == ShaftNetwork.Kind.MOTOR) status = status + " / UNMETERED";
         double speed = driverSpeed * factor, share = u.designSpeed() > 0 ? speed / u.designSpeed() : 0;
@@ -695,6 +702,51 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     /** Every shaft unit as the ledger holds it (a read). */
     public List<ShaftUnit> units() {
         return List.copyOf(topology.shafts().values());
+    }
+
+    /** Unit {@code unit} as the ledger holds it, or null (a read; W7's pages). */
+    public ShaftUnit unit(long unit) {
+        return topology.shaft(unit);
+    }
+
+    /** Gearbox {@code unit}'s ratio as its train compiled it (its own, or the auto ratio, reading A20); 0 for another part or none. */
+    public double ratio(long unit) {
+        Long key = trainOf.get(unit);
+        var run = key == null ? null : runs.get(key);
+        return run == null ? 0 : run.train.ratios().getOrDefault(unit, 0.0);
+    }
+
+    /** The driver of the train that drives fluid device {@code device} (a casing), or null for none (W7: the casing's Drive group). */
+    public ShaftUnit driverOf(long device) {
+        Long unit = unitOfDevice.get(device);
+        Long key = unit == null ? null : trainOf.get(unit);
+        var run = key == null ? null : runs.get(key);
+        if (run == null || run.train.driver() == 0) return null;
+        return topology.shaft(run.train.driver());
+    }
+
+    /** The shaft unit of fluid device {@code device} (a casing or a turbine), or null. */
+    public ShaftUnit unitOfDevice(long device) {
+        Long unit = unitOfDevice.get(device);
+        return unit == null ? null : topology.shaft(unit);
+    }
+
+    /** A turbine's steam at its last booking: flow, kg/s; inlet and exhaust pressure, Pa. */
+    public record Steam(double flow, double inlet, double exhaust) {
+    }
+
+    /** Turbine unit {@code unit}'s steam at its train's last booking, or null for another part or before its first (W7's page). */
+    public Steam steam(long unit) {
+        var u = topology.shaft(unit);
+        Long key = trainOf.get(unit);
+        var run = key == null ? null : runs.get(key);
+        if (u == null || u.kind() != ShaftNetwork.Kind.STEAM_TURBINE || run == null || run.train.driver() != unit || !run.booked) return null;
+        return new Steam(run.steamFlow, run.inlet, run.exhaust);
+    }
+
+    /** The governor valve's fluid device that turbine unit {@code unit}'s speed sensor works, or 0 for none. */
+    public long governorOf(long unit) {
+        return valveOfTurbine.getOrDefault(unit, 0L);
     }
 
     /** Every unit, for the debug command's list. */

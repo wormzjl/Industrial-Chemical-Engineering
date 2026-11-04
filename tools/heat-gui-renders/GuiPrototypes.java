@@ -7,6 +7,7 @@ import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
+import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
@@ -84,7 +85,150 @@ public final class GuiPrototypes {
         out.addAll(OperationPrototypes.operation());
         out.add(titleStrip());
         out.addAll(machines());
+        out.addAll(machinePages());
         return out;
+    }
+
+    // ---- W7's machine pages (batch 2026-11-03-rotating-machinery, owner decision D31: option A, each machine its own page) ----
+
+    static final String MACHINE = MachineColumn.KEY;
+
+    /** A machine text under {@code gui.icheme.machine.}. */
+    static String mt(String key, Object... args) {
+        return DIALOG.get(MACHINE + key, args);
+    }
+
+    /**
+     * A pump casing's page with the Drive group (the shipped DeviceColumn): a 30 kW 2-pole motor on a variable drive at 2950
+     * rpm driving P-101, 100 m³/h at 80 m, efficiency 70 %, speed 100 %.
+     */
+    static DeviceColumn.Input casingInput() {
+        return new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.20", "bar"), meter("throughput", "5530.0", "kmol/h"),
+                meter("pressure_change", "7.83", "bar"), new DeviceColumn.Meter("head", "80.0", "m", TEXTS.get("head.hint")), meter("speed_share", "100.0", "%"),
+                meter("shaft_power", "24.9", "kW"), new DeviceColumn.Meter("efficiency", "70.0", "%", TEXTS.get("efficiency.hint"))),
+                new DeviceColumn.Drive(TEXTS.get("drive_line_poles", TEXTS.get("driver.motor"), "30.0", 2), TEXTS.get("drive_state", "RUNNING", "2950"), true, false), null);
+    }
+
+    /** A device page's frame around {@code rows} instead of a DeviceColumn.Input's (as {@link #devicePage}). */
+    static Prototype devicePage(String file, int fw, int fh, List<Column.Row> rows, BiConsumer<Door, Skin> body) {
+        var m = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
+        WindowScale.Fit fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
+        int s = WindowScale.of(fw, fh, false, FluidGuiLayout.HEIGHT, fit), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
+        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: scale %d (the design size's %d, the minimum %d), %d by %d GUI px%n", file, fw, fh, s, WindowScale.of(fw, fh, false), WindowScale.minimum(fw, fh, false), gw, gh);
+        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.fits(gw, gh));
+    }
+
+    /**
+     * {@code rows} in a door column's view {@code area} (narrowed for its bar where taller), scrolled to its end where the door
+     * asks, with their widgets; fields show {@code drafts}. Prints the column's height against the view as {@code what}.
+     */
+    static void doorColumn(Door d, List<Column.Row> rows, Rect area, Map<String, String> drafts, String what) {
+        int tall = Column.place(rows, area.x(), area.y(), area.w(), d.m, Column.Metrics.COMPACT).bounds().h();
+        int width = tall > area.h() ? area.w() - ScrollView.BAR - 4 : area.w();
+        var column = Column.place(rows, area.x(), area.y(), width, d.m, Column.Metrics.COMPACT);
+        var view = new ScrollView();
+        view.layout(new Rect(area.x() - 2, area.y(), width + 4, area.h()), area.x() + width + 3, column.bounds().h());
+        while (d.end && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
+        d.c.clip(view.viewport());
+        column.draw(d.c, -view.offset(), d.skin);
+        for (var p : column.rows()) {
+            if (p.row() instanceof Column.Field f) {
+                var r = p.slots().get(f.key());
+                if (view.visible(r)) d.skin.field(d.c, view.onScreen(r), drafts.getOrDefault(f.key(), ""), "", false);
+            } else if (p.row() instanceof Column.Buttons b)
+                for (var spec : b.buttons()) {
+                    var r = p.slots().get(spec.key());
+                    if (!view.visible(r)) continue;
+                    if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), false);
+                    else d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
+                }
+        }
+        d.c.unclip();
+        view.drawBar(d.c, d.skin);
+        if (!d.end && d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", what, column.bounds().h(), area.h());
+    }
+
+    /** A device page's door column (x 10 to {@code FluidGuiLayout.side}), its divider and the glass; returns the glass's inner box. */
+    static Rect deviceDoor(Door d, List<Column.Row> rows, Map<String, String> drafts, String what) {
+        int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
+        doorColumn(d, rows, new Rect(10, top, side - 10, bottom - top), drafts, what);
+        d.skin.vDivider(d.c, side + 13, top, bottom);
+        return d.well(new Rect(side + 15, 72, d.w - side - 20, d.h - 50 - 72));
+    }
+
+    /** Push buttons at the footer's left under its divider, as MachineScreen places them: Close 50 px, the others 60, {@code primary} the confirm one (-1: none). */
+    static void pushFooter(Door d, int primary, String... texts) {
+        d.skin.hDivider(d.c, 8, d.w - 8, d.h - 35);
+        int x = 10;
+        for (int i = 0; i < texts.length; i++) {
+            int w = i == 0 ? 50 : 60;
+            d.skin.button(d.c, new Rect(x, d.h - 27, w, 18), texts[i], i == primary ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+            x += w + 6;
+        }
+    }
+
+    /** The nameplate on the glass, as MachineScreen draws it. */
+    static void nameplate(Door d, Rect box, List<String[]> lines) {
+        int x = box.x() + 6, y = box.y() + 6, w = Math.min(box.w() - 12, 240);
+        var all = new ArrayList<String[]>();
+        all.add(new String[]{mt("nameplate"), ""});
+        all.addAll(lines);
+        for (int i = 0; i < all.size() && y + 10 <= box.bottom(); i++, y += 12) {
+            d.c.text(d.m.cut(all.get(i)[0], w - 80), x, y, i == 0 ? Palette.MUTED : Palette.TEXT);
+            d.c.text(all.get(i)[1], x + w - d.m.width(all.get(i)[1]), y, Palette.ACCENT);
+            if (i == 0) d.c.hLine(x - 2, x + w + 2, y + 10, Palette.LINE);
+        }
+    }
+
+    /** One machine's page from the shipped MachineColumn: its title strip, the one tab, the status once, the door, the nameplate, the footer. */
+    static Prototype machinePage(String file, MachineColumn.Input in, String name, String status, Map<String, String> drafts, List<String[]> plate, boolean datasheet) {
+        var rows = MachineColumn.rows(in, DIALOG);
+        return devicePage(file, WINDOW[0], WINDOW[1], rows, (d, s) -> {
+            d.title(mt("kind." + in.kind().name().toLowerCase(java.util.Locale.ROOT)));
+            if (!name.isEmpty()) d.name(name, in.canEdit());
+            d.tabs(0, TEXTS.get("overview"));
+            d.status(status, status.startsWith("TRIPPED") ? Palette.WARN : Palette.MUTED);
+            var box = deviceDoor(d, rows, drafts, file);
+            nameplate(d, box, plate);
+            if (datasheet) pushFooter(d, in.canEdit() ? 2 : -1, in.canEdit() ? new String[]{TEXTS.get("close"), TEXTS.get("datasheet"), TEXTS.get("apply")} : new String[]{TEXTS.get("close"), TEXTS.get("datasheet")});
+            else pushFooter(d, in.canEdit() ? 1 : -1, in.canEdit() ? new String[]{TEXTS.get("close"), TEXTS.get("apply")} : new String[]{TEXTS.get("close")});
+        });
+    }
+
+    /** Each machine's page (motor, motor tripped, steam turbine, generator, gearbox, creative motor, a reader) and the casing with its Drive group. */
+    static List<Prototype> machinePages() {
+        var t = DIALOG;
+        var motorPlate = List.of(new String[]{mt("rating"), "30.0 kW"}, new String[]{mt("poles"), "2"}, new String[]{mt("drive"), mt("drive.variable")},
+                new String[]{mt("rated_speed"), "2950 rpm"});
+        var casing = casingInput();
+        return List.of(
+                machinePage("machine-motor", MachineColumn.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, false, t), "M-101", "RUNNING",
+                        Map.of("speed", "100"), motorPlate, true),
+                machinePage("machine-motor-tripped", MachineColumn.sample(MachineColumn.Kind.MOTOR, true, false, MachineColumn.Mode.SPEED, true, t), "M-102", "TRIPPED: OVERLOAD",
+                        Map.of(), List.of(new String[]{mt("rating"), "30.0 kW"}, new String[]{mt("poles"), "2"}, new String[]{mt("drive"), mt("drive.fixed")},
+                                new String[]{mt("rated_speed"), "2950 rpm"}), true),
+                machinePage("machine-turbine", MachineColumn.sample(MachineColumn.Kind.STEAM_TURBINE, true, true, MachineColumn.Mode.FLOW, false, t), "KT-101", "RUNNING",
+                        Map.of(), List.of(new String[]{mt("rating"), "2500.0 kW"}, new String[]{mt("rated_speed"), "4200 rpm"}), true),
+                machinePage("machine-turbine-tripped", MachineColumn.sample(MachineColumn.Kind.STEAM_TURBINE, true, true, MachineColumn.Mode.SPEED, true, t), "KT-102", "TRIPPED: OVERSPEED",
+                        Map.of("speed", "4200"), List.of(new String[]{mt("rating"), "2500.0 kW"}, new String[]{mt("rated_speed"), "4200 rpm"}), true),
+                machinePage("machine-generator", MachineColumn.sample(MachineColumn.Kind.GENERATOR, true, true, MachineColumn.Mode.SPEED, false, t), "G-101", "RUNNING",
+                        Map.of("powerLimit", ""), List.of(new String[]{mt("rating"), "30.0 kW"}, new String[]{mt("poles"), "2"}, new String[]{mt("rated_speed"), "2950 rpm"}), true),
+                machinePage("machine-gearbox", MachineColumn.sample(MachineColumn.Kind.GEARBOX, true, true, MachineColumn.Mode.SPEED, false, t), "GB-101", "RUNNING",
+                        Map.of("ratio", "0"), List.<String[]>of(new String[]{mt("rated_speed"), "12600 rpm"}), true),
+                machinePage("machine-creative-motor", MachineColumn.sample(MachineColumn.Kind.CREATIVE_MOTOR, true, true, MachineColumn.Mode.SPEED, false, t), "", "RUNNING",
+                        Map.of("speed", "2950", "powerLimit", ""), List.<String[]>of(new String[]{mt("rated_speed"), "2950 rpm"}), false),
+                machinePage("machine-motor-reader", MachineColumn.sample(MachineColumn.Kind.MOTOR, false, true, MachineColumn.Mode.SPEED, false, t), "M-101", "RUNNING",
+                        Map.of(), motorPlate, true),
+                devicePage("machine-casing", WINDOW[0], WINDOW[1], casing, (d, s) -> {
+                    d.title("Centrifugal pump");
+                    d.name("P-101", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                    var box = device(d, casing, Map.of("volumeFlow", "100.0", "maximumAddedPressure", "10.0"));
+                    contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "100.0", "5530"}));
+                    d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+                }));
     }
 
     // ---- N1's title strip (the owner 2026-11-03: "You can put the equipment name here") ----

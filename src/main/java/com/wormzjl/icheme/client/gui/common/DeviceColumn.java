@@ -53,11 +53,49 @@ public final class DeviceColumn {
      */
     public record Input(Kind kind, boolean canEdit, boolean switchable, boolean powerOn, String pressureUnit, String temperatureUnit, String flowTime,
                         Valve valve, @Nullable Opening opening, boolean recoverable, @Nullable Level level, @Nullable String junction,
-                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings) {
+                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power) {
         public Input {
             lead = List.copyOf(lead);
             readings = List.copyOf(readings);
         }
+
+        /** A device with no driver and no fans. */
+        public Input(Kind kind, boolean canEdit, boolean switchable, boolean powerOn, String pressureUnit, String temperatureUnit, String flowTime,
+                     Valve valve, @Nullable Opening opening, boolean recoverable, @Nullable Level level, @Nullable String junction,
+                     List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings) {
+            this(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, null, null);
+        }
+    }
+
+    /**
+     * A casing's or a turbine's driver (batch 2026-11-03-rotating-machinery, W7, owner decision D31, option A): the driver
+     * in one line ({@code MOTOR 30 kW 2-pole}), its state ({@code RUNNING · 2950 rpm}, null with no driver), and whether
+     * Open driver opens its page (false: {@code NO DRIVER}), and whether it runs at a fixed speed (the set flow's hover then
+     * says the flow follows the line).
+     */
+    public record Drive(String line, @Nullable String state, boolean open, boolean fixed) {
+    }
+
+    /** A fan unit's power (W5, reading A68; W7, reading A86): its draw (kW) and FE per tick as shown, its store (% as shown, or null). */
+    public record Power(String draw, String perTick, @Nullable String store) {
+    }
+
+    /** The Drive group: the driver's line and state, then Open driver, a push button (it opens a page; A100). */
+    public static Column.Group drive(Drive d, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        rows.add(new Column.Line(d.line(), d.open() ? Palette.TEXT : Palette.WARN));
+        if (d.state() != null) rows.add(new Column.Line(d.state(), Palette.TEXT));
+        if (d.open()) rows.add(new Column.Buttons(List.of(new Column.Button("open_driver", t.get("open_driver"), true, t.get("open_driver.hint")))));
+        return new Column.Group(t.get("device_group.drive"), t.get("device_group.drive.hint"), rows);
+    }
+
+    /** The Power group: the draw, FE per tick and the store, LED meters (the status words stay on the display). */
+    public static Column.Group power(Power p, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        rows.add(new Column.Reading("power:draw", t.get("power_draw"), p.draw(), "kW", null));
+        rows.add(new Column.Reading("power:fe", t.get("power_fe"), p.perTick(), "FE/t", t.get("power_fe.hint")));
+        if (p.store() != null) rows.add(new Column.Reading("power:store", t.get("power_store"), p.store(), "%", t.get("power_store.hint")));
+        return new Column.Group(t.get("device_group.power"), null, rows);
     }
 
     /** The phases' colours, as the old rail drew them: organic, aqueous, vapour, solids. */
@@ -71,6 +109,8 @@ public final class DeviceColumn {
         if (in.canEdit()) rows.addAll(settings(in, t));
         if (in.canEdit() && in.kind() == Kind.FILTER)
             rows.add(new Column.Group(t.get("device_group.solids"), null, List.of(new Column.Buttons(List.of(new Column.Button("recover", t.get("recover"), in.recoverable(), t.get("recover.hint")))))));
+        // The casing's driver (W7): Open driver is a widget, so the group stands before the plant's texts.
+        if (in.drive() != null) rows.add(drive(in.drive(), t));
         if (in.phases() != null) rows.add(phases(in.phases(), t));
         // From here the texts follow the plant: these groups hold no widget.
         if (in.level() != null) {
@@ -94,6 +134,7 @@ public final class DeviceColumn {
             readings.add(new Column.Reading("meter:" + i, t.get(m.key()), m.value(), m.unit(), m.hint()));
         }
         if (!readings.isEmpty()) rows.add(new Column.Group(t.get("device_group.readings"), null, readings));
+        if (in.power() != null) rows.add(power(in.power(), t));
         return rows;
     }
 
@@ -111,8 +152,8 @@ public final class DeviceColumn {
         var setPoint = t.get("heat_group.set_point");
         return switch (in.kind()) {
             case GENERATOR -> List.of(group(setPoint, field("pressure", t, "pressure", p), field("temperature", t, "temperature", in.temperatureUnit())));
-            case PUMP -> List.of(group(setPoint, field("volumeFlow", t, "suction_flow", volume)), group(t.get("device_group.limit"), field("maximumAddedPressure", t, "max_rise", p)));
-            case COMPRESSOR -> List.of(group(setPoint, field("volumeFlow", t, "suction_flow", volume)), group(t.get("device_group.limit"), field("maximumPressureRatio", t, "max_ratio", "")));
+            case PUMP -> List.of(group(setPoint, suctionFlow(in, t, volume)), group(t.get("device_group.limit"), field("maximumAddedPressure", t, "max_rise", p)));
+            case COMPRESSOR -> List.of(group(setPoint, suctionFlow(in, t, volume)), group(t.get("device_group.limit"), field("maximumPressureRatio", t, "max_ratio", "")));
             case VOID -> List.of(group(setPoint, field("pressure", t, "pressure", p)));
             case PIPE -> List.of(group(t.get("device_group.size"), field("diameter", t, "bore", "m")));
             case VALVE -> switch (in.valve()) {
@@ -153,6 +194,12 @@ public final class DeviceColumn {
 
     private static Column.Group group(String title, Column.Row... rows) {
         return new Column.Group(title, null, List.of(rows));
+    }
+
+    /** A mover's set flow; on a fixed-speed train (W7) its hover says the flow follows the line. */
+    private static Column.Field suctionFlow(Input in, HeatControlColumn.Texts t, String unit) {
+        boolean fixed = in.drive() != null && in.drive().fixed();
+        return new Column.Field("volumeFlow", t.get("device_field.suction_flow"), unit, t.get("device_field.suction_flow" + (fixed ? ".fixed" : "") + ".hint"));
     }
 
     /** A set point's field: its label and hover under {@code device_field.}. */

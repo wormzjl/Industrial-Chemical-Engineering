@@ -479,15 +479,14 @@ public final class ElectricStores {
     }
 
     /**
-     * A fan unit's status clause for its device's line (reading A68): {@code NO POWER}, the notice {@code UNMETERED}, or its
-     * draw and store; empty for none.
+     * A fan unit's power as its page shows it (reading A68; W7, reading A86): its draw, FE per tick and store for the Power
+     * group, and {@code NO POWER} or the notice {@code UNMETERED} for the display; null for none.
      */
-    public String line(long id) {
+    public FluidView.Power power(long id) {
         var v = view(id);
-        if (v == null || v.kind() == Kind.MOTOR || v.kind() == Kind.GENERATOR) return "";
-        if (!v.metered() && needPower()) return "UNMETERED";
-        String store = String.format(Locale.ROOT, "POWER: %.1f kW, %.0f FE/t, store %.0f %%", v.power() / 1000, v.power() / joulesPerFE() / 20,
-                v.capacity() > 0 ? 100 * v.joules() / v.capacity() : 0);
-        return v.unpowered() ? "NO POWER / " + store : store;
+        if (v == null || v.kind() == Kind.MOTOR || v.kind() == Kind.GENERATOR) return null;
+        String status = !v.metered() && needPower() ? "UNMETERED" : v.unpowered() ? "NO POWER" : "";
+        double draw = Math.max(0, v.power());
+        return new FluidView.Power(draw, draw / joulesPerFE() / 20, v.capacity() > 0 ? Math.clamp(v.joules() / v.capacity(), 0, 1) : null, status);
     }
 }

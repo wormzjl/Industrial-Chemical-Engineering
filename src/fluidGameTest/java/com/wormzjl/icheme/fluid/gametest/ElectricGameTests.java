@@ -159,7 +159,7 @@ public final class ElectricGameTests {
             // A refill restarts it by itself (D6), no reset.
             sequence = sequence.thenWaitUntil(() -> {
                 if (failure[0] != null) return;
-                helper.assertTrue(status.get().equals("RUNNING") && world.view(ids[2]).status().contains("SHAFT: RUNNING"), "Waiting for the restart: " + status.get());
+                helper.assertTrue(status.get().equals("RUNNING") && world.view(ids[2]).drive() != null && world.view(ids[2]).drive().status().startsWith("RUNNING"), "Waiting for the restart: " + status.get());
             }).thenExecute(() -> feed[0] = false);
         }
         finish(helper, plant, sequence, failure);
@@ -215,7 +215,7 @@ public final class ElectricGameTests {
             }).thenWaitUntil(() -> {
                 if (failure[0] != null) return;
                 var view = world.view(side[0]);
-                helper.assertTrue(view.heat().fans() > .99 && !view.status().contains("NO POWER") && view.status().contains("POWER:"),
+                helper.assertTrue(view.heat().fans() > .99 && !view.status().contains("NO POWER") && view.power() != null && view.power().draw() > 0,
                         "Waiting for the fans to start on power: " + view.status());
             }).thenExecute(() -> feed[0] = false);
         }

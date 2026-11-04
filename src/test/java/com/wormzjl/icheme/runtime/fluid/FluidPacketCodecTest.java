@@ -135,8 +135,8 @@ class FluidPacketCodecTest {
      * the live payload as a solid with its crystal record and comes back equal; a crystal made of a component off the
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
-    @Test void theProtocolIsFluidSeventeenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-17",FluidNetwork.PROTOCOL);
+    @Test void theProtocolIsFluidEighteenWithDistinctStaticAndLivePayloads() {
+        assertEquals("fluid-18",FluidNetwork.PROTOCOL);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -154,6 +154,50 @@ class FluidPacketCodecTest {
         assertEquals(data.view().state().solids(),copy.view().state().solids(),"the dry ice and its crystal record, as sent");
         assertEquals("component_3",copy.view().state().solids().crystals().getFirst().material().crystal().component());
         assertTrue(assertThrows(IllegalArgumentException.class,()->tank.apply("CarbonDioxide")).getMessage().contains("off the fluid axis"));
+    }
+    /** fluid-18 (W7): a casing's Drive and a fan unit's Power ride the live payload and come back as sent; a bad one is refused. */
+    @Test void aCasingsDriveAndAFanUnitsPowerRoundTripTheLivePayload() {
+        var base=generatorMenu("");
+        var drive=new FluidView.Drive("MOTOR",30000,2,"RUNNING",2950,false,1,24900);
+        var power=new FluidView.Power(26700,534,.72,"");
+        var view=base.view().withDrive(drive).withPower(power);
+        var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.GENERATOR,view,base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
+        var copy=FluidNetwork.decodeLive(new Gson().toJson(live(data)));
+        assertEquals(drive,copy.view().drive());assertEquals(power,copy.view().power());
+        var none=FluidNetwork.decodeLive(new Gson().toJson(live(base)));
+        assertNull(none.view().drive());assertNull(none.view().power());
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Drive("MOTOR",-1,2,"RUNNING",0,false,0,0));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Power(0,0,1.5,""));
+    }
+    /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
+    @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
+        assertEquals("machine-1",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
+        var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
+        var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5);
+        var state=new com.wormzjl.icheme.network.MachineNetwork.StatePayload(3,view,2,"");
+        var unread=new MachineView(8,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR,"OFF SPEED",0,0,0,0,ShaftUnit.Settings.DEFAULT,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,false,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN);
+        var edit=new com.wormzjl.icheme.network.MachineNetwork.EditPayload(3,2,com.wormzjl.icheme.network.MachineNetwork.Action.APPLY,settings);
+        var open=new com.wormzjl.icheme.network.MachineNetwork.OpenDriverPayload(4,new BlockPos(-3,70,12),99);
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.encode(buffer,state);assertEquals(state,com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer));
+            var copy=new com.wormzjl.icheme.network.MachineNetwork.StatePayload(1,unread,0,"refused");
+            com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.encode(buffer,copy);
+            var back=com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer);
+            assertTrue(Double.isNaN(back.view().storeShare())&&Double.isNaN(back.view().storeSeconds()));assertEquals("refused",back.refusal());
+            com.wormzjl.icheme.network.MachineNetwork.EditPayload.STREAM_CODEC.encode(buffer,edit);assertEquals(edit,com.wormzjl.icheme.network.MachineNetwork.EditPayload.STREAM_CODEC.decode(buffer));
+            com.wormzjl.icheme.network.MachineNetwork.OpenDriverPayload.STREAM_CODEC.encode(buffer,open);assertEquals(open,com.wormzjl.icheme.network.MachineNetwork.OpenDriverPayload.STREAM_CODEC.decode(buffer));
+            // A negative speed on the wire is refused at decode.
+            buffer.clear();
+            buffer.writeVarInt(1);buffer.writeLong(7);buffer.writeEnum(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR);buffer.writeUtf("RUNNING");buffer.writeDouble(-1);
+            for(int i=0;i<3;i++)buffer.writeDouble(0);
+            buffer.writeBoolean(true);buffer.writeEnum(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED);buffer.writeDouble(0);buffer.writeDouble(0);buffer.writeDouble(0);
+            buffer.writeEnum(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE);buffer.writeDouble(0);buffer.writeDouble(0);buffer.writeVarInt(0);buffer.writeBoolean(false);
+            buffer.writeDouble(Double.NaN);buffer.writeDouble(Double.NaN);buffer.writeUtf("");buffer.writeDouble(0);for(int i=0;i<3;i++)buffer.writeDouble(Double.NaN);buffer.writeVarInt(0);buffer.writeUtf("");
+            assertThrows(io.netty.handler.codec.DecoderException.class,()->com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer));
+        }finally{buffer.release();}
     }
     /** The static part carries the axis, presets, names and kind only; the live part the view, controls and reply only; joined they are the menu state. */
     @Test void theStaticAndLivePayloadsSplitAndRejoinIntoTheSameMenuState() {
