@@ -2528,7 +2528,7 @@
   "gui.icheme.flowsheet.file.change_parked": "%1$s salió del paquete: %2$s %% molar de %3$s apartado, sin resolver.",
   "gui.icheme.flowsheet.file.change_solid": "%1$s salió del paquete: se queda en %2$s, apartado, sin resolver.",
   "gui.icheme.flowsheet.file.change_setting": "%1$s tiene un ajuste nuevo, %2$s: empieza con su valor por defecto.",
-  "gui.icheme.flowsheet.file.change_revision": "La revisión del paquete cambió de %1$s a %2$s. Resultados descartados: vuelve a ejecutar.",
+  "gui.icheme.flowsheet.file.change_revision": "Los datos de los componentes del diagrama cambiaron desde que se guardó. Resultados descartados: vuelve a ejecutar.",
   "gui.icheme.flowsheet.file.change_removed": "%s %s: esta versión no tiene ese equipo. Se conserva como marcador con sus ajustes.",
   "gui.icheme.flowsheet.file.changes_title": "%s: cambios al abrir",
   "gui.icheme.flowsheet.file.changes_foot": "El archivo en disco queda como estaba hasta que guardes.",

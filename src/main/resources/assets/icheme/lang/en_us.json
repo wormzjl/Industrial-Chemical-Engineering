@@ -2528,7 +2528,7 @@
   "gui.icheme.flowsheet.file.change_parked": "%1$s left the package: %2$s mole %% of %3$s parked, not solved.",
   "gui.icheme.flowsheet.file.change_solid": "%1$s left the package: it stays in %2$s, parked, not solved.",
   "gui.icheme.flowsheet.file.change_setting": "%1$s has a new setting, %2$s: it starts at its default.",
-  "gui.icheme.flowsheet.file.change_revision": "Package revision changed from %1$s to %2$s. Results dropped: run again.",
+  "gui.icheme.flowsheet.file.change_revision": "The data of the sheet's compounds changed since it was saved. Results dropped: run again.",
   "gui.icheme.flowsheet.file.change_removed": "%s %s: this version has no such equipment. Kept as a placeholder with its settings.",
   "gui.icheme.flowsheet.file.changes_title": "%s: changes on opening",
   "gui.icheme.flowsheet.file.changes_foot": "The file on disk stays as it was until you save.",

@@ -2528,7 +2528,7 @@
   "gui.icheme.flowsheet.file.change_parked": "%1$s はパッケージから外れました: %3$s の %2$s モル %% を退避し、求解しません。",
   "gui.icheme.flowsheet.file.change_solid": "%1$s はパッケージから外れました: %2$s に残り、退避され、求解されません。",
   "gui.icheme.flowsheet.file.change_setting": "%1$s に新しい設定 %2$s があります: 既定値から始まります。",
-  "gui.icheme.flowsheet.file.change_revision": "パッケージのリビジョンが %1$s から %2$s に変わりました。結果を破棄しました: 再実行してください。",
+  "gui.icheme.flowsheet.file.change_revision": "保存後にフローシートの成分のデータが変わりました。結果を破棄しました: 再実行してください。",
   "gui.icheme.flowsheet.file.change_removed": "%s %s: このバージョンにはその機器がありません。設定ごとプレースホルダーとして残します。",
   "gui.icheme.flowsheet.file.changes_title": "%s: 開いたときの変更",
   "gui.icheme.flowsheet.file.changes_foot": "保存するまで、ディスク上のファイルは元のままです。",

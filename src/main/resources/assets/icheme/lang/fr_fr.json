@@ -2528,7 +2528,7 @@
   "gui.icheme.flowsheet.file.change_parked": "%1$s a quitté le paquet : %2$s %% mol de %3$s mis de côté, non résolu.",
   "gui.icheme.flowsheet.file.change_solid": "%1$s a quitté le paquet : il reste dans %2$s, mis de côté, non résolu.",
   "gui.icheme.flowsheet.file.change_setting": "%1$s a un nouveau réglage, %2$s : il démarre à sa valeur par défaut.",
-  "gui.icheme.flowsheet.file.change_revision": "Révision du paquet changée de %1$s à %2$s. Résultats abandonnés : relancez le calcul.",
+  "gui.icheme.flowsheet.file.change_revision": "Les données des constituants du schéma ont changé depuis son enregistrement. Résultats abandonnés : relancez le calcul.",
   "gui.icheme.flowsheet.file.change_removed": "%s %s : cette version n'a pas cet équipement. Conservé comme substitut avec ses réglages.",
   "gui.icheme.flowsheet.file.changes_title": "%s : modifications à l'ouverture",
   "gui.icheme.flowsheet.file.changes_foot": "Le fichier sur le disque reste tel quel jusqu'à ce que vous enregistriez.",

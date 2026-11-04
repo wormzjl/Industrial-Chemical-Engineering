@@ -22,7 +22,9 @@ import java.util.Objects;
  * @param sizing   what the player keeps of sizing: sizes, modes, types and entries, by item id (sizing plan section 3.9)
  */
 public record Flowsheet(Basis basis, List<Unit> units, List<Stream> streams, FlowsheetSolver.Settings settings, SizingFacts sizing, JsonObject unknown) {
-    /** The package, by its id and declared revision, and the component ids the sheet was drawn on. */
+    /** The package, by its id, the identity of the data the sheet's compounds ran on when its file was written
+     * ({@link RevisionNotice#stamped}; a file of an earlier version holds the package's declared revision), and the component
+     * ids the sheet was drawn on. */
     public record Basis(String packageId, String revision, List<String> components, JsonObject unknown) {
         public Basis {
             Objects.requireNonNull(packageId, "packageId");
@@ -156,6 +158,11 @@ public record Flowsheet(Basis basis, List<Unit> units, List<Stream> streams, Flo
 
     /** This sheet with its sizing facts at {@code sizing}. */
     public Flowsheet with(SizingFacts sizing) {
+        return new Flowsheet(basis, units, streams, settings, sizing, unknown);
+    }
+
+    /** This sheet on {@code basis}. */
+    public Flowsheet with(Basis basis) {
         return new Flowsheet(basis, units, streams, settings, sizing, unknown);
     }
 

@@ -2528,7 +2528,7 @@
   "gui.icheme.flowsheet.file.change_parked": "%1$s 已不在物性包中：%3$s 中 %2$s 摩尔 %% 被搁置，不参与求解。",
   "gui.icheme.flowsheet.file.change_solid": "%1$s 已不在物性包中：它留在 %2$s 中，被搁置，不参与求解。",
   "gui.icheme.flowsheet.file.change_setting": "%1$s 有新设定 %2$s：从默认值开始。",
-  "gui.icheme.flowsheet.file.change_revision": "物性包版本从 %1$s 变为 %2$s。结果已清除：请重新运行。",
+  "gui.icheme.flowsheet.file.change_revision": "自保存以来，流程图所用组分的数据已变更。结果已清除：请重新运行。",
   "gui.icheme.flowsheet.file.change_removed": "%s %s：这个版本没有这种设备。已保留为占位单元及其设定。",
   "gui.icheme.flowsheet.file.changes_title": "%s：打开时的更改",
   "gui.icheme.flowsheet.file.changes_foot": "在你保存之前，磁盘上的文件保持不变。",

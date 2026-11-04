@@ -37,6 +37,28 @@ public final class RevisionNotice {
         return Map.of(network, catalog.restrict(network, SheetCompounds.of(sheet, catalog)).fluidRevision(network));
     }
 
+    /** The identity of the data {@code sheet}'s compounds run on: its view's token ({@link #tokens(Flowsheet, MaterialCatalog)}). */
+    public static String data(Flowsheet sheet, MaterialCatalog catalog) {
+        return tokens(sheet, catalog).values().iterator().next();
+    }
+
+    /**
+     * {@code sheet} as its file holds it: its basis names the network package and the identity of the data its compounds run on
+     * ({@link #data}), which the file-open notice compares ({@code FileColumns.changes}). An edit to a package record, or to a
+     * compound the sheet does not feed, leaves it standing.
+     */
+    public static Flowsheet stamped(Flowsheet sheet, MaterialCatalog catalog) {
+        String network = FluidMaterialCatalog.networkPackage(catalog), data = data(sheet, catalog);
+        var basis = sheet.basis();
+        if (basis.packageId().equals(network) && basis.revision().equals(data)) return sheet;
+        return sheet.with(new Flowsheet.Basis(network, data, basis.components(), basis.unknown().deepCopy()));
+    }
+
+    /** Whether the data {@code sheet}'s compounds run on moved since its file was written ({@link #stamped}). */
+    public static boolean moved(Flowsheet sheet, MaterialCatalog catalog) {
+        return !sheet.basis().revision().equals(data(sheet, catalog));
+    }
+
     /** The packages whose data differ between client and server; none with no word from a server, which is what a single player has. */
     public static List<String> differing(Map<String, String> client, @Nullable Map<String, String> server) {
         var differ = new ArrayList<String>();
