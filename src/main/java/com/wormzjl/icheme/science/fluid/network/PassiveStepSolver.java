@@ -62,7 +62,8 @@ public final class PassiveStepSolver {
      * term ({@link #checkConservation}). A numerical regularisation sized to the flow: its mixing lag at full flow is tau.
      */
     static final double HOLDUP_TAU=.05;
-    /** The Newton's relative tolerance on its scaled rows (a tenth of it with a small liquid-full headspace); the solid
+    /** The Newton's relative tolerance on its scaled rows (a taut vessel's weighted by the pressure they imply,
+     * {@link Equations#rowWeights}); the solid
      * events read a flow within it of the island's largest as roundoff ({@code SolidEventIntegrator.still}). */
     static final double NEWTON_TOLERANCE=1e-9;
     /**
@@ -488,22 +489,10 @@ public final class PassiveStepSolver {
             if(workspace==null){if(workspaces.size()>=4)workspaces.remove(workspaces.keySet().iterator().next());var previous=structures.get(structure);workspace=previous==null?new SparseNewton.Workspace(ownership):previous.forkPreconditioner();workspaces.put(key,workspace);}
             if(structures.size()>=4&&!structures.containsKey(structure))structures.remove(structures.keySet().iterator().next());structures.put(structure,workspace);
             SparseNewton.Result numerical;
-            // Small headspaces amplify inventory roundoff into pressure and flow errors, so such nodes are solved more
-            // tightly. Only a vessel whose wall carries it has a headspace (decision D54: a slack vessel is at the ambient,
-            // a dry one holds no fluid); a generator, a void and a junction own no roundoff and no row, so none of them may
-            // tighten the tolerance every other node is held to (a filter's two junctions seeded liquid-full demanded 1e-10
-            // of a tank that floors its water saturation row near 1.03e-10, and the island refined its step to nothing).
-            // A port keeps its say: a finite reservoir held fixed for one rate evaluation.
-            boolean smallHeadspace=false;
-            for(int i=0;i<seeds.size();i++) {
-                var node=graph.reservoirs().get(i);var kind=node.kind();
-                if(kind!=PassiveNetwork.NodeKind.RESERVOIR&&kind!=PassiveNetwork.NodeKind.PORT||dry(node,seeds.get(i))||holdsNoFluid(node))continue;
-                if(seeds.get(i).vaporVolume()/seeds.get(i).volume()<.01&&PhaseLayout.taut(seeds.get(i),node.inventory().wallCapacity())){smallHeadspace=true;break;}
-            }
-            // 1e-11 stalls on caloric cancellation in nearly liquid-full water with trace N2.
-            // Keep two orders of margin to the unchanged 1e-8 full-equation gate; every final
-            // reconstruction and the independent interval accuracy/accounting checks still run.
-            double tolerance=smallHeadspace?NEWTON_TOLERANCE/10:NEWTON_TOLERANCE;
+            // One tolerance for every island: a taut vessel's rows carry the precision its pressure needs as weights in the
+            // norm the Newton converges on (owner decision D12, {@link Equations#rowWeights}), in place of the tenth of
+            // the tolerance a small headspace used to impose on the whole island.
+            double tolerance=NEWTON_TOLERANCE;
             try{numerical=SparseNewton.solve(equations,equations.initial(),new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance,1e-6,24),checkpoint,workspace);}
             catch(SparseNewton.Nonconvergence failure) {
                 if(failure.lastVariables()==null)throw failure;
@@ -762,7 +751,8 @@ public final class PassiveStepSolver {
         var graph=equations.graph;var pipe=graph.pipes().get(i);double rho=suction.density;var next=mode;
         if(pipe.control() instanceof FlowControl.Mover pump) {
             double band=shutoffBand(equations.pressureScales[i],tolerance);
-            // A mover on its own law (batch 2026-11-03-rotating-machinery): it closes on a reverse drive, opens where its rise at
+            // A mover on its own law (batch 2026-11-03-rotating-machinery): it closes on a reverse drive (its check valve; the
+            // curve itself reaches zero flow at its shutoff, owner decision D12), opens where its rise at
             // no flow beats the demand (a set-flow pump's rise on its supply, {@link #riseDensity}), goes on its suction limit
             // where its law holds its suction below the vapour pressure of the water it draws (owner decision D59 (4)), and
             // leaves it where its law cannot hold the point the suction line delivers.
@@ -1303,6 +1293,15 @@ public final class PassiveStepSolver {
         for(int edge=0;edge<q.length;edge++)q[edge]=initialMassFlow(graph,graph.pipes().get(edge));
         return q;
     }
+    /** The smallest velocity cap (kg/s) of the links on the suction walk of the mover on connection {@code edge}
+     * ({@link InletPhase#walk}), each on the stream its donor end draws ({@link #massFlowLimit}); infinite for a mover that
+     * draws straight from its first node. A set-flow mover starts on its law at no more than it (owner decision D12, E5 a). */
+    private double suctionCap(PassiveNetwork graph,int edge) {
+        var walk=InletPhase.walk(graph,edge);double cap=Double.POSITIVE_INFINITY;
+        for(int k=0;k<walk.links().length;k++){var link=graph.pipes().get(walk.links()[k]);int donor=walk.donors()[k];
+            cap=Math.min(cap,massFlowLimit(link,graph.reservoirs().get(donor).state(),link.portAt(donor)));}
+        return cap;
+    }
     /**
      * The connection flows and actuator heads a pass with this active set starts from, the whole of
      * {@link Equations#buildInitial}'s edge half; it lives here because {@link #closeIllegalStarts} reads it before the
@@ -1340,6 +1339,12 @@ public final class PassiveStepSolver {
             // Decision D54: a dry end gives nothing, so an estimate out of one starts at rest (A190's rule for a carried flow).
             flows[i]=outOfDryEnd(graph,pipe,estimate[i])?0:estimate[i];
         }
+        // Owner decision D12 (E5 a, reading A12): a set-flow mover on its law starts at no more than the smallest velocity cap
+        // on its suction walk ({@link #suctionCap}), whichever start it took: a seed, not a mode (F1's start on the head limit,
+        // restated for the law). A pump whose 1 cm suction line passes 3 kg/s pulled its suction junction to the hull floor as
+        // liquid in its first pass, and every step size stalled (bundled random seed 952).
+        for(int i=0;i<graph.pipes().size();i++)if(flows[i]>0&&!boundaryClosed[i]&&modes.get(i)==FlowControl.Mode.MOVER_LAW
+                &&graph.pipes().get(i).control() instanceof FlowControl.Mover mover&&!(mover instanceof FlowControl.Machine))flows[i]=Math.min(flows[i],suctionCap(graph,i));
         if(flashRestated!=null&&seeds!=null)restateFlashFlows(graph,modes,boundaryClosed,seeds,flows);
         if(!hasSolids(graph)&&graph.pipes().stream().noneMatch(pipe->pipe.filter()!=null))return;
         int nodes=graph.reservoirs().size();int[] degree=new int[nodes];
@@ -3713,6 +3718,27 @@ public final class PassiveStepSolver {
          * rejected: the scale would enter every row's derivative with a kink.
          */
         final double[] pressureScales;
+        /**
+         * Owner decision D12 (E8, reading A11): the weight of each row in the norm this pass's Newton converges and
+         * descends on ({@link #residualNorm}), null where every row's is 1; the rows themselves, and the equation gate that
+         * reads them, are unchanged. A taut vessel's pressure is its contents' stiffness {@code B = V / sum(V_phase
+         * kappa_phase)} times its volume residual ({@link FluidThermodynamics#isothermalAcousticBound}: {@code B = m c^2 / V}),
+         * so its wall row at the tolerance leaves {@code B * 1e-9} in its pressure and a balance row stated over the
+         * amount {@code s} leaves {@code B * 1e-9 * s / n}, where the hydraulic rows the gate checks are stated over
+         * {@code max(1e5, P)} ({@link #pressureScales}). Water at 573.6 kPa ({@code B} 2.27 GPa) reads 2.3 Pa where the
+         * gate allows 0.0057 Pa: a set-flow pump near its shutoff carried 3.1e-9 kg/s into a closed tank full of water
+         * (6.4e-12 of its amount), the carried point met the tolerance at zero iterations, the booking moved the tank's
+         * pressure 0.023 Pa and the gate refused 516 of 1024 attempts (bundled seed 896). So each of these rows is weighted
+         * by the pressure it implies over {@code max(1e5, P)}, at least 1: the wall row by {@code B / max(1e5, P)}, a
+         * balance row by that times {@code s / n}, so a trace stated over its own amount keeps its own resolution. A gas
+         * vessel ({@code B} about {@code P}) reads 1; a slack vessel's wall row states its pressure itself and a junction
+         * owns no wall, so neither is weighted (a filter's two junctions seeded liquid-full, held to a tank's tolerance,
+         * demanded 1e-10 of a tank that floors its water saturation row near 1.03e-10, and the island refined its step to
+         * nothing). The energy row of a vessel whose headspace is under 1 % keeps the tenth of the tolerance the whole
+         * island used to be solved to: its pressure through the thermal pressure coefficient asks more, but 1e-11 stalls
+         * on caloric cancellation in nearly liquid-full water with trace N2. Weights are the seed's, constant for the pass.
+         */
+        final double[] rowWeights;
         final double[] fixedOpenings=heldOpenings.clone();
         /** This pass's starting point, built once: {@link #junctionDonorFirst} is read off it. */
         final double[] initialPoint;
@@ -3844,6 +3870,7 @@ public final class PassiveStepSolver {
                 var pipe=graph.pipes().get(edge);
                 pressureScales[edge]=Math.max(1e5,Math.max(seeds.get(pipe.first()).pressure(),seeds.get(pipe.second()).pressure()));
             }
+            rowWeights=rowWeights();
             // A junction no open connection reaches keeps the pressure it had (PhaseLayout.junctionRows). The same holds
             // for a sealed pocket of junctions (hold F8; see pockets): every connection on its boundary is closed, so its
             // members' mass rows sum to zero identically and its pressure level has no row. The pocket's first member
@@ -4477,6 +4504,37 @@ public final class PassiveStepSolver {
             decode(x);double[] f=new double[size];
             assemble(x,cachedStates,cachedTransport,cachedPrepared,f);
             return f;
+        }
+        /** The largest row, each times its {@link #rowWeights} weight. */
+        @Override public double residualNorm(double[] residual) {
+            if(rowWeights==null)return SparseNewton.Equations.super.residualNorm(residual);
+            double maximum=0;for(int row=0;row<residual.length;row++)maximum=Math.max(maximum,rowWeights[row]*Math.abs(residual[row]));
+            return maximum;
+        }
+        /** {@link #rowWeights} from this pass's seeds and layouts. The amount {@code s} each balance row is stated over is read
+         * off the row itself: its change when every target moves by one mole is {@code -1/s}. */
+        private double[] rowWeights() {
+            double[] weights=null;
+            for(int node=0;node<layout.length;node++) {
+                var reservoir=graph.reservoirs().get(node);var kind=reservoir.kind();var seed=seeds.get(node);
+                if(layout[node]==null||kind!=PassiveNetwork.NodeKind.RESERVOIR&&kind!=PassiveNetwork.NodeKind.PORT||holdsNoFluid(reservoir))continue;
+                double capacity=reservoir.inventory().wallCapacity();
+                if(!PhaseLayout.taut(seed,capacity))continue;
+                double stiffness;
+                try{double speed=model.isothermalAcousticBound(seed);stiffness=seed.mass()*speed*speed/seed.volume()/Math.max(1e5,seed.pressure());}
+                catch(IllegalArgumentException outsideDomain){continue;}
+                if(!Double.isFinite(stiffness))continue;
+                var rows=layout[node];int balances=rows.componentBalanceCount();double[] x=rows.encode(seed),targets=new double[oldAmounts[node].length];
+                double[] at=new double[rows.size()],shifted=new double[rows.size()];
+                rows.balanceRows(seed,targets,0,capacity,Double.NaN,at,0,x,null);
+                Arrays.fill(targets,1);rows.balanceRows(seed,targets,0,capacity,Double.NaN,shifted,0,x,null);
+                if(weights==null){weights=new double[size];Arrays.fill(weights,1);}
+                int offset=offsets[node];
+                for(int row=0;row<balances;row++){double perMole=at[row]-shifted[row];if(perMole>0&&Double.isFinite(perMole))weights[offset+row]=Math.max(1,stiffness/(rows.amountScale()*perMole));}
+                if(seed.vaporVolume()/seed.volume()<.01)weights[offset+balances]=10;
+                weights[offset+balances+1]=Math.max(1,stiffness);
+            }
+            return weights;
         }
         /**
          * One complete residual from already decoded node states. The three passes are the whole
