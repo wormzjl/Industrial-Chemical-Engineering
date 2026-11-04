@@ -35,3 +35,4 @@ Status: Archived 2026-10-23. Index: [../INDEX.md](../INDEX.md).
 ### History
 
 - Archived 2026-10-23 (target integrated at `ab35ef47`; ten local changes preserved; target jar passed, client running; no tests)
+- 2026-11-04: `pump_running.ogg` and `compressor_running.ogg` re-authored without the motor hum by `tools/machine-sounds/` (batch 2026-11-03-rotating-machinery, D26); this script makes the 2026-10-23 versions. Its `python-deps/` stays the authoring environment of both.

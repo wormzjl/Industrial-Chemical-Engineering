@@ -8,6 +8,8 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.flowsheet.SizingCoverageTest;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
@@ -41,10 +43,29 @@ class ConstructorColumnTest {
     }
 
     private static ConstructorColumn.Design design(Form form, double diameter, int length, int support, int forward, int right, int up) {
+        return design(form, diameter, length, support, forward, right, up, false);
+    }
+
+    /**
+     * A machine's design point at these sizes; {@code largest}, every setting stepped to its end, the most poles, the
+     * variable drive and VHP steam (the widest values); {@link MachineDuty#NONE} for another form.
+     */
+    private static MachineDuty duty(Form form, double size, int length, boolean largest) {
+        if (!form.designed() || !UnitDesign.of(form.kind()).hasDuty()) return MachineDuty.NONE;
+        var u = UnitDesign.of(form.kind());
+        var d = u.duty(size, length);
+        if (!largest) return d;
+        if (d.steam() != null) d = d.withSteam(MachineDuty.Steam.VHP);
+        for (var setting : List.of("flow", "head", "power", "exhaust")) d = u.step(d, setting, 1000);
+        if (d.poles() != 0) d = d.withPoles(form.kind() == EquipmentShape.Kind.PUMP ? 4 : 8);
+        return form.kind() == EquipmentShape.Kind.MOTOR ? d.withDrive(MachineDuty.Drive.VARIABLE) : d;
+    }
+
+    private static ConstructorColumn.Design design(Form form, double diameter, int length, int support, int forward, int right, int up, boolean largest) {
         var outlet = form == Form.TRICKLE_BED_REACTOR ? new ConstructorColumn.Outlet(0b1011, 3, STANDING) : new ConstructorColumn.Outlet(1, 0, STANDING);
         var column = form.column() ? new ConstructorColumn.Imported(diameter, length + 2, length / 2 + 1) : null;
         return new ConstructorColumn.Design(form, diameter, length, support, forward, right, up, new ProcessUnit.Bank(right == 0 ? 1 : ProcessUnit.Bank.MAX_PARALLEL,
-                right == 0 ? 1 : ProcessUnit.Bank.MAX_SERIES), column, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE);
+                right == 0 ? 1 : ProcessUnit.Bank.MAX_SERIES), column, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE, duty(form, diameter, length, largest));
     }
 
     /** Every form at its least and its largest sizes and places, the right and up shifts at their least. */
@@ -54,7 +75,7 @@ class ConstructorColumnTest {
             if (form.designed()) {
                 var d = UnitDesign.of(form.kind());
                 out.add(design(form, d.minSize(), d.minLength(d.minSize()), 1, 1, 0, 0));
-                out.add(design(form, d.maxSize(), d.maxLength(d.maxSize()), 16, VesselPlacement.MAX_FORWARD, -VesselPlacement.MAX_SHIFT, -VesselPlacement.MAX_SHIFT));
+                out.add(design(form, d.maxSize(), d.maxLength(d.maxSize()), 16, VesselPlacement.MAX_FORWARD, -VesselPlacement.MAX_SHIFT, -VesselPlacement.MAX_SHIFT, true));
             } else {
                 out.add(design(form, 0.5, 1, 1, 1, 0, 0));
                 out.add(design(form, form.column() ? 15 : 10, 64, 16, VesselPlacement.MAX_FORWARD, -VesselPlacement.MAX_SHIFT, -VesselPlacement.MAX_SHIFT));
@@ -302,6 +323,18 @@ class ConstructorColumnTest {
         assertTrue(cooler.containsAll(List.of("parallel", "series", "support")));
         var pump = ConstructorColumn.design(design(Form.PUMP, 0.1, 1, 0, 3, 0, 0), t);
         assertFalse(slots(pump).contains("support"), "a pump stands at grade");
+        // A machine's design point (option A): its settings stepped, the sizes they give shown, its classes latched keys.
+        assertEquals(List.of("flow", "flow-", "flow+", "head", "head-", "head+", "size", "poles:2", "poles:4"), slots(pump).subList(0, 9));
+        assertTrue(buttons(pump).get("poles:2").latched() && buttons(pump).get("poles:4").active());
+        var motor = ConstructorColumn.design(design(Form.MOTOR, 250, 1, 2, 3, 0, 0), t);
+        assertEquals(List.of("power", "power-", "power+", "support", "support-", "support+", "poles:2", "poles:4", "poles:6", "poles:8", "drive:fixed", "drive:variable"),
+                slots(motor).subList(0, 12));
+        assertTrue(buttons(motor).get("poles:4").latched() && buttons(motor).get("drive:fixed").latched() && buttons(motor).get("drive:variable").active());
+        var turbine = ConstructorColumn.design(design(Form.STEAM_TURBINE, 1, 1, 0, 3, 0, 0), t);
+        assertEquals(List.of("power", "power-", "power+", "size", "support", "support-", "support+", "steam:mp", "steam:hp", "steam:vhp", "exhaust", "exhaust-", "exhaust+"),
+                slots(turbine).subList(0, 13));
+        assertTrue(buttons(turbine).get("steam:hp").latched() && buttons(turbine).get("steam:vhp").active());
+        assertFalse(slots(ConstructorColumn.design(design(Form.GEARBOX, 250, 1, 0, 3, 0, 0), t)).contains("poles:2"), "a gearbox has no speed of its own");
         assertEquals(List.of("paint", "build"), pump.footer().stream().map(Column.Button::key).toList(), "a unit has no Nozzles page");
         var reactor = buttons(ConstructorColumn.design(design(Form.TRICKLE_BED_REACTOR, 2, 2, 3, 3, 0, 0), t));
         assertTrue(reactor.get("outlet:3").latched() && reactor.get("outlet:0").active() && !reactor.get("outlet:2").active() && !reactor.get("outlet:2").latched(),
@@ -357,7 +390,7 @@ class ConstructorColumnTest {
                 var small = designs.get(i);
                 var large = designs.get(i + 1);
                 var moved = new ConstructorColumn.Design(small.form(), large.diameter(), large.length(), large.support(), large.forward(), large.right(), large.up(), large.bank(),
-                        large.column(), small.outlet(), small.reach(), small.towerBank());
+                        large.column(), small.outlet(), small.reach(), small.towerBank(), large.duty());
                 assertEquals(widgets(ConstructorColumn.design(small, t), width), widgets(ConstructorColumn.design(moved, t), width), small.form() + " at " + width);
             }
             for (boolean horizontal : new boolean[]{false, true}) {

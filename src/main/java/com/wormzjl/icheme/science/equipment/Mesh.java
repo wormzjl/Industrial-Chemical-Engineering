@@ -43,7 +43,28 @@ public final class Mesh {
         /** Neutral, unpainted level-instrument scale. */
         GAUGE_SCALE(1, -1),
         /** A tower's baked sprites, each a whole panel: casing, louvers, fan stack, deck, the spray seen through a fan, a natural shell's concrete. */
-        TOWER_PANEL(4, Paint.BODY), TOWER_LOUVER(4, Paint.BODY), TOWER_STACK(2, Paint.BODY), TOWER_DECK(4, -1), TOWER_DRIFT(4, -1), TOWER_CONCRETE(16, -1), TOWER_FILL(64, -1), TOWER_FLOOR(80, -1);
+        TOWER_PANEL(4, Paint.BODY), TOWER_LOUVER(4, Paint.BODY), TOWER_STACK(2, Paint.BODY), TOWER_DECK(4, -1), TOWER_DRIFT(4, -1), TOWER_CONCRETE(16, -1), TOWER_FILL(64, -1), TOWER_FLOOR(80, -1),
+        /**
+         * A pump's baked sprites (batch 2026-11-03-rotating-machinery, {@code tools/pump-sprites}): its coated cast surface
+         * (tiled by two metres, so its tiles meet at block faces), its volute's crown, its finned bearing housing, a bolted
+         * joint's rim and face, its baseplate's drain-rim deck and channel sides. All but the casting are stretched once
+         * over their part ({@link Mesh#band}, {@link Mesh#disc}).
+         */
+        PUMP_CASTING(2, Paint.BODY), PUMP_VOLUTE(.5, Paint.BODY), PUMP_FINS(1, Paint.BODY), PUMP_JOINT(1, Paint.BODY), PUMP_DISC(1, Paint.BODY),
+        PUMP_BASE(1, Paint.STRUCTURE), PUMP_CHANNEL(1, Paint.STRUCTURE),
+        /**
+         * A coupling guard's framed expanded-metal panel in safety yellow, one sprite a panel ({@code ProcessUnit.guard}); its
+         * own sprite, so {@link #GUARD}'s plain yellow (valve handles, labels, derricks) stays as it is.
+         */
+        COUPLING_GUARD(1, -1),
+        /** Bright machined steel: every turning shaft and coupling hub, as the shaft block draws its shaft ({@code shaft_steel}). */
+        SHAFT(1, -1),
+        /**
+         * A TEFC motor's baked sprites, neutral greys its paint tints (owner request 2026-11-04): its finned frame and nameplate
+         * stretched over its body, its end shield's face, a large motor's bolted panels (tiled by the metre), the plain
+         * cast parts (cowl, terminal box, feet, caps).
+         */
+        MOTOR_FRAME(1, Paint.BODY), MOTOR_SHIELD(1, Paint.BODY), MOTOR_PANEL(1, Paint.BODY), MOTOR_PLAIN(1, Paint.BODY);
 
         private final double period;
         private final int channel;
@@ -500,6 +521,36 @@ public final class Mesh {
             if (polygon.size() < 3) continue;
             add(polygon, f.along((z0 + z1) / 2), shading, material, around, along);
         }
+    }
+
+    /**
+     * The side of a frustum as {@link #frustum} draws it from {@code z0} to {@code z1} (z0 &lt; z1), its sprite stretched
+     * once round it and once along it (a pump's finned bearing housing, a bolted joint's rim): a baked sprite of the whole
+     * part, never cut where a tiled one would cross a tile.
+     */
+    void band(Frame f, double r0, double r1, double z0, double z1, int n, Material material) {
+        double chord = 2 * Math.max(r0, r1) * DeterministicMath.sin(Math.PI / n), slope = (r0 - r1) / Math.max(EPS, z1 - z0);
+        Shading shading = r0 == r1 ? new Radial(f.origin, f.axis) : new Cone(f.origin, f.axis, slope);
+        var along = new Uv(f.along(z0), f.axis, 0, z1 - z0);
+        double rWide = Math.max(r0, r1), zWide = r0 >= r1 ? z0 : z1;
+        for (int i = 0; i < n; i++) {
+            double a0 = 2 * Math.PI * i / n, a1 = 2 * Math.PI * (i + 1) / n;
+            var w0 = f.at(a0, rWide, zWide);
+            var around = new Uv(w0, unit(sub(f.at(a1, rWide, zWide), w0)), i * chord, n * chord);
+            add(List.of(f.at(a0, r0, z0), f.at(a1, r0, z0), f.at(a1, r1, z1), f.at(a0, r1, z1)), f.along((z0 + z1) / 2), shading, material, around, along);
+        }
+    }
+
+    /**
+     * A flat disc of {@code n} corners and radius {@code r} at frame station {@code z}, facing along the axis
+     * ({@code sign} +1) or against it, its sprite stretched once across it (a bolted cover, a flange's back): one polygon.
+     */
+    void disc(Frame f, double r, double z, int n, int sign, Material material) {
+        var polygon = new ArrayList<double[]>(n);
+        for (int i = 0; i < n; i++) polygon.add(f.at(2 * Math.PI * i / n, r, z));
+        var centre = f.along(z);
+        add(polygon, new double[]{centre[0] - sign * f.axis[0], centre[1] - sign * f.axis[1], centre[2] - sign * f.axis[2]}, FLAT, material,
+                new Uv(centre, f.ref, r, 2 * r), new Uv(centre, f.side(), r, 2 * r));
     }
 
     /** The inside of a tube (seen from its axis), radius {@code r}, from {@code z0} to {@code z1}. */

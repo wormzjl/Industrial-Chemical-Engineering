@@ -24,6 +24,7 @@ import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.equipment.VesselPlacement;
@@ -82,6 +83,7 @@ public final class GuiPrototypes {
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         out.addAll(OperationPrototypes.operation());
         out.add(titleStrip());
+        out.addAll(machines());
         return out;
     }
 
@@ -135,6 +137,28 @@ public final class GuiPrototypes {
                         strip.name() == null ? "none" : Integer.toString(strip.name().w()));
             }
         });
+    }
+
+    // ---- A machine's design point (batch 2026-11-03-rotating-machinery, option A, owner pick 2026-11-04) ----
+
+    /** The shipped design page of a pump, a motor and a steam turbine: Duty, then Speed and Drive or Inlet steam and Exhaust, then Place. */
+    static List<Prototype> machines() {
+        var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
+        var one = com.wormzjl.icheme.science.equipment.TowerBank.ONE;
+        var bank = new ProcessUnit.Bank(1, 1);
+        var pump = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.PUMP, UnitDesign.of(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.PUMP).size(MachineDuty.pump(200, 100, 2)), 1, 0, 3, 0, 0, bank, null, outlet, 16, one,
+                MachineDuty.pump(200, 100, 2)), DIALOG);
+        var motor = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.MOTOR, 250, 1, 2, 3, 0, 0, bank, null, outlet, 16, one,
+                MachineDuty.motor(250, 4, MachineDuty.Drive.FIXED)), DIALOG);
+        var turbine = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.STEAM_TURBINE, UnitDesign.of(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.STEAM_TURBINE).size(MachineDuty.turbine(2500, MachineDuty.Steam.HP, 450)), 1, 2, 3, 0, 0, bank, null, outlet, 16, one,
+                MachineDuty.turbine(2500, MachineDuty.Steam.HP, 450)), DIALOG);
+        return List.of(
+                new Prototype("equipment-constructor-pump", 464, 254, (d, s) -> constructorDoor(d, pump, "Pump", "change",
+                        DIALOG.get(CONSTRUCTOR + "pump_flow", "200", "100", "78"), Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-motor", 464, 254, (d, s) -> constructorDoor(d, motor, "Motor", "change",
+                        DIALOG.get(CONSTRUCTOR + "motor.rating", "250", "1,500", "0.75"), Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-turbine", 464, 254, (d, s) -> constructorDoor(d, turbine, "Steam turbine", "change",
+                        DIALOG.get(CONSTRUCTOR + "steam_turbine.power", "2,500", "4,200", "450"), Palette.ACCENT, Map.of()), true));
     }
 
     // ---- The column calculator: the shipped CalculatorColumn on its door (GUI_REVIEW.md order 5) ----

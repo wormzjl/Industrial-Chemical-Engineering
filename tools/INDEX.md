@@ -12,6 +12,9 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [device-names/](device-names/README.md) | Nameplate placement probe and plate-look renders | `2026-11-02-process-simulator` | In use since 2026-11-03 |
 | [simulator-bench/](simulator-bench/README.md) | Process simulator CPU, allocation, heap and draw-call bench on the bundled crude unit, with JFR | `2026-11-02-process-simulator` | In use since 2026-11-04 |
 | [rotating-machinery/](rotating-machinery/README.md) | Quick check of the machine-law forms and the centrifugal harness variant | `2026-11-03-rotating-machinery` | In progress since 2026-11-04 |
+| [pump-sprites/](pump-sprites/README.md) | Baked sprites of pumps, couplings and motors; their probes and renders | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In progress since 2026-11-03 |
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |
 | [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |

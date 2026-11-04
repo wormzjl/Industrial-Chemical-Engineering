@@ -4,6 +4,7 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Paint;
@@ -43,10 +44,11 @@ import java.util.Optional;
  * player, the choice with {@link ImportAnswer}, as a column template does ({@link TemplatePayload}, protocol 14). A cooling
  * tower's cell bank rides on the form (protocol 15). A device's name (protocol 17, N1): {@link Rename} names a placed
  * structure or one-block device, and {@link ImportChoice} carries the name the Import page listed, which the built
- * structure takes.
+ * structure takes. A machine's design point rides on the constructor's design too (protocol 18, batch
+ * 2026-11-03-rotating-machinery).
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-17";
+    public static final String PROTOCOL = "equipment-18";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
     /** A process simulator's designs are imported from within this many blocks of the constructor. */
@@ -66,16 +68,16 @@ public final class EquipmentNetwork {
      * {@code connections} its drum's {@link EquipmentShape.Connection#encode}, {@code paint} its {@link Paint#encode},
      * {@code bank} an air cooler's {@link ProcessUnit.Bank#encode}, {@code boot} whether a lying drum has one,
      * {@code outlet} its bottom outlet's quarter turns from the front, {@code turns} its column's turned nozzles
-     * ({@link ColumnTrays#encodeTurns})), and what to do with it.
+     * ({@link ColumnTrays#encodeTurns}), a machine's design point {@code duty}), and what to do with it.
      */
     public record ConstructorPayload(BlockPos position, double diameter, int tangentLength, int form, int support, int forward, int right, int up,
-                                     int[] trays, int[] connections, int[] paint, int[] bank, boolean boot, int outlet, int[] turns, Action action, int[] towerBank) implements CustomPacketPayload {
+                                     int[] trays, int[] connections, int[] paint, int[] bank, boolean boot, int outlet, int[] turns, Action action, int[] towerBank, MachineDuty duty) implements CustomPacketPayload {
         public static final Type<ConstructorPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_constructor"));
         public static final StreamCodec<RegistryFriendlyByteBuf, ConstructorPayload> STREAM_CODEC = new StreamCodec<>() {
             public ConstructorPayload decode(RegistryFriendlyByteBuf b) {
                 return new ConstructorPayload(b.readBlockPos(), b.readDouble(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(),
                         b.readVarInt(), b.readVarIntArray(ColumnTrays.MAX_ENCODED), b.readVarIntArray(3 * EquipmentShape.MAX_CONNECTIONS), b.readVarIntArray(2), b.readVarIntArray(2), b.readBoolean(), b.readVarInt(),
-                        b.readVarIntArray(3 * ColumnTrays.MAX_TURNS), b.readEnum(Action.class), b.readVarIntArray(2));
+                        b.readVarIntArray(3 * ColumnTrays.MAX_TURNS), b.readEnum(Action.class), b.readVarIntArray(2), readDuty(b));
             }
 
             public void encode(RegistryFriendlyByteBuf b, ConstructorPayload p) {
@@ -95,6 +97,7 @@ public final class EquipmentNetwork {
                 b.writeVarInt(p.outlet);
                 b.writeVarIntArray(p.turns);
                 b.writeEnum(p.action);b.writeVarIntArray(p.towerBank);
+                writeDuty(b, p.duty);
             }
         };
 
@@ -102,7 +105,7 @@ public final class EquipmentNetwork {
             var p = design.placement();
             return new ConstructorPayload(position, design.diameter(), design.tangentLength(), design.form().ordinal(), design.support(), p.forward(), p.right(), p.up(),
                     design.trays().encode(), EquipmentShape.Connection.encode(design.connections()), design.paint().encode(), design.bank().encode(), design.boot(), design.outlet(),
-                    ColumnTrays.encodeTurns(design.turns()), action,design.towerBank().encode());
+                    ColumnTrays.encodeTurns(design.turns()), action,design.towerBank().encode(), design.duty());
         }
 
         /**
@@ -115,7 +118,7 @@ public final class EquipmentNetwork {
             if (form < 0 || form >= forms.length) throw new IllegalArgumentException("Unknown form " + form);
             return stored.keepingColumn(new EquipmentConstructorBlockEntity.Design(diameter, tangentLength, forms[form], support, new VesselPlacement(forward, right, up),
                     ColumnTrays.decode(trays), EquipmentShape.Connection.decode(connections), Paint.decode(paint), ProcessUnit.Bank.decode(bank), boot, outlet, null,
-                    ColumnTrays.decodeTurns(turns),com.wormzjl.icheme.science.equipment.TowerBank.decode(towerBank)));
+                    ColumnTrays.decodeTurns(turns),com.wormzjl.icheme.science.equipment.TowerBank.decode(towerBank), duty));
         }
 
         @Override
@@ -259,6 +262,27 @@ public final class EquipmentNetwork {
         if (player.distanceToSqr(at.getCenter()) > reach * reach) return;
         if (!EquipmentStructure.rename(level, vessel, rename.name()))
             player.displayClientMessage(Component.translatable("message.icheme.device.rename_unloaded"), true);
+    }
+
+    /** A design point on the wire: its numbers, its drive, its steam class (0 for none, else its ordinal plus one). */
+    private static void writeDuty(RegistryFriendlyByteBuf b, MachineDuty d) {
+        b.writeDouble(d.flow());
+        b.writeDouble(d.head());
+        b.writeDouble(d.polytropicHead());
+        b.writeDouble(d.power());
+        b.writeVarInt(d.poles());
+        b.writeEnum(d.drive());
+        b.writeVarInt(d.steam() == null ? 0 : d.steam().ordinal() + 1);
+        b.writeDouble(d.exhaust());
+    }
+
+    private static MachineDuty readDuty(RegistryFriendlyByteBuf b) {
+        double flow = b.readDouble(), head = b.readDouble(), polytropicHead = b.readDouble(), power = b.readDouble();
+        int poles = b.readVarInt();
+        var drive = b.readEnum(MachineDuty.Drive.class);
+        int steam = b.readVarInt();
+        if (steam < 0 || steam > MachineDuty.Steam.values().length) throw new IllegalArgumentException("Unknown steam class " + steam);
+        return new MachineDuty(flow, head, polytropicHead, power, poles, drive, steam == 0 ? null : MachineDuty.Steam.values()[steam - 1], b.readDouble());
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {

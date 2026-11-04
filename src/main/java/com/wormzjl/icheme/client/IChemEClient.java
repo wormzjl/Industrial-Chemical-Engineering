@@ -30,6 +30,7 @@ public final class IChemEClient {
         TankRenderer.clear();
         SightGlassRenderer.clear();
         MoverSounds.clear();
+        DriverSounds.clear();
     }
 
 }

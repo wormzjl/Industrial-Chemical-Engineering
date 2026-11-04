@@ -307,8 +307,8 @@ Prototypes first (`gui-creation` skill), owner picks, then build.
 
 ## 10. Saves (AGENTS.md "Saves and data formats")
 
-- Fluid facts schema 8: the new device kinds, the machine's design point and law kind, the driver's settings, the FE buffer's content (energy the player put in), the gearbox ratio, the creative motor's set points, and each pump's and compressor's health, constructed or in-line (request 11, D19: a double from 0 to 1, default 1.0, which is the behaviour before the field: no wear, full performance). Corpus image `compat/fluid/schema-8`. If W3 lands schema 8 first, health goes in schema 9 with its own image.
-- Equipment shape fields 6: the pump's and compressor's design point, the motor's and turbine's duty. An old pump's missing design point takes today's datasheet values (A3). Corpus image `compat/equipment/shapes-6.snbt`.
+- Fluid facts schema 10 (main 0.20.0 holds 8 and 9): the new device kinds, the machine's design point and law kind, the driver's settings, the FE buffer's content (energy the player put in), the gearbox ratio, the creative motor's set points, and each pump's and compressor's health, constructed or in-line (request 11, D19: a double from 0 to 1, default 1.0, which is the behaviour before the field: no wear, full performance). Corpus image `compat/fluid/schema-8`. If W3 lands schema 8 first, health goes in schema 9 with its own image.
+- Equipment shape fields 8 (main 0.20.0 holds 6 and 7; W4 built it as 6, renumbered at its merge): the pump's and compressor's design point, the motor's and turbine's duty. An old pump's missing design point takes today's datasheet values (A3). Corpus image `compat/equipment/shapes-8.snbt`.
 - No backward compatibility for constructed movers (owner D4): old placed pumps and compressors rebuild to the casing layout through the layout refresh, without their drawn motor (and gear); they stand closed with `NO DRIVER` until the player joins a driver. Their registrations, identity and settings stay; the set flow is still the set flow.
 - Old steam turbines (drawing only) rebuild to the new layout; the owner approves the moved nozzle pipe blocks (owner D5).
 - State format bump for the new modes; state is rebuilt.
@@ -324,8 +324,8 @@ The simulator's units call the same Minecraft-free classes (`science/machine/**`
 | W0 | Owner answers; GUI option sheets for the new screens and constructor rows | owner picks |
 | W1 | `science/machine/**`: curves, heads, power, steam rate, sizes; tests | unit tests |
 | W2 | Fluid laws (3.1 to 3.4), form F1 or F2, energy booking, turbine connection; harness variant | quick check, then one campaign |
-| W3 | Shaft trains: blocks, registry, per-slice driver logic, island coupling, trips, the generator; facts schema 8 | unit tests, GameTests, corpus |
-| W4 | Equipment: casings, motor, turbine, gearbox, creative motor, generator, shaft drawing; constructor rows; shape fields 6 | layout table, `pipesApart`, renders, owner picks |
+| W3 | Shaft trains: blocks, registry, per-slice driver logic, island coupling, trips, the generator; facts schema 10 | unit tests, GameTests, corpus |
+| W4 | Equipment: casings, motor, turbine, gearbox, creative motor, generator, shaft drawing; constructor rows; shape fields 8 | layout table, `pipesApart`, renders, owner picks |
 | W5 | RF port, buffers, booking, auto restart, generator output; air cooler and cooling-tower fans; config | unit tests, GameTest |
 | W6a | Create and KubeJS optional: packaging, own outline drawing, own textures, the GameTest | build and GameTests without Create and with it |
 | W6b | The Create coupling (after W3) | GameTest with Create |

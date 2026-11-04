@@ -6,5 +6,17 @@
   "compressor_running": {
     "subtitle": "subtitles.icheme.compressor_running",
     "sounds": [{ "name": "icheme:compressor_running", "stream": false }]
+  },
+  "motor_running": {
+    "subtitle": "subtitles.icheme.motor_running",
+    "sounds": [{ "name": "icheme:motor_running", "stream": false }]
+  },
+  "generator_running": {
+    "subtitle": "subtitles.icheme.generator_running",
+    "sounds": [{ "name": "icheme:motor_running", "stream": false }]
+  },
+  "turbine_running": {
+    "subtitle": "subtitles.icheme.turbine_running",
+    "sounds": [{ "name": "icheme:turbine_running", "stream": false }]
   }
 }

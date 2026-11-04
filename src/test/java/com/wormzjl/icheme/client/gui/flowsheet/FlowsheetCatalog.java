@@ -54,7 +54,10 @@ public final class FlowsheetCatalog {
             case ADSORBER -> ADSORBER;
             case TRICKLE_BED_REACTOR -> TRICKLE;
             case EBULLATED_BED_REACTOR -> EBULLATED;
-            case STEAM_TURBINE, CONDENSING_TURBINE -> TURBINE;
+            case STEAM_TURBINE -> TURBINE;
+            // The drivers and the gearbox (batch 2026-11-03-rotating-machinery) pass shaft power, no stream: until the simulator has a tile
+            // of their own, they stand on the steam turbine's unlit one.
+            case MOTOR, GENERATOR, GEARBOX -> TURBINE;
             case CYCLONE -> CYCLONE;
             case FCC_CONVERTER -> FCC;
             case DELAYED_COKER -> COKER;
@@ -81,7 +84,10 @@ public final class FlowsheetCatalog {
             case PUMP -> PUMP;
             case COMPRESSOR, CENTRIFUGAL_COMPRESSOR -> COMPRESSOR;
             case EJECTOR -> EJECTOR;
-            case STEAM_TURBINE, CONDENSING_TURBINE -> TURBINE;
+            case STEAM_TURBINE -> TURBINE;
+            // The drivers and the gearbox (batch 2026-11-03-rotating-machinery) pass shaft power, no stream: until the simulator has a tile
+            // of their own, they stand on the steam turbine's unlit one.
+            case MOTOR, GENERATOR, GEARBOX -> TURBINE;
             case STIRRED_REACTOR -> STIRRED;
             case TRICKLE_BED_REACTOR -> TRICKLE;
             case EBULLATED_BED_REACTOR -> EBULLATED;

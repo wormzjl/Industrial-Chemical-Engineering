@@ -64,6 +64,13 @@ class EquipmentShapeCompatTest {
             double size = ProcessUnit.minDiameter(kind);int length = ProcessUnit.defaultLength(kind, size);
             shapes.add(EquipmentShape.designed(kind, size, length, Heading.WEST, ProcessUnit.defaultSupport(kind, size, length), ProcessUnit.Bank.ONE, 0));
         }
+        // Shape fields 8 (batch 2026-11-03-rotating-machinery): machines' design points other than their size's.
+        shapes.add(EquipmentShape.unit(Kind.PUMP, .05, 1, Heading.EAST, 0).withDuty(MachineDuty.pump(120, 60, 4)));
+        shapes.add(EquipmentShape.unit(Kind.CENTRIFUGAL_COMPRESSOR, .3, 2, Heading.SOUTH, 6).withDuty(MachineDuty.compressor(20000, 150)));
+        shapes.add(EquipmentShape.unit(Kind.STEAM_TURBINE, .3, 1, Heading.NORTH, 0).withDuty(MachineDuty.turbine(2500, MachineDuty.Steam.MP, 10)));
+        shapes.add(EquipmentShape.unit(Kind.MOTOR, .75, 1, Heading.NORTH, 2).withDuty(MachineDuty.motor(4500, 6, MachineDuty.Drive.VARIABLE)));
+        shapes.add(EquipmentShape.unit(Kind.GENERATOR, .75, 1, Heading.WEST, 0).withDuty(MachineDuty.generator(2000, 2)));
+        shapes.add(EquipmentShape.unit(Kind.GEARBOX, .75, 1, Heading.EAST, 0).withDuty(MachineDuty.gearbox(5000)));
         return shapes;
     }
 
@@ -151,6 +158,46 @@ class EquipmentShapeCompatTest {
         var read = EquipmentShellBlockEntity.readShape(tag);
         assertEquals(EquipmentShape.defaultConnections(3, 6, Orientation.VERTICAL, 4, false), read.shape().connections(), "the behaviour before the field existed");
         assertTrue(read.repairs().isEmpty(), read.repairs().toString());
+    }
+
+    /**
+     * A machine's design point (shape fields 8) reads by name; one this build cannot read (an unknown drive or steam
+     * class, a value out of its ranges) is dropped and named, and the machine takes its size's. A machine saved before
+     * the field takes its size's with no repair (decision A3); a condensing turbine is the steam turbine exhausting to a
+     * condenser at 10 kPa, its size kept (owner decision D5).
+     */
+    @Test
+    void aMachinesDesignPointReadsByNameAndAnUnreadableOneTakesItsSizes() {
+        var motor = EquipmentShape.unit(Kind.MOTOR, .75, 1, Heading.NORTH, 0).withDuty(MachineDuty.motor(250, 2, MachineDuty.Drive.VARIABLE));
+        var tag = saved(motor);
+        assertEquals("VARIABLE", tag.getCompound("Duty").getString("Drive"), "drives saved by name");
+        tag.getCompound("Duty").putString("Drive", "hydraulic");
+        var read = EquipmentShellBlockEntity.readShape(tag);
+        assertEquals(motor.withDuty(UnitDesign.of(Kind.MOTOR).duty(250, 1)), read.shape());
+        assertEquals(1, read.repairs().size(), read.repairs().toString());
+        assertTrue(read.repairs().getFirst().startsWith("duty (no drive hydraulic) -> its size's"), read.repairs().toString());
+        var pump = saved(EquipmentShape.unit(Kind.PUMP, .25, 1, Heading.NORTH, 0).withDuty(MachineDuty.pump(400, 80, 4)));
+        pump.getCompound("Duty").putDouble("Head", 5000);
+        var repaired = EquipmentShellBlockEntity.readShape(pump);
+        assertFalse(repaired.repairs().isEmpty());
+        assertEquals(UnitDesign.of(Kind.PUMP).duty(repaired.shape().diameter(), 1), repaired.shape().duty());
+        // Before the field: the size's design point, no repair.
+        var custom = EquipmentShape.unit(Kind.PUMP, .25, 1, Heading.NORTH, 0).withDuty(MachineDuty.pump(400, 80, 4));
+        var old = saved(custom);
+        old.remove("Duty");
+        var before = EquipmentShellBlockEntity.readShape(old);
+        assertEquals(EquipmentShape.unit(Kind.PUMP, custom.diameter(), 1, Heading.NORTH, 0), before.shape());
+        assertEquals(List.of(), before.repairs());
+        // A condensing turbine.
+        var turbine = saved(EquipmentShape.unit(Kind.STEAM_TURBINE, 1, 1, Heading.SOUTH, 0));
+        turbine.remove("Duty");
+        turbine.putString("Kind", "condensing_turbine");
+        var condensing = EquipmentShellBlockEntity.readShape(turbine);
+        assertEquals(Kind.STEAM_TURBINE, condensing.shape().kind());
+        assertEquals(1, condensing.shape().diameter(), 1e-9);
+        assertEquals(SteamTurbineDesign.CONDENSING_EXHAUST, condensing.shape().duty().exhaust());
+        assertTrue(condensing.shape().duty().vacuum());
+        assertEquals(List.of(), condensing.repairs());
     }
 
     /** Any saved value: the reader gives a valid shape or a retired kind, and never throws. */
@@ -331,15 +378,63 @@ class EquipmentShapeCompatTest {
         }
     }
 
+    /**
+     * A machine's design point as the constructor steps it (option A, batch 2026-11-03-rotating-machinery): every setting
+     * to both ends, every pole count, the variable drive and every steam class make a valid design whose sizes follow it,
+     * and it reads back as written. A design saved before it (no {@code Duty}) takes the design point its sizes give.
+     */
+    @Test
+    void aConstructorKeepsAMachinesDesignPointAcrossAReload() {
+        var fresh = EquipmentConstructorBlockEntity.Design.DEFAULT;
+        int checked = 0;
+        for (var kind : Kind.values()) {
+            if (!kind.designed() || !UnitDesign.of(kind).hasDuty()) continue;
+            var design = UnitDesign.of(kind);
+            var form = VesselPlacement.Form.valueOf(kind.name());
+            double d = ProcessUnit.sizes(kind).getFirst();
+            var start = design.duty(d, ProcessUnit.defaultLength(kind, d));
+            var points = new ArrayList<MachineDuty>();
+            for (int steps : new int[]{-1000, 1, 1000})
+                for (var setting : List.of("flow", "head", "power", "exhaust")) points.add(design.step(start, setting, steps));
+            if (start.poles() != 0) for (int poles : kind == Kind.PUMP ? List.of(2, 4) : MachineDuty.POLES) points.add(start.withPoles(poles));
+            if (kind == Kind.MOTOR) points.add(start.withDrive(MachineDuty.Drive.VARIABLE));
+            if (start.steam() != null)
+                for (var steam : MachineDuty.Steam.values()) points.add(design.step(design.step(start, "exhaust", 1000).withSteam(steam), "power", 1000));
+            for (var point : points) {
+                var made = new EquipmentConstructorBlockEntity.Design(0, 0, form, ProcessUnit.minSupport(kind, design.size(point), design.length(point)), fresh.placement(),
+                        fresh.trays(), List.of(), fresh.paint(), ProcessUnit.Bank.ONE, false, 0, null, List.of(), TowerBank.ONE, point);
+                assertEquals(point, made.duty(), kind::name);
+                assertEquals(design.size(point), made.diameter(), kind::name);
+                var tag = new CompoundTag();
+                EquipmentConstructorBlockEntity.writeDesign(tag, made);
+                var repairs = new ArrayList<String>();
+                assertEquals(made, EquipmentConstructorBlockEntity.readDesign(tag, fresh, repairs::add), kind::name);
+                assertEquals(List.of(), repairs, kind::name);
+                checked++;
+            }
+            // Saved before the constructor kept a design point: the one its sizes give.
+            var old = new CompoundTag();
+            EquipmentConstructorBlockEntity.writeDesign(old, new EquipmentConstructorBlockEntity.Design(0, 0, form, ProcessUnit.minSupport(kind, design.size(points.getLast()),
+                    design.length(points.getLast())), fresh.placement(), fresh.trays(), List.of(), fresh.paint(), ProcessUnit.Bank.ONE, false, 0, null, List.of(), TowerBank.ONE,
+                    points.getLast()));
+            old.remove("Duty");
+            var read = EquipmentConstructorBlockEntity.readDesign(old, fresh, repair -> {
+            });
+            assertEquals(design.duty(read.diameter(), read.tangentLength()), read.duty(), kind::name);
+        }
+        assertTrue(checked > 60, "design points checked: " + checked);
+    }
+
     // ---------------- the corpus: saved shell tags per shape-field change ----------------
 
     private static final Path CORPUS = Path.of("src/test/resources/compat/equipment");
     /**
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
      * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank; 6: a
-     * column's member counts; 7: a column's water trim count and its air-then-water condenser).
+     * column's member counts; 7: a column's water trim count and its air-then-water condenser; 8: a machine's design
+     * point).
      */
-    private static final int SHAPE_FIELDS = 7;
+    private static final int SHAPE_FIELDS = 8;
 
     /** A column's components as an image written before the member counts shows them. */
     private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(
@@ -391,6 +486,16 @@ class EquipmentShapeCompatTest {
                     var expected = entry.getString("Expected");
                     if(!expected.contains("towerBank="))expected=expected.substring(0,expected.length()-1)+", towerBank=TowerBank[columns=1, rows=1]]";
                     expected = withUnits(expected);
+                    if (!expected.contains("duty=MachineDuty[")) {
+                        // Shape fields 8: a machine saved before its design point takes its size's (decision A3); a
+                        // condensing turbine is the steam turbine exhausting to a condenser (owner decision D5).
+                        boolean condensing = expected.contains("kind=CONDENSING_TURBINE");
+                        expected = expected.replace("kind=CONDENSING_TURBINE", "kind=STEAM_TURBINE");
+                        var shape = read.shape();
+                        var duty = shape.designed() ? UnitDesign.of(shape.kind()).duty(shape.diameter(), (int) shape.tangentLength()) : MachineDuty.NONE;
+                        if (condensing) duty = MachineDuty.turbine(duty.power(), duty.steam(), SteamTurbineDesign.CONDENSING_EXHAUST);
+                        expected = expected.substring(0, expected.length() - 1) + ", duty=" + duty + "]";
+                    }
                     if (read.shape().column()) expected = expected.replaceFirst("tangentLength=[0-9.]+", "tangentLength=" + read.shape().tangentLength());
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }

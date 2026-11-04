@@ -31,6 +31,85 @@ public abstract class UnitDesign {
 
     public abstract double sizeStep();
 
+    /** Every main size a unit of the kind may take, smallest first: the grid from {@link #minSize()} by {@link #sizeStep()}. */
+    public List<Double> sizes() {
+        var out = new java.util.ArrayList<Double>();
+        long count = Math.round((maxSize() - minSize()) / sizeStep());
+        for (long k = 0; k <= count; k++) out.add(Math.round((minSize() + k * sizeStep()) * 1000) / 1000.0);
+        return out;
+    }
+
+    /** {@code size} on the kind's grid and inside its range, cleared of rounding (0.30000000000000004 becomes 0.3). */
+    public double snap(double size) {
+        double step = sizeStep(), min = minSize();
+        double k = Math.max(0, Math.min(Math.round((maxSize() - min) / step), Math.round((size - min) / step)));
+        return Math.round((min + k * step) * 1000) / 1000.0;
+    }
+
+    /** {@code size} moved {@code steps} places along the kind's sizes (the constructor's [−] and [+]). */
+    public double step(double size, int steps) {
+        return snap(size + steps * sizeStep());
+    }
+
+    // ---- Design point (shape fields 8, batch 2026-11-03-rotating-machinery) ------------------------------------------
+
+    /**
+     * Whether the kind's shape carries a design point ({@link MachineDuty}): a pump, a centrifugal compressor, a steam
+     * turbine, a motor, a generator, a gearbox. Its main and second sizes then follow from the design point.
+     */
+    public boolean hasDuty() {
+        return false;
+    }
+
+    /**
+     * The design point of a unit of these sizes where none was given: a shape saved before shape fields 8 (its
+     * behaviour then, decision A3), and the sizes the constructor and the tests step through. {@link MachineDuty#NONE}
+     * for a kind without one.
+     */
+    public MachineDuty duty(double size, int length) {
+        return MachineDuty.NONE;
+    }
+
+    /** The main size design point {@code duty} gives. */
+    public double size(MachineDuty duty) {
+        throw new IllegalArgumentException("This kind has no design point");
+    }
+
+    /** The second size design point {@code duty} gives. */
+    public int length(MachineDuty duty) {
+        return 1;
+    }
+
+    /** Checks {@code duty}'s ranges for the kind; throws {@link IllegalArgumentException} with the reason. */
+    void checkDuty(MachineDuty duty) {
+    }
+
+    /**
+     * Design point {@code duty} with its setting {@code setting} ({@code flow}, {@code head}, {@code power} or
+     * {@code exhaust}) stepped {@code steps} places along the values the constructor offers, held at its ends;
+     * {@code duty} itself for a setting the kind does not have. Every value stepped to is in the kind's ranges.
+     */
+    public MachineDuty step(MachineDuty duty, String setting, int steps) {
+        return duty;
+    }
+
+    /** Checks a shape's design point: in its ranges, and giving the shape's sizes; none for a kind without one. */
+    final void check(double size, int length, MachineDuty duty) {
+        if (!hasDuty()) {
+            if (!duty.equals(MachineDuty.NONE)) throw new IllegalArgumentException("This kind has no design point");
+            return;
+        }
+        checkDuty(duty);
+        if (Math.abs(size(duty) - size) > 1e-9 || length(duty) != length)
+            throw new IllegalArgumentException("A machine's sizes follow its design point: " + size(duty) + " and " + length(duty) + ", not " + size + " and " + length);
+    }
+
+    /** {@code value} rounded up onto a grid of {@code step} (a micrometre's rounding error kept on its step), within lo..hi. */
+    static double upTo(double value, double step, double lo, double hi) {
+        double k = Math.ceil(value / step - 1e-6);
+        return Math.max(lo, Math.min(hi, Math.round(k * step * 1000) / 1000.0));
+    }
+
     /** The least second size (length, height or count) at main size {@code size}; 1 where the kind has none. */
     public int minLength(double size) {
         return 1;
@@ -91,6 +170,16 @@ public abstract class UnitDesign {
     /** The constructor's row for the main size (its translation key under the constructor's prefix). */
     public abstract String sizeRow();
 
+    /** The main size's unit on the constructor's row: metres, or a machine's kilowatts. */
+    public String sizeUnit() {
+        return "m";
+    }
+
+    /** The main size as the constructor's row shows it. */
+    public String sizeText(double size) {
+        return size(size);
+    }
+
     /** The constructor's row for the second size, or {@code null} where the kind has none. */
     public String lengthRow() {
         return null;
@@ -107,7 +196,7 @@ public abstract class UnitDesign {
     /** The constructor's middle line: what the unit holds or does. */
     public abstract Line held(EquipmentShape shape);
 
-    /** The vessel screen's kind line's key suffix after {@code kind.<kind>} (a pump above {@link ProcessUnit#OH2_MAX} is split). */
+    /** The vessel screen's kind line's key suffix after {@code kind.<kind>} (a pump above {@link ProcessUnit#OH2_MAX} is radially split between bearings). */
     public String variant(EquipmentShape shape) {
         return "";
     }
@@ -141,7 +230,6 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.EBULLATED_BED_REACTOR, new EbullatedBedReactorDesign());
         DESIGNS.put(Kind.CENTRIFUGAL_COMPRESSOR, new CentrifugalCompressorDesign());
         DESIGNS.put(Kind.STEAM_TURBINE, new SteamTurbineDesign());
-        DESIGNS.put(Kind.CONDENSING_TURBINE, new CondensingTurbineDesign());
         DESIGNS.put(Kind.CYCLONE, new CycloneDesign());
         DESIGNS.put(Kind.FCC_CONVERTER, new FccConverterDesign());
         DESIGNS.put(Kind.DELAYED_COKER, new DelayedCokerDesign());
@@ -151,6 +239,9 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.FIXED_BED_GASIFIER, new FixedBedGasifierDesign());
         DESIGNS.put(Kind.INDUCED_DRAFT_COOLING_TOWER,new CoolingTowerDesign(false));
         DESIGNS.put(Kind.NATURAL_DRAFT_COOLING_TOWER,new CoolingTowerDesign(true));
+        DESIGNS.put(Kind.MOTOR, new MotorDesign(false));
+        DESIGNS.put(Kind.GENERATOR, new MotorDesign(true));
+        DESIGNS.put(Kind.GEARBOX, new GearboxDesign());
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */
@@ -160,17 +251,52 @@ public abstract class UnitDesign {
         return design;
     }
 
-    /**
-     * A constructed mover's running-loop gain, 0.10 to 0.60 over its kind's size range (its main size, and its stage or
-     * throw count where it has one); 0 for any other unit. Sound only: dimensions impose no hydraulic limits.
-     */
+    /** A running-loop gain at full speed ({@link #soundGain(EquipmentShape, double)}). */
     public static float soundGain(EquipmentShape shape) {
+        return soundGain(shape, 1);
+    }
+
+    /**
+     * A running loop's gain, one law for a mover's casing and for a driver (decision D26, batch
+     * 2026-11-03-rotating-machinery): 0.10 to 0.60 over the part's size range, times the speed share to the power
+     * {@link #SPEED_EXPONENT}; 0 for any other unit. A casing's size is its kind's size range (its main size, and its
+     * stage or throw count where it has one); a driver's is its rated power on a log scale over its kind's powers. The
+     * gain stays at or below 1: in Minecraft a volume above 1 widens the range instead of raising the loudness. Sound
+     * only: dimensions impose no hydraulic limits.
+     */
+    public static float soundGain(EquipmentShape shape, double speed) {
         java.util.Objects.requireNonNull(shape);
-        if(!shape.kind().mover())return 0;
-        var design=of(shape.kind());double size=(shape.diameter()-design.minSize())/(design.maxSize()-design.minSize());
-        int least=design.minLength(shape.diameter()),most=design.maxLength(shape.diameter());
-        if(most>least)size=(size+(shape.tangentLength()-least)/(most-least))/2;
-        return (float)(.10+.50*Math.clamp(size,0,1));
+        double size;
+        if(shape.kind().mover()){
+            var design=of(shape.kind());size=(shape.diameter()-design.minSize())/(design.maxSize()-design.minSize());
+            int least=design.minLength(shape.diameter()),most=design.maxLength(shape.diameter());
+            if(most>least)size=(size+(shape.tangentLength()-least)/(most-least))/2;
+        }else if(driver(shape.kind())){
+            boolean turbine=shape.kind()==EquipmentShape.Kind.STEAM_TURBINE;
+            double least=turbine?SteamTurbineDesign.MIN_POWER:MotorDesign.POWERS.getFirst(),most=turbine?SteamTurbineDesign.MAX_POWER:MotorDesign.POWERS.getLast();
+            size=Math.log(shape.duty().power()/least)/Math.log(most/least);
+        }else return 0;
+        return (float)((.10+.50*Math.clamp(size,0,1))*Math.pow(Math.clamp(speed,0,1),SPEED_EXPONENT));
+    }
+
+    /**
+     * A rotating machine's sound power rises about as its speed to the fifth (the fan law, 50 log N dB), its sound
+     * pressure, which a loop's gain scales, as the root of that: half speed is 0.18 of the full-speed gain.
+     */
+    public static final double SPEED_EXPONENT = 2.5;
+
+    /**
+     * A running loop's pitch at a speed share (decision D26, owner 2026-11-04): a machine's tones (blade pass, vane
+     * pass, fan, slots) are its shaft speed times a fixed count, so the pitch is the speed share, down to 0.5, where
+     * Minecraft stops lowering it; 1 at full speed and above.
+     */
+    public static float soundPitch(double speed) {
+        return (float) Math.clamp(speed, .5, 1);
+    }
+
+    /** Whether a kind sounds as a driver, its own loop at its own cells: a motor, its mirror the generator, or a steam turbine. */
+    public static boolean driver(EquipmentShape.Kind kind) {
+        return kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.STEAM_TURBINE;
     }
 
     // ---- Formats ----------------------------------------------------------------------------------------------------
