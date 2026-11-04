@@ -49,6 +49,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: owner "Start W10d"; picked readings and the pump curve (D37). Plan `W10D_BUILD_PLAN.md`; prototypes next.
 - 2026-11-04: W10d prototypes rendered; owner D38: add the 4 x NPSH3 inception curve; accept the in-line page's scroll bar.
 - 2026-11-04: W10d built 4eec41cad (Suction and Health groups, curve with 4 x NPSH3, status words FAILED > CAVITATION > GAS); test 592 + hold gates 58, GameTests 44/44; no campaign (observation only); A137 in-line gas read open for the owner. Review `W10D_REVIEW.md`.
+- 2026-11-04: owner D39 "Keep the gas read": A137 stays as built.
 
 ## Documents
 

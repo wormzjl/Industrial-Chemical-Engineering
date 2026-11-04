@@ -128,6 +128,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D38.** The pump curve also draws the inception curve, 4 x NPSH3, dashed, with the NPSH axis grown to fit it: NPSH available between NPSH3 and 4 x NPSH3 reads as cavitating, above both as quiet. The in-line pump page scrolls at 1920 x 1080 like the casing page.
 
+2026-11-04, on W10d's reading A137 (an in-line pump's gas reading costs one suction walk per running in-line pump per solve; the alternative was a dash): the owner: "Keep the gas read".
+
+- **D39.** In-line pumps keep their gas reading as built (`4eec41cad`): one `InletPhase.supply` walk per running set-flow pump per solve, for the page only. It feeds no churn, no `GAS` word and no dry wear.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).

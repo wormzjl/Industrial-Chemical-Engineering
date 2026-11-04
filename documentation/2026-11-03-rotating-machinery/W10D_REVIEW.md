@@ -44,7 +44,7 @@ Commit `4eec41cad` (`W10D_BUILD_PLAN.md`, owner decisions D37 and D38). Built by
 
 ## 4. Readings (A137 to A141)
 
-- **A137 (owner option):** the gas reading for in-line pumps needs that extra supply walk per solve. The alternative is "—" for an in-line pump's gas and no added work.
+- **A137 (owner kept it, D39):** the gas reading for in-line pumps needs that extra supply walk per solve. The alternative is "—" for an in-line pump's gas and no added work.
 - **A138:** the curve's operating point is computed on the client from view fields the Head meter already reads (mass flow, pressure change, density). This is display arithmetic, not process state.
 - **A139:** NPSH available is a solid blue line, and inception is dashed in its own colour, with a legend entry.
 - **A140:** a constructed pump's Overview glass shows the curve instead of the composition tables, as in the prototype the owner saw. The Phases bar on the door still gives the shares.
