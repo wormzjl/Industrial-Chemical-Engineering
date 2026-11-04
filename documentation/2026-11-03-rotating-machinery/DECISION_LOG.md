@@ -120,6 +120,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D36.** In-line pumps play the crackle and churn layers, with no running loop, at the smallest casing's gain; in-line compressors stay silent. Every machine loop's pitch is `clamp(n/n_loop, 0.5, 2)`, with n the machine's rpm and n_loop the rpm its loop was authored at (pump 2950, motor 1500; the machine's rated rpm where the loop states none). This replaces D26's pitch = speed share capped at 1. Volume keeps D26's law.
 
+2026-11-04, W10d's scope (A: readings only; B: readings and the pump curve; C: plan 9 in full): the owner, "Readings + pump curve".
+
+- **D37.** W10d builds `W10D_BUILD_PLAN.md`: on the pump page a Suction group (NPSH available, NPSH required, gas %), a Health meter, `CAVITATION`/`GAS`/`FAILED` on the display, and for a constructed centrifugal pump the head–flow and NPSH3 curves on the glass with the operating point and NPSH available. No compressor readings, head factor, rate of loss or Repair key.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).

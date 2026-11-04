@@ -46,6 +46,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: owner "Start W10c". A short plan (`W10C_BUILD_PLAN.md`) offered the crackle only, the crackle and gas churn, or plan 3.8 in full; the owner picked the crackle and gas churn (D35).
 - 2026-11-04: W10c built (`975a718e2`, D35): `pump_cavitation` and `pump_gas` loops, two `MoverState` bytes (`mover-3`), `GasEntrainment.churn`; GasEntrainmentTest 4, codec 22, affected 613 + hold gates 58, GameTests 43; no campaign (read-only observation). In-line pumps stay silent (W4 watch). Listening check due (`W10C_REVIEW.md`).
 - 2026-11-04: D36 (owner): in-line pumps play the crackle and churn; every machine loop's pitch = rpm over its loop's authored rpm (pump 2950, motor 1500), within 0.5 to 2; `MoverState` carries rpm (`mover-4`). Affected test 200, equipment gates 75, hold gates 10, GameTests 44. Owner rule: no subagent resumed after 5 min idle.
+- 2026-11-04: owner "Start W10d"; picked readings and the pump curve (D37). Plan `W10D_BUILD_PLAN.md`; prototypes next.
 
 ## Documents
 
@@ -74,6 +75,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - [W10B_REVIEW.md](W10B_REVIEW.md): W10b's simple form as built, tests, campaign, readings A129 to A136.
 - [W10C_BUILD_PLAN.md](W10C_BUILD_PLAN.md): W10c's plan (crackle and gas churn, D35).
 - [W10C_REVIEW.md](W10C_REVIEW.md): W10c as built, the loops, tests; in-line pumps silent; the listening check.
+- [W10D_BUILD_PLAN.md](W10D_BUILD_PLAN.md): W10d's plan (pump readings and curve, D37).
 - [PUMP_TYPES_REVIEW.md](PUMP_TYPES_REVIEW.md): the pump types against refinery practice (API 610 OH2, BB1, BB2); options for the large pump.
 
 ## Code areas (planned)
