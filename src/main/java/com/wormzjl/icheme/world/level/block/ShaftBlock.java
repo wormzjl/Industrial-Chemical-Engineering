@@ -64,4 +64,18 @@ public final class ShaftBlock extends RotatedPillarBlock {
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         return SHAPES.get(state.getValue(AXIS))[state.getValue(SIZE)];
     }
+
+    /** A placed shaft queues its part (W3); a new drawn size or axis of the same block is no new part. */
+    @Override
+    protected void onPlace(BlockState state, net.minecraft.world.level.Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
+        super.onPlace(state, level, pos, oldState, movedByPiston);
+        if (!level.isClientSide() && (!oldState.is(this) || oldState.getValue(AXIS) != state.getValue(AXIS))) ShaftParts.shaft(level, pos, state.getValue(AXIS));
+    }
+
+    /** A broken shaft queues its part's removal (W3): its train is cut at the next tick drain. */
+    @Override
+    protected void onRemove(BlockState state, net.minecraft.world.level.Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (!level.isClientSide() && !newState.is(this)) ShaftParts.remove(level, pos);
+        super.onRemove(state, level, pos, newState, movedByPiston);
+    }
 }

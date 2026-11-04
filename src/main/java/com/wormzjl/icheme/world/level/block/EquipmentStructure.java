@@ -172,6 +172,8 @@ public final class EquipmentStructure {
         }
         var vessel = new Vessel(origin, shape);
         if (shape.fluidDevice() && rows >= shape.sizeY()) register(level, vessel);
+        // A motor, generator or gearbox joins its shaft train whole (W3); a casing or turbine does once registered.
+        else if (!shape.fluidDevice() && rows >= shape.sizeY()) ShaftParts.structure(level, origin, shape, 0);
         reconnect(level, vessel);
         refreshNozzles(level, vessel);
         com.wormzjl.icheme.runtime.assembly.AssemblyService.placed(level, vessel);
@@ -189,11 +191,13 @@ public final class EquipmentStructure {
             return;
         }
         var node = node(vessel);
-        if (vessel.shape().kind().mover()) {
-            var kind = vessel.shape().kind() == EquipmentShape.Kind.PUMP ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
+        if (vessel.shape().kind().mover() || turbine(vessel.shape())) {
+            // A casing on its curve, a frame at its displacement, a turbine on its steam (W3): each turns with its shaft train.
+            var kind = turbine(vessel.shape()) ? TopologyCompiler.Kind.TURBINE : vessel.shape().kind() == EquipmentShape.Kind.PUMP ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
-                var record = world.placeMover(position(level, node), kind, ports(level, vessel));
+                var record = world.placeMachine(position(level, node), kind, ports(level, vessel), machineControl(vessel.shape()));
                 if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
+                ShaftParts.structure(level, vessel.origin(), vessel.shape(), record.device().id());
             });
             return;
         }
@@ -214,7 +218,8 @@ public final class EquipmentStructure {
      * normal construction or the existing layout refresh handles them. No blocks are changed and nothing solves.
      */
     public static boolean restoreFluidBinding(ServerLevel level,Vessel vessel) {
-        if(!vessel.shape().fluidDevice())return true;
+        // A motor, generator or gearbox's shaft unit (W3); queued again on every load, a no-op when nothing changed.
+        if(!vessel.shape().fluidDevice()){ShaftParts.structure(level,vessel.origin(),vessel.shape(),0);return true;}
         var world=FluidWorldAuthority.find(level.getServer()).orElse(null);if(world==null)return false;
         boolean unit=HeatSides.unit(vessel.shape().kind())!=null;
         var heldIds=unit?heldAtNodes(world,level,vessel):List.<Long>of();
@@ -231,6 +236,10 @@ public final class EquipmentStructure {
             if(level.hasChunkAt(node)&&record.device().position().equals(held)&&!record.device().ports().isEmpty()
                     &&level.getBlockEntity(node) instanceof EquipmentShellBlockEntity shell&&ours(shell,vessel.origin(),vessel.shape())) {
                 if(vessel.shape().reservoir()&&!record.spec().geometry().equals(vessel.shape().fluidGeometry()))reregister(level,vessel,node,List.of());
+                // A casing saved before W3 (reading A29): its set-flow control becomes its machine, keeping its set flow.
+                var machine=restoredControl(vessel.shape(),record.device().control());
+                if(machine!=null)world.edit(record.device().id(),record.revision(),record.device().withControl(machine),record.spec());
+                ShaftParts.structure(level,vessel.origin(),vessel.shape(),record.device().id());
                 if(shell.fluidIdentity()!=record.device().id())shell.bindIdentity(record.device().id());else world.deviceLoaded(record.device().id());
             }
             return true;
@@ -416,10 +425,11 @@ public final class EquipmentStructure {
         for (var port : ShapeRasterizer.ports(vessel.shape())) {
             if (passages.contains(nozzles.get(port.nozzle()).role())) continue;
             var role = PhysicalFluidTopology.ConnectionRole.VESSEL;
-            if (vessel.shape().kind().mover()) {
+            if (vessel.shape().kind().mover() || turbine(vessel.shape())) {
+                // A turbine's steam inlet is its suction, its exhaust its discharge (W3, reading A37).
                 role = switch (nozzles.get(port.nozzle()).role()) {
-                    case SUCTION -> PhysicalFluidTopology.ConnectionRole.SUCTION;
-                    case DISCHARGE -> PhysicalFluidTopology.ConnectionRole.DISCHARGE;
+                    case SUCTION, STEAM -> PhysicalFluidTopology.ConnectionRole.SUCTION;
+                    case DISCHARGE, EXHAUST -> PhysicalFluidTopology.ConnectionRole.DISCHARGE;
                     default -> null;
                 };
                 if (role == null) continue; // Oil-cooler and other auxiliary nozzles remain decorative.
@@ -432,6 +442,7 @@ public final class EquipmentStructure {
                 case BULK -> PassiveNetwork.PhasePort.BULK;
                 case OVERFLOW -> PassiveNetwork.PhasePort.OVERFLOW;
             };
+            if(turbine(vessel.shape()))phase=PassiveNetwork.PhasePort.BULK;
             if(vessel.shape().kind().coolingTower())phase=switch(nozzles.get(port.nozzle()).role()){case HOT_WATER_INLET->PassiveNetwork.PhasePort.SPRAY;default->phase;};
             if(vessel.shape().boot())phase=switch(nozzles.get(port.nozzle()).role()){case BOOT_DRAIN->PassiveNetwork.PhasePort.BOOT_WATER;case LIQUID_OUTLET->PassiveNetwork.PhasePort.BOOT_HC;default->phase;};
             ports.add(new PhysicalFluidTopology.Port(position(level, cell), face, phase, role));
@@ -627,6 +638,7 @@ public final class EquipmentStructure {
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(server, vessel);
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.dismantled(server, vessel);
             if (level instanceof ServerLevel server && vessel.shape().fluidDevice()) unregister(server, vessel);
+            if (UnitDesign.shafted(vessel.shape().kind())) ShaftParts.remove(level, vessel.origin());
             var layout = ShapeRasterizer.layout(vessel.shape());
             for (var list : java.util.List.of(layout.shell(), layout.interior()))
                 for (var cell : list) {
@@ -864,7 +876,10 @@ public final class EquipmentStructure {
         for (int x = low.getX() >> 4; x <= high.getX() >> 4; x++)
             for (int z = low.getZ() >> 4; z <= high.getZ() >> 4; z++) level.getChunkSource().chunkMap.waitForLightBeforeSending(new ChunkPos(x, z), 0);
         var vessel = new Vessel(placed, shape);
+        // A shaft unit stands at its structure's origin (W3): a moved origin's old unit leaves, the new one is queued below.
+        if (UnitDesign.shafted(shape.kind()) && !placed.equals(origin)) ShaftParts.remove(level, origin);
         if (shape.fluidDevice()) reregister(level, vessel, oldNode, held);
+        else ShaftParts.structure(level, placed, shape, 0);
         // Pipes beside a dropped, added or redrawn cell take up or drop their connection (old nozzles included).
         for (var at : touched)
             for (var direction : Direction.values()) {
@@ -914,6 +929,58 @@ public final class EquipmentStructure {
                 vessel.shape().kind().mover() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
+        ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());
+    }
+
+    /** Whether a shape registers as a steam turbine (W3, reading A37). */
+    private static boolean turbine(EquipmentShape shape) {
+        return shape.kind() == EquipmentShape.Kind.STEAM_TURBINE;
+    }
+
+    /**
+     * A shaft-driven machine's control from its shape's design point (W3, readings A3 and A32): a pump on its curve at its
+     * duty, with Corripio's efficiency; a centrifugal compressor on its curve at its rating, efficiency 0.78; a reciprocating
+     * frame at its displacement; a steam turbine at its rated power and its size's efficiency. A machine's speed is its train's.
+     */
+    static com.wormzjl.icheme.science.fluid.network.FlowControl machineControl(EquipmentShape shape) {
+        return switch (shape.kind()) {
+            case PUMP -> {
+                var r = UnitDesign.pumpRating(shape);
+                yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalPump(r[0], r[1],
+                        com.wormzjl.icheme.science.machine.CentrifugalPump.bestEfficiency(r[0]), UnitDesign.designSpeed(shape)), 0, true);
+            }
+            case CENTRIFUGAL_COMPRESSOR -> {
+                var r = UnitDesign.compressorRating(shape);
+                yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalCompressor(r[0], r[1], .78), 0, true);
+            }
+            case COMPRESSOR -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(frameDisplacement(shape), 3, true);
+            case STEAM_TURBINE -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(Math.max(1e3, UnitDesign.ratedPower(shape))));
+            default -> throw new IllegalArgumentException("Not a shaft-driven machine: " + shape.kind());
+        };
+    }
+
+    private static double frameDisplacement(EquipmentShape shape) {
+        return Math.max(1e-4, Math.min(com.wormzjl.icheme.science.fluid.network.FlowControl.Mover.MAXIMUM_VOLUME_FLOW, UnitDesign.displacement(shape)));
+    }
+
+    /**
+     * The control a casing saved before W3 takes at its restore (reading A29), or null when it already has its own: a pump's
+     * or centrifugal compressor's set-flow control becomes its machine, its set flow kept as the machine's; a frame takes
+     * its displacement, keeping its pressure ratio and switch.
+     */
+    static @Nullable com.wormzjl.icheme.science.fluid.network.FlowControl restoredControl(EquipmentShape shape, com.wormzjl.icheme.science.fluid.network.FlowControl control) {
+        return switch (shape.kind()) {
+            case PUMP, CENTRIFUGAL_COMPRESSOR -> {
+                if (!(control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Pump) && !(control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor)) yield null;
+                var mover = (com.wormzjl.icheme.science.fluid.network.FlowControl.Mover) control;
+                var machine = (com.wormzjl.icheme.science.fluid.network.FlowControl.Machine) machineControl(shape);
+                double set = Math.max(0, Math.min(com.wormzjl.icheme.science.fluid.network.FlowControl.Mover.MAXIMUM_VOLUME_FLOW, mover.requestedVolumeFlow()));
+                yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(machine.law(), 0, mover.enabled(), set, 0);
+            }
+            case COMPRESSOR -> control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor c && c.requestedVolumeFlow() != frameDisplacement(shape)
+                    ? new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(frameDisplacement(shape), c.maximumPressureRatio(), c.enabled()) : null;
+            default -> null;
+        };
     }
 
     private static BlockPos min(BlockPos a, BlockPos b) {

@@ -454,7 +454,7 @@ public final class ShapeRasterizer {
 
     /**
      * A drum's shell cell at its lowest inside point, where its fluid node stands: the bottom apex, or a lying drum's
-     * bottom line; a mover's suction nozzle cell; null for other columns and units.
+     * bottom line; a mover's suction nozzle cell, a steam turbine's steam inlet cell (W3); null for other columns and units.
      */
     public static @Nullable Cell fluidCell(EquipmentShape shape) {
         return geometry(shape).fluidCell;
@@ -752,6 +752,10 @@ public final class ShapeRasterizer {
             } else if (shape.kind().mover()) {
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.SUCTION)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A mover needs a suction nozzle")).cell();
+            } else if (shape.kind() == EquipmentShape.Kind.STEAM_TURBINE) {
+                // A turbine registers at its steam inlet's cell (W3, reading A37), as a mover at its suction's.
+                node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.STEAM)
+                        .findFirst().orElseThrow(() -> new IllegalStateException("A turbine needs a steam inlet")).cell();
             } else if (unit != null && unit.fluidPoint != null) {
                 var low = transform.point(unit.fluidPoint);
                 node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));

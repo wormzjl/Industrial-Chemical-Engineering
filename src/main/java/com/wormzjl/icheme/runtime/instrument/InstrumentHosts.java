@@ -45,7 +45,7 @@ public final class InstrumentHosts {
             var pos=entry.getKey();double reach=radius+entry.getValue();
             if(pos.getCenter().distanceToSqr(centre)>reach*reach||!level.hasChunkAt(pos))continue;
             var h=at(level,pos);if(h==null)continue;
-            var mounts=new ArrayList<>(h.mounts());mounts.addAll(Sensor.mounts(h,Sensor.Kind.LEVEL));mounts.addAll(Sensor.mounts(h,Sensor.Kind.FLOW));
+            var mounts=new ArrayList<>(h.mounts());mounts.addAll(Sensor.mounts(h,Sensor.Kind.LEVEL));mounts.addAll(Sensor.mounts(h,Sensor.Kind.FLOW));mounts.addAll(Sensor.mounts(h,Sensor.Kind.SPEED));
             if(mounts.stream().anyMatch(m->m.centre().distanceToSqr(centre)<=radius*radius))result.putIfAbsent(h.identity(),h);
         }
         return List.copyOf(result.values());

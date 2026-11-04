@@ -1779,6 +1779,7 @@
   "item.icheme.temperature_probe": "Sonde de température",
   "item.icheme.flowmeter": "Débitmètre",
   "item.icheme.digital_level_meter": "Indicateur de niveau numérique",
+  "item.icheme.speed_sensor": "Capteur de vitesse",
   "gui.icheme.fluid.pressure_probe": "Sonde de pression",
   "gui.icheme.fluid.temperature_probe": "Sonde de température",
   "gui.icheme.fluid.flowmeter": "Débitmètre",

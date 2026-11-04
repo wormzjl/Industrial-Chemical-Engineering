@@ -2197,7 +2197,7 @@ public final class ProcessUnit {
         double opening = Math.min(g - .03, rs + Math.max(.02, .4 * rs));
         for (int i = 0; i + 1 < outline.size(); i++) {
             double[] p = outline.get(i), q = outline.get(i + 1);
-            double length = Math.hypot(q[0] - p[0], q[1] - p[1]);
+            double length = Math.sqrt((q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1]));
             boolean flank = i == 0 || i + 2 == outline.size();
             var around = new Uv(new double[]{p[0], p[1], z0}, new double[]{(q[0] - p[0]) / length, (q[1] - p[1]) / length, 0}, flank ? 0 : run,
                     flank ? length / Math.max(1, Math.rint(length / GUARD_PANEL)) : arc);

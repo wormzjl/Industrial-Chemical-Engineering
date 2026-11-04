@@ -797,9 +797,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         return kind.reservoir();
     }
 
-    /** Registers with the fluid engine when the whole structure has been built. */
+    /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37). */
     public boolean fluidDevice() {
-        return reservoir() || kind.mover() || HeatSides.unit(kind) != null;
+        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || HeatSides.unit(kind) != null;
     }
 
     /** A vessel's skirt; a designed shape's supports are its own parts. */

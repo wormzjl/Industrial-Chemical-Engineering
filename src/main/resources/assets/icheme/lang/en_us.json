@@ -1779,6 +1779,7 @@
   "item.icheme.temperature_probe": "Temperature Probe",
   "item.icheme.flowmeter": "Flowmeter",
   "item.icheme.digital_level_meter": "Digital Level Meter",
+  "item.icheme.speed_sensor": "Speed Sensor",
   "gui.icheme.fluid.pressure_probe": "Pressure probe",
   "gui.icheme.fluid.temperature_probe": "Temperature probe",
   "gui.icheme.fluid.flowmeter": "Flowmeter",

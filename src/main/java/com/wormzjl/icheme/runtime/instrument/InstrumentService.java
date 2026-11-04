@@ -99,20 +99,29 @@ public final class InstrumentService {
                 }
             }
             if(op.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),!op.remove());metered(host);}
+            // A speed pickup binds or frees its turbine's governor valve, as a queued shaft event (W3, reading A25).
+            if(op.kind()==Sensor.Kind.SPEED)governor(host.identity(),op.remove()?null:value.instance());
             sync(host);world.markViewDirty(host.identity());player.inventoryMenu.broadcastChanges();
         }
     }
     private void editSensorValve(WorldTopologyLedger.Registration record,com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve control){
         var d=record.device();world.edit(d.id(),record.revision(),d.withControl(control),record.spec());
     }
-    private void recoverSensors(long host,ServerPlayer player,Level level,BlockPos position,boolean drop){for(var sensor:store.sensors(host))if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW)world.forgetFlowmeter(host);if(drop)refund(player,level,position,sensorItem(sensor.kind()));}}
+    private void recoverSensors(long host,ServerPlayer player,Level level,BlockPos position,boolean drop){for(var sensor:store.sensors(host))if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW)world.forgetFlowmeter(host);if(sensor.kind()==Sensor.Kind.SPEED)governor(host,null);if(drop)refund(player,level,position,sensorItem(sensor.kind()));}}
+    /** Queues turbine {@code host}'s governor binding (W3): {@code sensor} installed, or null removed. */
+    private void governor(long host,UUID sensor){world.shafts().queue(new ShaftTrains.Governor(host,sensor));}
+    /** The speed pickup installed on turbine {@code host}, or null (W3). */
+    public UUID speedSensor(long host){for(var s:store.sensors(host))if(s.kind()==Sensor.Kind.SPEED)return s.instance();return null;}
     private void recoverInvalidSensors(){for(var sensor:store.allSensors()){
         var host=world.instrumentHost(sensor.key().host());if(host==null)continue;
         if(Sensor.mounts(host,sensor.kind()).stream().anyMatch(m->m.id().equals(sensor.key().mount())))continue;
-        if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),false);metered(host);}refund(null,host.entity().getLevel(),host.entity().getBlockPos(),sensorItem(sensor.kind()));sync(host);world.markViewDirty(host.identity());}
+        if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),false);metered(host);}if(sensor.kind()==Sensor.Kind.SPEED)governor(host.identity(),null);refund(null,host.entity().getLevel(),host.entity().getBlockPos(),sensorItem(sensor.kind()));sync(host);world.markViewDirty(host.identity());}
     }}
-    public static ItemStack sensorItem(Sensor.Kind kind){return new ItemStack(switch(kind){case PRESSURE->ModItems.PRESSURE_PROBE.get();case TEMPERATURE->ModItems.TEMPERATURE_PROBE.get();case FLOW->ModItems.FLOWMETER.get();case LEVEL->ModItems.DIGITAL_LEVEL_METER.get();});}
-    public List<Sensor.Reading> sensorReadings(long host,FluidView view){var pipe=world.instrumentPipeReading(host);return store.sensors(host).stream().map(s->{var reading=Sensor.read(s,view,pipe,sensorSamples.get(s.instance()));sensorSamples.put(s.instance(),reading);return reading;}).toList();}
+    public static ItemStack sensorItem(Sensor.Kind kind){return new ItemStack(switch(kind){case PRESSURE->ModItems.PRESSURE_PROBE.get();case TEMPERATURE->ModItems.TEMPERATURE_PROBE.get();case FLOW->ModItems.FLOWMETER.get();case LEVEL->ModItems.DIGITAL_LEVEL_METER.get();case SPEED->ModItems.SPEED_SENSOR.get();});}
+    public List<Sensor.Reading> sensorReadings(long host,FluidView view){var pipe=world.instrumentPipeReading(host);return store.sensors(host).stream().map(s->{var reading=s.kind()==Sensor.Kind.SPEED?speedReading(s,view):Sensor.read(s,view,pipe,sensorSamples.get(s.instance()));sensorSamples.put(s.instance(),reading);return reading;}).toList();}
+    /** A speed pickup reads its turbine's shaft speed, rpm, as the trains last decided it (W3): a read of engine state. */
+    private Sensor.Reading speedReading(Sensor.Installed s,FluidView view){double rpm=world.shafts().speed(s.key().host());
+        return new Sensor.Reading(s.instance(),s.kind(),s.key().mount(),Double.isFinite(rpm)?rpm:0,0,0,view.committedTick(),Double.isFinite(rpm)?Instrument.Availability.AVAILABLE:Instrument.Availability.UNAVAILABLE);}
     private ServerLevel level(String name){return server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,ResourceLocation.parse(name)));}
     /** A flowmeter installed or removed (W8): an assembly whose walk read that pipe reverts, as for a fitting. */
     private static void metered(InstrumentHosts.Host host){if(host.entity().getLevel() instanceof net.minecraft.server.level.ServerLevel level)com.wormzjl.icheme.runtime.assembly.AssemblyService.metered(level,host.entity().getBlockPos());}

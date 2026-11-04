@@ -1779,6 +1779,7 @@
   "item.icheme.temperature_probe": "温度プローブ",
   "item.icheme.flowmeter": "流量計",
   "item.icheme.digital_level_meter": "デジタルレベル計",
+  "item.icheme.speed_sensor": "回転速度センサー",
   "gui.icheme.fluid.pressure_probe": "圧力プローブ",
   "gui.icheme.fluid.temperature_probe": "温度プローブ",
   "gui.icheme.fluid.flowmeter": "流量計",

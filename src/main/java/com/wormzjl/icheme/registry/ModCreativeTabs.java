@@ -23,6 +23,7 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.TEMPERATURE_PROBE.get());
                 output.accept(ModItems.FLOWMETER.get());
                 output.accept(ModItems.DIGITAL_LEVEL_METER.get());
+                output.accept(ModItems.SPEED_SENSOR.get());
                 output.accept(ModItems.PRESSURE_GAUGE.get());
                 output.accept(ModItems.TEMPERATURE_GAUGE.get());
                 output.accept(ModItems.ACCESSORY_WRENCH.get());

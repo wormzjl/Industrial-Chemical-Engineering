@@ -7,7 +7,10 @@ import java.util.*;
 /** Deterministic compilation of persistent block identities; no Minecraft reads or loaded-chunk dependency. */
 public final class TopologyCompiler {
     private TopologyCompiler() {}
-    public enum Kind { RESERVOIR, PIPE, PUMP, VALVE, GENERATOR, VOID, FILTER, COMPRESSOR, HEAT_SIDE }
+    /** Saved by name. {@code TURBINE} (batch 2026-11-03-rotating-machinery, W3, reading A37): a steam turbine, placed as a
+     * constructed mover is, its inlet the suction and its exhaust the discharge, its connection carrying
+     * {@code FlowControl.Turbine}. */
+    public enum Kind { RESERVOIR, PIPE, PUMP, VALVE, GENERATOR, VOID, FILTER, COMPRESSOR, HEAT_SIDE, TURBINE }
     public record Node(long id,Kind kind,double elevation) {
         public Node{Objects.requireNonNull(kind);if(!Double.isFinite(elevation))throw new IllegalArgumentException("Invalid elevation");}
     }

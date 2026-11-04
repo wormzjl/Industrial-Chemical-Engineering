@@ -106,7 +106,7 @@ final class SteamTurbineDesign extends UnitDesign {
 
     /** The isentropic drop, kJ/kg: {@link #DROP_PER_LOG} per e-fold of the pressure ratio (HP to 4.5 bar 450, to 0.1 bar 1,200). */
     static double drop(MachineDuty duty) {
-        return DROP_PER_LOG * Math.log(duty.steam().pressure / duty.exhaust());
+        return DROP_PER_LOG * com.wormzjl.icheme.science.math.DeterministicMath.log(duty.steam().pressure / duty.exhaust());
     }
 
     /** The stages: the drop at {@link #STAGE_DROP} each, 1 (an API 611 single-stage look) to 12. */

@@ -250,6 +250,28 @@ public final class IslandCoordinator {
         };
     }
     private Ports ports=Ports.NONE;
+    /**
+     * The shaft trains (batch 2026-11-03-rotating-machinery W3, build plan section 2): each island's slice inputs at dispatch
+     * (a machine's speed, a frame's displacement, a governor valve's target; reads, no solve), the power its machines took
+     * at each commit and replay ({@code booked} records only), and the drivers' step at the engine's decision points
+     * ({@code decide}, after commits and due deadlines; never in a presentation read). Arithmetic only, on the server thread.
+     */
+    public interface Shafts {
+        Map<Long,com.wormzjl.icheme.science.fluid.network.ShaftPlan> plans(long island,PassiveNetwork graph);
+        void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result);
+        void decide();
+        Shafts NONE=new Shafts(){
+            public Map<Long,com.wormzjl.icheme.science.fluid.network.ShaftPlan> plans(long island,PassiveNetwork graph){return Map.of();}
+            public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result){}
+            public void decide(){}
+        };
+    }
+    private Shafts shafts=Shafts.NONE;
+    /** Installs the shaft trains. */
+    public void shafts(Shafts value){owned();shafts=Objects.requireNonNull(value);}
+    /** A shaft train's speed, trip or start changed (a dependency change, plan 5.2): the islands it drives end their
+     * certificates at the next decision point and read the new speed at their next dispatch. */
+    public void shaftsMoved(Collection<Long> moved){owned();for(long id:moved)if(islands.containsKey(id))toWake.add(id);}
     /** Installs the running columns' ports. */
     public void ports(Ports value){owned();ports=Objects.requireNonNull(value);}
     /** A running column's plan for {@code island} moved: a certified island ends its certificate at the next decision point. */
@@ -496,7 +518,7 @@ public final class IslandCoordinator {
                 default->throw new IllegalStateException("No handler for deadline "+due.kind());
             }
         }
-        flushWakes();
+        shafts.decide();flushWakes();
     }
     /**
      * The O(1) check the tick hooks make: pumps only when a pump would act, that is when a state change made
@@ -536,14 +558,16 @@ public final class IslandCoordinator {
                 // The job starts from the committed interval, not from the solver's history; see RetainedSolver.
                 island.retained.committed(island.lastResult.orElse(null));
                 var reads=reads(island,slice);
-                var command=new ProcessSolveServices.FluidIslandCommand(island.model,island.graph,slice.seconds(),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,island.graph,slice));
+                // The shaft trains' slice inputs (W3), read here as a heat side's partner is.
+                var dispatched=com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(island.graph,shafts.plans(island.id,island.graph));
+                var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
                 var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong());entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
                 reconsider(island);
             }
             if(!admitted.isEmpty()){var round=new Round(roundSequence=Math.addExact(roundSequence,1),List.copyOf(admitted),roundStarted);rounds.add(round);scheduleRoundTimeout(round,settings.hardBudgetNanos);}
-            flushWakes();
+            shafts.decide();flushWakes();
         } finally {
             // Owners that became ready during this pump were offered to it; any left over wait for capacity,
             // which pumpIfUseful checks directly, so no request survives the pump.
@@ -611,7 +635,7 @@ public final class IslandCoordinator {
         }
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.islandsPublished,changed.size());
         publisher.published(List.copyOf(changed));
-        flushWakes();
+        shafts.decide();flushWakes();
     }
     /** The longest a held island waits between retries at the shortest slice, in cadences: 2^6 = 64. */
     static final int MAXIMUM_RETRY_DOUBLINGS=6;
@@ -696,6 +720,8 @@ public final class IslandCoordinator {
      */
     private static boolean sameControl(FlowControl a,FlowControl b) {
         if(a.equals(b))return true;
+        // A shaft train's slice input (W3): a machine's speed, a frame's displacement, a governor valve's target.
+        if(com.wormzjl.icheme.science.fluid.network.ShaftPlan.planned(a,b))return true;
         // A boundary valve a running column works (batch 2026-10-28-column-operation): its planned mass flow, whatever the valve's own control.
         if(b instanceof FlowControl.ControlValve y&&y.source()==FlowControl.ValveSource.MASS_FLOW&&com.wormzjl.icheme.science.fluid.network.PortPlan.COLUMN_SENSOR.equals(y.sensor())
                 &&a instanceof FlowControl.Valve x)return x.targetPressure()==y.targetPressure();
@@ -1049,6 +1075,7 @@ public final class IslandCoordinator {
      */
     private void booked(Island island,long start,long end,PassiveIntervalSolver.Result result,Map<Long,ExchangerRelay.Read> reads) {
         ports.booked(island.id,island.graph,start,end,result);
+        shafts.booked(island.id,island.graph,start,end,result);
         for(long pipe:island.sides) {
             var side=coupled.get(pipe);if(side==null)continue;
             double joule=heat(result,pipe);

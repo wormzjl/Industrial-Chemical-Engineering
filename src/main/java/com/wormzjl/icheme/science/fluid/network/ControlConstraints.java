@@ -28,7 +28,7 @@ public final class ControlConstraints {
      */
     public static BitSet standing(PassiveNetwork graph){
         int edges=graph.pipes().size();var result=new BitSet(edges);var valves=new ArrayList<Integer>();
-        for(int e=0;e<edges;e++)if(graph.pipes().get(e).control() instanceof FlowControl.ControlValve v&&!v.bare()&&v.source()==FlowControl.ValveSource.MASS_FLOW)valves.add(e);
+        for(int e=0;e<edges;e++)if(graph.pipes().get(e).control() instanceof FlowControl.ControlValve v&&!v.bare()&&v.source().mass())valves.add(e);
         if(valves.size()<2)return result;
         var basis=junctionBasis(graph);
         var lines=new ArrayList<Line>();

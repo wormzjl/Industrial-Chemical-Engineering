@@ -111,6 +111,8 @@ public final class FlowsheetCatalog {
             case FILTER -> modelled("filter");
             case COMPRESSOR -> COMPRESSOR;
             case HEAT_SIDE -> EXCHANGER;
+            // A steam turbine registers as a fluid device (W3, reading A37).
+            case TURBINE -> TURBINE;
         };
     }
 }

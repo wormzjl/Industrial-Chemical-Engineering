@@ -135,9 +135,9 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
         double[] r10 = {1, 1.25, 1.6, 2, 2.5, 3.15, 4, 5, 6.3, 8};
         var out = new java.util.ArrayList<Double>();
         out.add(min);
-        for (int k = (int) Math.floor(Math.log10(min)); k <= (int) Math.ceil(Math.log10(max)); k++)
+        for (int k = (int) Math.floor(com.wormzjl.icheme.science.math.DeterministicMath.log10(min)); k <= (int) Math.ceil(com.wormzjl.icheme.science.math.DeterministicMath.log10(max)); k++)
             for (double m : r10) {
-                double v = k >= 0 ? m * Math.pow(10, k) : m / Math.pow(10, -k);
+                double v = k >= 0 ? m * com.wormzjl.icheme.science.math.DeterministicMath.pow(10, k) : m / com.wormzjl.icheme.science.math.DeterministicMath.pow(10, -k);
                 v = Math.round(v * 1e6) / 1e6;
                 if (v > min + 1e-9 && v < max - 1e-9) out.add(v);
             }

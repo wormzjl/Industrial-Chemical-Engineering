@@ -55,8 +55,8 @@ public final class DriverSounds {
         double share=running&&speed>0?Math.min(speed,1):0;
         SPEEDS.put(origin,share);if(share==0)stop(origin);
     }
-    /** W3: send the driver watch request here (the drivers near the player in, the ones out of reach out). */
-    private static void request(List<BlockPos> watch,List<BlockPos> unwatch){}
+    /** The driver watch request (W3): the drivers near the player in, the ones out of reach out. */
+    private static void request(List<BlockPos> watch,List<BlockPos> unwatch){FluidNetwork.requestDrivers(watch,unwatch);}
     public static void clear(){for(var origin:List.copyOf(LOOPS.keySet()))stop(origin);SPEEDS.clear();WATCHED.clear();CELLS.clear();world=null;age=0;}
     /** A driver structure's origin, where this is its controller cell; otherwise null. */
     private static @Nullable BlockPos origin(EquipmentShellBlockEntity shell) {

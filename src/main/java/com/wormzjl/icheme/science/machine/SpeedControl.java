@@ -49,6 +49,17 @@ public final class SpeedControl {
         return Math.min(setSpeed, speed * DeterministicMath.cbrt(Math.sqrt(Math.max(0, available) / demand)));
     }
 
+    /**
+     * A driver that cannot cut its power (an ungoverned turbine, batch 2026-11-03-rotating-machinery reading A22): the same
+     * damped step {@code s (available/demand)^(1/6)} as {@link #powerLimited}, without the cap at the set speed, so a surplus
+     * accelerates the shaft and the overspeed trip can act. With no demand, any power is a surplus without bound (+∞); with
+     * neither, the speed holds.
+     */
+    public static double balance(double speed, double available, double demand) {
+        if (!(demand > 0)) return available > 0 ? Double.POSITIVE_INFINITY : speed;
+        return speed * DeterministicMath.cbrt(Math.sqrt(Math.max(0, available) / demand));
+    }
+
     private static double clamp(double value, double lowest, double highest) {
         return Math.min(highest, Math.max(lowest, value));
     }

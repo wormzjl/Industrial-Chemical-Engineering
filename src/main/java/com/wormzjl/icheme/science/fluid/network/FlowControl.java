@@ -192,15 +192,24 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * or compressor on its curve, at the speed its driver set for the slice. It has no set flow: the line and the curve
      * settle it. Its {@link #requestedVolumeFlow} is the rated flow at its speed, a scale for seeds, zero when it stands.
      *
-     * @param law     the machine's curve and efficiency
-     * @param speed   its speed for the slice, a share of the rated speed; zero stands it closed
-     * @param enabled whether it runs
+     * @param law         the machine's curve and efficiency
+     * @param speed       its speed for the slice, a share of the rated speed; zero stands it closed. A slice input its
+     *                    shaft train sets at dispatch (W3); saved facts carry none
+     * @param enabled     whether it runs
+     * @param setFlow     the suction volume flow (m³/s) a regulating driver holds (W3, reading A30); 0 for none
+     * @param setPressure the discharge pressure (Pa) a regulating driver holds; 0 for none
      */
-    record Machine(MachineLaw law,double speed,boolean enabled) implements Mover {
+    record Machine(MachineLaw law,double speed,boolean enabled,double setFlow,double setPressure) implements Mover {
+        public Machine(MachineLaw law,double speed,boolean enabled){this(law,speed,enabled,0,0);}
         public Machine {
             java.util.Objects.requireNonNull(law);
             if(!Double.isFinite(speed)||speed<0)throw new IllegalArgumentException("Invalid machine speed "+speed);
+            if(!Double.isFinite(setFlow)||setFlow<0||setFlow>MAXIMUM_VOLUME_FLOW||!Double.isFinite(setPressure)||setPressure<0)throw new IllegalArgumentException("Invalid machine set points");
         }
+        /** This machine at {@code value}, its share of the rated speed for a slice. */
+        public Machine withSpeed(double value){return value==speed?this:new Machine(law,value,enabled,setFlow,setPressure);}
+        /** Whether {@code other} is this machine at another speed: the same law, switch and set points. */
+        public boolean sameButSpeed(Machine other){return law.equals(other.law)&&enabled==other.enabled&&setFlow==other.setFlow&&setPressure==other.setPressure;}
         @Override public double requestedVolumeFlow(){return law.ratedFlow()*speed;}
         @Override public boolean liquid(){return law.liquid();}
         /** The curve's rise at no flow. */
@@ -222,7 +231,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         @Override public Npsh npsh(){return law instanceof CentrifugalPump pump&&speed>0?pump.npsh(speed):null;}
         /** This machine with its pump's head scaled by {@code share} ({@link CentrifugalPump#withHeadShare}, the gas share
          * {@link com.wormzjl.icheme.science.machine.GasEntrainment#headShare}); a compressor as it is. */
-        public Machine withHeadShare(double share){return law instanceof CentrifugalPump pump&&share!=1?new Machine(pump.withHeadShare(share),speed,enabled):this;}
+        public Machine withHeadShare(double share){return law instanceof CentrifugalPump pump&&share!=1?new Machine(pump.withHeadShare(share),speed,enabled,setFlow,setPressure):this;}
         @Override public String deviceName(){return liquid()?"pump":"compressor";}
     }
     /** The law of a set-flow mover (form F2e): its set flow is the displacement, its rise limit the relief rise. */
@@ -236,10 +245,18 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         default boolean bare(){return false;}
         default double targetMassFlow(double density){return Double.NaN;}
     }
-    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW }
+    /**
+     * What a control valve's sensor measures, saved by name. {@code SHAFT_SPEED} (batch 2026-11-03-rotating-machinery, owner
+     * decision D27): a turbine's governor valve, its sensor the speed sensor on the turbine's shaft train; it regulates a
+     * mass flow, its {@link ControlValve#massTarget}, which the engine sets once per slice from the train's power demand.
+     */
+    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED;
+        /** Whether a valve of this source regulates its mass flow. */
+        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED;}
+    }
     /** Configured facts; source identity/revision invalidate endpoint carry when a component or target changes. */
     record ControlValve(ValveSource source,double targetPressure,double massTarget,double volumeTarget,java.util.UUID sensor,long revision) implements Valve {
-        public ControlValve(ValveSource source,double target,java.util.UUID sensor,long revision){this(source,source==ValveSource.PRESSURE||source==ValveSource.NONE?target:200000,source==ValveSource.MASS_FLOW?target:1,source==ValveSource.VOLUME_FLOW?target:.01,sensor,revision);}
+        public ControlValve(ValveSource source,double target,java.util.UUID sensor,long revision){this(source,source==ValveSource.PRESSURE||source==ValveSource.NONE?target:200000,source.mass()?target:1,source==ValveSource.VOLUME_FLOW?target:.01,sensor,revision);}
         public ControlValve {
             java.util.Objects.requireNonNull(source);
             if(!Double.isFinite(targetPressure)||targetPressure<=0||!Double.isFinite(massTarget)||massTarget<0||!Double.isFinite(volumeTarget)||volumeTarget<0||revision<0||
@@ -248,9 +265,11 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         public static ControlValve unconfigured(){return new ControlValve(ValveSource.NONE,200000,null,0);}
         @Override public boolean pressureControl(){return source==ValveSource.PRESSURE;}
         @Override public boolean bare(){return sensor==null;}
-        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW->massTarget;case VOLUME_FLOW->volumeTarget;};}
-        @Override public double targetMassFlow(double density){return source==ValveSource.MASS_FLOW?massTarget:volumeTarget*density;}
-        public ControlValve withTarget(double value){return new ControlValve(source,source==ValveSource.PRESSURE?value:targetPressure,source==ValveSource.MASS_FLOW?value:massTarget,source==ValveSource.VOLUME_FLOW?value:volumeTarget,sensor,Math.addExact(revision,1));}
+        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED->massTarget;case VOLUME_FLOW->volumeTarget;};}
+        @Override public double targetMassFlow(double density){return source.mass()?massTarget:volumeTarget*density;}
+        public ControlValve withTarget(double value){return new ControlValve(source,source==ValveSource.PRESSURE?value:targetPressure,source.mass()?value:massTarget,source==ValveSource.VOLUME_FLOW?value:volumeTarget,sensor,Math.addExact(revision,1));}
+        /** A governor valve's mass target for one slice (W3): a slice input, its revision kept, as a column's port plan is. */
+        public ControlValve withMassTarget(double value){return new ControlValve(source,targetPressure,value,volumeTarget,sensor,revision);}
         public ControlValve withSource(ValveSource source,java.util.UUID sensor,long revision){return new ControlValve(source,targetPressure,massTarget,volumeTarget,sensor,revision);}
     }
     /** Effective flow-area opening, using the host bore and local density. */

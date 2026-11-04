@@ -21,7 +21,8 @@ import java.util.function.Supplier;
  * or refunds an item, so a dropped operation loses nothing.</p>
  */
 final class AccessoryFacts {
-    static final int SCHEMA=2,STATE=1;
+    /** Schema 3 (batch 2026-11-03-rotating-machinery W3): the sensor kind SPEED and its mount speed_pickup; no new field. */
+    static final int SCHEMA=3,STATE=1;
     /**
      * Renamed or removed saved names, per name set: the saved name to the current one. A gauge's kind and unit share the
      * item component's tables, so one alias serves both. None at schema 1.

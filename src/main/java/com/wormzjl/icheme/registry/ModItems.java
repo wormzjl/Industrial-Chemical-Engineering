@@ -73,6 +73,8 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> TEMPERATURE_PROBE=sensor("temperature_probe",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE);
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> FLOWMETER=sensor("flowmeter",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW);
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> DIGITAL_LEVEL_METER=sensor("digital_level_meter",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.LEVEL);
+    /** A steam turbine's speed pickup (W3): mounted on its coupling guard, it works the turbine's governor valve. */
+    public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> SPEED_SENSOR=sensor("speed_sensor",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED);
     private static DeferredItem<com.wormzjl.icheme.world.item.SensorItem> sensor(String name,com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind){return ITEMS.registerItem(name,p->new com.wormzjl.icheme.world.item.SensorItem(p,kind));}
 
     private ModItems() {

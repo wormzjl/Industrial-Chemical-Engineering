@@ -1779,6 +1779,7 @@
   "item.icheme.temperature_probe": "Sonda de temperatura",
   "item.icheme.flowmeter": "Caudalímetro",
   "item.icheme.digital_level_meter": "Medidor de nivel digital",
+  "item.icheme.speed_sensor": "Sensor de velocidad",
   "gui.icheme.fluid.pressure_probe": "Sonda de presión",
   "gui.icheme.fluid.temperature_probe": "Sonda de temperatura",
   "gui.icheme.fluid.flowmeter": "Caudalímetro",

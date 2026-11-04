@@ -17,7 +17,7 @@ public final class Instrument {
     /** What a player attaches: the two gauges and the pipe fittings. */
     public enum Type { PRESSURE, TEMPERATURE, SIGHT_GLASS, SHUTOFF, CHECK, PRESSURE_VALVE, FILTER, PUMP, COMPRESSOR }
     /** Every mount name; saved by name, like an enum constant. */
-    public static final Set<String> MOUNTS=Set.of("pipe_north","pipe_south","pipe_east","pipe_west","pipe_accessory","pressure_top","pressure_bottom","temperature_top","temperature_bottom","level_body","level_boot","valve_sensor");
+    public static final Set<String> MOUNTS=Set.of("pipe_north","pipe_south","pipe_east","pipe_west","pipe_accessory","pressure_top","pressure_bottom","temperature_top","temperature_bottom","level_body","level_boot","valve_sensor",Sensor.SPEED_PICKUP);
     public record Key(long host,String mount) {
         public Key{if(host<=0||mount==null||!MOUNTS.contains(mount))throw new IllegalArgumentException("Invalid instrument key");}
     }

@@ -116,8 +116,8 @@ public final class MoverSounds {
         }
     }
     /**
-     * A mover's speed share. Every mover is a set-flow pump or compressor today: 1 while it runs. W3 takes the share
-     * from the shaft train's driver, published with the mover's state. Its driver's own loop is {@link DriverSounds}.
+     * A mover's speed share, published with its state from its shaft train's driver (W3; 1 for a set-flow mover). Its
+     * driver's own loop is {@link DriverSounds}.
      */
-    private static double speed(FluidNetwork.MoverState state){return state.running()?1:0;}
+    private static double speed(FluidNetwork.MoverState state){return state.running()?Math.min(state.speed(),1.5):0;}
 }

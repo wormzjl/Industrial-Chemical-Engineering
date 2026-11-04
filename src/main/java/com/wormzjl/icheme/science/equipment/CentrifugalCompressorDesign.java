@@ -188,7 +188,7 @@ final class CentrifugalCompressorDesign extends UnitDesign {
      */
     static double airRatio(double head) {
         double exponent = .4 / (1.4 * .8), rt = 8.314 * 303.15 / 28.96;
-        return Math.pow(1 + head * exponent / rt, 1 / exponent);
+        return com.wormzjl.icheme.science.math.DeterministicMath.pow(1 + head * exponent / rt, 1 / exponent);
     }
 
     /** The inlet flow, m³/h: the anchor's, scaled with the impeller's area. */

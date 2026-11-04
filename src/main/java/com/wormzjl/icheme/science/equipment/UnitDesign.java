@@ -274,9 +274,9 @@ public abstract class UnitDesign {
         }else if(driver(shape.kind())){
             boolean turbine=shape.kind()==EquipmentShape.Kind.STEAM_TURBINE;
             double least=turbine?SteamTurbineDesign.MIN_POWER:MotorDesign.POWERS.getFirst(),most=turbine?SteamTurbineDesign.MAX_POWER:MotorDesign.POWERS.getLast();
-            size=Math.log(shape.duty().power()/least)/Math.log(most/least);
+            size=com.wormzjl.icheme.science.math.DeterministicMath.log(shape.duty().power()/least)/com.wormzjl.icheme.science.math.DeterministicMath.log(most/least);
         }else return 0;
-        return (float)((.10+.50*Math.clamp(size,0,1))*Math.pow(Math.clamp(speed,0,1),SPEED_EXPONENT));
+        return (float)((.10+.50*Math.clamp(size,0,1))*com.wormzjl.icheme.science.math.DeterministicMath.pow(Math.clamp(speed,0,1),SPEED_EXPONENT));
     }
 
     /**
@@ -297,6 +297,56 @@ public abstract class UnitDesign {
     /** Whether a kind sounds as a driver, its own loop at its own cells: a motor, its mirror the generator, or a steam turbine. */
     public static boolean driver(EquipmentShape.Kind kind) {
         return kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.STEAM_TURBINE;
+    }
+
+    /** Whether a kind is a member of a shaft train (batch 2026-11-03-rotating-machinery, W3): a driver, a gearbox, or a
+     * pump or compressor casing. */
+    public static boolean shafted(EquipmentShape.Kind kind) {
+        return driver(kind) || kind == EquipmentShape.Kind.GEARBOX || kind.mover();
+    }
+
+    /**
+     * A shaft member's design speed, rpm (W3): what its shaft turns at its rated point. A pump at its poles' speed with slip
+     * (2950 or 1475), a motor too; a generator at its synchronous speed; a centrifugal compressor at its impeller's tip speed;
+     * a reciprocating frame at its stroke's; a turbine at its last stage's tip ({@code SteamTurbineTrain}). 0 for a gearbox,
+     * whose speeds are its neighbours'.
+     */
+    public static double designSpeed(EquipmentShape shape) {
+        var duty = shape.duty();
+        return switch (shape.kind()) {
+            case PUMP, MOTOR -> com.wormzjl.icheme.science.machine.Motor.ratedSpeed(duty.poles() == 0 ? 2 : duty.poles());
+            case GENERATOR -> duty.poles() == 0 ? 3000 : duty.speed();
+            case CENTRIFUGAL_COMPRESSOR -> CentrifugalCompressorDesign.speed(shape.diameter());
+            case COMPRESSOR -> ProcessUnit.compressorSpeed(shape.diameter());
+            case STEAM_TURBINE -> SteamTurbineTrain.speed(shape.diameter());
+            default -> 0;
+        };
+    }
+
+    /** A driver's, generator's or gearbox's rated shaft power, W (W3); 0 for a casing, whose power its law gives. */
+    public static double ratedPower(EquipmentShape shape) {
+        return switch (shape.kind()) {
+            case MOTOR, GENERATOR, GEARBOX, STEAM_TURBINE -> 1000 * shape.duty().power();
+            default -> 0;
+        };
+    }
+
+    /** A pump casing's rated flow, m³/s, and head, m (W3): its duty, or without one its discharge's flow at {@code PUMP_HEAD}. */
+    public static double[] pumpRating(EquipmentShape shape) {
+        var duty = shape.duty();
+        return new double[]{(duty.flow() > 0 ? duty.flow() : ProcessUnit.pumpFlow(shape.diameter())) / 3600, duty.head() > 0 ? duty.head() : ProcessUnit.PUMP_HEAD};
+    }
+
+    /** A reciprocating frame's displacement at its design speed, m³/s (W3). */
+    public static double displacement(EquipmentShape shape) {
+        return ProcessUnit.displacement(shape.diameter(), (int) shape.tangentLength()) / 3600;
+    }
+
+    /** A centrifugal compressor's rated polytropic head, J/kg, and inlet flow, m³/s, from its design point (W3). */
+    public static double[] compressorRating(EquipmentShape shape) {
+        var duty = shape.duty();
+        double flow = duty.flow() > 0 ? duty.flow() : CentrifugalCompressorDesign.flow(shape.diameter());
+        return new double[]{flow / 3600, 1000 * (duty.polytropicHead() > 0 ? duty.polytropicHead() : 150)};
     }
 
     // ---- Formats ----------------------------------------------------------------------------------------------------

@@ -71,4 +71,18 @@ public final class CreativeMotorBlock extends HorizontalDirectionalBlock {
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         return SHAPES.get(state.getValue(FACING));
     }
+
+    /** A placed creative motor queues its part (W3). */
+    @Override
+    protected void onPlace(BlockState state, net.minecraft.world.level.Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
+        super.onPlace(state, level, pos, oldState, movedByPiston);
+        if (!level.isClientSide() && (!oldState.is(this) || oldState.getValue(FACING) != state.getValue(FACING))) ShaftParts.creative(level, pos, state.getValue(FACING));
+    }
+
+    /** A broken creative motor queues its part's removal (W3). */
+    @Override
+    protected void onRemove(BlockState state, net.minecraft.world.level.Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (!level.isClientSide() && !newState.is(this)) ShaftParts.remove(level, pos);
+        super.onRemove(state, level, pos, newState, movedByPiston);
+    }
 }
