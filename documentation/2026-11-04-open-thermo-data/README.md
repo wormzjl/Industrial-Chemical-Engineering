@@ -6,7 +6,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
 ## Documents
 
-- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O8 and decisions E1 to E17.
+- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O8 and decisions E1 to E20.
 - [NIST_REDERIVATION_REVIEW.md](NIST_REDERIVATION_REVIEW.md): O1 and O2, what the open re-derivation moved, the measurements and the owner decisions.
 - [CRUDE_GRADES_REVIEW.md](CRUDE_GRADES_REVIEW.md): research R1 and the production data. Grade specifications and the generation method on the shared cuts, cut viscosity candidates, the mixture rule and its open refit, the validation against ECCC records.
 - [CUT_VISCOSITY_REVIEW.md](CUT_VISCOSITY_REVIEW.md): O4, the Twu cut tables and the one-term mixture term, the bit-for-bit proof and what moved.
@@ -39,12 +39,15 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
 ## Open items
 
-- Next, one Gradle thread at a time:
-  1. O3: the grades, presets, client libraries and fixtures.
+- Next:
+  1. O3 (the grades, presets, client libraries and fixtures) on Gradle lane 1, with P1 (the PhUv diagnosis) beside it on lane 2 in a scratch worktree.
   2. O8: the existing model on the new grades.
   3. O5: removals.
-  4. The batch's final lane.
-- `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling` fails at 50d6c506f (UV pressure 499999.9935 against 500000 at 460 K): not O4; it passed in the refinery final lane, so O2 or O7 moved it. Found by O4.
+  4. The final lane, on the merged code (E19).
+- `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling` fails since O7 step 1 (`570c8441c`), which changes only the methane ideal-gas Cp coefficients. Found by O4, bisected 2026-11-05 (`tmp/phuv-roundtrip/`):
+  - At `2f052f28f` (O2) the class passes, 8 of 8. Free-water tally: worst |dT/T| 8.78e-12, worst |dP/P| 1.04e-9 over 16 round trips.
+  - At `570c8441c` it fails at 460 K, 0.5 MPa: the UV round trip gives 499999.99346 Pa. The limit is the isochoric stiffness times 1e-9 times P. The UV Newton stops at a step of 1e-11 (10 times that at its noise floor), so a miss of 1.3e-8 needs another explanation.
+  - Diagnosis thread P1 runs on the second Gradle lane in a scratch worktree, beside O3. Its options go to the owner.
 - E6: the neural model's fate, after O8. Before a public release it must be retrained on open data or removed. Its training includes the ExxonMobil crudes, and the schema-4 sidecar stores their compositions and trained values from the old NIST methane fit and water Shomate.
 - The learned seed is not used on the default preset: the model binds again, but its probe takes 109 ms against the 100 ms large-wet budget (`V3ColumnCalculator.LARGE_WET_NEURAL_PROBE_MILLISECONDS`). It did the same before O2. O8 runs the model with the budget lifted, to judge the seed itself. The wall-clock budget makes the seed's use depend on the machine.
 - NIST copies left in test fixtures and tools, for O5 (list in NIST_REDERIVATION_REVIEW.md, section 5).
