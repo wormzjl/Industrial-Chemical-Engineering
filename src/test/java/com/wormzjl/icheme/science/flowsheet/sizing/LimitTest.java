@@ -34,7 +34,6 @@ final class LimitTest {
         assertEquals(36000, Limit.PUMP_FLOW.value(), EXACT);
         assertEquals(2e6, Limit.PUMP_HEAD.value(), EXACT);
         assertEquals(FluidNetwork.MAXIMUM_PRESSURE_RATIO, Limit.COMPRESSOR_RATIO.value(), EXACT);
-        assertEquals(100 * FlowControl.Compressor.CONDENSED_REFUSE, Limit.COMPRESSOR_LIQUID.value(), EXACT);
         assertEquals(FluidDeviceSpec.MAX_VOLUME, Limit.TANK_VOLUME.value(), EXACT);
         assertEquals(EquipmentShape.MAX_COLUMN_DIAMETER, Limit.COLUMN_DIAMETER.value(), EXACT);
         assertEquals(ColumnTrays.MAX_TRAYS, Limit.COLUMN_TRAYS.value(), EXACT);

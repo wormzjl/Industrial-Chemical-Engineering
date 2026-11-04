@@ -113,7 +113,9 @@ public enum Limit {
 
     // ---- Compressors ----
     COMPRESSOR_RATIO(MUST, most(FlowControl.Compressor.MAXIMUM_PRESSURE_RATIO), "", "World: `FluidNetwork.Controls`"),
-    COMPRESSOR_LIQUID(MUST, most(100 * FlowControl.Compressor.CONDENSED_REFUSE), "%", "World: `Compressor.CONDENSED_REFUSE`", QUIET),
+    /** The world compresses a wet suction since request 11 of batch 2026-11-03-rotating-machinery (no refusal, so no MUST,
+     * D14); a wet suction costs efficiency and, with W10b, wears the machine. The share is the refusal it replaced. */
+    COMPRESSOR_LIQUID(SHOULD, most(1), "%", "This plan: a wet suction erodes (rotating machinery, plan section 3.6)", QUIET),
     COMPRESSOR_DISPLACEMENT(SHOULD, given(Sense.LEAST), "m³/h", "World: `displacement`"),
     COMPRESSOR_STAGE_PISTON(SHOULD, most(3.5), "", "[PEREZ]"),
     COMPRESSOR_STAGE_TURBO(SHOULD, most(3), "", "[PEREZ]"),

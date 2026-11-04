@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.flowsheet.UnitModel;
 import com.wormzjl.icheme.science.flowsheet.WiredUnit;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.InletPhase;
+import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 
 import java.util.List;
 
@@ -41,7 +42,7 @@ public final class MoverUnit implements UnitModel {
             double rise = outlet - in.pressure();
             if (!(rise > 0)) throw new FlowsheetFailure("mover.rise");
             if (closure.refuses(InletPhase.bulk(thermo.model(), in.state()), false)) throw new FlowsheetFailure(closure.deviceName() + ".phase");
-            double density = in.mass() / in.state().volume(), power = closure.power(in.mass(), rise, density, in.pressure());
+            double density = in.mass() / in.state().volume(), power = closure.power(in.mass(), rise, density, in.pressure(), kappa(thermo.model(), in.state()));
             if (closure instanceof FlowControl.Pump && thermo.boils(in.temperature(), in.pressure() * (1 - AT_BUBBLE), in.amounts())) report.note(Note.warning(u.id(), "pump.bubble_point"));
             u.write(board, report, "out", thermo.heated(in, power, outlet));
             report.duty(power);
@@ -49,5 +50,11 @@ public final class MoverUnit implements UnitModel {
             report.reading("rise", rise);
             report.reading("head", rise / (density * GRAVITY));
         }));
+    }
+
+    /** The heat capacity ratio the world reads for this mover: its suction gas's for a compressor, as the fluid network reads
+     * it ({@code PassiveStepSolver.kappa}); a liquid mover does not use it. */
+    private double kappa(FluidThermodynamics model, FluidThermodynamics.State state) {
+        return closure.liquid() ? 1.4 : model.heatCapacityRatio(state);
     }
 }

@@ -373,7 +373,7 @@ final class FlowsheetUnitsTest {
         var in = run.streams().get("in");
         var out = run.streams().get("out");
         double density = in.mass() / in.state().volume();
-        assertEquals(new FlowControl.Pump(1, 1).power(in.mass(), 8e5, density, 2e5), reading(run, "P", "power"), 1e-9);
+        assertEquals(new FlowControl.Pump(1, 1).power(in.mass(), 8e5, density, 2e5, 1.4), reading(run, "P", "power"), 1e-9);
         assertEquals(in.mass() / density * 8e5, reading(run, "P", "power"), 1e-6, "q v head");
         assertEquals(in.enthalpy() + reading(run, "P", "power"), out.enthalpy(), 1e-4, "booked as heat into the discharge");
         assertEquals(10e5, out.pressure(), 1e-6);
@@ -381,10 +381,11 @@ final class FlowsheetUnitsTest {
         assertFalse(logged(run, "pump.bubble_point"), "cold water is far from boiling");
     }
 
-    @Test void aPumpRefusesVapourAndWarnsAtTheBubblePoint() {
-        var gas = sheet().unit("P", "pump", "{\"pressure\":8e5}").feed("in", "P", "in", feed(300, 2e5, NITROGEN, 100)).product("out", "P", "out").run();
-        assertEquals(FlowsheetRun.Status.FAILED, gas.status());
-        assertTrue(logged(gas, "pump.phase"), () -> "log " + gas.log());
+    /** The world's pump takes gas since request 11 of batch 2026-11-03-rotating-machinery (owner decisions D19, D20): its
+     * set-flow law moves the mixture, so the sheet's pump on nitrogen closes. It still warns at the bubble point. */
+    @Test void aPumpTakesGasAndWarnsAtTheBubblePoint() {
+        var gas = closes(sheet().unit("P", "pump", "{\"pressure\":8e5}").feed("in", "P", "in", feed(300, 2e5, NITROGEN, 100)).product("out", "P", "out").run());
+        assertFalse(logged(gas, "pump.phase"), () -> "log " + gas.log());
         var drum = closes(sheet().unit("D", "drum", "{}").unit("P", "pump", "{\"pressure\":8e5}")
                 .feed("in", "D", "in", feed(400, 2e5, DRY_CRUDE, 100)).product("gas", "D", "gas").product("water", "D", "water")
                 .line("oil", "D", "oil", "P", "in").product("out", "P", "out").run());
@@ -400,15 +401,21 @@ final class FlowsheetUnitsTest {
                 .feed("in", "C", "in", feed(300, 1e5, NITROGEN, 100)).product("out", "C", "out").run());
         var in = run.streams().get("in");
         double density = in.mass() / in.state().volume();
-        assertEquals(new FlowControl.Compressor(1, 2).power(in.mass(), 4e5, density, 1e5), reading(run, "C", "power"), 1e-9);
-        assertEquals(100 * 8.314462618 * 300 * Math.log(5), reading(run, "C", "power"), .005 * reading(run, "C", "power"), "nRT ln r for a near-ideal gas");
+        double k = FluidThermodynamics.forNetwork(CATALOG, PACKAGE).heatCapacityRatio(in.state());
+        assertEquals(new FlowControl.Compressor(1, 2).power(in.mass(), 4e5, density, 1e5, k), reading(run, "C", "power"), 1e-9);
+        // The world's compressor is polytropic at 78 % since batch 2026-11-03-rotating-machinery (plan section 4.4): for a
+        // near-ideal gas n R T σ (r^(1/σ) − 1)/η with σ = η k/(k − 1), about 700 kW here against 401 kW for nRT ln r.
+        double eta = .78, sigma = eta * k / (k - 1);
+        assertEquals(100 * 8.314462618 * 300 * sigma * (Math.pow(5, 1 / sigma) - 1) / eta, reading(run, "C", "power"), .005 * reading(run, "C", "power"), "polytropic work for a near-ideal gas");
         assertEquals(in.enthalpy() + reading(run, "C", "power"), run.streams().get("out").enthalpy(), 1e-3);
     }
 
-    @Test void aCompressorRefusesLiquid() {
-        var run = sheet().unit("C", "compressor", "{\"pressure\":5e5}").feed("in", "C", "in", feed(300, 1e5, PURE_WATER, 100)).product("out", "C", "out").run();
-        assertEquals(FlowsheetRun.Status.FAILED, run.status());
-        assertTrue(logged(run, "compressor.phase"), () -> "log " + run.log());
+    /** The world's compressor takes liquid since request 11 of batch 2026-11-03-rotating-machinery (owner decisions D19,
+     * D20): its set-flow law moves the mixture, so the sheet's compressor on water closes; the sizing stage reads the
+     * liquid share (the SHOULD row {@code COMPRESSOR_LIQUID}). */
+    @Test void aCompressorTakesLiquid() {
+        var run = closes(sheet().unit("C", "compressor", "{\"pressure\":5e5}").feed("in", "C", "in", feed(300, 1e5, PURE_WATER, 100)).product("out", "C", "out").run());
+        assertFalse(logged(run, "compressor.phase"), () -> "log " + run.log());
     }
 
     @Test void feedAndEffluentAroundAHeaterIsNoLoop() {

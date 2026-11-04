@@ -422,7 +422,9 @@ final class UnitSizingTest {
     @Test void aCompressorsWorldLimitsAreRed() {
         var size = new CompressorSizing.Size(UnitType.PISTON, .5, 4);
         assertEquals(Lamp.RED, CompressorSizing.rate(gas(1000, 11), size).lamp());
-        assertEquals(Lamp.RED, CompressorSizing.rate(new CompressorSizing.Load(1000, 3, 2, 310, .25, 0), size).lamp(), "wet at the suction");
+        // The world compresses a wet suction since request 11 of batch 2026-11-03-rotating-machinery (W10a), so a wet suction
+        // is a SHOULD row; W10b's liquid knock trips a piston machine and makes it the world's (red) again.
+        assertEquals(Lamp.YELLOW, CompressorSizing.rate(new CompressorSizing.Load(1000, 3, 2, 310, .25, 0), size).lamp(), "wet at the suction");
         var small = CompressorSizing.rate(gas(6000, 3), new CompressorSizing.Size(UnitType.TURBO, .3, 2));
         assertEquals(Lamp.RED, small.lamp(), "under the smallest frame");
         assertSame(Limit.TYPE_TURBO, small.closest().limit());
