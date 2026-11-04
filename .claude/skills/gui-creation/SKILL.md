@@ -143,10 +143,10 @@ As in `HeatControlColumnTest`, `DeviceColumnTest`, `DialogColumnsTest`, `Constru
 
 ## Renders
 
-From the worktree root, after `./gradlew compileJava`:
+From the worktree root, after `./gradlew compileJava` (and `compileTestJava` for `GuiPrototypes`, whose machine pages take `MachineColumnSamples` from the test classes):
 
 ```
-java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/GuiPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/gui-prototypes
+java -Duser.language=en -Djava.awt.headless=true -cp "build/classes/java/main;build/classes/java/test" tools/heat-gui-renders/GuiPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/gui-prototypes
 java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/HeatDiagramRender.java src/main/resources/assets/icheme/lang/en_us.json tmp/heat-gui-renders
 ```
 

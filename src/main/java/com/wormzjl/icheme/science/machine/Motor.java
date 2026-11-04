@@ -31,16 +31,6 @@ public final class Motor {
     private Motor() {
     }
 
-    /** How many standard ratings there are. */
-    public static int ratingCount() {
-        return RATINGS_KW.length;
-    }
-
-    /** Standard rating {@code index} (0 the smallest), W. */
-    public static double rating(int index) {
-        return RATINGS_KW[index] * 1000;
-    }
-
     /** The smallest standard rating, W, at or above {@code power} (W); NaN above the largest, 20 MW. */
     public static double standardRating(double power) {
         for (double kw : RATINGS_KW) if (power <= kw * 1000 * (1 + 1e-12)) return kw * 1000;

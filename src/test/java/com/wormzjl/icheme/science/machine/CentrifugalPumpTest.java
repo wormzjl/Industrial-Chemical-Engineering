@@ -48,20 +48,27 @@ class CentrifugalPumpTest {
         assertEquals(rated, PUMP.shaftPower(qr, 1, 800), 1e-9 * rated);
         assertEquals(.35 * rated, PUMP.shaftPower(0, 1, 800), 1e-9 * rated, "8.5 kW at shutoff");
         assertEquals(.35 * rated, PUMP.shaftPower(-qr, 1, 800), 1e-9 * rated, "a reverse flow counts as none");
-        assertEquals(.72, PUMP.efficiencyAt(qr, 1), 1e-12);
-        assertEquals(.846, PUMP.efficiencyAt(.5 * qr, 1) / .72, 5e-4, "85 % of the best at half flow");
-        assertEquals(.886, PUMP.efficiencyAt(1.5 * qr, 1) / .72, 5e-4, "89 % of the best at 150 %");
+        assertEquals(.72, efficiencyAt(qr, 1), 1e-12);
+        assertEquals(.846, efficiencyAt(.5 * qr, 1) / .72, 5e-4, "85 % of the best at half flow");
+        assertEquals(.886, efficiencyAt(1.5 * qr, 1) / .72, 5e-4, "89 % of the best at 150 %");
         double best = 0, at = 0;
         for (double q = .5; q <= 1.5; q += .001) {
-            double eta = PUMP.efficiencyAt(q * qr, 1);
+            double eta = efficiencyAt(q * qr, 1);
             if (eta > best) {
                 best = eta;
                 at = q;
             }
         }
         assertEquals(1, at, .02, "the best efficiency at the rated flow");
-        assertEquals(0, PUMP.efficiencyAt(0, 1));
-        assertEquals(.3 * .9 * qr, PUMP.minimumFlow(.9), 1e-15);
+        assertEquals(0, efficiencyAt(0, 1));
+    }
+
+    /** The hydraulic power over the shaft power at {@code flow} and {@code speed} on 800 kg/m³; zero where no flow or no head
+     * (moved here from {@code CentrifugalPump} at the batch's tooling cleanup: the game reads the shaft power only). */
+    private static double efficiencyAt(double flow, double speed) {
+        double head = PUMP.head(flow, speed);
+        if (!(flow > 0) || !(head > 0) || !(speed > 0)) return 0;
+        return 800 * CentrifugalPump.GRAVITY * flow * head / PUMP.shaftPower(flow, speed, 800);
     }
 
     @Test void bestEfficiencyFollowsCorripio() {

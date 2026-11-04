@@ -114,14 +114,6 @@ public final class WorldTopologyLedger {
             }
             return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health);
         }
-        /** These facts with the electric stores {@code value} (W5): the engine keeps them live and hands them to a save. */
-        public Snapshot withStores(Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> value) {
-            return value.equals(stores)?this:new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,value,health);
-        }
-        /** These facts with the pumps' health {@code value} (W10b): the engine keeps it live and hands it to a save. */
-        public Snapshot withHealth(Map<Long,Double> value) {
-            return value.equals(health)?this:new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,value);
-        }
         public Snapshot {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologySnapshots);
             recoveries=Map.copyOf(recoveries);columns=Map.copyOf(columns);shafts=Map.copyOf(shafts);stores=Map.copyOf(stores);health=Map.copyOf(health);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");

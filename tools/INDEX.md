@@ -11,11 +11,11 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [process-simulator/](process-simulator/README.md) | Plain-JVM probes: a client can run the column and flashes; the design sheets' sample flowsheet solved by hand | `2026-11-02-process-simulator` | In use since 2026-11-02 |
 | [device-names/](device-names/README.md) | Nameplate placement probe and plate-look renders | `2026-11-02-process-simulator` | In use since 2026-11-03 |
 | [simulator-bench/](simulator-bench/README.md) | Process simulator CPU, allocation, heap and draw-call bench on the bundled crude unit, with JFR | `2026-11-02-process-simulator` | In use since 2026-11-04 |
-| [rotating-machinery/](rotating-machinery/README.md) | Quick check of the machine-law forms and the centrifugal harness variant | `2026-11-03-rotating-machinery` | In progress since 2026-11-04 |
+| [rotating-machinery/](rotating-machinery/README.md) | Machine-law quick checks and campaigns, worked numbers, W2 hold traces and probes | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [pump-sprites/](pump-sprites/README.md) | Baked sprites of pumps, couplings and motors; their probes and renders | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
-| [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In progress since 2026-11-03 |
+| [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In use since 2026-11-03 |
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |
 | [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
@@ -25,7 +25,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |
 | [drum-outlet-sweep/](drum-outlet-sweep/README.md) | Sweep of lying boot drums' oil-outlet placement (head fallbacks, options A and B) | `2026-10-28-drum-outlet-placement` | Implemented 2026-10-28 |
 | [heat-exchanger-design/](heat-exchanger-design/README.md) | Exchanger coupling, cell-count, 1-2 shell, per-phase film, zero-wall relay and game-timing study harnesses; owner-test probe of the review world; the merge lane | `2026-10-27-heat-exchanger-design` | Implemented 2026-10-28 (0.17.0) |
-| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit`, `2026-10-28-column-operation`, `2026-11-02-process-simulator` | In use since 2026-10-28 |
+| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit`, `2026-10-28-column-operation`, `2026-11-02-process-simulator`, `2026-11-03-rotating-machinery` | In use since 2026-10-28 |
 | [old-mover-removal/](old-mover-removal/README.md) | Writer of the removed-movers corpus image (a world with one-block movers) | `2026-10-28-old-mover-removal` | Implemented 2026-10-28 |
 | [native-column-default/](native-column-default/README.md) | Probes comparing the C++ and the Java outer pass of the inside-out trial, solver and calculator | `2026-10-28-native-column-default` | Implemented 2026-11-02 |
 | [column-operation/](column-operation/README.md) | C1 bench (the split table against drift, homogeneity, warm solve, rule B cost) and the review world's layout probe | `2026-10-28-column-operation` | Implemented 2026-11-02 |

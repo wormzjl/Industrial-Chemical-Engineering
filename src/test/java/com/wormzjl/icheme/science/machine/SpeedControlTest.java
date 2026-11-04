@@ -9,10 +9,17 @@ import org.junit.jupiter.api.Test;
 class SpeedControlTest {
     private static final CentrifugalPump PUMP = new CentrifugalPump(100 / 3600.0, 80, .72);
 
+    /** A positive-displacement machine's speed for {@code setFlow}: the set flow over the displacement (m³/s each), exact and
+     * without feedback, within the drive's range (plan section 4.1; no driver sets it yet, so it moved here from
+     * {@code SpeedControl} at the batch's tooling cleanup). */
+    static double displacementSpeed(double setFlow, double displacement, double lowest, double highest) {
+        return Math.min(highest, Math.max(lowest, setFlow / displacement));
+    }
+
     @Test void displacementSpeedIsExact() {
-        assertEquals(.7, SpeedControl.displacementSpeed(.007, .01, .1, 1), 1e-15);
-        assertEquals(.1, SpeedControl.displacementSpeed(0, .01, .1, 1), 0);
-        assertEquals(1, SpeedControl.displacementSpeed(.02, .01, .1, 1), 0);
+        assertEquals(.7, displacementSpeed(.007, .01, .1, 1), 1e-15);
+        assertEquals(.1, displacementSpeed(0, .01, .1, 1), 0);
+        assertEquals(1, displacementSpeed(.02, .01, .1, 1), 0);
     }
 
     /** The pump of plan section 1.1 on its line with 30 m static head, regulated from full speed to 70 % flow. */

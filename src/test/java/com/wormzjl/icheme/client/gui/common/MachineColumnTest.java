@@ -55,14 +55,14 @@ class MachineColumnTest {
         assertEquals(List.of("17345", "3135"), in.supply().stream().map(MachineColumn.Meter::value).toList());
         assertEquals(Map.of(), widgets(place(in, texts, 464)), "Create drives the coupling: no switch, no entry");
         assertFalse(MachineColumn.Kind.CREATE_COUPLING.settable());
-        var limited = MachineColumn.input(MachineColumn.couplingSample("POWER LIMITED", 256, 2629, 12287, 12288, 18e3), false, true, MachineColumn.Mode.SPEED, texts);
+        var limited = MachineColumn.input(MachineColumnSamples.couplingSample("POWER LIMITED", 256, 2629, 12287, 12288, 18e3), false, true, MachineColumn.Mode.SPEED, texts);
         assertEquals(List.of("12287", "1"), limited.supply().stream().map(MachineColumn.Meter::value).toList());
-        var rest = MachineColumn.input(MachineColumn.couplingSample("NO ROTATION", 0, 0, 0, 0, 0), false, true, MachineColumn.Mode.SPEED, texts);
+        var rest = MachineColumn.input(MachineColumnSamples.couplingSample("NO ROTATION", 0, 0, 0, 0, 0), false, true, MachineColumn.Mode.SPEED, texts);
         assertEquals(List.of("0", "—"), rest.supply().stream().map(MachineColumn.Meter::value).toList());
         assertFalse(rest.running());
         var c = new MachineView.Coupling(256, com.wormzjl.icheme.science.machine.CreateCoupling.UNLIMITED_STRESS, Double.NaN, Double.NaN, 1.465);
         assertTrue(Double.isNaN(c.drawn()) && Double.isNaN(c.spare()), "no impact yet, and Create's stress off: nothing to read");
-        var plate = MachineColumn.nameplate(MachineColumn.couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), texts);
+        var plate = MachineColumn.nameplate(MachineColumnSamples.couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), texts);
         assertEquals(List.of("1.465 W/su", "256 rpm"), plate.stream().map(l -> l[1]).toList());
         assertTrue(MachineColumn.warns("POWER LIMITED") && !MachineColumn.warns("NO ROTATION") && !MachineColumn.warns("RUNNING"));
     }
@@ -70,7 +70,7 @@ class MachineColumnTest {
     @Test
     void everyTextThePageNamesHasItsEnglishLine() {
         var texts = new HeatControlColumnTest.Recording("gui.icheme.");
-        for (var c : MachineColumn.cases(texts)) MachineColumn.rows(c.in(), texts);
+        for (var c : MachineColumnSamples.cases(texts)) MachineColumn.rows(c.in(), texts);
         for (var kind : ShaftNetwork.Kind.values())
             if (MachineColumn.Kind.of(kind) != null) {
                 MachineColumn.rows(MachineColumn.input(view(kind, 0, ShaftTrain.Trip.NONE), true, true, MachineColumn.Mode.SPEED, texts), texts);
@@ -89,7 +89,7 @@ class MachineColumnTest {
     @Test
     void thePageFitsTheDoorAtEverySupportedWidth() {
         var texts = new HeatControlColumnTest.Recording("gui.icheme.");
-        for (var c : MachineColumn.cases(texts))
+        for (var c : MachineColumnSamples.cases(texts))
             for (int width = 300; width <= 790; width += 7) {
                 var column = place(c.in(), texts, width);
                 var bounds = column.bounds();
@@ -118,7 +118,7 @@ class MachineColumnTest {
     @Test
     void aWidgetKeepsItsSlotWhileTheReadingsChange() {
         var texts = new HeatControlColumnTest.Recording("gui.icheme.");
-        for (var c : MachineColumn.cases(texts))
+        for (var c : MachineColumnSamples.cases(texts))
             for (int width : new int[]{300, 464, 790}) {
                 var in = c.in();
                 var before = widgets(place(in, texts, width));
@@ -137,19 +137,19 @@ class MachineColumnTest {
         var fields = Map.of(MachineColumn.Kind.MOTOR, List.of("speed"), MachineColumn.Kind.STEAM_TURBINE, List.of("speed"), MachineColumn.Kind.GENERATOR, List.of("powerLimit"),
                 MachineColumn.Kind.GEARBOX, List.of("ratio"), MachineColumn.Kind.CREATIVE_MOTOR, List.of("speed", "powerLimit"), MachineColumn.Kind.CREATE_COUPLING, List.of());
         for (var kind : MachineColumn.Kind.values()) {
-            var editor = place(MachineColumn.sample(kind, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464);
+            var editor = place(MachineColumnSamples.sample(kind, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464);
             assertEquals(fields.get(kind), keys(editor), kind.name());
-            var reader = place(MachineColumn.sample(kind, false, true, MachineColumn.Mode.SPEED, false, texts), texts, 464);
+            var reader = place(MachineColumnSamples.sample(kind, false, true, MachineColumn.Mode.SPEED, false, texts), texts, 464);
             assertEquals(List.of(), keys(reader), kind + " reader");
             for (var p : reader.rows())
                 if (p.row() instanceof Column.Buttons b) for (var spec : b.buttons()) assertFalse(spec.active(), kind + " reader's key " + spec.key());
         }
         // A fixed motor neither regulates nor sets a speed; a regulating one names the casing's target; Reset shows only while tripped (A94).
-        assertEquals(List.of(), keys(place(MachineColumn.sample(MachineColumn.Kind.MOTOR, true, false, MachineColumn.Mode.SPEED, false, texts), texts, 464)));
-        assertEquals(List.of(), keys(place(MachineColumn.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.FLOW, false, texts), texts, 464)));
-        assertTrue(widgets(place(MachineColumn.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, true, texts), texts, 464)).containsKey("reset"));
-        assertFalse(widgets(place(MachineColumn.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464)).containsKey("reset"));
-        assertFalse(widgets(place(MachineColumn.sample(MachineColumn.Kind.GEARBOX, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464)).containsKey("power:on"),
+        assertEquals(List.of(), keys(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, false, MachineColumn.Mode.SPEED, false, texts), texts, 464)));
+        assertEquals(List.of(), keys(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.FLOW, false, texts), texts, 464)));
+        assertTrue(widgets(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, true, texts), texts, 464)).containsKey("reset"));
+        assertFalse(widgets(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464)).containsKey("reset"));
+        assertFalse(widgets(place(MachineColumnSamples.sample(MachineColumn.Kind.GEARBOX, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464)).containsKey("power:on"),
                 "a gearbox has no switch (A99)");
     }
 
@@ -161,7 +161,7 @@ class MachineColumnTest {
     void theTallestPageFitsTheDesignView() {
         var texts = new HeatControlColumnTest.Recording("gui.icheme.");
         int view = FluidGuiLayout.doorView(FluidGuiLayout.HEIGHT);
-        for (var c : MachineColumn.cases(texts))
+        for (var c : MachineColumnSamples.cases(texts))
             for (int width : new int[]{FluidGuiLayout.HEIGHT * 4 / 3, FluidGuiLayout.HEIGHT * 16 / 9}) {
                 int tall = place(c.in(), texts, width).bounds().h();
                 assertTrue(tall <= view, c.name() + " at " + width + ": " + tall + " px in a " + view + " px view");

@@ -3,7 +3,7 @@
 Purpose: list which nozzle pipe blocks of placed pumps, compressors and turbines move when their drawn drivers leave them
 (AGENTS.md: a moved nozzle pipe block needs the owner's approval).
 
-Batch: `2026-11-03-rotating-machinery`, work package W4.
+Batch: `2026-11-03-rotating-machinery`, work package W4. Status: in use since 2026-11-03; run it again before any change that moves a machine's nozzles.
 
 ## How to run
 
@@ -24,6 +24,12 @@ Batch: `2026-11-03-rotating-machinery`, work package W4.
    - `perl compare-layouts.pl old-layouts.txt new-layouts.txt`: the layout table (`EquipmentLayoutGoldenTest`) before
      and after, the new lines' `duty=` stripped.
 4. Remove the probe from `src/test` again.
+
+## Entry points
+
+- `NozzleProbe.java`: a JUnit class in package `com.wormzjl.icheme.science.equipment`,
+  one test that writes the probe file.
+- `compare-casings.pl`, `compare-turbines.pl`, `compare-layouts.pl`: `perl <script> <before> <after>`.
 
 ## History
 

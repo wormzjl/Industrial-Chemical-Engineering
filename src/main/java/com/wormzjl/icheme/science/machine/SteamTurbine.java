@@ -5,7 +5,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 /**
  * A mechanical-drive steam turbine at process level (batch 2026-11-03-rotating-machinery, plan section 3.4): the
  * isentropic drop from the inlet's real {@code P/ρ}, a constant isentropic efficiency at every load (simplification S4,
- * no-load steam ignored), and the steam a shaft power needs. Its governor valve passes {@link #steamFor} the shaft's demand;
+ * no-load steam ignored), and the steam a shaft power needs. Its governor valve passes the steam the shaft's demand needs, {@code P / (η_is Δh_is)};
  * the exhaust takes {@code h_in − W/ṁ}, and the flash gives its temperature and wetness.
  *
  * @param ratedPower the shaft power at the rated steam conditions, W
@@ -47,16 +47,6 @@ public record SteamTurbine(double ratedPower, double efficiency) {
     /** The shaft power, W, of {@code massFlow} (kg/s) across isentropic drop {@code drop} (J/kg): {@code ṁ η_is Δh_is}. */
     public double work(double massFlow, double drop) {
         return Math.max(0, massFlow) * efficiency * Math.max(0, drop);
-    }
-
-    /** The steam flow, kg/s, that gives shaft power {@code power} (W) across {@code drop}; infinite with no drop. */
-    public double steamFor(double power, double drop) {
-        return drop > 0 ? Math.max(0, power) / (efficiency * drop) : Double.POSITIVE_INFINITY;
-    }
-
-    /** The steam rate, kg/kWh, across {@code drop}: 10.6 at 65 % for 40 bar and 400 °C to 4 bar. */
-    public double steamRate(double drop) {
-        return steamFor(3.6e6, drop);
     }
 
     /** The isentropic efficiency of a turbine rated {@code ratedPower} (W): {@link #SINGLE_STAGE} up to

@@ -741,15 +741,6 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     // ---------------- presentation (reads only) ----------------
 
-    /** The fluid device {@code device}'s shaft line for its status: its driver's status word, rpm and speed share; null for none. */
-    public String deviceLine(long device) {
-        Long unit = unitOfDevice.get(device);
-        if (unit == null) return null;
-        var v = view(unit);
-        if (v == null) return null;
-        return String.format(Locale.ROOT, "SHAFT: %s, %.0f rpm, %.0f %%", v.status(), v.speed(), 100 * v.share());
-    }
-
     /** Whether fluid device {@code device} is a casing or turbine of a shaft unit. */
     public boolean unitOf(long device) {
         return unitOfDevice.containsKey(device);
@@ -888,12 +879,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         return out;
     }
 
-    /** The governor valve's mass target sent for valve {@code device}, kg/s, or NaN. */
-    public double governorTarget(long device) {
-        return governorTargets.getOrDefault(device, Double.NaN);
-    }
-
-    /** Whether the governor target moved by more than the valve deadband; used by the tests through the plan path. */
+    /** Whether the governor target moved by more than the valve deadband. */
     static boolean outsideDeadband(double a, double b) {
         return Math.abs(a - b) > PassiveStepSolver.VALVE_DEADBAND * Math.max(a, b) + 1e-9;
     }

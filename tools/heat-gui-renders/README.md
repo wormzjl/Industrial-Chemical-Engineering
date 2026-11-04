@@ -25,10 +25,10 @@ It prints each case's tallest column against its 128 px view.
 The other screens' prototypes (`GuiPrototypes.java`, batch 2026-10-28-gui-toolkit, `GUI_REVIEW.md`):
 
 ```bash
-java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/GuiPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/gui-prototypes
+java -Duser.language=en -Djava.awt.headless=true -cp "build/classes/java/main;build/classes/java/test" tools/heat-gui-renders/GuiPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/gui-prototypes
 ```
 
-It writes one sheet per screen to `tmp/gui-prototypes/`, both doors side by side: the fluid device pages (pump, generator, valve, tank), the column calculator, the assembly, the equipment constructor, the pipeline tool, the gauge and the vessel datasheet.
+After `./gradlew compileJava compileTestJava` (the machine pages take `MachineColumnSamples` from the test classes). It writes one sheet per screen to `tmp/gui-prototypes/`, both doors side by side: the fluid device pages (pump, generator, valve, tank), the column calculator, the assembly, the equipment constructor, the pipeline tool, the gauge and the vessel datasheet.
 
 The process simulator's design sheets (`SimulatorPrototypes.java`, batch 2026-11-02-process-simulator, numbers from `tools/process-simulator/SampleFlowsheetProbe.java` and `LoopProbe.java`; finished sheets go to the main checkout's `research/2026-11-02-process-simulator/renders/`):
 
@@ -117,3 +117,4 @@ Flow basis: `SimulatorRender` draws in moles; add `-Dbasis=MASS` or `-Dbasis=VOL
 - 2026-11-04, same batch: the owner picked A. The option sheet is gone; `machines()` draws the shipped design pages of a pump, a motor and a steam turbine (`equipment-constructor-pump`, `-motor`, `-turbine`).
 - 2026-11-04, batch 2026-11-03-rotating-machinery: W7 Q1 sheets machine-a/b/c; owner picked A, 2026-11-04 (decision D31). B and C left the tool; the `machine-*` sheets draw the shipped `MachineColumn` (motor, tripped motor, turbine, generator, gearbox, creative motor, reader) and a casing's `DeviceColumn` with its Drive group.
 - 2026-11-05, batch 2026-11-03-rotating-machinery (W8): the column door's pump duty sheets, A (meters in each pump group) and B (one table on the glass); the owner picked B (decision D43). A left the tool; `pump-duty-table`, `-narrow` and `-unrated` draw the shipped `CalculatorColumn.pumpDuties`, and `SimulatorRender -Donly=pump-duties` draws T-101's Equipment page from the shipped `ColumnDoors`, rated by a real Size all and before one, at 464, 380 and 790 wide, opened and scrolled.
+- 2026-11-05, batch 2026-11-03-rotating-machinery (tooling cleanup): the machine pages' illustrative cases (`cases`, `sample`, `couplingSample`) left `MachineColumn` for the test class `MachineColumnSamples`; `GuiPrototypes` now needs `build/classes/java/test` on its class path (after `./gradlew compileTestJava`).

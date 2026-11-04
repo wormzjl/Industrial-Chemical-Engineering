@@ -6,11 +6,21 @@ import org.junit.jupiter.api.Test;
 
 /** Motor sizes, speeds and IE3 efficiencies (plan sections 1.3 and 7). */
 class MotorTest {
+    /** The standard ratings, W, smallest first, walked through {@link Motor#standardRating} (the index accessors left
+     * {@code Motor} at the batch's tooling cleanup: the game reads only the next rating above a power). */
+    private static final double[] RATINGS = ratings();
+
+    private static double[] ratings() {
+        var out = new java.util.ArrayList<Double>();
+        for (double r = Motor.standardRating(0); !Double.isNaN(r); r = Motor.standardRating(r * (1 + 1e-9))) out.add(r);
+        return out.stream().mapToDouble(Double::doubleValue).toArray();
+    }
+
     @Test void ratingsRunFromThreeQuarterKilowattToTwentyMegawatts() {
-        assertEquals(60, Motor.ratingCount());
-        assertEquals(750, Motor.rating(0), 0);
-        assertEquals(20e6, Motor.rating(Motor.ratingCount() - 1), 0);
-        for (int i = 1; i < Motor.ratingCount(); i++) assertTrue(Motor.rating(i) > Motor.rating(i - 1));
+        assertEquals(60, RATINGS.length);
+        assertEquals(750, RATINGS[0], 0);
+        assertEquals(20e6, RATINGS[RATINGS.length - 1], 0);
+        for (int i = 1; i < RATINGS.length; i++) assertTrue(RATINGS[i] > RATINGS[i - 1]);
     }
 
     @Test void aProposedMotorCarriesTheSpare() {
@@ -32,9 +42,9 @@ class MotorTest {
         assertTrue(between > .930 && between < .936, "between 22 and 30 kW");
         for (int poles = 2; poles <= 8; poles += 2) {
             double last = 0;
-            for (int i = 0; i < Motor.ratingCount(); i++) {
-                double eta = Motor.efficiency(Motor.rating(i), poles);
-                assertTrue(eta >= last, poles + " poles at " + Motor.rating(i));
+            for (int i = 0; i < RATINGS.length; i++) {
+                double eta = Motor.efficiency(RATINGS[i], poles);
+                assertTrue(eta >= last, poles + " poles at " + RATINGS[i]);
                 last = eta;
             }
         }

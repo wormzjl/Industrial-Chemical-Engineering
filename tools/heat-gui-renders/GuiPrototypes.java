@@ -7,6 +7,7 @@ import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
+import com.wormzjl.icheme.client.gui.common.MachineColumnSamples;
 import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.PumpCurve;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
@@ -266,22 +267,22 @@ public final class GuiPrototypes {
                 new String[]{mt("rated_speed"), "2950 rpm"});
         var casing = casingInput();
         return List.of(
-                machinePage("machine-motor", MachineColumn.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, false, t), "M-101", "RUNNING",
+                machinePage("machine-motor", MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, false, t), "M-101", "RUNNING",
                         Map.of("speed", "100"), motorPlate, true),
-                machinePage("machine-motor-tripped", MachineColumn.sample(MachineColumn.Kind.MOTOR, true, false, MachineColumn.Mode.SPEED, true, t), "M-102", "TRIPPED: OVERLOAD",
+                machinePage("machine-motor-tripped", MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, false, MachineColumn.Mode.SPEED, true, t), "M-102", "TRIPPED: OVERLOAD",
                         Map.of(), List.of(new String[]{mt("rating"), "30.0 kW"}, new String[]{mt("poles"), "2"}, new String[]{mt("drive"), mt("drive.fixed")},
                                 new String[]{mt("rated_speed"), "2950 rpm"}), true),
-                machinePage("machine-turbine", MachineColumn.sample(MachineColumn.Kind.STEAM_TURBINE, true, true, MachineColumn.Mode.FLOW, false, t), "KT-101", "RUNNING",
+                machinePage("machine-turbine", MachineColumnSamples.sample(MachineColumn.Kind.STEAM_TURBINE, true, true, MachineColumn.Mode.FLOW, false, t), "KT-101", "RUNNING",
                         Map.of(), List.of(new String[]{mt("rating"), "2500.0 kW"}, new String[]{mt("rated_speed"), "4200 rpm"}), true),
-                machinePage("machine-turbine-tripped", MachineColumn.sample(MachineColumn.Kind.STEAM_TURBINE, true, true, MachineColumn.Mode.SPEED, true, t), "KT-102", "TRIPPED: OVERSPEED",
+                machinePage("machine-turbine-tripped", MachineColumnSamples.sample(MachineColumn.Kind.STEAM_TURBINE, true, true, MachineColumn.Mode.SPEED, true, t), "KT-102", "TRIPPED: OVERSPEED",
                         Map.of("speed", "4200"), List.of(new String[]{mt("rating"), "2500.0 kW"}, new String[]{mt("rated_speed"), "4200 rpm"}), true),
-                machinePage("machine-generator", MachineColumn.sample(MachineColumn.Kind.GENERATOR, true, true, MachineColumn.Mode.SPEED, false, t), "G-101", "RUNNING",
+                machinePage("machine-generator", MachineColumnSamples.sample(MachineColumn.Kind.GENERATOR, true, true, MachineColumn.Mode.SPEED, false, t), "G-101", "RUNNING",
                         Map.of("powerLimit", ""), List.of(new String[]{mt("rating"), "30.0 kW"}, new String[]{mt("poles"), "2"}, new String[]{mt("rated_speed"), "2950 rpm"}), true),
-                machinePage("machine-gearbox", MachineColumn.sample(MachineColumn.Kind.GEARBOX, true, true, MachineColumn.Mode.SPEED, false, t), "GB-101", "RUNNING",
+                machinePage("machine-gearbox", MachineColumnSamples.sample(MachineColumn.Kind.GEARBOX, true, true, MachineColumn.Mode.SPEED, false, t), "GB-101", "RUNNING",
                         Map.of("ratio", "0"), List.<String[]>of(new String[]{mt("rated_speed"), "12600 rpm"}), true),
-                machinePage("machine-creative-motor", MachineColumn.sample(MachineColumn.Kind.CREATIVE_MOTOR, true, true, MachineColumn.Mode.SPEED, false, t), "", "RUNNING",
+                machinePage("machine-creative-motor", MachineColumnSamples.sample(MachineColumn.Kind.CREATIVE_MOTOR, true, true, MachineColumn.Mode.SPEED, false, t), "", "RUNNING",
                         Map.of("speed", "2950", "powerLimit", ""), List.<String[]>of(new String[]{mt("rated_speed"), "2950 rpm"}), false),
-                machinePage("machine-motor-reader", MachineColumn.sample(MachineColumn.Kind.MOTOR, false, true, MachineColumn.Mode.SPEED, false, t), "M-101", "RUNNING",
+                machinePage("machine-motor-reader", MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, false, true, MachineColumn.Mode.SPEED, false, t), "M-101", "RUNNING",
                         Map.of(), motorPlate, true),
                 devicePage("machine-casing", WINDOW[0], WINDOW[1], casing, (d, s) -> {
                     d.title("Centrifugal pump");
@@ -306,9 +307,9 @@ public final class GuiPrototypes {
     static List<Prototype> createCoupling() {
         var t = DIALOG;
         return List.of(
-                coupling("create-coupling-running", MachineColumn.couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), t),
-                coupling("create-coupling-limited", MachineColumn.couplingSample("POWER LIMITED", 256, 2629, 12287, 12288, 18.0e3), t),
-                coupling("create-coupling-no-rotation", MachineColumn.couplingSample("NO ROTATION", 0, 0, 0, 0, 0), t));
+                coupling("create-coupling-running", MachineColumnSamples.couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), t),
+                coupling("create-coupling-limited", MachineColumnSamples.couplingSample("POWER LIMITED", 256, 2629, 12287, 12288, 18.0e3), t),
+                coupling("create-coupling-no-rotation", MachineColumnSamples.couplingSample("NO ROTATION", 0, 0, 0, 0, 0), t));
     }
 
     /** One coupling sheet from view {@code v}, for a player who may build (as MachineScreen: the coupling's rows, its nameplate, Close only). */

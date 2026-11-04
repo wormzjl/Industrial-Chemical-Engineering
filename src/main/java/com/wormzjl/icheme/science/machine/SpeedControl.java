@@ -14,12 +14,6 @@ public final class SpeedControl {
     private SpeedControl() {
     }
 
-    /** A positive-displacement machine's speed for {@code setFlow}: the set flow over the displacement (m³/s each), exact and
-     * without feedback, within the drive's range. */
-    public static double displacementSpeed(double setFlow, double displacement, double lowest, double highest) {
-        return clamp(setFlow / displacement, lowest, highest);
-    }
-
     /**
      * A centrifugal machine's next speed, regulating a measure that rises with speed (its flow, or its pressure rise) to
      * {@code target}. With a previous slice whose measure moved the right way, the secant through the two; otherwise the

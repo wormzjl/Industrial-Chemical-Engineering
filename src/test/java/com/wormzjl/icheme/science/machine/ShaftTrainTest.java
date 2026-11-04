@@ -76,7 +76,7 @@ class ShaftTrainTest {
         assertEquals(6000, step.speed(), 0);
         assertEquals("RUNNING", step.status());
         assertEquals(RATED, step.governorPower(), 1e-9 * RATED, "at the set speed, the demand there");
-        double steam = design.steamFor(step.governorPower(), 524e3);
+        double steam = SteamTurbineTest.steamFor(design, step.governorPower(), 524e3);
         assertEquals(.10562, steam, 1e-3 * .10562);
         assertEquals(15.27, steam * 3600 / (RATED / 1000), .01, "kg/kWh");
         // Below its set speed, the governor feeds the demand at the set speed forward: the cube law.

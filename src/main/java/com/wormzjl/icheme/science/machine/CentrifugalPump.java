@@ -26,9 +26,6 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 public record CentrifugalPump(double ratedFlow, double ratedHead, double efficiency, double ratedSpeed) implements MachineLaw {
     /** Standard gravity, m/s², the fluid solver's. */
     public static final double GRAVITY = 9.80665;
-    /** Below this share of the flow at its best efficiency point a pump shows the {@code MIN FLOW} notice (plan S1: real
-     * pumps need 25 to 40 % to carry their heat away). */
-    public static final double MINIMUM_FLOW_SHARE = .3;
     /** US gallons per minute in one m³/s. */
     static final double GPM_PER_CUBIC_METRE_PER_SECOND = 60 / 3.785411784e-3;
     private static final double SHUTOFF = 1.21, SPEED_FLOW = .05, QUADRATIC = .15, LINEAR = .01;
@@ -86,13 +83,6 @@ public record CentrifugalPump(double ratedFlow, double ratedHead, double efficie
         return density * GRAVITY * ratedFlow * ratedHead / efficiency;
     }
 
-    /** The hydraulic power over the shaft power at {@code flow} and {@code speed}; zero where no flow or no head. */
-    public double efficiencyAt(double flow, double speed) {
-        double q = flow / ratedFlow, h = head(flow, speed) / ratedHead;
-        if (!(q > 0) || !(h > 0) || !(speed > 0)) return 0;
-        return efficiency * q * h / (speed * speed * (POWER_SHUTOFF * speed + POWER_FLOW * q));
-    }
-
     @Override public boolean liquid() {
         return true;
     }
@@ -113,12 +103,6 @@ public record CentrifugalPump(double ratedFlow, double ratedHead, double efficie
 
     @Override public double shaftPower(double flow, double speed, double density, double pressure, double k) {
         return shaftPower(flow, speed, density);
-    }
-
-    /** The flow, m³/s, below which the pump at {@code speed} shows {@code MIN FLOW}: {@link #MINIMUM_FLOW_SHARE} of its best
-     * efficiency flow, which moves with the speed. */
-    public double minimumFlow(double speed) {
-        return MINIMUM_FLOW_SHARE * speed * ratedFlow;
     }
 
     /**
