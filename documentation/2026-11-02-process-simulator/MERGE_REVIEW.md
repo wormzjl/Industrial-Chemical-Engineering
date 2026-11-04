@@ -53,3 +53,32 @@ The s3b-member-counts thread (`7d3708d41` and the fixes commit after it): `clien
 The draw-call batch (`0a04faffb` and its documents commit, the owner's "A: batch the loops"): `client-gui.md` (`Canvas.batch` and `GuiCanvas.batch` in the kit rows, `FlowsheetPainter`'s batched shapes, the draw-call note with what is batched and what is not, a change-table row with `DrawCallTest` and `-Dcount`) and `process-simulator.md` (`SheetPainter`'s batches, `DrawCallTest` in the screen's row and the tests).
 
 Not touched, no code of theirs changed in this batch: `equilibrium-engine.md`, `instrument-accessories.md`. Not touched, no change: `process-control.md`. S1 (`9a3b9cfd5`) added three constants to `FlowControl` (`MAXIMUM_VOLUME_FLOW` 10 m³/s, `MAXIMUM_ADDED_PRESSURE` 2 MPa, `MAXIMUM_PRESSURE_RATIO` 10), so the sizing table reads the world's mover limits. The constants are on `FlowControl.Mover`, `Pump` and `Compressor`; the chapter documents only `FlowControl.ControlValve`, and `fluid-runtime.md` and `fluid-science.md` already name all three, so it needs none.
+
+## Merge preparation (2026-11-04)
+
+Owner, 2026-11-04: "prepare for merge". Main has no commit the branch lacks (merge base `744ef4513`, main 0.19.3); the branch is 198 commits ahead. Code at `fc0ae90e1`.
+
+Cleanup, again over what came after `dab55f0c1` (81 commits: the screen's key groups, the door and reading fixes, the P, T key, the member tree, P1/P2 warm start, the draw-call work): `main-reach.pl` 540 classes, 0 unreachable; no print, probe or TODO added under `src/main`; every added `tools/` folder (`process-simulator`, `device-names`, `simulator-bench`, `heat-gui-renders`, `localization`, `custom-equipment-rendering-poc`) has its README and its `tools/INDEX.md` row; `git ls-files -i -c --exclude-standard` is empty. Code guide: README counts current (543 main, 443 test, 25 GameTest files); `process-simulator.md` at `a5e1304e2`, `client-gui.md` at `d8244a143`.
+
+Final lane, `bash tools/merge-lane/lane.sh head` at `fc0ae90e1`, alone on the machine (no other JVM, 19.6 GB free). Logs: `tools/merge-lane/logs/process-simulator-final-lane-logs-2026-11-04.tar.gz` (main checkout, local). Bases, no base lane run:
+- Campaign: main's own, the dry-ice drawn-arrival campaign at `e7a3a7f2b` ([DRAWN_ARRIVAL_REVIEW.md](../2026-11-02-dry-ice-cost/DRAWN_ARRIVAL_REVIEW.md)); nothing the campaign loads changed between it and main.
+- Gates, junction lines, chain-100, fluid GameTests: the dry-ice final lane at `803970ac1`. Main after it took the drawn arrival (`PassiveStepSolver`, whose gates passed with no expectation changed), the `SolidTransportAcceptanceTest` bound and 0.19.3's lang files and text tests.
+
+| Step | Head | Base |
+|---|---|---|
+| `test slowGates` (test, holdGates, columnGates, equipmentGates) | 2641 tests, 0 failures, 365 s | 2108 tests, 1 failure (the `SolidTransportAcceptanceTest` bound, fixed before 0.19.2) |
+| Junction lines | 33, the same values (only `ms`, `bytes`, `allocatedMB` differ) | 33 |
+| chain-100 exact | max deviation 0 in every field | 0 |
+| Fluid GameTests | 37/37 | 39/39 |
+| Simulator GameTests (`runColumnGameTestServer`, outside the lane) | 11/11 | none |
+| Campaign cold random | 992, `refused=0` | 992 |
+| Campaign bundled random | 994, `refused=0`; 995 with seed 6 replayed alone | 995 |
+| Campaign bundled defaults | 1000 | 1000 |
+
+- Held seeds as main's, each in its class: cold 85, 988 (E1), 752, 803 (E5), 101, 206, 446 (E6), 118 (F); bundled 430, 579 (E10), 431 (E6), 698 (E8), 241 (F). Bundled seed 6 held twice in the campaign (class F, 27 s under eight workers), not in main's: replayed alone (AGENTS.md, a new budget-class hold), it runs clean in 16 s. No new hold.
+- Fluid GameTests 37 against 39: W8 removed the calculator block and with it `ChunkLoadGameTests.aCalculatorRemovedWhileItCalculatesCancelsItsSolve` and `ColumnRegroupingGameTests.unreadableColumnDataIsRefusedAndReplacedByAFreshInput`; the simulator's own eleven run on `runColumnGameTestServer`.
+- Printed lines of the classes on both sides, with timestamps, timings, hash codes and allocation removed: the assembly store's state format reads 3 (was 2; a state format, AGENTS.md); `FluidCheckpointStoreTest`'s core file is 21 bytes larger (403242), the batch's facts additions; `FluidFactsCompatTest` and `ColumnRunTest` print lines for the batch's new images and tests. Four log4j `Error writing to RandomAccessFile logs/latest.log` traces under `AssemblyStoreTest` are the logger's, after its stream closed; the tests pass.
+
+Version: a new feature batch, so a minor bump, proposed 0.19.3 → 0.20.0, for the owner to choose. The merge turns the `[Unreleased]` line into the version heading and bumps `mod_version`; it is not pushed.
+
+Open after the merge (batch README): the column door's pump selector goes to the rotating machinery branch (owner); E readings on the 46 px LED meters stay as text (owner); nothing checked in game since the owner's manual test at `bd146c029`.
