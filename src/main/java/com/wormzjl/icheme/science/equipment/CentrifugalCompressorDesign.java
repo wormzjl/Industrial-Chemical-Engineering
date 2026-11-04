@@ -20,16 +20,17 @@ import static com.wormzjl.icheme.science.equipment.Mesh.ALL_FACES;
  * shaft by the heavy joint flange (0.12 D proud, 0.15 D thick, studs about 0.25 m apart: the signature) and standing on
  * feet at that joint; bearing housings 0.7 D across and 0.5 D long at both ends, the thrust bearing's cover in front; the
  * suction and discharge nozzles (0.9 D and 0.45 D, at most 1 m) cast pointing down through the table. Behind it the
- * coupling, a parallel-shaft step-up gear (1.2 by 2 by 2 Hm, its low-speed shaft 0.6 Hm aside) and the induction
- * motor (4.5 Hm long and 2 Hm across with its top-hat cooler), Hm = 0.5 m (P / 1 MW)^¼ from the shaft power P (Elliott
+ * half coupling under its guard and the driver bay, where a driver stands and joins it through a shaft block (batch
+ * 2026-11-03-rotating-machinery); the bay keeps the room of the step-up gear (1.2 by 2 by 2 Hm) and induction motor
+ * (4.5 Hm long, 2 Hm across) the train drew before, Hm = 0.5 m (P / 1 MW)^¼ from the shaft power P (Elliott
  * 32M4, D 0.65 m with four impellers: 33,000 m³/h, 2.5 MW, 7,176 rpm, scaled with D² and the impellers). The train stands
  * on a concrete table-top ({@link ProcessUnit#concreteTable}) whose 1 m deck lies {@code support} up (4 m and more, so
  * the suction line's elbow and strainer fit under it), on columns on pads at its edges; grating walkways with rails beside
  * it at its level, the right-hand one reached by the stair tower beside it ({@link ProcessUnit#stairTower}, its top
  * landing at the table's front); the API 614 lube-oil console (reservoir, twin pumps on plain motors and filters, twin
- * coolers) at grade on its left with its overhead rundown tank on an X-braced stand on the table beside the motor; a
+ * coolers) at grade on its left with its overhead rundown tank on an X-braced stand on the table beside the driver bay; a
  * seal-gas panel by the casing.
- * The motor's cooling fan and the coupling's shaft collar turn. Nozzles: suction down through the table; discharge down
+ * The coupling's shaft collar turns. Nozzles: suction down through the table; discharge down
  * through it and turned under it out to the right, one block clear of the suction's pipe; cooling water in at the front
  * and out at the back of the console's lower cooler.
  */
@@ -370,7 +371,7 @@ final class CentrifugalCompressorDesign extends UnitDesign {
         u.railing(new Access.Line(new double[]{x0, 0, zt0 + 1}, new double[]{1, 0, 0}, new double[]{0, 0, -1}, x1 - x0), deck, 1);
         u.railing(new Access.Line(new double[]{x0, 0, zt1 - 1}, new double[]{1, 0, 0}, new double[]{0, 0, 1}, x1 - x0), deck, 1);
 
-        // The seal-gas panel by the casing's left; the rundown tank on its braced stand beside the motor, its line down to
+        // The seal-gas panel by the casing's left; the rundown tank on its braced stand beside the driver bay, its line down to
         // the drive-end bearing.
         double sx = ax + xj + .5, sz = zc0 + .1 * length;
         u.box(new double[]{sx, h, sz}, new double[]{sx + pd, h + ph, sz + pl}, Material.MACHINE, true);

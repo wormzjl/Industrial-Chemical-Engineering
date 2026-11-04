@@ -21,7 +21,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 /**
  * {@code /icheme shaft} (operators only; batch 2026-11-03-rotating-machinery W3, build plan section 5): lists the shaft
  * parts with their status, speed and power, and queues a driver's settings, a start, a stop, a reset or a gearbox's ratio
- * as shaft events; they apply at the next tick drain. The W7 pages will send the same events.
+ * as shaft events; they apply at the next tick drain. The machine pages (W7, {@code MachineEdit}) send the same events.
  */
 @EventBusSubscriber(modid = IChemE.MOD_ID)
 public final class ShaftCommand {

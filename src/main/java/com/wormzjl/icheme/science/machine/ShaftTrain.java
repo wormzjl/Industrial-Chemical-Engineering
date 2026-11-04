@@ -90,7 +90,7 @@ public final class ShaftTrain {
     }
 
     /** The step's answer: the next speed (rpm), its trip, its status word, the shaft power a governor feeds forward (W, at
-     * the set speed) and a motor's electric draw (W, reading A14: shown, not booked). */
+     * the set speed) and a motor's electric draw (W; booked from its terminal's store by {@code ShaftTrains}, W5). */
     public record Step(double speed, Trip trip, String status, double governorPower, double electricPower) {
     }
 

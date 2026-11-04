@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-03-rotating-machinery/](2026-11-03-rotating-machinery/README.md) | Realistic pumps and compressors, separate motors and turbines on shafts, FE power, optional Create | In progress since 2026-11-03 |
+| [2026-11-03-rotating-machinery/](2026-11-03-rotating-machinery/README.md) | Realistic pumps and compressors, separate motors and turbines on shafts, FE power, optional Create | Implemented 2026-11-05 (0.21.0) |
 | [2026-11-03-localization/](2026-11-03-localization/README.md) | Missing lang keys; fr_fr, es_es and ja_jp added; zh_cn completed and reviewed | Implemented 2026-11-03 (0.19.3) |
 | [2026-11-02-dry-ice-cost/](2026-11-02-dry-ice-cost/README.md) | Why cold CO2 crystal worlds reach the island wall budget; fix proposal | Implemented 2026-11-03 |
 | [2026-11-02-process-simulator/](2026-11-02-process-simulator/README.md) | In-game process simulator: design sheets, client-side runs, flowsheet files and compatibility | Implemented (2026-11-04) |
