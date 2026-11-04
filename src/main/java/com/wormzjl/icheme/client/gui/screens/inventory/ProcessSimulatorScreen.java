@@ -237,7 +237,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     }
 
     private static SheetUnits units() {
-        return new SheetUnits(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime(), SheetUnits.Basis.valueOf(ClientConfig.basis().name()));
+        return new SheetUnits(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime(), SheetUnits.Basis.valueOf(ClientConfig.basis().name()), ClientConfig.streamConditions());
     }
 
     /** What the frame and every key read: worked out once for a sheet and a run, since a sheet's signature strings are not a frame's work. Only the run's clock is new each time. */
@@ -628,6 +628,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             case "temperature" -> ClientConfig.temperature(ClientConfig.temperature().next());
             case "pressure" -> ClientConfig.pressure(ClientConfig.pressure().next());
             case "time" -> ClientConfig.flowTime(ClientConfig.flowTime().next());
+            case "conditions" -> ClientConfig.streamConditions(!ClientConfig.streamConditions());
             // Mole, Mass, Volume and back: a stream's flow on that basis.
             default -> ClientConfig.basis(ClientConfig.Basis.valueOf(SheetUnits.Basis.valueOf(ClientConfig.basis().name()).next().name()));
         }

@@ -1816,6 +1816,8 @@
   "gui.icheme.flowsheet.frame.undo": "Undo",
   "gui.icheme.flowsheet.frame.redo": "Redo",
   "gui.icheme.flowsheet.frame.fit": "Fit",
+  "gui.icheme.flowsheet.frame.conditions": "P, T",
+  "gui.icheme.flowsheet.hint.conditions": "Shows or hides each stream's pressure and temperature under its name on the canvas.",
   "gui.icheme.flowsheet.hint.run": "A run starts here once the simulator has its run thread.",
   "gui.icheme.flowsheet.hint.run_due": "The results are out of date: run the sheet.",
   "gui.icheme.flowsheet.hint.block": "This waits for the Process Simulator block, which keeps the sheet.",

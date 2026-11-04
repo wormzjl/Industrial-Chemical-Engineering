@@ -172,6 +172,26 @@ class StreamFlowBasisTest {
      * A stream a unit makes has no tabs (the owner, 2026-11-04: "why there is a solid tab?"; its solids are on the Solid key), and
      * its door opens on the phase that holds the most until the player picks one.
      */
+    /** The P, T key (the owner, 2026-11-04): latched while shown; a feed reads its set T and P before a run, every stream its run's after. */
+    @Test
+    void theConditionsKeyShowsEachStreamsTAndP() {
+        var before = context(SheetFixture.editor(SHEET), SheetUnits.Basis.MOLE, false);
+        var u = before.units();
+        var feed = before.editor().stream("FEED");
+        assertEquals(List.of(u.t(feed.feed().temperature()) + " °C", u.p(feed.feed().pressure()) + " bar"), before.conditions(feed), "a feed's set values before a run");
+        assertNull(before.conditions(before.editor().stream("OUT")), "a product has none before a run");
+        var after = context(SheetFixture.editor(SHEET), SheetUnits.Basis.MOLE, true);
+        var out = after.editor().stream("OUT");
+        var solved = after.solved(out);
+        assertNotNull(solved);
+        assertEquals(List.of(u.t(solved.temperature()) + " °C", u.p(solved.pressure()) + " bar"), after.conditions(out), "the run's");
+        var texts = new SheetFixture.Texts();
+        assertFalse(SimulatorPage.conditionsKey(u, texts).latched(), "hidden by default");
+        var shown = new SheetUnits(u.temperature(), u.pressure(), u.time(), u.basis(), true);
+        assertTrue(SimulatorPage.conditionsKey(shown, texts).latched(), "latched while shown");
+        assertEquals("unit/conditions", SimulatorPage.conditionsKey(shown, texts).key());
+    }
+
     @Test
     void aProductDoorOpensOnItsLargestPhaseAndKeepsThePlayersPick() {
         var x = context(SheetFixture.editor(SHEET), SheetUnits.Basis.MOLE, true);

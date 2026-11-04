@@ -52,6 +52,7 @@ public final class SimulatorPage {
         var soft = softKeys(x.units(), x.t());
         var at = frame.softKeys();
         for (int i = 0; i < 4; i++) slots.add(new Slot(soft.get(i), at.get(i)));
+        slots.add(new Slot(conditionsKey(x.units(), x.t()), frame.conditionsKey()));
         return slots;
     }
 
@@ -88,6 +89,11 @@ public final class SimulatorPage {
             case VOLUME -> "fluid.volume_basis_short";
         }), true, null, false, true), new Column.Button("unit/temperature", u.temperature().symbol(), true, null, false, true),
                 new Column.Button("unit/pressure", u.pressure().symbol(), true, null, false, true), new Column.Button("unit/time", u.time().suffix(), true, null, false, true));
+    }
+
+    /** The P, T key ({@link SimulatorFrame#conditionsKey}): latched while the canvas shows each stream's T and P; a press switches them. */
+    public static Column.Button conditionsKey(SheetUnits u, HeatControlColumn.Texts t) {
+        return new Column.Button("unit/conditions", t.get("flowsheet.frame.conditions"), true, t.get("flowsheet.hint.conditions"), u.conditions());
     }
 
     /** The keys on the canvas and the palette. */
@@ -183,13 +189,14 @@ public final class SimulatorPage {
         skin.status(c, line, c.measure().cut(status.text(), line.w() - 4), status.tone());
         skin.hDivider(c, 8, w - 8, h - 35);
         skin.softKeys(c, frame.softTray());
+        skin.recess(c, frame.conditionsRecess());
     }
 
     /** The Flowsheet tab's canvas, palette and panel; the zoom keys' tray. Returns the canvas's inner box. */
     public static Rect flowsheet(Canvas c, Skin skin, SheetContext x, SimulatorFrame frame, SheetView view, SheetGestures gestures, SheetEditor editor, int category) {
         var box = skin.well(c, frame.well());
         view.layout(box);
-        SheetPainter.draw(c, editor.layout(), x.state(), view, gestures.selected(), gestures.overlay(), x.t());
+        SheetPainter.draw(c, editor.layout(), x.state(), view, gestures.selected(), gestures.overlay(), x.t(), x.units().conditions() ? x::conditions : null);
         skin.softKeys(c, SimulatorFrame.zoomTray(box));
         var well = skin.well(c, frame.tileWell());
         boolean locked = editor.locked();

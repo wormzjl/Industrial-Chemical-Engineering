@@ -34,12 +34,15 @@ public final class ClientConfig {
     public static final ModConfigSpec.EnumValue<PressureUnit> PRESSURE;
     public static final ModConfigSpec.EnumValue<FlowRateUnit> FLOW_TIME;
     public static final ModConfigSpec.EnumValue<Basis> BASIS;
+    public static final ModConfigSpec.BooleanValue STREAM_CONDITIONS;
 
     static {
         var builder = new ModConfigSpec.Builder();
         builder.push("gui");
         THEME = builder.comment("The process screens' control panel: LIGHT (a RAL 7035 grey door with red LED meters) or DARK (a RAL 7016 anthracite door with amber LED meters). The theme key on a screen's title row switches it too.")
                 .defineEnum("theme", Theme.LIGHT);
+        STREAM_CONDITIONS = builder.comment("Whether the process simulator's canvas shows each stream's temperature and pressure under its name. The P, T key at the simulator's foot switches it too.")
+                .define("stream_conditions", false);
         builder.pop();
         builder.comment("The units every process screen shows; the unit keys at a screen's foot switch them too. Display only: the server keeps SI.").push("units");
         TEMPERATURE = builder.comment("CELSIUS or KELVIN.").defineEnum("temperature", TemperatureUnit.CELSIUS);
@@ -99,13 +102,22 @@ public final class ClientConfig {
         set(BASIS, basis);
     }
 
+    /** Whether the process simulator's canvas shows each stream's temperature and pressure; off before the config has loaded. */
+    public static boolean streamConditions() {
+        return get(STREAM_CONDITIONS, false);
+    }
+
+    public static void streamConditions(boolean shown) {
+        set(STREAM_CONDITIONS, shown);
+    }
+
     /** The value set, {@code fallback} before the config has loaded. */
-    private static <T extends Enum<T>> T get(ModConfigSpec.EnumValue<T> value, T fallback) {
+    private static <T> T get(ModConfigSpec.ConfigValue<T> value, T fallback) {
         return SPEC.isLoaded() ? value.get() : fallback;
     }
 
     /** Sets the value and saves it to the file; nothing before the config has loaded. */
-    private static <T extends Enum<T>> void set(ModConfigSpec.EnumValue<T> value, T next) {
+    private static <T> void set(ModConfigSpec.ConfigValue<T> value, T next) {
         if (!SPEC.isLoaded()) return;
         value.set(next);
         value.save();

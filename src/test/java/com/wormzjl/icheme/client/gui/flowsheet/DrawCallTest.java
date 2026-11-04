@@ -23,7 +23,7 @@ class DrawCallTest {
     /** Counts draw calls as the game makes them ({@link HeldDraws}, as {@code GuiCanvas} holds a batch's texts and sprites). */
     private static final class Counting implements Canvas {
         final HeldDraws held = new HeldDraws();
-        int fills;
+        int fills, texts;
 
         int draws() {
             return held.draws();
@@ -58,6 +58,7 @@ class DrawCallTest {
 
         @Override
         public void text(String text, float x, float y, float scale, int argb) {
+            texts++;
             held.text(x, y, x + measure().width(text) * scale, y + measure().height() * scale, () -> {
             });
         }
@@ -140,6 +141,26 @@ class DrawCallTest {
         SheetPainter.draw(c, layout, new SheetState(sheet, null, null, 0, null), view, null, null, new SheetFixture.Texts());
         System.out.println("sample sheet: " + c.draws() + " draw calls, " + c.fills + " fills");
         assertTrue(c.draws() <= SAMPLE_BUDGET, c.draws() + " draw calls (" + c.fills + " fills) against " + SAMPLE_BUDGET);
+    }
+
+    /**
+     * The P, T key's lines (the owner, 2026-11-04: "Add a button to show/hide boundary conditions on the GUI (P, T)"): the
+     * streams' T and P lines draw on the sample's canvas, in one batch of their own: a fill run for their plates, a text run.
+     */
+    @Test
+    void theStreamsConditionsDrawInOneBatch() {
+        var sheet = SheetFixture.sample();
+        var layout = SheetLayout.of(sheet, SheetFixture.M);
+        var view = new SheetView();
+        view.layout(new Rect(0, 0, 900, 440));
+        view.fit(layout.bounds());
+        var state = new SheetState(sheet, null, null, 0, null);
+        var bare = new Counting();
+        SheetPainter.draw(bare, layout, state, view, null, null, new SheetFixture.Texts());
+        var shown = new Counting();
+        SheetPainter.draw(shown, layout, state, view, null, null, new SheetFixture.Texts(), stream -> List.of("100.0 °C", "2.50 bar"));
+        assertTrue(shown.texts >= bare.texts + layout.lines().size(), shown.texts + " texts against " + bare.texts + " for " + layout.lines().size() + " streams");
+        assertTrue(shown.draws() <= bare.draws() + 2, shown.draws() + " draw calls against " + bare.draws());
     }
 
     /**

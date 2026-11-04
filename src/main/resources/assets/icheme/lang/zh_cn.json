@@ -1816,6 +1816,8 @@
   "gui.icheme.flowsheet.frame.undo": "撤销",
   "gui.icheme.flowsheet.frame.redo": "重做",
   "gui.icheme.flowsheet.frame.fit": "适配",
+  "gui.icheme.flowsheet.frame.conditions": "P, T",
+  "gui.icheme.flowsheet.hint.conditions": "在画布上每条物流的名称下显示或隐藏其压力和温度。",
   "gui.icheme.flowsheet.hint.run": "模拟器有了运行线程后，运行从这里启动。",
   "gui.icheme.flowsheet.hint.run_due": "结果已过时：请运行流程图。",
   "gui.icheme.flowsheet.hint.block": "这要等流程模拟器方块，流程图由它保存。",

@@ -1816,6 +1816,8 @@
   "gui.icheme.flowsheet.frame.undo": "Annuler",
   "gui.icheme.flowsheet.frame.redo": "Rétablir",
   "gui.icheme.flowsheet.frame.fit": "Ajuster",
+  "gui.icheme.flowsheet.frame.conditions": "P, T",
+  "gui.icheme.flowsheet.hint.conditions": "Affiche ou masque la pression et la température de chaque courant sous son nom sur le canevas.",
   "gui.icheme.flowsheet.hint.run": "Un calcul démarre ici dès que le simulateur a son fil de calcul.",
   "gui.icheme.flowsheet.hint.run_due": "Les résultats ne sont plus à jour : lancez le schéma.",
   "gui.icheme.flowsheet.hint.block": "Ceci attend le bloc Simulateur de procédé, qui conserve le schéma.",

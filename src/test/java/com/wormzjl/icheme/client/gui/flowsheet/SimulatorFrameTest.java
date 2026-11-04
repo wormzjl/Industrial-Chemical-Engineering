@@ -83,6 +83,9 @@ class SimulatorFrameTest {
                     }
                     var foot = new java.util.ArrayList<Rect>(frame.softKeys());
                     foot.add(keys.getFirst());
+                    foot.add(frame.conditionsRecess());
+                    assertFalse(frame.conditionsRecess().overlaps(frame.softTray()), "the P, T key on its own beside the display keys at " + w);
+                    assertTrue(frame.conditionsRecess().right() + 6 <= frame.softTray().x(), "6 px from the tray at " + w);
                     for (int i = 0; i < foot.size(); i++) for (int k = i + 1; k < foot.size(); k++) assertFalse(foot.get(i).overlaps(foot.get(k)), "the footer apart at " + w);
                 }
             }

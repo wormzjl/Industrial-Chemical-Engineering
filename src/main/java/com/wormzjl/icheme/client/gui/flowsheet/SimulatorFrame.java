@@ -220,6 +220,18 @@ public final class SimulatorFrame {
         return new Rect(w - 10 - strip - 4, h - 31, strip + 8, 26);
     }
 
+    /**
+     * The P, T key: a push button on its own beside the display keys' tray (the owner, 2026-11-04: "Individual button on the
+     * bottom beside mole"), latched while the canvas shows each stream's T and P; its recess 6 px from the tray.
+     */
+    public Rect conditionsKey() {
+        return new Rect(softTray().x() - 6 - RECESS - 40, h - 27, 40, 18);
+    }
+
+    public Rect conditionsRecess() {
+        return around(List.of(conditionsKey()));
+    }
+
     // ---- The palette ----
 
     /** A tile as placed. */

@@ -5,13 +5,19 @@ import java.util.Locale;
 
 /**
  * The units the display keys chose (batch 2026-11-02-process-simulator): temperature, pressure, the flow's time, and the
- * basis a stream's flow reads in. Every builder reads SI values from a sheet or a run and formats them here, so a key
+ * basis a stream's flow reads in. Whether the canvas shows each stream's T and P rides with them (the P, T key).
+ * Every builder reads SI values from a sheet or a run and formats them here, so a key
  * changes all of the screen at once.
  */
-public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.PressureUnit pressure, DisplayUnit.FlowRateUnit time, Basis basis) {
+public record SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.PressureUnit pressure, DisplayUnit.FlowRateUnit time, Basis basis, boolean conditions) {
     /** The mol/s in one kmol/h: the column's own settings and results, templates and the 100 kmol/h a new flow starts at are in kmol/h. */
     public static final double KMOL_PER_HOUR = 1000 / 3600.0;
     public static final SheetUnits DEFAULT = new SheetUnits(DisplayUnit.TemperatureUnit.CELSIUS, DisplayUnit.PressureUnit.BAR, DisplayUnit.FlowRateUnit.PER_HOUR, Basis.MOLE);
+
+    /** The units with the streams' conditions hidden on the canvas ({@code conditions}, the P, T key). */
+    public SheetUnits(DisplayUnit.TemperatureUnit temperature, DisplayUnit.PressureUnit pressure, DisplayUnit.FlowRateUnit time, Basis basis) {
+        this(temperature, pressure, time, basis, false);
+    }
 
     /**
      * What a stream's flow reads in, the Mole, Mass and Volume display key (the owner, 2026-11-04: "The flowrate definition

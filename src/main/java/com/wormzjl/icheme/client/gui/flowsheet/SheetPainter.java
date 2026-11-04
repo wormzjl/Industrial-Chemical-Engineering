@@ -8,7 +8,9 @@ import com.wormzjl.icheme.client.gui.common.kit.FlowsheetPainter.Look;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
+import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import java.util.List;
+import java.util.function.Function;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -39,8 +41,18 @@ public final class SheetPainter {
         };
     }
 
-    /** Draws it all, clipped to the view's box. */
+    /** Draws it all, clipped to the view's box, with no stream's conditions. */
     public static void draw(Canvas c, SheetLayout layout, SheetState state, SheetView view, SheetGestures.@Nullable Selection selected, SheetGestures.@Nullable Overlay overlay, HeatControlColumn.Texts t) {
+        draw(c, layout, state, view, selected, overlay, t, null);
+    }
+
+    /**
+     * Draws it all, clipped to the view's box; with {@code conditions}, the lines it gives a stream (its T and P; the owner,
+     * 2026-11-04: "Add a button to show/hide boundary conditions on the GUI (P, T)", picked every stream) under its name, or under
+     * its pill where the pill says the name. A stream whose lines would cover a label, a pill or another stream's lines shows none of them.
+     */
+    public static void draw(Canvas c, SheetLayout layout, SheetState state, SheetView view, SheetGestures.@Nullable Selection selected, SheetGestures.@Nullable Overlay overlay, HeatControlColumn.Texts t,
+                            @Nullable Function<Flowsheet.Stream, @Nullable List<String>> conditions) {
         var box = view.box();
         c.clip(box);
         grid(c, view);
@@ -78,8 +90,37 @@ public final class SheetPainter {
             pill(p, line.start(), selected);
             pill(p, line.end(), selected);
         }
+        if (conditions != null && p.labels()) conditions(p, layout, hidden, conditions);
         if (overlay != null) overlay(p, overlay, t);
         c.unclip();
+    }
+
+    /** Each stream's lines under its name or its pill, after every pill is held against them; one batch. */
+    private static void conditions(FlowsheetPainter p, SheetLayout layout, @Nullable String hidden, Function<Flowsheet.Stream, @Nullable List<String>> conditions) {
+        for (var line : layout.lines())
+            for (var pill : new SheetLayout.Pill[]{line.start(), line.end()}) {
+                if (pill == null) continue;
+                var r = pill.rect();
+                p.take(new Rect(p.x(r.x()), p.y(r.y()), p.x(r.right()) - p.x(r.x()), p.y(r.bottom()) - p.y(r.y())));
+            }
+        float h = p.lineHeight();
+        var placed = new java.util.ArrayList<FlowsheetPainter.Placed>();
+        for (var line : layout.lines()) {
+            if (line.stream().id().equals(hidden)) continue;
+            var pill = line.start() != null ? line.start() : line.end();
+            if (!line.hasName() && pill == null) continue;
+            var lines = conditions.apply(line.stream());
+            if (lines == null) continue;
+            // Under the name, a line down for each; under the pill, from its bottom edge, half a line down to the first's middle.
+            int x = line.hasName() ? line.nameX() : pill.x(), y = line.hasName() ? line.nameY() : pill.y();
+            float first = line.hasName() ? h : p.px(SheetLayout.PILL_HALF) + h / 2 + 1;
+            placed.addAll(p.place(lines, x, y, .5f, first));
+        }
+        // The plates, then the texts: a fill run and a text run.
+        p.canvas().batch(() -> {
+            for (var at : placed) at.plate(p.canvas(), PLATE);
+            for (var at : placed) at.write(p.canvas(), Palette.MUTED);
+        });
     }
 
     /** A line's colour: white where selected, the accent where torn. */

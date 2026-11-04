@@ -85,9 +85,9 @@ public final class SimulatorRender {
     static final V3ColumnInput BASE = CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG);
     static StreamProps.Fluids FLUIDS;
     /** The display units the sheets show: the default's, with the flow's basis from {@code -Dbasis=MOLE|MASS|VOLUME}. */
-    // -Dpressure=KILOPASCAL, -Dtime=PER_MINUTE and -Dbasis=MASS draw every sheet on those display keys.
+    // -Dpressure=KILOPASCAL, -Dtime=PER_MINUTE and -Dbasis=MASS draw every sheet on those display keys. -Dconditions=true latches the P, T key.
     static final SheetUnits UNITS = new SheetUnits(SheetUnits.DEFAULT.temperature(), com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit.valueOf(System.getProperty("pressure", SheetUnits.DEFAULT.pressure().name())),
-            com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit.valueOf(System.getProperty("time", SheetUnits.DEFAULT.time().name())), SheetUnits.Basis.valueOf(System.getProperty("basis", "MOLE")));
+            com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit.valueOf(System.getProperty("time", SheetUnits.DEFAULT.time().name())), SheetUnits.Basis.valueOf(System.getProperty("basis", "MOLE")), Boolean.getBoolean("conditions"));
     static final Measure FONT = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
 
     private static StreamProps.Fluids fluids() {

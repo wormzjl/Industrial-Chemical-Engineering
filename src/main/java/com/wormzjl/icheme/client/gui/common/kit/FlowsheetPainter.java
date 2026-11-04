@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.client.gui.common.kit;
 
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * The flowsheets' drawing on a design grid (GUI_TOOLKIT_PLAN.md section 3), shared by a column's assembly screen and a
@@ -293,6 +294,11 @@ public final class FlowsheetPainter {
     /** The canvas boxes the labels placed with {@link #tag} and the areas {@link #take}n hold; a later label avoids them. */
     private final java.util.List<Rect> taken = new java.util.ArrayList<>();
 
+    /** A label's line on the canvas, in px. */
+    public float lineHeight() {
+        return c.measure().height() * fontScale();
+    }
+
     /** Holds canvas box {@code r} (a pill) against later labels. */
     public void take(Rect r) {
         taken.add(r);
@@ -304,14 +310,48 @@ public final class FlowsheetPainter {
      * was drawn.
      */
     public boolean tag(String text, int x, int y, float anchor, int colour, int plate) {
-        float fs = fontScale(), w = c.measure().width(text) * fs, h = c.measure().height() * fs;
-        float left = x(x) - w * anchor, top = y(y) - h / 2 + fs;
-        var box = new Rect((int) Math.floor(left) - 1, (int) Math.floor(top) - 1, (int) Math.ceil(w) + 2, (int) Math.ceil(h));
-        for (var t : taken) if (t.overlaps(box)) return false;
-        taken.add(box);
-        if (plate != 0) c.fill(box.x(), box.y(), box.right(), box.bottom(), plate);
-        c.text(text, left, top, fs, colour);
+        var placed = place(text, x, y, anchor, 0);
+        if (placed == null) return false;
+        placed.plate(c, plate);
+        placed.write(c, colour);
         return true;
+    }
+
+    /**
+     * A label {@link #tag} would place, its top {@code down} canvas px lower (a line under another, in steps of
+     * {@link #lineHeight}), held against later labels; null where it would cover one placed before it. A caller with many draws
+     * every plate before any text, so the texts stay one run in a batch.
+     */
+    public @Nullable Placed place(String text, int x, int y, float anchor, float down) {
+        var all = place(java.util.List.of(text), x, y, anchor, down);
+        return all.isEmpty() ? null : all.getFirst();
+    }
+
+    /** {@code lines} {@link #place}d one under another from {@code down}, all or none: a reading split in half would mislead. */
+    public java.util.List<Placed> place(java.util.List<String> lines, int x, int y, float anchor, float down) {
+        float fs = fontScale(), h = c.measure().height() * fs;
+        var placed = new java.util.ArrayList<Placed>();
+        for (int i = 0; i < lines.size(); i++) {
+            String text = lines.get(i);
+            float w = c.measure().width(text) * fs, left = x(x) - w * anchor, top = y(y) - h / 2 + fs + down + i * h;
+            var box = new Rect((int) Math.floor(left) - 1, (int) Math.floor(top) - 1, (int) Math.ceil(w) + 2, (int) Math.ceil(h));
+            for (var t : taken) if (t.overlaps(box)) return java.util.List.of();
+            placed.add(new Placed(text, left, top, fs, box));
+        }
+        for (var at : placed) taken.add(at.box());
+        return placed;
+    }
+
+    /** A label {@link #place}d: its text at ({@code left}, {@code top}) in {@code scale}, on its plate {@code box}. */
+    public record Placed(String text, float left, float top, float scale, Rect box) {
+        /** Its plate in {@code argb}; none for 0. */
+        public void plate(Canvas c, int argb) {
+            if (argb != 0) c.fill(box.x(), box.y(), box.right(), box.bottom(), argb);
+        }
+
+        public void write(Canvas c, int argb) {
+            c.text(text, left, top, scale, argb);
+        }
     }
 
     /** A design point's x of canvas x {@code cx}. */

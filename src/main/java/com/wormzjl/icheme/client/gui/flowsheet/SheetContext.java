@@ -76,6 +76,18 @@ public record SheetContext(SheetEditor editor, SheetState state, SheetUnits unit
         return open;
     }
 
+    /**
+     * A stream's T and P on the canvas (the P, T key), in the display units: its run's, or a feed's set values while no run
+     * holds it; null for a stream with neither.
+     */
+    public @Nullable List<String> conditions(Flowsheet.Stream stream) {
+        var solved = solved(stream);
+        var feed = stream.feed();
+        if (solved == null && feed == null) return null;
+        double kelvin = solved != null ? solved.temperature() : feed.temperature(), pascals = solved != null ? solved.pressure() : feed.pressure();
+        return List.of(units.t(kelvin) + " " + units.temperature().symbol(), units.p(pascals) + " " + units.pressure().symbol());
+    }
+
     /** A stream's last solved state, greyed or not: what a unit that solves alone has now, or null if no run has solved it. */
     public @Nullable FlowStream last(Flowsheet.@Nullable Stream stream) {
         var results = state.results();

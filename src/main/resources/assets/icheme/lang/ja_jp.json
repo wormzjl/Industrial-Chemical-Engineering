@@ -1816,6 +1816,8 @@
   "gui.icheme.flowsheet.frame.undo": "戻す",
   "gui.icheme.flowsheet.frame.redo": "やり直し",
   "gui.icheme.flowsheet.frame.fit": "全体",
+  "gui.icheme.flowsheet.frame.conditions": "P, T",
+  "gui.icheme.flowsheet.hint.conditions": "キャンバス上で各ストリームの名前の下に圧力と温度を表示または非表示にします。",
   "gui.icheme.flowsheet.hint.run": "シミュレーターに実行スレッドが用意されると、ここから実行が始まります。",
   "gui.icheme.flowsheet.hint.run_due": "結果が古くなっています。フローシートを実行してください。",
   "gui.icheme.flowsheet.hint.block": "シートを保持するプロセスシミュレーターブロックを待っています。",

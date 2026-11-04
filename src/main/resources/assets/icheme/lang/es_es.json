@@ -1816,6 +1816,8 @@
   "gui.icheme.flowsheet.frame.undo": "Deshacer",
   "gui.icheme.flowsheet.frame.redo": "Rehacer",
   "gui.icheme.flowsheet.frame.fit": "Ajustar",
+  "gui.icheme.flowsheet.frame.conditions": "P, T",
+  "gui.icheme.flowsheet.hint.conditions": "Muestra u oculta la presión y la temperatura de cada corriente bajo su nombre en el lienzo.",
   "gui.icheme.flowsheet.hint.run": "Una ejecución empieza aquí cuando el simulador tenga su hilo de ejecución.",
   "gui.icheme.flowsheet.hint.run_due": "Los resultados están desactualizados: ejecuta el diagrama.",
   "gui.icheme.flowsheet.hint.block": "Esto espera al bloque Simulador de procesos, que guarda el diagrama.",
