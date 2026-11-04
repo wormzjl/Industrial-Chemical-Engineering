@@ -12,18 +12,25 @@ import static org.junit.jupiter.api.Assertions.*;
 class V3ClientPresetsTest {
     @TempDir Path game;
     private V3ClientPresets library(){return new V3ClientPresets(game,n->getClass().getClassLoader().getResourceAsStream(n));}
-    private static V3ColumnInput reference(){var c=MaterialCatalog.bundled();return c.presets().column("tia_juana").input(c);}
+    private static V3ColumnInput reference(){var c=MaterialCatalog.bundled();return c.presets().column(c.presets().network().defaultColumnPreset()).input(c);}
     private static V3EditorDraft draft(){
         var input=reference();return new V3EditorDraft(input,weights(input));
     }
     private static java.util.List<Double> weights(V3ColumnInput input){
         return MaterialCatalog.bundled().requirePackage(input.packageId()).properties().stream().map(MaterialCatalog.Property::molecularWeight).toList();
     }
-    /** The column a stream of {@code parts} sits on: the one with the fewest components that holds them. */
+    /**
+     * The column a stream of {@code parts} sits on: the default column on the package with the fewest components that holds
+     * them and the default column's (a file names no package).
+     */
     private static V3ColumnInput sourceFor(java.util.Collection<String> parts){
-        var c=MaterialCatalog.bundled();
-        return c.presets().columns().keySet().stream().sorted().map(id->c.presets().column(id)).filter(p->p.visible()).map(p->p.input(c))
-                .filter(i->i.componentBasis().componentIds().containsAll(parts)).min(java.util.Comparator.comparingInt(i->i.componentBasis().componentCount())).orElseThrow();
+        var c=MaterialCatalog.bundled();var base=reference();var baseIds=base.componentBasis().componentIds();
+        var p=c.packages().values().stream().filter(k->k.components().containsAll(parts)&&k.components().containsAll(baseIds))
+                .min(java.util.Comparator.comparingInt((MaterialCatalog.Package k)->k.components().size()).thenComparing(MaterialCatalog.Package::id)).orElseThrow();
+        if(p.id().equals(base.packageId()))return base;
+        double[] feed=new com.wormzjl.icheme.science.material.MaterialAxis(p.components()).project(new com.wormzjl.icheme.science.material.MaterialAxis(baseIds),base.feedComponentMolarFlowsMolPerSecond());
+        return new V3ColumnInput(1,p.id(),base.assayId(),new V3ComponentBasis(p.components()),feed,base.feedTemperatureKelvin(),base.stageCount(),base.feedStageNumber(),
+                base.topPressurePascal(),base.stagePressureDropPascal(),base.specifications(),base.sideDraws(),base.steamFeeds(),base.pumparounds(),base.columnDiameterMetres());
     }
     /** A stream template on {@code source}'s components, with the feed flow and temperature where it has them. */
     private static void load(V3EditorDraft d,V3ClientPresets.Mixture mixture,V3ColumnInput source){
@@ -34,7 +41,7 @@ class V3ClientPresetsTest {
     @Test void bundledLibrariesAreIndependentAndPreserveAuthoredOperatingData(){
         var l=library();var columns=l.refresh(V3ClientPresets.Kind.COLUMN);var mixtures=l.refresh(V3ClientPresets.Kind.MIXTURE);
         assertTrue(columns.problems().isEmpty(),()->columns.problems().toString());assertTrue(mixtures.problems().isEmpty());
-        assertEquals(7,columns.entries().size());assertEquals(8,mixtures.entries().size());
+        assertEquals(5,columns.entries().size());assertEquals(6,mixtures.entries().size());
         for(var entry:columns.entries()){
             if(entry.file().equals("pot.json"))continue;
             // A crude is two files now: the stream, then the tower on it, as the calculator's Templates load them.
@@ -56,24 +63,24 @@ class V3ClientPresetsTest {
         var mixtures=library().refresh(V3ClientPresets.Kind.MIXTURE).entries();
         for(var entry:mixtures){
             var mixture=(V3ClientPresets.Mixture)entry.preset();
-            assertEquals(entry.file().equals("tia_juana_nitrogen.json")?"icheme:tjl20_methane_nitrogen":"icheme:tjl20_methane",sourceFor(mixture.amounts().keySet()).packageId(),entry.file());
+            assertEquals(entry.file().equals("medium_crude_nitrogen.json")?"icheme:tjl20_methane_nitrogen":"icheme:tjl20_methane",sourceFor(mixture.amounts().keySet()).packageId(),entry.file());
         }
         assertThrows(NoSuchElementException.class,()->sourceFor(Set.of("Unobtainium")));
     }
     /** Old files (process simulator plan, section 3.7): a column's feed flow is its design feed, and a mixture's package, gone or not, decides nothing. */
     @Test void filesOfTheOlderBuildsLoad()throws Exception{
         String column=corpus("column-schema-2.json"),mixture=corpus("mixture-schema-1.json");
-        assertTrue(mixture.contains("icheme:bonga_tjl20"),"the image names a package this build does not have");
+        assertTrue(mixture.contains("icheme:medium_crude_tjl20"),"the image names a package this build does not have");
         var c=(V3ClientPresets.Column)V3ClientPresets.decode(column,V3ClientPresets.Kind.COLUMN);
         var m=(V3ClientPresets.Mixture)V3ClientPresets.decode(mixture,V3ClientPresets.Kind.MIXTURE);
-        assertEquals(2650.277212975707,c.template().designFeed());
+        assertEquals(2557.200107051911,c.template().designFeed());
         assertTrue(m.flow().isEmpty()&&m.temperature().isEmpty()&&m.pressure().isEmpty(),"an old mixture is a mixture only");
         var l=library();
         Files.createDirectories(l.directory(V3ClientPresets.Kind.COLUMN));Files.createDirectories(l.directory(V3ClientPresets.Kind.MIXTURE));
         Files.writeString(l.directory(V3ClientPresets.Kind.COLUMN).resolve("old.json"),column);Files.writeString(l.directory(V3ClientPresets.Kind.MIXTURE).resolve("old.json"),mixture);
         var columns=l.refresh(V3ClientPresets.Kind.COLUMN);var mixtures=l.refresh(V3ClientPresets.Kind.MIXTURE);
         assertTrue(columns.problems().isEmpty()&&mixtures.problems().isEmpty(),()->columns.problems()+" "+mixtures.problems());
-        assertEquals(8,columns.entries().size());assertEquals(9,mixtures.entries().size());
+        assertEquals(6,columns.entries().size());assertEquals(7,mixtures.entries().size());
         // On the default feed: the feed and its temperature stay, the mixture changes, and the tower's flows scale to the feed they meet.
         var on=sourceFor(m.amounts().keySet());assertEquals(reference().packageId(),on.packageId());
         var d=draft();load(d,m,on);d.loadColumn(c.template());var loaded=d.assemble();
@@ -98,7 +105,7 @@ class V3ClientPresetsTest {
         var loaded=draft();var on=sourceFor(m.amounts().keySet());load(loaded,m,on);
         assertEquals(5000/3.6,Arrays.stream(loaded.assemble().feedComponentMolarFlowsMolPerSecond()).sum(),1e-9);assertEquals(313.15,loaded.assemble().feedTemperatureKelvin(),1e-9);
         for(var entry:library().refresh(V3ClientPresets.Kind.MIXTURE).entries()){
-            var stream=(V3ClientPresets.Mixture)entry.preset();boolean residue=entry.file().equals("tia_juana_residue.json");
+            var stream=(V3ClientPresets.Mixture)entry.preset();boolean residue=entry.file().equals("medium_crude_residue.json");
             assertEquals(!residue,stream.flow().isPresent(),entry.file());assertEquals(!residue,stream.temperature().isPresent(),entry.file());assertTrue(stream.pressure().isEmpty(),entry.file());
         }
     }
@@ -108,8 +115,8 @@ class V3ClientPresetsTest {
     /** The VDU feed template (batch 2026-10-26-multi-machine-framework, plan 4.4): the crude from 378 C up in its own proportions, and a 5 % gas oil tail. */
     @Test void theVduFeedTemplateIsTheCrudesResidueWithAGasOilTail(){
         var mixtures=library().refresh(V3ClientPresets.Kind.MIXTURE).entries();
-        var residue=(V3ClientPresets.Mixture)mixtures.stream().filter(e->e.file().equals("tia_juana_residue.json")).findFirst().orElseThrow().preset();
-        var crude=(V3ClientPresets.Mixture)mixtures.stream().filter(e->e.file().equals("tia_juana.json")).findFirst().orElseThrow().preset();
+        var residue=(V3ClientPresets.Mixture)mixtures.stream().filter(e->e.file().equals("medium_crude_residue.json")).findFirst().orElseThrow().preset();
+        var crude=(V3ClientPresets.Mixture)mixtures.stream().filter(e->e.file().equals("medium_crude.json")).findFirst().orElseThrow().preset();
         assertFalse(residue.mass());
         var d=draft();d.composition().load(residue.amounts(),residue.mass());
         var ids=List.copyOf(reference().componentBasis().componentIds());var x=d.composition().moleFractions();
@@ -127,7 +134,7 @@ class V3ClientPresetsTest {
         String json=V3ClientPresets.streamJson("custom",d.composition().relativeAmounts(),300,1.01,10);
         Path file=l.save(V3ClientPresets.Kind.MIXTURE,"custom",json);
         assertEquals(game.resolve("IChemE/mixturepreset/custom.json"),file);
-        assertEquals(8,first.entries().size());assertEquals(9,l.refresh(V3ClientPresets.Kind.MIXTURE).entries().size());
+        assertEquals(6,first.entries().size());assertEquals(7,l.refresh(V3ClientPresets.Kind.MIXTURE).entries().size());
         assertNotEquals(file,l.save(V3ClientPresets.Kind.MIXTURE,"custom",json));assertEquals(json,Files.readString(file));
         assertThrows(IllegalArgumentException.class,()->l.save(V3ClientPresets.Kind.MIXTURE,"../escape",json));
     }
@@ -172,7 +179,7 @@ class V3ClientPresetsTest {
         var l=library();Files.createDirectories(l.directory(V3ClientPresets.Kind.COLUMN));
         Files.writeString(l.directory(V3ClientPresets.Kind.COLUMN).resolve("broken.json"),"{broken");
         Files.writeString(l.directory(V3ClientPresets.Kind.COLUMN).resolve("large.json")," ".repeat(V3ClientPresets.MAX_BYTES+1));
-        var result=l.refresh(V3ClientPresets.Kind.COLUMN);assertEquals(7,result.entries().size());assertEquals(2,result.problems().size());
+        var result=l.refresh(V3ClientPresets.Kind.COLUMN);assertEquals(5,result.entries().size());assertEquals(2,result.problems().size());
         var o=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();o.addProperty("tray_count",1);
         assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(o.toString(),V3ClientPresets.Kind.COLUMN));
         // A schema 1 or a newer file is refused by its version; a schema 2 file that still carries the stage drop reads, the drop ignored.

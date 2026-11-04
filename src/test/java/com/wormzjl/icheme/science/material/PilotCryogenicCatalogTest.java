@@ -40,7 +40,6 @@ class PilotCryogenicCatalogTest {
      * compared directly ({@link #TJL20_PHYSICS}).
      */
     private static final String[][] BUNDLED_PINS = {
-        {"icheme:tjl19_dwsim", "icheme:tjl19_dwsim@crude-regrouped-r2"},
         {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r3"},
         {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r3"},
         {"icheme:refinery", "icheme:refinery@refinery-tier1-r2"},
@@ -75,6 +74,19 @@ class PilotCryogenicCatalogTest {
     private static final String PILOT_SPINE_REVISION = "spine:icheme:spine_nitrogen@spine-nitrogen-r3,icheme:spine_methane@spine-methane-r3,"
             + "icheme:spine_ethane@spine-ethane-r3,icheme:spine_carbon_dioxide@spine-carbon_dioxide-r4,icheme:crystal_carbon_dioxide_i@crystal-carbon_dioxide-i-r2";
 
+    /**
+     * tjl19_dwsim, a test fixture since O3 of batch 2026-11-04-open-thermo-data, had a fingerprint of its own for its
+     * 18-component axis; on that axis its physics is tjl20's.
+     */
+    @Test
+    void theTiaJuanaLiteraturePackageHasTjl20PhysicsOnItsAxis() {
+        var catalog = TiaJuanaTestCatalog.catalog();
+        var dwsim = catalog.requirePackage("icheme:tjl19_dwsim");
+        assertEquals("icheme:tjl19_dwsim@crude-regrouped-r2", dwsim.id() + "@" + dwsim.revision());
+        assertTrue(catalog.requirePackage(TJL20).components().containsAll(dwsim.components()));
+        assertEquals(catalog.physicsContent(TJL20, dwsim.components()), catalog.physicsContent(dwsim.id(), dwsim.components()), "tjl19_dwsim on its own axis");
+    }
+
     @Test
     void bundledPackageRevisionsAndSharedPhysicsAreUnchanged() {
         for (MaterialCatalog catalog : List.of(MaterialCatalog.bundled(), PilotCryogenicTestCatalog.catalog())) {
@@ -86,11 +98,7 @@ class PilotCryogenicCatalogTest {
             }
             var axis = catalog.requirePackage(TJL20).components();
             for (String id : TJL20_PHYSICS) assertEquals(catalog.physicsContent(TJL20, axis), catalog.physicsContent(id, axis), id);
-            // tjl19_dwsim had a fingerprint of its own for its 18-component axis; on that axis its physics is tjl20's.
-            var dwsim = catalog.requirePackage("icheme:tjl19_dwsim");
-            assertTrue(axis.containsAll(dwsim.components()));
-            assertEquals(catalog.physicsContent(TJL20, dwsim.components()), catalog.physicsContent(dwsim.id(), dwsim.components()), "tjl19_dwsim on its own axis");
-            // The pilot is the fifth bundled package and the only one with a reference spine.
+            // The pilot is the fourth bundled package and the only one with a reference spine.
             assertEquals(BUNDLED_PINS.length + 1, catalog.packages().size());
             assertEquals(List.of(PilotCryogenicTestCatalog.PACKAGE_ID), catalog.packages().values().stream()
                     .filter(p -> !p.spine().isEmpty()).map(MaterialCatalog.Package::id).toList());

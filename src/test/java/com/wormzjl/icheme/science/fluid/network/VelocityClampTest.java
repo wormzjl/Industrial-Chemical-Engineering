@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class VelocityClampTest {
     private FluidThermodynamics model(double limit){return FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),"icheme:tjl20_methane_nitrogen",limit, FluidThermodynamics.DEFAULT_TRACE_CUTOFF_MOLE_FRACTION);}
     private FluidThermodynamics.State state(FluidThermodynamics model,double pressure,boolean wet) {
-        double[] n=new double[model.componentCount()];if(wet){n=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),model.componentCount());n[model.componentCount()-1]=.2;}else n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=1;
+        double[] n=new double[model.componentCount()];if(wet){n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),model.componentCount());n[model.componentCount()-1]=.2;}else n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=1;
         var unit=model.flashTP(350,pressure,n,()->{});for(int c=0;c<n.length;c++)n[c]/=unit.volume();return model.flashTP(350,pressure,n,()->{});
     }
     private PassiveNetwork graph(FluidThermodynamics model,boolean reverse,boolean wet,FlowControl control,boolean finite) {

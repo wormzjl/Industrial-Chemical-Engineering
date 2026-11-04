@@ -9,10 +9,11 @@ import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3RegroupedTransformerTest {
     private static final Gson JSON = new Gson();
     private static V3ColumnInput input(String packageId) {
-        var p = MaterialCatalog.bundled().requirePackage(packageId);
+        var p = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().requirePackage(packageId);
         double[] feed = new double[p.components().size()];
         feed[feed.length-2] = 50; feed[feed.length-8] = 50;
         return V3TestInputs.dry(1, packageId, "test:reader", new V3ComponentBasis(p.components()),
@@ -26,7 +27,7 @@ class V3RegroupedTransformerTest {
         d.addProperty("featureRevision","v3-anchor-augmented-regrouped-2");
         d.addProperty("modelType","anchor-augmented"); d.addProperty("anchorLayout","full");
         d.addProperty("baselineRevision",V3AnchorTransformerInitializer.NativeAnchor.REVISION); d.addProperty("modelId","test:synthetic");
-        d.add("physics",physics(MaterialCatalog.bundled(),input.packageId()));
+        d.add("physics",physics(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog(),input.packageId()));
         d.add("components",JSON.toJsonTree(input.componentBasis().componentIds()));
         double[] z=input.feedComponentMolarFlowsMolPerSecond(); double total=Arrays.stream(z).sum();
         for(int i=0;i<z.length;i++)z[i]/=total;

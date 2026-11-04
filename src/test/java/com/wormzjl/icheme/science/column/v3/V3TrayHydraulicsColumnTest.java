@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
  * preset at 8 m runs at about 565 Pa a tray, 22 kPa in total and 69 % of flood — reproduced here through the
  * production publication seam rather than through the study harness.</p>
  */
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3TrayHydraulicsColumnTest {
     private static final String LITERATURE_ASSAY = "icheme:tia_juana_light";
     private static final double LITERATURE_FEED_MOL_PER_SECOND = 737.6996333000835;

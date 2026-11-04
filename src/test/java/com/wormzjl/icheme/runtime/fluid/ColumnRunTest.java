@@ -449,7 +449,7 @@ class ColumnRunTest {
     /** A solver answering every job {@code delay} ticks after it was asked (0: at once): {@link #table}, or a failure where {@code fail} holds. */
     static final class Fake implements ColumnOperation.Solves {
         static final com.wormzjl.icheme.science.column.v3.V3ColumnInput DESIGN;
-        static{var c=MaterialCatalog.bundled();DESIGN=c.presets().column("tia_juana").input(c);}
+        static{var c=MaterialCatalog.bundled();DESIGN=c.presets().column(c.presets().network().defaultColumnPreset()).input(c);}
         com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model;EventPathWorld world;final long delay;
         java.util.function.Predicate<ColumnSolve.Job> fail=j->false;
         final List<ColumnSolve.Job> jobs=new ArrayList<>();final List<Long> asked=new ArrayList<>();

@@ -38,7 +38,7 @@ class LiquidMixtureCorrectionTest {
         assertThrows(IllegalArgumentException.class,()->model().logCorrection(new double[3]));
     }
     @Test void theCrudeMethodTermTakesTheTwelveCutsOnEachPackageAxis() {
-        var catalog=MaterialCatalog.bundled();
+        var catalog=TiaJuanaTestCatalog.catalog(); // TJL19 is a test fixture (O3 of batch 2026-11-04-open-thermo-data)
         for (String id:List.of("icheme:tjl20_methane","icheme:tjl19_dwsim","icheme:refinery")) {
             var axis=catalog.requirePackage(id).components();var term=catalog.liquidMixture(id);
             assertEquals(G,term.coefficient());assertEquals(axis.size(),term.components());

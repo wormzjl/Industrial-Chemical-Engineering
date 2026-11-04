@@ -19,7 +19,7 @@ class PhaseLayoutTest {
     }
     @Test void coupledVolumeEnergyAndPhaseEquationsRecoverIndependentTpTargets() {
         String id="icheme:tjl20_methane";var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),id);
-        double[] crude=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(id).crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1);crude[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=.2;
+        double[] crude=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(id).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1);crude[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=.2;
         double[] water=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1];water[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=1;double[] methane=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1];methane[0]=1;
         for(double[] n:new double[][]{crude,water,methane}) {
             var seed=model.flashTP(350,101325,n,()->{});var target=model.flashTP(351,105000,n,()->{});

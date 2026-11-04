@@ -23,7 +23,7 @@ class TracePhaseFoldTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
     private static final int WATER=MaterialTestBasis.NETWORK,NITROGEN=MaterialTestBasis.NITROGEN;
     private static double[] crude(int components) {
-        return Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),components);
+        return Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),components);
     }
     private static double sum(double[] values){double total=0;for(double value:values)total+=value;return total;}
     private static double[] totals(FluidThermodynamics.State s) {

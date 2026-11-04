@@ -20,9 +20,12 @@ class RefineryImportTest {
     private static final List<String> VISCOSITY_FLAGS=List.of("icheme:tjl19_isobutane","icheme:tjl19_isopentane");
     @AfterEach void reset(){MaterialRuntime.reset();}
 
-    /** The bundled resources as they stood before the import. */
+    /**
+     * The bundled resources as they stood before the import. Read with the Tia Juana test fixture, which holds
+     * {@code tjl19_dwsim} since O3 of batch 2026-11-04-open-thermo-data.
+     */
     private static MaterialCatalog before() {
-        var resources=new HashMap<>(MaterialCatalog.bundled().resources());
+        var resources=new HashMap<>(TiaJuanaTestCatalog.catalog().resources());
         resources.entrySet().removeIf(e->{
             String path=e.getKey();if(!path.startsWith(ROOT))return false;
             if(path.equals(ROOT+"transport/chemsep_liquid_reference.json")||path.equals(ROOT+"interactions/dwsim_refinery_pr78.json")||path.equals(ROOT+"packages/refinery.json"))return true;
@@ -47,7 +50,7 @@ class RefineryImportTest {
     }
 
     @Test void theImportMovesNoColumnIdentityAndNoNumberOfTheOldPackages() {
-        var before=before();var after=MaterialCatalog.bundled();
+        var before=before();var after=TiaJuanaTestCatalog.catalog();
         assertEquals(NETWORK,before.presets().network().packageId());
         assertEquals(REFINERY,after.presets().network().packageId());
         for(String id:OLD_PACKAGES) {
@@ -72,7 +75,7 @@ class RefineryImportTest {
      * of such a world loads EXACT); a view holding either moves in those two tokens only.
      */
     @Test void aNetworkViewKeepsItsIdentityUnlessItHoldsAFlaggedTable() {
-        var before=before();var after=MaterialCatalog.bundled();var all=before.requirePackage(NETWORK).components();
+        var before=before();var after=TiaJuanaTestCatalog.catalog();var all=before.requirePackage(NETWORK).components();
         var views=List.of(List.of("Nitrogen","Methane"),List.of("Nitrogen","Ethane"),List.of("Nitrogen"),List.of("Methane","Ethane","Propane","N-butane","N-pentane"),
                 List.of("Nitrogen","crude_pc03","crude_pc12"),List.of("Nitrogen","Isobutane"),List.of("Nitrogen","Isopentane","crude_pc01"),all);
         for(var view:views) {
@@ -87,7 +90,7 @@ class RefineryImportTest {
 
     /** The pair library (D3): every pair names a new compound, no pair names hydrogen, and Methane/HydrogenSulfide is ChemSep's 2009 value. */
     @Test void thePairLibraryAddsOnlyPairsWithANewCompound() {
-        var after=MaterialCatalog.bundled();var before=before();
+        var after=TiaJuanaTestCatalog.catalog();var before=before();
         var added=new HashSet<>(after.requirePackage(REFINERY).components());added.removeAll(before.requirePackage(NETWORK).components());
         assertEquals(24,added.size());
         var library=JsonParser.parseString(after.resources().get(ROOT+"interactions/dwsim_refinery_pr78.json")).getAsJsonObject();

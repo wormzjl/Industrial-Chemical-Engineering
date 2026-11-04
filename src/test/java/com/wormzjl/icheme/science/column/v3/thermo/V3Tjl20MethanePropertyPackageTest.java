@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3Tjl20MethanePropertyPackageTest {
     private static final String TJL19 = "icheme:tjl19_dwsim", TJL19_ASSAY = "icheme:tia_juana_light";
     private static final String TJL20 = "icheme:tjl20_methane", TJL20_ASSAY = "icheme:tia_juana_light_methane";

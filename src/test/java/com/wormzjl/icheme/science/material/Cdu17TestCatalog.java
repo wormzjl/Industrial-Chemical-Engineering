@@ -10,7 +10,7 @@ import java.util.function.Supplier;
 /** Frozen literature fixture, parsed independently of the production material index. */
 public final class Cdu17TestCatalog {
     public static final String PACKAGE_ID = "icheme:cdu17_tjl_acs2018";
-    /** The fixture's Tia Juana Light assay; production's {@code icheme:tia_juana_light} (TJL19) keeps its own id. */
+    /** The fixture's Tia Juana Light assay; the TJL19 test fixture's {@code icheme:tia_juana_light} keeps its own id. */
     public static final String ASSAY_ID = "icheme:tia_juana_light_kl1976";
     private static final String PREFIX = "/materials/cdu17-reference/";
     private static final MaterialCatalog CATALOG = load();
@@ -24,18 +24,21 @@ public final class Cdu17TestCatalog {
         return MaterialRuntime.with(CATALOG, PACKAGE_ID, action);
     }
 
-    /** The Tia Juana Light assay on a package: the fixture's own on the fixture package, production's TJL19 assay elsewhere. */
+    /** The Tia Juana Light assay on a package: the fixture's own on the fixture package, the TJL19 test fixture's elsewhere. */
     public static String tiaJuanaAssay(String packageId) {
         return PACKAGE_ID.equals(packageId) ? ASSAY_ID : "icheme:tia_juana_light";
     }
 
     /**
-     * The fixture over the production resources. The fixture wins every record both hold, except that a compound record
+     * The fixture over the production resources with the Tia Juana test fixture ({@link TiaJuanaTestCatalog}, the
+     * resources these tests read before O3 of batch 2026-11-04-open-thermo-data moved Tia Juana out of the game; the scoped
+     * catalog where it holds them already). The fixture wins every record both hold, except that a compound record
      * shared with production (Methane, Ethane, Propane) keeps production's default dataset, so the production packages
      * resolve exactly as without the fixture; the fixture package names its own datasets.
      */
     public static MaterialCatalog withProduction() {
-        var resources=new LinkedHashMap<>(MaterialRuntime.current().resources());
+        var current=MaterialRuntime.current();
+        var resources=new LinkedHashMap<>(current.packages().containsKey(TiaJuanaTestCatalog.LITERATURE_PACKAGE_ID)?current.resources():TiaJuanaTestCatalog.resources());
         for (var entry : CATALOG.resources().entrySet()) {
             String production=resources.get(entry.getKey());
             resources.put(entry.getKey(), production!=null && entry.getKey().contains("materials/components/")

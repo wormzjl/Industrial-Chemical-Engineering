@@ -93,7 +93,7 @@ class CrystalPackageConsumersTest {
 
     @Test void aPilotNetworkCarriesNoCrudeAssayPreset() {
         var refused = assertThrows(IllegalArgumentException.class, () -> PilotCryogenicTestCatalog.parseWith(PilotCryogenicTestCatalog.NETWORK,
-                o -> o.getAsJsonArray("fluid_presets").add("icheme:tia_juana_light_methane")));
+                o -> o.getAsJsonArray("fluid_presets").add("icheme:medium_crude")));
         assertTrue(refused.getMessage().contains("holds compounds outside the network package"), refused.getMessage());
         assertTrue(PilotCryogenicTestCatalog.catalog().requirePackage(PILOT).assays().isEmpty(), "no assay: no column preset can name the pilot");
         assertTrue(PilotCryogenicTestCatalog.parseWith(PACKAGE, o -> {}).requirePackage(PILOT).crystals().contains(CO2_I));

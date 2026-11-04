@@ -18,6 +18,7 @@ import java.util.*;
  * <p>The learned failures here are produced by a cap, not by a clock: an accepted profile displaced off its
  * own solution and corrected under a one-iteration budget fails deterministically.</p>
  */
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3LearnedRecoveryTest {
 
     /** A column the classical route solves, with one small authored side draw. */

@@ -19,10 +19,10 @@ import java.io.InputStreamReader;
 class MaterialPresetsTest {
     private static final String ROOT="data/icheme/materials/";
     /** Every crude from its stream and tower templates (process simulator plan 3.7) is its qualification input to rounding. */
-    @Test void allSixInputsRemainTheQualificationInputs() throws Exception {
+    @Test void allFourInputsRemainTheQualificationInputs() throws Exception {
         try(var stream=getClass().getResourceAsStream("/materials/column-preset-inputs.json")) {
             var expected=JsonParser.parseReader(new InputStreamReader(stream,StandardCharsets.UTF_8)).getAsJsonArray();
-            assertEquals(6,expected.size());
+            assertEquals(4,expected.size());
             for(var row:expected) {
                 var fixture=row.getAsJsonObject();var actual=com.wormzjl.icheme.science.column.v3.V3TestInputs.crude(MaterialCatalog.bundled(),fixture.get("id").getAsString());
                 assertClose(fixture.get("input"),new Gson().toJsonTree(actual),fixture.get("id").getAsString());
@@ -61,7 +61,7 @@ class MaterialPresetsTest {
     }
     @Test void customPresetIsServerDefinedAndInvalidOverridesFailBeforePublication() {
         var original=MaterialCatalog.bundled();var resources=new HashMap<>(original.resources());String path=ROOT+"presets/column_custom.json";
-        var preset=JsonParser.parseString(resources.get(ROOT+"presets/column_tia_juana.json")).getAsJsonObject();
+        var preset=JsonParser.parseString(resources.get(ROOT+"presets/column_medium_crude.json")).getAsJsonObject();
         preset.addProperty("id","custom_crude");preset.addProperty("label","Server crude");preset.addProperty("translation_key","server.crude");
         preset.getAsJsonObject("operating").addProperty("feedTemperatureKelvin",650);resources.put(path,preset.toString());
         var changed=MaterialCatalog.parse(resources);var choice=changed.presets().column("custom_crude");
@@ -97,7 +97,7 @@ class MaterialPresetsTest {
 
     // ---------------- from CrudeAssayConversionTest ----------------
     @Test
-    void allFivePublishedConversionsLoadWithTheSameOrderAndMassBasis() throws IOException {
+    void allFourGeneratedGradesLoadWithTheSameOrderAndMassBasis() throws IOException {
         JsonObject report;
         try (var stream = getClass().getResourceAsStream("/materials/crude-assay-conversion-fixture.json")) {
             assertNotNull(stream, "Missing independent assay conversion fixture");
@@ -105,7 +105,7 @@ class MaterialPresetsTest {
         }
         var catalog = MaterialCatalog.bundled();
         var original = catalog.requirePackage("icheme:tjl20_methane");
-        assertEquals(5, report.getAsJsonArray("crudes").size());
+        assertEquals(4, report.getAsJsonArray("crudes").size());
         for (var element : report.getAsJsonArray("crudes")) {
             var row = element.getAsJsonObject();
             String packageId = row.get("package_id").getAsString();
@@ -127,7 +127,7 @@ class MaterialPresetsTest {
                 // The crude's own evidence stays with its data (the package's lines are the shared basis's).
                 String file = catalog.resources().get(ROOT + "assays/" + assayId.substring("icheme:".length()) + ".json");
                 var evidence = JsonParser.parseString(file).getAsJsonObject().getAsJsonObject("provenance").getAsJsonArray("advisory_evidence").toString();
-                for (String line : List.of("SHARED_COMPONENT_SURROGATE:", "ASSAY_SOURCE:", "C1_C2_ALLOCATION:", "ESTIMATED_HEAVY_TAIL:", "CONTAMINANTS:", "TRANSPORT_SURROGATE:"))
+                for (String line : List.of("GENERATED_GRADE:", "API_FROM_CUTS:", "LIGHT_END_SPLIT:", "SULFUR_METADATA:", "TRANSPORT:"))
                     assertTrue(evidence.contains(line), assayId + " " + line);
                 var flash = thermo.flashTP(638.15, 267_250, feed, thermo.newWorkspace());
                 assertEquals(V3FeedPhase.TWO_PHASE, flash.phase(), packageId + ": " + flash.detail());

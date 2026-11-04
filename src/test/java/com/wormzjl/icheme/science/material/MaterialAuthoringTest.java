@@ -8,8 +8,8 @@ class MaterialAuthoringTest {
  @Test void physicsIdentityIgnoresAssaysButTracksActualSelectedProperties() {
   var c=MaterialCatalog.bundled();var axis=c.requirePackage(ID).components();
   assertEquals(c.physicsContent(ID,axis),c.physicsContent("icheme:tjl20_methane_nitrogen",axis));
-  var resources=new HashMap<>(c.resources());var a=JsonParser.parseString(resources.get(ROOT+"assays/tjl20.json")).getAsJsonObject();
-  a.getAsJsonObject("amounts_by_component").addProperty("crude_pc01",.8);resources.put(ROOT+"assays/tjl20.json",a.toString());
+  var resources=new HashMap<>(c.resources());var a=JsonParser.parseString(resources.get(ROOT+"assays/medium_crude.json")).getAsJsonObject();
+  a.getAsJsonObject("amounts_by_component").addProperty("crude_pc01",.8);resources.put(ROOT+"assays/medium_crude.json",a.toString());
   var changed=MaterialCatalog.parse(resources);
   assertNotEquals(c.requirePackage(ID).assays(),changed.requirePackage(ID).assays());
   assertEquals(c.physicsContent(ID,axis),changed.physicsContent(ID,axis));
@@ -34,7 +34,7 @@ class MaterialAuthoringTest {
   error=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(records));assertTrue(error.getMessage().contains(path)&&error.getMessage().contains("Ethane"),error.getMessage());
  }
  @Test void sparseAssaysRejectUnknownIdentitiesAndConflictingPositionalForms() {
-  var c=MaterialCatalog.bundled();var records=new HashMap<>(c.resources());String path=ROOT+"assays/tjl20.json";
+  var c=MaterialCatalog.bundled();var records=new HashMap<>(c.resources());String path=ROOT+"assays/medium_crude.json";
   var a=JsonParser.parseString(records.get(path)).getAsJsonObject();a.getAsJsonObject("amounts_by_component").addProperty("retired_pc13",0);records.put(path,a.toString());
   assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(records));
   a.getAsJsonObject("amounts_by_component").remove("retired_pc13");a.add("amounts",new JsonArray());records.put(path,a.toString());

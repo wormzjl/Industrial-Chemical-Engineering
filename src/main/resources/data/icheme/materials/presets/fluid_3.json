@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "id": "icheme:wti_light_export",
+  "id": "icheme:medium_crude",
   "kind": "fluid",
-  "label": "WTI Light Export",
-  "assay": "icheme:wti_light_export"
+  "label": "Medium crude",
+  "assay": "icheme:medium_crude"
 }

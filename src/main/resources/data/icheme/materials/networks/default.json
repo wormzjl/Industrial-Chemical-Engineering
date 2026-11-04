@@ -2,12 +2,13 @@
   "schema_version": 1,
   "id": "icheme:default",
   "package": "icheme:refinery",
-  "default_column_preset": "tia_juana",
+  "default_column_preset": "medium_crude",
   "fluid_presets": [
     "water",
     "nitrogen",
-    "icheme:tia_juana_light_methane",
-    "icheme:wti_light_export",
-    "icheme:cold_lake_blend"
+    "icheme:light_crude",
+    "icheme:medium_crude",
+    "icheme:heavy_crude",
+    "icheme:oil_sand_dilbit"
   ]
 }

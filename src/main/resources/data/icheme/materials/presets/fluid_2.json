@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "id": "icheme:tia_juana_light_methane",
+  "id": "icheme:light_crude",
   "kind": "fluid",
-  "label": "Tia Juana Light",
-  "assay": "icheme:tia_juana_light_methane"
+  "label": "Light crude",
+  "assay": "icheme:light_crude"
 }

@@ -9,6 +9,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3NeuralInitializationTest {
     private static V3ColumnInput input() {
         var thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl19_dwsim");

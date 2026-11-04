@@ -50,7 +50,7 @@ class ScheduledTransferTest {
         compare(graph);
     }
     @Test void wetCrudePipeAndSimultaneousModuleBoundariesMatchTighterStepDoubling() {
-        var composition=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);composition[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;composition[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
+        var composition=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);composition[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;composition[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(int i=0;i<2;i++){var n=composition.clone();var unit=model.flashTP(350,150100-i*100,n,()->{});for(int c=0;c<com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1;c++)n[c]/=unit.volume();nodes.add(new PassiveNetwork.Reservoir(i+1,0,model.flashTP(350,150100-i*100,n,()->{})));}
         double[] water=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1];water[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.01/model.waterMolecularWeight;var feed=model.flashTP(350,150100,water,()->{});

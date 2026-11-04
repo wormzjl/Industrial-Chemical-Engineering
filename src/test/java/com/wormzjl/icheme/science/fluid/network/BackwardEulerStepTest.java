@@ -165,7 +165,7 @@ class BackwardEulerStepTest {
         assertEquals(0,blocked.massFlows()[0],1e-10);
     }
     @Test void aThreePhaseWetCrudeFeedCanEnterNitrogenWithoutLosingAnyComponent() {
-        String id="icheme:tjl20_methane_nitrogen";var n=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(id).crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
+        String id="icheme:tjl20_methane_nitrogen";var n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(id).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         var source=new PassiveNetwork.Reservoir(1,0,model.flashTP(350,200000,n,()->{}),PassiveNetwork.NodeKind.GENERATOR);
         var initial=model.initialNitrogenCharge(1,298.15,101325,()->{});
         var graph=new PassiveNetwork(List.of(source,new PassiveNetwork.Reservoir(2,0,initial)),List.of(pipe()));

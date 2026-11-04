@@ -21,8 +21,8 @@ class TraceTruncationLayoutTest {
 
     /** A wet crude at conditions that carry all three phases, which is the gameplay regime. */
     private FluidThermodynamics.State wetCrude(double temperature,double pressure) {
-        double[] n=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE)
-                .crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
+        double[] n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE)
+                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
         n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         return model.flashTP(temperature,pressure,n,()->{});
     }
@@ -118,8 +118,8 @@ class TraceTruncationLayoutTest {
     }
 
     @Test void aTruncatedInventorySolveReachesTheSameTemperaturePressureAndTotals() {
-        double[] n=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE)
-                .crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
+        double[] n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE)
+                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
         n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         var seed=model.flashTP(350,101325,n,()->{});var target=model.flashTP(351,105000,n,()->{});
         var layout=new PhaseLayout(model,seed,null,null,support(seed,1e-5));
@@ -196,8 +196,8 @@ class TraceTruncationLayoutTest {
         // A nearly liquid-full vessel (the small-headspace regime) and a dry one: the water unknowns,
         // the water equilibrium row and the partial-pressure closure belong to the regime state, not
         // to the hydrocarbon trace support, so the cutoff may not move any of them.
-        double[] wet=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE)
-                .crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
+        double[] wet=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE)
+                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
         wet[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.001;wet[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         double[] dry=Arrays.copyOf(wet,com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);dry[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=0;
         for(double[] n:new double[][]{wet,dry})for(double pressure:new double[]{101325,1_500_000}) {

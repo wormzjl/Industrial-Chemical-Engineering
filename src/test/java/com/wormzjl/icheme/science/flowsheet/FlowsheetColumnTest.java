@@ -31,7 +31,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class FlowsheetColumnTest {
     private static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
     private static final String NETWORK = CATALOG.presets().network().packageId();
-    private static final V3ColumnInput BASE = CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG);
+    /**
+     * The Tia Juana column, the test-only fixture of batch 2026-11-04-open-thermo-data (O3): these gates pin the simulator's coupling
+     * to the column, and the classical start does not close the medium grade at every feed temperature they reach
+     * (CRUDE_GRADES_APPLY_REVIEW.md). The door carries the assay as a label, so the sheet runs on the bundled catalog.
+     */
+    private static final V3ColumnInput BASE = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().presets().column("tia_juana")
+            .input(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog());
     private static final List<String> AXIS = FluidThermodynamics.forNetwork(CATALOG, NETWORK).components();
     private static final double FEED_TRAY = BASE.topPressurePascal() + (BASE.feedStageNumber() - 1) * BASE.stagePressureDropPascal();
 

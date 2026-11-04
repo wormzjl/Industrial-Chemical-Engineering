@@ -13,7 +13,10 @@ class MaterialCatalogTest {
     private static final String ROOT="data/icheme/materials/";
     @AfterEach void reset(){MaterialRuntime.reset();}
     static Map<String,String> changed(String path,java.util.function.Consumer<JsonObject> edit) {
-        var resources=new HashMap<>(MaterialCatalog.bundled().resources());
+        return changed(MaterialCatalog.bundled().resources(),path,edit);
+    }
+    static Map<String,String> changed(Map<String,String> base,String path,java.util.function.Consumer<JsonObject> edit) {
+        var resources=new HashMap<>(base);
         var json=JsonParser.parseString(resources.get(ROOT+path)).getAsJsonObject(); edit.accept(json);
         resources.put(ROOT+path,json.toString()); return resources;
     }
@@ -285,17 +288,18 @@ class MaterialCatalogTest {
         assertTrue(moved.getMessage().contains("packages/tjl20.json")&&moved.getMessage().contains("water_model"),moved.getMessage());
     }
     @Test void massAssaysConvertUsingSelectedMolecularWeightsAndVolumeReferencesAreChecked() {
-        var original=MaterialCatalog.bundled();var p=original.requirePackage(ID);var assay=p.assays().get("icheme:tia_juana_light_methane");
-        var resources=changed("assays/tjl20.json",o->{
+        // Tia Juana is a mole-basis assay of the test fixture (O3 of batch 2026-11-04-open-thermo-data): rewritten here by mass.
+        var original=TiaJuanaTestCatalog.catalog();var p=original.requirePackage(ID);var assay=p.assays().get(TiaJuanaTestCatalog.ASSAY_ID);
+        var resources=changed(TiaJuanaTestCatalog.resources(),"assays/tjl20.json",o->{
             o.addProperty("basis","mass");var mass=new JsonObject();
             for(int i=0;i<p.components().size();i++)mass.addProperty(p.components().get(i),assay.amounts().get(i)*p.properties().get(i).molecularWeight());
             o.add("amounts_by_component",mass);
         });
         var changed=MaterialCatalog.parse(resources);
-        double[] expected=V3PengRobinsonThermo.fromRegisteredPackage(ID).crudeFeed(assay.id()).moleFractions();
+        double[] expected=TiaJuanaTestCatalog.thermo(ID).crudeFeed(assay.id()).moleFractions();
         double[] actual=MaterialRuntime.with(changed,ID,()->V3PengRobinsonThermo.fromRegisteredPackage(ID).crudeFeed(assay.id()).moleFractions());
         assertArrayEquals(expected,actual,1e-16);
-        assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed("assays/tjl19.json",o->{o.addProperty("basis","standard_liquid_volume");o.addProperty("standard_temperature_kelvin",300);o.addProperty("standard_pressure_pascal",101325);})));
+        assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(TiaJuanaTestCatalog.resources(),"assays/tjl19.json",o->{o.addProperty("basis","standard_liquid_volume");o.addProperty("standard_temperature_kelvin",300);o.addProperty("standard_pressure_pascal",101325);})));
     }
     @Test void nrtlPairsAreDirectedCompleteAndNotAnImplementedSolver() {
         var r=new HashMap<>(MaterialCatalog.bundled().resources());

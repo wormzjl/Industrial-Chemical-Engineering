@@ -40,8 +40,8 @@ class DirectLiquidDeterminismTest {
     }
 
     @Test void aNodeStateThroughAReusedPreparedTemperatureMatchesTheStandaloneStateBitForBit() {
-        var crude=V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane");
-        var feed=crude.crudeFeed("icheme:tia_juana_light_methane").moleFractions();
+        var crude=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane");
+        var feed=crude.crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions();
         double[] n=new double[model.componentCount()];
         for(int c=0;c<feed.length;c++)n[model.components().indexOf(crude.componentBasis().componentId(c))]=feed[c];
         n[model.components().indexOf("Nitrogen")]=.1;n[n.length-1]=.2;

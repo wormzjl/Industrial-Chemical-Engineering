@@ -228,8 +228,8 @@ final class PhaseTestSupport {
     }
 
     static double[] crudeWithNitrogen(PhaseContract contract) {
-        var pkg = network();
-        var assay = pkg.assays().get("icheme:tia_juana_light_methane");
+        var pkg = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().requirePackage(NETWORK);
+        var assay = pkg.assays().get(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID);
         double[] z = new double[contract.components().size()];
         for (int c = 0; c < assay.components().size(); c++) z[contract.index(assay.components().get(c))] = assay.amounts().get(c);
         z[contract.index("Nitrogen")] = 0.05;

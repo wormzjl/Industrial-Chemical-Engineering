@@ -608,8 +608,8 @@ class NetworkPhaseEngineTest {
     }
 
     private double[] bundledCrude() {
-        return Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(FluidMaterialCatalog.NETWORK_PACKAGE)
-                .crudeFeed("icheme:tia_juana_light_methane").moleFractions(), n);
+        return Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(FluidMaterialCatalog.NETWORK_PACKAGE)
+                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(), n);
     }
 
     /** The bundled crude with {@code ratio} mol of water per mol of crude, 100 mol in all. */

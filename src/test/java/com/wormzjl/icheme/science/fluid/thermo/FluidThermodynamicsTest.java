@@ -33,7 +33,8 @@ class FluidThermodynamicsTest {
     }
     @Test void crudePresetsAndThreePhaseWaterMaintainComponentInventory() {
         var catalog=MaterialCatalog.bundled();
-        for(String id:new String[]{"icheme:tia_juana_light_methane","icheme:wti_light_export","icheme:cold_lake_blend"}) {
+        for(String id:new String[]{"icheme:light_crude","icheme:medium_crude","icheme:heavy_crude"}) {
+            // The dilbit is left out: its condensate vapour at 350 K and 1 atm takes up the 0.2 mol of water whole (no free water).
             var p=catalog.requirePackage("icheme:tjl20_methane");
             var composition=V3PengRobinsonThermo.fromRegisteredPackage(p.id()).crudeFeed(id).moleFractions();
             var n=Arrays.copyOf(composition,com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1);n[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=.2;

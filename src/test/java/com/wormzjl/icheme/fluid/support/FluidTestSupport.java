@@ -61,8 +61,8 @@ public final class FluidTestSupport {
             case NITROGEN -> amounts[NITROGEN] = 1;
             case WATER -> amounts[WATER] = 1;
             case WET_CRUDE -> {
-                amounts = Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(NETWORK_PACKAGE)
-                        .crudeFeed("icheme:tia_juana_light_methane").moleFractions(), WATER+1);
+                amounts = Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(NETWORK_PACKAGE)
+                        .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(), WATER+1);
                 amounts[NITROGEN] = .1;
                 amounts[WATER] = .2;
             }

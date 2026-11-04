@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
  * The column's admission limits that the bundled model does not cover, solved on the default route (the model declines them,
  * so the classical seed solves them): nitrogen in the feed, and a fourth side draw.
  */
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3ColumnFeedAndDrawLimitsTest {
     /**
      * The {@code tia_juana_nitrogen} preset is the Tia Juana column on the fluid network's package ({@code tjl20_methane_nitrogen}).

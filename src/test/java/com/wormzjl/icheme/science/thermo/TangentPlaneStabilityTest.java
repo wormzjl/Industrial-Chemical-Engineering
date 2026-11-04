@@ -52,8 +52,8 @@ class TangentPlaneStabilityTest {
 
     /** The Tia Juana light assay of the network package plus 5 mol% nitrogen: every component present. */
     static double[] crudeWithNitrogen() {
-        var pkg = MaterialCatalog.bundled().requirePackage(NETWORK);
-        var assay = pkg.assays().get("icheme:tia_juana_light_methane");
+        var pkg = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().requirePackage(NETWORK);
+        var assay = pkg.assays().get(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID);
         double[] z = new double[pkg.components().size()];
         for (int c = 0; c < assay.components().size(); c++) {
             z[pkg.components().indexOf(assay.components().get(c))] = assay.amounts().get(c);

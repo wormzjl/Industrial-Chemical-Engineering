@@ -95,14 +95,14 @@ final class SolverRegressionHarness {
      * list. The references hold the 21 entries of that list, so a compound the network package gains moves nothing.
      */
     static FluidThermodynamics chainModel(FluidThermodynamics network) {
-        var crude=V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane");
+        var crude=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane");
         var ids=new ArrayList<String>();ids.add("Nitrogen");
-        for(int c=0;c<crude.crudeFeed("icheme:tia_juana_light_methane").moleFractions().length;c++)ids.add(crude.componentBasis().componentId(c));
+        for(int c=0;c<crude.crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions().length;c++)ids.add(crude.componentBasis().componentId(c));
         return network.on(ids);
     }
     static PassiveNetwork cosineChain(FluidThermodynamics model,int count) {
-        var crude=V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane");
-        var feed=crude.crudeFeed("icheme:tia_juana_light_methane").moleFractions();
+        var crude=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane");
+        var feed=crude.crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions();
         var composition=new double[model.componentCount()];
         for(int c=0;c<feed.length;c++)composition[model.components().indexOf(crude.componentBasis().componentId(c))]=feed[c];
         composition[model.components().indexOf("Nitrogen")]=.1;composition[model.components().indexOf("Water")]=.2;

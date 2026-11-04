@@ -10,10 +10,14 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Fresh configured WTI loop; no saved-world fixture or altered physical law. */
+/**
+ * Fresh configured heavy-crude loop; no saved-world fixture or altered physical law. The heavy grade is liquid at 298.15 K
+ * and 1 atm (bubble point 68.6 kPa), as WTI was; the light grade boils there (138 kPa). The heavy grade is more viscous, and the
+ * pump meets its 5 bar head limit at a setpoint of 1.5 already, so the first setpoint is 1.0 (O3 of batch 2026-11-04-open-thermo-data).
+ */
 class PumpRateWarmStartTest extends PortFixture {
     private FluidThermodynamics.State oil(double volume) {
-        var n=FluidPresetCatalog.resolve(MaterialCatalog.bundled()).stream().filter(p->p.id().equals("icheme:wti_light_export")).findFirst().orElseThrow().moleFractions();
+        var n=FluidPresetCatalog.resolve(MaterialCatalog.bundled()).stream().filter(p->p.id().equals("icheme:heavy_crude")).findFirst().orElseThrow().moleFractions();
         var unit=model.flashTP(298.15,101325,n,NOOP);for(int c=0;c<n.length;c++)n[c]*=volume/unit.volume();
         return model.flashTP(298.15,101325,n,NOOP);
     }
@@ -42,7 +46,7 @@ class PumpRateWarmStartTest extends PortFixture {
     }
 
     @Test void increasingTheSetpointAdvancesOnItsLimitWithConservedMaterialAndEnergy() {
-        var graph=loop(1.5);var solver=new PassiveIntervalSolver(model);
+        var graph=loop(1.0);var solver=new PassiveIntervalSolver(model);
         var previous=solver.solve(graph,3.2,PassiveIntervalSolver.Settings.defaults(),NOOP);
         assertEquals(FlowControl.Mode.PUMP_TARGET,previous.endpointModes().getFirst());graph=previous.graph();
         var pipes=new ArrayList<>(graph.pipes());var p=pipes.getFirst();pipes.set(0,new PassiveNetwork.Pipe(p.id(),p.first(),p.second(),p.sections(),new FlowControl.Pump(2,500000),p.blockedDirections(),p.filter(),p.firstPort(),p.secondPort()));

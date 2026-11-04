@@ -100,7 +100,7 @@ class V3NeuralRegistryTest {
         // The package record is in no identity (option B, 2026-11-04): a seed's propertyRevision stands as well.
         assertEquals(CATALOG.requirePackage(MAIN).scientificRevision(),packageEdit.requirePackage(MAIN).scientificRevision());
         assertEquals("test:values",registry.bind(packageEdit,input).modelId());
-        var assayEdit=edit("assays/tjl20.json",o->{var amounts=o.getAsJsonObject("amounts_by_component");amounts.addProperty("Methane",amounts.get("Methane").getAsDouble()*2);});
+        var assayEdit=edit("assays/medium_crude.json",o->{var amounts=o.getAsJsonObject("amounts_by_component");amounts.addProperty("Methane",amounts.get("Methane").getAsDouble()*2);});
         assertEquals("test:values",registry.bind(assayEdit,input).modelId());
         // crude_pc05 is fed, crude_pc08 is not: a revision bump of either dataset, the pair library or the water is no change.
         for(String path:List.of("properties/crude_pc05.json","properties/crude_pc08.json","interactions/tjl20.json","water/water.json"))
@@ -124,14 +124,16 @@ class V3NeuralRegistryTest {
     /** A compound of the model that neither the request package nor the catalog holds makes the model unavailable. */
     @Test void aModelCompoundWithoutARecordIsUnavailable() throws Exception {
         var main=input();
-        var tjl19=on(main,"icheme:tjl19_dwsim",CATALOG.requirePackage("icheme:tjl19_dwsim").components());
+        // TJL19 is a test fixture (O3 of batch 2026-11-04-open-thermo-data).
+        var catalog=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
+        var tjl19=on(main,"icheme:tjl19_dwsim",catalog.requirePackage("icheme:tjl19_dwsim").components());
         // The request package lacks methane: the lens takes the catalog's default methane record.
-        assertEquals("test:padded",registry("test:padded").bind(CATALOG,tjl19).modelId());
+        assertEquals("test:padded",registry("test:padded").bind(catalog,tjl19).modelId());
         var d=V3RegroupedTransformerTest.document(main);d.addProperty("modelId","test:unknown");
         var ids=d.getAsJsonArray("components");assertEquals("Methane",ids.get(0).getAsString());ids.set(0,new JsonPrimitive("Unobtainium"));
         d.getAsJsonObject("physics").getAsJsonArray("compounds").get(0).getAsJsonObject().addProperty("id","Unobtainium");
         var unknown=V3AnchorTransformerInitializer.read(stream(d.toString()),V3FactorizedNeuralFeatures.DecodeOptions.NONE);
-        assertSame(V3NeuralInitializer.UNAVAILABLE,new V3NeuralRegistry(List.of(new V3NeuralRegistry.Entry(1,unknown,"0".repeat(64)))).bind(CATALOG,tjl19));
+        assertSame(V3NeuralInitializer.UNAVAILABLE,new V3NeuralRegistry(List.of(new V3NeuralRegistry.Entry(1,unknown,"0".repeat(64)))).bind(catalog,tjl19));
     }
     /** The comparison evaluates the water's functions as the column does ({@link V3WaterProperties}). */
     @Test void theComparisonEvaluatesTheColumnsWaterForms() {

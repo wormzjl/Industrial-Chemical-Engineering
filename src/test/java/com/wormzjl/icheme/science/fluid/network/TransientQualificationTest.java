@@ -70,7 +70,7 @@ class TransientQualificationTest {
     }
     @Test void liquidCompressionWetCrudeReversalAndPumpMatchRefinedTrajectories() throws Exception {
         double[] water=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1];water[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=1;
-        var wet=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);wet[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;wet[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
+        var wet=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);wet[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;wet[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         double[] gas=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1];gas[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=1;
         double[] smallHeadspace=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1];smallHeadspace[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.05;smallHeadspace[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=54000;
         var rows=new ArrayList<Map<String,Object>>();var failures=new ArrayList<String>();

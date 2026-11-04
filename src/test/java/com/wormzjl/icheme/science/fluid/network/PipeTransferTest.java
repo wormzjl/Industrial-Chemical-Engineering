@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class PipeTransferTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
     @Test void integratedThreePhaseHistoryMatchesTheConservativeTankInventoryChange() {
-        var n=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
+        var n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(int i=0;i<2;i++) {
             var amounts=n.clone();double pressure=150000-1000*i;

@@ -1,51 +1,42 @@
 {
-  "source_commit": "c5c8af3d5444ccb6d1eb6fa07f7ce10df6027a42",
+  "source_commit": "8396d8d98",
   "reference": "additive standard-liquid volume from selected component densities; accepted old-basis classical results",
-  "recaptured": "2026-11-04, batch 2026-11-04-open-thermo-data O2: the same capture on the open ideal-gas data (nitrogen, methane, water vapour); every target moved by 5e-8 to 1.2e-5",
+  "recaptured": "2026-11-05, batch 2026-11-04-open-thermo-data O3: captured on the four generated grades (their client templates on the default column), classical, prescribed drop; parent 8396d8d98 plus the O3 data",
   "targets": [
     {
-      "preset": "tia_juana",
+      "preset": "light_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.020703093103381375,
-        "side_liquid_tray_18": 0.028924071843261574,
-        "side_liquid_tray_28": 0.011436583923850928
+        "side_liquid_tray_10": 0.03665855129132894,
+        "side_liquid_tray_18": 0.034666509991529544,
+        "side_liquid_tray_28": 0.012536603165481601
       }
     },
     {
-      "preset": "wti_light_export",
+      "preset": "medium_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.0190033936624613,
-        "side_liquid_tray_18": 0.024226895461542816,
-        "side_liquid_tray_28": 0.008833530175411435
+        "side_liquid_tray_10": 0.023397238656168374,
+        "side_liquid_tray_18": 0.027596895950807655,
+        "side_liquid_tray_28": 0.012723556941629601
       }
     },
     {
-      "preset": "upper_zakum",
+      "preset": "heavy_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.020752278705616047,
-        "side_liquid_tray_18": 0.028652873386037912,
-        "side_liquid_tray_28": 0.011202938907985197
+        "side_liquid_tray_10": 0.017159756488465495,
+        "side_liquid_tray_18": 0.018578908510070775,
+        "side_liquid_tray_28": 0.008736789108226423
       }
     },
     {
-      "preset": "bonga",
+      "preset": "oil_sand_dilbit",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.023678496189206973,
-        "side_liquid_tray_18": 0.0313385780288744,
-        "side_liquid_tray_28": 0.012031479591407258
-      }
-    },
-    {
-      "preset": "dalia",
-      "package": "icheme:tjl20_methane",
-      "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.024242557459861855,
-        "side_liquid_tray_18": 0.034053909048057975,
-        "side_liquid_tray_28": 0.01218001195582847
+        "side_liquid_tray_10": 0.010086158046317366,
+        "side_liquid_tray_18": 0.009656590245177166,
+        "side_liquid_tray_28": 0.007058587194797441
       }
     }
   ]

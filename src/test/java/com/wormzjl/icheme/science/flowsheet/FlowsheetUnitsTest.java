@@ -30,7 +30,7 @@ final class FlowsheetUnitsTest {
     private static final double[] WET_CRUDE = wetCrude();
 
     private static double[] wetCrude() {
-        var crude = Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE).crudeFeed("icheme:tia_juana_light_methane").moleFractions(), AXIS.size());
+        var crude = Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(), AXIS.size());
         crude[WATER] = .2;
         return crude;
     }

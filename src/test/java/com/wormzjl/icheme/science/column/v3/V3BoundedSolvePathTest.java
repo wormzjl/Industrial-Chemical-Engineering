@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
  * surface as {@code INVALID_INPUT: solvePath is blank or exceeds the bounded contract}, discarding the completed
  * solve and blaming the request.</p>
  */
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3BoundedSolvePathTest {
     private static final int LIMIT = V3SolverDiagnostics.MAX_SOLVE_PATH_LENGTH;
 

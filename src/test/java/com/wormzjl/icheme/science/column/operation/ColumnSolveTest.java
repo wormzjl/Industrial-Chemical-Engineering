@@ -25,7 +25,7 @@ class ColumnSolveTest {
     private static final double SECONDS = 5;
 
     @Test void aStartSolvesTheDesignAndItsTableClosesACycleOnTheNetworksBasis() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
         var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
         var axis = model.components();
@@ -85,7 +85,7 @@ class ColumnSolveTest {
      * compounds bit for bit; each clone, which the feed does not hold, takes a solved compound's row.
      */
     @Test void aNetworkPackageAbove64CompoundsSolvesOnItsFeedIslandsList() {
-        var bundled = MaterialCatalog.bundled();
+        var bundled = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = bundled.presets().column("tia_juana_nitrogen").input(bundled);
         var wide = MaterialCatalog.parse(widened(4));
         var narrow = FluidThermodynamics.forNetwork(bundled, design.packageId());
@@ -171,7 +171,7 @@ class ColumnSolveTest {
      * the table instead of solving.
      */
     @Test void atAPrescribedDropHalfTheFeedSolvesToTheSameTable() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         var d = catalog.presets().column("tia_juana_nitrogen").input(catalog);
         var design = new V3ColumnInput(d.schemaVersion(), d.packageId(), d.assayId(), d.componentBasis(), d.feedComponentMolarFlowsMolPerSecond(), d.feedTemperatureKelvin(),
                 d.stageCount(), d.feedStageNumber(), d.topPressurePascal(), 700.0, d.specifications(), d.sideDraws(), d.steamFeeds(), d.pumparounds(), 0.0);
@@ -206,16 +206,16 @@ class ColumnSolveTest {
      * point names are plain names, so the point starts, and the solve stands on the network's own package.
      */
     @Test void aSavedPointOnARemovedPackageStarts() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
-        assertNull(catalog.packages().get("icheme:bonga_tjl20"), "the package this point names is gone");
+        assertNull(catalog.packages().get("icheme:retired_crude_tjl20"), "the package this point names is gone");
         var built = ColumnDesign.of(design, ColumnComponents.Choices.DEFAULT.fit(design.pumparounds().size()));
         var p = ColumnOperatingPoint.of(design);
-        var saved = new ColumnOperatingPoint("icheme:bonga_tjl20", "icheme:bonga", p.components(), p.feed(), p.feedTemperature(), p.topPressure(), p.stageDrop(),
+        var saved = new ColumnOperatingPoint("icheme:retired_crude_tjl20", "icheme:retired_crude", p.components(), p.feed(), p.feedTemperature(), p.topPressure(), p.stageDrop(),
                 p.condenserTemperature(), p.refluxRatio(), p.reboilerDuty(), p.steam(), p.draws(), p.pumparounds());
         var trays = built.trays().withOperating(saved);
         var start = trays.operating().input(trays, built.diameter());
-        assertEquals("icheme:bonga_tjl20", start.packageId());
+        assertEquals("icheme:retired_crude_tjl20", start.packageId());
         var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
         var axis = model.components();
         double[] feed = new double[axis.size()];
@@ -253,7 +253,7 @@ class ColumnSolveTest {
      * takes the whole duty and an air cooler's none. Prints the split and the air's and the water's MW for the batch.
      */
     @Test void anAirThenWaterCondensersWaterTakesTheTrimsShare() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
         var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
         var axis = model.components();
@@ -297,7 +297,7 @@ class ColumnSolveTest {
      * their speed and power; and air then water at a 30 °C receiver, its air's fans and its trim's water. Prints them for the batch.
      */
     @Test void theCondensersUtilitiesOnTheDefaultColumn() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
         var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
         var axis = model.components();

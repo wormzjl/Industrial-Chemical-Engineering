@@ -6,10 +6,12 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class RegroupedCrudeTest {
     @Test void replacementHasTwelveConsistentCutsAndNoRetiredProductionBasis() {
-        // Three column packages, the network package icheme:refinery and the bundled pilot icheme:pilot_cryogenic (no column package).
-        var catalog=MaterialCatalog.bundled();assertEquals(5,catalog.packages().size());
+        // Two column packages, the network package icheme:refinery and the bundled pilot icheme:pilot_cryogenic (no column
+        // package); the literature package icheme:tjl19_dwsim is a test fixture since O3 of batch 2026-11-04-open-thermo-data.
+        var catalog=MaterialCatalog.bundled();assertEquals(4,catalog.packages().size());
         assertFalse(catalog.packages().containsKey("icheme:cdu17_tjl_acs2018"));
         var p=catalog.requirePackage("icheme:tjl20_methane");assertEquals(19,p.components().size());
         for(int i=1;i<=12;i++)assertEquals("crude_pc%02d".formatted(i),p.components().get(i+6));
@@ -23,7 +25,7 @@ class RegroupedCrudeTest {
         assertTrue(p.aliases().isEmpty());
     }
     @Test void reconstructedFeedConservesIndependentOriginalMassVolumeAndCaloricMoments() {
-        var current=MaterialCatalog.bundled().requirePackage("icheme:tjl19_dwsim");
+        var current=TiaJuanaTestCatalog.catalog().requirePackage("icheme:tjl19_dwsim");
         var amounts=current.assays().get("icheme:tia_juana_light").amounts();
         double mass=0,volume=0;
         for(int i=0;i<amounts.size();i++) {
@@ -120,7 +122,7 @@ class RegroupedCrudeTest {
     }
 
     @Test void previouslyDifficultCrudesPublishAuditedClassicalSolutionsWithoutLearnedSeeds() {
-        for(String crude:List.of("bonga","cold_lake_blend")) {
+        for(String crude:List.of("heavy_crude","oil_sand_dilbit")) {
             var input=V3TestInputs.crude(MaterialCatalog.bundled(),crude);long start=System.nanoTime();
             var result=V3ColumnCalculator.calculate(input,()->{
                 if(System.nanoTime()-start>45_000_000_000L)throw new java.util.concurrent.CancellationException("Regrouped preset deadline");

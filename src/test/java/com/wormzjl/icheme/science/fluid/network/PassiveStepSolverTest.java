@@ -72,7 +72,7 @@ class PassiveStepSolverTest {
         assertEquals(result.states().get(1).pressure(),result.states().get(2).pressure(),1e-4);
     }
     @Test void bulkThreePhaseCrudeTransfersAllComponentsUpAnElevation() {
-        String id="icheme:tjl20_methane";double[] composition=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(id).crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1);composition[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=.2;
+        String id="icheme:tjl20_methane";double[] composition=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(id).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1);composition[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=.2;
         var reservoirs=new ArrayList<PassiveNetwork.Reservoir>();
         for(double pressure:new double[]{200000,150000}) {
             double[] n=composition.clone();var unit=model.flashTP(350,pressure,n,()->{});for(int i=0;i<n.length;i++)n[i]/=unit.volume();

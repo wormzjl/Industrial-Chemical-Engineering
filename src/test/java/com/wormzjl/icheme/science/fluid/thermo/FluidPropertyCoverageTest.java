@@ -21,7 +21,7 @@ class FluidPropertyCoverageTest {
         // does: {@code FluidPresetCatalog} computes each crude composition on its own package and
         // pads it onto this one basis.
         var model = FluidThermodynamics.forNetwork(catalog, FluidMaterialCatalog.NETWORK_PACKAGE);
-        for (String assay : List.of("icheme:tia_juana_light_methane", "icheme:wti_light_export", "icheme:cold_lake_blend", "icheme:upper_zakum", "icheme:bonga", "icheme:dalia")) {
+        for (String assay : List.of("icheme:light_crude", "icheme:medium_crude", "icheme:heavy_crude", "icheme:oil_sand_dilbit")) {
             String packageId = "icheme:tjl20_methane";
             var n = Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(packageId)
                     .crudeFeed(assay).moleFractions(), model.componentCount());

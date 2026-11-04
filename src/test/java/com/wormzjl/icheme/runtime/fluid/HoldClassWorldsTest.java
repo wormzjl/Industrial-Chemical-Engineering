@@ -29,7 +29,7 @@ class HoldClassWorldsTest {
     private static final int METHANE=EventPathWorld.CATALOG.requirePackage("icheme:tjl20_methane_nitrogen").components().indexOf("Methane");
     /** The Tia Juana light crude with methane, on the network basis, as a 1 m3 generator's spec. */
     private static FluidDeviceSpec crude(double temperature,double pressure) {
-        double[] n=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),
+        double[] n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),
                 MaterialTestBasis.NETWORK+1);
         return new FluidDeviceSpec(1,temperature,pressure,n);
     }
@@ -53,7 +53,7 @@ class HoldClassWorldsTest {
      */
     @Test void aLowCrudeGeneratorInAValveIslandDoesNotHoldTheSteps() {
         var catalog=EventPathWorld.CATALOG;int components=FluidDeviceSpec.nitrogen(catalog).composition().length;
-        double[] crude=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),components);
+        double[] crude=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),components);
         int methane=catalog.requirePackage("icheme:tjl20_methane_nitrogen").components().indexOf("Methane");
         var w=new EventPathWorld();w.runTo(105);var passive=new FlowControl.Passive();
         w.place(-1,-2,1,Kind.PIPE,NORTH,.05);w.place(2,0,0,Kind.PIPE,NORTH,.05);w.place(-1,-1,1,Kind.PIPE,NORTH,.02);w.place(-1,-2,3,Kind.PIPE,NORTH,.05);

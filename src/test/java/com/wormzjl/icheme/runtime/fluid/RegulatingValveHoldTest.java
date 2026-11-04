@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class RegulatingValveHoldTest {
     private static final UUID SENSOR=new UUID(1,1);
     private static double[] pure(int component){double[] n=new double[MaterialTestBasis.NETWORK+1];n[component]=1;return n;}
-    private static double[] crude(){return Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),MaterialTestBasis.NETWORK+1);}
+    private static double[] crude(){return Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),MaterialTestBasis.NETWORK+1);}
     private static FlowControl.ControlValve valve(double target){return new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,target,SENSOR,1);}
     private static FluidDeviceSpec sink(double pressure,double temperature){return new FluidDeviceSpec(1,temperature,pressure,pure(MaterialTestBasis.NITROGEN));}
 

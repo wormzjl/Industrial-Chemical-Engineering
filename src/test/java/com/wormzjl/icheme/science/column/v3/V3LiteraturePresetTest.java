@@ -8,6 +8,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** The fresh-calculator preset is the literature column at its published duties; a cold top is a warning, not a rejection. */
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3LiteraturePresetTest {
     @Test
     void theLiteraturePresetIsTheFortyTrayThesisColumnWithItsCoolersAtTheDraws() {
