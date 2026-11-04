@@ -245,11 +245,12 @@ public final class GuiPrototypes {
             d.title(mt("kind." + in.kind().name().toLowerCase(java.util.Locale.ROOT)));
             if (!name.isEmpty()) d.name(name, in.canEdit());
             d.tabs(0, TEXTS.get("overview"));
-            d.status(status, status.startsWith("TRIPPED") ? Palette.WARN : Palette.MUTED);
+            d.status(status, MachineColumn.warns(status) ? Palette.WARN : Palette.MUTED);
             var box = deviceDoor(d, rows, drafts, file);
             nameplate(d, box, plate);
-            if (datasheet) pushFooter(d, in.canEdit() ? 2 : -1, in.canEdit() ? new String[]{TEXTS.get("close"), TEXTS.get("datasheet"), TEXTS.get("apply")} : new String[]{TEXTS.get("close"), TEXTS.get("datasheet")});
-            else pushFooter(d, in.canEdit() ? 1 : -1, in.canEdit() ? new String[]{TEXTS.get("close"), TEXTS.get("apply")} : new String[]{TEXTS.get("close")});
+            boolean apply = in.canEdit() && in.kind().settable();
+            if (datasheet) pushFooter(d, apply ? 2 : -1, apply ? new String[]{TEXTS.get("close"), TEXTS.get("datasheet"), TEXTS.get("apply")} : new String[]{TEXTS.get("close"), TEXTS.get("datasheet")});
+            else pushFooter(d, apply ? 1 : -1, apply ? new String[]{TEXTS.get("close"), TEXTS.get("apply")} : new String[]{TEXTS.get("close")});
         });
     }
 
@@ -291,18 +292,23 @@ public final class GuiPrototypes {
     // ---- W6b's Create coupling page (batch 2026-11-03-rotating-machinery, form A, decision D40; -Donly=create-coupling) ----
 
     /**
-     * The Create coupling's page from the shipped MachineColumn.coupling, no switches: the 30 kW pump train of W6B_BUILD_PLAN
+     * The Create coupling's page as the game draws it (D41): a published MachineView through MachineColumn.input and its
+     * nameplate, no switches, no Apply: the 30 kW pump train of W6B_BUILD_PLAN
      * section 1 behind an auto gearbox (11.52), 24.9 kW at the pump, 25.4 kW at the coupling over the gear's 98 %, so 17,345 su at
      * 1.465 W per su. RUNNING on 40 large water wheels (20,480 su, 3,135 spare); POWER LIMITED on 24 (12,288 su, all drawn: the
      * train slows to 2629 rpm, 18.0 kW by the cube law); NO ROTATION with Create at rest.
      */
     static List<Prototype> createCoupling() {
         var t = DIALOG;
-        var plate = List.<String[]>of(new String[]{mt("stress_rate"), "1.465 W/su"}, new String[]{mt("rated_speed"), "256 rpm"});
         return List.of(
-                machinePage("create-coupling-running", MachineColumn.coupling(false, 256, 2950, 17345, 3135, 25.41e3, t), "", "RUNNING", Map.of(), plate, false),
-                machinePage("create-coupling-limited", MachineColumn.coupling(false, 256, 2629, 12287, 1, 18.0e3, t), "", "POWER LIMITED", Map.of(), plate, false),
-                machinePage("create-coupling-no-rotation", MachineColumn.coupling(false, 0, 0, 0, Double.NaN, 0, t), "", "NO ROTATION", Map.of(), plate, false));
+                coupling("create-coupling-running", MachineColumn.couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), t),
+                coupling("create-coupling-limited", MachineColumn.couplingSample("POWER LIMITED", 256, 2629, 12287, 12288, 18.0e3), t),
+                coupling("create-coupling-no-rotation", MachineColumn.couplingSample("NO ROTATION", 0, 0, 0, 0, 0), t));
+    }
+
+    /** One coupling sheet from view {@code v}, for a player who may build (as MachineScreen: the coupling's rows, its nameplate, Close only). */
+    static Prototype coupling(String file, com.wormzjl.icheme.runtime.fluid.MachineView v, HeatControlColumn.Texts t) {
+        return machinePage(file, MachineColumn.input(v, true, true, MachineColumn.Mode.SPEED, t), "", v.status(), Map.of(), MachineColumn.nameplate(v, t), false);
     }
 
     // ---- N1's title strip (the owner 2026-11-03: "You can put the equipment name here") ----

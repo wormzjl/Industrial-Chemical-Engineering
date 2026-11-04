@@ -20,6 +20,11 @@ public final class CreateCoupling {
     public static final double IMPACT_DEADBAND = 1e-3;
     /** The share of the network's spare stress the coupling may take: a margin for Create's float sums (reading A144). */
     public static final double SPARE_SHARE = 1 - 1e-4;
+    /**
+     * The stress the coupling may take where Create's stress is off, su: unlimited, as for Create's own machines (reading
+     * A149). The page shows no spare at or above it.
+     */
+    public static final double UNLIMITED_STRESS = 1e9;
 
     private CreateCoupling() {
     }

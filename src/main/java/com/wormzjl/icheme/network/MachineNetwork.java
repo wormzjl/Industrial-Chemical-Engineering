@@ -37,7 +37,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * Machine protocol {@value #PROTOCOL} (batch 2026-11-03-rotating-machinery, W7, owner decision D31, readings A85, A87,
- * A89, A100): a motor, generator, gearbox or creative motor opens its own page ({@link MachineMenu}); a casing's or a
+ * A89, A100): a motor, generator, gearbox, creative motor or Create coupling (W6b, protocol 2) opens its own page ({@link MachineMenu}); a casing's or a
  * turbine's fluid page opens its driver's ({@link OpenDriverPayload}). An open page is a session of the engine's
  * presentation ({@link MachinePresentation}): it gets its part's view at once and on the buckets after. An edit
  * ({@link EditPayload}) is checked at receipt (the page open on that part, {@code stillValid}, the player may build, the
@@ -45,7 +45,7 @@ import org.jetbrains.annotations.Nullable;
  * get no compatibility work (AGENTS.md).
  */
 public final class MachineNetwork {
-    public static final String PROTOCOL = "machine-1";
+    public static final String PROTOCOL = "machine-2";
     /** The highest speed share a variable drive or a turbine's governor takes, and the highest creative motor speed (rpm) and power limit (W). */
     public static final double MAXIMUM_SHARE = 1.1, MAXIMUM_RPM = 1e5, MAXIMUM_LIMIT = 1e9;
 
@@ -73,6 +73,8 @@ public final class MachineNetwork {
         b.writeUtf(v.governor(), MachineView.MAX_TEXT);
         b.writeDouble(v.ratio());
         for (double d : new double[]{v.steamFlow(), v.inletPressure(), v.exhaustPressure()}) b.writeDouble(d);
+        b.writeBoolean(v.coupling() != null);
+        if (v.coupling() != null) for (double d : new double[]{v.coupling().createSpeed(), v.coupling().stress(), v.coupling().impact(), v.coupling().trainSpeed(), v.coupling().wattsPerStress()}) b.writeDouble(d);
     }
 
     private static MachineView read(RegistryFriendlyByteBuf b) {
@@ -88,7 +90,8 @@ public final class MachineNetwork {
             boolean variable = b.readBoolean();
             double share = b.readDouble(), seconds = b.readDouble();
             String governor = b.readUtf(MachineView.MAX_TEXT);
-            return new MachineView(unit, kind, status, speed, shaft, electric, perTick, settings, trip, rated, design, poles, variable, share, seconds, governor, b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble());
+            return new MachineView(unit, kind, status, speed, shaft, electric, perTick, settings, trip, rated, design, poles, variable, share, seconds, governor, b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(),
+                    b.readBoolean() ? new MachineView.Coupling(b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble()) : null);
         } catch (IllegalArgumentException invalid) {
             throw new DecoderException(invalid.getMessage());
         }
@@ -223,7 +226,7 @@ public final class MachineNetwork {
     };
 
     /** Part {@code unit}'s view, its governor valve named by the valve's device name or, without one, its position (reading A95). */
-    static @Nullable MachineView machineView(FluidWorldAuthority world, ServerLevel level, long unit) {
+    public static @Nullable MachineView machineView(FluidWorldAuthority world, ServerLevel level, long unit) {
         var trains = world.shafts();
         long valve = trains.governorOf(unit);
         String governor = "";

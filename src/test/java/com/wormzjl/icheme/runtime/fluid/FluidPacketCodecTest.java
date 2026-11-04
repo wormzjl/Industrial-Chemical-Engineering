@@ -206,13 +206,23 @@ class FluidPacketCodecTest {
     }
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
-        assertEquals("machine-1",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
+        assertEquals("machine-2",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
         var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
         var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
-                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5);
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5,null);
         var state=new com.wormzjl.icheme.network.MachineNetwork.StatePayload(3,view,2,"");
         var unread=new MachineView(8,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR,"OFF SPEED",0,0,0,0,ShaftUnit.Settings.DEFAULT,
-                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,false,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN);
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,false,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN,null);
+        // W6b: a Create coupling's view carries its Create side; it round-trips, NaN impact included.
+        var coupling=new MachineView(9,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING,"POWER LIMITED",228.2,18000,0,0,ShaftUnit.Settings.DEFAULT,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,0,256,0,true,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN,
+                new MachineView.Coupling(256,12288,12287/256.,2629,1.465));
+        var unsent=new MachineView(10,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING,"NO ROTATION",0,0,0,0,ShaftUnit.Settings.DEFAULT,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,0,256,0,true,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN,
+                new MachineView.Coupling(0,0,Double.NaN,Double.NaN,1.465));
+        assertThrows(IllegalArgumentException.class,()->new MachineView(11,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",0,0,0,0,ShaftUnit.Settings.DEFAULT,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,0,256,0,true,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN,new MachineView.Coupling(0,0,0,0,1.465)),"a coupling view belongs to a coupling");
+        assertThrows(IllegalArgumentException.class,()->new MachineView.Coupling(-1,0,0,0,1.465));
         var edit=new com.wormzjl.icheme.network.MachineNetwork.EditPayload(3,2,com.wormzjl.icheme.network.MachineNetwork.Action.APPLY,settings);
         var open=new com.wormzjl.icheme.network.MachineNetwork.OpenDriverPayload(4,new BlockPos(-3,70,12),99);
         var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
@@ -222,6 +232,7 @@ class FluidPacketCodecTest {
             com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.encode(buffer,copy);
             var back=com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer);
             assertTrue(Double.isNaN(back.view().storeShare())&&Double.isNaN(back.view().storeSeconds()));assertEquals("refused",back.refusal());
+            for(var v:new MachineView[]{coupling,unsent}){var p=new com.wormzjl.icheme.network.MachineNetwork.StatePayload(5,v,0,"");com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.encode(buffer,p);assertEquals(p,com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer));}
             com.wormzjl.icheme.network.MachineNetwork.EditPayload.STREAM_CODEC.encode(buffer,edit);assertEquals(edit,com.wormzjl.icheme.network.MachineNetwork.EditPayload.STREAM_CODEC.decode(buffer));
             com.wormzjl.icheme.network.MachineNetwork.OpenDriverPayload.STREAM_CODEC.encode(buffer,open);assertEquals(open,com.wormzjl.icheme.network.MachineNetwork.OpenDriverPayload.STREAM_CODEC.decode(buffer));
             // A negative speed on the wire is refused at decode.
@@ -230,7 +241,7 @@ class FluidPacketCodecTest {
             for(int i=0;i<3;i++)buffer.writeDouble(0);
             buffer.writeBoolean(true);buffer.writeEnum(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED);buffer.writeDouble(0);buffer.writeDouble(0);buffer.writeDouble(0);
             buffer.writeEnum(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE);buffer.writeDouble(0);buffer.writeDouble(0);buffer.writeVarInt(0);buffer.writeBoolean(false);
-            buffer.writeDouble(Double.NaN);buffer.writeDouble(Double.NaN);buffer.writeUtf("");buffer.writeDouble(0);for(int i=0;i<3;i++)buffer.writeDouble(Double.NaN);buffer.writeVarInt(0);buffer.writeUtf("");
+            buffer.writeDouble(Double.NaN);buffer.writeDouble(Double.NaN);buffer.writeUtf("");buffer.writeDouble(0);for(int i=0;i<3;i++)buffer.writeDouble(Double.NaN);buffer.writeBoolean(false);buffer.writeVarInt(0);buffer.writeUtf("");
             assertThrows(io.netty.handler.codec.DecoderException.class,()->com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer));
         }finally{buffer.release();}
     }

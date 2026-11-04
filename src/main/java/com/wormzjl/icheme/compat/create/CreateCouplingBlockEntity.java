@@ -23,8 +23,6 @@ import net.minecraft.world.level.block.state.BlockState;
  * It saves nothing of its own: Create keeps its last impact in its own tag ({@code AddedStress}).
  */
 public final class CreateCouplingBlockEntity extends KineticBlockEntity implements ShaftParts.Coupling {
-    /** The stress the coupling may take where Create's stress is off: unlimited, as for Create's own machines (reading A149). */
-    static final double UNLIMITED = 1e9;
     /** The engine's impact, su per rpm. */
     private float impact;
     /** What the engine was last told: |rpm| and the stress the coupling may take, su (NaN: nothing yet). */
@@ -84,7 +82,7 @@ public final class CreateCouplingBlockEntity extends KineticBlockEntity implemen
 
     /** The stress the coupling may take, su: the network's capacity less its stress, plus the coupling's own draw. */
     private double spare() {
-        if (!IRotate.StressImpact.isEnabled()) return UNLIMITED;
+        if (!IRotate.StressImpact.isEnabled()) return CreateCoupling.UNLIMITED_STRESS;
         if (!hasNetwork()) return 0;
         return Math.max(0, (double) capacity - stress + (double) impact * Math.abs(getTheoreticalSpeed()));
     }

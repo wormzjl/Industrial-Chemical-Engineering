@@ -27,11 +27,10 @@ public final class MachineColumn {
     /** The page's kinds: the shaft parts that have a page of their own. */
     public enum Kind {
         MOTOR, STEAM_TURBINE, GENERATOR, GEARBOX, CREATIVE_MOTOR,
-        /** The Create coupling (W6b): no switch and no set point, Create drives it; a prototype until the owner's look. */
+        /** The Create coupling (W6b, D41): no switch and no set point, Create drives it. */
         CREATE_COUPLING;
 
-        /** The page of shaft part {@code kind}, or null for a shaft block or a casing (the casing has its fluid page), or a Create
-         * coupling, whose page waits for the owner's look at its prototype (W6b). */
+        /** The page of shaft part {@code kind}, or null for a shaft block or a casing (the casing has its fluid page). */
         public static @Nullable Kind of(ShaftNetwork.Kind kind) {
             return switch (kind) {
                 case MOTOR -> MOTOR;
@@ -39,6 +38,7 @@ public final class MachineColumn {
                 case GENERATOR -> GENERATOR;
                 case GEARBOX -> GEARBOX;
                 case CREATIVE_MOTOR -> CREATIVE_MOTOR;
+                case CREATE_COUPLING -> CREATE_COUPLING;
                 default -> null;
             };
         }
@@ -46,6 +46,11 @@ public final class MachineColumn {
         /** Whether it has a switch (a gearbox does not run on its own, reading A99; Create runs a coupling). */
         public boolean switched() {
             return this != GEARBOX && this != CREATE_COUPLING;
+        }
+
+        /** Whether its page sends settings, so its footer has Apply: every kind but the coupling, which Create drives (W6b). */
+        public boolean settable() {
+            return this != CREATE_COUPLING;
         }
 
         /** Whether it drives its train, so it sets a speed or regulates. */
@@ -172,6 +177,10 @@ public final class MachineColumn {
      */
     public static Input input(MachineView v, boolean canEdit, boolean running, Mode mode, HeatControlColumn.Texts t) {
         var kind = java.util.Objects.requireNonNull(Kind.of(v.kind()), "A machine page for a shaft part with none");
+        if (kind == Kind.CREATE_COUPLING) {
+            var c = java.util.Objects.requireNonNull(v.coupling(), "A coupling's view with no Create side");
+            return coupling(canEdit, c.createSpeed(), c.trainSpeed(), c.drawn(), c.spare(), v.shaftPower(), t);
+        }
         var shaft = new ArrayList<Meter>();
         var supply = new ArrayList<Meter>();
         shaft.add(new Meter("speed", whole(v.speed()), "rpm", null));
@@ -195,7 +204,26 @@ public final class MachineColumn {
     }
 
     /**
-     * A Create coupling's page (W6b, prototype): no switch and no set point. The shaft group reads Create's speed, the train's
+     * The nameplate on the glass for {@code v}, label and value: a rating, poles, a motor's drive, a coupling's stress rate
+     * (W/su), the rated speed (a table on the glass, panel rule 4). The screen and the render tool draw these lines.
+     */
+    public static List<String[]> nameplate(MachineView v, HeatControlColumn.Texts t) {
+        var lines = new ArrayList<String[]>();
+        if (v.ratedPower() > 0) lines.add(new String[]{t.get(KEY + "rating"), Format.number(v.ratedPower() / 1000) + " kW"});
+        if (v.poles() > 0) lines.add(new String[]{t.get(KEY + "poles"), Integer.toString(v.poles())});
+        if (v.kind() == ShaftNetwork.Kind.MOTOR) lines.add(new String[]{t.get(KEY + "drive"), t.get(KEY + (v.variable() ? "drive.variable" : "drive.fixed"))});
+        if (v.coupling() != null) lines.add(new String[]{t.get(KEY + "stress_rate"), String.format(Locale.ROOT, "%.3f W/su", v.coupling().wattsPerStress())});
+        if (v.designSpeed() > 0) lines.add(new String[]{t.get(KEY + "rated_speed"), String.format(Locale.ROOT, "%.0f rpm", v.designSpeed())});
+        return lines;
+    }
+
+    /** Whether the status word {@code status} shows in the warning tone: a trip, no power, a limit, an ungoverned turbine. */
+    public static boolean warns(String status) {
+        return status.startsWith("TRIPPED") || status.contains("NO POWER") || status.contains("LIMITED") || status.equals("UNGOVERNED");
+    }
+
+    /**
+     * A Create coupling's page (W6b, D41): no switch and no set point. The shaft group reads Create's speed, the train's
      * speed behind its gearbox (its first machine's) and the shaft power; the supply group the Create network: the stress the
      * coupling draws and what the network still spares (NaN: —), in stress units.
      */
@@ -204,6 +232,19 @@ public final class MachineColumn {
                 new Meter("train_speed", whole(trainRpm), "rpm", t.get(KEY + "train_speed.hint")), new Meter("power", Format.number(power / 1000), "kW", null));
         var supply = List.of(new Meter("stress", whole(stress), "su", t.get(KEY + "stress.hint")), new Meter("spare", whole(spare), "su", t.get(KEY + "spare.hint")));
         return new Input(Kind.CREATE_COUPLING, canEdit, createRpm > 0, false, Mode.SPEED, false, null, shaft, supply, null);
+    }
+
+    /**
+     * An illustrative published view of a Create coupling (the gates' and the render tool's, W6b): Create at {@code createRpm}
+     * with {@code stress} su to take, {@code drawn} su drawn, the train's first machine at {@code trainRpm} behind an 11.52
+     * gearbox, {@code power} W at the shaft, 1.465 W per su, its design speed Create's highest.
+     */
+    public static MachineView couplingSample(String status, double createRpm, double trainRpm, double drawn, double stress, double power) {
+        var rate = com.wormzjl.icheme.science.machine.CreateCoupling.wattsPerStress(2.5, com.wormzjl.icheme.science.machine.CreateCoupling.STRESS_PER_FE);
+        var c = new MachineView.Coupling(createRpm, stress, createRpm > 0 ? drawn / createRpm : 0, trainRpm, rate);
+        return new MachineView(1, ShaftNetwork.Kind.CREATE_COUPLING, status, trainRpm / 11.52, power, 0, 0, com.wormzjl.icheme.runtime.fluid.ShaftUnit.Settings.DEFAULT,
+                ShaftTrain.Trip.NONE, 0, com.wormzjl.icheme.science.machine.CreateCoupling.DESIGN_SPEED, 0, true, Double.NaN, Double.NaN, "", 0,
+                Double.NaN, Double.NaN, Double.NaN, c);
     }
 
     /** {@code seconds} as a player reads a time: {@code 6 min 10 s}, {@code 2 h 5 min}, {@code 40 s}. */
@@ -262,7 +303,7 @@ public final class MachineColumn {
      * 72 %; a 2500 kW turbine at 4200 rpm giving 1980 kW from 2.9 kg/s of steam, 40 bar in and 4 bar out.
      */
     public static Input sample(Kind kind, boolean edit, boolean variable, Mode mode, boolean tripped, HeatControlColumn.Texts t) {
-        if (kind == Kind.CREATE_COUPLING) return coupling(edit, 256, 2950, 17345, 3135, 25.41e3, t);
+        if (kind == Kind.CREATE_COUPLING) return input(couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), edit, true, mode, t);
         boolean turbine = kind == Kind.STEAM_TURBINE;
         var shaft = new ArrayList<Meter>(List.of(new Meter("speed", tripped ? "0" : turbine ? "4200" : "2950", "rpm", null)));
         if (kind == Kind.GEARBOX) shaft.add(new Meter("ratio_now", "4.27", "", t.get(KEY + "ratio_now.hint")));

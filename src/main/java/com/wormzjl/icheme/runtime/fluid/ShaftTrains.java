@@ -860,6 +860,22 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         return new Coupling(in == null ? 0 : in.rpm(), in == null ? 0 : in.stress(), impacts.getOrDefault(unit, Double.NaN));
     }
 
+    /**
+     * The speed of the first driven machine (its lowest identity) of the train that driver unit {@code unit} drives, rpm, at
+     * the train's last step: the driver's speed times that machine's ratio behind its gearboxes (W6b's page; a read). NaN for
+     * a part that drives no train or a train with no driven machine; 0 for a standing or faulted train.
+     */
+    public double drivenSpeed(long unit) {
+        Long key = trainOf.get(unit);
+        var run = key == null ? null : runs.get(key);
+        if (run == null || run.train.driver() != unit || run.train.driven().isEmpty()) return Double.NaN;
+        var first = run.train.driven().getFirst();
+        for (var m : run.train.driven()) if (m.id() < first.id()) first = m;
+        var d = topology.shaft(unit);
+        double speed = run.train.fault() == ShaftNetwork.Fault.NONE && d != null && d.state() != null ? d.state().speed() : 0;
+        return speed * first.ratio();
+    }
+
     /** The governor valve's fluid device that turbine unit {@code unit}'s speed sensor works, or 0 for none. */
     public long governorOf(long unit) {
         return valveOfTurbine.getOrDefault(unit, 0L);

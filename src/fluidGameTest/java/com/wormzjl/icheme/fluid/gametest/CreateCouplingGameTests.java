@@ -157,6 +157,8 @@ public final class CreateCouplingGameTests {
                         double drawn = network.getActualStressOf(be) * world.shafts().wattsPerStress();
                         if (Math.abs(drawn - view.demand()) > .05 * view.demand()) failure[0] = "the coupling draws " + drawn + " W of the train's " + view.demand();
                     }
+                    // The page a player opens now (D41): the replayed view, read from the engine's last step, as the page shows it.
+                    if (failure[0] == null) failure[0] = page(helper, world, unit.id(), "RUNNING", network.getActualStressOf(be));
                     LOG.info("create_coupling_test phase=running view={} coupling={} share={} stress={} su", view, c, world.shafts().share(ids[2]), network.getActualStressOf(be));
                     // A small supply: the creative motor's capacity cut to 0.5 su per rpm (128 su at 256 rpm).
                     var source = (com.simibubi.create.content.kinetics.base.KineticBlockEntity) level.getBlockEntity(motor[0]);
@@ -182,6 +184,7 @@ public final class CreateCouplingGameTests {
                     var network = be.getOrCreateNetwork();
                     if (be.isOverStressed() || network.calculateStress() > network.calculateCapacity())
                         failure[0] = "Create's network overstressed: " + network.calculateStress() + " of " + network.calculateCapacity();
+                    else failure[0] = page(helper, world, unit.id(), "POWER LIMITED", network.getActualStressOf(be));
                 });
             }
             sequence.thenExecute(plant::remove).thenWaitUntil(() -> helper.assertTrue(plant.removed() && world.shafts().units().stream()
@@ -190,6 +193,33 @@ public final class CreateCouplingGameTests {
                         plant.release();
                         if (failure[0] != null) helper.fail(failure[0]);
                     }).thenSucceed();
+        }
+
+        /**
+         * What opening the coupling's page would get (W6b, D41): the view the presentation replays ({@code MachineNetwork.machineView},
+         * engine state only), checked against the plant: the status word, Create at 256 rpm, the train's first machine at its geared
+         * speed (2950 rpm running, slower limited), the stress drawn as Create's network carries it, within the stress it may take,
+         * the shaft power the train's demand; and the page's rows from it. Limited, Create may hold the impact cut to its spare at the
+         * moment it landed (within the 1 % spare deadband), so the drawn stress agrees within 2 %. Null when it holds, else the failure.
+         */
+        private static String page(GameTestHelper helper, com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority world, long unit, String status, double carried) {
+            var v = com.wormzjl.icheme.network.MachineNetwork.machineView(world, helper.getLevel(), unit);
+            if (v == null || v.coupling() == null || com.wormzjl.icheme.client.gui.common.MachineColumn.Kind.of(v.kind()) != com.wormzjl.icheme.client.gui.common.MachineColumn.Kind.CREATE_COUPLING)
+                return "no coupling page view: " + v;
+            var c = v.coupling();
+            boolean running = status.equals("RUNNING");
+            if (!v.status().startsWith(status)) return "the page says " + v.status() + ", not " + status;
+            if (Math.abs(c.createSpeed() - 256) > 1e-6) return "the page reads Create at " + c.createSpeed() + " rpm";
+            if (running ? Math.abs(c.trainSpeed() / 2950 - 1) > .02 : !(c.trainSpeed() > 0 && c.trainSpeed() < .95 * 2950)) return "the page reads the train at " + c.trainSpeed() + " rpm";
+            if (!(c.drawn() > 0) || Math.abs(c.drawn() - carried) > (running ? 1e-3 : .02) * carried) return "the page reads " + c.drawn() + " su drawn, Create's network carries " + carried;
+            if (c.drawn() > c.stress() || !(c.spare() >= 0)) return "the page draws " + c.drawn() + " su of " + c.stress() + " su it may take, spare " + c.spare();
+            var demand = world.shafts().view(unit).demand();
+            if (!(v.shaftPower() > 0) || Math.abs(v.shaftPower() - demand) > 1e-9 * demand) return "the page reads " + v.shaftPower() + " W, the train demands " + demand;
+            if (Math.abs(c.wattsPerStress() - world.shafts().wattsPerStress()) > 1e-12) return "the page's stress rate " + c.wattsPerStress();
+            var in = com.wormzjl.icheme.client.gui.common.MachineColumn.input(v, true, true, com.wormzjl.icheme.client.gui.common.MachineColumn.Mode.SPEED, (key, args) -> key);
+            if (!in.shaft().getFirst().value().equals("256") || in.supply().size() != 2) return "the page's rows: " + in;
+            LOG.info("create_coupling_test page status={} create={} train={} drawn={} spare={} power={}", v.status(), c.createSpeed(), c.trainSpeed(), c.drawn(), c.spare(), v.shaftPower());
+            return null;
         }
 
         private static void shaft(AssemblyGameTests.Plant plant, BlockPos at, Direction.Axis axis) {

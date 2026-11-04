@@ -35,7 +35,36 @@ class MachineColumnTest {
                 kind == ShaftNetwork.Kind.MOTOR ? 534 : 0, new ShaftUnit.Settings(true, ShaftTrain.Mode.SPEED, setPoint, 0, 0), trip, 30000, 2950, 2, true,
                 kind == ShaftNetwork.Kind.MOTOR || kind == ShaftNetwork.Kind.GENERATOR ? .72 : Double.NaN, kind == ShaftNetwork.Kind.MOTOR ? 370 : Double.NaN,
                 kind == ShaftNetwork.Kind.STEAM_TURBINE ? "FV-101" : "", kind == ShaftNetwork.Kind.GEARBOX ? 4.27 : 0,
-                kind == ShaftNetwork.Kind.STEAM_TURBINE ? 2.9 : Double.NaN, kind == ShaftNetwork.Kind.STEAM_TURBINE ? 40e5 : Double.NaN, kind == ShaftNetwork.Kind.STEAM_TURBINE ? 4e5 : Double.NaN);
+                kind == ShaftNetwork.Kind.STEAM_TURBINE ? 2.9 : Double.NaN, kind == ShaftNetwork.Kind.STEAM_TURBINE ? 40e5 : Double.NaN, kind == ShaftNetwork.Kind.STEAM_TURBINE ? 4e5 : Double.NaN,
+                kind == ShaftNetwork.Kind.CREATE_COUPLING ? new MachineView.Coupling(256, 20480, 17345 / 256., 2950, 1.465) : null);
+    }
+
+    /**
+     * W6b (D41): a coupling's published view maps to the prototype's rows: Create's and the train's speed and the shaft power,
+     * then the stress drawn (impact × |rpm|) and the network's spare (what it may take less what it draws); at rest, and before
+     * the first impact, the spare and the stress read "—". No widget on the page; the nameplate gives the stress rate and 256 rpm;
+     * POWER LIMITED shows in the warning tone.
+     */
+    @Test
+    void aCouplingsViewMapsToItsPage() {
+        var texts = new HeatControlColumnTest.Recording("gui.icheme.");
+        var in = MachineColumn.input(view(ShaftNetwork.Kind.CREATE_COUPLING, 0, ShaftTrain.Trip.NONE), true, true, MachineColumn.Mode.SPEED, texts);
+        assertEquals(List.of("create_speed", "train_speed", "power"), in.shaft().stream().map(MachineColumn.Meter::key).toList());
+        assertEquals(List.of("256", "2950", "24.9"), in.shaft().stream().map(MachineColumn.Meter::value).toList());
+        assertEquals(List.of("stress", "spare"), in.supply().stream().map(MachineColumn.Meter::key).toList());
+        assertEquals(List.of("17345", "3135"), in.supply().stream().map(MachineColumn.Meter::value).toList());
+        assertEquals(Map.of(), widgets(place(in, texts, 464)), "Create drives the coupling: no switch, no entry");
+        assertFalse(MachineColumn.Kind.CREATE_COUPLING.settable());
+        var limited = MachineColumn.input(MachineColumn.couplingSample("POWER LIMITED", 256, 2629, 12287, 12288, 18e3), false, true, MachineColumn.Mode.SPEED, texts);
+        assertEquals(List.of("12287", "1"), limited.supply().stream().map(MachineColumn.Meter::value).toList());
+        var rest = MachineColumn.input(MachineColumn.couplingSample("NO ROTATION", 0, 0, 0, 0, 0), false, true, MachineColumn.Mode.SPEED, texts);
+        assertEquals(List.of("0", "—"), rest.supply().stream().map(MachineColumn.Meter::value).toList());
+        assertFalse(rest.running());
+        var c = new MachineView.Coupling(256, com.wormzjl.icheme.science.machine.CreateCoupling.UNLIMITED_STRESS, Double.NaN, Double.NaN, 1.465);
+        assertTrue(Double.isNaN(c.drawn()) && Double.isNaN(c.spare()), "no impact yet, and Create's stress off: nothing to read");
+        var plate = MachineColumn.nameplate(MachineColumn.couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), texts);
+        assertEquals(List.of("1.465 W/su", "256 rpm"), plate.stream().map(l -> l[1]).toList());
+        assertTrue(MachineColumn.warns("POWER LIMITED") && !MachineColumn.warns("NO ROTATION") && !MachineColumn.warns("RUNNING"));
     }
 
     @Test
@@ -50,7 +79,7 @@ class MachineColumnTest {
         MachineColumn.duration(7300, texts);
         MachineColumn.duration(40, texts);
         // The keys MachineScreen reads itself.
-        for (var key : List.of("waiting_first", "waiting", "invalid", "nameplate", "rating", "poles", "rated_speed", "steam_flow", "inlet", "exhaust")) texts.get(MachineColumn.KEY + key);
+        for (var key : List.of("waiting_first", "waiting", "invalid", "nameplate", "rating", "poles", "rated_speed", "stress_rate", "steam_flow", "inlet", "exhaust")) texts.get(MachineColumn.KEY + key);
         texts.get(MachineColumn.KEY + "refused", "x");
         assertEquals(Set.of(), texts.missing);
         assertTrue(texts.asked.size() > 60, "the cases ask for the page's texts: " + texts.asked.size());

@@ -18,7 +18,6 @@ import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGu
 import com.wormzjl.icheme.network.MachineNetwork;
 import com.wormzjl.icheme.runtime.fluid.MachineView;
 import com.wormzjl.icheme.runtime.fluid.ShaftUnit;
-import com.wormzjl.icheme.science.machine.ShaftNetwork;
 import com.wormzjl.icheme.world.inventory.MachineMenu;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import java.util.ArrayList;
@@ -134,7 +133,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         }).icon(Skin.Icon.THEME).setTooltip(Tooltip.create(Component.literal(theme + "\n").append(Component.translatable("gui.icheme.fluid.theme.hint"))));
         var place = strip().name();
         if (place != null && menu.datasheet() && canEdit()) nameBox(place);
-        // Close, the Datasheet push button (A89) and Apply, the confirm key, under the footer's divider.
+        // Close, the Datasheet push button (A89) and Apply, the confirm key, under the footer's divider; a coupling has no Apply (W6b).
         int x = 10, by = imageHeight - 27;
         push(tr("fluid.close"), new Rect(x, by, 50, 18), this::onClose);
         x += 56;
@@ -143,7 +142,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
                     .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.datasheet.hint")));
             x += 66;
         }
-        if (canEdit()) push(tr("fluid.apply"), new Rect(x, by, 60, 18), this::apply).primary(true).active = !waiting();
+        if (canEdit() && kind().settable()) push(tr("fluid.apply"), new Rect(x, by, 60, 18), this::apply).primary(true).active = !waiting();
         door.place(leftPos, topPos);
     }
 
@@ -305,7 +304,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
             tone = Palette.WARN;
         } else {
             status = v.status();
-            if (status.startsWith("TRIPPED") || status.contains("NO POWER") || status.contains("LIMITED") || status.equals("UNGOVERNED")) tone = Palette.WARN;
+            if (MachineColumn.warns(status)) tone = Palette.WARN;
         }
         int width = imageWidth - 20;
         String shown = font.plainSubstrByWidth(status, width);
@@ -321,16 +320,13 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         if (v != null) nameplate(canvas, v);
     }
 
-    /** The nameplate on the glass: rating, poles, drive, rated speed (a table on the glass, panel rule 4). */
+    /** The nameplate on the glass ({@link MachineColumn#nameplate}: rating, poles, drive, a coupling's stress rate, rated speed). */
     private void nameplate(GuiCanvas c, MachineView v) {
         var box = glass();
         int x = box.x() + 6, y = box.y() + 6, w = Math.min(box.w() - 12, 240);
         var lines = new ArrayList<String[]>();
         lines.add(new String[]{mt("nameplate"), ""});
-        if (v.ratedPower() > 0) lines.add(new String[]{mt("rating"), Format.number(v.ratedPower() / 1000) + " kW"});
-        if (v.poles() > 0) lines.add(new String[]{mt("poles"), Integer.toString(v.poles())});
-        if (v.kind() == ShaftNetwork.Kind.MOTOR) lines.add(new String[]{mt("drive"), mt(v.variable() ? "drive.variable" : "drive.fixed")});
-        if (v.designSpeed() > 0) lines.add(new String[]{mt("rated_speed"), String.format(Locale.ROOT, "%.0f rpm", v.designSpeed())});
+        lines.addAll(MachineColumn.nameplate(v, MachineScreen::tr));
         for (int i = 0; i < lines.size() && y + 10 <= box.bottom(); i++, y += 12) {
             var line = lines.get(i);
             c.text(font.plainSubstrByWidth(line[0], w - 80), x, y, i == 0 ? Palette.MUTED : Palette.TEXT);
@@ -363,7 +359,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
 
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
-        if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && canEdit()) {
+        if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && canEdit() && kind().settable()) {
             apply();
             return true;
         }
