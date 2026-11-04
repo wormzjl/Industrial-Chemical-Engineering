@@ -56,6 +56,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: owner D40 "A: follow demand"; build agent started (engine, compat block, GameTests, page prototype).
 - 2026-11-04: W6b built 23c634d1f (Drive.CREATE, compat/create behind one guard, CreateInput events, impact cut to the spare, gearbox 64 behind a coupling, facts unchanged); affected test 340 + the agent's 80, GameTests 45/45 with and without Create; owner D41 "Build as shown" for the page; page agent started.
 - 2026-11-04: W6b page built (MachineView.Coupling, protocol machine-2, no Apply on the coupling); page tests 281 pass, GameTests 45/45 with and without Create. Review `W6B_REVIEW.md` (A142 to A157). W6b done.
+- 2026-11-04: owner "Start W8". Plan `W8_BUILD_PLAN.md`: form A (efficiencies, proposed driver, modelled turbine tile) or B (shaft wires, driver tiles); the column door pump selector (a) duty readings or (b) keys kept; owner pick next.
 
 ## Documents
 
@@ -88,6 +89,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - [W10D_REVIEW.md](W10D_REVIEW.md): W10d's review (readings A137 to A141).
 - [W6B_BUILD_PLAN.md](W6B_BUILD_PLAN.md): W6b's plan (the Create coupling, forms A and B).
 - [W6B_REVIEW.md](W6B_REVIEW.md): W6b's review (readings A142 to A157).
+- [W8_BUILD_PLAN.md](W8_BUILD_PLAN.md): W8's plan (simulator support, forms A and B, the column pump selector).
 - [PUMP_TYPES_REVIEW.md](PUMP_TYPES_REVIEW.md): the pump types against refinery practice (API 610 OH2, BB1, BB2); options for the large pump.
 
 ## Code areas (planned)
