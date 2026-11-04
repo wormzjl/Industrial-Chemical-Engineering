@@ -100,13 +100,14 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 
 ## Translations
 
-- Every change to `src/main/resources/assets/icheme/lang/en_us.json` updates every other lang file in the same commit (`zh_cn`, `fr_fr`, `es_es`, `ja_jp`, and any language added later):
+- During a batch, change only `src/main/resources/assets/icheme/lang/en_us.json`. Do not edit the other lang files between commits.
+- Before the batch merges, bring every other lang file up to date with en_us in one translation commit (`zh_cn`, `fr_fr`, `es_es`, `ja_jp`, and any language added later):
   - add each new key;
   - rewrite the translation of each line whose English changed, also when only the wording changed;
   - remove each key that en_us removes.
 - Keep each file in en_us key order. Keep the arguments (`%s`, `%n$s`, `%%`) and the line breaks that en_us has. Keep the server's status words (LIMITED, LOW LIMIT, DUTY INSUFFICIENT) in English.
 - Use the terms that each file already uses. `tools/localization/glossary.md` lists them for fr, es and ja.
-- Check offline with `tools/localization/`: `check.js` for keys and arguments, `width.js` for label widths, and `stale-translations.js <locale>` after the commit, for translations whose English changed. `LanguageFilesTest` (quick suite) and `UnitTextTest` (equipmentGates) are the gates.
+- Check offline with `tools/localization/`: `check.js` for keys and arguments, `width.js` for label widths, and `stale-translations.js <locale>` before the translation commit, for translations whose English changed. `LanguageFilesTest` (quick suite) and `UnitTextTest` (equipmentGates) are the gates. They fail until the translation commit; do not run them before it. The final lane runs them.
 
 ## Git and worktrees
 
@@ -144,6 +145,7 @@ Every merge to `main` includes, in the same merge:
   - patch for fixes, cleanups and consolidation;
   - minor only for a new feature or a solver or model batch.
   - Propose the version and let the owner choose. Do not jump versions fast.
+- The translation commit (see Translations), when the batch changed `en_us.json`.
 - A code guide update (see below).
 - The tooling cleanup (see below).
 
