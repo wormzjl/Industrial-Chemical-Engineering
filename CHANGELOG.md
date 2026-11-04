@@ -34,6 +34,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 - The Column Calculator's screen, menu, block entity and packets (`ColumnCalculatorV3Screen`, `ColumnCalculatorV3Menu`, `ColumnCalculatorV3BlockEntity`, `ColumnV3Network`, `ColumnPresentation`, `V3EditorCatalog` and its codec, `ColumnInputPreset`, the calculator's requests in `ProcessSolveServices` and `ProcessSolveCoordinator`), the old screen's code, the config entries `stageTraceCutoffMolPercent` and `columnV3ConvergenceClosurePercent`, and the GameTests only the calculator needed (`ColumnRegroupingGameTests`, one each in `ChunkLoadGameTests` and `MaterialReloadGameTests`) (W8 `60ec1f48d`, W9 `7f074f4bf`, batch `2026-11-02-process-simulator`).
 - The five per-crude material packages and their five column data presets; the five crude assays stand on `tjl20_methane` at `crude-regrouped-r2` (W5 `61fe9196e`).
 - The old assembly drawing (`AssemblyFlowsheet`, with `AssemblyPortColoursTest`) and its 26 drawing-only lang keys (`3c3b0b26d`).
+- The four learned-start config keys `columnV3.initializerMode`, `lnnWetStartMode`, `lnnMaxCorrectionIterations` and `lnnBudgetMilliseconds`, which since the calculator block left only chose whether the server parsed the bundled model at start (it always does now, as the default did); `MaterialRuntime.name`, which had no caller; and three dead `columnGates` patterns (`3f459c176`).
 
 ## [0.19.3] - 2026-11-03
 
