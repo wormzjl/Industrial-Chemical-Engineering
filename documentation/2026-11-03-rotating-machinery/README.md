@@ -60,6 +60,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: owner D42: form A, duty readings on the column door; build agent started (laws, turbine tile, sizing rows, door prototype).
 - 2026-11-05: W8 laws built (pump η Corripio, compressor unchanged since its closure already divides by 0.78 (A158), TurbineUnit, motor proposal and FE/t readings; four references re-recorded, 0.08 K class); owner D43: TurbineSizing with the drivers drawing-only, pump duty table on the glass (option B).
 - 2026-11-05: W8 part two built 3d615e6a1 (TurbineSizing, drivers drawing-only, duty table, SentDesignTagsTest fixed for W4's duty field); affected 468, only the two zh_cn SimulatorColumnsTest cases fail until the translation commit. Owner D44: the Equipment glass scrolls.
+- 2026-11-05: D44 built 7de10b5ac (glass ScrollView, SheetBuilder.grid stacking; Results sheets scroll too, A171); 123 more tests pass. Review `W8_REVIEW.md` (A158 to A174; open: the Feed page stream glass A173, a compact pump table at 380 A174). W8 done.
 
 ## Documents
 
@@ -93,6 +94,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - [W6B_BUILD_PLAN.md](W6B_BUILD_PLAN.md): W6b's plan (the Create coupling, forms A and B).
 - [W6B_REVIEW.md](W6B_REVIEW.md): W6b's review (readings A142 to A157).
 - [W8_BUILD_PLAN.md](W8_BUILD_PLAN.md): W8's plan (simulator support, forms A and B, the column pump selector).
+- [W8_REVIEW.md](W8_REVIEW.md): W8's review (readings A158 to A174).
 - [PUMP_TYPES_REVIEW.md](PUMP_TYPES_REVIEW.md): the pump types against refinery practice (API 610 OH2, BB1, BB2); options for the large pump.
 
 ## Code areas (planned)
