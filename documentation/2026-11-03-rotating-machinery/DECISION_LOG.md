@@ -104,6 +104,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D32.** A steam turbine's controls are on its own machine page, like every driver's; its fluid page carries the Drive group with Open driver, as a casing's does. This replaces D31's Drive tab.
 
+2026-11-04, W10b's build plan (`W10B_BUILD_PLAN.md` section 7, readings A109 to A128): the owner, "All as recommended".
+
+- **D33 (A109 to A128).** W10b builds as its plan recommends: health per pump and compressor device in fluid facts schema 12 (A109); plan 3.7's rates at commit and on the cadence (A111, A112); the health factor as a dispatch input (A113) with a 1e-3 wake threshold (A114); the knock trip (A115); two parts, impeller and valve set, without a seal kit (A116, A117, replacing Q14's list); vanilla recipes and script-drawn textures (A118, A119); and A120 to A128 as given.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
