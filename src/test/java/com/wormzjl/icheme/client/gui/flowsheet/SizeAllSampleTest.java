@@ -82,15 +82,18 @@ class SizeAllSampleTest {
      * <p>O4 of batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term) makes the crude
      * up to 15 % more viscous at the coolers' temperatures: PA 2 0.40 to 0.41, PA 3 0.29 to 0.30, E-101 0.17 to 0.18, the
      * path 3.07 to 3.10 bar. No size moves.
+     *
+     * <p>O3 of the same batch runs the sample on the medium crude grade: PA 1 cooler 0.36 to 0.39, E-101 0.18 to 0.20, H-101 1.48 to
+     * 1.39, S-6 0.03 to 0.02; the path 3.10 to 3.06 bar.
      */
     @Test
     void p101sPathIsTheProbesStair() {
         var path = path(proposal, "P-101");
         String[] items = {"S-1", "T-101/pa 1 cooler", "S-2", "T-101/pa 2 cooler", "S-3", "T-101/pa 3 cooler", "S-4", "E-101", "S-5", "H-101", "S-6"};
-        double[] lost = {.12, .36, .10, .41, .04, .30, .04, .18, .04, 1.48, .03};
+        double[] lost = {.12, .39, .10, .41, .04, .30, .04, .20, .04, 1.39, .02};
         assertEquals(List.of(items), path.steps().stream().map(PressurePath.Step::item).toList());
         for (int i = 0; i < lost.length; i++) assertEquals(lost[i], path.steps().get(i).lost(), HUNDREDTH, items[i]);
-        assertEquals(3.10, path.lost(), HUNDREDTH);
+        assertEquals(3.06, path.lost(), HUNDREDTH);
         assertEquals(14.00, path.from(), HUNDREDTH);
         assertTrue(path.set());
         assertEquals("V-101", path.taker());
@@ -103,17 +106,18 @@ class SizeAllSampleTest {
      * not the probe's 0.47: S2's heat curves give E-102 724 m² where the probe's one heat capacity gave 741, which picks another
      * bank, 0.07 bar where the probe's lost 0.05 (plan section 4). S4c's spare takes larger units on it: E-101's 1.25 m shell, whose
      * residue side loses 0.06, not 0.15, and E-102's 6 × 3 bays of 2.5 × 6 m, 0.04, not 0.07. The path loses 0.37; 0.38 since O4 of
-     * batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term), 0.375 against 0.37.
+     * batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term), 0.375 against 0.37. On the
+     * medium crude grade (O3 of that batch) E-101's residue side loses 0.07 and the product line 0.16; the head 0.48, the path 0.38.
      */
     @Test
     void theResiduesPathIsTheProbes() {
         var residue = proposal.paths().stream().filter(p -> p.start().equals("T-101") && p.end().equals("RESIDUE")).findFirst().orElseThrow();
         assertEquals(List.of("S-9", "E-101", "S-10", "E-102", "RESIDUE"), residue.steps().stream().map(PressurePath.Step::item).toList());
-        double[] lost = {.005, .06, .09, .045, .17};
+        double[] lost = {.005, .07, .09, .045, .16};
         for (int i = 0; i < lost.length; i++) assertEquals(lost[i], residue.steps().get(i).lost(), HUNDREDTH, residue.steps().get(i).item());
-        assertEquals(.49, residue.head(), HUNDREDTH);
-        assertEquals(2.22, residue.to(), HUNDREDTH);
-        assertEquals(.99, residue.available(), HUNDREDTH);
+        assertEquals(.48, residue.head(), HUNDREDTH);
+        assertEquals(2.21, residue.to(), HUNDREDTH);
+        assertEquals(.98, residue.available(), HUNDREDTH);
         assertEquals(.38, residue.lost(), HUNDREDTH);
         assertFalse(residue.set());
         assertSame(com.wormzjl.icheme.science.flowsheet.sizing.Rating.NONE, residue.rating());
@@ -134,6 +138,10 @@ class SizeAllSampleTest {
      *
      * <p>S4c also raises V-101's set outlet from 2.72 to 2.80 bar ("always have enough excess"): the feed flashes less across the
      * valve and reaches the column 0.24 K warmer, 359.70 °C before sizing and 350.02 after. Upstream of the valve nothing moves.
+     *
+     * <p>O3 of batch 2026-11-04-open-thermo-data runs the sample on the medium crude grade, lighter than Tia Juana: S-6 stands at
+     * the same 5.00 and 11.9 bar, the furnace fires 73.0 MW before sizing and 67.7 after, the coil's vapour share is 0.67 and 0.41,
+     * and the feed reaches the column at 358.5 °C and 347.1 °C.
      */
     @Test
     void theSampleSizedMovesAsThePlanSays() {
@@ -142,12 +150,12 @@ class SizeAllSampleTest {
         assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
         assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
         assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
-        assertEquals(78.38, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
-        assertEquals(73.93, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
-        assertEquals(359.7, before.get("S-7").temperature() - 273.15, .1);
-        assertEquals(350.0, after.get("S-7").temperature() - 273.15, .15);
-        assertEquals(.71, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);
-        assertEquals(.52, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH);
+        assertEquals(73.00, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
+        assertEquals(67.70, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
+        assertEquals(358.5, before.get("S-7").temperature() - 273.15, .1);
+        assertEquals(347.1, after.get("S-7").temperature() - 273.15, .15);
+        assertEquals(.67, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);
+        assertEquals(.41, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH);
     }
 
     /** Nothing is sized twice: every Auto item holds the size Size all proposed, and that is the size its rating reads. */
@@ -168,21 +176,21 @@ class SizeAllSampleTest {
     }
 
     /**
-     * S3b: Auto's member counts reach the door, as the column's diameter does. The condenser's five shells are the design's count,
+     * S3b: Auto's member counts reach the door, as the column's diameter does. The condenser's four shells (five on Tia Juana) are the design's count,
      * which the assembly asks for and builds (at most {@code ColumnComponents.MAX_UNITS}); each cooler keeps one shell.
      */
     @Test
-    void theCondensersFiveShellsReachTheDoor() {
+    void theCondensersFourShellsReachTheDoor() {
         var door = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(all.sheet().units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params());
-        assertEquals(new com.wormzjl.icheme.science.equipment.ColumnComponents.Units(5, 1, List.of(1, 1, 1)), door.units());
+        assertEquals(new com.wormzjl.icheme.science.equipment.ColumnComponents.Units(4, 1, List.of(1, 1, 1)), door.units());
         var choices = door.choices(com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.STANDARD, List.of());
-        assertEquals(5, choices.units().condenser(), "a design the calculator and the assembly take");
+        assertEquals(4, choices.units().condenser(), "a design the calculator and the assembly take");
         assertEquals(1, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(sheet.units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params()).units().condenser(),
                 "the sheet it was given keeps its door");
     }
 
     /**
-     * S5: Send to block stores the column at its door's diameter with its member counts, the condenser's five shells as its count, and every
+     * S5: Send to block stores the column at its door's diameter with its member counts, the condenser's four shells as its count, and every
      * unit with a shape but the valve, each reading back whole as the block keeps it.
      */
     @Test
@@ -194,7 +202,7 @@ class SizeAllSampleTest {
         assertEquals(door.diameter(), column.column().diameter(), 1e-12);
         assertEquals(door.units(), column.column().components().units());
         var condenser = designs.stream().filter(d -> d.member().equals("condenser")).findFirst().orElseThrow();
-        assertEquals(5, condenser.count());
+        assertEquals(4, condenser.count());
         long shaped = all.sized().units().values().stream().filter(u -> u.size() != null && !(u.size() instanceof com.wormzjl.icheme.science.flowsheet.sizing.ValveSizing.Size)).count();
         assertEquals(shaped, designs.size());
         var read = com.wormzjl.icheme.world.level.block.entity.SentDesignTags.read(com.wormzjl.icheme.world.level.block.entity.SentDesignTags.write(designs, List.of()));
