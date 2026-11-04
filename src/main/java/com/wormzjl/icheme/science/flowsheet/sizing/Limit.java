@@ -25,6 +25,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Sense;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
+import com.wormzjl.icheme.science.machine.Motor;
 
 /**
  * The sizing stage's limits, one row a limit (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.3, 3.4 and
@@ -227,6 +228,12 @@ public enum Limit {
      * thread's reading of the owner's "always have enough excess" (2026-11-03), reversible by the owner.
      */
     EJECTOR_MOTIVE_SPARE(SHOULD, least(20), "%", "This plan", QUIET),
+
+    // ---- Steam turbines (batch 2026-11-03-rotating-machinery, W8, D43) ----
+    /** The rated power over the shaft power at design flow, at least a motor's {@link Motor#SPARE}: the owner's "always have enough excess". */
+    TURBINE_SPARE(SHOULD, least(Motor.SPARE), "", "This plan: `Motor.SPARE`"),
+    /** The inlet's pressure under its steam class's header: a casing is rated for its class. The world reads the real inlet and refuses none. */
+    TURBINE_INLET(SHOULD, given(Sense.MOST), "kPa", "This plan: `MachineDuty.Steam`", QUIET),
 
     // ---- Types, section 3.10: what section 3.4 has no row for ----
     /** Above the largest cabin, a count of cabins. */

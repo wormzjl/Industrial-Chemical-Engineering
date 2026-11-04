@@ -33,6 +33,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.Service;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
 import com.wormzjl.icheme.science.flowsheet.sizing.TankSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.TurbineSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitSize;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import com.wormzjl.icheme.science.flowsheet.sizing.ValveSizing;
@@ -188,6 +189,7 @@ public final class SizingPage {
         return switch (size) {
             case PumpSizing.Size p -> "pump";
             case EjectorSizing.Size e -> "ejector";
+            case TurbineSizing.Size s -> "steam_turbine";
             case ExchangerSizing.Size e -> e.kettle() ? "kettle" : "exchanger";
             case AirCoolerSizing.Size a -> "cooler";
             case DrumSizing.Size d -> "drum";
@@ -278,6 +280,7 @@ public final class SizingPage {
         String text = switch (size) {
             case PumpSizing.Size p -> x.text("sizing.size.pump", SheetUnits.number(2, p.discharge()));
             case EjectorSizing.Size e -> x.text("sizing.size.ejector", SheetUnits.number(2, e.suction()));
+            case TurbineSizing.Size s -> x.text("sizing.size.turbine", SheetUnits.number(0, s.power()), s.steam().name(), SheetUnits.number(0, s.exhaust()));
             case ExchangerSizing.Size e -> x.text("sizing.size.exchanger", SheetUnits.number(2, e.shell()), e.tubes());
             case AirCoolerSizing.Size a -> x.text("sizing.size.air_cooler", a.bank().parallel(), a.bank().series(), SheetUnits.number(1, a.width()), a.length());
             case HeaterSizing.Size h -> x.text("sizing.size.heater", SheetUnits.number(1, h.diameter()), h.length());
@@ -351,6 +354,10 @@ public final class SizingPage {
         switch (size) {
             case PumpSizing.Size p -> group.add(Door.entry(KEY + "size/discharge", x.text("sizing.discharge"), "m"));
             case EjectorSizing.Size e -> group.add(Door.entry(KEY + "size/suction", x.text("sizing.suction"), "m"));
+            case TurbineSizing.Size s -> {
+                group.add(Door.entry(KEY + "size/power", x.text("sizing.power"), "kW"));
+                group.add(Door.entry(KEY + "size/exhaust", x.text("sizing.exhaust"), "kPa"));
+            }
             case ExchangerSizing.Size e -> {
                 group.add(new Column.Setting(KEY + "size/count", x.text("sizing.shells"), Integer.toString(e.shells()), "", hint, edits));
                 group.add(Door.entry(KEY + "size/shell", x.text("sizing.shell"), "m"));
@@ -457,6 +464,10 @@ public final class SizingPage {
             switch (size(x, unit, sized)) {
                 case PumpSizing.Size p -> values.put(KEY + "size/discharge", SheetUnits.number(2, p.discharge()));
                 case EjectorSizing.Size e -> values.put(KEY + "size/suction", SheetUnits.number(2, e.suction()));
+                case TurbineSizing.Size s -> {
+                    values.put(KEY + "size/power", SheetUnits.number(0, s.power()));
+                    values.put(KEY + "size/exhaust", SheetUnits.number(0, s.exhaust()));
+                }
                 case ExchangerSizing.Size e -> {
                     values.put(KEY + "size/shell", SheetUnits.number(2, e.shell()));
                     values.put(KEY + "size/tubes", Integer.toString(e.tubes()));
@@ -566,6 +577,11 @@ public final class SizingPage {
         return switch (size) {
             case PumpSizing.Size p -> field.equals("discharge") ? new PumpSizing.Size(value) : null;
             case EjectorSizing.Size e -> field.equals("suction") ? new EjectorSizing.Size(value) : null;
+            case TurbineSizing.Size s -> switch (field) {
+                case "power" -> new TurbineSizing.Size(value, s.steam(), s.exhaust());
+                case "exhaust" -> new TurbineSizing.Size(s.power(), s.steam(), value);
+                default -> null;
+            };
             case ExchangerSizing.Size e -> switch (field) {
                 case "count" -> e.withShells(whole);
                 case "shell" -> new ExchangerSizing.Size(e.kettle(), e.shells(), value, e.tubes());

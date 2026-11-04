@@ -98,9 +98,12 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
         return (int) n;
     }
 
-    /** The components a Save design names: the condenser, the counts, and the pumps the door's rows hold, standard where none. */
-    public ColumnComponents.Choices choices(ColumnComponents.Pump reflux, List<ColumnComponents.Pump> pumps) {
-        return new ColumnComponents.Choices(condenser, reflux, pumps, units).fit(pumparounds.size());
+    /**
+     * The components a Save design names: the condenser and the counts. The design names no pump kind (batch
+     * 2026-11-03-rotating-machinery, D42): every pump is standard, and the assembly takes either kind in its slot.
+     */
+    public ColumnComponents.Choices choices() {
+        return new ColumnComponents.Choices(condenser, ColumnComponents.Pump.STANDARD, List.of(), units).fit(pumparounds.size());
     }
 
     private static String id(Params row, String kind, HashSet<String> ids) {

@@ -15,6 +15,7 @@ import com.wormzjl.icheme.science.flowsheet.Wiring;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
+import com.wormzjl.icheme.science.flowsheet.unit.TurbineUnit;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import org.jetbrains.annotations.Nullable;
 
@@ -371,6 +372,7 @@ public final class SheetSizing {
                 case "drum" -> drum(id, entry);
                 case "storage_tank" -> tank(id, entry);
                 case "ejector" -> ejector(id, entry);
+                case "steam_turbine" -> turbine(id, entry, unit.params().number("exhaust", TurbineUnit.EXHAUST_PRESSURE));
                 default -> null;
             };
         }
@@ -486,6 +488,12 @@ public final class SheetSizing {
 
         static SizedUnit ejector(UnitEntry entry, EjectorSizing.Load load) {
             return sized(entry, EjectorSizing.Size.class, size -> EjectorSizing.rate(load, size), () -> EjectorSizing.auto(load));
+        }
+
+        /** A steam turbine on the shaft power its run gave, from its inlet to the tile's exhaust (Pa) (W8, D43). */
+        SizedUnit turbine(String id, UnitEntry entry, double exhaust) {
+            var load = TurbineSizing.Load.of(stream(id, "in"), readings(id).getOrDefault("power", 0.), exhaust, basis);
+            return sized(entry, TurbineSizing.Size.class, size -> TurbineSizing.rate(load, size), () -> TurbineSizing.auto(load));
         }
 
         /** What the run read on unit {@code id}, nothing where it has no report. */

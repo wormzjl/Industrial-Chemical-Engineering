@@ -92,11 +92,18 @@ final class ColumnGlass {
         return tray < 0 ? name : x.text("door.port_tray", name, tray + 1);
     }
 
-    /** The block's connection points: what each carries, read from the last run. */
-    static Door.Glass connections(SheetContext x, Flowsheet.Unit unit, ColumnDoor door) {
+    /**
+     * The block's pumps and connection points (W8, D43): the pumps' duties as one table ({@link CalculatorColumn#pumpDuties}), then what
+     * each connection point carries, read from the last run.
+     */
+    static Door.Glass connections(SheetContext x, Flowsheet.Unit unit, ColumnDoor door, List<CalculatorColumn.PumpDuty> pumps) {
         return (c, skin, box) -> {
             var u = x.units();
-            int x0 = box.x() + 4, y = box.y() + 4;
+            // The glass does not scroll: on a short door what passes its foot is cut there, not drawn over the footer.
+            c.clip(box);
+            var duties = CalculatorColumn.pumpDuties(pumps, box.w(), c.measure(), x.t());
+            CalculatorColumn.draw(c, duties, box, 0);
+            int x0 = box.x() + 4, y = box.y() + duties.height() + CalculatorColumn.PITCH;
             String[] head = {x.text("door.connection"), x.text("door.stream"), x.text("door.temperature"), x.text("door.heat")};
             int[] at = {0, 124, 200, 280};
             for (int i = 0; i < head.length; i++) c.text(head[i], x0 + at[i], y, Palette.MUTED);
@@ -118,6 +125,7 @@ final class ColumnGlass {
                 r++;
                 y += 14;
             }
+            c.unclip();
         };
     }
 

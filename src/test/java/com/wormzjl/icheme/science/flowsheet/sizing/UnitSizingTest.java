@@ -56,6 +56,22 @@ final class UnitSizingTest {
         assertEquals(1.7, PumpSizing.requiredNpsh(36), .05, "the default in-line pump, 0.01 m³/s at 2950 rpm");
     }
 
+    /** W8 (batch 2026-11-03-rotating-machinery, D43): the duty a column's door reads, the plan's worked example: 100 m³/h of water at 80 m. */
+    @Test void aPumpsRatingCarriesItsDuty() {
+        var load = new PumpSizing.Load(100, 80, 204.5, null, 1000);
+        var duty = PumpSizing.Duty.of(PumpSizing.rate(load, new PumpSizing.Size(.1)));
+        assertNotNull(duty);
+        assertEquals(100, duty.flow(), 0);
+        assertEquals(80, duty.head(), 0);
+        assertEquals(31.1e3, duty.shaft(), .1e3, "21.8 kW hydraulic at Corripio's 0.70");
+        assertEquals(3.3, duty.npsh(), 1e-9);
+        assertEquals(45e3, duty.motor(), 0, "1.2 × 31.1 kW = 37.4 kW: the next standard motor is 45 kW");
+        var dry = PumpSizing.Duty.of(PumpSizing.rate(PUMP, new PumpSizing.Size(.3)));
+        assertNotNull(dry);
+        assertTrue(Double.isNaN(dry.shaft()) && Double.isNaN(dry.motor()), "no density, no shaft power");
+        assertNull(PumpSizing.Duty.of(Rating.NONE));
+    }
+
     @Test void aPumpWithNoHeightReadsNoNpshAtAll() {
         var rating = PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, null), new PumpSizing.Size(.3));
         assertNull(rating.reading(Limit.PUMP_NPSH));

@@ -6,7 +6,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Every kind of equipment declares its sizing (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} work package S5): the size class
  * that sizes it and gives Send to block its shape, or why it has none. The switch has no default, so a new kind fails the compile here, as it
- * does in {@code FlowsheetCatalog}. The ejector joined with main plan W10. {@code SizingCoverageTest} holds a kind the simulator runs to a size class, and each class to the kinds
+ * does in {@code FlowsheetCatalog}. The ejector joined with main plan W10, the steam turbine with W8 of batch 2026-11-03-rotating-machinery (D43). {@code SizingCoverageTest} holds a kind the simulator runs to a size class, and each class to the kinds
  * its shapes build.
  */
 public final class SizingCoverage {
@@ -49,7 +49,8 @@ public final class SizingCoverage {
             case COMPRESSOR, CENTRIFUGAL_COMPRESSOR -> sized(CompressorSizing.Size.class);
             case VERTICAL_HEATER, CABIN_HEATER -> sized(HeaterSizing.Size.class);
             case EJECTOR -> sized(EjectorSizing.Size.class);
-            case STIRRED_REACTOR, ADSORBER, TRICKLE_BED_REACTOR, EBULLATED_BED_REACTOR, STEAM_TURBINE, MOTOR, GENERATOR, GEARBOX, CYCLONE, FCC_CONVERTER, DELAYED_COKER,
+            case STEAM_TURBINE -> sized(TurbineSizing.Size.class);
+            case STIRRED_REACTOR, ADSORBER, TRICKLE_BED_REACTOR, EBULLATED_BED_REACTOR, MOTOR, GENERATOR, GEARBOX, CYCLONE, FCC_CONVERTER, DELAYED_COKER,
                  FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER, INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> none(NO_MODEL);
         };
     }

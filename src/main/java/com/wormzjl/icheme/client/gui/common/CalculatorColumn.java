@@ -10,7 +10,6 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser;
-import com.wormzjl.icheme.science.equipment.ColumnComponents.Pump;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -404,18 +403,15 @@ public final class CalculatorColumn {
     }
 
     /**
-     * What the Equipment page reads: the draft conflict; the condenser, the reflux pump and each pumparound's pump chosen;
-     * whether the design saves; how many units stand in parallel on each heat-transfer step (S3b), and whether the design
-     * has a kettle, whose count shows only then.
+     * What the Equipment page reads: the draft conflict; the condenser chosen; how many pumparounds the design has; whether
+     * the design saves; how many units stand in parallel on each heat-transfer step (S3b), and whether the design has a
+     * kettle, whose count shows only then. The design names no pump kind (batch 2026-11-03-rotating-machinery, D42): its
+     * pumps' duties stand on the glass ({@link #pumpDuties}).
      */
-    public record EquipmentInput(boolean conflict, Condenser condenser, Pump reflux, List<Pump> pumparounds, boolean saves, ColumnComponents.Units units, boolean kettle) {
-        public EquipmentInput {
-            pumparounds = List.copyOf(pumparounds);
-        }
-
+    public record EquipmentInput(boolean conflict, Condenser condenser, int pumparounds, boolean saves, ColumnComponents.Units units, boolean kettle) {
         /** One unit on every step and no kettle: the page before the counts. */
-        public EquipmentInput(boolean conflict, Condenser condenser, Pump reflux, List<Pump> pumparounds, boolean saves) {
-            this(conflict, condenser, reflux, pumparounds, saves, ColumnComponents.Units.ONE, false);
+        public EquipmentInput(boolean conflict, Condenser condenser, int pumparounds, boolean saves) {
+            this(conflict, condenser, pumparounds, saves, ColumnComponents.Units.ONE, false);
         }
     }
 
@@ -424,18 +420,13 @@ public final class CalculatorColumn {
         return new Column.Setting("units/" + key, t.get(KEY + label), Integer.toString(count), "", t.get(KEY + "units.hint"), true);
     }
 
-    private static Column.Buttons pumps(String key, Pump chosen, HeatControlColumn.Texts t) {
-        return new Column.Buttons(List.of(position(key + ":standard", t.get(KEY + "pump.standard"), chosen == Pump.STANDARD, true, null),
-                position(key + ":in_line", t.get(KEY + "pump.in_line"), chosen == Pump.IN_LINE, true, null)));
-    }
-
     /**
      * The Equipment page: Condenser (air cooler, exchanger, or air then water, and its banks or shells; the water trim's
-     * shells after an air cooler), Reflux pump, the Kettle's shells where the design has one, and each pumparound's pump
-     * (standard, in-line) and cooler shells; latched selectors in place of the cycle buttons, counts stepped; Design (Save
-     * design). The derived components and the design's state stand on the glass. Buttons {@code condenser:air_cooler},
-     * {@code condenser:exchanger}, {@code condenser:air_then_water}, {@code reflux:<pump>}, {@code pa<i>:<pump>},
-     * {@code save_design}; settings {@code units/condenser}, {@code units/trim}, {@code units/kettle}, {@code units/pa<i>}.
+     * shells after an air cooler), the Kettle's shells where the design has one, and each pumparound's cooler shells;
+     * latched selectors in place of the cycle buttons, counts stepped; Design (Save design). The pumps' duties and the
+     * design's state stand on the glass. Buttons {@code condenser:air_cooler}, {@code condenser:exchanger},
+     * {@code condenser:air_then_water}, {@code save_design}; settings {@code units/condenser}, {@code units/trim},
+     * {@code units/kettle}, {@code units/pa<i>}.
      */
     public static Rows equipment(EquipmentInput in, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
@@ -449,13 +440,61 @@ public final class CalculatorColumn {
         condenser.add(units("condenser", in.condenser() == Condenser.EXCHANGER ? "units.shells" : "units.banks", in.units().condenser(), t));
         if (in.condenser() == Condenser.AIR_THEN_WATER) condenser.add(units("trim", "units.trim_shells", in.units().trim(), t));
         rows.add(new Column.Group(t.get(KEY + "component_condenser"), t.get(KEY + "condenser.hint"), condenser));
-        rows.add(new Column.Group(t.get(KEY + "component_reflux_pump"), t.get(KEY + "pump.hint"), List.of(pumps("reflux", in.reflux(), t))));
         if (in.kettle()) rows.add(new Column.Group(t.get(KEY + "component_kettle"), t.get(KEY + "units.hint"), List.of(units("kettle", "units.shells", in.units().kettle(), t))));
-        for (int i = 0; i < in.pumparounds().size(); i++)
-            rows.add(new Column.Group(t.get(KEY + "component_pa", i + 1), t.get(KEY + "component_pa.hint"), List.of(pumps("pa" + i, in.pumparounds().get(i), t),
-                    units("pa" + i, "units.cooler_shells", in.units().cooler(i), t))));
+        for (int i = 0; i < in.pumparounds(); i++)
+            rows.add(new Column.Group(t.get(KEY + "component_pa", i + 1), t.get(KEY + "component_pa.hint"), List.of(units("pa" + i, "units.cooler_shells", in.units().cooler(i), t))));
         rows.add(group("design", t, new Column.Buttons(List.of(button("save_design", "save_design", in.saves(), t, "save_design")))));
         return new Rows(List.of(), rows);
+    }
+
+    /**
+     * One pump of the design on the Equipment page's glass (batch 2026-11-03-rotating-machinery, W8, D43), as the sheet's
+     * sizing gives it at design flow: its name; flow, m³/h; head, m; shaft power, W; NPSH3, m; the proposed motor, W. NaN
+     * where the sizing has no number yet.
+     */
+    public record PumpDuty(String name, double flow, double head, double shaft, double npsh, double motor) {
+        /** A pump the sizing has not rated yet. */
+        public static PumpDuty unknown(String name) {
+            return new PumpDuty(name, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN);
+        }
+    }
+
+    /** What a number not known yet shows. */
+    public static final String NONE = "—";
+
+    /**
+     * The pumps' duties as one table {@code width} wide (D43): Pump, Flow m³/h, Head m, Shaft kW, NPSH3 m, Motor kW, the
+     * quantity over its unit; a row a pump, every second one on a band. Where the glass is too narrow for the numbers side
+     * by side, each pump is its name over a readout a quantity, on one band. Where no pump has a duty yet, its numbers read
+     * {@link #NONE} and a note under the table says when they come.
+     */
+    public static Sheet pumpDuties(List<PumpDuty> pumps, int width, Measure m, HeatControlColumn.Texts t) {
+        var header = List.of(t.get(KEY + "duty.pump"), t.get(KEY + "duty.flow"), t.get(KEY + "duty.head"), t.get(KEY + "duty.shaft"), t.get(KEY + "duty.npsh"),
+                t.get(KEY + "duty.motor"));
+        var units = List.of("", "m³/h", "m", "kW", "m", "kW");
+        var rows = new ArrayList<List<String>>();
+        boolean known = false;
+        for (var p : pumps) {
+            known |= !Double.isNaN(p.flow());
+            rows.add(List.of(p.name(), fixed(0, p.flow()), fixed(1, p.head()), fixed(1, p.shaft() / 1e3), fixed(1, p.npsh()), fixed(0, p.motor() / 1e3)));
+        }
+        var sheet = new SheetBuilder(width, m);
+        var numbers = new ArrayList<List<String>>(rows);
+        numbers.add(units);
+        if (SheetBuilder.fits(header, numbers, width, m))
+            sheet.table(header, units, rows);
+        else
+            for (var r : rows) {
+                var pairs = new ArrayList<List<String>>();
+                for (int i = 1; i < r.size(); i++) pairs.add(List.of(header.get(i), units.get(i).isEmpty() ? r.get(i) : r.get(i) + " " + units.get(i)));
+                sheet.entry(r.getFirst(), pairs);
+            }
+        if (!known) sheet.blank().note(t.get(KEY + "duty.none"), Palette.MUTED);
+        return sheet.build();
+    }
+
+    private static String fixed(int digits, double value) {
+        return Double.isNaN(value) ? NONE : String.format(Locale.ROOT, "%." + digits + "f", value);
     }
 
     /**
@@ -774,9 +813,9 @@ public final class CalculatorColumn {
 
     // ---- Readouts and tables on the glass ----
 
-    /** A line's kind on the glass: a note (one cell at the left), a readout (its label at the left, its value at the right), a table's header or row, a blank line. */
+    /** A line's kind on the glass: a note (one cell at the left), a readout (its label at the left, its value at the right), a table's header, the units under its header where it has them, or a row; a blank line. */
     public enum Kind {
-        NOTE, PAIR, HEADER, ROW, BLANK
+        NOTE, PAIR, HEADER, UNITS, ROW, BLANK
     }
 
     /** A line on the glass: its kind, its cells, a note's tone, and the entry it belongs to (-1 for a header or a blank line), so a wrapped entry shares its band. */
@@ -831,6 +870,20 @@ public final class CalculatorColumn {
             return this;
         }
 
+        /** One entry on one band: {@code title} (wrapped), then a readout a pair of label and value, each as {@link #pair} lays it. */
+        public SheetBuilder entry(String title, List<List<String>> pairs) {
+            for (var line : m.wrap(title, width - 6)) lines.add(new Line(Kind.NOTE, List.of(line), Palette.TEXT, entry));
+            for (var p : pairs) {
+                if (m.width(p.get(0)) + 8 + m.width(p.get(1)) <= width - 6) lines.add(new Line(Kind.PAIR, p, Palette.TEXT, entry));
+                else {
+                    for (var line : m.wrap(p.get(0), width - 6)) lines.add(new Line(Kind.NOTE, List.of(line), Palette.MUTED, entry));
+                    for (var line : m.wrap(p.get(1), width - 6)) lines.add(new Line(Kind.NOTE, List.of(line), Palette.ACCENT, entry));
+                }
+            }
+            entry++;
+            return this;
+        }
+
         public SheetBuilder blank() {
             if (!lines.isEmpty()) lines.add(new Line(Kind.BLANK, List.of(""), Palette.TEXT, -1));
             return this;
@@ -838,11 +891,20 @@ public final class CalculatorColumn {
 
         /** The table: its header, then a row a name; the first cell a name, the others numbers. One table a sheet. */
         public SheetBuilder table(List<String> header, List<List<String>> rows) {
+            return table(header, null, rows);
+        }
+
+        /**
+         * The table with a second header line, {@code units} under the quantities (the first cell blank), ruled under it
+         * instead of under the first. One table a sheet.
+         */
+        public SheetBuilder table(List<String> header, @Nullable List<String> units, List<List<String>> rows) {
             int n = header.size();
             int[] w = new int[n];
             int numbers = 0;
             for (int i = 1; i < n; i++) {
                 int most = m.width(header.get(i));
+                if (units != null) most = Math.max(most, m.width(units.get(i)));
                 for (var r : rows) most = Math.max(most, m.width(r.get(i)));
                 w[i] = most + 8;
                 numbers += w[i];
@@ -852,6 +914,7 @@ public final class CalculatorColumn {
             w[0] = stacked ? width - 6 : name;
             widths = w;
             lines.add(new Line(Kind.HEADER, header, Palette.MUTED, -1));
+            if (units != null) lines.add(new Line(Kind.UNITS, units, Palette.MUTED, -1));
             var blank = new ArrayList<String>();
             for (int i = 1; i < n; i++) blank.add("");
             for (var r : rows) {
@@ -897,7 +960,8 @@ public final class CalculatorColumn {
     public static void draw(Canvas c, Sheet sheet, Rect box, int offset) {
         var m = c.measure();
         int y = box.y() + 2 - offset, right = box.right() - 3;
-        for (var line : sheet.lines()) {
+        for (int at = 0; at < sheet.lines().size(); at++) {
+            var line = sheet.lines().get(at);
             if (y + PITCH > box.y() && y < box.bottom()) {
                 if (line.entry() % 2 == 1) c.fill(box.x(), y - 1, box.right(), y + PITCH - 1, DialogColumns.BAND);
                 var cells = line.cells();
@@ -907,15 +971,15 @@ public final class CalculatorColumn {
                         c.text(cells.get(0), box.x() + 3, y, Palette.MUTED);
                         c.text(cells.get(1), right - m.width(cells.get(1)), y, Palette.ACCENT);
                     }
-                    case HEADER, ROW -> {
-                        boolean header = line.kind() == Kind.HEADER;
+                    case HEADER, UNITS, ROW -> {
+                        boolean header = line.kind() != Kind.ROW, ruled = header && (at + 1 == sheet.lines().size() || sheet.lines().get(at + 1).kind() != Kind.UNITS);
                         c.text(cells.getFirst(), box.x() + 3, y, header ? Palette.MUTED : Palette.TEXT);
                         int end = right;
                         for (int i = cells.size() - 1; i >= 1; i--) {
                             c.text(cells.get(i), end - m.width(cells.get(i)), y, header ? Palette.MUTED : Palette.ACCENT);
                             end -= sheet.widths()[i];
                         }
-                        if (header) c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
+                        if (ruled) c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
                     }
                     case BLANK -> {
                     }

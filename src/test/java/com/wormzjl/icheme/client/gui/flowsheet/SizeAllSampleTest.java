@@ -170,7 +170,7 @@ class SizeAllSampleTest {
     void theCondensersFiveShellsReachTheDoor() {
         var door = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(all.sheet().units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params());
         assertEquals(new com.wormzjl.icheme.science.equipment.ColumnComponents.Units(5, 1, List.of(1, 1, 1)), door.units());
-        var choices = door.choices(com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.STANDARD, List.of());
+        var choices = door.choices();
         assertEquals(5, choices.units().condenser(), "a design the calculator and the assembly take");
         assertEquals(1, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(sheet.units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params()).units().condenser(),
                 "the sheet it was given keeps its door");

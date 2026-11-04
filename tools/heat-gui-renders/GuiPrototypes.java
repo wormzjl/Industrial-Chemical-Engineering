@@ -200,6 +200,11 @@ public final class GuiPrototypes {
                     if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), false);
                     else d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
                 }
+            else if (p.row() instanceof Column.Setting st && st.steps())
+                for (var spec : List.of(st.minus(), st.plus())) {
+                    var r = p.slots().get(spec.key());
+                    if (view.visible(r)) d.skin.button(d.c, view.onScreen(r), spec.text(), Skin.Press.REST, false);
+                }
         }
         d.c.unclip();
         view.drawBar(d.c, d.skin);
@@ -397,14 +402,10 @@ public final class GuiPrototypes {
                 // C1 (COOLER_MODEL_PLAN.md section 6): the condenser's third choice, air then water, with its banks and its trim's shells.
                 new Prototype("column-calculator-air-then-water", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE), true),
                 new Prototype("column-calculator-air-then-water-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE), true),
-                // W8 (rotating machinery, D42 (a)): each pump's duty readings in place of its Standard / In-line keys. A prototype; the door is unchanged.
-                new Prototype("column-equipment-pump-duty", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, pumpDutyRows()), true),
-                new Prototype("column-equipment-pump-duty-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, pumpDutyRows()), true),
-                // The same column from its reflux pump on (its condenser group left out), so the pump groups show opened and scrolled.
-                new Prototype("column-equipment-pump-duty-pumps", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, pumpsOnly()), true),
-                // W8 option B: the pump keys go; the duties stand as one table on the glass, the door keeps its steppers (-Donly=pump-duty-table).
-                new Prototype("pump-duty-table", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, stepperRows(), GuiPrototypes::dutyTable), true),
-                new Prototype("pump-duty-table-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, stepperRows(), GuiPrototypes::dutyTable), true));
+                // W8 (rotating machinery, D43, option B as built): the pump keys gone, the pumps' duties as one table on the glass, rated and before a rating.
+                new Prototype("pump-duty-table", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, twoPumparounds(), GuiPrototypes::dutyTable), true),
+                new Prototype("pump-duty-table-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, twoPumparounds(), GuiPrototypes::dutyTable), true),
+                new Prototype("pump-duty-table-unrated", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, twoPumparounds(), GuiPrototypes::unratedTable)));
     }
 
     /** The draft's entries as the door shows them. */
@@ -440,136 +441,40 @@ public final class GuiPrototypes {
         calculatorDoor(d, page, metric, null);
     }
 
-    /** One pump's duty as the door would read it: suction volume flow (m³/h), head (m) and liquid density (kg/m³). */
-    record PumpDuty(double flow, double head, double density) {
+    /** The shipped Equipment page of a crude column with two pumparounds, an air-then-water condenser and a kettle. */
+    static CalculatorColumn.Rows twoPumparounds() {
+        return CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, 2, true, new ColumnComponents.Units(2, 1, List.of(1, 2), 3), true), DIALOG);
     }
 
     /**
-     * W8 prototype (batch 2026-11-03-rotating-machinery, D42 (a)): the shipped Equipment page of a crude column with two
-     * pumparounds, each pump's Standard / In-line keys replaced by its duty: flow, head, shaft power, NPSH required and the
-     * proposed motor, from the W1 laws at sample duties (reflux 60 m³/h, 55 m of naphtha; PA 1 250 m³/h, 45 m of kerosene;
-     * PA 2 350 m³/h, 50 m of gas oil). The game would take them from the sheet's block sizing ({@code BlockSizing}, members
-     * {@code reflux pump} and {@code pa <id> pump}).
-     */
-    static CalculatorColumn.Rows pumpDutyRows() {
-        var t = DIALOG;
-        var shipped = CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD,
-                List.of(ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD), true, new ColumnComponents.Units(2, 1, List.of(1, 2), 3), true), t);
-        var duties = Map.of("reflux", new PumpDuty(60, 55, 700), "pa0", new PumpDuty(250, 45, 760), "pa1", new PumpDuty(350, 50, 820));
-        var rows = new ArrayList<Column.Row>();
-        for (var row : shipped.right()) {
-            if (!(row instanceof Column.Group group)) {
-                rows.add(row);
-                continue;
-            }
-            var inside = new ArrayList<Column.Row>();
-            for (var r : group.rows()) {
-                String pump = r instanceof Column.Buttons b && !b.buttons().isEmpty() && b.buttons().getFirst().key().endsWith(":standard") ? b.buttons().getFirst().key().split(":")[0] : null;
-                if (pump == null || !duties.containsKey(pump)) inside.add(r);
-                else inside.addAll(dutyMeters(pump, duties.get(pump), t));
-            }
-            rows.add(new Column.Group(group.title(), group.hint(), inside));
-        }
-        return new CalculatorColumn.Rows(shipped.left(), rows);
-    }
-
-    /** W8 option B's door: the shipped Equipment page with the pump keys gone; a group left empty by them (the reflux pump's) goes too. */
-    static CalculatorColumn.Rows stepperRows() {
-        var shipped = CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD,
-                List.of(ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD), true, new ColumnComponents.Units(2, 1, List.of(1, 2), 3), true), DIALOG);
-        var rows = new ArrayList<Column.Row>();
-        for (var row : shipped.right()) {
-            if (!(row instanceof Column.Group group)) {
-                rows.add(row);
-                continue;
-            }
-            var inside = new ArrayList<Column.Row>();
-            for (var r : group.rows())
-                if (!(r instanceof Column.Buttons b && !b.buttons().isEmpty() && b.buttons().getFirst().key().endsWith(":standard"))) inside.add(r);
-            if (!inside.isEmpty()) rows.add(new Column.Group(group.title(), group.hint(), inside));
-        }
-        return new CalculatorColumn.Rows(shipped.left(), rows);
-    }
-
-    /**
-     * W8 option B's glass: the pumps' duties as one table, a pump a row (the sample duties of {@link #pumpDutyRows}). Two header
-     * lines, the quantity over its unit, ruled under; every second pump on a band; the name left, the numbers right-aligned. A name
-     * wraps in its column; where one of its words is wider than the column, the table stacks: each name across the glass, its
-     * numbers on the line under it.
+     * W8 (batch 2026-11-03-rotating-machinery, D43): the pumps' duties on the glass through the shipped builder
+     * ({@link CalculatorColumn#pumpDuties}), at sample duties: reflux 60 m³/h and 55 m of naphtha (700 kg/m³); PA 1 250 m³/h and 45 m of
+     * kerosene (760); PA 2 350 m³/h and 50 m of gas oil (820), each through {@link com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing#duty}.
      */
     static void dutyTable(Door d, Rect box) {
         var t = DIALOG;
-        var m = d.m;
-        var names = List.of(t.get("column.component_reflux_pump"), t.get("column.component_pa", 1), t.get("column.component_pa", 2));
-        var duties = List.of(new PumpDuty(60, 55, 700), new PumpDuty(250, 45, 760), new PumpDuty(350, 50, 820));
-        String[] heads = {t.get("column.duty.table.pump"), t.get("column.duty.flow"), t.get("column.duty.head"), t.get("column.duty.table.shaft"), t.get("column.duty.table.npsh"),
-                t.get("column.duty.motor")};
-        String[] units = {"", "m³/h", "m", "kW", "m", "kW"};
-        var rows = new ArrayList<String[]>();
-        for (var duty : duties) {
-            double q = duty.flow() / 3600, shaft = duty.density() * 9.80665 * q * duty.head() / com.wormzjl.icheme.science.machine.CentrifugalPump.rated(q, duty.head()).efficiency();
-            rows.add(new String[]{String.format(java.util.Locale.ROOT, "%.0f", duty.flow()), String.format(java.util.Locale.ROOT, "%.1f", duty.head()),
-                    String.format(java.util.Locale.ROOT, "%.1f", shaft / 1e3), String.format(java.util.Locale.ROOT, "%.1f", com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.requiredNpsh(duty.flow())),
-                    String.format(java.util.Locale.ROOT, "%.0f", com.wormzjl.icheme.science.machine.Motor.ratingFor(shaft) / 1e3)});
-        }
-        int[] w = new int[heads.length];
-        int numbers = 0;
-        for (int i = 1; i < heads.length; i++) {
-            int most = Math.max(m.width(heads[i]), m.width(units[i]));
-            for (var r : rows) most = Math.max(most, m.width(r[i - 1]));
-            w[i] = most + 8;
-            numbers += w[i];
-        }
-        int name = box.w() - 6 - numbers;
-        boolean stacked = name < m.width(heads[0]) || names.stream().flatMap(n -> java.util.Arrays.stream(n.split(" "))).anyMatch(word -> m.width(word) > name);
-        int pitch = CalculatorColumn.PITCH, right = box.right() - 3, y = box.y() + 2;
-        var c = d.c;
-        for (int line = 0; line < 2; line++, y += pitch) {
-            String[] cells = line == 0 ? heads : units;
-            if (line == 0 || !stacked) c.text(cells[0], box.x() + 3, y, Palette.MUTED);
-            int end = right;
-            for (int i = cells.length - 1; i >= 1; i--) {
-                c.text(cells[i], end - m.width(cells[i]), y, Palette.MUTED);
-                end -= w[i];
-            }
-        }
-        c.hLine(box.x() + 2, box.right() - 2, y - 2, Palette.LINE);
-        for (int r = 0; r < rows.size(); r++) {
-            var wrapped = m.wrap(names.get(r), stacked ? box.w() - 6 : name);
-            int lines = wrapped.size() + (stacked ? 1 : 0);
-            if (r % 2 == 1) c.fill(box.x(), y - 1, box.right(), y + lines * pitch - 1, DialogColumns.BAND);
-            for (int j = 0; j < wrapped.size(); j++) c.text(wrapped.get(j), box.x() + 3, y + j * pitch, Palette.TEXT);
-            int numbersY = stacked ? y + wrapped.size() * pitch : y, end = right;
-            for (int i = heads.length - 1; i >= 1; i--) {
-                String cell = rows.get(r)[i - 1];
-                c.text(cell, end - m.width(cell), numbersY, Palette.ACCENT);
-                end -= w[i];
-            }
-            y += lines * pitch;
-        }
+        var pumps = List.of(sampleDuty(t.get("column.component_reflux_pump"), 60, 55, 700), sampleDuty(t.get("column.component_pa", 1), 250, 45, 760),
+                sampleDuty(t.get("column.component_pa", 2), 350, 50, 820));
+        drawDuties(d, box, pumps, "pump duty table");
+    }
+
+    /** The same table before the sheet has a rating: each number a dash, and the note under it. */
+    static void unratedTable(Door d, Rect box) {
+        var t = DIALOG;
+        drawDuties(d, box, List.of(CalculatorColumn.PumpDuty.unknown(t.get("column.component_reflux_pump")), CalculatorColumn.PumpDuty.unknown(t.get("column.component_pa", 1)),
+                CalculatorColumn.PumpDuty.unknown(t.get("column.component_pa", 2))), "pump duty table, unrated");
+    }
+
+    static void drawDuties(Door d, Rect box, List<CalculatorColumn.PumpDuty> pumps, String what) {
+        var sheet = CalculatorColumn.pumpDuties(pumps, box.w(), d.m, DIALOG);
+        CalculatorColumn.draw(d.c, sheet, box, 0);
         if (d.skin == PanelSkin.LIGHT && !d.end)
-            System.out.printf(java.util.Locale.ROOT, "%-24s glass %d by %d: table %d px tall, name column %d px, numbers %d px, %s%n", "pump duty table", box.w(), box.h(),
-                    y - box.y(), stacked ? box.w() - 6 : name, numbers, stacked ? "stacked" : "side by side");
+            System.out.printf(java.util.Locale.ROOT, "%-28s glass %d by %d: table %d px tall, %d lines%n", what, box.w(), box.h(), sheet.height(), sheet.lines().size());
     }
 
-    /** {@link #pumpDutyRows} from the reflux pump on: the door scrolled past its condenser group. */
-    static CalculatorColumn.Rows pumpsOnly() {
-        var all = pumpDutyRows();
-        return new CalculatorColumn.Rows(all.left(), all.right().subList(1, all.right().size()));
-    }
-
-    /** A pump's five duty meters, by the W1 laws: Corripio's efficiency at its flow, its NPSH3 at the world's duty design, a 2-pole motor with 20 % spare. */
-    static List<Column.Row> dutyMeters(String pump, PumpDuty duty, HeatControlColumn.Texts t) {
-        double q = duty.flow() / 3600, hydraulic = duty.density() * 9.80665 * q * duty.head();
-        double shaft = hydraulic / com.wormzjl.icheme.science.machine.CentrifugalPump.rated(q, duty.head()).efficiency();
-        double npsh = com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.requiredNpsh(duty.flow());
-        double motor = com.wormzjl.icheme.science.machine.Motor.ratingFor(shaft);
-        java.util.function.Function<Double, String> one = v -> String.format(java.util.Locale.ROOT, "%.1f", v);
-        return List.of(new Column.Reading(pump + "/flow", t.get("column.duty.flow"), String.format(java.util.Locale.ROOT, "%.0f", duty.flow()), "m³/h", t.get("column.duty.flow.hint")),
-                new Column.Reading(pump + "/head", t.get("column.duty.head"), one.apply(duty.head()), "m", t.get("column.duty.head.hint")),
-                new Column.Reading(pump + "/shaft", t.get("column.duty.shaft"), one.apply(shaft / 1e3), "kW", t.get("column.duty.shaft.hint")),
-                new Column.Reading(pump + "/npsh", t.get("column.duty.npsh"), one.apply(npsh), "m", t.get("column.duty.npsh.hint")),
-                new Column.Reading(pump + "/motor", t.get("column.duty.motor"), one.apply(motor / 1e3), "kW", t.get("column.duty.motor.hint")));
+    static CalculatorColumn.PumpDuty sampleDuty(String name, double flow, double head, double density) {
+        var duty = com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.duty(new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Load(flow, head, 0, null, density));
+        return new CalculatorColumn.PumpDuty(name, duty.flow(), duty.head(), duty.shaft(), duty.npsh(), duty.motor());
     }
 
     static void calculatorDoor(Door d, CalculatorColumn.Page page, CalculatorColumn.Metric metric, CalculatorColumn.Rows override) {
@@ -592,8 +497,7 @@ public final class GuiPrototypes {
         var rows = override != null ? override : page == CalculatorColumn.Page.COLUMN
                 ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", "bar", "kmol/h", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
                 : page == CalculatorColumn.Page.EQUIPMENT
-                ? CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD,
-                        List.of(ColumnComponents.Pump.STANDARD), true, new ColumnComponents.Units(2, 1, List.of(1), 3), true), t)
+                ? CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, 1, true, new ColumnComponents.Units(2, 1, List.of(1), 3), true), t)
                 : CalculatorColumn.results(new CalculatorColumn.ResultsInput(false, CalculatorColumn.View.PROFILES, metric, List.of(), 0, 13, 20), t);
         boolean two = rows.two();
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - CalculatorColumn.DIVIDER);

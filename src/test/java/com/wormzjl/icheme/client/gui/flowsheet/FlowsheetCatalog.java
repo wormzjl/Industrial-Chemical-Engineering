@@ -23,7 +23,7 @@ public final class FlowsheetCatalog {
 
     private static final Entry COLUMN = modelled("column"), DRUM = modelled("drum"), TANK = modelled("storage_tank"), EXCHANGER = modelled("exchanger"), KETTLE = modelled("kettle"),
             AIR_COOLER = modelled("cooler"), HEATER = modelled("fired_heater"), PUMP = modelled("pump"), COMPRESSOR = modelled("compressor"), COOLING_TOWER = drawn("cooling_tower"),
-            EJECTOR = modelled("ejector"), TURBINE = modelled("steam_turbine"), ADSORBER = drawn("adsorber"), CYCLONE = drawn("cyclone"), STIRRED = drawn("stirred_reactor"),
+            EJECTOR = modelled("ejector"), TURBINE = modelled("steam_turbine"), DRIVER = drawn("steam_turbine"), ADSORBER = drawn("adsorber"), CYCLONE = drawn("cyclone"), STIRRED = drawn("stirred_reactor"),
             TRICKLE = drawn("trickle_bed"), EBULLATED = drawn("ebullated_bed"), FCC = drawn("fcc_converter"), COKER = drawn("delayed_coker"), CFB = drawn("cfb_boiler"),
             FLUID_BED = drawn("fluid_bed_gasifier"), GRATE = drawn("grate_boiler"), FIXED_BED = drawn("fixed_bed_gasifier");
 
@@ -56,8 +56,8 @@ public final class FlowsheetCatalog {
             case EBULLATED_BED_REACTOR -> EBULLATED;
             case STEAM_TURBINE -> TURBINE;
             // The drivers and the gearbox (batch 2026-11-03-rotating-machinery) pass shaft power, no stream: until the simulator has a tile
-            // of their own, they stand on the steam turbine's unlit one.
-            case MOTOR, GENERATOR, GEARBOX -> TURBINE;
+            // of their own, they stand on the steam turbine's tile, drawn only: they are not run (W8, D43).
+            case MOTOR, GENERATOR, GEARBOX -> DRIVER;
             case CYCLONE -> CYCLONE;
             case FCC_CONVERTER -> FCC;
             case DELAYED_COKER -> COKER;
@@ -86,8 +86,8 @@ public final class FlowsheetCatalog {
             case EJECTOR -> EJECTOR;
             case STEAM_TURBINE -> TURBINE;
             // The drivers and the gearbox (batch 2026-11-03-rotating-machinery) pass shaft power, no stream: until the simulator has a tile
-            // of their own, they stand on the steam turbine's unlit one.
-            case MOTOR, GENERATOR, GEARBOX -> TURBINE;
+            // of their own, they stand on the steam turbine's tile, drawn only: they are not run (W8, D43).
+            case MOTOR, GENERATOR, GEARBOX -> DRIVER;
             case STIRRED_REACTOR -> STIRRED;
             case TRICKLE_BED_REACTOR -> TRICKLE;
             case EBULLATED_BED_REACTOR -> EBULLATED;

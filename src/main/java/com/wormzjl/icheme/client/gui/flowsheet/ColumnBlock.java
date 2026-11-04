@@ -235,7 +235,7 @@ public final class ColumnBlock {
 
     private ColumnBlock(Flowsheet.Unit unit, ColumnDoor door, Set<String> reversed) {
         this.reversed = Set.copyOf(reversed);
-        var choices = ColumnDoors.choices(unit);
+        var choices = ColumnDoors.built(unit);
         boolean kettle = ColumnComponents.kettleRequired(door.reboilerDuty()), air = door.condenser() == ColumnComponents.Condenser.AIR_COOLER, trimmed = door.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER, ejector = ColumnComponents.ejectorRequired(door.topPressure());
         var runs = runs(door);
         var draws = new ArrayList<>(door.draws());

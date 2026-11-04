@@ -1198,7 +1198,7 @@ public final class SimulatorPrototypes {
         }
         d.skin.status(d.c, CalculatorColumn.display(d.w), drawing ? "Solved: 3 draws, 3 pumparounds, 1 steam feed." : equipment ? "17 connection points, all connected." : "Solved. Drop 21.5 kPa, flooding at most 64.8 % at tray 33.", Palette.ACCENT);
         var rows = drawing ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", "bar", "kmol/h", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
-                : equipment ? CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD), true), t)
+                : equipment ? CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.EXCHANGER, 3, true), t)
                 : CalculatorColumn.results(new CalculatorColumn.ResultsInput(false, CalculatorColumn.View.PROFILES, CalculatorColumn.Metric.TEMPERATURE, List.of(), 0, 10, 40), t);
         boolean two = rows.two();
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - CalculatorColumn.DIVIDER);
