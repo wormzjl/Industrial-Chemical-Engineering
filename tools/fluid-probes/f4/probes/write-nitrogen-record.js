@@ -1,5 +1,5 @@
 // F4: writes the cryogenic nitrogen property record (src/main/resources/.../properties/nitrogen.json) from the NIST
-// data in ../nist/ and the fits in fit-nitrogen-cp-low.js / build-nitrogen-viscosity-tables.js. Run from the worktree root.
+// data in D:/Minecraft/Modding/1.21/CreateChemE/research/2026-09-23-fluid-followups/f4-nist/ and the fits in fit-nitrogen-cp-low.js / build-nitrogen-viscosity-tables.js. Run from the worktree root.
 // Run once, against the r1 record of e837ada (git show e837ada:src/main/resources/data/createcheme/materials/properties/nitrogen.json):
 // it appends the new vapour nodes to the existing table, so a second run on the r2 record would duplicate them.
 const fs=require('fs'),cp=require('child_process');
