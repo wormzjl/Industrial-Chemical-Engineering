@@ -1,7 +1,7 @@
 # W2 forms review: the set-flow movers' law (F1 or F2b) and the machines on their curves
 
-Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04. Branch `claude/realistic-pump-compressor-6fdfd9`: `218f9c5ff` (W2,
-forms F1 and F2 behind `icheme.fluid.cornerLaw`), `ffae9fc4d` (F2b). Plan 3.3, 4.2, 4.5; owner decision D1: take F2 if
+Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04. Branch `claude/realistic-pump-compressor-6fdfd9`: `7e66ba393` (W2,
+forms F1 and F2 behind `icheme.fluid.cornerLaw`), `3eb801811` (F2b). Plan 3.3, 4.2, 4.5; owner decision D1: take F2 if
 the quick check measures it no worse than F1.
 
 ## 1. Expected behaviour
@@ -19,7 +19,7 @@ the quick check measures it no worse than F1.
   on the start state. W2's polytropic ratio limit moved the numbers onto this latch; the latch is the switch's own.
 - **F2** (the corner as a norm residual, ‖(u⁺, v⁺)‖₁₆ − 1): a new E2 hold, cold seed 200, singular Jacobian. At no flow and
   no rise, where a mover that cannot beat its discharge starts, the residual has no gradient: the mover's row is empty.
-- **F2b** (`ffae9fc4d`): the corner as a rise, finite at every flow: the relief rise at or below no flow, the corner up to
+- **F2b** (`3eb801811`): the corner as a rise, finite at every flow: the relief rise at or below no flow, the corner up to
   0.999 of the displacement, then a line with the corner's slope there (−47.9 relief rises per displacement), zero at
   1.0151. The row is head − rise for every mover, head derivative one; 49 lines net deleted. The transfer lands 1.5e-6 Pa
   from r_max P_s (`CompressorTest` with the switch set: three asserts fail, on F1's mode names only).

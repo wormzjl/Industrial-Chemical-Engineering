@@ -1,11 +1,11 @@
 # W2 campaign review: D17 (a pump's suction limit never above its supplier)
 
-Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04, commit `9449ecce2` (owner decision D17). One full campaign (1000
+Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04, commit `d444cb424` (owner decision D17). One full campaign (1000
 seeds, three distributions, 8 workers, alone). Before it, the affected tests (98 classes, the hold gates) pass.
 
 ## 1. The campaign
 
-| Distribution | Base (0.19.2) | D16 (`7b46b3b05`) | D17 | New against base |
+| Distribution | Base (0.19.2) | D16 (`e1677d74e`) | D17 | New against base |
 |---|---|---|---|---|
 | cold random | 991 | 992 | 992 | none |
 | bundled random | 993 | 994 | 994 | 896 (E5) |

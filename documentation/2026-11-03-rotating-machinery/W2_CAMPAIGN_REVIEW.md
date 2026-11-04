@@ -1,6 +1,6 @@
 # W2 campaign review: law F2e with start rules A1 and A2
 
-Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04, commit `bd89826a3` (owner decision D11, readings A9 and A10). One
+Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04, commit `ea840a2d6` (owner decision D11, readings A9 and A10). One
 full campaign (1000 seeds, three distributions, 8 workers, alone) against the 0.19.2 baseline (F1); held seeds traced alone.
 
 ## 1. Expected behaviour
@@ -9,7 +9,7 @@ full campaign (1000 seeds, three distributions, 8 workers, alone) against the 0.
   its relief with no net flow. It primes itself. Starved by its suction line, it cavitates and passes what the line gives.
 - A flow valve whose target exceeds what a set-flow mover in its line moves stands open; the mover sets the flow.
 
-## 2. What the code does (`bd89826a3`)
+## 2. What the code does (`ea840a2d6`)
 
 - A1 (A9): a valve carried in regulating starts open above the lowest set flow in its junction-balance line; the running
   line follows 6, 50, 5, 0, 4 and 50 kg/s.

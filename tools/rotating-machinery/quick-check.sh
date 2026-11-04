@@ -3,7 +3,7 @@
 # cold random, bundled random and bundled defaults on this folder's harness copies, one Gradle invocation at a time.
 # Usage: bash tools/rotating-machinery/quick-check.sh <label> [extra -P flags...]
 #   The head as committed: no flags.   Q3 (the centrifugal variant): -PholdFuzzMachines=true. (Until the owner chose F2b on
-#   2026-11-04, -PholdFuzzCornerLaw=true switched form F2 on at 218f9c5ff and ffae9fc4d.)
+#   2026-11-04, -PholdFuzzCornerLaw=true switched form F2 on at 7e66ba393 and 3eb801811.)
 # Reports go to tmp/rotating-machinery/quick/<label>/, or $QUICK_OUT/<label>; SEEDS overrides the 1-200 range; ONLY runs one
 # harness and distribution, as a replay alone (ONLY=hold-fuzz-cold-random SEEDS=6).
 set -u

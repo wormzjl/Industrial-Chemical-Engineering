@@ -1,10 +1,10 @@
 # D14 holds review: bundled random 896, cold random 181
 
-Commit `e9313e1db` (D14). Both seeds were clean at `a8accb372` and hold at D14. Traced alone with a temporary tracer (`tmp/rotating-machinery/w2-tests/trace-d14.js`), then with one counterfactual (`probe-d14-b.js`). Outputs: `tmp/rotating-machinery/quick/D14-trace-{896,181}` and `D14-trace-{896,181}-probeB`. The source is restored.
+Commit `ffde40d7f` (D14). Both seeds were clean at `8343a4bd0` and hold at D14. Traced alone with a temporary tracer (`tmp/rotating-machinery/w2-tests/trace-d14.js`), then with one counterfactual (`probe-d14-b.js`). Outputs: `tmp/rotating-machinery/quick/D14-trace-{896,181}` and `D14-trace-{896,181}-probeB`. The source is restored.
 
-## 0. The campaign of `e9313e1db` (1000 seeds, three distributions, 8 workers, alone)
+## 0. The campaign of `ffde40d7f` (1000 seeds, three distributions, 8 workers, alone)
 
-| Distribution | Base | D13 (`a8accb372`) | D14 | New against D13 | Gone against D13 |
+| Distribution | Base | D13 (`8343a4bd0`) | D14 | New against D13 | Gone against D13 |
 |---|---|---|---|---|---|
 | cold random | 991 | 992 | 991 | 181 (E6) | none |
 | bundled random | 993 | 993 | 993 | 896 (E5), 6 (F, a baseline hold) | 575, 952 (E5) |
@@ -24,7 +24,7 @@ classes, the hold gates) pass, with `PumpRateWarmStartTest`'s 2 m³/s pump resta
 Both floors are correct. They are true bubble points, not a liquid-liquid split. They do not flip between solves: 214 691.6 → 214 776.8 Pa, and 101 325.0 → 101 324.1 Pa, while the walk's end junction moves from its minted seed to the balance's seed. No pumps are in series. The modes do not cycle: no pass converges, so every failure keeps `PUMP_SUCTION_LIMIT`. The deleted E5 (a) start seed is not the cause (probe B clears both seeds without it). In both seeds the walk ends at a flowing junction that already stands at its own bubble point. `BalanceNet.solve` finds the pump's law suction below the floor (896: 192.5 kPa; 181: 70.8 to 73.7 kPa) and puts it on its suction limit. It anchors the suction junction at the floor and prescribes what the line delivers there: `inflowExcept` = 0 in both seeds. The pump then stands on its limit with no flow.
 - **896 (singular, stalled).** Every pass, at every substep down to 9.5e-8 s, stalls at residual 14.2 on the tee's mass row. Inflow is 46.9 kg/s and the liquid's capped outflow to the void is 60.85 kg/s. Only a flashing tee below 214.78 kPa balances. But then the pump's suction, held at 214.78 kPa, stands above its supplier. The line reverses, and the pump draws backwards out of an empty tank (19 K state; head −2.3e23 Pa at dt 0.05 s). So no root exists: the floor stands above its supplier's operating point. Before D14 this supplier, a one-phase liquid, gave no floor.
 - **181 (iteration limit).** Pass 0 reaches residual 2.0e-8 on a node row against the 1e-9 tolerance, and stops there at every substep. The anchored suction junction is laid out with gas and oil (GO), with a vapour volume share of 1.7e-4. It is held 0.1 Pa above the bubble point at the supplier's start temperature. The liquid it receives has been throttled by 256 Pa, which warms it by about 1e-4 K (the Joule-Thomson effect in a liquid) and raises its bubble pressure by about 1 Pa (dP/dT ≈ 8 kPa/K). So the junction holds a vanishing vapour phase. This is the defect that `waterFloor` already states and fixes for water.
-- **Probe B** (the balance closes a pump whose line gives nothing at its floor, in place of anchoring it). Both seeds are clean. 896 is back to STEADY 52.76 kg/s. 181 is FULL, with 43.3 kg of crystals against 43.4 kg at `a8accb372`. On the way, 181 has 46 failed Newtons: the pass loop reopens the pump (CLOSED → MOVER_LAW on rise against demand) and it cavitates again. 181 took 8.4 s alone, against 5.0 s in the D13 campaign. That is wall time, not judged.
+- **Probe B** (the balance closes a pump whose line gives nothing at its floor, in place of anchoring it). Both seeds are clean. 896 is back to STEADY 52.76 kg/s. 181 is FULL, with 43.3 kg of crystals against 43.4 kg at `8343a4bd0`. On the way, 181 has 46 failed Newtons: the pass loop reopens the pump (CLOSED → MOVER_LAW on rise against demand) and it cavitates again. 181 took 8.4 s alone, against 5.0 s in the D13 campaign. That is wall time, not judged.
 
 ## 3. Proposals for the owner
 

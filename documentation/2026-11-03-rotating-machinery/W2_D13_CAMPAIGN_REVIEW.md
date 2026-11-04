@@ -1,7 +1,7 @@
 # W2 campaign review: D13 (taut-vessel row weights, E5 (a) start)
 
-Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04, commit `a8accb372` (owner decisions D12, D13). One full campaign
-(1000 seeds, three distributions, 8 workers, alone), against the 0.19.2 baseline (F1) and the F2e campaign (`cf110c875`).
+Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04, commit `8343a4bd0` (owner decisions D12, D13). One full campaign
+(1000 seeds, three distributions, 8 workers, alone), against the 0.19.2 baseline (F1) and the F2e campaign (`2a2ed1a3c`).
 Before it, the affected tests: 98 quick-suite classes and the hold gates pass (`D12_TESTS_REVIEW.md` for the withdrawn clip).
 
 ## 1. Expected behaviour

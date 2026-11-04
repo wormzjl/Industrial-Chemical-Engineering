@@ -1,11 +1,11 @@
 # W2 campaign review: D16 (one vapour-lock fact per solve, floor at the liquid's enthalpy)
 
-Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04, commit `7b46b3b05` (owner decision D16). One full campaign (1000
+Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04, commit `e1677d74e` (owner decision D16). One full campaign (1000
 seeds, three distributions, 8 workers, alone). Before it, the affected tests (98 classes, the hold gates) pass.
 
 ## 1. The campaign
 
-| Distribution | Base (0.19.2) | D13 (`a8accb372`) | D15 (`f53708de3`) | D16 | New against base |
+| Distribution | Base (0.19.2) | D13 (`8343a4bd0`) | D15 (`93159d42d`) | D16 | New against base |
 |---|---|---|---|---|---|
 | cold random | 991 | 992 | 991 | 992 | none (431 gone) |
 | bundled random | 993 | 993 | 993 | 994 | 896 (E5) (6, 301 gone) |

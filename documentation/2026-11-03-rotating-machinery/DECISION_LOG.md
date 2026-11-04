@@ -56,7 +56,7 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 2026-11-04, the owner's answer to the D17 campaign review (`W2_D17_CAMPAIGN_REVIEW.md` section 2): "Accept, close W2".
 
-- **D18 (W2's solver work closed).** Bundled 896 stays as a known hold: three held intervals at the step where its supplier tee first reaches its bubble point, then STEADY at 52.76 kg/s. The campaign stands at 992, 994 and 1000 clean against the baseline's 991, 993 and 1000. W2's solver work ends at `9449ecce2`.
+- **D18 (W2's solver work closed).** Bundled 896 stays as a known hold: three held intervals at the step where its supplier tee first reaches its bubble point, then STEADY at 52.76 kg/s. The campaign stands at 992, 994 and 1000 clean against the baseline's 991, 993 and 1000. W2's solver work ends at `d444cb424`.
 
 2026-11-04, the owner on plan revision 3's Q13: "Q13 in-line equipment is treated the same as normal equipment".
 

@@ -1,6 +1,6 @@
 # W2 corner review: the chosen law F2b, and a law with slip (F2e)
 
-Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04: `7c7c0132e` (D10, "Take F2b (A)"), `1d6d5d19c` (F2e). Basis: the 59
+Batch `2026-11-03-rotating-machinery`, W2, 2026-11-04: `8c396c1e5` (D10, "Take F2b (A)"), `fc7f0b39f` (F2e). Basis: the 59
 quick-suite classes that load the movers and the 58 hold gates, run alone; no quick check of F2e (F1, F2, F2b used three).
 
 ## 1. Expected behaviour
@@ -13,7 +13,7 @@ quick-suite classes that load the movers and the 58 hold gates, run alone; no qu
 
 ## 2. What the code did
 
-- **F2b** (`7c7c0132e`): 13 of 415 fail. Its knee line covers every rise below 77 % of the limit, not only flows past the
+- **F2b** (`8c396c1e5`): 13 of 415 fail. Its knee line covers every rise below 77 % of the limit, not only flows past the
   displacement as `W2_FORMS_REVIEW.md` said: 100.0 to 101.5 % of the set flow there (seven tests, `CompressorTest` 0.020278
   for 0.02 m³/s, `InletPhaseTest` 10.09 for 9.97 kg/s). Four fail on convergence; as a rise the law is steep at the set flow.
 - **F2c** (the corner as a flow, `u = 1 − v^64`; `tmp/rotating-machinery/w2-tests/f2c.patch`): 15 of 420 and 1 hold gate
@@ -26,7 +26,7 @@ quick-suite classes that load the movers and the 58 hold gates, run alone; no qu
   2. `CoolingTowerRuntimeTest`, second fan mode: the pump closes while priming and never reopens: its rise limit scales with
      its suction end's density (P1, D4), gas there, while its refusal reads the line's liquid supply. F1 pushed the gas through.
 
-## 3. F2e: two lines and a rounded corner (`1d6d5d19c`)
+## 3. F2e: two lines and a rounded corner (`fc7f0b39f`)
 
 - `u = smin(1 − s v, m (1 − v) + δ)`, `smin(x, y) = (x + y − √((x − y)² + ε²))/2`; slip s 0.4 % of the displacement per
   relief rise, relief line m = 10 (10 % accumulation), rounding ε 0.02, δ = ε²/(4 (1 − s)). Delivery: 99.9989 % at no

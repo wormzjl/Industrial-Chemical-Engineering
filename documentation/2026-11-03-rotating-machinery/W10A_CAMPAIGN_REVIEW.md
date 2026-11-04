@@ -1,6 +1,6 @@
 # W10a: two-phase pump and compressor laws, review
 
-Commit `5516c976f` (owner decisions D19 to D21, plan section 3.6). Built by an Opus medium subagent and reviewed here.
+Commit `4536849bb` (owner decisions D19 to D21, plan section 3.6). Built by an Opus medium subagent and reviewed here.
 
 ## 1. What changed
 

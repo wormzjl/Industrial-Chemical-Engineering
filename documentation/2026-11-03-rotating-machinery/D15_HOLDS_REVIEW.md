@@ -1,10 +1,10 @@
 # D15 holds review: bundled random 575, cold random 181 (active-set cycle)
 
-Commit `f53708de3` (D15). Both seeds hold with "Phase/device active-set cycle" ×20. Traced alone with a temporary tracer (`tmp/rotating-machinery/w2-tests/trace-d15.js`), then two counterfactuals (`probe-d15-p.js`, `probe-d15-c.js`). Outputs: `tmp/rotating-machinery/quick/D15-trace-{575,181}`, `-575-probeP` (seeds 575 and 896), `-181-probeP`, `-181-probePC`. Five replays. The source is restored.
+Commit `93159d42d` (D15). Both seeds hold with "Phase/device active-set cycle" ×20. Traced alone with a temporary tracer (`tmp/rotating-machinery/w2-tests/trace-d15.js`), then two counterfactuals (`probe-d15-p.js`, `probe-d15-c.js`). Outputs: `tmp/rotating-machinery/quick/D15-trace-{575,181}`, `-575-probeP` (seeds 575 and 896), `-181-probeP`, `-181-probePC`. Five replays. The source is restored.
 
-## 0. The campaign of `f53708de3` (1000 seeds, three distributions, 8 workers, alone)
+## 0. The campaign of `93159d42d` (1000 seeds, three distributions, 8 workers, alone)
 
-| Distribution | D14 (`e9313e1db`) | D15 | Change |
+| Distribution | D14 (`ffde40d7f`) | D15 | Change |
 |---|---|---|---|
 | cold random | 991 | 991 | 181 E6 → E7 (active-set cycle) |
 | bundled random | 993 | 993 | 896 gone; 575 back as E7 |
