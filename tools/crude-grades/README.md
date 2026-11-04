@@ -7,7 +7,7 @@
 
 **Batch:** [2026-11-04-open-thermo-data](../../documentation/2026-11-04-open-thermo-data/README.md); see the decisions E10 to E14 in `OPEN_DATA_PLAN.md` and section 6 of `CRUDE_GRADES_REVIEW.md`.
 
-**Status:** generator only. The scripts write nothing under `src/`; the application thread copies the outputs into the material records.
+**Status:** generator. The scripts write nothing under `src/`; O4 copied the cut tables and the `liquid_mixture` block into the material records. Since then `validate.mjs`'s "current rule" is the O4 rule, and `method.mjs`'s `current_java_equivalent` describes the removed form.
 
 ## How to run
 
@@ -55,3 +55,4 @@ node tools/crude-grades/validate.mjs     # 6  validation.md, validation.json (ne
 - 2026-11-04: Promoted from the research scripts in `tmp/crude-grades/` (CRUDE_GRADES_REVIEW sections 1 to 5), after the owner's decisions E10 to E14. In the same change:
   - the density rule for nu to mu moved from the API MPMS 11.1 expansion to the Rackett form, which holds up to 900 K;
   - G was refitted on the full ECCC crude set.
+- 2026-11-04: O4 applied the outputs: the 12 cut tables (`twu-1985-d341-r1`) into `properties/crude_pc01..12.json` and the proposed block (`cut_pair_v1`, G = 1.0956, `eccc-cut-pair-r1`) into `methods/crude_pr78.json`. A re-run on 50d6c506f gave every output byte for byte.
