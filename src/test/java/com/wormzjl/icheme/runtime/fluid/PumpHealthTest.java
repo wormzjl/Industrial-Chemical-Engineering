@@ -118,12 +118,21 @@ class PumpHealthTest {
         double worn = rig.health.health(1);
         assertTrue(worn < 1 && worn > 0, "it has worn: " + worn);
         assertFalse(rig.health.failed(1));
-        assertTrue(rig.health.status(1).startsWith("HEALTH "), rig.health.status(1));
+        // W10d: its page reads its committed suction (NPSH3 at its D21 duty speed, NPSHA = σ NPSH3, no gas in water; a
+        // set-flow pump has no gas ratio) and says CAVITATION; its health has its meter, off the status line.
+        var suction = rig.health.suction(1);
+        double npsh3 = Npsh.forDuty(FLOW, 2950).required(FLOW);
+        assertEquals(npsh3, suction.required(), .02 * npsh3, "NPSH required is NPSH3 at the set flow");
+        assertEquals(rig.ratio(), suction.sigma(), 1e-12);
+        assertEquals(suction.sigma() * suction.required(), suction.available(), 1e-12);
+        assertEquals(0, suction.gas(), 1e-9, "water below its boiling point carries no vapour");
+        assertTrue(Double.isNaN(suction.ratio()), "a set-flow pump has no gas ratio");
+        assertEquals("CAVITATION", rig.health.status(1));
         // It wears to 0 at about its 60 s life, fails at the next cadence and stands closed.
         for (int i = 0; i < 2400 && !rig.health.failed(1); i++) rig.tick();
         assertTrue(rig.health.failed(1), "it failed: " + rig.health.health(1));
         assertEquals(0, rig.health.health(1));
-        assertEquals("FAILED / HEALTH 0 %", rig.health.status(1));
+        assertEquals("FAILED", rig.health.status(1), "FAILED takes precedence over CAVITATION");
         for (int i = 0; i < 300; i++) rig.tick();
         assertEquals(0, rig.flow(), 1e-9, "a failed pump passes nothing");
         assertEquals(0, rig.health.crackle(1), "a stopped pump is silent");
@@ -156,7 +165,8 @@ class PumpHealthTest {
         assertEquals(0, rig.health.rate(1));
         assertEquals(0, rig.health.crackle(1), "a clean pump does not crackle (W10c)");
         assertTrue(rig.health.facts().isEmpty(), "a new pump carries no entry");
-        assertEquals("HEALTH 100 %", rig.health.status(1));
+        assertEquals("", rig.health.status(1), "a quiet pump says nothing");
+        assertTrue(rig.health.suction(1).available() > 4 * rig.health.suction(1).required(), "its NPSHA above the inception curve");
         var outcome = new ArrayList<PumpHealth.Outcome>();
         int[] taken = {0};
         rig.health.queue(new PumpHealth.Repair(1, () -> ++taken[0] > 0, outcome::add));

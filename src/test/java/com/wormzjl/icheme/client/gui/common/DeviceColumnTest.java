@@ -127,6 +127,63 @@ class DeviceColumnTest {
         assertEquals(Set.of(), texts.missing);
     }
 
+    /**
+     * W10d (owner decision D37): a pump's Suction group (NPSH available, NPSH required, gas) and Health group come after its
+     * set points and drive and before its Phases, for a casing and an in-line pump, an editor and a reader; meters only, so
+     * no widget moves while they read; each fits the door at every width, words whole and boxes in line. A compressor has none.
+     */
+    @Test
+    void aPumpsSuctionAndHealthFitTheDoor() {
+        var texts = new HeatControlColumnTest.Recording();
+        var driven = new DeviceColumn.Drive(texts.get("drive_line_poles", texts.get("driver.motor"), "30.0", 2), texts.get("drive_state", "RUNNING", "2950"), true, false);
+        var readings = new DeviceColumn.Suction("6.8", "3.3", "0.4", "73.0");
+        var none = new DeviceColumn.Suction("—", "—", "—", "100.0");
+        for (var drive : java.util.Arrays.asList(driven, null))
+            for (boolean edit : new boolean[]{true, false})
+                for (var suction : List.of(readings, none)) {
+                    var base = input(Kind.PUMP, edit, drive != null, DeviceColumn.Valve.NONE, drive != null ? 8 : 4, "", "volume");
+                    var in = new DeviceColumn.Input(base.kind(), edit, drive != null, true, base.pressureUnit(), base.temperatureUnit(), base.flowTime(), base.valve(), null, false, null, null,
+                            List.of(), base.phases(), base.readings(), drive, null, suction);
+                    var rows = DeviceColumn.rows(in, texts);
+                    int drives = -1, intake = -1, health = -1, phases = -1;
+                    for (int i = 0; i < rows.size(); i++)
+                        if (rows.get(i) instanceof Column.Group g) {
+                            if (g.title().equals(texts.get("device_group.drive"))) drives = i;
+                            if (g.title().equals(texts.get("device_group.suction"))) intake = i;
+                            if (g.title().equals(texts.get("device_group.health"))) health = i;
+                            if (g.title().equals(texts.get("device_group.phases"))) phases = i;
+                        }
+                    String what = (drive != null ? "casing" : "in-line") + (edit ? "" : " reader");
+                    assertTrue(intake > drives && health == intake + 1 && phases == health + 1, what + ": Suction and Health after the drive, before the Phases");
+                    var suctionRows = ((Column.Group) rows.get(intake)).rows();
+                    assertEquals(List.of("npsh:available", "npsh:required", "npsh:gas"), suctionRows.stream().map(r -> ((Column.Reading) r).key()).toList(), what);
+                    assertEquals("health", ((Column.Reading) ((Column.Group) rows.get(health)).rows().getFirst()).key(), what);
+                    for (int width = 300; width <= 790; width += 7) {
+                        var column = Column.place(rows, 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT);
+                        for (var p : column.rows()) {
+                            assertTrue(p.rect().right() <= column.bounds().right(), what + " a row at " + width);
+                            for (var t : p.texts()) assertTrue(M.width(t) <= p.rect().w(), what + " a text cut at " + width + ": " + t);
+                            for (var s : p.slots().values()) assertTrue(s.inside(p.rect()) && s.w() >= 40, what + " a box at " + width + ": " + s);
+                            if (p.row() instanceof Column.Group g) assertEquals(1, p.texts().size(), what + " a plate in one line at " + width + ": " + g.title());
+                            if (p.row() instanceof Column.Reading r) assertTrue(p.texts().contains(r.unit()), what + " a unit whole at " + width + ": " + r.unit());
+                        }
+                        column.slots();
+                        assertInLine(column, what + " at " + width);
+                        // The readings move no widget: the same column with other values keeps every slot.
+                        var other = Column.place(DeviceColumn.rows(in.withSuction(suction == readings ? none : readings), texts), 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT);
+                        assertEquals(widgets(column), widgets(other), what + " at " + width);
+                    }
+                }
+        var compressor = DeviceColumn.rows(input(Kind.COMPRESSOR, true, true, DeviceColumn.Valve.NONE, 4, "", "volume"), texts);
+        assertTrue(compressor.stream().noneMatch(r -> r instanceof Column.Group g && (g.title().equals(texts.get("device_group.suction")) || g.title().equals(texts.get("device_group.health")))),
+                "a compressor shows no pump readings (D34)");
+        // The curve's texts on the glass (PumpCurve).
+        for (var key : List.of("pump_curve.title", "pump_curve.head", "pump_curve.npsh3", "pump_curve.inception", "pump_curve.available", "pump_curve.head_axis",
+                "pump_curve.npsh_axis", "pump_curve.flow_axis"))
+            texts.get(key, "1");
+        assertEquals(Set.of(), texts.missing);
+    }
+
     /** A fan tower's control keeps its words whole and in line at every width, for an editor and a reader, and a natural tower shows none. */
     @Test
     void aTowersControlFitsTheDoorAtEverySupportedWidth() {

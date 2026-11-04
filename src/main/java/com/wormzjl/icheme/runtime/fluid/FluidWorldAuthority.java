@@ -816,6 +816,19 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new FluidView.Drive(driver.kind().name(),driver.ratedPower(),driver.poles(),status,v==null?0:v.speed(),
                 driver.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR&&driver.drive()==com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED,share,power);
     }
+    /**
+     * A pump's readings (W10d, owner decision D37): its suction as its last committed slice read it and its health (W10b),
+     * a constructed centrifugal pump's design for its curve; null for a device that is no pump. A read of what the engine
+     * last committed: no solve.
+     */
+    private FluidView.Pump pump(long id,WorldTopologyLedger.Registration registration){
+        if(!PumpHealth.pump(registration))return null;var h=health.health(id);if(h==null)return null;
+        var s=health.suction(id);
+        var curve=registration.device().control() instanceof FlowControl.Machine machine&&machine.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump law
+                ?new FluidView.Curve(law.ratedFlow(),law.ratedHead(),law.efficiency(),law.ratedSpeed()):null;
+        return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve);
+    }
+    private static Double finite(double value){return Double.isFinite(value)?value:null;}
     public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);}
 
     /** The drivers each player watches (W3), by their structures' origins, within their dimension. */
@@ -1081,8 +1094,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
                     double delivered=mover instanceof FlowControl.Machine||drawn.empty()||!(mover.targetVolumeFlow()>0)?Double.NaN
                             :q[i]/(drawn.state().mass()/drawn.state().volume())/mover.targetVolumeFlow();
                     if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet,delivered);
-                    // A pump's health (W10b): FAILED first while it stands failed, its health last.
-                    if(mover.liquid()){var wear=health.status(id);if(health.failed(id))status="FAILED: use a repair kit / "+status;if(!wear.isEmpty())status+=" / "+(health.failed(id)?wear.substring("FAILED / ".length()):wear);}
+                    // A pump's health (W10b) and suction (W10d, owner decision D37): FAILED first while it stands failed, else
+                    // CAVITATION or GAS last; its health and suction have their meters (the view's Pump).
+                    if(mover.liquid()){var word=health.status(id);if(word.equals("FAILED"))status="FAILED: use a repair kit / "+status;else if(!word.isEmpty())status+=" / "+word;}
                     else {status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
                     // The limit the mover's law holds: a set-flow pump's setting is the rise for water and scales with its
                     // supply's density, the stream its supply walk ends at (owner decision D11, A2); a compressor's is the ratio over
@@ -1142,6 +1156,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var power=electric.power(id);if(power!=null){view=view.withPower(power);if(!power.status().isEmpty())view=view.withStatus(view.status()+" / "+power.status());}
         // A casing's or turbine's driver (W7, option A's Drive group; it replaces W3's SHAFT clause, reading A43).
         var drive=drive(id);if(drive!=null)view=view.withDrive(drive);
+        var pump=pump(id,registration);if(pump!=null)view=view.withPump(pump);
         // A heat side (batch 2026-10-27-heat-exchanger-design): its outlet junction's temperature, the heat its HEAT boundaries
         // booked over the interval, an air cooler's fans and an exchanger side's bypass as planned, a fired heater's burners,
         // set point and most heat.

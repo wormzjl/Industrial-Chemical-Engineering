@@ -169,6 +169,25 @@ class FluidPacketCodecTest {
         assertThrows(IllegalArgumentException.class,()->new FluidView.Drive("MOTOR",-1,2,"RUNNING",0,false,0,0));
         assertThrows(IllegalArgumentException.class,()->new FluidView.Power(0,0,1.5,""));
     }
+    /**
+     * W10d: a pump's readings ride the live payload and come back as sent: a casing's with its curve's design, an in-line
+     * pump's with no curve and no reads (null, not NaN); a bad one is refused.
+     */
+    @Test void aPumpsReadingsRoundTripTheLivePayload() {
+        var base=generatorMenu("");
+        var casing=new FluidView.Pump(6.8,3.3,.004,.73,new FluidView.Curve(100/3600.0,80,.70,2950));
+        var inline=new FluidView.Pump(null,null,null,1,null);
+        for(var pump:List.of(casing,inline)) {
+            var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.PUMP,base.view().withPump(pump),base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
+            var copy=FluidNetwork.decodeLive(new Gson().toJson(live(data)));
+            assertEquals(pump,copy.view().pump());
+        }
+        assertNull(FluidNetwork.decodeLive(new Gson().toJson(live(base))).view().pump());
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(1.0,-1.0,0.0,1,null));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(1.0,1.0,1.5,1,null));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(null,null,null,1.2,null));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Curve(0,80,.7,2950));
+    }
     /** W10c: a mover's state round-trips with its crackle and churn bytes; a byte outside 0 to 255 is refused. */
     @Test void aMoverStateRoundTripsItsCrackleAndChurn() {
         var target=new FluidNetwork.Target(new BlockPos(3,70,-9),42);

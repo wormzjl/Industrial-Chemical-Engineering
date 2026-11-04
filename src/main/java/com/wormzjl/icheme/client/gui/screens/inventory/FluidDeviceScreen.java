@@ -289,7 +289,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             return;
         }
         buildDevice();
-        if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
+        if(page==0&&curve())configureScroll(0);else if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
         else if(page==4)configureScroll(data.view().outlets().size());else if(page==5)configureScroll(datasheetGlass().lines().size());
         else configureScroll(data.view().pipeInfo().connections().size());
         if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
@@ -518,6 +518,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** The drawing's box inside the Control tab's HMI screen, as {@link #renderBg} drew it this frame. */
     private Rect drawingBox;
+    /** The box inside every other page's glass, as {@link #renderBg} drew it this frame (a pump's curve, W10d). */
+    private Rect pageBox;
     /** Every page but the Control tab: the tables' HMI screen right of the door column, from below the status to the footer's divider. */
     private Rect pageWell(){return new Rect(side()+15,72,imageWidth-side()-20,imageHeight-50-72);}
     @Override protected void renderBg(GuiGraphics g,float partialTick,int mouseX,int mouseY){
@@ -526,7 +528,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         skin.page(canvas,new Rect(0,0,imageWidth,imageHeight));
         // The HMI screen goes under the widgets that sit on it.
         var data=menu.clientData();
-        if(data!=null){if(page==CONTROL&&data.view().heat()!=null)drawingBox=skin.well(canvas,controlWell());else skin.well(canvas,pageWell());}
+        if(data!=null){if(page==CONTROL&&data.view().heat()!=null)drawingBox=skin.well(canvas,controlWell());else pageBox=skin.well(canvas,pageWell());}
         skin.softKeys(canvas,FluidGuiLayout.softKeys(imageWidth,imageHeight));
         g.pose().popPose();
     }
@@ -568,7 +570,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         skin.vDivider(canvas,side()+13,controlTop(),controlBottom());
         for(var label:labels)text(g,label.text(),label.x(),label.y(),MUTED,label.width());
         renderDevice(canvas,skin);
-        if(page==0)renderContents(g,mouseX-leftPos,mouseY-topPos);
+        // A constructed centrifugal pump's Overview draws its curve on the glass (W10d); every other device its contents.
+        if(page==0&&curve()){var box=pageBox!=null?pageBox:skin.well(canvas,pageWell());canvas.clip(box);PumpCurve.draw(canvas,box,curveInput(),FluidDeviceScreen::tr);canvas.unclip();}
+        else if(page==0)renderContents(g,mouseX-leftPos,mouseY-topPos);
         else if(page==1)renderComposition(g,mouseX-leftPos,mouseY-topPos);
         else if(page==3)renderConnections(g,mouseX-leftPos,mouseY-topPos);
         else if(page==4)renderOutlets(g,mouseX-leftPos,mouseY-topPos);
@@ -719,7 +723,26 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // A paired heat side leads with its side selector, as its Control tab does.
         var lead=tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
         return new DeviceColumn.Input(data.kind(),canEdit(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
-            view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters(),drive(),power());
+            view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters(),drive(),power(),suction());
+    }
+    /**
+     * A pump's Suction and Health groups (W10d, owner decision D37): NPSH available and required, the suction's gas and the
+     * health left, from the view the bucket sent; null for a device that is no pump. CAVITATION, GAS and FAILED stay on the display.
+     */
+    private DeviceColumn.Suction suction(){
+        var p=menu.clientData().view().pump();if(p==null)return null;
+        return new DeviceColumn.Suction(boxed(p.npshAvailable()),boxed(p.npshRequired()),p.gasShare()==null?"—":value(100*p.gasShare()),value(100*p.health()));
+    }
+    private String boxed(Double v){return v==null?"—":value(v);}
+    /** Whether the Overview's glass draws this pump's curve (W10d): a constructed centrifugal pump with a driver. In-line pumps keep their tables. */
+    private boolean curve(){var view=menu.clientData()==null?null:menu.clientData().view();return view!=null&&view.pump()!=null&&view.pump().curve()!=null&&view.drive()!=null;}
+    /** The curve's input from the view: the speed share, the suction volume flow and the head as the Readings show them, the NPSH available. */
+    private PumpCurve.Input curveInput(){
+        var view=menu.clientData().view();var c=view.pump().curve();var state=view.state();
+        double density=state!=null&&state.volume()>0?state.mass()/state.volume():Double.NaN,rise=view.devicePressureChange()==null?Double.NaN:view.devicePressureChange();
+        var pump=new com.wormzjl.icheme.science.machine.CentrifugalPump(c.ratedFlow(),c.ratedHead(),c.efficiency(),c.ratedSpeed());
+        double available=view.pump().npshAvailable()==null?Double.NaN:view.pump().npshAvailable();
+        return new PumpCurve.Input(pump,Math.max(0,view.drive().share()),Math.abs(view.massFlow())/density,rise/(density*9.80665),available,flowRateUnit.display(1),flowRateUnit.unit("m³"));
     }
     /**
      * A casing's or a turbine's Drive group (W7, owner decision D31, option A): the driver in one line, its state, Open

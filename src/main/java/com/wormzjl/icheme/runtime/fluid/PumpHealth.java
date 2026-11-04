@@ -47,10 +47,20 @@ public final class PumpHealth {
         }
     }
 
+    /**
+     * A pump's suction as its last committed slice read it (W10d, owner decision D37), for its page: NPSH available and NPSH3
+     * at the accepted flow (m), the vapour volume share α (0 to 1), σ = NPSHA/NPSH3 and the gas ratio r = α/α_T; each NaN
+     * where the slice made no read (a stopped pump, no vapour-pressure floor, a set-flow pump's r).
+     */
+    public record Suction(double available, double required, double gas, double sigma, double ratio) {
+        public static final Suction NONE = new Suction(Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN);
+    }
+
     private static final class Pump {
         double health = 1, rate;
         /** The sound bytes of its last committed suction (W10c): the crackle {@code 255 I_c(σ)} and the churn {@code 255 v(r)}. */
         int crackle, churn;
+        Suction suction = Suction.NONE;
         long bookedTick;
         boolean failed;
     }
@@ -143,6 +153,7 @@ public final class PumpHealth {
             book(p, read ? Wear.rate(row.npshRatio(), row.dry(), s) : 0, start, end);
             p.crackle = read ? (int) Math.round(255 * Wear.intensity(row.npshRatio())) : 0;
             p.churn = read ? (int) Math.round(255 * com.wormzjl.icheme.science.machine.GasEntrainment.churn(row.gasRatio())) : 0;
+            p.suction = read ? new Suction(row.npshRatio() * row.npshRequired(), row.npshRequired(), row.vapourShare(), row.npshRatio(), row.gasRatio()) : Suction.NONE;
         }
     }
 
@@ -275,11 +286,26 @@ public final class PumpHealth {
         return p == null ? 0 : p.rate;
     }
 
-    /** Pump {@code id}'s status words: {@code FAILED / HEALTH 0 %} or {@code HEALTH 73 %}; empty for no pump. */
-    public String status(long id) {
-        var h = health(id);
-        if (h == null) return "";
-        String health = String.format(Locale.ROOT, "HEALTH %d %%", (int) Math.floor(h * 100 + 1e-9));
-        return failed(id) ? "FAILED / " + health : health;
+    /** Pump {@code id}'s suction as its last committed slice read it (W10d); {@link Suction#NONE} for no read and no pump. */
+    public Suction suction(long id) {
+        var p = pumps.get(id);
+        return p == null ? Suction.NONE : p.suction;
     }
+
+    /**
+     * Pump {@code id}'s status word on its page's message display, said once (W10d, owner decision D37): {@code FAILED} at
+     * health 0, which takes precedence; else {@code CAVITATION} while σ is below inception ({@link Wear#INCEPTION}: while it
+     * crackles); else {@code GAS} while its gas ratio is above half the Turpin onset (while it churns); else empty. Its
+     * health has its meter.
+     */
+    public String status(long id) {
+        if (failed(id)) return "FAILED";
+        var s = suction(id);
+        if (s.sigma() < Wear.INCEPTION) return "CAVITATION";
+        if (s.ratio() > GAS_RATIO) return "GAS";
+        return "";
+    }
+
+    /** The gas ratio r = α/α_T above which a pump churns ({@link com.wormzjl.icheme.science.machine.GasEntrainment#churn}) and its page says {@code GAS}. */
+    public static final double GAS_RATIO = .5;
 }

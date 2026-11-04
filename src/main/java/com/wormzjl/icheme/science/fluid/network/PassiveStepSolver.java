@@ -1731,6 +1731,8 @@ public final class PassiveStepSolver {
                 if(machine.liquid())suctionMovers[edge]=machine.withHeadShare(com.wormzjl.icheme.science.machine.GasEntrainment.headShare(supply.vapourVolumeShare(),graph.reservoirs().get(pipe.first()).state().pressure()));
                 else wetShares[edge]=com.wormzjl.icheme.science.machine.CentrifugalCompressor.wetEfficiency(1,supply.condensedMassShare());
             }
+            // W10d: a set-flow pump's suction vapour share, for its page's gas reading only (its law counts the mixture already).
+            else if(mover.liquid())vapourShares[edge]=InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration).vapourVolumeShare();
             if(mover.liquid()){npshDesigns[edge]=mover.npsh();liquidDensities[edge]=InletPhase.liquidDensity(model,graph,edge,mover.targetVolumeFlow(),duration);}
         }
     }
@@ -1818,7 +1820,8 @@ public final class PassiveStepSolver {
                 observed=observed.withFlowSamples(meters);
             }
             if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&mover.targetVolumeFlow()>0&&read(e.graph,edge))
-                observed=observed.withSuction(npshRatio(e,edge,states,flows[edge]),dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),gasRatio(edge,mover,states.get(a).pressure()));
+                observed=observed.withSuction(npshRatio(e,edge,states,flows[edge]),dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),gasRatio(edge,mover,states.get(a).pressure()),
+                        npshRequired(edge,flows[edge]),vapourShares[edge]);
             samples.add(observed);
         }
         return List.copyOf(samples);
@@ -1831,14 +1834,17 @@ public final class PassiveStepSolver {
      * constructed pump), no floor or no liquid. Observational: never fed back into the solve.
      */
     private double npshRatio(Equations e,int edge,List<FluidThermodynamics.State> states,double massFlow) {
-        var design=npshDesigns[edge];double rho=liquidDensities[edge];
-        if(design==null||!(rho>0))return Double.NaN;
+        double rho=liquidDensities[edge],required=npshRequired(edge,massFlow);
+        if(!(required>0))return Double.NaN;
         var pipe=e.graph.pipes().get(edge);int a=pipe.first();double floor;
         try{floor=vapourPressure(e,edge,states.get(a));}catch(IllegalArgumentException outsideData){return Double.NaN;}
         if(!(floor<Double.POSITIVE_INFINITY))return Double.NaN;
-        double required=design.required(Math.max(0,massFlow)/rho);
-        if(!(required>0))return Double.NaN;
         return (endPressure(e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a))-floor)/(rho*GRAVITY)/required;
+    }
+    /** W10d: a running liquid pump's NPSH3 (m) at the accepted mass flow, on this solve's NPSH design and liquid density; NaN where it has none. */
+    private double npshRequired(int edge,double massFlow) {
+        var design=npshDesigns[edge];double rho=liquidDensities[edge];
+        return design==null||!(rho>0)?Double.NaN:design.required(Math.max(0,massFlow)/rho);
     }
     /**
      * W10c (owner decision D35): a running centrifugal pump's suction vapour share in Turpin onsets, {@code r = α/α_T} at its
@@ -5256,7 +5262,9 @@ public final class PassiveStepSolver {
     public record FlowSample(long host,double pressure,double massFlow,Double volumeFlow){public FlowSample{if(host<=0||!Double.isFinite(pressure)||!Double.isFinite(massFlow)||volumeFlow!=null&&!Double.isFinite(volumeFlow))throw new IllegalArgumentException("Invalid flow sample");}}
     public record PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,
                                   double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,
-                                  double npshRatio,boolean dry,double gasRatio) {
+                                  double npshRatio,boolean dry,double gasRatio,double npshRequired,double vapourShare) {
+        /** Without the pump readings (W10d): no NPSH3 in metres, no vapour share. */
+        public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,double npshRatio,boolean dry,double gasRatio){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,Double.NaN,Double.NaN);}
         /** Without a gas read (W10c): no vapour share in onsets. */
         public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,double npshRatio,boolean dry){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,Double.NaN);}
         /** Without a pump's suction read (W10b): no NPSH ratio, not dry. */
@@ -5264,10 +5272,11 @@ public final class PassiveStepSolver {
         public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,List.of());}
         public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,0,0);}
         public PipeObservation{flowSamples=List.copyOf(flowSamples);lengths=List.copyOf(lengths);losses=List.copyOf(losses);if(lengths.isEmpty()||lengths.size()!=losses.size())throw new IllegalArgumentException("Missing observed sections");}
-        public PipeObservation withFlowSamples(List<FlowSample> samples){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,samples,npshRatio,dry,gasRatio);}
-        /** This row with a liquid pump's suction read (W10b, W10c): its NPSHA over NPSH3 (NaN: none), whether it runs dry, and
-         * its suction's vapour share in Turpin onsets, {@code r = α/α_T} (NaN: none). */
-        public PipeObservation withSuction(double ratio,boolean value,double gas){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,ratio,value,gas);}
+        public PipeObservation withFlowSamples(List<FlowSample> samples){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,samples,npshRatio,dry,gasRatio,npshRequired,vapourShare);}
+        /** This row with a liquid pump's suction read (W10b, W10c, W10d): its NPSHA over NPSH3 (NaN: none), whether it runs dry,
+         * its suction's vapour share in Turpin onsets, {@code r = α/α_T} (NaN: none), its NPSH3 at the accepted flow (m; NaN:
+         * none) and its suction's vapour volume share α (NaN: none). The pump page reads the last two. */
+        public PipeObservation withSuction(double ratio,boolean value,double gas,double required,double share){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,ratio,value,gas,required,share);}
         public static List<PipeObservation> atRest(PassiveNetwork graph,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model){
             var result=new ArrayList<PipeObservation>();
             for(var pipe:graph.pipes()){

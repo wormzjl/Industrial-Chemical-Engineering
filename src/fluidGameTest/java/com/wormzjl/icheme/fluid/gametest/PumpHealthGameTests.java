@@ -83,8 +83,12 @@ public final class PumpHealthGameTests {
                 helper.assertTrue(view.state() != null && view.state().mass() > .01 && health != null && health < 1,
                         "Waiting for the pump to deliver and wear: " + world.view(ids[2]).status() + ", health " + health);
             }).thenExecute(() -> {
-                var status = world.view(ids[2]).status();
-                if (!status.contains("HEALTH ")) failure[0] = "no health on the pump's status line: " + status;
+                // W10d: the page's readings carry its health and suction; its status line says CAVITATION once.
+                var view = world.view(ids[2]);
+                var status = view.status();
+                if (view.pump() == null || !(view.pump().health() < 1) || view.pump().npshAvailable() == null || view.pump().npshRequired() == null || view.pump().curve() == null)
+                    failure[0] = "no pump readings on the casing's view: " + view.pump();
+                else if (!status.contains("CAVITATION") || status.contains("HEALTH ")) failure[0] = "the pump's status line does not say CAVITATION once: " + status;
                 // A survival player beside the casing uses one kit on it. Not joined to the player list (a join syncs every
                 // mod's data to a mock connection): the kit reads the player it was used by.
                 var p = player[0] = new ServerPlayer(level.getServer(), level, new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "repair-kit-test"),

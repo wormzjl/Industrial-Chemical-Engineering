@@ -8,6 +8,7 @@ import com.wormzjl.icheme.client.gui.common.DeviceColumn;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.MachineColumn;
+import com.wormzjl.icheme.client.gui.common.PumpCurve;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
@@ -86,7 +87,62 @@ public final class GuiPrototypes {
         out.add(titleStrip());
         out.addAll(machines());
         out.addAll(machinePages());
+        out.addAll(pumpReadings());
         return out;
+    }
+
+    // ---- W10d's pump readings and curve (batch 2026-11-03-rotating-machinery, decision D37; W10D_BUILD_PLAN.md) ----
+
+    /**
+     * The constructed pump P-101 (as machine-casing) with the shipped Suction and Health groups (DeviceColumn) and the shipped
+     * curve on the glass (PumpCurve), cavitating: NPSH available 6.8 m between NPSH3 3.3 m and 4 x NPSH3 13.2 m (σ about 2);
+     * the same pump at 70 % speed running quiet; and an in-line pump with the readings only and its composition table.
+     */
+    static List<Prototype> pumpReadings() {
+        double rated = 100 / 3600.0;
+        var pump = new com.wormzjl.icheme.science.machine.CentrifugalPump(rated, 80, 0.70, 2950);
+        String required = com.wormzjl.icheme.client.gui.common.kit.Format.number(pump.npsh(1).required(rated));
+        var casing = casingInput().withSuction(new DeviceColumn.Suction("6.8", required, "0.4", "73.0"));
+        var casingRows = DeviceColumn.rows(casing, TEXTS);
+        double slow = .7, flow = .7 * rated, head = pump.head(flow, slow);
+        String slowRequired = com.wormzjl.icheme.client.gui.common.kit.Format.number(pump.npsh(slow).required(flow));
+        var quiet = casingInput().withSuction(new DeviceColumn.Suction("12.0", slowRequired, "0.0", "73.0"));
+        var inline = new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.10", "bar"),
+                meter("throughput", "1995.0", "kmol/h"), meter("pressure_change", "2.40", "bar"))).withSuction(new DeviceColumn.Suction("9.5", "1.7", "0.0", "100.0"));
+        var inlineRows = DeviceColumn.rows(inline, TEXTS);
+        return List.of(
+                devicePage("pump-readings-casing", WINDOW[0], WINDOW[1], casing, (d, s) -> {
+                    d.title("Centrifugal pump");
+                    d.name("P-101", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing") + " · CAVITATION", Palette.MUTED);
+                    var box = device(d, casing, casingRows, Map.of("volumeFlow", "100.0", "maximumAddedPressure", "10.0"));
+                    d.c.clip(box);
+                    PumpCurve.draw(d.c, box, new PumpCurve.Input(pump, 1.0, rated, 80, 6.8, 3600, "m³/h"), TEXTS);
+                    d.c.unclip();
+                    d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+                }),
+                devicePage("pump-readings-quiet", WINDOW[0], WINDOW[1], quiet, (d, s) -> {
+                    d.title("Centrifugal pump");
+                    d.name("P-101", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                    var box = device(d, quiet, DeviceColumn.rows(quiet, TEXTS), Map.of("volumeFlow", "70.0", "maximumAddedPressure", "10.0"));
+                    d.c.clip(box);
+                    PumpCurve.draw(d.c, box, new PumpCurve.Input(pump, slow, flow, head, 12.0, 3600, "m³/h"), TEXTS);
+                    d.c.unclip();
+                    d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+                }),
+                devicePage("pump-readings-inline", WINDOW[0], WINDOW[1], inline, (d, s) -> {
+                    d.title("In-line pump");
+                    d.name("P-102", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                    var box = device(d, inline, inlineRows, Map.of("volumeFlow", "36.0", "maximumAddedPressure", "5.00"));
+                    contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "100.0", "1995"}));
+                    d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+                }));
     }
 
     // ---- W7's machine pages (batch 2026-11-03-rotating-machinery, owner decision D31: option A, each machine its own page) ----
@@ -805,11 +861,15 @@ public final class GuiPrototypes {
      * asks for it. Fields show {@code drafts} by key. Returns the glass's inner box.
      */
     static Rect device(Door d, DeviceColumn.Input in, Map<String, String> drafts) {
-        int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
         // N1 (the owner 2026-11-03): the name in the title strip, an entry for an editor of a device that takes one (a plain pipe takes none).
         // A tank with contents holds Copy where Apply would stand: its name reads as text (an open item).
         if (in.kind() != Kind.PIPE) d.name(NAMES.getOrDefault(in.kind(), ""), in.canEdit() && in.kind() != Kind.RESERVOIR);
-        var rows = DeviceColumn.rows(in, TEXTS);
+        return device(d, in, DeviceColumn.rows(in, TEXTS), drafts);
+    }
+
+    /** As {@link #device(Door, DeviceColumn.Input, Map)} with {@code rows} in place of the input's own (a prototype's added groups); the name is the caller's. */
+    static Rect device(Door d, DeviceColumn.Input in, List<Column.Row> rows, Map<String, String> drafts) {
+        int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
         var column = Column.place(rows, 10, top, side - 10, d.m, Column.Metrics.COMPACT);
         var view = new ScrollView();
         view.layout(new Rect(8, top, side - 6, bottom - top), side + 3, column.bounds().h());

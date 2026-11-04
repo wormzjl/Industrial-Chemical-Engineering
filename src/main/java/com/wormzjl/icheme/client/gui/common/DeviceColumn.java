@@ -53,10 +53,22 @@ public final class DeviceColumn {
      */
     public record Input(Kind kind, boolean canEdit, boolean switchable, boolean powerOn, String pressureUnit, String temperatureUnit, String flowTime,
                         Valve valve, @Nullable Opening opening, boolean recoverable, @Nullable Level level, @Nullable String junction,
-                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power) {
+                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power, @Nullable Suction suction) {
         public Input {
             lead = List.copyOf(lead);
             readings = List.copyOf(readings);
+        }
+
+        /** A device that is no pump: no Suction and Health groups. */
+        public Input(Kind kind, boolean canEdit, boolean switchable, boolean powerOn, String pressureUnit, String temperatureUnit, String flowTime,
+                     Valve valve, @Nullable Opening opening, boolean recoverable, @Nullable Level level, @Nullable String junction,
+                     List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power) {
+            this(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, null);
+        }
+
+        /** This input with a pump's readings. */
+        public Input withSuction(@Nullable Suction value) {
+            return new Input(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, value);
         }
 
         /** A device with no driver and no fans. */
@@ -78,6 +90,25 @@ public final class DeviceColumn {
 
     /** A fan unit's power (W5, reading A68; W7, reading A86): its draw (kW) and FE per tick as shown, its store (% as shown, or null). */
     public record Power(String draw, String perTick, @Nullable String store) {
+    }
+
+    /**
+     * A pump's readings (batch 2026-11-03-rotating-machinery W10d, owner decision D37), as shown: NPSH available and NPSH
+     * required (m; an in-line pump's NPSH3 at its D21 duty speed), the suction's gas (% by volume) and the health left (%).
+     * The status words (FAILED, CAVITATION, GAS) stay on the message display.
+     */
+    public record Suction(String available, String required, String gas, String health) {
+    }
+
+    /** The Suction group (NPSH available, NPSH required, gas) and the Health group (what is left), LED meters with their hovers. */
+    public static List<Column.Row> suction(Suction s, HeatControlColumn.Texts t) {
+        return List.of(
+                new Column.Group(t.get("device_group.suction"), t.get("device_group.suction.hint"), List.of(
+                        new Column.Reading("npsh:available", t.get("npsh_available"), s.available(), "m", t.get("npsh_available.hint")),
+                        new Column.Reading("npsh:required", t.get("npsh_required"), s.required(), "m", t.get("npsh_required.hint")),
+                        new Column.Reading("npsh:gas", t.get("gas_share"), s.gas(), "%", t.get("gas_share.hint")))),
+                new Column.Group(t.get("device_group.health"), t.get("device_group.health.hint"), List.of(
+                        new Column.Reading("health", t.get("health_left"), s.health(), "%", t.get("health_left.hint")))));
     }
 
     /** The Drive group: the driver's line and state, then Open driver, a push button (it opens a page; A100). */
@@ -111,6 +142,9 @@ public final class DeviceColumn {
             rows.add(new Column.Group(t.get("device_group.solids"), null, List.of(new Column.Buttons(List.of(new Column.Button("recover", t.get("recover"), in.recoverable(), t.get("recover.hint")))))));
         // The casing's driver (W7): Open driver is a widget, so the group stands before the plant's texts.
         if (in.drive() != null) rows.add(drive(in.drive(), t));
+        // A pump's Suction and Health (W10d): after its set points and drive, as the owner saw them (D37); meters only, a
+        // fixed height whatever they read, so the Phases' basis key keeps its slot.
+        if (in.suction() != null) rows.addAll(suction(in.suction(), t));
         if (in.phases() != null) rows.add(phases(in.phases(), t));
         // From here the texts follow the plant: these groups hold no widget.
         if (in.level() != null) {
