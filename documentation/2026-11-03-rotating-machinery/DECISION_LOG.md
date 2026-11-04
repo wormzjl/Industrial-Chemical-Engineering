@@ -76,6 +76,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D21.** An in-line pump is chosen for its duty: its NPSH3 design is its set flow at `n = min(2950, 200 · 3.3^0.75 / √Q)` rpm (`Npsh.forDuty`), so its rated NPSH3 is at most 3.3 m (plan 1.1's pump). Nothing changes up to 0.028 m³/s; a 1.5 m³/s pump turns at about 400 rpm. The speed feeds only NPSH3. Constructed pumps keep the speed of their design.
 
+2026-11-04, the turbine connection (plan 3.4), whose governor target was to come from the shaft's demand (W3): the owner, "Decouple them for now, add control systems as individual component", then "the turbine is decouple from the pump/compressor head".
+
+- **D22.** The steam turbine is a driver of its own, separate from the pump or compressor head it drives; a shaft train joins them (W3). Control systems (the governor, speed control) are separate components too. So the turbine connection has no built-in governor and no demanded flow: it passes steam on its own flow resistance between its inlet and exhaust pressures and takes `W = ṁ η_is Δh_is` out of the stream as shaft work (exhaust at `h_in − W/ṁ`). Its flow is set by a separate control component in line, for now the existing mass-target control valve upstream.
+
 ## Taken under the standing instruction
 
 - **A1 (Q10, reading of "as recommended").** All three proposals join the batch: a generator (shaft power to FE, the motor's mirror), cooling-tower fans on the RF port, KubeJS made optional with Create.

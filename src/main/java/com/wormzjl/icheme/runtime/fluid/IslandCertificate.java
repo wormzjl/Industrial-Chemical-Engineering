@@ -367,6 +367,7 @@ public final class IslandCertificate {
             for(var section:pipe.sections()){d.real(section.length());d.real(section.diameter());d.real(section.roughness());d.real(section.minorLoss());d.integer(section.channels());}
             switch(pipe.control()) {
                 case FlowControl.Passive ignored->d.text("passive");
+                case FlowControl.Turbine turbine->{d.text("turbine");d.real(turbine.design().ratedPower());d.real(turbine.design().efficiency());}
                 case FlowControl.Pump pump->{d.text("pump");d.real(pump.requestedVolumeFlow());d.real(pump.maximumAddedPressure());d.integer(pump.enabled()?1:0);}
                 case FlowControl.Compressor compressor->{d.text("compressor");d.real(compressor.requestedVolumeFlow());d.real(compressor.maximumPressureRatio());d.integer(compressor.enabled()?1:0);}
                 case FlowControl.Machine machine->{var law=machine.law();d.text("machine");d.integer(law.liquid()?1:0);d.real(law.ratedFlow());d.real(law.ratedHead());d.real(law.efficiency());if(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump)d.real(pump.ratedSpeed());d.real(machine.speed());d.integer(machine.enabled()?1:0);}

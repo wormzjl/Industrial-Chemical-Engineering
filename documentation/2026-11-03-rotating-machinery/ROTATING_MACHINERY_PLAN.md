@@ -129,7 +129,7 @@ This is today's "set flow up to a head limit" written as one smooth row instead 
 
 ### 3.4 Steam turbine
 
-The turbine is a connection in the steam island:
+The turbine is a connection in the steam island. Owner decision D22: the turbine is a driver separate from the pump or compressor head it drives (the shaft train joins them, W3), and control systems are separate components. It has no built-in governor; it passes steam on its own resistance, and a separate control component in line (for now the mass-target control valve) sets its flow. The governor below becomes such a control component:
 
 - **Governor valve.** A flow valve whose mass target the engine sets once per slice from the shaft's demand: `ṁ = P_demand / (η_is Δh_is)` (the `couple` precedent). Fully open, the turbine passes what its own resistance allows at the inlet and exhaust pressures; that is its maximum power.
 - **Work out.** `W = ṁ η_is Δh_is`, with `Δh_is = k/(k − 1) (P_in/ρ_in) (1 − (P_out/P_in)^((k−1)/k))` on the inlet's real `P/ρ` (524 kJ/kg against the steam tables' 528 for 40 bar, 400 °C to 4 bar). The exhaust takes `h_in − W/ṁ`, and the PH flash gives its temperature and wetness. Work leaving the fluid is new: today work is clipped at zero.

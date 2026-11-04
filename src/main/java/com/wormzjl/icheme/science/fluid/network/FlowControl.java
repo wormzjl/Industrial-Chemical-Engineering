@@ -8,8 +8,36 @@ import com.wormzjl.icheme.science.machine.Npsh;
 import com.wormzjl.icheme.science.machine.PositiveDisplacement;
 
 /** Immutable actuator settings; the active regime belongs to a solve attempt, never to this shared value. */
-public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Mover,FlowControl.Valve {
+public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Mover,FlowControl.Valve,FlowControl.Turbine {
     record Passive() implements FlowControl {}
+    /**
+     * A steam turbine (batch 2026-11-03-rotating-machinery, plan section 3.4, owner decision D22): a driver of its own,
+     * separate from the machines it drives, which a shaft train joins later (W3). Its control is a separate component in
+     * line (for now the mass-target {@link ControlValve} upstream); the turbine has no governor and no set flow. It passes
+     * what its own flow resistance passes between its inlet (its first end) and its exhaust (its second), as an open line
+     * does (mode {@code VALVE_OPEN}, no added or throttled pressure), and takes {@link #shaftPower} out of the stream: the
+     * exhaust leaves at {@code h_in − W/ṁ}, and the receiver's flash gives its temperature and wetness. The work leaves the
+     * island as a {@link ConservativeTransport.BoundaryTransfer.Kind#SHAFT} transfer at the connection, which W3 reads as the
+     * power the turbine delivers. A reverse flow passes as through an open line and does no work.
+     *
+     * @param design its rated power and isentropic efficiency η_is
+     */
+    record Turbine(com.wormzjl.icheme.science.machine.SteamTurbine design) implements FlowControl {
+        public Turbine {java.util.Objects.requireNonNull(design);}
+        /**
+         * The shaft power (W, out of the stream, never negative) of {@code massFlow} (kg/s, forward) expanding from the inlet's
+         * real {@code inletPressure} (Pa) and {@code inletDensity} (kg/m3) to {@code exhaustPressure} (Pa), for the inlet gas's
+         * heat capacity ratio {@code k}: {@code ṁ η_is Δh_is} ({@link com.wormzjl.icheme.science.machine.SteamTurbine#isentropicDrop}).
+         * At {@code k ≤ 1}, where the drop's formula divides by zero, the drop is its limit at {@code k → 1}, the isothermal
+         * {@code (P_in/ρ_in) ln(P_in/P_out)}: a numerical guard only, since the ideal-gas ratio the solver reads exceeds one.
+         */
+        public double shaftPower(double massFlow,double inletDensity,double inletPressure,double exhaustPressure,double k) {
+            if(!(massFlow>0)||!(inletDensity>0)||!(exhaustPressure<inletPressure))return 0;
+            double drop=k>1?com.wormzjl.icheme.science.machine.SteamTurbine.isentropicDrop(inletPressure,inletDensity,exhaustPressure,k)
+                    :inletPressure/inletDensity*com.wormzjl.icheme.science.math.DeterministicMath.log(inletPressure/Math.max(exhaustPressure,1e-12*inletPressure));
+            return design.work(massFlow,drop);
+        }
+    }
     /**
      * A device that moves fluid from its connection's first end (its suction) to its second: the liquid pump and the gas
      * compressor (decisions D1, D2, D7, D8 of documentation/2026-09-26-phase-ports-and-compressor). Every mover runs on its
@@ -251,6 +279,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * <p>{@code MOVER_LAW} (batch 2026-11-03-rotating-machinery) is a running mover: one row, the rise falling with the
      * flow ({@link Mover#lawResidual}). It closes on a reverse drive and takes the suction limit. The set-flow pair it
      * replaced, a target row and a head-limit row, is gone (form F2b, 2026-11-04).
+     *
+     * <p>A {@link Turbine} stands in {@code VALVE_OPEN} for its whole solve: its actuator row holds no throttled pressure,
+     * so its own resistance sets its flow.
      */
     enum Mode { PASSIVE, VALVE_REGULATING, VALVE_OPEN, CLOSED, INLET_WRONG_PHASE, PUMP_SUCTION_LIMIT, VALVE_CONFLICT, MOVER_LAW }
 }

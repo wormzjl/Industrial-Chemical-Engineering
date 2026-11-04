@@ -1674,8 +1674,12 @@ public final class PassiveStepSolver {
     }
     /** The power (W) the mover on connection {@code edge} gives what it moves ({@link FlowControl.Mover#power}): a centrifugal
      * compressor's over its wet efficiency's share of its dry one ({@link #readSuctions}), the one function the Newton's
-     * energy rows and the transport's booking read ({@link ConservativeTransport.MoverWork}). */
-    double moverPower(PassiveNetwork graph,int edge,double massFlow,double head,double suctionDensity,double suctionPressure) {
+     * energy rows and the transport's booking read ({@link ConservativeTransport.MoverWork}). A steam turbine's is negative,
+     * its shaft power out of the stream ({@link FlowControl.Turbine#shaftPower}) from its inlet's density and pressure to
+     * {@code dischargePressure}, its exhaust node's pressure, on {@link #kappa}; a mover's reads no discharge pressure. */
+    double moverPower(PassiveNetwork graph,int edge,double massFlow,double head,double suctionDensity,double suctionPressure,double dischargePressure) {
+        var pipe=graph.pipes().get(edge);
+        if(pipe.control() instanceof FlowControl.Turbine turbine)return -turbine.shaftPower(massFlow,suctionDensity,suctionPressure,dischargePressure,kappa(graph,pipe));
         double power=mover(graph,edge).power(massFlow,head,suctionDensity,suctionPressure,kappa(graph,graph.pipes().get(edge)));
         return read(graph,edge)?power/wetShares[edge]:power;
     }
@@ -1735,10 +1739,11 @@ public final class PassiveStepSolver {
      * The heat capacity ratio of the gas the mover on {@code pipe} draws, on its suction node's state at the step's start
      * ({@link FluidThermodynamics#heatCapacityRatio}; batch 2026-11-03-rotating-machinery, plan section 3.2): one value
      * for the whole step, so every row, every mode test and the transport's booking read the same polytropic exponent.
-     * A liquid mover does not use it. Cached by the state's identity: a state is immutable.
+     * A liquid mover does not use it. A steam turbine reads its inlet's the same way (plan section 3.4). Cached by the
+     * state's identity: a state is immutable.
      */
     private double kappa(PassiveNetwork graph,PassiveNetwork.Pipe pipe) {
-        if(((FlowControl.Mover)pipe.control()).liquid())return 1.4;
+        if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid())return 1.4;
         var state=graph.reservoirs().get(pipe.first()).state();int slot=System.identityHashCode(state)&15;
         if(kappaStates[slot]!=state){kappaValues[slot]=model.heatCapacityRatio(state);kappaStates[slot]=state;}
         return kappaValues[slot];
@@ -2813,6 +2818,7 @@ public final class PassiveStepSolver {
         var modes=new ArrayList<FlowControl.Mode>();
         for(var pipe:graph.pipes())modes.add(switch(pipe.control()) {
             case FlowControl.Passive ignored->FlowControl.Mode.PASSIVE;
+            case FlowControl.Turbine ignored->FlowControl.Mode.VALVE_OPEN;
             case FlowControl.Mover pump->pump.targetVolumeFlow()==0||vapourLocked(modes.size())?FlowControl.Mode.CLOSED:FlowControl.Mode.MOVER_LAW;
             case FlowControl.Valve valve->heldOpenings.length==graph.pipes().size()&&!Double.isNaN(heldOpenings[modes.size()])?(heldOpenings[modes.size()]==0?FlowControl.Mode.CLOSED:FlowControl.Mode.VALVE_CONFLICT):valve.bare()||!valve.pressureControl()||graph.reservoirs().get(pipe.first()).state().pressure()>valve.targetPressure()+.01
                     ?FlowControl.Mode.VALVE_OPEN:FlowControl.Mode.CLOSED;
@@ -4932,11 +4938,13 @@ public final class PassiveStepSolver {
                     double capturedRate=Math.abs(flow)*(transport.solids.enthalpy(upstream.temperature(),upstream.pressure())/transport.mass);
                     stored-=dt*capturedRate;
                 }
-                if(!first&&pipe.control() instanceof FlowControl.Mover) {
+                if(!first&&(pipe.control() instanceof FlowControl.Mover||pipe.control() instanceof FlowControl.Turbine)) {
                     int control=controlOffsets[edge];double head=control<0?0:x[control]*1e5;
                     // Metered on the suction stream's density (its bulk at a BULK end) and, for a compressor, the suction
-                    // node's pressure at this trial (decision D8: suction properties only).
-                    double power=moverPower(edge,flow,head,drawn(edge,0,tr[a],flow).density,st[a].pressure());
+                    // node's pressure at this trial (decision D8: suction properties only). A turbine's work leaves the
+                    // stream (negative), its drop read from the trial inlet to the trial exhaust node's pressure; the
+                    // sparsity declares this row on both ends' columns and the flow's (buildSparsity).
+                    double power=moverPower(edge,flow,head,drawn(edge,0,tr[a],flow).density,st[a].pressure(),st[b].pressure());
                     stored+=dt*power;heat+=power;
                 }
                 // A heat-exchanging side delivers its donor's stream with the heat it took up crossing the wall, booked like
@@ -4955,7 +4963,7 @@ public final class PassiveStepSolver {
         double sideHeat(int edge,double specificEnthalpy,double flow){return PassiveStepSolver.this.sideHeat(graph,graph.pipes().get(edge),specificEnthalpy,flow,()->{});}
         /** The power (W) mover connection {@code edge} gives what it moves ({@link PassiveStepSolver#moverPower}, on this step's
          * graph): the energy rows and the reconstruction ({@link ConservativeTransport.MoverWork}) read this one function. */
-        double moverPower(int edge,double massFlow,double head,double suctionDensity,double suctionPressure){return PassiveStepSolver.this.moverPower(graph,edge,massFlow,head,suctionDensity,suctionPressure);}
+        double moverPower(int edge,double massFlow,double head,double suctionDensity,double suctionPressure,double dischargePressure){return PassiveStepSolver.this.moverPower(graph,edge,massFlow,head,suctionDensity,suctionPressure,dischargePressure);}
         /**
          * The cap flow (kg/s) of an inline filter's connection: the drawn stream's velocity cap {@code limit}
          * ({@link #capLimit}) and, in a step that may fill the cake, the room the cake has left over the step's own
