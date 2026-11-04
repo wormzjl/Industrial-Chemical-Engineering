@@ -100,6 +100,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D31 (Q1, A85 to A100).** Each machine has its own page: motor, steam turbine (a Drive tab on its device page), generator, gearbox and creative motor. Using the machine opens it. A casing's page gains a Drive group (the driver in two lines and an Open driver push button). Readings A85 to A100 as `W7_BUILD_PLAN.md` gives them.
 
+2026-11-04, W7's review (`W7_REVIEW.md` section 4: the turbine opens its own machine page from a Drive group instead of a Drive tab on its fluid page): the owner, "Keep as built".
+
+- **D32.** A steam turbine's controls are on its own machine page, like every driver's; its fluid page carries the Drive group with Open driver, as a casing's does. This replaces D31's Drive tab.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).

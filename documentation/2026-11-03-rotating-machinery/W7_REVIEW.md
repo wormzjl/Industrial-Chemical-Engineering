@@ -33,7 +33,7 @@ Commit `75c3fca13` (`W7_BUILD_PLAN.md`, owner decision D31: Q1 option A, own pag
 ## 4. For the owner
 
 - **The turbine has no Drive tab** (D31 said a Drive tab on its fluid page). The turbine's fluid page has the Drive group with Open driver, as a casing has, and its controls are on its own machine page like every other driver.
-  - Recommended: keep it. One kind of page per machine, and one path to the controls.
+  - Recommended: keep it. One kind of page per machine, and one path to the controls. The owner kept it (D32).
 - **The motor page is 347 px at a 464 px wide door,** 9 px over the 338 px budget, so it scrolls 9 px there. At the design widths (640 and 853, A108) it fits. `MachineColumnTest` checks those widths.
 - **The casing page is 476 px in its 398 px view at 1920 × 1080** (A106) and scrolls, as the pump page already did at 2560 × 1440.
 - The build's readings A101 to A108 stand as above.
