@@ -2,7 +2,7 @@
   "format": 2,
   "basis": {
     "package": "icheme:tjl20_methane_nitrogen",
-    "revision": "crude-regrouped-r1",
+    "revision": "crude-regrouped-r2",
     "components": [
       "Methane",
       "Ethane",
@@ -47,7 +47,6 @@
       "x": 372,
       "y": 20,
       "params": {
-        "package": "icheme:tjl20_methane",
         "assay": "icheme:tia_juana_light_methane",
         "stages": 40,
         "feed_stage": 37,

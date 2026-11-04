@@ -47,7 +47,6 @@ final class FlowsheetColumnDoorTest {
 
     @Test void theDoorHoldsWhatTheCalculatorHolds() {
         var door = ColumnDoor.of(ColumnDoor.from(BASE, ColumnComponents.Condenser.EXCHANGER));
-        assertEquals(BASE.packageId(), door.packageId());
         assertEquals(BASE.stageCount(), door.stages());
         assertEquals(BASE.feedStageNumber(), door.feedStage());
         assertEquals(BASE.topPressurePascal(), door.topPressure(), 0);

@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
+import com.wormzjl.icheme.science.flowsheet.SheetCompounds;
 import com.wormzjl.icheme.science.flowsheet.sizing.Proposal;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
@@ -49,21 +50,25 @@ public final class SimulatorRunner {
 
         FlowsheetRun alone(Flowsheet sheet, String unit, MaterialCatalog catalog, Runnable checkpoint, Map<String, FlowStream> streams, FlowsheetSolver.Progress progress);
 
-        /** Size all on {@code run}, or null where the world holds another package than the sheet's. Stop throws {@link CancellationException}. */
+        /** Size all on {@code run}, or null where the sheet cannot run on the world's package ({@link SheetCompounds#refusal}). Stop throws {@link CancellationException}. */
         default SheetSizing.@Nullable SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint, FlowsheetSolver.Progress progress) {
             return thermo(sheet, catalog, checkpoint, thermo -> Proposal.sizeAll(sheet, run, thermo, progress));
         }
 
-        /** Every item rated at its size on {@code run}, or null where the world holds another package than the sheet's. */
+        /** Every item rated at its size on {@code run}, or null where the sheet cannot run on the world's package. */
         default SheetSizing.@Nullable Sized rate(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint) {
             return thermo(sheet, catalog, checkpoint, thermo -> SheetSizing.rate(sheet, run, thermo));
         }
     }
 
-    /** {@code on} with the thermo of {@code sheet}'s package, as a run reads it, or null where the world holds another. */
+    /**
+     * {@code on} with the world package's thermo, on whose axis a run's streams stand, or null where the sheet cannot run on it. Every
+     * state a run left holds only the sheet's compounds, so the package answers them as the run's view did; a column's trials take
+     * that view again ({@code BlockSizing}).
+     */
     private static <T> @Nullable T thermo(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, Function<FlowThermo, T> on) {
-        String network = sheet.basis().packageId();
-        if (!network.equals(FluidMaterialCatalog.networkPackage(catalog))) return null;
+        if (SheetCompounds.refusal(sheet, catalog) != null) return null;
+        String network = FluidMaterialCatalog.networkPackage(catalog);
         return MaterialRuntime.with(catalog, network, () -> on.apply(new FlowThermo(FluidThermodynamics.forNetwork(catalog, network), catalog, network, checkpoint)));
     }
 

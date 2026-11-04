@@ -307,8 +307,11 @@ public final class MaterialCatalog {
     private static JsonObject propertyScience(Property property) {
         var json=new Gson().toJsonTree(property).getAsJsonObject();json.remove("id");return json;
     }
-    /** {@link #physicsContent(Package, List)} of package {@code packageId}; package-private so tests compare it across catalogs. */
-    String physicsContent(String packageId,List<String> axis) { return physicsContent(requirePackage(packageId),axis); }
+    /**
+     * {@link #physicsContent(Package, List)} of package {@code packageId}: what the process simulator compares a sheet's package
+     * with the network's by on the sheet's compounds (W3), and tests across catalogs.
+     */
+    public String physicsContent(String packageId,List<String> axis) { return physicsContent(requirePackage(packageId),axis); }
     /**
      * The numbers package {@code p} holds on {@code axis}, as canonical JSON: the model, the axis's property constants,
      * interactions and NRTL pairs, the water model's numbers and any group-contribution pairs. Assays, names, transport,

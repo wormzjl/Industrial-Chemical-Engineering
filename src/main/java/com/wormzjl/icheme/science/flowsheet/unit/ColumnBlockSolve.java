@@ -291,29 +291,18 @@ final class ColumnBlockSolve implements Calculation.Law {
         steam.add(added);
     }
 
-    /** The door's package while there is one and it holds the feed, else the sheet's. The learned start declines nitrogen, so the narrower one stands while it can. */
+    /**
+     * The column on the sheet's package, the network's view of the sheet's compounds ({@code SheetCompounds}): the sheet's axis is
+     * its compounds, then water, which the caller has moved to the steam. The learned start binds by the feed's own compounds.
+     */
     private V3ColumnInput input(double[] amounts, double temperature, List<V3SteamFeedSpec> steam) {
         var thermo = u.thermo();
-        var pack = thermo.catalog().packages().get(door.packageId());
-        if (pack == null || !holds(pack.components(), amounts)) pack = thermo.catalog().requirePackage(thermo.packageId());
-        if (!holds(pack.components(), amounts)) throw new FlowsheetFailure("column.component");
-        var axis = thermo.axis();
-        double[] flows = new double[pack.components().size()];
-        for (int i = 0; i < flows.length; i++) {
-            int at = axis.indexOf(pack.components().get(i));
-            if (at >= 0) flows[i] = amounts[at];
-        }
+        var pack = thermo.catalog().requirePackage(thermo.packageId());
         try {
-            return door.input(pack, flows, temperature, steam);
+            return door.input(pack, java.util.Arrays.copyOf(amounts, pack.components().size()), temperature, steam);
         } catch (IllegalArgumentException refused) {
             throw new FlowsheetFailure("column.failed", String.valueOf(refused.getMessage()));
         }
-    }
-
-    private boolean holds(List<String> basis, double[] amounts) {
-        var axis = u.thermo().axis();
-        for (int i = 0; i < amounts.length; i++) if (amounts[i] > 0 && !basis.contains(axis.get(i))) return false;
-        return true;
     }
 
     private V3ColumnResult run(V3ColumnInput input) {
