@@ -121,6 +121,14 @@ public record FlowsheetRun(Status status, Map<String, FlowStream> streams, Map<S
         return new FlowsheetRun(status, streams, outcomes, reports, loops, log, massIn, massOut, heatIn, heatOut, duties, order, passes);
     }
 
+    /** This run without its columns' warm starts ({@link Report.Warm}): a run that starts from it starts its loops here, its columns from the learned start. */
+    public FlowsheetRun cold() {
+        if (this.reports.values().stream().allMatch(report -> report.warm() == null)) return this;
+        var reports = new HashMap<String, Report>();
+        this.reports.forEach((id, report) -> reports.put(id, report.cold()));
+        return new FlowsheetRun(status, streams, outcomes, reports, loops, log, massIn, massOut, heatIn, heatOut, duties, order, passes);
+    }
+
     public double massGap() {
         return massIn - massOut;
     }

@@ -318,6 +318,73 @@ class SimulatorRunnerTest {
         assertSame(steady, gate.lasts.get(2), "a stopped run is no first estimate");
     }
 
+    /** A steady run whose column report carries a warm start: a stand-in seed on the default preset's input. */
+    private static FlowsheetRun warmRun() {
+        var input = SheetFixture.CATALOG.presets().column(SheetFixture.CATALOG.presets().network().defaultColumnPreset()).input(SheetFixture.CATALOG);
+        int nodes = input.stageCount() + 2, components = input.componentBasis().componentCount();
+        var temperatures = new double[nodes];
+        java.util.Arrays.fill(temperatures, 400);
+        var seed = new com.wormzjl.icheme.science.column.v3.V3NeuralSeed(input, "r1", com.wormzjl.icheme.science.column.v3.V3CondenserPhaseBranch.TWO_PHASE,
+                new double[nodes][components], new double[nodes][components], temperatures, new double[nodes], new boolean[nodes]);
+        var report = new Report();
+        report.warm(new Report.Warm(seed, 2e5, Map.of()));
+        return new FlowsheetRun(FlowsheetRun.Status.STEADY, Map.of(), Map.of(), Map.of("T-101", report), List.of(), List.of(), 0, 0, 0, 0, 0, List.of(), List.of());
+    }
+
+    /**
+     * Stop leaves the next run's columns to the learned start and its loops where the steady run left them (owner 2026-11-04, P2): a
+     * warm start that took long is not tried again.
+     */
+    @Test
+    void stopLeavesTheNextRunsColumnsToTheLearnedStart() throws InterruptedException {
+        var warm = warmRun();
+        var entered = new CountDownLatch(1);
+        var open = new CountDownLatch(1);
+        var lasts = Collections.synchronizedList(new ArrayList<FlowsheetRun>());
+        var runner = runner(new SimulatorRunner.Engine() {
+            @Override public FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, FlowsheetRun last, FlowsheetSolver.Progress progress) {
+                lasts.add(last);
+                if (lasts.size() == 2) {
+                    // The second run waits for Stop, then meets its checkpoint.
+                    entered.countDown();
+                    try {
+                        assertTrue(open.await(GUARD, TimeUnit.SECONDS));
+                    } catch (InterruptedException e) {
+                        throw new IllegalStateException(e);
+                    }
+                    checkpoint.run();
+                }
+                return warm;
+            }
+
+            @Override public FlowsheetRun alone(Flowsheet sheet, String unit, MaterialCatalog catalog, Runnable checkpoint, Map<String, FlowStream> streams, FlowsheetSolver.Progress progress) {
+                return FlowsheetRun.none();
+            }
+
+            @Override public com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing.Sized rate(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint) {
+                return null;
+            }
+        });
+        var sheet = SheetFixture.water();
+        runner.run(sheet);
+        ended();
+        runner.run(sheet);
+        assertTrue(entered.await(GUARD, TimeUnit.SECONDS));
+        runner.stop();
+        open.countDown();
+        ended();
+        runner.run(sheet);
+        ended();
+        assertEquals(3, lasts.size());
+        assertNull(lasts.get(0));
+        assertSame(warm, lasts.get(1), "a steady run starts the next one warm");
+        var after = lasts.get(2);
+        assertNotSame(warm, after);
+        assertNull(after.reports().get("T-101").warm(), "after Stop the column starts from the learned start");
+        assertEquals(FlowsheetRun.Status.STEADY, after.status(), "and the loops where the steady run left them");
+        assertEquals(warm.streams(), after.streams());
+    }
+
     @Test
     void theCatalogIsTakenOnTheCallerAtTheRunsStart() throws InterruptedException {
         var threads = new ArrayList<Thread>();

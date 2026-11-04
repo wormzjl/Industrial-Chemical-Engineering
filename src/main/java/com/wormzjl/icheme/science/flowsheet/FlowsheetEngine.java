@@ -19,13 +19,14 @@ public final class FlowsheetEngine {
     }
 
     /**
-     * {@code last}, this sheet's last run if it has one, starts its loops; see {@link FlowsheetCompiler#estimates}. A stream flashes
-     * on the world's own package, so a sheet drawn on another, or on one since removed, asks for it. Amounts go by component id, so
-     * a sheet given that package keeps every one it has a place for.
+     * {@code last}, this sheet's last run if it has one, starts its loops (see {@link FlowsheetCompiler#estimates}) and, where it
+     * stood steady, its columns where their solves there ended ({@link Report.Warm}). A stream flashes on the world's own package, so
+     * a sheet drawn on another, or on one since removed, asks for it. Amounts go by component id, so a sheet given that package keeps
+     * every one it has a place for.
      */
     public static FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, @Nullable FlowsheetRun last, FlowsheetSolver.Progress progress) {
         return solving(sheet, catalog, thermo -> {
-            var calculations = FlowsheetCompiler.compile(sheet, thermo);
+            var calculations = FlowsheetCompiler.compile(sheet, thermo, last);
             var estimates = FlowsheetCompiler.estimates(sheet, thermo, last);
             return FlowsheetSolver.run(calculations, thermo.axis(), thermo, sheet.settings(), checkpoint, estimates, progress, Map.of());
         }, checkpoint);
@@ -33,11 +34,12 @@ public final class FlowsheetEngine {
 
     /**
      * Solves {@code unit} alone on the streams it has now, {@code streams}, as Solve alone asks (plan section 3.3). Nothing else
-     * runs: a stream that starts on the sheet's own feed reaches it, and a heat side runs only if its line has a stream.
+     * runs: a stream that starts on the sheet's own feed reaches it, and a heat side runs only if its line has a stream. A column
+     * starts from the learned start.
      */
     public static FlowsheetRun alone(Flowsheet sheet, String unit, MaterialCatalog catalog, Runnable checkpoint, Map<String, FlowStream> streams, FlowsheetSolver.Progress progress) {
         return solving(sheet, catalog, thermo -> {
-            var all = FlowsheetCompiler.compile(sheet, thermo);
+            var all = FlowsheetCompiler.compile(sheet, thermo, null);
             var known = new HashSet<>(streams.keySet());
             var reads = new HashSet<String>();
             for (var c : all) {

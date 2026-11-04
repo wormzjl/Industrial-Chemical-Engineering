@@ -137,7 +137,8 @@ public final class ColumnSizing {
 
     /**
      * The real column at each diameter a sizing asks for, once each: the door's from the run, any other by a solve of the run's own
-     * input, warm from the last trial that solved. It runs on the caller's thread, and {@code checkpoint} reaches every solve.
+     * input, warm from the last trial that solved, the first from where the run's own solve ended. It runs on the caller's thread,
+     * and {@code checkpoint} reaches every solve.
      */
     public static final class Trials {
         private final Load load;
@@ -147,10 +148,12 @@ public final class ColumnSizing {
         private @Nullable V3NeuralSeed seed;
         private int solves;
 
-        public Trials(Load load, MaterialCatalog catalog, Runnable checkpoint) {
+        /** @param start where the run's own solve of the column ended, or null: the first trial then starts from the learned start */
+        public Trials(Load load, MaterialCatalog catalog, Runnable checkpoint, @Nullable V3NeuralSeed start) {
             this.load = load;
             this.catalog = catalog;
             this.checkpoint = checkpoint;
+            seed = start;
             done.put(load.diameter(), Optional.of(load.hydraulics()));
         }
 

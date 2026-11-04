@@ -12,8 +12,9 @@ import java.util.Map;
  * @param wires     the stream on each wired port
  * @param passages  its sized passages' laws (D19); {@link Passages#TYPED} while it has no size
  * @param utilities the feeds whose flow it sets, and what it reads to set them
+ * @param last      what its block's solve left in the steady run this one starts from, or null: a column starts where it ended
  */
-public record WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo, Passages passages, Utilities utilities) {
+public record WiredUnit(String id, Params params, Map<String, String> wires, FlowThermo thermo, Passages passages, Utilities utilities, @Nullable Report last) {
     /** A sized passage's drop is found again while it moves by more than this, Pa: a thousandth of a bar. */
     private static final double SAME_DROP = 100;
     /** At most this often: the coils' drop rises with the vapour a lower outlet pressure gives, and settles in a few. */

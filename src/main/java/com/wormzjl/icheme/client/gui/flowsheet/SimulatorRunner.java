@@ -83,7 +83,10 @@ public final class SimulatorRunner {
     private volatile SimulatorHost.@Nullable Finished last;
     private volatile @Nullable Rated rated;
     private volatile @Nullable String broken;
-    /** The last run that stood steady, which starts the next one's loops: a stopped or failed run leaves it where it was. */
+    /**
+     * The last run that stood steady, which starts the next one's loops and its columns where they ended there (owner 2026-11-04,
+     * P1 and P2): a stopped or failed run leaves it where it was, and Stop leaves its columns to the learned start.
+     */
     private volatile @Nullable FlowsheetRun steady;
     private volatile boolean closed;
 
@@ -145,10 +148,15 @@ public final class SimulatorRunner {
         thread.start();
     }
 
-    /** Stops the run in hand, which ends at its next checkpoint and keeps what it has. */
+    /**
+     * Stops the run in hand, which ends at its next checkpoint and keeps what it has. The next run starts its columns from the learned
+     * start: a warm start that took long is not tried again.
+     */
     public void stop() {
         var running = job.get();
         if (running != null) running.stopped = true;
+        var held = steady;
+        if (held != null) steady = held.cold();
     }
 
     /** Stops the run in hand and drops its result, and starts no other: the screen is gone. */
@@ -158,11 +166,14 @@ public final class SimulatorRunner {
     }
 
     /**
-     * What a block held, which stands as the last run until the next. A column's warm start lives only in this client's memory, so {@link #steady} stays as it is: the first run
-     * after opening starts cold.
+     * What a block held, which stands as the last run until the next. Where it stood steady it starts the next run's loops, as a run
+     * on this client does (owner 2026-11-04, P1). A column's warm start lives only in this client's memory and a stored run has none,
+     * so the first run after opening starts its columns from the learned start.
      */
     public void restore(SimulatorHost.Finished stored) {
-        if (!closed && job.get() == null) last = stored;
+        if (closed || job.get() != null) return;
+        last = stored;
+        if (stored.run().status() == FlowsheetRun.Status.STEADY) steady = stored.run();
     }
 
     /** The run or Size all in hand, or null: a quiet rating is none. */

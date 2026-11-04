@@ -168,7 +168,7 @@ class SimulatorBlockTest {
     }
 
     @Test
-    void aReplayPutsTheSheetAndResultsOnShowAndTheNextRunStartsCold() throws Exception {
+    void aReplayPutsTheSheetAndResultsOnShow() throws Exception {
         var sheet = SheetFixture.water();
         var finished = run(sheet);
         byte[] bytes = FlowsheetFile.write(sheet);
@@ -184,11 +184,15 @@ class SimulatorBlockTest {
         assertFalse(host.unsaved(shown));
     }
 
-    /** {@code restore} leaves the start of the next run alone: a warm start is client memory only. */
+    /**
+     * A stored run that stood steady starts the next run's loops, as a run on this client does (owner 2026-11-04, P1); one that did
+     * not starts nothing. A column's warm start is client memory only, so the stored run carries none (see {@code FlowsheetColumnTest}).
+     */
     @Test
-    void storedResultsGiveNoWarmStart() throws Exception {
+    void aStoredSteadyRunStartsTheNextRunsLoops() throws Exception {
         var sheet = SheetFixture.water();
-        var finished = run(sheet);
+        var stored = replay(run(sheet), sheet);
+        assertEquals(FlowsheetRun.Status.STEADY, stored.run().status());
         var lasts = new ArrayList<FlowsheetRun>();
         var runner = new SimulatorRunner(() -> SheetFixture.CATALOG, new SimulatorRunner.Engine() {
             @Override public FlowsheetRun run(Flowsheet s, com.wormzjl.icheme.science.material.MaterialCatalog c, Runnable p, FlowsheetRun last, com.wormzjl.icheme.science.flowsheet.FlowsheetSolver.Progress g) {
@@ -200,12 +204,16 @@ class SimulatorBlockTest {
                 return FlowsheetRun.none();
             }
         });
-        runner.restore(finished);
-        assertSame(finished, runner.last());
+        runner.restore(new SimulatorHost.Finished(sheet, FlowsheetRun.refused(Note.error("sheet", "run.broken", "x")), 0));
         runner.run(sheet);
         for (int i = 0; i < 6000 && runner.running() != null; i++) Thread.sleep(10);
-        assertEquals(1, lasts.size());
-        assertNull(lasts.getFirst());
+        runner.restore(stored);
+        assertSame(stored, runner.last());
+        runner.run(sheet);
+        for (int i = 0; i < 6000 && runner.running() != null; i++) Thread.sleep(10);
+        assertEquals(2, lasts.size());
+        assertNull(lasts.getFirst(), "a stored run that failed starts nothing");
+        assertSame(stored.run(), lasts.get(1));
     }
 
     @Test

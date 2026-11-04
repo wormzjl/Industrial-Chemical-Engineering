@@ -25,7 +25,10 @@ import java.util.Locale;
 
 import static com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit.*;
 
-/** The column block's own solve ({@link ColumnUnit}). It keeps the last state, so each pass starts from it. */
+/**
+ * The column block's own solve ({@link ColumnUnit}). It keeps the last state, so each pass starts from it, and leaves it on its
+ * report, so a run that starts from a steady one starts the column where it ended there (owner 2026-11-04, P2).
+ */
 final class ColumnBlockSolve implements Calculation.Law {
     /**
      * The feed is flashed to its tray's pressure, which only a solve can say, so it starts at the stream's own and goes round
@@ -57,6 +60,18 @@ final class ColumnBlockSolve implements Calculation.Law {
         this.u = u;
         this.door = door;
         components = u.thermo().axis().size();
+        // Where the column's solve ended in the steady run this one starts from, while its package stands at that revision.
+        var left = u.last() == null ? null : u.last().warm();
+        if (left != null && left.current(u.thermo().catalog())) {
+            warm = left.seed();
+            feedTray = left.feedTray();
+            stages.putAll(left.stages());
+        }
+    }
+
+    /** Leaves where the column now stands on {@code report}, for a run that starts from this one. */
+    private void leave(Report report) {
+        if (warm != null) report.warm(new Report.Warm(warm, feedTray, stages));
     }
 
     String condenserHeat() {
@@ -97,6 +112,7 @@ final class ColumnBlockSolve implements Calculation.Law {
         var feed = board.stream(u.wire(FEED));
         if (feed.empty()) {
             write(board, report, null, null, 0);
+            leave(report);
             return;
         }
         if (!feed.solids().empty()) throw new FlowsheetFailure("column.solids");
@@ -134,6 +150,7 @@ final class ColumnBlockSolve implements Calculation.Law {
         double whole = ledger.condenserWatts() - motiveHeat, water = water(result, whole);
         write(board, report, result, ejected, water);
         report.display(display);
+        leave(report);
         report.reading("condenser", -whole);
         report.reading("condenser_air", water - whole);
         report.reading("condenser_water", -water);

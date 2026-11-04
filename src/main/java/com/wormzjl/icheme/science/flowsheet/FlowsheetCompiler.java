@@ -24,8 +24,11 @@ public final class FlowsheetCompiler {
     private FlowsheetCompiler() {
     }
 
-    /** @param drawn the sheet as drawn: its passages' ends read as the roles the models name ({@link Wiring#roles}) */
-    public static List<Calculation> compile(Flowsheet drawn, FlowThermo thermo) {
+    /**
+     * @param drawn the sheet as drawn: its passages' ends read as the roles the models name ({@link Wiring#roles})
+     * @param last  the run this one starts from, or null: where it stood steady, each block starts where its solve there ended
+     */
+    public static List<Calculation> compile(Flowsheet drawn, FlowThermo thermo, @Nullable FlowsheetRun last) {
         var sheet = Wiring.roles(drawn);
         var calculations = new ArrayList<Calculation>();
         var wires = new HashMap<String, Map<String, String>>();
@@ -43,8 +46,9 @@ public final class FlowsheetCompiler {
             else calculations.add(source(stream, thermo));
         }
         double fall = sheet.sizing().basis().paFall();
+        var left = last != null && last.status() == FlowsheetRun.Status.STEADY ? last.reports() : Map.<String, Report>of();
         for (var unit : sheet.units())
-            calculations.addAll(unit(unit, sheet.sizing(), wires.getOrDefault(unit.id(), Map.of()), outlets.getOrDefault(unit.id(), List.of()), new WiredUnit.Utilities(utilities.getOrDefault(unit.id(), Map.of()), fall), thermo));
+            calculations.addAll(unit(unit, sheet.sizing(), wires.getOrDefault(unit.id(), Map.of()), outlets.getOrDefault(unit.id(), List.of()), new WiredUnit.Utilities(utilities.getOrDefault(unit.id(), Map.of()), fall), left.get(unit.id()), thermo));
         return calculations;
     }
 
@@ -172,11 +176,11 @@ public final class FlowsheetCompiler {
     }
 
     /** A unit with a size runs its passages' laws at the run's flow; one with none, its door's drops (sizing plan section 3.11, D19). */
-    private static List<Calculation> unit(Flowsheet.Unit unit, SizingFacts sizing, Map<String, String> wires, List<String> outlets, WiredUnit.Utilities utilities, FlowThermo thermo) {
+    private static List<Calculation> unit(Flowsheet.Unit unit, SizingFacts sizing, Map<String, String> wires, List<String> outlets, WiredUnit.Utilities utilities, @Nullable Report last, FlowThermo thermo) {
         var model = UnitTypes.model(unit.type());
         if (model == null) return List.of(refused(unit, outlets, "unit.removed", unit.type()));
         try {
-            var wired = new WiredUnit(unit.id(), unit.params(), Map.copyOf(wires), thermo, SizedPassages.of(sizing, unit, thermo), utilities);
+            var wired = new WiredUnit(unit.id(), unit.params(), Map.copyOf(wires), thermo, SizedPassages.of(sizing, unit, thermo), utilities, last);
             for (var port : model.ports(unit.params())) if (port.required() && wired.wire(port.id()) == null) throw new FlowsheetFailure("unit.free_inlet", port.id());
             return model.calculations(wired);
         } catch (FlowsheetFailure refusal) {

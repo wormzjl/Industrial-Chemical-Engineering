@@ -1,6 +1,8 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
+import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
+import com.wormzjl.icheme.science.material.MaterialCatalog;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -25,10 +27,32 @@ public final class Report {
         LAST
     }
 
+    /**
+     * Where a column's last solve ended, which the next run's solve of it starts from (owner 2026-11-04, P2): state in this client's
+     * memory only. A run's stored results never carry it, so a stored run's columns start from the learned start. The calculator
+     * judges whether it still fits the column it is offered to, and solves from the learned start where it does not.
+     *
+     * @param seed     the calculator's warm start, on the package revision it names
+     * @param feedTray the feed tray's pressure (Pa)
+     * @param stages   each steam row's stage pressure (Pa, by stage)
+     */
+    public record Warm(V3NeuralSeed seed, double feedTray, Map<Integer, Double> stages) {
+        public Warm {
+            stages = Map.copyOf(stages);
+        }
+
+        /** Whether its package still stands at the revision it was solved on: a new revision starts from the learned start. */
+        public boolean current(MaterialCatalog catalog) {
+            var pack = catalog.packages().get(seed.input().packageId());
+            return pack != null && pack.scientificRevision().equals(seed.propertyRevision());
+        }
+    }
+
     private final Map<String, Double> readings = new LinkedHashMap<>();
     private final List<Note> notes = new ArrayList<>();
     private double duty, massIn, enthalpyIn, massOut, enthalpyOut;
     private @Nullable V3ColumnDisplayResult display;
+    private @Nullable Warm warm;
     private @Nullable Start start;
     private final @Nullable Consumer<Start> told;
 
@@ -61,6 +85,30 @@ public final class Report {
 
     public @Nullable V3ColumnDisplayResult display() {
         return display;
+    }
+
+    public void warm(Warm warm) {
+        this.warm = warm;
+    }
+
+    public @Nullable Warm warm() {
+        return warm;
+    }
+
+    /** This report without its warm start: the same readings, notes, boundary, display and start. */
+    Report cold() {
+        if (warm == null) return this;
+        var cold = new Report();
+        cold.readings.putAll(readings);
+        cold.notes.addAll(notes);
+        cold.duty = duty;
+        cold.massIn = massIn;
+        cold.enthalpyIn = enthalpyIn;
+        cold.massOut = massOut;
+        cold.enthalpyOut = enthalpyOut;
+        cold.display = display;
+        cold.start = start;
+        return cold;
     }
 
     public void note(Note note) {

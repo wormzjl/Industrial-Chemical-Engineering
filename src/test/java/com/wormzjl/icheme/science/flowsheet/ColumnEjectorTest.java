@@ -104,11 +104,12 @@ final class ColumnEjectorTest {
         System.out.printf("free: vent %.4f kg/s (water %.1f %%, gas %.1f %%), steam %.4f kg/s (%.2f kg/kg), heat %.3f MW, condenser %.2f MW%n",
                 load, 100 * water, 100 * (1 - water), need, need / load, heat / 1e6, reading(free, "condenser") / 1e6);
 
-        // Wired at 1.1 times the need: the same column, so the same need; the water product carries the wired steam.
+        // Wired at 1.1 times the need: the same column, so the same need; the water product carries the wired steam. It runs from no
+        // run, as the free one did: from the free run its column would start warm and close to its own tolerance, not to these digits.
         var steam = new LinkedHashMap<String, Double>();
         steam.put("Water", 1.1 * need / waterMass);
         var sheet = sheet(new Flowsheet.Feed(460, EjectorUnit.MOTIVE_PRESSURE, steam, List.of()));
-        var wired = run(sheet, free);
+        var wired = run(sheet, null);
         closes(wired);
         assertEquals(need, reading(wired, "ejector_need"), 1e-6 * need);
         assertEquals(1.1 * need, reading(wired, "ejector_motive"), 1e-9 * need);

@@ -28,9 +28,10 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class SimulatorRunTest {
     private static final Flowsheet SAMPLE = SheetFixture.sample();
+    /** How many checkpoints {@link #ONE} met: a cold run's. */
+    private static final AtomicInteger COLD = new AtomicInteger();
     /** The run on its own, on the caller, with no progress: what every other run here must equal. */
-    private static final FlowsheetRun ONE = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(SAMPLE, SheetFixture.CATALOG, () -> {
-    });
+    private static final FlowsheetRun ONE = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(SAMPLE, SheetFixture.CATALOG, COLD::incrementAndGet);
 
     private static void ended() throws InterruptedException {
         for (var thread : Thread.getAllStackTraces().keySet())
@@ -106,6 +107,8 @@ class SimulatorRunTest {
         assertTrue(ONE.reports().values().stream().anyMatch(report -> report.display() != null), "the sample has a column to show");
         assertEquals(ONE.reports().keySet(), back.run().reports().keySet());
         for (var id : ONE.reports().keySet()) assertEquals(ONE.reports().get(id).display(), back.run().reports().get(id).display(), id);
+        assertNotNull(ONE.reports().get("T-101").warm(), "the run leaves where its column ended");
+        for (var report : back.run().reports().values()) assertNull(report.warm(), "which is client memory only: the stored run starts its columns from the learned start");
         assertEquals(ONE.status(), back.run().status());
         assertEquals(ONE.streams().keySet(), back.run().streams().keySet());
     }
@@ -199,12 +202,10 @@ class SimulatorRunTest {
 
     @Test
     void stopReachesInsideAColdColumnOnTheGamesPath() throws InterruptedException {
-        var count = new AtomicInteger();
-        com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(SAMPLE, SheetFixture.CATALOG, count::incrementAndGet);
         int deep = 0;
         // Spread through the first pass, whose cold column takes most of a run's checkpoints.
         for (double share : new double[]{.05, .15, .3}) {
-            var stopped = stopAt((int) (count.get() * share));
+            var stopped = stopAt((int) (COLD.get() * share));
             assertEquals(FlowsheetRun.Status.STOPPED, stopped.run().status(), "never FAILED");
             assertTrue(stopped.run().log().stream().noneMatch(note -> note.severity() == Note.Severity.ERROR), () -> "a stop blames nothing: " + stopped.run().log());
             assertFalse(stopped.run().outcomes().containsValue(FlowsheetRun.Outcome.FAILED));
@@ -216,6 +217,47 @@ class SimulatorRunTest {
             assertEquals(FlowsheetRun.Outcome.SOLVED, stopped.run().outcomes().get("P-101"), "what finished stays");
         }
         assertTrue(deep >= 2, "Stop came inside the column " + deep + " times");
+    }
+
+    /**
+     * A run from a steady one starts the column where its solve there ended (owner 2026-11-04, P2): the same answer to the loop's
+     * tolerance, in a fraction of a cold run's checkpoints. Stop's cold copy starts it from the learned start.
+     */
+    @Test
+    void aRunFromASteadyOneStartsTheColumnWhereItEnded() {
+        var starts = Collections.synchronizedList(new ArrayList<Report.Start>());
+        FlowsheetSolver.Progress heard = new FlowsheetSolver.Progress() {
+            @Override public void calculation(int pass, int passes, String unit) {
+            }
+
+            @Override public void start(Report.Start start) {
+                starts.add(start);
+            }
+        };
+        var warm = new AtomicInteger();
+        var next = FlowsheetEngine.run(SAMPLE, SheetFixture.CATALOG, warm::incrementAndGet, ONE, heard);
+        assertEquals(FlowsheetRun.Status.STEADY, next.status(), () -> "log " + next.log());
+        assertEquals(Report.Start.LAST, starts.getFirst(), "its first solve starts where the steady run's ended");
+        double flow = 0, temperature = 0;
+        for (var id : ONE.streams().keySet()) {
+            var a = ONE.streams().get(id);
+            var b = next.streams().get(id);
+            if (a.empty() && b.empty()) continue;
+            flow = Math.max(flow, Math.abs(b.mass() - a.mass()) / Math.max(a.mass(), 1e-9));
+            temperature = Math.max(temperature, Math.abs(b.temperature() - a.temperature()));
+        }
+        System.out.printf("WARM_START checkpoints=%d cold=%d flow_rel=%.3g temperature_K=%.3g%n", warm.get(), COLD.get(), flow, temperature);
+        assertTrue(warm.get() < COLD.get() / 2, () -> warm.get() + " checkpoints against a cold run's " + COLD.get());
+        // The band: the warm solve's closure, 0.1 % of a row's own scale, and ten times the loop's 0.01 K (measured 4e-7 and 2e-5 K).
+        assertTrue(flow < 1e-3, "flow moved by " + flow);
+        assertTrue(temperature < .1, "temperature moved by " + temperature + " K");
+
+        starts.clear();
+        var probe = FlowsheetEngine.run(SAMPLE, SheetFixture.CATALOG, () -> {
+            if (!starts.isEmpty()) throw new java.util.concurrent.CancellationException();
+        }, ONE.cold(), heard);
+        assertEquals(FlowsheetRun.Status.STOPPED, probe.status());
+        assertEquals(List.of(Report.Start.LEARNED), starts, "Stop's cold copy starts the column from the learned start");
     }
 
     @Test
