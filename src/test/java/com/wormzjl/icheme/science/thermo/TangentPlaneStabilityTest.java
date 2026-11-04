@@ -188,7 +188,8 @@ class TangentPlaneStabilityTest {
     void networkPackageVerdictsMatchTheNetworkFlashPhaseCount() {
         var kernel = kernel(PengRobinsonKernel.Mixing.SPARSE_PAIRS);
         var test = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT);
-        var fluid = FluidTestSupport.networkModel();
+        // The network model on the kernel's compounds, as an island holding only them runs (batch 2026-11-04-refinery-compounds, V2).
+        var fluid = FluidTestSupport.networkModel().on(MaterialCatalog.bundled().requirePackage(NETWORK).components());
         double[] z = crudeWithNitrogen();
         int n = kernel.componentCount();
         assertEquals(20, n);

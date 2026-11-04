@@ -14,7 +14,7 @@ class ConservativeTransportTest {
         var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:tjl20_methane");
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(int component:new int[]{0,1,1}) {
-            double[] n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK];n[component]=1/model.hydrocarbon.molecularWeight(component);
+            double[] n=new double[model.componentCount()];n[component]=1/model.hydrocarbon.molecularWeight(component);
             nodes.add(new PassiveNetwork.Reservoir(nodes.size()+1,0,model.flashTP(350,101325,n,()->{})));
         }
         var geometry=new PipeResistance.Geometry(10,.05,.000045,0);

@@ -168,8 +168,13 @@ class FluidCheckpointCodecTest {
         assertEquals(world.constructed().solidMasses(),decoded.constructed().solidMasses());assertArrayEquals(world.destroyed().moles(),decoded.destroyed().moles());
         assertEquals(world.basis(),decoded.basis());assertEquals(world.recoveries(),decoded.recoveries());
         assertArrayEquals(bytes,FluidCheckpointCodec.encodeTopology(decoded),"a decoded topology re-encodes to the same bytes");
-        // The basis identity (a package's composed revisions, about 3.3 KB of ASCII) is stored once per world.
-        assertTrue(bytes.length-world.basis().revision().length()<2_500,"the facts and events of five devices: "+bytes.length+" bytes with the basis");
+        // The basis (its identity, a package's composed revisions, about 7.8 KB of ASCII on the 45-entry list, and its compound
+        // ids) is stored once per world, and the fixture's two compositions hold every entry of the list (8 bytes each): both
+        // grow with the world list, the rest does not. The budget is the 2,500 bytes beside the identity the 21-entry list had,
+        // less its 21 ids (189 characters) and the two compositions' 21 entries (336 bytes): the same budget at that list.
+        int basis=world.basis().revision().length();for(String id:world.basis().components())basis+=id.length();
+        int perDevice=bytes.length-basis-2*Double.BYTES*count;
+        assertTrue(perDevice<1_975,"the facts and events of five devices: "+bytes.length+" bytes with the basis, "+perDevice+" without the basis and the two full compositions, "+count+" entries");
         assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length+1),0,key->key.on(model))).getMessage().contains("trailing bytes"));
         assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length/2),0,key->key.on(model)));
     }

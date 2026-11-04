@@ -187,7 +187,7 @@ class FluidCheckpointFormatTest extends CertifyingRig.Islands {
         // A graph-identity change: every run of pipe one metre longer, in the base and in the interval's start alike.
         var longer=CheckpointImages.withIsland(image,2,key->key.on(model),entry->withCertificateGraphs(entry,FluidCheckpointFormatTest::withLongerSections,FluidCheckpointFormatTest::withLongerSections));
         var cases=List.of(
-                new Case("property revision",FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),PACKAGE,10, FluidThermodynamics.DEFAULT_TRACE_CUTOFF_MOLE_FRACTION),defaults,image),
+                new Case("property revision",FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE,10, FluidThermodynamics.DEFAULT_TRACE_CUTOFF_MOLE_FRACTION),defaults,image),
                 new Case("certificate policy",model,new CertificatePolicy(true,1e-8,1e-6,17_280,2,0),image),
                 new Case("certificate policy",model,new CertificatePolicy(true,1e-7,1e-5,17_280,2,0),image),
                 new Case("certificate policy",model,new CertificatePolicy(true,1e-7,1e-6,17_279,2,0),image),

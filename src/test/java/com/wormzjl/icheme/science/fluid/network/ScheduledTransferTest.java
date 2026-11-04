@@ -69,12 +69,13 @@ class ScheduledTransferTest {
         // at the step's end composition, and the state cap does not see a composition integral: on the single-tank fixture
         // one 5 s step withdraws 0.160 mol of the injected methane against 0.120 refined, 0.74 % of the 5.41 mol withdrawn
         // (WP1 of the mixed-gas junction batch). Energy stays at 0.1 %.
-        for(long id:r.keySet()){double total=0;for(int c=0;c<22;c++)total+=Math.abs(r.get(id)[c]);
-            for(int c=0;c<23;c++)assertEquals(r.get(id)[c],a.get(id)[c],c==22?1e-4+.001*Math.abs(r.get(id)[c]):1e-10+.01*total,"Boundary "+id+" component/energy "+c);}
+        for(long id:r.keySet()){double total=0;int width=model.componentCount();for(int c=0;c<width;c++)total+=Math.abs(r.get(id)[c]);
+            for(int c=0;c<=width;c++)assertEquals(r.get(id)[c],a.get(id)[c],c==width?1e-4+.001*Math.abs(r.get(id)[c]):1e-10+.01*total,"Boundary "+id+" component/energy "+c);}
         for(int i=0;i<actual.averageMassFlows().length;i++)assertEquals(reference.averageMassFlows()[i],actual.averageMassFlows()[i],1e-9+.002*Math.abs(reference.averageMassFlows()[i]));
         assertTrue(actual.acceptedSubsteps()<reference.acceptedSubsteps(),"The controller did not reduce accepted work in this smooth fixture");
     }
-    private static Map<Long,double[]> totals(List<ConservativeTransport.BoundaryTransfer> transfers) {
-        var result=new HashMap<Long,double[]>();for(var transfer:transfers){var sum=result.computeIfAbsent(transfer.nodeId(),id->new double[23]);var n=transfer.moles();for(int c=0;c<com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1;c++)sum[c]+=n[c];sum[22]+=transfer.totalEnergyJoule();}return result;
+    private Map<Long,double[]> totals(List<ConservativeTransport.BoundaryTransfer> transfers) {
+        int width=model.componentCount();
+        var result=new HashMap<Long,double[]>();for(var transfer:transfers){var sum=result.computeIfAbsent(transfer.nodeId(),id->new double[width+1]);var n=transfer.moles();for(int c=0;c<width;c++)sum[c]+=n[c];sum[width]+=transfer.totalEnergyJoule();}return result;
     }
 }

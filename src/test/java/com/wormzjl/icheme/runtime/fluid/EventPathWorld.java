@@ -102,6 +102,16 @@ class EventPathWorld {
     }
     /** A 1 m3 nitrogen charge at 298.15 K and 1 atm: a tank's or a void's default. */
     static FluidDeviceSpec nitrogen(){return FluidDeviceSpec.nitrogen(CATALOG);}
+    /** The compounds of the network before batch 2026-11-04-refinery-compounds (W6), water last: the axis of the minimized fuzz worlds' recorded specs. */
+    private static List<String> legacyAxis(){var ids=new ArrayList<>(CATALOG.requirePackage("icheme:tjl20_methane_nitrogen").components());ids.add("Water");return ids;}
+    /** {@code amounts}, recorded on that axis, on the world list by compound id. */
+    static double[] legacy(double[] amounts) {
+        var legacy=legacyAxis();if(amounts.length!=legacy.size())throw new IllegalArgumentException("A legacy composition has "+legacy.size()+" entries");
+        var ids=new ArrayList<>(CATALOG.requirePackage(CATALOG.presets().network().packageId()).components());ids.add("Water");
+        double[] n=new double[ids.size()];for(int i=0;i<amounts.length;i++)n[ids.indexOf(legacy.get(i))]=amounts[i];return n;
+    }
+    /** One mole of the compound at {@code index} of that axis, on the world list. */
+    static double[] legacy(int index){double[] n=new double[legacyAxis().size()];n[index]=1;return legacy(n);}
     /** A generator's spec: one component at a temperature and pressure. */
     static FluidDeviceSpec pure(int component,double temperature,double pressure) {
         double[] n=new double[FluidDeviceSpec.nitrogen(CATALOG).composition().length];n[component]=1;return new FluidDeviceSpec(1,temperature,pressure,n);
