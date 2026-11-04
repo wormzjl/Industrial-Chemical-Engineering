@@ -126,8 +126,9 @@ The engines keep reading the resolved `MaterialCatalog.Package` view (components
 |---|---|---|
 | D1 | Sections 3.1-3.4 as written (package = method + list; neural by active compounds and content; simulator column on the sheet package; save basis by compound ids) | Q1 |
 | D2 | Network compounds after the rework | Decided 2026-11-04: option B of [VARYING_COMPONENTS_REVIEW.md](VARYING_COMPONENTS_REVIEW.md), island compound sets |
-| D3 | k_ij for pairs with a new compound: DWSIM (`kij_pr.dat`, else the DECHEMA value whose range is nearest 300-600 K), zero where none; existing pairs unchanged | Q3 |
-| D4 | Crude-fraction freezing point | Q4 |
+| D3 | k_ij for pairs with a new compound: DWSIM (`kij_pr.dat`, else the DECHEMA value whose range is nearest 300-600 K), zero where none; existing pairs unchanged | Q3; refined 2026-11-04 (owner): Methane/H2S 0.08125 from ChemSep's 2009 table (`pr.ipd`, Reamer et al. data), because `kij_pr.dat`'s 0.1356 equals DECHEMA's Methane/SO2 value; every hydrogen pair zero (the narrow DECHEMA fits, e.g. H2/Toluene -0.51, would put H2 into the oil) |
+| D4 | Crude-fraction freezing point | Q4: n-paraffin bound (Riazi and Al-Sahhaf 1995), estimated |
+| D4b | Carbonyl sulfide constants | Decided 2026-11-04 (owner): Tc, Pc and acentric factor from CoolProp (Tc 378.77 K); ChemSep's record is inconsistent (Tc 375.15 K, its correlations run to 378.8 K); ChemSep correlations otherwise |
 | D5 | Freezing sub-record under the viscosity rule (3.6); AGENTS.md gains "a freezing-point edit bumps the freezing point's own `revision`" | with Q1 |
 | D6 | New compound ids: DWSIM name without spaces, capitalised; a leading locant moves behind (`Butene-1`), or the trade name (`Isooctane`, `Butadiene`); existing ids unchanged (they are facts) | reversible until merge |
 
