@@ -34,7 +34,20 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     static final int GOVERNOR_WALK = 64;
 
     /** A queued change to the parts. */
-    public sealed interface Event permits Put, Remove, Configure, Reset, Governor {
+    public sealed interface Event permits Put, Remove, Configure, Reset, Governor, CreateInput {
+    }
+
+    /**
+     * What a Create coupling at {@code cell} reads of its Create network (W6b, D40): its |rpm| (0 at rest or overstressed)
+     * and the stress it may take, su: the network's spare stress plus what the coupling draws already. Queued by the
+     * coupling's block entity when Create's speed or spare moves past {@link com.wormzjl.icheme.science.machine.CreateCoupling#moved};
+     * engine state, never saved (reading A147).
+     */
+    public record CreateInput(PhysicalFluidTopology.Position cell, double rpm, double stress) implements Event {
+        public CreateInput {
+            Objects.requireNonNull(cell);
+            if (!(rpm >= 0) || !Double.isFinite(rpm) || !Double.isFinite(stress)) throw new IllegalArgumentException("Invalid Create input");
+        }
     }
 
     /** A part at {@code position}, built by {@code make} from the identity it keeps (a part of the same kind already there) or takes. */
@@ -75,6 +88,10 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         UUID speedSensor(long turbine);
 
         void resize(PhysicalFluidTopology.Position shaft, int pixels);
+
+        /** The Create coupling at {@code coupling} draws {@code impact} su per rpm on its Create network from now (W6b). */
+        default void stress(PhysicalFluidTopology.Position coupling, double impact) {
+        }
 
         Host NONE = new Host() {
             public void edit(long device, FlowControl.ControlValve control) {
@@ -142,6 +159,12 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     private final Map<Long, Integer> sizes = new HashMap<>();
     /** Statuses a governor binding left on a turbine ({@code NO GOVERNOR VALVE}). */
     private final Map<Long, String> bindings = new HashMap<>();
+    /** Each Create coupling's last input by its cell (W6b): engine state, rebuilt from the block entity's next report. */
+    private final Map<PhysicalFluidTopology.Position, CreateInput> create = new HashMap<>();
+    /** The stress impact last sent to each coupling unit, su per rpm. */
+    private final Map<Long, Double> impacts = new HashMap<>();
+    /** Stress units per FE per tick (config {@code create.stressPerFE}). */
+    private java.util.function.DoubleSupplier stressPerFE = () -> com.wormzjl.icheme.science.machine.CreateCoupling.STRESS_PER_FE;
 
     /**
      * @param owner a fluid device's island, or null ({@link PhysicalRegistry#owner})
@@ -170,6 +193,25 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         health = Objects.requireNonNull(value);
     }
 
+    /** Installs the Create stress rate (W6b): stress units one FE per tick trades for. */
+    public void stressPerFE(java.util.function.DoubleSupplier value) {
+        stressPerFE = Objects.requireNonNull(value);
+    }
+
+    /** Watts per stress unit: {@code 20 × J per FE / su per FE} (D7). */
+    public double wattsPerStress() {
+        double jpf = electric == null ? ElectricStores.Settings.DEFAULT.joulesPerFE() : electric.joulesPerFE();
+        return com.wormzjl.icheme.science.machine.CreateCoupling.wattsPerStress(jpf, stressPerFE.getAsDouble());
+    }
+
+    /**
+     * Queues the removal of every part of {@code kind} (W6b): a world opened without Create lost its couplings' blocks,
+     * and a coupling left as a part would stand its train as a second driver (reading A148).
+     */
+    public void forget(ShaftNetwork.Kind kind) {
+        for (var u : topology.shafts().values()) if (u.kind() == kind) queue(new Remove(u.position()));
+    }
+
     /** Installs the world's side, then compiles the saved parts. */
     public void host(Host value) {
         host = Objects.requireNonNull(value);
@@ -189,7 +231,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     /** Applies the queued events, then recompiles and wakes what moved. Called at the tick drain, after the topology's own events. */
     public void apply() {
         if (events.isEmpty()) return;
-        boolean recompile = false;
+        boolean recompile = false, resize = false;
         var governors = new ArrayList<Governor>();
         // The parts by cell, kept while the batch applies (a command placing a field of shafts stays linear).
         var index = new HashMap<PhysicalFluidTopology.Position, ShaftUnit>();
@@ -199,6 +241,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             switch (event) {
                 case Put put -> recompile |= put(put, index);
                 case Remove remove -> {
+                    create.remove(remove.position());
                     var old = index.remove(remove.position());
                     if (old != null) {
                         topology.removeShaft(old.id());
@@ -224,9 +267,20 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     fresh(u.id());
                 }
                 case Governor governor -> governors.add(governor);
+                case CreateInput input -> {
+                    // Create's speed or spare moved (W6b): the coupling's train steps at the next decision point. Its
+                    // impact is sent again after it, in case the block entity reloaded since the last one (reading A147).
+                    create.put(input.cell(), input);
+                    var u = index.get(input.cell());
+                    if (u == null || u.kind() != ShaftNetwork.Kind.CREATE_COUPLING) continue;
+                    impacts.remove(u.id());
+                    fresh(u.id());
+                    resize = true;
+                }
             }
         }
         if (recompile) compile();
+        else if (resize) resize();
         for (var g : governors) bind(g);
         if (!governors.isEmpty()) findGovernors();
         publish();
@@ -276,6 +330,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             for (long id : train.parts()) trainOf.put(id, train.key());
         }
         for (var u : units.values()) if (u.fluid() != 0) unitOfDevice.put(u.fluid(), u.id());
+        impacts.keySet().retainAll(units.keySet());
         // A driver that has no saved speed starts at its set speed.
         for (var run : runs.values()) {
             var d = run.train.driver() == 0 ? null : units.get(run.train.driver());
@@ -376,7 +431,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         for (var run : runs.values()) {
             var d = run.train.driver() == 0 ? null : units.get(run.train.driver());
             double rated = d == null ? 0 : driver(d, false).limit(), rpm = d == null ? 0 : d.designSpeed();
-            if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR) rpm = driver(d, false).setSpeed();
+            if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR || d != null && d.kind() == ShaftNetwork.Kind.CREATE_COUPLING) rpm = driver(d, false).setSpeed();
             for (var e : run.train.shafts().entrySet()) {
                 double speed = rpm * e.getValue();
                 int pixels = d == null || speed <= 0 ? com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE
@@ -516,6 +571,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         var train = run.train;
         if (train.fault() != ShaftNetwork.Fault.NONE) {
             run.status = train.fault().name().replace('_', ' ');
+            // A coupling on a standing train draws nothing from its Create network (W6b).
+            for (long id : train.parts()) {
+                var u = topology.shaft(id);
+                if (u != null && u.kind() == ShaftNetwork.Kind.CREATE_COUPLING) impact(u, 0);
+            }
             return false;
         }
         var d = topology.shaft(train.driver());
@@ -541,6 +601,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (d.kind() == ShaftNetwork.Kind.STEAM_TURBINE && bindings.containsKey(d.id()) && step.trip() == ShaftTrain.Trip.NONE) run.status = run.status + " / " + bindings.get(d.id());
         run.electric = step.electricPower();
         run.governorPower = step.governorPower();
+        // A coupling draws the stress of the power its train takes, at most what its network spares (W6b, D40).
+        if (driver.drive() == ShaftTrain.Drive.CREATE)
+            impact(d, step.speed() > 0 ? com.wormzjl.icheme.science.machine.CreateCoupling.impact(demand, driver.limit(), driver.setSpeed(), wattsPerStress()) : 0);
         if (valve != null) {
             double w = run.specificWork > 0 ? run.specificWork : run.efficiency > 0 && run.drop > 0 ? run.efficiency * run.drop : Double.NaN;
             double target = w > 0 ? step.governorPower() / w : 0;
@@ -601,17 +664,35 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** The step's driver for unit {@code d}. */
-    private static ShaftTrain.Driver driver(ShaftUnit d, boolean governed) {
+    private ShaftTrain.Driver driver(ShaftUnit d, boolean governed) {
         return driver(d, governed, true);
     }
 
     /** The step's driver for unit {@code d}, with power ({@code powered}) or without. */
-    private static ShaftTrain.Driver driver(ShaftUnit d, boolean governed, boolean powered) {
+    private ShaftTrain.Driver driver(ShaftUnit d, boolean governed, boolean powered) {
         var drive = d.drive(d.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE);
         if (drive == null) drive = ShaftTrain.Drive.CREATIVE;
         double design = d.designSpeed() > 0 ? d.designSpeed() : ShaftTrain.CREATIVE_SPEED;
         var s = d.settings();
+        if (drive == ShaftTrain.Drive.CREATE) {
+            // A Create coupling (W6b, D40): Create's |rpm| and the power of the stress it may take; no settings of its own.
+            var in = create.get(d.position());
+            double rpm = in == null ? 0 : in.rpm(), limit = in == null ? 0 : Math.max(0, in.stress()) * wattsPerStress();
+            return new ShaftTrain.Driver(drive, 0, d.designSpeed() > 0 ? d.designSpeed() : com.wormzjl.icheme.science.machine.CreateCoupling.DESIGN_SPEED, 0, true,
+                    ShaftTrain.Mode.SPEED, rpm, limit, ShaftTrain.Trip.NONE, false, true);
+        }
         return new ShaftTrain.Driver(drive, d.ratedPower(), design, d.poles(), s.running(), s.mode(), s.setPoint(), s.powerLimit(), d.trip(), governed, powered);
+    }
+
+    /**
+     * Sends coupling {@code u} its stress impact, su per rpm, when it moved past {@link com.wormzjl.icheme.science.machine.CreateCoupling#impactMoved}
+     * (W6b): at the train's step, the engine's decision point, never on Create's tick.
+     */
+    private void impact(ShaftUnit u, double impact) {
+        Double sent = impacts.get(u.id());
+        if (sent != null && !com.wormzjl.icheme.science.machine.CreateCoupling.impactMoved(sent, impact)) return;
+        impacts.put(u.id(), impact);
+        host.stress(u.position(), impact);
     }
 
     /** Sends each driven device its new share, and wakes the islands whose share or governor target moved. */
@@ -765,6 +846,18 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         var run = key == null ? null : runs.get(key);
         if (u == null || u.kind() != ShaftNetwork.Kind.STEAM_TURBINE || run == null || run.train.driver() != unit || !run.booked) return null;
         return new Steam(run.steamFlow, run.inlet, run.exhaust);
+    }
+
+    /** A Create coupling as the engine holds it (W6b): Create's |rpm|, the stress it may take (su), the impact last sent (su per rpm, NaN for none). */
+    public record Coupling(double rpm, double stress, double impact) {
+    }
+
+    /** Coupling unit {@code unit}'s Create input and the impact last sent, or null for another part or none (a read). */
+    public Coupling coupling(long unit) {
+        var u = topology.shaft(unit);
+        if (u == null || u.kind() != ShaftNetwork.Kind.CREATE_COUPLING) return null;
+        var in = create.get(u.position());
+        return new Coupling(in == null ? 0 : in.rpm(), in == null ? 0 : in.stress(), impacts.getOrDefault(unit, Double.NaN));
     }
 
     /** The governor valve's fluid device that turbine unit {@code unit}'s speed sensor works, or 0 for none. */

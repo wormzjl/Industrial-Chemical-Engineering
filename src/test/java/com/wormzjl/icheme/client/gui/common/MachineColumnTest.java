@@ -106,7 +106,7 @@ class MachineColumnTest {
     void eachKindHasItsSetPointsAndAReaderNone() {
         var texts = new HeatControlColumnTest.Recording("gui.icheme.");
         var fields = Map.of(MachineColumn.Kind.MOTOR, List.of("speed"), MachineColumn.Kind.STEAM_TURBINE, List.of("speed"), MachineColumn.Kind.GENERATOR, List.of("powerLimit"),
-                MachineColumn.Kind.GEARBOX, List.of("ratio"), MachineColumn.Kind.CREATIVE_MOTOR, List.of("speed", "powerLimit"));
+                MachineColumn.Kind.GEARBOX, List.of("ratio"), MachineColumn.Kind.CREATIVE_MOTOR, List.of("speed", "powerLimit"), MachineColumn.Kind.CREATE_COUPLING, List.of());
         for (var kind : MachineColumn.Kind.values()) {
             var editor = place(MachineColumn.sample(kind, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464);
             assertEquals(fields.get(kind), keys(editor), kind.name());

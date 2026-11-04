@@ -26,9 +26,12 @@ public final class MachineColumn {
 
     /** The page's kinds: the shaft parts that have a page of their own. */
     public enum Kind {
-        MOTOR, STEAM_TURBINE, GENERATOR, GEARBOX, CREATIVE_MOTOR;
+        MOTOR, STEAM_TURBINE, GENERATOR, GEARBOX, CREATIVE_MOTOR,
+        /** The Create coupling (W6b): no switch and no set point, Create drives it; a prototype until the owner's look. */
+        CREATE_COUPLING;
 
-        /** The page of shaft part {@code kind}, or null for a shaft block or a casing (the casing has its fluid page). */
+        /** The page of shaft part {@code kind}, or null for a shaft block or a casing (the casing has its fluid page), or a Create
+         * coupling, whose page waits for the owner's look at its prototype (W6b). */
         public static @Nullable Kind of(ShaftNetwork.Kind kind) {
             return switch (kind) {
                 case MOTOR -> MOTOR;
@@ -40,9 +43,9 @@ public final class MachineColumn {
             };
         }
 
-        /** Whether it has a switch (a gearbox does not run on its own, reading A99). */
+        /** Whether it has a switch (a gearbox does not run on its own, reading A99; Create runs a coupling). */
         public boolean switched() {
-            return this != GEARBOX;
+            return this != GEARBOX && this != CREATE_COUPLING;
         }
 
         /** Whether it drives its train, so it sets a speed or regulates. */
@@ -191,6 +194,18 @@ public final class MachineColumn {
         return new Input(kind, canEdit, running, v.variable(), mode, v.trip() != ShaftTrain.Trip.NONE && v.trip().latched(), governor, shaft, supply, lasts);
     }
 
+    /**
+     * A Create coupling's page (W6b, prototype): no switch and no set point. The shaft group reads Create's speed, the train's
+     * speed behind its gearbox (its first machine's) and the shaft power; the supply group the Create network: the stress the
+     * coupling draws and what the network still spares (NaN: —), in stress units.
+     */
+    public static Input coupling(boolean canEdit, double createRpm, double trainRpm, double stress, double spare, double power, HeatControlColumn.Texts t) {
+        var shaft = List.of(new Meter("create_speed", whole(createRpm), "rpm", t.get(KEY + "create_speed.hint")),
+                new Meter("train_speed", whole(trainRpm), "rpm", t.get(KEY + "train_speed.hint")), new Meter("power", Format.number(power / 1000), "kW", null));
+        var supply = List.of(new Meter("stress", whole(stress), "su", t.get(KEY + "stress.hint")), new Meter("spare", whole(spare), "su", t.get(KEY + "spare.hint")));
+        return new Input(Kind.CREATE_COUPLING, canEdit, createRpm > 0, false, Mode.SPEED, false, null, shaft, supply, null);
+    }
+
     /** {@code seconds} as a player reads a time: {@code 6 min 10 s}, {@code 2 h 5 min}, {@code 40 s}. */
     public static String duration(double seconds, HeatControlColumn.Texts t) {
         long s = Math.round(Math.max(0, seconds));
@@ -247,6 +262,7 @@ public final class MachineColumn {
      * 72 %; a 2500 kW turbine at 4200 rpm giving 1980 kW from 2.9 kg/s of steam, 40 bar in and 4 bar out.
      */
     public static Input sample(Kind kind, boolean edit, boolean variable, Mode mode, boolean tripped, HeatControlColumn.Texts t) {
+        if (kind == Kind.CREATE_COUPLING) return coupling(edit, 256, 2950, 17345, 3135, 25.41e3, t);
         boolean turbine = kind == Kind.STEAM_TURBINE;
         var shaft = new ArrayList<Meter>(List.of(new Meter("speed", tripped ? "0" : turbine ? "4200" : "2950", "rpm", null)));
         if (kind == Kind.GEARBOX) shaft.add(new Meter("ratio_now", "4.27", "", t.get(KEY + "ratio_now.hint")));

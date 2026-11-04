@@ -233,6 +233,85 @@ class ShaftCouplingTest {
         assertEquals(1, trains.share(1), 1e-9);
     }
 
+    /**
+     * W6b (form A, D40): a Create coupling drives the pump at node 1 through a shaft, the casing rated at 256 rpm. Create's
+     * inputs are queued events applied at the tick drain; the impact goes back through the host at the train's step.
+     * Without an input it stands (NO ROTATION); at 256 rpm with stress to spare it runs at share 1 and draws the stress of
+     * the train's power at 1.465 W per su; with little spare it slows (POWER LIMITED) and never draws more than the spare;
+     * Create at rest stands it again and its draw goes to 0.
+     */
+    @Test
+    void aCreateCouplingTurnsAtCreatesSpeedWithinItsSpareStress() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long first = ledger.reserve(3);
+        var variable = com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE;
+        var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                0, com.wormzjl.icheme.science.machine.CreateCoupling.DESIGN_SPEED, 0, variable, ShaftUnit.Settings.DEFAULT, trip, null));
+        ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
+        ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
+                0, 256, 0, variable, ShaftUnit.Settings.DEFAULT, trip, null));
+        var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
+        var sent = new ArrayList<Double>();
+        rig.coordinator.shafts(trains);
+        trains.host(new ShaftTrains.Host() {
+            public void edit(long device, FlowControl.ControlValve control) {
+            }
+
+            public UUID speedSensor(long turbine) {
+                return null;
+            }
+
+            public void resize(PhysicalFluidTopology.Position shaft, int pixels) {
+            }
+
+            @Override
+            public void stress(PhysicalFluidTopology.Position coupling, double impact) {
+                assertEquals(cell(0), coupling);
+                sent.add(impact);
+            }
+        });
+        rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line(), new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+        long coupling = first;
+        double wps = trains.wattsPerStress();
+        assertEquals(1.46499, wps, 1e-5, "20 x 2.5 J per FE / 34.13 su per FE");
+        Runnable tick = () -> {
+            rig.epoch[0]++;
+            if (trains.hasEvents()) trains.apply();
+            rig.coordinator.tick();
+            rig.drain();
+        };
+        for (int i = 0; i < 200; i++) tick.run();
+        assertEquals("NO ROTATION", trains.view(coupling).status(), "no Create input yet");
+        assertEquals(0, trains.share(1));
+        // Create at 256 rpm with stress to spare: the train runs at Create's speed and draws its power's stress.
+        trains.queue(new ShaftTrains.CreateInput(cell(0), 256, 1e6));
+        for (int i = 0; i < 1200; i++) tick.run();
+        assertEquals("RUNNING", trains.view(coupling).status());
+        assertEquals(1, trains.share(1), 1e-9, "the pump at 256 rpm, its design speed");
+        double demand = trains.view(coupling).demand();
+        assertTrue(demand > 100, "the pump takes power: " + demand);
+        assertEquals(demand / (wps * 256), sent.getLast(), 2e-3 * sent.getLast(), "impact = demand / (W per su x rpm)");
+        assertEquals(sent.getLast(), trains.coupling(coupling).impact(), 0);
+        // Little to spare: a fifth of the train's stress. It slows (POWER LIMITED) and draws no more than the spare.
+        double spare = .2 * demand / wps;
+        int from = sent.size();
+        trains.queue(new ShaftTrains.CreateInput(cell(0), 256, spare));
+        for (int i = 0; i < 2400; i++) tick.run();
+        assertTrue(trains.view(coupling).status().startsWith("POWER LIMITED"), trains.view(coupling).status());
+        assertTrue(trains.share(1) < .9 && trains.share(1) > 0, "the train slows: " + trains.share(1));
+        assertTrue(sent.size() > from, "the limit sent a new impact");
+        for (double impact : sent.subList(from, sent.size())) assertTrue(impact * 256 <= spare, "never more than the spare: " + impact * 256 + " of " + spare);
+        assertTrue(sent.getLast() * 256 > .9 * spare, "the slowed train takes about all of it: " + sent.getLast() * 256 + " of " + spare);
+        // Create at rest: the train stands and draws nothing.
+        trains.queue(new ShaftTrains.CreateInput(cell(0), 0, spare));
+        for (int i = 0; i < 400; i++) tick.run();
+        assertEquals("NO ROTATION", trains.view(coupling).status());
+        assertEquals(0, trains.share(1));
+        assertEquals(0, sent.getLast(), 0);
+    }
+
     /** The governor walk: from a turbine's inlet upstream through unbranched pipes to the nearest control valve. */
     @Test
     void theGovernorWalkFindsTheTurbinesValve() {

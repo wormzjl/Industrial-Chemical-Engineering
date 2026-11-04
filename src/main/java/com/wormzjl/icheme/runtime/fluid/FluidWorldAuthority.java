@@ -122,6 +122,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         instruments.reconcileLegacyValves();
         shafts=new ShaftTrains(topology,registry::owner,runtime.coordinator());runtime.coordinator().shafts(shafts);shafts.host(new ShaftHost());
         electric=new ElectricStores(topology,registry::owner,runtime.coordinator(),()->new ElectricStores.Settings(IChemE.joulesPerFE(),IChemE.machinesNeedPower()));shafts.electric(electric);
+        // The Create coupling (W6b): its stress rate; a world opened without Create lost its couplings' blocks, so their parts leave.
+        shafts.stressPerFE(IChemE::stressPerFE);if(!net.neoforged.fml.ModList.get().isLoaded("create"))shafts.forget(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING);
         health=new PumpHealth(topology,registry::owner,runtime.coordinator(),id->PumpHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
@@ -1327,6 +1329,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
             FluidWorldAuthority.this.edit(device,r.revision(),r.device().withControl(control),r.spec());
         }
         @Override public UUID speedSensor(long turbine){return instruments.speedSensor(turbine);}
+        /** A coupling's block entity takes its impact where its chunk is loaded (W6b); a reloaded one reports again and is sent it again. */
+        @Override public void stress(PhysicalFluidTopology.Position coupling,double impact) {
+            var level=server.getLevel(dimension(coupling.dimension()));if(level==null)return;
+            var pos=new BlockPos(coupling.x(),coupling.y(),coupling.z());if(!level.isLoaded(pos))return;
+            if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.ShaftParts.Coupling c)c.stressImpact(impact);
+        }
         @Override public void resize(PhysicalFluidTopology.Position shaft,int pixels) {
             var level=server.getLevel(dimension(shaft.dimension()));if(level==null)return;
             var pos=new BlockPos(shaft.x(),shaft.y(),shaft.z());if(!level.hasChunkAt(pos))return;

@@ -16,17 +16,19 @@ public final class ShaftNetwork {
     public static final double GEAR_EFFICIENCY = .98;
     /** The largest ratio a gearbox takes either way (plan 5.3). */
     public static final double MAXIMUM_RATIO = 20;
+    /** The largest ratio of a gearbox whose slow line a Create coupling drives (plan 5.3, W6b): 256 rpm reaches 16,384 rpm. */
+    public static final double CREATE_RATIO = 64;
 
     private ShaftNetwork() {
     }
 
     /** What a part is in its train. */
     public enum Kind {
-        SHAFT, MOTOR, GENERATOR, GEARBOX, STEAM_TURBINE, CASING, CREATIVE_MOTOR;
+        SHAFT, MOTOR, GENERATOR, GEARBOX, STEAM_TURBINE, CASING, CREATIVE_MOTOR, CREATE_COUPLING;
 
         /** Whether it drives its train. */
         public boolean driver() {
-            return this == MOTOR || this == STEAM_TURBINE || this == CREATIVE_MOTOR;
+            return this == MOTOR || this == STEAM_TURBINE || this == CREATIVE_MOTOR || this == CREATE_COUPLING;
         }
 
         /** Whether its train drives it. */
@@ -224,7 +226,9 @@ public final class ShaftNetwork {
                             double here = factor.get(line) * driverPart.designSpeed();
                             ratio = target > 0 && here > 0 ? (upward ? target / here : here / target) : 1;
                         }
-                        ratio = Math.max(1 / MAXIMUM_RATIO, Math.min(MAXIMUM_RATIO, ratio));
+                        // Behind a Create coupling, on the line it drives, a gearbox steps up to 64 (plan 5.3, W6b; reading A145).
+                        double most = driverPart.kind() == Kind.CREATE_COUPLING && upward && line == start ? CREATE_RATIO : MAXIMUM_RATIO;
+                        ratio = Math.max(1 / most, Math.min(most, ratio));
                         ratios.put(gear.id(), ratio);
                         factor.put(other, factor.get(line) * (upward ? ratio : 1 / ratio));
                         efficiency.put(other, efficiency.get(line) * GEAR_EFFICIENCY);

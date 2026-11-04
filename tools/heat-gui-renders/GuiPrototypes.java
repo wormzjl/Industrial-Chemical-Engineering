@@ -88,6 +88,7 @@ public final class GuiPrototypes {
         out.addAll(machines());
         out.addAll(machinePages());
         out.addAll(pumpReadings());
+        out.addAll(createCoupling());
         return out;
     }
 
@@ -285,6 +286,23 @@ public final class GuiPrototypes {
                     contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "100.0", "5530"}));
                     d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
                 }));
+    }
+
+    // ---- W6b's Create coupling page (batch 2026-11-03-rotating-machinery, form A, decision D40; -Donly=create-coupling) ----
+
+    /**
+     * The Create coupling's page from the shipped MachineColumn.coupling, no switches: the 30 kW pump train of W6B_BUILD_PLAN
+     * section 1 behind an auto gearbox (11.52), 24.9 kW at the pump, 25.4 kW at the coupling over the gear's 98 %, so 17,345 su at
+     * 1.465 W per su. RUNNING on 40 large water wheels (20,480 su, 3,135 spare); POWER LIMITED on 24 (12,288 su, all drawn: the
+     * train slows to 2629 rpm, 18.0 kW by the cube law); NO ROTATION with Create at rest.
+     */
+    static List<Prototype> createCoupling() {
+        var t = DIALOG;
+        var plate = List.<String[]>of(new String[]{mt("stress_rate"), "1.465 W/su"}, new String[]{mt("rated_speed"), "256 rpm"});
+        return List.of(
+                machinePage("create-coupling-running", MachineColumn.coupling(false, 256, 2950, 17345, 3135, 25.41e3, t), "", "RUNNING", Map.of(), plate, false),
+                machinePage("create-coupling-limited", MachineColumn.coupling(false, 256, 2629, 12287, 1, 18.0e3, t), "", "POWER LIMITED", Map.of(), plate, false),
+                machinePage("create-coupling-no-rotation", MachineColumn.coupling(false, 0, 0, 0, Double.NaN, 0, t), "", "NO ROTATION", Map.of(), plate, false));
     }
 
     // ---- N1's title strip (the owner 2026-11-03: "You can put the equipment name here") ----

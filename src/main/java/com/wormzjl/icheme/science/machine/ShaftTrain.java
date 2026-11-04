@@ -19,7 +19,9 @@ public final class ShaftTrain {
 
     /** What drives the train. */
     public enum Drive {
-        FIXED_MOTOR, VARIABLE_MOTOR, TURBINE, CREATIVE
+        FIXED_MOTOR, VARIABLE_MOTOR, TURBINE, CREATIVE,
+        /** A Create coupling (W6b, D40): {@code setPoint} is Create's |rpm|, {@code powerLimit} the power its network spares, W. */
+        CREATE
     }
 
     /** How a variable-speed driver sets its speed: a set speed, or regulating its first machine's flow or discharge pressure. Saved by name. */
@@ -64,11 +66,13 @@ public final class ShaftTrain {
 
         /** The speed the driver aims at before any limit, rpm. */
         public double setSpeed() {
+            if (drive == Drive.CREATE) return setPoint;
             return drive == Drive.CREATIVE ? setPoint > 0 ? setPoint : CREATIVE_SPEED : (setPoint > 0 ? setPoint : 1) * designSpeed;
         }
 
         /** The power the driver can give, W: its rating, or a creative motor's limit. */
         public double limit() {
+            if (drive == Drive.CREATE) return powerLimit;
             return drive == Drive.CREATIVE ? powerLimit > 0 ? powerLimit : CREATIVE_LIMIT : ratedPower;
         }
     }
@@ -109,7 +113,20 @@ public final class ShaftTrain {
                 yield new Step(next, Trip.NONE, status, 0, driver.drive() == Drive.CREATIVE ? 0 : electric(driver, demand));
             }
             case TURBINE -> turbine(driver, speed, measure, demand, set);
+            case CREATE -> create(driver, speed, demand);
         };
+    }
+
+    /**
+     * A Create coupling (W6b, D40): the creative motor's limited step at Create's speed, its limit the power the network
+     * spares. Create at rest stands the train ({@code NO ROTATION}); no spare at all stands it too ({@code POWER LIMITED}),
+     * where the creative motor's step would restart it at full speed from rest each slice (reading A146).
+     */
+    private static Step create(Driver driver, double speed, double demand) {
+        double set = driver.setSpeed();
+        if (!(set > 0)) return new Step(0, Trip.NONE, "NO ROTATION", 0, 0);
+        double next = driver.limit() > 0 ? limited(speed, driver.limit(), demand, set) : 0;
+        return new Step(next, Trip.NONE, next < set * (1 - 1e-9) ? "POWER LIMITED" : "RUNNING", 0, 0);
     }
 
     /** A turbine (D27, readings A22, A23, A26). */

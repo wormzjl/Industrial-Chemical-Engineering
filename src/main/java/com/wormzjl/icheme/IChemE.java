@@ -53,6 +53,7 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue EQUIPMENT_SHEEN;
     private static final ModConfigSpec.DoubleValue ENERGY_JOULES_PER_FE;
     private static final ModConfigSpec.BooleanValue ENERGY_MACHINES_NEED_POWER;
+    private static final ModConfigSpec.DoubleValue CREATE_STRESS_PER_FE;
     private static final ModConfigSpec.BooleanValue WEAR_ENABLED;
     private static final ModConfigSpec.DoubleValue WEAR_CAVITATION_HOURS, WEAR_DRY_MINUTES;
 
@@ -161,6 +162,11 @@ public final class IChemE {
         ENERGY_MACHINES_NEED_POWER = builder.comment("Whether motors, air cooler fans and cooling tower fans need FE at their terminal box. False: nothing is drawn, nothing stops for want of power, and the ports still accept FE (a pack without energy mods).")
                 .define("machinesNeedPower", true);
         builder.pop();
+        // The Create coupling (batch 2026-11-03-rotating-machinery W6b, decision D7): read only with Create installed.
+        builder.push("create");
+        CREATE_STRESS_PER_FE = builder.comment("Create stress units that one FE per tick trades for: a stress unit is worth 20 x joulesPerFE / stressPerFE watts (1.465 W at the defaults). Default 34.13, the rate of Create Crafts & Additions and Create: New Age. A pack that changes their rate sets this to match, so no round trip FE -> shaft -> Create -> FE gains energy.")
+                .defineInRange("stressPerFE", 34.13, 0.01, 1e6);
+        builder.pop();
         // Pump wear (batch 2026-11-03-rotating-machinery W10b, owner decision D34).
         builder.push("machines");
         builder.push("wear");
@@ -179,6 +185,8 @@ public final class IChemE {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
         com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
+        // The Create coupling (W6b, D40): its only entry point, guarded; no class outside compat/create names a Create type.
+        if (net.neoforged.fml.ModList.get().isLoaded("create")) com.wormzjl.icheme.compat.create.CreateCompat.register(modEventBus);
         ModBlockEntities.register(modEventBus);
         ModMenus.register(modEventBus);
         modEventBus.addListener(ProcessSimulatorNetwork::register);
@@ -238,6 +246,11 @@ public final class IChemE {
     public static com.wormzjl.icheme.science.machine.Wear.Settings wearSettings() {
         if (!CONFIG_SPEC.isLoaded()) return com.wormzjl.icheme.science.machine.Wear.Settings.DEFAULT;
         return new com.wormzjl.icheme.science.machine.Wear.Settings(WEAR_ENABLED.get(), WEAR_CAVITATION_HOURS.get(), WEAR_DRY_MINUTES.get());
+    }
+
+    /** Create stress units per FE per tick (W6b; default 34.13 before the config loads). */
+    public static double stressPerFE() {
+        return CONFIG_SPEC.isLoaded() ? CREATE_STRESS_PER_FE.get() : com.wormzjl.icheme.science.machine.CreateCoupling.STRESS_PER_FE;
     }
 
     /** Whether machines need FE (W5; default true before the config loads). */

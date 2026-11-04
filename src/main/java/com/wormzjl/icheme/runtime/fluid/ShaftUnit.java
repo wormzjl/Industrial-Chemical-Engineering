@@ -29,14 +29,16 @@ public record ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Pos
     /**
      * What the player set: whether it runs (default true: a placed driver turns, reading A19), its mode (default SPEED),
      * its set point (default 0: its design speed; a creative motor's rpm), a creative motor's power limit (default 0:
-     * {@link ShaftTrain#CREATIVE_LIMIT}), a gearbox's ratio (default 0: auto, reading A20).
+     * {@link ShaftTrain#CREATIVE_LIMIT}), a gearbox's ratio (default 0: auto, reading A20); up to
+     * {@link ShaftNetwork#CREATE_RATIO} either way, of which a train applies more than {@link ShaftNetwork#MAXIMUM_RATIO} only
+     * behind a Create coupling (W6b, reading A145).
      */
     public record Settings(boolean running,ShaftTrain.Mode mode,double setPoint,double powerLimit,double ratio) {
         public static final Settings DEFAULT=new Settings(true,ShaftTrain.Mode.SPEED,0,0,0);
         public Settings {
             Objects.requireNonNull(mode);
-            if(!(setPoint>=0)||!(powerLimit>=0)||!(ratio>=0)||!Double.isFinite(setPoint+powerLimit+ratio)||ratio>ShaftNetwork.MAXIMUM_RATIO)throw new IllegalArgumentException("Invalid shaft settings");
-            if(ratio>0&&ratio<1/ShaftNetwork.MAXIMUM_RATIO)throw new IllegalArgumentException("Invalid gearbox ratio "+ratio);
+            if(!(setPoint>=0)||!(powerLimit>=0)||!(ratio>=0)||!Double.isFinite(setPoint+powerLimit+ratio)||ratio>ShaftNetwork.CREATE_RATIO)throw new IllegalArgumentException("Invalid shaft settings");
+            if(ratio>0&&ratio<1/ShaftNetwork.CREATE_RATIO)throw new IllegalArgumentException("Invalid gearbox ratio "+ratio);
         }
     }
     /** A driver's speed, rpm, and the slice before's speed and regulated measure (NaN for none): engine state. */
@@ -68,7 +70,7 @@ public record ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Pos
     }
     /** The driver this unit is in the step's terms, or null for a part that drives nothing. */
     public ShaftTrain.Drive drive(boolean variable) {
-        return switch(kind){case MOTOR->variable?ShaftTrain.Drive.VARIABLE_MOTOR:ShaftTrain.Drive.FIXED_MOTOR;case STEAM_TURBINE->ShaftTrain.Drive.TURBINE;case CREATIVE_MOTOR->ShaftTrain.Drive.CREATIVE;default->null;};
+        return switch(kind){case MOTOR->variable?ShaftTrain.Drive.VARIABLE_MOTOR:ShaftTrain.Drive.FIXED_MOTOR;case STEAM_TURBINE->ShaftTrain.Drive.TURBINE;case CREATIVE_MOTOR->ShaftTrain.Drive.CREATIVE;case CREATE_COUPLING->ShaftTrain.Drive.CREATE;default->null;};
     }
     static ShaftNetwork.Cell cell(PhysicalFluidTopology.Position p){return new ShaftNetwork.Cell(p.dimension(),p.x(),p.y(),p.z());}
 }

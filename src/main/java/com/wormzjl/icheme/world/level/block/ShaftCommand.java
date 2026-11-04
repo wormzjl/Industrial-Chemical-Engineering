@@ -41,7 +41,7 @@ public final class ShaftCommand {
                         .executes(c -> settings(c, s -> new ShaftUnit.Settings(s.running(), ShaftTrain.Mode.SPEED, DoubleArgumentType.getDouble(c, "value"), s.powerLimit(), s.ratio()))))))
                 .then(Commands.literal("limit").then(Commands.argument("unit", LongArgumentType.longArg(1)).then(Commands.argument("watts", DoubleArgumentType.doubleArg(0, 1e9))
                         .executes(c -> settings(c, s -> new ShaftUnit.Settings(s.running(), s.mode(), s.setPoint(), DoubleArgumentType.getDouble(c, "watts"), s.ratio()))))))
-                .then(Commands.literal("ratio").then(Commands.argument("unit", LongArgumentType.longArg(1)).then(Commands.argument("value", DoubleArgumentType.doubleArg(0, ShaftNetwork.MAXIMUM_RATIO))
+                .then(Commands.literal("ratio").then(Commands.argument("unit", LongArgumentType.longArg(1)).then(Commands.argument("value", DoubleArgumentType.doubleArg(0, ShaftNetwork.CREATE_RATIO))
                         .executes(c -> settings(c, s -> new ShaftUnit.Settings(s.running(), s.mode(), s.setPoint(), s.powerLimit(), DoubleArgumentType.getDouble(c, "value")))))))
                 .then(Commands.literal("regulate").then(Commands.argument("unit", LongArgumentType.longArg(1))
                         .then(Commands.literal("flow").executes(c -> settings(c, s -> new ShaftUnit.Settings(s.running(), ShaftTrain.Mode.REGULATE_FLOW, s.setPoint(), s.powerLimit(), s.ratio()))))

@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
+import com.wormzjl.icheme.science.machine.CreateCoupling;
 import com.wormzjl.icheme.science.machine.ShaftNetwork;
 import com.wormzjl.icheme.science.machine.ShaftTrain;
 import net.minecraft.core.BlockPos;
@@ -50,6 +51,30 @@ public final class ShaftParts {
         var end = new ShaftUnit.End(cell, facing.getStepX(), facing.getStepY(), facing.getStepZ(), true);
         queue(level, new ShaftTrains.Put(cell, ShaftNetwork.Kind.CREATIVE_MOTOR, id -> new ShaftUnit(id, ShaftNetwork.Kind.CREATIVE_MOTOR, cell, 0, List.of(end), 0,
                 0, ShaftTrain.CREATIVE_SPEED, 0, MachineDuty.Drive.VARIABLE, ShaftUnit.Settings.DEFAULT, ShaftTrain.Trip.NONE, null)));
+    }
+
+    /**
+     * A Create coupling at {@code at}, its industrial shaft leaving its {@code shaftSide} (W6b, D40): a driver with no
+     * settings, its design speed Create's highest, {@link CreateCoupling#DESIGN_SPEED}, which an auto gearbox behind it matches.
+     */
+    public static void coupling(Level level, BlockPos at, Direction shaftSide) {
+        var cell = position(level, at);
+        var end = new ShaftUnit.End(cell, shaftSide.getStepX(), shaftSide.getStepY(), shaftSide.getStepZ(), true);
+        queue(level, new ShaftTrains.Put(cell, ShaftNetwork.Kind.CREATE_COUPLING, id -> new ShaftUnit(id, ShaftNetwork.Kind.CREATE_COUPLING, cell, 0, List.of(end), 0,
+                0, CreateCoupling.DESIGN_SPEED, 0, MachineDuty.Drive.VARIABLE, ShaftUnit.Settings.DEFAULT, ShaftTrain.Trip.NONE, null)));
+    }
+
+    /** What the coupling at {@code at} reads of its Create network: |rpm| and the stress it may take, su (W6b; a queued engine event). */
+    public static void createInput(Level level, BlockPos at, double rpm, double stress) {
+        queue(level, new ShaftTrains.CreateInput(position(level, at), rpm, stress));
+    }
+
+    /**
+     * A Create coupling's block entity as the engine's world side sees it (W6b): it takes the stress impact the engine
+     * sends, su per rpm, on the engine's schedule. Implemented in {@code compat/create} only, so nothing here names Create.
+     */
+    public interface Coupling {
+        void stressImpact(double suPerRpm);
     }
 
     /** The part at {@code at} (a block, or a structure's origin) leaves. */
