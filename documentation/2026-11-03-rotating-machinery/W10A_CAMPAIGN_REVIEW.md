@@ -26,24 +26,24 @@ Commit `4536849bb` (owner decisions D19 to D21, plan section 3.6). Built by an O
 
 ## 3. Full campaign (1000 seeds, all distributions, 8 workers, run alone)
 
-| | base 0.19.2 | D17 | W10a |
-|---|---|---|---|
-| cold random | 991 | 992 | 991 |
-| bundled random | 993 | 994 | 993 |
-| bundled defaults | 1000 | 1000 | 1000 |
+| | base 0.19.2 | D17 | W10a | W10a on 0.20.0 |
+|---|---|---|---|---|
+| cold random | 991 | 992 | 991 | 992 |
+| bundled random | 993 | 994 | 993 | 994 |
+| bundled defaults | 1000 | 1000 | 1000 | 1000 |
 
-- **New holds:** cold 6 (class F). Replayed alone, it is clean: a wall-clock artefact. Bundled 6 (F) is a baseline hold that D17 had cleared. Bundled 431 moved from class E6 to class F; replayed alone it still holds, with the same active-set cycle as in the baseline. No new mechanism.
-- **Counters against D17:**
-  - Random distributions: within 1 %.
-  - Bundled defaults: Newton iterations +5.5 %, backtracks +16 % (17,658 to 20,470), Jacobian builds +5.5 %.
-- **Wall time against D17:**
-  - Cold +27 %, bundled random +23 %. Both are inside the D13 to D17 spread (1.20 to 1.56 M ms, and 287 to 397 k ms).
-  - Bundled defaults +54 % (40.9 to 62.9 k ms), above the earlier maximum of 49.7 k. With the counters about 5 % up, the rest is per-solve overhead. `readSuctions` walks each mover's suction twice per solve (`InletPhase.supply`, then `InletPhase.liquidDensity`, which repeats the walk).
+- **W10a, new holds:** cold 6 (class F) was clean when replayed alone, a wall-clock artefact. Bundled 6 (F) is a baseline hold. Bundled 431 moved from class E6 to F; replayed alone it holds with its baseline active-set cycle. No new mechanism. Counters against D17: within 1 % in the random distributions. In bundled defaults: Newton iterations +5.5 %, backtracks +16 % (17,658 to 20,470).
+- **After the rebase onto 0.20.0** (owner, 2026-11-04): the same holds as D17. Cold 6 and bundled 6 are clean; 431 is E6 again. Bundled defaults' counters are identical to W10a's; the random distributions' are within 0.4 %. Wall time 1.41 M, 326 k and 44 k ms. The 63 k of W10a's defaults run was machine noise, not the extra suction walk.
+- **Rebase coupling** (`5ea618d5b`): the simulator's `MoverUnit` passes the suction's κ (W2). `COMPRESSOR_LIQUID` becomes a SHOULD row, because the world no longer refuses a wet suction. The simulator's unit tests follow the world: a pump takes gas, a compressor takes liquid, compressor work is polytropic. Affected set on the new base: 1132 tests, hold gates 131, fluid GameTests 37.
 
 ## 4. Options for the owner
 
-- **O1, one suction walk.** Return the liquid density with the supply from one walk. This is code only, no physics change. Measure it with one bundled-defaults pair.
-- **O2, the wet compressor ratio.** The ratio reads the mixture density, which overstates a very wet suction: about 31 against 1.6 for pure condensate at 50 bar and 50 kJ/kg. The exact homogeneous form, `H = σ(1−w)P v_g (r^(1/σ) − 1) + w v_l P (r − 1)`, is an option. Today's 1 % refusal kept such states out; the random worlds have none.
-- **O3, the vapour lock.** It reads the bubble floor. A pump drawing straight from a fixed generator, with no suction line and NPSHA below its shutoff NPSH3, has no root. Only test graphs build this, since in game a pipe always sits between. The option is for the lock to read the NPSH3 floor at shutoff.
+- **O1, one suction walk.** `InletPhase.liquidDensity` repeats `supply`'s walk. This is code only; with no measured cost after the rebase, it is a cleanup, not a fix.
+- **O2, the wet compressor ratio.** The ratio reads the mixture density, which overstates a very wet suction: about 31 against 1.6 for pure condensate at 50 bar. The exact homogeneous form, `H = σ(1−w)P v_g (r^(1/σ) − 1) + w v_l P (r − 1)`, is an option. The random worlds have no such states.
+- **O3, the vapour lock.** It reads the bubble floor, so a pump drawn straight from a generator, with NPSHA below its shutoff NPSH3, has no root. Only test graphs build this. The option is for the lock to read the NPSH3 floor.
+- **O4, the simulator's NPSH rows.**
+  - `PUMP_NPSH_WORLD` (MUST) still reads NPSHA > 0, but the world now starves a pump at `0.85 NPSH3` of its duty design (`Npsh.forDuty`). Its bound should be that.
+  - `PUMP_NPSH` (SHOULD, 1 m, HI 9.6.1) is a margin, so it should read NPSHA ≥ NPSH3 + 1 m.
+  - A SHOULD row for gas above the onset α_T is an option. With W10b, a piston's liquid knock trip makes `COMPRESSOR_LIQUID` red again for pistons.
 
-Code guide: not updated yet. The fluid network chapter (mover laws, refusals, suction floor) and the machine chapter (GasEntrainment, Npsh) change at the merge refresh.
+Code guide: not updated yet. The fluid network chapter (mover laws, refusals, suction floor), the machine chapter (GasEntrainment, Npsh) and the simulator's sizing rows change at the merge refresh.
