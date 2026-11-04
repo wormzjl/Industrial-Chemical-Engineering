@@ -45,6 +45,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: W10b built in its simple form (`6074e7aa0`, D34): `Wear`, `PumpHealth`, σ and dry in `PipeObservation`, `ShaftPlan.Kind.FAILED`, `repair_kit` (`tools/machine-parts/`), fluid facts schema 12, config `machines.wear`. WearTest 3, PumpHealthTest 2, affected 625 + hold gates 58, GameTests 43; campaign 992, 994 and 1000 clean, the same holds (`W10B_REVIEW.md`).
 - 2026-11-04: owner "Start W10c". A short plan (`W10C_BUILD_PLAN.md`) offered the crackle only, the crackle and gas churn, or plan 3.8 in full; the owner picked the crackle and gas churn (D35).
 - 2026-11-04: W10c built (`975a718e2`, D35): `pump_cavitation` and `pump_gas` loops, two `MoverState` bytes (`mover-3`), `GasEntrainment.churn`; GasEntrainmentTest 4, codec 22, affected 613 + hold gates 58, GameTests 43; no campaign (read-only observation). In-line pumps stay silent (W4 watch). Listening check due (`W10C_REVIEW.md`).
+- 2026-11-04: D36 (owner): in-line pumps play the crackle and churn; every machine loop's pitch = rpm over its loop's authored rpm (pump 2950, motor 1500), within 0.5 to 2; `MoverState` carries rpm (`mover-4`). Affected test 200, equipment gates 75, hold gates 10, GameTests 44. Owner rule: no subagent resumed after 5 min idle.
 
 ## Documents
 

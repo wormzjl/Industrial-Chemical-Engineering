@@ -116,6 +116,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D35.** W10c builds two pump loops: the cavitation crackle (volume `I_c(σ)`, W10b's curve) and the gas churn (volume `clamp(r − 0.5, 0, 1) M(r)/0.568`, `r = α/α_T`). Both are scaled by D26's `soundGain` and carried as two `MoverState` bytes. No compressor sounds.
 
+2026-11-04, after W10c's review: the owner, "Yes, add them" (in-line pumps' sounds), then "Rotation machine sound should also scale with their rpm".
+
+- **D36.** In-line pumps play the crackle and churn layers, with no running loop, at the smallest casing's gain; in-line compressors stay silent. Every machine loop's pitch is `clamp(n/n_loop, 0.5, 2)`, with n the machine's rpm and n_loop the rpm its loop was authored at (pump 2950, motor 1500; the machine's rated rpm where the loop states none). This replaces D26's pitch = speed share capped at 1. Volume keeps D26's law.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).

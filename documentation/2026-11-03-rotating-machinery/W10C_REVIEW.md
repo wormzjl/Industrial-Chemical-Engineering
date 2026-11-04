@@ -24,7 +24,7 @@ Commit `975a718e2` (`W10C_BUILD_PLAN.md`, owner decision D35). Built by an Opus 
 
 ## 3. For the owner
 
-- **In-line pumps make no sound.** W4's sound watch (`MoverSounds`, `watchMovers`) covers constructed movers only. The bytes are set for in-line pumps, but nothing plays them. Bringing in-line movers into the watch is a small follow-up if wanted.
+- **In-line pumps make no sound.** W4's sound watch covered constructed movers only. Follow-up done (D36, 69c1c8aa0): in-line pumps play the two layers, and every machine loop's pitch follows rpm.
 - **A set-flow in-line pump has no gas churn:** it has no head factor M.
 - **The listening check (D26) is due:** the casing, driver, crackle and churn loops, with volume and pitch following speed and size. You start it; no agent starts a dev client.
 
