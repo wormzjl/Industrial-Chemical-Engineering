@@ -2,7 +2,7 @@
 
 Purpose: realistic pumps and compressors at process level, separate drivers (motor, steam turbine, creative motor) joined by shafts and gearboxes, electricity (FE) for motors and air coolers, Create as an optional power source.
 
-Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, gas, liquid, cavitation, wear and sound, answered D19 to D21, W10a built 4536849bb; W1 built; W2's solver work closed, owner decision D18: law F2e with A1 and A2 (D11), E8 fixed by taut-vessel row weights (D13), the suction floor, the vapour lock and the floor under the supplier (D14-D17); campaign 992/994/1000 against 991/993/1000, bundled 896 a known hold; W2 complete with the turbine connection (18c6f304b); W4 merged (71c66ae94); W3 built (69056145f), A42 kept as built (D29)). Branch `claude/realistic-pump-compressor-6fdfd9`, rebased on main `84f739baa` (0.20.0).
+Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, gas, liquid, cavitation, wear and sound, answered D19 to D21, W10a built 4536849bb; W1 built; W2's solver work closed, owner decision D18: law F2e with A1 and A2 (D11), E8 fixed by taut-vessel row weights (D13), the suction floor, the vapour lock and the floor under the supplier (D14-D17); campaign 992/994/1000 against 991/993/1000, bundled 896 a known hold; W2 complete with the turbine connection (18c6f304b); W4 merged (71c66ae94); W3 built (69056145f), A42 kept as built (D29); W5 built (97ae9c6d8); main fb9607dad merged). Branch `claude/realistic-pump-compressor-6fdfd9`, rebased on main `84f739baa` (0.20.0).
 
 ## History
 
@@ -38,6 +38,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 
 - 2026-11-04: W3, shaft trains (`W3_BUILD_PLAN.md`). Owner decisions D27 ("A: speed sensor + valve": the governor is a speed sensor plus the upstream control valve with source `SHAFT_SPEED`), A14 (a motor runs as supplied until W5) and D28 ("All as recommended": readings A15 to A40). Built by an Opus medium subagent, reviewed: `ShaftNetwork`, `ShaftTrain`, `ShaftPlan`, `ShaftTrains`, `ShaftCommand`, the speed sensor, `TopologyCompiler.Kind.TURBINE`; fluid facts schema 10, accessory facts schema 3, checkpoint 35, with corpus images (`69056145f`). It also fixed W4's direct `Math` calls in `science/equipment`. Affected quick 165, equipment gates 120, hold gates 23, GameTests 38; campaign 992, 994 and 1000 clean, W2-turbine's holds. A42 departs from A27 (`W3_REVIEW.md`); owner "A: keep as built" (D29).
 - 2026-11-04: owner "Start W5", then "Add forced draft cooler as well" / "I mean add power usage to it": the forced-draft cooler is today's air cooler (fans under the bundle), so its fans draw FE as plan 7 says; no new equipment. W5 build plan written (`W5_BUILD_PLAN.md`): electric stores in fluid facts schema 11, terminal cells for the air cooler and induced tower, booking at commits and on the presentation cadence, unpowered as a dispatch input, generator load from its buffer, config `energy.*`; readings A53 to A73, A73 (old coolers and towers unmetered until wired, or all metered) an owner decision.
+- 2026-11-04: W5, electricity (D30, `W5_BUILD_PLAN.md`). Built by an Opus medium subagent, reviewed (`97ae9c6d8`): `ElectricStore`, `ElectricStores`, `TerminalEnergy`; stores in fluid facts schema 11 in joules, terminal cells for the air cooler and induced tower, booking at commits and on the cadence, unpowered as a dispatch input (`NO_POWER`, natural or stack draught), generator load from its buffer, config `energy.*`, older coolers and towers `UNMETERED` (A73 A). Fixed a W3 save crash (NaN driver state through `Writer.f64`). Affected 583, equipment gates 98, hold gates 81, GameTests 41; campaign 992, 993 and 1000 clean, seed 6 a baseline wall hold. Then main `fb9607dad` merged (`c2704213a`, AGENTS.md: translations become a pre-merge commit).
 
 ## Documents
 
@@ -59,6 +60,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - [W3_BUILD_PLAN.md](W3_BUILD_PLAN.md): W3's build plan and readings A15 to A40 (D28).
 - [W3_REVIEW.md](W3_REVIEW.md): the shaft trains as built, tests, campaign, readings A41 to A52; A42's options.
 - [W5_BUILD_PLAN.md](W5_BUILD_PLAN.md): W5's build plan (FE stores, ports, booking, generator, config), readings A53 to A73.
+- [W5_REVIEW.md](W5_REVIEW.md): W5 as built, the W3 save crash fixed, tests, campaign, readings A74 to A84.
 - [PUMP_TYPES_REVIEW.md](PUMP_TYPES_REVIEW.md): the pump types against refinery practice (API 610 OH2, BB1, BB2); options for the large pump.
 
 ## Code areas (planned)
@@ -72,7 +74,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - Owner request 2026-11-04, a motor or turbine sound apart from the pump or compressor head's, with the volume scaled by operating speed and equipment size: W4's follow-up (D26, client and assets); the speed share in `FluidNetwork.MoverState` comes with W3's driver logic.
 - Owner: W10a's options O1 to O3 (O4 built) (`W10A_CAMPAIGN_REVIEW.md` section 4). Then W10b (health, wear, repair) after W3, W10c (sound) on W4's loops, W10d (screens) with W7.
 - Owner: the turbine's options T6 and T7, and whether to trace the closed 450 K steam pocket as its own batch (`W2_TURBINE_REVIEW.md`). W2 is complete.
-- W5 building (D30: readings A53 to A73 as recommended, A73 option A); W7 after it (plan section 12; W3 built 2026-11-04); W8 after the simulator merges; W9 only when the owner says so. W4 merged 2026-11-04; W6a is done on `claude/interesting-wozniak-cb5e6a` (43731e4d3, 2b2339d59), not merged.
+- W7 (screens and controls) next; W5 built 2026-11-04 (`W5_REVIEW.md`; the generator's push to a neighbour is untested in GameTests). Before the merge: the translation commit for every en_us key the batch added since W3 (plan section 12; W3 built 2026-11-04); W8 after the simulator merges; W9 only when the owner says so. W4 merged 2026-11-04; W6a is done on `claude/interesting-wozniak-cb5e6a` (43731e4d3, 2b2339d59), not merged.
 - W4 merge, reversible calls to confirm: the smallest motor and generator (0.75 m) carry no nameplate, like the smallest drums and ejectors (`NameplateTest`); the simulator has no tile for a motor, generator or gearbox, so the test catalog (`FlowsheetCatalog`) puts them on the steam turbine's unlit tile until W8 gives them one.
 - D26: one in-game listening check of the machine loops (casing and driver, volume and pitch with speed), approved by the owner, once W3 calls `DriverSounds.accept`.
 - Scratch: `tmp/rotating-machinery/` (worked numbers, campaign reports, test logs, the `CompressorTest` corner-law probe); the measurement tools are in `tools/rotating-machinery/`.
