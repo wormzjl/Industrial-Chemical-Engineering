@@ -101,8 +101,10 @@ class SolidTransportAcceptanceTest {
         assertTrue(a.graph().pipes().stream().allMatch(p->p.blockedDirections()!=0));
     }
     @Test void highViscosityBlocksTheMixedOutletBeforeSlurryThickening() {
+        // Either side of crude_pc12's 100 Pa s crossing, 382.4 K on its Twu 1985 table since O4 of batch
+        // 2026-11-04-open-thermo-data (330 and 340 K about the Dalia table's 333.9 K before).
         var n=new double[model.componentCount()];n[model.components().indexOf("crude_pc12")]=1;
-        var cold=model.flashTP(330,150000,n,()->{});var hot=model.flashTP(340,150000,n,()->{});
+        var cold=model.flashTP(380,150000,n,()->{});var hot=model.flashTP(390,150000,n,()->{});
         assertEquals(SolidMobility.Reason.IMMOBILE_LIQUID,check(cold,pipe(),1,SolidMobility.Outlet.MIXED).reason());
         assertTrue(check(hot,pipe(),1,SolidMobility.Outlet.MIXED).allowed());
         assertTrue(check(cold,pipe(),1,SolidMobility.Outlet.GAS).allowed());
