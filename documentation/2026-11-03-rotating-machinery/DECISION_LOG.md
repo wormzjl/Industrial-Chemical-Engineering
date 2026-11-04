@@ -54,6 +54,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D17 (bundled 896).** A pump's suction limit never stands above its supplier: the anchored suction is the lesser of the floor and the supplier's end pressure less the static lift, on the trial point. A supplier that falls to its bubble point within the step takes the pump's delivery to zero continuously, in the row, with no mode change.
 
+2026-11-04, the owner's answer to the D17 campaign review (`W2_D17_CAMPAIGN_REVIEW.md` section 2): "Accept, close W2".
+
+- **D18 (W2's solver work closed).** Bundled 896 stays as a known hold: three held intervals at the step where its supplier tee first reaches its bubble point, then STEADY at 52.76 kg/s. The campaign stands at 992, 994 and 1000 clean against the baseline's 991, 993 and 1000. W2's solver work ends at `9449ecce2`.
+
 ## Taken under the standing instruction
 
 - **A1 (Q10, reading of "as recommended").** All three proposals join the batch: a generator (shaft power to FE, the motor's mirror), cooling-tower fans on the RF port, KubeJS made optional with Create.

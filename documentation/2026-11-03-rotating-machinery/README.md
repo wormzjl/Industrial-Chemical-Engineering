@@ -2,7 +2,7 @@
 
 Purpose: realistic pumps and compressors at process level, separate drivers (motor, steam turbine, creative motor) joined by shafts and gearboxes, electricity (FE) for motors and air coolers, Create as an optional power source.
 
-Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e with A1 and A2 (D11), E8 fixed by taut-vessel row weights (D13), the suction floor and the vapour lock (D14-D17), campaigned: 992/994/1000 against 991/993/1000; bundled 896 waits on the owner, `W2_D17_CAMPAIGN_REVIEW.md` section 2). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
+Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2's solver work closed, owner decision D18: law F2e with A1 and A2 (D11), E8 fixed by taut-vessel row weights (D13), the suction floor, the vapour lock and the floor under the supplier (D14-D17); campaign 992/994/1000 against 991/993/1000, bundled 896 a known hold; the turbine connection (plan 3.4) is W2's last open item). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
 
 ## History
 
@@ -21,6 +21,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 - 2026-11-04: owner decision D15 ("A: close it"): a pump whose suction head at no flow is not positive stands CLOSED, reopening only above the band; built by an Opus subagent, 98 classes and the hold gates pass; `f53708de3`. Its campaign: 896 gone, 575 and 181 hold on an active-set cycle (`D15_HOLDS_REVIEW.md`): `cavitates` and the balance read the vapour lock on a point the pump's own law drained, the reopen test on the closed converged point. Proposed: one vapour-lock decision per solve on the start states (A) with the floor at the liquid's own enthalpy (C).
 - 2026-11-04: owner decision D16 ("Yes, A + C"): the vapour lock is one fact per solve on the start states (`vapourLocked`; `supplierHead`, its close branch, `startHead` and the per-point overloads deleted), and a hydrocarbon floor is its bubble pressure at its own enthalpy (PH bisection). 98 classes and the hold gates pass; `7b46b3b05`. Campaign (`W2_D16_CAMPAIGN_REVIEW.md`): 992, 994 and 1000 clean against the baseline's 991, 993 and 1000; 181 and 575 gone; counters back at D13's level; bundled 896 holds again in D14's form (its tee falls to its bubble point within the step).
 - 2026-11-04: owner decision D17 ("(a) Floor ≤ supplier"): the suction-limit row and the balance's anchor of a limited pump read the lesser of the floor and the supplier's end pressure less its lift (`suctionLimit`, `suctionSupply`, `suctionAnchor`; the Jacobian pattern sees the remote supplier). 98 classes and the hold gates pass; `9449ecce2`. Campaign (`W2_D17_CAMPAIGN_REVIEW.md`): the same holds as D16; 896's holds 10 → 3, no singular Jacobian, its island ends STEADY at 52.76 kg/s.
+- 2026-11-04: owner decision D18 ("Accept, close W2"): bundled 896 stays a known hold (three held intervals, then STEADY at 52.76 kg/s); W2's solver work ends at `9449ecce2`.
 
 ## Documents
 
@@ -43,10 +44,10 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 
 ## Open items
 
-- Owner: bundled 896 in `W2_D17_CAMPAIGN_REVIEW.md` section 2 (recommended: accept); water's floor joining the PH bisection (later); the vapour-locked status line (hard-coded "cannot drive forward flow" in `PipePresentation`).
+- Later, proposed: water's floor joining the PH bisection (it would delete `waterFloor`, `vapourPressure`'s water branch, the balance's `Math.min` and the carry's water alternative); the vapour-locked status line (hard-coded "cannot drive forward flow" in `PipePresentation`, needs a reason passed in like `inletReason`); bundled 896's first-anchor fix (`W2_D17_CAMPAIGN_REVIEW.md` option b).
 - To measure later, not proposed: a mover on F2e stands at its relief behind a sealed pocket (`PumpAheadOfFlowValveTest`, `SealedDischargeTest`), so D58's closure may no longer be needed for movers.
 - Owner request 2026-11-04, a motor or turbine sound apart from the pump or compressor head's, with the volume scaled by operating speed and equipment size: W4's follow-up (D13 on its branch, client and assets); the speed share in `FluidNetwork.MoverState` comes with W3's driver logic.
 - `DECISION_LOG.md` numbering: this branch's D10 (the law) and W4's D10 to D13 collide; renumber at the merge.
-- W2 rest: the owner's E8 and E5 choice, its affected tests and a new full campaign; the turbine connection (plan 3.4).
+- W2 rest: the turbine connection (plan 3.4).
 - W3, W5 and W7 to build (plan section 12); W8 after the simulator merges; W9 only when the owner says so. W4 runs as its own session; W6a is done on `claude/interesting-wozniak-cb5e6a` (43731e4d3, 2b2339d59), not merged.
 - Scratch: `tmp/rotating-machinery/` (worked numbers, campaign reports, test logs, the `CompressorTest` corner-law probe); the measurement tools are in `tools/rotating-machinery/`.
