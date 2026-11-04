@@ -860,7 +860,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var pos=target.position();
             if(!level.hasChunkAt(pos)||!moverRange(player,pos)||!(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver)||receiver.fluidIdentity()!=target.identity())continue;
             var record=registrations().get(target.identity());
-            if(record==null||record.device().ports().isEmpty()||!(record.device().control() instanceof FlowControl.Mover)||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString()))continue;
+            // A constructed mover at its fluid cell, or (W10c, owner 2026-11-04) an in-line mover at its pipe block.
+            if(record==null||!(record.device().control() instanceof FlowControl.Mover)||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString()))continue;
             if(moverWatchers.watch(uuid,target.identity())) {
                 refreshObserved(target.identity());var state=publishedMovers.get(target.identity());
                 if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendMover(player,state);
@@ -870,9 +871,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private static boolean moverRange(net.minecraft.server.level.ServerPlayer player,BlockPos pos){return pos.distToCenterSqr(player.position())<=com.wormzjl.icheme.network.FluidNetwork.MOVER_RANGE*com.wormzjl.icheme.network.FluidNetwork.MOVER_RANGE;}
     private void refreshObserved(long id){if(moverWatchers.watchers(id).isEmpty()&&sightGlassWatchers.watchers(id).isEmpty()&&(instruments==null||!instruments.observes(id)))presentation.unobserve(id);else presentation.observe(id);}
     private void unwatchMover(UUID player,long id){moverWatchers.unwatch(player,id);refreshObserved(id);}
+    /** The mover state last published for device {@code id} (a read), or null. */
+    public com.wormzjl.icheme.network.FluidNetwork.MoverState publishedMover(long id){owned();return publishedMovers.get(id);}
     private void forgetMover(long id){moverWatchers.remove(id);publishedMovers.remove(id);refreshObserved(id);}
     private void publishMover(WorldTopologyLedger.Registration record,net.minecraft.server.level.ServerLevel level,BlockPos pos) {
-        if(record.device().ports().isEmpty()||!(record.device().control() instanceof FlowControl.Mover mover))return;
+        if(!(record.device().control() instanceof FlowControl.Mover mover))return;
         long id=record.device().id();var target=new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id);
         // A machine turns at its shaft train's share (W3); a set-flow mover at its whole speed while it runs.
         double share=mover instanceof FlowControl.Machine||shafts.unitOf(id)?shafts.share(id):1;
@@ -881,7 +884,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 // A column holds its pumps and fans only while it runs, and runs them (C7).
                 running,(float)(running?Math.max(share,0):0),
                 // A pump's crackle and churn (W10c) from its last committed suction; 0 for a compressor and a stopped mover.
-                running&&mover.liquid()?health.crackle(id):0,running&&mover.liquid()?health.churn(id):0);
+                running&&mover.liquid()?health.crackle(id):0,running&&mover.liquid()?health.churn(id):0,
+                // An in-line pump's rated speed (its D21 duty speed) for its pitch; a casing's comes from its shape.
+                mover instanceof FlowControl.Pump pump&&pump.requestedVolumeFlow()>0?(float)com.wormzjl.icheme.science.machine.Npsh.dutySpeed(pump.requestedVolumeFlow(),com.wormzjl.icheme.science.machine.Motor.ratedSpeed(2)):0);
         publishedMovers.put(id,state);
         for(var uuid:moverWatchers.watchers(id)) {
             var player=server.getPlayerList().getPlayer(uuid);
@@ -1289,6 +1294,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var presented=view.get();receiver.acceptFluidView(presented);instruments.publish(id,presented);
             if(com.wormzjl.icheme.world.level.block.FluidDeviceBlock.hasSightGlass(level.getBlockState(pos)))publishSightGlass(record,level,pos,presented);
             else forgetSightGlass(id);
+            // An in-line mover's state (W10c, owner 2026-11-04): a pump's crackle and churn for its watchers.
+            if(record.device().control() instanceof FlowControl.Mover)publishMover(record,level,pos);
             return true;
         }
         public void failed(long device,RuntimeException failure){IChemE.LOGGER.error("fluid_presentation device={} status=FAILED detail=The view could not be presented at its bucket",device,failure);}

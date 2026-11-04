@@ -34,7 +34,7 @@ public final class MoverSounds {
     private static ClientLevel world;
     private static int age;
     private MoverSounds(){}
-    /** Lifecycle callers must be on the client thread. A constructed mover is tracked only at its fluid binding cell. */
+    /** Lifecycle callers must be on the client thread. A constructed mover is tracked only at its fluid binding cell, an in-line pump at its pipe block. */
     public static void track(BlockEntity entity){if(target(entity)!=null)CELLS.add(entity);else CELLS.remove(entity);}
     public static void forget(BlockEntity entity){CELLS.remove(entity);forget(entity.getBlockPos());}
     private static Target target(BlockEntity entity) {
@@ -43,7 +43,9 @@ public final class MoverSounds {
             var shape=shell.shape();if(shape==null||!shape.kind().mover())return null;
             var cell=ShapeRasterizer.fluidCell(shape);var origin=shell.origin();
             if(cell==null||origin==null||!origin.offset(cell.x(),cell.y(),cell.z()).equals(shell.getBlockPos()))return null;
-        }else return null;
+        }else if(!(entity instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity)
+                ||!com.wormzjl.icheme.world.level.block.FluidDeviceBlock.hasPump(entity.getBlockState()))return null;
+        // An in-line pump at its pipe block (W10c, owner 2026-11-04): only its crackle and churn play; an in-line compressor is silent.
         return new Target(entity.getBlockPos(),receiver.fluidIdentity());
     }
     private static boolean valid(Target target) {
@@ -93,8 +95,9 @@ public final class MoverSounds {
             boolean audible=state.running()&&valid(target)&&target.position().distToCenterSqr(point)<=24*24
                     &&mc.options.getSoundSourceVolume(SoundSource.BLOCKS)>0&&mc.options.getSoundSourceVolume(SoundSource.MASTER)>0;
             if(!audible){stop(target);continue;}
+            // A casing's running loop; an in-line pump has none (it never had one), only its layers.
             var loop=LOOPS.get(target);
-            if(loop==null||!mc.getSoundManager().isActive(loop)){loop=new Loop(state,mc.level,0);LOOPS.put(target,loop);mc.getSoundManager().play(loop);}
+            if(casing(target)&&(loop==null||!mc.getSoundManager().isActive(loop))){loop=new Loop(state,mc.level,0);LOOPS.put(target,loop);mc.getSoundManager().play(loop);}
             // A pump's crackle and churn (W10c): each starts when its byte rises above 0 and stops itself once silent.
             var layers=LAYERS.computeIfAbsent(target,t->new Loop[2]);
             for(int i=0;i<2;i++) {
@@ -103,6 +106,8 @@ public final class MoverSounds {
             }
         }
     }
+    /** Whether {@code target} is a constructed mover's fluid cell (it has a casing loop), not an in-line pump. */
+    private static boolean casing(Target target){var level=Minecraft.getInstance().level;return level!=null&&level.getBlockEntity(target.position()) instanceof EquipmentShellBlockEntity;}
     /** Layer {@code layer}'s share of full loudness, 0 to 1: the casing 1, a pump's crackle and churn their bytes over 255 (W10c). */
     private static double layer(FluidNetwork.MoverState state,int layer){return layer==0?1:(layer==1?state.crackle():state.churn())/255.0;}
     /** How far a layer's volume moves toward its goal each client tick: about a second to settle. */
@@ -133,9 +138,14 @@ public final class MoverSounds {
          */
         private void refreshVolume(){
             var state=STATES.get(target);
-            float goal=state!=null&&level.getBlockEntity(target.position()) instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null
-                    ?(float)(UnitDesign.soundGain(shell.shape(),speed(state))*layer(state,layer)):0;
-            if(layer==0){volume=goal;pitch=UnitDesign.soundPitch(state==null?1:speed(state));return;}
+            // An in-line pump's layers take the smallest pump casing's gain (UnitDesign.leastGain): it has no casing shape.
+            float gain=state==null?0:level.getBlockEntity(target.position()) instanceof EquipmentShellBlockEntity shell?shell.shape()==null?0:UnitDesign.soundGain(shell.shape(),speed(state))
+                    :UnitDesign.leastGain(speed(state));
+            float goal=state==null?0:(float)(gain*layer(state,layer));
+            // The pitch follows the shaft's rpm over the loop's (owner 2026-11-04); a pump's layers take its pump's pitch.
+            pitch=state==null?1:level.getBlockEntity(target.position()) instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null?UnitDesign.soundPitch(shell.shape(),speed(state))
+                    :state.rpm()>0?UnitDesign.soundPitch(speed(state)*state.rpm(),UnitDesign.PUMP_LOOP_RPM):1;
+            if(layer==0){volume=goal;return;}
             volume+=(goal-volume)*EASE;
             if(goal<=0&&volume<.003f)stop();
         }

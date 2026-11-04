@@ -276,7 +276,20 @@ public abstract class UnitDesign {
             double least=turbine?SteamTurbineDesign.MIN_POWER:MotorDesign.POWERS.getFirst(),most=turbine?SteamTurbineDesign.MAX_POWER:MotorDesign.POWERS.getLast();
             size=com.wormzjl.icheme.science.math.DeterministicMath.log(shape.duty().power()/least)/com.wormzjl.icheme.science.math.DeterministicMath.log(most/least);
         }else return 0;
+        return gain(size,speed);
+    }
+
+    /** The law of {@link #soundGain(EquipmentShape, double)} at a size share {@code size} (0 to 1) and a speed share. */
+    private static float gain(double size,double speed) {
         return (float)((.10+.50*Math.clamp(size,0,1))*com.wormzjl.icheme.science.math.DeterministicMath.pow(Math.clamp(speed,0,1),SPEED_EXPONENT));
+    }
+
+    /**
+     * The smallest pump casing's gain at a speed share (size share 0: 0.10 at full speed), which an in-line pump's
+     * cavitation crackle and gas churn take (W10c, owner 2026-11-04): an in-line pump has no casing shape for the law.
+     */
+    public static float leastGain(double speed) {
+        return gain(0,speed);
     }
 
     /**
@@ -286,12 +299,47 @@ public abstract class UnitDesign {
     public static final double SPEED_EXPONENT = 2.5;
 
     /**
-     * A running loop's pitch at a speed share (decision D26, owner 2026-11-04): a machine's tones (blade pass, vane
-     * pass, fan, slots) are its shaft speed times a fixed count, so the pitch is the speed share, down to 0.5, where
-     * Minecraft stops lowering it; 1 at full speed and above.
+     * The shaft speeds, rpm, the loops were authored at (tools/machine-sounds/README.md): {@code pump_running} at 2950 rpm
+     * (its 300 Hz vane pass is 2950 rpm times 6 vanes), which a pump's crackle and churn layers share, and
+     * {@code motor_running} (motor and generator) at 1500 rpm (its 250 Hz fan blade pass is 25 Hz times 10 blades). The
+     * compressor and turbine loops state none: they sound at their machine's rated speed.
      */
-    public static float soundPitch(double speed) {
-        return (float) Math.clamp(speed, .5, 1);
+    public static final double PUMP_LOOP_RPM = 2950, MOTOR_LOOP_RPM = 1500;
+
+    /**
+     * A running loop's pitch at a shaft speed {@code rpm} for a loop authored at {@code loopRpm} (decision D26; owner
+     * 2026-11-04: "Rotation machine sound should also scale with their rpm"): a machine's tones (blade pass, vane pass,
+     * fan, slots) are its shaft speed times a fixed count, so the pitch is {@code n / n_loop}, between Minecraft's 0.5 and
+     * 2. A 1475 rpm pump sounds at 0.5 of the 2950 rpm loop, a 4425 rpm one at 1.5; overspeed rises to 2.
+     */
+    public static float soundPitch(double rpm, double loopRpm) {
+        if (!(loopRpm > 0) || !(rpm >= 0)) return 1;
+        return (float) Math.clamp(rpm / loopRpm, .5, 2);
+    }
+
+    /**
+     * The rated shaft speed, rpm, of a sounding machine's shape from its design data: a pump casing's or a motor's or
+     * generator's from its poles ({@link com.wormzjl.icheme.science.machine.Motor#ratedSpeed}; a pump without poles is
+     * 2-pole); 0 where its loop states no speed (a compressor, a turbine).
+     */
+    public static double ratedRpm(EquipmentShape shape) {
+        var kind = shape.kind();
+        boolean pump = kind == Kind.PUMP, motor = kind == Kind.MOTOR || kind == Kind.GENERATOR;
+        if (!pump && !motor) return 0;
+        int poles = shape.duty() == null ? 0 : shape.duty().poles();
+        if (poles == 0) poles = pump ? 2 : 4;
+        return com.wormzjl.icheme.science.machine.Motor.ratedSpeed(poles);
+    }
+
+    /**
+     * A machine's loop pitch at speed share {@code share} of its rated speed: {@link #soundPitch(double, double)} of its
+     * rpm ({@code share} times {@link #ratedRpm}) over its loop's ({@link #PUMP_LOOP_RPM}, {@link #MOTOR_LOOP_RPM}); for a
+     * loop that states no speed, the share itself, between 0.5 and 2. A pump's crackle and churn take its pump's pitch.
+     */
+    public static float soundPitch(EquipmentShape shape, double share) {
+        double rated = ratedRpm(shape);
+        if (!(rated > 0)) return soundPitch(share, 1);
+        return soundPitch(share * rated, shape.kind() == Kind.PUMP ? PUMP_LOOP_RPM : MOTOR_LOOP_RPM);
     }
 
     /** Whether a kind sounds as a driver, its own loop at its own cells: a motor, its mirror the generator, or a steam turbine. */

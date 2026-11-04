@@ -174,13 +174,16 @@ class FluidPacketCodecTest {
         var target=new FluidNetwork.Target(new BlockPos(3,70,-9),42);
         var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
         try{
-            for(var state:List.of(new FluidNetwork.MoverState(target,false,true,.95f,255,128),new FluidNetwork.MoverState(target,false,true,1,0,7),new FluidNetwork.MoverState(target,true,false,0))) {
+            // An in-line pump's state at its pipe block (W10c follow-up): the same payload, its speed 1, its crackle only.
+            var inline=new FluidNetwork.MoverState(new FluidNetwork.Target(new BlockPos(-120,64,33),Long.MAX_VALUE-5),false,true,1,201,0,1549.2f);
+            for(var state:List.of(new FluidNetwork.MoverState(target,false,true,.95f,255,128),new FluidNetwork.MoverState(target,false,true,1,0,7),new FluidNetwork.MoverState(target,true,false,0),inline)) {
                 FluidNetwork.MoverState.STREAM_CODEC.encode(buffer,state);assertEquals(state,FluidNetwork.MoverState.STREAM_CODEC.decode(buffer));
             }
         }finally{buffer.release();}
         assertEquals(0,new FluidNetwork.MoverState(target,true,true,1).crackle());
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MoverState(target,false,true,1,256,0));
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MoverState(target,false,true,1,0,-1));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MoverState(target,false,true,1,0,0,-1));
     }
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {

@@ -486,15 +486,21 @@ public final class FluidNetwork {
     }
     /** Server to client: a constructed mover's requested presentation (which loop, running or not, and its speed share from
      * its shaft train, W3, reading A36: 1 for a set-flow mover); no process inventory or solver results. */
-    /** A mover's published state: its speed share and (W10c) a pump's cavitation crackle and gas churn, 0 to 255 each (0 for a compressor and a stopped mover). */
-    public record MoverState(Target target,boolean compressor,boolean running,float speed,int crackle,int churn) implements CustomPacketPayload {
-        public MoverState(Target target,boolean compressor,boolean running,float speed){this(target,compressor,running,speed,0,0);}
+    /**
+     * A mover's published state: its speed share and (W10c) a pump's cavitation crackle and gas churn, 0 to 255 each (0 for
+     * a compressor and a stopped mover), and an in-line pump's rated speed, rpm (its D21 duty speed; 0 for a constructed
+     * mover, whose shape gives it), for its sound's pitch.
+     */
+    public record MoverState(Target target,boolean compressor,boolean running,float speed,int crackle,int churn,float rpm) implements CustomPacketPayload {
+        public MoverState(Target target,boolean compressor,boolean running,float speed){this(target,compressor,running,speed,0,0,0);}
+        public MoverState(Target target,boolean compressor,boolean running,float speed,int crackle,int churn){this(target,compressor,running,speed,crackle,churn,0);}
         public MoverState{Objects.requireNonNull(target);if(!Float.isFinite(speed)||speed<0)throw new IllegalArgumentException("Invalid mover speed");
+            if(!Float.isFinite(rpm)||rpm<0)throw new IllegalArgumentException("Invalid mover rpm");
             if(crackle<0||crackle>255||churn<0||churn>255)throw new IllegalArgumentException("Invalid mover sound bytes");}
         public static final Type<MoverState> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"mover_state"));
         public static final StreamCodec<RegistryFriendlyByteBuf,MoverState> STREAM_CODEC=new StreamCodec<>() {
-            public MoverState decode(RegistryFriendlyByteBuf b){return new MoverState(readTarget(b),flag(b),flag(b),b.readFloat(),b.readUnsignedByte(),b.readUnsignedByte());}
-            public void encode(RegistryFriendlyByteBuf b,MoverState p){writeTarget(b,p.target);b.writeBoolean(p.compressor);b.writeBoolean(p.running);b.writeFloat(p.speed);b.writeByte(p.crackle);b.writeByte(p.churn);}
+            public MoverState decode(RegistryFriendlyByteBuf b){return new MoverState(readTarget(b),flag(b),flag(b),b.readFloat(),b.readUnsignedByte(),b.readUnsignedByte(),b.readFloat());}
+            public void encode(RegistryFriendlyByteBuf b,MoverState p){writeTarget(b,p.target);b.writeBoolean(p.compressor);b.writeBoolean(p.running);b.writeFloat(p.speed);b.writeByte(p.crackle);b.writeByte(p.churn);b.writeFloat(p.rpm);}
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
@@ -618,8 +624,8 @@ public final class FluidNetwork {
         });
         sightGlass.playToClient(SightGlassPayload.TYPE,SightGlassPayload.STREAM_CODEC,(payload,context)->com.wormzjl.icheme.client.SightGlassRenderer.accept(payload.target,payload.sample));
         // mover-2 (W3, reading A36): the mover state carries its speed share; the drivers' watch and state ride beside it.
-        // mover-3 (W10c): and a pump's crackle and churn bytes.
-        var mover=event.registrar("mover-3").executesOn(HandlerThread.MAIN);
+        // mover-3 (W10c): and a pump's crackle and churn bytes; mover-4: an in-line pump's rated rpm for the pitch.
+        var mover=event.registrar("mover-4").executesOn(HandlerThread.MAIN);
         mover.playToServer(Watch.MOVERS,Watch.codec(Watch.MOVERS),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchMovers(player,p.watch,p.unwatch));
         });

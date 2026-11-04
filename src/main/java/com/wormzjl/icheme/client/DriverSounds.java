@@ -25,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
  * Client-thread-only positional loops of the drivers ({@link UnitDesign#driver}: motor, generator, steam turbine), apart
  * from their machine's casing loop ({@link MoverSounds}; decision D26, batch 2026-11-03-rotating-machinery). A driver is
  * known by its structure's origin and tracked at its controller cell; its loop sits at the centre of its cells, its gain
- * {@link UnitDesign#soundGain(EquipmentShape, double)} of its rated power and speed share, its pitch {@link UnitDesign#soundPitch}. The running state and the
+ * {@link UnitDesign#soundGain(EquipmentShape, double)} of its rated power and speed share, its pitch {@link UnitDesign#soundPitch(EquipmentShape, double)} of its rpm over the loop's. The running state and the
  * speed share come from the server's shaft trains (W3) through {@link #accept}; W3 also sends the watch request
  * ({@link #request}). Until then no driver sounds. No process state is inferred on client ticks.
  */
@@ -121,6 +121,6 @@ public final class DriverSounds {
                     ||shell.getBlockPos().distToCenterSqr(mc.player.position())>24*24)stop();
             else refreshVolume();
         }
-        private void refreshVolume(){var speed=SPEEDS.get(origin);volume=shell.shape()==null||speed==null?0:UnitDesign.soundGain(shell.shape(),speed);pitch=UnitDesign.soundPitch(speed==null?1:speed);}
+        private void refreshVolume(){var speed=SPEEDS.get(origin);volume=shell.shape()==null||speed==null?0:UnitDesign.soundGain(shell.shape(),speed);pitch=shell.shape()==null?1:UnitDesign.soundPitch(shell.shape(),speed==null?1:speed);}
     }
 }

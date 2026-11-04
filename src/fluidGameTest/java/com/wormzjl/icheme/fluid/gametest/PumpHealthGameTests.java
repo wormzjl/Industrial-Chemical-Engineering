@@ -115,4 +115,47 @@ public final class PumpHealthGameTests {
                     if (failure[0] != null) helper.fail(failure[0]);
                 }).thenSucceed();
     }
+
+    /**
+     * W10c (owner 2026-11-04, "Yes, add them"): an in-line pump fed at about twice its NPSH3 publishes its mover state, as a
+     * casing does, running with its crackle byte above 0, for the watchers that ask for it.
+     */
+    @GameTest(template = "empty", timeoutTicks = 2400, batch = "inline-pump-sound")
+    public static void anInlinePumpPublishesItsCrackle(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var source = helper.absolutePos(new BlockPos(0, 1, 0));
+        var inlet = source.east();
+        var pump = inlet.east();
+        var outlet = pump.east();
+        var sink = outlet.east();
+        var placed = java.util.List.of(source, inlet, pump, outlet, sink);
+        level.setBlock(source, ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), 3);
+        level.setBlock(sink, ModBlocks.FLUID_VOID.get().defaultBlockState(), 3);
+        level.setBlock(inlet, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        level.setBlock(outlet, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        level.setBlock(pump, FluidPumpStartupGameTests.inlinePump(Direction.EAST), 3);
+        var water = FluidDeviceSpec.water(com.wormzjl.icheme.science.material.MaterialRuntime.active()).composition();
+        long sourceId = ((FluidDeviceBlockEntity) level.getBlockEntity(source)).fluidIdentity();
+        long sinkId = ((FluidDeviceBlockEntity) level.getBlockEntity(sink)).fluidIdentity();
+        long pumpId = ((FluidDeviceBlockEntity) level.getBlockEntity(pump)).fluidIdentity();
+        // Its default set flow, 0.01 m3/s, needs 1.68 m of NPSH3: the supply stands at twice that over the water's vapour pressure.
+        double npsh3 = com.wormzjl.icheme.science.machine.Npsh.forDuty(.01, 2950).required(.01);
+        TankCharge.run(world, sourceId, new FluidDeviceSpec(1, 298.15, 3169 + 2 * 997 * 9.81 * npsh3, water));
+        var r = world.registrations().get(sinkId);
+        world.edit(sinkId, r.revision(), r.device(), new FluidDeviceSpec(1, 298.15, 101_325, water));
+        String[] failure = {null};
+        helper.startSequence().thenWaitUntil(() -> {
+            var state = world.publishedMover(pumpId);
+            helper.assertTrue(state != null && state.running() && !state.compressor() && state.crackle() > 0,
+                    "Waiting for the in-line pump's crackle: " + state + " / " + world.view(pumpId).status());
+        }).thenExecute(() -> {
+            var state = world.publishedMover(pumpId);
+            if (state.crackle() != world.health().crackle(pumpId)) failure[0] = "the published crackle is not the pump's: " + state;
+            for (var at : placed) level.removeBlock(at, false);
+        }).thenWaitUntil(() -> helper.assertTrue(java.util.stream.LongStream.of(sourceId, sinkId, pumpId).noneMatch(world.registrations()::containsKey),
+                "Waiting for the line to leave")).thenExecute(() -> {
+            if (failure[0] != null) helper.fail(failure[0]);
+        }).thenSucceed();
+    }
 }

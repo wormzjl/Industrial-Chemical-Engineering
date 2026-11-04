@@ -290,9 +290,24 @@ class PipePresentationTest {
             assertEquals(full,UnitDesign.soundGain(shape,1.3));
             for(double speed=.1;speed<=1;speed+=.1)assertTrue(UnitDesign.soundGain(shape,speed)>UnitDesign.soundGain(shape,speed-.1));
         }
-        // The pitch is the speed share (a machine's tones scale with its shaft speed), between Minecraft's 0.5 and 1.
-        assertEquals(1F,UnitDesign.soundPitch(1));assertEquals(1F,UnitDesign.soundPitch(1.3));
-        assertEquals(.8F,UnitDesign.soundPitch(.8),1e-6);assertEquals(.5F,UnitDesign.soundPitch(.5));assertEquals(.5F,UnitDesign.soundPitch(.2));
+        // The pitch is the shaft's rpm over the loop's (owner 2026-11-04), between Minecraft's 0.5 and 2.
+        assertEquals(.5F,UnitDesign.soundPitch(1475,UnitDesign.PUMP_LOOP_RPM),1e-6);assertEquals(1F,UnitDesign.soundPitch(2950,UnitDesign.PUMP_LOOP_RPM),1e-6);
+        assertEquals(1.5F,UnitDesign.soundPitch(4425,UnitDesign.PUMP_LOOP_RPM),1e-6);assertEquals(2F,UnitDesign.soundPitch(9000,UnitDesign.PUMP_LOOP_RPM));
+        assertEquals(.5F,UnitDesign.soundPitch(500,UnitDesign.PUMP_LOOP_RPM));assertEquals(1F,UnitDesign.soundPitch(1500,UnitDesign.MOTOR_LOOP_RPM),1e-6);
+        // From a shape's design data: a 2-pole pump at full speed is its loop, a 4-pole one an octave down, at 1.5 times
+        // its speed half again; a 4-pole motor (1475 rpm) just under its 1500 rpm loop; a compressor's loop states no speed.
+        var designed=UnitDesign.of(EquipmentShape.Kind.PUMP);double size=designed.minSize();int length=designed.defaultLength(size);
+        var twoPole=EquipmentShape.designed(EquipmentShape.Kind.PUMP,size,length,EquipmentShape.Heading.NORTH,designed.defaultSupport(size,length),com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE)
+                .withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.pump(72,50,2));
+        assertEquals(1F,UnitDesign.soundPitch(twoPole,1),1e-6);assertEquals(1.5F,UnitDesign.soundPitch(twoPole,1.5),1e-6);
+        assertEquals(.5F,UnitDesign.soundPitch(twoPole.withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.pump(72,50,4)),1),1e-6);
+        var motorDesign=UnitDesign.of(EquipmentShape.Kind.MOTOR);double kw=motorDesign.minSize();int motorLength=motorDesign.defaultLength(kw);
+        var fourPole=EquipmentShape.designed(EquipmentShape.Kind.MOTOR,kw,motorLength,EquipmentShape.Heading.NORTH,0,com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE)
+                .withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.motor(kw,4,com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED));
+        assertEquals((float)(1475/1500.),UnitDesign.soundPitch(fourPole,1),1e-6);
+        var compressor=UnitDesign.of(EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR);double c=compressor.minSize();int cl=compressor.defaultLength(c);
+        var centrifugal=EquipmentShape.designed(EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR,c,cl,EquipmentShape.Heading.NORTH,compressor.defaultSupport(c,cl),com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE);
+        assertEquals(.8F,UnitDesign.soundPitch(centrifugal,.8),1e-6);assertEquals(.5F,UnitDesign.soundPitch(centrifugal,.2));
         assertFalse(UnitDesign.driver(EquipmentShape.Kind.GEARBOX));
         assertEquals(0,UnitDesign.soundGain(EquipmentShape.unit(EquipmentShape.Kind.GEARBOX,UnitDesign.of(EquipmentShape.Kind.GEARBOX).minSize(),1,EquipmentShape.Heading.NORTH,0)));
     }
