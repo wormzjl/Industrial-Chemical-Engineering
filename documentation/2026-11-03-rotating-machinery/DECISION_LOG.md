@@ -44,6 +44,12 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D15 (D14’s two new holds).** A pump whose suction line delivers nothing at its floor (no NPSH available: its supplier stands at or below the bubble pressure the floor reads) is vapour-locked and passes nothing: it stands closed, not on its suction limit with no flow. It reopens only when its supplier stands above the floor again, as well as its rise beating the demand.
 
+2026-11-04, the owner's answer to the D15 holds review (`D15_HOLDS_REVIEW.md` section 3): "Yes, A + C".
+
+- **D16 (D15 restated).**
+  - **A.** Whether a pump is vapour-locked is one fact per solve, read on the step's start states like its floor: a suction head at no flow at or below the band stands it closed for the whole solve, reopening included; above it, the pump is never closed for vapour lock in that solve, and a starved pump goes only to its suction limit. No reading on a point the pump's own law drained.
+  - **C.** A hydrocarbon liquid's floor is its bubble pressure at its own enthalpy (the stream arriving through a throttle keeps its enthalpy), as `waterFloor` states it for water.
+
 ## Taken under the standing instruction
 
 - **A1 (Q10, reading of "as recommended").** All three proposals join the batch: a generator (shaft power to FE, the motor's mirror), cooling-tower fans on the RF port, KubeJS made optional with Create.

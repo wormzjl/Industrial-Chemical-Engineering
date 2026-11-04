@@ -140,12 +140,14 @@ class PumpCavitationTest {
      * vapour. Seed 397's LNG stands subcooled in its generator at 111.8 K and 222 kPa and feeds the pump [0.01 m3/s, 500 kPa]
      * through two metres of 10 mm line, which cannot carry the target (about 4.3 kg/s) on the 120 kPa between the generator
      * and the liquid's bubble pressure (about 100 kPa). The pump stands on its suction limit with its suction at that bubble
-     * pressure, worked out at the generator's temperature and liquid composition, and delivers what the line passes there.
+     * pressure, worked out at the generator liquid's composition and its own enthalpy (owner decision D16 C: the line
+     * throttles the liquid, which keeps its enthalpy and warms by its Joule-Thomson effect), and delivers what the line
+     * passes there.
      * Without the rule (two-phase suppliers only, K6) the junction was pulled to 40 kPa, where the liquid flashed and the
      * pass stalled (cold seed 397); bundled random seeds 952 and 575 held the same way on a subcooled light crude. The
-     * bubble pressure is checked here on the engine's own TP equilibrium, 0.1 % on either side of the suction: the solver
-     * brackets it to 1e-6 and the suction row holds it to the Newton's tolerance, and a 10 mm junction's port head is about
-     * 20 Pa, inside the 100 Pa of the band.
+     * bubble pressure is checked here on the engine's own PH equilibrium at the liquid's enthalpy, 0.1 % on either side of
+     * the suction: the solver brackets it to 1e-6 and the suction row holds it to the Newton's tolerance, and a 10 mm
+     * junction's port head is about 20 Pa, inside the 100 Pa of the band.
      */
     @Test void aSubcooledLngGeneratorHoldsItsPumpOnTheSuctionLimitAtTheBubblePressure() {
         var catalog=PilotCryogenicTestCatalog.catalog();var network=FluidMaterialCatalog.networkPackage(catalog);
@@ -165,9 +167,12 @@ class PumpCavitationTest {
             int pump=-1;for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.Pump)pump=e;
             var generator=graph.reservoirs().stream().filter(r->r.kind()==PassiveNetwork.NodeKind.GENERATOR).findFirst().orElseThrow().state();
             var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();double q=result.averageMassFlows()[pump];
-            double[] x=FluidThermodynamics.phaseMoles(generator,FluidThermodynamics.OIL);double t=generator.temperature();
-            var above=w.model.equilibriumTP(t,suction.pressure()*1.001,x.clone(),()->{},null);
-            var below=w.model.equilibriumTP(t,suction.pressure()*.999,x.clone(),()->{},null);
+            double[] x=FluidThermodynamics.phaseMoles(generator,FluidThermodynamics.OIL);double t=generator.temperature(),moles=0;
+            for(int c=0;c<x.length-1;c++)moles+=x[c];
+            double h=moles*generator.liquidProperties().molarEnthalpy();
+            var above=w.model.equilibriumPH(t,suction.pressure()*1.001,h,x.clone(),()->{});
+            var below=w.model.equilibriumPH(t,suction.pressure()*.999,h,x.clone(),()->{});
+            assertTrue(above!=null&&below!=null,"the PH equilibria on either side of the suction converge");
             System.out.println("PUMP_CAVITATION_SUBCOOLED modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())+" generatorP="+generator.pressure()
                     +" generatorT="+t+" suctionP="+suction.pressure()+" suctionT="+suction.temperature());
             assertTrue(generator.liquidVolume()>0&&generator.vaporVolume()==0,"the generator holds a subcooled liquid, no vapour");
@@ -180,15 +185,16 @@ class PumpCavitationTest {
     }
 
     /**
-     * Owner decision D15 (D14_HOLDS_REVIEW.md): a pump whose suction line delivers nothing at its floor is vapour-locked and
-     * passes nothing. Seed 397's LNG stands in its generator at 111.8 K a millionth below its bubble pressure (worked out
-     * here on the engine's own TP equilibrium), level with the pump [0.01 m3/s, 500 kPa], which draws through two metres of
-     * 10 mm line. A supplier at its bubble point has no suction head over the floor at no flow (no NPSH available), so the
-     * pump stands closed with no flow, not on its suction limit with none. Its discharge pipe is a tee that a second,
-     * subcooled generator of the same LNG at 222 kPa feeds into the void, so the rest of the island runs, and the closed
-     * pump's rise (about 215 kPa on LNG) beats its demand (about 60 kPa): only the supplier test keeps it closed. Anchored
-     * on its suction limit, bundled random 896 (a crude tee at its bubble point) had no root at any step size, and closed
-     * without the supplier test cold random 181's pump reopened and cavitated again 46 times.
+     * Owner decisions D15 and D16 A (D14_HOLDS_REVIEW.md, D15_HOLDS_REVIEW.md): a pump whose suction line delivers nothing
+     * at its floor is vapour-locked and passes nothing. Seed 397's LNG stands in its generator at 111.8 K a millionth below
+     * its bubble pressure (worked out here on the engine's own TP equilibrium; with no line between them the liquid's
+     * enthalpy gives the same point), level with the pump [0.01 m3/s, 500 kPa], which draws through two metres of 10 mm
+     * line. A supplier at its bubble point has no suction head over the floor at no flow (no NPSH available), so the pump
+     * stands closed with no flow, not on its suction limit with none. Its discharge pipe is a tee that a second, subcooled
+     * generator of the same LNG at 222 kPa feeds into the void, so the rest of the island runs, and the closed pump's rise
+     * (about 215 kPa on LNG) beats its demand (about 60 kPa): only the vapour lock, one fact per solve on the step's start
+     * states, keeps it closed. Anchored on its suction limit, bundled random 896 (a crude tee at its bubble point) had no
+     * root at any step size, and closed without the lock cold random 181's pump reopened and cavitated again 46 times.
      */
     @Test void aPumpDrawingFromASupplierAtItsBubblePointIsVapourLockedAndClosed() {
         var catalog=PilotCryogenicTestCatalog.catalog();var network=FluidMaterialCatalog.networkPackage(catalog);
