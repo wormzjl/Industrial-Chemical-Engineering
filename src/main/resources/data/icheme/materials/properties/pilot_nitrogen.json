@@ -36,6 +36,15 @@
       "acentric_factor": 0.0372
     }
   },
+  "freezing": {
+    "normal_melting_kelvin": 63.149,
+    "triple_point_kelvin": 63.149,
+    "triple_point_pascal": 12520,
+    "fusion_enthalpy_j_per_mol": 720,
+    "estimated": false,
+    "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Nitrogen\" (ChemSep index 905, CAS 7727-37-9): melting point, triple point temperature and pressure, heat of fusion at the melting point. Data only: never a validity floor or a range end.",
+    "revision": "chemsep-8.3-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

@@ -3,6 +3,8 @@
   "properties_revision": "unused",
   "viscosity_revision": "unused",
   "freezing_revision": "chemsep-8.3-r1",
+  "estimate_freezing_revision": "riazi-al-sahhaf-1995-r1",
+  "crystal_freezing_revision": "crystal-anchor-r1",
   "form": {
     "column_range_kelvin": [
       298.15,

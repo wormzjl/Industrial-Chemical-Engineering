@@ -139,6 +139,58 @@ class MaterialCatalogTest {
         assertTrue(MaterialRuntime.with(edited,ID,()->V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).isPresent()));
     }
     /**
+     * A dataset's freezing sub-record (plan section 3.6, D5) follows the viscosity rule: its own revision, and no identity
+     * until a model reads it. Every package's column, fluid and spine identity and its physics content are the same with
+     * and without the sub-records, so they move no world, result or neural model. Every bundled dataset carries one; the
+     * water has none (its water model holds its triple point and its ice).
+     */
+    @Test void freezingSubRecordsAreInNoIdentity() {
+        var bundled=MaterialCatalog.bundled();var resources=new HashMap<>(bundled.resources());int stripped=0;
+        for(var entry:resources.entrySet())if(entry.getKey().startsWith(ROOT+"properties/")) {
+            var o=JsonParser.parseString(entry.getValue()).getAsJsonObject();
+            assertTrue(o.has("freezing"),entry.getKey());o.remove("freezing");entry.setValue(o.toString());stripped++;
+        }
+        assertEquals(24,stripped);
+        var without=MaterialCatalog.parse(resources);
+        for(var p:bundled.packages().values()) {
+            assertEquals(p.scientificRevision(),without.requirePackage(p.id()).scientificRevision(),p.id());
+            assertEquals(bundled.fluidRevision(p.id()),without.fluidRevision(p.id()),p.id());
+            assertEquals(bundled.spineRevision(p.id()),without.spineRevision(p.id()),p.id());
+            assertEquals(bundled.physicsContent(p.id(),p.components()),without.physicsContent(p.id(),p.components()),p.id());
+            for(String component:p.components()) {
+                assertTrue(bundled.freezingPoint(p.id(),component).isPresent(),p.id()+" "+component);
+                assertTrue(without.freezingPoint(p.id(),component).isEmpty(),p.id()+" "+component);
+            }
+            assertTrue(bundled.freezingPoint(p.id(),"Water").isEmpty(),p.id());
+        }
+        var co2=bundled.freezingPoint("icheme:pilot_cryogenic","CarbonDioxide").orElseThrow();
+        assertEquals(bundled.crystals().get("icheme:crystal_carbon_dioxide_i").anchor().temperature(),co2.triplePointTemperature().doubleValue());
+        var pc01=bundled.freezingPoint(ID,"crude_pc01").orElseThrow();
+        assertTrue(pc01.estimated());assertNull(pc01.triplePointTemperature());
+        assertFalse(bundled.freezingPoint(ID,"Methane").orElseThrow().estimated());
+    }
+    /**
+     * A freezing sub-record is validated as it is read (positive finite numbers, a revision token, the required fields), and
+     * a compound with a crystal record agrees with that record's anchor within 0.005 K; a refusal names both records.
+     */
+    @Test void aFreezingSubRecordIsValidatedAndAgreesWithItsCrystalAnchor() {
+        String co2="properties/pilot_carbon_dioxide.json";
+        var far=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(co2,o->o.getAsJsonObject("freezing").addProperty("triple_point_kelvin",216.6))));
+        assertTrue(far.getMessage().contains(co2)&&far.getMessage().contains("icheme:pilot_carbon_dioxide")&&far.getMessage().contains("icheme:crystal_carbon_dioxide_i"),far.getMessage());
+        var near=MaterialCatalog.parse(changed(co2,o->o.getAsJsonObject("freezing").addProperty("triple_point_kelvin",216.596)));
+        assertEquals(216.596,near.freezingPoint("icheme:pilot_cryogenic","CarbonDioxide").orElseThrow().anchorTemperature());
+        // Without a triple point, the melting point is compared with the anchor.
+        var melting=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(co2,o->{var f=o.getAsJsonObject("freezing");
+            f.remove("triple_point_kelvin");f.addProperty("normal_melting_kelvin",194.7);})));
+        assertTrue(melting.getMessage().contains("icheme:crystal_carbon_dioxide_i"),melting.getMessage());
+        String pc07="properties/crude_pc07.json";
+        for(var edit:List.<java.util.function.Consumer<JsonObject>>of(f->f.addProperty("normal_melting_kelvin",-1),f->f.addProperty("triple_point_pascal",0),
+                f->f.addProperty("fusion_enthalpy_j_per_mol","x"),f->f.addProperty("revision","riazi 1995"),f->f.remove("estimated"),f->f.remove("source"))) {
+            var error=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(pc07,o->edit.accept(o.getAsJsonObject("freezing")))));
+            assertTrue(error.getMessage().contains(pc07)&&error.getMessage().contains("freezing."),error.getMessage());
+        }
+    }
+    /**
      * A package is a method and a compound list, and its identity names those records, not the package record (option B,
      * 2026-11-04): an edit of the package record alone (its revision, its evidence, its list written out in place of
      * {@code extends}, in the same order) moves no identity, of the package or of a view.

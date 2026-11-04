@@ -46,6 +46,26 @@ public final class MaterialCatalog {
         List<Double> numbers() { return List.of(minimumTemperature, maximumTemperature, minimumPressure, maximumPressure); }
     }
     /**
+     * A dataset's freezing point, its optional {@code freezing} sub-record (batch 2026-11-04-refinery-compounds, plan
+     * section 3.6): the normal melting point, optionally the triple point and the fusion enthalpy at the melting point,
+     * whether the values are estimated, their source and the sub-record's own revision. {@code null} marks an optional
+     * value the record does not give.
+     *
+     * <p>Data for later models only. It feeds no range, floor, seed window or hold: a freezing point is never a validity
+     * bound (AGENTS.md, thermo validity). Like a viscosity it has its own revision, and it is in no identity
+     * ({@link Package#scientificRevision}, {@link MaterialCatalog#fluidRevision}, {@link MaterialCatalog#physicsContent})
+     * until a model reads it, so an edit moves no world, result or neural model. A compound with a crystal record agrees
+     * with that record's anchor within {@link #CRYSTAL_ANCHOR_TOLERANCE} (checked at load).</p>
+     */
+    public record Freezing(double normalMeltingTemperature, Double triplePointTemperature, Double triplePointPressure,
+            Double fusionEnthalpy, boolean estimated, String source, String revision) {
+        /** The largest gap, K, between a freezing point and the anchor of a crystal record of the same compound. */
+        public static final double CRYSTAL_ANCHOR_TOLERANCE = 0.005;
+        public Freezing { Objects.requireNonNull(source); Objects.requireNonNull(revision); }
+        /** The temperature a crystal anchor is compared with: the triple point when the record gives one, else the melting point. */
+        public double anchorTemperature() { return triplePointTemperature != null ? triplePointTemperature : normalMeltingTemperature; }
+    }
+    /**
      * The free-water model of a package. {@code ice} is its ice below the melting line (WP4 of batch
      * 2026-09-24-coolprop-low-temperature), null for a record without one (a frozen fixture): the fluid network needs it.
      */
@@ -91,7 +111,8 @@ public final class MaterialCatalog {
      * every package that uses that record moves with it. What only the fluid network reads is identified apart: the
      * viscosities, each by its own revision, the water's ice and the fluid reference data in
      * {@link MaterialCatalog#fluidRevision}, and the spine and crystal records (the column refuses such packages) record by
-     * record in {@link MaterialCatalog#spineRevision}. Assays are compositions, not physics: no identity carries them.</p>
+     * record in {@link MaterialCatalog#spineRevision}. Assays are compositions, not physics: no identity carries them, and
+     * neither does a dataset's freezing sub-record ({@link Freezing}), which no model reads yet.</p>
      */
     public record Package(String id, String revision, String model, List<String> components,
             List<Property> properties, List<List<Double>> interactions, List<NrtlPair> nrtlPairs,
@@ -303,6 +324,21 @@ public final class MaterialCatalog {
         else throw new IllegalArgumentException("Component is outside package: " + componentId);
         return Optional.ofNullable(viscosities.getOrDefault(key, Map.of()).get(phase));
     }
+    /**
+     * A compound's freezing point in a package: the {@code freezing} sub-record of the dataset the package takes for it
+     * ({@link Freezing}); absent for a dataset without one and for the water, whose water model holds its triple point
+     * and its ice.
+     */
+    public Optional<Freezing> freezingPoint(String packageId, String componentId) {
+        Package p = requirePackage(packageId);
+        String id = p.canonicalId(Objects.requireNonNull(componentId, "componentId"));
+        int index = p.components().indexOf(id);
+        if (index < 0) {
+            if (id.equals("Water")) return Optional.empty();
+            throw new IllegalArgumentException("Component is outside package: " + componentId);
+        }
+        return Optional.ofNullable(records.freezing().get(p.properties().get(index).id()));
+    }
 
     private static JsonObject propertyScience(Property property) {
         var json=new Gson().toJsonTree(property).getAsJsonObject();json.remove("id");return json;
@@ -475,6 +511,7 @@ public final class MaterialCatalog {
         var spines = new HashMap<String, ReferenceSpine>();
         var crystals = new HashMap<String, CrystalReference>();
         var propertyRevisions = new HashMap<String, String>();
+        var freezing = new HashMap<String, Freezing>();
         for (var o : group(groups,"components").values()) checked(origins,o,() -> {
             JsonObject cut = o.has("cut") ? object(o,"cut") : null;
             String id=text(o,"id"), kind=text(o,"kind");
@@ -542,6 +579,15 @@ public final class MaterialCatalog {
                     positive(o,"standard_liquid_density_kg_per_m3"),positive(o,"standard_temperature_kelvin"),positive(o,"standard_pressure_pascal"),
                     min,max,reference,coefficients,pr,bool(o,"estimated_heavy_residue"),floor,translation));
             if (o.has("fluid_domain")) propertyValidity.put(id,validity(object(o,"fluid_domain")));
+            if (o.has("freezing")) {
+                var f=readFreezing(object(o,"freezing"));
+                // The compound's crystal records are anchored at its triple point: the freezing data must agree with them.
+                for (var crystal : new TreeMap<>(crystals).values()) if (crystal.component().equals(component)
+                        && !(Math.abs(f.anchorTemperature()-crystal.anchor().temperature())<=Freezing.CRYSTAL_ANCHOR_TOLERANCE))
+                    throw new IllegalArgumentException("freezing: "+id+" gives "+f.anchorTemperature()+" K and crystal record "+crystal.id()
+                            +" is anchored at "+crystal.anchor().temperature()+" K; they must agree within "+Freezing.CRYSTAL_ANCHOR_TOLERANCE+" K");
+                freezing.put(id,f);
+            }
         });
         for (var o : group(groups,"water").values()) checked(origins,o,() -> {
             viscosities.put("water/" + text(o,"id"), readViscosities(o));
@@ -584,7 +630,7 @@ public final class MaterialCatalog {
         var spinesByComponent=new HashMap<String,List<String>>();
         for(var spine:spines.values())spinesByComponent.computeIfAbsent(spine.component(),unused->new ArrayList<>()).add(spine.id());
         var records=new Records(names,properties,propertyRevisions,descriptors,waters,group(groups,"interactions"),matrices,spines,
-                spinesByComponent,crystals,aliases,assayRecords,propertyValidity,viscosities,fluidData);
+                spinesByComponent,crystals,aliases,assayRecords,propertyValidity,viscosities,freezing,fluidData);
         var definitions=new HashMap<String,Definition>();
         for (var o : group(groups,"packages").values()) checked(origins,o,() -> {
             // A package is a property method and a list of compounds (batch 2026-11-04-refinery-compounds): every number comes
@@ -681,6 +727,16 @@ public final class MaterialCatalog {
             }
         }
         return Map.copyOf(result);
+    }
+    /** A dataset's {@code freezing} sub-record ({@link Freezing}); a refusal names the field. */
+    private static Freezing readFreezing(JsonObject o) {
+        try {
+            return new Freezing(positive(o,"normal_melting_kelvin"),
+                    o.has("triple_point_kelvin")?positive(o,"triple_point_kelvin"):null,
+                    o.has("triple_point_pascal")?positive(o,"triple_point_pascal"):null,
+                    o.has("fusion_enthalpy_j_per_mol")?positive(o,"fusion_enthalpy_j_per_mol"):null,
+                    bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("freezing."+invalid.getMessage(),invalid); }
     }
     private static void validateInteractions(JsonObject o,Map<String,MaterialName> names,Map<String,GroupInteractionMatrix> matrices) {
         String model=text(o,"model"); text(o,"source"); revision(o,"revision");
@@ -817,9 +873,10 @@ public final class MaterialCatalog {
             Map<String,LiquidMixtureCorrection.Descriptor> descriptors,Map<String,Water> waters,Map<String,JsonObject> libraries,
             Map<String,GroupInteractionMatrix> matrices,Map<String,ReferenceSpine> spines,Map<String,List<String>> spinesByComponent,
             Map<String,CrystalReference> crystals,Map<String,String> aliases,Map<String,AssayRecord> assays,
-            Map<String,Validity> propertyValidity,Map<String,Map<ViscosityCorrelation.Phase,ViscosityCorrelation>> viscosities,FluidData fluidData) {
+            Map<String,Validity> propertyValidity,Map<String,Map<ViscosityCorrelation.Phase,ViscosityCorrelation>> viscosities,
+            Map<String,Freezing> freezing,FluidData fluidData) {
         Records {
-            names=Map.copyOf(names); properties=Map.copyOf(properties); propertyRevisions=Map.copyOf(propertyRevisions);
+            names=Map.copyOf(names); properties=Map.copyOf(properties); propertyRevisions=Map.copyOf(propertyRevisions); freezing=Map.copyOf(freezing);
             descriptors=Map.copyOf(descriptors); waters=Map.copyOf(waters); libraries=Map.copyOf(libraries); matrices=Map.copyOf(matrices);
             spines=Map.copyOf(spines); crystals=Map.copyOf(crystals); aliases=Map.copyOf(aliases); assays=Map.copyOf(assays);
             propertyValidity=Map.copyOf(propertyValidity); viscosities=Map.copyOf(viscosities);

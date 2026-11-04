@@ -36,6 +36,15 @@
       "acentric_factor": 0.22394
     }
   },
+  "freezing": {
+    "normal_melting_kelvin": 216.592,
+    "triple_point_kelvin": 216.592,
+    "triple_point_pascal": 517950,
+    "fusion_enthalpy_j_per_mol": 9019,
+    "estimated": true,
+    "source": "The anchor of icheme:crystal_carbon_dioxide_i (revision crystal-carbon_dioxide-i-r2), its values and estimated flag. CO2 sublimes at 1 atm (194.7 K) and has no normal melting point: normal_melting_kelvin holds the triple point. The fusion enthalpy is the crystal's effective value for the pilot family. Data only: never a validity floor or a range end.",
+    "revision": "crystal-anchor-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

@@ -38,6 +38,15 @@
       "acentric_factor": 0.186
     }
   },
+  "freezing": {
+    "normal_melting_kelvin": 113.54,
+    "triple_point_kelvin": 113.54,
+    "triple_point_pascal": 0.0120622,
+    "fusion_enthalpy_j_per_mol": 4540,
+    "estimated": false,
+    "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Isobutane\" (ChemSep index 4, CAS 75-28-5): melting point, triple point temperature and pressure, heat of fusion at the melting point. Data only: never a validity floor or a range end.",
+    "revision": "chemsep-8.3-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

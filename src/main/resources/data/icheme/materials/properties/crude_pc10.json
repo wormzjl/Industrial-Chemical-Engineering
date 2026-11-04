@@ -38,6 +38,12 @@
       "acentric_factor": 1.2792012740476753
     }
   },
+  "freezing": {
+    "normal_melting_kelvin": 364.83425536820147,
+    "estimated": true,
+    "source": "Estimated upper bound: the melting point of the n-paraffin of the fraction's molar mass 678.3954100855394 g/mol (icheme:crude_pc10, revision crude-regrouped-r1), Riazi and Al-Sahhaf, Ind. Eng. Chem. Res. 34 (1995) 4145, Tm = 397 - exp(6.5096 - 0.14187 M^0.47), fitted for C5..C40 (M about 70..565); this M lies beyond C40, so the value is extrapolated. A fraction freezes over a range (cloud and pour points lie lower). Data only: never a validity floor or a range end.",
+    "revision": "riazi-al-sahhaf-1995-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

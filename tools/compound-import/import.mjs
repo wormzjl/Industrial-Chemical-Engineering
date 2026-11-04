@@ -229,7 +229,10 @@ const write = (rel, value) => {
   written.push(rel);
 };
 const written = [];
-for (const r of [selection.properties_revision, selection.viscosity_revision, selection.freezing_revision])
+// A freezing sub-record's revision names its source: ChemSep's, the crude-fraction estimate's or the crystal anchor's.
+const estimateFreezingRevision = selection.estimate_freezing_revision ?? selection.freezing_revision;
+const crystalFreezingRevision = selection.crystal_freezing_revision ?? selection.freezing_revision;
+for (const r of [selection.properties_revision, selection.viscosity_revision, selection.freezing_revision, estimateFreezingRevision, crystalFreezingRevision])
   if (!REVISION.test(r)) throw new Error('invalid revision token ' + r);
 
 const report = { compounds: [], pairs: [], freezing_only: [], notes: [] };
@@ -400,14 +403,14 @@ for (const e of selection.freezing_only ?? []) {
         + 'Riazi and Al-Sahhaf, Ind. Eng. Chem. Res. 34 (1995) 4145, Tm = 397 - exp(6.5096 - 0.14187 M^0.47), fitted for C5..C40 (M about 70..565)'
         + (m > 565 ? '; this M lies beyond C40, so the value is extrapolated' : '') + '. A fraction freezes over a range (cloud and pour points lie lower). '
         + 'Data only: never a validity floor or a range end.',
-      revision: selection.freezing_revision };
+      revision: estimateFreezingRevision };
   } else if (e.from_crystal) {
     if (!materialsDir) throw new Error('--materials is required for ' + e.component);
     const crystal = JSON.parse(readFileSync(join(materialsDir, 'crystals', e.from_crystal), 'utf8')), a = crystal.anchor;
     record = { normal_melting_kelvin: a.temperature_kelvin, triple_point_kelvin: a.temperature_kelvin, triple_point_pascal: a.pressure_pascal,
       fusion_enthalpy_j_per_mol: a.fusion_enthalpy_j_per_mol, estimated: a.estimated ?? false,
       source: `The anchor of ${crystal.id} (revision ${crystal.revision}), its values and estimated flag. ${e.note ?? ''} Data only: never a validity floor or a range end.`,
-      revision: selection.freezing_revision };
+      revision: crystalFreezingRevision };
   } else {
     record = freezingRecord(chemsep(e.cas));
   }
