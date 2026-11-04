@@ -2,7 +2,7 @@
 
 Purpose: realistic pumps and compressors at process level, separate drivers (motor, steam turbine, creative motor) joined by shafts and gearboxes, electricity (FE) for motors and air coolers, Create as an optional power source.
 
-Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, gas, liquid, cavitation, wear and sound, answered D19 to D21, W10a built 4536849bb; W1 built; W2's solver work closed, owner decision D18: law F2e with A1 and A2 (D11), E8 fixed by taut-vessel row weights (D13), the suction floor, the vapour lock and the floor under the supplier (D14-D17); campaign 992/994/1000 against 991/993/1000, bundled 896 a known hold; W2 complete with the turbine connection (18c6f304b); W4 merged (71c66ae94); W3 built (69056145f), A42 kept as built (D29); W5 built (97ae9c6d8); main fb9607dad merged; W7 built (75c3fca13); W10b built (6074e7aa0)). Branch `claude/realistic-pump-compressor-6fdfd9`, rebased on main `84f739baa` (0.20.0).
+Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, gas, liquid, cavitation, wear and sound, answered D19 to D21, W10a built 4536849bb; W1 built; W2's solver work closed, owner decision D18: law F2e with A1 and A2 (D11), E8 fixed by taut-vessel row weights (D13), the suction floor, the vapour lock and the floor under the supplier (D14-D17); campaign 992/994/1000 against 991/993/1000, bundled 896 a known hold; W2 complete with the turbine connection (18c6f304b); W4 merged (71c66ae94); W3 built (69056145f), A42 kept as built (D29); W5 built (97ae9c6d8); main fb9607dad merged; W7 built (75c3fca13); W10b built (6074e7aa0); W10c built (975a718e2)). Branch `claude/realistic-pump-compressor-6fdfd9`, rebased on main `84f739baa` (0.20.0).
 
 ## History
 
@@ -44,6 +44,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: owner "Start W10b". Build plan written (`W10B_BUILD_PLAN.md`): health per pump and compressor device in fluid facts schema 12, plan 3.7's wear rates at commit and on the cadence (lives checked: 2.0 h at σ 2.06, 5.1 h at NPSH3, 18.9 h at σ 3.5), the health factor as a dispatch input, the liquid knock trip, impeller and valve-set parts with vanilla recipes and the repair event, config `machines.wear`; readings A109 to A128 (A117: no seal kit, against Q14's list).
 - 2026-11-04: W10b built in its simple form (`6074e7aa0`, D34): `Wear`, `PumpHealth`, σ and dry in `PipeObservation`, `ShaftPlan.Kind.FAILED`, `repair_kit` (`tools/machine-parts/`), fluid facts schema 12, config `machines.wear`. WearTest 3, PumpHealthTest 2, affected 625 + hold gates 58, GameTests 43; campaign 992, 994 and 1000 clean, the same holds (`W10B_REVIEW.md`).
 - 2026-11-04: owner "Start W10c". A short plan (`W10C_BUILD_PLAN.md`) offered the crackle only, the crackle and gas churn, or plan 3.8 in full; the owner picked the crackle and gas churn (D35).
+- 2026-11-04: W10c built (`975a718e2`, D35): `pump_cavitation` and `pump_gas` loops, two `MoverState` bytes (`mover-3`), `GasEntrainment.churn`; GasEntrainmentTest 4, codec 22, affected 613 + hold gates 58, GameTests 43; no campaign (read-only observation). In-line pumps stay silent (W4 watch). Listening check due (`W10C_REVIEW.md`).
 
 ## Documents
 
@@ -71,6 +72,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - [W10B_BUILD_PLAN.md](W10B_BUILD_PLAN.md): W10b's build plan (health, wear, knock, parts, repair), readings A109 to A128.
 - [W10B_REVIEW.md](W10B_REVIEW.md): W10b's simple form as built, tests, campaign, readings A129 to A136.
 - [W10C_BUILD_PLAN.md](W10C_BUILD_PLAN.md): W10c's plan (crackle and gas churn, D35).
+- [W10C_REVIEW.md](W10C_REVIEW.md): W10c as built, the loops, tests; in-line pumps silent; the listening check.
 - [PUMP_TYPES_REVIEW.md](PUMP_TYPES_REVIEW.md): the pump types against refinery practice (API 610 OH2, BB1, BB2); options for the large pump.
 
 ## Code areas (planned)
