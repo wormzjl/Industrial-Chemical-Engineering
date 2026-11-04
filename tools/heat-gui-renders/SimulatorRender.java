@@ -266,7 +266,7 @@ public final class SimulatorRender {
         var frame = new SimulatorFrame(d.w, d.h, d.m.width(HeatDiagramRender.tr("block.icheme.process_simulator")));
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE;
         var status = SimulatorPage.status(x, s.tab, s.results, s.gestures, s.editor, narrow, s.host.holder());
-        SimulatorPage.back(d.c, d.skin, status, HeatDiagramRender.tr("block.icheme.process_simulator"), frame, d.w, d.h);
+        SimulatorPage.back(d.c, d.skin, status, HeatDiagramRender.tr("block.icheme.process_simulator"), frame, s.tab, d.w, d.h);
         RUN_DUE = SimulatorPage.runDue(x, s.host);
         keys(d, SimulatorPage.frameKeys(x, s.tab, frame, s.host, s.editor));
         d.skin.iconKey(d.c, frame.theme(), Skin.Icon.THEME, false);
@@ -385,7 +385,7 @@ public final class SimulatorRender {
         var titles = List.of("Flowsheet tab, fitted", "Flowsheet tab, near 1:1", "Sizing tab: Size all and Send to block in Run's and Stop's place");
         var bodies = List.of(scene(sheet, run, seconds, host, nothing()), scene(sheet, run, seconds, host, near), scene(sheet, run, seconds, host, sizing));
         sheet(out, "30-arrows-keys", W, H, titles, bodies);
-        sheet(out, "31-arrows-keys-wide", 800, 450, titles, bodies);
+        sheet(out, "31-arrows-keys-wide", 960, 540, titles, bodies);
     }
 
     // ---- The sheets ----

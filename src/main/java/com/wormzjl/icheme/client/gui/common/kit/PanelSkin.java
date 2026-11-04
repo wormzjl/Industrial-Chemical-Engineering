@@ -195,6 +195,20 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         c.fill(r.right() - 1, r.y(), r.right(), r.bottom(), door.light());
     }
 
+    /**
+     * A recess under a group of push buttons (the owner, 2026-11-04: "encircle it with something", "regroup these buttons",
+     * "look homogeneous"): a floor darker than the door, its top and left edges in shadow, its bottom and right lit.
+     */
+    @Override
+    public void recess(Canvas c, Rect r) {
+        int x0 = r.x(), y0 = r.y(), x1 = r.right(), y1 = r.bottom(), shadow = mix(door.dark(), door.edge(), 0.75);
+        c.fill(x0, y0, x1, y1, mix(door.sheet(), door.dark(), 0.7));
+        c.fill(x0, y0, x1, y0 + 2, shadow);
+        c.fill(x0, y0, x0 + 2, y1, shadow);
+        c.fill(x0 + 1, y1 - 1, x1, y1, door.light());
+        c.fill(x1 - 1, y0 + 1, x1, y1, door.light());
+    }
+
     /** A display key: flat and black in a thin rim, no chrome ring; the pointer lights its face as a push button's. */
     @Override
     public void softKey(Canvas c, Rect r, String text, boolean hover) {

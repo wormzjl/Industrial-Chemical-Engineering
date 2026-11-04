@@ -41,7 +41,7 @@ public final class SimulatorPage {
             String label = x.text("tab." + t.name().toLowerCase(java.util.Locale.ROOT));
             slots.add(new Slot(sizing && !SizingPage.open(x) ? off("tab/" + t.ordinal(), label, x.text("hint.sizing")) : Door.position("tab/" + t.ordinal(), label, t == tab), tabs.get(t.ordinal())));
         }
-        boolean narrow = frame.size() != SimulatorFrame.Size.WIDE, reader = host.reader();
+        boolean narrow = !frame.wideKeys(), reader = host.reader();
         var file = frame.fileKeys();
         slots.add(new Slot(new Column.Button("file/new", x.text("file.new"), !editor.locked(), null), file.get(0)));
         slots.add(new Slot(new Column.Button("file/open", x.text("file.open"), !editor.locked(), null), file.get(1)));
@@ -57,7 +57,7 @@ public final class SimulatorPage {
 
     private static void runKeys(List<Slot> slots, SheetContext x, SimulatorFrame frame, SimulatorHost host, SheetEditor editor, boolean reader) {
         boolean running = host.running() != null;
-        slots.addAll(keys(x, frame.keys(50), editor, new Column.Button("run", x.text("frame.run"), host.canRun() && !running && !reader, !host.canRun() ? x.text("hint.run") : runDue(x, host) ? x.text("hint.run_due") : null),
+        slots.addAll(keys(x, frame.keys(frame.third(SimulatorFrame.Tab.FLOWSHEET)), editor, new Column.Button("run", x.text("frame.run"), host.canRun() && !running && !reader, !host.canRun() ? x.text("hint.run") : runDue(x, host) ? x.text("hint.run_due") : null),
                 new Column.Button("stop", x.text("frame.stop"), running, null)));
     }
 
@@ -174,10 +174,11 @@ public final class SimulatorPage {
         return b.latched() ? Skin.Press.CURRENT : !b.active() ? Skin.Press.OFF : Skin.Press.REST;
     }
 
-    /** The frame under its keys: the page, the title, the status once, the footer's rule and tray. */
-    public static void back(Canvas c, Skin skin, SheetState.Status status, String title, SimulatorFrame frame, int w, int h) {
+    /** The frame under its keys: the page, the title, the status once, the top rows' recesses ({@link SimulatorFrame#recesses}), the footer's rule and tray. */
+    public static void back(Canvas c, Skin skin, SheetState.Status status, String title, SimulatorFrame frame, SimulatorFrame.Tab tab, int w, int h) {
         skin.page(c, new Rect(0, 0, w, h));
         skin.title(c, 10, 8, title);
+        for (var recess : frame.recesses(tab)) skin.recess(c, recess);
         var line = frame.status();
         skin.status(c, line, c.measure().cut(status.text(), line.w() - 4), status.tone());
         skin.hDivider(c, 8, w - 8, h - 35);
@@ -323,7 +324,7 @@ public final class SimulatorPage {
     /** Draws the page the screen stands on; returns the hover. */
     public static @Nullable String draw(Canvas c, Skin skin, SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SheetView view, SheetGestures gestures, ResultsPage.State results, SizingPage.State sizing, int category, SheetEditor editor, KitDoor kit, String title, @Nullable String holder, double mouseX, double mouseY) {
         int w = frame.status().w() + 20, h = frame.bottom() + SimulatorFrame.BOTTOM;
-        back(c, skin, status(x, tab, results, gestures, editor, frame.size() != SimulatorFrame.Size.WIDE, holder), title, frame, w, h);
+        back(c, skin, status(x, tab, results, gestures, editor, frame.size() != SimulatorFrame.Size.WIDE, holder), title, frame, tab, w, h);
         switch (tab) {
             case FLOWSHEET -> {
                 var box = flowsheet(c, skin, x, frame, view, gestures, editor, category);

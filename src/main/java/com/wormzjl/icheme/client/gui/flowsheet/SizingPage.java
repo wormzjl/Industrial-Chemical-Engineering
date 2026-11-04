@@ -788,6 +788,6 @@ public final class SizingPage {
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE;
         String unsent = unsent(x);
         String send = unsent != null ? unsent : x.text("sizing.send_hint", designs(x).size());
-        return SimulatorPage.keys(x, frame.keys(frame.size().narrow() ? 50 : 84), editor, second, new Column.Button("send", x.text(narrow ? "sizing.send_short" : "sizing.send"), unsent == null, send));
+        return SimulatorPage.keys(x, frame.keys(frame.third(SimulatorFrame.Tab.SIZING)), editor, second, new Column.Button("send", x.text(narrow ? "sizing.send_short" : "sizing.send"), unsent == null, send));
     }
 }

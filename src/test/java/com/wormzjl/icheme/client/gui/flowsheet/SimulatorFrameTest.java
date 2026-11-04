@@ -47,30 +47,43 @@ class SimulatorFrameTest {
     }
 
     @Test
-    void theTabsKeysStandOnTheTitleRowClearOfTheTitle() {
+    void theTabsKeysStandInTwoGroupsBetweenTheTabsAndTheFileKeysOrOnTheTitleRow() {
         // 0, the English title in the game's font, the French one (the widest), as the screen measures them.
         for (int title : new int[]{0, 90, 125})
-            for (int[] size : new int[][]{{464, 254}, {624, 344}, {790, 524}, {944, 524}, {1280, 720}}) {
-                var frame = new SimulatorFrame(size[0], size[1], title);
-                for (int third : new int[]{50, frame.size().narrow() ? 50 : 84}) {
-                    var keys = frame.keys(third);
+            for (int[] size : new int[][]{{464, 254}, {624, 344}, {661, 344}, {662, 344}, {700, 400}, {790, 524}, {855, 524}, {856, 524}, {944, 524}, {1280, 720}}) {
+                int w = size[0];
+                var frame = new SimulatorFrame(w, size[1], title);
+                if (frame.size() == SimulatorFrame.Size.WIDE) assertTrue(frame.keysOnTabRow(), "a wide window holds them on the tab row at " + w);
+                var tabs = frame.tabs();
+                var files = frame.fileKeys();
+                for (var tab : SimulatorFrame.Tab.values()) {
+                    var keys = frame.keys(frame.third(tab));
                     assertEquals(5, keys.size(), "Close and four keys");
                     var top = keys.subList(1, 5);
+                    var recesses = frame.recesses(tab);
                     for (int i = 0; i < top.size(); i++) {
                         var key = top.get(i);
-                        assertEquals(5, key.y(), "on the title row at " + size[0]);
-                        assertTrue(key.x() >= SimulatorFrame.TITLE_RIGHT + title, "clear of a " + title + " px title at " + size[0]);
-                        assertFalse(key.overlaps(frame.theme()), "clear of the theme key at " + size[0] + ", title " + title);
-                        for (var tab : frame.tabs()) assertFalse(key.overlaps(tab), "above the tabs at " + size[0]);
-                        for (int k = i + 1; k < top.size(); k++) assertFalse(key.overlaps(top.get(k)), "apart at " + size[0]);
+                        assertEquals(frame.keysOnTabRow() ? 29 : 5, key.y(), "on its row at " + w);
+                        if (frame.keysOnTabRow()) assertTrue(key.x() > tabs.getLast().right() && key.right() < files.getFirst().x(), "between the tabs and the file keys at " + w);
+                        else assertTrue(key.x() - 3 >= SimulatorFrame.TITLE_RIGHT + title + 6, "its recess clear of a " + title + " px title at " + w);
+                        assertTrue(key.inside(recesses.get(1 + i / 2)), "in its pair's recess at " + w);
+                        assertFalse(key.overlaps(frame.theme()), "clear of the theme key at " + w + ", title " + title);
+                        for (var r : tabs) assertFalse(key.overlaps(r), "clear of the tabs at " + w);
+                        for (var r : files) assertFalse(key.overlaps(r), "clear of the file keys at " + w);
+                        for (int k = i + 1; k < top.size(); k++) assertFalse(key.overlaps(top.get(k)), "apart at " + w);
                     }
-                    if (title == 0) {
-                        int left = top.getFirst().x(), right = size[0] - top.getLast().right();
-                        assertTrue(Math.abs(left - right) <= 1, "centred at " + size[0] + ": " + left + " | " + right);
+                    // Centred in the room they have: between the tabs and the file keys, or across the window.
+                    int from = frame.keysOnTabRow() ? tabs.getLast().right() : 0, to = frame.keysOnTabRow() ? files.getFirst().x() : w;
+                    int left = top.getFirst().x() - from, right = to - top.getLast().right();
+                    if (frame.keysOnTabRow() || title == 0) assertTrue(Math.abs(left - right) <= 1, "centred at " + w + ": " + left + " | " + right);
+                    for (int i = 0; i < recesses.size(); i++) {
+                        var r = recesses.get(i);
+                        assertTrue(r.x() >= 5 && r.right() <= w - 5 && r.y() >= 0 && r.bottom() <= frame.status().y() - 5, "recess " + i + " on the door's top rows at " + w);
+                        for (int k = i + 1; k < recesses.size(); k++) assertFalse(r.overlaps(recesses.get(k)), "recesses " + i + " and " + k + " apart at " + w + ", " + tab);
                     }
                     var foot = new java.util.ArrayList<Rect>(frame.softKeys());
                     foot.add(keys.getFirst());
-                    for (int i = 0; i < foot.size(); i++) for (int k = i + 1; k < foot.size(); k++) assertFalse(foot.get(i).overlaps(foot.get(k)), "the footer apart at " + size[0]);
+                    for (int i = 0; i < foot.size(); i++) for (int k = i + 1; k < foot.size(); k++) assertFalse(foot.get(i).overlaps(foot.get(k)), "the footer apart at " + w);
                 }
             }
     }

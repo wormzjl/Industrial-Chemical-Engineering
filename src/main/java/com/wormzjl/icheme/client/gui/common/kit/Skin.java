@@ -159,6 +159,10 @@ public interface Skin {
     default void softKeys(Canvas c, Rect r) {
     }
 
+    /** A recess {@code r} pressed into the door under a group of push buttons. Here none. */
+    default void recess(Canvas c, Rect r) {
+    }
+
     /** A display key {@code r} on its strip ({@link #softKeys}), {@code hover} as for a button. Here a button at rest. */
     default void softKey(Canvas c, Rect r, String text, boolean hover) {
         button(c, r, text, Press.REST, hover);

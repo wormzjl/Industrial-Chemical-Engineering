@@ -58,17 +58,65 @@ public final class SimulatorFrame {
     }
 
     public List<Rect> tabs() {
-        int tw = size.narrow() ? 56 : 84;
+        int tw = tabWidth(wideKeys());
         var tabs = new ArrayList<Rect>();
         for (int i = 0; i < Tab.values().length; i++) tabs.add(new Rect(10 + i * (tw + 4), 29, tw, 18));
         return tabs;
     }
 
     public List<Rect> fileKeys() {
-        int kw = size.narrow() ? 36 : 48, n = 4, x = w - 10 - n * kw - (n - 1) * 4;
+        int kw = fileWidth(wideKeys()), n = 4, x = filesLeft(wideKeys());
         var keys = new ArrayList<Rect>();
         for (int i = 0; i < n; i++) keys.add(new Rect(x + i * (kw + 4), 29, kw, 18));
         return keys;
+    }
+
+    /**
+     * Whether the tabs and file keys take their wide widths: only on a wide window where the tab's key groups still fit
+     * between them; elsewhere the narrow ones, as a compact window's, and Save as reads short.
+     */
+    public boolean wideKeys() {
+        return size == Size.WIDE && filesLeft(true) - tabsRight(true) >= need();
+    }
+
+    /** Whether the tab's key groups stand on the tab row, between the tabs and the file keys; elsewhere on the title row. */
+    public boolean keysOnTabRow() {
+        boolean wide = wideKeys();
+        return filesLeft(wide) - tabsRight(wide) >= need();
+    }
+
+    private static int tabWidth(boolean wide) {
+        return wide ? 84 : 56;
+    }
+
+    private static int fileWidth(boolean wide) {
+        return wide ? 48 : 36;
+    }
+
+    private static int tabsRight(boolean wide) {
+        return 10 + 4 * tabWidth(wide) + 3 * 4;
+    }
+
+    private int filesLeft(boolean wide) {
+        return w - 10 - 4 * fileWidth(wide) - 3 * 4;
+    }
+
+    /** The key groups' width with {@code third} the tab's second key: Run (60) and Stop, then Undo and Redo (50 each). */
+    private static int groups(int third) {
+        return 60 + 4 + third + PAIR_GAP + 50 + 4 + 50;
+    }
+
+    /**
+     * The room the groups need between the tabs and the file keys: their recesses, the neighbours' and 4 px between each.
+     * Measured with the widest second key the window shows (Size all's), so no tab moves the row.
+     */
+    private int need() {
+        return groups(third(Tab.SIZING)) + 4 * RECESS + 2 * 4;
+    }
+
+    /** The tab's second key's width: Size all's 84 on a wide window; Run's, Stop's and a narrow Size all's 50. */
+    public int third(Tab tab) {
+        return tab == Tab.SIZING && size == Size.WIDE ? 84 : 50;
     }
 
     public Rect status() {
@@ -115,24 +163,50 @@ public final class SimulatorFrame {
     }
 
     /**
-     * A tab's keys: Close in the footer, then the tab's two keys, the second {@code third} px wide, and Undo and Redo, centred on the
-     * title row (the owner, 2026-11-04: "These buttons should be moved to top center"), never over the title's plate. The
-     * Flowsheet tab's are Run and Stop (50); the Sizing tab's Size all and Send to block (84, 50 where the window is narrow).
+     * A tab's keys: Close in the footer, then the tab's two keys, the second {@code third} px wide ({@link #third}), and Undo and
+     * Redo, in two groups (the owner, 2026-11-04: "should be in the middle of these 2, regroup these buttons"): on the tab row,
+     * centred between the tabs and the file keys, where they fit ({@link #keysOnTabRow}); else centred on the title row, never
+     * over the title's plate. The Flowsheet tab's are Run and Stop; the Sizing tab's Size all and Send to block.
      */
     public List<Rect> keys(int third) {
         var keys = new ArrayList<Rect>();
         keys.add(new Rect(10, h - 27, 50, 18));
         int[] widths = {60, third, 50, 50};
-        int x = Math.max((w - (160 + third + 12)) / 2, TITLE_RIGHT + title + 6);
-        for (int width : widths) {
-            keys.add(new Rect(x, 5, width, 18));
-            x += width + 4;
+        boolean tabRow = keysOnTabRow(), wide = wideKeys();
+        int y = tabRow ? 29 : 5;
+        int x = tabRow ? tabsRight(wide) + (filesLeft(wide) - tabsRight(wide) - groups(third)) / 2 : Math.max((w - groups(third)) / 2, TITLE_RIGHT + title + 6 + RECESS);
+        for (int i = 0; i < widths.length; i++) {
+            keys.add(new Rect(x, y, widths[i], 18));
+            x += widths[i] + (i == 1 ? PAIR_GAP : 4);
         }
         return keys;
     }
 
+    /**
+     * The recesses pressed into the door under the top rows' key groups (the owner, 2026-11-04: "Need to change style of other
+     * button layout as well so they look homogeneous", the footer kept as it was): the tabs, the tab's two pairs, the file keys
+     * and the theme key, {@link #RECESS} px round each.
+     */
+    public List<Rect> recesses(Tab tab) {
+        var keys = keys(third(tab));
+        return List.of(around(tabs()), around(keys.subList(1, 3)), around(keys.subList(3, 5)), around(fileKeys()), around(List.of(theme())));
+    }
+
+    private static Rect around(List<Rect> keys) {
+        int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, y1 = Integer.MIN_VALUE;
+        for (var r : keys) {
+            x0 = Math.min(x0, r.x());
+            y0 = Math.min(y0, r.y());
+            x1 = Math.max(x1, r.right());
+            y1 = Math.max(y1, r.bottom());
+        }
+        return new Rect(x0 - RECESS, y0 - RECESS, x1 - x0 + 2 * RECESS, y1 - y0 + 2 * RECESS);
+    }
+
     /** Where the title's plate ends, less its text: {@code PanelSkin.title} at x 10 pads it by 4. */
     static final int TITLE_RIGHT = 14;
+    /** A recess's margin round its keys; the gap between the tab's two pairs: both recesses and 6 px between them. */
+    static final int RECESS = 3, PAIR_GAP = 2 * RECESS + 6;
 
     public List<Rect> softKeys() {
         int kw = 40, strip = 4 * kw + 18, kx = w - 10 - strip;
