@@ -277,20 +277,15 @@ class GroupContributionInteractionsTest {
         var unused = PilotCryogenicTestCatalog.parseWith(MATRIX, o -> { firstPair(o).addProperty("a_mpa", 65.55); o.addProperty("source", "edited text"); });
         assertEquals(physics, unused.physicsContent(p.id(), p.components()));
         assertBundledPackagesHold(unused);
-        // A lens carries constant pairs only: the rule's pairs make the pilot's physics on the axis another than a
-        // constant-pair package's, so no lens is built.
-        var constant = new MaterialCatalog.Physics("pr78", List.of(
-                new MaterialCatalog.Physics.Compound("Nitrogen", MaterialCatalog.Physics.Revisioned.parse("icheme:fluid_nitrogen@" + revision(base, "icheme:fluid_nitrogen"))),
-                new MaterialCatalog.Physics.Compound("Methane", MaterialCatalog.Physics.Revisioned.parse("icheme:tjl20_methane@" + revision(base, "icheme:tjl20_methane")))),
-                List.of(), "zero", new MaterialCatalog.Physics.Revisioned("icheme:water", p.water().revision()));
-        assertTrue(base.resolve(constant).isPresent(), "the constant-pair records are current");
+        // A lens carries constant pairs only: a model trained on a constant-pair package's values (the network package's
+        // nitrogen and methane) reads no request whose view resolves a pair by the rule, so no lens is built.
+        var network = base.requirePackage("icheme:tjl20_methane_nitrogen");
+        var compounds = nitrogenMethane.stream().map(id -> {
+            var r = network.properties().get(network.components().indexOf(id));
+            return new TrainedPhysics.Compound(id, r.pr().criticalTemperature(), r.pr().criticalPressure(), r.pr().acentricFactor(), r.cp());
+        }).toList();
+        var constant = new TrainedPhysics("pr78", 298.15, 700, compounds, List.of(), TrainedPhysics.Water.of(p.water()));
         assertTrue(base.inferenceView(p.id(), nitrogenMethane, constant).isEmpty());
-    }
-
-    /** The declared revision of a property record. */
-    private static String revision(MaterialCatalog catalog, String propertyId) {
-        return catalog.resources().values().stream().map(s -> com.google.gson.JsonParser.parseString(s).getAsJsonObject())
-                .filter(o -> o.has("models") && o.get("id").getAsString().equals(propertyId)).findFirst().orElseThrow().get("revision").getAsString();
     }
 
     /** Every bundled package but the pilot is untouched by a group-matrix edit: its record and its physics. */

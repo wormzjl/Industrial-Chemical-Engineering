@@ -56,20 +56,30 @@ class V3RegroupedTransformerTest {
         d.add("weights",weights); return d;
     }
     /**
-     * The physics a model trained on package {@code packageId} stores (sidecar schema 3): the records its identity names,
-     * each by its declared revision, and its method's policy for a missing pair.
+     * The physics a model trained on package {@code packageId} stores (sidecar schema 4, O7 of batch
+     * 2026-11-04-open-thermo-data): the package's values, each compound's PR78 constants and ideal-gas fit, its non-zero
+     * pairs and its water, over the bundled model's trained range.
      */
     static JsonObject physics(MaterialCatalog catalog,String packageId) {
-        var p=catalog.requirePackage(packageId);var tokens=new HashMap<String,String>();
-        for(String token:p.scientificRevision().split(";")){int at=token.indexOf('=');if(at>0)tokens.put(token.substring(0,at),token.substring(at+1));}
-        // The method token names its physics fields (D7), among them the missing-pair policy.
-        String missing=java.util.Arrays.stream(tokens.get("method").split(",")).filter(f->f.startsWith("missing-interactions:"))
-                .findFirst().orElseThrow().substring("missing-interactions:".length());
-        var compounds=new JsonArray();String[] datasets=tokens.get("properties").split(",");
-        for(int i=0;i<datasets.length;i++){var c=new JsonObject();c.addProperty("id",p.components().get(i));c.addProperty("properties",datasets[i]);compounds.add(c);}
-        var libraries=new JsonArray();for(String library:tokens.get("interactions").split(","))if(!library.isEmpty())libraries.add(library);
-        var physics=new JsonObject();physics.addProperty("model",p.model());physics.add("compounds",compounds);physics.add("interactions",libraries);
-        physics.addProperty("missingInteractions",missing);physics.addProperty("water",tokens.get("water"));
+        var p=catalog.requirePackage(packageId);var physics=new JsonObject();
+        physics.addProperty("model",p.model());physics.addProperty("source","test: the values of package "+packageId);
+        physics.addProperty("temperatureMinimumKelvin",298.15);physics.addProperty("temperatureMaximumKelvin",765.7654003015762);
+        var compounds=new JsonArray();var pairs=new JsonArray();
+        for(int i=0;i<p.components().size();i++) {
+            var r=p.properties().get(i);var c=new JsonObject();c.addProperty("id",p.components().get(i));
+            c.addProperty("criticalTemperatureKelvin",r.pr().criticalTemperature());c.addProperty("criticalPressurePascal",r.pr().criticalPressure());
+            c.addProperty("acentricFactor",r.pr().acentricFactor());c.add("idealGasCp",JSON.toJsonTree(r.cp()));compounds.add(c);
+            for(int j=i+1;j<p.components().size();j++)if(p.interactions().get(i).get(j)!=0) {
+                var pair=new JsonObject();pair.addProperty("first",p.components().get(i));pair.addProperty("second",p.components().get(j));
+                pair.addProperty("kij",p.interactions().get(i).get(j));pairs.add(pair);
+            }
+        }
+        var w=p.water();var water=new JsonObject();
+        water.addProperty("criticalTemperatureKelvin",w.criticalTemperature());water.addProperty("criticalPressurePascal",w.criticalPressure());
+        water.add("saturationCoefficients",JSON.toJsonTree(w.saturation()));water.addProperty("boilingTemperatureKelvin",w.boilingTemperature());
+        water.addProperty("vaporizationEnthalpyJoulesPerMol",w.vaporizationEnthalpy());water.addProperty("watsonExponent",w.watsonExponent());
+        water.add("shomateCoefficients",JSON.toJsonTree(w.shomate()));
+        physics.add("compounds",compounds);physics.add("pairs",pairs);physics.add("water",water);
         return physics;
     }
     private static double[] fill(int n,double value) { double[] a=new double[n]; Arrays.fill(a,value); return a; }
@@ -112,32 +122,40 @@ class V3RegroupedTransformerTest {
         var input=input("icheme:tjl20_methane"); var original=MaterialCatalog.bundled();
         var model=V3AnchorTransformerInitializer.read(stream(document(input)), V3FactorizedNeuralFeatures.DecodeOptions.NONE);
         var registry=new V3NeuralRegistry(List.of(new V3NeuralRegistry.Entry(1,model,"0".repeat(64))));
-        var records=new HashMap<>(original.resources());
-        String key=records.keySet().stream().filter(k->k.endsWith("properties/crude_pc08.json")).findFirst().orElseThrow();
-        var edited=JsonParser.parseString(records.get(key)).getAsJsonObject();
-        var pr=edited.getAsJsonObject("models").getAsJsonObject("pr78");
-        pr.addProperty("critical_temperature_kelvin",pr.get("critical_temperature_kelvin").getAsDouble()+1);
-        // Nothing is hashed (owner decisions 2026-10-26): the edit declares itself with the record's own revision.
-        edited.addProperty("revision",edited.get("revision").getAsString()+"-edited");
-        records.put(key,edited.toString());
-        var changed=MaterialCatalog.parse(records);
-        // The binding reads the physics: the trained dataset's revision is not the catalog's, so the model is stale.
-        assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(changed,input));
+        // crude_pc05 is fed, crude_pc08 is not: the binding compares the fed compounds' values (O7, decision E8).
+        for(String fraction:List.of("crude_pc05","crude_pc08")) {
+            var records=new HashMap<>(original.resources());
+            String key=records.keySet().stream().filter(k->k.endsWith("properties/"+fraction+".json")).findFirst().orElseThrow();
+            var edited=JsonParser.parseString(records.get(key)).getAsJsonObject();
+            var pr=edited.getAsJsonObject("models").getAsJsonObject("pr78");
+            pr.addProperty("critical_temperature_kelvin",pr.get("critical_temperature_kelvin").getAsDouble()*1.02);
+            // Nothing is hashed (owner decisions 2026-10-26): the edit declares itself with the record's own revision.
+            edited.addProperty("revision",edited.get("revision").getAsString()+"-edited");
+            records.put(key,edited.toString());
+            var changed=MaterialCatalog.parse(records);
+            if(fraction.equals("crude_pc05"))assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(changed,input),"Tc +2 % on a fed compound");
+            else assertEquals(model.modelId(),registry.bind(changed,input).modelId(),"a compound the request does not feed");
+        }
         assertEquals(model.modelId(),registry.bind(original,input).modelId());
     }
     @Test void sidecarPinsPayloadAndRejectsOverlappingFields() throws Exception {
         var d=document(input("icheme:tjl20_methane")); var payload=new JsonObject();
         for(String key:List.of("featureRevision","modelType","anchorLayout","baselineRevision","components","normalization","weights"))payload.add(key,d.remove(key));
-        payload.addProperty("schemaVersion",1); d.addProperty("schemaVersion",3);
+        payload.addProperty("schemaVersion",1); d.addProperty("schemaVersion",4);
         d.addProperty("payloadSha256",V3NeuralRegistry.TransformerArtifact.sha256(payload.toString().getBytes(StandardCharsets.UTF_8)));
         d.addProperty("decoder","ZERO_PHASE_FLOOR_10"); d.addProperty("candidateRule","SINGLE"); d.addProperty("correctionRule","PROGRESS");
         assertEquals(88852,V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(d)).initializer().parameterCount());
-        // Schema 3 only: the schema 2 identity fields are refused, and the physics names the model's compounds in order.
-        var old=d.deepCopy(); old.addProperty("schemaVersion",2); old.addProperty("packageId","icheme:tjl20_methane");
+        // Schema 4 only: a schema 3 sidecar (the trained records by id@revision) is refused, the physics holds the model's
+        // compounds in order, and it holds exactly its fields.
+        var old=d.deepCopy(); old.addProperty("schemaVersion",3);
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(old)));
+        var named=d.deepCopy(); named.getAsJsonObject("physics").addProperty("water","icheme:water@water-iapws95-shomate-r3");
+        assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(named)));
         var shuffled=d.deepCopy(); var compounds=shuffled.getAsJsonObject("physics").getAsJsonArray("compounds");
         var first=compounds.remove(0); compounds.add(first);
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(shuffled)));
+        var unfit=d.deepCopy(); unfit.getAsJsonObject("physics").getAsJsonArray("compounds").get(0).getAsJsonObject().add("idealGasCp",new JsonArray());
+        assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(unfit)));
         payload.addProperty("baselineRevision","changed");
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(d)));
         payload.addProperty("baselineRevision",V3AnchorTransformerInitializer.NativeAnchor.REVISION); d.add("weights",payload.get("weights"));

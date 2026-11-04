@@ -73,6 +73,66 @@ class V3BundledRegroupedModelTest {
             assertArrayEquals(to.project(from,expected.vapor()[n]),actual.vapor()[n]);
         }
     }
+    /**
+     * The bundled model carries the values it was trained on (sidecar schema 4): the records before batch
+     * 2026-11-04-open-thermo-data. The open data moved methane's ideal-gas Cp (O2, E16) and the water's vapour Shomate (O2);
+     * both stay within the 1 % of decision E9 over the trained range, so the default package binds the model.
+     */
+    @Test void theOpenDataStaysWithinTheTrainedTolerance() throws Exception {
+        byte[] payload,sidecar;
+        try(var p=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.payload.json");var s=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json")) {
+            payload=p.readAllBytes();sidecar=s.readAllBytes();
+        }
+        var physics=V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),new ByteArrayInputStream(sidecar)).initializer().physics();
+        assertEquals(298.15,physics.minimumTemperature());assertEquals(765.7654003015762,physics.maximumTemperature());
+        var p=com.wormzjl.icheme.science.material.MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane");
+        var deviations=physics.compare(p,p.components());
+        for(var d:deviations) {
+            System.out.println("trained distance "+d.subject()+" "+d.quantity()+": "+d.value()+" (limit "+d.limit()+")");
+            assertTrue(d.within(),d.toString());
+            boolean moved=d.subject().equals("Methane")&&d.quantity().equals("ideal-gas heat capacity")
+                    ||d.subject().equals("Water")&&d.quantity().startsWith("vapour");
+            if(!moved)assertEquals(0,d.value(),d.toString());
+        }
+        var methane=deviations.stream().filter(d->d.subject().equals("Methane")&&d.quantity().equals("ideal-gas heat capacity")).findFirst().orElseThrow();
+        assertTrue(methane.value()>0.008&&methane.value()<0.009,"methane Cp at the trained maximum: "+methane.value());
+    }
+    /**
+     * What the binding leaves out of its comparison (O7 of batch 2026-11-04-open-thermo-data, {@code TrainedPhysics}) moves
+     * no prediction: with every compound's molar mass, normal boiling point and standard liquid density 5 % higher, the
+     * model's raw output (the native anchor, the network and the branch) is the same bit for bit, and the model binds.
+     */
+    @Test void theValuesTheBindingLeavesOutMoveNoPrediction() throws Exception {
+        JsonObject fixture;
+        try(var stream=getClass().getResourceAsStream("/science/column/v3/neural/regrouped-predictions.json")) {
+            assertNotNull(stream);fixture=JsonParser.parseReader(new InputStreamReader(stream,StandardCharsets.UTF_8)).getAsJsonObject();
+        }
+        var bundled=com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
+        var resources=new HashMap<>(bundled.resources());int edited=0;
+        for(var property:bundled.requirePackage("icheme:tjl20_methane").properties())for(var entry:resources.entrySet()) {
+            if(!entry.getKey().contains("/materials/properties/"))continue;
+            var o=JsonParser.parseString(entry.getValue()).getAsJsonObject();
+            if(!o.get("id").getAsString().equals(property.id()))continue;
+            for(String field:List.of("molecular_weight_kg_per_mol","normal_boiling_point_kelvin","standard_liquid_density_kg_per_m3"))
+                o.addProperty(field,o.get(field).getAsDouble()*1.05);
+            o.addProperty("revision",o.get("revision").getAsString()+"-edited");entry.setValue(o.toString());edited++;
+        }
+        assertEquals(19,edited);
+        var catalog=com.wormzjl.icheme.science.material.MaterialCatalog.parse(resources);
+        byte[] payload,sidecar;
+        try(var p=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.payload.json");var s=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json")) {
+            payload=p.readAllBytes();sidecar=s.readAllBytes();
+        }
+        var model=V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),new ByteArrayInputStream(sidecar)).initializer();
+        for(var entry:fixture.getAsJsonArray("fixtures")) {
+            var input=input(entry.getAsJsonObject().getAsJsonObject("input"));
+            var expected=com.wormzjl.icheme.science.material.MaterialRuntime.with(bundled,input.packageId(),()->model.raw(input,V3SolveControl.UNBOUNDED));
+            var actual=com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog,input.packageId(),()->model.raw(input,V3SolveControl.UNBOUNDED));
+            assertArrayEquals(expected.branchLogits(),actual.branchLogits());
+            for(int n=0;n<expected.values().length;n++)assertArrayEquals(expected.values()[n],actual.values()[n]);
+            assertNotSame(V3NeuralInitializer.UNAVAILABLE,V3NeuralRegistry.bundled().bind(catalog,input));
+        }
+    }
     /** The model has three draw slots; a column with the fourth draw the input allows is left to the classical seed. */
     @Test void aFourthSideDrawIsAValidInputTheBundledModelDeclines() throws Exception {
         JsonObject fixture;

@@ -1,92 +1,361 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "payloadSha256": "68fe3cca51ad31c43f4dca45beebedb52aaf7f91df057207f14c1ca0f4de8060",
   "modelId": "regrouped-seed-17041-epoch-160",
   "physics": {
     "model": "pr78",
+    "source": "The values of the records the model was trained on (icheme:tjl20_methane@tjl20-methane-nist-r1, icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1, icheme:tjl19_propane@tjl19-dwsim-10.2.3-r1, icheme:tjl19_isobutane@tjl19-dwsim-10.2.3-r1, icheme:tjl19_n_butane@tjl19-dwsim-10.2.3-r1, icheme:tjl19_isopentane@tjl19-dwsim-10.2.3-r1, icheme:tjl19_n_pentane@tjl19-dwsim-10.2.3-r1, icheme:crude_pc01@crude-regrouped-r1, icheme:crude_pc02@crude-regrouped-r1, icheme:crude_pc03@crude-regrouped-r1, icheme:crude_pc04@crude-regrouped-r1, icheme:crude_pc05@crude-regrouped-r1, icheme:crude_pc06@crude-regrouped-r1, icheme:crude_pc07@crude-regrouped-r1, icheme:crude_pc08@crude-regrouped-r1, icheme:crude_pc09@crude-regrouped-r1, icheme:crude_pc10@crude-regrouped-r1, icheme:crude_pc11@crude-regrouped-r1, icheme:crude_pc12@crude-regrouped-r1; icheme:tjl20@tjl20-frozen-kij-r1; icheme:water@water-iapws-shomate-r2), read from git 03e7b6138 by tools/open-thermo-data/sidecar-schema4.mjs (batch 2026-11-04-open-thermo-data, O7). Trained range: 298.15 K (the datasets' column floor) to the trained feed temperature maximum (sidecar globalMax[1]). Pairs not listed are zero.",
+    "temperatureMinimumKelvin": 298.15,
+    "temperatureMaximumKelvin": 765.7654003015762,
     "compounds": [
       {
         "id": "Methane",
-        "properties": "icheme:tjl20_methane@tjl20-methane-nist-r1"
+        "criticalTemperatureKelvin": 190.564,
+        "criticalPressurePascal": 4599200,
+        "acentricFactor": 0.01142,
+        "idealGasCp": [
+          35.605746481777615,
+          0.037000414354219455,
+          0.0001459299391720176,
+          -4.216765855568231e-7,
+          5.351033897511078e-10,
+          -2.715203964835217e-13
+        ]
       },
       {
         "id": "Ethane",
-        "properties": "icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1"
+        "criticalTemperatureKelvin": 305.32,
+        "criticalPressurePascal": 4872000,
+        "acentricFactor": 0.099,
+        "idealGasCp": [
+          52.810839998282816,
+          0.12642417422855318,
+          0.000025310154721470207,
+          -2.463921910967482e-7,
+          3.4586923626802897e-10,
+          -1.7871383580177725e-13
+        ]
       },
       {
         "id": "Propane",
-        "properties": "icheme:tjl19_propane@tjl19-dwsim-10.2.3-r1"
+        "criticalTemperatureKelvin": 369.83,
+        "criticalPressurePascal": 4248000,
+        "acentricFactor": 0.152,
+        "idealGasCp": [
+          74.86252735492347,
+          0.2064246978726818,
+          -0.00009553874320310266,
+          -5.6379016821935325e-8,
+          1.5991112353985266e-10,
+          -1.0273515743428986e-13
+        ]
       },
       {
         "id": "Isobutane",
-        "properties": "icheme:tjl19_isobutane@tjl19-dwsim-10.2.3-r1"
+        "criticalTemperatureKelvin": 407.85,
+        "criticalPressurePascal": 3640000,
+        "acentricFactor": 0.186,
+        "idealGasCp": [
+          98.5254291460953,
+          0.2822069563491607,
+          -0.00019571468933833017,
+          1.042617937224965e-7,
+          -1.2573152372869729e-11,
+          -2.6550228981850173e-14
+        ]
       },
       {
         "id": "N-butane",
-        "properties": "icheme:tjl19_n_butane@tjl19-dwsim-10.2.3-r1"
+        "criticalTemperatureKelvin": 425.12,
+        "criticalPressurePascal": 3796000,
+        "acentricFactor": 0.199,
+        "idealGasCp": [
+          101.24198647161117,
+          0.2595403306519781,
+          -0.00016470714912482498,
+          1.2230617341261937e-7,
+          -7.752172195943077e-11,
+          1.2124531745458365e-14
+        ]
       },
       {
         "id": "Isopentane",
-        "properties": "icheme:tjl19_isopentane@tjl19-dwsim-10.2.3-r1"
+        "criticalTemperatureKelvin": 460.39,
+        "criticalPressurePascal": 3381000,
+        "acentricFactor": 0.229,
+        "idealGasCp": [
+          118.82341727280007,
+          0.35234040723535626,
+          -0.00014133345942267587,
+          -2.1850754641347403e-7,
+          4.5607887735389127e-10,
+          -2.687541857445134e-13
+        ]
       },
       {
         "id": "N-pentane",
-        "properties": "icheme:tjl19_n_pentane@tjl19-dwsim-10.2.3-r1"
+        "criticalTemperatureKelvin": 469.7,
+        "criticalPressurePascal": 3370000,
+        "acentricFactor": 0.251,
+        "idealGasCp": [
+          120.23526341999202,
+          0.31420995957197456,
+          0.00009376285878884146,
+          -8.666173685157468e-7,
+          1.2430895883987828e-9,
+          -6.363423968929682e-13
+        ]
       },
       {
         "id": "crude_pc01",
-        "properties": "icheme:crude_pc01@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 508.99432288211597,
+        "criticalPressurePascal": 3638872.7572635906,
+        "acentricFactor": 0.2377236624261812,
+        "idealGasCp": [
+          101.78767901967993,
+          0.37483524194044304,
+          -0.00016013826096260403,
+          7.991168260504826e-20,
+          -1.115068676786725e-22,
+          5.711687440981994e-26
+        ]
       },
       {
         "id": "crude_pc02",
-        "properties": "icheme:crude_pc02@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 570.0747419929318,
+        "criticalPressurePascal": 3079144.6369848815,
+        "acentricFactor": 0.30069738389431744,
+        "idealGasCp": [
+          142.45940063217247,
+          0.4729147014557544,
+          -0.00021978165815613701,
+          6.924324375112571e-20,
+          -8.589796698260044e-23,
+          3.392768400735782e-26
+        ]
       },
       {
         "id": "crude_pc03",
-        "properties": "icheme:crude_pc03@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 623.6066531396688,
+        "criticalPressurePascal": 2634114.490244381,
+        "acentricFactor": 0.36343306035065015,
+        "idealGasCp": [
+          185.25722428306753,
+          0.5791783128870694,
+          -0.0002829837280338083,
+          -9.655143500617924e-21,
+          3.212341388519978e-23,
+          -2.5471709077626414e-26
+        ]
       },
       {
         "id": "crude_pc04",
-        "properties": "icheme:crude_pc04@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 674.6018422621576,
+        "criticalPressurePascal": 2259558.269547844,
+        "acentricFactor": 0.4311961424948967,
+        "idealGasCp": [
+          233.61903497982067,
+          0.704449841975436,
+          -0.00035473481608175723,
+          1.0248859733050523e-19,
+          -1.284723726562753e-22,
+          5.748873326673512e-26
+        ]
       },
       {
         "id": "crude_pc05",
-        "properties": "icheme:crude_pc05@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 723.906909238257,
+        "criticalPressurePascal": 1943733.536612771,
+        "acentricFactor": 0.5020539088626317,
+        "idealGasCp": [
+          289.45888776625185,
+          0.8541897641703349,
+          -0.0004376089563634539,
+          2.1675031971729847e-19,
+          -3.324127989040013e-22,
+          1.8868086844244703e-25
+        ]
       },
       {
         "id": "crude_pc06",
-        "properties": "icheme:crude_pc06@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 771.2108987980082,
+        "criticalPressurePascal": 1681080.8910499467,
+        "acentricFactor": 0.5800192663375261,
+        "idealGasCp": [
+          354.18960692953635,
+          1.0307963939039837,
+          -0.0005333746352059712,
+          3.788237634979534e-19,
+          -6.180320712868035e-22,
+          3.7126731753436343e-25
+        ]
       },
       {
         "id": "crude_pc07",
-        "properties": "icheme:crude_pc07@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 816.802100810692,
+        "criticalPressurePascal": 1462028.6221570692,
+        "acentricFactor": 0.6655985901077015,
+        "idealGasCp": [
+          429.57936103919644,
+          1.2391180493711584,
+          -0.000644501002839273,
+          4.1791991395995586e-19,
+          -7.536633954820196e-22,
+          4.913497539043877e-25
+        ]
       },
       {
         "id": "crude_pc08",
-        "properties": "icheme:crude_pc08@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 871.0047154805952,
+        "criticalPressurePascal": 1238712.0314336824,
+        "acentricFactor": 0.7851092300583887,
+        "idealGasCp": [
+          541.5389139381163,
+          1.5517119791053695,
+          -0.0008087538720964476,
+          7.741102997668305e-19,
+          -1.319857562320948e-21,
+          8.175748046533847e-25
+        ]
       },
       {
         "id": "crude_pc09",
-        "properties": "icheme:crude_pc09@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 939.5661168518473,
+        "criticalPressurePascal": 1012685.7475551399,
+        "acentricFactor": 0.9697306112702417,
+        "idealGasCp": [
+          724.7085806358763,
+          2.0673048765828663,
+          -0.0010762055267577494,
+          3.4774981214134893e-19,
+          -5.032849598938849e-22,
+          2.59884503459005e-25
+        ]
       },
       {
         "id": "crude_pc10",
-        "properties": "icheme:crude_pc10@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 1024.8370677144503,
+        "criticalPressurePascal": 798621.5877473254,
+        "acentricFactor": 1.2792012740476753,
+        "idealGasCp": [
+          1041.4326060515134,
+          2.965524720521896,
+          -0.0015369566723193013,
+          1.405792366846304e-18,
+          -2.279642199233325e-21,
+          1.3388509629862748e-24
+        ]
       },
       {
         "id": "crude_pc11",
-        "properties": "icheme:crude_pc11@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 1106.2926685602486,
+        "criticalPressurePascal": 669162.7933921168,
+        "acentricFactor": 1.6482547408751187,
+        "idealGasCp": [
+          1440.0215939910233,
+          4.106337415675431,
+          -0.002124731208511783,
+          1.808742479671037e-18,
+          -2.9295599033971798e-21,
+          1.756310767269026e-24
+        ]
       },
       {
         "id": "crude_pc12",
-        "properties": "icheme:crude_pc12@crude-regrouped-r1"
+        "criticalTemperatureKelvin": 1220.1078790328,
+        "criticalPressurePascal": 568637.8683777635,
+        "acentricFactor": 2.257588536670623,
+        "idealGasCp": [
+          2252.6918622524195,
+          6.455107013779502,
+          -0.003340709085618318,
+          2.2619206442444093e-18,
+          -3.797383157028494e-21,
+          2.3091463224265516e-24
+        ]
       }
     ],
-    "interactions": [
-      "icheme:tjl20@tjl20-frozen-kij-r1"
+    "pairs": [
+      {
+        "first": "Ethane",
+        "second": "Propane",
+        "kij": 0.0011
+      },
+      {
+        "first": "Ethane",
+        "second": "Isobutane",
+        "kij": -0.0067
+      },
+      {
+        "first": "Ethane",
+        "second": "N-butane",
+        "kij": 0.0089
+      },
+      {
+        "first": "Ethane",
+        "second": "N-pentane",
+        "kij": 0.0078
+      },
+      {
+        "first": "Propane",
+        "second": "Isobutane",
+        "kij": -0.0078
+      },
+      {
+        "first": "Propane",
+        "second": "N-butane",
+        "kij": 0.0033
+      },
+      {
+        "first": "Propane",
+        "second": "Isopentane",
+        "kij": 0.0111
+      },
+      {
+        "first": "Propane",
+        "second": "N-pentane",
+        "kij": 0.0267
+      },
+      {
+        "first": "Isobutane",
+        "second": "N-butane",
+        "kij": -0.0004
+      },
+      {
+        "first": "N-butane",
+        "second": "N-pentane",
+        "kij": 0.0174
+      },
+      {
+        "first": "Isopentane",
+        "second": "N-pentane",
+        "kij": 0.06
+      }
     ],
-    "missingInteractions": "zero",
-    "water": "icheme:water@water-iapws-shomate-r2"
+    "water": {
+      "criticalTemperatureKelvin": 647.096,
+      "criticalPressurePascal": 22064000,
+      "saturationCoefficients": [
+        -7.85951783,
+        1.84408259,
+        -11.7866497,
+        22.6807411,
+        -15.9618719,
+        1.80122502
+      ],
+      "boilingTemperatureKelvin": 373.15,
+      "vaporizationEnthalpyJoulesPerMol": 40660,
+      "watsonExponent": 0.38,
+      "shomateCoefficients": [
+        30.092,
+        6.832514,
+        6.793435,
+        -2.53448,
+        0.082139,
+        -250.881,
+        241.8264
+      ]
+    }
   },
   "formulationRevisions": [
     "v3-dry-mesh-r23",

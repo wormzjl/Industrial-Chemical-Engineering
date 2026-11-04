@@ -67,9 +67,12 @@ class CrystalPackageConsumersTest {
                         new V3ColumnSpecification.ReboilerDuty(0)), List.of());
         assertSame(V3NeuralInitializer.UNAVAILABLE, V3NeuralRegistry.bundled().bind(catalog, input), "no model binds a crystal package");
         // A lens of a request whose view on its active compounds admits a crystal is refused, never projected fluid-only.
-        var any = MaterialCatalog.Physics.Revisioned.parse("test:any@r1");
-        var physics = new MaterialCatalog.Physics("pr78", List.of(new MaterialCatalog.Physics.Compound("Nitrogen", any),
-                new MaterialCatalog.Physics.Compound("Methane", any), new MaterialCatalog.Physics.Compound("CarbonDioxide", any)), List.of(), "zero", any);
+        var cp = List.of(30.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        var physics = new com.wormzjl.icheme.science.material.TrainedPhysics("pr78", 298.15, 700, List.of(
+                new com.wormzjl.icheme.science.material.TrainedPhysics.Compound("Nitrogen", 126.2, 3.4e6, 0.04, cp),
+                new com.wormzjl.icheme.science.material.TrainedPhysics.Compound("Methane", 190.6, 4.6e6, 0.01, cp),
+                new com.wormzjl.icheme.science.material.TrainedPhysics.Compound("CarbonDioxide", 304.1, 7.4e6, 0.22, cp)), List.of(),
+                com.wormzjl.icheme.science.material.TrainedPhysics.Water.of(pilot.water()));
         var projection = assertThrows(CrystalPhasesUnavailable.class,
                 () -> catalog.inferenceView(PILOT, List.of("Nitrogen", "Methane", "CarbonDioxide"), physics));
         assertEquals("a neural inference projection", projection.consumer());

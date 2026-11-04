@@ -131,41 +131,6 @@ public final class MaterialCatalog {
         public String canonicalId(String id) { return aliases.getOrDefault(id, id); }
     }
     /**
-     * The phase physics of a compound list, named by records and their declared revisions, without a package or a method
-     * record: the model, each compound with its dataset, the pair libraries in priority order, the policy for a pair none
-     * of them names and the water model. A neural model stores the physics it was trained on in this form (sidecar schema
-     * 3) and {@link #resolve} builds it from the live catalog's records. Its ideal gas is the datasets' fits.
-     */
-    public record Physics(String model, List<Compound> compounds, List<Revisioned> interactions, String missingInteractions,
-            Revisioned water) {
-        /** A record id and its declared revision, written {@code id@revision}. */
-        public record Revisioned(String id, String revision) {
-            public Revisioned { Objects.requireNonNull(id); Objects.requireNonNull(revision); }
-            /** Reads {@code id@revision}. */
-            public static Revisioned parse(String text) {
-                int at=text.indexOf('@');
-                if(at<=0||at!=text.lastIndexOf('@')||at==text.length()-1)throw new IllegalArgumentException("Expected id@revision, got "+text);
-                return new Revisioned(text.substring(0,at),text.substring(at+1));
-            }
-            @Override public String toString() { return id+"@"+revision; }
-        }
-        /** A compound and the dataset it takes. */
-        public record Compound(String id, Revisioned properties) {
-            public Compound { Objects.requireNonNull(id); Objects.requireNonNull(properties); }
-        }
-        public Physics {
-            Objects.requireNonNull(model); compounds=List.copyOf(compounds); interactions=List.copyOf(interactions);
-            Objects.requireNonNull(missingInteractions); Objects.requireNonNull(water);
-            if(compounds.isEmpty())throw new IllegalArgumentException("physics: no compounds");
-        }
-        /** The compound ids, in order. */
-        public List<String> components() { return compounds.stream().map(Compound::id).toList(); }
-        /** The same physics on the compounds of {@code ids}, in this list's order. */
-        public Physics on(Collection<String> ids) {
-            return new Physics(model,compounds.stream().filter(c->ids.contains(c.id())).toList(),interactions,missingInteractions,water);
-        }
-    }
-    /**
      * The longest identity, {@link Package#scientificRevision} or {@link #fluidRevision}: the column's result payloads, the
      * neural models and the fluid saves carry them. A catalog whose identity would be longer is refused at load.
      */
@@ -397,70 +362,40 @@ public final class MaterialCatalog {
     }
 
     /**
-     * The package {@code physics} names, built from this catalog's records by the loader's code ({@link #build}); empty
-     * when the physics is stale: a compound, dataset, pair library or water model it names is missing, or declares another
-     * revision. A physics record names no method: its ideal gas is the datasets' fits and it has no column pressure range
-     * of its own (a consumer takes its range from the package it serves). Records that do not form a package (a dataset
-     * without a fit, a pair library with a group-contribution rule) are refused with an {@link IllegalArgumentException}.
-     */
-    public Optional<Package> resolve(Physics physics) {
-        if(!Set.of("pr78","nrtl").contains(physics.model()))throw new IllegalArgumentException("physics: unsupported model "+physics.model());
-        if(!Set.of("zero","error").contains(physics.missingInteractions())||physics.model().equals("nrtl")&&!physics.missingInteractions().equals("error"))
-            throw new IllegalArgumentException("physics: invalid missing_interactions policy "+physics.missingInteractions());
-        var entries=new ArrayList<Entry>();
-        for(var compound:physics.compounds()) {
-            var property=records.properties().get(compound.properties().id());
-            if(!records.names().containsKey(compound.id())||property==null||!property.component().equals(compound.id())
-                    ||!compound.properties().revision().equals(records.propertyRevisions().get(property.id())))return Optional.empty();
-            entries.add(new Entry(compound.id(),property.id(),null));
-        }
-        var libraries=new ArrayList<String>();
-        for(var library:physics.interactions()) {
-            var record=records.libraries().get(library.id());
-            if(record==null||!library.revision().equals(text(record,"revision")))return Optional.empty();
-            if(!physics.model().equals(text(record,"model")))throw new IllegalArgumentException("physics: interaction model mismatch: "+library.id());
-            if(record.has("rule"))throw new IllegalArgumentException("physics: "+library.id()+" carries a group-contribution rule, which needs reference spines");
-            libraries.add(library.id());
-        }
-        var water=records.waters().get(physics.water().id());
-        if(water==null||!water.revision().equals(physics.water().revision()))return Optional.empty();
-        var method=new Method("physics",physics.model(),physics.model(),false,libraries,physics.missingInteractions(),physics.water().id(),
-                Double.MIN_VALUE,Double.MAX_VALUE,new JsonObject(),List.of(),null);
-        var definition=new Definition("physics",physics.model(),List.of("physics="+physics.model()),method,entries,List.of(),List.of());
-        return Optional.of(build(records,definition,null,Map.of()).pack());
-    }
-
-    /**
      * The lens a model trained on {@code reference} reads a request on package {@code packageId} through (plan section
-     * 3.3): this catalog with {@code packageId} replaced by a PR78 package on the reference's compound list. The compounds
-     * of {@code active} (the request's non-zero feed) take the request's data, the others the reference's, and a pair
-     * takes the request's value when both its compounds are active. It keeps the request's column range, water, evidence
-     * and identity: it is a lens for one inference, never published. Empty when the reference is stale ({@link #resolve})
-     * or when the request's physics on {@code active} differs from the reference's, compared by content on the two views
-     * ({@link #restrict}, {@link #physicsContent(Package, List)}), never by package ids. A request whose view on
-     * {@code active} admits a crystal is refused (P6): it is never projected fluid-only.
+     * 3.3 of batch 2026-11-04-refinery-compounds; by value since O7 of batch 2026-11-04-open-thermo-data, owner decision
+     * E8): this catalog with {@code packageId} replaced by a PR78 package on the reference's compound list. The compounds of
+     * {@code active} (the request's non-zero feed) take the request's records; each other compound the request package's
+     * record when the package holds it, else the catalog's default record of the compound. A pair takes the request's value
+     * when both its compounds are active, else the trained value. It keeps the request's column range, water, evidence and
+     * identity: it is a lens for one inference, never published. Empty when the request's values on {@code active} differ
+     * from the trained ones beyond the tolerances ({@link TrainedPhysics#matches}, on the request's view {@link #restrict}),
+     * when that view resolves a pair by a group-contribution rule (the lens carries constant pairs only), or when a compound
+     * of the model has no record with PR78 constants and an ideal-gas fit. No record id, revision or package id takes part.
+     * A request whose view on {@code active} admits a crystal is refused (P6): it is never projected fluid-only.
      */
-    public Optional<MaterialCatalog> inferenceView(String packageId,List<String> active,Physics reference) {
+    public Optional<MaterialCatalog> inferenceView(String packageId,List<String> active,TrainedPhysics reference) {
         var source=requirePackage(packageId);var axis=reference.components();
         if(!axis.containsAll(active)||!source.components().containsAll(active))
             throw new IllegalArgumentException("Inference compounds outside the request package or the model: "+active);
-        // The lens carries constant pairs only.
-        if(!reference.model().equals("pr78"))throw new IllegalArgumentException("Inference projection requires PR78");
         var request=restrict(packageId,active).requirePackage(packageId);
         if(!request.crystals().isEmpty())throw new CrystalPhasesUnavailable(packageId,request.crystals(),"a neural inference projection");
-        var model=resolve(reference).orElse(null);
-        if(model==null)return Optional.empty();
-        var trained=resolve(reference.on(active)).orElseThrow();
-        if(!physicsContent(request,active).equals(physicsContent(trained,active)))return Optional.empty();
+        // The lens carries constant pairs only.
+        if(!request.model().equals(reference.model())||request.groupContributions()!=null&&!request.groupContributions().pairs().isEmpty())
+            return Optional.empty();
+        if(!reference.matches(request,active))return Optional.empty();
         var properties=new ArrayList<Property>();var interactions=new ArrayList<List<Double>>();
         for(int a=0;a<axis.size();a++) {
-            int i=active.contains(axis.get(a))?source.components().indexOf(axis.get(a)):-1;
-            properties.add(i>=0?source.properties().get(i):model.properties().get(a));
+            int i=source.components().indexOf(axis.get(a));
+            String fallback=i>=0?null:records.defaults().get(axis.get(a));
+            var property=i>=0?source.properties().get(i):fallback==null?null:records.properties().get(fallback);
+            if(property==null||property.pr()==null||property.cp().size()!=6)return Optional.empty();
+            properties.add(property);
+            boolean fed=active.contains(axis.get(a));
             var row=new ArrayList<Double>();
-            for(int b=0;b<axis.size();b++) {
-                int j=active.contains(axis.get(b))?source.components().indexOf(axis.get(b)):-1;
-                row.add(i>=0&&j>=0?source.interactions().get(i).get(j):model.interactions().get(a).get(b));
-            }
+            for(int b=0;b<axis.size();b++)
+                row.add(fed&&active.contains(axis.get(b))?source.interactions().get(i).get(source.components().indexOf(axis.get(b)))
+                        :a==b?0.0:reference.kij(axis.get(a),axis.get(b)));
             interactions.add(row);
         }
         var lens=new Package(source.id(),source.revision(),source.model(),axis,properties,
@@ -632,7 +567,7 @@ public final class MaterialCatalog {
         var spinesByComponent=new HashMap<String,List<String>>();
         for(var spine:spines.values())spinesByComponent.computeIfAbsent(spine.component(),unused->new ArrayList<>()).add(spine.id());
         var records=new Records(names,properties,propertyRevisions,descriptors,waters,group(groups,"interactions"),matrices,spines,
-                spinesByComponent,crystals,aliases,assayRecords,propertyValidity,viscosities,freezing,fluidData);
+                spinesByComponent,crystals,aliases,assayRecords,propertyValidity,viscosities,freezing,fluidData,defaults);
         var definitions=new HashMap<String,Definition>();
         for (var o : group(groups,"packages").values()) checked(origins,o,() -> {
             // A package is a property method and a list of compounds (batch 2026-11-04-refinery-compounds): every number comes
@@ -889,9 +824,9 @@ public final class MaterialCatalog {
             Map<String,GroupInteractionMatrix> matrices,Map<String,ReferenceSpine> spines,Map<String,List<String>> spinesByComponent,
             Map<String,CrystalReference> crystals,Map<String,String> aliases,Map<String,AssayRecord> assays,
             Map<String,Validity> propertyValidity,Map<String,Map<ViscosityCorrelation.Phase,ViscosityCorrelation>> viscosities,
-            Map<String,Freezing> freezing,FluidData fluidData) {
+            Map<String,Freezing> freezing,FluidData fluidData,Map<String,String> defaults) {
         Records {
-            names=Map.copyOf(names); properties=Map.copyOf(properties); propertyRevisions=Map.copyOf(propertyRevisions); freezing=Map.copyOf(freezing);
+            defaults=Map.copyOf(defaults); names=Map.copyOf(names); properties=Map.copyOf(properties); propertyRevisions=Map.copyOf(propertyRevisions); freezing=Map.copyOf(freezing);
             descriptors=Map.copyOf(descriptors); waters=Map.copyOf(waters); libraries=Map.copyOf(libraries); matrices=Map.copyOf(matrices);
             spines=Map.copyOf(spines); crystals=Map.copyOf(crystals); aliases=Map.copyOf(aliases); assays=Map.copyOf(assays);
             propertyValidity=Map.copyOf(propertyValidity); viscosities=Map.copyOf(viscosities);
@@ -903,8 +838,7 @@ public final class MaterialCatalog {
      * What a package is built from: its id and own revision, the leading token of its identity (its method's physics
      * fields; neither a package record's nor a method record's own revision is in any identity), its method, its compounds with their datasets, the crystals it admits and
      * its evidence. A restricted view
-     * ({@link #restrict}) keeps the package's definition with fewer compounds; a physics record ({@link #resolve}) has a
-     * method of its own.
+     * ({@link #restrict}) keeps the package's definition with fewer compounds.
      */
     private record Definition(String id,String revision,List<String> head,Method method,List<Entry> entries,List<String> crystals,List<String> evidence) {
         Definition { head=List.copyOf(head); entries=List.copyOf(entries); crystals=List.copyOf(crystals); evidence=List.copyOf(evidence); }
@@ -913,7 +847,7 @@ public final class MaterialCatalog {
     private record Built(Package pack,LiquidMixtureCorrection liquidMixture,Validity envelope) {}
     /**
      * Builds the package of {@code d} from the records: the one place a package, its pairs and its identity are made, for
-     * the loader, a restricted view and a physics record. {@code parent}, when given, is the package {@code d} restricts:
+     * the loader and a restricted view. {@code parent}, when given, is the package {@code d} restricts:
      * the view keeps its column range (the fluid envelope stays the parent's by its id). {@code assays} are the assay
      * records to apply.
      */

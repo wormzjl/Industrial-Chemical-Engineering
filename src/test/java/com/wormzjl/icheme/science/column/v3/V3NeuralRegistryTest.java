@@ -12,8 +12,8 @@ import org.junit.jupiter.api.*;
 
 /**
  * A model binds by compound list (batch 2026-11-04-refinery-compounds, plan section 3.3): the request's active compounds
- * lie in the model's list, the records the model was trained on are current, and the request's physics on its active
- * compounds is the model's, compared by content. Package ids and package records play no part.
+ * lie in the model's list, and the request's values on its active compounds are the model's trained values within the
+ * tolerances of decision E9 (O7 of batch 2026-11-04-open-thermo-data). Package ids, record ids and revisions play no part.
  */
 class V3NeuralRegistryTest {
     private static final String MAIN="icheme:tjl20_methane",NETWORK="icheme:tjl20_methane_nitrogen";
@@ -90,29 +90,75 @@ class V3NeuralRegistryTest {
         for(int n=0;n<base.liquid().length;n++)assertArrayEquals(new MaterialAxis(reversed).project(mainAxis,base.liquid()[n]),reorderedSeed.liquid()[n]);
     }
     /**
-     * What a model reads is its records: an edit of a package record alone (its revision, its evidence) leaves it on, an
-     * assay edit too; a revision bump of one crude dataset turns it off, whether or not the request feeds that compound.
+     * Values decide, never record ids or revisions (owner decision E8, O7 of batch 2026-11-04-open-thermo-data): a package
+     * record edit, an assay edit, a dataset re-revisioned or renamed with equal values, a pair library's or the water's
+     * revision bump all leave the model on; a fed compound's value within 1 % or a fed pair within 0.001 too (decision E9).
      */
-    @Test void onlyTheTrainedRecordsDecideAndAPackageRecordEditLeavesTheModelOn() throws Exception {
-        var input=input();var registry=registry("test:records");
+    @Test void valuesDecideAndNoRecordIdOrRevisionTakesPart() throws Exception {
+        var input=input();var registry=registry("test:values");
         var packageEdit=edit("packages/tjl20.json",o->{bump(o);o.getAsJsonArray("advisory_evidence").add("TEST: an edited package record");});
         // The package record is in no identity (option B, 2026-11-04): a seed's propertyRevision stands as well.
         assertEquals(CATALOG.requirePackage(MAIN).scientificRevision(),packageEdit.requirePackage(MAIN).scientificRevision());
-        assertEquals("test:records",registry.bind(packageEdit,input).modelId());
+        assertEquals("test:values",registry.bind(packageEdit,input).modelId());
         var assayEdit=edit("assays/tjl20.json",o->{var amounts=o.getAsJsonObject("amounts_by_component");amounts.addProperty("Methane",amounts.get("Methane").getAsDouble()*2);});
-        assertEquals("test:records",registry.bind(assayEdit,input).modelId());
-        // crude_pc05 is fed, crude_pc08 is not: a bump of either dataset's revision is a stale model.
-        for(String fraction:List.of("crude_pc05","crude_pc08"))
-            assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(edit("properties/"+fraction+".json",V3NeuralRegistryTest::bump),input),fraction);
-        // A pair library's bump, or the water model's, is a stale model too.
-        assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(edit("interactions/tjl20.json",V3NeuralRegistryTest::bump),input));
+        assertEquals("test:values",registry.bind(assayEdit,input).modelId());
+        // crude_pc05 is fed, crude_pc08 is not: a revision bump of either dataset, the pair library or the water is no change.
+        for(String path:List.of("properties/crude_pc05.json","properties/crude_pc08.json","interactions/tjl20.json","water/water.json"))
+            assertEquals("test:values",registry.bind(edit(path,V3NeuralRegistryTest::bump),input).modelId(),path);
+        // The fed dataset under another id (its compound's default names the new id), with its values.
+        var resources=new HashMap<>(CATALOG.resources());
+        var record=JsonParser.parseString(resources.get(ROOT+"properties/crude_pc05.json")).getAsJsonObject();
+        record.addProperty("id","icheme:crude_pc05_renamed");bump(record);resources.put(ROOT+"properties/crude_pc05.json",record.toString());
+        var component=JsonParser.parseString(resources.get(ROOT+"components/crude_pc05.json")).getAsJsonObject();
+        component.addProperty("properties","icheme:crude_pc05_renamed");resources.put(ROOT+"components/crude_pc05.json",component.toString());
+        var renamed=MaterialCatalog.parse(resources);
+        assertEquals("icheme:crude_pc05_renamed",renamed.requirePackage(MAIN).properties().get(renamed.requirePackage(MAIN).components().indexOf("crude_pc05")).id());
+        assertEquals("test:values",registry.bind(renamed,input).modelId(),"a renamed dataset with the same values");
+        // Within the tolerance: Tc +0.5 % on the fed compound, a fed pair at 0.0005; beyond it: Tc +2 %, a pair at 0.002.
+        assertEquals("test:values",registry.bind(edit("properties/crude_pc05.json",o->criticalTemperature(o,1.005)),input).modelId());
+        assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(edit("properties/crude_pc05.json",o->criticalTemperature(o,1.02)),input));
+        assertEquals("test:values",registry.bind(edit("properties/crude_pc08.json",o->criticalTemperature(o,1.02)),input).modelId(),"not fed");
+        assertEquals("test:values",registry.bind(edit("interactions/tjl20.json",o->pair(o,0.0005)),input).modelId());
+        assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(edit("interactions/tjl20.json",o->pair(o,0.002)),input));
+    }
+    /** A compound of the model that neither the request package nor the catalog holds makes the model unavailable. */
+    @Test void aModelCompoundWithoutARecordIsUnavailable() throws Exception {
+        var main=input();
+        var tjl19=on(main,"icheme:tjl19_dwsim",CATALOG.requirePackage("icheme:tjl19_dwsim").components());
+        // The request package lacks methane: the lens takes the catalog's default methane record.
+        assertEquals("test:padded",registry("test:padded").bind(CATALOG,tjl19).modelId());
+        var d=V3RegroupedTransformerTest.document(main);d.addProperty("modelId","test:unknown");
+        var ids=d.getAsJsonArray("components");assertEquals("Methane",ids.get(0).getAsString());ids.set(0,new JsonPrimitive("Unobtainium"));
+        d.getAsJsonObject("physics").getAsJsonArray("compounds").get(0).getAsJsonObject().addProperty("id","Unobtainium");
+        var unknown=V3AnchorTransformerInitializer.read(stream(d.toString()),V3FactorizedNeuralFeatures.DecodeOptions.NONE);
+        assertSame(V3NeuralInitializer.UNAVAILABLE,new V3NeuralRegistry(List.of(new V3NeuralRegistry.Entry(1,unknown,"0".repeat(64)))).bind(CATALOG,tjl19));
+    }
+    /** The comparison evaluates the water's functions as the column does ({@link V3WaterProperties}). */
+    @Test void theComparisonEvaluatesTheColumnsWaterForms() {
+        var water=CATALOG.requirePackage(MAIN).water();var values=TrainedPhysics.Water.of(water);
+        for(double t=water.triplePoint();t<=900;t+=7.3) {
+            if(t<water.criticalTemperature()) {
+                assertEquals(com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.saturationPressurePascal(water,t),values.saturationPressure(t),1e-12*values.saturationPressure(t));
+                assertEquals(com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.vaporizationEnthalpy(water,t),values.vaporizationEnthalpy(t),1e-9);
+            }
+            assertEquals(com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.vaporMolarEnthalpy(water,t),values.vaporEnthalpy(t),1e-9);
+            assertEquals(com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.dVaporMolarEnthalpyDT(water,t),values.vaporHeatCapacity(t),1e-12);
+        }
+    }
+    private static void criticalTemperature(JsonObject record,double factor) {
+        var pr=record.getAsJsonObject("models").getAsJsonObject("pr78");
+        pr.addProperty("critical_temperature_kelvin",pr.get("critical_temperature_kelvin").getAsDouble()*factor);bump(record);
+    }
+    /** A pair between the two fed fractions, which the bundled library leaves zero. */
+    private static void pair(JsonObject library,double kij) {
+        var pair=new JsonObject();pair.addProperty("first","crude_pc05");pair.addProperty("second","crude_pc11");pair.addProperty("kij",kij);
+        library.getAsJsonArray("pairs").add(pair);bump(library);
     }
     @Test void admissionSnapshotSurvivesReload() throws Exception {
         var catalog=CATALOG;var registry=registry("test:captured");var input=input();
         var bound=registry.bind(catalog,input);var expected=bound.predict(input,V3SolveControl.UNBOUNDED).orElseThrow();
-        // Nothing is hashed, and each record declares its own revision (owner decisions 2026-10-26): the edit of the shared
-        // methane record bumps that record alone, which the model was trained on.
-        var changed=edit("properties/tjl20_methane.json",o->{o.addProperty("molecular_weight_kg_per_mol",.017);bump(o);});
+        // A fed compound's value moved past the tolerance (Tc +2 %, decision E9) turns the model off for new bindings.
+        var changed=edit("properties/crude_pc05.json",o->criticalTemperature(o,1.02));
         assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(changed,input));
         var ready=new CountDownLatch(1);var release=new CountDownLatch(1);
         try(var worker=Executors.newSingleThreadExecutor()) {

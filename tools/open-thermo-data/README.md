@@ -24,13 +24,16 @@ Node 22 from this folder; the Java probes through Gradle (one at a time, AGENTS.
 4. `node spine-checks.mjs` prints the open comparisons that replace the JANAF and WebBook holdouts; `node records.mjs --write` edits the spine and package records (texts, the removed entropy uncertainty, revisions).
 5. `node compat-energy.mjs`: the energy each compat corpus image's load books for the data change, computed apart from the engine (reads the parent commit's records with git); `FluidFactsCompatTest` pins these.
 6. `ColumnPresetProbe.java` (columnGates, package `science.column.v3`): the default column preset before (the parent commit's records) and after, from the learned start and the classical initializer; writes `tmp/open-thermo-nist/column-preset.json`.
-7. `WetBoundaryCaptureProbe.java` (columnGates): an attempt to re-capture `science/column/v3/neural/tjl20-wet-boundary.json` by bisecting the condenser temperature on the classical solve. The classical route declines free water at every temperature tried (332.95 to 334.95 K), so it cannot reproduce the 2026-09-10 capture; kept as the record of that attempt.
+7. `node sidecar-schema4.mjs [--write]` (from the worktree root, O7 step 2): the regrouped model's sidecar to schema 4. Reads the records the schema-3 block named at git 03e7b6138 (each checked against its named revision), writes only the values the binding compares (`TrainedPhysics`: PR78 constants, ideal-gas fits, non-zero pairs, the water's saturation, Watson and Shomate values, the trained range 298.15 K to the trained feed maximum 765.77 K), and recomputes the registry's `pipelineSha256`.
+8. `O7BindingProbe.java` (columnGates): the distance of each compound and the water from the trained values, whether the bundled model binds the default preset, and that preset from the learned start and the classical one by control polls; writes `tmp/open-thermo-o7/binding.json`.
+9. `WetBoundaryCaptureProbe.java` (columnGates): an attempt to re-capture `science/column/v3/neural/tjl20-wet-boundary.json` by bisecting the condenser temperature on the classical solve. The classical route declines free water at every temperature tried (332.95 to 334.95 K), so it cannot reproduce the 2026-09-10 capture; kept as the record of that attempt.
 
 ## Entry points
 
-`lib.mjs` (evaluators and fits), `derive.mjs`, `records.mjs`, `spine-checks.mjs`, `compat-energy.mjs`, `check-transport.mjs`, `OpenThermoOracleProbe.java`, `ColumnPresetProbe.java`, `WetBoundaryCaptureProbe.java`.
+`lib.mjs` (evaluators and fits), `derive.mjs`, `records.mjs`, `spine-checks.mjs`, `compat-energy.mjs`, `check-transport.mjs`, `OpenThermoOracleProbe.java`, `ColumnPresetProbe.java`, `WetBoundaryCaptureProbe.java`, `sidecar-schema4.mjs`, `O7BindingProbe.java`.
 
 ## History
 
 - 2026-11-04: created for O2. The record forms are unchanged (no Java change); the nitrogen Cp fit is pinned at its 273.16 K value so that the held capacity below it is the reference's (D37/S4 within 0.05 %); the nitrogen viscosity reuses the pilot's CoolProp tables (same definition, node agreement 0.04 % liquid, 0.22 % vapour); methane uses the CoolProp Setzmann-Wagner alpha0 (0.015 % from the bundled spine).
 - 2026-11-04: O7 step 1 (E16): `derive.mjs` fits the methane Cp to the reference spine as the spine joins its segments (Setzmann-Wagner alpha0 to 425 K, GERG-2008 ideal part above, D13), `--methane-only`; `tjl20-methane-spine-r3`.
+- 2026-11-04: O7 step 2 (E8, E9): `sidecar-schema4.mjs` writes the trained physics into the sidecar as values; `O7BindingProbe.java` measures the distances, the binding and the column counters.

@@ -75,10 +75,11 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
     @Override public String modelId(){return "bundled-registry";}
     /**
      * The first model, by priority, that a request binds (plan section 3.3 of batch 2026-11-04-refinery-compounds): its
-     * active compounds A (the non-zero feed, as {@link V3ActiveComponentBasis} takes them) lie in the model's list M; the
-     * records the model was trained on are current in {@code catalog}; and the request package's physics on A is the
-     * model's, compared by content on the two restricted views. The model then reads the request on M through the lens
-     * ({@link MaterialCatalog#inferenceView}): A's data from the request, M  A from the trained records. The composition,
+     * active compounds A (the non-zero feed, as {@link V3ActiveComponentBasis} takes them) lie in the model's list M, and
+     * the request package's values on A are the model's trained values within the tolerances of decision E9
+     * ({@link TrainedPhysics}, sidecar schema 4 since O7 of batch 2026-11-04-open-thermo-data): no record id or revision
+     * takes part. The model then reads the request on M through the lens ({@link MaterialCatalog#inferenceView}): A's records
+     * from the request, the rest of M from the request package or the catalog's default records. The composition,
      * topology and global-bound gates are the model's own ({@link V3AnchorTransformerInitializer#supported}).
      */
     @Override public V3NeuralInitializer bind(MaterialCatalog catalog,V3ColumnInput input) {
@@ -147,7 +148,7 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
             byte[] payload = bounded(payloadStream, 8 * 1024 * 1024);
             byte[] sidecar = bounded(sidecarStream, 256 * 1024);
             try {
-                JsonObject weights = object(payload, PAYLOAD, 1), policy = object(sidecar, SIDECAR, 3);
+                JsonObject weights = object(payload, PAYLOAD, 1), policy = object(sidecar, SIDECAR, 4);
                 if (!sha256(payload).equals(policy.get("payloadSha256").getAsString()))
                     throw new IllegalArgumentException("Transformer payload SHA-256 mismatch");
                 if (!"ZERO_PHASE_FLOOR_10".equals(policy.get("decoder").getAsString())
@@ -165,7 +166,7 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
                         document.toString().getBytes(StandardCharsets.UTF_8)),
                         V3FactorizedNeuralFeatures.DecodeOptions.zeroPhaseFloor(10));
                 return new Loaded(model, sha256((sha256(payload) + ":" + sha256(sidecar)).getBytes(StandardCharsets.US_ASCII)));
-            } catch (com.google.gson.JsonParseException | IllegalStateException | NullPointerException invalid) {
+            } catch (com.google.gson.JsonParseException | IllegalStateException | NullPointerException | UnsupportedOperationException invalid) {
                 throw new IllegalArgumentException("Invalid transformer payload or sidecar", invalid);
             }
         }

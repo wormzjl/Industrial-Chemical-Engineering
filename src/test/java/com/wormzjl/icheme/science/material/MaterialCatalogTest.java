@@ -48,7 +48,10 @@ class MaterialCatalogTest {
         assertFalse(MaterialRuntime.with(science,ID,()->isCurrent(ID,before.scientificRevision())));
         assertTrue(MaterialRuntime.with(names,ID,()->isCurrent(ID,before.scientificRevision())));
         var input=com.wormzjl.icheme.science.column.v3.V3TestInputs.methaneCduInput();
-        assertTrue(MaterialRuntime.with(science,ID,()->V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).isEmpty()));
+        // A molar mass is outside what the neural model computes with (O7 of batch 2026-11-04-open-thermo-data): the model
+        // still binds, and its seed names the new identity.
+        assertEquals(science.requirePackage(ID).scientificRevision(),MaterialRuntime.with(science,ID,
+                ()->V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).orElseThrow().propertyRevision()));
     }
     /**
      * The identities an owner reads off the files (owner decision 2026-10-26). The column's: every record the package names
