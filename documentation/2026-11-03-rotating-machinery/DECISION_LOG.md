@@ -136,6 +136,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D40.** W6a joins this branch (one batch, one merge to main). The Create coupling is form A of `W6B_BUILD_PLAN.md` (plan section 8): a `Drive.CREATE` driver at Create's |rpm| with the creative motor's power-limited step, its power limit the network's spare stress plus its own draw at 1.465 W per su, its stress impact following the train's demand on the engine's schedule; short of power the train slows (`POWER LIMITED`) and the Create network never overstresses. Form B (a rated impact) is not built.
 
+2026-11-04, on the coupling page prototype (create-coupling-running, -limited, -no-rotation): the owner: "Build as shown".
+
+- **D41.** The Create coupling's machine page is the prototype of `23c634d1f`: Shaft group (Create speed, train speed, power), Supply group (stress drawn, network spare, su), a nameplate on the glass (stress rate, rated speed), no switches, Close only.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
