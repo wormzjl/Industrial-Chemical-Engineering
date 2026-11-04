@@ -2,7 +2,7 @@
 
 Purpose: realistic pumps and compressors at process level, separate drivers (motor, steam turbine, creative motor) joined by shafts and gearboxes, electricity (FE) for motors and air coolers, Create as an optional power source.
 
-Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, gas, liquid, cavitation, wear and sound, Q11 to Q17 open; W1 built; W2's solver work closed, owner decision D18: law F2e with A1 and A2 (D11), E8 fixed by taut-vessel row weights (D13), the suction floor, the vapour lock and the floor under the supplier (D14-D17); campaign 992/994/1000 against 991/993/1000, bundled 896 a known hold; the turbine connection (plan 3.4) is W2's last open item). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
+Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, gas, liquid, cavitation, wear and sound, answered D19 to D21, W10a built 5516c976f; W1 built; W2's solver work closed, owner decision D18: law F2e with A1 and A2 (D11), E8 fixed by taut-vessel row weights (D13), the suction floor, the vapour lock and the floor under the supplier (D14-D17); campaign 992/994/1000 against 991/993/1000, bundled 896 a known hold; the turbine connection (plan 3.4) is W2's last open item). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
 
 ## History
 
@@ -23,6 +23,8 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: owner decision D17 ("(a) Floor ≤ supplier"): the suction-limit row and the balance's anchor of a limited pump read the lesser of the floor and the supplier's end pressure less its lift (`suctionLimit`, `suctionSupply`, `suctionAnchor`; the Jacobian pattern sees the remote supplier). 98 classes and the hold gates pass; `9449ecce2`. Campaign (`W2_D17_CAMPAIGN_REVIEW.md`): the same holds as D16; 896's holds 10 → 3, no singular Jacobian, its island ends STEADY at 52.76 kg/s.
 - 2026-11-04: owner decision D18 ("Accept, close W2"): bundled 896 stays a known hold (three held intervals, then STEADY at 52.76 kg/s); W2's solver work ends at `9449ecce2`.
 - 2026-11-04: owner request 11 (remove the pumps' hard gas limit; cavitation, its noise and a durability system; the same for compressors with liquid; "integrate it with the master plan first"). Research by an Opus thread (`TWO_PHASE_MACHINES_RESEARCH_REVIEW.md`: Turpin's gas onset and a head multiplier, NPSH3 from suction specific speed, Gülich's erosion power, wet-gas and reciprocating liquid damage, the genre's maintenance conventions). Plan revision 3: sections 3.6 to 3.8, W10a to W10d, questions Q11 to Q17, simplifications T1 to T5.
+- 2026-11-04: owner decisions D19 (Q13: in-line movers are treated as constructed machines) and D20 ("All as recommended" for Q11, Q12 and Q14 to Q17).
+- 2026-11-04: W10a built by an Opus medium subagent, reviewed (efficiency scales with M, so shaft power stays on the mixture): refusals removed, M(α) on centrifugal pumps, the NPSH3 floor, wet centrifugal compressors. Two affected tests showed 2-pole in-line pumps cavitating above 0.17 m³/s; owner decision D21 ("A: speed for 3.3 m"). Affected 639, hold gates 67 and fluid GameTests 39 pass; `5516c976f`. Full campaign 991, 993 and 1000 clean, no new mechanism; bundled defaults' wall time +54 % (`W10A_CAMPAIGN_REVIEW.md`, options O1 to O3).
 
 ## Documents
 
@@ -39,6 +41,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - [W2_D16_CAMPAIGN_REVIEW.md](W2_D16_CAMPAIGN_REVIEW.md): the full campaign of D16; bundled 896's options; water unification proposed.
 - [W2_D17_CAMPAIGN_REVIEW.md](W2_D17_CAMPAIGN_REVIEW.md): the full campaign of D17; 896 recovers after three held intervals.
 - [TWO_PHASE_MACHINES_RESEARCH_REVIEW.md](TWO_PHASE_MACHINES_RESEARCH_REVIEW.md): gas in pumps, cavitation, its noise and erosion, compressors with liquid, maintenance in the genre; the research behind plan revision 3.
+- [W10A_CAMPAIGN_REVIEW.md](W10A_CAMPAIGN_REVIEW.md): W10a's laws, tests and full campaign; options O1 (one suction walk), O2 (wet compressor ratio), O3 (vapour lock on the NPSH3 floor).
 
 ## Code areas (planned)
 
@@ -50,7 +53,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - To measure later, not proposed: a mover on F2e stands at its relief behind a sealed pocket (`PumpAheadOfFlowValveTest`, `SealedDischargeTest`), so D58's closure may no longer be needed for movers.
 - Owner request 2026-11-04, a motor or turbine sound apart from the pump or compressor head's, with the volume scaled by operating speed and equipment size: W4's follow-up (D13 on its branch, client and assets); the speed share in `FluidNetwork.MoverState` comes with W3's driver logic.
 - `DECISION_LOG.md` numbering: this branch's D10 (the law) and W4's D10 to D13 collide; renumber at the merge.
-- Owner: plan revision 3's questions Q11 to Q17 (request 11; recommended: NPSH3 floor, pressure-only gas onset, no wear for in-line movers, a spare part repairs, wet compressors as researched, the physical wear shape, W10a first).
+- Owner: W10a's options O1 to O3 (`W10A_CAMPAIGN_REVIEW.md` section 4). Then W10b (health, wear, repair) after W3, W10c (sound) after W4 merges, W10d (screens) with W7.
 - W2 rest: the turbine connection (plan 3.4).
 - W3, W5 and W7 to build (plan section 12); W8 after the simulator merges; W9 only when the owner says so. W4 runs as its own session; W6a is done on `claude/interesting-wozniak-cb5e6a` (43731e4d3, 2b2339d59), not merged.
 - Scratch: `tmp/rotating-machinery/` (worked numbers, campaign reports, test logs, the `CompressorTest` corner-law probe); the measurement tools are in `tools/rotating-machinery/`.
