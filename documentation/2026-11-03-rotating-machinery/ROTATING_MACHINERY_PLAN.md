@@ -158,14 +158,14 @@ Expected behaviour:
 Laws (each a number fixed for the solve, read once on the step's start states like the suction floor and the vapour lock, D16; no new mode, no refusal, no hysteresis):
 - **Centrifugal pump:** `H_2φ = H(Q, s) × M(α)`, `M = 1 / (1 + (α/α_50)^4)`, `α_50 = 1.6 α_T(p_s)`, α the suction's vapour volume share (`InletPhase.Supply`). The rise `ρ_s g H_2φ` takes the mixture density, a second factor `(1 − α)`. M at 1 bar: 0.89 at 2 %, 0.34 at 4 %; at 10 bar 0.81 at 20 %. Gas lock is not a rule: when `M H` at shutoff falls below the line's lift, the curve meets zero flow and the check valve closes it.
 - **Set-flow pump (positive displacement):** no multiplier. The law already counts suction mixture volume.
-- **Cavitation (Q11):** (A) the suction floor of D17 becomes `p_v + 0.85 ρ_l g NPSH3(Q, s)` on the trial point, inside its lesser-of, so a constructed pump starves at its full-breakdown NPSH, and today's bubble floor is its `NPSH3 = 0` end; or (B) the floor stays the bubble pressure, and NPSH3 feeds only noise, wear and a notice. Set-flow movers have no design point and keep the bubble floor either way.
+- **Cavitation (Q11):** (A) the suction floor of D17 becomes `p_v + 0.85 ρ_l g NPSH3(Q, s)` on the trial point, inside its lesser-of, so a pump starves at its full-breakdown NPSH, and today's bubble floor is its `NPSH3 = 0` end; or (B) the floor stays the bubble pressure, and NPSH3 feeds only noise, wear and a notice. An in-line mover is treated as a constructed machine (owner decision D19): its design point is its set flow at a 2-pole speed (2950 rpm), so the default 0.01 m³/s pump needs 1.7 m.
 - **Centrifugal compressor:** the head curve reads the suction mixture volume; the ratio formula of 3.2 the mixture density; power `ṁ_total H_p / η_wet`, `η_wet = η_p (1 − 0.5 w_l)`, w_l the liquid mass share (the 0.5 is an assumption, Q15). The PH flash gives the evaporative cooling.
 - **Reciprocating and set-flow compressor:** gas delivered is the displacement less the liquid's volume, which the mixture volume already gives.
 - The vapour lock (D15, D16) stays: the NPSHA ≤ 0 end, closed for the solve.
 
 ### 3.7 Durability (request 11, revision 3)
 
-A constructed pump or compressor has a health D from 1 (new) to 0 (failed), a fact. Wear comes only from a fault the player can see and fix, never from clean running (the genre's convention: GregTech's maintenance problems, the Maintenance mod; research review section 7).
+Every pump and compressor, constructed or in-line (owner decision D19), has a health D from 1 (new) to 0 (failed), a fact. Wear comes only from a fault the player can see and fix, never from clean running (the genre's convention: GregTech's maintenance problems, the Maintenance mod; research review section 7).
 
 - **Integration.** At each slice commit, on committed states, over the slice's online time; never on the tick loop. A trip at D = 0 applies between slices.
 - **Cavitation:** `dD/dt = I_c(σ) g(α) / 2 h`, with `σ = NPSHA / NPSH3`, `I_c = (σ/2.06)³ ((4 − σ)/1.94)^2.83` for 0 < σ < 4 and 0 above (Gülich's erosion power, `Δp³ L_cav^2.83`; its peak at σ = 2.06 lands on the measured maximum near 2 × NPSH3), and the gas cushion `g(α) = exp(−α/0.02)` (entrained gas softens bubble collapse). Lives in online time: 2 h at the peak, 5 h at NPSH3, 19 h at σ = 3.5, none above 4.
@@ -174,7 +174,7 @@ A constructed pump or compressor has a health D from 1 (new) to 0 (failed), a fa
 - **Effect.** Head and efficiency × `(0.9 + 0.1 D)`, read once per solve. At D = 0 the machine stands closed: `IMPELLER FAILED` (pump), `VALVES FAILED` (reciprocating), `IMPELLER FAILED` (centrifugal compressor), until repaired.
 - **Repair (Q14).** A queued engine event from the machine's screen or a part used on the casing; its acknowledgement arrives on the engine schedule.
 - Every τ and the gas cushion width in the server config (`machines.wear.*`), with a switch to turn wear off.
-- In-line set-flow movers (D3, utility movers with an integral motor) take the gas and liquid laws and no wear (Q13).
+- In-line movers are treated as constructed machines (owner decision D19): the same laws, NPSH3 from their set flow at a 2-pole speed, the same wear, trips and repair.
 
 ### 3.8 Sound (request 11, revision 3)
 
@@ -307,7 +307,7 @@ Prototypes first (`gui-creation` skill), owner picks, then build.
 
 ## 10. Saves (AGENTS.md "Saves and data formats")
 
-- Fluid facts schema 8: the new device kinds, the machine's design point and law kind, the driver's settings, the FE buffer's content (energy the player put in), the gearbox ratio, the creative motor's set points, and each constructed machine's health (request 11: a double from 0 to 1, default 1.0, which is the behaviour before the field: no wear, full performance). Corpus image `compat/fluid/schema-8`. If W3 lands schema 8 first, health goes in schema 9 with its own image.
+- Fluid facts schema 8: the new device kinds, the machine's design point and law kind, the driver's settings, the FE buffer's content (energy the player put in), the gearbox ratio, the creative motor's set points, and each pump's and compressor's health, constructed or in-line (request 11, D19: a double from 0 to 1, default 1.0, which is the behaviour before the field: no wear, full performance). Corpus image `compat/fluid/schema-8`. If W3 lands schema 8 first, health goes in schema 9 with its own image.
 - Equipment shape fields 6: the pump's and compressor's design point, the motor's and turbine's duty. An old pump's missing design point takes today's datasheet values (A3). Corpus image `compat/equipment/shapes-6.snbt`.
 - No backward compatibility for constructed movers (owner D4): old placed pumps and compressors rebuild to the casing layout through the layout refresh, without their drawn motor (and gear); they stand closed with `NO DRIVER` until the player joins a driver. Their registrations, identity and settings stay; the set flow is still the set flow.
 - Old steam turbines (drawing only) rebuild to the new layout; the owner approves the moved nozzle pipe blocks (owner D5).
@@ -356,7 +356,7 @@ Revision 3 (request 11), open:
 
 - **Q11. Cavitation in the flow.** (A) The suction floor of a constructed pump rises to `p_v + 0.85 ρ g NPSH3(Q, s)`, in D17's row: it starves at its breakdown NPSH (recommended; it moves worlds that draw from boiling drums, +22 kPa for the pump of 1.1). (B) The floor stays the bubble pressure; NPSH3 feeds only noise, wear and a notice (no world moves, no cavitation in the flow).
 - **Q12. Gas onset.** Pressure only, `α_T(p_s)` (recommended first); or also a speed factor (onset rises with speed, 1.25 to 2.3 times for 1.67 times speed) and an impeller-type factor (mixed flow about 2.5 times radial).
-- **Q13. In-line set-flow movers.** Gas and liquid laws, no wear (recommended: utility movers, D3); or wear for them too.
+- **Q13. In-line set-flow movers.** Answered 2026-11-04: "in-line equipment is treated the same as normal equipment" (D19).
 - **Q14. Repair.** (a) A spare part crafted per machine (impeller, valve set, seal kit) used on the casing, restoring full health (recommended); (b) a wrench, part health per use; (c) both: a wrench for wear above 0.5, a part for a failure.
 - **Q15. Wet compressors.** Centrifugal: homogeneous mixture with `η_wet = η_p (1 − 0.5 w_l)` and droplet erosion; reciprocating: liquid knock costs 0.5 and trips (recommended); the factor 0.5 is an assumption to keep or change.
 - **Q16. Wear shape and scale.** The physical intensity, peak near 2 × NPSH3 (recommended); or monotone, largest at the floor. Without a size factor first (a 10 m NPSH3 pump would erode 27 times faster than a 3.3 m one). Lives as in 3.7, all in the server config.

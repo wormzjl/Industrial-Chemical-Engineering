@@ -58,6 +58,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D18 (W2's solver work closed).** Bundled 896 stays as a known hold: three held intervals at the step where its supplier tee first reaches its bubble point, then STEADY at 52.76 kg/s. The campaign stands at 992, 994 and 1000 clean against the baseline's 991, 993 and 1000. W2's solver work ends at `9449ecce2`.
 
+2026-11-04, the owner on plan revision 3's Q13: "Q13 in-line equipment is treated the same as normal equipment".
+
+- **D19 (Q13).** In-line pumps and compressors take request 11 whole, as constructed machines: the gas and liquid laws, the NPSH3 curve, health, wear, trips and repair. Their design point for NPSH3 is their set flow at a 2-pole speed (2950 rpm); the default 0.01 m³/s pump needs 1.7 m. Q11, Q12 and Q14 to Q17 stay open.
+
 ## Taken under the standing instruction
 
 - **A1 (Q10, reading of "as recommended").** All three proposals join the batch: a generator (shaft power to FE, the motor's mirror), cooling-tower fans on the RF port, KubeJS made optional with Create.
