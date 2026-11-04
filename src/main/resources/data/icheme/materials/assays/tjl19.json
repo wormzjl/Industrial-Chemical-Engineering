@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
   "id": "icheme:tia_juana_light",
-  "package": "icheme:tjl19_dwsim",
   "basis": "mole",
   "appearance": {
     "color": "#45301E",

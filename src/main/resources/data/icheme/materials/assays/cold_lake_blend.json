@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
   "id": "icheme:cold_lake_blend",
-  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "CLKBL23B",
@@ -18,13 +17,13 @@
     "source_whole_crude": {
       "density_15c_kg_per_m3": 936.6999999999999,
       "sulfur_mass_percent": 3.87,
-      "nitrogen_mass_ppm": 3062.0,
+      "nitrogen_mass_ppm": 3062,
       "nickel_mass_ppm": 55.8,
       "vanadium_mass_ppm": 145.2,
       "iron_mass_ppm": 8.8,
       "sodium_mass_ppm": 4.8,
       "mercury_mass_ppb": 9.8,
-      "arsenic_mass_ppb": 134.0
+      "arsenic_mass_ppb": 134
     },
     "residual_mass_rounding_scale": 1.0003149606299213,
     "tail": {
@@ -32,13 +31,13 @@
       "estimated_above_celsius": 590,
       "scale_celsius": 103.2471042471042,
       "remaining_at_590_volume_percent": 25.900000000000006,
-      "residue_550_plus_mean_celsius": 671.0,
+      "residue_550_plus_mean_celsius": 671,
       "estimated_mass_percent_above_590": 29.67959812618361
     }
   },
   "appearance": {
     "color": "#171615",
-    "transparency": 0.0,
+    "transparency": 0,
     "estimated": true
   },
   "revision": "crude-regrouped-r2",

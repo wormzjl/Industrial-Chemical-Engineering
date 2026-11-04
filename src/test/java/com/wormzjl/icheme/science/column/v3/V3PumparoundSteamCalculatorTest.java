@@ -255,7 +255,7 @@ class V3PumparoundSteamCalculatorTest {
             String packageId, double reboilerDutyWatts, List<V3PumparoundSpec> pumparounds,
             List<V3SideDrawSpec> sideDraws) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(packageId));
         double[] flows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlow;

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "icheme:crude_pr78",
+  "revision": "crude-pr78-r1",
+  "model": "pr78",
+  "ideal_gas": "fit",
+  "interactions": [
+    "icheme:tjl20"
+  ],
+  "missing_interactions": "zero",
+  "water_model": "icheme:water",
+  "pressure_min_pascal": 1000,
+  "pressure_max_pascal": 2000000,
+  "liquid_mixture": {
+    "type": "symmetric_pair_groups_v1",
+    "coefficients": [
+      0.7585241056539558,
+      0.45724340571290695,
+      0.08245501128109843,
+      0.05051713998043995
+    ],
+    "reference_kelvin": 323.15,
+    "slope_cap_kelvin": 373.15,
+    "source": "Global Dalia whole/residue fit; whole 40C and residue 60C held out; non-donor mismatch accepted",
+    "revision": "dalia-global-r1"
+  }
+}

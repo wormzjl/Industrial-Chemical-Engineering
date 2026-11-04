@@ -266,7 +266,7 @@ class V3ColumnCalculatorTest {
 
     private static V3ColumnInput registeredRealCrudeThirtyStagePilot() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] feedFlows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < feedFlows.length; component++) feedFlows[component] *= totalFlow;
@@ -287,7 +287,7 @@ class V3ColumnCalculatorTest {
 
     private static V3ColumnInput realCrudePilot(double condenserTemperatureKelvin, double methaneFeedFlow) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] feedFlows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < feedFlows.length; component++) feedFlows[component] *= totalFlow;

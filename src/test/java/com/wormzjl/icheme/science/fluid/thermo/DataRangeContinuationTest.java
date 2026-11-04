@@ -87,14 +87,17 @@ class DataRangeContinuationTest {
         assertTrue(stretched.specificVolume()>0);
     }
 
-    /** The envelope is the package's data range and the input box of device settings, so a package without one cannot
-     * be built; no range has to lie inside another any more (a component beyond its package envelope or its own vapour
-     * viscosity data loads, and is continued where it leaves them). */
+    /** The envelope is the package's data range and the input box of device settings: the hull of its compounds' dataset
+     * ranges, so a package with a compound whose dataset declares none cannot be built; no range has to lie inside another
+     * any more (a component beyond its package envelope or its own vapour viscosity data loads, and is continued where it
+     * leaves them). */
     @Test void theCatalogReadsTheEnvelopeAndNoLongerChecksRangesAgainstEachOther() {
         var resources=new HashMap<>(catalog.resources());
-        String pkg="data/icheme/materials/packages/tjl20.json";
-        var o=JsonParser.parseString(resources.get(pkg)).getAsJsonObject();String id=o.get("id").getAsString();o.remove("fluid_domain");resources.put(pkg,o.toString());
+        // The pilot's ethane dataset is in no other package, so the network package keeps its envelope.
+        String dataset="data/icheme/materials/properties/pilot_ethane.json",id="icheme:pilot_cryogenic";
+        var o=JsonParser.parseString(resources.get(dataset)).getAsJsonObject();o.remove("fluid_domain");resources.put(dataset,o.toString());
         var withoutEnvelope=MaterialCatalog.parse(resources);
+        assertTrue(withoutEnvelope.fluidValidity(id).isEmpty());assertTrue(withoutEnvelope.fluidValidity(NETWORK).isPresent());
         var missing=assertThrows(IllegalArgumentException.class,()->com.wormzjl.icheme.fluid.support.FluidTestSupport.model(withoutEnvelope,id));
         assertTrue(missing.getMessage().contains("declares no fluid_domain"),missing.getMessage());
 

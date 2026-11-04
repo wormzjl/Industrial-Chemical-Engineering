@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 @org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3FlashTruncationTest {
     private static final String PACKAGE_ID = "icheme:cdu17_tjl_acs2018";
-    private static final String ASSAY_ID = "icheme:tia_juana_light";
+    private static final String ASSAY_ID = "icheme:tia_juana_light_kl1976";
     private static final double CUTOFF = 1.0e-6;
     private static final int ETHANE = 1;
     private static final int PC12 = 15;

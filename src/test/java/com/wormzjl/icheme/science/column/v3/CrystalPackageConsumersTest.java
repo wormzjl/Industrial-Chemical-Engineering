@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
  * refused typed rather than dropping its crystals.</li>
  * <li>The loader refuses a package that declares crystals without a reference spine (the crystal's anchor), so the
  * network, whose crystal competition needs the spine, can never run such a package fluid-only.</li>
- * <li>Presets: a network configuration that selects the pilot cannot carry a crude-assay fluid preset (its physics differ);
+ * <li>Presets: a network configuration that selects the pilot cannot carry a crude-assay fluid preset (the assay holds compounds the pilot lacks);
  * the pilot has no assay, so no column preset can name it.</li>
  * </ul>
  *
@@ -87,7 +87,7 @@ class CrystalPackageConsumersTest {
     @Test void aPilotNetworkCarriesNoCrudeAssayPreset() {
         var refused = assertThrows(IllegalArgumentException.class, () -> PilotCryogenicTestCatalog.parseWith(PilotCryogenicTestCatalog.NETWORK,
                 o -> o.getAsJsonArray("fluid_presets").add("icheme:tia_juana_light_methane")));
-        assertTrue(refused.getMessage().contains("physics differ"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("holds compounds outside the network package"), refused.getMessage());
         assertTrue(PilotCryogenicTestCatalog.catalog().requirePackage(PILOT).assays().isEmpty(), "no assay: no column preset can name the pilot");
         assertTrue(PilotCryogenicTestCatalog.parseWith(PACKAGE, o -> {}).requirePackage(PILOT).crystals().contains(CO2_I));
     }

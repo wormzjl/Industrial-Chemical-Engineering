@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
   "id": "icheme:upper_zakum",
-  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "UPZAK26B",
@@ -18,13 +17,13 @@
     "source_whole_crude": {
       "density_15c_kg_per_m3": 857.7,
       "sulfur_mass_percent": 2.09,
-      "nitrogen_mass_ppm": 873.0,
+      "nitrogen_mass_ppm": 873,
       "nickel_mass_ppm": 10.1,
       "vanadium_mass_ppm": 11.2,
       "iron_mass_ppm": 0.3,
       "sodium_mass_ppm": 0.8,
-      "mercury_mass_ppb": 1.0,
-      "arsenic_mass_ppb": 5.0
+      "mercury_mass_ppb": 1,
+      "arsenic_mass_ppb": 5
     },
     "residual_mass_rounding_scale": 0.9988512949039264,
     "tail": {
@@ -32,7 +31,7 @@
       "estimated_above_celsius": 590,
       "scale_celsius": 92.81746031746036,
       "remaining_at_590_volume_percent": 12.599999999999994,
-      "residue_550_plus_mean_celsius": 656.0,
+      "residue_550_plus_mean_celsius": 656,
       "estimated_mass_percent_above_590": 15.17890749601275
     }
   },

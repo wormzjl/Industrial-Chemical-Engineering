@@ -25,10 +25,8 @@ public final class FluidPresetCatalog {
         for(String id:config.fluidPresets()) {
             var preset=catalog.presets().fluid(id);double[] amounts;
             if(!preset.component().isEmpty()){amounts=new double[axis.size()];amounts[axis.requireIndex(preset.component())]=1;}
-            else {
-                var source=catalog.requirePackage(preset.packageId());catalog.requireSharedFluidPhysics(source.id(),target.id());
-                amounts=axis.project(new MaterialAxis(source.components()),MaterialPresets.moleFractions(source,preset.assayId()));
-            }
+            // An assay is a composition by compound: it resolves on the network package's own datasets.
+            else amounts=axis.project(new MaterialAxis(target.components()),MaterialPresets.moleFractions(target,preset.assayId()));
             result.add(new Preset(id,preset.label(),amounts));
         }
         if(catalog.solids().materials().containsKey("icheme:demo_particle")){double[] water=new double[axis.size()];water[axis.requireIndex("Water")]=1;result.add(new Preset("icheme:demo_slurry","Water slurry (10% solids, 100 µm)",water,SlurryFeed.demo()));}

@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
   "id": "icheme:bonga",
-  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "BONGA25Y",
@@ -18,13 +17,13 @@
     "source_whole_crude": {
       "density_15c_kg_per_m3": 888.4,
       "sulfur_mass_percent": 0.26,
-      "nitrogen_mass_ppm": 1462.0,
+      "nitrogen_mass_ppm": 1462,
       "nickel_mass_ppm": 3.5,
       "vanadium_mass_ppm": 0.3,
       "iron_mass_ppm": 7.4,
       "sodium_mass_ppm": 0.4,
-      "mercury_mass_ppb": 1.0,
-      "arsenic_mass_ppb": 213.0
+      "mercury_mass_ppb": 1,
+      "arsenic_mass_ppb": 213
     },
     "residual_mass_rounding_scale": 0.998275512274295,
     "tail": {
@@ -32,7 +31,7 @@
       "estimated_above_celsius": 590,
       "scale_celsius": 78.88679245283019,
       "remaining_at_590_volume_percent": 5.299999999999997,
-      "residue_550_plus_mean_celsius": 637.0,
+      "residue_550_plus_mean_celsius": 637,
       "estimated_mass_percent_above_590": 6.03700716845878
     }
   },

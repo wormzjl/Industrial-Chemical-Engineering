@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
@@ -40,9 +39,9 @@ class PilotCryogenicCatalogTest {
      * compared directly ({@link #TJL20_PHYSICS}).
      */
     private static final String[][] BUNDLED_PINS = {
-        {"icheme:tjl19_dwsim", "icheme:tjl19_dwsim@crude-regrouped-r1"},
-        {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r1"},
-        {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r1"},
+        {"icheme:tjl19_dwsim", "icheme:tjl19_dwsim@crude-regrouped-r2"},
+        {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r2"},
+        {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r2"},
     };
     private static final String TJL20 = "icheme:tjl20_methane";
     /**
@@ -56,10 +55,12 @@ class PilotCryogenicCatalogTest {
      * identity, every record it names for its phase physics by its declared revision (its viscosities are in the fluid
      * identity), and the spine identity of its spine and crystal records' declared revisions. An edit of a record bumps
      * the record's revision, which moves the pin. Until 2026-10-26 these were hashes of the data (history in this file's
-     * git log).
+     * git log). Since batch 2026-11-04-refinery-compounds the package names its method (r2), which holds the model, the
+     * pair libraries and the water model.
      */
     private static final String PILOT_SCIENTIFIC_REVISION = String.join(";",
-            "icheme:pilot_cryogenic@pilot-cryogenic-p3-r1",
+            "icheme:pilot_cryogenic@pilot-cryogenic-p3-r2",
+            "method=icheme:pilot_eppr78@pilot-eppr78-r1",
             "properties=" + String.join(",",
                     "icheme:pilot_nitrogen@pilot-nitrogen-p3-r1",
                     "icheme:pilot_methane@pilot-methane-p3-r1",
@@ -194,27 +195,33 @@ class PilotCryogenicCatalogTest {
 
     @Test
     void packageSpineRulesAreEnforced() {
-        refused(PACKAGE, o -> o.getAsJsonArray("spine").remove(3), "expected one reference-spine record per component");
-        refused(PACKAGE, o -> {
-            JsonArray spine = o.getAsJsonArray("spine");
-            spine.set(1, new JsonPrimitive("icheme:spine_ethane"));
-            spine.set(2, new JsonPrimitive("icheme:spine_methane"));
-        }, "is for Ethane, not component Methane");
-        refused(PACKAGE, o -> o.getAsJsonArray("spine").set(0, new JsonPrimitive("icheme:spine_argon")), "spine: unresolved icheme:spine_argon");
+        // Each compound takes its only reference-spine record; with two, its package entry names one.
+        var resources = PilotCryogenicTestCatalog.resources();
+        var copy = JsonParser.parseString(resources.get(NITROGEN)).getAsJsonObject();
+        copy.addProperty("id", "icheme:spine_nitrogen_copy");
+        resources.put("data/icheme/materials/spine/nitrogen_copy.json", copy.toString());
+        var two = assertThrows(IllegalArgumentException.class, () -> MaterialCatalog.parse(resources));
+        assertTrue(two.getMessage().contains("spine: Nitrogen has 2 reference-spine records; name one"), two.getMessage());
+        var named = JsonParser.parseString(resources.get(PACKAGE)).getAsJsonObject();
+        spineOf(named, 0, "icheme:spine_nitrogen_copy");
+        resources.put(PACKAGE, named.toString());
+        assertEquals("icheme:spine_nitrogen_copy", MaterialCatalog.parse(resources).requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID).spine().getFirst());
+        refused(PACKAGE, o -> spineOf(o, 1, "icheme:spine_ethane"), "is for Ethane, not component Methane");
+        refused(PACKAGE, o -> spineOf(o, 0, "icheme:spine_argon"), "spine: unresolved icheme:spine_argon");
         refused(METHANE, o -> o.addProperty("molar_mass_kg_per_mol", 0.01605), "above 1e-4");
         refused(PACKAGE, o -> o.getAsJsonArray("crystals").add("icheme:crystal_carbon_dioxide_i"), "crystals: duplicate crystal record");
         refused(PACKAGE, o -> o.getAsJsonArray("crystals").set(0, new JsonPrimitive("icheme:crystal_water_ih")), "crystals: unresolved");
         refused(CRYSTAL, o -> o.addProperty("component", "Water"), "is for Water, outside the package components");
     }
 
-    /** D6: one ideal-gas source per species; ideal_gas_cp is optional only in a package that declares a spine. */
+    /** D6: one ideal-gas source per species; ideal_gas_cp is optional only under a method that takes the reference spines. */
     @Test
     void idealGasSourceRules() {
-        // A property record without a Cp fit in a package without a spine.
-        refused(PACKAGE, o -> o.remove("spine"), "Property icheme:pilot_nitrogen has no ideal_gas_cp: a package without a reference spine needs a shifted_polynomial_5 fit");
-        // A Cp fit in a package with a spine.
+        // A property record without a Cp fit under a method that takes the datasets' fits.
+        refused(PACKAGE, o -> o.addProperty("method", "icheme:crude_pr78"), "Property icheme:pilot_nitrogen has no ideal_gas_cp: a method without a reference spine needs a shifted_polynomial_5 fit");
+        // A Cp fit under a method that takes the spines.
         var fit = JsonParser.parseString(PilotCryogenicTestCatalog.read(TJL20_METHANE)).getAsJsonObject().getAsJsonObject("ideal_gas_cp");
-        refused(PILOT_METHANE, o -> o.add("ideal_gas_cp", fit), "Property icheme:pilot_methane carries ideal_gas_cp in a package with a reference spine");
+        refused(PILOT_METHANE, o -> o.add("ideal_gas_cp", fit), "Property icheme:pilot_methane carries ideal_gas_cp in a method with a reference spine");
         // The record itself stays loadable without a fit; only its use is refused.
         assertTrue(MaterialCatalog.bundled().requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID).properties().get(1).cp().isEmpty());
     }
@@ -239,6 +246,11 @@ class PilotCryogenicCatalogTest {
         refused(NITROGEN, o -> o.addProperty("component", "Argon"), "component: unresolved Argon");
         refused(CRYSTAL, o -> o.remove("coverage"), "coverage: required field");
         refused(NITROGEN, o -> o.addProperty("revision", "spine nitrogen r1"), "revision: \"spine nitrogen r1\" must be a token");
+    }
+
+    /** Names a reference spine on the package's entry {@code index}, an object that carries the compound's dataset. */
+    private static void spineOf(com.google.gson.JsonObject record, int index, String spine) {
+        record.getAsJsonArray("components").get(index).getAsJsonObject().addProperty("spine", spine);
     }
 
     static void refused(String path, Consumer<com.google.gson.JsonObject> edit, String message) {

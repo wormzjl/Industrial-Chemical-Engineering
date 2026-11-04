@@ -81,10 +81,13 @@ class LegacyNetworkPathPinTest {
      * fingerprint is the nitrogen record r3's. Since 2026-10-26 nothing is hashed and each record declares its own
      * revision (owner decisions): the fingerprint (last {@code 7b222959...}) is every record's declared revision,
      * {@link MaterialCatalog#fluidRevision}: the column's identity, then each viscosity by its own revision, the ice and
-     * the fluid reference records. The nitrogen record's r3 is visible in it.
+     * the fluid reference records. The nitrogen record's r3 is visible in it. Since W1 of batch 2026-11-04-refinery-compounds
+     * a package is a property method and a compound list: the package record's revision is r2 and the method follows it
+     * ({@code method=icheme:crude_pr78@crude-pr78-r1}); every dataset, pair and water record, and so every number, is unchanged.
      */
     static final String REVISION = String.join(";",
-            "icheme:tjl20_methane_nitrogen@crude-regrouped-r1",
+            "icheme:tjl20_methane_nitrogen@crude-regrouped-r2",
+            "method=icheme:crude_pr78@crude-pr78-r1",
             "properties=" + String.join(",",
                     "icheme:tjl20_methane@tjl20-methane-nist-r1",
                     "icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1",

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "icheme:cdu17_pr78",
+  "revision": "cdu17-pr78-r1",
+  "model": "pr78",
+  "ideal_gas": "fit",
+  "interactions": [
+    "icheme:cdu17"
+  ],
+  "missing_interactions": "zero",
+  "water_model": "icheme:water",
+  "pressure_min_pascal": 50000,
+  "pressure_max_pascal": 2000000
+}

@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
   "id": "icheme:dalia",
-  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "DALIA26Y",
@@ -18,13 +17,13 @@
     "source_whole_crude": {
       "density_15c_kg_per_m3": 917.8,
       "sulfur_mass_percent": 0.52,
-      "nitrogen_mass_ppm": 2338.0,
+      "nitrogen_mass_ppm": 2338,
       "nickel_mass_ppm": 20.3,
       "vanadium_mass_ppm": 8.4,
       "iron_mass_ppm": 6.3,
-      "sodium_mass_ppm": 1.0,
-      "mercury_mass_ppb": 1.0,
-      "arsenic_mass_ppb": 135.0
+      "sodium_mass_ppm": 1,
+      "mercury_mass_ppb": 1,
+      "arsenic_mass_ppb": 135
     },
     "residual_mass_rounding_scale": 1.0012070006035003,
     "tail": {
@@ -32,7 +31,7 @@
       "estimated_above_celsius": 590,
       "scale_celsius": 89.3793103448276,
       "remaining_at_590_volume_percent": 17.400000000000006,
-      "residue_550_plus_mean_celsius": 653.0,
+      "residue_550_plus_mean_celsius": 653,
       "estimated_mass_percent_above_590": 19.170709415922396
     }
   },

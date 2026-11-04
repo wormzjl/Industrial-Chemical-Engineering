@@ -4,6 +4,7 @@
   "kind": "petroleum_fraction",
   "translation_key": "material.icheme.crude_pc04",
   "fallback": "Crude oil",
+  "properties": "icheme:crude_pc04",
   "cut": {
     "estimated": true,
     "derivation": "adjacent_nbp_midpoints",

@@ -44,7 +44,8 @@ class LiquidMixtureCorrectionTest {
         assertThrows(IllegalArgumentException.class,()->model().logCorrection(300,new double[]{1,0,-1,0}));
     }
     @Test void transportEditChangesOnlyTransportAndNamesResourceOnError() {
-        String packageId="icheme:tjl20_methane",path="data/icheme/materials/packages/tjl20.json";
+        // The liquid-mixture correction is the crude method's: an edit there moves every crude package's transport alone.
+        String packageId="icheme:tjl20_methane",path="data/icheme/materials/methods/crude_pr78.json";
         var baseline=MaterialCatalog.bundled();var resources=new HashMap<>(baseline.resources());
         resources.keySet().removeIf(key->key.contains("/networks/")); // Isolated column transport override, not a shared network preset.
         var record=JsonParser.parseString(resources.get(path)).getAsJsonObject();

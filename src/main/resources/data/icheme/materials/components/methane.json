@@ -4,6 +4,7 @@
   "kind": "chemical",
   "translation_key": "material.icheme.methane",
   "fallback": "Methane",
+  "properties": "icheme:tjl20_methane",
   "appearance": {
     "color": "#F3F4EA",
     "transparency": 0.85,

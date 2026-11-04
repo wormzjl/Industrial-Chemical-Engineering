@@ -23,7 +23,7 @@ class V3StageContinuationTest {
     @Test
     void acceptedFourStageRealCrudeProfileCanSeedAFreshEightStageCorrection() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
         V3SimultaneousColumnSolver.Attempt.Converged acceptedFourStage = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
@@ -53,7 +53,7 @@ class V3StageContinuationTest {
     @Test
     void certifiedEightStageRealCrudeProfileCanSeedAFreshFifteenStageCorrection() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
         V3SimultaneousColumnSolver.Attempt.Converged convergedFourStage = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
@@ -81,7 +81,7 @@ class V3StageContinuationTest {
     @Test
     void certifiedFifteenStageRealCrudeProfileCanSeedAFreshThirtyStageCorrection() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
         V3SimultaneousColumnSolver.Attempt.Converged convergedFourStage = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,

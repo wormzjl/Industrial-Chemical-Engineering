@@ -3,6 +3,5 @@
   "id": "icheme:tia_juana_light_methane",
   "kind": "fluid",
   "label": "Tia Juana Light",
-  "package": "icheme:tjl20_methane",
   "assay": "icheme:tia_juana_light_methane"
 }

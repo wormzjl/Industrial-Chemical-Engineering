@@ -206,7 +206,7 @@ class V3SideDrawCalculatorTest {
 
     static V3ColumnInput canonicalInput(double pressure) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] feed = crude.moleFractions();
         for (int i = 0; i < feed.length; i++) feed[i] *= 2610.7 / 3.6;
         return new V3ColumnInput(1, crude.packageId(), crude.assayId(), crude.componentBasis(), feed,

@@ -245,12 +245,12 @@ class GroupContributionInteractionsTest {
         refused(INTERACTIONS, o -> o.getAsJsonObject("rule").addProperty("type", "ppr78"), "rule.type: expected eppr78");
         refused(INTERACTIONS, o -> o.getAsJsonObject("rule").addProperty("group_interactions", "icheme:eppr78_2017"),
                 "rule.group_interactions: unresolved icheme:eppr78_2017");
-        // A rule on the constant interactions of the spine-less column and network packages.
+        // A rule in the pair library of the crude method, which takes the datasets' fits and no spines.
         refused("data/icheme/materials/interactions/tjl20.json", o -> {
             var rule = new JsonObject();
             rule.addProperty("type", "eppr78"); rule.addProperty("group_interactions", "icheme:eppr78_2022");
             o.add("rule", rule);
-        }, "the package declares no spine");
+        }, "this method takes no spines");
         // missing_interactions: error still refuses a pair neither listed nor resolvable (no rule).
         refused(INTERACTIONS, o -> o.remove("rule"), "Missing interaction: Nitrogen / Methane");
     }

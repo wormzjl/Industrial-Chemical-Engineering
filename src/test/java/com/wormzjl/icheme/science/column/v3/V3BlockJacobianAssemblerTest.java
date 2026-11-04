@@ -138,7 +138,7 @@ class V3BlockJacobianAssemblerTest {
     @EnumSource(value = V3CondenserPhaseBranch.class, names = {"TWO_PHASE", "LIQUID_ONLY"})
     void localStageBlocksMatchTheColoredReferenceForRealCrudeCondenserBranches(V3CondenserPhaseBranch branch) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnInput input = realCrudeInput(crude, 100_000.0);
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(input, branch);
         V3DryMeshState state = V3ColumnInitializer.initialize(
@@ -244,7 +244,7 @@ class V3BlockJacobianAssemblerTest {
     @Test
     void analyticStageBlocksMatchTheColoredReferenceOnAVaporOnlyCondenser() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
         double totalFlowMolPerSecond = 2_000.0 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlowMolPerSecond;
@@ -298,7 +298,7 @@ class V3BlockJacobianAssemblerTest {
 
     private static V3ColumnInput featuredInput(String feature) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
         double totalFlowMolPerSecond = 2_000.0 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlowMolPerSecond;
@@ -332,7 +332,7 @@ class V3BlockJacobianAssemblerTest {
     @Test
     void everyProbeOfTheRealCrudeFixtureDecodesAndEvaluatesBitwiseAsTheWholeVectorProbeDid() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnInput input = realCrudeInput(crude, 100_000.0);
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(input, V3CondenserPhaseBranch.TWO_PHASE);
         V3DryMeshState state = V3ColumnInitializer.initialize(
@@ -372,7 +372,7 @@ class V3BlockJacobianAssemblerTest {
     @Test
     void anInadmissibleProbeStepIsRefusedIdenticallyByBothDecodes() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(
                 realCrudeInput(crude, 100_000.0), V3CondenserPhaseBranch.TWO_PHASE);
         V3DryMeshState state = V3ColumnInitializer.initialize(

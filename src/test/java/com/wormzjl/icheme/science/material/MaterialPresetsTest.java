@@ -76,11 +76,13 @@ class MaterialPresetsTest {
     @Test void addingAQualifiedFixtureComponentAndMovingNitrogenNeedsNoFixedWidthEdits() {
         var original=MaterialCatalog.bundled();var resources=new HashMap<>(original.resources());
         var name=JsonParser.parseString(resources.get(ROOT+"components/nitrogen.json")).getAsJsonObject();
-        name.addProperty("id","Testgas");name.addProperty("fallback","Testgas");name.addProperty("translation_key","test.gas");resources.put(ROOT+"components/testgas.json",name.toString());
+        name.addProperty("id","Testgas");name.addProperty("fallback","Testgas");name.addProperty("translation_key","test.gas");name.addProperty("properties","test:testgas");
+        resources.put(ROOT+"components/testgas.json",name.toString());
         var property=JsonParser.parseString(resources.get(ROOT+"properties/nitrogen.json")).getAsJsonObject();
         property.addProperty("id","test:testgas");property.addProperty("component","Testgas");property.addProperty("source","Synthetic structural fixture using nitrogen reference data");resources.put(ROOT+"properties/testgas.json",property.toString());
-        var basis=JsonParser.parseString(resources.get(ROOT+"bases/network.json")).getAsJsonObject();
-        basis.add("components",new Gson().toJsonTree(List.of("Testgas","Nitrogen")));basis.add("properties",new Gson().toJsonTree(List.of("test:testgas","icheme:fluid_nitrogen")));resources.put(ROOT+"bases/network.json",basis.toString());
+        // The network package lists a new compound before nitrogen: the package names compounds, each brings its dataset.
+        var network=JsonParser.parseString(resources.get(ROOT+"packages/tjl20_nitrogen.json")).getAsJsonObject();
+        network.add("components",new Gson().toJsonTree(List.of("Testgas","Nitrogen")));resources.put(ROOT+"packages/tjl20_nitrogen.json",network.toString());
         var changed=MaterialCatalog.parse(resources);String pkg=FluidMaterialCatalog.networkPackage(changed);var axis=changed.requirePackage(pkg).components();
         assertEquals(original.requirePackage(pkg).components().size()+1,axis.size());
         var nitrogen=FluidDeviceSpec.nitrogen(changed);assertEquals(1,nitrogen.composition()[axis.indexOf("Nitrogen")]);assertEquals(0,nitrogen.composition()[axis.indexOf("Testgas")]);

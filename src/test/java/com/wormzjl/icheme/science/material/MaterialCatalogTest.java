@@ -74,11 +74,28 @@ class MaterialCatalogTest {
             return parts;
         };
         for(var o:records.get("packages").values()) {
-            String id=o.get("id").getAsString(),water=o.get("water_model").getAsString();var interactions=records.get("interactions").get(o.get("interactions").getAsString());
-            var properties=propertyReferences(o,records.get("bases"));
-            var parts=new ArrayList<>(List.of(declared.apply("packages",id),"properties="+String.join(",",properties.stream().map(ref->declared.apply("properties",ref)).toList()),
-                    "interactions="+declared.apply("interactions",interactions.get("id").getAsString())));
-            if(interactions.has("rule"))parts.add("group-interactions="+declared.apply("group_interactions",interactions.getAsJsonObject("rule").get("group_interactions").getAsString()));
+            String id=o.get("id").getAsString();var method=records.get("methods").get(o.get("method").getAsString());String water=method.get("water_model").getAsString();
+            var members=members(o,records.get("packages"),records.get("components"));
+            var components=members.stream().map(member->member[0]).toList();var properties=members.stream().map(member->member[1]).toList();
+            // The method's pair libraries in order, each listed when it gives a pair of the package's compounds that no earlier
+            // one gave; the group-contribution rule's library when a pair is left for it.
+            var seen=new HashSet<String>();var libraries=new ArrayList<String>();String rule=null,groups=null;
+            for(var name:method.getAsJsonArray("interactions")) {
+                var library=records.get("interactions").get(name.getAsString());boolean gave=false;
+                for(var value:library.getAsJsonArray("pairs")) {
+                    String a=value.getAsJsonObject().get("first").getAsString(),b=value.getAsJsonObject().get("second").getAsString();
+                    if(components.contains(a)&&components.contains(b)&&seen.add(a.compareTo(b)<0?a+"/"+b:b+"/"+a))gave=true;
+                }
+                if(gave)libraries.add(declared.apply("interactions",name.getAsString()));
+                if(library.has("rule"))rule=name.getAsString();
+            }
+            if(rule!=null&&seen.size()<components.size()*(components.size()-1)/2) {
+                String token=declared.apply("interactions",rule);if(!libraries.contains(token))libraries.add(token);
+                groups=declared.apply("group_interactions",records.get("interactions").get(rule).getAsJsonObject("rule").get("group_interactions").getAsString());
+            }
+            var parts=new ArrayList<>(List.of(declared.apply("packages",id),"method="+declared.apply("methods",method.get("id").getAsString()),
+                    "properties="+String.join(",",properties.stream().map(ref->declared.apply("properties",ref)).toList()),"interactions="+String.join(",",libraries)));
+            if(groups!=null)parts.add("group-interactions="+groups);
             parts.add("water="+declared.apply("water",water));
             String identity=String.join(";",parts);
             assertEquals(identity,catalog.requirePackage(id).scientificRevision(),id);
@@ -89,13 +106,16 @@ class MaterialCatalogTest {
                     +";fluid-data="+String.join(",",transport),catalog.fluidRevision(id),id);
         }
     }
-    /** A package's property references: its own list or its basis's, a basis extending its parent's. */
-    private static List<String> propertyReferences(JsonObject record,Map<String,JsonObject> bases) {
-        if(record.has("basis"))return propertyReferences(bases.get(record.get("basis").getAsString()),bases);
-        var references=new ArrayList<String>();
-        if(record.has("extends"))references.addAll(propertyReferences(bases.get(record.get("extends").getAsString()),bases));
-        for(var reference:record.getAsJsonArray("properties"))references.add(reference.getAsString());
-        return references;
+    /** A package's compounds and their datasets: its parent's first, then its own, each its default dataset unless the entry names one. */
+    private static List<String[]> members(JsonObject record,Map<String,JsonObject> packages,Map<String,JsonObject> components) {
+        var members=new ArrayList<String[]>();
+        if(record.has("extends"))members.addAll(members(packages.get(record.get("extends").getAsString()),packages,components));
+        for(var entry:record.getAsJsonArray("components")) {
+            String component=entry.isJsonObject()?entry.getAsJsonObject().get("id").getAsString():entry.getAsString();
+            var named=entry.isJsonObject()?entry.getAsJsonObject().get("properties"):null;
+            members.add(new String[]{component,named!=null?named.getAsString():components.get(component).get("properties").getAsString()});
+        }
+        return members;
     }
     /**
      * Only the fluid network reads viscosities, so a viscosity edit, declared with the viscosity's own revision, moves the
@@ -141,15 +161,26 @@ class MaterialCatalogTest {
         duplicate.put(ROOT+"components/duplicate.json",duplicate.get(ROOT+"components/ethane.json"));
         assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(duplicate));
         assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed("properties/crude_pc07.json",o->o.addProperty("component","Missing"))));
-        assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed("packages/tjl20.json",o->o.getAsJsonObject("aliases").addProperty("Ethane","Methane"))));
-        assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed("packages/tjl20.json",o->o.addProperty("missing_interactions","error"))));
+        // Aliases are catalog-wide, on the compounds: one alias for two compounds, or an alias that is a compound's id, is refused.
+        var ambiguous=changed("components/methane.json",o->o.add("aliases",JsonParser.parseString("[\"C1\"]")));
+        var ethane=JsonParser.parseString(ambiguous.get(ROOT+"components/ethane.json")).getAsJsonObject();ethane.add("aliases",JsonParser.parseString("[\"C1\"]"));
+        ambiguous.put(ROOT+"components/ethane.json",ethane.toString());
+        assertTrue(assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(ambiguous)).getMessage().contains("names two components"));
+        assertTrue(assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed("components/methane.json",o->o.add("aliases",JsonParser.parseString("[\"Ethane\"]")))))
+                .getMessage().contains("is itself a component id"));
+        // The error policy is the method's: the crude packages' methane pairs are not in their library.
+        assertTrue(assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed("methods/crude_pr78.json",o->o.addProperty("missing_interactions","error"))))
+                .getMessage().contains("Missing interaction"));
+        // A package names its method and compounds; a field of the method on it is refused, never silently read.
+        var moved=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed("packages/tjl20.json",o->o.addProperty("water_model","icheme:water"))));
+        assertTrue(moved.getMessage().contains("packages/tjl20.json")&&moved.getMessage().contains("water_model"),moved.getMessage());
     }
     @Test void massAssaysConvertUsingSelectedMolecularWeightsAndVolumeReferencesAreChecked() {
         var original=MaterialCatalog.bundled();var p=original.requirePackage(ID);var assay=p.assays().get("icheme:tia_juana_light_methane");
         var resources=changed("assays/tjl20.json",o->{
-            o.addProperty("basis","mass");var mass=new JsonArray();
-            for(int i=0;i<p.components().size();i++)mass.add(assay.amounts().get(i)*p.properties().get(i).molecularWeight());
-            o.remove("amounts_by_component");o.add("components",new Gson().toJsonTree(p.components()));o.add("amounts",mass);
+            o.addProperty("basis","mass");var mass=new JsonObject();
+            for(int i=0;i<p.components().size();i++)mass.addProperty(p.components().get(i),assay.amounts().get(i)*p.properties().get(i).molecularWeight());
+            o.add("amounts_by_component",mass);
         });
         var changed=MaterialCatalog.parse(resources);
         double[] expected=V3PengRobinsonThermo.fromRegisteredPackage(ID).crudeFeed(assay.id()).moleFractions();
@@ -164,11 +195,14 @@ class MaterialCatalogTest {
                  "pairs":[{"first":"Ethane","second":"Propane","a12":1,"b12_kelvin":100,"a21":2,"b21_kelvin":200,
                  "alpha":0.3,"temperature_min_kelvin":298.15,"temperature_max_kelvin":900}]}
                 """);
-        var p=JsonParser.parseString(r.get(ROOT+"packages/tjl19.json")).getAsJsonObject();
-        p.remove("basis");p.addProperty("id","example:nrtl");p.addProperty("model","nrtl");p.addProperty("interactions","example:nrtl");p.addProperty("missing_interactions","error");
-        p.add("components",JsonParser.parseString("[\"Ethane\",\"Propane\"]"));
-        p.add("properties",JsonParser.parseString("[\"icheme:tjl19_ethane\",\"icheme:tjl19_propane\"]"));p.add("aliases",new JsonObject());
-        r.put(ROOT+"packages/nrtl.json",p.toString());
+        r.put(ROOT+"methods/nrtl.json","""
+                {"schema_version":1,"id":"example:nrtl_method","revision":"example-nrtl-method-r1","model":"nrtl","ideal_gas":"fit",
+                 "interactions":["example:nrtl"],"missing_interactions":"error","water_model":"icheme:water",
+                 "pressure_min_pascal":1000,"pressure_max_pascal":2000000}
+                """);
+        r.put(ROOT+"packages/nrtl.json","""
+                {"schema_version":1,"id":"example:nrtl","revision":"example-nrtl-r1","method":"example:nrtl_method","components":["Ethane","Propane"]}
+                """);
         var c=MaterialCatalog.parse(r);var pair=c.requirePackage("example:nrtl").nrtlPairs().getFirst();
         assertEquals(100,pair.b12());assertEquals(200,pair.b21());
         var error=assertThrows(IllegalArgumentException.class,()->MaterialRuntime.with(c,"example:nrtl",()->V3PengRobinsonThermo.fromRegisteredPackage("example:nrtl")));

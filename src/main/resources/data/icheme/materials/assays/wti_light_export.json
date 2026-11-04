@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
   "id": "icheme:wti_light_export",
-  "package": "icheme:tjl20_methane",
   "basis": "mass",
   "provenance": {
     "source_reference": "WTLEX26Y",
@@ -18,13 +17,13 @@
     "source_whole_crude": {
       "density_15c_kg_per_m3": 790.6,
       "sulfur_mass_percent": 0.07,
-      "nitrogen_mass_ppm": 113.0,
+      "nitrogen_mass_ppm": 113,
       "nickel_mass_ppm": 0.1,
       "vanadium_mass_ppm": 0.1,
-      "iron_mass_ppm": 1.0,
+      "iron_mass_ppm": 1,
       "sodium_mass_ppm": 0.1,
-      "mercury_mass_ppb": 1.0,
-      "arsenic_mass_ppb": 5.0
+      "mercury_mass_ppb": 1,
+      "arsenic_mass_ppb": 5
     },
     "residual_mass_rounding_scale": 1.001377994488022,
     "tail": {
@@ -32,7 +31,7 @@
       "estimated_above_celsius": 590,
       "scale_celsius": 61.55999999999989,
       "remaining_at_590_volume_percent": 2.5,
-      "residue_550_plus_mean_celsius": 619.0,
+      "residue_550_plus_mean_celsius": 619,
       "estimated_mass_percent_above_590": 2.86980278908153
     }
   },

@@ -3,6 +3,5 @@
   "id": "icheme:wti_light_export",
   "kind": "fluid",
   "label": "WTI Light Export",
-  "package": "icheme:tjl20_methane",
   "assay": "icheme:wti_light_export"
 }

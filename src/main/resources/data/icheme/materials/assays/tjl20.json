@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
   "id": "icheme:tia_juana_light_methane",
-  "package": "icheme:tjl20_methane",
   "basis": "mole",
   "appearance": {
     "color": "#45301E",

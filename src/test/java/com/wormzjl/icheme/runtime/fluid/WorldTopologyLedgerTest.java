@@ -106,11 +106,11 @@ class WorldTopologyLedgerTest {
     // The fluid basis (merged from FluidBasisTest).
     @org.junit.jupiter.api.AfterEach void resetMaterials(){com.wormzjl.icheme.science.material.MaterialRuntime.reset();}
     private static MaterialCatalog reordered() {
-        var resources=new HashMap<>(MaterialCatalog.bundled().resources());String path="data/icheme/materials/bases/network.json";
-        var basis=com.google.gson.JsonParser.parseString(resources.get(path)).getAsJsonObject();basis.remove("extends");
-        var original=MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane_nitrogen");
-        var ids=new ArrayList<>(original.components());var properties=new ArrayList<>(original.properties().stream().map(MaterialCatalog.Property::id).toList());
-        Collections.reverse(ids);Collections.reverse(properties);basis.add("components",new com.google.gson.Gson().toJsonTree(ids));basis.add("properties",new com.google.gson.Gson().toJsonTree(properties));resources.put(path,basis.toString());
+        // The network package's own compound list, reversed: each compound keeps its default dataset.
+        var resources=new HashMap<>(MaterialCatalog.bundled().resources());String path="data/icheme/materials/packages/tjl20_nitrogen.json";
+        var record=com.google.gson.JsonParser.parseString(resources.get(path)).getAsJsonObject();record.remove("extends");
+        var ids=new ArrayList<>(MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane_nitrogen").components());
+        Collections.reverse(ids);record.add("components",new com.google.gson.Gson().toJsonTree(ids));resources.put(path,record.toString());
         return MaterialCatalog.parse(resources);
     }
     @Test void topologyWithoutAnyIslandStillRejectsAChangedIdentityAxis() {

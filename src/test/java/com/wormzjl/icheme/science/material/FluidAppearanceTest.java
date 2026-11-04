@@ -32,7 +32,9 @@ class FluidAppearanceTest {
         }
         assertEquals(0x171615, catalog.assayAppearance(PACKAGE, "icheme:cold_lake_blend").rgb());
         assertThrows(IllegalArgumentException.class, () -> catalog.componentAppearance(PACKAGE, "Unknown"));
-        assertThrows(IllegalArgumentException.class, () -> catalog.assayAppearance("icheme:tjl20_methane_nitrogen", "icheme:cold_lake_blend"));
+        // An assay applies to every package that holds its compounds; the pilot holds no crude fraction.
+        assertEquals(0x171615, catalog.assayAppearance("icheme:tjl20_methane_nitrogen", "icheme:cold_lake_blend").rgb());
+        assertThrows(IllegalArgumentException.class, () -> catalog.assayAppearance("icheme:pilot_cryogenic", "icheme:cold_lake_blend"));
     }
 
     @Test void appearanceEditsPreserveThePackagesScienceAndTransport() {
