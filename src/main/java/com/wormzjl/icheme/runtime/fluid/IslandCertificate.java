@@ -382,7 +382,9 @@ public final class IslandCertificate {
                     d.integer(side.wall().length);for(double t:side.wall())d.real(t);d.real(side.bypass());d.real(side.giveBack());d.number(side.partner());d.real(side.active());
                     control(d,side.control());d.integer(side.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();d.integer(3);d.real(cooled.area());d.real(air.temperature());d.real(air.barePerFace());d.real(air.film());d.real(air.capacity());d.real(air.natural());
-                    d.real(cooled.draught());control(d,cooled.control());d.integer(cooled.limit().ordinal());}
+                    d.real(cooled.draught());control(d,cooled.control());d.integer(cooled.limit().ordinal());
+                    // Fans without power (W5): a held fan limit is part of the law, named only below 1 (older signatures stand).
+                    if(cooled.fanLimit()<1)d.real(cooled.fanLimit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{d.integer(4);d.real(coil.conductance());d.number(coil.radiant());d.real(coil.flue());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.number(coil.partner());d.real(coil.duty());d.real(coil.firing());}
             }

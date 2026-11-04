@@ -48,6 +48,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final ColumnOperation columns;
     /** The shaft trains (batch 2026-11-03-rotating-machinery W3): their parts' queued events, speeds and the islands' slice inputs. */
     private final ShaftTrains shafts;
+    /** The powered units' electric stores (W5). */
+    private final ElectricStores electric;
     /**
      * Queued topology events apply as one batch at the next tick's hook, or earlier when something reads what they
      * change (a view, a capture, a filter recovery). A run of events inside one tick (a command placing thousands of
@@ -117,6 +119,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         instruments=new com.wormzjl.icheme.runtime.instrument.InstrumentService(server,this,accessories);
         instruments.reconcileLegacyValves();
         shafts=new ShaftTrains(topology,registry::owner,runtime.coordinator());runtime.coordinator().shafts(shafts);shafts.host(new ShaftHost());
+        electric=new ElectricStores(topology,registry::owner,runtime.coordinator(),()->new ElectricStores.Settings(IChemE.joulesPerFE(),IChemE.machinesNeedPower()));shafts.electric(electric);
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
         registry.forEachChunk((name,chunk,devices)->{var level=server.getLevel(dimension(name));var at=new net.minecraft.world.level.ChunkPos(chunk);
@@ -285,6 +288,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The shaft trains (W3): queue their parts' events here; their views are reads. */
     public ShaftTrains shafts(){owned();return shafts;}
+    /** The electric stores (W5): the FE ports' side and their views are reads and the FE protocol only. */
+    public ElectricStores electric(){owned();return electric;}
     /**
      * A shaft-driven machine (batch 2026-11-03-rotating-machinery W3): a pump or compressor casing on its curve
      * ({@code FlowControl.Machine}), a reciprocating frame ({@code Compressor}) or a steam turbine (kind {@code TURBINE},
@@ -602,8 +607,35 @@ public final class FluidWorldAuthority implements AutoCloseable {
         presentation.tick(topology.onlineTick());
         // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
         if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
+        // The electric stores at the presentation cadence (W5, readings A60, A62): booking at rest, restarts, the facts handed over.
+        if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();}
+        // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
+        pushGenerators();
         com.wormzjl.icheme.network.AssemblyNetwork.presentationTick(server, topology.onlineTick());
         data.setDirty();
+    }
+    /**
+     * Each charged generator's port pushes FE to the receivers on the six faces of its terminal cell (W5, reading A65): the
+     * FE protocol, moving stored FE only, where the terminal cell is loaded. The terminal is found through the cell of the
+     * generator's first shaft end, which is its structure's.
+     */
+    private void pushGenerators() {
+        var charged=electric.charged();if(charged.isEmpty())return;
+        for(long id:charged) {
+            var u=topology.shaft(id);if(u==null||u.ends().isEmpty())continue;
+            var end=u.ends().getFirst().cell();var level=server.getLevel(dimension(end.dimension()));if(level==null)continue;
+            var at=new BlockPos(end.x(),end.y(),end.z());
+            if(!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||shell.shape()==null||shell.origin()==null)continue;
+            var t=com.wormzjl.icheme.science.equipment.ShapeRasterizer.terminal(shell.shape());if(t==null)continue;
+            var terminal=shell.origin().offset(t.x(),t.y(),t.z());
+            for(var face:net.minecraft.core.Direction.values()) {
+                var beside=terminal.relative(face);if(!level.isLoaded(beside))continue;
+                var sink=level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,beside,face.getOpposite());
+                if(sink==null||!sink.canReceive())continue;
+                int offer=electric.extract(id,Integer.MAX_VALUE,true);if(offer<=0)break;
+                int taken=sink.receiveEnergy(offer,false);if(taken>0)electric.extract(id,taken,false);
+            }
+        }
     }
     /** Attempted when a recovery is queued and on its retry deadline, never polled; delivery stays exactly-once. */
     private void deliverRecoveries(){
@@ -926,7 +958,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public FluidSavedData.Capture capture() {
         owned();flush();var islands=new ArrayList<FluidCheckpointCodec.IslandEntry>();
         // Materialised first: a certified side's replay books its heat in transit, which the facts then carry.
-        var snapshots=runtime.coordinator().snapshots();var world=topology.snapshot().withHeatTransits(runtime.coordinator().transits());
+        var snapshots=runtime.coordinator().snapshots();electric.flush();var world=topology.snapshot().withHeatTransits(runtime.coordinator().transits());
         for(var snapshot:snapshots) {
             if(registry.members(snapshot.id()).isEmpty())throw new IllegalStateException("Fluid island "+snapshot.id()+" holds no device; refusing to save it");
             String dimension=world.active().get(registry.members(snapshot.id()).getFirst()).device().position().dimension();
@@ -973,7 +1005,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return switch(why) {
             case NONE->"";
             case LOWEST->fans?"LIMITED: the louvers are shut / ":"LIMITED: the bypass is fully open / ";
-            case HIGHEST->fans?"LIMITED: the fans run at full speed / ":"LIMITED: the bypass is closed / ";
+            case HIGHEST->fans?((com.wormzjl.icheme.science.fluid.network.AirCooled)law).fanLimit()<1?"LIMITED: NO POWER, natural draught / ":"LIMITED: the fans run at full speed / ":"LIMITED: the bypass is closed / ";
             case LOW_LIMIT->String.format(java.util.Locale.ROOT,"LOW LIMIT: the outlet is held at %.1f K / ",unit==null?0:unit.control().lowLimit());
         };
     }
@@ -1075,6 +1107,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             view=view.withTower(new FluidView.Tower(registration.spec().tower(),rates));
             if(rates!=null&&!rates.status().equals("RUNNING"))view=view.withStatus(view.status()+" / "+rates.status());
         }
+        // A fan unit's power (W5, reading A68): NO POWER, the notice UNMETERED, or its electric draw and store.
+        var power=electric.line(id);if(!power.isEmpty())view=view.withStatus(view.status()+" / "+power);
         // A heat side (batch 2026-10-27-heat-exchanger-design): its outlet junction's temperature, the heat its HEAT boundaries
         // booked over the interval, an air cooler's fans and an exchanger side's bypass as planned, a fired heater's burners,
         // set point and most heat.

@@ -51,6 +51,8 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue COLUMN_V3_LIQUID_SUPPLY_SCREEN_RATIO;
     private static final ModConfigSpec.ConfigValue<String> EQUIPMENT_PRIMARY_COLOUR, EQUIPMENT_SECONDARY_COLOUR;
     private static final ModConfigSpec.DoubleValue EQUIPMENT_SHEEN;
+    private static final ModConfigSpec.DoubleValue ENERGY_JOULES_PER_FE;
+    private static final ModConfigSpec.BooleanValue ENERGY_MACHINES_NEED_POWER;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -150,6 +152,13 @@ public final class IChemE {
                         "Read when the models are baked: restart the client or reload resources (F3+T) after a change.")
                 .defineInRange("metallicSheen", 0.2, 0.0, 0.4);
         builder.pop();
+        // Electricity (batch 2026-11-03-rotating-machinery W5, reading A66).
+        builder.push("energy");
+        ENERGY_JOULES_PER_FE = builder.comment("Joules per forge energy unit (FE). Motors, fans and generators convert their watts at this rate; stores keep joules, so a change keeps the energy they hold. Default 2.5, Mekanism's joule.")
+                .defineInRange("joulesPerFE", 2.5, 0.01, 1e6);
+        ENERGY_MACHINES_NEED_POWER = builder.comment("Whether motors, air cooler fans and cooling tower fans need FE at their terminal box. False: nothing is drawn, nothing stops for want of power, and the ports still accept FE (a pack without energy mods).")
+                .define("machinesNeedPower", true);
+        builder.pop();
         CONFIG_SPEC = builder.build();
     }
 
@@ -163,6 +172,7 @@ public final class IChemE {
         modEventBus.addListener(com.wormzjl.icheme.network.FluidNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.EquipmentNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.AssemblyNetwork::register);
+        modEventBus.addListener(IChemE::registerCapabilities);
         modContainer.registerConfig(ModConfig.Type.COMMON, CONFIG_SPEC, "icheme-common.toml");
         // The client's own settings (the process screens' panel theme); a dedicated server never loads them.
         modContainer.registerConfig(ModConfig.Type.CLIENT, com.wormzjl.icheme.client.ClientConfig.SPEC, "icheme-client.toml");
@@ -180,6 +190,10 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onFluidChunkLoaded);
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
         gameEventBus.addListener(IChemE::onLevelTickPost);
+    }
+    /** The FE port of a structure's terminal box (W5): the shell block entity's energy capability, on its terminal cell only. */
+    private static void registerCapabilities(net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.energy());
     }
     /** The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves). */
     private static void onLevelTickPost(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
@@ -199,6 +213,16 @@ public final class IChemE {
                 var loaded=server.getLevel(dimension);if(loaded!=null)com.wormzjl.icheme.runtime.assembly.AssemblyService.chunkLoaded(loaded,new net.minecraft.world.level.ChunkPos(chunk));
             }));
         }
+    }
+
+    /** Joules per FE (W5; default 2.5 before the config loads). */
+    public static double joulesPerFE() {
+        return CONFIG_SPEC.isLoaded() ? ENERGY_JOULES_PER_FE.get() : 2.5;
+    }
+
+    /** Whether machines need FE (W5; default true before the config loads). */
+    public static boolean machinesNeedPower() {
+        return !CONFIG_SPEC.isLoaded() || ENERGY_MACHINES_NEED_POWER.get();
     }
 
     /** The equipment's metallic sheen, 0 to 0.4 (0: none; default 0.2). */

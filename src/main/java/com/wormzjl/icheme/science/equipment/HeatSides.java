@@ -215,6 +215,11 @@ public final class HeatSides {
      * still, 0.63, 0.65 and 0.29.
      */
     public static HeatCurve.Films airFilms(double fans){return AIR.films(AIR.draught(fans));}
+    /** An air cooler's fans, each on its own motor (batch 2026-11-03-rotating-machinery W5, reading A70): its bays' fans as drawn; 0 for another kind. */
+    public static int fans(EquipmentShape shape) {
+        if(shape.kind()!=EquipmentShape.Kind.AIR_COOLER)return 0;
+        return shape.bank().bays()*ProcessUnit.fans(shape.diameter(),shape.tangentLength()).count();
+    }
     /** An air cooler's fan power, W, over bare tube surface {@code area} (m²) with its fans at {@code fans} of full speed (the fan laws: the cube of the speed). */
     public static double fanPower(double area,double fans){return FAN_POWER*area/BARE_PER_FACE*fans*fans*fans;}
 }

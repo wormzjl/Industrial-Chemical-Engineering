@@ -335,6 +335,19 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         box = new int[]{shape.sizeX(), shape.sizeY(), shape.sizeZ()};
         setChanged();
         trackRoof();
+        // The cell may have become (or stopped being) a terminal box (W5): cached FE ports look again.
+        if (level != null && !level.isClientSide()) level.invalidateCapabilities(worldPosition);
+    }
+
+    /**
+     * This cell's FE port (batch 2026-11-03-rotating-machinery W5, readings A56, A57): on every face of its structure's
+     * terminal cell, receive-only for a consumer, extract-only for a generator; null on any other cell and on the client.
+     */
+    public net.neoforged.neoforge.energy.@Nullable IEnergyStorage energy() {
+        if (shape == null || !(level instanceof ServerLevel server)) return null;
+        var terminal = ShapeRasterizer.terminal(shape);
+        if (terminal == null || !terminal.equals(cell())) return null;
+        return new TerminalEnergy(server, this);
     }
 
     /**

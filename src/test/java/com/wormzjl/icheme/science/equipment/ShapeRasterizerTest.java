@@ -18,6 +18,47 @@ import static com.wormzjl.icheme.science.equipment.EquipmentShape.drum;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ShapeRasterizerTest {
+    /**
+     * W5 (batch 2026-11-03-rotating-machinery, reading A58): an air cooler's and an induced-draft tower's terminal box, its
+     * FE port, is a cell of its layout at grade on an outside face, with one free block between it and every nozzle's pipe
+     * block, in every size, bank and heading.
+     */
+    @Test
+    void aFanUnitsTerminalIsAnOutsideCellAtGradeClearOfItsNozzles() {
+        var shapes = new java.util.ArrayList<EquipmentShape>();
+        for (var heading : Heading.values()) {
+            var cooler = UnitDesign.of(Kind.AIR_COOLER);
+            for (double d : new double[]{cooler.minSize(), cooler.maxSize()})
+                for (var bank : List.of(ProcessUnit.Bank.ONE, new ProcessUnit.Bank(3, 2), new ProcessUnit.Bank(ProcessUnit.Bank.MAX_PARALLEL, ProcessUnit.Bank.MAX_SERIES))) {
+                    int length = cooler.defaultLength(d);
+                    shapes.add(EquipmentShape.designed(Kind.AIR_COOLER, d, length, heading, cooler.defaultSupport(d, length), bank));
+                }
+            var tower = UnitDesign.of(Kind.INDUCED_DRAFT_COOLING_TOWER);
+            for (double d : new double[]{tower.minSize(), tower.maxSize()})
+                for (var bank : List.of(TowerBank.ONE, new TowerBank(3, 2)))
+                    shapes.add(EquipmentShape.designed(Kind.INDUCED_DRAFT_COOLING_TOWER, d, tower.defaultLength(d), heading, 0, ProcessUnit.Bank.ONE).withTowerBank(bank));
+        }
+        for (var shape : shapes) {
+            var terminal = ShapeRasterizer.terminal(shape);
+            assertNotNull(terminal, shape.toString());
+            var layout = ShapeRasterizer.layout(shape);
+            var occupied = new HashSet<ShapeRasterizer.Cell>(layout.shell());
+            occupied.addAll(layout.interior());
+            assertTrue(layout.shell().contains(terminal), shape + ": its terminal " + terminal + " is a shell cell");
+            assertEquals(0, terminal.y(), shape + ": at grade");
+            boolean outside = false;
+            for (int[] d : new int[][]{{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}})
+                outside |= !occupied.contains(new ShapeRasterizer.Cell(terminal.x() + d[0], terminal.y(), terminal.z() + d[2]));
+            assertTrue(outside, shape + ": on an outside face");
+            for (var port : ShapeRasterizer.ports(shape)) {
+                int dx = Math.abs(terminal.x() - port.cell().x() - port.dx()), dy = Math.abs(terminal.y() - port.cell().y() - port.dy()), dz = Math.abs(terminal.z() - port.cell().z() - port.dz());
+                assertTrue(Math.max(dx, Math.max(dy, dz)) >= 2, shape + ": a free block between its terminal and a nozzle's pipe");
+            }
+        }
+        assertNull(ShapeRasterizer.terminal(EquipmentShape.designed(Kind.NATURAL_DRAFT_COOLING_TOWER, 40, com.wormzjl.icheme.science.fluid.network.CoolingTower.naturalHeight(40), Heading.NORTH, 0, ProcessUnit.Bank.ONE)),
+                "a natural-draught tower has no fans");
+    }
+
     @Test
     void aDedicatedServerLaysOutKeysAndCollidesWithoutFacets() {
         // ShapeRasterizer.serverOnly (2026-10-16): a dedicated server drops a geometry's facets once it is laid out. Its

@@ -99,7 +99,27 @@ class FluidFactsCompatTest {
             FluidDeviceSpec.water(CATALOG).composition(),SlurryFeed.NONE,CoolingTower.BASIN_DEPTH,true).withTower(tower),.05);
         world.runTo(800);
         shafts(world);
-        world.runTo(820);return world;
+        world.runTo(820);
+        stores(world);
+        world.runTo(840);return world;
+    }
+    /**
+     * Facts schema 11 (batch 2026-11-03-rotating-machinery W5): an air cooler side with its four fans, and the electric
+     * stores: the 30 kW motor's metered and part full, the 1 MW motor's metered and empty, the tower's unmetered (a store
+     * from a save before W5, owner decision A73) with what it took before it was metered (none).
+     */
+    private void stores(EventPathWorld world) {
+        long cooler=world.ledger.nextIdentity();var spec=FluidDeviceSpec.nitrogen(CATALOG);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(cooler,new WorldTopologyLedger.Registration(heatSide(cooler,70,0,HeatSides.airCoolerPassage(3,6,com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE),
+                new HeatUnit(HeatSides.Unit.AIR_COOLER,HeatSides.Side.PROCESS,120,0).withFans(4)),spec,0))),cooler+1,null);
+        world.runTo(830);
+        var stores=new HashMap<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts>();
+        var motors=world.ledger.shafts().values().stream().filter(u->u.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR).sorted(Comparator.comparingLong(ShaftUnit::id)).toList();
+        stores.put(motors.get(0).id(),new com.wormzjl.icheme.science.machine.ElectricStore.Facts(4.5e5,true));
+        stores.put(motors.get(1).id(),com.wormzjl.icheme.science.machine.ElectricStore.Facts.EMPTY);
+        stores.put(cooler,new com.wormzjl.icheme.science.machine.ElectricStore.Facts(1234.5,true));
+        for(var r:world.ledger.active().values())if(r.spec().tower()!=null)stores.put(r.device().id(),com.wormzjl.icheme.science.machine.ElectricStore.Facts.UNMETERED);
+        world.ledger.stores(stores);
     }
     /**
      * Facts schema 10 (batch 2026-11-03-rotating-machinery W3): a pump casing on its curve driven by a 30 kW motor over
@@ -411,6 +431,10 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("columns",""),columns(ledger),folder+": column units");
                 // Schema 10 wrote the machines on their curves, turbines, governor valves and shaft units; an older image reads none.
                 assertEquals(expected.getProperty("shafts",""),shafts(ledger),folder+": shaft units");
+                // Schema 11 wrote the electric stores; an older image reads an unmetered, empty store for each powered unit.
+                if(expected.getProperty("stores")!=null)assertEquals(expected.getProperty("stores"),stores(ledger),folder+": electric stores");
+                if(expected.getProperty("stores")==null)for(var e:ledger.stores().entrySet())assertEquals(com.wormzjl.icheme.science.machine.ElectricStore.Facts.UNMETERED,e.getValue(),folder+": store "+e.getKey());
+                if(expected.getProperty("stores")==null)assertEquals(ledger.active().values().stream().filter(ElectricStores::powered).count()+ledger.shafts().values().stream().filter(ElectricStores::powered).count(),ledger.stores().size(),folder+": a store for each powered unit");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
@@ -542,6 +566,7 @@ class FluidFactsCompatTest {
         props.setProperty("suspended",Long.toString(suspended(loaded.world().orElseThrow())));
         props.setProperty("columns",columns(loaded.world().orElseThrow()));
         props.setProperty("shafts",shafts(loaded.world().orElseThrow()));
+        props.setProperty("stores",stores(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
@@ -554,6 +579,8 @@ class FluidFactsCompatTest {
             if(!text.isEmpty())text.append(";");
             text.append(r.device().id()).append(":").append(g.channels());
             if(h!=null)text.append(":").append(h.unit()).append(":").append(h.side()).append(":").append(h.area()).append(":").append(h.partner()).append(":").append(h.control()).append(":").append(h.transitJoule());
+            // Schema 11: an air cooler's fans, written only where known, as an older image has none.
+            if(h!=null&&h.fanCount()>0)text.append(":fans=").append(h.fanCount());
         }
         return text.toString();
     }
@@ -591,6 +618,17 @@ class FluidFactsCompatTest {
             if(!u.settings().equals(ShaftUnit.Settings.DEFAULT))units.append("[").append(u.settings().mode()).append(" ").append(u.settings().setPoint()).append(" ").append(u.settings().powerLimit()).append(" ").append(u.settings().ratio()).append("]");
         }
         return "machines="+machines+";turbines="+turbines+";speedValves="+speedValves+";trips="+trips+";units="+units;
+    }
+    /**
+     * What schema 11 carries (W5): every electric store, by unit, as {@code id=joules/metered}.
+     */
+    private static String stores(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var e:new TreeMap<>(world.stores()).entrySet()) {
+            if(!text.isEmpty())text.append(";");
+            text.append(e.getKey()).append("=").append(e.getValue().joules()).append("/").append(e.getValue().metered());
+        }
+        return text.toString();
     }
     private static long controlValves(WorldTopologyLedger.Snapshot world){return world.active().values().stream().filter(r->r.device().control() instanceof FlowControl.ControlValve).count();}
     private static FluidCheckpointCodec.Image read(Path folder) throws IOException {

@@ -459,7 +459,7 @@ class ProcessUnitTest {
      * Batch 2026-11-03-rotating-machinery (W4): every machine's shaft end has its coupling's half in the machine and a
      * free block beyond its coupling face for the shaft block, level, off the ground and a block clear of every nozzle's
      * pipe; a gearbox has its input and its output, every other machine one end. A motor's and a generator's terminal box
-     * lies in the machine; no other kind has one.
+     * lies in the machine; an air cooler and an induced-draft tower have one too (W5); no other kind has one.
      */
     @Test
     void everyShaftEndMeetsAFreeBlockForItsShaft() {
@@ -467,7 +467,7 @@ class ProcessUnitTest {
         for (var shape : everySize()) {
             var shafts = ShapeRasterizer.shafts(shape);
             var terminal = ShapeRasterizer.terminal(shape);
-            boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR;
+            boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER;
             assertEquals(electric, terminal != null, shape.toString());
             if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR) {
                 assertEquals(List.of(), shafts, shape.toString());

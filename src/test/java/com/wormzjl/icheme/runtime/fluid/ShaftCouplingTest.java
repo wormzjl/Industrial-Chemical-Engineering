@@ -16,6 +16,20 @@ import static org.junit.jupiter.api.Assertions.*;
  * ({@link IslandCoordinator#shaftsMoved}, a coupling wake). The governor valve walk finds the turbine's valve.
  */
 class ShaftCouplingTest {
+    /**
+     * A driver's state with no slice before it (NaN: none yet) saves and reads back (W5 found this: Writer.f64 refuses
+     * non-finite numbers, so a world with a started driver failed to save).
+     */
+    @Test void aDriverStateWithNoSliceBeforeItSavesAndReadsBack() {
+        var cell = new PhysicalFluidTopology.Position(EventPathWorld.DIM, 0, 66, 0);
+        var states = List.of(new ShaftUnit.State(2950, Double.NaN, Double.NaN), new ShaftUnit.State(2950, 2940, Double.NaN),
+                new ShaftUnit.State(1500, 1490, .8));
+        var units = new HashMap<Long, ShaftUnit>();
+        for (int i = 0; i < states.size(); i++) units.put(i + 1L, ShaftUnit.shaft(i + 1L, cell, 0).withState(states.get(i)));
+        byte[] data = FluidFacts.topologyState(List.of(), Map.of(), units);
+        var read = FluidFacts.topologyState(data, 0, data.length).shafts();
+        for (int i = 0; i < states.size(); i++) assertEquals(states.get(i), read.get(i + 1L), "state " + i);
+    }
     private final FluidThermodynamics model = FluidTestSupport.networkModel();
     private static final PipeResistance.Geometry FAT = new PipeResistance.Geometry(1, .1, PipeResistance.DEFAULT_ROUGHNESS_METRES, 0);
     private static final CentrifugalPump PUMP = new CentrifugalPump(.01, 50, .7);
@@ -138,6 +152,85 @@ class ShaftCouplingTest {
         double faster = rig.coordinator.observe(1).lastResult().orElseThrow().endpointFlows()[0];
         assertTrue(faster > 1.1 * flow, "full speed against the same static rise moves more: " + flow + " -> " + faster);
         assertTrue(before > 0);
+    }
+
+    private static PhysicalFluidTopology.Position cell(int x) {
+        return new PhysicalFluidTopology.Position(EventPathWorld.DIM, x, 64, 0);
+    }
+
+    /**
+     * W5 (build plan section 7.4): an 11 kW motor drives the pump at node 1 through a shaft. Built from W5 on, its store
+     * starts empty, so it stands (NO POWER) until its port is filled to one slice of its rated draw; it then runs, books
+     * its draw at its train's steps and on the cadence, runs short, stops (NO POWER, never saved as its trip) and restarts
+     * by itself on a refill.
+     */
+    @Test
+    void aMotorRunsShortTripsNoPowerAndRestartsOnARefill() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long first = ledger.reserve(3);
+        var fixed = com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED;
+        var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                11e3, 2950, 2, fixed, ShaftUnit.Settings.DEFAULT, trip, null));
+        ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
+        ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
+                0, 2950, 0, fixed, ShaftUnit.Settings.DEFAULT, trip, null));
+        var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
+        var stores = new ElectricStores(ledger, device -> device == 1 ? 1L : null, rig.coordinator, () -> ElectricStores.Settings.DEFAULT);
+        trains.electric(stores);
+        rig.coordinator.shafts(trains);
+        trains.host(ShaftTrains.Host.NONE);
+        rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line(), new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+        long motor = first;
+        double rated = com.wormzjl.icheme.science.machine.ElectricStore.motorDraw(11e3, 2, false);
+        int[] feed = {0};
+        Runnable tick = () -> {
+            rig.epoch[0]++;
+            rig.coordinator.tick();
+            rig.drain();
+            if (feed[0] > 0) stores.receive(motor, feed[0], false);
+            if (rig.epoch[0] % ElectricStores.CADENCE == 0) {
+                stores.cadence();
+                trains.cadence();
+            }
+        };
+        // Empty: the motor stands.
+        for (int i = 0; i < 300; i++) tick.run();
+        assertEquals("TRIPPED: NO POWER", trains.view(motor).status(), "a new store is empty");
+        assertEquals(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NO_POWER, trains.view(motor).trip());
+        assertEquals(trip, ledger.shaft(motor).trip(), "NO POWER is never the unit's saved trip");
+        assertEquals(0, trains.share(1), "the pump stands");
+        // A port filled at its full rate: the store passes one slice of rated draw and the motor restarts on the cadence.
+        feed[0] = Integer.MAX_VALUE;
+        assertEquals(stores.receive(motor, Integer.MAX_VALUE, true), (int) Math.floor(2 * rated * .05 / 2.5 + 1e-9), "the port takes twice the rated draw per tick");
+        for (int i = 0; i < 1000 && !trains.view(motor).status().equals("RUNNING"); i++) tick.run();
+        assertEquals("RUNNING", trains.view(motor).status());
+        assertTrue(stores.view(motor).joules() >= com.wormzjl.icheme.science.machine.ElectricStore.restart(rated) - 2 * rated * .05 * 100, "it restarted near one slice of rated draw");
+        for (int i = 0; i < 600; i++) tick.run();
+        assertEquals(1, trains.share(1), 1e-9, "the pump turns at its design speed");
+        double draw = trains.view(motor).electricPower();
+        assertTrue(draw > 1e3 && draw < rated, "it draws the pump's shaft power over its efficiency: " + draw);
+        double full = com.wormzjl.icheme.science.machine.ElectricStore.capacity(rated);
+        assertTrue(stores.view(motor).joules() >= full - draw * com.wormzjl.icheme.science.machine.ElectricStore.SLICE_SECONDS, "the port kept it full within a slice's booking: " + stores.view(motor).joules() + " of " + full);
+        // The feed stops: the store drains at the draw, then the motor stops.
+        feed[0] = 0;
+        double before = stores.view(motor).joules();
+        long start = rig.epoch[0];
+        for (int i = 0; i < 20_000 && !trains.view(motor).status().equals("TRIPPED: NO POWER"); i++) tick.run();
+        assertEquals("TRIPPED: NO POWER", trains.view(motor).status());
+        assertEquals(0, stores.view(motor).joules(), "it booked what was left");
+        double seconds = (rig.epoch[0] - start) / 20.0;
+        assertEquals(before / draw, seconds, Math.max(10, .25 * before / draw), "it ran as long as its store held at its draw");
+        for (int i = 0; i < 300; i++) tick.run();
+        assertEquals(0, trains.share(1), "the pump stands without power");
+        assertEquals(trip, ledger.shaft(motor).trip());
+        // A refill restarts it by itself (D6), no reset.
+        feed[0] = Integer.MAX_VALUE;
+        for (int i = 0; i < 1000 && !trains.view(motor).status().equals("RUNNING"); i++) tick.run();
+        assertEquals("RUNNING", trains.view(motor).status());
+        for (int i = 0; i < 300; i++) tick.run();
+        assertEquals(1, trains.share(1), 1e-9);
     }
 
     /** The governor walk: from a turbine's inlet upstream through unbranched pipes to the nearest control valve. */

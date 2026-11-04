@@ -27,19 +27,33 @@ public final class ShaftTrain {
         SPEED, REGULATE_FLOW, REGULATE_PRESSURE
     }
 
-    /** A protection trip, latched until the player resets it (owner decision A2). Saved by name. */
+    /**
+     * A trip. {@code OVERLOAD} and {@code OVERSPEED} are protection trips, latched until the player resets it (owner
+     * decision A2). {@code NO_POWER} (W5) is a motor's stop on an empty store: not latched, it clears itself when the store
+     * holds one slice again (D6), and is never saved as the unit's trip. Saved by name.
+     */
     public enum Trip {
-        NONE, OVERLOAD, OVERSPEED
+        NONE, OVERLOAD, OVERSPEED, NO_POWER;
+
+        /** Whether it waits for the player's reset. */
+        public boolean latched() {
+            return this == OVERLOAD || this == OVERSPEED;
+        }
     }
 
     /**
      * A driver as the player set it: {@code ratedPower} W, {@code designSpeed} rpm, a motor's {@code poles}; {@code setPoint}
      * a share of the design speed (0: 1, reading A19), a creative motor's rpm (0: {@link #CREATIVE_SPEED});
      * {@code powerLimit} a creative motor's W (0: {@link #CREATIVE_LIMIT}); {@code governed} whether a turbine's speed sensor
-     * works its valve (D27).
+     * works its valve (D27); {@code powered} whether a motor's store holds energy (W5: false stops it, {@code NO POWER}).
      */
     public record Driver(Drive drive, double ratedPower, double designSpeed, int poles, boolean running, Mode mode, double setPoint, double powerLimit, Trip trip,
-                         boolean governed) {
+                         boolean governed, boolean powered) {
+        /** A driver whose store holds energy (or that needs none). */
+        public Driver(Drive drive, double ratedPower, double designSpeed, int poles, boolean running, Mode mode, double setPoint, double powerLimit, Trip trip, boolean governed) {
+            this(drive, ratedPower, designSpeed, poles, running, mode, setPoint, powerLimit, trip, governed, true);
+        }
+
         public Driver {
             Objects.requireNonNull(drive);
             Objects.requireNonNull(mode);
@@ -78,8 +92,11 @@ public final class ShaftTrain {
 
     /** The next speed of {@code driver} turning at {@code speed} rpm after {@code measure}. */
     public static Step step(Driver driver, double speed, Measure measure) {
-        if (driver.trip() != Trip.NONE) return new Step(0, driver.trip(), "TRIPPED: " + driver.trip().name(), 0, 0);
+        if (driver.trip() != Trip.NONE) return new Step(0, driver.trip(), tripped(driver.trip()), 0, 0);
         if (!driver.running()) return new Step(0, Trip.NONE, "STOPPED", 0, 0);
+        // A motor on an empty store stands (W5, D6): not latched, it restarts once its store holds a slice again.
+        if (!driver.powered() && (driver.drive() == Drive.FIXED_MOTOR || driver.drive() == Drive.VARIABLE_MOTOR))
+            return new Step(0, Trip.NO_POWER, tripped(Trip.NO_POWER), 0, 0);
         double demand = Math.max(0, measure.demand());
         double set = regulated(driver, speed, measure);
         return switch (driver.drive()) {
@@ -138,6 +155,11 @@ public final class ShaftTrain {
 
     private static double electric(Driver driver, double demand) {
         return driver.poles() == 0 || driver.ratedPower() <= 0 ? 0 : Motor.electricPower(demand, driver.ratedPower(), driver.poles(), driver.drive() == Drive.VARIABLE_MOTOR);
+    }
+
+    /** A trip's status word: {@code TRIPPED: OVERLOAD}, {@code TRIPPED: NO POWER}. */
+    public static String tripped(Trip trip) {
+        return "TRIPPED: " + trip.name().replace('_', ' ');
     }
 
     private static double cube(double x) {

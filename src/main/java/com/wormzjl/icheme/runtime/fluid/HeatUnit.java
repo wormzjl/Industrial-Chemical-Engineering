@@ -19,8 +19,13 @@ import org.jetbrains.annotations.Nullable;
  *                     tubes and shell, W7), or 0 for a one-sided unit (an air cooler)
  * @param control      the side's built-in control (plan section 6)
  * @param transitJoule the heat this side's unit holds in transit between its two sides (plan section 5.2), J
+ * @param fanCount     an air cooler's fans, each on its own motor (batch 2026-11-03-rotating-machinery W5, fluid facts
+ *                     schema 11, reading A70), or 0 where not known (a side saved before the field, until its structure
+ *                     loads and restates it; every other unit)
  */
-public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long partner,Control control,double transitJoule) {
+public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long partner,Control control,double transitJoule,int fanCount) {
+    /** A side without a fan count (a save before schema 11). */
+    public HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long partner,Control control,double transitJoule){this(unit,side,area,partner,control,transitJoule,0);}
     /**
      * The control modes of plan section 6. {@code OFF}: no controller, so the manual {@link Control#share} holds.
      * {@code OUTLET_TEMPERATURE} and {@code DUTY} act on the unit's own actuator (W4): an exchanger side's or a kettle's tubes'
@@ -52,7 +57,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
     }
     public HeatUnit {
         Objects.requireNonNull(unit);Objects.requireNonNull(side);Objects.requireNonNull(control);
-        if(!Double.isFinite(area)||area<=0||partner<0||!Double.isFinite(transitJoule))throw new IllegalArgumentException("Invalid heat unit side");
+        if(!Double.isFinite(area)||area<=0||partner<0||!Double.isFinite(transitJoule)||fanCount<0||fanCount>MAXIMUM_FANS||fanCount>0&&unit!=HeatSides.Unit.AIR_COOLER)throw new IllegalArgumentException("Invalid heat unit side");
         // A fired heater's coil fires towards its set point (owner Q11): its law needs one.
         if(unit==HeatSides.Unit.FIRED_HEATER&&(control.mode()!=Mode.FIRING||!(control.target()>0)))throw new IllegalArgumentException("A fired heater's coil fires to a set point");
         if(unit!=HeatSides.Unit.FIRED_HEATER&&control.mode()==Mode.FIRING)throw new IllegalArgumentException("Only a fired heater's coil fires");
@@ -63,11 +68,15 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
     public static final Control FIRING=new Control(Mode.FIRING,573.15,0,1);
     /** A newly built side: control off, an air cooler's fans running, a fired heater firing to {@link #FIRING}, nothing in transit. */
     public HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long partner){this(unit,side,area,partner,switch(unit){case AIR_COOLER->Control.OFF.withShare(1);case FIRED_HEATER->FIRING;default->Control.OFF;},0);}
-    public HeatUnit withPartner(long id){return new HeatUnit(unit,side,area,id,control,transitJoule);}
+    /** The most fans a bank has: six trains of four bays, three fans a bay. */
+    public static final int MAXIMUM_FANS=72;
+    public HeatUnit withPartner(long id){return new HeatUnit(unit,side,area,id,control,transitJoule,fanCount);}
     /** The same side over {@code value} m²: a datasheet whose surface law changed. */
-    public HeatUnit withArea(double value){return new HeatUnit(unit,side,value,partner,control,transitJoule);}
-    public HeatUnit withControl(Control value){return new HeatUnit(unit,side,area,partner,value,transitJoule);}
-    public HeatUnit withTransit(double joule){return new HeatUnit(unit,side,area,partner,control,joule);}
+    public HeatUnit withArea(double value){return new HeatUnit(unit,side,value,partner,control,transitJoule,fanCount);}
+    public HeatUnit withControl(Control value){return new HeatUnit(unit,side,area,partner,value,transitJoule,fanCount);}
+    public HeatUnit withTransit(double joule){return new HeatUnit(unit,side,area,partner,control,joule,fanCount);}
+    /** The same side with {@code count} fans (its structure's drawing, W5). */
+    public HeatUnit withFans(int count){return new HeatUnit(unit,side,area,partner,control,transitJoule,count);}
     /** Whether the side has fans the player switches (an air cooler's process side). */
     public boolean fans(){return unit==HeatSides.Unit.AIR_COOLER;}
     /** Whether the side is a fired heater's coil, whose burners and set point the player sets for both coils at once. */

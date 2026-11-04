@@ -270,7 +270,7 @@ public final class EquipmentStructure {
         var placing = new ArrayList<FluidWorldAuthority.UnitSide>();
         for (int i = 0; i < sides.size(); i++) {
             var side = sides.get(i);
-            placing.add(new FluidWorldAuthority.UnitSide(position(level, nodes.get(i)), sidePorts(level, vessel, side), side.passage(), new HeatUnit(unit, side.side(), side.area(), 0)));
+            placing.add(new FluidWorldAuthority.UnitSide(position(level, nodes.get(i)), sidePorts(level, vessel, side), side.passage(), new HeatUnit(unit, side.side(), side.area(), 0).withFans(HeatSides.fans(shape))));
         }
         // A kettle's shell (W7): a closed vessel at its pool's node, its phase ports the drum's, its surface its tubes'.
         var pool = HeatSides.pool(shape.kind()) ? new FluidWorldAuthority.UnitVessel(position(level, nodes.get(sides.size())), ports(level, vessel), shape.volume(), shape.levelHeight(),
@@ -354,7 +354,8 @@ public final class EquipmentStructure {
             var record = records.get(side.side());
             var node = nodes.get(i);
             var device = record.device();
-            var moved = device.withPlacement(position(level, node), sidePorts(level, vessel, side)).withGeometry(side.passage()).withHeat(device.heat().withArea(side.area()));
+            // An air cooler's fans follow the drawing (W5), as its surface does.
+            var moved = device.withPlacement(position(level, node), sidePorts(level, vessel, side)).withGeometry(side.passage()).withHeat(device.heat().withArea(side.area()).withFans(HeatSides.fans(vessel.shape())));
             if (!moved.equals(device)) world.edit(device.id(), record.revision(), moved, record.spec());
             for (var other : nodes)
                 if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();

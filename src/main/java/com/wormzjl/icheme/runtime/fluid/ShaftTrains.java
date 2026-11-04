@@ -26,8 +26,6 @@ import java.util.*;
  * tick drain ({@link #apply}); only then do trains recompile. A train is state: its key is its lowest part's identity.
  */
 public final class ShaftTrains implements IslandCoordinator.Shafts {
-    /** Joules per forge energy unit, for a motor's shown draw (reading A14): 26.7 kW shows 534 FE/t. */
-    public static final double JOULE_PER_FE = 2.5;
     /** The most queued shaft events; a full queue drops the newest (a command placing a whole field of shafts). */
     public static final int MAXIMUM_EVENTS = 65536;
     /** The heat capacity ratio of steam for a governor's first target, before the turbine has booked (build plan case 2). */
@@ -93,11 +91,12 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     /**
      * A part as a page shows it (W7; read only): its status word, its train's driver speed (rpm) and its own (rpm), its speed
-     * share, the train's demand (W), the shaft power it gives or takes (W), a motor's electric draw (W) and FE per tick, its
-     * settings and trip.
+     * share, the train's demand (W), the shaft power it gives or takes (W), a motor's electric draw or a generator's output
+     * (W) and FE per tick, its settings and trip ({@code NO_POWER} too, which is never saved), and a motor's or generator's
+     * electric store (W5, reading A67: content, capacity, FE per tick in and out, {@code NO POWER}, {@code UNMETERED}), or null.
      */
     public record View(long unit, ShaftNetwork.Kind kind, String status, double driverSpeed, double speed, double share, double demand, double shaftPower,
-                       double electricPower, double energyPerTick, ShaftUnit.Settings settings, ShaftTrain.Trip trip) {
+                       double electricPower, double energyPerTick, ShaftUnit.Settings settings, ShaftTrain.Trip trip, ElectricStores.View electric) {
     }
 
     /** One train's engine state. */
@@ -110,6 +109,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         long stepped = Long.MIN_VALUE;
         String status = "RUNNING";
         double electric, governorPower;
+        /** The last step's trip, {@code NO_POWER} included (it is not saved on the unit). */
+        ShaftTrain.Trip trip = ShaftTrain.Trip.NONE;
+        /** Each generator's electric output decided at the last step, W, and whether it stood outside its speed window. */
+        final Map<Long, Double> output = new HashMap<>();
+        final Set<Long> offSpeed = new HashSet<>();
 
         Run(ShaftNetwork.Train train) {
             this.train = train;
@@ -120,6 +124,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     private final java.util.function.LongFunction<Long> owner;
     private final IslandCoordinator coordinator;
     private Host host = Host.NONE;
+    /** The electric stores (W5): a motor's draw and a generator's output are booked at the train's step. */
+    private ElectricStores electric;
     private final ArrayDeque<Event> events = new ArrayDeque<>();
     private final Map<Long, Run> runs = new TreeMap<>();
     /** Unit identity to its train's key. */
@@ -144,6 +150,16 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         this.topology = Objects.requireNonNull(topology);
         this.owner = Objects.requireNonNull(owner);
         this.coordinator = Objects.requireNonNull(coordinator);
+    }
+
+    /** Installs the electric stores (W5). */
+    public void electric(ElectricStores value) {
+        electric = Objects.requireNonNull(value);
+    }
+
+    /** The electric stores, or null before they are installed. */
+    public ElectricStores electric() {
+        return electric;
     }
 
     /** Installs the world's side, then compiles the saved parts. */
@@ -367,8 +383,14 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     @Override
     public Map<Long, ShaftPlan> plans(long island, PassiveNetwork graph) {
-        if (shares.isEmpty() && governorTargets.isEmpty()) return Map.of();
         Map<Long, ShaftPlan> plans = null;
+        // The fan units' power (W5): a fan limit for every air cooler and induced tower with a store.
+        if (electric != null) {
+            var fans = new HashMap<Long, ShaftPlan>();
+            electric.plans(graph, fans);
+            if (!fans.isEmpty()) plans = fans;
+        }
+        if (shares.isEmpty() && governorTargets.isEmpty()) return plans == null ? Map.of() : plans;
         for (var pipe : graph.pipes()) {
             long id = graph.reservoirs().get(pipe.first()).id();
             ShaftPlan plan = null;
@@ -398,7 +420,10 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     @Override
     public void booked(long island, PassiveNetwork graph, long start, long end, PassiveIntervalSolver.Result result) {
-        if (unitOfDevice.isEmpty() || result.advancedSeconds() <= 0) return;
+        if (result.advancedSeconds() <= 0) return;
+        // The fans' draw over the span (W5, reading A59).
+        if (electric != null) electric.booked(island, start, end, result);
+        if (unitOfDevice.isEmpty()) return;
         var solved = result.graph();
         var flows = result.endpointFlows();
         var heads = result.endpointHeads();
@@ -470,15 +495,23 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         }
         var d = topology.shaft(train.driver());
         if (d == null) return false;
+        long now = coordinator.now();
+        var state = d.state() == null ? new ShaftUnit.State(0, Double.NaN, Double.NaN) : d.state();
+        // A generator (W5) books its output since its last step and takes the load its store has room for.
+        generators(run, state.speed(), now);
         double demand = 0;
         for (var m : train.driven()) demand += run.power.getOrDefault(m.id(), 0.0) / m.efficiency();
-        var state = d.state() == null ? new ShaftUnit.State(0, Double.NaN, Double.NaN) : d.state();
         Long valve = valveOfTurbine.get(d.id());
         double sent = valve == null ? 0 : governorTargets.getOrDefault(valve, 0.0);
         boolean steamShort = valve != null && sent > 0 && run.steamFlow < .99 * sent;
         var measure = new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured());
-        var driver = driver(d, valve != null);
+        // A motor runs while its store has energy (W5): its draw is booked at this step, from its last booking to now, at the
+        // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
+        boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
+        var driver = driver(d, valve != null, !motor || electric.powered(d.id()));
         var step = ShaftTrain.step(driver, state.speed(), measure);
+        if (motor && electric.draw(d.id(), step.electricPower(), now)) step = ShaftTrain.step(driver(d, valve != null, false), state.speed(), measure);
+        run.trip = step.trip();
         run.status = step.status();
         if (d.kind() == ShaftNetwork.Kind.STEAM_TURBINE && bindings.containsKey(d.id()) && step.trip() == ShaftTrain.Trip.NONE) run.status = run.status + " / " + bindings.get(d.id());
         run.electric = step.electricPower();
@@ -488,19 +521,69 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             double target = w > 0 ? step.governorPower() / w : 0;
             if (Double.isFinite(target)) governorTargets.put(valve, Math.min(target, FlowControl.Mover.MAXIMUM_VOLUME_FLOW * 1000));
         }
-        boolean changed = Math.abs(step.speed() - state.speed()) > ShaftTrain.SPEED_DEADBAND * Math.max(d.designSpeed(), 1) || step.trip() != d.trip();
-        var next = d.withTrip(step.trip()).withState(new ShaftUnit.State(step.speed(), state.speed(), run.measured));
+        // Only a protection trip is the unit's (it waits for the reset); NO POWER clears itself and is never saved.
+        var trip = step.trip().latched() ? step.trip() : ShaftTrain.Trip.NONE;
+        boolean changed = Math.abs(step.speed() - state.speed()) > ShaftTrain.SPEED_DEADBAND * Math.max(d.designSpeed(), 1) || trip != d.trip();
+        var next = d.withTrip(trip).withState(new ShaftUnit.State(step.speed(), state.speed(), run.measured));
         if (changed) topology.shaft(next);
         return changed || valve != null;
     }
 
+    /**
+     * The train's generators (W5, readings A63, A64): each books the output its last step decided, from its last booking to
+     * {@code now}, then, within 5 % of its rated speed, takes as its load what fills its store's room over the next cadence
+     * (its rating at most), else no load ({@code OFF SPEED}); its shaft power is that over its efficiency.
+     */
+    private void generators(Run run, double driverSpeed, long now) {
+        for (var m : run.train.driven()) {
+            var g = topology.shaft(m.id());
+            if (g == null || g.kind() != ShaftNetwork.Kind.GENERATOR) continue;
+            if (electric != null) electric.give(g.id(), run.output.getOrDefault(g.id(), 0.0), now);
+            boolean on = com.wormzjl.icheme.science.machine.ElectricStore.onSpeed(driverSpeed * m.ratio(), g.designSpeed());
+            double load = on && electric != null ? electric.load(g.id(), ElectricStores.CADENCE * com.wormzjl.icheme.science.machine.ElectricStore.TICK_SECONDS) : 0;
+            if (on) run.offSpeed.remove(g.id());
+            else run.offSpeed.add(g.id());
+            run.output.put(g.id(), load);
+            run.power.put(g.id(), load / com.wormzjl.icheme.science.machine.ElectricStore.generatorEfficiency(g.ratedPower(), g.poles()));
+        }
+    }
+
+    /**
+     * The presentation cadence (W5, readings A60, A62): a stopped motor whose store holds one slice of its rated draw
+     * restarts; a motor not stepped for a cadence (its islands at rest) books its last draw to now, and stops when that runs
+     * its store short; a train with a generator steps again, for its generators' output and load. Each marks its train for
+     * a step at the next decision point; nothing here solves.
+     */
+    public void cadence() {
+        if (electric == null) return;
+        long now = coordinator.now();
+        for (var run : runs.values()) {
+            if (run.train.fault() != ShaftNetwork.Fault.NONE) continue;
+            var d = topology.shaft(run.train.driver());
+            if (d == null) continue;
+            if (d.kind() == ShaftNetwork.Kind.MOTOR) {
+                if (electric.restart(d.id())) run.fresh = true;
+                else if (!electric.bookedWithin(d.id(), now) && electric.draw(d.id(), run.electric, now)) run.fresh = true;
+            }
+            for (var m : run.train.driven()) {
+                var g = topology.shaft(m.id());
+                if (g != null && g.kind() == ShaftNetwork.Kind.GENERATOR && !electric.bookedWithin(g.id(), now)) run.fresh = true;
+            }
+        }
+    }
+
     /** The step's driver for unit {@code d}. */
     private static ShaftTrain.Driver driver(ShaftUnit d, boolean governed) {
+        return driver(d, governed, true);
+    }
+
+    /** The step's driver for unit {@code d}, with power ({@code powered}) or without. */
+    private static ShaftTrain.Driver driver(ShaftUnit d, boolean governed, boolean powered) {
         var drive = d.drive(d.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE);
         if (drive == null) drive = ShaftTrain.Drive.CREATIVE;
         double design = d.designSpeed() > 0 ? d.designSpeed() : ShaftTrain.CREATIVE_SPEED;
         var s = d.settings();
-        return new ShaftTrain.Driver(drive, d.ratedPower(), design, d.poles(), s.running(), s.mode(), s.setPoint(), s.powerLimit(), d.trip(), governed);
+        return new ShaftTrain.Driver(drive, d.ratedPower(), design, d.poles(), s.running(), s.mode(), s.setPoint(), s.powerLimit(), d.trip(), governed, powered);
     }
 
     /** Sends each driven device its new share, and wakes the islands whose share or governor target moved. */
@@ -586,7 +669,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (u == null) return null;
         Long key = trainOf.get(unit);
         var run = key == null ? null : runs.get(key);
-        if (run == null) return new View(unit, u.kind(), u.kind() == ShaftNetwork.Kind.SHAFT ? "LOOSE" : "NO DRIVER", 0, 0, 0, 0, 0, 0, 0, u.settings(), u.trip());
+        var store = electric == null ? null : electric.view(unit);
+        if (run == null) return new View(unit, u.kind(), u.kind() == ShaftNetwork.Kind.SHAFT ? "LOOSE" : "NO DRIVER", 0, 0, 0, 0, 0, 0, 0, u.settings(), u.trip(), store);
         var train = run.train;
         var d = train.driver() == 0 ? null : topology.shaft(train.driver());
         double driverSpeed = train.fault() == ShaftNetwork.Fault.NONE && d != null && d.state() != null ? d.state().speed() : 0;
@@ -595,11 +679,17 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         for (var m : train.driven()) if (m.id() == unit) factor = m.ratio();
         if (train.shafts().containsKey(unit)) factor = train.shafts().get(unit);
         String status = train.fault() != ShaftNetwork.Fault.NONE ? train.fault().name().replace('_', ' ')
-                : d != null && d.trip() != ShaftTrain.Trip.NONE ? u.kind().driver() ? "TRIPPED: " + d.trip().name() : "DRIVER TRIPPED" : run.status;
+                : d != null && d.trip() != ShaftTrain.Trip.NONE ? u.kind().driver() ? ShaftTrain.tripped(d.trip()) : "DRIVER TRIPPED" : run.status;
+        // A generator outside its speed window takes no load (W5, reading A64).
+        if (u.kind() == ShaftNetwork.Kind.GENERATOR && train.fault() == ShaftNetwork.Fault.NONE && run.offSpeed.contains(unit)) status = "OFF SPEED";
+        // A motor's or generator's store from a save before W5 runs free until wired (A73): the notice, non-blocking.
+        if (store != null && "UNMETERED".equals(store.status()) && u.kind() == ShaftNetwork.Kind.MOTOR) status = status + " / UNMETERED";
         double speed = driverSpeed * factor, share = u.designSpeed() > 0 ? speed / u.designSpeed() : 0;
         double shaft = u.kind().driver() ? demand : run.power.getOrDefault(unit, 0.0);
-        double electric = u.kind() == ShaftNetwork.Kind.MOTOR ? run.electric : 0;
-        return new View(unit, u.kind(), status, driverSpeed, speed, share, demand, shaft, electric, electric / JOULE_PER_FE / 20, u.settings(), u.trip());
+        double power = u.kind() == ShaftNetwork.Kind.MOTOR ? run.electric : u.kind() == ShaftNetwork.Kind.GENERATOR ? run.output.getOrDefault(unit, 0.0) : 0;
+        double jpf = electric == null ? ElectricStores.Settings.DEFAULT.joulesPerFE() : electric.joulesPerFE();
+        var trip = u.trip() != ShaftTrain.Trip.NONE || !u.kind().driver() ? u.trip() : run.trip;
+        return new View(unit, u.kind(), status, driverSpeed, speed, share, demand, shaft, power, power / jpf / 20, u.settings(), trip, store);
     }
 
     /** Every shaft unit as the ledger holds it (a read). */

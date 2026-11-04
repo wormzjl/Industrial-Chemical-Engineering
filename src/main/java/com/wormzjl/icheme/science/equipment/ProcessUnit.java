@@ -1090,6 +1090,9 @@ public final class ProcessUnit {
         nozzles.add(new Nozzle(Role.PROCESS_OUTLET, new double[]{a, outBase, zOut}, 1, -1, outBase - Math.floor(yo - out / 2 - NECK), out, 0));
         var outline = new double[][]{{x0 + .05, high, .5 - h / 2}, {x1 - .05, high, .5 - h / 2}, {x1 - .05, high, end - .5 + h / 2}, {x0 + .05, high, end - .5 + h / 2}};
         for (int k = 0; k < 4; k++) segment(outline[k], outline[(k + 1) % 4]);
+        // The bank's FE port (W5, reading A58): the foot of its front corner leg, at grade, on the bank's outside faces, the
+        // inlet above and the outlet at the back far from it; the fans' motors share it (one feeder per bay, reading A71).
+        terminal = new double[]{legX.getFirst(), .25, legZ.getFirst()};
     }
 
     /** Sides of the Blender fan ring's polygon ({@code ac_fan_ring}), a multiple of 4 for the hopper's quadrants. */
