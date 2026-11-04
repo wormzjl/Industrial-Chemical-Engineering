@@ -96,6 +96,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D30 (A53 to A73).** W5 builds as its plan recommends: one electric store per powered unit in fluid facts schema 11, saved in joules (A53 to A55); ports on every face of a terminal cell, receive-only for consumers and extract-only for generators (A56, A57); terminal cells on an outside face at grade in existing cells (A58); booking at commits and on the presentation cadence (A59, A60); unpowered as a dispatch input (A61); restart at one slice of rated draw (A62); a generator loaded by its buffer's room, within ±5 % of rated speed, pushing to its neighbours (A63 to A65); the two `energy` config keys (A66); and A67 to A72 as given. A73 option A: air coolers and induced towers from older saves stay unmetered, with the notice, until their port first receives FE.
 
+2026-11-04, W7's Q1 on the option sheets `machine-a` (motor page, pump page with a Drive group), `machine-b` (a Train tab on the pump page) and `machine-c` (a train screen); the question said readings A85 to A100 go with the pick as recommended: the owner, "A: own pages".
+
+- **D31 (Q1, A85 to A100).** Each machine has its own page: motor, steam turbine (a Drive tab on its device page), generator, gearbox and creative motor. Using the machine opens it. A casing's page gains a Drive group (the driver in two lines and an Open driver push button). Readings A85 to A100 as `W7_BUILD_PLAN.md` gives them.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
