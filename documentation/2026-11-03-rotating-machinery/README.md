@@ -52,6 +52,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: W10d built 4eec41cad (Suction and Health groups, curve with 4 x NPSH3, status words FAILED > CAVITATION > GAS); test 592 + hold gates 58, GameTests 44/44; no campaign (observation only); A137 in-line gas read open for the owner. Review `W10D_REVIEW.md`.
 - 2026-11-04: owner D39 "Keep the gas read": A137 stays as built.
 - 2026-11-04: owner "Merge W6a here": W6a (`claude/interesting-wozniak-cb5e6a`) merged into this branch for W6b; only this README conflicted.
+- 2026-11-04: W6b plan `W6B_BUILD_PLAN.md`: form A (plan section 8, demand-following impact capped at the spare stress) and form B (a rated impact, proposed simplification); owner pick next.
 
 ## Documents
 
@@ -82,6 +83,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - [W10C_REVIEW.md](W10C_REVIEW.md): W10c as built, the loops, tests; in-line pumps silent; the listening check.
 - [W10D_BUILD_PLAN.md](W10D_BUILD_PLAN.md): W10d's plan (pump readings and curve, D37).
 - [W10D_REVIEW.md](W10D_REVIEW.md): W10d's review (readings A137 to A141).
+- [W6B_BUILD_PLAN.md](W6B_BUILD_PLAN.md): W6b's plan (the Create coupling, forms A and B).
 - [PUMP_TYPES_REVIEW.md](PUMP_TYPES_REVIEW.md): the pump types against refinery practice (API 610 OH2, BB1, BB2); options for the large pump.
 
 ## Code areas (planned)
