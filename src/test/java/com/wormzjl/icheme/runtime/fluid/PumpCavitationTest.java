@@ -94,7 +94,7 @@ class PumpCavitationTest {
      * supplier's own pressure is its bubble pressure (no new thermodynamics). From cold fuzz seed 397's world: its LNG
      * (111.66 K, 89 % methane with ethane and CO2) boils at about 99 kPa; the seed's generator stood subcooled at 222 kPa,
      * and the pump [0.01 m3/s, 500 kPa] pulled the suction junction of its 10 mm line to 40 kPa, where the liquid flashed
-     * and the two-phase junction's pass stalled (a hold outside this rule, which reads a two-phase supplier only). Here
+     * and the two-phase junction's pass stalled (since owner decision D14 the subcooled case below holds the same floor). Here
      * the same LNG at 111.8 K fills a tank from a generator at 222 kPa and boils there: the tank fills to its wall and
      * stands two-phase at about 128 kPa and 115 K, two metres above the pump, which draws through the tank's bottom port
      * (liquid, so the pump is not refused). The available head is the column and the level head alone, the target would
@@ -132,6 +132,50 @@ class PumpCavitationTest {
             assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,result.endpointModes().get(pump),"the pump stands on its suction limit");
             assertEquals(tank.pressure(),suction.pressure(),.01*tank.pressure(),"its suction stands at the tank's bubble pressure");
             assertTrue(q>0&&q<.01*suction.mass()/suction.volume(),"it delivers what the head pushes through the line, below its target: "+q);
+            return null;});
+    }
+
+    /**
+     * Owner decision D14 (reading A13): the floor holds for a subcooled hydrocarbon liquid too, whose supplier holds no
+     * vapour. Seed 397's LNG stands subcooled in its generator at 111.8 K and 222 kPa and feeds the pump [0.01 m3/s, 500 kPa]
+     * through two metres of 10 mm line, which cannot carry the target (about 4.3 kg/s) on the 120 kPa between the generator
+     * and the liquid's bubble pressure (about 100 kPa). The pump stands on its suction limit with its suction at that bubble
+     * pressure, worked out at the generator's temperature and liquid composition, and delivers what the line passes there.
+     * Without the rule (two-phase suppliers only, K6) the junction was pulled to 40 kPa, where the liquid flashed and the
+     * pass stalled (cold seed 397); bundled random seeds 952 and 575 held the same way on a subcooled light crude. The
+     * bubble pressure is checked here on the engine's own TP equilibrium, 0.1 % on either side of the suction: the solver
+     * brackets it to 1e-6 and the suction row holds it to the Newton's tolerance, and a 10 mm junction's port head is about
+     * 20 Pa, inside the 100 Pa of the band.
+     */
+    @Test void aSubcooledLngGeneratorHoldsItsPumpOnTheSuctionLimitAtTheBubblePressure() {
+        var catalog=PilotCryogenicTestCatalog.catalog();var network=FluidMaterialCatalog.networkPackage(catalog);
+        MaterialRuntime.with(catalog,network,()->{
+            var w=new EventPathWorld(catalog,FluidThermodynamics.forNetwork(catalog,network));var passive=new FlowControl.Passive();
+            var lng=new FluidDeviceSpec(1,111.8,222268.7652191971,new double[]{0.0019051322577280617,0.8927278421557977,0.06093423437004952,0.04443279121642472,0});
+            w.runTo(100);
+            w.place(0,0,-3,Kind.GENERATOR,NORTH,passive,lng,.01);
+            w.place(0,0,-2,Kind.PIPE,NORTH,passive,null,.01);
+            w.place(0,0,-1,Kind.PIPE,NORTH,passive,null,.01);
+            w.place(0,0,0,Kind.PUMP,SOUTH,new FlowControl.Pump(.01,500000),null,.01);
+            w.place(0,0,1,Kind.PIPE,NORTH,passive,null,.01);
+            w.place(0,0,2,Kind.VOID,NORTH,passive,new FluidDeviceSpec(1,298.15,101325,new double[]{1,0,0,0,0}),.01);
+            w.runTo(100+20*100);w.assertKeptUp("a subcooled LNG generator feeding a pump through a narrow line");
+            var s=w.coordinator.snapshots().stream().filter(sn->sn.graph().pipes().stream().anyMatch(p->p.control() instanceof FlowControl.Pump)).findFirst().orElseThrow();
+            var result=s.lastResult().orElseThrow();var graph=s.graph();
+            int pump=-1;for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.Pump)pump=e;
+            var generator=graph.reservoirs().stream().filter(r->r.kind()==PassiveNetwork.NodeKind.GENERATOR).findFirst().orElseThrow().state();
+            var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();double q=result.averageMassFlows()[pump];
+            double[] x=FluidThermodynamics.phaseMoles(generator,FluidThermodynamics.OIL);double t=generator.temperature();
+            var above=w.model.equilibriumTP(t,suction.pressure()*1.001,x.clone(),()->{},null);
+            var below=w.model.equilibriumTP(t,suction.pressure()*.999,x.clone(),()->{},null);
+            System.out.println("PUMP_CAVITATION_SUBCOOLED modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())+" generatorP="+generator.pressure()
+                    +" generatorT="+t+" suctionP="+suction.pressure()+" suctionT="+suction.temperature());
+            assertTrue(generator.liquidVolume()>0&&generator.vaporVolume()==0,"the generator holds a subcooled liquid, no vapour");
+            assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,result.endpointModes().get(pump),"the pump stands on its suction limit");
+            assertTrue(above.liquidVolume()>0&&above.vaporVolume()==0,"0.1 % above the suction the generator's liquid is one liquid");
+            assertTrue(below.vaporVolume()>0,"0.1 % below the suction it splits a vapour: the suction stands at its bubble pressure");
+            assertTrue(q>0&&q<.01*generator.mass()/generator.volume(),"it delivers what the line passes, below its target: "+q);
+            for(int e=0;e<graph.pipes().size();e++)assertEquals(q,Math.abs(result.averageMassFlows()[e]),1e-3*q,"the series line carries the pump's flow");
             return null;});
     }
 

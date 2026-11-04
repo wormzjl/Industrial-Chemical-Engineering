@@ -244,9 +244,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * Endpoint modes are state, saved as ordinals in the checkpoint format only.
      *
      * <p>{@code PUMP_SUCTION_LIMIT} (owner decision D59 (4)) is a liquid pump that cavitates: its law would pull its suction
-     * below the bubble pressure of the liquid it draws (water's saturation pressure; for a hydrocarbon liquid a two-phase
-     * supplier's own pressure, owner decision K6 of 2026-10-18), so the row {@code P_suction = P_bubble} replaces the law's
-     * row and the flow is what the suction line delivers at that pressure. It persists as an endpoint mode. The velocity
+     * below the bubble pressure of the liquid it draws (water's saturation pressure; for a hydrocarbon liquid its bubble
+     * pressure at its supplier's temperature and composition, owner decision D14), so the row {@code P_suction = P_bubble}
+     * replaces the law's row and the flow is what the suction line delivers at that pressure. It persists as an endpoint mode. The velocity
      * cap is no mode: it is part of every throttling line's law ({@code PassiveStepSolver.saturated}, 2026-10-18).
      *
      * <p>{@code MOVER_LAW} (batch 2026-11-03-rotating-machinery) is a running mover: one row, the rise falling with the

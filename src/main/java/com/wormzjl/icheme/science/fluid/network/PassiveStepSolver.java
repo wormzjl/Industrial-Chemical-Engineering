@@ -211,7 +211,7 @@ public final class PassiveStepSolver {
     /** The last converged solve's states, and whether it was a rate solve: a rate solve's point starts a step only where
      * it was written back into the step's graph ({@code PassiveIntervalSolver.coldRateSeed}); see {@link #carriedPoint}. */
     private List<FluidThermodynamics.State> previousOutputStates=List.of();private boolean previousRateOnly;
-    /** Per connection, the pressure a pump's suction may not fall below in this solve ({@link #suctionFloors(PassiveNetwork,List)}). */
+    /** Per connection, the pressure a pump's suction may not fall below in this solve ({@link #suctionFloors(PassiveNetwork,List,Runnable)}). */
     private double[] suctionFloors=new double[0];
     /**
      * The device active set the last pass of the last solve on this graph settled on. A mover on its suction limit, or closed
@@ -333,7 +333,7 @@ public final class PassiveStepSolver {
         inputGraph=PassiveNetwork.sizeJunctionHoldups(inputGraph,model);
         this.rateOnly=rateOnly;
         inputStates=inputGraph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList();
-        suctionFloors=suctionFloors(inputGraph,inputStates);
+        suctionFloors=suctionFloors(inputGraph,inputStates,checkpoint);
         SolverDiagnostics.count(SolverDiagnostics.implicitSolves);
         ownership.check("Each executing island job needs its own step workspace");
         lastSolve=null;lawFlowsFromBalance=false;
@@ -497,8 +497,8 @@ public final class PassiveStepSolver {
             catch(SparseNewton.Nonconvergence failure) {
                 if(failure.lastVariables()==null)throw failure;
                 double[] trialFlows=Arrays.copyOfRange(failure.lastVariables(),equations.edgeOffset,equations.edgeOffset+graph.pipes().size());
-                // Owner decision D59 (4): a pump whose law pulled its suction below the vapour pressure of the water it
-                // draws cavitates; the pass is solved again with it on its suction limit.
+                // Owner decisions D59 (4) and D14: a pump whose law pulled its suction below the vapour pressure of the liquid
+                // it draws cavitates; the pass is solved again with it on its suction limit.
                 if(cavitates(equations,failure.lastVariables(),modes,boundaryClosed,tolerance))continue;
                 // Decision D54: a vessel the failed iterate drained to nothing runs dry within the step. Its end state has no
                 // contents, so the pass laid out with them has no root (every step size fails the same way); it is solved
@@ -754,7 +754,8 @@ public final class PassiveStepSolver {
             // A mover on its own law (batch 2026-11-03-rotating-machinery): it closes on a reverse drive (its check valve; the
             // curve itself reaches zero flow at its shutoff, owner decision D12), opens where its rise at
             // no flow beats the demand (a set-flow pump's rise on its supply, {@link #riseDensity}), goes on its suction limit
-            // where its law holds its suction below the vapour pressure of the water it draws (owner decision D59 (4)), and
+            // where its law holds its suction below the vapour pressure of the liquid it draws (owner decisions D59 (4) and
+            // D14, {@link #vapourPressure}), and
             // leaves it where its law cannot hold the point the suction line delivers.
             if(pump.targetVolumeFlow()==0)next=FlowControl.Mode.CLOSED;
             else if(mode==FlowControl.Mode.MOVER_LAW&&flow<-1e-10)next=FlowControl.Mode.CLOSED;
@@ -787,10 +788,9 @@ public final class PassiveStepSolver {
         return next;
     }
     /**
-     * Owner decision D59 (4): how far the suction end of connection {@code edge} stands above the vapour pressure of the
-     * water its pump draws, read on {@code states} (Pa); positive infinity where the connection is not a liquid pump or
-     * the pass laid its suction out with no free water. The temperature is the state's, or the pass's seed's where the
-     * state stands outside the water data.
+     * Owner decisions D59 (4) and D14: how far the suction end of connection {@code edge} stands above the vapour pressure
+     * of the liquid its pump draws ({@link #vapourPressure}), read on {@code states} (Pa); positive infinity where the
+     * connection is not a liquid pump or its suction has no vapour pressure to stand at.
      */
     private double cavitationMargin(Equations equations,int edge,List<FluidThermodynamics.State> states) {
         var pipe=equations.graph.pipes().get(edge);int a=pipe.first();
@@ -801,8 +801,9 @@ public final class PassiveStepSolver {
      * The pressure the suction of pump connection {@code edge} may not fall below, at the trial state {@code suction} of its
      * first node: the vapour pressure of the water that node's seed holds, at the trial's temperature (owner decision D59
      * (4), A390; the seed's temperature where the trial stands outside the water data), else the floor of the liquid the
-     * pump draws ({@link #suctionFloors}); positive infinity where the suction has none (no pump, a VAPOR port, a dry or
-     * subcooled supplier).
+     * pump draws ({@link #suctionFloors}); positive infinity where the suction has none (no pump, a VAPOR port, a pump
+     * drawing straight from its first node, a supplier with no hydrocarbon liquid or whose liquid does not flash above the
+     * numerical box's floor).
      */
     double vapourPressure(Equations equations,int edge,FluidThermodynamics.State suction) {
         var pipe=equations.graph.pipes().get(edge);int a=pipe.first();var seed=equations.seeds.get(a);
@@ -811,26 +812,73 @@ public final class PassiveStepSolver {
         try{return model.saturationPressure(suction.temperature());}catch(IllegalArgumentException outsideData){return model.saturationPressure(seed.temperature());}
     }
     /**
-     * Owner decision on the t38 plan (2026-10-18, K6): a pump's suction limit reads the liquid it draws. A pump cannot pull
-     * its suction below the bubble pressure of that liquid; for water the saturation curve says what it is
-     * ({@link #vapourPressure}), and for a hydrocarbon liquid a two-phase supplier's own pressure is its bubble pressure,
-     * no new thermodynamics. Per pump connection, for the whole solve: the pressure of the supplier its suction walk ends
-     * at ({@link InletPhase#walk}) in the step's start states, where that supplier holds vapour beside a hydrocarbon liquid
-     * and is not the pump's own first node (a tank's own closure holds its bubble pressure; a suction junction between the
-     * two is what the pump can pull down); positive infinity otherwise. An LNG tank at 112 K and 222 kPa feeding a pump
-     * through its line drew the junction below the bubble point, where the liquid flashed and the step stalled; with water
-     * at that temperature the limit was nothing.
+     * Owner decision D14 (reading A13; K6 of the t38 plan widened): a pump's suction limit reads the liquid it draws. A pump
+     * cannot pull its suction below the bubble pressure of that liquid; for water the saturation curve says what it is
+     * ({@link #vapourPressure}), and for a hydrocarbon liquid its bubble pressure at the supplier's temperature and
+     * composition ({@link #bubblePressure}), whether or not the supplier holds vapour. Per pump connection, for the whole
+     * solve: the bubble pressure of the hydrocarbon liquid of the supplier its suction walk ends at
+     * ({@link InletPhase#walk}) in the step's start states, where that supplier is not the pump's own first node (a tank's
+     * own closure holds its bubble pressure; a suction junction between the two is what the pump can pull down); positive
+     * infinity otherwise, and where the thermodynamics refuses the evaluation (no floor, never a hold). An LNG tank at
+     * 112 K and 222 kPa feeding a pump through its line drew the junction below the bubble point, where the liquid flashed
+     * and the step stalled; with water at that temperature the limit was nothing. A subcooled light crude at 310 K and
+     * 390 kPa, drawn by a 0.01 m3/s pump through a 1 cm line that passes 3.04 kg/s, was pulled to the 1 Pa floor still
+     * laid out as liquid, and the line search stalled (bundled random seeds 952 and 575).
      */
-    private double[] suctionFloors(PassiveNetwork graph,List<FluidThermodynamics.State> states) {
+    private double[] suctionFloors(PassiveNetwork graph,List<FluidThermodynamics.State> states,Runnable checkpoint) {
         double[] floors=new double[graph.pipes().size()];Arrays.fill(floors,Double.POSITIVE_INFINITY);
         for(int edge=0;edge<floors.length;edge++) {
             var pipe=graph.pipes().get(edge);
             if(!(pipe.control() instanceof FlowControl.Mover liquid&&liquid.liquid())||pipe.firstPort()==PassiveNetwork.PhasePort.VAPOR)continue;
             var walk=InletPhase.walk(graph,edge);if(walk.via()<0)continue;
-            var supplier=states.get(walk.node());
-            if(FluidThermodynamics.holdsPhase(supplier,FluidThermodynamics.GAS)&&FluidThermodynamics.holdsPhase(supplier,FluidThermodynamics.OIL))floors[edge]=supplier.pressure();
+            floors[edge]=bubblePressure(states.get(walk.node()),checkpoint);
         }
         return floors;
+    }
+    /** The bubble pressures {@link #bubblePressure} worked out, keyed by the supplier state (a generator keeps its state
+     * across solves). */
+    private static final Map<FluidThermodynamics.State,Double> BUBBLE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
+    /** The relative width in pressure to which {@link #bubblePressure} brackets a bubble point. The floor is read from one
+     * evaluation for a whole solve, so its rows and mode tests all read the same value; the width only places it against
+     * the true bubble pressure (0.1 Pa at 100 kPa), and it costs about 24 equilibria from the box's floor. */
+    private static final double BUBBLE_WIDTH=1e-6;
+    /**
+     * Owner decision D14 (reading A13): the bubble pressure of the hydrocarbon liquid supplier state {@code s} holds, at the
+     * supplier's temperature and that liquid's composition (its OIL stream, {@link FluidThermodynamics#phaseMoles}).
+     * A supplier holding vapour beside the liquid stands at its bubble pressure: its own pressure, exactly. Else the lowest
+     * pressure, between the numerical box's floor and the supplier's pressure, at which the engine's TP equilibrium
+     * ({@link FluidThermodynamics#equilibriumTP}, unfolded, so a trace of vapour counts) states that composition as one
+     * liquid: a bisection in ln P to {@link #BUBBLE_WIDTH} that returns the liquid end, so a suction held there is liquid.
+     * Midpoints are geometric means ({@link Math#sqrt}, correctly rounded, the same on every runtime). A split the network
+     * cannot carry ({@link FluidThermodynamics.UnsupportedPhases}: two liquids, a product proved unstable) is not one
+     * liquid. Positive infinity where the supplier holds no hydrocarbon liquid, where the liquid is one liquid at the box's
+     * floor, where the equilibrium at the supplier's pressure holds no liquid, and where the thermodynamics refuses a
+     * trial (any other {@link IllegalArgumentException}): no floor, never a hold (AGENTS.md, thermo validity).
+     */
+    private double bubblePressure(FluidThermodynamics.State s,Runnable checkpoint) {
+        if(!FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL))return Double.POSITIVE_INFINITY;
+        if(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS))return s.pressure();
+        var known=BUBBLE_CACHE.get(s);if(known!=null)return known;
+        double bubble=Double.POSITIVE_INFINITY;
+        double[] x=FluidThermodynamics.phaseMoles(s,FluidThermodynamics.OIL);double t=s.temperature(),hi=s.pressure(),lo=NumericalBox.MINIMUM_PRESSURE;
+        try{
+            if(hi>lo) {
+                var top=model.equilibriumTP(t,hi,x.clone(),checkpoint,null);
+                if(FluidThermodynamics.holdsPhase(top,FluidThermodynamics.GAS)&&FluidThermodynamics.holdsPhase(top,FluidThermodynamics.OIL))bubble=hi;
+                else if(FluidThermodynamics.holdsPhase(top,FluidThermodynamics.OIL)&&!oneLiquid(t,lo,x,checkpoint)) {
+                    for(int k=0;k<200&&hi>lo*(1+BUBBLE_WIDTH);k++){double mid=Math.sqrt(lo*hi);if(oneLiquid(t,mid,x,checkpoint))hi=mid;else lo=mid;}
+                    bubble=hi;
+                }
+            }
+        }catch(IllegalArgumentException refused){bubble=Double.POSITIVE_INFINITY;}
+        BUBBLE_CACHE.put(s,bubble);
+        return bubble;
+    }
+    /** Whether the TP equilibrium of {@code x} at {@code (t, p)} is one hydrocarbon liquid ({@link #bubblePressure}). */
+    private boolean oneLiquid(double t,double p,double[] x,Runnable checkpoint) {
+        try{var at=model.equilibriumTP(t,p,x.clone(),checkpoint,null);
+            return FluidThermodynamics.holdsPhase(at,FluidThermodynamics.OIL)&&!FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS);}
+        catch(FluidThermodynamics.UnsupportedPhases split){return false;}
     }
     /**
      * Owner decision D59 (4) on a failed Newton: the first pump on its law whose suction the last iterate
@@ -1293,15 +1341,6 @@ public final class PassiveStepSolver {
         for(int edge=0;edge<q.length;edge++)q[edge]=initialMassFlow(graph,graph.pipes().get(edge));
         return q;
     }
-    /** The smallest velocity cap (kg/s) of the links on the suction walk of the mover on connection {@code edge}
-     * ({@link InletPhase#walk}), each on the stream its donor end draws ({@link #massFlowLimit}); infinite for a mover that
-     * draws straight from its first node. A set-flow mover starts on its law at no more than it (owner decision D12, E5 a). */
-    private double suctionCap(PassiveNetwork graph,int edge) {
-        var walk=InletPhase.walk(graph,edge);double cap=Double.POSITIVE_INFINITY;
-        for(int k=0;k<walk.links().length;k++){var link=graph.pipes().get(walk.links()[k]);int donor=walk.donors()[k];
-            cap=Math.min(cap,massFlowLimit(link,graph.reservoirs().get(donor).state(),link.portAt(donor)));}
-        return cap;
-    }
     /**
      * The connection flows and actuator heads a pass with this active set starts from, the whole of
      * {@link Equations#buildInitial}'s edge half; it lives here because {@link #closeIllegalStarts} reads it before the
@@ -1339,12 +1378,6 @@ public final class PassiveStepSolver {
             // Decision D54: a dry end gives nothing, so an estimate out of one starts at rest (A190's rule for a carried flow).
             flows[i]=outOfDryEnd(graph,pipe,estimate[i])?0:estimate[i];
         }
-        // Owner decision D12 (E5 a, reading A12): a set-flow mover on its law starts at no more than the smallest velocity cap
-        // on its suction walk ({@link #suctionCap}), whichever start it took: a seed, not a mode (F1's start on the head limit,
-        // restated for the law). A pump whose 1 cm suction line passes 3 kg/s pulled its suction junction to the hull floor as
-        // liquid in its first pass, and every step size stalled (bundled random seed 952).
-        for(int i=0;i<graph.pipes().size();i++)if(flows[i]>0&&!boundaryClosed[i]&&modes.get(i)==FlowControl.Mode.MOVER_LAW
-                &&graph.pipes().get(i).control() instanceof FlowControl.Mover mover&&!(mover instanceof FlowControl.Machine))flows[i]=Math.min(flows[i],suctionCap(graph,i));
         if(flashRestated!=null&&seeds!=null)restateFlashFlows(graph,modes,boundaryClosed,seeds,flows);
         if(!hasSolids(graph)&&graph.pipes().stream().noneMatch(pipe->pipe.filter()!=null))return;
         int nodes=graph.reservoirs().size();int[] degree=new int[nodes];
@@ -2734,7 +2767,7 @@ public final class PassiveStepSolver {
         var seeds=supplierSeeds(graph,()->{});var seeded=new ArrayList<PassiveNetwork.Reservoir>(graph.reservoirs().size());
         for(int i=0;i<graph.reservoirs().size();i++){var node=graph.reservoirs().get(i);seeded.add(node.junction()&&seeds.get(i)!=null&&seeds.get(i)!=node.state()?new PassiveNetwork.Reservoir(node.id(),node.elevation(),seeds.get(i),node.kind(),node.inventory()):node);}
         graph=new PassiveNetwork(seeded,graph.pipes(),graph.scheduledTransfers());
-        suctionFloors=suctionFloors(graph,graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList());
+        suctionFloors=suctionFloors(graph,graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),()->{});
         supplyGraph=graph;supplyDuration=0;supplyDensities=new double[graph.pipes().size()];Arrays.fill(supplyDensities,Double.NaN);
         var modes=initialModes(graph);boolean[] closed=new boolean[graph.pipes().size()];
         for(int i=0;i<closed.length;i++)if(graph.pipes().get(i).effectiveBlockedDirections()==3){closed[i]=true;if(!(graph.pipes().get(i).control() instanceof FlowControl.Passive))modes.set(i,FlowControl.Mode.CLOSED);}
@@ -2911,8 +2944,8 @@ public final class PassiveStepSolver {
                 else if(mode==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl())prescribed[e]=valve.targetMassFlow(rho[e][0]);
             }
         }
-        /** The floor of the liquid the pump on connection {@code e} draws: a two-phase hydrocarbon supplier's own pressure
-         * ({@link #suctionFloors}, K6), or the water curve where its suction junction holds free water (D59 (4),
+        /** The floor of the liquid the pump on connection {@code e} draws: its hydrocarbon supplier's bubble pressure
+         * ({@link #suctionFloors}, owner decision D14), or the water curve where its suction junction holds free water (D59 (4),
          * {@link #waterFloor}); infinite where neither. One statement for a pump the balance puts on its suction limit and for
          * one that arrives there, worked out once per connection. */
         private double suctionFloor(int e,Runnable checkpoint) {
@@ -4726,7 +4759,7 @@ public final class PassiveStepSolver {
                 // this edge's rows for every perturbed column of its first node, and the sparsity already declares the
                 // actuator row on both endpoints' columns (buildSparsity).
                 case MOVER_LAW->lawResidual(graph,pipe,flow/suction.density,head,riseDensity(edge,suction.density),st[a].pressure())/pressureScale;
-                // Cavitation (owner decision D59 (4); t38 K6): the suction end stands at the vapour pressure of the liquid the
+                // Cavitation (owner decisions D59 (4) and D14): the suction end stands at the vapour pressure of the liquid the
                 // pump draws ({@link PassiveStepSolver#vapourPressure}); the head is free, and the hydraulic row with the
                 // suction line's sets the flow.
                 case PUMP_SUCTION_LIMIT->(endPressure(graph.reservoirs().get(a),pipe.firstPort(),st[a])-vapourPressure(this,edge,st[a]))/pressureScale;
