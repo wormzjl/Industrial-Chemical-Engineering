@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-04-refinery-compounds/](2026-11-04-refinery-compounds/README.md) | Major refinery compounds for the thermo package, data and sources; freezing points for all compounds | Planned |
 | [2026-11-03-localization/](2026-11-03-localization/README.md) | Missing lang keys; fr_fr, es_es and ja_jp added; zh_cn completed and reviewed | Implemented 2026-11-03 (0.19.3) |
 | [2026-11-02-dry-ice-cost/](2026-11-02-dry-ice-cost/README.md) | Why cold CO2 crystal worlds reach the island wall budget; fix proposal | Implemented 2026-11-03 |
 | [2026-11-02-process-simulator/](2026-11-02-process-simulator/README.md) | In-game process simulator: design sheets, client-side runs, flowsheet files and compatibility | Implemented (2026-11-04) |
