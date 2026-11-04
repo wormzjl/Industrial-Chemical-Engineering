@@ -31,8 +31,9 @@ public final class StreamDoors {
         return stream.feed() != null && stream.from() == null ? feed(x, stream, view) : product(x, stream, view);
     }
 
+    /** The phase keys, named in full (the owner, 2026-11-04: "these names should not be shortened"): the glass gives each at least 62 px. */
     private static List<String> phaseKeys(SheetContext x) {
-        return List.of(x.text("phase.organic_short"), x.text("phase.aqueous_short"), x.text("phase.gas_short"), x.text("phase.solid_short"));
+        return List.of(x.text("phase.organic"), x.text("phase.aqueous"), x.text("phase.gas"), x.text("phase.solid"));
     }
 
     /** The phase keys, then the composition's table. */
