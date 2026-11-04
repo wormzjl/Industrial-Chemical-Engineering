@@ -35,14 +35,13 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 ## Open items
 
 - Next, one Gradle thread at a time:
-  1. O7: the methane refit (E16), the physics check by value, the wet-boundary fixture.
-  2. O4: the cut tables and the one-term mixture term.
-  3. O3: the grades, presets, client libraries and fixtures.
-  4. O8: the existing model on the new grades.
-  5. O5: removals.
-  6. The batch's final lane.
-- E6: the neural model's fate, after O8. Before a public release it must be retrained on open data or removed (its training includes the ExxonMobil crudes).
-- `V3WaterPhaseQualificationTest.observerReceivesOnlyTheReleasedCertifiedWetProfile` fails on its old-data wet certificate fixture; it is re-captured in O7.
+  1. O4: the cut tables and the one-term mixture term.
+  2. O3: the grades, presets, client libraries and fixtures.
+  3. O8: the existing model on the new grades.
+  4. O5: removals.
+  5. The batch's final lane.
+- E6: the neural model's fate, after O8. Before a public release it must be retrained on open data or removed. Its training includes the ExxonMobil crudes, and the schema-4 sidecar stores their compositions and trained values from the old NIST methane fit and water Shomate.
+- The learned seed is not used on the default preset: the model binds again, but its probe takes 109 ms against the 100 ms large-wet budget (`V3ColumnCalculator.LARGE_WET_NEURAL_PROBE_MILLISECONDS`). It did the same before O2. O8 runs the model with the budget lifted, to judge the seed itself. The wall-clock budget makes the seed's use depend on the machine.
 - NIST copies left in test fixtures and tools, for O5 (list in NIST_REDERIVATION_REVIEW.md, section 5).
 - E11 limit: the dilbit reads API 29 and about 19 times too thin; a dense second cut family is the fix (CRUDE_GRADES_REVIEW.md 3.5-3).
 - Owner items from R2, not acted on:
