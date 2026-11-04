@@ -95,6 +95,11 @@ public final class FluidThermodynamics {
     }
 
     public FluidThermodynamics(MaterialCatalog catalog,String packageId,double maximumVelocity,TraceTruncationPolicy tracePolicy,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings) {
+        this(catalog,packageId,maximumVelocity,tracePolicy,solidSettings,null);
+    }
+    /** The model of a compound list (batch 2026-11-04-refinery-compounds, V2): {@code whole}'s package restricted to it. */
+    private FluidThermodynamics(MaterialCatalog catalog,String packageId,double maximumVelocity,TraceTruncationPolicy tracePolicy,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings,FluidThermodynamics whole) {
+        this.whole=whole==null?this:whole;views=whole==null?new java.util.HashMap<>():null;
         this.solidSettings=Objects.requireNonNull(solidSettings);
         if(!Double.isFinite(maximumVelocity)||maximumVelocity<=0)throw new IllegalArgumentException("Positive finite maximum velocity required");
         TraceTruncationPolicy.requireCutoff(Objects.requireNonNull(tracePolicy,"tracePolicy").cutoffMoleFraction(),MAX_TRACE_CUTOFF_MOLE_FRACTION);
@@ -146,6 +151,32 @@ public final class FluidThermodynamics {
      * table): the network's integrator, the hydrocarbon model's and the viscosity's revisions. Built once per model.
      */
     private final String thermodynamicRevision;
+    /** The model of the whole package this one is a view of (itself for a whole package), and, on the whole one, its views by compound list. */
+    private final FluidThermodynamics whole;
+    private final java.util.Map<List<String>,FluidThermodynamics> views;
+    /** The model this one is a view of: the package on its whole compound list, with the same settings. */
+    public FluidThermodynamics whole(){return whole;}
+    /** The compounds this model carries, in the package's order, water not among them. */
+    public List<String> compounds(){return hydrocarbon.components();}
+    /**
+     * This model's package on {@code compounds} (an island's own list, batch 2026-11-04-refinery-compounds, V2), with the same
+     * velocity limit, trace cutoff and solid settings: {@link MaterialCatalog#restrict} of the whole package, in its order, built
+     * once per list and kept by the whole model. Every compound must be one of the whole package's; water is never named.
+     * A state that holds none of the other compounds has the same numbers on it as on the whole package (V1).
+     */
+    public FluidThermodynamics on(java.util.Collection<String> compounds) {
+        var all=whole.compounds();var wanted=new java.util.HashSet<>(compounds);
+        for(String id:wanted)if(!all.contains(id))throw new IllegalArgumentException("Compound "+id+" is not in package "+domain.packageId());
+        var list=all.stream().filter(wanted::contains).toList();
+        if(list.size()==all.size())return whole;
+        if(list.equals(compounds()))return this;
+        synchronized(whole.views) {
+            var known=whole.views.get(list);
+            if(known!=null)return known;
+            var view=new FluidThermodynamics(whole.catalog.restrict(domain.packageId(),list),domain.packageId(),whole.maximumVelocity,whole.tracePolicy,whole.solidSettings,whole);
+            whole.views.put(list,view);return view;
+        }
+    }
     /**
      * The model's full revision: the thermodynamic one with the hydraulic acceptance law (the velocity clamp, the trace
      * cutoff, the solid settings). A certificate holds only under the revision it was issued with, and the world's

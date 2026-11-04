@@ -66,7 +66,7 @@ class RegulatingValveHoldTest {
         w.runTo(800);
         w.assertKeptUp("a header of two supplies");
         var result=w.coordinator.snapshots().getFirst().lastResult().orElseThrow();
-        var graph=w.coordinator.snapshots().getFirst().graph();
+        var graph=w.worldGraph(w.coordinator.snapshots().getFirst());
         for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.ControlValve)assertEquals(target,result.averageMassFlows()[e],1e-6*target);
     }
     /**
@@ -81,7 +81,7 @@ class RegulatingValveHoldTest {
         w.place(3,0,0,Kind.PIPE,EAST,bore);
         w.place(4,0,0,Kind.VOID,EAST,sink(250000,533),bore);
         w.runTo(200);
-        var graph=w.coordinator.snapshots().getFirst().graph();
+        var graph=w.worldGraph(w.coordinator.snapshots().getFirst());
         var solver=new PassiveIntervalSolver(model);
         var rest=solver.solve(graph,5,PassiveIntervalSolver.Settings.defaults(),()->{},1);
         var pipes=new ArrayList<PassiveNetwork.Pipe>();
@@ -130,7 +130,7 @@ class RegulatingValveHoldTest {
         w.place(3,0,0,Kind.PIPE,EAST,bore);
         w.place(4,0,0,Kind.VOID,EAST,sink(101325,298.15),bore);
         w.runTo(200);
-        var graph=w.coordinator.snapshots().getFirst().graph();
+        var graph=w.worldGraph(w.coordinator.snapshots().getFirst());
         long valve=-1,port=-1;
         for(var pipe:graph.pipes())if(pipe.control() instanceof FlowControl.ControlValve)valve=graph.reservoirs().get(pipe.first()).id();
         for(var node:graph.reservoirs())if(node.kind()==PassiveNetwork.NodeKind.VOID)port=node.id();
@@ -148,7 +148,7 @@ class RegulatingValveHoldTest {
         // As production runs a column's line: one retained solver reset from the committed interval before each job, and each
         // slice with a new composition at the generator and a new target at the valve (a planned port's two changes).
         var solver=new RetainedSolver();var settings=PassiveIntervalSolver.Settings.defaults();
-        var committed=solver.solve(model,w.coordinator.snapshots().getFirst().graph(),5,settings,()->{});
+        var committed=solver.solve(model,w.worldGraph(w.coordinator.snapshots().getFirst()),5,settings,()->{});
         for(int slice=0;slice<slices;slice++) {
             double target=slice%2==0?first:second,shift=slice%2==0?0:.02;double[] product=Arrays.copyOf(amounts,MaterialTestBasis.NETWORK+1);
             for(int c=0;c<product.length;c++)product[c]*=1+(c%2==0?shift:-shift);

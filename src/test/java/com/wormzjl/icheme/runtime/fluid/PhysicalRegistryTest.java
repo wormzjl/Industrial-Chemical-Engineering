@@ -55,7 +55,8 @@ class PhysicalRegistryTest {
         long[] queueLine(int n){int x=16+6*(n%16),z=16+2*(n/16);long[] ids=new long[5];String layout="RPPPR";for(int i=0;i<5;i++)ids[i]=queue(x+i,z,layout.charAt(i)=='R'?Kind.RESERVOIR:Kind.PIPE);return ids;}
         void lines(int count){for(int n=0;n<count;n++){queueLine(n);if(registry.unapplied()>=FluidWorldAuthority.APPLY_BATCH)apply();}apply();}
         long owner(long device){return Objects.requireNonNull(registry.owner(device),"device "+device+" has no island");}
-        IslandCoordinator.Snapshot island(long device){return coordinator.observe(owner(device));}
+        /** The device's island on the world list (an island carries its own compounds; zero compounds are inert). */
+        IslandCoordinator.Snapshot island(long device){return onWorld(coordinator.observe(owner(device)));}
         /** Online ticks as the world runs them: the epoch advances, due deadlines fire, admitted jobs run, and the pump runs. */
         void run(long ticks) {
             for(long tick=0;tick<ticks;tick++) {
@@ -314,7 +315,7 @@ class PhysicalRegistryTest {
         assertBooked(empty,placed.destroyed(),start.destroyed(),"a placement into an empty world destroys nothing");
         // Ten intervals of flow move the junctions' composition away from the mint.
         w.run(1_000);
-        long owner=w.owner(tank);var solved=w.coordinator.snapshot(owner);assertEquals(1_000,solved.clock().committedTick());
+        long owner=w.owner(tank);var solved=w.onWorld(w.coordinator.snapshot(owner));assertEquals(1_000,solved.clock().committedTick());
         var old=solved.graph().reservoirs().stream().filter(PassiveNetwork.Reservoir::junction).toList();
         var before=w.ledger.snapshot();
         // The edit: a stub off the first pipe recompiles the island.

@@ -31,7 +31,11 @@ public final class ExchangerRelay {
      * its heat side, whose surface, films and bypass it passes the cells with. A kettle's pool (W7) is read as its vessel's
      * contents alone ({@link #pool(PassiveNetwork.Reservoir)}): no stream, no heat side.
      */
-    public record Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,@Nullable HeatSide law,@Nullable Bath bath) {
+    public record Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,@Nullable HeatSide law,@Nullable Bath bath,@Nullable FluidThermodynamics model) {
+        public Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,@Nullable HeatSide law,@Nullable Bath bath){this(donor,port,volume,massFlow,law,bath,null);}
+        /** This read with the model of the island it was taken from (batch 2026-11-04-refinery-compounds, V2: an island carries its own
+         * compound list, so the reading side evaluates its partner's stream on the partner's model); null reads it on the reader's own. */
+        public Partner withModel(@Nullable FluidThermodynamics value){return new Partner(donor,port,volume,massFlow,law,bath,value);}
         public Partner {Objects.requireNonNull(donor);Objects.requireNonNull(port);if(!Double.isFinite(massFlow)||!(volume>=0)||(law==null)==(bath==null)||bath!=null&&massFlow!=0)throw new IllegalArgumentException("Invalid partner read");}
         public Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,HeatSide law){this(donor,port,volume,massFlow,law,null);}
         /** A kettle's pool as its tube side reads it: vessel {@code node}'s contents at its temperature and film ({@link Pool#film}),

@@ -116,8 +116,8 @@ class CrystalIslandRuntimeTest {
         int solves=rig.solves;rig.run(1_000);
         assertEquals(solves,rig.solves,"a resting vessel solves nothing");
         assertEquals(base.solids(),rig.read(1).graph().reservoirs().getFirst().inventory().solids(),"the crystal stock 1000 ticks into the replay, bit for bit");
-        var image=FluidCheckpointCodec.encode(rig.checkpoint(),key->model);
-        var restored=new CertifyingRig(CertificatePolicy.defaults(),model,rig.epoch[0]);restored.load(FluidCheckpointCodec.decode(image,key->model));
+        var image=FluidCheckpointCodec.encode(rig.checkpoint(),key->key.on(model));
+        var restored=new CertifyingRig(CertificatePolicy.defaults(),model,rig.epoch[0]);restored.load(FluidCheckpointCodec.decode(image,key->key.on(model)));
         assertTrue(restored.stored(1).certificate().isPresent(),"the certificate is restored: "+restored.stored(1).status());
         assertEquals(rig.read(1).graph().reservoirs().getFirst().inventory(),restored.read(1).graph().reservoirs().getFirst().inventory(),"the restored vessel, its crystal included");
         var interval=saved.interval();var node=interval.before().reservoirs().getFirst();var inventory=node.inventory();

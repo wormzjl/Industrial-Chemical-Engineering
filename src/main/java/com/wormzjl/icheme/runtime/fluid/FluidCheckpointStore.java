@@ -77,7 +77,7 @@ public final class FluidCheckpointStore {
 
     /** Where a live unit lies, and which island state it records (revision, in-memory payload generation and the package it
      * names; a topology unit names none). */
-    private record Ref(long revision,long payloadGeneration,String packageId,long generation,FluidCheckpointCodec.UnitRef unit) {}
+    private record Ref(long revision,long payloadGeneration,FluidCheckpointCodec.PackageKey packageId,long generation,FluidCheckpointCodec.UnitRef unit) {}
     private sealed interface Segment permits Bytes,Copy {}
     private record Bytes(byte[] data) implements Segment {}
     private record Copy(FluidCheckpointCodec.UnitRef from) implements Segment {}
@@ -176,13 +176,13 @@ public final class FluidCheckpointStore {
             var packageModel=Objects.requireNonNull(models.apply(key));
             if(!packages.containsKey(key))packages.put(key,FluidCheckpointCodec.PackageRecord.of(key,packageModel));
             var old=islands.get(s.id());Ref ref;
-            if(old!=null&&s.payloadGeneration()!=0&&old.revision==s.revision()&&old.payloadGeneration==s.payloadGeneration()&&old.packageId.equals(entry.packageId())) {
+            if(old!=null&&s.payloadGeneration()!=0&&old.revision==s.revision()&&old.payloadGeneration==s.payloadGeneration()&&old.packageId.equals(entry.key())) {
                 ref=old;reused++;
                 if(FluidCheckpointCodec.verifying()&&!MessageDigest.isEqual(FluidCheckpointCodec.sha256(FluidCheckpointCodec.islandUnit(entry,old.generation,strings,packageModel.components())),old.unit.sha256()))
                     throw new IllegalStateException("Stored unit of island "+s.id()+" at payload generation "+s.payloadGeneration()+" no longer matches the island");
             } else {
                 long generation=nextGeneration++;byte[] unit=FluidCheckpointCodec.islandUnit(entry,generation,strings,packageModel.components());
-                ref=new Ref(s.revision(),s.payloadGeneration(),entry.packageId(),generation,layout.place(new Bytes(unit),unit.length,FluidCheckpointCodec.sha256(unit)));
+                ref=new Ref(s.revision(),s.payloadGeneration(),entry.key(),generation,layout.place(new Bytes(unit),unit.length,FluidCheckpointCodec.sha256(unit)));
                 encoded++;encodedBytes+=unit.length;
             }
             if(refs.put(s.id(),ref)!=null)throw new IllegalArgumentException("Duplicate saved island identity");
@@ -197,7 +197,7 @@ public final class FluidCheckpointStore {
                     throw new IllegalStateException("Stored topology unit no longer matches the world ledger");
             } else {
                 long generation=nextGeneration++;byte[] unit=FluidCheckpointCodec.topologyUnit(current,generation);
-                topologyRef=new Ref(0,0,"",generation,layout.place(new Bytes(unit),unit.length,FluidCheckpointCodec.sha256(unit)));topologyEncoded=true;
+                topologyRef=new Ref(0,0,null,generation,layout.place(new Bytes(unit),unit.length,FluidCheckpointCodec.sha256(unit)));topologyEncoded=true;
             }
         }
         // Compaction: a pack less than half live, or the smallest packs beyond the bound, move their live units here.
@@ -215,7 +215,7 @@ public final class FluidCheckpointStore {
                 e.setValue(new Ref(ref.revision,ref.payloadGeneration,ref.packageId,ref.generation,unit));copied++;copiedBytes+=ref.unit.length();
             }
             if(topologyRef!=null&&moved.contains(topologyRef.unit.pack())) {
-                var from=topologyRef.unit;topologyRef=new Ref(0,0,"",topologyRef.generation,layout.place(new Copy(from),from.length(),from.sha256()));copied++;copiedBytes+=from.length();
+                var from=topologyRef.unit;topologyRef=new Ref(0,0,null,topologyRef.generation,layout.place(new Copy(from),from.length(),from.sha256()));copied++;copiedBytes+=from.length();
             }
         }
         var newPacks=layout.close();
@@ -322,15 +322,20 @@ public final class FluidCheckpointStore {
         // Why the state cannot be used, once known: the load then reads facts only.
         String why=core.stateFormat()!=FluidCheckpointCodec.VERSION?"state format "+core.stateFormat()+", this build's is "+FluidCheckpointCodec.VERSION:null;boolean restate=false;
         var byKey=new HashMap<FluidCheckpointCodec.PackageKey,FluidThermodynamics>();
+        // The package records whose data moved or whose compounds are gone: only the islands on them restate (V3).
+        var moved=new HashSet<FluidCheckpointCodec.PackageRecord>();
         for(var p:core.packages()) {
             // The model the saved package's key names now (a world's islands run on its network package, whatever id the save
             // names): units written under other data restate.
-            var model=Objects.requireNonNull(models.apply(p.key()));
+            // A list naming a compound the package no longer has (V3) has no model: its islands restate from their facts.
+            FluidThermodynamics model;
+            try{model=Objects.requireNonNull(models.apply(p.key()));}
+            catch(IllegalArgumentException gone){restate=true;moved.add(p);why="the compounds of package "+p.packageId()+" changed: "+gone.getMessage();continue;}
             byKey.put(p.key(),model);
             var reference=EnergyReference.sensible(model.components());
             if(reference.formationDataQualified())throw new IllegalArgumentException("This build's energy reference of package "+p.packageId()+" is formation-qualified, which a checkpoint cannot carry");
             if(!p.propertyRevision().equals(model.thermodynamicRevision())||!p.energyRevision().equals(reference.revision())||!p.energyComponents().equals(reference.components())) {
-                restate=true;why="the property data of package "+p.packageId()+" changed";
+                restate=true;moved.add(p);why="the property data of package "+p.packageId()+" changed";
             }
         }
         var rowsByPack=new HashMap<Long,List<Integer>>();
@@ -368,7 +373,8 @@ public final class FluidCheckpointStore {
         synchronized(lock){var previous=new HashSet<Long>();for(long p:loadedPacks)previous.add(p);previousReferenced=Set.copyOf(previous);}
         if(why!=null) {
             if(worldFacts==null)throw new IllegalArgumentException("The fluid checkpoint's state cannot be used ("+why+") and it holds no topology unit to rebuild its islands from");
-            var placed=new ArrayList<FluidFacts.Placed>(facts.length);for(int i=0;i<facts.length;i++)placed.add(new FluidFacts.Placed(facts[i],core.islands().get(i).committed()));
+            var placed=new ArrayList<FluidFacts.Placed>(facts.length);
+            for(int i=0;i<facts.length;i++){var f=facts[i];placed.add(new FluidFacts.Placed(f,core.islands().get(i).committed(),core.packages().stream().noneMatch(p->!moved.contains(p)&&p.packageId().equals(f.packageId())&&p.energyComponents().equals(f.components()))));}
             var rebuilt=FluidFacts.rebuild(worldFacts,placed,core.epoch(),models,catalog,restate,why);
             // Nothing stored is reused: the next save writes every unit afresh.
             islands.clear();topology=null;topologySource=null;packSizes.clear();strings=new FluidCheckpointCodec.Strings();selfContained=true;
@@ -376,11 +382,11 @@ public final class FluidCheckpointStore {
             return new Loaded(rebuilt.checkpoint(),Optional.of(rebuilt.world()),Route.FACTS,why);
         }
         var refs=new LinkedHashMap<Long,Ref>();
-        for(int i=0;i<entries.length;i++){var row=core.islands().get(i);refs.put(row.id(),new Ref(row.revision(),entries[i].snapshot().payloadGeneration(),entries[i].packageId(),row.generation(),row.unit()));}
+        for(int i=0;i<entries.length;i++){var row=core.islands().get(i);refs.put(row.id(),new Ref(row.revision(),entries[i].snapshot().payloadGeneration(),entries[i].key(),row.generation(),row.unit()));}
         var checkpoint=new FluidCheckpointCodec.Checkpoint(Arrays.asList(entries));
         // Seed the dirty tracking: an island registered with the payload generation its decoded snapshot carries keeps
         // its unit where it is until something it records changes.
-        islands.clear();islands.putAll(refs);topology=core.topology()==null?null:new Ref(0,0,"",core.topologyGeneration(),core.topology());topologySource=world.orElse(null);
+        islands.clear();islands.putAll(refs);topology=core.topology()==null?null:new Ref(0,0,null,core.topologyGeneration(),core.topology());topologySource=world.orElse(null);
         packSizes.clear();for(int i=0;i<core.packs().length;i++)packSizes.put(core.packs()[i],core.packBytes()[i]);
         strings=core.strings();selfContained=false;
         // The same basis under another package id: the world names the current package, and its topology unit is written

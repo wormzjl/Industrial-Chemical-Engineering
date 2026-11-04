@@ -69,7 +69,7 @@ class PumpAheadOfFlowValveTest {
     /** A running line whose target moves past the pump's rate and back, as a column's cycle moves it: each change takes effect within its solve. */
     @Test void aRunningLineFollowsItsTargetPastThePumpsRate() {
         var model=FluidTestSupport.networkModel();var w=line(5,true);var solver=new RetainedSolver();var settings=PassiveIntervalSolver.Settings.defaults();
-        var committed=solver.solve(model,w.coordinator.snapshots().getFirst().graph(),5,settings,()->{});
+        var committed=solver.solve(model,w.worldGraph(w.coordinator.snapshots().getFirst()),5,settings,()->{});
         for(double target:new double[]{6,50,5,0,4,50}) {
             var pipes=new ArrayList<PassiveNetwork.Pipe>();
             for(var pipe:committed.graph().pipes())pipes.add(pipe.control() instanceof FlowControl.ControlValve?pipe.withControl(valve(target)):pipe);

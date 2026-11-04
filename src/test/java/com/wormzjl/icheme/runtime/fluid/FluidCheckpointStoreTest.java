@@ -97,7 +97,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         var world=topology.snapshot();assertEquals(1,world.events().size());
 
         var folder=temporary.resolve("world/data");
-        var data=new FluidSavedData(checkpoint,world,key->model,directory(folder));data.setDirty();
+        var data=new FluidSavedData(checkpoint,world,key->key.on(model),directory(folder));data.setDirty();
         data.save(core(folder).toFile(),null);
         assertFalse(data.isDirty(),"Minecraft's save path wrote the checkpoint");
         assertEquals(Set.of("fluid-1.pack"),packs(folder),"one pack: every unit of the first save");assertTrue(Files.exists(core(folder)));
@@ -110,7 +110,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         assertFalse(rows.contains("Kind"),"format 11, like 5 to 10, has one certificate kind and no kind column");
         assertEquals(0.0,checkpoint.islands().get(1).snapshot().certificate().orElseThrow().drift(),"the closed pair's certificate is the identity map, drift 0");
 
-        var loaded=FluidSavedData.read(directory(folder),key->model).orElseThrow();
+        var loaded=FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow();
         for(int i=0;i<5;i++) {
             var a=checkpoint.islands().get(i).snapshot();var b=loaded.checkpoint().islands().get(i).snapshot();String what="island "+a.id();
             assertEquals(a.id(),b.id());assertEquals(a.revision(),b.revision(),what);assertEquals(a.clock(),b.clock(),what+" clock, exact");
@@ -150,7 +150,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         rig.runUntilCertified(List.of(1L,2L),2_000);
         var ledger=new WorldTopologyLedger(world(0));
         java.util.function.Supplier<WorldTopologyLedger.Snapshot> topology=()->{while(ledger.onlineTick()<rig.epoch[0])ledger.tick();return ledger.snapshot();};
-        var folder=temporary.resolve("dirty");var data=new FluidSavedData(rig.checkpoint(),topology.get(),key->model,directory(folder));
+        var folder=temporary.resolve("dirty");var data=new FluidSavedData(rig.checkpoint(),topology.get(),key->key.on(model),directory(folder));
         data.bindCapture(()->new FluidSavedData.Capture(rig.checkpoint(),topology.get()));
         data.save(new CompoundTag(),null);
         assertEquals(3,data.lastSave().payloadsEncoded());var first=files(folder);
@@ -178,7 +178,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         var rig=rig(CertificatePolicy.defaults());rig.register(1,deadHeadedLine(100,0));rig.register(2,slowFill(200,4));
         rig.runUntilCertified(List.of(1L),2_000);
         var folder=temporary.resolve("crash");var failing=new Failing(new FluidCheckpointStore.Directory(folder,false));var store=FluidCheckpointStore.of(failing,Runnable::run);
-        var data=new FluidSavedData(rig.checkpoint(),world(rig.epoch[0]),key->model,store);
+        var data=new FluidSavedData(rig.checkpoint(),world(rig.epoch[0]),key->key.on(model),store);
         data.bindCapture(()->new FluidSavedData.Capture(rig.checkpoint(),world(rig.epoch[0])));
         data.save(new CompoundTag(),null);var savedClock=rig.stored(2).clock();var savedCore=files(folder).get(FluidCheckpointStore.CORE_NAME);
         rig.run(100);assertNotEquals(savedClock,rig.stored(2).clock());
@@ -189,14 +189,14 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         // What a crash in the middle of a write leaves: temporaries beside the pack and beside the core record.
         Files.write(folder.resolve(FluidCheckpointStore.UNIT_DIRECTORY).resolve("fluid-3.pack.8127.tmp"),new byte[]{1,2,3});
         Files.write(folder.resolve(FluidCheckpointStore.CORE_NAME+".4410.tmp"),new byte[]{4,5});
-        var restarted=directory(folder);var loaded=FluidSavedData.read(restarted,key->model).orElseThrow();
+        var restarted=directory(folder);var loaded=FluidSavedData.read(restarted,key->key.on(model)).orElseThrow();
         assertEquals(savedClock,loaded.checkpoint().islands().stream().filter(e->e.snapshot().id()==2).findFirst().orElseThrow().snapshot().clock(),"the restart reads the previous checkpoint");
         assertEquals(3,restarted.cleanOrphans(),"the orphan pack and both temporaries");
         assertEquals(Set.of("fluid-1.pack"),packs(folder));assertFalse(Files.exists(folder.resolve(FluidCheckpointStore.CORE_NAME+".4410.tmp")));
         failing.failCore=false;
         data.save(new CompoundTag(),null);
         assertTrue(data.lastSave().stats().full(),"after a failed commit every unit is written afresh");assertEquals(2,data.lastSave().payloadsEncoded());
-        var reloaded=FluidSavedData.read(directory(folder),key->model).orElseThrow();
+        var reloaded=FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow();
         assertEquals(rig.stored(2).clock(),reloaded.checkpoint().islands().stream().filter(e->e.snapshot().id()==2).findFirst().orElseThrow().snapshot().clock());
     }
 
@@ -206,7 +206,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         rig.runUntilCertified(List.of(2L),2_000);
         var folder=temporary.resolve("chain");var queue=new ArrayDeque<Runnable>();
         var failing=new Failing(new FluidCheckpointStore.Directory(folder,false));var store=FluidCheckpointStore.of(failing,queue::add);
-        var data=new FluidSavedData(rig.checkpoint(),world(rig.epoch[0]),key->model,store);
+        var data=new FluidSavedData(rig.checkpoint(),world(rig.epoch[0]),key->key.on(model),store);
         data.bindCapture(()->new FluidSavedData.Capture(rig.checkpoint(),world(rig.epoch[0])));
         var file=core(folder).toFile();
         data.setDirty();data.save(file,null);assertEquals(1,queue.size(),"the commit waits for the IO worker");queue.poll().run();
@@ -219,14 +219,14 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         assertEquals(before,files(folder),"neither commit changed a file");
         data.setDirty();data.save(file,null);assertTrue(data.lastSave().stats().full());assertEquals(2,data.lastSave().payloadsEncoded());
         queue.poll().run();assertTrue(store.committed());
-        var loaded=FluidSavedData.read(store.reopen(),key->model).orElseThrow();
+        var loaded=FluidSavedData.read(store.reopen(),key->key.on(model)).orElseThrow();
         assertEquals(clockOfB,loaded.checkpoint().islands().getFirst().snapshot().clock());
     }
 
     /** A truncated, damaged, missing or misnamed pack refuses the world, and the refusal leaves every file as it was. */
     @Test void aHalfWrittenDamagedOrMissingPackRefusesTheWorldAndLeavesEveryFileAsItWas() throws IOException {
         var folder=temporary.resolve("source");var store=directory(folder);
-        var data=new FluidSavedData(checkpoint(List.of(tank(1,1,0),tank(2,2,0))),key->model,store);
+        var data=new FluidSavedData(checkpoint(List.of(tank(1,1,0),tank(2,2,0))),key->key.on(model),store);
         data.save(new CompoundTag(),null);
         data.replace(checkpoint(List.of(tank(1,1,0),tank(2,3,0))));data.save(new CompoundTag(),null);
         assertEquals(Set.of("fluid-1.pack","fluid-2.pack"),packs(folder));
@@ -241,7 +241,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
             var copy=temporary.resolve("case-"+cases.indexOf(c));
             try(var walk=Files.walk(folder)){for(var source:walk.toList()){var target=copy.resolve(folder.relativize(source).toString());if(Files.isDirectory(source))Files.createDirectories(target);else Files.copy(source,target);}}
             c.damage().accept(copy);var before=files(copy);
-            var refusal=assertThrows(IllegalArgumentException.class,()->FluidSavedData.read(directory(copy),key->model));
+            var refusal=assertThrows(IllegalArgumentException.class,()->FluidSavedData.read(directory(copy),key->key.on(model)));
             assertTrue(refusal.getMessage().contains(c.expected()),c.expected()+" / got: "+refusal.getMessage());
             assertEquals(before,files(copy),c.expected()+": the refused world's files, the orphan included, are left exactly as they were");
         }
@@ -260,7 +260,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
      * world taken during a save still finds the packs of the core record it copied); at most 16 packs are referenced.
      */
     @Test void unitsOfRemovedOrReplacedIslandsAreDroppedAndTheirPacksCompactedAndDeleted() throws IOException {
-        var folder=temporary.resolve("orphans");var data=new FluidSavedData(checkpoint(List.of(tank(1,1,0),tank(2,2,0),tank(3,3,0),tank(4,4,0))),key->model,directory(folder));
+        var folder=temporary.resolve("orphans");var data=new FluidSavedData(checkpoint(List.of(tank(1,1,0),tank(2,2,0),tank(3,3,0),tank(4,4,0))),key->key.on(model),directory(folder));
         data.save(new CompoundTag(),null);assertEquals(Set.of("fluid-1.pack"),packs(folder));
         // Islands 2, 3 and 4 are removed: one live unit of four is left in pack 1, which is moved into pack 2.
         data.replace(checkpoint(List.of(tank(1,1,0))));data.save(new CompoundTag(),null);var moved=data.lastSave();
@@ -272,7 +272,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         data.replace(checkpoint(List.of(tank(5,5,0))));data.save(new CompoundTag(),null);
         assertEquals(1,data.lastSave().stats().packs());assertEquals(Set.of("fluid-2.pack","fluid-3.pack"),packs(folder));
         data.save(new CompoundTag(),null);assertEquals(Set.of("fluid-3.pack"),packs(folder));
-        var loaded=FluidSavedData.read(directory(folder),key->model).orElseThrow();
+        var loaded=FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow();
         assertEquals(List.of(5L),loaded.checkpoint().islands().stream().map(e->e.snapshot().id()).toList());
         // Twenty islands, one of them changing at each of forty saves: never more than 16 packs referenced, 17 on disk.
         var generations=new long[21];var snapshots=new ArrayList<IslandCoordinator.Snapshot>();long next=100;
@@ -287,7 +287,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
             assertEquals(expected,packs(folder),"on disk: the packs of this core record and of the one before it, nothing else");previous=now;most=Math.max(most,packs(folder).size());
         }
         System.out.println("pack files on disk at most: "+most);
-        var last=FluidSavedData.read(directory(folder),key->model).orElseThrow();
+        var last=FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow();
         assertEquals(20,last.checkpoint().islands().size());
     }
 
@@ -295,16 +295,16 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
     @Test void aSaveLargerThanOnePackSpansSeveralAndReadsBack() throws IOException {
         var folder=temporary.resolve("spanning");var store=directory(folder);store.packLimit(1_000);
         var snapshots=new ArrayList<IslandCoordinator.Snapshot>();for(long id=1;id<=12;id++)snapshots.add(tank(id,id,0));
-        var data=new FluidSavedData(checkpoint(snapshots),key->model,store);data.save(new CompoundTag(),null);
+        var data=new FluidSavedData(checkpoint(snapshots),key->key.on(model),store);data.save(new CompoundTag(),null);
         var stats=data.lastSave().stats();
         assertTrue(stats.newPacks()>1,"several packs: "+stats.newPacks());assertEquals(stats.newPacks(),packs(folder).size());assertEquals(stats.newPacks(),stats.packs());
         for(var name:packs(folder))assertTrue(Files.size(folder.resolve(FluidCheckpointStore.UNIT_DIRECTORY).resolve(name))<=1_000||name.equals("fluid-1.pack"),name);
-        var loaded=FluidSavedData.read(directory(folder),key->model).orElseThrow();
+        var loaded=FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow();
         assertEquals(12,loaded.checkpoint().islands().size());
         for(int i=0;i<12;i++)assertInventories(snapshots.get(i).graph(),loaded.checkpoint().islands().get(i).snapshot().graph(),"island "+(i+1));
         snapshots.set(3,tank(4,40,0));data.replace(checkpoint(snapshots));data.save(new CompoundTag(),null);
         assertEquals(1,data.lastSave().payloadsEncoded());assertEquals(1,data.lastSave().stats().newPacks());
-        assertEquals(12,FluidSavedData.read(directory(folder),key->model).orElseThrow().checkpoint().islands().size());
+        assertEquals(12,FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow().checkpoint().islands().size());
     }
 
     // ---------------- scale ----------------
@@ -330,11 +330,11 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         var rig=rig(policy,model,template.epoch[0]);for(var s:snapshots)rig.coordinator.register(s,model);
         assertEquals(10_000,counter("certificatesRestored"));
         var folder=temporary.resolve("ten-thousand");var world=world(template.epoch[0]);
-        var data=new FluidSavedData(rig.checkpoint(),world,key->model,directory(folder));data.bindCapture(()->new FluidSavedData.Capture(rig.checkpoint(),world));
+        var data=new FluidSavedData(rig.checkpoint(),world,key->key.on(model),directory(folder));data.bindCapture(()->new FluidSavedData.Capture(rig.checkpoint(),world));
         data.save(new CompoundTag(),null);var cold=data.lastSave();
         data.save(new CompoundTag(),null);var warm=data.lastSave();
         assertEquals(10_000,cold.payloadsEncoded());assertEquals(0,warm.payloadsEncoded());assertEquals(10_000,warm.payloadsReused());assertEquals(0,warm.stats().pack());
-        long read0=System.nanoTime();var loaded=FluidSavedData.read(directory(folder),key->model).orElseThrow();long read1=System.nanoTime();
+        long read0=System.nanoTime();var loaded=FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow();long read1=System.nanoTime();
         var restarted=rig(policy,model,template.epoch[0]);long register0=System.nanoTime();restarted.load(loaded.checkpoint());long register1=System.nanoTime();
         loaded.bindCapture(()->new FluidSavedData.Capture(restarted.checkpoint(),loaded.world().orElseThrow()));
         loaded.save(new CompoundTag(),null);var seeded=loaded.lastSave();
@@ -358,9 +358,9 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         var rig=rig(policy);rig.register(1,deadHeadedLine(100,0));rig.register(2,closedPair(200,4));rig.register(3,generatorToVoid(300,8));rig.register(4,slowFill(400,12));
         rig.runUntilCertified(List.of(1L,2L,3L),2_000);
         var folder=temporary.resolve("seeded");var world=world(rig.epoch[0]);
-        new FluidSavedData(rig.checkpoint(),world,key->model,directory(folder)).save(new CompoundTag(),null);
+        new FluidSavedData(rig.checkpoint(),world,key->key.on(model),directory(folder)).save(new CompoundTag(),null);
         for(var restartPolicy:List.of(policy,CertificatePolicy.disabled())) {
-            var loaded=FluidSavedData.read(directory(folder),key->model).orElseThrow();
+            var loaded=FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow();
             var restarted=rig(restartPolicy,model,rig.epoch[0]);restarted.load(loaded.checkpoint());
             loaded.bindCapture(()->new FluidSavedData.Capture(restarted.checkpoint(),loaded.world().orElseThrow()));
             loaded.save(new CompoundTag(),null);var first=loaded.lastSave();

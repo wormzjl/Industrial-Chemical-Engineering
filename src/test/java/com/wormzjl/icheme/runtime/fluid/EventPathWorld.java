@@ -45,13 +45,21 @@ class EventPathWorld {
     EventPathWorld(){this(1);}
     /** A world whose worker pool has {@code workers} slots: 0 (no solve) or 1 (a synchronous worker). */
     EventPathWorld(int workers){this(workers,WorldTopologyLedger.Snapshot.empty(CATALOG),List.of());}
-    /** The world {@code saved} ({@code world.ledger.snapshot()}) and {@code islands} ({@code world.coordinator.snapshots()})
+    /** The checkpoint entries of this world's islands, each on its own compound list (what FluidWorldAuthority saves). */
+    List<FluidCheckpointCodec.IslandEntry> entries(){return coordinator.snapshots().stream().map(s->coordinator.entry(DIM,FluidPresetCatalog.NETWORK_PACKAGE,s)).toList();}
+    /** Snapshot {@code s} of a live island on the world list, its amounts mapped by compound id (zero compounds are inert), as the presentation reads it. */
+    IslandCoordinator.Snapshot onWorld(IslandCoordinator.Snapshot s){return IslandSets.presented(s,coordinator.model(s.id()),model);}
+    /** The graph of live island {@code s} evaluated on the world list, to solve on the world model (a state zero outside the island's compounds evaluates bit for bit alike). */
+    PassiveNetwork worldGraph(IslandCoordinator.Snapshot s){return IslandSets.graph(s.graph(),coordinator.model(s.id()),model);}
+    /** Snapshots built on the whole network package's axis as checkpoint entries. */
+    static List<FluidCheckpointCodec.IslandEntry> whole(List<IslandCoordinator.Snapshot> islands){return islands.stream().map(s->new FluidCheckpointCodec.IslandEntry(DIM,FluidPresetCatalog.NETWORK_PACKAGE,s)).toList();}
+    /** The world {@code saved} ({@code world.ledger.snapshot()}) and {@code islands} ({@code world.entries()})
      * reload to, as {@code FluidWorldAuthority} starts: the ledger, every saved island registered, then the registry loaded. */
-    EventPathWorld(int workers,WorldTopologyLedger.Snapshot saved,List<IslandCoordinator.Snapshot> islands) {
+    EventPathWorld(int workers,WorldTopologyLedger.Snapshot saved,List<FluidCheckpointCodec.IslandEntry> islands) {
         this(workers,saved,islands,List.of());
     }
     /** That reload with the flowmeters the accessory store holds on {@code flowmeters}, given to the registry before it loads. */
-    EventPathWorld(int workers,WorldTopologyLedger.Snapshot saved,List<IslandCoordinator.Snapshot> islands,Collection<Long> flowmeters) {
+    EventPathWorld(int workers,WorldTopologyLedger.Snapshot saved,List<FluidCheckpointCodec.IslandEntry> islands,Collection<Long> flowmeters) {
         this(workers,saved,islands,CATALOG,FluidTestSupport.networkModel(),flowmeters);
     }
     /** A world with one synchronous worker on {@code catalog}, whose network model is {@code model}
@@ -59,7 +67,7 @@ class EventPathWorld {
      * {@code MaterialRuntime} context, as the cold placement fuzz runs a seed. A block placed without a spec holds a 1 m3
      * nitrogen charge of that catalog. */
     EventPathWorld(MaterialCatalog catalog,FluidThermodynamics model){this(1,WorldTopologyLedger.Snapshot.empty(catalog),List.of(),catalog,model,List.of());}
-    private EventPathWorld(int workers,WorldTopologyLedger.Snapshot saved,List<IslandCoordinator.Snapshot> islands,MaterialCatalog catalog,FluidThermodynamics model,Collection<Long> flowmeters) {
+    private EventPathWorld(int workers,WorldTopologyLedger.Snapshot saved,List<FluidCheckpointCodec.IslandEntry> islands,MaterialCatalog catalog,FluidThermodynamics model,Collection<Long> flowmeters) {
         this.workers=workers;this.catalog=catalog;this.model=model;ledger=new WorldTopologyLedger(saved);
         coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
             public int availableWorkers(){return workers-attempts.size();}
@@ -78,7 +86,7 @@ class EventPathWorld {
             public void refused(UUID event,String reason){}
             public void committed(Set<Long> removed,Set<Long> recompiled){committedRemovals.add(removed);if(columns!=null)columns.committed();}
         });
-        for(var island:islands)coordinator.register(island,model);
+        for(var island:islands)coordinator.register(island.snapshot(),island.compounds()==null?model:model.on(island.compounds()));
         registry.flowmeters(flowmeters);registry.load();
     }
     /** Online ticks more that one island's jobs take: a slow island beside quick ones. */

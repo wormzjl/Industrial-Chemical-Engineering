@@ -51,7 +51,7 @@ class FluidFactsCompatTest {
         world.runTo(20);assertTrue(world.registry.installPipeFilter(generator+2,Direction.EAST));world.runTo(400);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(generator,null)),world.ledger.nextIdentity(),null);world.runTo(600);
         world.assertKeptUp("the saved line");
-        var stock=contents(new FluidCheckpointCodec.Checkpoint(world.coordinator.snapshots().stream().map(s->new FluidCheckpointCodec.IslandEntry(EventPathWorld.DIM,PACKAGE,s)).toList()));
+        var stock=contents(new FluidCheckpointCodec.Checkpoint(world.entries()));
         assertTrue(Arrays.stream(((PassiveNetwork.Inventory)stock.get(first)).moles()).sum()>10,"the generator charged the vessels: "+stock.get(first));
         return world;
     }
@@ -106,8 +106,8 @@ class FluidFactsCompatTest {
         return new PhysicalFluidTopology.Device(id,inlet,Kind.HEAT_SIDE,Direction.NORTH,passage,new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
     }
     private FluidCheckpointCodec.Image image(EventPathWorld world) {
-        var checkpoint=new FluidCheckpointCodec.Checkpoint(world.coordinator.snapshots().stream().map(s->new FluidCheckpointCodec.IslandEntry(EventPathWorld.DIM,PACKAGE,s)).toList());
-        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->model));
+        var checkpoint=new FluidCheckpointCodec.Checkpoint(world.entries());
+        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->key.on(model)));
         return store.image();
     }
     private static FluidCheckpointCodec.Image edited(FluidCheckpointCodec.Image image,java.util.function.Consumer<CompoundTag> edit) {
@@ -116,27 +116,34 @@ class FluidFactsCompatTest {
     private static FluidCheckpointStore.Loaded load(FluidCheckpointCodec.Image image,java.util.function.Function<FluidCheckpointCodec.PackageKey,FluidThermodynamics> models,MaterialCatalog catalog) {
         return FluidCheckpointStore.memory(image).load(image.core(),models,catalog);
     }
-    /** Every vessel's inventory and every filter's cake, by device identity. */
-    private static Map<Long,Object> contents(FluidCheckpointCodec.Checkpoint checkpoint) {
+    /** Every vessel's inventory on the world list (each island's by compound id, V3) and every filter's cake, by device identity. */
+    private Map<Long,Object> contents(FluidCheckpointCodec.Checkpoint checkpoint) {
         var out=new TreeMap<Long,Object>();
         for(var entry:checkpoint.islands()) {
-            var graph=entry.snapshot().graph();
-            for(var n:graph.reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)assertNull(out.put(n.id(),n.inventory()),"vessel "+n.id()+" in two islands");
+            var graph=entry.snapshot().graph();var own=entry.key().on(model);
+            for(var n:graph.reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)assertNull(out.put(n.id(),IslandSets.paddedNode(n,own,model).inventory()),"vessel "+n.id()+" in two islands");
             for(var p:graph.pipes())if(p.filter()!=null)assertNull(out.put(p.id()-Long.MIN_VALUE,p.filter()),"filter "+p.id()+" in two islands");
         }
         return out;
     }
-    private static double[] moles(FluidCheckpointCodec.Checkpoint checkpoint,int components) {
+    /** Amounts on the axis {@code components} on the world list, by compound id. */
+    private double[] onWorld(double[] amounts,List<String> components) {
+        var world=model.components();var out=new double[world.size()];
+        for(int c=0;c<amounts.length;c++){int to=world.indexOf(components.get(c));if(to>=0)out[to]=amounts[c];else assertEquals(0,amounts[c],components.get(c)+" is off the world list");}
+        return out;
+    }
+    /** Every vessel's moles summed on the world list: each island's amounts mapped by compound id (V3). */
+    private double[] moles(FluidCheckpointCodec.Checkpoint checkpoint,int components) {
         var total=new double[components];
-        for(var entry:checkpoint.islands())for(var n:entry.snapshot().graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)for(int c=0;c<components;c++)total[c]+=n.inventory().moles()[c];
+        for(var entry:checkpoint.islands())for(var n:entry.snapshot().graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR){var m=IslandSets.amounts(n.inventory().moles(),entry.key().on(model),model);for(int c=0;c<components;c++)total[c]+=m[c];}
         return total;
     }
 
     @Test void anotherStateFormatRebuildsTheWorldFromItsFactsWithEveryVesselExactlyAsSaved() {
         var world=world();var image=image(world);var saved=world.ledger.snapshot();
-        var exact=load(image,key->model,CATALOG);
+        var exact=load(image,key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.EXACT,exact.route(),"this build's own checkpoint loads exactly");
-        var rebuilt=load(edited(image,core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG);
+        var rebuilt=load(edited(image,core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,rebuilt.route());assertTrue(rebuilt.reason().contains("state format "+(FluidCheckpointCodec.VERSION+1)),rebuilt.reason());
         assertEquals(contents(exact.checkpoint()),contents(rebuilt.checkpoint()),"every vessel's inventory and every filter's cake, bit for bit");
         var ledger=rebuilt.world().orElseThrow();
@@ -154,12 +161,11 @@ class FluidFactsCompatTest {
             assertTrue(s.certificate().isEmpty()&&s.lastResult().isEmpty()&&s.fences().isEmpty());
         }
         // The rebuilt world runs as a loaded one does, its stock conserved, and saves to an exact checkpoint again.
-        var reloaded=new EventPathWorld(1,ledger,rebuilt.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList());
+        var reloaded=new EventPathWorld(1,ledger,rebuilt.checkpoint().islands());
         reloaded.runTo(epoch+300);reloaded.assertKeptUp("the rebuilt line");
-        var before=moles(rebuilt.checkpoint(),model.componentCount());var after=moles(new FluidCheckpointCodec.Checkpoint(reloaded.coordinator.snapshots().stream()
-                .map(s->new FluidCheckpointCodec.IslandEntry(EventPathWorld.DIM,PACKAGE,s)).toList()),model.componentCount());
+        var before=moles(rebuilt.checkpoint(),model.componentCount());var after=moles(new FluidCheckpointCodec.Checkpoint(reloaded.entries()),model.componentCount());
         for(int c=0;c<before.length;c++)assertEquals(before[c],after[c],1e-9*Math.max(1,Math.abs(before[c])),"component "+c+" conserved by the rebuilt line");
-        var again=image(reloaded);assertEquals(FluidCheckpointStore.Route.EXACT,load(again,key->model,CATALOG).route());
+        var again=image(reloaded);assertEquals(FluidCheckpointStore.Route.EXACT,load(again,key->key.on(model),CATALOG).route());
     }
 
     /**
@@ -167,17 +173,18 @@ class FluidFactsCompatTest {
      * temperature are kept, the current data gives its energy and pressure, and the ledger books the energy difference.
      */
     @Test void aChangedBasisRestatesEveryVesselKeepingItsAmountsAndTemperatureAndBooksTheEnergy() {
-        var world=world();var image=image(world);var exact=load(image,key->model,CATALOG);
+        var world=world();var image=image(world);var exact=load(image,key->key.on(model),CATALOG);
         var changed=edited(image,core->{var entry=((ListTag)core.get("Packages")).getCompound(0);entry.putString("EnergyRevision",entry.getString("EnergyRevision")+"-retired");});
-        var restated=load(changed,key->model,CATALOG);
+        var restated=load(changed,key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,restated.route());assertTrue(restated.reason().contains("property data of package "+PACKAGE+" changed"),restated.reason());
         var before=new TreeMap<Long,PassiveNetwork.Reservoir>();var after=new TreeMap<Long,PassiveNetwork.Reservoir>();
-        for(var e:exact.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)before.put(n.id(),n);
-        for(var e:restated.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)after.put(n.id(),n);
+        var exactOwn=new HashMap<Long,List<String>>();var restatedOwn=new HashMap<Long,List<String>>();
+        for(var e:exact.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR){before.put(n.id(),n);exactOwn.put(n.id(),e.key().on(model).components());}
+        for(var e:restated.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR){after.put(n.id(),n);restatedOwn.put(n.id(),e.key().on(model).components());}
         assertEquals(before.keySet(),after.keySet());double energy=0;
         for(long id:before.keySet()) {
             var a=before.get(id);var b=after.get(id);
-            assertArrayEquals(a.inventory().moles(),b.inventory().moles(),"vessel "+id+": its moles are kept exactly");
+            assertArrayEquals(onWorld(a.inventory().moles(),exactOwn.get(id)),onWorld(b.inventory().moles(),restatedOwn.get(id)),"vessel "+id+": its moles are kept exactly");
             assertEquals(a.inventory().volume(),b.inventory().volume());assertEquals(a.inventory().solids(),b.inventory().solids());
             assertEquals(a.state().temperature(),b.state().temperature(),1e-9*a.state().temperature(),"vessel "+id+": its temperature is kept");
             assertEquals(a.state().pressure(),b.state().pressure(),1e-6*a.state().pressure(),"vessel "+id+": the same data gives the same pressure");
@@ -202,16 +209,17 @@ class FluidFactsCompatTest {
         for(var row:core.islands()) {
             var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
             var components=new ArrayList<>(facts.components());components.add("Retired");
-            var widened=facts.vessels().stream().map(v->{var moles=Arrays.copyOf(v.moles(),v.moles().length+1);moles[moles.length-1]=2.5;kept.put(v.id(),v.moles());
+            var widened=facts.vessels().stream().map(v->{var moles=Arrays.copyOf(v.moles(),v.moles().length+1);moles[moles.length-1]=2.5;kept.put(v.id(),onWorld(v.moles(),facts.components()));
                 return new FluidFacts.Vessel(v.id(),v.volume(),v.levelHeight(),v.open(),moles,v.energy(),v.solids(),v.temperature(),v.pressure(),v.liquid(),v.vapor(),v.waterLiquid(),v.waterVapor(),v.hydrocarbonPressure());}).toList();
             vessels+=widened.size();
             placed.add(new FluidFacts.Placed(new FluidFacts.Island(facts.dimension(),facts.packageId(),components,widened,facts.filters(),null),row.committed()));
         }
-        var rebuilt=FluidFacts.rebuild(world,placed,core.epoch(),key->model,CATALOG,true,"test");
+        var rebuilt=FluidFacts.rebuild(world,placed,core.epoch(),key->key.on(model),CATALOG,true,"test");
         assertEquals(Map.of("Retired",2.5*vessels),rebuilt.world().restated().removedMoles(),"the ledger books the removed component by id");
         for(var entry:rebuilt.checkpoint().islands()) {
             assertTrue(entry.snapshot().status().contains("removed by the property data: Retired "+(2.5*vessels)+" mol"),entry.snapshot().status());
-            for(var n:entry.snapshot().graph().reservoirs())if(kept.containsKey(n.id()))assertArrayEquals(kept.get(n.id()),n.inventory().moles(),"vessel "+n.id()+": every other amount is kept");
+            var own=entry.key().on(model).components();
+            for(var n:entry.snapshot().graph().reservoirs())if(kept.containsKey(n.id()))assertArrayEquals(kept.get(n.id()),onWorld(n.inventory().moles(),own),"vessel "+n.id()+": every other amount is kept");
         }
     }
 
@@ -236,7 +244,7 @@ class FluidFactsCompatTest {
                             new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().produced().moles(),0.),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds()),u.condensers()));
         }
         var wide=new FluidFacts.World(world.nextIdentity(),new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision()),registrations,total.apply(world.constructed()),total.apply(world.destroyed()),world.recoveries(),world.restated(),world.removedMovers(),columns);
-        return FluidFacts.rebuild(wide,placed,core.epoch(),key->model,CATALOG,true,"test");
+        return FluidFacts.rebuild(wide,placed,core.epoch(),key->key.on(model),CATALOG,true,"test");
         };
         var rebuilt=restated.apply(1.5);
         assertEquals(Map.of("Retired",1.5),rebuilt.world().restated().removedMoles(),"the ledger books the removed component by id");
@@ -250,27 +258,27 @@ class FluidFactsCompatTest {
     @Test void aColumnsQueuedEventsSettleOnWhatStands() {
         var stoppedHolding=corpusWorld();var unit=stoppedHolding.ledger.columns().values().iterator().next();
         stoppedHolding.ledger.column(unit.withStations(false,unit.stations().stream().map(s->s.withDevice(0)).toList()));
-        var settled=load(edited(image(stoppedHolding),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow();
+        var settled=load(edited(image(stoppedHolding),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->key.on(model),CATALOG).world().orElseThrow();
         assertEquals(0,suspended(settled),"a stopped unit holds nothing");
         assertTrue(unit.stations().stream().noneMatch(s->settled.active().containsKey(s.device())),"its ports left");
         assertFalse(settled.columns().get(unit.id()).running());
 
         var unplaced=corpusWorld();var u=unplaced.ledger.columns().values().iterator().next();
         unplaced.ledger.column(u.withStations(true,u.stations().stream().map(s->s.withDevice(s.device()+1000)).toList()));
-        var started=load(edited(image(unplaced),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow();
+        var started=load(edited(image(unplaced),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->key.on(model),CATALOG).world().orElseThrow();
         assertEquals(0,suspended(started),"a Start whose ports never stood holds nothing");
         assertFalse(started.columns().get(u.id()).running());
 
         var leaving=corpusWorld();var v=leaving.ledger.columns().values().iterator().next();double[] destroyed=leaving.ledger.snapshot().destroyed().moles();
         leaving.ledger.column(v.leave());
-        var left=load(edited(image(leaving),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow();
+        var left=load(edited(image(leaving),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->key.on(model),CATALOG).world().orElseThrow();
         assertFalse(left.columns().containsKey(v.id()),"a dismantled column leaves");
         assertEquals(0,suspended(left));
         assertEquals(Arrays.stream(destroyed).sum()+v.stations().getFirst().account().total(),Arrays.stream(left.destroyed().moles()).sum(),1e-9,"its accounts are destroyed");
         assertEquals(1.5,left.destroyed().solidMasses().values().stream().mapToDouble(Double::doubleValue).sum(),0,"and its solids (merge review, finding 10)");
 
         var running=corpusWorld();var w=running.ledger.columns().values().iterator().next();
-        assertTrue(load(edited(image(running),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow().columns().get(w.id()).running(),"a unit whose devices stand keeps running");
+        assertTrue(load(edited(image(running),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->key.on(model),CATALOG).world().orElseThrow().columns().get(w.id()).running(),"a unit whose devices stand keeps running");
     }
     // ---------------- the world basis by compound ids (batch 2026-11-04-refinery-compounds, W4) ----------------
 
@@ -321,11 +329,11 @@ class FluidFactsCompatTest {
         double[] built=new double[ids.size()],gone=new double[ids.size()];
         built[ids.indexOf("Nitrogen")]=5;built[ids.indexOf("Propane")]=2;built[ids.indexOf("Water")]=1;gone[ids.indexOf("Propane")]=.5;
         var saved=new WorldTopologyLedger.Snapshot(1200,7,Map.of(),List.of(),new WorldTopologyLedger.MaterialTotal(built,-4e5),new WorldTopologyLedger.MaterialTotal(gone,-1e5),basis);
-        var store=FluidCheckpointStore.memory();store.commit(store.prepare(new FluidCheckpointCodec.Checkpoint(List.of()),Optional.of(saved),saved.onlineTick(),key->model));
+        var store=FluidCheckpointStore.memory();store.commit(store.prepare(new FluidCheckpointCodec.Checkpoint(List.of()),Optional.of(saved),saved.onlineTick(),key->key.on(model)));
         var image=edited(store.image(),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1));
         for(var catalog:List.of(lacking("Propane"),renamed())) {
             var current=networkModel(catalog);
-            var loaded=load(image,key->current,catalog);
+            var loaded=load(image,key->key.on(current),catalog);
             assertEquals(FluidCheckpointStore.Route.FACTS,loaded.route());assertTrue(loaded.reason().contains("state format "+(FluidCheckpointCodec.VERSION+1)),loaded.reason());
             assertTrue(loaded.checkpoint().islands().isEmpty());
             var ledger=loaded.world().orElseThrow();ledger.basis().requireCurrent(catalog);
@@ -355,25 +363,25 @@ class FluidFactsCompatTest {
             fail("No compound-basis corpus image: copy "+written.toAbsolutePath()+" to "+folder);
         }
         var image=read(folder);var renamedCatalog=renamed();var renamedModel=networkModel(renamedCatalog);
-        var bundled=load(image,key->model,CATALOG);var renamed=load(image,key->renamedModel,renamedCatalog);
+        var bundled=load(image,key->key.on(model),CATALOG);var renamed=load(image,key->key.on(renamedModel),renamedCatalog);
         assertEquals(bundled.route(),renamed.route(),renamed.reason());
         assertEquals(contents(bundled.checkpoint()),contents(renamed.checkpoint()),"every vessel, bit for bit");
         assertEquals(WorldTopologyLedger.FluidBasis.capture(renamedCatalog),renamed.world().orElseThrow().basis(),"the world names the current network package");
         assertEquals(bundled.world().orElseThrow().restated(),renamed.world().orElseThrow().restated());
         // A save of this build's data keeps its state under the renamed package, and saves again under the new id.
-        var fresh=image(propaneWorld());var store=FluidCheckpointStore.memory(fresh);var kept=store.load(fresh.core(),key->renamedModel,renamedCatalog);
+        var fresh=image(propaneWorld());var store=FluidCheckpointStore.memory(fresh);var kept=store.load(fresh.core(),key->key.on(renamedModel),renamedCatalog);
         assertEquals(FluidCheckpointStore.Route.EXACT,kept.route(),kept.reason());
-        assertEquals(contents(load(fresh,key->model,CATALOG).checkpoint()),contents(kept.checkpoint()));
+        assertEquals(contents(load(fresh,key->key.on(model),CATALOG).checkpoint()),contents(kept.checkpoint()));
         assertEquals("icheme:network_renamed",kept.world().orElseThrow().basis().packageId());
         // The world saves its islands as the authority does, on the current package: every unit is written again under the
         // new id (a unit is reused only for the package it names), and the save loads exactly.
-        var islands=new FluidCheckpointCodec.Checkpoint(kept.checkpoint().islands().stream().map(e->new FluidCheckpointCodec.IslandEntry(e.dimension(),"icheme:network_renamed",e.snapshot())).toList());
-        store.commit(store.prepare(islands,kept.world(),FluidCheckpointCodec.epoch(fresh.core()),key->renamedModel));var again=store.image();
+        var islands=new FluidCheckpointCodec.Checkpoint(kept.checkpoint().islands().stream().map(e->new FluidCheckpointCodec.IslandEntry(e.dimension(),"icheme:network_renamed",e.compounds(),e.snapshot())).toList());
+        store.commit(store.prepare(islands,kept.world(),FluidCheckpointCodec.epoch(fresh.core()),key->key.on(renamedModel)));var again=store.image();
         var resaved=FluidCheckpointCodec.readCore(again.core());
         assertEquals(List.of("icheme:network_renamed"),resaved.packages().stream().map(FluidCheckpointCodec.PackageRecord::packageId).toList());
         var t=resaved.topology();var topologyPack=again.packs().get(t.pack());
         assertEquals("icheme:network_renamed",FluidCheckpointCodec.worldFacts(topologyPack,FluidCheckpointCodec.topologySections(topologyPack,(int)t.offset(),t.length(),resaved.topologyGeneration())).basis().packageId());
-        var reloaded=load(again,key->renamedModel,renamedCatalog);
+        var reloaded=load(again,key->key.on(renamedModel),renamedCatalog);
         assertEquals(FluidCheckpointStore.Route.EXACT,reloaded.route(),reloaded.reason());assertEquals(contents(kept.checkpoint()),contents(reloaded.checkpoint()));
 
         // Without propane: it leaves the world, booked by id; every other amount is kept.
@@ -382,7 +390,7 @@ class FluidFactsCompatTest {
         for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
             axis=facts.components();for(var v:facts.vessels()){saved.put(v.id(),v);propane+=v.moles()[axis.indexOf("Propane")];}}
         assertTrue(propane>1,"the image's vessels hold propane: "+propane);
-        var restated=load(image,key->lackingModel,lackingCatalog);
+        var restated=load(image,key->key.on(lackingModel),lackingCatalog);
         assertEquals(FluidCheckpointStore.Route.FACTS,restated.route());
         var ledger=restated.world().orElseThrow();assertEquals(WorldTopologyLedger.FluidBasis.capture(lackingCatalog),ledger.basis());
         assertEquals(Map.of("Propane",propane),ledger.restated().removedMoles(),"the ledger books the removed propane by id");
@@ -390,8 +398,8 @@ class FluidFactsCompatTest {
         for(var entry:restated.checkpoint().islands()) {
             assertTrue(entry.snapshot().status().contains("removed by the property data: Propane "+propane+" mol"),entry.snapshot().status());
             for(var n:entry.snapshot().graph().reservoirs()) {
-                var v=saved.get(n.id());if(v==null)continue;vessels++;
-                for(int c=0;c<axis.size();c++){int to=now.indexOf(axis.get(c));if(to>=0)assertEquals(v.moles()[c],n.inventory().moles()[to],"vessel "+n.id()+": "+axis.get(c)+" kept");}
+                var v=saved.get(n.id());if(v==null)continue;vessels++;var held=IslandSets.amounts(n.inventory().moles(),entry.key().on(lackingModel),lackingModel);
+                for(int c=0;c<axis.size();c++){int to=now.indexOf(axis.get(c));if(to>=0)assertEquals(v.moles()[c],held[to],"vessel "+n.id()+": "+axis.get(c)+" kept");}
             }
         }
         assertEquals(saved.size(),vessels);
@@ -425,7 +433,7 @@ class FluidFactsCompatTest {
         assertEquals(-42.25,written.active().get(Math.min(tube,shell)).device().heat().transitJoule(),"the lower side holds it");
         assertEquals(0,written.active().get(Math.max(tube,shell)).device().heat().transitJoule(),"the other side 0");
         assertSame(written,written.withHeatTransits(written.heatTransits()),"an unchanged transit writes nothing new");
-        var decoded=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(written),written.onlineTick(),key->model);
+        var decoded=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(written),written.onlineTick(),key->key.on(model));
         assertEquals(Map.of(pair,-42.25),decoded.heatTransits(),"the facts round-trip it");
         double before=world.ledger.snapshot().destroyed().totalEnergy();world.ledger.removedHeat(-42.25);
         assertEquals(before-42.25,world.ledger.snapshot().destroyed().totalEnergy(),1e-9,"a removed unit books it as destroyed energy");
@@ -435,14 +443,14 @@ class FluidFactsCompatTest {
         var unit=CheckpointImages.unitBytes(image,island);
         // The facts schema follows the 30-byte header: a later schema was written by a newer build.
         var later=unit.clone();later[FluidCheckpointCodec.UNIT_HEADER]=(byte)(FluidFacts.SCHEMA+1);
-        var refusal=assertThrows(FluidCheckpointCodec.Unreadable.class,()->load(CheckpointImages.withUnit(image,island,later),key->model,CATALOG)).getMessage();
+        var refusal=assertThrows(FluidCheckpointCodec.Unreadable.class,()->load(CheckpointImages.withUnit(image,island,later),key->key.on(model),CATALOG)).getMessage();
         assertTrue(refusal.contains("facts schema "+(FluidFacts.SCHEMA+1))&&refusal.contains("newer build"),refusal);
         // A device kind this build does not know (a renamed constant without its alias) refuses the world too.
         var topology=image.core().getCompound("Topology");var pack=image.packs().get(topology.getLong("Pack"));int offset=(int)topology.getLong("Offset");
         var bytes=CheckpointImages.renamed(Arrays.copyOfRange(pack,offset,offset+topology.getInt("Length")),"RESERVOIR","RESERVOIX");
         var packs=new HashMap<>(image.packs());var copy=pack.clone();System.arraycopy(bytes,0,copy,offset,bytes.length);packs.put(topology.getLong("Pack"),copy);
         var core=image.core().copy();core.getCompound("Topology").putByteArray("SHA256",FluidCheckpointCodec.sha256(bytes));CheckpointImages.reseal(core);
-        refusal=assertThrows(FluidCheckpointCodec.Unreadable.class,()->load(new FluidCheckpointCodec.Image(core,packs),key->model,CATALOG)).getMessage();
+        refusal=assertThrows(FluidCheckpointCodec.Unreadable.class,()->load(new FluidCheckpointCodec.Image(core,packs),key->key.on(model),CATALOG)).getMessage();
         assertTrue(refusal.contains("unknown Kind RESERVOIX"),refusal);
     }
     /** Fields are append-only: a record that ends before a field reads that field's default (the behaviour before the
@@ -459,7 +467,7 @@ class FluidFactsCompatTest {
     private static final Path CORPUS=Path.of("src/test/resources/compat/fluid");
     @Test void towerSettingsSurviveBothExactAndFactsOnlyLoads(){
         var world=corpusWorld();var saved=image(world);
-        for(var restored:List.of(load(saved,key->model,CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->model,CATALOG))){
+        for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG))){
             var towers=restored.world().orElseThrow().active().values().stream().map(r->r.spec().tower()).filter(java.util.Objects::nonNull).toList();
             assertEquals(List.of(CoolingTower.induced(8,2,3,2).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,.4,299)),towers);
         }
@@ -479,7 +487,7 @@ class FluidFactsCompatTest {
         try(var images=Files.list(CORPUS)) {
             for(var folder:images.sorted().toList()) {
                 var image=read(folder);var expected=new Properties();try(var in=Files.newBufferedReader(folder.resolve("expected.properties"))){expected.load(in);}
-                var rebuilt=load(edited(image,core->core.putInt("StateFormat",Integer.MAX_VALUE)),key->model,CATALOG);
+                var rebuilt=load(edited(image,core->core.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG);
                 assertEquals(FluidCheckpointStore.Route.FACTS,rebuilt.route(),folder.toString());
                 var ledger=rebuilt.world().orElseThrow();
                 assertEquals(Integer.parseInt(expected.getProperty("registrations")),ledger.active().size(),folder+": registrations");
@@ -509,7 +517,7 @@ class FluidFactsCompatTest {
     @Test void aSchemaOneWorldRestatesOnceOntoTheDeclaredRevisions() throws IOException {
         var folder=CORPUS.resolve("schema-1");var image=read(folder);
         var expected=new Properties();try(var in=Files.newBufferedReader(folder.resolve("expected.properties"))){expected.load(in);}
-        var restated=load(image,key->model,CATALOG);
+        var restated=load(image,key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,restated.route());
         assertTrue(restated.reason().contains("property data of package "+PACKAGE+" changed"),restated.reason());
         var ledger=restated.world().orElseThrow();
@@ -520,8 +528,8 @@ class FluidFactsCompatTest {
         double energy=0;for(var e:restated.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs())
             if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)energy+=Math.abs(n.inventory().internalEnergy());
         assertEquals(0,ledger.restated().energy(),1e-9*energy,"the same data gives the same energy");
-        var reloaded=new EventPathWorld(1,ledger,restated.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList());
-        assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->model,CATALOG).route(),"restated once");
+        var reloaded=new EventPathWorld(1,ledger,restated.checkpoint().islands());
+        assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->key.on(model),CATALOG).route(),"restated once");
     }
     /**
      * A vessel of superheated steam and nitrogen, charged from a generator of 80 % steam at 520 K and 10 bar, written under
@@ -541,7 +549,7 @@ class FluidFactsCompatTest {
         var image=read(folder);var core=FluidCheckpointCodec.readCore(image.core());var saved=new TreeMap<Long,FluidFacts.Vessel>();
         for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());
             for(var v:FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id()).vessels())saved.put(v.id(),v);}
-        var restated=load(image,key->model,CATALOG);
+        var restated=load(image,key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,restated.route());
         assertTrue(restated.reason().contains("property data of package "+PACKAGE+" changed"),restated.reason());
         var ledger=restated.world().orElseThrow();
@@ -550,7 +558,7 @@ class FluidFactsCompatTest {
         for(var e:restated.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs()) {
             if(n.kind()!=PassiveNetwork.NodeKind.RESERVOIR)continue;
             var v=saved.get(n.id());var s=n.state();vessels++;
-            assertArrayEquals(v.moles(),n.inventory().moles(),"vessel "+n.id()+": its moles are kept exactly");
+            assertArrayEquals(v.moles(),IslandSets.amounts(n.inventory().moles(),e.key().on(model),model),"vessel "+n.id()+": its moles are kept exactly");
             assertEquals(v.volume(),n.inventory().volume());
             assertEquals(v.temperature(),s.temperature(),1e-9*v.temperature(),"vessel "+n.id()+": its temperature is kept");
             assertTrue(s.waterVapor()>0&&s.waterLiquid()==0&&s.waterVapor()==v.waterVapor(),"all of the water is steam, as saved");
@@ -572,8 +580,8 @@ class FluidFactsCompatTest {
         // 7.98 bar, -173 J/mol (SteamVirialTest checks dB/dT against IF97 Region 2).
         assertTrue(residual<0,"the steam's residual energy: "+residual+" J");
         assertEquals(energy,ledger.restated().energy(),1e-9*Math.abs(energy),"the ledger books the energy difference");
-        var reloaded=new EventPathWorld(1,ledger,restated.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList());
-        assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->model,CATALOG).route(),"restated once");
+        var reloaded=new EventPathWorld(1,ledger,restated.checkpoint().islands());
+        assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->key.on(model),CATALOG).route(),"restated once");
     }
     /** A 1 m3 vessel charged from a generator of 80 % steam and 20 % nitrogen at 520 K and 10 bar (the steam's dew point 444 K), the generator then removed. */
     private EventPathWorld steamWorld() {
@@ -600,7 +608,7 @@ class FluidFactsCompatTest {
     @Test void aWorldWithOneBlockMoversOpensWithoutThemAndKeepsEveryVessel() throws IOException {
         var folder=Path.of("src/test/resources/compat/removed-movers");var image=read(folder);
         var expected=new Properties();try(var in=Files.newBufferedReader(folder.resolve("expected.properties"))){expected.load(in);}
-        var loaded=load(image,key->model,CATALOG);
+        var loaded=load(image,key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,loaded.route());
         assertTrue(loaded.reason().contains("property data of package "+PACKAGE+" changed"),loaded.reason());
         var ledger=loaded.world().orElseThrow();
@@ -609,13 +617,13 @@ class FluidFactsCompatTest {
         double total=Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum();
         assertEquals(Double.parseDouble(expected.getProperty("moles")),total,1e-12*total,"every vessel keeps its stock");
         assertEquals(Long.parseLong(expected.getProperty("vessels")),contents(loaded.checkpoint()).size());
-        var reloaded=new EventPathWorld(1,ledger,loaded.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList());
-        assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->model,CATALOG).route(),"opened once");
+        var reloaded=new EventPathWorld(1,ledger,loaded.checkpoint().islands());
+        assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->key.on(model),CATALOG).route(),"opened once");
     }
     private void write(FluidCheckpointCodec.Image image,Path folder) throws IOException {
         Files.createDirectories(folder);NbtIo.writeCompressed(image.core(),folder.resolve("core.dat"));
         for(var pack:image.packs().entrySet())Files.write(folder.resolve("pack-"+pack.getKey()+".bin"),pack.getValue());
-        var loaded=load(image,key->model,CATALOG);var props=new Properties();
+        var loaded=load(image,key->key.on(model),CATALOG);var props=new Properties();
         props.setProperty("registrations",Integer.toString(loaded.world().orElseThrow().active().size()));
         props.setProperty("laid",Long.toString(loaded.world().orElseThrow().active().values().stream().filter(r->r.device().joints()!=PhysicalFluidTopology.ALL_FACES).count()));
         props.setProperty("lanes",Long.toString(loaded.world().orElseThrow().active().values().stream().filter(r->r.device().position().lane()!=0&&r.device().position().lane()<=PhysicalFluidTopology.RACK_PLACES).count()));

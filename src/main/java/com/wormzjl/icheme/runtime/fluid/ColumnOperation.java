@@ -577,7 +577,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             for(var st:u.stations())if(st.device()==node.id())s=st;
             if(s==null)continue;
             if(plans==null)plans=new HashMap<>();
-            plans.put(node.id(),s.port().inlet()?inletPlan(r,s,node,slice):outletPlan(r,s,node,slice));
+            plans.put(node.id(),s.port().inlet()?inletPlan(r,s,node,slice):outletPlan(island,r,s,node,slice));
         }
         return plans==null?Map.of():plans;
     }
@@ -600,7 +600,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * the product's solved temperature; the valve takes the production of the last cycle through the fence corrected by the
      * account's fill, and never more than those moles over the slice.
      */
-    private PortPlan outletPlan(Run r,ColumnUnit.Station s,PassiveNetwork.Reservoir node,IslandClock.Slice slice) {
+    private PortPlan outletPlan(long island,Run r,ColumnUnit.Station s,PassiveNetwork.Reservoir node,IslandClock.Slice slice) {
         long fence=slice.startTick()-FENCE_TICKS;
         var available=s.account().moles();var solids=s.solids();var log=r==null?null:r.credits.get(s.device());
         var made=r==null?null:asOf(log,Credit::tick,fence);
@@ -609,13 +609,53 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double temperature=node.state().temperature();
         var table=r==null?null:r.tableAt(fence);
         if(table!=null)for(var p:table.products())if(p.port()==s.port()&&p.index()==s.index())temperature=p.temperature();
-        if(!(total>0))return new PortPlan(node.id(),s.valve(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
+        // The port gives on its island's own compound list (V2): a product compound the island does not carry yet first grows
+        // the island (a topology event, queued on the engine's tick, grow), and the account holds the moles until then.
+        var mine=total>0?onIsland(island,available):null;
+        if(total>0&&mine==null)growth.add(s.device());
+        if(!(total>0)||mine==null)return new PortPlan(node.id(),s.valve(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
         double mass=mass(available),cap=mass/slice.seconds()*TAKE_MARGIN,rate=cap;
         if(made!=null) {
             double produced=mass(made.product().moles())/(CYCLE_TICKS/20.0),aim=produced*BUFFER_SECONDS/2;
             if(aim>0)rate=produced*Math.max(0,Math.min(2,mass/aim));
         }
-        return new PortPlan(node.id(),s.valve(),Math.min(cap,rate),temperature,available,solids);
+        return new PortPlan(node.id(),s.valve(),Math.min(cap,rate),temperature,mine,solids);
+    }
+    /** The ports whose islands must grow before they give their accounts (V2): queued edits, applied on the engine's tick. */
+    private final Set<Long> growth=new LinkedHashSet<>();
+    /**
+     * Queues, through {@code submit}, an edit of every port whose account holds a compound its island does not carry (its
+     * registration at its next revision, which recompiles its island on the engine's schedule with the compounds the port
+     * delivers, {@link #compounds}); a port with an event already queued waits for it. Nothing when none is waiting.
+     */
+    public void grow(java.util.function.Consumer<List<WorldTopologyLedger.Edit>> submit) {
+        if(growth.isEmpty())return;
+        var waiting=List.copyOf(growth);growth.clear();
+        for(long device:waiting) {
+            var r=topology.latest().get(device);if(r==null||topology.pending(device))continue;
+            submit.accept(List.of(new WorldTopologyLedger.Edit(device,new WorldTopologyLedger.Registration(r.device(),r.spec(),Math.addExact(r.revision(),1)))));
+        }
+    }
+    /** The compounds outlet port {@code device} may deliver: those its account holds (water not named), for its island's list (V2). */
+    public Set<String> compounds(long device) {
+        Long unit=portUnits.get(device);if(unit==null)return Set.of();var u=topology.column(unit);if(u==null)return Set.of();
+        var found=new HashSet<String>();
+        for(var st:u.stations())if(st.device()==device&&!st.port().inlet()){var n=st.account().moles();for(int i=0;i<n.length;i++)if(n[i]>0&&!axis.get(i).equals(SplitTable.WATER))found.add(axis.get(i));}
+        return found;
+    }
+    /** {@code moles} on the world list on island {@code island}'s own list, or null where it holds a compound the island does not carry. */
+    private double[] onIsland(long island,double[] moles) {
+        var own=coordinator.model(island).components();if(own.equals(axis))return moles;
+        var result=new double[own.size()];
+        for(int i=0;i<moles.length;i++){if(moles[i]==0)continue;int j=own.indexOf(axis.get(i));if(j<0)return null;result[j]=moles[i];}
+        return result;
+    }
+    /** {@code moles} on island {@code island}'s own list on the world list (the accounts'). */
+    private double[] onWorld(long island,double[] moles) {
+        var own=coordinator.model(island).components();if(own.equals(axis))return moles;
+        var result=new double[axis.size()];
+        for(int i=0;i<moles.length;i++){if(moles[i]==0)continue;int j=axis.indexOf(own.get(i));if(j<0)throw new IllegalStateException("Island "+island+" carries "+own.get(i)+", which the world list does not");result[j]=moles[i];}
+        return result;
     }
     private double mass(double[] moles){double m=0;for(int i=0;i<moles.length;i++)m+=moles[i]*weights[i];return m;}
     private double molar(double[] moles){double t=0;for(double n:moles)t+=n;return t>0?mass(moles)/t:0;}
@@ -626,7 +666,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         for(var b:result.boundaries()) {
             if(b.kind()!=ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE||!portUnits.containsKey(b.nodeId()))continue;
             if(moles==null){moles=new HashMap<>();energy=new HashMap<>();solids=new HashMap<>();}
-            var sum=moles.computeIfAbsent(b.nodeId(),id->new double[weights.length]);var n=b.moles();for(int i=0;i<n.length;i++)sum[i]+=n[i];
+            var sum=moles.computeIfAbsent(b.nodeId(),id->new double[weights.length]);var n=onWorld(island,b.moles());for(int i=0;i<n.length;i++)sum[i]+=n[i];
             energy.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);solids.merge(b.nodeId(),b.solids(),SolidInventory::plus);
         }
         if(moles!=null)credit(moles,energy,solids,start,end);
