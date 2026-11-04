@@ -2,7 +2,7 @@
 
 Purpose: realistic pumps and compressors at process level, separate drivers (motor, steam turbine, creative motor) joined by shafts and gearboxes, electricity (FE) for motors and air coolers, Create as an optional power source.
 
-Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e with start rules A1 and A2, owner decision D11, campaigned; two new hold classes wait on the owner, `W2_CAMPAIGN_REVIEW.md` section 4). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
+Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e with start rules A1 and A2, owner decision D11; E8 fixed by taut-vessel row weights, D12/D13, campaigned; E5 waits on the owner, `W2_D13_CAMPAIGN_REVIEW.md` section 4). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
 
 ## History
 
@@ -15,6 +15,8 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 - 2026-11-04: F2e (1d6d5d19c, WIP): the flow row of `u = smin(1 − s v, m (1 − v) + δ)`, s 0.4 %, m 10, ε 0.02, δ putting no flow on the rise limit (without it six tests cycled between `CLOSED` and `MOVER_LAW`). 418 of 420 affected tests and 58 of 58 hold gates pass; a dead-headed mover now runs on its law with no net flow or stands closed (eight tests restated). The two failures are D10's gaps, failing under F2b too: a flow valve raised past the pump's rate (F1's yield rule) and a cooling-tower pump that never primes (its rise limit reads gas at its suction end). `W2_CORNER_REVIEW.md`: options A (F2e with start-stage proposals A1, A2), B (2 % slip), C (F2b).
 - 2026-11-04: owner: "A: F2e with A1, A2" (D11). A1: a flow valve carried into a solve regulating starts open where its target lies above the set flow of a set-flow mover in its line (reading A9). A2 as written cycled (a reopening and a law on two densities) and left the tower pump reversing; read as a set-flow pump's relief rise on its supply's density in its law, mode tests and status, the start balance on the suction stream (A10), since the supply's relief in the balance stalled the LNG hold gate. The 59 classes (415 tests) and the 58 hold gates pass.
 - 2026-11-04: the full campaign of `bd89826a3` (`W2_CAMPAIGN_REVIEW.md`): 992, 992 and 998 clean against 991, 993 and 1000; new holds 575, 952 (E5) and 563, 896 (E8); 431 and 301 gone. Traced 896 (a pump dead-heading a liquid-full tank on its relief line fails the reconstruction gate) and 952 (a pump starved by a 1 cm suction line takes its suction junction to the pressure floor in pass 0); both hold the same on the head basis, so the law, not A1 or A2. Proposed: close at the relief (E8 a), start at a suction link's cap (E5 a). The harness's verbose replay skips a held island that is gone (`tools/rotating-machinery`).
+- 2026-11-04: owner decision D12 (E8 is the curve's shutoff; E5 a). Built by two Opus subagents: the Newton weights a taut vessel's wall and balance rows by the pressure they imply (stiffness over max(1e5, P)) in place of the small-headspace tolerance, and a set-flow mover starts at no more than its suction walk's smallest velocity cap. Reading A11 also clipped the curve at zero flow; 15 of 619 affected tests failed (a no-flow half-line leaves a dead-headed pocket's pressure undetermined, `D12_TESTS_REVIEW.md`). Owner decision D13: F2e unchanged with the reverse closure as its check valve. 98 classes and the hold gates pass; `a8accb372`.
+- 2026-11-04: the full campaign of `a8accb372` (`W2_D13_CAMPAIGN_REVIEW.md`): 992, 993 and 1000 clean; E8 (563, 896) gone, bundled defaults' implicit solves 181,014 → 26,788; E5 (575, 952) holds unchanged, so the start seed has no measured effect. Proposed: a vapour-pressure suction floor for every liquid (D59 (4) widened) and deleting the start seed.
 
 ## Documents
 
@@ -24,6 +26,8 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 - [W2_FORMS_REVIEW.md](W2_FORMS_REVIEW.md): the quick check of forms F1, F2, F2b and the centrifugal variant, and the form proposal.
 - [W2_CORNER_REVIEW.md](W2_CORNER_REVIEW.md): the chosen form F2b against its tests, the flow form F2c, and the law with slip F2e.
 - [W2_CAMPAIGN_REVIEW.md](W2_CAMPAIGN_REVIEW.md): the full campaign of F2e with A1 and A2, the two traced holds and the options for them.
+- [D12_TESTS_REVIEW.md](D12_TESTS_REVIEW.md): the affected tests of D12's first build; the clipped curve withdrawn (D13).
+- [W2_D13_CAMPAIGN_REVIEW.md](W2_D13_CAMPAIGN_REVIEW.md): the full campaign of D13; E8 gone, E5's options.
 
 ## Code areas (planned)
 
@@ -31,7 +35,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 
 ## Open items
 
-- Owner: E8 and E5 in `W2_CAMPAIGN_REVIEW.md` section 4 (recommended: close at the relief, start at a suction link's cap); confirm reading A10 of A2 (the pump's relief rise on its supply's density, the start balance on the suction stream).
+- Owner: E5 in `W2_D13_CAMPAIGN_REVIEW.md` section 4 (recommended: a vapour-pressure suction floor for every liquid; delete the start seed); confirm reading A10 of A2 (the pump's relief rise on its supply's density, the start balance on the suction stream).
 - To measure later, not proposed: a mover on F2e stands at its relief behind a sealed pocket (`PumpAheadOfFlowValveTest`, `SealedDischargeTest`), so D58's closure may no longer be needed for movers.
 - Owner request 2026-11-04, a motor or turbine sound apart from the pump or compressor head's, with the volume scaled by operating speed and equipment size: W4's follow-up (D13 on its branch, client and assets); the speed share in `FluidNetwork.MoverState` comes with W3's driver logic.
 - `DECISION_LOG.md` numbering: this branch's D10 (the law) and W4's D10 to D13 collide; renumber at the merge.
