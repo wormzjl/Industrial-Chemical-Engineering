@@ -17,7 +17,7 @@ Copy `examples/material-override` into a world's `datapacks` directory, enable i
 `/reload`. The example replaces the property record `icheme:tjl20_methane` to give methane an illustrative
 standard-liquid density (357.0 instead of 356.07 kg/m³); it is an editing example, not a measured reference dataset.
 Its other fields are the bundled record's (a test keeps them so), except its `revision`
-(`tjl20-methane-coolprop-r2-example-density`): an edit declares itself with a bump of the edited record's revision. Methane
+(`tjl20-methane-spine-r3-example-density`): an edit declares itself with a bump of the edited record's revision. Methane
 belongs to the network package, so the bumped revision changes the network's fluid identity: on a running world the
 reload holds the fluid network until the data is restored or the world is reopened (see "Reloads"); a new world starts
 on the edited record.

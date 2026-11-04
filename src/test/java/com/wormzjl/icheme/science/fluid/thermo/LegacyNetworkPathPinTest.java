@@ -70,7 +70,7 @@ class LegacyNetworkPathPinTest {
      * move, their gas volume, partial pressures, enthalpy and acoustic bound now those of {@code R T / p + B} steam; every
      * changed line runs only for a state or a phase holding water, so the dry probe states run no changed code.</p>
      */
-    static final String DIGEST = "5dbe1a5b44708afa1d795d1bf4dfd052806dd6e4aeb69a0efd614d5f6680f155";
+    static final String DIGEST = "829a4af5d5fabb47d173294a1430d40ee5d815c25ae1949baeaa93d0d7e76b4a";
     /**
      * The revision string: the formulation tag {@code direct-liquid-v1:tp-engine-v1:range-continuation-v1} (the phases
      * decided by the equilibrium engine, every data range continued since the owner rule of 2026-10-16) and the fluid
@@ -92,12 +92,13 @@ class LegacyNetworkPathPinTest {
      * isobutane and isopentane liquid viscosity tables are marked estimated past ChemSep's data end (r2). Since O2 of batch
      * 2026-11-04-open-thermo-data the NIST-derived records are re-derived from CoolProp, IAPWS-95 and ATcT (methane r2, nitrogen
      * r4 with the pilot's CoolProp viscosity tables, water r3, the liquid calibration points), an owner-approved physics change:
-     * the digest moves with them.
+     * the digest moves with them. Since O7 (decision E16) the methane Cp is fitted to the reference spine (methane r3, within
+     * 0.013 % of r2; the digest before, {@code 5dbe1a5b44708afa1d795d1bf4dfd052806dd6e4aeb69a0efd614d5f6680f155}).
      */
     static final String REVISION = String.join(";",
             "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:dalia-global-r1",
             "properties=" + String.join(",",
-                    "icheme:tjl20_methane@tjl20-methane-coolprop-r2",
+                    "icheme:tjl20_methane@tjl20-methane-spine-r3",
                     "icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1",
                     "icheme:tjl19_propane@tjl19-dwsim-10.2.3-r1",
                     "icheme:tjl19_isobutane@tjl19-dwsim-10.2.3-r1",

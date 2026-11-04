@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "icheme:tjl20_methane",
   "component": "Methane",
-  "revision": "tjl20-methane-coolprop-r2-example-density",
+  "revision": "tjl20-methane-spine-r3-example-density",
   "source": "Example override: illustrative hypothetical liquid density; not a measured dataset",
   "molecular_weight_kg_per_mol": 0.0160428,
   "normal_boiling_point_kelvin": 111.66,
@@ -23,12 +23,12 @@
     "type": "shifted_polynomial_5",
     "reference_kelvin": 298.15,
     "coefficients": [
-      35.69961112703681,
-      0.03745371293968529,
-      0.00014001510902418902,
-      -3.8364158190634657e-7,
-      4.638601560435372e-10,
-      -2.2560825450036827e-13
+      35.70208138851616,
+      0.03726345646011474,
+      0.00014293988221306974,
+      -3.9756267315253727e-7,
+      4.89673847734574e-10,
+      -2.420339184420931e-13
     ]
   },
   "models": {

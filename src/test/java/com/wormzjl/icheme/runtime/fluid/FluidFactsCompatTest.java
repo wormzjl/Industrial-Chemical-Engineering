@@ -489,9 +489,10 @@ class FluidFactsCompatTest {
      * 2026-11-04-open-thermo-data re-derived the ideal-gas Cp of nitrogen, methane and water vapour from open sources, so a
      * vessel restated at its saved temperature holds {@code sum n_i (h_i,new(T) - h_i,old(T))} more energy. Computed apart
      * from the engine by {@code tools/open-thermo-data/compat-energy.mjs} from the vessels' saved states and the records
-     * at the batch's parent (03e7b6138); the loads book these to 1e-8 J. Before O2 each was 0 (the same data).
+     * at the batch's parent (03e7b6138); the loads book these to 1e-8 J. Before O2 each was 0 (the same data). O7 refitted
+     * the methane Cp to the reference spine (decision E16): island-sets 616.608360671 to 615.412696198 J.
      */
-    private static final double SCHEMA_ONE_DATA_CHANGE=-10.2747985856,ISLAND_SETS_DATA_CHANGE=616.608360671,STEAM_V2_DATA_CHANGE=126.968251430;
+    private static final double SCHEMA_ONE_DATA_CHANGE=-10.2747985856,ISLAND_SETS_DATA_CHANGE=615.412696198,STEAM_V2_DATA_CHANGE=126.968251430;
     @Test void towerSettingsSurviveBothExactAndFactsOnlyLoads(){
         var world=corpusWorld();var saved=image(world);
         for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG))){
