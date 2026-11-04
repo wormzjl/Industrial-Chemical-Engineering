@@ -41,9 +41,9 @@ Commit `4536849bb` (owner decisions D19 to D21, plan section 3.6). Built by an O
 - **O1, one suction walk.** `InletPhase.liquidDensity` repeats `supply`'s walk. This is code only; with no measured cost after the rebase, it is a cleanup, not a fix.
 - **O2, the wet compressor ratio.** The ratio reads the mixture density, which overstates a very wet suction: about 31 against 1.6 for pure condensate at 50 bar. The exact homogeneous form, `H = σ(1−w)P v_g (r^(1/σ) − 1) + w v_l P (r − 1)`, is an option. The random worlds have no such states.
 - **O3, the vapour lock.** It reads the bubble floor, so a pump drawn straight from a generator, with NPSHA below its shutoff NPSH3, has no root. Only test graphs build this. The option is for the lock to read the NPSH3 floor.
-- **O4, the simulator's NPSH rows.**
-  - `PUMP_NPSH_WORLD` (MUST) still reads NPSHA > 0, but the world now starves a pump at `0.85 NPSH3` of its duty design (`Npsh.forDuty`). Its bound should be that.
-  - `PUMP_NPSH` (SHOULD, 1 m, HI 9.6.1) is a margin, so it should read NPSHA ≥ NPSH3 + 1 m.
+- **O4, the simulator's NPSH rows: built** (owner "Yes, build O4", `6dbae99c2`).
+  - `PUMP_NPSH_WORLD` (MUST) reads NPSHA against `0.85 NPSH3` of the world's in-line pump at the design flow (`PumpSizing.requiredNpsh`), not against 0.
+  - `PUMP_NPSH` (SHOULD, HI 9.6.1) reads NPSHA ≥ NPSH3 + 1 m. Simulator tests 424 and simulator hold gates 64 pass.
   - A SHOULD row for gas above the onset α_T is an option. With W10b, a piston's liquid knock trip makes `COMPRESSOR_LIQUID` red again for pistons.
 
 Code guide: not updated yet. The fluid network chapter (mover laws, refusals, suction floor), the machine chapter (GasEntrainment, Npsh) and the simulator's sizing rows change at the merge refresh.
