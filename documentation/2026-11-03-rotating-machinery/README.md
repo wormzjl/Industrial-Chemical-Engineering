@@ -47,6 +47,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: W10c built (`975a718e2`, D35): `pump_cavitation` and `pump_gas` loops, two `MoverState` bytes (`mover-3`), `GasEntrainment.churn`; GasEntrainmentTest 4, codec 22, affected 613 + hold gates 58, GameTests 43; no campaign (read-only observation). In-line pumps stay silent (W4 watch). Listening check due (`W10C_REVIEW.md`).
 - 2026-11-04: D36 (owner): in-line pumps play the crackle and churn; every machine loop's pitch = rpm over its loop's authored rpm (pump 2950, motor 1500), within 0.5 to 2; `MoverState` carries rpm (`mover-4`). Affected test 200, equipment gates 75, hold gates 10, GameTests 44. Owner rule: no subagent resumed after 5 min idle.
 - 2026-11-04: owner "Start W10d"; picked readings and the pump curve (D37). Plan `W10D_BUILD_PLAN.md`; prototypes next.
+- 2026-11-04: W10d prototypes rendered; owner D38: add the 4 x NPSH3 inception curve; accept the in-line page's scroll bar.
 
 ## Documents
 

@@ -124,6 +124,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D37.** W10d builds `W10D_BUILD_PLAN.md`: on the pump page a Suction group (NPSH available, NPSH required, gas %), a Health meter, `CAVITATION`/`GAS`/`FAILED` on the display, and for a constructed centrifugal pump the head–flow and NPSH3 curves on the glass with the operating point and NPSH available. No compressor readings, head factor, rate of loss or Repair key.
 
+2026-11-04, on W10d's prototype sheets (pump-readings-casing, pump-readings-inline): the curve read as safe while the pump cavitated (NPSH available 6.8 m above NPSH3 3.3 m, inception near 4 x NPSH3 = 13.2 m); the owner: "Add 4xNPSH3 curve" and, on the in-line page now taller than its view, "Accept the bar".
+
+- **D38.** The pump curve also draws the inception curve, 4 x NPSH3, dashed, with the NPSH axis grown to fit it: NPSH available between NPSH3 and 4 x NPSH3 reads as cavitating, above both as quiet. The in-line pump page scrolls at 1920 x 1080 like the casing page.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
