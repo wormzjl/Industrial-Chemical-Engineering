@@ -453,7 +453,10 @@ class NetworkPhaseEngineTest {
         double p = 2e5;
         double[] clean = new double[n];
         double[] crude = bundledCrude();
-        for (int i = n - 7; i < n - 2; i++) clean[i] = crude[i];
+        for (int c = 8; c <= 12; c++) {
+            int i = model.components().indexOf("crude_pc%02d".formatted(c));
+            clean[i] = crude[i];
+        }
         double total = sum(clean);
         for (int i = 0; i < n; i++) clean[i] *= 100 / total;
         clean[water] = 30;

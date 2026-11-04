@@ -13,7 +13,7 @@ import java.util.Objects;
 
 /** Shared, independent fixture-basis and finite-ledger calculations for fluid tests. */
 public final class FluidTestSupport {
-    private static final String NETWORK_PACKAGE = "icheme:tjl20_methane_nitrogen";
+    private static final String NETWORK_PACKAGE = com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE;
     private static final int NITROGEN = com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN;
     private static final int WATER = com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK;
 

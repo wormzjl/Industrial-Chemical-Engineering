@@ -88,7 +88,8 @@ class LegacyNetworkPathPinTest {
      * ({@code icheme:tjl20_methane_nitrogen@crude-regrouped-r2}) left it, and the method leads; the fluid reference records stay,
      * as both hold entries for the network's compounds. Since owner decision D7 (2026-11-04) the method is named by its
      * physics fields (model, ideal gas, missing pairs, column pressures, the liquid-mixture correction's revision), not by
-     * {@code icheme:crude_pr78@crude-pr78-r1}: a pair library added for other compounds moves nothing here.
+     * {@code icheme:crude_pr78@crude-pr78-r1}: a pair library added for other compounds moves nothing here. Since W6 the
+     * isobutane and isopentane liquid viscosity tables are marked estimated past ChemSep's data end (r2).
      */
     static final String REVISION = String.join(";",
             "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:dalia-global-r1",
@@ -119,9 +120,9 @@ class LegacyNetworkPathPinTest {
                     viscosities("icheme:tjl20_methane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_ethane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_propane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:tjl19_isobutane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:tjl19_isobutane", "dwsim-viscosity-api-r2", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_n_butane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:tjl19_isopentane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:tjl19_isopentane", "dwsim-viscosity-api-r2", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_n_pentane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:crude_pc01", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:crude_pc02", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),

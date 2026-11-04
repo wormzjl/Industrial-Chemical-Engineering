@@ -8,8 +8,8 @@ import com.wormzjl.icheme.science.material.*;
  * the world's contents by id when it loads.
  */
 public final class FluidMaterialCatalog {
-    /** Bundled fixture IDs; runtime code resolves the selected network from its catalog snapshot. */
-    public static final String NETWORK_PACKAGE="icheme:tjl20_methane_nitrogen";
+    /** The bundled network preset's package ({@code networks/default.json}), for tests and fixtures; runtime code resolves the selected network from its catalog snapshot. */
+    public static final String NETWORK_PACKAGE="icheme:refinery";
     public static final String NITROGEN="Nitrogen";
     private FluidMaterialCatalog() {}
     public static String networkPackage(MaterialCatalog catalog){return catalog.presets().network().packageId();}

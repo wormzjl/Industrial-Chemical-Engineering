@@ -9,8 +9,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RegroupedCrudeTest {
     @Test void replacementHasTwelveConsistentCutsAndNoRetiredProductionBasis() {
-        // Three column/network packages plus the bundled pilot icheme:pilot_cryogenic (no column package).
-        var catalog=MaterialCatalog.bundled();assertEquals(4,catalog.packages().size());
+        // Three column packages, the network package icheme:refinery and the bundled pilot icheme:pilot_cryogenic (no column package).
+        var catalog=MaterialCatalog.bundled();assertEquals(5,catalog.packages().size());
         assertFalse(catalog.packages().containsKey("icheme:cdu17_tjl_acs2018"));
         var p=catalog.requirePackage("icheme:tjl20_methane");assertEquals(19,p.components().size());
         for(int i=1;i<=12;i++)assertEquals("crude_pc%02d".formatted(i),p.components().get(i+6));

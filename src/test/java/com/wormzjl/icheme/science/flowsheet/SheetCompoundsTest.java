@@ -69,8 +69,8 @@ final class SheetCompoundsTest {
         assertEquals(CATALOG.requirePackage(NETWORK).components().stream().filter(CRUDE::containsKey).toList(), crude, "the package's order");
         assertEquals(List.of("Nitrogen"), SheetCompounds.of(sheet(NETWORK, Map.of("Water", 5.)), CATALOG), "water is on every axis; nitrogen holds the place");
         var grown = SheetCompounds.of(sheet(NETWORK, with(CRUDE, "Nitrogen", .1)), CATALOG);
-        assertEquals(CATALOG.requirePackage(NETWORK).components(), grown, "a feed that gains a compound grows the list");
-        assertSame(CATALOG, CATALOG.restrict(NETWORK, grown), "the whole package is its own view");
+        assertEquals(CATALOG.requirePackage(NETWORK).components().stream().filter(c -> CRUDE.containsKey(c) || c.equals("Nitrogen")).toList(), grown, "a feed that gains a compound grows the list");
+        assertSame(CATALOG, CATALOG.restrict(NETWORK, CATALOG.requirePackage(NETWORK).components()), "the whole package is its own view");
         assertEquals(crude, SheetCompounds.of(sheet(NETWORK, with(CRUDE, "Nitrogen", 0.)), CATALOG), "a zero amount brings nothing");
         assertEquals(crude.subList(1, crude.size()), SheetCompounds.of(sheet(NETWORK, with(CRUDE, crude.getFirst(), 0.)), CATALOG), "and a compound no feed holds goes");
     }

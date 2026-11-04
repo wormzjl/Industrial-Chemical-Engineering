@@ -334,7 +334,7 @@ class FluidPacketCodecTest {
         // A setting outside the package envelope is replied with the input box's own text.
         var domain=assertThrows(IllegalArgumentException.class,
                 ()->new FluidDeviceSpec(1,298.15,1.2e7,n).validate(com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel(),TopologyCompiler.Kind.GENERATOR));
-        assertEquals("Pressure 1.2E7 Pa outside the package envelope 100.0..1.0E7 Pa (package icheme:tjl20_methane_nitrogen)",FluidNetwork.reason(domain));
+        assertEquals("Pressure 1.2E7 Pa outside the package envelope 100.0..1.0E7 Pa (package icheme:refinery)",FluidNetwork.reason(domain));
         assertEquals("Stale fluid controls",FluidNetwork.reason(new IllegalStateException("Stale fluid controls")));
         assertEquals("null",FluidNetwork.reason(new RuntimeException()));
     }

@@ -107,9 +107,9 @@ class WorldTopologyLedgerTest {
     @org.junit.jupiter.api.AfterEach void resetMaterials(){com.wormzjl.icheme.science.material.MaterialRuntime.reset();}
     private static MaterialCatalog reordered() {
         // The network package's own compound list, reversed: each compound keeps its default dataset.
-        var resources=new HashMap<>(MaterialCatalog.bundled().resources());String path="data/icheme/materials/packages/tjl20_nitrogen.json";
+        var resources=new HashMap<>(MaterialCatalog.bundled().resources());String path="data/icheme/materials/packages/refinery.json";
         var record=com.google.gson.JsonParser.parseString(resources.get(path)).getAsJsonObject();record.remove("extends");
-        var ids=new ArrayList<>(MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane_nitrogen").components());
+        var ids=new ArrayList<>(MaterialCatalog.bundled().requirePackage("icheme:refinery").components());
         Collections.reverse(ids);record.add("components",new com.google.gson.Gson().toJsonTree(ids));resources.put(path,record.toString());
         return MaterialCatalog.parse(resources);
     }

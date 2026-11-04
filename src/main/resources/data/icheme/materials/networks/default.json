@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "icheme:default",
-  "package": "icheme:tjl20_methane_nitrogen",
+  "package": "icheme:refinery",
   "default_column_preset": "tia_juana",
   "fluid_presets": [
     "water",

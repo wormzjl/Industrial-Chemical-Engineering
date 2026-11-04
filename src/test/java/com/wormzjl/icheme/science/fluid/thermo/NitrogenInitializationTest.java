@@ -22,7 +22,7 @@ class NitrogenInitializationTest {
         assertTrue(state.mass()>1.13&&state.mass()<1.16);assertEquals(0,state.waterLiquid()+state.waterVapor());
         int nitrogen=model.hydrocarbon.components().indexOf("Nitrogen");assertEquals(catalog.requirePackage(NETWORK).components().indexOf("Nitrogen"),nitrogen);assertTrue(state.vapor()[nitrogen]>40);
         assertTrue(model.viscosity.vapor(298.15,state.vapor(),0)>1.7e-5);
-        assertSame(original,catalog.requirePackage(COLUMN));assertEquals(model.hydrocarbon.componentCount()-1,catalog.requirePackage(COLUMN).components().size());
+        assertSame(original,catalog.requirePackage(COLUMN));assertTrue(model.hydrocarbon.components().containsAll(catalog.requirePackage(COLUMN).components())&&!catalog.requirePackage(COLUMN).components().contains("Nitrogen"));
     }
     /** The model is the named package's, whatever its id (a saved world names its basis by compound ids, batch
      * 2026-11-04-refinery-compounds, W4); one without nitrogen refuses a nitrogen charge rather than place another gas. */
@@ -32,7 +32,7 @@ class NitrogenInitializationTest {
         assertThrows(IllegalStateException.class,()->column.initialNitrogenCharge(1,298.15,101325,()->{}));
     }
     @Test void nitrogenCaloricFitMatchesIndependentShomateCheckpoints() throws Exception {
-        var cp=MaterialCatalog.bundled().requirePackage(NETWORK).properties().getLast().cp();
+        var network=MaterialCatalog.bundled().requirePackage(NETWORK);var cp=network.properties().get(network.components().indexOf("Nitrogen")).cp();
         try(var input=getClass().getResourceAsStream("/fluid/reference/nitrogen-cp-checks.json")) {
             var json=JsonParser.parseReader(new InputStreamReader(input,StandardCharsets.UTF_8)).getAsJsonObject();
             for(var entry:json.getAsJsonArray("points")) {

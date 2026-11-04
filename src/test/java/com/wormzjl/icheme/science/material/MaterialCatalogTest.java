@@ -156,7 +156,7 @@ class MaterialCatalogTest {
             var o=JsonParser.parseString(entry.getValue()).getAsJsonObject();
             assertTrue(o.has("freezing"),entry.getKey());o.remove("freezing");entry.setValue(o.toString());stripped++;
         }
-        assertEquals(24,stripped);
+        assertEquals(48,stripped,"24 datasets and the 24 Tier 1 imports (W6)");
         var without=MaterialCatalog.parse(resources);
         for(var p:bundled.packages().values()) {
             assertEquals(p.scientificRevision(),without.requirePackage(p.id()).scientificRevision(),p.id());

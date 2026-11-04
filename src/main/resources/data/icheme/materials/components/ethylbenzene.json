@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Ethylbenzene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.ethylbenzene",
+  "fallback": "Ethylbenzene",
+  "properties": "icheme:chemsep_ethylbenzene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "100-41-4",
+    "chemsep_id": "504",
+    "smiles": "c1ccccc1(CC)",
+    "formula": "(C6H5)CH2CH3"
+  }
+}

@@ -26,9 +26,10 @@ public final class V3TjlReferenceCatalog {
         var resources=new LinkedHashMap<>(MaterialRuntime.current().resources());
         resources.keySet().removeIf(key->key.contains("/networks/")||key.contains("/presets/fluid_")); // Independent column-only numerical oracle.
         // The old packages below replace the bundled ones, so the bundled assays (regrouped on the bundled compounds) leave
-        // with them, and so does the network package, which extends the bundled TJL20 package, with its column preset. The
+        // with them, and so do the packages that extend the bundled TJL20 package (tjl20_methane_nitrogen with its column
+        // preset, and the network package icheme:refinery, W6). The
         // reference set brings its own two assays.
-        resources.keySet().removeIf(key->key.contains("/assays/")||key.endsWith("/packages/tjl20_nitrogen.json")
+        resources.keySet().removeIf(key->key.contains("/assays/")||key.endsWith("/packages/tjl20_nitrogen.json")||key.endsWith("/packages/refinery.json")
                 ||key.endsWith("/presets/column_tia_juana_nitrogen.json"));
         try(var stream=Objects.requireNonNull(V3TjlReferenceCatalog.class.getResourceAsStream(RECORDS),RECORDS);
                 var reader=new InputStreamReader(stream,StandardCharsets.UTF_8)) {

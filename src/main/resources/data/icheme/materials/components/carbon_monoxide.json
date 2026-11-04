@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "CarbonMonoxide",
+  "kind": "chemical",
+  "translation_key": "material.icheme.carbon_monoxide",
+  "fallback": "CarbonMonoxide",
+  "properties": "icheme:chemsep_carbon_monoxide",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "630-08-0",
+    "chemsep_id": "908",
+    "smiles": "[C+]#[O-]",
+    "formula": "CO"
+  }
+}

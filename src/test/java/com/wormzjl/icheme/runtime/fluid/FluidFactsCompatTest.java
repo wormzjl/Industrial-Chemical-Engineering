@@ -282,11 +282,11 @@ class FluidFactsCompatTest {
     }
     // ---------------- the world basis by compound ids (batch 2026-11-04-refinery-compounds, W4) ----------------
 
-    private static final String NETWORK_RECORD="data/icheme/materials/packages/tjl20_nitrogen.json";
+    private static final String NETWORK_RECORD="data/icheme/materials/packages/refinery.json";
     /**
      * The bundled catalog with its network package's record written out (no {@code extends}) as {@code compounds} of its
-     * own list, under id {@code id}; the network configuration and the column preset that name the package follow it. A
-     * shorter list holds no crude assay, so the network then offers only its pure presets and the column preset leaves.
+     * own list, under id {@code id}; the network configuration follows it (no column preset names the network package
+     * since W6). A shorter list holds no crude assay, so the network then offers only its pure presets.
      */
     private static MaterialCatalog network(String id,java.util.function.UnaryOperator<List<String>> compounds) {
         var resources=new HashMap<>(MaterialCatalog.bundled().resources());var whole=CATALOG.requirePackage(PACKAGE).components();
@@ -294,14 +294,12 @@ class FluidFactsCompatTest {
         var list=compounds.apply(new ArrayList<>(whole));
         record.add("components",new com.google.gson.Gson().toJsonTree(list));
         record.addProperty("id",id);resources.put(NETWORK_RECORD,record.toString());
-        String network="data/icheme/materials/networks/default.json",column="data/icheme/materials/presets/column_tia_juana_nitrogen.json";
+        String network="data/icheme/materials/networks/default.json";
         if(!list.containsAll(whole)) {
-            resources.remove(column);
             var config=com.google.gson.JsonParser.parseString(resources.get(network)).getAsJsonObject();
             config.add("fluid_presets",new com.google.gson.Gson().toJsonTree(List.of("water","nitrogen")));resources.put(network,config.toString());
         }
-        for(var path:List.of(network,column)) {
-            if(!resources.containsKey(path))continue;
+        for(var path:List.of(network)) {
             var named=com.google.gson.JsonParser.parseString(resources.get(path)).getAsJsonObject();assertEquals(PACKAGE,named.get("package").getAsString(),path);
             named.addProperty("package",id);resources.put(path,named.toString());
         }
@@ -465,6 +463,8 @@ class FluidFactsCompatTest {
     // ---------------- the corpus: one image per facts schema ----------------
 
     private static final Path CORPUS=Path.of("src/test/resources/compat/fluid");
+    /** The package the corpus images were written on: the network package before W6 (batch 2026-11-04-refinery-compounds). A load names the saved package in its reason. */
+    private static final String CORPUS_PACKAGE="icheme:tjl20_methane_nitrogen";
     @Test void towerSettingsSurviveBothExactAndFactsOnlyLoads(){
         var world=corpusWorld();var saved=image(world);
         for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG))){
@@ -573,7 +573,7 @@ class FluidFactsCompatTest {
         var expected=new Properties();try(var in=Files.newBufferedReader(folder.resolve("expected.properties"))){expected.load(in);}
         var restated=load(image,key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,restated.route());
-        assertTrue(restated.reason().contains("property data of package "+PACKAGE+" changed"),restated.reason());
+        assertTrue(restated.reason().contains("property data of package "+CORPUS_PACKAGE+" changed"),restated.reason());
         var ledger=restated.world().orElseThrow();
         assertEquals(WorldTopologyLedger.FluidBasis.capture(CATALOG),ledger.basis());
         double total=Arrays.stream(moles(restated.checkpoint(),model.componentCount())).sum();
@@ -600,19 +600,20 @@ class FluidFactsCompatTest {
             var written=Path.of("build/compat/fluid/steam-v2");write(image(steamWorld()),written);
             fail("No steam corpus image: copy "+written.toAbsolutePath()+" to "+folder);
         }
-        var image=read(folder);var core=FluidCheckpointCodec.readCore(image.core());var saved=new TreeMap<Long,FluidFacts.Vessel>();
-        for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());
-            for(var v:FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id()).vessels())saved.put(v.id(),v);}
+        var image=read(folder);var core=FluidCheckpointCodec.readCore(image.core());var saved=new TreeMap<Long,FluidFacts.Vessel>();List<String> axis=null;
+        for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
+            axis=facts.components();for(var v:facts.vessels())saved.put(v.id(),v);}
         var restated=load(image,key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,restated.route());
-        assertTrue(restated.reason().contains("property data of package "+PACKAGE+" changed"),restated.reason());
+        assertTrue(restated.reason().contains("property data of package "+CORPUS_PACKAGE+" changed"),restated.reason());
         var ledger=restated.world().orElseThrow();
         assertTrue(ledger.restated().removedMoles().isEmpty()&&ledger.restated().removedSolids().isEmpty());
         double energy=0,residual=0;int vessels=0;
         for(var e:restated.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs()) {
             if(n.kind()!=PassiveNetwork.NodeKind.RESERVOIR)continue;
             var v=saved.get(n.id());var s=n.state();vessels++;
-            assertArrayEquals(v.moles(),IslandSets.amounts(n.inventory().moles(),e.key().on(model),model),"vessel "+n.id()+": its moles are kept exactly");
+            // By compound id: the image's axis is the network package it was written on, the world list is this build's.
+            assertArrayEquals(onWorld(v.moles(),axis),IslandSets.amounts(n.inventory().moles(),e.key().on(model),model),"vessel "+n.id()+": its moles are kept exactly");
             assertEquals(v.volume(),n.inventory().volume());
             assertEquals(v.temperature(),s.temperature(),1e-9*v.temperature(),"vessel "+n.id()+": its temperature is kept");
             assertTrue(s.waterVapor()>0&&s.waterLiquid()==0&&s.waterVapor()==v.waterVapor(),"all of the water is steam, as saved");
@@ -664,7 +665,7 @@ class FluidFactsCompatTest {
         var expected=new Properties();try(var in=Files.newBufferedReader(folder.resolve("expected.properties"))){expected.load(in);}
         var loaded=load(image,key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,loaded.route());
-        assertTrue(loaded.reason().contains("property data of package "+PACKAGE+" changed"),loaded.reason());
+        assertTrue(loaded.reason().contains("property data of package "+CORPUS_PACKAGE+" changed"),loaded.reason());
         var ledger=loaded.world().orElseThrow();
         assertEquals(Integer.parseInt(expected.getProperty("registrations"))-Integer.parseInt(expected.getProperty("movers")),ledger.active().size(),"every other registration kept");
         assertTrue(ledger.active().values().stream().noneMatch(r->r.device().kind()==Kind.PUMP||r.device().kind()==Kind.COMPRESSOR),"no mover left");

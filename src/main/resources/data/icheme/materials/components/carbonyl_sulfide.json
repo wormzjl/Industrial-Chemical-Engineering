@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "CarbonylSulfide",
+  "kind": "chemical",
+  "translation_key": "material.icheme.carbonyl_sulfide",
+  "fallback": "CarbonylSulfide",
+  "properties": "icheme:chemsep_carbonyl_sulfide",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "463-58-1",
+    "chemsep_id": "1893",
+    "smiles": "O=C=S",
+    "formula": "OCS"
+  }
+}

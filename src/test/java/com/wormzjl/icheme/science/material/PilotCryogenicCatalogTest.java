@@ -43,12 +43,14 @@ class PilotCryogenicCatalogTest {
         {"icheme:tjl19_dwsim", "icheme:tjl19_dwsim@crude-regrouped-r2"},
         {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r2"},
         {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r2"},
+        {"icheme:refinery", "icheme:refinery@refinery-tier1-r1"},
     };
     private static final String TJL20 = "icheme:tjl20_methane";
     /**
-     * The packages with tjl20_methane's physics on its axis: the network package, whose nitrogen lies outside that axis.
+     * The packages with tjl20_methane's physics on its axis: the old network package, whose nitrogen lies outside that
+     * axis, and the network package icheme:refinery, which extends it (W6).
      */
-    private static final List<String> TJL20_PHYSICS = List.of("icheme:tjl20_methane_nitrogen");
+    private static final List<String> TJL20_PHYSICS = List.of("icheme:tjl20_methane_nitrogen", "icheme:refinery");
 
     /**
      * The pilot package as committed in P3 WP3 (pilot records r1, the E-PPR78 rule on icheme:eppr78_2022 r1), with
@@ -88,7 +90,7 @@ class PilotCryogenicCatalogTest {
             var dwsim = catalog.requirePackage("icheme:tjl19_dwsim");
             assertTrue(axis.containsAll(dwsim.components()));
             assertEquals(catalog.physicsContent(TJL20, dwsim.components()), catalog.physicsContent(dwsim.id(), dwsim.components()), "tjl19_dwsim on its own axis");
-            // The pilot is the fourth bundled package and the only one with a reference spine.
+            // The pilot is the fifth bundled package and the only one with a reference spine.
             assertEquals(BUNDLED_PINS.length + 1, catalog.packages().size());
             assertEquals(List.of(PilotCryogenicTestCatalog.PACKAGE_ID), catalog.packages().values().stream()
                     .filter(p -> !p.spine().isEmpty()).map(MaterialCatalog.Package::id).toList());
@@ -155,7 +157,7 @@ class PilotCryogenicCatalogTest {
     void theTestNetworkOverrideSelectsThePilot() {
         var bundled = MaterialCatalog.bundled();
         var pilot = PilotCryogenicTestCatalog.catalog();
-        assertEquals("icheme:tjl20_methane_nitrogen", bundled.presets().network().packageId(), "the bundled network is unchanged");
+        assertEquals("icheme:refinery", bundled.presets().network().packageId(), "the bundled network is unchanged");
         var network = pilot.presets().network();
         assertEquals(PilotCryogenicTestCatalog.PACKAGE_ID, network.packageId());
         assertEquals(List.of("water", "nitrogen", "methane", "ethane", "carbon_dioxide"), network.fluidPresets());

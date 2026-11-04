@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "N-hexane",
+  "kind": "chemical",
+  "translation_key": "material.icheme.n_hexane",
+  "fallback": "N-hexane",
+  "properties": "icheme:chemsep_n_hexane",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "110-54-3",
+    "chemsep_id": "11",
+    "smiles": "CCCCCC",
+    "formula": "CH3(CH2)4CH3"
+  }
+}
