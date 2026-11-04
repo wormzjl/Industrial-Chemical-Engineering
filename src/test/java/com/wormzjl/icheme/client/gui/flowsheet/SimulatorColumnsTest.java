@@ -34,7 +34,7 @@ class SimulatorColumnsTest {
 
     /** One of every lit type a door draws, in a line that runs. */
     private static Flowsheet sheet() {
-        var names = List.of("pump", "valve", "exchanger", "fired_heater", "cooler", "drum", "mixer", "splitter", "filter", "storage_tank", "kettle", "compressor");
+        var names = List.of("pump", "valve", "exchanger", "fired_heater", "cooler", "drum", "mixer", "splitter", "filter", "storage_tank", "kettle", "compressor", "steam_turbine");
         var units = new ArrayList<Flowsheet.Unit>();
         int x = 40;
         for (var type : names) {

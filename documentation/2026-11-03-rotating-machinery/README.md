@@ -58,6 +58,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: W6b page built (MachineView.Coupling, protocol machine-2, no Apply on the coupling); page tests 281 pass, GameTests 45/45 with and without Create. Review `W6B_REVIEW.md` (A142 to A157). W6b done.
 - 2026-11-04: owner "Start W8". Plan `W8_BUILD_PLAN.md`: form A (efficiencies, proposed driver, modelled turbine tile) or B (shaft wires, driver tiles); the column door pump selector (a) duty readings or (b) keys kept; owner pick next.
 - 2026-11-04: owner D42: form A, duty readings on the column door; build agent started (laws, turbine tile, sizing rows, door prototype).
+- 2026-11-05: W8 laws built (pump η Corripio, compressor unchanged since its closure already divides by 0.78 (A158), TurbineUnit, motor proposal and FE/t readings; four references re-recorded, 0.08 K class); owner D43: TurbineSizing with the drivers drawing-only, pump duty table on the glass (option B).
 
 ## Documents
 

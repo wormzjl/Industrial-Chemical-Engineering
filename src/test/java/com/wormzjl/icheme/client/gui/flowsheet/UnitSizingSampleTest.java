@@ -120,7 +120,7 @@ class UnitSizingSampleTest {
         assertEquals(586, surface.value(), ONE);
         assertEquals(440, surface.low(), ONE, "the curves' surface");
         assertEquals(443.5, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
-        assertEquals(81.8, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
+        assertEquals(81.7, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
         assertEquals(46.7, read(unit.rating(), Limit.EXCHANGER_COLD_END), TENTH);
         assertEquals(46.7, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);
         assertEquals(33, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE);

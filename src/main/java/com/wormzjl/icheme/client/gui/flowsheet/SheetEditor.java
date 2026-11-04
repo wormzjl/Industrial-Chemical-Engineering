@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.Wiring;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
 import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
+import com.wormzjl.icheme.science.flowsheet.unit.TurbineUnit;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -260,6 +261,7 @@ public final class SheetEditor {
                 p.addProperty("pressure", 5e5);
                 p.addProperty("rise", 2e5);
             }
+            case "steam_turbine" -> p.addProperty("exhaust", TurbineUnit.EXHAUST_PRESSURE);
             case "ejector" -> {
                 p.addProperty("discharge", EjectorUnit.DISCHARGE_PRESSURE);
                 p.addProperty("motive", EjectorUnit.MOTIVE_PRESSURE);

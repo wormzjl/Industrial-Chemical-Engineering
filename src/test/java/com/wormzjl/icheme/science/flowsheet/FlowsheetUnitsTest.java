@@ -5,6 +5,11 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.flowsheet.unit.MoverUnit;
+import com.wormzjl.icheme.science.flowsheet.unit.TurbineUnit;
+import com.wormzjl.icheme.science.machine.CentrifugalPump;
+import com.wormzjl.icheme.science.machine.Motor;
+import com.wormzjl.icheme.science.machine.SteamTurbine;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import org.junit.jupiter.api.Test;
@@ -373,9 +378,13 @@ final class FlowsheetUnitsTest {
         var in = run.streams().get("in");
         var out = run.streams().get("out");
         double density = in.mass() / in.state().volume();
-        assertEquals(new FlowControl.Pump(1, 1).power(in.mass(), 8e5, density, 2e5, 1.4), reading(run, "P", "power"), 1e-9);
-        assertEquals(in.mass() / density * 8e5, reading(run, "P", "power"), 1e-6, "q v head");
-        assertEquals(in.enthalpy() + reading(run, "P", "power"), out.enthalpy(), 1e-4, "booked as heat into the discharge");
+        // W8 form A (batch 2026-11-03-rotating-machinery, D42): the world's ideal work over the design efficiency at the duty, all of it into the discharge.
+        assertEquals(new FlowControl.Pump(1, 1).power(in.mass(), 8e5, density, 2e5, 1.4), reading(run, "P", "hydraulic"), 1e-9);
+        assertEquals(in.mass() / density * 8e5, reading(run, "P", "hydraulic"), 1e-6, "q v head");
+        double eta = CentrifugalPump.rated(in.mass() / density, 8e5 / (density * 9.80665)).efficiency();
+        assertEquals(eta, reading(run, "P", "efficiency"), 1e-15);
+        assertEquals(reading(run, "P", "hydraulic") / eta, reading(run, "P", "power"), 1e-9, "shaft power");
+        assertEquals(in.enthalpy() + reading(run, "P", "power"), out.enthalpy(), 1e-4, "the shaft power booked as heat into the discharge");
         assertEquals(10e5, out.pressure(), 1e-6);
         assertEquals(8e5 / (density * 9.80665), reading(run, "P", "head"), 1e-9);
         assertFalse(logged(run, "pump.bubble_point"), "cold water is far from boiling");
@@ -408,6 +417,75 @@ final class FlowsheetUnitsTest {
         double eta = .78, sigma = eta * k / (k - 1);
         assertEquals(100 * 8.314462618 * 300 * sigma * (Math.pow(5, 1 / sigma) - 1) / eta, reading(run, "C", "power"), .005 * reading(run, "C", "power"), "polytropic work for a near-ideal gas");
         assertEquals(in.enthalpy() + reading(run, "C", "power"), run.streams().get("out").enthalpy(), 1e-3);
+        // W8: the closure's power is already the shaft power at 78 %; the tile proposes a 2-pole motor with 20 % spare.
+        assertEquals(.78, reading(run, "C", "efficiency"), 0);
+        double motor = Motor.ratingFor(reading(run, "C", "power"));
+        assertEquals(motor, reading(run, "C", "motor"), 0);
+        assertTrue(motor >= 1.2 * reading(run, "C", "power"));
+        assertEquals(reading(run, "C", "power") / Motor.efficiency(motor, 2), reading(run, "C", "electric"), 1e-6);
+    }
+
+    /** W8's worked pump (batch 2026-11-03-rotating-machinery, W8_BUILD_PLAN.md section 2): water, 100 m³/h at 80 m head. */
+    @Test void aPumpProposesItsMotor() {
+        double flow = 100 / 3600., hydraulic = 1000 * 9.80665 * flow * 80, eta = MoverUnit.pumpEfficiency(flow);
+        assertEquals(21.79e3, hydraulic, 10);
+        assertEquals(.7016, eta, 1e-4);
+        assertEquals(CentrifugalPump.rated(flow, 80).efficiency(), eta, 0);
+        double shaft = hydraulic / eta, motor = Motor.ratingFor(shaft), electric = Motor.electricPower(shaft, motor, 2, false);
+        assertEquals(31.06e3, shaft, 10);
+        assertEquals(45e3, motor, 0);
+        assertEquals(.940, Motor.efficiency(motor, 2), 1e-12);
+        assertEquals(33.04e3, electric, 10);
+        assertEquals(661, electric / (20 * 2.5), .5, "FE/t at 2.5 J/FE");
+        // The tile on water at 25 °C, 100 m³/h: the same law on the run's own density.
+        double density = 997.05, moles = 100 / 3600. * density / .01801528;
+        var run = closes(sheet().unit("P", "pump", "{\"target\":\"rise\",\"rise\":" + 80 * density * 9.80665 + "}")
+                .feed("in", "P", "in", feed(298.15, 2e5, PURE_WATER, moles)).product("out", "P", "out").run());
+        var in = run.streams().get("in");
+        double q = in.mass() / (in.mass() / in.state().volume());
+        assertEquals(flow, q, .01 * flow);
+        assertEquals(.7016, reading(run, "P", "efficiency"), 2e-3);
+        assertEquals(31.06e3, reading(run, "P", "power"), .01 * 31.06e3);
+        assertEquals(45e3, reading(run, "P", "motor"), 0);
+        assertEquals(.940, reading(run, "P", "motor_efficiency"), 1e-12);
+        assertEquals(reading(run, "P", "power") / .94, reading(run, "P", "electric"), 1e-6);
+        double warmer = run.streams().get("out").temperature() - in.temperature();
+        // The ideal work v Δp raises the liquid's enthalpy at nearly its temperature: (∂h/∂p)_T = v (1 − αT), αT = 0.0766 for water
+        // at 25 °C. So the losses, and αT of the ideal work, warm it: 0.094 K here, where the ideal work alone warmed it by 0.014 K.
+        double losses = reading(run, "P", "power") - reading(run, "P", "hydraulic"), expansion = .0766 * reading(run, "P", "hydraulic");
+        assertEquals((losses + expansion) / (in.mass() * 4181), warmer, .03 * warmer, "the whole shaft power stays in the water");
+    }
+
+    /** W8's steam turbine: 40 bar and 400 °C steam to 4 bar, the plan's case of {@code SteamTurbine.isentropicDrop}. */
+    @Test void aSteamTurbineTakesItsWorkOutOfTheSteam() {
+        double kilograms = 2, moles = kilograms / .01801528;
+        var run = closes(sheet().unit("ST", "steam_turbine", "{\"exhaust\":4e5}")
+                .feed("in", "ST", "in", feed(673.15, 40e5, PURE_WATER, moles)).product("out", "ST", "out").run());
+        var in = run.streams().get("in");
+        var out = run.streams().get("out");
+        double power = reading(run, "ST", "power"), eta = reading(run, "ST", "efficiency"), drop = reading(run, "ST", "drop");
+        System.out.printf(java.util.Locale.ROOT, "turbine: drop %.1f kJ/kg, eta %.4f, power %.1f kW, steam rate %.2f kg/kWh, exhaust %.2f K%n", drop / 1e3, eta, power / 1e3,
+                reading(run, "ST", "steam_rate"), out.temperature());
+        assertEquals(524e3, drop, .03 * 524e3, "the isentropic drop on the inlet's real P/ρ");
+        assertEquals(SteamTurbine.typicalEfficiency(power), eta, 1e-9, "a design rated at its own shaft power");
+        assertEquals(in.mass() * drop * eta, power, 1e-6 * power);
+        assertEquals(3600 * in.mass() / (power / 1e3), reading(run, "ST", "steam_rate"), 1e-9);
+        assertEquals(4e5, out.pressure(), 0);
+        assertEquals(in.enthalpy() - power, out.enthalpy(), 1e-3, "the work leaves the steam");
+        assertEquals(-power, run.reports().get("ST").duty(), 1e-9);
+        var uphill = sheet().unit("ST", "steam_turbine", "{\"exhaust\":50e5}").feed("in", "ST", "in", feed(673.15, 40e5, PURE_WATER, moles)).product("out", "ST", "out").run();
+        assertEquals(FlowsheetRun.Status.FAILED, uphill.status());
+        assertTrue(logged(uphill, "turbine.drop"), () -> "log " + uphill.log());
+    }
+
+    @Test void aTurbineDesignSettlesOnItsOwnRating() {
+        for (double isentropic : new double[]{1e4, 3e5, 1e6, 4.2e6, 1e8}) {
+            var design = TurbineUnit.designed(isentropic);
+            assertEquals(SteamTurbine.typicalEfficiency(design.efficiency() * isentropic), design.efficiency(), 1e-12, "at " + isentropic);
+            assertEquals(design.efficiency() * isentropic, design.ratedPower(), 1e-9 * isentropic);
+        }
+        assertEquals(.45, TurbineUnit.designed(1e5).efficiency(), 0, "single stage");
+        assertEquals(.76, TurbineUnit.designed(1e7).efficiency(), 0, "multistage");
     }
 
     /** The world's compressor takes liquid since request 11 of batch 2026-11-03-rotating-machinery (owner decisions D19,
