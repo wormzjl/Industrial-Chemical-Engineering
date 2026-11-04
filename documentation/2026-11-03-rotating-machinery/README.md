@@ -2,7 +2,7 @@
 
 Purpose: realistic pumps and compressors at process level, separate drivers (motor, steam turbine, creative motor) joined by shafts and gearboxes, electricity (FE) for motors and air coolers, Create as an optional power source.
 
-Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e with start rules A1 and A2, owner decision D11; E8 fixed by taut-vessel row weights, D12/D13, campaigned; E5 waits on the owner, `W2_D13_CAMPAIGN_REVIEW.md` section 4). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
+Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e with A1 and A2 (D11), E8 fixed by taut-vessel row weights (D13), the suction floor and the vapour lock (D14-D16), campaigned: 992/994/1000 against 991/993/1000; bundled 896 waits on the owner, `W2_D16_CAMPAIGN_REVIEW.md` section 2). Branch `claude/realistic-pump-compressor-6fdfd9`, base `744ef4513` (main, 0.19.3).
 
 ## History
 
@@ -19,6 +19,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 - 2026-11-04: the full campaign of `a8accb372` (`W2_D13_CAMPAIGN_REVIEW.md`): 992, 993 and 1000 clean; E8 (563, 896) gone, bundled defaults' implicit solves 181,014 → 26,788; E5 (575, 952) holds unchanged, so the start seed has no measured effect. Proposed: a vapour-pressure suction floor for every liquid (D59 (4) widened) and deleting the start seed.
 - 2026-11-04: D14's full campaign held bundled 896 and cold 181, clean at `a8accb372` (`D14_HOLDS_REVIEW.md`). Both draw through a junction already at its own bubble point; the balance anchors the suction at the floor with no line delivery. 896: no root (the supplier must flash below the floor); 181: a vanishing vapour at the anchored junction. A probe closing such a pump in the balance cleared both; options A (mode), B (row), C (floor at the liquid's enthalpy) wait on the owner.
 - 2026-11-04: owner decision D15 ("A: close it"): a pump whose suction head at no flow is not positive stands CLOSED, reopening only above the band; built by an Opus subagent, 98 classes and the hold gates pass; `f53708de3`. Its campaign: 896 gone, 575 and 181 hold on an active-set cycle (`D15_HOLDS_REVIEW.md`): `cavitates` and the balance read the vapour lock on a point the pump's own law drained, the reopen test on the closed converged point. Proposed: one vapour-lock decision per solve on the start states (A) with the floor at the liquid's own enthalpy (C).
+- 2026-11-04: owner decision D16 ("Yes, A + C"): the vapour lock is one fact per solve on the start states (`vapourLocked`; `supplierHead`, its close branch, `startHead` and the per-point overloads deleted), and a hydrocarbon floor is its bubble pressure at its own enthalpy (PH bisection). 98 classes and the hold gates pass; `7b46b3b05`. Campaign (`W2_D16_CAMPAIGN_REVIEW.md`): 992, 994 and 1000 clean against the baseline's 991, 993 and 1000; 181 and 575 gone; counters back at D13's level; bundled 896 holds again in D14's form (its tee falls to its bubble point within the step).
 
 ## Documents
 
@@ -32,6 +33,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 - [W2_D13_CAMPAIGN_REVIEW.md](W2_D13_CAMPAIGN_REVIEW.md): the full campaign of D13; E8 gone, E5's options.
 - [D14_HOLDS_REVIEW.md](D14_HOLDS_REVIEW.md): the two new holds of D14 (bundled 896, cold 181) traced; a starved pump's options.
 - [D15_HOLDS_REVIEW.md](D15_HOLDS_REVIEW.md): D15's campaign and its two active-set cycles traced; one decision per solve.
+- [W2_D16_CAMPAIGN_REVIEW.md](W2_D16_CAMPAIGN_REVIEW.md): the full campaign of D16; bundled 896's options; water unification proposed.
 
 ## Code areas (planned)
 
@@ -39,7 +41,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 
 ## Open items
 
-- Owner: the vapour-lock decision in `D15_HOLDS_REVIEW.md` section 3 (recommended: A + C); the vapour-locked status line (hard-coded "cannot drive forward flow" in `PipePresentation`).
+- Owner: bundled 896 in `W2_D16_CAMPAIGN_REVIEW.md` section 2 (recommended: the suction-limit floor never above its supplier); water's floor joining the PH bisection (later); the vapour-locked status line (hard-coded "cannot drive forward flow" in `PipePresentation`).
 - To measure later, not proposed: a mover on F2e stands at its relief behind a sealed pocket (`PumpAheadOfFlowValveTest`, `SealedDischargeTest`), so D58's closure may no longer be needed for movers.
 - Owner request 2026-11-04, a motor or turbine sound apart from the pump or compressor head's, with the volume scaled by operating speed and equipment size: W4's follow-up (D13 on its branch, client and assets); the speed share in `FluidNetwork.MoverState` comes with W3's driver logic.
 - `DECISION_LOG.md` numbering: this branch's D10 (the law) and W4's D10 to D13 collide; renumber at the merge.
