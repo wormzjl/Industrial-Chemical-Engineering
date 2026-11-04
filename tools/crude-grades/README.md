@@ -7,7 +7,7 @@
 
 **Batch:** [2026-11-04-open-thermo-data](../../documentation/2026-11-04-open-thermo-data/README.md); see the decisions E10 to E14 in `OPEN_DATA_PLAN.md` and section 6 of `CRUDE_GRADES_REVIEW.md`.
 
-**Status:** generator. The scripts write nothing under `src/`; O4 copied the cut tables and the `liquid_mixture` block into the material records. Since then `validate.mjs`'s "current rule" is the O4 rule, and `method.mjs`'s `current_java_equivalent` describes the removed form.
+**Status:** generator. The scripts write nothing under `src/`; O4 copied the cut tables and the `liquid_mixture` block into the material records, and O3 the assays and the presets. Since then `validate.mjs`'s "current rule" is the O4 rule, and `method.mjs`'s `current_java_equivalent` describes the removed form.
 
 ## How to run
 
@@ -26,7 +26,7 @@ node tools/crude-grades/validate.mjs     # 6  validation.md, validation.json (ne
 - The bundled material records under `src/main/resources/data/icheme/materials/`, read only:
   - `properties/crude_pc*.json` and the seven light-end records;
   - `methods/crude_pr78.json`.
-- The tia_juana client presets under `src/main/resources/assets/icheme/`.
+- The Tia Juana client templates the presets are sized against: `reference/tia_juana.mixturepreset.json` and `reference/tia_juana.columnpreset.json`, the files bundled under `src/main/resources/assets/icheme/` until O3 (copied from 8396d8d98).
 - The ECCC CSV. The default path is the main checkout's `research/2026-11-04-open-thermo-data/eccc-oil-database/`. Override it with the variable `ECCC_CSV` or the first argument of `fit-g.mjs`.
 
 **Output:** `tmp/crude-grades/out/`, or the folder in the variable `CRUDE_GRADES_OUT`. JSON files use 2-space indentation and CRLF line ends, the same as the working-tree copies of the bundled files.
@@ -49,6 +49,7 @@ node tools/crude-grades/validate.mjs     # 6  validation.md, validation.json (ne
 | `lib/mixture.mjs` | The mixture rule: ln mu = sum x ln mu_i + G (x_cut^2 - sum x_i^2). |
 | `lib/eccc.mjs` | The CSV reader. |
 | `lib/out.mjs` | The JSON and text writers. |
+| `reference/` | The two Tia Juana client templates `presets.mjs` sizes the grades against (input only). |
 
 ## History
 
@@ -56,3 +57,4 @@ node tools/crude-grades/validate.mjs     # 6  validation.md, validation.json (ne
   - the density rule for nu to mu moved from the API MPMS 11.1 expansion to the Rackett form, which holds up to 900 K;
   - G was refitted on the full ECCC crude set.
 - 2026-11-04: O4 applied the outputs: the 12 cut tables (`twu-1985-d341-r1`) into `properties/crude_pc01..12.json` and the proposed block (`cut_pair_v1`, G = 1.0956, `eccc-cut-pair-r1`) into `methods/crude_pr78.json`. A re-run on 50d6c506f gave every output byte for byte.
+- 2026-11-05: O3 applied the outputs: the four assays (`generated-r1`) into `assays/`, the medium grade's column draft as the default column preset `presets/column_medium_crude.json` (unchanged after the solver check, CRUDE_GRADES_APPLY_REVIEW.md), and the client drafts into `assets/icheme/columnpreset/` and `mixturepreset/` with their en_us names. The Tia Juana client templates left `src/main`, so `presets.mjs` reads their copies in `reference/`; a re-run of `presets.mjs` on the same `grades.json` gave every preset output byte for byte.

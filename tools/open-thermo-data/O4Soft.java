@@ -11,7 +11,7 @@ import java.util.Objects;
 public final class O4Soft {
     private O4Soft() {}
     private static void report(Object expected, Object actual, boolean holds, Object message) {
-        var caller = StackWalker.getInstance().walk(s -> s.skip(2).findFirst()).orElseThrow();
+        var caller = StackWalker.getInstance().walk(s -> s.filter(f -> !f.getClassName().equals(O4Soft.class.getName())).findFirst()).orElseThrow();
         System.out.println("PIN\t" + caller.getClassName().replaceAll(".*\\.", "") + ":" + caller.getLineNumber() + "\t" + message
                 + "\t" + expected + "\t" + actual + "\t" + (holds ? "ok" : "MOVED"));
     }
@@ -20,6 +20,8 @@ public final class O4Soft {
         report(expected, actual, Double.compare(expected, actual) == 0 || Math.abs(expected - actual) <= delta, message);
     }
     public static void eq(Object expected, Object actual) { eq(expected, actual, ""); }
+    public static void eq(Object expected, Object actual, java.util.function.Supplier<String> message) { eq(expected, actual, message.get()); }
+    public static void eq(double expected, double actual, double delta, java.util.function.Supplier<String> message) { eq(expected, actual, delta, message.get()); }
     public static void eq(Object expected, Object actual, String message) {
         boolean holds = expected instanceof Number e && actual instanceof Number a ? e.doubleValue() == a.doubleValue() : Objects.equals(expected, actual);
         report(expected, actual, holds, message);

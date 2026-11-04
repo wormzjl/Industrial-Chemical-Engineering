@@ -8,7 +8,7 @@
 // Run after grades.mjs: node tools/crude-grades/presets.mjs
 import fs from 'node:fs';
 import path from 'node:path';
-import {loadComponents, OUT, ASSETS} from './lib/materials.mjs';
+import {loadComponents, OUT, TOOL} from './lib/materials.mjs';
 import {moleFractions} from './lib/grades.mjs';
 import {writeJson, isMain} from './lib/out.mjs';
 
@@ -19,8 +19,9 @@ const RESIDUE = ['crude_pc07', 'crude_pc08', 'crude_pc09', 'crude_pc10', 'crude_
 if (isMain(import.meta.url)) {
   const comps = loadComponents(), byName = Object.fromEntries(comps.map(c => [c.name, c]));
   const grades = JSON.parse(fs.readFileSync(path.join(OUT, 'grades.json'), 'utf8'));
-  const tjMix = JSON.parse(fs.readFileSync(path.join(ASSETS, 'mixturepreset/tia_juana.json'), 'utf8'));
-  const tjCol = JSON.parse(fs.readFileSync(path.join(ASSETS, 'columnpreset/tia_juana.json'), 'utf8'));
+  // The Tia Juana templates the grades are sized against, as they were bundled until O3 (reference/, from 8396d8d98).
+  const tjMix = JSON.parse(fs.readFileSync(path.join(TOOL, 'reference/tia_juana.mixturepreset.json'), 'utf8'));
+  const tjCol = JSON.parse(fs.readFileSync(path.join(TOOL, 'reference/tia_juana.columnpreset.json'), 'utf8'));
   // Tia Juana feed: kmol/h per component, standard liquid volume, group masses
   const tjTotal = tjMix.components.reduce((s, c) => s + c.amount, 0), tjFeed = tjCol.design_feed_kmol_h;
   const tjN = Object.fromEntries(tjMix.components.map(c => [c.id, c.amount / tjTotal * tjFeed]));
