@@ -45,8 +45,15 @@ final class UnitSizingTest {
         assertSame(Limit.PUMP_FLOW, PumpSizing.rate(new PumpSizing.Load(40000, 71, 204.5, 80.), size).closest().limit());
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(40000, 71, 204.5, 80.), size).lamp());
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 210, 204.5, 80.), size).lamp());
+        // Owner decision D21 and option O4: the world's in-line pump for 731 m³/h needs 3.3 m, so it starves under 0.85 × 3.3 m
+        // and the margin row asks for 4.3 m.
+        assertEquals(3.3, PumpSizing.requiredNpsh(731), 1e-9);
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 0.), size).lamp(), "NPSH on 0 misses");
-        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, .5), size).lamp());
+        assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 2.8), size).lamp(), "under the world's floor, 2.805 m");
+        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 2.81), size).lamp(), "over the floor, under the margin");
+        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 4.2), size).lamp());
+        assertEquals(Lamp.GREEN, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 4.3), size).lamp(), "NPSH3 plus 1 m meets it");
+        assertEquals(1.7, PumpSizing.requiredNpsh(36), .05, "the default in-line pump, 0.01 m³/s at 2950 rpm");
     }
 
     @Test void aPumpWithNoHeightReadsNoNpshAtAll() {

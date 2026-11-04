@@ -71,8 +71,8 @@ final class LimitTest {
         assertEquals(Lamp.RED, Limit.LINE_BORE.read(.81).lamp());
         assertEquals(Lamp.GREEN, Limit.PUMP_NPSH.read(1).lamp(), "at least: on it meets it");
         assertEquals(Lamp.YELLOW, Limit.PUMP_NPSH.read(.9).lamp());
-        assertEquals(Lamp.RED, Limit.PUMP_NPSH_WORLD.read(0).lamp(), "above: on it misses it");
-        assertEquals(Lamp.GREEN, Limit.PUMP_NPSH_WORLD.read(.1).lamp());
+        assertEquals(Lamp.RED, Limit.PUMP_NPSH_WORLD.against(2, 2).lamp(), "above: on it misses it");
+        assertEquals(Lamp.GREEN, Limit.PUMP_NPSH_WORLD.against(2.1, 2).lamp());
         assertEquals(Lamp.YELLOW, Limit.PUMP_RATED.read(69).lamp());
         assertEquals(Lamp.GREEN, Limit.PUMP_RATED.read(96).lamp());
         assertEquals(Lamp.YELLOW, Limit.PUMP_RATED.read(121).lamp());

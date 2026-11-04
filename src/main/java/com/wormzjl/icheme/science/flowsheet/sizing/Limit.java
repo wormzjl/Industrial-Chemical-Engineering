@@ -107,7 +107,11 @@ public enum Limit {
     /** A rise for the world's reference fluid, so a head in metres takes that fluid's density. */
     // Its bound is the world's added pressure, Pa; a pump reads it as head, m of its own liquid, against that pressure as head of the reference liquid.
     PUMP_HEAD(MUST, most(FlowControl.Pump.MAXIMUM_ADDED_PRESSURE), "m", "World: 2 MPa at water reference", QUIET),
-    PUMP_NPSH_WORLD(MUST, above(0), "m", "World: `PUMP_SUCTION_LIMIT`", QUIET),
+    /** The world starves a pump whose suction falls to its liquid's vapour pressure plus {@code 0.85 NPSH3} at its flow
+     * (batch 2026-11-03-rotating-machinery, owner decisions D20 Q11 A and D21): the rating gives that floor
+     * ({@link PumpSizing#requiredNpsh}). */
+    PUMP_NPSH_WORLD(MUST, given(Sense.ABOVE), "m", "World: `PUMP_SUCTION_LIMIT` at `0.85 NPSH3` (`Npsh`)", QUIET),
+    /** The margin over the pump's NPSH3 (m): the rating reads NPSH available against NPSH3 plus this number. */
     PUMP_NPSH(SHOULD, least(1), "m", "[HI-961]", QUIET),
     PUMP_RATED(SHOULD, within(70, 120), "%", "[API610]"),
 

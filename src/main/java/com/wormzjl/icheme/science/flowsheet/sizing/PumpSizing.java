@@ -4,7 +4,9 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
+import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver;
+import com.wormzjl.icheme.science.machine.Npsh;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -76,11 +78,21 @@ public final class PumpSizing {
         readings.add(Limit.PUMP_HEAD.against(load.head(), load.mostHead()));
         var npsh = load.npsh();
         if (npsh != null) {
-            readings.add(Limit.PUMP_NPSH_WORLD.read(npsh));
-            readings.add(Limit.PUMP_NPSH.read(npsh));
+            double required = requiredNpsh(load.flow());
+            readings.add(Limit.PUMP_NPSH_WORLD.against(npsh, Npsh.BREAKDOWN * required));
+            readings.add(Limit.PUMP_NPSH.against(npsh, required + Limit.PUMP_NPSH.value()));
         }
         readings.add(Limit.PUMP_RATED.read(100 * load.flow() / ProcessUnit.pumpFlow(size.discharge())));
         return new Rating(readings);
+    }
+
+    /**
+     * The NPSH3 (m) of the world's in-line pump set to {@code flow} (m³/h), at that flow: its duty design
+     * ({@link FlowControl.Pump#npsh}, {@link Npsh#forDuty}; owner decision D21), 1.7 m at 36 m³/h and 3.3 m from 100 m³/h up.
+     */
+    public static double requiredNpsh(double flow) {
+        double volumeFlow = flow / 3600;
+        return new FlowControl.Pump(volumeFlow, 1).npsh().required(volumeFlow);
     }
 
     /** The smallest discharge that meets every limit. No flow, no size. */
