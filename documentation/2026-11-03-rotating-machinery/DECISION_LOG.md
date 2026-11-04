@@ -108,6 +108,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D33 (A109 to A128).** W10b builds as its plan recommends: health per pump and compressor device in fluid facts schema 12 (A109); plan 3.7's rates at commit and on the cadence (A111, A112); the health factor as a dispatch input (A113) with a 1e-3 wake threshold (A114); the knock trip (A115); two parts, impeller and valve set, without a seal kit (A116, A117, replacing Q14's list); vanilla recipes and script-drawn textures (A118, A119); and A120 to A128 as given.
 
+2026-11-04, before W10b's build started: the owner, "Holdon, keep this simple", then on the scope question (A: cavitation and dry running only, full performance until failure, one repair kit; B: all faults, one part; C: the plan as written): "Cavitation + dry only".
+
+- **D34 (replaces D33).** W10b in its simple form (`W10B_BUILD_PLAN.md` revision 2): pumps only carry health (compressors have no wear source left); wear from cavitation (Gülich's curve, no gas cushion) and running dry; no effect until health 0, then `FAILED`, closed; one `repair_kit`; no knock trip, no gradual head loss, no wake threshold. Readings A109 to A128 are withdrawn.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
