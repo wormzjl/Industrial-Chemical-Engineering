@@ -37,6 +37,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: owner: "Yes, merge W4". W4's branch `claude/sad-elgamal-92e0e4` (`07f823eb1`) merged into this branch; its decisions D10 to D13 renumbered D23 to D26; its machine design point became shape fields 8 (main 0.20.0 holds 6 and 7), and this batch's machine facts fluid facts schema 10 (main holds 9). Code conflicts resolved by an Opus medium subagent (constructor `Design` carries main's name and W4's duty, protocol `equipment-18`); `shapes-8.snbt` written by `EquipmentShapeCompatTest`. Affected 363, equipment gates 177, simulator hold gates 23, fluid GameTests 37 pass.
 
 - 2026-11-04: W3, shaft trains (`W3_BUILD_PLAN.md`). Owner decisions D27 ("A: speed sensor + valve": the governor is a speed sensor plus the upstream control valve with source `SHAFT_SPEED`), A14 (a motor runs as supplied until W5) and D28 ("All as recommended": readings A15 to A40). Built by an Opus medium subagent, reviewed: `ShaftNetwork`, `ShaftTrain`, `ShaftPlan`, `ShaftTrains`, `ShaftCommand`, the speed sensor, `TopologyCompiler.Kind.TURBINE`; fluid facts schema 10, accessory facts schema 3, checkpoint 35, with corpus images (`69056145f`). It also fixed W4's direct `Math` calls in `science/equipment`. Affected quick 165, equipment gates 120, hold gates 23, GameTests 38; campaign 992, 994 and 1000 clean, W2-turbine's holds. A42 departs from A27 (`W3_REVIEW.md`); owner "A: keep as built" (D29).
+- 2026-11-04: owner "Start W5", then "Add forced draft cooler as well" / "I mean add power usage to it": the forced-draft cooler is today's air cooler (fans under the bundle), so its fans draw FE as plan 7 says; no new equipment. W5 build plan written (`W5_BUILD_PLAN.md`): electric stores in fluid facts schema 11, terminal cells for the air cooler and induced tower, booking at commits and on the presentation cadence, unpowered as a dispatch input, generator load from its buffer, config `energy.*`; readings A53 to A73, A73 (old coolers and towers unmetered until wired, or all metered) an owner decision.
 
 ## Documents
 
@@ -57,6 +58,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - [W2_TURBINE_REVIEW.md](W2_TURBINE_REVIEW.md): the steam turbine connection (D22), its tests and campaign; the closed 450 K steam pocket defect (on main too); options T6 (reverse flow), T7 (liquid inlet).
 - [W3_BUILD_PLAN.md](W3_BUILD_PLAN.md): W3's build plan and readings A15 to A40 (D28).
 - [W3_REVIEW.md](W3_REVIEW.md): the shaft trains as built, tests, campaign, readings A41 to A52; A42's options.
+- [W5_BUILD_PLAN.md](W5_BUILD_PLAN.md): W5's build plan (FE stores, ports, booking, generator, config), readings A53 to A73.
 - [PUMP_TYPES_REVIEW.md](PUMP_TYPES_REVIEW.md): the pump types against refinery practice (API 610 OH2, BB1, BB2); options for the large pump.
 
 ## Code areas (planned)
@@ -70,7 +72,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - Owner request 2026-11-04, a motor or turbine sound apart from the pump or compressor head's, with the volume scaled by operating speed and equipment size: W4's follow-up (D26, client and assets); the speed share in `FluidNetwork.MoverState` comes with W3's driver logic.
 - Owner: W10a's options O1 to O3 (O4 built) (`W10A_CAMPAIGN_REVIEW.md` section 4). Then W10b (health, wear, repair) after W3, W10c (sound) on W4's loops, W10d (screens) with W7.
 - Owner: the turbine's options T6 and T7, and whether to trace the closed 450 K steam pocket as its own batch (`W2_TURBINE_REVIEW.md`). W2 is complete.
-- W5 and W7 to build (plan section 12; W3 built 2026-11-04); W8 after the simulator merges; W9 only when the owner says so. W4 merged 2026-11-04; W6a is done on `claude/interesting-wozniak-cb5e6a` (43731e4d3, 2b2339d59), not merged.
+- Owner: W5's readings A53 to A73, A73 a decision (`W5_BUILD_PLAN.md` section 8). Then W5 builds; W7 after it (plan section 12; W3 built 2026-11-04); W8 after the simulator merges; W9 only when the owner says so. W4 merged 2026-11-04; W6a is done on `claude/interesting-wozniak-cb5e6a` (43731e4d3, 2b2339d59), not merged.
 - W4 merge, reversible calls to confirm: the smallest motor and generator (0.75 m) carry no nameplate, like the smallest drums and ejectors (`NameplateTest`); the simulator has no tile for a motor, generator or gearbox, so the test catalog (`FlowsheetCatalog`) puts them on the steam turbine's unlit tile until W8 gives them one.
 - D26: one in-game listening check of the machine loops (casing and driver, volume and pitch with speed), approved by the owner, once W3 calls `DriverSounds.accept`.
 - Scratch: `tmp/rotating-machinery/` (worked numbers, campaign reports, test logs, the `CompressorTest` corner-law probe); the measurement tools are in `tools/rotating-machinery/`.
