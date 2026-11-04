@@ -49,6 +49,8 @@ public final class PumpHealth {
 
     private static final class Pump {
         double health = 1, rate;
+        /** The sound bytes of its last committed suction (W10c): the crackle {@code 255 I_c(σ)} and the churn {@code 255 v(r)}. */
+        int crackle, churn;
         long bookedTick;
         boolean failed;
     }
@@ -137,7 +139,10 @@ public final class PumpHealth {
                 for (var row : result.observations()) rows.put(row.pipe(), row);
             }
             var row = rows.get(pipe.id());
-            book(p, row == null || m.targetVolumeFlow() <= 0 ? 0 : Wear.rate(row.npshRatio(), row.dry(), s), start, end);
+            boolean read = row != null && m.targetVolumeFlow() > 0;
+            book(p, read ? Wear.rate(row.npshRatio(), row.dry(), s) : 0, start, end);
+            p.crackle = read ? (int) Math.round(255 * Wear.intensity(row.npshRatio())) : 0;
+            p.churn = read ? (int) Math.round(255 * com.wormzjl.icheme.science.machine.GasEntrainment.churn(row.gasRatio())) : 0;
         }
     }
 
@@ -250,6 +255,18 @@ public final class PumpHealth {
     public boolean failed(long id) {
         var p = pumps.get(id);
         return p != null && p.failed && settings().enabled();
+    }
+
+    /** Pump {@code id}'s cavitation crackle, 0 to 255, from its last committed suction (W10c); 0 for no pump. */
+    public int crackle(long id) {
+        var p = pumps.get(id);
+        return p == null ? 0 : p.crackle;
+    }
+
+    /** Pump {@code id}'s gas churn, 0 to 255, from its last committed suction (W10c); 0 for no pump. */
+    public int churn(long id) {
+        var p = pumps.get(id);
+        return p == null ? 0 : p.churn;
     }
 
     /** Pump {@code id}'s wear rate at its last booking, health per second. */

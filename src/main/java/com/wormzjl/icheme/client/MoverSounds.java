@@ -29,6 +29,8 @@ public final class MoverSounds {
     private static final Set<Target> WATCHED=new HashSet<>();
     private static final Map<Target,FluidNetwork.MoverState> STATES=new HashMap<>();
     private static final Map<Target,Loop> LOOPS=new HashMap<>();
+    /** A pump's crackle and churn loops (W10c), over its casing loop: index 0 the crackle, 1 the churn. */
+    private static final Map<Target,Loop[]> LAYERS=new HashMap<>();
     private static ClientLevel world;
     private static int age;
     private MoverSounds(){}
@@ -52,7 +54,10 @@ public final class MoverSounds {
         if(!WATCHED.contains(state.target())||!valid(state.target()))return;
         STATES.put(state.target(),state);if(!state.running())stop(state.target());
     }
-    private static void stop(Target target){var loop=LOOPS.remove(target);if(loop!=null)Minecraft.getInstance().getSoundManager().stop(loop);}
+    private static void stop(Target target){
+        var loop=LOOPS.remove(target);if(loop!=null)Minecraft.getInstance().getSoundManager().stop(loop);
+        var layers=LAYERS.remove(target);if(layers!=null)for(var layer:layers)if(layer!=null)Minecraft.getInstance().getSoundManager().stop(layer);
+    }
     private static void drop(Target target){STATES.remove(target);stop(target);}
     private static void forget(BlockPos pos) {
         var gone=WATCHED.stream().filter(t->t.position().equals(pos)).toList();WATCHED.removeAll(gone);gone.forEach(MoverSounds::drop);
@@ -89,30 +94,50 @@ public final class MoverSounds {
                     &&mc.options.getSoundSourceVolume(SoundSource.BLOCKS)>0&&mc.options.getSoundSourceVolume(SoundSource.MASTER)>0;
             if(!audible){stop(target);continue;}
             var loop=LOOPS.get(target);
-            if(loop==null||!mc.getSoundManager().isActive(loop)){loop=new Loop(state,mc.level);LOOPS.put(target,loop);mc.getSoundManager().play(loop);}
+            if(loop==null||!mc.getSoundManager().isActive(loop)){loop=new Loop(state,mc.level,0);LOOPS.put(target,loop);mc.getSoundManager().play(loop);}
+            // A pump's crackle and churn (W10c): each starts when its byte rises above 0 and stops itself once silent.
+            var layers=LAYERS.computeIfAbsent(target,t->new Loop[2]);
+            for(int i=0;i<2;i++) {
+                if(layer(state,i+1)<=0||layers[i]!=null&&mc.getSoundManager().isActive(layers[i]))continue;
+                layers[i]=new Loop(state,mc.level,i+1);mc.getSoundManager().play(layers[i]);
+            }
         }
     }
+    /** Layer {@code layer}'s share of full loudness, 0 to 1: the casing 1, a pump's crackle and churn their bytes over 255 (W10c). */
+    private static double layer(FluidNetwork.MoverState state,int layer){return layer==0?1:(layer==1?state.crackle():state.churn())/255.0;}
+    /** How far a layer's volume moves toward its goal each client tick: about a second to settle. */
+    private static final float EASE=.05f;
     private static final class Loop extends AbstractTickableSoundInstance {
         private final Target target;
         private final ClientLevel level;
-        private Loop(FluidNetwork.MoverState state,ClientLevel level) {
-            super((state.compressor()?ModBlocks.COMPRESSOR_RUNNING:ModBlocks.PUMP_RUNNING).get(),SoundSource.BLOCKS,RandomSource.create());
-            this.target=state.target();this.level=level;looping=true;delay=0;volume=0;pitch=1;refreshVolume();
+        /** 0: the casing; 1: a pump's cavitation crackle; 2: its gas churn (W10c). */
+        private final int layer;
+        private Loop(FluidNetwork.MoverState state,ClientLevel level,int layer) {
+            super((layer==1?ModBlocks.PUMP_CAVITATION:layer==2?ModBlocks.PUMP_GAS:state.compressor()?ModBlocks.COMPRESSOR_RUNNING:ModBlocks.PUMP_RUNNING).get(),SoundSource.BLOCKS,RandomSource.create());
+            this.target=state.target();this.level=level;this.layer=layer;looping=true;delay=0;volume=0;pitch=1;if(layer==0)refreshVolume();
             attenuation=net.minecraft.client.resources.sounds.SoundInstance.Attenuation.LINEAR;
             x=target.position().getX()+.5;y=target.position().getY()+.5;z=target.position().getZ()+.5;
         }
+        /** A layer starts silent and eases in (the sound engine would drop it otherwise). */
+        @Override public boolean canStartSilent(){return layer>0;}
         @Override public void tick() {
             var mc=Minecraft.getInstance();var state=STATES.get(target);
             if(mc.level!=level||state==null||!state.running()||!WATCHED.contains(target)||!valid(target)||mc.player==null
                     ||target.position().distToCenterSqr(mc.player.position())>24*24)stop();
             else refreshVolume();
         }
-        /** The casing's gain and pitch, {@link UnitDesign#soundGain(EquipmentShape, double)} and {@link UnitDesign#soundPitch} of its size and speed share (decision D26). */
+        /**
+         * The casing's gain and pitch, {@link UnitDesign#soundGain(EquipmentShape, double)} and {@link UnitDesign#soundPitch} of
+         * its size and speed share (decision D26). A crackle or churn layer (W10c) takes the casing's gain times its byte over
+         * 255, eased toward it, at its own pitch, and stops itself once it has faded out.
+         */
         private void refreshVolume(){
             var state=STATES.get(target);
-            volume=state!=null&&level.getBlockEntity(target.position()) instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null
-                    ?UnitDesign.soundGain(shell.shape(),speed(state)):0;
-            pitch=UnitDesign.soundPitch(state==null?1:speed(state));
+            float goal=state!=null&&level.getBlockEntity(target.position()) instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null
+                    ?(float)(UnitDesign.soundGain(shell.shape(),speed(state))*layer(state,layer)):0;
+            if(layer==0){volume=goal;pitch=UnitDesign.soundPitch(state==null?1:speed(state));return;}
+            volume+=(goal-volume)*EASE;
+            if(goal<=0&&volume<.003f)stop();
         }
     }
     /**

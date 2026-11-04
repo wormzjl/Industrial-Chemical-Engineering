@@ -109,6 +109,10 @@ class PumpHealthTest {
         for (int i = 0; i < 400; i++) rig.tick();
         assertTrue(rig.flow() > 9, "it delivers its set flow: " + rig.flow() + " kg/s");
         assertEquals(2.06, rig.ratio(), .1, "it runs at the erosion peak");
+        // W10c: its mover state's crackle byte is its committed I_c(σ), near full; a set-flow pump has no churn read.
+        assertEquals(Math.round(255 * Wear.intensity(rig.ratio())), rig.health.crackle(1), "the crackle follows I_c");
+        assertTrue(rig.health.crackle(1) > 250, "loud at the peak: " + rig.health.crackle(1));
+        assertEquals(0, rig.health.churn(1));
         double rate = rig.health.rate(1);
         assertEquals(Wear.rate(rig.ratio(), false, FAST), rate, 1e-12, "it books its commit's rate");
         double worn = rig.health.health(1);
@@ -122,6 +126,7 @@ class PumpHealthTest {
         assertEquals("FAILED / HEALTH 0 %", rig.health.status(1));
         for (int i = 0; i < 300; i++) rig.tick();
         assertEquals(0, rig.flow(), 1e-9, "a failed pump passes nothing");
+        assertEquals(0, rig.health.crackle(1), "a stopped pump is silent");
         assertTrue(rig.coordinator.observe(1).graph().pipes().getFirst().control() instanceof FlowControl.Pump p && !p.enabled() && p.requestedVolumeFlow() == FLOW && p.maximumAddedPressure() == 5e5,
                 "it is switched off with its settings kept: the closure is a slice input");
         assertEquals(Map.of(1L, 0.0), rig.health.facts(), "health is a fact");
@@ -149,6 +154,7 @@ class PumpHealthTest {
         assertTrue(rig.ratio() > 4, "its NPSHA is past inception: " + rig.ratio());
         assertEquals(1, rig.health.health(1));
         assertEquals(0, rig.health.rate(1));
+        assertEquals(0, rig.health.crackle(1), "a clean pump does not crackle (W10c)");
         assertTrue(rig.health.facts().isEmpty(), "a new pump carries no entry");
         assertEquals("HEALTH 100 %", rig.health.status(1));
         var outcome = new ArrayList<PumpHealth.Outcome>();

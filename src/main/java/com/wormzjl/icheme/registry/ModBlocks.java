@@ -80,6 +80,9 @@ public final class ModBlocks {
     private static final DeferredRegister<SoundEvent> SOUNDS=DeferredRegister.create(Registries.SOUND_EVENT,IChemE.MOD_ID);
     public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_RUNNING=loop("pump_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> COMPRESSOR_RUNNING=loop("compressor_running");
+    /** A pump's cavitation crackle and gas churn (W10c, decision D35), played over its casing loop. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_CAVITATION=loop("pump_cavitation");
+    public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_GAS=loop("pump_gas");
     /** The drivers' own loops, apart from their machine's casing loop (decision D26); the generator plays the motor's sound. */
     public static final DeferredHolder<SoundEvent,SoundEvent> MOTOR_RUNNING=loop("motor_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> GENERATOR_RUNNING=loop("generator_running");

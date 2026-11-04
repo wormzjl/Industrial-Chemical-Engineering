@@ -1,4 +1,4 @@
-"""Original machine loops (pump and compressor casings, motor, steam turbine); authoring only, never part of the mod runtime.
+"""Original machine loops (pump and compressor casings, motor, steam turbine, a pump's cavitation and gas); authoring only, never part of the mod runtime.
 
 The same route as tools/pump-compressor-controls/make_loops.py: periodic tones whose cycles fit the loop exactly,
 plus noise shaped in the frequency domain over the whole loop (so it is periodic too), mono 24 kHz Vorbis, 3 s.
@@ -65,11 +65,32 @@ pump = (noise(7101, wash) * (1 + .12 * np.cos(2 * np.pi * 3 * t))
 compressor = ((noise(7102, wash + .4 * band(1500, .7)) + tones([(450, .25, 0), (900, .1, .6)]))
               * (1 + .28 * np.cos(2 * np.pi * 6 * t)))
 
+# Cavitation (W10c, decision D35): bubbles collapsing at the impeller's eye, "gravel in the pump". A train of sharp,
+# random clicks (short bright bursts, heavy-tailed in strength, about 140 a second) over a faint broadband hiss, the
+# loudest snaps rounded by a soft limit so the loop keeps the pump's level without clipping. Each click wraps round the
+# loop's end, so the train is periodic and the seam stays clean.
+rng = np.random.default_rng(7301)
+bright = noise(7302, band(4000, 1.1) + .5 * band(1200, .8))
+crackle = .12 * noise(7303, band(2500, 1.4))
+clicks = np.zeros(count)
+for start in rng.integers(0, count, 420):
+    length = int(rng.integers(rate // 2000, rate // 300))
+    strength = min(2.5, rng.pareto(2.5) + .3)
+    span = (start + np.arange(length)) % count
+    clicks[span] += strength * np.exp(-np.arange(length) / (length / 5)) * bright[span]
+crackle += clicks
+crackle = np.tanh(crackle / (2.2 * np.sqrt(np.mean(crackle ** 2))))
+# Gas in the impeller (W10c, D35): low irregular surges, 50 to 200 Hz, a churn that swells and slackens at random one to
+# four times a second. The envelope is smooth periodic noise, so the loop has no seam.
+slow = noise(7311, np.where((frequency >= .5) & (frequency <= 4), 1.0, 0.0))
+churn = noise(7312, band(110, .55) + .3 * band(60, .3)) * np.exp(.55 * slow)
+
 # Each loop's RMS: the 2026-10-23 pump and compressor loops' levels, the drivers at the pump's; the volume law
 # (UnitDesign.soundGain) sets the loudness in game.
 PUMP_RMS, COMPRESSOR_RMS = .0926, .1109
 for name, sound, level in (("pump_running", pump, PUMP_RMS), ("compressor_running", compressor, COMPRESSOR_RMS),
-                           ("motor_running", motor, PUMP_RMS), ("turbine_running", turbine, PUMP_RMS)):
+                           ("motor_running", motor, PUMP_RMS), ("turbine_running", turbine, PUMP_RMS),
+                           ("pump_cavitation", crackle, PUMP_RMS), ("pump_gas", churn, PUMP_RMS)):
     sound = sound - np.mean(sound)
     sound *= level / np.sqrt(np.mean(sound ** 2))
     path = output / (name + ".ogg")

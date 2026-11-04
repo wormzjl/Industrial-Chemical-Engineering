@@ -169,6 +169,19 @@ class FluidPacketCodecTest {
         assertThrows(IllegalArgumentException.class,()->new FluidView.Drive("MOTOR",-1,2,"RUNNING",0,false,0,0));
         assertThrows(IllegalArgumentException.class,()->new FluidView.Power(0,0,1.5,""));
     }
+    /** W10c: a mover's state round-trips with its crackle and churn bytes; a byte outside 0 to 255 is refused. */
+    @Test void aMoverStateRoundTripsItsCrackleAndChurn() {
+        var target=new FluidNetwork.Target(new BlockPos(3,70,-9),42);
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            for(var state:List.of(new FluidNetwork.MoverState(target,false,true,.95f,255,128),new FluidNetwork.MoverState(target,false,true,1,0,7),new FluidNetwork.MoverState(target,true,false,0))) {
+                FluidNetwork.MoverState.STREAM_CODEC.encode(buffer,state);assertEquals(state,FluidNetwork.MoverState.STREAM_CODEC.decode(buffer));
+            }
+        }finally{buffer.release();}
+        assertEquals(0,new FluidNetwork.MoverState(target,true,true,1).crackle());
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MoverState(target,false,true,1,256,0));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MoverState(target,false,true,1,0,-1));
+    }
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
         assertEquals("machine-1",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);

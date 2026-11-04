@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.machine;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
+
 /**
  * Gas carried into a centrifugal pump's suction (batch 2026-11-03-rotating-machinery, plan section 3.6, owner decisions D19
  * and D20 Q12; TWO_PHASE_MACHINES_RESEARCH_REVIEW.md section 1). Small bubbles ride with the liquid and cost little; past
@@ -37,5 +39,20 @@ public final class GasEntrainment {
         if (!(vapourVolumeShare > 0)) return 1;
         double x = Math.min(vapourVolumeShare, 1) / half, x2 = x * x;
         return 1 / (1 + x2 * x2);
+    }
+
+    /** The churn's peak value of {@code clamp(r − 0.5, 0, 1) M(r)}, at r = 1.42: the loudness it is scaled to. */
+    public static final double CHURN_PEAK = .568;
+
+    /**
+     * The loudness of a pump's gas churn, 0 to 1, at {@code r = α/α_T}, its vapour share in onsets (batch
+     * 2026-11-03-rotating-machinery W10c, owner decision D35): {@code clamp(r − 0.5, 0, 1) M(r) / 0.568} with the head
+     * share in onsets {@code M(r) = 1/(1 + (r/1.6)^4)}. Silent below half the onset, 0.76 at the onset, its peak 1.0 at
+     * r = 1.42, then fading as the head collapses toward gas lock: 0.51 at 2, 0.13 at 3. Zero for no read (NaN).
+     */
+    public static double churn(double r) {
+        if (!(r > .5) || Double.isInfinite(r)) return 0;
+        double rise = Math.min(r - .5, 1), share = 1 / (1 + DeterministicMath.pow(r / HALF_HEAD_ONSETS, 4));
+        return Math.min(1, rise * share / CHURN_PEAK);
     }
 }

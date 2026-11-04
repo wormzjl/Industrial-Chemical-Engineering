@@ -37,6 +37,19 @@ class GasEntrainmentTest {
         assertEquals(.88, GasEntrainment.headShare(.02, BAR) * (1 - .02), 5e-3, "the rise share M (1 − α) at 1 bar, 2 %");
     }
 
+    /** W10c (owner decision D35): the churn's loudness in onsets r = α/α_T, the build plan's numbers. */
+    @Test void theChurnRisesFromHalfTheOnsetPeaksAndFadesTowardGasLock() {
+        assertEquals(0, GasEntrainment.churn(.5), 1e-12, "silent at half the onset");
+        assertEquals(0, GasEntrainment.churn(.2), 1e-12);
+        assertEquals(.76, GasEntrainment.churn(1), .005, "at the onset");
+        assertEquals(1.0, GasEntrainment.churn(1.42), .005, "the peak");
+        assertEquals(.51, GasEntrainment.churn(2), .005);
+        assertEquals(.13, GasEntrainment.churn(3), .005);
+        for (double r = 0; r < 6; r += .01) assertTrue(GasEntrainment.churn(r) >= 0 && GasEntrainment.churn(r) <= 1, "r " + r);
+        assertEquals(0, GasEntrainment.churn(Double.NaN));
+        assertEquals(0, GasEntrainment.churn(Double.POSITIVE_INFINITY));
+    }
+
     @Test void theHeadShareFallsWithGasAndRisesWithPressure() {
         for (double p : new double[]{1e3, BAR, 10 * BAR, 100 * BAR}) {
             double before = 1;
