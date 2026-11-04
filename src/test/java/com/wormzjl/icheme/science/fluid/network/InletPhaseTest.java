@@ -9,11 +9,12 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * The liquid-only pump (decisions D1, D4, D6 and A37 of documentation/2026-09-26-phase-ports-and-compressor; plan 3.6):
- * the supply walk and its measures ({@link InletPhase}), the refusal {@link FlowControl.Mode#INLET_WRONG_PHASE} decided
- * once per slice on the committed state and the committed endpoint mode, with its hysteresis, and the plan's fixtures 4
- * (refused pumps, the rest of the island bitwise; hysteresis), 5 (a pump draining a tank's bottom port) and 8 (certified
- * replay). Every slice is a job as the island runtime runs it ({@link PassiveIntervalSolver#replayStart} from the committed
+ * The pump's suction (decisions D1, D4, D6 and A37 of documentation/2026-09-26-phase-ports-and-compressor; plan 3.6): the
+ * supply walk and its measures ({@link InletPhase}), and the plan's fixtures 4 (pumps on gas and on a two-phase supply; a
+ * swept supply), 5 (a pump draining a tank's bottom port) and 8 (certified replay). Restated for request 11 (batch
+ * 2026-11-03-rotating-machinery, owner decisions D19 and D20): gas at a pump is no refusal, so the vapour refusal
+ * {@link FlowControl.Mode#INLET_WRONG_PHASE} and its hysteresis these fixtures asserted are gone; a set-flow pump's law
+ * counts the suction mixture's volume and moves what it is fed. A dry suction still refuses (DrySuctionTest). Every slice is a job as the island runtime runs it ({@link PassiveIntervalSolver#replayStart} from the committed
  * interval), commits whole, and closes the component ledger to 1e-12 and the energy ledger to 1e-10. Each fixture prints
  * an {@code INLET_PHASE_RUN} line; the numbers are recorded in PHASE_PORTS_REVIEW.md, section "WP3".
  */
@@ -127,83 +128,66 @@ class InletPhaseTest extends PortFixture {
         }
     }
 
-    /** The decision of D6 on the measure alone: refuse above 2 % vapour by volume; a pump refused at the committed slice end
-     * stays refused until below 0.5 %; the reason names the share and the source node. */
-    @Test void thePumpsThresholdsAndReason() {
+    /** Restated for request 11 (owner decisions D19 and D20): D6's thresholds (refuse above 2 % vapour by volume, resume
+     * below 0.5 %) are gone. A fed pump, set-flow or a machine on its curve, refuses no vapour share, whether or not it
+     * stood refused at the committed slice end; a refused pump is dry, and its reason says so. */
+    @Test void aFedPumpRefusesNoVapourShare() {
         var pump=new FlowControl.Pump(.001,500000);
-        for(double[] c:new double[][]{{.0199,0,0},{.0201,0,1},{.0199,1,1},{.0051,1,1},{.0049,1,0},{.0049,0,0},{0,1,0}})
-            assertEquals(c[2]==1,pump.refuses(new InletPhase.Supply(0,7,PhasePort.BULK,c[0],0,0,Double.POSITIVE_INFINITY),c[1]==1),Arrays.toString(c));
-        assertEquals("ERROR: pump inlet not liquid (vapour 34.0 % by volume, from node 7)",InletPhase.reason(pump,new InletPhase.Supply(0,7,PhasePort.BULK,.34,0,0,Double.POSITIVE_INFINITY)));
+        var machine=new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalPump(.01,50,.7),1,true);
+        for(double share:new double[]{0,.0049,.0051,.0199,.0201,.34,1})for(boolean before:new boolean[]{false,true}) {
+            var supply=new InletPhase.Supply(0,7,PhasePort.BULK,share,0,0,Double.POSITIVE_INFINITY);
+            assertFalse(pump.refuses(supply,before),share+" refused before "+before);assertFalse(machine.refuses(supply,before),"machine "+share+" refused before "+before);
+        }
+        assertEquals("ERROR: pump inlet dry (from node 7)",InletPhase.reason(pump,new InletPhase.Supply(0,7,PhasePort.BULK,.34,0,0,0)));
     }
 
-    // ---- Fixture 4: refused pumps; the rest of the island bitwise; hysteresis ---------------------------------------
+    // ---- Fixture 4: pumps on gas and on a two-phase supply; a swept supply ------------------------------------------
 
     /**
      * Plan fixture 4. One island (one graph): an independent water line (a 300 kPa water generator filling a nitrogen
      * tank), a pump between two nitrogen tanks, and a pump on a two-phase generator (30 % vapour by volume) into a
-     * nitrogen tank. Both pumps are refused ({@code INLET_WRONG_PHASE}), carry exactly zero, every slice commits FULL (no
-     * hold), at 5 s and 0.1 s. The water line integrates bit for bit as in the same island whose nitrogen line is a
-     * compressor set to no flow (a closed device, mode CLOSED): a refusal is exactly a closed device. (The control was a
-     * compressor closed both ways by a block until every interval start read the closures open, owner decision D33.)
-     * Against the water line alone (no device lines at all) it agrees to a few units in the last place: the line alone is
-     * another Newton system. At 0.1 s a closed device's head unknown moves the water line's flow by a few units in the
-     * last place in some slices, as the pre-existing closed-device path does (measured: the refused and the
-     * closed-compressor islands agree bitwise, both 1-2 ulp from the line alone, drifting to a few ulp over 60 slices);
-     * at 5 s it was bit for bit until a vessel's seed became its committed layout (owner decision D40 A), which moves the
-     * joint solve's last iterate: slice 0 ends 11 units in the last place apart in the receiving tank's pressure
-     * (1.6e-10 Pa of 104.7 kPa). That comparison is held to 1e-13 relative in the flow and 1e-12 in the tank's state.
+     * nitrogen tank, at 5 s and 0.1 s. Restated for request 11 (owner decisions D19 and D20): both pumps were refused
+     * ({@code INLET_WRONG_PHASE}), carried exactly zero and left the water line bitwise as a closed device does; gas at a
+     * pump is no refusal now, so the comparison with a closed device is gone. Both pumps run on their laws, each moving
+     * what its supply delivers (its set flow is a volume of the suction mixture), every slice commits whole with the
+     * ledgers closed, and the water line still flows.
      */
-    @Test void refusedPumpsCarryNothingAndTheIslandsWaterLineIntegratesBitwise() {
+    @Test void pumpsOnGasAndOnATwoPhaseSupplyRunAndTheIslandIntegrates() {
         for(double interval:new double[]{5,.1}) {
             int count=interval==5?6:60;
             var waterLine=List.of(new PassiveNetwork.Reservoir(1,0,waterSupply(300000),PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,nitrogenAt(101325)));
-            var alone=new PassiveNetwork(waterLine,List.of(pipe(10,0,1,line(10,.02),new FlowControl.Passive())));
             var nodes=new ArrayList<>(waterLine);
             nodes.add(new PassiveNetwork.Reservoir(3,0,nitrogenAt(200000)));nodes.add(new PassiveNetwork.Reservoir(4,0,nitrogenAt(101325)));
             var twoPhase=twoPhase(.3,150000);
             nodes.add(new PassiveNetwork.Reservoir(5,0,twoPhase,PassiveNetwork.NodeKind.GENERATOR));nodes.add(new PassiveNetwork.Reservoir(6,0,nitrogenAt(101325)));
             var island=new PassiveNetwork(nodes,List.of(pipe(10,0,1,line(10,.02),new FlowControl.Passive()),
                     pipe(11,2,3,line(1,.05),new FlowControl.Pump(.01,500000)),pipe(12,4,5,line(1,.05),new FlowControl.Pump(.001,500000))));
-            // The control: the nitrogen line's device a compressor (a gas is its phase) set to no flow; the two-phase line as is.
-            var closedControl=new PassiveNetwork(nodes,List.of(pipe(10,0,1,line(10,.02),new FlowControl.Passive()),
-                    pipe(11,2,3,line(1,.05),new FlowControl.Compressor(0,1.5)),pipe(12,4,5,line(1,.05),new FlowControl.Pump(.001,500000))));
-            var reference=drive("alone@"+interval,alone,interval,count);var run=drive("island@"+interval,island,interval,count);
-            var control=drive("closed@"+interval,closedControl,interval,count);
-            int worstUlps=0;
+            var run=drive("island@"+interval,island,interval,count);
             for(int i=0;i<count;i++) {
                 var s=run.slices().get(i);
-                assertEquals(FlowControl.Mode.INLET_WRONG_PHASE,s.endpointModes().get(1),"nitrogen pump refused, slice "+i);
-                assertEquals(FlowControl.Mode.INLET_WRONG_PHASE,s.endpointModes().get(2),"two-phase pump refused, slice "+i);
-                assertEquals(0.0,s.averageMassFlows()[1]);assertEquals(0.0,s.averageMassFlows()[2]);assertEquals(0.0,s.pumpWorkJoule());
-                assertEquals(FlowControl.Mode.CLOSED,control.slices().get(i).endpointModes().get(1),"the control's compressor is closed, not refused");
-                assertSameDoubles("water line vs the closed-device island @"+interval+" slice "+i,control.slices().get(i),s,2,1);
-                {double a=reference.slices().get(i).averageMassFlows()[0],b=s.averageMassFlows()[0];
-                    worstUlps=Math.max(worstUlps,(int)Math.abs(Double.doubleToLongBits(a)-Double.doubleToLongBits(b)));
-                    assertEquals(a,b,1e-13*Math.abs(a),"water line vs the line alone @"+interval+" slice "+i);
-                    var x=reference.slices().get(i).graph().reservoirs().get(1).state();var y=s.graph().reservoirs().get(1).state();
-                    // Restated 2026-09-27 (hold F7, owner decision): under the 900 kg/m3 mass reference the receiving
-                    // tank's state drifts 2.45e-13 relative from the line alone over the 60 slices (97673.64797358793
-                    // against 97673.64797361186 Pa; before, below 1e-13), the same closed-device roundoff on a
-                    // different step sequence. The flow comparison above keeps 1e-13.
-                    assertEquals(x.pressure(),y.pressure(),1e-12*x.pressure());assertEquals(x.temperature(),y.temperature(),1e-12*x.temperature());}
+                assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,s.endpointModes().get(1),"the nitrogen pump is not refused, slice "+i);
+                assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,s.endpointModes().get(2),"the two-phase pump is not refused, slice "+i);
+                assertTrue(s.pumpWorkJoule()>=0,"slice "+i);
             }
+            var first=run.slices().getFirst();
+            assertTrue(first.averageMassFlows()[1]>0,"the nitrogen pump moves the 200 kPa tank's gas");
+            assertTrue(first.averageMassFlows()[2]>0,"the two-phase pump moves its supply");
             assertTrue(run.slices().getLast().averageMassFlows()[0]>0,"the water line flows");
-            var n2=run.last().reservoirs().get(2);assertArrayEquals(nodes.get(2).inventory().moles(),n2.inventory().moles(),"the suction tank keeps its nitrogen");
-            System.out.println("INLET_PHASE_RUN fixture4 interval="+interval+" slices="+count+" worstUlpsVsAlone="+worstUlps+" accepted="+run.accepted()+"/"+reference.accepted()+" rejected="+run.rejected()+"/"+reference.rejected()
-                    +" reasons="+run.reasons()+" waterLineFlow="+run.slices().getLast().averageMassFlows()[0]+" twoPhaseShare="+share(twoPhase)
-                    +" reasons: "+InletPhase.reason(model,island,1,interval)+" | "+InletPhase.reason(model,island,2,interval));
+            var n2=run.last().reservoirs().get(2).inventory().moles()[nitrogen];
+            assertTrue(n2<nodes.get(2).inventory().moles()[nitrogen],"the suction tank gave up nitrogen");
+            System.out.println("INLET_PHASE_RUN fixture4 interval="+interval+" slices="+count+" accepted="+run.accepted()+" rejected="+run.rejected()
+                    +" reasons="+run.reasons()+" flows="+Arrays.toString(first.averageMassFlows())+" twoPhaseShare="+share(twoPhase));
         }
     }
 
     /**
-     * Plan fixture 4, hysteresis: a pump on a generator whose supply is swept 0 % to 5 % vapour by volume and back, one 5 s
-     * slice per step; the generator's state changes between slices (an input change) and each slice is a job from the
-     * committed interval. It refuses first at 2.1 % (not at 1.9 %) and runs again first at 0.4 % (not at 0.6 %, nor
-     * anywhere in between).
+     * Plan fixture 4, the swept supply: a pump on a generator whose supply is swept 0 % to 5 % vapour by volume and back,
+     * one 5 s slice per step; the generator's state changes between slices (an input change) and each slice is a job from
+     * the committed interval. Restated for request 11 (owner decisions D19 and D20): it refused first at 2.1 % and ran again
+     * first at 0.4 % (D6's hysteresis); now it is never refused and runs at every step of the sweep.
      */
-    @Test void aSweptSupplyRefusesAboveTwoPercentAndResumesBelowHalfAPercent() {
+    @Test void aSweptSupplyIsNeverRefused() {
         double[] sweep={0,.01,.019,.021,.03,.05,.03,.01,.006,.004,0};
-        boolean[] expected={false,false,false,true,true,true,true,true,true,false,false};
         var solver=new PassiveIntervalSolver(model);PassiveIntervalSolver.Result committed=null;
         PassiveNetwork.Reservoir tank=new PassiveNetwork.Reservoir(2,0,waterUnderNitrogen(.2,101325));
         var refused=new ArrayList<Boolean>();
@@ -215,8 +199,8 @@ class InletPhaseTest extends PortFixture {
             boolean off=result.endpointModes().getFirst()==FlowControl.Mode.INLET_WRONG_PHASE;refused.add(off);
             if(off)assertEquals(0.0,result.averageMassFlows()[0]);else assertTrue(result.averageMassFlows()[0]>0,"runs at "+sweep[i]);
         }
-        System.out.println("INLET_PHASE_RUN hysteresis sweep="+Arrays.toString(sweep)+" refused="+refused);
-        for(int i=0;i<sweep.length;i++)assertEquals(expected[i],refused.get(i),"slice "+i+" at "+sweep[i]);
+        System.out.println("INLET_PHASE_RUN sweep="+Arrays.toString(sweep)+" refused="+refused);
+        for(int i=0;i<sweep.length;i++)assertFalse(refused.get(i),"slice "+i+" at "+sweep[i]);
     }
 
     // ---- Fixture 5: a pump drains a tank's bottom port ---------------------------------------------------------------
@@ -224,11 +208,14 @@ class InletPhaseTest extends PortFixture {
     /**
      * Plan fixture 5 (under decision D11 and default A37): a pump draws water from a tank's bottom (LIQUID) port and lifts
      * it into a void 30 kPa above the tank. The tank holds 2.99 slices of the pump's target volume. The pump runs on its
-     * target for two slices; the third starts with 0.99 of a slice of water (the draw over the slice is 1 % gas, admitted),
-     * and within it the port's water runs out and the draw turns to gas; from the fourth slice on the supply is gas and the
-     * pump is refused ({@code INLET_WRONG_PHASE}), with no held slice.
+     * target for two slices; the third starts with 0.99 of a slice of water (the draw over the slice is 1 % gas), and within
+     * it the port's water runs out and the draw turns to gas; from the fourth slice on the supply is gas, with no held
+     * slice. Restated for request 11 (owner decisions D19 and D20): the pump was refused there ({@code INLET_WRONG_PHASE});
+     * now it is not, and its law on the gas moves next to nothing: a set-flow pump's relief rise is a head on its supply
+     * (owner decision D11, A2), about 0.7 kPa on the tank's nitrogen against the void's 30 kPa, and a slice of its
+     * displacement of gas would be 0.013 kg.
      */
-    @Test void aPumpOnABottomPortRunsThenMeetsGasAndIsRefusedAtTheNextSlice() {
+    @Test void aPumpOnABottomPortRunsThenMeetsGasAndMovesNextToNothing() {
         double target=.002,interval=5;
         // The tank's water volume made exactly 2.99 slices of the target (the flash moves it from the charged volume).
         double charged=2.99*target*interval;var tankState=waterUnderNitrogen(charged,120000);
@@ -244,21 +231,21 @@ class InletPhaseTest extends PortFixture {
         assertEquals(FlowControl.Mode.MOVER_LAW,run.slices().get(0).endpointModes().getFirst());
         assertEquals(FlowControl.Mode.MOVER_LAW,run.slices().get(1).endpointModes().getFirst());
         for(int i=0;i<2;i++)assertEquals(target*interval*997,drawn.get(i),.01*target*interval*997,"slice "+i+" on target");
-        assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,run.slices().get(2).endpointModes().getFirst(),"admitted with 1 % of the slice's draw gas");
-        for(int i=3;i<8;i++){assertEquals(FlowControl.Mode.INLET_WRONG_PHASE,run.slices().get(i).endpointModes().getFirst(),"refused from slice 3: "+modes);assertEquals(0.0,drawn.get(i));}
+        for(int i=2;i<8;i++){assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,run.slices().get(i).endpointModes().getFirst(),"not refused: "+modes);
+            if(i>=3)assertTrue(drawn.get(i)<.01*target*interval*997,"slice "+i+" draws next to nothing: "+drawn);}
         assertTrue(tank.waterVolume()<1e-6,"the port drew the water");
     }
 
-    // ---- Fixture 8: certified replay with a refused pump --------------------------------------------------------------
+    // ---- Fixture 8: certified replay with a pump on a gassy supply -----------------------------------------------------
 
     /**
-     * Plan fixture 8: a pump refused on a vessel whose gas cushion a water generator compresses, so its supply's vapour
-     * share falls from 3 % into the hysteresis band (0.5 % to 2 %); the refusal holds there only because the committed
-     * endpoint mode says it was refused. A fresh solver started from the committed interval of slice k
-     * ({@link PassiveIntervalSolver#replayStart}) reproduces the island that solved every interval bit for bit; started
-     * without the committed interval, a fresh solver in the band admits the pump instead (the input the replay needs).
+     * Plan fixture 8: a pump on a vessel whose gas cushion a water generator compresses, so its supply's vapour share falls
+     * from 3 %. A fresh solver started from the committed interval of slice k ({@link PassiveIntervalSolver#replayStart})
+     * reproduces the island that solved every interval bit for bit. Restated for request 11 (owner decisions D19 and D20):
+     * the pump was refused throughout, and in D6's hysteresis band (0.5 % to 2 %) only the committed mode kept it refused,
+     * which a forgetful solver showed; gas at a pump is no refusal now, so the pump runs and the replay is of a running pump.
      */
-    @Test void aFreshSolverReplaysARefusedPumpBitwise() {
+    @Test void aFreshSolverReplaysAPumpOnAGassySupplyBitwise() {
         var vessel=new PassiveNetwork.Reservoir(1,0,waterUnderNitrogen(.97,101325));
         var start=new PassiveNetwork(List.of(vessel,new PassiveNetwork.Reservoir(2,0,waterSupply(600000),PassiveNetwork.NodeKind.GENERATOR),
                 new PassiveNetwork.Reservoir(3,0,nitrogenAt(101325),PassiveNetwork.NodeKind.VOID)),
@@ -266,18 +253,12 @@ class InletPhaseTest extends PortFixture {
         var reference=drive("replay",start,5,12);
         var shares=new ArrayList<Double>();for(var g:reference.graphs())shares.add(share(g.reservoirs().getFirst().state()));
         System.out.println("INLET_PHASE_RUN fixture8 shares="+shares+" modes="+reference.slices().stream().map(s->s.endpointModes().get(1)).toList()+" accepted="+reference.accepted()+" rejected="+reference.rejected());
-        int band=-1;
-        for(int i=0;i<reference.slices().size();i++) {
-            assertEquals(FlowControl.Mode.INLET_WRONG_PHASE,reference.slices().get(i).endpointModes().get(1),"refused throughout, slice "+i);
-            if(band<0&&shares.get(i)<FlowControl.Pump.VAPOUR_REFUSE&&shares.get(i)>FlowControl.Pump.VAPOUR_RESUME)band=i;
-        }
-        assertTrue(band>=0&&band<11,"the supply enters the hysteresis band: "+shares);
-        for(int resume:new int[]{1,band+1}) {
+        for(int i=0;i<reference.slices().size();i++)
+            assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,reference.slices().get(i).endpointModes().get(1),"never refused, slice "+i);
+        for(int resume:new int[]{1,6}) {
             var resumed=drive("replay-from-"+resume,reference.graphs().get(resume-1),5,12-resume,new PassiveIntervalSolver(model),reference.slices().get(resume-1));
             for(int i=0;i<resumed.slices().size();i++)assertSameDoubles("resume "+resume+" slice "+(resume+i),reference.slices().get(resume+i),resumed.slices().get(i),3,2);
             for(int i=0;i<resumed.slices().size();i++)assertEquals(reference.slices().get(resume+i).endpointModes(),resumed.slices().get(i).endpointModes());
         }
-        var forgetful=drive("no-committed-interval",reference.graphs().get(band),5,1);
-        assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,forgetful.slices().getFirst().endpointModes().get(1),"without the committed mode the band admits the pump");
     }
 }

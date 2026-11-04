@@ -70,6 +70,19 @@ class CentrifugalCompressorTest {
         assertEquals(0, MACHINE.gasPower(-1, 1e3));
     }
 
+    /** A wet suction (plan section 3.6, owner decision D20 Q15): {@code η_wet = η_p (1 − 0.5 w_l)}; 1 % liquid by volume in
+     * 50 bar natural gas (40 and 600 kg/m³) is 13.2 % by mass, η 0.78 falling to 0.729. */
+    @Test void aWetSuctionLowersTheEfficiency() {
+        assertEquals(.78, CentrifugalCompressor.wetEfficiency(.78, 0), 0, "dry");
+        double wl = .01 * 600 / (.01 * 600 + .99 * 40);
+        assertEquals(.132, wl, 5e-4, "1 % by volume is 13.2 % by mass");
+        assertEquals(.78 * (1 - .5 * wl), CentrifugalCompressor.wetEfficiency(.78, wl), 1e-15);
+        assertEquals(.729, CentrifugalCompressor.wetEfficiency(.78, wl), 5e-4);
+        assertEquals(.39, CentrifugalCompressor.wetEfficiency(.78, 1), 1e-15, "held at all liquid");
+        assertEquals(.39, CentrifugalCompressor.wetEfficiency(.78, 2), 1e-15, "a share is at most one");
+        assertEquals(.78, CentrifugalCompressor.wetEfficiency(.78, -1), 0, "and at least none");
+    }
+
     @Test void refusesAnInvalidRating() {
         assertThrows(IllegalArgumentException.class, () -> new CentrifugalCompressor(1, 0, .78));
         assertThrows(IllegalArgumentException.class, () -> CentrifugalCompressor.sigma(1, .78));

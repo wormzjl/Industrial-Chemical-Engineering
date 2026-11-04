@@ -549,7 +549,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             skin.text(canvas,shown,at[0],at[1],Palette.TEXT);if(shown.length()<name.length()&&strip.name().contains(hoverX,hoverY))hovered=name;}
         var data=menu.clientData();
         if(data==null){doorStatus(canvas,skin,tr("waiting"),MUTED);return;}
-        // A refused mover's reason ("ERROR: pump inlet not liquid ...") and a hold read in the warning colour.
+        // A refused mover's reason ("ERROR: pump inlet dry ...") and a hold read in the warning colour.
         var view=data.view();
         skin.hDivider(canvas,8,imageWidth-8,imageHeight-49);
         // A message only (waiting, an invalid input); the view's time is gone (owner, 2026-10-28).

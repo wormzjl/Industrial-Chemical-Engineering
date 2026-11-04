@@ -77,6 +77,25 @@ class CentrifugalPumpTest {
     @Test void refusesAnInvalidRating() {
         assertThrows(IllegalArgumentException.class, () -> new CentrifugalPump(0, 80, .7));
         assertThrows(IllegalArgumentException.class, () -> new CentrifugalPump(.01, 80, 1.2));
+        assertThrows(IllegalArgumentException.class, () -> new CentrifugalPump(.01, 80, .7, 0));
+    }
+
+    /** Plan section 3.6 (owner decisions D19 and D20): gas scales the head (the rise keeps the mixture density), and the NPSH3
+     * design is the rated flow at the rated speed, 2950 rpm for a design that states none (decision A3). */
+    @Test void gasScalesTheHeadAndTheDesignCarriesItsNpsh() {
+        assertEquals(Motor.ratedSpeed(2), PUMP.ratedSpeed(), 0, "a design with no speed of its own turns at the 2-pole speed");
+        var gassy = PUMP.withHeadShare(.4);
+        assertSame(PUMP, PUMP.withHeadShare(1), "no gas, the same curve");
+        assertEquals(PUMP.ratedSpeed(), gassy.ratedSpeed(), 0);assertEquals(.4 * PUMP.efficiency(), gassy.efficiency(), 1e-15, "the efficiency falls with the head");
+        for (double s : new double[]{.5, 1}) for (double q = 0; q <= 2.5; q += .25) {
+            double flow = q * PUMP.ratedFlow();
+            assertEquals(.4 * PUMP.head(flow, s), gassy.head(flow, s), 1e-12 * PUMP.ratedHead(), "head at s " + s + ", q " + q);
+            assertEquals(.4 * PUMP.rise(flow, s, 760, 1e5, 1.4), gassy.rise(flow, s, 760, 1e5, 1.4), 1e-9, "rise on the mixture density at s " + s + ", q " + q);
+            assertEquals(PUMP.shaftPower(flow, s, 760), gassy.shaftPower(flow, s, 760), 1e-9 * PUMP.ratedShaftPower(760), "the same shaft power on the mixture at s " + s + ", q " + q);
+        }
+        assertEquals(Npsh.rated(PUMP.ratedFlow(), 2950), PUMP.npsh(1).ratedNpsh3(), 0, "3.3 m for plan 1.1's pump");
+        assertEquals(.8, PUMP.npsh(.8).speed(), 0);
+        assertEquals(Npsh.rated(PUMP.ratedFlow(), 1475), new CentrifugalPump(PUMP.ratedFlow(), 80, .72, 1475).npsh(1).ratedNpsh3(), 0, "a 4-pole design");
     }
 
     /** The flow share where the pump at {@code speed} meets the line {@code h = 0.375 + 0.625 q²}. */

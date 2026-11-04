@@ -72,6 +72,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
   - **Q16.** The physical wear intensity (peak near 2 × NPSH3), no size factor, the lives of plan 3.7 in the server config.
   - **Q17.** W10a now; W10b to W10d after W3, W4 and W7.
 
+2026-11-04, W10a's affected tests: at D19's 2-pole speed NPSH3 grows with the set flow, `(2950 √Q/200)^(4/3)`: 7.8 m at 0.1 m³/s, 47 m at 1.5 m³/s, so every in-line pump above about 0.17 m³/s cavitated from a full atmospheric tank (`PumpRateWarmStartTest`). Options: (A) the speed that keeps NPSH3 at 3.3 m, at most 2950 rpm; (B) keep 2-pole. The owner: "A: speed for 3.3 m".
+
+- **D21.** An in-line pump is chosen for its duty: its NPSH3 design is its set flow at `n = min(2950, 200 · 3.3^0.75 / √Q)` rpm (`Npsh.forDuty`), so its rated NPSH3 is at most 3.3 m (plan 1.1's pump). Nothing changes up to 0.028 m³/s; a 1.5 m³/s pump turns at about 400 rpm. The speed feeds only NPSH3. Constructed pumps keep the speed of their design.
+
 ## Taken under the standing instruction
 
 - **A1 (Q10, reading of "as recommended").** All three proposals join the batch: a generator (shaft power to FE, the motor's mirror), cooling-tower fans on the RF port, KubeJS made optional with Create.

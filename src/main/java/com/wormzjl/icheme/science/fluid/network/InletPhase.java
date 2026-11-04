@@ -12,7 +12,9 @@ import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.WATER;
 /**
  * The inlet phase check of a pump or compressor (decisions D1, D2, D6): what the device's suction line delivers,
  * measured on a committed state, and whether the device is refused ({@link FlowControl.Mode#INLET_WRONG_PHASE}) for the
- * slice that starts there. Every method is a pure function of the graph, the slice duration and, for the decision, the
+ * slice that starts there: a dry suction, or a compressor's solids. The measures also set a centrifugal machine's laws for
+ * a solve (request 11, owner decisions D19 and D20): a pump's head reads the vapour share, a compressor's efficiency the
+ * condensed share ({@code PassiveStepSolver.readSuctions}); gas at a pump and liquid at a compressor refuse nothing. Every method is a pure function of the graph, the slice duration and, for the decision, the
  * committed endpoint modes, so the solver and the device view ({@code FluidWorldAuthority}) read the same answer.
  *
  * <p>The supply walk: from the device edge's first node, a vessel, generator, void or port there supplies the stream of
@@ -108,6 +110,19 @@ public final class InletPhase {
         double mass=0,volume=0;
         if(source.drawn()!=null)for(int phase=0;phase<3;phase++)if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PassiveStepSolver.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
         return volume>0?mass/volume:state.mass()/state.volume();
+    }
+    /**
+     * The density (kg/m3) of the liquid in what connection {@code edge}'s suction line delivers, {@link #supply}'s stream on
+     * the same arguments: its hydrocarbon liquid and free water streams' mass over their volume, at the densities a
+     * connection's end draws them with; where the stream holds no liquid, the liquid of the node it is drawn from; NaN where
+     * that holds none. What a pump's NPSH floor reads ({@code PassiveStepSolver.readSuctions}, owner decision D20 Q11 A).
+     */
+    public static double liquidDensity(FluidThermodynamics model,PassiveNetwork graph,int edge,double targetVolumeFlow,double duration) {
+        var source=source(model,graph,edge,targetVolumeFlow,duration);var state=graph.reservoirs().get(source.node()).state();
+        double mass=0,volume=0;
+        if(source.drawn()!=null)for(int phase:new int[]{OIL,WATER})if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PassiveStepSolver.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
+        if(!(volume>0))for(int phase:new int[]{OIL,WATER}){double v=FluidThermodynamics.phaseVolume(state,phase);if(v>0){mass+=v*PassiveStepSolver.phaseDensity(model,state,phase);volume+=v;}}
+        return volume>0?mass/volume:Double.NaN;
     }
     /** Where a suction walk ends: the node, its end's port there (BULK at a junction) and the phase stream volumes drawn
      * through it ({@link #draw}; null for the bulk). */
@@ -225,8 +240,8 @@ public final class InletPhase {
 
     /**
      * Which connections of {@code graph} are refused for the slice that starts on its states: every mover whose supply
-     * ({@link #supply}, over {@code duration}) it refuses ({@link FlowControl.Mover#refuses}: a dry suction or the wrong
-     * phase), with its hysteresis input the committed endpoint mode {@code committedModes} (null, or of another length:
+     * ({@link #supply}, over {@code duration}) it refuses ({@link FlowControl.Mover#refuses}: a dry suction, or a
+     * compressor's solids), with its hysteresis input the committed endpoint mode {@code committedModes} (null, or of another length:
      * none refused before). One flag per connection.
      */
     public static boolean[] decide(FluidThermodynamics model,PassiveNetwork graph,List<FlowControl.Mode> committedModes,double duration) {
@@ -241,18 +256,15 @@ public final class InletPhase {
     }
 
     /**
-     * The reason a refused mover shows (decision D6), which the device view shows with the node named as a device: "ERROR: pump inlet not liquid
-     * (vapour 34.0 % by volume, from node 12)", "ERROR: compressor inlet not gas (condensed 2.5 % by mass, from node 12)"
-     * or, for solids, "ERROR: compressor inlet not gas (solids 1.0e-03 by volume, from node 12)"; a suction that what feeds
-     * it fills below the opening share ({@link #DRY_RESUME}) is dry: "ERROR: pump inlet dry (from node 12)". {@code node}
-     * is the id of the node the supply walk ended at.
+     * The reason a refused mover shows (decision D6), which the device view shows with the node named as a device: a
+     * suction that what feeds it fills below the opening share ({@link #DRY_RESUME}) is dry, "ERROR: pump inlet dry (from
+     * node 12)"; a compressor's solids, "ERROR: compressor inlet not gas (solids 1.0e-03 by volume, from node 12)". Gas at a
+     * pump and liquid at a compressor refuse nothing (request 11, owner decision D19), so a refused pump is dry.
+     * {@code node} is the id of the node the supply walk ended at.
      */
     public static String reason(FlowControl.Mover mover,Supply supply) {
-        if(supply.heldShare()<DRY_RESUME)return String.format(Locale.ROOT,"ERROR: %s inlet dry (from node %d)",mover.deviceName(),supply.nodeId());
-        if(mover.liquid())return String.format(Locale.ROOT,"ERROR: pump inlet not liquid (vapour %.1f %% by volume, from node %d)",100*supply.vapourVolumeShare(),supply.nodeId());
-        return supply.largestSolidVolumeFraction()>com.wormzjl.icheme.science.fluid.transport.SlurryTransport.DEFAULT_TRACE_VOLUME_FRACTION
-                ?String.format(Locale.ROOT,"ERROR: compressor inlet not gas (solids %.1e by volume, from node %d)",supply.largestSolidVolumeFraction(),supply.nodeId())
-                :String.format(Locale.ROOT,"ERROR: compressor inlet not gas (condensed %.1f %% by mass, from node %d)",100*supply.condensedMassShare(),supply.nodeId());
+        if(mover.liquid()||supply.heldShare()<DRY_RESUME)return String.format(Locale.ROOT,"ERROR: %s inlet dry (from node %d)",mover.deviceName(),supply.nodeId());
+        return String.format(Locale.ROOT,"ERROR: compressor inlet not gas (solids %.1e by volume, from node %d)",supply.largestSolidVolumeFraction(),supply.nodeId());
     }
     /** {@link #reason} of connection {@code edge} of {@code graph} (a mover) over a slice of {@code duration} seconds. */
     public static String reason(FluidThermodynamics model,PassiveNetwork graph,int edge,double duration) {

@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The crude case is re-baselined for the liquid-only pump (decision D1 of the phase-ports batch): the Tia Juana Light
  * preset at 298.15 K and 1 atm is two-phase, 11.15 % vapour by volume by one flashTP, with its bubble point at 117.8 kPa,
- * so the pump refuses it there ({@code INLET_WRONG_PHASE}). Its generator and the nitrogen receiver now stand at 150 kPa,
+ * so the pump refused it there ({@code INLET_WRONG_PHASE}; gas at a pump is no refusal since request 11). Its generator and the nitrogen receiver now stand at 150 kPa,
  * above the bubble point, so the pump still starts a liquid through its zero-storage inlet into the receiver's own
  * pressure; the water case is unchanged at 1 atm.
  */

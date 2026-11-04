@@ -1,7 +1,10 @@
 package com.wormzjl.icheme.science.fluid.network;
 
 import com.wormzjl.icheme.science.machine.CentrifugalCompressor;
+import com.wormzjl.icheme.science.machine.CentrifugalPump;
 import com.wormzjl.icheme.science.machine.MachineLaw;
+import com.wormzjl.icheme.science.machine.Motor;
+import com.wormzjl.icheme.science.machine.Npsh;
 import com.wormzjl.icheme.science.machine.PositiveDisplacement;
 
 /** Immutable actuator settings; the active regime belongs to a solve attempt, never to this shared value. */
@@ -14,10 +17,13 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * 2026-11-03-rotating-machinery: the owner chose the law over the set-flow pair on 2026-11-04, form F2e). A set-flow pump
      * or compressor is a positive-displacement machine: its set flow is the displacement, its rise limit the relief rise
      * ({@link PositiveDisplacement}). A {@link Machine} is on its curve. Movers share the modes, the shutoff band and the
-     * carry; they differ in the law, the shaft work and the inlet phase they admit. A pump has one more mode,
-     * {@code PUMP_SUCTION_LIMIT} (cavitation); a compressor draws gas, which has no vapour pressure to fall below, and never
-     * takes it. Every quantity reads the suction only (decision D4): the stream the first end draws, and the first end's
-     * pressure; a set-flow pump's relief rise reads the density of its supply, the stream its refusal reads, so it primes
+     * carry; they differ in the law and the shaft work. Every mover takes what its suction line delivers, gas and liquid
+     * alike (request 11, owner decisions D19 and D20): its law counts the suction mixture's volume, a centrifugal machine's
+     * head or efficiency reads the suction's vapour or liquid share once per solve ({@code PassiveStepSolver.readSuctions}),
+     * and only a dry suction (D58) or, at a compressor, solids refuse it. A pump has one more mode,
+     * {@code PUMP_SUCTION_LIMIT} (cavitation, on its NPSH3 floor, {@link Mover#npsh}); a compressor draws gas, which has no
+     * vapour pressure to fall below, and never takes it. Every quantity reads the suction only (decision D4): the stream the first end draws, and the first end's
+     * pressure; a set-flow pump's relief rise reads the density of its supply, the stream its supply walk ends at, so it primes
      * its own line (owner decision D11, A2; {@code PassiveStepSolver.riseDensity}).
      */
     sealed interface Mover extends FlowControl permits Pump,Compressor,Machine {
@@ -61,24 +67,23 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         /**
          * Whether a supply (what the suction line delivers, {@link InletPhase.Supply}) is refused for the next slice
          * ({@code INLET_WRONG_PHASE}), given whether the device stood refused at the committed slice end: a dry suction
-         * ({@link InletPhase.Supply#dry}, decision D58), or the wrong phase by a refusal threshold, with a lower resume
-         * threshold the measure must fall below before a refused device runs again.
+         * ({@link InletPhase.Supply#dry}, decision D58, with its hysteresis), and at a compressor a solid above the trace.
+         * Gas at a pump and liquid at a compressor refuse nothing (request 11, owner decision D19): the law moves them.
          */
         boolean refuses(InletPhase.Supply supply,boolean refused);
+        /** A liquid mover's NPSH design ({@link Npsh}; owner decisions D19 and D20 Q11 A); null for a gas mover and a stopped
+         * one. */
+        default Npsh npsh(){return null;}
         /** The device's name in reasons ("pump", "compressor"). */
         String deviceName();
     }
-    /** Suction volumetric target (m3/s), maximum added pressure (Pa). A liquid pump (decision D1): it refuses a supply whose
-     * vapour fills more than {@link #VAPOUR_REFUSE} of its fluid volume, and runs again once that share is below
-     * {@link #VAPOUR_RESUME}. */
+    /** Suction volumetric target (m3/s), maximum added pressure (Pa). A liquid pump (decision D1), positive displacement:
+     * gas at its suction fills its displacement with the mixture, so it delivers {@code (1 − α)} of it as liquid (plan
+     * section 3.6; simplification T2: a reciprocating pump's gas lock is not modelled). */
     record Pump(double requestedVolumeFlow,double maximumAddedPressure,boolean enabled) implements Mover {
         public Pump(double targetVolumeFlow,double maximumAddedPressure){this(targetVolumeFlow,maximumAddedPressure,true);}
         /** The largest rise a pump's controls take, for the reference fluid (Pa). */
         public static final double MAXIMUM_ADDED_PRESSURE=2e6;
-        /** Vapour share of the supply's fluid volume above which a pump refuses (plan Appendix B, decision D6). */
-        public static final double VAPOUR_REFUSE=.02;
-        /** Vapour share below which a refused pump runs again. */
-        public static final double VAPOUR_RESUME=.005;
         public Pump {
             if(!Double.isFinite(requestedVolumeFlow)||requestedVolumeFlow<0||!Double.isFinite(maximumAddedPressure)||maximumAddedPressure<=0)
                 throw new IllegalArgumentException("Invalid pump settings");
@@ -102,33 +107,25 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return corner(this,suctionDensity,suctionPressure,referenceDensity,k).residual(flow,head,1);
         }
-        @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
-        /** A liquid machine's refusal: a dry suction, or vapour above {@link #VAPOUR_REFUSE} of the fluid volume. */
-        static boolean refusesSupply(InletPhase.Supply supply,boolean refused) {
-            if(supply.dry(refused))return true;
-            double share=supply.vapourVolumeShare();
-            return share>VAPOUR_REFUSE||refused&&!(share<VAPOUR_RESUME);
-        }
+        @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return supply.dry(refused);}
+        /** An in-line mover is a constructed machine (owner decision D19), chosen for its duty (D21): its design point is its
+         * set flow at the speed that keeps its NPSH3 at {@link Npsh#DUTY_NPSH3}, at most the 2-pole speed ({@link Npsh#forDuty}). */
+        @Override public Npsh npsh(){return targetVolumeFlow()>0?Npsh.forDuty(targetVolumeFlow(),Motor.ratedSpeed(2)):null;}
         @Override public String deviceName(){return "pump";}
     }
     /**
      * A gas compressor (decisions D2, D7, D8): suction volume flow target (m3/s at inlet conditions) and maximum pressure
      * ratio {@code r_max} (discharge over suction). Its rise limit is {@code (r_max - 1) P_suction}; its work the polytropic
      * work at the default polytropic efficiency, on suction properties, booked into the discharge (batch
-     * 2026-11-03-rotating-machinery, plan section 4.4; the ideal isothermal work before). It
-     * refuses a supply whose condensed phases (hydrocarbon liquid, free water and solids) exceed
-     * {@link #CONDENSED_REFUSE} of its mass, or that carries any solid population above
-     * {@link com.wormzjl.icheme.science.fluid.transport.SlurryTransport#DEFAULT_TRACE_VOLUME_FRACTION} of its volume,
-     * and runs again once the condensed share is below {@link #CONDENSED_RESUME} (and no solid is above the trace).
+     * 2026-11-03-rotating-machinery, plan section 4.4; the ideal isothermal work before). Positive
+     * displacement: liquid at its suction takes its own volume of the displacement, so the gas it delivers is the
+     * displacement less the liquid's volume (plan section 3.6). It refuses a supply that carries any solid population above
+     * {@link com.wormzjl.icheme.science.fluid.transport.SlurryTransport#DEFAULT_TRACE_VOLUME_FRACTION} of its volume.
      */
     record Compressor(double requestedVolumeFlow,double maximumPressureRatio,boolean enabled) implements Mover {
         public Compressor(double targetVolumeFlow,double maximumPressureRatio){this(targetVolumeFlow,maximumPressureRatio,true);}
         /** The largest pressure ratio a compressor's controls take (plan Appendix B). */
         public static final double MAXIMUM_PRESSURE_RATIO=10;
-        /** Condensed share of the supply's mass above which a compressor refuses (plan Appendix B, decision D6). */
-        public static final double CONDENSED_REFUSE=.01;
-        /** Condensed share below which a refused compressor runs again. */
-        public static final double CONDENSED_RESUME=.002;
         public Compressor {
             if(!Double.isFinite(requestedVolumeFlow)||requestedVolumeFlow<0||!Double.isFinite(maximumPressureRatio)||maximumPressureRatio<=1)
                 throw new IllegalArgumentException("Invalid compressor settings");
@@ -155,13 +152,10 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
             return corner(this,suctionDensity,suctionPressure,referenceDensity,k).residual(flow,head,1);
         }
         @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
-        /** A gas machine's refusal: a dry suction, a solid above the trace, or condensed phases above {@link #CONDENSED_REFUSE}
-         * of the mass. */
+        /** A gas machine's refusal: a dry suction or a solid above the trace. Liquid refuses nothing (request 11): a wet
+         * suction is compressed as the mixture it is. */
         static boolean refusesSupply(InletPhase.Supply supply,boolean refused) {
-            if(supply.dry(refused))return true;
-            if(supply.largestSolidVolumeFraction()>com.wormzjl.icheme.science.fluid.transport.SlurryTransport.DEFAULT_TRACE_VOLUME_FRACTION)return true;
-            double share=supply.condensedMassShare();
-            return share>CONDENSED_REFUSE||refused&&!(share<CONDENSED_RESUME);
+            return supply.dry(refused)||supply.largestSolidVolumeFraction()>com.wormzjl.icheme.science.fluid.transport.SlurryTransport.DEFAULT_TRACE_VOLUME_FRACTION;
         }
         @Override public String deviceName(){return "compressor";}
     }
@@ -195,8 +189,12 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
             return law.riseSlope(flow,speed,suctionDensity,suctionPressure,k);
         }
         @Override public boolean refuses(InletPhase.Supply supply,boolean refused) {
-            return liquid()?Pump.refusesSupply(supply,refused):Compressor.refusesSupply(supply,refused);
+            return liquid()?supply.dry(refused):Compressor.refusesSupply(supply,refused);
         }
+        @Override public Npsh npsh(){return law instanceof CentrifugalPump pump&&speed>0?pump.npsh(speed):null;}
+        /** This machine with its pump's head scaled by {@code share} ({@link CentrifugalPump#withHeadShare}, the gas share
+         * {@link com.wormzjl.icheme.science.machine.GasEntrainment#headShare}); a compressor as it is. */
+        public Machine withHeadShare(double share){return law instanceof CentrifugalPump pump&&share!=1?new Machine(pump.withHeadShare(share),speed,enabled):this;}
         @Override public String deviceName(){return liquid()?"pump":"compressor";}
     }
     /** The law of a set-flow mover (form F2e): its set flow is the displacement, its rise limit the relief rise. */
@@ -239,14 +237,15 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
     }
     /**
      * The regime of one connection in a solve. {@code INLET_WRONG_PHASE} (decision D6) is a mover refused for a whole
-     * slice because its supply is the wrong phase or dry ({@link InletPhase}): in the solver it is {@code CLOSED} (flow exactly
+     * slice because its suction is dry or, at a compressor, carries solids ({@link InletPhase}): in the solver it is {@code CLOSED} (flow exactly
      * zero, never reopened within the slice), and it persists as an endpoint mode so the next slice's hysteresis reads it.
      * Endpoint modes are state, saved as ordinals in the checkpoint format only.
      *
      * <p>{@code PUMP_SUCTION_LIMIT} (owner decision D59 (4)) is a liquid pump that cavitates: its law would pull its suction
-     * below the bubble pressure of the liquid it draws (water's saturation pressure; for a hydrocarbon liquid its bubble
-     * pressure at its supplier's temperature and composition, owner decision D14), so the row {@code P_suction = P_bubble}
-     * replaces the law's row and the flow is what the suction line delivers at that pressure. It persists as an endpoint mode. The velocity
+     * below its floor, the bubble pressure of the liquid it draws (water's saturation pressure; for a hydrocarbon liquid its
+     * bubble pressure at its supplier's temperature and composition, owner decision D14) plus the breakdown NPSH at its
+     * flow ({@link Npsh#breakdownPressure}, owner decision D20 Q11 A), so the row {@code P_suction = floor} replaces the
+     * law's row and the flow is what the suction line delivers at that pressure. It persists as an endpoint mode. The velocity
      * cap is no mode: it is part of every throttling line's law ({@code PassiveStepSolver.saturated}, 2026-10-18).
      *
      * <p>{@code MOVER_LAW} (batch 2026-11-03-rotating-machinery) is a running mover: one row, the rise falling with the

@@ -12,7 +12,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Fresh configured WTI loop; no saved-world fixture or altered physical law. At 2 m³/s the pump outruns the junction it
  * draws from, so it stands on its suction limit at the oil's bubble pressure (owner decision D14 of the rotating-machinery
- * batch; the root used to flash the suction junction on the pump's law); at 1.5 m³/s it runs on its law. */
+ * batch; the root used to flash the suction junction on the pump's law); at 1 m³/s it runs on its law. The start was 1.5 m³/s
+ * until the NPSH3 floor (owner decisions D20 Q11 A and D21): there the 0.3 m suction line runs at 21 m/s and leaves less than
+ * the 3.3 m NPSH3 (about 23 kPa on this oil) above the bubble pressure, so the pump cavitated from the start. */
 class PumpRateWarmStartTest extends PortFixture {
     private FluidThermodynamics.State oil(double volume) {
         var n=FluidPresetCatalog.resolve(MaterialCatalog.bundled()).stream().filter(p->p.id().equals("icheme:wti_light_export")).findFirst().orElseThrow().moleFractions();
@@ -43,7 +45,7 @@ class PumpRateWarmStartTest extends PortFixture {
     }
 
     @Test void increasingTheSetpointAdvancesOnItsLimitWithConservedMaterialAndEnergy() {
-        var graph=loop(1.5);var solver=new PassiveIntervalSolver(model);
+        var graph=loop(1);var solver=new PassiveIntervalSolver(model);
         var previous=solver.solve(graph,3.2,PassiveIntervalSolver.Settings.defaults(),NOOP);
         assertEquals(FlowControl.Mode.MOVER_LAW,previous.endpointModes().getFirst());graph=previous.graph();
         var pipes=new ArrayList<>(graph.pipes());var p=pipes.getFirst();pipes.set(0,new PassiveNetwork.Pipe(p.id(),p.first(),p.second(),p.sections(),new FlowControl.Pump(2,500000),p.blockedDirections(),p.filter(),p.firstPort(),p.secondPort()));

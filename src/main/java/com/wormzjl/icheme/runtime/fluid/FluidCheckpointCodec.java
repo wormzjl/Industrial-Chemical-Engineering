@@ -88,10 +88,13 @@ import java.util.function.Function;
  *
  * <p>32 (the same batch, form F2b): the endpoint modes lose {@code PUMP_TARGET} and {@code PUMP_HEAD_LIMIT}, every mover
  * running on its law, so the mode ordinals move.</p>
+ *
+ * <p>33 (the same batch, W10a): a machine on its curve that is a pump carries its rated speed after its efficiency (its
+ * NPSH3 design point, owner decision D20 Q11 A).</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=32;
+    public static final int VERSION=33;
     /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -357,7 +360,7 @@ public final class FluidCheckpointCodec {
                 case FlowControl.PressureValve valve->{w.u8(2);w.f64(valve.targetPressure());}
                 case FlowControl.ControlValve valve->{w.u8(4);w.text(valve.source().name());w.f64(valve.targetPressure());w.f64(valve.massTarget());w.f64(valve.volumeTarget());w.bool(valve.sensor()!=null);if(valve.sensor()!=null){w.i64(valve.sensor().getMostSignificantBits());w.i64(valve.sensor().getLeastSignificantBits());}w.i64(valve.revision());}
                 case FlowControl.Compressor compressor->{w.u8(3);w.f64(compressor.requestedVolumeFlow());w.f64(compressor.maximumPressureRatio());w.bool(compressor.enabled());}
-                case FlowControl.Machine machine->{var law=machine.law();w.u8(5);w.bool(law.liquid());w.f64(law.ratedFlow());w.f64(law.ratedHead());w.f64(law.efficiency());w.f64(machine.speed());w.bool(machine.enabled());}
+                case FlowControl.Machine machine->{var law=machine.law();w.u8(5);w.bool(law.liquid());w.f64(law.ratedFlow());w.f64(law.ratedHead());w.f64(law.efficiency());if(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump)w.f64(pump.ratedSpeed());w.f64(machine.speed());w.bool(machine.enabled());}
             }
             // Format 6: the port of each end (PassiveNetwork.PhasePort ordinal), after the control.
             w.u8(p.firstPort().ordinal());w.u8(p.secondPort().ordinal());w.varint(p.forbiddenDirections());w.f64(p.actuatorArea());
@@ -438,10 +441,11 @@ public final class FluidCheckpointCodec {
         double bypass=r.f64(),giveBack=r.f64();long partner=r.i64();double active=r.f64();var control=control(r);
         return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,partner,active,control,limit(r));
     }
-    /** Tag 5: a machine on its curve, its law (liquid flag, rated flow, head and efficiency), speed and enabled flag. */
+    /** Tag 5: a machine on its curve, its law (liquid flag, rated flow, head and efficiency, a pump's rated speed), speed and
+     * enabled flag. */
     private static FlowControl.Machine machine(Reader r) {
         boolean liquid=r.bool();double flow=r.f64(),head=r.f64(),efficiency=r.f64();
-        return new FlowControl.Machine(liquid?new com.wormzjl.icheme.science.machine.CentrifugalPump(flow,head,efficiency)
+        return new FlowControl.Machine(liquid?new com.wormzjl.icheme.science.machine.CentrifugalPump(flow,head,efficiency,r.f64())
                 :new com.wormzjl.icheme.science.machine.CentrifugalCompressor(flow,head,efficiency),r.f64(),r.bool());
     }
     private static PassiveNetwork.PhasePort port(Reader r){int port=r.u8();if(port>=PHASE_PORTS.length)throw r.invalid("unknown pipe port "+port);return PHASE_PORTS[port];}

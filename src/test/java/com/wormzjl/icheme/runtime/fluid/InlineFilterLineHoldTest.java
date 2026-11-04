@@ -100,7 +100,7 @@ class InlineFilterLineHoldTest {
     }
     /**
      * The same pocket entered from the other side (hold search seed 61, tools/phase-ports-probes/hold-fuzz): a nitrogen
-     * generator at 406 kPa, placed first, so every junction is minted with its gas; a pump refused its gas supply (closed)
+     * generator at 406 kPa, placed first, so every junction is minted with its gas; a pump on its gas supply (refused, closed, until request 11; now on its law)
      * discharging into an inline filter; and a water generator at 215 kPa feeding the filter's outlet through a 0.01 m pipe.
      * The filter's two junctions form a pocket whose only way in or out is that pipe, and at the minted 406 kPa its row
      * started on the velocity cap's branch, which has no pressure column: the rate pass at every interval's start was

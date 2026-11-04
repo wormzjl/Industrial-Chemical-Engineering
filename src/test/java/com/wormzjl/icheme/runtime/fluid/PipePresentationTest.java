@@ -222,7 +222,7 @@ class PipePresentationTest {
      * form F2b) is a device error like a refusal, with the share it delivers; at its set flow it runs. */
     @Test void operatingLimitsAndRefusalsAreDeviceErrorsOnAnAdvancingIsland() {
         for(var mode:new FlowControl.Mode[]{FlowControl.Mode.MOVER_LAW,FlowControl.Mode.PUMP_SUCTION_LIMIT,FlowControl.Mode.INLET_WRONG_PHASE,FlowControl.Mode.CLOSED}) {
-            String status=PipePresentation.pumpStatus("FULL",pump,mode,"ERROR: pump inlet is not liquid (from generator)",.6);
+            String status=PipePresentation.pumpStatus("FULL",pump,mode,"ERROR: pump inlet dry (from generator)",.6);
             assertTrue(status.startsWith("ERROR: pump"));assertTrue(status.endsWith(" / FULL"));assertFalse(status.contains("HELD"));
         }
         assertEquals("ERROR: pump delivers 60 % of its set flow; requested flow unavailable / FULL",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.MOVER_LAW,"",.6));
@@ -231,7 +231,7 @@ class PipePresentationTest {
         assertEquals("FULL / pump running",PipePresentation.pumpStatus("FULL",machine,FlowControl.Mode.MOVER_LAW,"",Double.NaN),"a machine has no set flow");
         assertEquals("compressor delivers 40 % of its set flow; requested flow unavailable",PipePresentation.shortfall(new FlowControl.Compressor(1,3),FlowControl.Mode.MOVER_LAW,.4));
         assertEquals("",PipePresentation.shortfall(new FlowControl.Compressor(1,3),FlowControl.Mode.CLOSED,0),"only a running mover falls short");
-        String inlet="ERROR: pump inlet is not liquid (from generator)";
+        String inlet="ERROR: pump inlet dry (from generator)";
         assertEquals(inlet+" / FULL",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.INLET_WRONG_PHASE,inlet,Double.NaN));
     }
 

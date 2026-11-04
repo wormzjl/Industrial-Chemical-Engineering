@@ -21,8 +21,9 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * @param ratedFlow  Q_r, the suction volume flow at the rated point, m³/s
  * @param ratedHead  H_r, the head at the rated point, m
  * @param efficiency η, the efficiency at the rated point, the best on the curve
+ * @param ratedSpeed n_r, the rated speed, rpm: the design point of its NPSH3 ({@link #npsh})
  */
-public record CentrifugalPump(double ratedFlow, double ratedHead, double efficiency) implements MachineLaw {
+public record CentrifugalPump(double ratedFlow, double ratedHead, double efficiency, double ratedSpeed) implements MachineLaw {
     /** Standard gravity, m/s², the fluid solver's. */
     public static final double GRAVITY = 9.80665;
     /** Below this share of the flow at its best efficiency point a pump shows the {@code MIN FLOW} notice (plan S1: real
@@ -34,13 +35,32 @@ public record CentrifugalPump(double ratedFlow, double ratedHead, double efficie
     private static final double POWER_SHUTOFF = .35, POWER_FLOW = .65;
 
     public CentrifugalPump {
-        if (!(ratedFlow > 0) || !(ratedHead > 0) || !(efficiency > 0 && efficiency <= 1) || !Double.isFinite(ratedFlow) || !Double.isFinite(ratedHead))
-            throw new IllegalArgumentException("Invalid pump rating: " + ratedFlow + " m3/s, " + ratedHead + " m, " + efficiency);
+        if (!(ratedFlow > 0) || !(ratedHead > 0) || !(efficiency > 0 && efficiency <= 1) || !Double.isFinite(ratedFlow) || !Double.isFinite(ratedHead)
+                || !(ratedSpeed > 0) || !Double.isFinite(ratedSpeed))
+            throw new IllegalArgumentException("Invalid pump rating: " + ratedFlow + " m3/s, " + ratedHead + " m, " + efficiency + ", " + ratedSpeed + " rpm");
+    }
+
+    /** A pump at the 2-pole speed, a design with no speed of its own (decision A3). */
+    public CentrifugalPump(double ratedFlow, double ratedHead, double efficiency) {
+        this(ratedFlow, ratedHead, efficiency, Motor.ratedSpeed(2));
     }
 
     /** A pump rated {@code ratedFlow} (m³/s) and {@code ratedHead} (m) with the {@link #bestEfficiency} of its flow. */
     public static CentrifugalPump rated(double ratedFlow, double ratedHead) {
         return new CentrifugalPump(ratedFlow, ratedHead, bestEfficiency(ratedFlow));
+    }
+
+    /** This pump with its head and its efficiency scaled by {@code share} (0 to 1): the curve of a pump that makes that share
+     * of its liquid head ({@link GasEntrainment#headShare}) for the same shaft power on the mixture, so the rated shaft power
+     * {@code ρ g Q_r H_r / η} keeps its value and the efficiency at every point is {@code η M} (plan section 3.6: the impeller
+     * still turns the mixture; the gas costs head, not shaft load). The rise keeps the suction mixture density. */
+    public CentrifugalPump withHeadShare(double share) {
+        return share == 1 ? this : new CentrifugalPump(ratedFlow, ratedHead * share, efficiency * share, ratedSpeed);
+    }
+
+    /** Its NPSH3 at {@code speed} (share of rated), from its rated flow and speed ({@link Npsh#rated}). */
+    public Npsh npsh(double speed) {
+        return Npsh.rated(ratedFlow, ratedSpeed, speed);
     }
 
     /** The head, m, at suction volume flow {@code flow} (m³/s) and speed {@code speed} (share of rated). */

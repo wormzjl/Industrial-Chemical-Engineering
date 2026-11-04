@@ -146,12 +146,15 @@ class CompressorTest extends PortFixture {
     // ---- Fixture 7: a compressor on liquid, two-phase and solids -------------------------------------------------------
 
     /**
-     * Plan fixture 7: a compressor on a water tank's side (its bulk: half water), on a two-phase generator, on a gas tank
-     * whose solids exceed the trace fraction and on a wet tank's bottom port is refused ({@code INLET_WRONG_PHASE}) and
-     * carries exactly nothing; a compressor on the same wet tank's top port draws its gas and runs; every slice commits
-     * FULL at 5 s and at 0.1 s, the island integrating around the refused lines.
+     * Plan fixture 7: compressors on a water tank's side (its bulk: half water), on a two-phase generator, on a gas tank
+     * whose solids exceed the trace fraction, on a wet tank's bottom port and on its top port; every slice commits FULL at
+     * 5 s and at 0.1 s. Restated for request 11 (batch 2026-11-03-rotating-machinery, owner decisions D19 and D20): the
+     * three wet suctions were refused ({@code INLET_WRONG_PHASE}); liquid at a compressor is no refusal now, and a set-flow
+     * compressor's law counts the suction mixture's volume, so the gas it delivers is its displacement less the liquid's
+     * volume: they run and move what they are fed. The solids still refuse (not part of request 11: a solid population is
+     * no fluid the law moves), carrying exactly nothing, with their reason; the top port's gas runs as before.
      */
-    @Test void aCompressorOnLiquidOrTwoPhaseOrSolidsIsRefusedAndTheIslandIntegrates() {
+    @Test void aCompressorOnLiquidOrTwoPhaseRunsAndOnSolidsIsRefused() {
         // A gas tank carrying 1 g of the demo particle: a solid volume fraction far above the 1e-8 trace.
         var dusty=nitrogenAt(150000).withSolids(new SolidInventory(List.of(new SolidInventory.Population(
                 model.solids.require("icheme:demo_particle"),com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("100"),1e-3))));
@@ -170,23 +173,29 @@ class CompressorTest extends PortFixture {
             var run=drive("fixture7@"+interval,island,interval,count);
             for(int i=0;i<count;i++) {
                 var s=run.slices().get(i);
-                for(int edge:new int[]{0,1,2,3}){assertEquals(FlowControl.Mode.INLET_WRONG_PHASE,s.endpointModes().get(edge),"edge "+edge+" refused, slice "+i);assertEquals(0.0,s.averageMassFlows()[edge]);}
-                assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,s.endpointModes().get(4),"the top port's gas is admitted");
+                for(int edge:new int[]{0,1,3,4})assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,s.endpointModes().get(edge),"edge "+edge+" is not refused, slice "+i);
+                assertEquals(FlowControl.Mode.INLET_WRONG_PHASE,s.endpointModes().get(2),"the solids are refused, slice "+i);assertEquals(0.0,s.averageMassFlows()[2]);
                 assertTrue(s.averageMassFlows()[4]>0,"the top-port compressor runs");
             }
-            var reasons=new ArrayList<String>();for(int edge=0;edge<4;edge++)reasons.add(InletPhase.reason(model,island,edge,interval));
-            System.out.println("COMPRESSOR_RUN fixture7 interval="+interval+" accepted="+run.accepted()+" rejected="+run.rejected()+" reasons="+run.reasons()+" topFlow="+run.slices().getLast().averageMassFlows()[4]+" texts="+reasons);
-            assertTrue(reasons.get(0).startsWith("ERROR: compressor inlet not gas (condensed ")&&reasons.get(0).endsWith("by mass, from node 1)"),reasons.get(0));
-            assertTrue(reasons.get(2).startsWith("ERROR: compressor inlet not gas (solids "),reasons.get(2));
+            var first=run.slices().getFirst();
+            for(int edge:new int[]{0,1,3})assertTrue(first.averageMassFlows()[edge]>0,"edge "+edge+" moves its wet suction");
+            String solids=InletPhase.reason(model,island,2,interval);
+            System.out.println("COMPRESSOR_RUN fixture7 interval="+interval+" accepted="+run.accepted()+" rejected="+run.rejected()+" reasons="+run.reasons()+" flows="+Arrays.toString(first.averageMassFlows())+" solids="+solids);
+            assertTrue(solids.startsWith("ERROR: compressor inlet not gas (solids "),solids);
         }
     }
-    /** The compressor's thresholds (decision D6): refuse above 1 % condensed by mass, resume below 0.2 %; any solid
-     * population above the trace volume fraction refuses whatever the condensed share. */
-    @Test void theCompressorsThresholds() {
+    /** The compressor's refusal (decision D6), restated for request 11 (owner decisions D19 and D20): D6's condensed
+     * thresholds (refuse above 1 % by mass, resume below 0.2 %) are gone, so no condensed share refuses, whether or not
+     * the compressor stood refused; any solid population above the trace volume fraction refuses whatever the condensed
+     * share, with its reason. A machine on its curve reads the same. */
+    @Test void theCompressorsRefusal() {
         var compressor=new FlowControl.Compressor(.001,3);
-        for(double[] c:new double[][]{{.0099,0,0,0},{.0101,0,0,1},{.0099,1,0,1},{.0021,1,0,1},{.0019,1,0,0},{0,0,2e-8,1},{0,0,1e-8,0}})
-            assertEquals(c[3]==1,compressor.refuses(new InletPhase.Supply(0,3,PhasePort.BULK,0,c[0],c[2],Double.POSITIVE_INFINITY),c[1]==1),Arrays.toString(c));
-        assertEquals("ERROR: compressor inlet not gas (condensed 2.5 % by mass, from node 3)",InletPhase.reason(compressor,new InletPhase.Supply(0,3,PhasePort.BULK,0,.025,0,Double.POSITIVE_INFINITY)));
+        var machine=new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalCompressor(.02,24400,.78),1,true);
+        for(double[] c:new double[][]{{.0099,0,0,0},{.0101,0,0,0},{.0099,1,0,0},{.0021,1,0,0},{.0019,1,0,0},{1,1,0,0},{0,0,2e-8,1},{.5,1,2e-8,1},{0,0,1e-8,0}}) {
+            var supply=new InletPhase.Supply(0,3,PhasePort.BULK,0,c[0],c[2],Double.POSITIVE_INFINITY);
+            assertEquals(c[3]==1,compressor.refuses(supply,c[1]==1),Arrays.toString(c));assertEquals(c[3]==1,machine.refuses(supply,c[1]==1),"machine "+Arrays.toString(c));
+        }
+        assertEquals("ERROR: compressor inlet not gas (solids 2.0e-08 by volume, from node 3)",InletPhase.reason(compressor,new InletPhase.Supply(0,3,PhasePort.BULK,0,.025,2e-8,Double.POSITIVE_INFINITY)));
         assertThrows(IllegalArgumentException.class,()->new FlowControl.Compressor(.001,1),"a ratio of 1 adds nothing");
     }
 }

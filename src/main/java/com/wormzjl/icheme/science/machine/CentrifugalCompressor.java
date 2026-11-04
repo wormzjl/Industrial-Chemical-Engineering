@@ -93,6 +93,21 @@ public record CentrifugalCompressor(double ratedFlow, double ratedHead, double e
         return shaftPower(flow, speed, density, head(flow, speed));
     }
 
+    /** How much of the polytropic efficiency a wet suction's liquid mass share costs, per unit share (the factor 0.5 is an
+     * assumption, owner decision D20 Q15). */
+    public static final double WET_EFFICIENCY_LOSS = .5;
+
+    /**
+     * The efficiency of a machine of polytropic efficiency {@code efficiency} on a wet suction whose liquid is
+     * {@code liquidMassShare} (0 to 1) of its mass: {@code η_wet = η_p (1 − 0.5 w_l)} (plan section 3.6, owner decision D20
+     * Q15; TWO_PHASE_MACHINES_RESEARCH_REVIEW.md section 6). The machine compresses the homogeneous mixture: the head curve
+     * reads its suction volume, the ratio its suction density (so the ratio rises with liquid, as wet-gas tests measured),
+     * and the stream takes {@code ṁ_total H_p/η_wet}; the discharge flash gives the evaporative cooling.
+     */
+    public static double wetEfficiency(double efficiency, double liquidMassShare) {
+        return efficiency * (1 - WET_EFFICIENCY_LOSS * Math.clamp(liquidMassShare, 0, 1));
+    }
+
     /** {@code σ = η_p k/(k − 1)} for heat capacity ratio {@code k} (from the suction's ideal-gas heat capacity) and
      * polytropic efficiency {@code efficiency}; {@code (n − 1)/n = 1/σ}. */
     public static double sigma(double k, double efficiency) {

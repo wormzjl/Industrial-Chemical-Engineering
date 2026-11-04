@@ -158,7 +158,7 @@ Expected behaviour:
 Laws (each a number fixed for the solve, read once on the step's start states like the suction floor and the vapour lock, D16; no new mode, no refusal, no hysteresis):
 - **Centrifugal pump:** `H_2φ = H(Q, s) × M(α)`, `M = 1 / (1 + (α/α_50)^4)`, `α_50 = 1.6 α_T(p_s)`, α the suction's vapour volume share (`InletPhase.Supply`). The rise `ρ_s g H_2φ` takes the mixture density, a second factor `(1 − α)`. M at 1 bar: 0.89 at 2 %, 0.34 at 4 %; at 10 bar 0.81 at 20 %. Gas lock is not a rule: when `M H` at shutoff falls below the line's lift, the curve meets zero flow and the check valve closes it.
 - **Set-flow pump (positive displacement):** no multiplier. The law already counts suction mixture volume.
-- **Cavitation (Q11):** (A) the suction floor of D17 becomes `p_v + 0.85 ρ_l g NPSH3(Q, s)` on the trial point, inside its lesser-of, so a pump starves at its full-breakdown NPSH, and today's bubble floor is its `NPSH3 = 0` end; or (B) the floor stays the bubble pressure, and NPSH3 feeds only noise, wear and a notice. An in-line mover is treated as a constructed machine (owner decision D19): its design point is its set flow at a 2-pole speed (2950 rpm), so the default 0.01 m³/s pump needs 1.7 m.
+- **Cavitation (Q11):** (A) the suction floor of D17 becomes `p_v + 0.85 ρ_l g NPSH3(Q, s)` on the trial point, inside its lesser-of, so a pump starves at its full-breakdown NPSH, and today's bubble floor is its `NPSH3 = 0` end; or (B) the floor stays the bubble pressure, and NPSH3 feeds only noise, wear and a notice. An in-line mover is treated as a constructed machine (owner decision D19): its design point is its set flow at the speed that keeps its rated NPSH3 at 3.3 m, at most the 2-pole speed (owner decision D21), so the default 0.01 m³/s pump needs 1.7 m at 2950 rpm and a 1.5 m³/s pump 3.3 m at about 400 rpm.
 - **Centrifugal compressor:** the head curve reads the suction mixture volume; the ratio formula of 3.2 the mixture density; power `ṁ_total H_p / η_wet`, `η_wet = η_p (1 − 0.5 w_l)`, w_l the liquid mass share (the 0.5 is an assumption, Q15). The PH flash gives the evaporative cooling.
 - **Reciprocating and set-flow compressor:** gas delivered is the displacement less the liquid's volume, which the mixture volume already gives.
 - The vapour lock (D15, D16) stays: the NPSHA ≤ 0 end, closed for the solve.
@@ -174,7 +174,7 @@ Every pump and compressor, constructed or in-line (owner decision D19), has a he
 - **Effect.** Head and efficiency × `(0.9 + 0.1 D)`, read once per solve. At D = 0 the machine stands closed: `IMPELLER FAILED` (pump), `VALVES FAILED` (reciprocating), `IMPELLER FAILED` (centrifugal compressor), until repaired.
 - **Repair (Q14).** A queued engine event from the machine's screen or a part used on the casing; its acknowledgement arrives on the engine schedule.
 - Every τ and the gas cushion width in the server config (`machines.wear.*`), with a switch to turn wear off.
-- In-line movers are treated as constructed machines (owner decision D19): the same laws, NPSH3 from their set flow at a 2-pole speed, the same wear, trips and repair.
+- In-line movers are treated as constructed machines (owner decision D19): the same laws, NPSH3 from their set flow at the speed that keeps it at 3.3 m, at most 2950 rpm (D21), the same wear, trips and repair.
 
 ### 3.8 Sound (request 11, revision 3)
 
