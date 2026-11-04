@@ -43,6 +43,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: W7 built (`75c3fca13`, D31 option A): `MachineColumn`, `MachineScreen`, `MachineMenu`, `MachineView` (driver publication, open pages only), `MachineEdit` (queued shaft event); the casing's Drive group, the heat Control page's Power group, turbine Trip/Run and steam readings; registrars `machine-1`, `fluid-18`. Review fixed a sentence on the turbine's door and its missing steam readings. MachineColumnTest 6, codec 21, affected 415 + hold gates 58, GameTests 42; no campaign (no solver change). For the owner: the turbine opens its machine page instead of a Drive tab; the motor page scrolls 9 px at 464 px wide (`W7_REVIEW.md`).
 - 2026-11-04: owner "Start W10b". Build plan written (`W10B_BUILD_PLAN.md`): health per pump and compressor device in fluid facts schema 12, plan 3.7's wear rates at commit and on the cadence (lives checked: 2.0 h at σ 2.06, 5.1 h at NPSH3, 18.9 h at σ 3.5), the health factor as a dispatch input, the liquid knock trip, impeller and valve-set parts with vanilla recipes and the repair event, config `machines.wear`; readings A109 to A128 (A117: no seal kit, against Q14's list).
 - 2026-11-04: W10b built in its simple form (`6074e7aa0`, D34): `Wear`, `PumpHealth`, σ and dry in `PipeObservation`, `ShaftPlan.Kind.FAILED`, `repair_kit` (`tools/machine-parts/`), fluid facts schema 12, config `machines.wear`. WearTest 3, PumpHealthTest 2, affected 625 + hold gates 58, GameTests 43; campaign 992, 994 and 1000 clean, the same holds (`W10B_REVIEW.md`).
+- 2026-11-04: owner "Start W10c". A short plan (`W10C_BUILD_PLAN.md`) offered the crackle only, the crackle and gas churn, or plan 3.8 in full; the owner picked the crackle and gas churn (D35).
 
 ## Documents
 
@@ -69,6 +70,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - [W7_REVIEW.md](W7_REVIEW.md): W7 as built, the review's two fixes, tests, the turbine page and fit calls for the owner.
 - [W10B_BUILD_PLAN.md](W10B_BUILD_PLAN.md): W10b's build plan (health, wear, knock, parts, repair), readings A109 to A128.
 - [W10B_REVIEW.md](W10B_REVIEW.md): W10b's simple form as built, tests, campaign, readings A129 to A136.
+- [W10C_BUILD_PLAN.md](W10C_BUILD_PLAN.md): W10c's plan (crackle and gas churn, D35).
 - [PUMP_TYPES_REVIEW.md](PUMP_TYPES_REVIEW.md): the pump types against refinery practice (API 610 OH2, BB1, BB2); options for the large pump.
 
 ## Code areas (planned)

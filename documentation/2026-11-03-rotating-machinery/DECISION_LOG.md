@@ -112,6 +112,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D34 (replaces D33).** W10b in its simple form (`W10B_BUILD_PLAN.md` revision 2): pumps only carry health (compressors have no wear source left); wear from cavitation (Gülich's curve, no gas cushion) and running dry; no effect until health 0, then `FAILED`, closed; one `repair_kit`; no knock trip, no gradual head loss, no wake threshold. Readings A109 to A128 are withdrawn.
 
+2026-11-04, W10c's scope (`W10C_BUILD_PLAN.md`; A: the crackle only, B: the crackle and the gas churn, C: plan 3.8 in full): the owner, "Crackle + gas churn".
+
+- **D35.** W10c builds two pump loops: the cavitation crackle (volume `I_c(σ)`, W10b's curve) and the gas churn (volume `clamp(r − 0.5, 0, 1) M(r)/0.568`, `r = α/α_T`). Both are scaled by D26's `soundGain` and carried as two `MoverState` bytes. No compressor sounds.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
