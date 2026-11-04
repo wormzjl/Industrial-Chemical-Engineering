@@ -117,7 +117,7 @@ The engines keep reading the resolved `MaterialCatalog.Package` view (components
 | W4 | World basis by compound ids; renamed-network corpus image; no-island fix | `FluidFactsCompatTest`, `WorldTopologyLedgerTest`, `FluidCheckpointStore` tests |
 | W5 | Import tool; `freezing` on all datasets | catalog parse test, the tool's own cross-check |
 | W6 | New compounds per Q2/Q3, lang lines | catalog, `LanguageFilesTest`, `UnitTextTest` |
-| W7 | Network widening per Q2; GUI lists checked by renders (gui-creation skill) | junction lines, chain-100, campaign in the final lane; one timing run alone |
+| W7 | Replaced by V1-V5 of [VARYING_COMPONENTS_REVIEW.md](VARYING_COMPONENTS_REVIEW.md) (owner, 2026-11-04) | see the review, section 4 |
 | W8 | MATERIALS.md, code guide (thermo-materials, column-v3, fluid-science, process-simulator), tooling cleanup, batch README | none |
 
 ## 5. Decisions
@@ -125,7 +125,7 @@ The engines keep reading the resolved `MaterialCatalog.Package` view (components
 | # | Decision | Status |
 |---|---|---|
 | D1 | Sections 3.1-3.4 as written (package = method + list; neural by active compounds and content; simulator column on the sheet package; save basis by compound ids) | Q1 |
-| D2 | Network compounds after the rework | Q2 |
+| D2 | Network compounds after the rework | Decided 2026-11-04: option B of [VARYING_COMPONENTS_REVIEW.md](VARYING_COMPONENTS_REVIEW.md), island compound sets |
 | D3 | k_ij for pairs with a new compound: DWSIM (`kij_pr.dat`, else the DECHEMA value whose range is nearest 300-600 K), zero where none; existing pairs unchanged | Q3 |
 | D4 | Crude-fraction freezing point | Q4 |
 | D5 | Freezing sub-record under the viscosity rule (3.6); AGENTS.md gains "a freezing-point edit bumps the freezing point's own `revision`" | with Q1 |
