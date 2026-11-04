@@ -40,6 +40,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D14 (E5).** A vapour-pressure suction floor for every liquid (D59 (4) and K6 widened): a pump's suction may not fall below the bubble pressure of the hydrocarbon liquid it draws, whether or not its supplier holds vapour. A starved pump goes on its suction limit and delivers what its line gives at that pressure. E5 (a), the suction-cap start seed, goes: it measured no effect.
 
+2026-11-04, the owner’s answer to the D14 holds review (`D14_HOLDS_REVIEW.md` section 3): "A: close it".
+
+- **D15 (D14’s two new holds).** A pump whose suction line delivers nothing at its floor (no NPSH available: its supplier stands at or below the bubble pressure the floor reads) is vapour-locked and passes nothing: it stands closed, not on its suction limit with no flow. It reopens only when its supplier stands above the floor again, as well as its rise beating the demand.
+
 ## Taken under the standing instruction
 
 - **A1 (Q10, reading of "as recommended").** All three proposals join the batch: a generator (shaft power to FE, the motor's mirror), cooling-tower fans on the RF port, KubeJS made optional with Create.

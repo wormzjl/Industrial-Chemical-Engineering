@@ -180,6 +180,51 @@ class PumpCavitationTest {
     }
 
     /**
+     * Owner decision D15 (D14_HOLDS_REVIEW.md): a pump whose suction line delivers nothing at its floor is vapour-locked and
+     * passes nothing. Seed 397's LNG stands in its generator at 111.8 K a millionth below its bubble pressure (worked out
+     * here on the engine's own TP equilibrium), level with the pump [0.01 m3/s, 500 kPa], which draws through two metres of
+     * 10 mm line. A supplier at its bubble point has no suction head over the floor at no flow (no NPSH available), so the
+     * pump stands closed with no flow, not on its suction limit with none. Its discharge pipe is a tee that a second,
+     * subcooled generator of the same LNG at 222 kPa feeds into the void, so the rest of the island runs, and the closed
+     * pump's rise (about 215 kPa on LNG) beats its demand (about 60 kPa): only the supplier test keeps it closed. Anchored
+     * on its suction limit, bundled random 896 (a crude tee at its bubble point) had no root at any step size, and closed
+     * without the supplier test cold random 181's pump reopened and cavitated again 46 times.
+     */
+    @Test void aPumpDrawingFromASupplierAtItsBubblePointIsVapourLockedAndClosed() {
+        var catalog=PilotCryogenicTestCatalog.catalog();var network=FluidMaterialCatalog.networkPackage(catalog);
+        MaterialRuntime.with(catalog,network,()->{
+            var w=new EventPathWorld(catalog,FluidThermodynamics.forNetwork(catalog,network));var passive=new FlowControl.Passive();
+            double t=111.8,top=222268.7652191971;double[] x={0.0019051322577280617,0.8927278421557977,0.06093423437004952,0.04443279121642472,0};
+            // The bubble pressure of the LNG at 111.8 K (about 100 kPa): the lowest pressure the TP equilibrium holds it as one liquid.
+            double lo=80000,hi=top;
+            for(int k=0;k<60;k++){double mid=Math.sqrt(lo*hi);boolean split;
+                try{split=w.model.equilibriumTP(t,mid,x.clone(),()->{},null).vaporVolume()>0;}catch(FluidThermodynamics.UnsupportedPhases twoLiquids){split=true;}
+                if(split)lo=mid;else hi=mid;}
+            w.runTo(100);
+            w.place(0,0,-3,Kind.GENERATOR,NORTH,passive,new FluidDeviceSpec(1,t,hi*(1-1e-6),x.clone()),.01);
+            w.place(0,0,-2,Kind.PIPE,NORTH,passive,null,.01);
+            w.place(0,0,-1,Kind.PIPE,NORTH,passive,null,.01);
+            w.place(0,0,0,Kind.PUMP,SOUTH,new FlowControl.Pump(.01,500000),null,.01);
+            w.place(0,0,1,Kind.PIPE,NORTH,passive,null,.01);
+            w.place(1,0,1,Kind.GENERATOR,NORTH,passive,new FluidDeviceSpec(1,t,top,x.clone()),.01);
+            w.place(0,0,2,Kind.VOID,NORTH,passive,new FluidDeviceSpec(1,298.15,101325,new double[]{1,0,0,0,0}),.01);
+            w.runTo(100+20*100);w.assertKeptUp("a pump drawing from an LNG supplier at its bubble point");
+            var s=w.coordinator.snapshots().stream().filter(sn->sn.graph().pipes().stream().anyMatch(p->p.control() instanceof FlowControl.Pump)).findFirst().orElseThrow();
+            var result=s.lastResult().orElseThrow();var graph=s.graph();
+            int pump=-1,feed=-1;
+            for(int e=0;e<graph.pipes().size();e++) {
+                var pipe=graph.pipes().get(e);
+                if(pipe.control() instanceof FlowControl.Pump)pump=e;
+                for(int node:new int[]{pipe.first(),pipe.second()})if(graph.reservoirs().get(node).kind()==PassiveNetwork.NodeKind.GENERATOR&&graph.reservoirs().get(node).state().pressure()>2e5)feed=e;
+            }
+            System.out.println("PUMP_CAVITATION_VAPOUR_LOCK bubbleP="+hi+" modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows()));
+            assertEquals(FlowControl.Mode.CLOSED,result.endpointModes().get(pump),"the pump is vapour-locked: closed, not on its suction limit nor refused");
+            assertEquals(0,result.averageMassFlows()[pump],1e-9,"it passes nothing");
+            assertTrue(feed>=0&&Math.abs(result.averageMassFlows()[feed])>0,"the subcooled generator still feeds the void through the tee");
+            return null;});
+    }
+
+    /**
      * The arriving-phase seed of a junction is its own split of the enthalpy that arrives (f983306b, 8fd61a13): bundled
      * fuzz seed 889 pair-minimized to 11 blocks (OD4_COLD285_GATE889_REVIEW.md, 2026-10-20). A 326.6 K, 398 kPa water
      * generator 3 m up feeds, through 20 and 10 mm lines, a junction beside a nitrogen tank and a 10 mm suction line into a
