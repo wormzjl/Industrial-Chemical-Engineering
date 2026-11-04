@@ -33,7 +33,7 @@ Commit `6074e7aa0` (`W10B_BUILD_PLAN.md` revision 2, owner decision D34). Built 
 - bundled random: 994 clean, the same held seeds; seed 6 (main's baseline wall hold) clears again, as under W3;
 - bundled defaults: 1000 clean, identical counters.
 
-Counters move by under 0.35 %. No campaign pump wears to failure within 120 slices.
+Counters move by under 0.35 %. Cavitation cannot fail a pump within a campaign run (120 slices are at most 40 min of online time, the shortest cavitation life 2 h), but a vapour-locked pump can run dry to failure in 10 min. The campaign does not count failures, so whether any pump failed is not measured; the held seeds did not change.
 
 ## 4. Departures and readings (A129 to A136)
 
