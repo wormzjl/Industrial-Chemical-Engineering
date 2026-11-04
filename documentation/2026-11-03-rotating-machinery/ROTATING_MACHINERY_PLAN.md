@@ -1,6 +1,6 @@
 # Rotating machinery: plan
 
-Batch `2026-11-03-rotating-machinery`. Base `744ef4513` (main, 0.19.3). Branch `claude/realistic-pump-compressor-6fdfd9`. Status: Planned, revision 2 (2026-11-03) with the owner's answers to Q1 to Q10 and the revised Create rate (section 13, [DECISION_LOG.md](DECISION_LOG.md)). Implementation starts with W1.
+Batch `2026-11-03-rotating-machinery`. Base `744ef4513` (main, 0.19.3). Branch `claude/realistic-pump-compressor-6fdfd9`. Status: revision 3 (2026-11-04): request 11 (gas, liquid, cavitation, wear and their sound; sections 3.6 to 3.8, W10, Q11 to Q17) joins revision 2 (2026-11-03, the owner's answers to Q1 to Q10 and the revised Create rate; section 13, [DECISION_LOG.md](DECISION_LOG.md)). W1 is built; W2's solver work is closed (D18).
 
 Evidence: [MACHINE_RESEARCH_REVIEW.md](MACHINE_RESEARCH_REVIEW.md) (engineering and Minecraft conventions, with sources). Worked numbers: `tmp/rotating-machinery/examples.js`, `curves.js` and `curves2.js` (they move to `tools/rotating-machinery/` at the cleanup).
 
@@ -16,6 +16,10 @@ Owner request 2026-11-03:
 8. A real motor and turbine control system.
 9. Support in the process simulator (work in progress).
 10. Create's rotation as an optional power source (Create no longer required), a researched, configurable conversion rule, shafts that carry real production speeds, and an industrial gearbox that links them to Create's speeds.
+
+Owner request 2026-11-04 ("a major change, so integrate it with the master plan first"):
+
+11. Remove the hard no-gas limit on pumps and add a cavitation mechanism: pumps lose performance as the gas fraction rises (with a scientific source and an efficient implementation); they make noise when they cavitate, changing with the gas fraction; a durability system that cavitation wears; the same for compressors with liquid, researched first.
 
 Owner note the same day: "The model shouldn't be too deep into the details, remember it's for chemical engineers." Every model here stays at the level a process simulator shows: a curve, an efficiency, a duty, a speed, a steam rate. Mechanical numbers (shaft diameter, motor frame) only size the drawings.
 
@@ -74,6 +78,7 @@ A reciprocating compressor delivers its displacement whatever the discharge pres
 **Fluid solver** (`PassiveStepSolver`, `FlowControl`, code guide `fluid-science.md`):
 
 - A mover has two unknowns, a flow and a head, and one row per mode: `PUMP_TARGET` (suction volume flow = set flow), `PUMP_HEAD_LIMIT` (head = rise limit), `PUMP_SUCTION_LIMIT` (suction pressure = vapour pressure), `CLOSED`, `INLET_WRONG_PHASE`. The pass loop switches modes one at a time and carries the limits from slice to slice.
+- Inlet phase: a pump refuses a suction above 2 % vapour by volume (resume 0.5 %), a compressor one above 1 % condensed by mass (resume 0.2 %), as `INLET_WRONG_PHASE` (`InletPhase`, `FlowControl.Pump.VAPOUR_REFUSE`, `Compressor.CONDENSED_REFUSE`). Request 11 replaces both (section 3.6).
 - Rise limit: pump `maxAddedPressure × ρ_s / 997.05` (a head in metres of the reference water); compressor `(r_max − 1) P_s`.
 - Rules that exist for this switch: R1 to R4 of the pump-shutoff fix, the sealed-pocket relief `yieldPrescribed`, the `atShutoff` latch, the own-end dead head, the head-limit start flow, `carriedMoverLimit`, the filter cake law suspended at target.
 - Energy: no efficiency. A pump books `q × head`; a compressor the isothermal work `q (P_s/ρ_s) ln(1 + head/P_s)`. Work is clipped at zero: nothing can take work out of the fluid.
@@ -104,7 +109,7 @@ Every law is one smooth row that falls with flow, written on the same two unknow
 - Falls with flow at every speed: slope ≤ −0.01 H_r/Q_r, also at 10 % speed. That is the condition for one solution in any network of rising resistances (Wetter 2013); EPANET and Modelica Buildings add such a linear term for the same reason. Runout at 2.65 Q_r.
 - Shaft power `P = P_r (0.35 s³ + 0.65 q s²)`: finite everywhere (no division by an efficiency that is zero at shutoff), best efficiency at the rated point, 85 % of the best at half flow, 89 % at 150 %.
 - The fluid gets the ideal work, as today. The losses would warm the liquid by 0.15 K at the rated point (simplification S1).
-- Cavitation keeps today's suction limit (`PUMP_SUCTION_LIMIT`, vapour pressure floor). The NPSH margin is shown, not modelled (S2).
+- Cavitation: the suction limit (`PUMP_SUCTION_LIMIT`) on the liquid's bubble pressure (D14 to D17), with an NPSH3 curve and gas degradation from revision 3 (section 3.6).
 - The machine is one-way: a reverse drive closes it, as the discharge check valve on every real pump does (today's reverse closure).
 - Off or tripped: `CLOSED`, as today.
 
@@ -138,6 +143,46 @@ The constructor asks no efficiency; the design takes one from its size (`science
 - **Motor:** the IE3 table by pole count (IEC 60034-30-1, EU 2019/1781 annex I table 2), held above 200 kW: 30 kW 2-pole 93.3 %, 1 MW 2-pole 95.8 %. A small 8-pole motor is 7.5 points below a 4-pole one, so the speed class picks its column.
 - **Steam turbine:** 0.45 (single stage, 15 kg/kWh on the example's steam) up to 300 kW, 0.76 (multistage, 9 kg/kWh) from 3 MW, in log power between: 0.61 at 1 MW. A 30 kW turbine for the 24 kW pump uses 0.10 kg/s, not the 0.07 of section 1.3 at 65 %.
 - **Centrifugal compressor:** η_p 0.78 unless the design states its own.
+
+### 3.6 Gas, liquid and cavitation (request 11, revision 3)
+
+Evidence: [TWO_PHASE_MACHINES_RESEARCH_REVIEW.md](TWO_PHASE_MACHINES_RESEARCH_REVIEW.md); worked numbers `tmp/rotating-machinery/two-phase/laws.js`. Today a pump refuses a suction above 2 % vapour by volume (`Pump.VAPOUR_REFUSE`, resume 0.5 %) and a compressor one above 1 % condensed by mass (`Compressor.CONDENSED_REFUSE`, resume 0.2 %). Both refusals go, with their hysteresis; a dry suction (D58) stays.
+
+Expected behaviour:
+- **Centrifugal pump with gas.** Small bubbles cost little; past an onset fraction they gather in the impeller and the head falls fast toward gas lock. The onset rises with suction pressure (denser gas): Turpin et al. 1986, `α_T = r/(1 + r)`, `r = 0.0218 p_s[bar]`: 2.1 % at 1 bar, 5.2 % at 2.5 bar, 18 % at 10 bar. Rule of thumb at 1 bar: 2 % gas costs 10 % of capacity, 4 % costs 43 %.
+- **Positive-displacement pump with gas** (the set-flow movers' law): the displaced volume fills with the mixture at suction pressure, so it delivers `(1 − α)` of its displacement as liquid. Screw and progressive-cavity pumps run to very high gas fractions; reciprocating pumps can gas-lock.
+- **Cavitation.** Below NPSH3 (the NPSH available at a 3 % head drop) the head breaks down steeply; the pump delivers what its suction can feed. NPSH3 grows with speed squared and with flow: `NPSH3 = NPSH3_r s² (0.4 + 0.6 (q/s)²)`, with `NPSH3_r` from a suction specific speed of 200 (metric): 3.3 m for the pump of section 1.1. Bubbles form from about 4 × NPSH3 (inception); erosion peaks near 2 × NPSH3.
+- **Centrifugal compressor with liquid.** Wet-gas machines run to about 5 % liquid by volume: the ratio rises, efficiency falls, droplets erode the impeller. Today's 1 % mass limit is 0.07 % liquid by volume at 50 bar.
+- **Reciprocating compressor with liquid.** Liquid beyond the clearance volume cannot compress: valves, rods and pistons break within strokes. Plants put a knock-out drum ahead of every stage.
+
+Laws (each a number fixed for the solve, read once on the step's start states like the suction floor and the vapour lock, D16; no new mode, no refusal, no hysteresis):
+- **Centrifugal pump:** `H_2φ = H(Q, s) × M(α)`, `M = 1 / (1 + (α/α_50)^4)`, `α_50 = 1.6 α_T(p_s)`, α the suction's vapour volume share (`InletPhase.Supply`). The rise `ρ_s g H_2φ` takes the mixture density, a second factor `(1 − α)`. M at 1 bar: 0.89 at 2 %, 0.34 at 4 %; at 10 bar 0.81 at 20 %. Gas lock is not a rule: when `M H` at shutoff falls below the line's lift, the curve meets zero flow and the check valve closes it.
+- **Set-flow pump (positive displacement):** no multiplier. The law already counts suction mixture volume.
+- **Cavitation (Q11):** (A) the suction floor of D17 becomes `p_v + 0.85 ρ_l g NPSH3(Q, s)` on the trial point, inside its lesser-of, so a constructed pump starves at its full-breakdown NPSH, and today's bubble floor is its `NPSH3 = 0` end; or (B) the floor stays the bubble pressure, and NPSH3 feeds only noise, wear and a notice. Set-flow movers have no design point and keep the bubble floor either way.
+- **Centrifugal compressor:** the head curve reads the suction mixture volume; the ratio formula of 3.2 the mixture density; power `ṁ_total H_p / η_wet`, `η_wet = η_p (1 − 0.5 w_l)`, w_l the liquid mass share (the 0.5 is an assumption, Q15). The PH flash gives the evaporative cooling.
+- **Reciprocating and set-flow compressor:** gas delivered is the displacement less the liquid's volume, which the mixture volume already gives.
+- The vapour lock (D15, D16) stays: the NPSHA ≤ 0 end, closed for the solve.
+
+### 3.7 Durability (request 11, revision 3)
+
+A constructed pump or compressor has a health D from 1 (new) to 0 (failed), a fact. Wear comes only from a fault the player can see and fix, never from clean running (the genre's convention: GregTech's maintenance problems, the Maintenance mod; research review section 7).
+
+- **Integration.** At each slice commit, on committed states, over the slice's online time; never on the tick loop. A trip at D = 0 applies between slices.
+- **Cavitation:** `dD/dt = I_c(σ) g(α) / 2 h`, with `σ = NPSHA / NPSH3`, `I_c = (σ/2.06)³ ((4 − σ)/1.94)^2.83` for 0 < σ < 4 and 0 above (Gülich's erosion power, `Δp³ L_cav^2.83`; its peak at σ = 2.06 lands on the measured maximum near 2 × NPSH3), and the gas cushion `g(α) = exp(−α/0.02)` (entrained gas softens bubble collapse). Lives in online time: 2 h at the peak, 5 h at NPSH3, 19 h at σ = 3.5, none above 4.
+- **Gas surging:** `clamp(α/α_T − 1, 0, 1) / 20 h`. **Dry running** (power on and gas-locked or vapour-locked): `1 / 10 min`. **Below 30 % of rated flow:** `1 / 50 h`.
+- **Compressor:** centrifugal droplet erosion `(w_l / 0.01) / 100 h`; reciprocating valve wear `(LVF / 0.001) / 2 h`, and a liquid knock (`LVF ≥ 0.5 × clearance`) costs 0.5 and trips the machine (one event per slice).
+- **Effect.** Head and efficiency × `(0.9 + 0.1 D)`, read once per solve. At D = 0 the machine stands closed: `IMPELLER FAILED` (pump), `VALVES FAILED` (reciprocating), `IMPELLER FAILED` (centrifugal compressor), until repaired.
+- **Repair (Q14).** A queued engine event from the machine's screen or a part used on the casing; its acknowledgement arrives on the engine schedule.
+- Every τ and the gas cushion width in the server config (`machines.wear.*`), with a switch to turn wear off.
+- In-line set-flow movers (D3, utility movers with an integral motor) take the gas and liquid laws and no wear (Q13).
+
+### 3.8 Sound (request 11, revision 3)
+
+Two layers per mover beside W4's casing and driver loops (`MoverSounds`, `DriverSounds`):
+- **Crackle** (cavitation): broadband with sharp transients ("gravel in the pump"), bright at inception, a low rumble when developed. Volume `I_c(σ) g(α)`: silent above σ = 4, loudest near 2 × NPSH3, softer below NPSH3 and with gas.
+- **Churn** (gas): low irregular surges, 50 to 200 Hz, rising with `α/α_T` from 0.5 to 1.5, fading toward gas lock, where the motor note rises as the pump unloads.
+- **Compressors:** a droplet hiss (centrifugal, with w_l), sharp metallic knocks (reciprocating liquid knock).
+- **Transport.** Two bytes per mover added to `FluidNetwork.MoverState`, which the engine sends on its schedule to clients that watch movers in range (`Watch.MOVERS`, the request W4's loops use). The client eases the volumes and computes no process state. A wire format: no compatibility work.
 
 ## 4. Speed, flow control and convergence
 
@@ -257,11 +302,12 @@ Prototypes first (`gui-creation` skill), owner picks, then build.
 - **Create coupling.** Readings: Create speed, stress drawn, the network's headroom.
 - **Creative motor.** Speed, power limit, Regulate as the motor.
 - **Pump and compressor.** The set flow (or discharge pressure) stays on the machine's page, where it is today; the driver follows it when it regulates. A fixed-speed train shows "flow follows the line"; a casing with no driver on its shaft shows `NO DRIVER` and stands closed. Readings: flow, head, speed, power, efficiency; the curve with the operating point.
+- **Two-phase readings (request 11).** On the pump and compressor pages: inlet gas (or liquid) fraction, NPSH available and required with σ, the head factor M, health as a bar with its rate of loss, and Repair. Status words: `GAS`, `CAVITATION`, `WET GAS`, `LIQUID KNOCK`, `WORN` (D < 0.5), `IMPELLER FAILED`, `VALVES FAILED`, beside today's.
 - Every new key in all five lang files (AGENTS.md Translations); status words stay in English.
 
 ## 10. Saves (AGENTS.md "Saves and data formats")
 
-- Fluid facts schema 8: the new device kinds, the machine's design point and law kind, the driver's settings, the FE buffer's content (energy the player put in), the gearbox ratio, the creative motor's set points. Corpus image `compat/fluid/schema-8`.
+- Fluid facts schema 8: the new device kinds, the machine's design point and law kind, the driver's settings, the FE buffer's content (energy the player put in), the gearbox ratio, the creative motor's set points, and each constructed machine's health (request 11: a double from 0 to 1, default 1.0, which is the behaviour before the field: no wear, full performance). Corpus image `compat/fluid/schema-8`. If W3 lands schema 8 first, health goes in schema 9 with its own image.
 - Equipment shape fields 6: the pump's and compressor's design point, the motor's and turbine's duty. An old pump's missing design point takes today's datasheet values (A3). Corpus image `compat/equipment/shapes-6.snbt`.
 - No backward compatibility for constructed movers (owner D4): old placed pumps and compressors rebuild to the casing layout through the layout refresh, without their drawn motor (and gear); they stand closed with `NO DRIVER` until the player joins a driver. Their registrations, identity and settings stay; the set flow is still the set flow.
 - Old steam turbines (drawing only) rebuild to the new layout; the owner approves the moved nozzle pipe blocks (owner D5).
@@ -285,9 +331,13 @@ The simulator's units call the same Minecraft-free classes (`science/machine/**`
 | W6b | The Create coupling (after W3) | GameTest with Create |
 | W7 | Screens and controls, lang | gates, renders |
 | W8 | Simulator support (after both merge) | simulator tests |
+| W10a | Request 11 laws: refusals removed; M(α) on centrifugal pumps; mixture volume on set-flow movers; NPSH3 floor (Q11 A); wet compressor; per-solve constants; harness variant with gas and liquid suctions | affected tests, quick check, one campaign |
+| W10b | Health fact, wear at commit, trips, repair event, config (after W3's registrations) | unit tests, GameTest, corpus |
+| W10c | Sound layers on W4's loops, `MoverState` bytes (after W4 merges into the branch) | owner listens |
+| W10d | Two-phase readings, status words, Repair on the screens (with W7), lang | gates, renders |
 | W9 | Final lane, code guide, tooling cleanup, CHANGELOG, version (minor) — only when the owner says so | final lane |
 
-W4 and W6a touch neither the solver nor each other; they run as their own sessions beside W1 and W2. W4 defines the shape fields (the design points and duties); W1 takes plain numbers; W3 joins them at registration.
+W10a needs only W2's laws and can start now; W10b needs W3's machine registrations; W10c W4's sound loops; W10d W7's screens. W4 and W6a touch neither the solver nor each other; they run as their own sessions beside W1 and W2. W4 defines the shape fields (the design points and duties); W1 takes plain numbers; W3 joins them at registration.
 
 ## 13. Owner questions
 
@@ -302,17 +352,32 @@ Answered 2026-11-03: "Q4 no backward compat, Q6 auto start, Others as recommende
 - **Q7. Ratios.** (a) 10 J per FE and 5.86 W per su, at parity (recommended); (b) Mekanism's 2.5 J per FE, with the parity 1.47 W per su (a 0.38 kW water wheel); (c) 10 W per su, the best match to real wheels, with 17.1 J per FE.
 - **Q8. Create direction.** (a) Create drives industrial shafts only (recommended first); (b) also industrial drives Create.
 - **Q9. Simulator timing.** (a) After both batches merge (recommended); (b) on the simulator branch now.
+Revision 3 (request 11), open:
+
+- **Q11. Cavitation in the flow.** (A) The suction floor of a constructed pump rises to `p_v + 0.85 ρ g NPSH3(Q, s)`, in D17's row: it starves at its breakdown NPSH (recommended; it moves worlds that draw from boiling drums, +22 kPa for the pump of 1.1). (B) The floor stays the bubble pressure; NPSH3 feeds only noise, wear and a notice (no world moves, no cavitation in the flow).
+- **Q12. Gas onset.** Pressure only, `α_T(p_s)` (recommended first); or also a speed factor (onset rises with speed, 1.25 to 2.3 times for 1.67 times speed) and an impeller-type factor (mixed flow about 2.5 times radial).
+- **Q13. In-line set-flow movers.** Gas and liquid laws, no wear (recommended: utility movers, D3); or wear for them too.
+- **Q14. Repair.** (a) A spare part crafted per machine (impeller, valve set, seal kit) used on the casing, restoring full health (recommended); (b) a wrench, part health per use; (c) both: a wrench for wear above 0.5, a part for a failure.
+- **Q15. Wet compressors.** Centrifugal: homogeneous mixture with `η_wet = η_p (1 − 0.5 w_l)` and droplet erosion; reciprocating: liquid knock costs 0.5 and trips (recommended); the factor 0.5 is an assumption to keep or change.
+- **Q16. Wear shape and scale.** The physical intensity, peak near 2 × NPSH3 (recommended); or monotone, largest at the floor. Without a size factor first (a 10 m NPSH3 pump would erode 27 times faster than a 3.3 m one). Lives as in 3.7, all in the server config.
+- **Q17. Order.** W10a now (recommended), W10b to W10d after the packages they need; or request 11 after W3 to W7.
+
 - **Q10. Not asked, proposed.** A generator (shaft to FE) so a turbine can power motors without other mods; cooling-tower fans on the same RF port; KubeJS made optional (it is required but unused).
 
 ## 14. Simplifications (with their effect)
 
 - **S1.** Pump losses not booked into the liquid: 0.15 K at the rated point, 0.3 K at half flow. At shutoff a real pump heats its trapped liquid with all its power (45 kW into 50 kg of water: 13 K a minute); here it adds nothing, and a `MIN FLOW` notice shows below about 30 % of rated flow.
-- **S2.** No NPSH required curve: the suction limit stays at the vapour pressure; the screen shows the margin.
+- **S2.** No NPSH required curve: the suction limit stays at the vapour pressure; the screen shows the margin. Revision 3 replaces it with the NPSH3 curve (section 3.6, Q11), and T1 to T5 below.
 - **S3.** Constant polytropic efficiency along a speed line: the real one falls about 5 points toward surge and choke.
 - **S4.** Constant turbine efficiency at part load; no-load steam (10 to 15 % of full) ignored.
 - **S5.** No slip, no inertia, no torque-speed curve: flow 0.9 % low at 60 % load on the example line; speed changes land within one slice.
 - **S6.** No viscosity correction of pump curves (heavy oil above about 100 cSt loses head and efficiency).
 - **S7.** Drawn shaft diameter three times the torque diameter, 2 to 8 px.
+- **T1.** A pump's own vapour counts as gas in M(α); real vapour recondenses in the impeller and costs less than nitrogen. An equilibrium suction has little NPSH, so the cavitation law binds first there.
+- **T2.** Gas lock of a reciprocating pump is a notice only; the set-flow law delivers `(1 − α)` of its displacement.
+- **T3.** No thermodynamic NPSH effect: hot hydrocarbons and hot water need less NPSH than cold water.
+- **T4.** The 0 to 3 % head drop between inception and NPSH3 is not in the curve; the floor sits at full breakdown (0.85 NPSH3).
+- **T5.** Wear is linear in online time with no inspection, no random failure and no clean-running ageing.
 
 ## 15. Risks
 
@@ -321,3 +386,6 @@ Answered 2026-11-03: "Q4 no backward compat, Q6 auto start, Others as recommende
 - Create optional: any missed Create or Catnip class load crashes a client without Create. Gate: a build and GameTest run with Create absent.
 - The old turbines' nozzle moves need the owner's approval.
 - Scope: ten requests in one batch. W2 decides the route before W3 to W9.
+- Request 11 moves worlds: pumps with gas and compressors with liquid now run where they stood refused; the NPSH3 floor (Q11 A) lowers the delivery of pumps on boiling drums. Read with the campaign's classifier; the harness needs gas and liquid suctions to exercise it.
+- Gas lock emerges from `M H` meeting the lift; a pump near gas lock sits near its check valve's closure, which W10a's campaign must show does not cycle (the D15 lesson: decisions read once per solve).
+- Wear needs players to see it coming: the screen's rate of loss and the sound must lead the failure by game hours.
