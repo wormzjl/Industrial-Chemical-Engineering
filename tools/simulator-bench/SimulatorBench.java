@@ -582,7 +582,7 @@ public final class SimulatorBench {
     static void sizeStagesPhase() throws Exception {
         var sheet = crudeUnit();
         var run = run(sheet, null, new Units());
-        var moves = SheetSizing.class.getDeclaredMethod("moves", Flowsheet.class, Flowsheet.class);
+        var moves = Proposal.class.getDeclaredMethod("moves", Flowsheet.class, Flowsheet.class);
         moves.setAccessible(true);
         long[] checkpoints = {0};
         var counted = MaterialRuntime.with(CATALOG, NETWORK, () -> new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> checkpoints[0]++));
