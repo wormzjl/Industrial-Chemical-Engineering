@@ -3,12 +3,14 @@ package com.wormzjl.icheme.science.flowsheet;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.material.MaterialRuntime;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
+import java.util.function.Function;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -23,7 +25,13 @@ import org.jetbrains.annotations.Nullable;
  * <p>A run solves on the network package's view of the list ({@link MaterialCatalog#restrict}): the same method and records, the
  * pairs among its compounds, the package's ranges. Every mixing sum runs over the compounds present, so its numbers equal the
  * package's for every state that holds nothing else. Its streams go back onto the network's axis by id, where the screens, the stored
- * results and the sizing read them, and a stream from the network's axis comes onto the view's the same way. Minecraft-free.
+ * results and the sizing read them, and a stream from the network's axis comes onto the view's the same way. The run and the sizing
+ * both work on the view ({@link #on}), so no part of the simulator evaluates a compound the sheet does not hold.
+ *
+ * <p>A sheet drawn on another package, or on one since removed, runs on the network by compound ids: the owner's rule is the
+ * network's method and records on the sheet's compounds, whatever package the sheet names. Results stored from other physics
+ * show through {@link RevisionNotice}. A feed's compound that the network does not hold is parked, as the file rules park a
+ * removed compound: its amount stays in the file, out of the solve, and the run names it ({@code basis.parked}). Minecraft-free.
  */
 public final class SheetCompounds {
     private final FlowThermo thermo;
@@ -45,9 +53,24 @@ public final class SheetCompounds {
         }
     }
 
-    /** The view {@code thermo} runs on, beside the network package's {@code network} model, or null where it is that package. */
-    static SheetCompounds of(FlowThermo thermo, @Nullable FluidThermodynamics network) {
-        return new SheetCompounds(thermo, network);
+    /**
+     * {@code on} with the network package's view of {@code sheet}'s compounds on {@code catalog}, inside the view's runtime. What
+     * {@code on} gives back is on the view's axis: {@link #up} puts a run back on the network's.
+     */
+    public static <T> T on(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, Function<SheetCompounds, T> on) {
+        String network = FluidMaterialCatalog.networkPackage(catalog);
+        var view = catalog.restrict(network, of(sheet, catalog));
+        var whole = view == catalog ? null : MaterialRuntime.with(catalog, network, () -> FluidThermodynamics.forNetwork(catalog, network));
+        return MaterialRuntime.with(view, network, () -> on.apply(new SheetCompounds(new FlowThermo(FluidThermodynamics.forNetwork(view, network), view, network, checkpoint), whole)));
+    }
+
+    /** {@link #on(Flowsheet, MaterialCatalog, Runnable, Function)} from {@code network}, the network package's thermo, whose model it keeps. */
+    public static <T> T on(Flowsheet sheet, FlowThermo network, Function<SheetCompounds, T> on) {
+        var catalog = network.catalog();
+        String id = network.packageId();
+        var view = catalog.restrict(id, of(sheet, catalog));
+        if (view == catalog) return MaterialRuntime.with(catalog, id, () -> on.apply(new SheetCompounds(network, null)));
+        return MaterialRuntime.with(view, id, () -> on.apply(new SheetCompounds(new FlowThermo(FluidThermodynamics.forNetwork(view, id), view, id, network.checkpoint()), network.model())));
     }
 
     /** The compounds {@code sheet} runs on, in the network package's order of {@code catalog}. */
@@ -69,32 +92,13 @@ public final class SheetCompounds {
         return list.isEmpty() ? List.of(FluidMaterialCatalog.NITROGEN) : list;
     }
 
-    /** {@link #refusal(Flowsheet, MaterialCatalog, List)} on the compounds {@code sheet} runs on. */
-    public static @Nullable Note refusal(Flowsheet sheet, MaterialCatalog catalog) {
-        return refusal(sheet, catalog, of(sheet, catalog));
-    }
-
-    /**
-     * Why {@code sheet} cannot run on {@code catalog}'s network, or null. A sheet drawn on another package runs where that package
-     * gives {@code compounds} the network's physics, compared by content ({@link MaterialCatalog#physicsContent}): the network's
-     * records then answer every state it can reach as its own did. One whose package is gone, or holds other numbers for them, asks
-     * for it.
-     */
-    public static @Nullable Note refusal(Flowsheet sheet, MaterialCatalog catalog, List<String> compounds) {
-        String drawn = sheet.basis().packageId(), world = FluidMaterialCatalog.networkPackage(catalog);
-        if (drawn.equals(world)) return null;
-        var pack = catalog.packages().get(drawn);
-        if (pack != null && pack.components().containsAll(compounds) && catalog.physicsContent(drawn, compounds).equals(catalog.physicsContent(world, compounds))) return null;
-        return Note.error("sheet", "basis.package", drawn, world);
-    }
-
     /** The stream thermo on the view. */
-    FlowThermo thermo() {
+    public FlowThermo thermo() {
         return thermo;
     }
 
     /** {@code run} on the network's axis. */
-    FlowsheetRun up(FlowsheetRun run) {
+    public FlowsheetRun up(FlowsheetRun run) {
         if (network == null) return run;
         var streams = new HashMap<String, FlowStream>();
         run.streams().forEach((id, stream) -> streams.put(id, up(stream)));
@@ -118,7 +122,7 @@ public final class SheetCompounds {
     }
 
     /** {@code run}'s streams on the view's axis, without those that hold a compound it lacks; null stays null. */
-    @Nullable FlowsheetRun down(@Nullable FlowsheetRun run) {
+    public @Nullable FlowsheetRun down(@Nullable FlowsheetRun run) {
         return run == null ? null : run.on(down(run.streams()));
     }
 

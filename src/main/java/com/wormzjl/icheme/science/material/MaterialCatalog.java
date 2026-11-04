@@ -83,12 +83,15 @@ public final class MaterialCatalog {
      * datasets' ranges at the method's pressures, its fluid envelope the hull of their data ranges, its aliases the
      * catalog's for its compounds, its assays every assay whose non-zero compounds it holds. {@code scientificRevision}, the
      * column's identity, is composed at load from the declared revision of every record the package uses for its phase
-     * physics, in a fixed order: the package, its method, each property record, the pair libraries that give a pair on its
-     * axis (and the group matrix of a rule that resolves one), and the water model. An edit bumps the revision of the
-     * record it changes, and the identity of every package that uses that record moves with it. What only the fluid network reads is identified apart: the viscosities, each by its own
-     * revision, the water's ice and the fluid reference data in {@link MaterialCatalog#fluidRevision}, and the spine and
-     * crystal records (the column refuses such packages) record by record in {@link MaterialCatalog#spineRevision}.
-     * Assays are compositions, not physics: no identity carries them.</p>
+     * physics, in a fixed order: its method, each compound's dataset in the package's order, the pair libraries that give a
+     * pair among its compounds (and the group matrix of a rule that resolves one), and the water model. The package record is
+     * no part of it (option B of the varying-components review, 2026-11-04): it names the method and the compounds, which
+     * the identity lists themselves, so a package record edit alone, or a compound added to the package, moves no identity of
+     * a view that does not hold the new compound. An edit bumps the revision of the record it changes, and the identity of
+     * every package that uses that record moves with it. What only the fluid network reads is identified apart: the
+     * viscosities, each by its own revision, the water's ice and the fluid reference data in
+     * {@link MaterialCatalog#fluidRevision}, and the spine and crystal records (the column refuses such packages) record by
+     * record in {@link MaterialCatalog#spineRevision}. Assays are compositions, not physics: no identity carries them.</p>
      */
     public record Package(String id, String revision, String model, List<String> components,
             List<Property> properties, List<List<Double>> interactions, List<NrtlPair> nrtlPairs,
@@ -103,11 +106,6 @@ public final class MaterialCatalog {
             spine = List.copyOf(spine); crystals = List.copyOf(crystals); Objects.requireNonNull(scientificRevision);
         }
         public String canonicalId(String id) { return aliases.getOrDefault(id, id); }
-        /** An identity's first part, the package id and the package record's own revision: what a screen shows of it. */
-        public static String label(String scientificRevision) {
-            int end = scientificRevision.indexOf(';');
-            return end < 0 ? scientificRevision : scientificRevision.substring(0, end);
-        }
     }
     /**
      * The phase physics of a compound list, named by records and their declared revisions, without a package or a method
@@ -224,9 +222,10 @@ public final class MaterialCatalog {
      * The fluid network's identity of a package's data: its {@link Package#scientificRevision}, then what only the fluid
      * network reads, each by its declared revision: the viscosities of the property records and of the water model
      * ({@code id/phase@revision}, in component order, then the water), the water's ice crystal record and the fluid
-     * reference records (the liquid volume references and the dissolved-solute viscosities). The column's identity
-     * leaves them out, so a viscosity-only edit keeps the column's results and neural models. Nothing is hashed: a
-     * changed identity is a changed property basis (a world restates its contents once).
+     * reference records that hold an entry for one of its compounds or the water (the liquid volume references and the
+     * dissolved-solute viscosities), as the pair libraries enter the column's. The column's identity leaves them out, so a
+     * viscosity-only edit keeps the column's results and neural models. Nothing is hashed: a changed identity is a changed
+     * property basis (a world restates its contents once).
      */
     public String fluidRevision(String packageId) {
         return fluidIdentity(requirePackage(packageId),waterModels.get(packageId),viscosities,crystals,fluidData);
@@ -237,8 +236,9 @@ public final class MaterialCatalog {
         for(var property:p.properties())viscosityRevisions(transport,property.id(),viscosities.getOrDefault("properties/"+property.id(),Map.of()));
         viscosityRevisions(transport,waterId,viscosities.getOrDefault("water/"+waterId,Map.of()));
         var ice=p.water().ice();
+        var held=new HashSet<>(p.components());held.add("Water");
         return p.scientificRevision()+";viscosity="+String.join(",",transport)
-                +(ice==null?"":";ice="+ice.crystal()+"@"+crystals.get(ice.crystal()).revision())+";fluid-data="+fluidData.revision();
+                +(ice==null?"":";ice="+ice.crystal()+"@"+crystals.get(ice.crystal()).revision())+";fluid-data="+fluidData.revision(held);
     }
     /** A record's viscosities, {@code id/liquid@revision} and {@code id/vapor@revision} for the phases it has. */
     private static void viscosityRevisions(List<String> parts,String id,Map<ViscosityCorrelation.Phase,ViscosityCorrelation> viscosities) {
@@ -308,10 +308,9 @@ public final class MaterialCatalog {
         var json=new Gson().toJsonTree(property).getAsJsonObject();json.remove("id");return json;
     }
     /**
-     * {@link #physicsContent(Package, List)} of package {@code packageId}: what the process simulator compares a sheet's package
-     * with the network's by on the sheet's compounds (W3), and tests across catalogs.
+     * {@link #physicsContent(Package, List)} of package {@code packageId}: what tests compare packages by across catalogs.
      */
-    public String physicsContent(String packageId,List<String> axis) { return physicsContent(requirePackage(packageId),axis); }
+    String physicsContent(String packageId,List<String> axis) { return physicsContent(requirePackage(packageId),axis); }
     /**
      * The numbers package {@code p} holds on {@code axis}, as canonical JSON: the model, the axis's property constants,
      * interactions and NRTL pairs, the water model's numbers and any group-contribution pairs. Assays, names, transport,
@@ -600,7 +599,7 @@ public final class MaterialCatalog {
             List<String> crystalIds=o.has("crystals")?strings(o,"crystals"):List.of();
             if(new HashSet<>(crystalIds).size()!=crystalIds.size())throw new IllegalArgumentException("crystals: duplicate crystal record");
             String revision=revision(o,"revision");
-            var definition=new Definition(id,revision,List.of(id+"@"+revision,"method="+method.id()+"@"+method.revision()),method,entries.get(id),crystalIds,evidence);
+            var definition=new Definition(id,revision,List.of("method="+method.id()+"@"+method.revision()),method,entries.get(id),crystalIds,evidence);
             var built=build(records,definition,null,assayRecords);
             packages.put(id,built.pack()); definitions.put(id,definition);
             liquidMixtures.put(id,built.liquidMixture()); waterModels.put(id,method.water());
@@ -829,8 +828,9 @@ public final class MaterialCatalog {
         }
     }
     /**
-     * What a package is built from: its id and own revision, the leading tokens of its identity (the package's and its
-     * method's), its method, its compounds with their datasets, the crystals it admits and its evidence. A restricted view
+     * What a package is built from: its id and own revision, the leading token of its identity (its method's; a package
+     * record's own revision is in no identity), its method, its compounds with their datasets, the crystals it admits and
+     * its evidence. A restricted view
      * ({@link #restrict}) keeps the package's definition with fewer compounds; a physics record ({@link #resolve}) has a
      * method of its own.
      */
@@ -1018,22 +1018,29 @@ public final class MaterialCatalog {
         public record VolumeReference(double temperatureKelvin,double pressurePascal,double molarVolumeCubicMetres) {}
         private final Map<String,VolumeReference> volumes;
         private final Map<String,ViscosityCorrelation> conditional;
-        private final String revision;
-        private FluidData(Map<String,VolumeReference> volumes,Map<String,ViscosityCorrelation> conditional,String revision) {
-            this.volumes=Map.copyOf(volumes);this.conditional=Map.copyOf(conditional);this.revision=Objects.requireNonNull(revision);
+        /** Each record's {@code type@revision} and the compounds it holds an entry for. */
+        private final Map<String,Set<String>> revisions;
+        private FluidData(Map<String,VolumeReference> volumes,Map<String,ViscosityCorrelation> conditional,Map<String,Set<String>> revisions) {
+            this.volumes=Map.copyOf(volumes);this.conditional=Map.copyOf(conditional);
+            var held=new TreeMap<String,Set<String>>();revisions.forEach((token,ids)->held.put(token,Set.copyOf(ids)));this.revisions=Collections.unmodifiableMap(held);
         }
         public Map<String,VolumeReference> volumeReferences(){return volumes;}
         public Map<String,ViscosityCorrelation> conditionalLiquidViscosities(){return conditional;}
-        /** The declared revisions of the fluid reference records, {@code type@revision} in sorted order. */
-        public String revision(){return revision;}
+        /**
+         * The declared revisions of the fluid reference records that hold an entry for one of {@code compounds},
+         * {@code type@revision} in sorted order: a record for other compounds moves nothing on them.
+         */
+        public String revision(Collection<String> compounds){
+            return String.join(",",revisions.entrySet().stream().filter(e->e.getValue().stream().anyMatch(compounds::contains)).map(Map.Entry::getKey).toList());
+        }
         static FluidData read(Map<String,JsonObject> records,Map<JsonObject,String> origins,Set<String> components) {
-            var volumes=new HashMap<String,VolumeReference>();var curves=new HashMap<String,ViscosityCorrelation>();var revisions=new ArrayList<String>();
+            var volumes=new HashMap<String,VolumeReference>();var curves=new HashMap<String,ViscosityCorrelation>();var revisions=new HashMap<String,Set<String>>();
             for(var row:records.values())try {
                 String type=text(row,"type"),revision=text(row,"revision"),source=text(row,"source");
-                revisions.add(type+"@"+token(revision,"revision"));
+                var held=revisions.computeIfAbsent(type+"@"+token(revision,"revision"),unused->new HashSet<>());
                 if(type.equals("liquid_volume_reference_points")) {
                     for(var entry:array(row,"points")) {
-                        var point=entry.getAsJsonObject();String id=component(point,components);
+                        var point=entry.getAsJsonObject();String id=component(point,components);held.add(id);
                         text(point,"source");
                         var value=new VolumeReference(positive(point,"temperatureKelvin"),positive(point,"pressurePascal"),positive(point,"molarVolumeCubicMetres"));
                         if(volumes.putIfAbsent(id,value)!=null)throw new IllegalArgumentException("points: duplicate component "+id);
@@ -1041,7 +1048,7 @@ public final class MaterialCatalog {
                 } else if(type.equals("conditional_solute_log_tables")) {
                     double pressure=positive(row,"reference_pressure_pascal");
                     for(var entry:array(row,"curves")) {
-                        var curve=entry.getAsJsonObject();String id=component(curve,components);
+                        var curve=entry.getAsJsonObject();String id=component(curve,components);held.add(id);
                         var t=numbers(curve,"temperatures_kelvin");var mu=numbers(curve,"viscosities_pascal_seconds");
                         if(t.size()<2||t.size()!=mu.size())throw new IllegalArgumentException("curves: temperature/value count mismatch");
                         var value=new ViscosityCorrelation(ViscosityCorrelation.Model.LOG_TABLE,t.getFirst(),t.getLast(),pressure,pressure,t.getFirst(),mu,List.of(),revision,source,true,t);
@@ -1053,8 +1060,7 @@ public final class MaterialCatalog {
                     }
                 } else throw new IllegalArgumentException("type: unsupported fluid reference record "+type);
             } catch(RuntimeException invalid) {throw new IllegalArgumentException(origins.get(row)+": "+invalid.getMessage(),invalid);}
-            Collections.sort(revisions);
-            return new FluidData(volumes,curves,String.join(",",revisions));
+            return new FluidData(volumes,curves,revisions);
         }
         private static String component(JsonObject row,Set<String> components){String id=text(row,"component");if(!components.contains(id))throw new IllegalArgumentException("component: unknown "+id);return id;}
     }

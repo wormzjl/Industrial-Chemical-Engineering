@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
-import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import java.util.ArrayList;
@@ -21,9 +20,9 @@ public final class FlowsheetEngine {
     /**
      * {@code last}, this sheet's last run if it has one, starts its loops (see {@link FlowsheetCompiler#estimates}) and, where it
      * stood steady, its columns where their solves there ended ({@link Report.Warm}). A stream flashes on the world's own package's
-     * view of the sheet's compounds ({@link SheetCompounds}), so a sheet drawn on another runs where that package gives them the same
-     * physics, and one drawn on a package since removed asks for it. Amounts go by component id, so a sheet given that package keeps
-     * every one it has a place for. A stream of {@code last} that holds a compound the sheet no longer feeds starts nothing.
+     * view of the sheet's compounds ({@link SheetCompounds}), whatever package the sheet was drawn on: amounts go by component id, so
+     * a sheet drawn on another package, or on one since removed, runs on the network's records and keeps every amount it has a place
+     * for. A stream of {@code last} that holds a compound the sheet no longer feeds starts nothing.
      */
     public static FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, @Nullable FlowsheetRun last, FlowsheetSolver.Progress progress) {
         return solving(sheet, catalog, view -> {
@@ -74,20 +73,15 @@ public final class FlowsheetEngine {
 
     /** {@code solving} on the network package's view of the sheet's compounds ({@link SheetCompounds}); its run comes back on the network's axis. */
     private static FlowsheetRun solving(Flowsheet sheet, MaterialCatalog catalog, Solving solving, Runnable checkpoint) {
-        var compounds = SheetCompounds.of(sheet, catalog);
-        var refused = SheetCompounds.refusal(sheet, catalog, compounds);
-        if (refused != null) return FlowsheetRun.refused(refused);
         String network = FluidMaterialCatalog.networkPackage(catalog);
-        var view = catalog.restrict(network, compounds);
-        var whole = view == catalog ? null : MaterialRuntime.with(catalog, network, () -> FluidThermodynamics.forNetwork(catalog, network));
-        var axes = MaterialRuntime.with(view, network, () -> SheetCompounds.of(new FlowThermo(FluidThermodynamics.forNetwork(view, network), view, network, checkpoint), whole));
-        var run = MaterialRuntime.with(view, network, () -> {
+        return SheetCompounds.on(sheet, catalog, checkpoint, axes -> {
+            FlowsheetRun run;
             try {
-                return solving.on(axes);
+                run = solving.on(axes);
             } catch (CancellationException stop) {
-                return null;
+                return FlowsheetRun.stopped();
             }
+            return MaterialRuntime.with(catalog, network, () -> axes.up(run));
         });
-        return run == null ? FlowsheetRun.stopped() : MaterialRuntime.with(catalog, network, () -> axes.up(run));
     }
 }

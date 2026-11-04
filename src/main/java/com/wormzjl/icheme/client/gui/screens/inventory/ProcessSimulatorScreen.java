@@ -51,7 +51,6 @@ import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
 import com.wormzjl.icheme.science.flowsheet.SheetBody;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
-import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import com.wormzjl.icheme.world.inventory.ProcessSimulatorMenu;
 import java.io.IOException;
@@ -181,7 +180,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         // A sheet flashes on the world's own package, whatever it names: a stream's page reads that thermo.
         String network = catalog.presets().network().packageId();
         var pack = catalog.requirePackage(network);
-        String packName = Component.translatableWithFallback("gui.icheme.flowsheet.basis.pack." + MaterialCatalog.Package.label(pack.id()).replace(':', '.'), MaterialCatalog.Package.label(pack.id())).getString();
+        String packName = Component.translatableWithFallback("gui.icheme.flowsheet.basis.pack." + pack.id().replace(':', '.'), pack.id()).getString();
         fluids = new StreamProps.Fluids(FluidThermodynamics.forNetwork(catalog, network), pack, id -> ProcessUi.materialName(catalog.name(id)), packName);
         var sheet = new Flowsheet(new Flowsheet.Basis(network, pack.revision(), fluids.axis()), List.of(), List.of(), FlowsheetSolver.Settings.DEFAULT);
         editor = new SheetEditor(sheet, measure(), ProcessSimulatorScreen::columnDefaults);

@@ -31,8 +31,9 @@ class PilotCryogenicCatalogTest {
     private static final String CALIBRATION = "data/icheme/materials/transport/liquid_calibration.json";
 
     /**
-     * Package id and identity label of every bundled column and network package: the package's id and its record's own
-     * declared revision, the first part of its identity ({@link MaterialCatalog.Package#label}). Until 2026-10-26 these
+     * Package id and record of every bundled column and network package: the package's id and its record's own declared
+     * revision. Since option B of the varying-components review (2026-11-04) the package record is in no identity: an
+     * identity is the method and the records it names, so a package record edit alone moves none. Until 2026-10-26 these
      * pins were hashes of the data, with a physics fingerprint per package (their history is in this file's git log);
      * since then nothing is hashed and each record declares its own revision (owner decisions): the rest of an identity
      * is every record's revision (MaterialCatalogTest checks the composition), and the physics the packages share is
@@ -56,10 +57,9 @@ class PilotCryogenicCatalogTest {
      * identity), and the spine identity of its spine and crystal records' declared revisions. An edit of a record bumps
      * the record's revision, which moves the pin. Until 2026-10-26 these were hashes of the data (history in this file's
      * git log). Since batch 2026-11-04-refinery-compounds the package names its method (r2), which holds the model, the
-     * pair libraries and the water model.
+     * pair libraries and the water model; since option B (2026-11-04) the package record leaves the identity and the method leads.
      */
     private static final String PILOT_SCIENTIFIC_REVISION = String.join(";",
-            "icheme:pilot_cryogenic@pilot-cryogenic-p3-r2",
             "method=icheme:pilot_eppr78@pilot-eppr78-r1",
             "properties=" + String.join(",",
                     "icheme:pilot_nitrogen@pilot-nitrogen-p3-r1",
@@ -77,7 +77,8 @@ class PilotCryogenicCatalogTest {
         for (MaterialCatalog catalog : List.of(MaterialCatalog.bundled(), PilotCryogenicTestCatalog.catalog())) {
             for (String[] pin : BUNDLED_PINS) {
                 var p = catalog.requirePackage(pin[0]);
-                assertEquals(pin[1], MaterialCatalog.Package.label(p.scientificRevision()), pin[0]);
+                assertEquals(pin[1], p.id() + "@" + p.revision(), pin[0]);
+                assertTrue(p.scientificRevision().startsWith("method=") && !p.scientificRevision().contains(pin[1]), p.scientificRevision());
                 assertTrue(p.spine().isEmpty() && p.crystals().isEmpty() && catalog.spineRevision(pin[0]).isEmpty() && p.groupContributions() == null, pin[0]);
             }
             var axis = catalog.requirePackage(TJL20).components();

@@ -51,21 +51,23 @@ class MaterialCatalogTest {
         assertTrue(MaterialRuntime.with(science,ID,()->V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).isEmpty()));
     }
     /**
-     * The identities an owner reads off the files (owner decision 2026-10-26). The column's: the package's own revision,
-     * then every record it names for its phase physics, each with its declared revision. The fluid network's adds what
-     * only it reads: each viscosity by its own revision, the water's ice and the fluid reference records. Rebuilt here
-     * from the raw JSON, not through the parser.
+     * The identities an owner reads off the files (owner decision 2026-10-26). The column's: every record the package names
+     * for its phase physics, each with its declared revision, and not the package record itself (option B, 2026-11-04). The
+     * fluid network's adds what only it reads: each viscosity by its own revision, the water's ice and the fluid reference
+     * records that hold an entry for one of its compounds or the water. Rebuilt here from the raw JSON, not through the parser.
      */
     @Test void everyPackageIdentityListsTheDeclaredRevisionOfEachRecordItNames() {
-        var catalog=MaterialCatalog.bundled();var records=new HashMap<String,Map<String,JsonObject>>();var transport=new ArrayList<String>();
+        var catalog=MaterialCatalog.bundled();var records=new HashMap<String,Map<String,JsonObject>>();var transport=new TreeMap<String,Set<String>>();
         for(var resource:catalog.resources().entrySet()) {
             String path=resource.getKey();int folder=path.indexOf('/',ROOT.length());
             if(!path.startsWith(ROOT)||folder<0)continue;
             var element=JsonParser.parseString(resource.getValue());if(!element.isJsonObject())continue;var o=element.getAsJsonObject();
-            if(path.startsWith(ROOT+"transport/"))transport.add(o.get("type").getAsString()+"@"+o.get("revision").getAsString());
+            if(path.startsWith(ROOT+"transport/")) {
+                var held=transport.computeIfAbsent(o.get("type").getAsString()+"@"+o.get("revision").getAsString(),k->new HashSet<>());
+                for(String list:List.of("points","curves"))if(o.has(list))for(var entry:o.getAsJsonArray(list))held.add(entry.getAsJsonObject().get("component").getAsString());
+            }
             else if(o.has("id"))records.computeIfAbsent(path.substring(ROOT.length(),folder),k->new HashMap<>()).put(o.get("id").getAsString(),o);
         }
-        Collections.sort(transport);
         java.util.function.BiFunction<String,String,String> declared=(kind,id)->id+"@"+records.get(kind).get(id).get("revision").getAsString();
         java.util.function.BiFunction<String,String,List<String>> viscosities=(kind,id)->{
             var o=records.get(kind).get(id);var parts=new ArrayList<String>();
@@ -93,7 +95,7 @@ class MaterialCatalogTest {
                 String token=declared.apply("interactions",rule);if(!libraries.contains(token))libraries.add(token);
                 groups=declared.apply("group_interactions",records.get("interactions").get(rule).getAsJsonObject("rule").get("group_interactions").getAsString());
             }
-            var parts=new ArrayList<>(List.of(declared.apply("packages",id),"method="+declared.apply("methods",method.get("id").getAsString()),
+            var parts=new ArrayList<>(List.of("method="+declared.apply("methods",method.get("id").getAsString()),
                     "properties="+String.join(",",properties.stream().map(ref->declared.apply("properties",ref)).toList()),"interactions="+String.join(",",libraries)));
             if(groups!=null)parts.add("group-interactions="+groups);
             parts.add("water="+declared.apply("water",water));
@@ -103,7 +105,8 @@ class MaterialCatalogTest {
             transportParts.addAll(viscosities.apply("water",water));var waterRecord=records.get("water").get(water);
             assertEquals(identity+";viscosity="+String.join(",",transportParts)
                     +(waterRecord.has("ice")?";ice="+declared.apply("crystals",waterRecord.getAsJsonObject("ice").get("crystal").getAsString()):"")
-                    +";fluid-data="+String.join(",",transport),catalog.fluidRevision(id),id);
+                    +";fluid-data="+String.join(",",transport.entrySet().stream().filter(e->e.getValue().contains("Water")||e.getValue().stream().anyMatch(components::contains)).map(Map.Entry::getKey).toList()),
+                    catalog.fluidRevision(id),id);
         }
     }
     /** A package's compounds and their datasets: its parent's first, then its own, each its default dataset unless the entry names one. */
@@ -134,6 +137,40 @@ class MaterialCatalogTest {
         assertTrue(MaterialRuntime.with(edited,ID,()->isCurrent(ID,bundled.requirePackage(ID).scientificRevision())));
         var input=com.wormzjl.icheme.science.column.v3.V3TestInputs.methaneCduInput();
         assertTrue(MaterialRuntime.with(edited,ID,()->V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).isPresent()));
+    }
+    /**
+     * A package is a method and a compound list, and its identity names those records, not the package record (option B,
+     * 2026-11-04): an edit of the package record alone (its revision, its evidence, its list written out in place of
+     * {@code extends}, in the same order) moves no identity, of the package or of a view.
+     */
+    @Test void aPackageRecordEditAloneMovesNoIdentity() {
+        var bundled=MaterialCatalog.bundled();String network="icheme:tjl20_methane_nitrogen";
+        var components=new JsonArray();for(String id:bundled.requirePackage(network).components())components.add(id);
+        var edited=MaterialCatalog.parse(changed("packages/tjl20_nitrogen.json",o->{o.addProperty("revision",o.get("revision").getAsString()+"-edited");
+            o.remove("extends");o.add("components",components);o.getAsJsonArray("advisory_evidence").add("EDITED: a package record edit");}));
+        assertNotEquals(bundled.requirePackage(network).revision(),edited.requirePackage(network).revision());
+        assertNotEquals(bundled.requirePackage(network).evidence(),edited.requirePackage(network).evidence());
+        for(var p:bundled.packages().values()) {
+            assertEquals(p.scientificRevision(),edited.requirePackage(p.id()).scientificRevision(),p.id());
+            assertEquals(bundled.fluidRevision(p.id()),edited.fluidRevision(p.id()),p.id());
+            assertEquals(bundled.spineRevision(p.id()),edited.spineRevision(p.id()),p.id());
+        }
+        for(var view:List.of(List.of("Nitrogen"),List.of("Methane","Ethane","crude_pc07"))) {
+            assertEquals(bundled.restrict(network,view).requirePackage(network).scientificRevision(),edited.restrict(network,view).requirePackage(network).scientificRevision(),view.toString());
+            assertEquals(bundled.restrict(network,view).fluidRevision(network),edited.restrict(network,view).fluidRevision(network),view.toString());
+        }
+    }
+    /** A dataset's revision bump moves the identity of every view that holds its compound, and of no other. */
+    @Test void aDatasetRevisionBumpMovesEveryViewThatHoldsItsCompoundAndNoOther() {
+        var bundled=MaterialCatalog.bundled();String network="icheme:tjl20_methane_nitrogen";
+        var edited=MaterialCatalog.parse(changed("properties/crude_pc07.json",o->o.addProperty("revision",o.get("revision").getAsString()+"-edited")));
+        var all=bundled.requirePackage(network).components();
+        for(var view:List.of(List.of("crude_pc07"),List.of("Nitrogen","crude_pc07"),List.of("Nitrogen"),List.of("Methane","Ethane","crude_pc06","crude_pc08"),
+                all.stream().filter(id->!id.equals("crude_pc07")).toList(),all)) {
+            boolean holds=view.contains("crude_pc07");
+            assertEquals(!holds,bundled.restrict(network,view).requirePackage(network).scientificRevision().equals(edited.restrict(network,view).requirePackage(network).scientificRevision()),view.toString());
+            assertEquals(!holds,bundled.restrict(network,view).fluidRevision(network).equals(edited.restrict(network,view).fluidRevision(network)),view.toString());
+        }
     }
     /** A revision is a short token, so an identity stays readable and splits at its separators; a refusal names the record's file. */
     @Test void aRevisionThatIsNotATokenOrIsMissingIsRefusedNamingItsRecord() {

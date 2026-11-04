@@ -96,7 +96,8 @@ class V3NeuralRegistryTest {
     @Test void onlyTheTrainedRecordsDecideAndAPackageRecordEditLeavesTheModelOn() throws Exception {
         var input=input();var registry=registry("test:records");
         var packageEdit=edit("packages/tjl20.json",o->{bump(o);o.getAsJsonArray("advisory_evidence").add("TEST: an edited package record");});
-        assertNotEquals(CATALOG.requirePackage(MAIN).scientificRevision(),packageEdit.requirePackage(MAIN).scientificRevision());
+        // The package record is in no identity (option B, 2026-11-04): a seed's propertyRevision stands as well.
+        assertEquals(CATALOG.requirePackage(MAIN).scientificRevision(),packageEdit.requirePackage(MAIN).scientificRevision());
         assertEquals("test:records",registry.bind(packageEdit,input).modelId());
         var assayEdit=edit("assays/tjl20.json",o->{var amounts=o.getAsJsonObject("amounts_by_component");amounts.addProperty("Methane",amounts.get("Methane").getAsDouble()*2);});
         assertEquals("test:records",registry.bind(assayEdit,input).modelId());

@@ -70,7 +70,7 @@ public final class ColumnUnit implements UnitModel {
     public static void add(double[] amounts, List<String> axis, String component, double fraction, double flow) {
         if (fraction == 0) return;
         int at = axis.indexOf(component);
-        if (at < 0) throw new FlowsheetFailure("column.component");
+        if (at < 0) throw new FlowsheetFailure("column.component", component);
         amounts[at] += fraction * flow;
     }
 

@@ -19,6 +19,8 @@ class MaterialFluidDataTest {
   var captured=new MixtureViscosity(original,ID);double before=captured.liquid(293.15,amounts).pascalSeconds();
   assertEquals(original.physicsContent(ID,p.components()),changed.physicsContent(ID,p.components()));
   assertNotEquals(original.fluidRevision(ID),changed.fluidRevision(ID));
+  // A fluid reference record enters only the identity of a package that holds one of its compounds (option B, 2026-11-04).
+  assertEquals(original.restrict(ID,List.of("crude_pc12")).fluidRevision(ID),changed.restrict(ID,List.of("crude_pc12")).fluidRevision(ID),"a record for other compounds");
   assertNotEquals(captured.revision(),new MixtureViscosity(changed,ID).revision());
   var admitted=new CountDownLatch(1);var released=new CountDownLatch(1);
   try(var worker=Executors.newSingleThreadExecutor()) {

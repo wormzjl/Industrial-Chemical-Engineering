@@ -43,7 +43,7 @@ public final class RevisionNotice {
         if (server == null) return differ;
         var packs = new TreeSet<>(client.keySet());
         packs.addAll(server.keySet());
-        for (var pack : packs) if (!Objects.equals(client.get(pack), server.get(pack))) differ.add(MaterialCatalog.Package.label(pack));
+        for (var pack : packs) if (!Objects.equals(client.get(pack), server.get(pack))) differ.add(pack);
         return differ;
     }
 

@@ -137,20 +137,70 @@ final class SheetCompoundsTest {
         for (int i = 0; i < AXIS.size(); i++) bits(first.streams().get("G").amountsView()[i], fits.streams().get("G").amountsView()[i], "alone G " + AXIS.get(i));
     }
 
-    /** A sheet drawn on another package runs where that package gives its compounds the network's numbers, and asks for it where not. */
-    @Test void aSheetDrawnOnAnotherPackageRunsWhereItsPhysicsIsTheNetworks() {
-        assertNull(SheetCompounds.refusal(sheet("icheme:tjl20_methane", CRUDE), CATALOG), "the crude package without nitrogen: the same records");
+    /**
+     * A sheet drawn on another package, or on one since removed, runs on the network's method and records by compound ids (owner
+     * 2026-11-04): the same bits as the sheet drawn on the network. A feed's compound the network does not hold is parked: the run
+     * names it and goes on.
+     */
+    @Test void aSheetDrawnOnAnotherPackageRunsOnTheNetworksRecords() {
         var light = new LinkedHashMap<String, Double>();
         light.put("Methane", 1.);
         light.put("Ethane", 1.);
-        var pilot = SheetCompounds.refusal(sheet("icheme:pilot_cryogenic", light), CATALOG);
-        assertNotNull(pilot, "the pilot's methane and ethane are other data");
-        assertEquals(List.of("icheme:pilot_cryogenic", NETWORK), pilot.arguments());
-        assertNotNull(SheetCompounds.refusal(sheet("icheme:pilot_cryogenic", CRUDE), CATALOG), "the pilot holds no crude");
-        assertNotNull(SheetCompounds.refusal(sheet("icheme:retired_package", CRUDE), CATALOG), "a package gone");
-        var run = FlowsheetRuns.run(sheet("icheme:tjl20_methane", CRUDE), CATALOG, () -> {
+        light.put("crude_pc05", 1.);
+        var drawn = FlowsheetRuns.run(sheet(NETWORK, light), CATALOG, () -> {
         });
-        assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
+        assertEquals(FlowsheetRun.Status.STEADY, drawn.status(), () -> "log " + drawn.log());
+        for (var other : List.of("icheme:pilot_cryogenic", "icheme:tjl20_methane", "icheme:retired_package")) {
+            var run = FlowsheetRuns.run(sheet(other, light), CATALOG, () -> {
+            });
+            assertEquals(drawn.status(), run.status(), other);
+            assertEquals(drawn.log(), run.log(), other);
+            for (var id : drawn.streams().keySet())
+                for (int i = 0; i < AXIS.size(); i++) bits(drawn.streams().get(id).amountsView()[i], run.streams().get(id).amountsView()[i], other + " " + id + " " + AXIS.get(i));
+        }
+        var carbon = FlowsheetRuns.run(sheet("icheme:pilot_cryogenic", with(light, "CarbonDioxide", 1.)), CATALOG, () -> {
+        });
+        assertEquals(FlowsheetRun.Status.STEADY, carbon.status(), () -> "log " + carbon.log());
+        assertTrue(carbon.reports().values().stream().flatMap(report -> report.notes().stream())
+                .anyMatch(note -> note.key().equals("basis.parked") && note.arguments().equals(List.of("CarbonDioxide"))), () -> "reports " + carbon.reports());
+        assertEquals(SheetCompounds.of(sheet(NETWORK, light), CATALOG), SheetCompounds.of(sheet("icheme:pilot_cryogenic", with(light, "CarbonDioxide", 1.)), CATALOG));
+    }
+
+    /**
+     * A compound added to the network package moves nothing a sheet that does not hold it stands on (option B, 2026-11-04): its token
+     * and its columns' warm-start identity stay, while the whole package's identity moves. The new compound is a copy of propane's
+     * records under another id.
+     */
+    @Test void aCompoundAddedToTheNetworkKeepsTheTokenOfASheetWithoutIt() {
+        var resources = new HashMap<>(CATALOG.resources());
+        String root = "data/icheme/materials/";
+        var component = JsonParser.parseString(resources.get(root + "components/propane.json")).getAsJsonObject();
+        component.addProperty("id", "Testane");
+        component.addProperty("translation_key", "material.icheme.testane");
+        component.addProperty("fallback", "Testane");
+        component.addProperty("properties", "test:testane");
+        resources.put(root + "components/testane.json", component.toString());
+        var dataset = JsonParser.parseString(resources.get(root + "properties/tjl19_propane.json")).getAsJsonObject();
+        dataset.addProperty("id", "test:testane");
+        dataset.addProperty("component", "Testane");
+        resources.put(root + "properties/testane.json", dataset.toString());
+        var record = JsonParser.parseString(resources.get(root + "packages/tjl20_nitrogen.json")).getAsJsonObject();
+        record.getAsJsonArray("components").add("Testane");
+        record.addProperty("revision", record.get("revision").getAsString() + "-testane");
+        resources.put(root + "packages/tjl20_nitrogen.json", record.toString());
+        var grown = MaterialCatalog.parse(resources);
+        assertTrue(grown.requirePackage(NETWORK).components().contains("Testane"));
+        var crude = sheet(NETWORK, CRUDE);
+        var compounds = SheetCompounds.of(crude, CATALOG);
+        assertEquals(compounds, SheetCompounds.of(crude, grown));
+        assertEquals(RevisionNotice.tokens(crude, CATALOG), RevisionNotice.tokens(crude, grown), "the sheet's results stand");
+        assertEquals(CATALOG.restrict(NETWORK, compounds).requirePackage(NETWORK).scientificRevision(), grown.restrict(NETWORK, compounds).requirePackage(NETWORK).scientificRevision(),
+                "the identity a column's warm start is checked on");
+        assertNotEquals(CATALOG.requirePackage(NETWORK).scientificRevision(), grown.requirePackage(NETWORK).scientificRevision(), "the whole package holds it");
+        assertNotEquals(CATALOG.fluidRevision(NETWORK), grown.fluidRevision(NETWORK));
+        var testane = sheet(NETWORK, with(CRUDE, "Testane", .1));
+        assertTrue(SheetCompounds.of(testane, grown).contains("Testane"));
+        assertTrue(RevisionNotice.dropsResults(RevisionNotice.tokens(crude, grown), RevisionNotice.tokens(testane, grown)), "a sheet that feeds it stands on other records");
     }
 
     /** An edit to a compound the sheet does not hold leaves its token, so its results and its columns' warm starts stand; one it holds moves it. */

@@ -84,9 +84,11 @@ class LegacyNetworkPathPinTest {
      * the fluid reference records. The nitrogen record's r3 is visible in it. Since W1 of batch 2026-11-04-refinery-compounds
      * a package is a property method and a compound list: the package record's revision is r2 and the method follows it
      * ({@code method=icheme:crude_pr78@crude-pr78-r1}); every dataset, pair and water record, and so every number, is unchanged.
+     * Since option B of the varying-components review (2026-11-04) an identity is physics only: the package record
+     * ({@code icheme:tjl20_methane_nitrogen@crude-regrouped-r2}) left it, and the method leads; the fluid reference records stay,
+     * as both hold entries for the network's compounds.
      */
     static final String REVISION = String.join(";",
-            "icheme:tjl20_methane_nitrogen@crude-regrouped-r2",
             "method=icheme:crude_pr78@crude-pr78-r1",
             "properties=" + String.join(",",
                     "icheme:tjl20_methane@tjl20-methane-nist-r1",

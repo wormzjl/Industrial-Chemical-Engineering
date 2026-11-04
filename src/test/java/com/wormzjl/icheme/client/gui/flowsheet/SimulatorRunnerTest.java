@@ -362,7 +362,7 @@ class SimulatorRunnerTest {
             }
 
             @Override public com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing.Sized rate(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint) {
-                return null;
+                return new com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing.Sized(Map.of(), Map.of(), List.of());
             }
         });
         var sheet = SheetFixture.water();

@@ -184,18 +184,21 @@ final class FlowsheetFileTest {
         assertEquals(FlowsheetRun.Outcome.SOLVED, run.outcomes().get("D-1"), "no flow is no failure");
     }
 
-    /** A sheet drawn on a package gone from this version, given the world's: its amounts go by id. */
-    @Test void aRemovedPackageAsksForAnother() {
+    /**
+     * A sheet drawn on a package gone from this version runs on the world's by compound ids (owner 2026-11-04: each sheet on its own
+     * list with the network's method and records): the same run as the sheet drawn on the network, and the file keeps all it holds.
+     */
+    @Test void aRemovedPackageRunsOnTheNetworkByIds() {
         var json = image();
         json.getAsJsonObject("basis").addProperty("package", "icheme:retired_package");
         var sheet = FlowsheetFile.read(bytes(json));
-        var refused = run(sheet);
-        assertEquals(FlowsheetRun.Status.FAILED, refused.status());
-        assertEquals("basis.package", refused.log().getFirst().key());
-        assertEquals(List.of("icheme:retired_package", NETWORK), refused.log().getFirst().arguments());
+        var ran = run(sheet);
+        var drawn = run(FlowsheetFile.read(imageBytes()));
+        assertEquals(drawn.status(), ran.status(), () -> "log " + ran.log());
+        assertEquals(drawn.log(), ran.log());
+        assertEquals(drawn.streams().keySet(), ran.streams().keySet());
+        for (var id : drawn.streams().keySet()) assertArrayEquals(drawn.streams().get(id).amounts(), ran.streams().get(id).amounts(), id);
         assertEquals(tree(imageBytes()).get("streams"), tree(FlowsheetFile.write(sheet)).get("streams"), "the sheet keeps all it holds");
-        var given = new Flowsheet(new Flowsheet.Basis(NETWORK, sheet.basis().revision(), sheet.basis().components()), sheet.units(), sheet.streams(), sheet.settings());
-        assertArrayEquals(run(FlowsheetFile.read(imageBytes())).streams().get("O-1").amounts(), run(given).streams().get("O-1").amounts());
     }
 
     @Test void aRemovedRowLeavesItsStreamsOpenAndMovesNoOther() {
