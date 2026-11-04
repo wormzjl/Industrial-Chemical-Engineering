@@ -95,7 +95,13 @@ class MaterialCatalogTest {
                 String token=declared.apply("interactions",rule);if(!libraries.contains(token))libraries.add(token);
                 groups=declared.apply("group_interactions",records.get("interactions").get(rule).getAsJsonObject("rule").get("group_interactions").getAsString());
             }
-            var parts=new ArrayList<>(List.of("method="+declared.apply("methods",method.get("id").getAsString()),
+            // The method by its physics fields (D7), never by its record's revision.
+            var pressure=new java.math.BigDecimal[]{method.get("pressure_min_pascal").getAsBigDecimal(),method.get("pressure_max_pascal").getAsBigDecimal()};
+            String head="method=model:"+method.get("model").getAsString()+",ideal-gas:"+method.get("ideal_gas").getAsString()
+                    +",missing-interactions:"+method.get("missing_interactions").getAsString()
+                    +",pressure-pascal:"+pressure[0].stripTrailingZeros().toPlainString()+".."+pressure[1].stripTrailingZeros().toPlainString()
+                    +(method.has("liquid_mixture")?",liquid-mixture:"+method.getAsJsonObject("liquid_mixture").get("revision").getAsString():"");
+            var parts=new ArrayList<>(List.of(head,
                     "properties="+String.join(",",properties.stream().map(ref->declared.apply("properties",ref)).toList()),"interactions="+String.join(",",libraries)));
             if(groups!=null)parts.add("group-interactions="+groups);
             parts.add("water="+declared.apply("water",water));
@@ -210,6 +216,17 @@ class MaterialCatalogTest {
         for(var view:List.of(List.of("Nitrogen"),List.of("Methane","Ethane","crude_pc07"))) {
             assertEquals(bundled.restrict(network,view).requirePackage(network).scientificRevision(),edited.restrict(network,view).requirePackage(network).scientificRevision(),view.toString());
             assertEquals(bundled.restrict(network,view).fluidRevision(network),edited.restrict(network,view).fluidRevision(network),view.toString());
+        }
+        // The method is named by its physics fields (D7): its record's revision and evidence alone move nothing; its
+        // liquid-mixture correction's own revision moves every package on it.
+        var method=MaterialCatalog.parse(changed("methods/crude_pr78.json",o->{o.addProperty("revision",o.get("revision").getAsString()+"-edited");
+            var evidence=new JsonArray();evidence.add("EDITED: a method record edit");o.add("advisory_evidence",evidence);}));
+        var mixture=MaterialCatalog.parse(changed("methods/crude_pr78.json",o->o.getAsJsonObject("liquid_mixture").addProperty("revision","dalia-global-edited")));
+        for(var p:bundled.packages().values()) {
+            assertEquals(p.scientificRevision(),method.requirePackage(p.id()).scientificRevision(),p.id());
+            assertEquals(bundled.fluidRevision(p.id()),method.fluidRevision(p.id()),p.id());
+            boolean crude=p.scientificRevision().contains("liquid-mixture:dalia-global-r1");
+            assertEquals(!crude,p.scientificRevision().equals(mixture.requirePackage(p.id()).scientificRevision()),p.id());
         }
     }
     /** A dataset's revision bump moves the identity of every view that holds its compound, and of no other. */

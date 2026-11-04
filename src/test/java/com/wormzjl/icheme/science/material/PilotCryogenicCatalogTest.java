@@ -57,10 +57,11 @@ class PilotCryogenicCatalogTest {
      * identity), and the spine identity of its spine and crystal records' declared revisions. An edit of a record bumps
      * the record's revision, which moves the pin. Until 2026-10-26 these were hashes of the data (history in this file's
      * git log). Since batch 2026-11-04-refinery-compounds the package names its method (r2), which holds the model, the
-     * pair libraries and the water model; since option B (2026-11-04) the package record leaves the identity and the method leads.
+     * pair libraries and the water model; since option B (2026-11-04) the package record leaves the identity and the method leads;
+     * since D7 (2026-11-04) the method is named by its physics fields, not by its record's revision.
      */
     private static final String PILOT_SCIENTIFIC_REVISION = String.join(";",
-            "method=icheme:pilot_eppr78@pilot-eppr78-r1",
+            "method=model:pr78,ideal-gas:spine,missing-interactions:error,pressure-pascal:100..10000000",
             "properties=" + String.join(",",
                     "icheme:pilot_nitrogen@pilot-nitrogen-p3-r1",
                     "icheme:pilot_methane@pilot-methane-p3-r1",

@@ -476,8 +476,10 @@ class FluidFactsCompatTest {
     /**
      * {@code compat/fluid/island-sets/} (batch 2026-11-04-refinery-compounds, V3): two islands on different compound lists,
      * nitrogen with methane and nitrogen with ethane, written at state format 31, whose package table names each island's
-     * list. It loads exactly, each island on its own list; its facts rebuild each island on the same list (nitrogen and what
-     * its stock holds) with every vessel bit for bit and nothing restated. When the image is missing the test writes it under
+     * list. It loads, by whatever route the data's identity gives (FACTS since owner decision D7 named the method by its
+     * physics fields: the image names {@code icheme:crude_pr78@crude-pr78-r1}), each island on its own list with every vessel's
+     * amounts as saved, bit for bit, and its energy the same; its facts rebuild the same two lists to the same contents. A
+     * fresh save of this build's two-list world loads exactly. When the image is missing the test writes it under
      * {@code build/compat/fluid/}.
      */
     @Test void twoIslandsOnDifferentListsLoadEachOnItsOwnList() throws IOException {
@@ -486,15 +488,31 @@ class FluidFactsCompatTest {
             var written=Path.of("build/compat/fluid/island-sets");write(image(setsWorld()),written);
             fail("No island-sets corpus image: copy "+written.toAbsolutePath()+" to "+folder);
         }
-        var image=read(folder);assertEquals(31,FluidCheckpointCodec.readCore(image.core()).stateFormat(),"the image is of state format 31");
-        var exact=load(image,key->key.on(model),CATALOG);assertEquals(FluidCheckpointStore.Route.EXACT,exact.route(),exact.reason());
-        var lists=exact.checkpoint().islands().stream().map(e->Set.copyOf(e.compounds())).collect(java.util.stream.Collectors.toSet());
+        var image=read(folder);var core=FluidCheckpointCodec.readCore(image.core());assertEquals(31,core.stateFormat(),"the image is of state format 31");
+        var saved=new TreeMap<Long,FluidFacts.Vessel>();var axes=new HashMap<Long,List<String>>();
+        for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
+            for(var v:facts.vessels()){saved.put(v.id(),v);axes.put(v.id(),facts.components());}}
+        var stored=load(image,key->key.on(model),CATALOG);
+        var lists=stored.checkpoint().islands().stream().map(e->Set.copyOf(e.compounds())).collect(java.util.stream.Collectors.toSet());
         assertEquals(Set.of(Set.of("Nitrogen","Methane"),Set.of("Nitrogen","Ethane")),lists,"each island on its own list");
-        var rebuilt=load(edited(image,core->core.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG);
+        int vessels=0;double energy=0;var world=model.components();
+        for(var entry:stored.checkpoint().islands())for(var n:entry.snapshot().graph().reservoirs()) {
+            var v=saved.get(n.id());if(v==null)continue;vessels++;energy+=Math.abs(v.energy());
+            var held=IslandSets.amounts(n.inventory().moles(),entry.key().on(model),model);var axis=axes.get(n.id());
+            for(int c=0;c<axis.size();c++)assertEquals(v.moles()[c],held[world.indexOf(axis.get(c))],"vessel "+n.id()+": "+axis.get(c)+", bit for bit");
+        }
+        assertEquals(saved.size(),vessels,"every vessel loads");
+        var restated=stored.world().orElseThrow().restated();
+        assertTrue(restated.removedMoles().isEmpty()&&restated.removedSolids().isEmpty(),"nothing removed");
+        assertEquals(0,restated.energy(),1e-9*energy,"the same physics gives the same energy");
+        var rebuilt=load(edited(image,c->c.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,rebuilt.route());
         assertEquals(lists,rebuilt.checkpoint().islands().stream().map(e->Set.copyOf(e.compounds())).collect(java.util.stream.Collectors.toSet()),"the facts rebuild each island on the same list");
-        assertEquals(contents(exact.checkpoint()),contents(rebuilt.checkpoint()),"every vessel, bit for bit");
-        assertEquals(WorldTopologyLedger.Restated.NONE,rebuilt.world().orElseThrow().restated(),"nothing restated");
+        assertEquals(contents(stored.checkpoint()),contents(rebuilt.checkpoint()),"every vessel, bit for bit");
+        // This build's own save of the two-list world loads exactly.
+        var fresh=image(setsWorld());var exact=load(fresh,key->key.on(model),CATALOG);
+        assertEquals(FluidCheckpointStore.Route.EXACT,exact.route(),exact.reason());
+        assertEquals(lists,exact.checkpoint().islands().stream().map(e->Set.copyOf(e.compounds())).collect(java.util.stream.Collectors.toSet()),"a fresh save keeps each island's list");
     }
     /** Two lines, each a pair of 1 m3 vessels charged from a generator of nitrogen with methane, or with ethane, at 300 K and 3 bar, the generators then removed. */
     private EventPathWorld setsWorld() {

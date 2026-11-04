@@ -49,7 +49,7 @@ class LiquidMixtureCorrectionTest {
         var baseline=MaterialCatalog.bundled();var resources=new HashMap<>(baseline.resources());
         resources.keySet().removeIf(key->key.contains("/networks/")); // Isolated column transport override, not a shared network preset.
         var record=JsonParser.parseString(resources.get(path)).getAsJsonObject();
-        record.add("liquid_mixture",JsonParser.parseString("{\"type\":\"symmetric_pair_groups_v1\",\"coefficients\":[1,2,3,4],\"reference_kelvin\":323.15,\"slope_cap_kelvin\":373.15}"));
+        record.add("liquid_mixture",JsonParser.parseString("{\"type\":\"symmetric_pair_groups_v1\",\"coefficients\":[1,2,3,4],\"reference_kelvin\":323.15,\"slope_cap_kelvin\":373.15,\"revision\":\"edited-r1\"}"));
         resources.put(path,record.toString());var changed=MaterialCatalog.parse(resources);
         var axis=baseline.requirePackage(packageId).components();
         assertEquals(baseline.physicsContent(packageId,axis),changed.physicsContent(packageId,axis),"the phase physics is untouched");

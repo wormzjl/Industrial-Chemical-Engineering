@@ -201,7 +201,7 @@ class RestrictedPackagePhysicsTest {
         assertEquals(catalog.fluidValidity(NETWORK), restricted.fluidValidity(NETWORK));
         // The method leads both identities; the package record is in neither (option B, 2026-11-04).
         assertEquals(parent.scientificRevision().split(";")[0], view.scientificRevision().split(";")[0]);
-        assertTrue(view.scientificRevision().startsWith("method=icheme:crude_pr78@"), view.scientificRevision());
+        assertTrue(view.scientificRevision().startsWith("method=model:pr78,ideal-gas:fit,"), view.scientificRevision());
         assertFalse(parent.scientificRevision().contains(NETWORK + "@") || view.scientificRevision().contains(NETWORK + "@"), parent.scientificRevision());
         assertTrue(view.scientificRevision().contains("properties=icheme:crude_pc03@") && !view.scientificRevision().contains("icheme:crude_pc04@"), view.scientificRevision());
         // The frozen pairs name no pair with nitrogen, so its view names no pair library; the crude's light ends do.

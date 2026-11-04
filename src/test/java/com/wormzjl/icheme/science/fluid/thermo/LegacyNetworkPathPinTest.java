@@ -86,10 +86,12 @@ class LegacyNetworkPathPinTest {
      * ({@code method=icheme:crude_pr78@crude-pr78-r1}); every dataset, pair and water record, and so every number, is unchanged.
      * Since option B of the varying-components review (2026-11-04) an identity is physics only: the package record
      * ({@code icheme:tjl20_methane_nitrogen@crude-regrouped-r2}) left it, and the method leads; the fluid reference records stay,
-     * as both hold entries for the network's compounds.
+     * as both hold entries for the network's compounds. Since owner decision D7 (2026-11-04) the method is named by its
+     * physics fields (model, ideal gas, missing pairs, column pressures, the liquid-mixture correction's revision), not by
+     * {@code icheme:crude_pr78@crude-pr78-r1}: a pair library added for other compounds moves nothing here.
      */
     static final String REVISION = String.join(";",
-            "method=icheme:crude_pr78@crude-pr78-r1",
+            "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:dalia-global-r1",
             "properties=" + String.join(",",
                     "icheme:tjl20_methane@tjl20-methane-nist-r1",
                     "icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1",

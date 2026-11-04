@@ -62,9 +62,9 @@ class V3RegroupedTransformerTest {
     static JsonObject physics(MaterialCatalog catalog,String packageId) {
         var p=catalog.requirePackage(packageId);var tokens=new HashMap<String,String>();
         for(String token:p.scientificRevision().split(";")){int at=token.indexOf('=');if(at>0)tokens.put(token.substring(0,at),token.substring(at+1));}
-        String method=tokens.get("method").substring(0,tokens.get("method").indexOf('@'));
-        String missing=catalog.resources().values().stream().map(s->JsonParser.parseString(s).getAsJsonObject())
-                .filter(o->o.has("missing_interactions")&&o.get("id").getAsString().equals(method)).findFirst().orElseThrow().get("missing_interactions").getAsString();
+        // The method token names its physics fields (D7), among them the missing-pair policy.
+        String missing=java.util.Arrays.stream(tokens.get("method").split(",")).filter(f->f.startsWith("missing-interactions:"))
+                .findFirst().orElseThrow().substring("missing-interactions:".length());
         var compounds=new JsonArray();String[] datasets=tokens.get("properties").split(",");
         for(int i=0;i<datasets.length;i++){var c=new JsonObject();c.addProperty("id",p.components().get(i));c.addProperty("properties",datasets[i]);compounds.add(c);}
         var libraries=new JsonArray();for(String library:tokens.get("interactions").split(","))if(!library.isEmpty())libraries.add(library);

@@ -103,7 +103,9 @@ public final class MaterialCatalog {
      * datasets' ranges at the method's pressures, its fluid envelope the hull of their data ranges, its aliases the
      * catalog's for its compounds, its assays every assay whose non-zero compounds it holds. {@code scientificRevision}, the
      * column's identity, is composed at load from the declared revision of every record the package uses for its phase
-     * physics, in a fixed order: its method, each compound's dataset in the package's order, the pair libraries that give a
+     * physics, in a fixed order: its method by its physics fields (model, ideal-gas source, missing-pair policy, column
+     * pressure range and the liquid-mixture correction's own revision; never the method record's revision, owner decision
+     * D7 of 2026-11-04, so a pair library added to the method for other compounds moves nothing), each compound's dataset in the package's order, the pair libraries that give a
      * pair among its compounds (and the group matrix of a rule that resolves one), and the water model. The package record is
      * no part of it (option B of the varying-components review, 2026-11-04): it names the method and the compounds, which
      * the identity lists themselves, so a package record edit alone, or a compound added to the package, moves no identity of
@@ -423,7 +425,7 @@ public final class MaterialCatalog {
         var water=records.waters().get(physics.water().id());
         if(water==null||!water.revision().equals(physics.water().revision()))return Optional.empty();
         var method=new Method("physics",physics.model(),physics.model(),false,libraries,physics.missingInteractions(),physics.water().id(),
-                Double.MIN_VALUE,Double.MAX_VALUE,new JsonObject(),List.of());
+                Double.MIN_VALUE,Double.MAX_VALUE,new JsonObject(),List.of(),null);
         var definition=new Definition("physics",physics.model(),List.of("physics="+physics.model()),method,entries,List.of(),List.of());
         return Optional.of(build(records,definition,null,Map.of()).pack());
     }
@@ -645,7 +647,7 @@ public final class MaterialCatalog {
             List<String> crystalIds=o.has("crystals")?strings(o,"crystals"):List.of();
             if(new HashSet<>(crystalIds).size()!=crystalIds.size())throw new IllegalArgumentException("crystals: duplicate crystal record");
             String revision=revision(o,"revision");
-            var definition=new Definition(id,revision,List.of("method="+method.id()+"@"+method.revision()),method,entries.get(id),crystalIds,evidence);
+            var definition=new Definition(id,revision,List.of(method.identity()),method,entries.get(id),crystalIds,evidence);
             var built=build(records,definition,null,assayRecords);
             packages.put(id,built.pack()); definitions.put(id,definition);
             liquidMixtures.put(id,built.liquidMixture()); waterModels.put(id,method.water());
@@ -806,8 +808,19 @@ public final class MaterialCatalog {
      * and advisory evidence. Any package may combine it with any compounds.
      */
     private record Method(String id,String revision,String model,boolean spine,List<String> interactions,String missing,
-            String water,double minimumPressure,double maximumPressure,JsonObject record,List<String> evidence) {
+            String water,double minimumPressure,double maximumPressure,JsonObject record,List<String> evidence,String mixtureRevision) {
         Method { interactions=List.copyOf(interactions); evidence=List.copyOf(evidence); }
+        /**
+         * The method's token in an identity: its physics fields, never its id or its record's revision (owner decision D7,
+         * 2026-11-04), so adding a pair library for other compounds moves no package. The libraries that give a pair, the
+         * datasets and the water model are tokens of their own.
+         */
+        String identity() {
+            return "method=model:"+model+",ideal-gas:"+(spine?"spine":"fit")+",missing-interactions:"+missing
+                    +",pressure-pascal:"+plain(minimumPressure)+".."+plain(maximumPressure)
+                    +(mixtureRevision==null?"":",liquid-mixture:"+mixtureRevision);
+        }
+        private static String plain(double value) { return java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString(); }
         static Method read(JsonObject o,Map<String,JsonObject> libraries,Map<String,Water> waters) {
             String id=text(o,"id"), model=text(o,"model"), policy=text(o,"missing_interactions"), idealGas=text(o,"ideal_gas");
             if (!Set.of("pr78","nrtl").contains(model)) throw new IllegalArgumentException("Unsupported model: " + model);
@@ -830,8 +843,10 @@ public final class MaterialCatalog {
             double pmin=positive(o,"pressure_min_pascal"), pmax=positive(o,"pressure_max_pascal"); range(pmin,pmax,"pressure");
             var evidence=o.has("advisory_evidence")?strings(o,"advisory_evidence"):List.<String>of();
             LiquidMixtureCorrection.read(o,List.of());
-            // The record's own revision() accessor hides the statically imported reader; name it by its class.
-            return new Method(id,JsonFields.revision(o,"revision"),model,idealGas.equals("spine"),ids,policy,water,pmin,pmax,o,evidence);
+            // The record's own revision() accessor hides the statically imported reader; name it by its class. The
+            // liquid-mixture correction declares its own revision, which the identity names.
+            String mixture=o.has("liquid_mixture")?JsonFields.token(text(object(o,"liquid_mixture"),"revision"),"liquid_mixture.revision"):null;
+            return new Method(id,JsonFields.revision(o,"revision"),model,idealGas.equals("spine"),ids,policy,water,pmin,pmax,o,evidence,mixture);
         }
     }
     /** One compound of a package after {@code extends}: its dataset and, for a method with spines, the spine it names. */
@@ -885,8 +900,8 @@ public final class MaterialCatalog {
         }
     }
     /**
-     * What a package is built from: its id and own revision, the leading token of its identity (its method's; a package
-     * record's own revision is in no identity), its method, its compounds with their datasets, the crystals it admits and
+     * What a package is built from: its id and own revision, the leading token of its identity (its method's physics
+     * fields; neither a package record's nor a method record's own revision is in any identity), its method, its compounds with their datasets, the crystals it admits and
      * its evidence. A restricted view
      * ({@link #restrict}) keeps the package's definition with fewer compounds; a physics record ({@link #resolve}) has a
      * method of its own.
