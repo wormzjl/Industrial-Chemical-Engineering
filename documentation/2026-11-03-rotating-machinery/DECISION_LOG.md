@@ -148,6 +148,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D43.** A `TurbineSizing` class lets Auto propose the steam turbine from its rated power with the 20 % spare; the motor, generator and gearbox entries on the turbine's tile are drawing-only, so `SizingCoverageTest` checks only what runs. The column door's pump duties are one banded table on the glass (Pump, Flow m³/h, Head m, Shaft kW, NPSH3 m, Motor kW; a row per pump); the Standard / In-line keys and the Reflux pump group leave the door.
 
+2026-11-05, on W8's shipped door (pump-duties-464, -790; reading A169): at 464 and 380 wide the Equipment glass shows about 3 of 17 connection points under the pump table and cuts the list's Heat column; the owner: "Scroll the glass".
+
+- **D44.** The column door's Equipment glass scrolls when its tables are taller than it (its own bar, as the door column has), the pump duty table first; where the glass is too narrow, the connection list stacks its Heat value under its row. Nothing on the glass is hidden or cut.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
