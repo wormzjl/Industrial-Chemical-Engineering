@@ -7,6 +7,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 ## Documents
 
 - [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O6 and decisions E1 to E6.
+- [NIST_REDERIVATION_REVIEW.md](NIST_REDERIVATION_REVIEW.md): O1 and O2, what the open re-derivation moved, the measurements and the owner decisions.
 
 ## Code areas
 
@@ -19,9 +20,13 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 - 2026-11-04: O1: the raw NIST copies left the tracked tree for the main checkout's `research/`: the 7 F4 WebBook TSV files (`tools/fluid-probes/f4/nist/` to `research/2026-09-23-fluid-followups/f4-nist/`), `tools/neural/fit_methane.py` (the NIST methane Shomate coefficients) and both `cea-holdouts.mjs` (JANAF and WebBook rows) to `research/2026-11-04-open-thermo-data/nist-copies/`; the F4 scripts, `tools/fluid-probes` READMEs, `methane-qualification.md` and `tools/spine-join-measurement/README.md` point there; `research/INDEX.md` patched row by row. No physics change; no test run (tools and documents only). `tools/wp5-legacy-digest` left to O5.
 - 2026-11-04: O2: every NIST-derived value re-derived from open sources by `tools/open-thermo-data/` (CoolProp 8.0.0 alpha0 and equations of state, ATcT, IAPWS R12-08, NASA CEA for comparisons); forms unchanged, no Java change beyond comments. Records: nitrogen `fluid-nitrogen-coolprop-r4` (Cp fit pinned at 273.16 K, held 29.1112 to 29.1163, max change +0.020 %; viscosity = the pilot's CoolProp tables, liquid table up to 10 % in the last kelvin below Tc, 0.34 % below 124 K), tjl20 methane `tjl20-methane-coolprop-r2` (Setzmann-Wagner alpha0; Cp up to +1.17 % at 900 K), water `water-iapws95-shomate-r3` (Cp within 0.038 %, h(298.15) 0.53 to 0 J/mol), liquid calibration `coolprop-8.0.0-liquid-calibration-r1` (volumes within 1.3e-7), spine nitrogen/methane/ethane r3 and carbon dioxide r4 (JANAF texts and the entropy uncertainty removed), packages refinery-tier1-r2, crude-regrouped-r3 (tjl20, tjl20_nitrogen), pilot-cryogenic-p3-r3; crude_unit.json basis re-recorded. Tests: JANAF/WebBook holdouts replaced by CoolProp, CEA and RRHO references; compat corpus energies pinned (schema-1 -10.27 J, island sets 616.61 J, steam v2 +126.97 J, each equal to n*dh_ig computed apart); column draw-volume targets re-captured (moves up to 1.2e-5). Failing and left: E6 (V3BundledRegroupedModelTest x3, MaterialCatalogTest.aViscosityRevisionBumpMovesOnlyTheFluidIdentity: the model no longer binds) and V3WaterPhaseQualificationTest.observerReceivesOnlyTheReleasedCertifiedWetProfile (old-data wet certificate fixture; a re-capture failed). Review: `NIST_REDERIVATION_REVIEW.md` (later commit).
 - 2026-11-04: chain-100 re-captured on the O2 data (owner approved). `fluidSolverRegression -PfluidRegressionMode=exact` before the capture: 40 differences, max deviations moles 8.5e-9 relative, temperature 8.6e-8 K, phase fraction 3.8e-10, flow 3.2e-6 relative (2.7e-8 kg/s against the controller's 3.2e-8 kg/s allowance), all inside the declared gate (1e-6, 1e-4 K, 1e-6, 1e-3).
+- 2026-11-04: O2 measured and reviewed in `NIST_REDERIVATION_REVIEW.md`: 200-seed hold quick check unchanged against the refinery final lane (cold 197 clean with the baseline's E1 85, E6 101, F 118; bundled random and defaults 200/200; refused 0; seed 121 gains a non-blocking methane Cp range notice); default column preset 7.3 % fewer control polls (239,869 to 219,620), products within 0.0022 %, stages within 0.0015 K; compat images booking an energy difference: schema-1, island-sets, compound-basis, steam-v2. Seven owner decisions listed.
 
 ## Open items
 
 - R1: open sources for crude viscosity and a generation method for the grades.
 - R2: an inventory of unused data.
 - E6: the neural model, after O3.
+- O2 owner decisions 1 to 7 of NIST_REDERIVATION_REVIEW.md (methane Cp source, the pinned nitrogen fit, the wet-boundary fixture among them).
+- `V3WaterPhaseQualificationTest.observerReceivesOnlyTheReleasedCertifiedWetProfile` fails on its old-data wet certificate fixture; re-capture after E6.
+- NIST copies left in test fixtures and tools for O5 (list in NIST_REDERIVATION_REVIEW.md, section 5).
