@@ -132,6 +132,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D39.** In-line pumps keep their gas reading as built (`4eec41cad`): one `InletPhase.supply` walk per running set-flow pump per solve, for the page only. It feeds no churn, no `GAS` word and no dry wear.
 
+2026-11-04, on W6b (`W6B_BUILD_PLAN.md`): asked how W6b gets W6a, the owner: "Merge W6a here" (merged `d16ecab51`); asked how the coupling takes power, the owner: "A: follow demand".
+
+- **D40.** W6a joins this branch (one batch, one merge to main). The Create coupling is form A of `W6B_BUILD_PLAN.md` (plan section 8): a `Drive.CREATE` driver at Create's |rpm| with the creative motor's power-limited step, its power limit the network's spare stress plus its own draw at 1.465 W per su, its stress impact following the train's demand on the engine's schedule; short of power the train slows (`POWER LIMITED`) and the Create network never overstresses. Form B (a rated impact) is not built.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).

@@ -15,7 +15,7 @@ Batch `2026-11-03-rotating-machinery`, branch `claude/realistic-pump-compressor-
   This is the D7 rate, so a Create-driven pump is a late-game build. No round trip through FE gains energy.
 - **Speeds.** Create runs at 256 rpm at most. A 2-pole pump at 2950 rpm needs 11.5:1 from 256 rpm, or 46:1 from 64 rpm. Plan 5.3 allows up to 1:64 on a Create input; today `ShaftNetwork.MAXIMUM_RATIO` is 20. W6b raises the limit to 64 only for a gearbox whose slow line is driven by a coupling.
 
-## 2. Form A, as plan section 8 decided (2026-11-03)
+## 2. Form A, as plan section 8 decided (2026-11-03); owner pick D40
 
 - **Driver.** A new `ShaftTrain.Drive.CREATE` runs the creative motor's step (`limited`):
   - its set speed is Create's present |rpm|;

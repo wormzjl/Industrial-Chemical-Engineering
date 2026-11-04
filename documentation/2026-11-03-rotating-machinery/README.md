@@ -53,6 +53,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: owner D39 "Keep the gas read": A137 stays as built.
 - 2026-11-04: owner "Merge W6a here": W6a (`claude/interesting-wozniak-cb5e6a`) merged into this branch for W6b; only this README conflicted.
 - 2026-11-04: W6b plan `W6B_BUILD_PLAN.md`: form A (plan section 8, demand-following impact capped at the spare stress) and form B (a rated impact, proposed simplification); owner pick next.
+- 2026-11-04: owner D40 "A: follow demand"; build agent started (engine, compat block, GameTests, page prototype).
 
 ## Documents
 
