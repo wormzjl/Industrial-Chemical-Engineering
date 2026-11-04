@@ -1,6 +1,6 @@
 # Shared thermodynamics, materials and deterministic math
 
-**Snapshot:** 6bf2205bf (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-03 · **Updated:** 2026-11-03 (batch 2026-11-02-process-simulator, W5 `61fe9196`: the five crude packages and their five column presets are gone; the five crude assays stand on `tjl20_methane` at `crude-regrouped-r2`; three column presets, four packages, 84 indexed files) · earlier: 2026-10-28 at f20ceefa (batch 2026-10-27-heat-exchanger-design, owner choice (b): a column preset's `columnDiameterMetres` must be above 0; the id `holland_3_2` is no longer reserved, the Holland example having left the presets; the steam's second-virial gas is in [equilibrium-engine.md](equilibrium-engine.md)) · earlier: 2026-10-27 at ce71b45c (batch 2026-10-26-multi-machine-framework, owner decisions 2026-10-26: nothing is hashed; every record declares its revision (a token, `JsonFields.revision`), and a package's identities are composed from them: `scientificRevision`, `fluidRevision`, `spineRevision`; `samePhysics` compares content directly; the fingerprints are gone; interactions records need a `revision`; the eight crude packages' pressure floor 1 kPa) · earlier: 2026-10-25 (batch 2026-10-21-floating-roof-tanks: the crude fractions' appearance colours from their normal boiling points; appearances read by the open tank's display and the sight glass) · earlier: 2026-10-21 (0.11.1 test review; mod rename to IChemE, 0.11.0); 2026-10-20 (`DeterministicMath` gains `sin`, `asin`, `atan2`; the rest of the chapter is unchanged since a08c7134)
+**Snapshot:** 6bf2205bf (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (merge package: the catalog's readers after the calculator block left, W8: no viewer refresh, the simulator's `RevisionNotice`, a placed calculator reading only its design; no code of this chapter changed since 6bf2205bf) · 2026-11-03 (batch 2026-11-02-process-simulator, W5 `61fe9196`: the five crude packages and their five column presets are gone; the five crude assays stand on `tjl20_methane` at `crude-regrouped-r2`; three column presets, four packages, 84 indexed files) · earlier: 2026-10-28 at f20ceefa (batch 2026-10-27-heat-exchanger-design, owner choice (b): a column preset's `columnDiameterMetres` must be above 0; the id `holland_3_2` is no longer reserved, the Holland example having left the presets; the steam's second-virial gas is in [equilibrium-engine.md](equilibrium-engine.md)) · earlier: 2026-10-27 at ce71b45c (batch 2026-10-26-multi-machine-framework, owner decisions 2026-10-26: nothing is hashed; every record declares its revision (a token, `JsonFields.revision`), and a package's identities are composed from them: `scientificRevision`, `fluidRevision`, `spineRevision`; `samePhysics` compares content directly; the fingerprints are gone; interactions records need a `revision`; the eight crude packages' pressure floor 1 kPa) · earlier: 2026-10-25 (batch 2026-10-21-floating-roof-tanks: the crude fractions' appearance colours from their normal boiling points; appearances read by the open tank's display and the sight glass) · earlier: 2026-10-21 (0.11.1 test review; mod rename to IChemE, 0.11.0); 2026-10-20 (`DeterministicMath` gains `sin`, `asin`, `atan2`; the rest of the chapter is unchanged since a08c7134)
 Up: [code guide](README.md)
 
 ## Read this when
@@ -103,7 +103,7 @@ flowchart LR
   CUR --> COL["column: V3CatalogPropertyPackage (refuses crystal and spine packages) -> V3PengRobinsonSession -> PengRobinsonKernel CLASSICAL"]
   CUR --> FLU["fluid: FluidThermodynamics -> HydrocarbonModel -> TranslatedPengRobinson -> PengRobinsonKernel SPARSE_PAIRS, or TEMPERATURE_DEPENDENT_PAIRS for a spine package (SpinePackageData)"]
   CUR --> ENG["fluid: NetworkPhaseEngine -> FluidTpEquilibrium (equilibrium-engine.md)"]
-  CUR --> UI["calculator names, presets, freshness"]
+  CUR --> UI["process simulator on the client: FlowsheetEngine, templates, revision tokens (RevisionNotice)"]
 ```
 
 1. **Datapack JSON.** Minecraft's resource manager picks the highest-priority file at each path; a replacement is a
@@ -151,9 +151,11 @@ flowchart LR
      builds `FreeWaterIce` from `Water.ice()` and `catalog.crystals()`. `FluidThermodynamics` still refuses a water model
      without ice, but the catalog refuses the network's at loading (step 3), so a datapack no longer reaches that refusal.
    - Server and UI: `ProcessSolveServices` pins the catalog per request; `FluidWorldAuthority.refreshProperties`
-     compares the active catalog to the world's captured one and holds islands on a change; the server tick
-     notices a new catalog instance and calls `ColumnV3Network.refreshMaterialViewers`;
-     `ColumnCalculatorV3BlockEntity` uses `MaterialRuntime.name` and `isCurrent`.
+     compares the active catalog to the world's captured one and holds islands on a change. The calculator
+     block's viewer refresh on a new catalog (`ColumnV3Network.refreshMaterialViewers`) left with the block (batch
+     2026-11-02-process-simulator, W8), and with it the game's callers of `MaterialRuntime.name` and `isCurrent`
+     (tests still call them); the process simulator runs on the client's own catalog and shows a notice when its
+     revision tokens differ from the server's (`RevisionNotice`, [process-simulator.md](process-simulator.md)).
 
 <details><summary>Data schema and units (by kind)</summary>
 
@@ -189,8 +191,8 @@ Bundled packages: `tjl19_dwsim`, `tjl20_methane`, `tjl20_methane_nitrogen`, `pil
 per-crude packages (`bonga_tjl20` and the others) and their column presets left with W5 (batch 2026-11-02-process-simulator,
 `61fe9196`): no screen read those presets, only gates. Their assays (`bonga`, `cold_lake_blend`, `dalia`, `upper_zakum`,
 `wti_light_export`) now name `tjl20_methane`, so a column on any crude shows the shared package's audit lines, and each
-assay keeps its crude's evidence in its own `provenance`. A calculator block saved on a removed package resets its input
-and keeps its design. The three crude packages' column range starts at `pressure_min_pascal` 1000 (1 kPa, 50 kPa before 0.15.0, owner answer Q1), so a vacuum
+assay keeps its crude's evidence in its own `provenance`. Since W8 a placed calculator block loads as a process
+simulator, which reads only its saved design (`Design`), not its input. The three crude packages' column range starts at `pressure_min_pascal` 1000 (1 kPa, 50 kPa before 0.15.0, owner answer Q1), so a vacuum
 column can be designed; it is an admission bound only, outside `samePhysics`, and the package revisions stayed
 `crude-regrouped-r1`. The standalone index
 [`materials-index.json`](../../../src/main/resources/materials-index.json) lists all 84 bundled material files and is used
