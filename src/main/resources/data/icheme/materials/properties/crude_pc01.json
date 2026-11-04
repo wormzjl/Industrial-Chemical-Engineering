@@ -1345,10 +1345,5 @@
       "source": "DWSIM 10.2.5.0 API AUX_VAPVISCi(component,T), dilute-gas auxiliary; DWSIM characterization: tjl-ledezma2019-dwsim1023-13pc-r1; TJL_PC01. Adaptive log interpolation checked to 0.05% against API quarter/midpoints. Sampled interval, not independent physical qualification; phase may be metastable. https://dwsim.org/api_help/html/T_DWSIM_Thermodynamics_PropertyPackages_PropertyPackage.htm Ambient extension to 293.15 K sampled with the same API; original nodes at and above 298.15 K retained.",
       "estimated": true
     }
-  },
-  "liquid_mixture_descriptor": {
-    "participation": 1.0,
-    "residue_retention": 0.0,
-    "activation_slope": 0.49967481923183893
   }
 }

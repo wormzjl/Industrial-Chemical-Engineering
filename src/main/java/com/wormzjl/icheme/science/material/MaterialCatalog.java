@@ -440,7 +440,6 @@ public final class MaterialCatalog {
         var viscosities = new HashMap<String, Map<ViscosityCorrelation.Phase, ViscosityCorrelation>>();
         var waterModels = new HashMap<String, String>();
         var liquidMixtures = new HashMap<String, LiquidMixtureCorrection>();
-        var descriptors = new HashMap<String, LiquidMixtureCorrection.Descriptor>();
         var assayAppearances = new HashMap<String, FluidAppearance>();
         var componentAppearances = new HashMap<String, FluidAppearance>();
         var propertyValidity = new HashMap<String, Validity>();
@@ -488,7 +487,7 @@ public final class MaterialCatalog {
         for (var o : group(groups,"properties").values()) checked(origins,o,() -> {
             String id=text(o,"id"), component=text(o,"component"); require(names,component,"component");
             viscosities.put("properties/" + id, readViscosities(o));
-            descriptors.put(id,LiquidMixtureCorrection.Descriptor.read(o));
+            if(o.has("liquid_mixture_descriptor"))throw new IllegalArgumentException("liquid_mixture_descriptor: the compounds of a liquid-mixture term are listed in its method's liquid_mixture.components");
             propertyRevisions.put(id,revision(o,"revision")); text(o,"source");
             // ideal_gas_cp is optional: a record without it is usable only in a package that declares a reference
             // spine (D6, one ideal-gas source per species; checked per package below). Its cp is then empty.
@@ -559,6 +558,7 @@ public final class MaterialCatalog {
         var methods = new HashMap<String, Method>();
         for (var o : group(groups,"methods").values()) checked(origins,o,() -> {
             var method=Method.read(o,group(groups,"interactions"),waters); methods.put(method.id(),method);
+            for(String component:method.mixture().components())require(names,component,"liquid_mixture.components");
         });
         // The fluid reference records come before the packages: each package's fluid identity is bounded at load.
         var fluidData=FluidData.read(group(groups,"transport"),origins,names.keySet());
@@ -566,7 +566,7 @@ public final class MaterialCatalog {
         var entries=Entries.resolve(group(groups,"packages"),origins,defaults);
         var spinesByComponent=new HashMap<String,List<String>>();
         for(var spine:spines.values())spinesByComponent.computeIfAbsent(spine.component(),unused->new ArrayList<>()).add(spine.id());
-        var records=new Records(names,properties,propertyRevisions,descriptors,waters,group(groups,"interactions"),matrices,spines,
+        var records=new Records(names,properties,propertyRevisions,waters,group(groups,"interactions"),matrices,spines,
                 spinesByComponent,crystals,aliases,assayRecords,propertyValidity,viscosities,freezing,fluidData,defaults);
         var definitions=new HashMap<String,Definition>();
         for (var o : group(groups,"packages").values()) checked(origins,o,() -> {
@@ -743,7 +743,7 @@ public final class MaterialCatalog {
      * and advisory evidence. Any package may combine it with any compounds.
      */
     private record Method(String id,String revision,String model,boolean spine,List<String> interactions,String missing,
-            String water,double minimumPressure,double maximumPressure,JsonObject record,List<String> evidence,String mixtureRevision) {
+            String water,double minimumPressure,double maximumPressure,List<String> evidence,LiquidMixtureCorrection.Rule mixture) {
         Method { interactions=List.copyOf(interactions); evidence=List.copyOf(evidence); }
         /**
          * The method's token in an identity: its physics fields, never its id or its record's revision (owner decision D7,
@@ -753,7 +753,7 @@ public final class MaterialCatalog {
         String identity() {
             return "method=model:"+model+",ideal-gas:"+(spine?"spine":"fit")+",missing-interactions:"+missing
                     +",pressure-pascal:"+plain(minimumPressure)+".."+plain(maximumPressure)
-                    +(mixtureRevision==null?"":",liquid-mixture:"+mixtureRevision);
+                    +(mixture.revision()==null?"":",liquid-mixture:"+mixture.revision());
         }
         private static String plain(double value) { return java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString(); }
         static Method read(JsonObject o,Map<String,JsonObject> libraries,Map<String,Water> waters) {
@@ -777,11 +777,10 @@ public final class MaterialCatalog {
             String water=text(o,"water_model"); require(waters,water,"water_model");
             double pmin=positive(o,"pressure_min_pascal"), pmax=positive(o,"pressure_max_pascal"); range(pmin,pmax,"pressure");
             var evidence=o.has("advisory_evidence")?strings(o,"advisory_evidence"):List.<String>of();
-            LiquidMixtureCorrection.read(o,List.of());
             // The record's own revision() accessor hides the statically imported reader; name it by its class. The
-            // liquid-mixture correction declares its own revision, which the identity names.
-            String mixture=o.has("liquid_mixture")?JsonFields.token(text(object(o,"liquid_mixture"),"revision"),"liquid_mixture.revision"):null;
-            return new Method(id,JsonFields.revision(o,"revision"),model,idealGas.equals("spine"),ids,policy,water,pmin,pmax,o,evidence,mixture);
+            // liquid-mixture term declares its own revision, which the identity names.
+            return new Method(id,JsonFields.revision(o,"revision"),model,idealGas.equals("spine"),ids,policy,water,pmin,pmax,evidence,
+                    LiquidMixtureCorrection.Rule.read(o));
         }
     }
     /** One compound of a package after {@code extends}: its dataset and, for a method with spines, the spine it names. */
@@ -820,14 +819,14 @@ public final class MaterialCatalog {
     }
     /** The records a package is built from, after validation: what {@link #build} reads. */
     private record Records(Map<String,MaterialName> names,Map<String,Property> properties,Map<String,String> propertyRevisions,
-            Map<String,LiquidMixtureCorrection.Descriptor> descriptors,Map<String,Water> waters,Map<String,JsonObject> libraries,
+            Map<String,Water> waters,Map<String,JsonObject> libraries,
             Map<String,GroupInteractionMatrix> matrices,Map<String,ReferenceSpine> spines,Map<String,List<String>> spinesByComponent,
             Map<String,CrystalReference> crystals,Map<String,String> aliases,Map<String,AssayRecord> assays,
             Map<String,Validity> propertyValidity,Map<String,Map<ViscosityCorrelation.Phase,ViscosityCorrelation>> viscosities,
             Map<String,Freezing> freezing,FluidData fluidData,Map<String,String> defaults) {
         Records {
             defaults=Map.copyOf(defaults); names=Map.copyOf(names); properties=Map.copyOf(properties); propertyRevisions=Map.copyOf(propertyRevisions); freezing=Map.copyOf(freezing);
-            descriptors=Map.copyOf(descriptors); waters=Map.copyOf(waters); libraries=Map.copyOf(libraries); matrices=Map.copyOf(matrices);
+            waters=Map.copyOf(waters); libraries=Map.copyOf(libraries); matrices=Map.copyOf(matrices);
             spines=Map.copyOf(spines); crystals=Map.copyOf(crystals); aliases=Map.copyOf(aliases); assays=Map.copyOf(assays);
             propertyValidity=Map.copyOf(propertyValidity); viscosities=Map.copyOf(viscosities);
             var byComponent=new HashMap<String,List<String>>(); spinesByComponent.forEach((k,v)->byComponent.put(k,List.copyOf(v)));
@@ -895,7 +894,7 @@ public final class MaterialCatalog {
                     +ps.get(i).id()+" ("+ps.get(i).molecularWeight()+" kg/mol) by "+difference+" relative, above 1e-4");
             spineIds.add(spine.id()); spineRecords.add(spine);
         }
-        var liquidMixture=LiquidMixtureCorrection.read(method.record(),refs.stream().map(r.descriptors()::get).toList());
+        var liquidMixture=method.mixture().on(ids);
         // The method's pair libraries in order: the first that names a pair gives its value; pairs outside the package are
         // skipped. Only libraries that give a pair on this axis enter the identity, so a library for other compounds moves
         // nothing here.

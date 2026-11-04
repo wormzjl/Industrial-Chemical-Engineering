@@ -78,15 +78,19 @@ class SizeAllSampleTest {
      * bar, not 0.30 and 0.33. E-101 takes a 1.25 m shell with 5 m tubes, not 1.00 × 6 m: more tubes, shorter, 0.17, not 0.44. H-101's
      * cabin of 12.0 × 45 m holds 105.4 MW on 13 passes of 8 MW, not 87.6 on 11: each pass carries 11/13 of the crude on a pass 2 %
      * longer, 1.48 bar, not 2.11. The path loses 3.07 bar.
+     *
+     * <p>O4 of batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term) makes the crude
+     * up to 15 % more viscous at the coolers' temperatures: PA 2 0.40 to 0.41, PA 3 0.29 to 0.30, E-101 0.17 to 0.18, the
+     * path 3.07 to 3.10 bar. No size moves.
      */
     @Test
     void p101sPathIsTheProbesStair() {
         var path = path(proposal, "P-101");
         String[] items = {"S-1", "T-101/pa 1 cooler", "S-2", "T-101/pa 2 cooler", "S-3", "T-101/pa 3 cooler", "S-4", "E-101", "S-5", "H-101", "S-6"};
-        double[] lost = {.12, .36, .10, .40, .04, .29, .04, .17, .04, 1.48, .03};
+        double[] lost = {.12, .36, .10, .41, .04, .30, .04, .18, .04, 1.48, .03};
         assertEquals(List.of(items), path.steps().stream().map(PressurePath.Step::item).toList());
         for (int i = 0; i < lost.length; i++) assertEquals(lost[i], path.steps().get(i).lost(), HUNDREDTH, items[i]);
-        assertEquals(3.07, path.lost(), HUNDREDTH);
+        assertEquals(3.10, path.lost(), HUNDREDTH);
         assertEquals(14.00, path.from(), HUNDREDTH);
         assertTrue(path.set());
         assertEquals("V-101", path.taker());
@@ -98,7 +102,8 @@ class SizeAllSampleTest {
      * The residue's path: the probe's 0.99 bar, the sump's head with the doors' drops, to a product nothing holds. It loses 0.48,
      * not the probe's 0.47: S2's heat curves give E-102 724 m² where the probe's one heat capacity gave 741, which picks another
      * bank, 0.07 bar where the probe's lost 0.05 (plan section 4). S4c's spare takes larger units on it: E-101's 1.25 m shell, whose
-     * residue side loses 0.06, not 0.15, and E-102's 6 × 3 bays of 2.5 × 6 m, 0.04, not 0.07. The path loses 0.37.
+     * residue side loses 0.06, not 0.15, and E-102's 6 × 3 bays of 2.5 × 6 m, 0.04, not 0.07. The path loses 0.37; 0.38 since O4 of
+     * batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term), 0.375 against 0.37.
      */
     @Test
     void theResiduesPathIsTheProbes() {
@@ -109,7 +114,7 @@ class SizeAllSampleTest {
         assertEquals(.49, residue.head(), HUNDREDTH);
         assertEquals(2.22, residue.to(), HUNDREDTH);
         assertEquals(.99, residue.available(), HUNDREDTH);
-        assertEquals(.37, residue.lost(), HUNDREDTH);
+        assertEquals(.38, residue.lost(), HUNDREDTH);
         assertFalse(residue.set());
         assertSame(com.wormzjl.icheme.science.flowsheet.sizing.Rating.NONE, residue.rating());
     }

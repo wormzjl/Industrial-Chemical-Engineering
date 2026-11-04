@@ -94,9 +94,11 @@ class LegacyNetworkPathPinTest {
      * r4 with the pilot's CoolProp viscosity tables, water r3, the liquid calibration points), an owner-approved physics change:
      * the digest moves with them. Since O7 (decision E16) the methane Cp is fitted to the reference spine (methane r3, within
      * 0.013 % of r2; the digest before, {@code 5dbe1a5b44708afa1d795d1bf4dfd052806dd6e4aeb69a0efd614d5f6680f155}).
+     * Since O4 (decisions E12, E14) the cuts' liquid viscosity is Twu 1985 + ASTM D341 ({@code twu-1985-d341-r1}) and the
+     * method's liquid-mixture term the one-term ECCC refit ({@code eccc-cut-pair-r1}): transport only, so the digest stays.
      */
     static final String REVISION = String.join(";",
-            "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:dalia-global-r1",
+            "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:eccc-cut-pair-r1",
             "properties=" + String.join(",",
                     "icheme:tjl20_methane@tjl20-methane-spine-r3",
                     "icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1",
@@ -128,18 +130,18 @@ class LegacyNetworkPathPinTest {
                     viscosities("icheme:tjl19_n_butane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_isopentane", "dwsim-viscosity-api-r2", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_n_pentane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc01", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc02", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc03", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc04", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc05", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc06", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc07", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc08", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:crude_pc09", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:crude_pc10", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:crude_pc11", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:crude_pc12", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:crude_pc01", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc02", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc03", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc04", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc05", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc06", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc07", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc08", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:crude_pc09", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:crude_pc10", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:crude_pc11", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:crude_pc12", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
                     viscosities("icheme:fluid_nitrogen", "coolprop-8.0.0-saturated-liquid-r1", "coolprop-8.0.0-dilute-gas-r1"),
                     "icheme:water/liquid@iapws-sr6-2011-viscosity-r1"),
             "ice=icheme:crystal_ice_ih@crystal-ice-ih-r1",

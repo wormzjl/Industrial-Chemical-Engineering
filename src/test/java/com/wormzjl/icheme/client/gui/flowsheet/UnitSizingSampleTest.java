@@ -125,7 +125,7 @@ class UnitSizingSampleTest {
         assertEquals(46.7, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);
         assertEquals(33, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE);
         var drops = unit.rating().readings().stream().filter(reading -> reading.limit() == Limit.EXCHANGER_DROP_LIQUID).toList();
-        assertEquals(.17, drops.get(0).value(), HUNDREDTH, "the tube side, 0.44 on 1.00 × 6 m");
+        assertEquals(.18, drops.get(0).value(), HUNDREDTH, "the tube side, 0.44 on 1.00 × 6 m; 0.17 before O4's crude viscosity");
         assertEquals(.06, drops.get(1).value(), HUNDREDTH, "the shell side, 0.15 on 1.00 × 6 m");
     }
 
@@ -145,9 +145,9 @@ class UnitSizingSampleTest {
         assertSame(Limit.EXCHANGER_SURFACE, kept.rating().closest().limit());
         assertEquals(253, read(kept.rating(), Limit.EXCHANGER_SURFACE), ONE);
         var drops = kept.rating().readings().stream().filter(reading -> reading.limit() == Limit.EXCHANGER_DROP_LIQUID).toList();
-        assertEquals(1.29, drops.get(0).value(), HUNDREDTH);
+        assertEquals(1.31, drops.get(0).value(), HUNDREDTH, "1.29 before O4's crude viscosity");
         assertEquals(Lamp.YELLOW, drops.get(0).lamp());
-        assertEquals(.41, drops.get(1).value(), HUNDREDTH);
+        assertEquals(.43, drops.get(1).value(), HUNDREDTH, "0.41 before O4's crude viscosity");
     }
 
     /** S4c: the bare 86.2 MW sets the type and the one cabin; the spare sets the size: 12.0 × 45 m holds 105.4 MW, the least over 1.2 × 86.2 = 103.4, where 11.0 × 41 m held 87.6. */
@@ -206,7 +206,7 @@ class UnitSizingSampleTest {
                 new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-102", new SheetSizing.UnitEntry(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(5, 3), 1), null, null, false))))).units().get("E-102");
         assertEquals(Lamp.GREEN, kept.rating().lamp());
         assertEquals(752, read(kept.rating(), Limit.AIR_COOLER_SURFACE), ONE);
-        assertEquals(.05, read(kept.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH);
+        assertEquals(.06, read(kept.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH, "0.05 before O4's crude viscosity: the residue cooled to 45 C");
     }
 
     /** The plan's what-if: the sample has no storage tile, so each product stands for the liquid one would hold. */

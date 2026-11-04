@@ -224,11 +224,11 @@ class MaterialCatalogTest {
         // liquid-mixture correction's own revision moves every package on it.
         var method=MaterialCatalog.parse(changed("methods/crude_pr78.json",o->{o.addProperty("revision",o.get("revision").getAsString()+"-edited");
             var evidence=new JsonArray();evidence.add("EDITED: a method record edit");o.add("advisory_evidence",evidence);}));
-        var mixture=MaterialCatalog.parse(changed("methods/crude_pr78.json",o->o.getAsJsonObject("liquid_mixture").addProperty("revision","dalia-global-edited")));
+        var mixture=MaterialCatalog.parse(changed("methods/crude_pr78.json",o->o.getAsJsonObject("liquid_mixture").addProperty("revision","eccc-cut-pair-edited")));
         for(var p:bundled.packages().values()) {
             assertEquals(p.scientificRevision(),method.requirePackage(p.id()).scientificRevision(),p.id());
             assertEquals(bundled.fluidRevision(p.id()),method.fluidRevision(p.id()),p.id());
-            boolean crude=p.scientificRevision().contains("liquid-mixture:dalia-global-r1");
+            boolean crude=p.scientificRevision().contains("liquid-mixture:eccc-cut-pair-r1");
             assertEquals(!crude,p.scientificRevision().equals(mixture.requirePackage(p.id()).scientificRevision()),p.id());
         }
     }

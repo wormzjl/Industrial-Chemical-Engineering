@@ -2507,10 +2507,5 @@
       "estimated": true,
       "source": "DWSIM 10.2.5.0 AUX_VAPVISCi with reconstructed MW, SG, NBP, Tc, Pc and PR78 omega; estimated vapor continuation"
     }
-  },
-  "liquid_mixture_descriptor": {
-    "participation": 1.0,
-    "residue_retention": 1.0,
-    "activation_slope": 5.1552527383229
   }
 }
