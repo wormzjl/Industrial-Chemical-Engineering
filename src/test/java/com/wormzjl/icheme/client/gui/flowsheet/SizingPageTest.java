@@ -219,6 +219,35 @@ class SizingPageTest {
         assertEquals(List.of(), texts.missing.stream().toList());
     }
 
+    /**
+     * The owner, 2026-11-04 ("Add some kind of indicator to this kind of sub-equipment so player understands that they belong to
+     * the column", picked A, tree lines): in every table a member's name stands a branch in, under its block's row or another of
+     * its members; the Lines table, which lists no column, gives the column a row of its tag.
+     */
+    @Test
+    void aMemberHangsOffItsBlocksRowInEveryTable() {
+        var texts = new SheetFixture.Texts();
+        var x = context(texts, SheetFixture.editor(SHEET), STEADY, false);
+        var state = new SizingPage.State();
+        var box = new Rect(189, 77, 1400, 600);
+        int name = box.x() + 4 + 12, branch = name + 10;
+        String column = SizingPage.name(x, "T-101");
+        for (var view : List.of(SizingPage.View.UNITS, SizingPage.View.LINES, SizingPage.View.BUILD)) {
+            state.view = view;
+            var canvas = new Recording(texts.measure);
+            SizingGlass.draw(canvas, x, state, box);
+            var first = canvas.texts.stream().filter(t -> t.x() == name || t.x() == branch).toList();
+            int members = 0;
+            for (int i = 1; i < first.size(); i++) {
+                if (first.get(i).x() != branch) continue;
+                members++;
+                var above = first.get(i - 1);
+                assertTrue(above.x() == branch || above.text().equals(column), view + ": " + first.get(i).text() + " under " + above.text());
+            }
+            assertTrue(members > 0, view + " lists T-101's members a branch in");
+        }
+    }
+
     @Test
     void aNarrowGlassStacksItsTableRatherThanCutACell() {
         var texts = new SheetFixture.Texts();

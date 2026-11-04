@@ -69,7 +69,15 @@ public final class SizingGlass {
     }
 
     /** One row: its key for a click, its lamp, its cells, whether it is the item picked. */
-    private record Item(@Nullable String key, @Nullable Lamp lamp, List<Cell> cells, boolean picked) {
+    private record Item(@Nullable String key, @Nullable Lamp lamp, List<Cell> cells, boolean picked, @Nullable String block) {
+        Item(@Nullable String key, @Nullable Lamp lamp, List<Cell> cells, boolean picked) {
+            this(key, lamp, cells, picked, null);
+        }
+
+        /** A row for unit or member {@code id}: a member's ({@code T-101/condenser}) hangs off its block's row on the tree. */
+        static Item of(String id, @Nullable Lamp lamp, List<Cell> cells, boolean picked) {
+            return new Item(id, lamp, cells, picked, SizingPage.block(id));
+        }
     }
 
     /**
@@ -77,13 +85,15 @@ public final class SizingGlass {
      * column whole on its line and the later lines indented under the first column (the GUI skill's stacking rule: no cut cell).
      */
     private record Table(int[] at, int[] line, int[] widths, int lines) {
-        private static final int INDENT = 16;
+        /** A stacked row's later lines; a member's name after its branch. */
+        private static final int INDENT = 16, TREE = 10;
 
         static Table of(Measure m, int width, String[] head, List<Item> items) {
             int n = head.length;
             int[] widths = new int[n];
             for (int i = 0; i < n; i++) widths[i] = m.width(head[i]);
-            for (var item : items) for (int i = 0; i < n && i < item.cells().size(); i++) widths[i] = Math.max(widths[i], m.width(item.cells().get(i).text()));
+            for (var item : items)
+                for (int i = 0; i < n && i < item.cells().size(); i++) widths[i] = Math.max(widths[i], m.width(item.cells().get(i).text()) + (i == 0 && item.block() != null ? TREE : 0));
             int[] at = new int[n], line = new int[n];
             int x = LAMP, row = 0;
             for (int i = 0; i < n; i++) {
@@ -103,8 +113,24 @@ public final class SizingGlass {
         }
 
         void cell(Canvas c, Cell cell, int i, int x0, int y) {
-            int x = x0 + at[i] + (cell.right() ? widths[i] - c.measure().width(cell.text()) : 0);
+            cell(c, cell, i, x0, y, 0);
+        }
+
+        /** A cell, its text {@code shift} px in from its column's left (a member's name, after its branch). */
+        void cell(Canvas c, Cell cell, int i, int x0, int y, int shift) {
+            int x = x0 + at[i] + (cell.right() ? widths[i] - c.measure().width(cell.text()) : shift);
             c.text(cell.text(), x, y + line[i] * ROW, cell.colour());
+        }
+
+        /**
+         * A member's branch before its name (the owner, 2026-11-04: "Add some kind of indicator to this kind of sub-equipment so
+         * player understands that they belong to the column", picked A, tree lines): a line down the name column's left from its
+         * block's row, a tick into the name, and a corner on the block's last member.
+         */
+        void branch(Canvas c, int x0, int y, boolean last) {
+            int x = x0 + at[0] + 2, mid = y + 3;
+            c.fill(x, y - 2, x + 1, last ? mid + 1 : y + height() - 2, Palette.LINE);
+            c.fill(x + 1, mid, x + TREE - 5, mid + 1, Palette.LINE);
         }
 
         /** Draws the head and the rows from {@code first} down to {@code bottom}; returns the y under the last row drawn. */
@@ -118,10 +144,27 @@ public final class SizingGlass {
                 if ((r - first) % 2 == 1) c.fill(box.x(), y - 2, box.right(), y + height() - 2, DialogColumns.BAND);
                 if (item.picked()) c.outline(box.x() + 1, y - 2, box.w() - 2, height(), Palette.ACCENT);
                 if (item.lamp() != null) c.fill(x0, y + 2, x0 + LAMP_SIZE, y + 2 + LAMP_SIZE, colour(item.lamp()));
-                for (int i = 0; i < item.cells().size(); i++) cell(c, item.cells().get(i), i, x0, y);
+                boolean member = item.block() != null;
+                if (member) branch(c, x0, y, r + 1 >= items.size() || !item.block().equals(items.get(r + 1).block()));
+                for (int i = 0; i < item.cells().size(); i++) cell(c, item.cells().get(i), i, x0, y, i == 0 && member ? TREE : 0);
             }
             return y;
         }
+    }
+
+    /**
+     * {@code items} with a row of the block's own before members that have none above them (the Lines table lists a column's
+     * lines, not the column), so every branch hangs off its block, never off the row before it. The row picks nothing.
+     */
+    private static List<Item> parented(SheetContext x, List<Item> items) {
+        var out = new ArrayList<Item>();
+        for (var item : items) {
+            String block = item.block();
+            if (block != null && (out.isEmpty() || !block.equals(out.getLast().block()) && !block.equals(out.getLast().key())))
+                out.add(new Item(null, null, List.of(Cell.of(name(x, block), Palette.TEXT)), false));
+            out.add(item);
+        }
+        return out;
     }
 
     private static String[] unitHead(SheetContext x) {
@@ -138,12 +181,12 @@ public final class SizingGlass {
             var closest = rated.rating().closest();
             int tone = tone(rated.rating().lamp());
             String block = block(id);
-            String tag = block == null ? name(x, id) : "  " + member(x, id.substring(block.length() + 1));
-            items.add(new Item(id, rated.rating().lamp(), List.of(Cell.of(tag, Palette.TEXT), Cell.of(equipment(x, id, size), Palette.MUTED), Cell.of(sizeText(x, size), Palette.ACCENT),
+            String tag = block == null ? name(x, id) : member(x, id.substring(block.length() + 1));
+            items.add(Item.of(id, rated.rating().lamp(), List.of(Cell.of(tag, Palette.TEXT), Cell.of(equipment(x, id, size), Palette.MUTED), Cell.of(sizeText(x, size), Palette.ACCENT),
                     Cell.of(closest == null ? "" : limitName(x, closest.limit()), Palette.MUTED), Cell.right(closest == null ? "" : value(x, closest), closest == null ? Palette.ACCENT : tone(closest.lamp())),
                     Cell.right(closest == null ? "" : limit(x, closest), Palette.MUTED)), id.equals(picked)));
         }
-        return items;
+        return parented(x, items);
     }
 
     private static String[] lineHead(SheetContext x, SheetUnits u) {
@@ -162,13 +205,13 @@ public final class SizingGlass {
             var rating = rated.rating();
             var closest = rating.closest();
             String block = block(id);
-            String tag = block == null ? name(x, id) : "  " + member(x, id.substring(block.length() + 1));
-            items.add(new Item(id, rating.lamp(), List.of(Cell.of(tag, Palette.TEXT), Cell.of(service == null ? "" : x.text("sizing.service." + service.name().toLowerCase(Locale.ROOT)), Palette.MUTED),
+            String tag = block == null ? name(x, id) : member(x, id.substring(block.length() + 1));
+            items.add(Item.of(id, rating.lamp(), List.of(Cell.of(tag, Palette.TEXT), Cell.of(service == null ? "" : x.text("sizing.service." + service.name().toLowerCase(Locale.ROOT)), Palette.MUTED),
                     Cell.right(line.flows() ? number(u.time().display(line.volume())) : "", Palette.ACCENT), Cell.right(lineSizeText(x, lineSize(x, id, sized)), Palette.ACCENT),
                     reading(rating, service == null ? null : service.speed()), reading(rating, service == null ? null : service.drop()), reading(rating, service == null ? null : service.momentum()),
                     Cell.of(closest == null ? "" : limitName(x, closest.limit()), Palette.MUTED)), id.equals(picked)));
         }
-        return items;
+        return parented(x, items);
     }
 
     private static Cell reading(Rating rating, @Nullable Limit limit) {
@@ -237,11 +280,11 @@ public final class SizingGlass {
             var size = size(x, id, sized);
             if (size == null || UnitSize.built(size) == null) continue;
             String block = block(id);
-            String tag = block == null ? name(x, id) : "  " + member(x, id.substring(block.length() + 1));
-            items.add(new Item(id, entry.getValue().rating().lamp(), List.of(Cell.of(tag, Palette.TEXT), Cell.right(Integer.toString(size.count()), Palette.ACCENT), Cell.of(equipment(x, id, size), Palette.MUTED),
+            String tag = block == null ? name(x, id) : member(x, id.substring(block.length() + 1));
+            items.add(Item.of(id, entry.getValue().rating().lamp(), List.of(Cell.of(tag, Palette.TEXT), Cell.right(Integer.toString(size.count()), Palette.ACCENT), Cell.of(equipment(x, id, size), Palette.MUTED),
                     Cell.of(sizeText(x, size.count() > 1 ? one(size) : size), Palette.ACCENT)), false));
         }
-        return items;
+        return parented(x, items);
     }
 
     /** One of a counted size, as the constructor builds each. */
