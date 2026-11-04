@@ -92,6 +92,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D29 (A42).** A pump's or compressor's shaft power is read at commit from its end flows, heads and suction state (`law.shaftPower`, `Compressor.power`) and loads its train; it books no `SHAFT` boundary, and a closed pump island keeps no boundary transfer (`BackwardEulerStepTest`). Only the turbine's work leaves as a `SHAFT` boundary (D22). This replaces A27 for pumps and compressors.
 
+2026-11-04, W5's build plan (`W5_BUILD_PLAN.md` section 8, readings A53 to A73). Before it the owner: "Add forced draft cooler as well", then "I mean add power usage to it" (the forced-draft cooler is today's air cooler). On the plan: "All as recommended".
+
+- **D30 (A53 to A73).** W5 builds as its plan recommends: one electric store per powered unit in fluid facts schema 11, saved in joules (A53 to A55); ports on every face of a terminal cell, receive-only for consumers and extract-only for generators (A56, A57); terminal cells on an outside face at grade in existing cells (A58); booking at commits and on the presentation cadence (A59, A60); unpowered as a dispatch input (A61); restart at one slice of rated draw (A62); a generator loaded by its buffer's room, within ±5 % of rated speed, pushing to its neighbours (A63 to A65); the two `energy` config keys (A66); and A67 to A72 as given. A73 option A: air coolers and induced towers from older saves stay unmetered, with the notice, until their port first receives FE.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
