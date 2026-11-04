@@ -162,6 +162,14 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         return electric;
     }
 
+    /** The pumps' health (W10b): books at the islands' commits, closes a failed pump at dispatch. */
+    private PumpHealth health;
+
+    /** Installs the pumps' health (W10b). */
+    public void health(PumpHealth value) {
+        health = Objects.requireNonNull(value);
+    }
+
     /** Installs the world's side, then compiles the saved parts. */
     public void host(Host value) {
         host = Objects.requireNonNull(value);
@@ -390,7 +398,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             electric.plans(graph, fans);
             if (!fans.isEmpty()) plans = fans;
         }
-        if (shares.isEmpty() && governorTargets.isEmpty()) return plans == null ? Map.of() : plans;
+        if (shares.isEmpty() && governorTargets.isEmpty()) return failures(plans, graph);
         for (var pipe : graph.pipes()) {
             long id = graph.reservoirs().get(pipe.first()).id();
             ShaftPlan plan = null;
@@ -406,6 +414,19 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             if (plan == null) continue;
             if (plans == null) plans = new HashMap<>();
             plans.put(id, plan);
+        }
+        return failures(plans, graph);
+    }
+
+    /** {@code plans} with each failed pump of {@code graph} closed (W10b): its {@code FAILED} plan stands in for its speed. */
+    private Map<Long, ShaftPlan> failures(Map<Long, ShaftPlan> plans, PassiveNetwork graph) {
+        if (health != null) {
+            var failed = new HashMap<Long, ShaftPlan>();
+            health.plans(graph, failed);
+            if (!failed.isEmpty()) {
+                if (plans == null) plans = new HashMap<>();
+                plans.putAll(failed);
+            }
         }
         return plans == null ? Map.of() : plans;
     }
@@ -423,6 +444,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (result.advancedSeconds() <= 0) return;
         // The fans' draw over the span (W5, reading A59).
         if (electric != null) electric.booked(island, start, end, result);
+        // The pumps' wear over the span (W10b).
+        if (health != null) health.booked(island, start, end, result);
         if (unitOfDevice.isEmpty()) return;
         var solved = result.graph();
         var flows = result.endpointFlows();

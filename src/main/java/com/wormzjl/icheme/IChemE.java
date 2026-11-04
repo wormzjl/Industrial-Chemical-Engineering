@@ -53,6 +53,8 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue EQUIPMENT_SHEEN;
     private static final ModConfigSpec.DoubleValue ENERGY_JOULES_PER_FE;
     private static final ModConfigSpec.BooleanValue ENERGY_MACHINES_NEED_POWER;
+    private static final ModConfigSpec.BooleanValue WEAR_ENABLED;
+    private static final ModConfigSpec.DoubleValue WEAR_CAVITATION_HOURS, WEAR_DRY_MINUTES;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -159,6 +161,17 @@ public final class IChemE {
         ENERGY_MACHINES_NEED_POWER = builder.comment("Whether motors, air cooler fans and cooling tower fans need FE at their terminal box. False: nothing is drawn, nothing stops for want of power, and the ports still accept FE (a pack without energy mods).")
                 .define("machinesNeedPower", true);
         builder.pop();
+        // Pump wear (batch 2026-11-03-rotating-machinery W10b, owner decision D34).
+        builder.push("machines");
+        builder.push("wear");
+        WEAR_ENABLED = builder.comment("Whether pumps wear from cavitation and from running dry, and fail at 0 % health until a repair kit restores them. False: nothing wears and no pump stands failed.")
+                .define("enabled", true);
+        WEAR_CAVITATION_HOURS = builder.comment("A pump's life in online hours at the worst cavitation (its NPSH available about twice its NPSH3). Longer elsewhere: 5.1 h at NPSH3, 18.9 h at 3.5 times it, none from 4 times it up.")
+                .defineInRange("cavitationHours", 2.0, 0.001, 1e6);
+        WEAR_DRY_MINUTES = builder.comment("A pump's life in online minutes running dry: its driver on while it is gas- or vapour-locked or its suction holds no liquid.")
+                .defineInRange("dryMinutes", 10.0, 0.01, 1e6);
+        builder.pop();
+        builder.pop();
         CONFIG_SPEC = builder.build();
     }
 
@@ -219,6 +232,12 @@ public final class IChemE {
     /** Joules per FE (W5; default 2.5 before the config loads). */
     public static double joulesPerFE() {
         return CONFIG_SPEC.isLoaded() ? ENERGY_JOULES_PER_FE.get() : 2.5;
+    }
+
+    /** The pumps' wear settings (W10b; the defaults before the config loads). */
+    public static com.wormzjl.icheme.science.machine.Wear.Settings wearSettings() {
+        if (!CONFIG_SPEC.isLoaded()) return com.wormzjl.icheme.science.machine.Wear.Settings.DEFAULT;
+        return new com.wormzjl.icheme.science.machine.Wear.Settings(WEAR_ENABLED.get(), WEAR_CAVITATION_HOURS.get(), WEAR_DRY_MINUTES.get());
     }
 
     /** Whether machines need FE (W5; default true before the config loads). */

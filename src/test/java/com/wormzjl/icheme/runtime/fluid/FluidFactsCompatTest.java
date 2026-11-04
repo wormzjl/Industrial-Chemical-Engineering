@@ -101,7 +101,20 @@ class FluidFactsCompatTest {
         shafts(world);
         world.runTo(820);
         stores(world);
-        world.runTo(840);return world;
+        world.runTo(840);
+        health(world);
+        world.runTo(860);return world;
+    }
+    /**
+     * Facts schema 12 (batch 2026-11-03-rotating-machinery W10b): the pumps' health, the first pump worn to 0.73, the
+     * second (where the corpus has one) failed at 0; every other pump is new and carries no entry.
+     */
+    private void health(EventPathWorld world) {
+        var pumps=world.ledger.active().values().stream().filter(PumpHealth::pump).map(r->r.device().id()).sorted().toList();
+        var health=new HashMap<Long,Double>();
+        health.put(pumps.get(0),.73);
+        if(pumps.size()>1)health.put(pumps.get(1),0.);
+        world.ledger.health(health);
     }
     /**
      * Facts schema 11 (batch 2026-11-03-rotating-machinery W5): an air cooler side with its four fans, and the electric
@@ -435,6 +448,8 @@ class FluidFactsCompatTest {
                 if(expected.getProperty("stores")!=null)assertEquals(expected.getProperty("stores"),stores(ledger),folder+": electric stores");
                 if(expected.getProperty("stores")==null)for(var e:ledger.stores().entrySet())assertEquals(com.wormzjl.icheme.science.machine.ElectricStore.Facts.UNMETERED,e.getValue(),folder+": store "+e.getKey());
                 if(expected.getProperty("stores")==null)assertEquals(ledger.active().values().stream().filter(ElectricStores::powered).count()+ledger.shafts().values().stream().filter(ElectricStores::powered).count(),ledger.stores().size(),folder+": a store for each powered unit");
+                // Schema 12 wrote the pumps' health; an older image reads every pump new (health 1, no entry).
+                assertEquals(expected.getProperty("health",""),health(ledger),folder+": pump health");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
@@ -567,6 +582,7 @@ class FluidFactsCompatTest {
         props.setProperty("columns",columns(loaded.world().orElseThrow()));
         props.setProperty("shafts",shafts(loaded.world().orElseThrow()));
         props.setProperty("stores",stores(loaded.world().orElseThrow()));
+        props.setProperty("health",health(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
@@ -627,6 +643,15 @@ class FluidFactsCompatTest {
         for(var e:new TreeMap<>(world.stores()).entrySet()) {
             if(!text.isEmpty())text.append(";");
             text.append(e.getKey()).append("=").append(e.getValue().joules()).append("/").append(e.getValue().metered());
+        }
+        return text.toString();
+    }
+    /** What schema 12 carries (W10b): every pump below full health, by device, as {@code id=health}. */
+    private static String health(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var e:new TreeMap<>(world.health()).entrySet()) {
+            if(!text.isEmpty())text.append(";");
+            text.append(e.getKey()).append("=").append(e.getValue());
         }
         return text.toString();
     }

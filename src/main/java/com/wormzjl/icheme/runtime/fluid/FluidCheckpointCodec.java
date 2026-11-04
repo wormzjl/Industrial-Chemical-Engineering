@@ -196,7 +196,7 @@ public final class FluidCheckpointCodec {
         var shafts=new HashMap<>(snapshot.shafts());
         state.shafts().forEach((id,saved)->{var u=shafts.get(id);if(u!=null)shafts.put(id,u.withState(saved));});
         return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),snapshot.active(),snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
-                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),Map.copyOf(shafts),snapshot.stores());
+                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),Map.copyOf(shafts),snapshot.stores(),snapshot.health());
     }
     /** The facts of a topology unit; facts this build cannot read refuse the world. */
     static FluidFacts.World worldFacts(byte[] data,Sections s) {

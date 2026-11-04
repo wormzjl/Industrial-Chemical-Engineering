@@ -27,6 +27,7 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.PRESSURE_GAUGE.get());
                 output.accept(ModItems.TEMPERATURE_GAUGE.get());
                 output.accept(ModItems.ACCESSORY_WRENCH.get());
+                output.accept(ModItems.REPAIR_KIT.get());
                 output.accept(ModItems.PIPELINE_TOOL.get());
                 output.accept(ModItems.PIPE_LAYING_TOOL.get());
                 output.accept(ModItems.PIPE_RACK.get());

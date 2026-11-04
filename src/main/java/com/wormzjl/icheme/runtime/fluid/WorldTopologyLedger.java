@@ -81,7 +81,9 @@ public final class WorldTopologyLedger {
     }
     public record Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,
                            MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,
-                           Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores) {
+                           Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health) {
+        /** Without pump health (fluid facts before schema 12, W10b): every pump new. */
+        public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,Map.of());}
         /** Without electric stores (fluid facts before schema 11, batch 2026-11-03-rotating-machinery W5). */
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,Map.of());}
         /** Without shaft units (fluid facts before schema 10, batch 2026-11-03-rotating-machinery W3). */
@@ -110,15 +112,19 @@ public final class WorldTopologyLedger {
                 if(changed==null)changed=new HashMap<>(active);
                 changed.put(r.device().id(),new Registration(r.device().withHeat(heat.withTransit(joule)),r.spec(),r.revision()));
             }
-            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores);
+            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health);
         }
         /** These facts with the electric stores {@code value} (W5): the engine keeps them live and hands them to a save. */
         public Snapshot withStores(Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> value) {
-            return value.equals(stores)?this:new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,value);
+            return value.equals(stores)?this:new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,value,health);
+        }
+        /** These facts with the pumps' health {@code value} (W10b): the engine keeps it live and hands it to a save. */
+        public Snapshot withHealth(Map<Long,Double> value) {
+            return value.equals(health)?this:new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,value);
         }
         public Snapshot {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologySnapshots);
-            recoveries=Map.copyOf(recoveries);columns=Map.copyOf(columns);shafts=Map.copyOf(shafts);stores=Map.copyOf(stores);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
+            recoveries=Map.copyOf(recoveries);columns=Map.copyOf(columns);shafts=Map.copyOf(shafts);stores=Map.copyOf(stores);health=Map.copyOf(health);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
             if(onlineTick<0||nextIdentity<1||events.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Invalid world topology snapshot");
             active=Map.copyOf(active);events=List.copyOf(events);Objects.requireNonNull(constructed);Objects.requireNonNull(destroyed);Objects.requireNonNull(restated);
             Objects.requireNonNull(basis);int count=basis.components().size();
@@ -146,6 +152,8 @@ public final class WorldTopologyLedger {
             }
             // An electric store (W5): keyed by its unit's identity, a device's or a shaft unit's.
             for(long id:stores.keySet())if(id<=0||id>=nextIdentity)throw new IllegalArgumentException("Invalid electric store identity "+id);
+            // A pump's health (W10b): keyed by its device's identity, 0 to 1; a pump without an entry is new.
+            for(var e:health.entrySet())if(e.getKey()<=0||e.getKey()>=nextIdentity||!(e.getValue()>=0&&e.getValue()<=1))throw new IllegalArgumentException("Invalid pump health "+e.getKey()+"="+e.getValue());
         }
         public static Snapshot empty(){return empty(com.wormzjl.icheme.science.material.MaterialRuntime.current());}
         public static Snapshot empty(com.wormzjl.icheme.science.material.MaterialCatalog catalog) {
@@ -193,6 +201,8 @@ public final class WorldTopologyLedger {
     private final LinkedHashMap<Long,ShaftUnit> shafts=new LinkedHashMap<>();
     // The electric stores (W5) as last handed over: the engine keeps them live ({@link ElectricStores}) and sets them here.
     private Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores=Map.of();
+    // The pumps' health (W10b) as last handed over: the engine keeps it live ({@link PumpHealth}) and sets it here.
+    private Map<Long,Double> health=Map.of();
     private final Map<Long,Registration> activeView=Collections.unmodifiableMap(active),latestView=Collections.unmodifiableMap(latest);
     private final List<Event> eventsView=Collections.unmodifiableList(events);
     private final Map<UUID,RecoveredSolid> recoveriesView=Collections.unmodifiableMap(recoveries);
@@ -203,15 +213,15 @@ public final class WorldTopologyLedger {
         latest.putAll(active);latestAt.putAll(activeAt);
         // Every queued event must apply to the registry before it, in order, as when it was queued.
         for(var event:restored.events){check(latest,latestAt,event.edits);apply(latest,latestAt,event.edits);events.add(event);}
-        recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);stores=restored.stores;
+        recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);stores=restored.stores;health=restored.health;
         shared=restored;sharedVersion=version;
     }
     private void owned(){if(Thread.currentThread()!=owner)throw new IllegalStateException("World topology belongs to the server thread");}
     /** The ledger as a checkpoint saves it. While the ledger is unchanged every snapshot shares the same immutable parts. */
     public Snapshot snapshot() {
         owned();
-        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),Map.copyOf(shafts),stores);sharedVersion=version;}
-        else if(shared.onlineTick!=onlineTick)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,shared.shafts,shared.stores);
+        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),Map.copyOf(shafts),stores,health);sharedVersion=version;}
+        else if(shared.onlineTick!=onlineTick)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,shared.shafts,shared.stores,shared.health);
         return shared;
     }
     public long onlineTick(){owned();return onlineTick;}
@@ -338,6 +348,10 @@ public final class WorldTopologyLedger {
     public Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores(){owned();return stores;}
     /** Sets the electric stores (W5): the engine's live stores, handed over at its cadence and before a save. */
     public void stores(Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> value){owned();var copy=Map.copyOf(value);if(!copy.equals(stores)){stores=copy;version++;}}
+    /** The pumps' health (W10b) as last set, by device identity: only pumps below 1. */
+    public Map<Long,Double> health(){owned();return health;}
+    /** Sets the pumps' health (W10b): the engine's live values, handed over at its cadence and before a save. */
+    public void health(Map<Long,Double> value){owned();var copy=Map.copyOf(value);if(!copy.equals(health)){health=copy;version++;}}
     /** Removes shaft unit {@code id}; a part holds no stock, so nothing is booked. */
     public void removeShaft(long id){owned();if(shafts.remove(id)!=null)version++;}
     /** Reserves {@code count} identities and returns the first. */

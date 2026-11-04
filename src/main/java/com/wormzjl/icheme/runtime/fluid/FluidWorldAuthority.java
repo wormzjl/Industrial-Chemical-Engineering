@@ -50,6 +50,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final ShaftTrains shafts;
     /** The powered units' electric stores (W5). */
     private final ElectricStores electric;
+    /** The pumps' health (W10b). */
+    private final PumpHealth health;
     /**
      * Queued topology events apply as one batch at the next tick's hook, or earlier when something reads what they
      * change (a view, a capture, a filter recovery). A run of events inside one tick (a command placing thousands of
@@ -120,6 +122,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         instruments.reconcileLegacyValves();
         shafts=new ShaftTrains(topology,registry::owner,runtime.coordinator());runtime.coordinator().shafts(shafts);shafts.host(new ShaftHost());
         electric=new ElectricStores(topology,registry::owner,runtime.coordinator(),()->new ElectricStores.Settings(IChemE.joulesPerFE(),IChemE.machinesNeedPower()));shafts.electric(electric);
+        health=new PumpHealth(topology,registry::owner,runtime.coordinator(),id->PumpHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
         registry.forEachChunk((name,chunk,devices)->{var level=server.getLevel(dimension(name));var at=new net.minecraft.world.level.ChunkPos(chunk);
@@ -290,6 +293,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public ShaftTrains shafts(){owned();return shafts;}
     /** The electric stores (W5): the FE ports' side and their views are reads and the FE protocol only. */
     public ElectricStores electric(){owned();return electric;}
+    /** The pumps' health (W10b): a repair kit queues its event here. */
+    public PumpHealth health(){owned();return health;}
     /**
      * A shaft-driven machine (batch 2026-11-03-rotating-machinery W3): a pump or compressor casing on its curve
      * ({@code FlowControl.Machine}), a reciprocating frame ({@code Compressor}) or a steam turbine (kind {@code TURBINE},
@@ -603,12 +608,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(topology.hasPendingEvents()){applyPending();runtime.coordinator().pumpIfUseful();}
         // Shaft events apply after the devices they name (W3), then their trains recompile and wake what moved.
         if(shafts.hasEvents()&&propertyHold==null){shafts.apply();if(topology.hasPendingEvents())applyPending();runtime.coordinator().pumpIfUseful();}
+        // Repair kits (W10b): queued engine events, applied after the devices they name; a repaired failed pump wakes its island.
+        if(health.hasEvents()&&propertyHold==null){health.apply();runtime.coordinator().pumpIfUseful();}
         instruments.tick(topology.onlineTick());
         presentation.tick(topology.onlineTick());
         // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
         if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
         // The electric stores at the presentation cadence (W5, readings A60, A62): booking at rest, restarts, the facts handed over.
-        if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();}
+        if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();health.cadence();}
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
         com.wormzjl.icheme.network.AssemblyNetwork.presentationTick(server, topology.onlineTick());
@@ -974,7 +981,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public FluidSavedData.Capture capture() {
         owned();flush();var islands=new ArrayList<FluidCheckpointCodec.IslandEntry>();
         // Materialised first: a certified side's replay books its heat in transit, which the facts then carry.
-        var snapshots=runtime.coordinator().snapshots();electric.flush();var world=topology.snapshot().withHeatTransits(runtime.coordinator().transits());
+        var snapshots=runtime.coordinator().snapshots();electric.flush();health.flush();var world=topology.snapshot().withHeatTransits(runtime.coordinator().transits());
         for(var snapshot:snapshots) {
             if(registry.members(snapshot.id()).isEmpty())throw new IllegalStateException("Fluid island "+snapshot.id()+" holds no device; refusing to save it");
             String dimension=world.active().get(registry.members(snapshot.id()).getFirst()).device().position().dimension();
@@ -1067,6 +1074,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
                     double delivered=mover instanceof FlowControl.Machine||drawn.empty()||!(mover.targetVolumeFlow()>0)?Double.NaN
                             :q[i]/(drawn.state().mass()/drawn.state().volume())/mover.targetVolumeFlow();
                     if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet,delivered);
+                    // A pump's health (W10b): FAILED first while it stands failed, its health last.
+                    if(mover.liquid()){var wear=health.status(id);if(health.failed(id))status="FAILED: use a repair kit / "+status;if(!wear.isEmpty())status+=" / "+(health.failed(id)?wear.substring("FAILED / ".length()):wear);}
                     else {status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
                     // The limit the mover's law holds: a set-flow pump's setting is the rise for water and scales with its
                     // supply's density, the stream its supply walk ends at (owner decision D11, A2); a compressor's is the ratio over

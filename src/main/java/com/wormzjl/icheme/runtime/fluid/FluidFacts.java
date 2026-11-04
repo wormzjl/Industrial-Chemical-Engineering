@@ -49,9 +49,10 @@ final class FluidFacts {
      *  10 (batch 2026-11-03-rotating-machinery, W3): the {@code machine} and {@code turbine} controls, the device kind
      *  {@code TURBINE}, the control valve source {@code SHAFT_SPEED}, and the world's shaft units (after the column units).
      *  11 (batch 2026-11-03-rotating-machinery, W5): the world's electric stores (after the shaft units), an air cooler side's
-     *  fans, the shaft trip {@code NO_POWER} (never written: it is not latched). */
-    static final int SCHEMA=11;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 11. */
+     *  fans, the shaft trip {@code NO_POWER} (never written: it is not latched).
+     *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1. */
+    static final int SCHEMA=12;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 12. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -174,7 +175,14 @@ final class FluidFacts {
      */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
                  WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
-                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores) {
+                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health) {
+        /** Facts without pump health (a world before schema 12): every pump new. */
+        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
+              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
+              List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores) {
+            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,Map.of());
+        }
+        World {health=Map.copyOf(health);}
         /** Facts without shaft units (a world before schema 10). */
         World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
               WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns) {
@@ -199,7 +207,7 @@ final class FluidFacts {
             for(var r:recoveries)if(pending.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,inventory(r.solids,record),r.energy))!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate recovery "+r.id);
             var units=new HashMap<Long,ColumnUnit>();for(var u:columns)if(units.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate column unit "+u.id());
             var parts=new HashMap<Long,ShaftUnit>();for(var u:shafts)if(parts.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate shaft unit "+u.id());
-            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores());
+            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health);
             new WorldTopologyLedger(snapshot);return snapshot;
         }
     }
@@ -221,6 +229,8 @@ final class FluidFacts {
             f.list(new TreeMap<>(s.shafts()).values(),FluidFacts::shaft);
             // Schema 11: the electric stores, by unit identity: content (J) and whether metered.
             f.list(new TreeMap<>(s.stores()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue().joules()).bool(e.getValue().metered()));
+            // Schema 12: the pumps' health, by device identity, only pumps below 1 (a pump without an entry is new).
+            f.list(new TreeMap<>(s.health()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue()));
         });
     }
     static World world(byte[] data,int offset,int length) {
@@ -250,8 +260,13 @@ final class FluidFacts {
                 return valid(q,"electric store "+id,()->Map.entry(id,new com.wormzjl.icheme.science.machine.ElectricStore.Facts(joules,metered)));});
             Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores=null;
             if(saved!=null){stores=new HashMap<>();for(var e:saved)if(stores.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate electric store "+e.getKey());}
+            // A world written before schema 12 has no pump health: every pump is new (health 1).
+            var health=new HashMap<Long,Double>();
+            for(var e:f.list(List.<Map.Entry<Long,Double>>of(),q->{long id=q.count(0);double value=q.f64(1);
+                if(!(value>=0&&value<=1))throw q.invalid("pump health "+id+": "+value);return Map.entry(id,value);}))
+                if(health.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate pump health "+e.getKey());
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
-            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores);
+            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores,health);
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {
@@ -756,7 +771,7 @@ final class FluidFacts {
         }
         var restatedTotal=world.restated.plus(new WorldTopologyLedger.Restated(energy,removed.moles,removed.solids));
         var shafts=new HashMap<Long,ShaftUnit>();for(var u:world.shafts)shafts.put(u.id(),u);
-        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,shafts,world.electricStores());
+        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,shafts,world.electricStores(),world.health());
         var ledger=new WorldTopologyLedger(snapshot);
         // A dismantled column whose release was still queued leaves now, its accounts booked as destroyed.
         for(var u:columns.values())if(u.leaving())ledger.removeColumn(u.id());
