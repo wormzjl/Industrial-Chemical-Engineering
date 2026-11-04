@@ -128,6 +128,11 @@ public interface SimulatorHost {
         return null;
     }
 
+    /** Joules per FE, for the FE/t a proposed motor draws (batch 2026-11-03-rotating-machinery, W8): the common config's {@code joulesPerFE} as this client loaded it, 2.5 J with no config. */
+    default double joulesPerFE() {
+        return 2.5;
+    }
+
     /** Whether the sheet is stored on a block, so Save has somewhere to go. */
     default boolean stores() {
         return false;

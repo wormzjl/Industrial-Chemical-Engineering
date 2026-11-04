@@ -137,7 +137,7 @@ class SizeAllSampleTest {
         assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
         assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
         assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
-        assertEquals(78.38, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
+        assertEquals(78.36, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
         assertEquals(73.93, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
         assertEquals(359.7, before.get("S-7").temperature() - 273.15, .1);
         assertEquals(350.0, after.get("S-7").temperature() - 273.15, .15);
@@ -170,7 +170,7 @@ class SizeAllSampleTest {
     void theCondensersFiveShellsReachTheDoor() {
         var door = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(all.sheet().units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params());
         assertEquals(new com.wormzjl.icheme.science.equipment.ColumnComponents.Units(5, 1, List.of(1, 1, 1)), door.units());
-        var choices = door.choices(com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.STANDARD, List.of());
+        var choices = door.choices();
         assertEquals(5, choices.units().condenser(), "a design the calculator and the assembly take");
         assertEquals(1, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(sheet.units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params()).units().condenser(),
                 "the sheet it was given keeps its door");

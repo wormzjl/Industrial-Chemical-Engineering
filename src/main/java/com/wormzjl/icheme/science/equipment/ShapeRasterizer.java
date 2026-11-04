@@ -116,6 +116,17 @@ public final class ShapeRasterizer {
     public record Port(Cell cell, int dx, int dy, int dz, EquipmentShape.PortClass port, int nozzle) {
     }
 
+    /**
+     * A machine's shaft end in the box (batch 2026-11-03-rotating-machinery): the cell inside its coupling face, the
+     * face's outward direction and which way power passes it. Its shaft block stands in {@link #block()}.
+     */
+    public record Shaft(Cell cell, int dx, int dy, int dz, EquipmentShape.ShaftEnd.Role role) {
+        /** The cell beyond the coupling face, where a shaft block joins the machine. */
+        public Cell block() {
+            return new Cell(cell.x() + dx, cell.y() + dy, cell.z() + dz);
+        }
+    }
+
     private ShapeRasterizer() {
     }
 
@@ -426,6 +437,16 @@ public final class ShapeRasterizer {
         return geometry(shape).ports;
     }
 
+    /** A machine's shaft ends, in its design's order; none for a vessel or a unit without a shaft. */
+    public static List<Shaft> shafts(EquipmentShape shape) {
+        return geometry(shape).shafts;
+    }
+
+    /** The cell of an electric machine's terminal box (its RF port, batch 2026-11-03-rotating-machinery W5), or null. */
+    public static @Nullable Cell terminal(EquipmentShape shape) {
+        return geometry(shape).terminal;
+    }
+
     /** The cells nozzle {@code k} may reach at its largest size: those whose keys carry its size. */
     public static Set<Cell> nozzleCells(EquipmentShape shape, int k) {
         return geometry(shape).nozzleCells.get(k);
@@ -433,7 +454,7 @@ public final class ShapeRasterizer {
 
     /**
      * A drum's shell cell at its lowest inside point, where its fluid node stands: the bottom apex, or a lying drum's
-     * bottom line; a mover's suction nozzle cell; null for other columns and units.
+     * bottom line; a mover's suction nozzle cell, a steam turbine's steam inlet cell (W3); null for other columns and units.
      */
     public static @Nullable Cell fluidCell(EquipmentShape shape) {
         return geometry(shape).fluidCell;
@@ -581,6 +602,9 @@ public final class ShapeRasterizer {
         private final Map<Cell, int[]> reaching = new HashMap<>();
         private final Map<Integer, Mesh> nozzleMeshes = new ConcurrentHashMap<>();
         private final List<Port> ports = new ArrayList<>();
+        private final List<Shaft> shafts = new ArrayList<>();
+        /** An electric machine's terminal box cell, its RF port; null without one. */
+        private final Cell terminal;
         private final Layout layout;
         private final Cell fluidCell;
         /** One node cell per registration: the fluid cell, or each heat side's first inlet cell (batch 2026-10-27-heat-exchanger-design). */
@@ -684,6 +708,23 @@ public final class ShapeRasterizer {
                 var out = transform.direction(nozzle.direction());
                 ports.add(new Port(new Cell(floor(inner[0]), floor(inner[1]), floor(inner[2])), (int) out[0], (int) out[1], (int) out[2], nozzle.role().port, k));
             }
+            Cell box = null;
+            if (unit != null) {
+                for (var end : unit.shaftEnds()) {
+                    var face = end.face();
+                    var direction = new double[3];
+                    direction[end.axis()] = end.sign();
+                    var inner = transform.point(new double[]{face[0] - direction[0] * .01, face[1] - direction[1] * .01, face[2] - direction[2] * .01});
+                    var out = transform.direction(direction);
+                    shafts.add(new Shaft(new Cell(floor(inner[0]), floor(inner[1]), floor(inner[2])), (int) out[0], (int) out[1], (int) out[2], end.role()));
+                }
+                var centre = unit.terminal();
+                if (centre != null) {
+                    var at = transform.point(centre);
+                    box = new Cell(floor(at[0]), floor(at[1]), floor(at[2]));
+                }
+            }
+            terminal = box;
             for (var entry : byCell.entrySet()) {
                 if (entry.getValue().size() > KEYED_NOZZLES)
                     throw new IllegalStateException(entry.getValue().size() + " nozzles reach cell " + entry.getKey() + " of " + shape + ": a key carries " + KEYED_NOZZLES);
@@ -711,6 +752,10 @@ public final class ShapeRasterizer {
             } else if (shape.kind().mover()) {
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.SUCTION)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A mover needs a suction nozzle")).cell();
+            } else if (shape.kind() == EquipmentShape.Kind.STEAM_TURBINE) {
+                // A turbine registers at its steam inlet's cell (W3, reading A37), as a mover at its suction's.
+                node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.STEAM)
+                        .findFirst().orElseThrow(() -> new IllegalStateException("A turbine needs a steam inlet")).cell();
             } else if (unit != null && unit.fluidPoint != null) {
                 var low = transform.point(unit.fluidPoint);
                 node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));

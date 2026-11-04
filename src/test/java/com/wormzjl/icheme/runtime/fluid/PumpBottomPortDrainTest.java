@@ -18,7 +18,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * 200 kg of water at 130 kPa); then the generator and its pipe removed and a pump placed under the tank facing down, one
  * block of pipe and a 101325 Pa void below it. Run the way the world runs an island: consecutive 5 s jobs on one
  * {@link RetainedSolver}, the committed interval handed over at each dispatch. The pump must drain the tank without a
- * hold and end refused on its inlet phase once the water is gone.
+ * hold. Restated for request 11 (batch 2026-11-03-rotating-machinery, owner decisions D19 and D20): it ended refused on its
+ * inlet phase once the water was gone; gas at a pump is no refusal now, so once the water is gone it runs on, never
+ * refused, on the gas its bottom port then gives, and the run ends two slices after the tank holds less than one slice
+ * of the target.
  */
 class PumpBottomPortDrainTest {
     static final String DIMENSION="minecraft:overworld";
@@ -74,7 +77,7 @@ class PumpBottomPortDrainTest {
         var graph=island(devices,Map.of(6L,new FluidDeviceSpec(1,298.15,101325,nitrogen())),Map.of(tankId,tank));
         int pump=-1;for(int i=0;i<graph.pipes().size();i++)if(graph.pipes().get(i).control() instanceof FlowControl.Pump)pump=i;
         assertTrue(pump>=0);
-        var retained=new RetainedSolver();PassiveIntervalSolver.Result last=null;int refusedAt=-1;
+        var retained=new RetainedSolver();PassiveIntervalSolver.Result last=null;int drainedAt=-1;
         for(int slice=0;slice<slices;slice++) {
             retained.committed(last);PassiveIntervalSolver.Result result;
             try{result=retained.solve(model,graph,5,PassiveIntervalSolver.Settings.defaults(),()->{});}
@@ -87,16 +90,11 @@ class PumpBottomPortDrainTest {
             var t=graph.reservoirs().get(node(graph,tankId)).state();var mode=result.endpointModes().get(pump);
             System.out.println("F1_SLICE target="+target+" slice="+slice+" mode="+mode+" flow="+result.averageMassFlows()[pump]+" tankP="+t.pressure()
                     +" condensed="+model.liquidMass(t)+" vapourShare="+t.vaporVolume()/t.volume()+" accepted="+result.acceptedSubsteps()+" rejected="+result.rejectedSubsteps()+" reasons="+result.rejectionReasons());
-            if(mode==FlowControl.Mode.INLET_WRONG_PHASE&&refusedAt<0)refusedAt=slice;
-            if(refusedAt>=0&&slice>=refusedAt+2)break;
+            assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,mode,"gas at a pump is no refusal, slice "+slice);
+            if(drainedAt<0&&model.liquidMass(t)<target*5*1000)drainedAt=slice;
+            if(drainedAt>=0&&slice>=drainedAt+2)break;
         }
-        assertTrue(refusedAt>=0,"the pump ends refused on its inlet phase");
-        var t=graph.reservoirs().get(node(graph,tankId)).state();
-        assertEquals(FlowControl.Mode.INLET_WRONG_PHASE,last.endpointModes().get(pump));
-        assertEquals(0,last.averageMassFlows()[pump],0,"a refused pump carries nothing");
-        // A37: the pump is refused once the port's draw over one slice is more than 2 % gas, so at most about one slice
-        // of the target volume of water is left behind.
-        assertTrue(model.liquidMass(t)<target*5*1000,"the tank is drained to less than one slice of the target: "+model.liquidMass(t)+" kg");
+        assertTrue(drainedAt>=0,"the pump drains the tank to less than one slice of the target");
     }
 
     @Test void aPumpOnTheBottomFaceDrainsTheTankAtTheDefaultTarget(){drain(.01,20);}

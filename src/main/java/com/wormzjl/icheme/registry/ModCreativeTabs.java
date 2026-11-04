@@ -23,9 +23,11 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.TEMPERATURE_PROBE.get());
                 output.accept(ModItems.FLOWMETER.get());
                 output.accept(ModItems.DIGITAL_LEVEL_METER.get());
+                output.accept(ModItems.SPEED_SENSOR.get());
                 output.accept(ModItems.PRESSURE_GAUGE.get());
                 output.accept(ModItems.TEMPERATURE_GAUGE.get());
                 output.accept(ModItems.ACCESSORY_WRENCH.get());
+                output.accept(ModItems.REPAIR_KIT.get());
                 output.accept(ModItems.PIPELINE_TOOL.get());
                 output.accept(ModItems.PIPE_LAYING_TOOL.get());
                 output.accept(ModItems.PIPE_RACK.get());
@@ -43,6 +45,8 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.RECOVERED_SOLIDS.get());
                 output.accept(ModItems.FLUID_DEBUGGER.get());
                 output.accept(ModItems.EQUIPMENT_CONSTRUCTOR.get());
+                output.accept(ModItems.SHAFT.get());
+                output.accept(ModItems.CREATIVE_MOTOR.get());
             })
             .build());
 

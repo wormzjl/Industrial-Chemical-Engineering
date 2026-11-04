@@ -25,6 +25,9 @@ public final class ModMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<com.wormzjl.icheme.world.inventory.GaugeMenu>> GAUGE = MENU_TYPES.register("gauge", () -> IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.GaugeMenu::new));
     public static final DeferredHolder<MenuType<?>, MenuType<com.wormzjl.icheme.world.inventory.AssemblyMenu>> ASSEMBLY = MENU_TYPES.register("assembly", () -> IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.AssemblyMenu::new));
 
+    /** A machine's own page (batch 2026-11-03-rotating-machinery, W7). */
+    public static final DeferredHolder<MenuType<?>, MenuType<com.wormzjl.icheme.world.inventory.MachineMenu>> MACHINE = MENU_TYPES.register("machine", () -> IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.MachineMenu::new));
+
     private ModMenus() {
     }
 

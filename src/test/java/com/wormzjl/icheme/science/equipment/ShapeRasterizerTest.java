@@ -18,6 +18,47 @@ import static com.wormzjl.icheme.science.equipment.EquipmentShape.drum;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ShapeRasterizerTest {
+    /**
+     * W5 (batch 2026-11-03-rotating-machinery, reading A58): an air cooler's and an induced-draft tower's terminal box, its
+     * FE port, is a cell of its layout at grade on an outside face, with one free block between it and every nozzle's pipe
+     * block, in every size, bank and heading.
+     */
+    @Test
+    void aFanUnitsTerminalIsAnOutsideCellAtGradeClearOfItsNozzles() {
+        var shapes = new java.util.ArrayList<EquipmentShape>();
+        for (var heading : Heading.values()) {
+            var cooler = UnitDesign.of(Kind.AIR_COOLER);
+            for (double d : new double[]{cooler.minSize(), cooler.maxSize()})
+                for (var bank : List.of(ProcessUnit.Bank.ONE, new ProcessUnit.Bank(3, 2), new ProcessUnit.Bank(ProcessUnit.Bank.MAX_PARALLEL, ProcessUnit.Bank.MAX_SERIES))) {
+                    int length = cooler.defaultLength(d);
+                    shapes.add(EquipmentShape.designed(Kind.AIR_COOLER, d, length, heading, cooler.defaultSupport(d, length), bank));
+                }
+            var tower = UnitDesign.of(Kind.INDUCED_DRAFT_COOLING_TOWER);
+            for (double d : new double[]{tower.minSize(), tower.maxSize()})
+                for (var bank : List.of(TowerBank.ONE, new TowerBank(3, 2)))
+                    shapes.add(EquipmentShape.designed(Kind.INDUCED_DRAFT_COOLING_TOWER, d, tower.defaultLength(d), heading, 0, ProcessUnit.Bank.ONE).withTowerBank(bank));
+        }
+        for (var shape : shapes) {
+            var terminal = ShapeRasterizer.terminal(shape);
+            assertNotNull(terminal, shape.toString());
+            var layout = ShapeRasterizer.layout(shape);
+            var occupied = new HashSet<ShapeRasterizer.Cell>(layout.shell());
+            occupied.addAll(layout.interior());
+            assertTrue(layout.shell().contains(terminal), shape + ": its terminal " + terminal + " is a shell cell");
+            assertEquals(0, terminal.y(), shape + ": at grade");
+            boolean outside = false;
+            for (int[] d : new int[][]{{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}})
+                outside |= !occupied.contains(new ShapeRasterizer.Cell(terminal.x() + d[0], terminal.y(), terminal.z() + d[2]));
+            assertTrue(outside, shape + ": on an outside face");
+            for (var port : ShapeRasterizer.ports(shape)) {
+                int dx = Math.abs(terminal.x() - port.cell().x() - port.dx()), dy = Math.abs(terminal.y() - port.cell().y() - port.dy()), dz = Math.abs(terminal.z() - port.cell().z() - port.dz());
+                assertTrue(Math.max(dx, Math.max(dy, dz)) >= 2, shape + ": a free block between its terminal and a nozzle's pipe");
+            }
+        }
+        assertNull(ShapeRasterizer.terminal(EquipmentShape.designed(Kind.NATURAL_DRAFT_COOLING_TOWER, 40, com.wormzjl.icheme.science.fluid.network.CoolingTower.naturalHeight(40), Heading.NORTH, 0, ProcessUnit.Bank.ONE)),
+                "a natural-draught tower has no fans");
+    }
+
     @Test
     void aDedicatedServerLaysOutKeysAndCollidesWithoutFacets() {
         // ShapeRasterizer.serverOnly (2026-10-16): a dedicated server drops a geometry's facets once it is laid out. Its
@@ -109,7 +150,7 @@ class ShapeRasterizerTest {
         assertThrows(IllegalArgumentException.class, () -> drum(12, 5, Orientation.VERTICAL, Heading.NORTH, 3));
         assertThrows(IllegalArgumentException.class, () -> EquipmentShape.column(3, ColumnTrays.simple(12, 6), Heading.NORTH, 0));
         assertThrows(IllegalArgumentException.class, () -> new EquipmentShape(EquipmentShape.Kind.COLUMN, 3, 4, Orientation.VERTICAL, Heading.NORTH, 2, ColumnTrays.simple(12, 6), List.of(),
-                ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE));
+                ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE, MachineDuty.NONE));
         // Owner decision 2026-10-25: a lower skirt, the bottom line on the lowest row: ceil(0.5 + 0.8 + 0.05 + D/4).
         assertEquals(2, EquipmentShape.minimumSkirt(2.5));
         assertEquals(3, EquipmentShape.minimumSkirt(6));
@@ -269,6 +310,9 @@ class ShapeRasterizerTest {
             if (shape.reservoir()) assertTrue(ShapeRasterizer.layout(shape).shell().contains(ShapeRasterizer.fluidCell(shape)), shape.toString());
             // A mover's node is its suction nozzle's port cell (batch 2026-10-23-functional-pumps-compressors).
             else if (shape.kind().mover()) assertTrue(ShapeRasterizer.ports(shape).stream().anyMatch(p -> p.cell().equals(ShapeRasterizer.fluidCell(shape))), shape.toString());
+            // A steam turbine's node is its steam inlet's port cell (batch 2026-11-03-rotating-machinery W3, reading A37).
+            else if (shape.kind() == EquipmentShape.Kind.STEAM_TURBINE) assertTrue(ShapeRasterizer.ports(shape).stream()
+                    .anyMatch(p -> shape.nozzles().get(p.nozzle()).role() == EquipmentShape.Role.STEAM && p.cell().equals(ShapeRasterizer.fluidCell(shape))), shape.toString());
             // A heat-exchanging unit has a node per side, at its first inlet's port cell (batch 2026-10-27-heat-exchanger-design).
             else if (HeatSides.unit(shape.kind()) != null) {
                 var sides = HeatSides.of(shape);var cells = ShapeRasterizer.fluidCells(shape);
@@ -633,7 +677,7 @@ class ShapeRasterizerTest {
         for (Runnable bad : List.<Runnable>of(() -> drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 4, List.of(), false, 4),
                 () -> drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 4, List.of(), false, -1), () -> drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 0, List.of(), false, 1),
                 () -> drum(3, 9, Orientation.HORIZONTAL, Heading.NORTH, 2, List.of(), false, 2),
-                () -> new EquipmentShape(Kind.COLUMN, 3, trays.tangentLength(3), Orientation.VERTICAL, Heading.NORTH, 4, trays, List.of(), ProcessUnit.Bank.ONE, false, 1, TowerBank.ONE)))
+                () -> new EquipmentShape(Kind.COLUMN, 3, trays.tangentLength(3), Orientation.VERTICAL, Heading.NORTH, 4, trays, List.of(), ProcessUnit.Bank.ONE, false, 1, TowerBank.ONE, MachineDuty.NONE)))
             assertThrows(IllegalArgumentException.class, bad::run);
         assertFalse(EquipmentShape.column(3, trays, Heading.NORTH, 4).outletTurns());
         assertFalse(drum(3, 9, Orientation.HORIZONTAL, Heading.NORTH, 2).outletTurns());
@@ -667,7 +711,7 @@ class ShapeRasterizerTest {
                 java.util.Collections.nCopies(EquipmentShape.MAX_CONNECTIONS + 1, new Connection(0, 5, 0))));
         var trays = ColumnTrays.simple(12, 6);
         assertThrows(IllegalArgumentException.class, () -> new EquipmentShape(EquipmentShape.Kind.COLUMN, 3, trays.tangentLength(3), Orientation.VERTICAL,
-                Heading.NORTH, 4, trays, List.of(new Connection(0, 5, 0)), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE));
+                Heading.NORTH, 4, trays, List.of(new Connection(0, 5, 0)), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE, MachineDuty.NONE));
         // Right, left and a hillside nozzle at the back over the manway: clear of each other, of the outlets and of the
         // manway, the hillside one off centre.
         var drum = drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 4, placed);
@@ -935,9 +979,9 @@ class ShapeRasterizerTest {
         assertThrows(IllegalArgumentException.class, () -> EquipmentShape.storage(Kind.DRUM, 2, 3, Heading.NORTH, 0));
         // Neither takes side connections or trays: their ports are fixed.
         assertThrows(IllegalArgumentException.class, () -> new EquipmentShape(Kind.TANK, 12, 8, Orientation.VERTICAL, Heading.NORTH, 0, null,
-                List.of(new Connection(0, 1, 0)), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE));
+                List.of(new Connection(0, 1, 0)), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE, MachineDuty.NONE));
         assertThrows(IllegalArgumentException.class, () -> new EquipmentShape(Kind.SPHERE, 8, 1, Orientation.VERTICAL, Heading.NORTH, 2, ColumnTrays.simple(12, 6),
-                List.of(), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE));
+                List.of(), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE, MachineDuty.NONE));
         assertEquals(37 * 21 + 21 * 7, everyStorageSize().size());
     }
 

@@ -28,7 +28,7 @@ public final class FluidPumpStartupGameTests {
         level.setBlock(pump,inlinePump(Direction.EAST),3);
         long sourceId=((FluidDeviceBlockEntity)level.getBlockEntity(source)).fluidIdentity(),tankId=((FluidDeviceBlockEntity)level.getBlockEntity(tank)).fluidIdentity();
         var feed=world.presets().stream().filter(p->p.id().equals("icheme:tia_juana_light_methane")).findFirst().orElseThrow();
-        // A liquid-only pump (decision D1 of the phase-ports batch) refuses the crude at 350 K and 1 atm, which is 76 %
+        // A liquid-only pump (decision D1 of the phase-ports batch; gas refuses nothing since request 11) refused the crude at 350 K and 1 atm, which is 76 %
         // vapour by volume; its bubble point at 350 K is 226 kPa (one flashTP, PHASE_PORTS_REVIEW.md WP3), so the
         // generator stands at 1 MPa and supplies a liquid (re-baselined from 101325 Pa).
         TankCharge.run(world,sourceId,new FluidDeviceSpec(1,350,1e6,feed.moleFractions()));

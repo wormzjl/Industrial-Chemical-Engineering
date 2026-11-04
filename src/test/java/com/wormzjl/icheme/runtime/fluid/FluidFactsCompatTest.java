@@ -97,7 +97,92 @@ class FluidFactsCompatTest {
         var tower=CoolingTower.induced(8,2,3,2).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,.4,299);
         world.place(50,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(tower.basinVolume(),298.15,101325,
             FluidDeviceSpec.water(CATALOG).composition(),SlurryFeed.NONE,CoolingTower.BASIN_DEPTH,true).withTower(tower),.05);
-        world.runTo(800);return world;
+        world.runTo(800);
+        shafts(world);
+        world.runTo(820);
+        stores(world);
+        world.runTo(840);
+        health(world);
+        world.runTo(860);return world;
+    }
+    /**
+     * Facts schema 12 (batch 2026-11-03-rotating-machinery W10b): the pumps' health, the first pump worn to 0.73, the
+     * second (where the corpus has one) failed at 0; every other pump is new and carries no entry.
+     */
+    private void health(EventPathWorld world) {
+        var pumps=world.ledger.active().values().stream().filter(PumpHealth::pump).map(r->r.device().id()).sorted().toList();
+        var health=new HashMap<Long,Double>();
+        health.put(pumps.get(0),.73);
+        if(pumps.size()>1)health.put(pumps.get(1),0.);
+        world.ledger.health(health);
+    }
+    /**
+     * Facts schema 11 (batch 2026-11-03-rotating-machinery W5): an air cooler side with its four fans, and the electric
+     * stores: the 30 kW motor's metered and part full, the 1 MW motor's metered and empty, the tower's unmetered (a store
+     * from a save before W5, owner decision A73) with what it took before it was metered (none).
+     */
+    private void stores(EventPathWorld world) {
+        long cooler=world.ledger.nextIdentity();var spec=FluidDeviceSpec.nitrogen(CATALOG);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(cooler,new WorldTopologyLedger.Registration(heatSide(cooler,70,0,HeatSides.airCoolerPassage(3,6,com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE),
+                new HeatUnit(HeatSides.Unit.AIR_COOLER,HeatSides.Side.PROCESS,120,0).withFans(4)),spec,0))),cooler+1,null);
+        world.runTo(830);
+        var stores=new HashMap<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts>();
+        var motors=world.ledger.shafts().values().stream().filter(u->u.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR).sorted(Comparator.comparingLong(ShaftUnit::id)).toList();
+        stores.put(motors.get(0).id(),new com.wormzjl.icheme.science.machine.ElectricStore.Facts(4.5e5,true));
+        stores.put(motors.get(1).id(),com.wormzjl.icheme.science.machine.ElectricStore.Facts.EMPTY);
+        stores.put(cooler,new com.wormzjl.icheme.science.machine.ElectricStore.Facts(1234.5,true));
+        for(var r:world.ledger.active().values())if(r.spec().tower()!=null)stores.put(r.device().id(),com.wormzjl.icheme.science.machine.ElectricStore.Facts.UNMETERED);
+        world.ledger.stores(stores);
+    }
+    /**
+     * Facts schema 10 (batch 2026-11-03-rotating-machinery W3): a pump casing on its curve driven by a 30 kW motor over
+     * three shafts, the motor tripped on overload; a 1 MW motor, a gearbox set to 4.27 and a centrifugal compressor casing;
+     * a steam turbine with its governor valve ({@code SHAFT_SPEED}) on a shaft; a creative motor on its own shaft. Every
+     * new field is away from its default somewhere: a set flow and a set pressure, settings, a ratio, a trip.
+     */
+    private void shafts(EventPathWorld world) {
+        var spec=FluidDeviceSpec.nitrogen(CATALOG);var water=FluidDeviceSpec.water(CATALOG);
+        long pump=world.ledger.nextIdentity(),compressor=pump+1,turbine=pump+2;
+        var pumpLaw=new com.wormzjl.icheme.science.machine.CentrifugalPump(100/3600.,80,.7,2950);
+        var compressorLaw=new com.wormzjl.icheme.science.machine.CentrifugalCompressor(2.0,150000,.78);
+        world.registry.submit(List.of(
+                new WorldTopologyLedger.Edit(pump,new WorldTopologyLedger.Registration(machine(pump,60,0,Kind.PUMP,new FlowControl.Machine(pumpLaw,0,true,.02,0)),water,0)),
+                new WorldTopologyLedger.Edit(compressor,new WorldTopologyLedger.Registration(machine(compressor,60,4,Kind.COMPRESSOR,new FlowControl.Machine(compressorLaw,0,true,0,4e5)),spec,0)),
+                new WorldTopologyLedger.Edit(turbine,new WorldTopologyLedger.Registration(machine(turbine,60,8,Kind.TURBINE,new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(55e3))),water,0))),turbine+1,null);
+        world.runTo(805);
+        long governor=world.place(58,64,8,Kind.VALVE,Direction.EAST);world.runTo(810);
+        var r=world.registry.registrations().get(governor);
+        var valve=new FlowControl.ControlValve(FlowControl.ValveSource.SHAFT_SPEED,200000,.1056,.01,new UUID(3,4),2);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(governor,new WorldTopologyLedger.Registration(r.device().withControl(valve),r.spec(),r.revision()+1))),world.ledger.nextIdentity(),null);
+        var none=ShaftUnit.Settings.DEFAULT;var trip=com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;var fixed=com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED;
+        // Train 1: motor (61,64,0) east into shafts at 62..64, into the pump casing's end at 65; tripped on overload.
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,at(61,0),0,List.of(end(61,0,1,true)),0,30e3,2950,2,fixed,
+                new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.9,0,0),com.wormzjl.icheme.science.machine.ShaftTrain.Trip.OVERLOAD,null));
+        for(int x=62;x<=64;x++)world.ledger.shaft(ShaftUnit.shaft(world.ledger.reserve(1),at(x,1),0));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING,at(65,1),0,List.of(end(65,1,-1,false)),pump,0,2950,0,fixed,none,trip,null));
+        // Train 2: a 1 MW motor, a gearbox at 4.27, a centrifugal compressor casing.
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,at(61,4),0,List.of(end(61,4,1,true)),0,1e6,2950,2,
+                com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,none,trip,null));
+        world.ledger.shaft(ShaftUnit.shaft(world.ledger.reserve(1),at(62,4),0));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GEARBOX,at(63,4),0,List.of(end(63,4,-1,false),end(63,4,1,true)),0,1e6,0,0,fixed,
+                new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED,0,0,4.27),trip,null));
+        world.ledger.shaft(ShaftUnit.shaft(world.ledger.reserve(1),at(64,4),0));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING,at(65,4),0,List.of(end(65,4,-1,false)),compressor,0,12597,0,fixed,none,trip,null));
+        // Train 3: the steam turbine on a shaft; train 4: a creative motor at 1500 rpm and 50 kW on its shaft.
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.STEAM_TURBINE,at(61,8),0,List.of(end(61,8,1,true)),turbine,55e3,6000,0,fixed,none,trip,null));
+        world.ledger.shaft(ShaftUnit.shaft(world.ledger.reserve(1),at(62,8),0));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR,at(61,12),0,List.of(end(61,12,1,true)),0,0,
+                com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED,0,com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED,1500,5e4,0),trip,null));
+        world.ledger.shaft(ShaftUnit.shaft(world.ledger.reserve(1),at(62,12),0));
+    }
+    private static PhysicalFluidTopology.Position at(int x,int z){return new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,66,z);}
+    private static ShaftUnit.End end(int x,int z,int dx,boolean output){return new ShaftUnit.End(at(x,z),dx,0,0,output);}
+    /** A shaft-driven machine (W3) at row {@code z}: its suction port at {@code x}, its discharge two cells east. */
+    private static PhysicalFluidTopology.Device machine(long id,int x,int z,Kind kind,FlowControl control) {
+        var inlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,z);var outlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x+2,64,z);
+        var ports=List.of(new PhysicalFluidTopology.Port(inlet,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),
+                new PhysicalFluidTopology.Port(outlet,Direction.EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
+        return new PhysicalFluidTopology.Device(id,inlet,kind,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control,ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES);
     }
     private static PhysicalFluidTopology.Device heatSide(long id,int x,int z,PipeResistance.Geometry passage,HeatUnit heat) {
         var inlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,z);var outlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x+2,64,z);
@@ -357,6 +442,14 @@ class FluidFactsCompatTest {
                 // Schema 6 wrote the column units and the devices they hold; an older image reads none.
                 assertEquals(Long.parseLong(expected.getProperty("suspended","0")),suspended(ledger),folder+": suspended devices");
                 assertEquals(expected.getProperty("columns",""),columns(ledger),folder+": column units");
+                // Schema 10 wrote the machines on their curves, turbines, governor valves and shaft units; an older image reads none.
+                assertEquals(expected.getProperty("shafts",""),shafts(ledger),folder+": shaft units");
+                // Schema 11 wrote the electric stores; an older image reads an unmetered, empty store for each powered unit.
+                if(expected.getProperty("stores")!=null)assertEquals(expected.getProperty("stores"),stores(ledger),folder+": electric stores");
+                if(expected.getProperty("stores")==null)for(var e:ledger.stores().entrySet())assertEquals(com.wormzjl.icheme.science.machine.ElectricStore.Facts.UNMETERED,e.getValue(),folder+": store "+e.getKey());
+                if(expected.getProperty("stores")==null)assertEquals(ledger.active().values().stream().filter(ElectricStores::powered).count()+ledger.shafts().values().stream().filter(ElectricStores::powered).count(),ledger.stores().size(),folder+": a store for each powered unit");
+                // Schema 12 wrote the pumps' health; an older image reads every pump new (health 1, no entry).
+                assertEquals(expected.getProperty("health",""),health(ledger),folder+": pump health");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
@@ -487,6 +580,9 @@ class FluidFactsCompatTest {
         props.setProperty("heatSides",heatSides(loaded.world().orElseThrow()));
         props.setProperty("suspended",Long.toString(suspended(loaded.world().orElseThrow())));
         props.setProperty("columns",columns(loaded.world().orElseThrow()));
+        props.setProperty("shafts",shafts(loaded.world().orElseThrow()));
+        props.setProperty("stores",stores(loaded.world().orElseThrow()));
+        props.setProperty("health",health(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
@@ -499,6 +595,8 @@ class FluidFactsCompatTest {
             if(!text.isEmpty())text.append(";");
             text.append(r.device().id()).append(":").append(g.channels());
             if(h!=null)text.append(":").append(h.unit()).append(":").append(h.side()).append(":").append(h.area()).append(":").append(h.partner()).append(":").append(h.control()).append(":").append(h.transitJoule());
+            // Schema 11: an air cooler's fans, written only where known, as an older image has none.
+            if(h!=null&&h.fanCount()>0)text.append(":fans=").append(h.fanCount());
         }
         return text.toString();
     }
@@ -519,6 +617,44 @@ class FluidFactsCompatTest {
         return text.toString();
     }
     private static long shaped(WorldTopologyLedger.Snapshot world){return world.active().values().stream().filter(r->r.spec().geometry().form()!=VesselGeometry.Form.PRISM).count();}
+    /**
+     * What schema 10 carries (W3): the machines on their curves, the turbines, the governor valves, the trips and the shaft
+     * units by kind with their settings, as {@code machines=2;turbines=1;speedValves=1;trips=1;units=...}; empty for none.
+     */
+    private static String shafts(WorldTopologyLedger.Snapshot world) {
+        long machines=world.active().values().stream().filter(r->r.device().control() instanceof FlowControl.Machine).count();
+        long turbines=world.active().values().stream().filter(r->r.device().control() instanceof FlowControl.Turbine).count();
+        long speedValves=world.active().values().stream().filter(r->r.device().control() instanceof FlowControl.ControlValve v&&v.source()==FlowControl.ValveSource.SHAFT_SPEED).count();
+        long trips=world.shafts().values().stream().filter(u->u.trip()!=com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE).count();
+        if(machines+turbines+speedValves+world.shafts().size()==0)return "";
+        var units=new StringBuilder();
+        for(var u:new TreeMap<>(world.shafts()).values()) {
+            if(!units.isEmpty())units.append(",");
+            units.append(u.kind().name().toLowerCase(Locale.ROOT)).append(u.fluid()!=0?"@"+u.fluid():"");
+            if(!u.settings().equals(ShaftUnit.Settings.DEFAULT))units.append("[").append(u.settings().mode()).append(" ").append(u.settings().setPoint()).append(" ").append(u.settings().powerLimit()).append(" ").append(u.settings().ratio()).append("]");
+        }
+        return "machines="+machines+";turbines="+turbines+";speedValves="+speedValves+";trips="+trips+";units="+units;
+    }
+    /**
+     * What schema 11 carries (W5): every electric store, by unit, as {@code id=joules/metered}.
+     */
+    private static String stores(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var e:new TreeMap<>(world.stores()).entrySet()) {
+            if(!text.isEmpty())text.append(";");
+            text.append(e.getKey()).append("=").append(e.getValue().joules()).append("/").append(e.getValue().metered());
+        }
+        return text.toString();
+    }
+    /** What schema 12 carries (W10b): every pump below full health, by device, as {@code id=health}. */
+    private static String health(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var e:new TreeMap<>(world.health()).entrySet()) {
+            if(!text.isEmpty())text.append(";");
+            text.append(e.getKey()).append("=").append(e.getValue());
+        }
+        return text.toString();
+    }
     private static long controlValves(WorldTopologyLedger.Snapshot world){return world.active().values().stream().filter(r->r.device().control() instanceof FlowControl.ControlValve).count();}
     private static FluidCheckpointCodec.Image read(Path folder) throws IOException {
         var core=NbtIo.readCompressed(folder.resolve("core.dat"),NbtAccounter.unlimitedHeap());var packs=new HashMap<Long,byte[]>();

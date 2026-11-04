@@ -55,6 +55,10 @@ public final class SimulatorBlockHost implements SimulatorHost {
         return runner;
     }
 
+    @Override public double joulesPerFE() {
+        return com.wormzjl.icheme.IChemE.joulesPerFE();
+    }
+
     @Override public boolean canRun() {
         return !reader();
     }

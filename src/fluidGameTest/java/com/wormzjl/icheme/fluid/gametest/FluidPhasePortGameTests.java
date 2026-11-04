@@ -14,8 +14,8 @@ import java.util.*;
 
 /**
  * The three devices of the phase-ports batch placed as blocks (plan section 6, phase-ports WP5): a tank's top, side and
- * bottom outlets each carrying their phase to a void; a liquid-only pump on a gas tank refused with its reason on its
- * status line (the compressor's target, ratio limit and shutoff are CompressorTest's). Every observation is the device's
+ * bottom outlets each carrying their phase to a void; a pump on a gas tank moving the gas (the compressor's target, ratio
+ * limit and shutoff are CompressorTest's). Every observation is the device's
  * view as the engine publishes it ({@link FluidWorldAuthority#view}).
  */
 @GameTestHolder("icheme_fluid_test")
@@ -108,20 +108,20 @@ public final class FluidPhasePortGameTests {
     private static final long EDIT_AFTER_TICKS=10;
 
     /**
-     * Plan section 6, scenario 2 (its first half). A liquid-only pump (decision D1) on the east side of a nitrogen tank,
-     * facing east into a pipe and a void: its supply is 100 % vapour, so it is refused (INLET_WRONG_PHASE, decision D6),
-     * carries nothing, and its status line gives the reason with the tank named as a device, in the words the menu shows.
+     * Plan section 6, scenario 2 (its first half). A pump on the east side of a nitrogen tank, facing east into a pipe and a
+     * void: its supply is 100 % vapour. Restated for request 11 (batch 2026-11-03-rotating-machinery, owner decisions D19
+     * and D20): gas at a pump is no refusal; the set-flow pump's law counts the suction mixture's volume, so it moves the
+     * tank's gas, its status line carries no inlet reason and its limit is shown on this fluid. (Before: refused,
+     * INLET_WRONG_PHASE with the reason "pump inlet not liquid".)
      */
-    @GameTest(template="empty",timeoutTicks=30000,batch="fluid-pump-refused")
-    public static void aPumpOnAGasTankIsRefusedWithItsReasonOnItsStatusLine(GameTestHelper helper) {
+    @GameTest(template="empty",timeoutTicks=30000,batch="fluid-pump-gas")
+    public static void aPumpOnAGasTankMovesTheGasWithNoRefusal(GameTestHelper helper) {
         var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
         // A pipe block between the tank and the in-line pump, as the line stood with the one-block pump (decision D20).
         var tank=helper.absolutePos(new BlockPos(0,1,0));var suction=tank.east();var pump=suction.east();var pipe=pump.east();var sink=pipe.east();var all=List.of(tank,suction,pump,pipe,sink);
         place(helper,tank,ModBlocks.FLUID_RESERVOIR.get().defaultBlockState());
         // A placed tank holds nothing (decision D54): the gas tank is charged first, at 102 kPa (TankCharge).
         var charge=new TankCharge(helper,world,tank,Direction.SOUTH,102000);
-        var p=world.registrations().get(identity(helper,tank)).device().position();
-        String expected="ERROR: pump inlet not liquid (vapour 100.0 % by volume, from reservoir at "+p.x()+", "+p.y()+", "+p.z()+")";
         boolean[] done={false};long[] deadline={System.nanoTime()+180_000_000_000L};long[] pumpIds={-1};
         helper.onEachTick(()->{
             if(done[0])return;
@@ -135,13 +135,12 @@ public final class FluidPhasePortGameTests {
                 pumpIds[0]=identity(helper,pump);deadline[0]=System.nanoTime()+60_000_000_000L;return;
             }
             long pumpId=pumpIds[0];var view=world.view(pumpId);
-            helper.assertTrue(System.nanoTime()<deadline[0],"The pump was not refused: "+view.status());
-            if(!view.status().startsWith("ERROR: pump inlet"))return;
-            helper.assertTrue(view.status().contains(expected),"The reason names the tank: "+view.status());
-            helper.assertTrue(view.massFlow()==0,"A refused pump carries nothing: "+view.massFlow());
-            helper.assertTrue(!view.status().contains("limit"),"No limit is shown for a refused pump: "+view.status());
+            helper.assertTrue(System.nanoTime()<deadline[0],"The pump moved no gas: "+view.status());
+            helper.assertTrue(!view.status().contains("inlet"),"Gas at a pump is no refusal: "+view.status());
+            if(!(view.massFlow()>0))return;
+            helper.assertTrue(view.status().contains("limit"),"A running pump shows its limit on this fluid: "+view.status());
             var page=FluidNetwork.snapshot(world,world.registrations().get(pumpId),view);
-            helper.assertTrue(page.view().status().contains(expected),"The pump's page shows the reason");
+            helper.assertTrue(!page.view().status().contains("inlet"),"The pump's page shows no inlet reason");
             System.out.println("PHASE_PORT_GAMETEST pump tick="+view.onlineTick()+" committed="+view.committedTick()+" status="+view.status());
             done[0]=true;clear(helper,all);helper.succeed();
         });

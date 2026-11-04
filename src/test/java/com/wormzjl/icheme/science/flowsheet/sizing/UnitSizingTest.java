@@ -45,8 +45,31 @@ final class UnitSizingTest {
         assertSame(Limit.PUMP_FLOW, PumpSizing.rate(new PumpSizing.Load(40000, 71, 204.5, 80.), size).closest().limit());
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(40000, 71, 204.5, 80.), size).lamp());
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 210, 204.5, 80.), size).lamp());
+        // Owner decision D21 and option O4: the world's in-line pump for 731 m³/h needs 3.3 m, so it starves under 0.85 × 3.3 m
+        // and the margin row asks for 4.3 m.
+        assertEquals(3.3, PumpSizing.requiredNpsh(731), 1e-9);
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 0.), size).lamp(), "NPSH on 0 misses");
-        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, .5), size).lamp());
+        assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 2.8), size).lamp(), "under the world's floor, 2.805 m");
+        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 2.81), size).lamp(), "over the floor, under the margin");
+        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 4.2), size).lamp());
+        assertEquals(Lamp.GREEN, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 4.3), size).lamp(), "NPSH3 plus 1 m meets it");
+        assertEquals(1.7, PumpSizing.requiredNpsh(36), .05, "the default in-line pump, 0.01 m³/s at 2950 rpm");
+    }
+
+    /** W8 (batch 2026-11-03-rotating-machinery, D43): the duty a column's door reads, the plan's worked example: 100 m³/h of water at 80 m. */
+    @Test void aPumpsRatingCarriesItsDuty() {
+        var load = new PumpSizing.Load(100, 80, 204.5, null, 1000);
+        var duty = PumpSizing.Duty.of(PumpSizing.rate(load, new PumpSizing.Size(.1)));
+        assertNotNull(duty);
+        assertEquals(100, duty.flow(), 0);
+        assertEquals(80, duty.head(), 0);
+        assertEquals(31.1e3, duty.shaft(), .1e3, "21.8 kW hydraulic at Corripio's 0.70");
+        assertEquals(3.3, duty.npsh(), 1e-9);
+        assertEquals(45e3, duty.motor(), 0, "1.2 × 31.1 kW = 37.4 kW: the next standard motor is 45 kW");
+        var dry = PumpSizing.Duty.of(PumpSizing.rate(PUMP, new PumpSizing.Size(.3)));
+        assertNotNull(dry);
+        assertTrue(Double.isNaN(dry.shaft()) && Double.isNaN(dry.motor()), "no density, no shaft power");
+        assertNull(PumpSizing.Duty.of(Rating.NONE));
     }
 
     @Test void aPumpWithNoHeightReadsNoNpshAtAll() {
@@ -422,7 +445,9 @@ final class UnitSizingTest {
     @Test void aCompressorsWorldLimitsAreRed() {
         var size = new CompressorSizing.Size(UnitType.PISTON, .5, 4);
         assertEquals(Lamp.RED, CompressorSizing.rate(gas(1000, 11), size).lamp());
-        assertEquals(Lamp.RED, CompressorSizing.rate(new CompressorSizing.Load(1000, 3, 2, 310, .25, 0), size).lamp(), "wet at the suction");
+        // The world compresses a wet suction since request 11 of batch 2026-11-03-rotating-machinery (W10a), so a wet suction
+        // is a SHOULD row; W10b's liquid knock trips a piston machine and makes it the world's (red) again.
+        assertEquals(Lamp.YELLOW, CompressorSizing.rate(new CompressorSizing.Load(1000, 3, 2, 310, .25, 0), size).lamp(), "wet at the suction");
         var small = CompressorSizing.rate(gas(6000, 3), new CompressorSizing.Size(UnitType.TURBO, .3, 2));
         assertEquals(Lamp.RED, small.lamp(), "under the smallest frame");
         assertSame(Limit.TYPE_TURBO, small.closest().limit());

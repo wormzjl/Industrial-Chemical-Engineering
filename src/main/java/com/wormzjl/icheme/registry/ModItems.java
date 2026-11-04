@@ -49,6 +49,8 @@ public final class ModItems {
     public static final DeferredItem<BlockItem> PIPE_RACK=ITEMS.registerSimpleBlockItem("pipe_rack",ModBlocks.PIPE_RACK);
     public static final DeferredItem<com.wormzjl.icheme.world.item.RecoveredSolidsItem> RECOVERED_SOLIDS=ITEMS.registerItem("recovered_solids",com.wormzjl.icheme.world.item.RecoveredSolidsItem::new);
     public static final DeferredItem<BlockItem> EQUIPMENT_CONSTRUCTOR=ITEMS.registerSimpleBlockItem("equipment_constructor",ModBlocks.EQUIPMENT_CONSTRUCTOR);
+    public static final DeferredItem<BlockItem> SHAFT=ITEMS.registerSimpleBlockItem("shaft",ModBlocks.SHAFT);
+    public static final DeferredItem<BlockItem> CREATIVE_MOTOR=ITEMS.registerSimpleBlockItem("creative_motor",ModBlocks.CREATIVE_MOTOR);
     public static final DeferredItem<net.minecraft.world.item.Item> FLUID_DEBUGGER=ITEMS.registerSimpleItem("fluid_debugger",new net.minecraft.world.item.Item.Properties().stacksTo(1));
     public static final DeferredItem<PipelineToolItem> PIPELINE_TOOL =
             ITEMS.registerItem("pipeline_tool", PipelineToolItem::new);
@@ -66,11 +68,15 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.GaugeItem> PRESSURE_GAUGE = ITEMS.registerItem("pressure_gauge", p -> new com.wormzjl.icheme.world.item.GaugeItem(p, GaugeSettings.PRESSURE));
     public static final DeferredItem<com.wormzjl.icheme.world.item.GaugeItem> TEMPERATURE_GAUGE = ITEMS.registerItem("temperature_gauge", p -> new com.wormzjl.icheme.world.item.GaugeItem(p, GaugeSettings.TEMPERATURE));
     public static final DeferredItem<com.wormzjl.icheme.world.item.AccessoryWrenchItem> ACCESSORY_WRENCH = ITEMS.registerItem("accessory_wrench", com.wormzjl.icheme.world.item.AccessoryWrenchItem::new);
+    /** A pump repair kit (W10b): used on a pump casing or an in-line pump, it restores the pump's health. */
+    public static final DeferredItem<com.wormzjl.icheme.world.item.RepairKitItem> REPAIR_KIT = ITEMS.registerItem("repair_kit", com.wormzjl.icheme.world.item.RepairKitItem::new);
 
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> PRESSURE_PROBE=sensor("pressure_probe",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE);
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> TEMPERATURE_PROBE=sensor("temperature_probe",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE);
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> FLOWMETER=sensor("flowmeter",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW);
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> DIGITAL_LEVEL_METER=sensor("digital_level_meter",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.LEVEL);
+    /** A steam turbine's speed pickup (W3): mounted on its coupling guard, it works the turbine's governor valve. */
+    public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> SPEED_SENSOR=sensor("speed_sensor",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED);
     private static DeferredItem<com.wormzjl.icheme.world.item.SensorItem> sensor(String name,com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind){return ITEMS.registerItem(name,p->new com.wormzjl.icheme.world.item.SensorItem(p,kind));}
 
     private ModItems() {

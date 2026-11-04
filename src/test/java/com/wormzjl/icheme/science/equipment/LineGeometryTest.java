@@ -39,7 +39,8 @@ class LineGeometryTest {
         for (var kind : Kind.values()) {
             // A heat side is a unit's passage (batch 2026-10-27-heat-exchanger-design), never a line block.
             // A pump or compressor is an in-line mover on a pipe (InlineMoverGeometry); no block draws one alone.
-            if (kind == Kind.PIPE || kind == Kind.HEAT_SIDE || kind == Kind.PUMP || kind == Kind.COMPRESSOR) continue;
+            // A turbine is a machine's cell (batch 2026-11-03-rotating-machinery, W3, A37), never a line block.
+            if (kind == Kind.PIPE || kind == Kind.HEAT_SIDE || kind == Kind.PUMP || kind == Kind.COMPRESSOR || kind == Kind.TURBINE) continue;
             for (int facing : new int[]{NORTH, EAST, UP})
                 for (double od : SIZES) {
                     int a = facing & ~1;

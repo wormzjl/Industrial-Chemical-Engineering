@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.flowsheet.unit.FilterUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.MixerUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.MoverUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.SplitterUnit;
+import com.wormzjl.icheme.science.flowsheet.unit.TurbineUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.ValveUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.VesselUnit;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
@@ -36,7 +37,8 @@ public final class UnitTypes {
             Map.entry("column", new ColumnUnit()),
             Map.entry("pump", new MoverUnit(new FlowControl.Pump(1, 1))),
             Map.entry("compressor", new MoverUnit(new FlowControl.Compressor(1, 2))),
-            Map.entry("ejector", new EjectorUnit()));
+            Map.entry("ejector", new EjectorUnit()),
+            Map.entry("steam_turbine", new TurbineUnit()));
 
     private UnitTypes() {
     }

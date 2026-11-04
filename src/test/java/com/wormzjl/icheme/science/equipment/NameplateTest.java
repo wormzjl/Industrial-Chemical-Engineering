@@ -47,7 +47,9 @@ class NameplateTest {
                                 what + " something stands before the plate at " + d + " m");
                 }
         }
-        assertEquals(java.util.List.of("DRUM 0.5", "EXCHANGER 0.5", "EJECTOR 0.05", "EJECTOR 0.45", "CYCLONE 0.3"), none, "shapes with no plate");
+        // The smallest motor and generator (0.75 m, batch 2026-11-03-rotating-machinery's W4) have no face clear of their
+        // shaft ends and feet; their larger sizes carry a plate.
+        assertEquals(java.util.List.of("DRUM 0.5", "EXCHANGER 0.5", "EJECTOR 0.05", "EJECTOR 0.45", "CYCLONE 0.3", "MOTOR 0.75", "GENERATOR 0.75"), none, "shapes with no plate");
         assertTrue(front >= 75, "plates facing the front: " + front);
     }
 

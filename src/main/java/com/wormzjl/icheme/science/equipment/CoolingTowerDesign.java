@@ -59,6 +59,9 @@ final class CoolingTowerDesign extends UnitDesign {
             panels(u,start,along,out,length,inlet,deck,4,Material.TOWER_PANEL);
         }
         u.fluidPoint=new double[]{.1,.1,.1};
+        // The bank's FE port (W5, reading A58): the basin rim's back corner at grade, away from the hot-water inlet on the front,
+        // the ladder on the end wall and the cold-water outlet mid-back; one store for every cell's fan (reading A71).
+        u.terminal=new double[]{-.1,.25,l+.1};
         double r=t.fanRadius(),flare=CoolingTower.BELL*r,mouth=1.06*r,top=t.height(),bell=deck+.25*(top-deck),floor=t.distributorHeight()+.4,arm=bell-.5;
         for(int x=0;x<bank.columns();x++)for(int z=0;z<bank.rows();z++){
             double a=x*d,b=z*d,cx=a+d/2,cz=b+d/2;

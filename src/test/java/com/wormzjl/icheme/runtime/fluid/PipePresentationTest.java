@@ -218,20 +218,27 @@ class PipePresentationTest {
 
     private final FlowControl.Pump pump=new FlowControl.Pump(2,500000);
 
+    /** A pump on its law short of its set flow (its relief lifting, or a velocity cap; batch 2026-11-03-rotating-machinery,
+     * form F2b) is a device error like a refusal, with the share it delivers; at its set flow it runs. */
     @Test void operatingLimitsAndRefusalsAreDeviceErrorsOnAnAdvancingIsland() {
-        for(var mode:new FlowControl.Mode[]{FlowControl.Mode.PUMP_HEAD_LIMIT,FlowControl.Mode.PUMP_SUCTION_LIMIT,FlowControl.Mode.INLET_WRONG_PHASE,FlowControl.Mode.CLOSED}) {
-            String status=PipePresentation.pumpStatus("FULL",pump,mode,"ERROR: pump inlet is not liquid (from generator)");
+        for(var mode:new FlowControl.Mode[]{FlowControl.Mode.MOVER_LAW,FlowControl.Mode.PUMP_SUCTION_LIMIT,FlowControl.Mode.INLET_WRONG_PHASE,FlowControl.Mode.CLOSED}) {
+            String status=PipePresentation.pumpStatus("FULL",pump,mode,"ERROR: pump inlet dry (from generator)",.6);
             assertTrue(status.startsWith("ERROR: pump"));assertTrue(status.endsWith(" / FULL"));assertFalse(status.contains("HELD"));
         }
-        assertTrue(PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.PUMP_HEAD_LIMIT,"").contains("requested flow unavailable"));
-        String inlet="ERROR: pump inlet is not liquid (from generator)";
-        assertEquals(inlet+" / FULL",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.INLET_WRONG_PHASE,inlet));
+        assertEquals("ERROR: pump delivers 60 % of its set flow; requested flow unavailable / FULL",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.MOVER_LAW,"",.6));
+        assertEquals("FULL / pump running",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.MOVER_LAW,"",.996),"what rounds to its set flow runs");
+        var machine=new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalPump(.01,50,.7),1,true);
+        assertEquals("FULL / pump running",PipePresentation.pumpStatus("FULL",machine,FlowControl.Mode.MOVER_LAW,"",Double.NaN),"a machine has no set flow");
+        assertEquals("compressor delivers 40 % of its set flow; requested flow unavailable",PipePresentation.shortfall(new FlowControl.Compressor(1,3),FlowControl.Mode.MOVER_LAW,.4));
+        assertEquals("",PipePresentation.shortfall(new FlowControl.Compressor(1,3),FlowControl.Mode.CLOSED,0),"only a running mover falls short");
+        String inlet="ERROR: pump inlet dry (from generator)";
+        assertEquals(inlet+" / FULL",PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.INLET_WRONG_PHASE,inlet,Double.NaN));
     }
 
     @Test void offIsNormalAndPresentationDoesNotHideARealSolverFailure() {
-        assertFalse(PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.PUMP_TARGET,"").contains("ERROR:"));
-        assertFalse(PipePresentation.pumpStatus("FULL",new FlowControl.Pump(2,500000,false),FlowControl.Mode.CLOSED,"").contains("ERROR:"));
-        assertTrue(PipePresentation.pumpStatus("HELD: numerical failure",pump,FlowControl.Mode.PUMP_HEAD_LIMIT,"").contains("HELD: numerical failure"));
+        assertFalse(PipePresentation.pumpStatus("FULL",pump,FlowControl.Mode.MOVER_LAW,"",1).contains("ERROR:"));
+        assertFalse(PipePresentation.pumpStatus("FULL",new FlowControl.Pump(2,500000,false),FlowControl.Mode.CLOSED,"",Double.NaN).contains("ERROR:"));
+        assertTrue(PipePresentation.pumpStatus("HELD: numerical failure",pump,FlowControl.Mode.MOVER_LAW,"",.6).contains("HELD: numerical failure"));
     }
 
     private static final EquipmentShape.Kind[] MOVERS={EquipmentShape.Kind.PUMP,EquipmentShape.Kind.COMPRESSOR,EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR};
@@ -262,6 +269,47 @@ class PipePresentationTest {
         assertEquals(0,UnitDesign.soundGain(EquipmentShape.drum(2,4,EquipmentShape.Orientation.VERTICAL,EquipmentShape.Heading.NORTH,4)));
         // The pump range ends at 0.6 m (its suction a pipe's largest, 0.8 m): a 0.4 m pump sits 0.35 / 0.55 along it.
         assertEquals(.10+.50*.35/.55,UnitDesign.soundGain(shape(EquipmentShape.Kind.PUMP,.4,1,EquipmentShape.Heading.NORTH)),1e-6);
+    }
+    @Test void aDriverSoundsByItsPowerAndEveryLoopFallsWithTheSpeedShare(){
+        // Decision D26: a driver's gain spans 0.10 to 0.60 over its kind's powers on a log scale; a loop's gain is that
+        // times the speed share to the 2.5th, so it never passes 1 (above 1 Minecraft widens the range, not the loudness).
+        var motor=EquipmentShape.Kind.MOTOR;var design=UnitDesign.of(motor);float previous=0;
+        for(double kw:design.sizes()){float gain=UnitDesign.soundGain(shape(motor,kw,1,EquipmentShape.Heading.NORTH));assertTrue(gain>previous);previous=gain;}
+        assertEquals(.10F,UnitDesign.soundGain(shape(motor,.75,1,EquipmentShape.Heading.NORTH)),1e-6);
+        assertEquals(.60F,UnitDesign.soundGain(shape(motor,20000,1,EquipmentShape.Heading.NORTH)),1e-6);
+        assertEquals(UnitDesign.soundGain(shape(motor,250,1,EquipmentShape.Heading.NORTH)),
+                UnitDesign.soundGain(shape(EquipmentShape.Kind.GENERATOR,250,1,EquipmentShape.Heading.NORTH)));
+        // A 1 MW turbine sits ln(1000/55) / ln(45000/55) along the turbine's powers.
+        var turbine=EquipmentShape.unit(EquipmentShape.Kind.STEAM_TURBINE,.5,1,EquipmentShape.Heading.NORTH,0).withDuty(MachineDuty.turbine(1000,MachineDuty.Steam.HP,450));
+        assertEquals(.10+.50*Math.log(1000/55.)/Math.log(45000/55.),UnitDesign.soundGain(turbine),1e-6);
+        for(var shape:List.of(turbine,shape(motor,250,1,EquipmentShape.Heading.NORTH),shape(EquipmentShape.Kind.PUMP,.4,1,EquipmentShape.Heading.NORTH))){
+            float full=UnitDesign.soundGain(shape);
+            assertEquals(full,UnitDesign.soundGain(shape,1));
+            assertEquals(full*Math.pow(.5,2.5),UnitDesign.soundGain(shape,.5),1e-6);
+            assertEquals(0,UnitDesign.soundGain(shape,0));
+            assertEquals(full,UnitDesign.soundGain(shape,1.3));
+            for(double speed=.1;speed<=1;speed+=.1)assertTrue(UnitDesign.soundGain(shape,speed)>UnitDesign.soundGain(shape,speed-.1));
+        }
+        // The pitch is the shaft's rpm over the loop's (owner 2026-11-04), between Minecraft's 0.5 and 2.
+        assertEquals(.5F,UnitDesign.soundPitch(1475,UnitDesign.PUMP_LOOP_RPM),1e-6);assertEquals(1F,UnitDesign.soundPitch(2950,UnitDesign.PUMP_LOOP_RPM),1e-6);
+        assertEquals(1.5F,UnitDesign.soundPitch(4425,UnitDesign.PUMP_LOOP_RPM),1e-6);assertEquals(2F,UnitDesign.soundPitch(9000,UnitDesign.PUMP_LOOP_RPM));
+        assertEquals(.5F,UnitDesign.soundPitch(500,UnitDesign.PUMP_LOOP_RPM));assertEquals(1F,UnitDesign.soundPitch(1500,UnitDesign.MOTOR_LOOP_RPM),1e-6);
+        // From a shape's design data: a 2-pole pump at full speed is its loop, a 4-pole one an octave down, at 1.5 times
+        // its speed half again; a 4-pole motor (1475 rpm) just under its 1500 rpm loop; a compressor's loop states no speed.
+        var designed=UnitDesign.of(EquipmentShape.Kind.PUMP);double size=designed.minSize();int length=designed.defaultLength(size);
+        var twoPole=EquipmentShape.designed(EquipmentShape.Kind.PUMP,size,length,EquipmentShape.Heading.NORTH,designed.defaultSupport(size,length),com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE)
+                .withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.pump(72,50,2));
+        assertEquals(1F,UnitDesign.soundPitch(twoPole,1),1e-6);assertEquals(1.5F,UnitDesign.soundPitch(twoPole,1.5),1e-6);
+        assertEquals(.5F,UnitDesign.soundPitch(twoPole.withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.pump(72,50,4)),1),1e-6);
+        var motorDesign=UnitDesign.of(EquipmentShape.Kind.MOTOR);double kw=motorDesign.minSize();int motorLength=motorDesign.defaultLength(kw);
+        var fourPole=EquipmentShape.designed(EquipmentShape.Kind.MOTOR,kw,motorLength,EquipmentShape.Heading.NORTH,0,com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE)
+                .withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.motor(kw,4,com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED));
+        assertEquals((float)(1475/1500.),UnitDesign.soundPitch(fourPole,1),1e-6);
+        var compressor=UnitDesign.of(EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR);double c=compressor.minSize();int cl=compressor.defaultLength(c);
+        var centrifugal=EquipmentShape.designed(EquipmentShape.Kind.CENTRIFUGAL_COMPRESSOR,c,cl,EquipmentShape.Heading.NORTH,compressor.defaultSupport(c,cl),com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE);
+        assertEquals(.8F,UnitDesign.soundPitch(centrifugal,.8),1e-6);assertEquals(.5F,UnitDesign.soundPitch(centrifugal,.2));
+        assertFalse(UnitDesign.driver(EquipmentShape.Kind.GEARBOX));
+        assertEquals(0,UnitDesign.soundGain(EquipmentShape.unit(EquipmentShape.Kind.GEARBOX,UnitDesign.of(EquipmentShape.Kind.GEARBOX).minSize(),1,EquipmentShape.Heading.NORTH,0)));
     }
     private static EquipmentShape shape(EquipmentShape.Kind kind,double size,int count,EquipmentShape.Heading front){return EquipmentShape.unit(kind,size,count,front,UnitDesign.of(kind).defaultSupport(size,count));}
 }

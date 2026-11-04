@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.google.gson.JsonObject;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
@@ -14,6 +15,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.Service;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
 import com.wormzjl.icheme.science.flowsheet.sizing.TankSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.TurbineSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitSize;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import org.jetbrains.annotations.Nullable;
@@ -89,6 +91,7 @@ final class SizingFactsFile {
                 case "DRUM" -> new DrumSizing.Size(fields.name("type", UnitType.class), fields.number("diameter"), fields.whole("length"), fields.bool("boot"));
                 case "TANK" -> new TankSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("shell"));
                 case "EJECTOR" -> new EjectorSizing.Size(fields.number("suction"));
+                case "STEAM_TURBINE" -> new TurbineSizing.Size(fields.number("power"), fields.name("steam", MachineDuty.Steam.class), fields.number("exhaust"));
                 default -> throw JsonFields.damaged(fields.path + ".kind");
             };
         } catch (IllegalArgumentException invalid) {
@@ -184,6 +187,12 @@ final class SizingFactsFile {
             case EjectorSizing.Size ejector -> {
                 json.addProperty("kind", "EJECTOR");
                 json.addProperty("suction", ejector.suction());
+            }
+            case TurbineSizing.Size turbine -> {
+                json.addProperty("kind", "STEAM_TURBINE");
+                json.addProperty("power", turbine.power());
+                json.addProperty("steam", turbine.steam().name());
+                json.addProperty("exhaust", turbine.exhaust());
             }
             default -> throw new IllegalArgumentException("A " + size.getClass().getSimpleName() + " is no fact: it follows from the sheet");
         }

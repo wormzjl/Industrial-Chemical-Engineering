@@ -938,6 +938,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         if (door != null) {
             var shown = shownDoor(context());
             if (shown != null && !super.mouseClicked(x, y, button)) {
+                var scroll = shown.glass().scroll();
+                if (scroll != null && scroll.press(x - doorLeft(), y - doorTop(), button)) return true;
                 String key = shown.glass().click(SimulatorFrame.inner(DoorFrame.glass(shown, doorWidth(), doorHeight())), x - doorLeft(), y - doorTop());
                 if (key != null) actDoor(key);
                 return kit.press(x - doorLeft(), y - doorTop(), button);
@@ -967,13 +969,14 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     }
 
     @Override public boolean mouseDragged(double x, double y, int button, double dx, double dy) {
-        if (door != null) return kit.drag(y - doorTop()) || super.mouseDragged(x, y, button, dx, dy);
+        if (door != null) return kit.drag(y - doorTop()) || doorView.glass.drag(y - doorTop()) || super.mouseDragged(x, y, button, dx, dy);
         gestures.drag(x, y);
         return true;
     }
 
     @Override public boolean mouseReleased(double x, double y, int button) {
         kit.release();
+        doorView.glass.release();
         if (door == null && dialog == Dialog.NONE) gestures.release(x, y, button);
         return super.mouseReleased(x, y, button);
     }
@@ -983,7 +986,13 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     }
 
     @Override public boolean mouseScrolled(double x, double y, double dx, double dy) {
-        if (door != null) return kit.wheel(x - doorLeft(), y - doorTop(), dy);
+        if (door != null) {
+            if (kit.wheel(x - doorLeft(), y - doorTop(), dy)) return true;
+            // The glass's own view, where the page's glass scrolls (D44): laid out where the glass last drew.
+            var shown = shownDoor(context());
+            var scroll = shown == null ? null : shown.glass().scroll();
+            return scroll != null && scroll.wheel(x - doorLeft(), y - doorTop(), dy);
+        }
         if (tab == SimulatorFrame.Tab.FLOWSHEET && canvasBox.contains(x, y)) view.wheel(dy, x, y);
         if (tab == SimulatorFrame.Tab.SIZING && SimulatorPage.glass(frame, width).contains(x, y)) SizingGlass.scroll(sizingState, dy);
         return true;

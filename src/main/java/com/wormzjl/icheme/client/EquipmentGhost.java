@@ -8,7 +8,6 @@ import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
-import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LightTexture;
@@ -38,8 +37,8 @@ import java.util.Objects;
  * once built): every loaded constructor within {@link #RANGE} blocks shows its saved design until that vessel stands
  * where it would be built, and an open constructor screen shows its draft instead. The shell is drawn translucent on the
  * painted plate sprite in the design's paint (its other parts light grey); the cells the focused ghost (the screen's draft, or the aimed constructor's design) cannot take
- * are outlined in red through Catnip's outliner. Client only; the server checks again before it builds.
- * <p>The shell is drawn as translucent entity geometry on the block atlas ({@link #TYPE}), as Catnip draws its outlines:
+ * are outlined in red ({@link Outlines}). Client only; the server checks again before it builds.
+ * <p>The shell is drawn as translucent entity geometry on the block atlas ({@link #TYPE}), as {@link Outlines} draws its outlines:
  * the chunk type {@code RenderType.translucent()} drawn from a level-stage event is lost under an Iris shader pack, whose
  * terrain programs only take chunk geometry (owner report 2026-10-17, the preview vanished with shaders).
  */
@@ -122,18 +121,17 @@ public final class EquipmentGhost {
             focused = focus;
             age = 0;
         }
-        var outliner = Outliner.getInstance();
         if (focused == null) {
             blocked = List.of();
-            outliner.remove(BLOCKED_SLOT);
+            Outlines.remove(BLOCKED_SLOT);
             return;
         }
         if (age++ % RECHECK_TICKS == 0) {
             blocked = blocked(mc.level, focused);
-            if (!blocked.isEmpty()) outliner.showCluster(BLOCKED_SLOT, blocked).colored(BLOCKED_COLOUR).lineWidth(1 / 16F);
+            if (!blocked.isEmpty()) Outlines.cluster(BLOCKED_SLOT, blocked, BLOCKED_COLOUR, 1 / 16F);
         }
-        if (blocked.isEmpty()) outliner.remove(BLOCKED_SLOT);
-        else outliner.keep(BLOCKED_SLOT);
+        if (blocked.isEmpty()) Outlines.remove(BLOCKED_SLOT);
+        else Outlines.keep(BLOCKED_SLOT);
     }
 
     /** The vessel already stands there: its controller cell is a shell cell of the same vessel. */

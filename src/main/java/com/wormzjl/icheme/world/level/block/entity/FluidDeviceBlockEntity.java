@@ -41,7 +41,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     /** Client: the pipes with an open end, which the pipe laying tool marks while it is held. Client thread only; weak, as above. */
     private static final java.util.Set<FluidDeviceBlockEntity> CLIENT_OPEN_ENDS=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     public static java.util.List<FluidDeviceBlockEntity> clientOpenEnds(){return java.util.List.copyOf(CLIENT_OPEN_ENDS);}
-    private void trackOpenEnds(){if(level!=null&&level.isClientSide()){if(openEnds()!=0)CLIENT_OPEN_ENDS.add(this);else CLIENT_OPEN_ENDS.remove(this);if(!name.isEmpty()&&nameable())CLIENT_NAMED.add(this);else CLIENT_NAMED.remove(this);}}
+    private void trackOpenEnds(){if(level!=null&&level.isClientSide()){com.wormzjl.icheme.client.MoverSounds.track(this);if(openEnds()!=0)CLIENT_OPEN_ENDS.add(this);else CLIENT_OPEN_ENDS.remove(this);if(!name.isEmpty()&&nameable())CLIENT_NAMED.add(this);else CLIENT_NAMED.remove(this);}}
     /** Client: the named devices, whose tags the client draws (N1). Client thread only; weak, as above. */
     private static final java.util.Set<FluidDeviceBlockEntity> CLIENT_NAMED=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     public static java.util.List<FluidDeviceBlockEntity> clientNamed(){return java.util.List.copyOf(CLIENT_NAMED);}
@@ -252,7 +252,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     private void released() {
         com.wormzjl.icheme.runtime.instrument.InstrumentHosts.unloaded(this);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.InstrumentRenderer.forget(worldPosition);
-        if(level!=null&&level.isClientSide()){CLIENT_GLASSES.remove(this);CLIENT_OPEN_ENDS.remove(this);CLIENT_NAMED.remove(this);com.wormzjl.icheme.client.SightGlassRenderer.forget(worldPosition);}
+        if(level!=null&&level.isClientSide()){CLIENT_GLASSES.remove(this);CLIENT_OPEN_ENDS.remove(this);CLIENT_NAMED.remove(this);com.wormzjl.icheme.client.SightGlassRenderer.forget(worldPosition);com.wormzjl.icheme.client.MoverSounds.forget(this);}
         if(identity!=0&&level instanceof ServerLevel serverLevel&&serverLevel.getServer().isSameThread())FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->world.deviceUnloaded(identity));
     }
     /** The engine's bucket hands over this device's view (the authority checked the identity); the block entity keeps it for server-side readers. */

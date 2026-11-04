@@ -23,11 +23,12 @@ import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.Params;
 import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.UnitTypes;
+import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
@@ -83,12 +84,49 @@ public final class ColumnDoors {
         }
     }
 
-    /** What the Equipment page has chosen. */
+    /** What the Equipment page has chosen. The design names no pump kind (batch 2026-11-03-rotating-machinery, D42): its pumps are standard. */
     public static ColumnComponents.Choices choices(Flowsheet.Unit unit) {
-        var door = ColumnDoor.of(unit.params());
+        return ColumnDoor.of(unit.params()).choices();
+    }
+
+    /**
+     * The pumps a built column's design names, as its schematic draws them: an assembly's door holds them ({@code AssemblyBlock}, read
+     * unchanged from the column's shape, where a design saved before D42 may name an in-line pump); a sheet's door holds none, so
+     * its pumps are standard.
+     */
+    public static ColumnComponents.Choices built(Flowsheet.Unit unit) {
         var pumps = new ArrayList<ColumnComponents.Pump>();
         for (var row : unit.params().rows("pumparounds")) pumps.add(pump(row.text("pump", ColumnComponents.Pump.STANDARD.name())));
-        return door.choices(pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps);
+        var choices = choices(unit).withRefluxPump(pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())));
+        for (int i = 0; i < Math.min(pumps.size(), choices.pumparoundPumps().size()); i++) choices = choices.withPumparoundPump(i, pumps.get(i));
+        return choices;
+    }
+
+    private static ColumnComponents.Pump pump(String name) {
+        try {
+            return ColumnComponents.Pump.valueOf(name);
+        } catch (IllegalArgumentException unknown) {
+            return ColumnComponents.Pump.STANDARD;
+        }
+    }
+
+    /**
+     * The design's pumps as the sheet's last rating gives them (W8, D43): the reflux pump, then each pumparound's, from the block's members
+     * {@code reflux pump} and {@code pa <id> pump}. Before a steady run has been rated, each reads unknown.
+     */
+    static List<CalculatorColumn.PumpDuty> duties(SheetContext x, String id, ColumnDoor door) {
+        var sized = SizingPage.sized(x);
+        var out = new ArrayList<CalculatorColumn.PumpDuty>();
+        out.add(duty(sized, SheetSizing.member(id, "reflux pump"), c(x, "component_reflux_pump")));
+        for (int i = 0; i < door.pumparounds().size(); i++)
+            out.add(duty(sized, SheetSizing.member(id, SheetSizing.PumparoundMember.name(door.pumparounds().get(i).id(), "pump")), c(x, "component_pa", i + 1)));
+        return out;
+    }
+
+    private static CalculatorColumn.PumpDuty duty(SheetSizing.@Nullable Sized sized, String member, String name) {
+        var unit = sized == null ? null : sized.units().get(member);
+        var duty = unit == null ? null : PumpSizing.Duty.of(unit.rating());
+        return duty == null ? CalculatorColumn.PumpDuty.unknown(name) : new CalculatorColumn.PumpDuty(name, duty.flow(), duty.head(), duty.shaft(), duty.npsh(), duty.motor());
     }
 
     static @Nullable V3ColumnDisplayResult display(SheetContext x, String id) {
@@ -132,9 +170,7 @@ public final class ColumnDoors {
                 } : StreamDoors.contents(x, stream, view);
             }
             case EQUIPMENT -> {
-                var pumps = new ArrayList<ColumnComponents.Pump>();
-                for (var row : unit.params().rows("pumparounds")) pumps.add(pump(row.text("pump", ColumnComponents.Pump.STANDARD.name())));
-                var rows = CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, door.condenser(), pump(unit.params().text("reflux_pump", ColumnComponents.Pump.STANDARD.name())), pumps,
+                var rows = CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, door.condenser(), door.pumparounds().size(),
                         x.host().stores() && !x.host().reader() && input(x, id, door) != null, door.units(), ColumnComponents.kettleRequired(door.reboilerDuty())), x.t());
                 var right = new ArrayList<>(rows.right());
                 right.add(right.size() - 1, Door.group(x.text("door.group.tube_sides"), Door.entry("tube", x.text("door.drop"), x.units().pressure().symbol())));
@@ -143,7 +179,7 @@ public final class ColumnDoors {
                     right.add(right.size() - 1, Door.group(x.text("door.group.ejector"), Door.entry("ejector_discharge", x.text("door.discharge"), x.units().pressure().symbol()),
                             Door.entry("ejector_motive", x.text("door.motive"), x.units().pressure().symbol())));
                 columns = List.of(right);
-                glass = ColumnGlass.connections(x, unit, door);
+                glass = ColumnGlass.connections(x, unit, door, duties(x, id, door), view);
             }
             default -> {
                 var in = new CalculatorColumn.ColumnInput(false, true, symbol, x.units().pressure().symbol(), x.units().molesUnit(), view.connection, view.index, view.spread(door), door.draws().size() < V3ColumnInput.MAX_SIDE_DRAWS, door.pumparounds().size() < MAX_PA, door.steam().size() < MAX_STEAM);
@@ -228,14 +264,6 @@ public final class ColumnDoors {
         double feed = last != null ? last.total() : 0;
         if (last == null && stream != null && stream.feed() != null) for (double amount : stream.feed().amounts().values()) feed += amount;
         return x.editor().setParams(id, ColumnDoor.template(x.editor().unit(id).params(), template.scaledTo(feed / SheetUnits.KMOL_PER_HOUR)), null);
-    }
-
-    private static ColumnComponents.Pump pump(String name) {
-        try {
-            return ColumnComponents.Pump.valueOf(name);
-        } catch (IllegalArgumentException unknown) {
-            return ColumnComponents.Pump.STANDARD;
-        }
     }
 
     private static SheetState.Status status(SheetContext x, String id, ColumnDoor door, @Nullable V3ColumnDisplayResult display, Page page) {
@@ -359,6 +387,8 @@ public final class ColumnDoors {
         int colon = key.indexOf(':');
         String head = colon < 0 ? key : key.substring(0, colon), tail = colon < 0 ? "" : key.substring(colon + 1);
         if (view.press(key)) return;
+        // Another sheet on the Results glass opens at its top (D44).
+        if (head.equals("view") || head.equals("stream") || head.startsWith("tray")) view.glass.reset();
         switch (head) {
             case "view" -> {
                 for (var v : CalculatorColumn.View.values()) if (v.key().equals(tail)) view.results = v;
@@ -381,14 +411,8 @@ public final class ColumnDoors {
                 case "air_then_water" -> ColumnComponents.Condenser.AIR_THEN_WATER;
                 default -> ColumnComponents.Condenser.AIR_COOLER;
             }).name(), null);
-            case "reflux" -> editor.set(id, "reflux_pump", tail.toUpperCase(Locale.ROOT), null);
             default -> {
                 if (head.startsWith("units/") && (head.endsWith("-") || head.endsWith("+"))) units(x, id, head.substring(6, head.length() - 1), head.endsWith("+") ? 1 : -1);
-                else if (head.startsWith("pa")) {
-                    var json = copy(x, id);
-                    json.getAsJsonArray("pumparounds").get(Integer.parseInt(head.substring(2))).getAsJsonObject().addProperty("pump", tail.toUpperCase(Locale.ROOT));
-                    editor.setParams(id, new Params(json), null);
-                }
             }
         }
     }

@@ -179,17 +179,25 @@ public final class PipePresentation {
 
     private static int whiten(int channel,double amount){return (int)Math.round(channel+(255-channel)*amount);}
 
-    /** A pump's accepted operating condition on its status line, presented without changing its island's solver status. */
-
-    static String pumpStatus(String islandStatus,FlowControl.Pump pump,FlowControl.Mode mode,String inletReason) {
+    /** A pump's accepted operating condition on its status line, presented without changing its island's solver status;
+     * {@code delivered} as for {@link #shortfall}. */
+    static String pumpStatus(String islandStatus,FlowControl.Mover pump,FlowControl.Mode mode,String inletReason,double delivered) {
         String condition=switch(mode) {
-            case PUMP_TARGET->"pump running";
-            case PUMP_HEAD_LIMIT->"ERROR: pump pressure rise limit reached; requested flow unavailable";
+            case MOVER_LAW->{String shortfall=shortfall(pump,mode,delivered);yield shortfall.isEmpty()?"pump running":"ERROR: "+shortfall;}
             case PUMP_SUCTION_LIMIT->"ERROR: pump cavitating: suction pressure limit reached";
             case INLET_WRONG_PHASE->inletReason.isBlank()?"ERROR: pump inlet is dry or has the wrong phase":inletReason;
             case CLOSED->pump.targetVolumeFlow()==0?"pump off":"ERROR: pump cannot drive forward flow";
             default->throw new IllegalArgumentException("Invalid pump operating mode: "+mode);
         };
         return condition.startsWith("ERROR:")?condition+" / "+islandStatus:islandStatus+" / "+condition;
+    }
+    /**
+     * A set-flow mover on its law delivers its set flow until its relief lifts or a velocity cap holds it (batch
+     * 2026-11-03-rotating-machinery, form F2b); {@code delivered} is the share of its set flow it moved, NaN for a machine,
+     * which has none. Below what rounds to 100 % the requested flow is unavailable, and this says so; empty otherwise.
+     */
+    static String shortfall(FlowControl.Mover mover,FlowControl.Mode mode,double delivered) {
+        return mode==FlowControl.Mode.MOVER_LAW&&delivered<.995
+                ?String.format(Locale.ROOT,"%s delivers %.0f %% of its set flow; requested flow unavailable",mover.deviceName(),100*Math.max(0,delivered)):"";
     }
 }

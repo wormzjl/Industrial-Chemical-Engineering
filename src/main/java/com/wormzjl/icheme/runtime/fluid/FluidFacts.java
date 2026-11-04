@@ -45,9 +45,14 @@ final class FluidFacts {
      *  6 (batch 2026-10-28-column-operation): a registration's column unit (the running column that holds it), the column units.
      *  7 (batch 2026-10-30-water-cooling-tower): a device spec's cooling tower.
      *  8 (batch 2026-11-02-process-simulator, S3b): a column unit's further condenser water sides, one a shell in parallel.
-     *  9 (batch 2026-11-02-process-simulator, U2): a column unit's air condenser surface; a heat side's {@code COLUMN} mode. */
-    static final int SCHEMA=9;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 9. */
+     *  9 (batch 2026-11-02-process-simulator, U2): a column unit's air condenser surface; a heat side's {@code COLUMN} mode.
+     *  10 (batch 2026-11-03-rotating-machinery, W3): the {@code machine} and {@code turbine} controls, the device kind
+     *  {@code TURBINE}, the control valve source {@code SHAFT_SPEED}, and the world's shaft units (after the column units).
+     *  11 (batch 2026-11-03-rotating-machinery, W5): the world's electric stores (after the shaft units), an air cooler side's
+     *  fans, the shaft trip {@code NO_POWER} (never written: it is not latched).
+     *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1. */
+    static final int SCHEMA=12;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 12. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -170,14 +175,39 @@ final class FluidFacts {
      */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
                  WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
-                 List<String> removedMovers,List<ColumnUnit> columns) {
+                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health) {
+        /** Facts without pump health (a world before schema 12): every pump new. */
+        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
+              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
+              List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores) {
+            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,Map.of());
+        }
+        World {health=Map.copyOf(health);}
+        /** Facts without shaft units (a world before schema 10). */
+        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
+              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns) {
+            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,List.of(),null);
+        }
+        /**
+         * The electric stores (schema 11, W5). A world written before them ({@code stores} null) has a store, unmetered and
+         * empty, for each powered unit it holds: an air cooler, an induced-draft tower, a motor, a generator (owner decision
+         * A73 option A: they ran free, and run free until their port first receives FE).
+         */
+        Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> electricStores() {
+            if(stores!=null)return stores;
+            var legacy=new HashMap<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts>();
+            for(var r:registrations)if(ElectricStores.powered(r))legacy.put(r.device().id(),com.wormzjl.icheme.science.machine.ElectricStore.Facts.UNMETERED);
+            for(var u:shafts)if(ElectricStores.powered(u))legacy.put(u.id(),com.wormzjl.icheme.science.machine.ElectricStore.Facts.UNMETERED);
+            return legacy;
+        }
         /** The ledger these facts and {@code events} make at {@code onlineTick}, its recoveries' solids named by {@code record}. */
         WorldTopologyLedger.Snapshot snapshot(long onlineTick,List<WorldTopologyLedger.Event> events,Function<Solid,SolidMaterial> record) {            var active=new HashMap<Long,WorldTopologyLedger.Registration>();
             for(var r:registrations)if(active.put(r.device().id(),r)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate device "+r.device().id());
             var pending=new HashMap<UUID,WorldTopologyLedger.RecoveredSolid>();
             for(var r:recoveries)if(pending.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,inventory(r.solids,record),r.energy))!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate recovery "+r.id);
             var units=new HashMap<Long,ColumnUnit>();for(var u:columns)if(units.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate column unit "+u.id());
-            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units);
+            var parts=new HashMap<Long,ShaftUnit>();for(var u:shafts)if(parts.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate shaft unit "+u.id());
+            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health);
             new WorldTopologyLedger(snapshot);return snapshot;
         }
     }
@@ -195,6 +225,12 @@ final class FluidFacts {
                     .list(new TreeMap<>(restated.removedSolids()).entrySet(),(e,m)->e.text(m.getKey()).f64(m.getValue())));
             // Schema 6: the column units, by identity.
             f.list(new TreeMap<>(s.columns()).values(),FluidFacts::column);
+            // Schema 10: the shaft units, by identity.
+            f.list(new TreeMap<>(s.shafts()).values(),FluidFacts::shaft);
+            // Schema 11: the electric stores, by unit identity: content (J) and whether metered.
+            f.list(new TreeMap<>(s.stores()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue().joules()).bool(e.getValue().metered()));
+            // Schema 12: the pumps' health, by device identity, only pumps below 1 (a pump without an entry is new).
+            f.list(new TreeMap<>(s.health()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue()));
         });
     }
     static World world(byte[] data,int offset,int length) {
@@ -217,8 +253,20 @@ final class FluidFacts {
                 var solids=new HashMap<String,Double>();for(var e:q.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))solids.put(e.getKey(),e.getValue());
                 return valid(q,"restated totals",()->new WorldTopologyLedger.Restated(energy,moles,solids));});
             var columns=f.list(List.<ColumnUnit>of(),FluidFacts::column);
+            // A world written before schema 10 has no shaft units: no part turned before them.
+            var shafts=f.list(List.<ShaftUnit>of(),FluidFacts::shaft);
+            // A world written before schema 11 has no electric stores: null, read as unmetered stores for its powered units.
+            var saved=f.list(null,q->{long id=q.count(0);double joules=q.f64(0);boolean metered=q.bool(true);
+                return valid(q,"electric store "+id,()->Map.entry(id,new com.wormzjl.icheme.science.machine.ElectricStore.Facts(joules,metered)));});
+            Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores=null;
+            if(saved!=null){stores=new HashMap<>();for(var e:saved)if(stores.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate electric store "+e.getKey());}
+            // A world written before schema 12 has no pump health: every pump is new (health 1).
+            var health=new HashMap<Long,Double>();
+            for(var e:f.list(List.<Map.Entry<Long,Double>>of(),q->{long id=q.count(0);double value=q.f64(1);
+                if(!(value>=0&&value<=1))throw q.invalid("pump health "+id+": "+value);return Map.entry(id,value);}))
+                if(health.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate pump health "+e.getKey());
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
-            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns);
+            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores,health);
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {
@@ -343,18 +391,48 @@ final class FluidFacts {
         var moles=f.doubles(null);double energy=f.f64(0);required(moles,f,"account moles");
         return valid(f,"column account",()->new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(moles,energy));
     }
-    /** A heat side's unit (schema 5): its unit and side by name, area, partner, control and heat in transit. */
+    /**
+     * A shaft unit (schema 10, batch 2026-11-03-rotating-machinery W3): its identity, kind by name, position, axis, ends (each a
+     * cell, its step and whether power leaves), fluid device, rated power, design speed, poles, drive by name, settings
+     * (running, mode by name, set point, power limit, ratio) and trip by name. Its engine state is in the topology state.
+     */
+    private static void shaft(Fields f,ShaftUnit u) {
+        var s=u.settings();
+        f.count(u.id()).name(u.kind());position(f,u.position());f.count(u.axis())
+                .list(u.ends(),(q,e)->{position(q,e.cell());q.i32(e.dx()).i32(e.dy()).i32(e.dz()).bool(e.output());})
+                .count(u.fluid()).f64(u.ratedPower()).f64(u.designSpeed()).count(u.poles()).name(u.drive())
+                .record(q->q.bool(s.running()).name(s.mode()).f64(s.setPoint()).f64(s.powerLimit()).f64(s.ratio()))
+                .name(u.trip());
+    }
+    private static ShaftUnit shaft(Record f) {
+        long id=f.count(0);var kind=f.name(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.class,null);var position=position(f);long axis=f.count(0);
+        var ends=f.list(List.<ShaftUnit.End>of(),q->{var cell=required(position(q),q,"shaft end cell");int dx=q.i32(0),dy=q.i32(0),dz=q.i32(0);boolean output=q.bool(false);
+            return valid(q,"shaft end",()->new ShaftUnit.End(cell,dx,dy,dz,output));});
+        long fluid=f.count(0);double power=f.f64(0),speed=f.f64(0);long poles=f.count(0);
+        var drive=f.name(com.wormzjl.icheme.science.equipment.MachineDuty.Drive.class,com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED);
+        var settings=f.record(ShaftUnit.Settings.DEFAULT,q->{boolean running=q.bool(true);var mode=q.name(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.class,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED);
+            double set=q.f64(0),limit=q.f64(0),ratio=q.f64(0);return valid(q,"shaft settings",()->new ShaftUnit.Settings(running,mode,set,limit,ratio));});
+        var trip=f.name(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.class,com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE);
+        required(kind,f,"shaft unit kind");required(position,f,"shaft unit position");
+        if(axis>2||poles>8||ends.size()>ShaftUnit.MAXIMUM_ENDS)throw f.invalid("shaft unit "+id);
+        return valid(f,"shaft unit "+id,()->new ShaftUnit(id,kind,position,(int)axis,ends,fluid,power,speed,(int)poles,drive,settings,trip,null));
+    }
+    /** A heat side's unit (schema 5): its unit and side by name, area, partner, control and heat in transit; an air cooler's fans (schema 11). */
     private static void heatUnit(Fields f,HeatUnit h) {
         var c=h.control();
-        f.name(h.unit()).name(h.side()).f64(h.area()).count(h.partner()).record(q->q.name(c.mode()).f64(c.target()).f64(c.lowLimit()).f64(c.share())).f64(h.transitJoule());
+        f.name(h.unit()).name(h.side()).f64(h.area()).count(h.partner()).record(q->q.name(c.mode()).f64(c.target()).f64(c.lowLimit()).f64(c.share())).f64(h.transitJoule())
+                .count(h.fanCount());
     }
     private static HeatUnit heatUnit(Record f) {
         var unit=f.name(com.wormzjl.icheme.science.equipment.HeatSides.Unit.class,null);var side=f.name(com.wormzjl.icheme.science.equipment.HeatSides.Side.class,null);double area=f.f64(0);long partner=f.count(0);
         var control=f.record(HeatUnit.Control.OFF,q->{var mode=q.name(HeatUnit.Mode.class,HeatUnit.Mode.OFF);double target=q.f64(0),lowLimit=q.f64(0),share=q.f64(0);
             return valid(q,"heat unit control",()->new HeatUnit.Control(mode,target,lowLimit,share));});
         double transit=f.f64(0);
+        // A side saved before schema 11 has no fan count: 0, read as one fan motor for the bank until its structure restates it.
+        long fans=f.count(0);
         required(unit,f,"heat unit");required(side,f,"heat unit side");
-        return valid(f,"heat unit",()->new HeatUnit(unit,side,area,partner,control,transit));
+        if(fans>HeatUnit.MAXIMUM_FANS)throw f.invalid("heat unit fans "+fans);
+        return valid(f,"heat unit",()->new HeatUnit(unit,side,area,partner,control,transit,(int)fans));
     }
     private static void geometry(Fields f,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){f.name(g.form()).f64(g.capacity()).f64(g.height()).f64(g.diameter()).f64(g.length()).f64(g.bootDiameter()).f64(g.bootLength());}
     private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Record f){var form=f.name(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.class,null);double capacity=f.f64(0),height=f.f64(0),d=f.f64(0),l=f.f64(0),bd=f.f64(0),bl=f.f64(0);return valid(f,"vessel geometry",()->new com.wormzjl.icheme.science.fluid.network.VesselGeometry(form,capacity,height,d,l,bd,bl));}
@@ -363,6 +441,13 @@ final class FluidFacts {
             case FlowControl.Passive ignored->f.text("passive").f64(0).f64(0).bool(false).f64(0);
             case FlowControl.Pump pump->f.text("pump").f64(pump.requestedVolumeFlow()).f64(pump.maximumAddedPressure()).bool(pump.enabled()).f64(0);
             case FlowControl.Compressor compressor->f.text("compressor").f64(compressor.requestedVolumeFlow()).f64(compressor.maximumPressureRatio()).bool(compressor.enabled()).f64(0);
+            // Schema 10 (W3): a casing on its curve, its set points, switch and law; its speed is its train's, a slice input.
+            case FlowControl.Machine machine->{var law=machine.law();
+                f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
+                        .record(q->q.text(law.liquid()?"centrifugal_pump":"centrifugal_compressor").f64(law.ratedFlow()).f64(law.ratedHead()).f64(law.efficiency())
+                                .f64(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump?pump.ratedSpeed():0));}
+            // Schema 10 (W3): a steam turbine's rated power and isentropic efficiency.
+            case FlowControl.Turbine turbine->f.text("turbine").f64(0).f64(0).bool(true).f64(0).f64(turbine.design().ratedPower()).f64(turbine.design().efficiency());
             case FlowControl.PressureValve valve->f.text("pressure_valve").f64(0).f64(0).bool(false).f64(valve.targetPressure());
             case FlowControl.ControlValve valve->{f.text("control_valve").f64(0).f64(0).bool(false).f64(valve.targetPressure()).name(valve.source());f.list(valve.sensor()==null?List.<java.util.UUID>of():List.of(valve.sensor()),FluidFacts::uuid).i64(valve.revision()).f64(valve.massTarget()).f64(valve.volumeTarget());}
         }
@@ -375,6 +460,13 @@ final class FluidFacts {
             case "compressor"->new FlowControl.Compressor(flow,limit,enabled);
             case "pressure_valve"->new FlowControl.PressureValve(target);
             case "control_valve"->{var source=f.name(FlowControl.ValveSource.class,null);var sensor=f.list(List.of(),FluidFacts::uuid);long revision=f.i64(0);if(sensor.size()>1)throw f.invalid("multiple control sources");double mass=f.f64(1),volume=f.f64(.01);yield new FlowControl.ControlValve(source,target,mass,volume,sensor.isEmpty()?null:sensor.getFirst(),revision);}
+            case "machine"->{var law=f.record(null,q->{var type=q.text("");double rated=q.f64(0),head=q.f64(0),efficiency=q.f64(0),rpm=q.f64(0);
+                    return switch(type){case "centrifugal_pump"->new com.wormzjl.icheme.science.machine.CentrifugalPump(rated,head,efficiency,rpm);
+                        case "centrifugal_compressor"->new com.wormzjl.icheme.science.machine.CentrifugalCompressor(rated,head,efficiency);
+                        default->throw q.invalid("unknown machine law "+type);};});
+                if(law==null)throw f.invalid("a machine without its law");
+                yield new FlowControl.Machine(law,0,enabled,flow,limit);}
+            case "turbine"->{double power=f.f64(0),efficiency=f.f64(0);yield new FlowControl.Turbine(new com.wormzjl.icheme.science.machine.SteamTurbine(power,efficiency));}
             default->throw new IllegalArgumentException("unknown control "+kind);
         });
     }
@@ -382,18 +474,22 @@ final class FluidFacts {
      * The topology unit's state: its queued events, each with the registrations it would install; then the running column
      * units' engine state ({@link ColumnUnit.State}), by unit. A checkpoint written before the column states has none.
      */
-    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns) {
+    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns){return topologyState(events,columns,Map.of());}
+    /** {@code shafts}: the shaft units whose engine state (a driver's speed, W3) is kept, after the column states. */
+    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts) {
         var states=new ArrayList<ColumnUnit>();for(var u:columns.values())if(u.state()!=null)states.add(u);states.sort(Comparator.comparingLong(ColumnUnit::id));
+        var speeds=new ArrayList<ShaftUnit>();for(var u:shafts.values())if(u.state()!=null)speeds.add(u);speeds.sort(Comparator.comparingLong(ShaftUnit::id));
         return section(f->f.list(events,(q,event)->{uuid(q,event.id());q.count(event.tick());
             q.list(event.edits(),(e,edit)->e.count(edit.id()).list(edit.replacement()==null?List.<WorldTopologyLedger.Registration>of():List.of(edit.replacement()),FluidFacts::registration));
             var touched=new ArrayList<>(event.touched());Collections.sort(touched);q.list(touched,(t,id)->t.count(id));
             var recovery=event.recovery();
             q.list(recovery==null?List.<WorldTopologyLedger.Recovery>of():List.of(recovery),(r,v)->r.count(v.filterId()).list(v.player()==null?List.<UUID>of():List.of(v.player()),FluidFacts::uuid));
-        }).list(states,(q,u)->columnState(q.count(u.id()),u.state())));
+        }).list(states,(q,u)->columnState(q.count(u.id()),u.state()))
+          .list(speeds,(q,u)->shaftState(q.count(u.id()),u.state())));
     }
     static byte[] events(List<WorldTopologyLedger.Event> events){return topologyState(events,Map.of());}
     /** A topology unit's state: its events, and the column states that validate (one that does not is dropped: that unit solves again). */
-    record TopologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit.State> columns) {}
+    record TopologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit.State> columns,Map<Long,ShaftUnit.State> shafts) {}
     static TopologyState topologyState(byte[] data,int offset,int length) {
         return read(data,offset,length,"state of the topology unit",f->{
             var events=f.list(List.<WorldTopologyLedger.Event>of(),q->{
@@ -407,10 +503,22 @@ final class FluidFacts {
             var columns=new HashMap<Long,ColumnUnit.State>();
             for(var entry:f.list(List.<Map.Entry<Long,ColumnUnit.State>>of(),q->{long id=q.count(0);var state=columnState(q);return new AbstractMap.SimpleEntry<>(id,state);}))
                 if(entry.getValue()!=null&&columns.put(entry.getKey(),entry.getValue())!=null)throw new IllegalArgumentException("Invalid saved topology state: duplicate column unit "+entry.getKey());
-            return new TopologyState(events,columns);
+            // W3: a driver's speed; one that does not validate is dropped and its train starts at its set speed.
+            var shafts=new HashMap<Long,ShaftUnit.State>();
+            for(var entry:f.list(List.<Map.Entry<Long,ShaftUnit.State>>of(),q->{long id=q.count(0);double speed=q.f64(0),previous=q.f64(Double.NaN),measured=q.f64(Double.NaN);
+                    ShaftUnit.State state;try{state=new ShaftUnit.State(speed,previous,measured);}catch(IllegalArgumentException invalid){state=null;}return new AbstractMap.SimpleEntry<>(id,state);}))
+                if(entry.getValue()!=null&&shafts.put(entry.getKey(),entry.getValue())!=null)throw new IllegalArgumentException("Invalid saved topology state: duplicate shaft unit "+entry.getKey());
+            return new TopologyState(events,columns,shafts);
         });
     }
     static List<WorldTopologyLedger.Event> events(byte[] data,int offset,int length){return topologyState(data,offset,length).events();}
+    /** A driver's state: its speed, then the slice before's speed and measure while each is known; an absent one reads as NaN (none yet). */
+    private static void shaftState(Fields f,ShaftUnit.State s) {
+        f.f64(s.speed());
+        if(!Double.isFinite(s.previousSpeed()))return;
+        f.f64(s.previousSpeed());
+        if(Double.isFinite(s.previousMeasured()))f.f64(s.previousMeasured());
+    }
     private static Fields columnState(Fields f,ColumnUnit.State s) {
         var t=s.table();var ref=t.reference();
         var held=new double[t.held().length];for(int i=0;i<held.length;i++)held[i]=t.held()[i]?1:0;
@@ -662,7 +770,8 @@ final class FluidFacts {
             recoveries.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,solids,r.energy));
         }
         var restatedTotal=world.restated.plus(new WorldTopologyLedger.Restated(energy,removed.moles,removed.solids));
-        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns);
+        var shafts=new HashMap<Long,ShaftUnit>();for(var u:world.shafts)shafts.put(u.id(),u);
+        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,shafts,world.electricStores(),world.health());
         var ledger=new WorldTopologyLedger(snapshot);
         // A dismantled column whose release was still queued leaves now, its accounts booked as destroyed.
         for(var u:columns.values())if(u.leaving())ledger.removeColumn(u.id());

@@ -123,8 +123,7 @@ public final class NetworkReduction {
      * <li>An island that holds no stock (no generator, no vessel holding anything) is at rest whatever its devices are
      * set to: a junction's buffer is never material (D46), and one no source reaches holds a placeholder (D55).</li>
      * <li>A pump or compressor that cannot move anything this slice (set to no flow, or refused for the slice,
-     * {@code refused}) is a closed connection; any other at its target moves its set flow whatever the pressures, and
-     * the island is solved.</li>
+     * {@code refused}) is a closed connection; any other runs on its law, and the island is solved.</li>
      * <li>Otherwise it is at rest when the gauge reads no drive and no flow (owner decisions D42, D43, D58). A gauge stands
      * where stock is; a junction holds no stock and no gauge. So: no connection between two stock nodes has a static drive
      * ({@link #drives}) above {@link #REST_RESOLUTION} in an allowed direction, no path of junctions between two such

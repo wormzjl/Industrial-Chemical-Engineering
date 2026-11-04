@@ -200,6 +200,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      */
     private void trackMoving() {
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.MoverSounds.track(this);
+        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.track(this);
         moving = new int[0];
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
@@ -285,6 +286,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         com.wormzjl.icheme.runtime.instrument.InstrumentHosts.unloaded(this);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.InstrumentRenderer.forget(worldPosition);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.MoverSounds.forget(this);
+        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.forget(this);
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
@@ -333,6 +335,19 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         box = new int[]{shape.sizeX(), shape.sizeY(), shape.sizeZ()};
         setChanged();
         trackRoof();
+        // The cell may have become (or stopped being) a terminal box (W5): cached FE ports look again.
+        if (level != null && !level.isClientSide()) level.invalidateCapabilities(worldPosition);
+    }
+
+    /**
+     * This cell's FE port (batch 2026-11-03-rotating-machinery W5, readings A56, A57): on every face of its structure's
+     * terminal cell, receive-only for a consumer, extract-only for a generator; null on any other cell and on the client.
+     */
+    public net.neoforged.neoforge.energy.@Nullable IEnergyStorage energy() {
+        if (shape == null || !(level instanceof ServerLevel server)) return null;
+        var terminal = ShapeRasterizer.terminal(shape);
+        if (terminal == null || !terminal.equals(cell())) return null;
+        return new TerminalEnergy(server, this);
     }
 
     /**
@@ -573,6 +588,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         }
         if (shape.kind() == EquipmentShape.Kind.AIR_COOLER) tag.putIntArray("Bank", shape.bank().encode());
         if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)tag.putIntArray("TowerBank",shape.towerBank().encode());
+        if (shape.designed() && com.wormzjl.icheme.science.equipment.UnitDesign.of(shape.kind()).hasDuty()) tag.put("Duty", writeDuty(shape.duty()));
     }
 
     /**
@@ -586,13 +602,38 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         catch(IllegalArgumentException invalid){var repairs=new java.util.ArrayList<>(read.repairs());repairs.add("tower bank -> one cell: "+invalid.getMessage());return new ShapeRepair.Read(read.shape(),null,repairs);}
     }
 
+    /**
+     * A machine's design point (shape fields 8, batch 2026-11-03-rotating-machinery): its numbers, its drive and its steam
+     * class by name (the steam class only where it has one).
+     */
+    public static CompoundTag writeDuty(com.wormzjl.icheme.science.equipment.MachineDuty duty) {
+        var tag = new CompoundTag();
+        tag.putDouble("Flow", duty.flow());
+        tag.putDouble("Head", duty.head());
+        tag.putDouble("PolytropicHead", duty.polytropicHead());
+        tag.putDouble("Power", duty.power());
+        tag.putInt("Poles", duty.poles());
+        tag.putString("Drive", duty.drive().name());
+        if (duty.steam() != null) tag.putString("Steam", duty.steam().name());
+        tag.putDouble("Exhaust", duty.exhaust());
+        return tag;
+    }
+
+    /** A design point as saved, or null where the shape has none (a machine saved before shape fields 8, or a field that is not a compound). */
+    public static ShapeRepair.@org.jetbrains.annotations.Nullable SavedDuty savedDuty(CompoundTag tag) {
+        if (!tag.contains("Duty", net.minecraft.nbt.Tag.TAG_COMPOUND)) return null;
+        var d = tag.getCompound("Duty");
+        return new ShapeRepair.SavedDuty(d.getDouble("Flow"), d.getDouble("Head"), d.getDouble("PolytropicHead"), d.getDouble("Power"), d.getInt("Poles"),
+                d.contains("Drive") ? d.getString("Drive") : null, d.contains("Steam") ? d.getString("Steam") : null, d.getDouble("Exhaust"));
+    }
+
     /** The shape fields of {@code tag} as written, before any rule reads them. */
     public static ShapeRepair.Saved saved(CompoundTag tag) {
         return new ShapeRepair.Saved(tag.getString("Kind"), tag.getString("Front"), tag.contains("Orientation") ? tag.getString("Orientation") : null,
                 tag.getDouble("Diameter"), tag.getDouble("TangentLength"), tag.getInt("Support"), tag.contains("Trays") ? tag.getIntArray("Trays") : null,
                 tag.contains("Connections") ? tag.getIntArray("Connections") : null, tag.getBoolean("Boot"), tag.getInt("Outlet"),
                 tag.contains("Bank") ? tag.getIntArray("Bank") : null, ColumnDesignTags.saved(tag, "Components"), ColumnDesignTags.savedTurns(tag, "Turns"),
-                ColumnDesignTags.savedOperating(tag, "Operating"));
+                ColumnDesignTags.savedOperating(tag, "Operating"), savedDuty(tag));
     }
 
     @Override

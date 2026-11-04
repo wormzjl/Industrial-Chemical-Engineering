@@ -34,6 +34,9 @@ class SentDesignTagsTest {
 
     /** Member counts as an image written before the water trim's count shows them. */
     private static final java.util.regex.Pattern UNITS_BEFORE_TRIM = java.util.regex.Pattern.compile("(Units\\[condenser=\\d+, kettle=\\d+, coolers=\\[[0-9, ]*\\])\\]");
+    /** A machine's duty (batch 2026-11-03-rotating-machinery W4): an image written before the shape's duty field reads back with
+     * the default duty of its size, which its expected text does not show. */
+    private static final java.util.regex.Pattern DUTY = java.util.regex.Pattern.compile(", duty=MachineDuty\\[[^\\]]*\\]");
 
     /** Every size the stage proposes, as Send to block stores it, members and counts among them; and an air-then-water column. */
     static List<SentDesign> designs() {
@@ -123,7 +126,10 @@ class SentDesignTagsTest {
                     var read = SentDesignTags.read(list);
                     assertTrue(read.whole(), file + ": " + read.repairs());
                     // Counts written before the water trim's read one trim shell.
-                    assertEquals(UNITS_BEFORE_TRIM.matcher(entry.getString("Expected")).replaceAll("$1, trim=1]"), read.designs().getFirst().toString(), file.toString());
+                    var expected = UNITS_BEFORE_TRIM.matcher(entry.getString("Expected")).replaceAll("$1, trim=1]");
+                    var actual = read.designs().getFirst().toString();
+                    if (!expected.contains("duty=")) actual = DUTY.matcher(actual).replaceAll("");
+                    assertEquals(expected, actual, file.toString());
                 }
         }
     }

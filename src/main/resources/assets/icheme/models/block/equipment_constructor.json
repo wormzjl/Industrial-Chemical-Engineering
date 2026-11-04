@@ -1,10 +1,10 @@
 {
   "parent": "minecraft:block/orientable_with_bottom",
   "textures": {
-    "top": "create:block/schematic_table_top",
-    "bottom": "create:block/andesite_casing",
-    "side": "create:block/andesite_casing",
-    "front": "create:block/brass_casing",
-    "particle": "create:block/andesite_casing"
+    "top": "icheme:block/computer_keys",
+    "bottom": "icheme:block/computer_shell",
+    "side": "icheme:block/computer_shell",
+    "front": "icheme:block/computer_face",
+    "particle": "icheme:block/computer_shell"
   }
 }

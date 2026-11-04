@@ -25,14 +25,14 @@ side = "BOTH"
 
 [[dependencies."${mod_id}"]]
 modId = "create"
-type = "required"
+type = "optional"
 versionRange = "${create_version_range}"
 ordering = "AFTER"
 side = "BOTH"
 
 [[dependencies."${mod_id}"]]
 modId = "kubejs"
-type = "required"
+type = "optional"
 versionRange = "${kubejs_version_range}"
 ordering = "AFTER"
 side = "BOTH"

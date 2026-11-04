@@ -217,6 +217,9 @@ public final class ColumnOperationReviewWorld {
                     plant.world.resizeLine(id(front(column, role, 0).relative(out(column, role, 0), k)), (double) line[1], d -> PipeSizes.MAX_BORE);
             }
             for (var valve : plant.valves.entrySet()) plant.install(valve.getKey(), valve.getValue());
+            // The casings turn only with their shaft trains (W3): a creative motor drives each pump.
+            plant.drive(refluxPump);
+            for (var pump : pumps) plant.drive(pump);
 
             // The supplies and the sinks.
             supply(feed, FEED_BORE, new FluidDeviceSpec(1, input.feedTemperatureKelvin(), SUPPLY, crude(catalog)));

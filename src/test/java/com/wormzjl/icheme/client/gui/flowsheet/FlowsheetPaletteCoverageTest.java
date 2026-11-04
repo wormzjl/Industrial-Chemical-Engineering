@@ -24,7 +24,14 @@ class FlowsheetPaletteCoverageTest {
         return entries;
     }
 
-    private static boolean stream(String type) {
+    /**
+     * A drawing-only kind that stands on a modelled kind's tile, as the drivers on the steam turbine's (batch 2026-11-03-rotating-machinery, W8, D43):
+     * the tile runs the modelled kind, and this one is drawn there only.
+     */
+    private static boolean drawnOnARunningTile(FlowsheetCatalog.Entry entry) {
+        return entry.coverage() == FlowsheetCatalog.Coverage.DRAWING_ONLY && entries().stream().anyMatch(e -> e.tile().equals(entry.tile()) && e.coverage() == FlowsheetCatalog.Coverage.MODELLED);
+    }
+    private static boolean stream(String type) {
         return type.equals(Tiles.FEED) || type.equals(Tiles.PRODUCT);
     }
 
@@ -33,7 +40,7 @@ class FlowsheetPaletteCoverageTest {
         for (var entry : entries()) {
             var tile = Tiles.tile(entry.tile());
             assertNotNull(tile, entry + " has a tile");
-            assertEquals(entry.coverage() == FlowsheetCatalog.Coverage.MODELLED, tile.lit(), entry + ": lit means it has a model");
+            if (!drawnOnARunningTile(entry)) assertEquals(entry.coverage() == FlowsheetCatalog.Coverage.MODELLED, tile.lit(), entry + ": lit means it has a model");
             assertTrue(SheetFixture.Texts.has("gui.icheme." + tile.name()), entry + " has a name");
         }
     }
@@ -57,7 +64,7 @@ class FlowsheetPaletteCoverageTest {
         assertTrue(SheetFixture.Texts.has("gui.icheme.flowsheet.tile.unlit"), "its hover says why it is off");
         int some = 0;
         for (var entry : entries()) {
-            if (entry.coverage() != FlowsheetCatalog.Coverage.DRAWING_ONLY) continue;
+            if (entry.coverage() != FlowsheetCatalog.Coverage.DRAWING_ONLY || drawnOnARunningTile(entry)) continue;
             some++;
             assertNull(UnitTypes.model(entry.tile()), entry + " has no model yet");
             var units = List.of(new Flowsheet.Unit("u", entry.tile(), "U-1", 100, 60, SheetEditor.defaults("valve", SheetFixture::column)));

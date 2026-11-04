@@ -175,11 +175,12 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
 
     /**
      * The round bodies that take the metallic sheen ({@code IChemE.equipmentSheen}; owner request 2026-10-17,
-     * {@code METALLIC_LOOK_RESEARCH.md}): shells, heads, cladding, skirts, heater casings, machine and motor bodies. Pipes and
+     * {@code METALLIC_LOOK_RESEARCH.md}): shells, heads, cladding, skirts, heater casings, machine and motor bodies, a pump's castings, housing and joints, a motor's frame and cast parts. Pipes and
      * flanges have too few facets: their highlight would jump from facet to facet.
      */
     private static final Set<Mesh.Material> SHEEN = EnumSet.of(Mesh.Material.SHELL, Mesh.Material.HEAD, Mesh.Material.CLADDING, Mesh.Material.SUPPORT,
-            Mesh.Material.HEATER, Mesh.Material.MACHINE, Mesh.Material.MOTOR, Mesh.Material.AC_HEADER);
+            Mesh.Material.HEATER, Mesh.Material.MACHINE, Mesh.Material.MOTOR, Mesh.Material.AC_HEADER, Mesh.Material.PUMP_CASTING, Mesh.Material.PUMP_VOLUTE,
+            Mesh.Material.PUMP_FINS, Mesh.Material.PUMP_JOINT, Mesh.Material.MOTOR_FRAME, Mesh.Material.MOTOR_PLAIN);
 
     /**
      * A fixed highlight over the shade of a round body's vertex with normal (nx, nz): {@code k |nz|^8} and half as much

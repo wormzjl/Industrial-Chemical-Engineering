@@ -25,6 +25,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Sense;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
+import com.wormzjl.icheme.science.machine.Motor;
 
 /**
  * The sizing stage's limits, one row a limit (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.3, 3.4 and
@@ -107,13 +108,19 @@ public enum Limit {
     /** A rise for the world's reference fluid, so a head in metres takes that fluid's density. */
     // Its bound is the world's added pressure, Pa; a pump reads it as head, m of its own liquid, against that pressure as head of the reference liquid.
     PUMP_HEAD(MUST, most(FlowControl.Pump.MAXIMUM_ADDED_PRESSURE), "m", "World: 2 MPa at water reference", QUIET),
-    PUMP_NPSH_WORLD(MUST, above(0), "m", "World: `PUMP_SUCTION_LIMIT`", QUIET),
+    /** The world starves a pump whose suction falls to its liquid's vapour pressure plus {@code 0.85 NPSH3} at its flow
+     * (batch 2026-11-03-rotating-machinery, owner decisions D20 Q11 A and D21): the rating gives that floor
+     * ({@link PumpSizing#requiredNpsh}). */
+    PUMP_NPSH_WORLD(MUST, given(Sense.ABOVE), "m", "World: `PUMP_SUCTION_LIMIT` at `0.85 NPSH3` (`Npsh`)", QUIET),
+    /** The margin over the pump's NPSH3 (m): the rating reads NPSH available against NPSH3 plus this number. */
     PUMP_NPSH(SHOULD, least(1), "m", "[HI-961]", QUIET),
     PUMP_RATED(SHOULD, within(70, 120), "%", "[API610]"),
 
     // ---- Compressors ----
     COMPRESSOR_RATIO(MUST, most(FlowControl.Compressor.MAXIMUM_PRESSURE_RATIO), "", "World: `FluidNetwork.Controls`"),
-    COMPRESSOR_LIQUID(MUST, most(100 * FlowControl.Compressor.CONDENSED_REFUSE), "%", "World: `Compressor.CONDENSED_REFUSE`", QUIET),
+    /** The world compresses a wet suction since request 11 of batch 2026-11-03-rotating-machinery (no refusal, so no MUST,
+     * D14); a wet suction costs efficiency and, with W10b, wears the machine. The share is the refusal it replaced. */
+    COMPRESSOR_LIQUID(SHOULD, most(1), "%", "This plan: a wet suction erodes (rotating machinery, plan section 3.6)", QUIET),
     COMPRESSOR_DISPLACEMENT(SHOULD, given(Sense.LEAST), "m³/h", "World: `displacement`"),
     COMPRESSOR_STAGE_PISTON(SHOULD, most(3.5), "", "[PEREZ]"),
     COMPRESSOR_STAGE_TURBO(SHOULD, most(3), "", "[PEREZ]"),
@@ -221,6 +228,12 @@ public enum Limit {
      * thread's reading of the owner's "always have enough excess" (2026-11-03), reversible by the owner.
      */
     EJECTOR_MOTIVE_SPARE(SHOULD, least(20), "%", "This plan", QUIET),
+
+    // ---- Steam turbines (batch 2026-11-03-rotating-machinery, W8, D43) ----
+    /** The rated power over the shaft power at design flow, at least a motor's {@link Motor#SPARE}: the owner's "always have enough excess". */
+    TURBINE_SPARE(SHOULD, least(Motor.SPARE), "", "This plan: `Motor.SPARE`"),
+    /** The inlet's pressure under its steam class's header: a casing is rated for its class. The world reads the real inlet and refuses none. */
+    TURBINE_INLET(SHOULD, given(Sense.MOST), "kPa", "This plan: `MachineDuty.Steam`", QUIET),
 
     // ---- Types, section 3.10: what section 3.4 has no row for ----
     /** Above the largest cabin, a count of cabins. */

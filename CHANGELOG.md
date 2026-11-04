@@ -15,6 +15,18 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-05
+
+### Added
+
+- Rotating machinery (W1 `94ab01831`, W2 `7e66ba393`, `ea840a2d6`, `8343a4bd0`, `ffde40d7f`, `93159d42d`, `e1677d74e`, `d444cb424`, turbine connection `18c6f304b`, W10a `4536849bb`, O4 `6dbae99c2`, simulator coupling `5ea618d5b`, W4 merge `71c66ae94`, W3 `69056145f`, W5 `97ae9c6d8`, W7 `75c3fca13`, W10b `6074e7aa0`, W10c `975a718e2`, `69c1c8aa0`, W10d `4eec41cad`, W6a merge `d16ecab51`, W6b `23c634d1f`, `fd44fb9bf`, W8 `13a2bda76`, `3d615e6a1`, `7de10b5ac`, translations `7d19dc2eb`, cleanup `388ea9c4c`; merges main `c2704213a`; batch `2026-11-03-rotating-machinery`, plan `ROTATING_MACHINERY_PLAN.md`, decisions D1 to D44 in `DECISION_LOG.md`, reviews `W3_REVIEW.md` to `W8_REVIEW.md`): constructed centrifugal pumps and compressors run on their curves (head and NPSH3 from their design point, efficiency from the design, the curve's shutoff and a check valve, a bubble-point suction floor, a vapour-locked pump stands closed) and steam turbines take their work out of the steam; machines with shaft ends join shaft trains driven by a motor (fixed or variable speed, regulating a flow or a pressure), a steam turbine with a speed-sensor governor, a creative motor, or a Create coupling, through gearboxes up to 20:1 (64:1 behind a coupling), with generators on the other end; motors, air cooler and cooling tower fans draw FE at a terminal box (2.5 J per FE, config `energy.joulesPerFE`, `energy.machinesNeedPower`) and generators push it out; pumps draw gas and cavitate (Turpin head factor, NPSH3), wear from cavitation and running dry, fail closed at zero health and take a crafted repair kit (config `machines.wear.*`); machines sound their casing and driver loops with pitch from rpm, a cavitation crackle and a gas churn; motors, turbines, generators, gearboxes, the creative motor and the coupling have machine pages, and pump pages show NPSH available and required, gas, health and the pump curve with its 4 x NPSH3 inception line; Create and KubeJS are optional, and with Create a coupling block brings Create rotation into a train at 34.13 su per FE (config `create.stressPerFE`), its stress following the train's demand and never overstressing the Create network; the process simulator's pump and compressor tiles take their design efficiency and propose a motor with a 20 % spare, its steam turbine tile runs and Auto sizes turbines, and the column door shows its pumps' duties in a table on a glass that scrolls. Every new line is in all five languages. Formats: fluid facts schema 10, 11 and 12 (corpus `compat/fluid/schema-10/` to `schema-12/`), accessory facts 3 (`compat/accessories/schema-3.snbt`), shape fields 8 (`compat/equipment/shapes-8.snbt`), checkpoint 35, protocols `equipment-18`, `fluid-18`, `machine-2`, `mover-4`.
+
+### Changed
+
+- The column door's Standard / In-line pump keys give way to the pumps' duty table; new column designs name the standard pump, and the assembly takes either pump in the slot (W8 `3d615e6a1`, batch `2026-11-03-rotating-machinery`, D43).
+- Tooling cleanup of the rotating machinery batch (`388ea9c4c`): test-only helpers (`MachineColumn` samples, `SpeedControl.displacementSpeed`, `CentrifugalPump.efficiencyAt`, `SteamTurbine.steamFor` and `steamRate`, `Motor.rating` and `ratingCount`) move to `src/test`; unused `CentrifugalPump.minimumFlow`, `ShaftTrains.deviceLine` and `governorTarget`, `WorldTopologyLedger.Snapshot.withStores` and `withHealth` are removed; worked numbers and W2 traces and probes move to `tools/rotating-machinery/`.
+
+
 ## [0.20.0] - 2026-11-04
 
 ### Added

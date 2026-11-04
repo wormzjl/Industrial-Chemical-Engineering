@@ -25,7 +25,6 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser;
-import com.wormzjl.icheme.science.equipment.ColumnComponents.Pump;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -111,13 +110,13 @@ class CalculatorColumnTest {
         var out = new ArrayList<EquipmentInput>();
         for (boolean conflict : new boolean[]{false, true})
             for (var condenser : Condenser.values())
-                for (var pumps : List.of(List.<Pump>of(), List.of(Pump.STANDARD, Pump.IN_LINE, Pump.STANDARD, Pump.IN_LINE)))
+                for (int pumps : new int[]{0, 4})
                     for (boolean saves : new boolean[]{false, true})
                         // S3b: with a kettle and every count at its most, and with one unit a step and no kettle.
                         for (boolean kettle : new boolean[]{false, true}) {
                             var most = ColumnComponents.MAX_UNITS;
-                            var units = kettle ? new ColumnComponents.Units(most, most, java.util.Collections.nCopies(pumps.size(), most), most) : ColumnComponents.Units.ONE;
-                            out.add(new EquipmentInput(conflict, condenser, saves ? Pump.IN_LINE : Pump.STANDARD, pumps, saves, units, kettle));
+                            var units = kettle ? new ColumnComponents.Units(most, most, java.util.Collections.nCopies(pumps, most), most) : ColumnComponents.Units.ONE;
+                            out.add(new EquipmentInput(conflict, condenser, pumps, saves, units, kettle));
                         }
         return out;
     }
@@ -408,15 +407,16 @@ class CalculatorColumnTest {
         assertTrue(profile.get("view:profiles").latched() && !profile.get("view:profiles").active() && profile.get("view:heat").active());
         assertTrue(profile.get("metric:drop").latched() && profile.get("metric:temperature").active() && !profile.get("metric:temperature").latched());
 
-        var equipment = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.EXCHANGER, Pump.IN_LINE, List.of(Pump.STANDARD, Pump.IN_LINE), false), t);
-        assertEquals(List.of("condenser:air_cooler", "condenser:exchanger", "condenser:air_then_water", "units/condenser", "units/condenser-", "units/condenser+", "reflux:standard", "reflux:in_line",
-                "pa0:standard", "pa0:in_line", "units/pa0", "units/pa0-", "units/pa0+", "pa1:standard", "pa1:in_line", "units/pa1", "units/pa1-", "units/pa1+", "save_design"),
-                keys(equipment.right()));
+        // W8 (D43): the design names no pump kind, so no pump keys and no Reflux pump group; the pumps' duties stand on the glass.
+        var equipment = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.EXCHANGER, 2, false), t);
+        assertEquals(List.of("condenser:air_cooler", "condenser:exchanger", "condenser:air_then_water", "units/condenser", "units/condenser-", "units/condenser+",
+                "units/pa0", "units/pa0-", "units/pa0+", "units/pa1", "units/pa1-", "units/pa1+", "save_design"), keys(equipment.right()));
+        assertTrue(equipment.right().stream().noneMatch(r -> r instanceof Column.Group g && g.title().equals(t.get("column.component_reflux_pump"))), "no Reflux pump group");
         var chosen = buttons(equipment.right());
-        assertTrue(chosen.get("condenser:exchanger").latched() && chosen.get("reflux:in_line").latched() && chosen.get("pa0:standard").latched() && chosen.get("pa1:in_line").latched());
+        assertTrue(chosen.get("condenser:exchanger").latched());
         assertFalse(chosen.get("save_design").active());
         // S3b: the counts as the door holds them, the kettle's only where the design has one; an exchanger counts shells, an air cooler banks.
-        var counted = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.AIR_COOLER, Pump.STANDARD, List.of(Pump.STANDARD),
+        var counted = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.AIR_COOLER, 1,
                 true, new ColumnComponents.Units(2, 3, List.of(4)), true), t).right();
         var settings = new LinkedHashMap<String, Column.Setting>();
         for (var row : counted)
@@ -424,11 +424,11 @@ class CalculatorColumnTest {
         assertEquals(List.of("units/condenser", "units/kettle", "units/pa0"), List.copyOf(settings.keySet()));
         assertEquals(List.of("2", "3", "4"), settings.values().stream().map(Column.Setting::value).toList());
         assertEquals(t.get("column.units.banks"), settings.get("units/condenser").label());
-        assertEquals(t.get("column.units.shells"), CalculatorColumn.equipment(new EquipmentInput(false, Condenser.EXCHANGER, Pump.STANDARD, List.of(), true), t).right().stream()
+        assertEquals(t.get("column.units.shells"), CalculatorColumn.equipment(new EquipmentInput(false, Condenser.EXCHANGER, 0, true), t).right().stream()
                 .filter(r -> r instanceof Column.Group).map(r -> (Column.Group) r).flatMap(g -> g.rows().stream()).filter(r -> r instanceof Column.Setting).map(r -> ((Column.Setting) r).label()).findFirst().orElseThrow());
         // An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): its air cooler's banks, then its water trim's shells.
         var trimmed = new LinkedHashMap<String, Column.Setting>();
-        var trimPage = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.AIR_THEN_WATER, Pump.STANDARD, List.of(), true,
+        var trimPage = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.AIR_THEN_WATER, 0, true,
                 new ColumnComponents.Units(2, 1, List.of(), 3), false), t).right();
         for (var row : trimPage)
             if (row instanceof Column.Group g) for (var r : g.rows()) if (r instanceof Column.Setting s) trimmed.put(s.key(), s);
@@ -496,9 +496,9 @@ class CalculatorColumnTest {
                     for (boolean trim : new boolean[]{false, true}) {
                         var list = new ArrayList<Rows>();
                         for (var in : equipmentInputs())
-                            if (in.conflict() == conflict && in.pumparounds().size() == 4 && in.kettle() == kettle && (in.condenser() == Condenser.AIR_THEN_WATER) == trim) {
+                            if (in.conflict() == conflict && in.pumparounds() == 4 && in.kettle() == kettle && (in.condenser() == Condenser.AIR_THEN_WATER) == trim) {
                                 list.add(CalculatorColumn.equipment(in, t));
-                                list.add(CalculatorColumn.equipment(new EquipmentInput(conflict, in.condenser(), in.reflux(), in.pumparounds(), in.saves(), ColumnComponents.Units.ONE.fit(4), kettle), t));
+                                list.add(CalculatorColumn.equipment(new EquipmentInput(conflict, in.condenser(), in.pumparounds(), in.saves(), ColumnComponents.Units.ONE.fit(4), kettle), t));
                             }
                         groups.put("equipment " + conflict + " " + kettle + " " + trim, list);
                     }
@@ -553,6 +553,112 @@ class CalculatorColumnTest {
         @Override
         public void unclip() {
         }
+    }
+
+    /**
+     * W8 (batch 2026-11-03-rotating-machinery, D43): the pumps' duties as one table, the quantity over its unit, ruled under the units;
+     * a row a pump with its six cells; no text cut at any glass width; before a rating, dashes and the note.
+     */
+    @Test
+    void thePumpDutiesStandAsOneTable() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        var pumps = List.of(new CalculatorColumn.PumpDuty(t.get("column.component_reflux_pump"), 60, 55, 29.6e3, 1.7, 37e3), new CalculatorColumn.PumpDuty(t.get("column.component_pa", 1), 250, 45, 99e3, 3.3, 132e3),
+                CalculatorColumn.PumpDuty.unknown(t.get("column.component_pa", 2)));
+        // The Equipment page's glass at every door width, inside the well's bezel (8 px narrower at most).
+        for (int door = CalculatorColumn.MIN_WIDTH; door <= CalculatorColumn.MAX_WIDTH; door += 7) {
+            int width = CalculatorColumn.glass(door, 254, false).w() - 8;
+            var sheet = CalculatorColumn.pumpDuties(pumps, width, M, t);
+            var kinds = sheet.lines().stream().map(CalculatorColumn.Line::kind).toList();
+            if (kinds.getFirst() == Kind.HEADER) {
+                assertEquals(List.of(Kind.HEADER, Kind.UNITS), kinds.subList(0, 2), width + ": two header lines");
+                assertEquals(List.of("", "m³/h", "m", "kW", "m", "kW"), sheet.lines().get(1).cells());
+                assertEquals(3, sheet.lines().stream().filter(l -> l.kind() == Kind.ROW && !l.cells().get(1).isEmpty()).count(), width + ": a row of numbers a pump");
+                assertTrue(sheet.lines().stream().noneMatch(l -> l.kind() == Kind.NOTE), width + ": a rated pump, no note");
+            } else {
+                // Too narrow for the numbers side by side: each pump its name over its five readouts, on one band.
+                for (int p = 0; p < pumps.size(); p++) {
+                    int entry = p;
+                    assertEquals(pumps.get(p).name(), sheet.lines().stream().filter(l -> l.entry() == entry).findFirst().orElseThrow().cells().getFirst(), width + ": the name first");
+                }
+                assertEquals(5, sheet.lines().stream().filter(l -> l.entry() == 1 && l.kind() == Kind.PAIR).count() + sheet.lines().stream().filter(l -> l.entry() == 1 && l.palette() == Palette.ACCENT).count(),
+                        width + ": five readouts a pump");
+            }
+            for (var line : sheet.lines())
+                if (line.kind() == Kind.NOTE) assertTrue(M.width(line.cells().getFirst()) <= width - 6, width + ": a line cut: " + line.cells());
+                else if (line.kind() == Kind.PAIR) assertTrue(M.width(line.cells().get(0)) + 8 + M.width(line.cells().get(1)) <= width - 6, width + ": a readout cut: " + line.cells());
+            for (var line : sheet.lines())
+                if (line.kind() == Kind.ROW || line.kind() == Kind.HEADER || line.kind() == Kind.UNITS) {
+                    assertTrue(M.width(line.cells().getFirst()) <= sheet.widths()[0], width + ": a name cut: " + line.cells());
+                    for (int i = 1; i < line.cells().size(); i++) assertTrue(M.width(line.cells().get(i)) <= sheet.widths()[i] - 8, width + ": a cell wider than its column");
+                }
+            var canvas = new Recording();
+            CalculatorColumn.draw(canvas, sheet, new Rect(0, 0, width, 10_000), 0);
+            long rules = canvas.fills.stream().filter(f -> f[4] == Palette.LINE).count();
+            assertTrue(rules <= 1, width + ": one rule, under the units");
+            for (var place : canvas.places) assertTrue(place.x() >= 0 && place.right() <= width, width + ": a text outside the glass " + place);
+        }
+        assertEquals(Kind.NOTE, CalculatorColumn.pumpDuties(pumps, CalculatorColumn.glass(CalculatorColumn.MIN_WIDTH, 254, false).w() - 8, M, t).lines().getFirst().kind(),
+                "the narrowest door stacks each pump");
+        var side = CalculatorColumn.pumpDuties(pumps, 400, M, t);
+        assertEquals(List.of(t.get("column.component_pa", 1), "250", "45.0", "99.0", "3.3", "132"), side.lines().stream().filter(l -> l.kind() == Kind.ROW).toList().get(1).cells());
+        assertEquals(List.of(t.get("column.component_pa", 2), CalculatorColumn.NONE, CalculatorColumn.NONE, CalculatorColumn.NONE, CalculatorColumn.NONE, CalculatorColumn.NONE),
+                side.lines().stream().filter(l -> l.kind() == Kind.ROW).toList().get(2).cells(), "a pump not rated yet reads dashes");
+        var unrated = CalculatorColumn.pumpDuties(List.of(CalculatorColumn.PumpDuty.unknown(t.get("column.component_reflux_pump"))), 300, M, t);
+        assertEquals(Kind.NOTE, unrated.lines().getLast().kind(), "before any rating, the note says when the duties come");
+        assertEquals(t.get("column.duty.none"), String.join(" ", unrated.lines().stream().filter(l -> l.kind() == Kind.NOTE).map(l -> l.cells().getFirst()).toList()));
+    }
+
+    /**
+     * D44 (batch 2026-11-03-rotating-machinery): the connection points' grid at every Equipment glass width. No cell is cut or crosses
+     * another; where the columns do not fit beside the name, a row stacks its values on further lines on its band, each under its heading;
+     * a stacked line with nothing to show is left out; on a wide glass a row is one line.
+     */
+    @Test
+    void theGridStacksWhereItsColumnsDoNotFit() {
+        var header = List.of("Connection point", "Stream", "Temperature", "Heat");
+        var rows = List.of(List.of("Feed, tray 12", "FEED", "350.0 °C", ""), List.of("Pumparound 1 return, tray 8", "PA-1R", "180.5 °C", "12.40 MW"),
+                List.of("Condenser outlet", "None", "", ""), List.of("Reboiler inlet", "RB-IN", "352.1 °C", "8.10 MW"));
+        boolean stacked = false, wide = false;
+        for (int door = CalculatorColumn.MIN_WIDTH; door <= CalculatorColumn.MAX_WIDTH; door += 7) {
+            int width = CalculatorColumn.glass(door, 254, false).w() - 8;
+            for (int w : new int[]{width, width - ScrollView.BAR - 2}) {
+                var sheet = new CalculatorColumn.SheetBuilder(w, M).grid(header, rows, 2).build();
+                int heads = (int) sheet.lines().stream().filter(l -> l.kind() == Kind.GRID_HEADER && l.placed().getFirst().x() != 0).count(), lines = (int) sheet.lines().stream().filter(l -> l.placed().getFirst().x() != 0).count();
+                for (var line : sheet.lines()) {
+                    int end = Integer.MIN_VALUE;
+                    for (var cell : line.placed()) {
+                        assertTrue(cell.x() >= end, w + ": cells cross on " + line.cells());
+                        end = cell.x() + M.width(cell.text()) + 1;
+                        assertTrue(cell.x() >= 0 && cell.x() + M.width(cell.text()) <= w - 6, w + ": a cell outside the glass: " + cell);
+                        assertFalse(cell.text().isEmpty(), w + ": a blank cell placed");
+                    }
+                    if (line.kind() == Kind.GRID_ROW) assertFalse(line.placed().isEmpty(), w + ": a stacked line with nothing to show");
+                }
+                for (int r = 0; r < rows.size(); r++) {
+                    int entry = r;
+                    var cells = sheet.lines().stream().filter(l -> l.entry() == entry).flatMap(l -> l.cells().stream()).toList();
+                    for (int i = 1; i < 4; i++) if (!rows.get(r).get(i).isEmpty()) assertTrue(cells.contains(rows.get(r).get(i)), w + ": " + rows.get(r).get(i) + " shown");
+                    assertEquals(rows.get(r).getFirst(), String.join(" ", sheet.lines().stream().filter(l -> l.entry() == entry && l.placed().getFirst().x() == 0).map(l -> l.cells().getFirst()).toList()),
+                            w + ": the name whole");
+                }
+                // Each value under its heading: its right edge (a number) or left edge (a text) where its heading's is.
+                var headings = sheet.lines().stream().filter(l -> l.kind() == Kind.GRID_HEADER).flatMap(l -> l.placed().stream()).toList();
+                for (var line : sheet.lines())
+                    if (line.kind() == Kind.GRID_ROW)
+                        for (var cell : line.placed())
+                            if (cell.x() != 0) assertTrue(headings.stream().anyMatch(h -> h.x() == cell.x() || h.x() + M.width(h.text()) == cell.x() + M.width(cell.text())), w + ": " + cell + " under no heading");
+                stacked |= heads > 0;
+                if (w >= 330) {
+                    assertEquals(0, lines, w + ": a wide glass holds the grid in one line a row");
+                    wide = true;
+                }
+                var canvas = new Recording();
+                CalculatorColumn.draw(canvas, sheet, new Rect(0, 0, w, 10_000), 0);
+                assertEquals(1, canvas.fills.stream().filter(f -> f[4] == Palette.LINE).count(), w + ": one rule, under the header");
+                for (var place : canvas.places) assertTrue(place.x() >= 0 && place.right() <= w, w + ": a text outside the glass " + place);
+            }
+        }
+        assertTrue(stacked && wide, "the narrowest glass stacks, the widest does not");
     }
 
     private static final List<String> NAMES = List.of("Water", "n-Hexane", "Ethylbenzene and its isomers", "1,2,4-Trimethylbenzene", "Hydrogen sulfide");

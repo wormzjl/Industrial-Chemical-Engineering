@@ -46,6 +46,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final PhysicalRegistry registry;
     /** The running columns (batch 2026-10-28-column-operation): their ports' plans and bookings, and their cycles. */
     private final ColumnOperation columns;
+    /** The shaft trains (batch 2026-11-03-rotating-machinery W3): their parts' queued events, speeds and the islands' slice inputs. */
+    private final ShaftTrains shafts;
+    /** The powered units' electric stores (W5). */
+    private final ElectricStores electric;
+    /** The pumps' health (W10b). */
+    private final PumpHealth health;
     /**
      * Queued topology events apply as one batch at the next tick's hook, or earlier when something reads what they
      * change (a view, a capture, a filter recovery). A run of events inside one tick (a command placing thousands of
@@ -114,6 +120,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         });
         instruments=new com.wormzjl.icheme.runtime.instrument.InstrumentService(server,this,accessories);
         instruments.reconcileLegacyValves();
+        shafts=new ShaftTrains(topology,registry::owner,runtime.coordinator());runtime.coordinator().shafts(shafts);shafts.host(new ShaftHost());
+        electric=new ElectricStores(topology,registry::owner,runtime.coordinator(),()->new ElectricStores.Settings(IChemE.joulesPerFE(),IChemE.machinesNeedPower()));shafts.electric(electric);
+        // The Create coupling (W6b): its stress rate; a world opened without Create lost its couplings' blocks, so their parts leave.
+        shafts.stressPerFE(IChemE::stressPerFE);if(!net.neoforged.fml.ModList.get().isLoaded("create"))shafts.forget(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING);
+        health=new PumpHealth(topology,registry::owner,runtime.coordinator(),id->PumpHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
         registry.forEachChunk((name,chunk,devices)->{var level=server.getLevel(dimension(name));var at=new net.minecraft.world.level.ChunkPos(chunk);
@@ -160,7 +171,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         data.setDirty();
     }
     public static void stop(MinecraftServer server){find(server).ifPresent(FluidWorldAuthority::close);}
-    public static void forget(MinecraftServer server){EARLY_CHUNKS.remove(server);com.wormzjl.icheme.network.AssemblyNetwork.forget(server);var world=SERVERS.remove(server);if(world!=null)world.close();}
+    public static void forget(MinecraftServer server){EARLY_CHUNKS.remove(server);com.wormzjl.icheme.network.AssemblyNetwork.forget(server);com.wormzjl.icheme.network.MachineNetwork.forget(server);var world=SERVERS.remove(server);if(world!=null)world.close();}
     private void owned(){if(!server.isSameThread())throw new IllegalStateException("Fluid authority requires the logical server thread");}
     /** Every island of this world solves on a model built from the same captured options, so the
      * configured trace cutoff is one value for every worker and every retained solver: a retained
@@ -279,6 +290,25 @@ public final class FluidWorldAuthority implements AutoCloseable {
         owned();var edits=new ArrayList<WorldTopologyLedger.Edit>();
         for(long id:new TreeSet<>(ids)){instruments.recoverHost(id);if(registrations().containsKey(id))edits.add(new WorldTopologyLedger.Edit(id,null));}
         if(!edits.isEmpty())submit(edits,topology.nextIdentity());
+    }
+    /** The shaft trains (W3): queue their parts' events here; their views are reads. */
+    public ShaftTrains shafts(){owned();return shafts;}
+    /** The electric stores (W5): the FE ports' side and their views are reads and the FE protocol only. */
+    public ElectricStores electric(){owned();return electric;}
+    /** The pumps' health (W10b): a repair kit queues its event here. */
+    public PumpHealth health(){owned();return health;}
+    /**
+     * A shaft-driven machine (batch 2026-11-03-rotating-machinery W3): a pump or compressor casing on its curve
+     * ({@code FlowControl.Machine}), a reciprocating frame ({@code Compressor}) or a steam turbine (kind {@code TURBINE},
+     * {@code FlowControl.Turbine}, reading A37), registered at its suction or steam nozzle's cell with its process pair.
+     */
+    public WorldTopologyLedger.Registration placeMachine(PhysicalFluidTopology.Position suction,TopologyCompiler.Kind kind,List<PhysicalFluidTopology.Port> ports,FlowControl control) {
+        owned();
+        if(kind!=TopologyCompiler.Kind.PUMP&&kind!=TopologyCompiler.Kind.COMPRESSOR&&kind!=TopologyCompiler.Kind.TURBINE||ports.isEmpty())throw new IllegalArgumentException("Expected a shaft-driven machine");
+        long id=topology.nextIdentity();
+        var device=new PhysicalFluidTopology.Device(id,suction,kind,PhysicalFluidTopology.Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control,ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES);
+        var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);
+        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
     /** A complete multi-cell mover uses the same controls and geometry as its one-block counterpart. */
     public WorldTopologyLedger.Registration placeMover(PhysicalFluidTopology.Position suction,TopologyCompiler.Kind kind,List<PhysicalFluidTopology.Port> ports) {
@@ -578,10 +608,45 @@ public final class FluidWorldAuthority implements AutoCloseable {
         holdValves();
         runtime.tick();
         if(topology.hasPendingEvents()){applyPending();runtime.coordinator().pumpIfUseful();}
+        // Shaft events apply after the devices they name (W3), then their trains recompile and wake what moved.
+        if(shafts.hasEvents()&&propertyHold==null){shafts.apply();if(topology.hasPendingEvents())applyPending();runtime.coordinator().pumpIfUseful();}
+        // Repair kits (W10b): queued engine events, applied after the devices they name; a repaired failed pump wakes its island.
+        if(health.hasEvents()&&propertyHold==null){health.apply();runtime.coordinator().pumpIfUseful();}
         instruments.tick(topology.onlineTick());
         presentation.tick(topology.onlineTick());
+        // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
+        if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
+        // The electric stores at the presentation cadence (W5, readings A60, A62): booking at rest, restarts, the facts handed over.
+        if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();health.cadence();}
+        // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
+        pushGenerators();
         com.wormzjl.icheme.network.AssemblyNetwork.presentationTick(server, topology.onlineTick());
+        // The machine pages' views (W7, reading A85): on the same 100-tick buckets, only to the open pages.
+        com.wormzjl.icheme.network.MachineNetwork.presentationTick(server, topology.onlineTick());
         data.setDirty();
+    }
+    /**
+     * Each charged generator's port pushes FE to the receivers on the six faces of its terminal cell (W5, reading A65): the
+     * FE protocol, moving stored FE only, where the terminal cell is loaded. The terminal is found through the cell of the
+     * generator's first shaft end, which is its structure's.
+     */
+    private void pushGenerators() {
+        var charged=electric.charged();if(charged.isEmpty())return;
+        for(long id:charged) {
+            var u=topology.shaft(id);if(u==null||u.ends().isEmpty())continue;
+            var end=u.ends().getFirst().cell();var level=server.getLevel(dimension(end.dimension()));if(level==null)continue;
+            var at=new BlockPos(end.x(),end.y(),end.z());
+            if(!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||shell.shape()==null||shell.origin()==null)continue;
+            var t=com.wormzjl.icheme.science.equipment.ShapeRasterizer.terminal(shell.shape());if(t==null)continue;
+            var terminal=shell.origin().offset(t.x(),t.y(),t.z());
+            for(var face:net.minecraft.core.Direction.values()) {
+                var beside=terminal.relative(face);if(!level.isLoaded(beside))continue;
+                var sink=level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,beside,face.getOpposite());
+                if(sink==null||!sink.canReceive())continue;
+                int offer=electric.extract(id,Integer.MAX_VALUE,true);if(offer<=0)break;
+                int taken=sink.receiveEnergy(offer,false);if(taken>0)electric.extract(id,taken,false);
+            }
+        }
     }
     /** Attempted when a recovery is queued and on its retry deadline, never polled; delivery stays exactly-once. */
     private void deliverRecoveries(){
@@ -702,7 +767,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 var position=new PhysicalFluidTopology.Position(name,cell.getX(),cell.getY(),cell.getZ());
                 var record=registry.at(position).orElseGet(()->place(position,pipe.kind(),PhysicalFluidTopology.Direction.valueOf(pipe.getBlockState().getValue(FluidDeviceBlock.FACING).name()),FluidDeviceBlock.cutoff(pipe.getBlockState()),FluidDeviceBlock.hasPressureValve(pipe.getBlockState()),FluidDeviceBlock.hasFilter(pipe.getBlockState()),FluidDeviceBlock.hasMover(pipe.getBlockState())?pipe.getBlockState().getValue(FluidDeviceBlock.INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE,pipe.kind()==TopologyCompiler.Kind.PIPE?pipe.joints():PhysicalFluidTopology.ALL_FACES));
                 if(pipe.fluidIdentity()!=record.device().id())pipe.bindIdentity(record.device().id());else deviceLoaded(record.device().id());
-            } else if(entity instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&shell.shape().fluidDevice()) {
+            } else if(entity instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&(shell.shape().fluidDevice()||com.wormzjl.icheme.science.equipment.UnitDesign.shafted(shell.shape().kind()))) {
                 var origin=shell.origin();
                 unboundStructures.put(new PhysicalFluidTopology.Position(name,origin.getX(),origin.getY(),origin.getZ()),new EquipmentStructure.Vessel(origin,shell.shape()));
             }
@@ -739,8 +804,69 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
     }
     /** Ends every tank watch of a player who left. */
-    public void forgetWatcher(UUID player){owned();tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);}
+    /**
+     * A casing's or a steam turbine's Drive group (W7, owner decision D31, option A): its train's driver (a turbine is its
+     * own), its status and speed, the casing's share and shaft power; {@code NO DRIVER} for a casing with none, where it
+     * stands closed; null for a device with no shaft unit. A read of what the trains last decided.
+     */
+    private FluidView.Drive drive(long id){
+        var own=shafts.unitOfDevice(id);if(own==null)return null;
+        var mine=shafts.view(own.id());double share=mine==null?0:Math.max(0,mine.share()),power=mine==null?0:mine.shaftPower();
+        var driver=own.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.STEAM_TURBINE?own:shafts.driverOf(id);
+        if(driver==null)return new FluidView.Drive("",0,0,"NO DRIVER",0,false,0,power);
+        var v=shafts.view(driver.id());String status=v==null?"":v.status();if(status.length()>256)status=status.substring(0,256);
+        return new FluidView.Drive(driver.kind().name(),driver.ratedPower(),driver.poles(),status,v==null?0:v.speed(),
+                driver.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR&&driver.drive()==com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED,share,power);
+    }
+    /**
+     * A pump's readings (W10d, owner decision D37): its suction as its last committed slice read it and its health (W10b),
+     * a constructed centrifugal pump's design for its curve; null for a device that is no pump. A read of what the engine
+     * last committed: no solve.
+     */
+    private FluidView.Pump pump(long id,WorldTopologyLedger.Registration registration){
+        if(!PumpHealth.pump(registration))return null;var h=health.health(id);if(h==null)return null;
+        var s=health.suction(id);
+        var curve=registration.device().control() instanceof FlowControl.Machine machine&&machine.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump law
+                ?new FluidView.Curve(law.ratedFlow(),law.ratedHead(),law.efficiency(),law.ratedSpeed()):null;
+        return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve);
+    }
+    private static Double finite(double value){return Double.isFinite(value)?value:null;}
+    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);}
 
+    /** The drivers each player watches (W3), by their structures' origins, within their dimension. */
+    private final Map<UUID,Set<BlockPos>> driverWatchers=new HashMap<>();
+    /**
+     * A driver sound subscription (W3, reading A36): each new watch of a loaded driver within
+     * {@link com.wormzjl.icheme.network.FluidNetwork#MOVER_RANGE} is answered with its train's last decided state (a read:
+     * nothing steps), and the presentation cadence sends it again ({@link #publishDrivers}).
+     */
+    public void watchDrivers(net.minecraft.server.level.ServerPlayer player,List<BlockPos> watch,List<BlockPos> unwatch) {
+        owned();if(closed)return;var set=driverWatchers.computeIfAbsent(player.getUUID(),k->new HashSet<>());
+        unwatch.forEach(set::remove);
+        for(var origin:watch) {
+            if(set.size()>=com.wormzjl.icheme.network.FluidNetwork.MAXIMUM_WATCHED||!player.serverLevel().hasChunkAt(origin)||!moverRange(player,origin))continue;
+            var state=driverState(player.serverLevel(),origin);if(state==null)continue;
+            set.add(origin.immutable());com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,state);
+        }
+        if(set.isEmpty())driverWatchers.remove(player.getUUID());
+    }
+    private com.wormzjl.icheme.network.FluidNetwork.DriverState driverState(net.minecraft.server.level.ServerLevel level,BlockPos origin) {
+        var unit=shafts.unitAt(new PhysicalFluidTopology.Position(level.dimension().location().toString(),origin.getX(),origin.getY(),origin.getZ()));
+        if(unit==null||!(unit.kind().driver()||unit.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR))return null;
+        var view=shafts.view(unit.id());if(view==null)return null;
+        return new com.wormzjl.icheme.network.FluidNetwork.DriverState(origin,view.share()>0,(float)Math.max(0,view.share()));
+    }
+    /** The presentation cadence's driver states: one per watched driver, to its watchers only. */
+    private void publishDrivers() {
+        for(var it=driverWatchers.entrySet().iterator();it.hasNext();) {
+            var e=it.next();var player=server.getPlayerList().getPlayer(e.getKey());
+            if(player==null||player.hasDisconnected()){it.remove();continue;}
+            for(var origin:List.copyOf(e.getValue())) {
+                var state=player.serverLevel().hasChunkAt(origin)&&moverRange(player,origin)?driverState(player.serverLevel(),origin):null;
+                if(state==null)e.getValue().remove(origin);else com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,state);
+            }
+        }
+    }
     /** A sound/animation subscription replays published operating state only; it never reads or advances a process. */
     public void watchMovers(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
         owned();if(closed)return;var uuid=player.getUUID();var level=player.serverLevel();
@@ -749,7 +875,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var pos=target.position();
             if(!level.hasChunkAt(pos)||!moverRange(player,pos)||!(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver)||receiver.fluidIdentity()!=target.identity())continue;
             var record=registrations().get(target.identity());
-            if(record==null||record.device().ports().isEmpty()||!(record.device().control() instanceof FlowControl.Mover)||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString()))continue;
+            // A constructed mover at its fluid cell, or (W10c, owner 2026-11-04) an in-line mover at its pipe block.
+            if(record==null||!(record.device().control() instanceof FlowControl.Mover)||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString()))continue;
             if(moverWatchers.watch(uuid,target.identity())) {
                 refreshObserved(target.identity());var state=publishedMovers.get(target.identity());
                 if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendMover(player,state);
@@ -759,13 +886,22 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private static boolean moverRange(net.minecraft.server.level.ServerPlayer player,BlockPos pos){return pos.distToCenterSqr(player.position())<=com.wormzjl.icheme.network.FluidNetwork.MOVER_RANGE*com.wormzjl.icheme.network.FluidNetwork.MOVER_RANGE;}
     private void refreshObserved(long id){if(moverWatchers.watchers(id).isEmpty()&&sightGlassWatchers.watchers(id).isEmpty()&&(instruments==null||!instruments.observes(id)))presentation.unobserve(id);else presentation.observe(id);}
     private void unwatchMover(UUID player,long id){moverWatchers.unwatch(player,id);refreshObserved(id);}
+    /** The mover state last published for device {@code id} (a read), or null. */
+    public com.wormzjl.icheme.network.FluidNetwork.MoverState publishedMover(long id){owned();return publishedMovers.get(id);}
     private void forgetMover(long id){moverWatchers.remove(id);publishedMovers.remove(id);refreshObserved(id);}
     private void publishMover(WorldTopologyLedger.Registration record,net.minecraft.server.level.ServerLevel level,BlockPos pos) {
-        if(record.device().ports().isEmpty()||!(record.device().control() instanceof FlowControl.Mover mover))return;
+        if(!(record.device().control() instanceof FlowControl.Mover mover))return;
         long id=record.device().id();var target=new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id);
-        var state=new com.wormzjl.icheme.network.FluidNetwork.MoverState(target,mover instanceof FlowControl.Compressor,
+        // A machine turns at its shaft train's share (W3); a set-flow mover at its whole speed while it runs.
+        double share=mover instanceof FlowControl.Machine||shafts.unitOf(id)?shafts.share(id):1;
+        boolean running=record.device().suspendedBy()!=0||mover.enabled()&&(mover instanceof FlowControl.Machine||shafts.unitOf(id)?share>0:mover.requestedVolumeFlow()>0);
+        var state=new com.wormzjl.icheme.network.FluidNetwork.MoverState(target,!mover.liquid(),
                 // A column holds its pumps and fans only while it runs, and runs them (C7).
-                record.device().suspendedBy()!=0||mover.enabled()&&mover.requestedVolumeFlow()>0);
+                running,(float)(running?Math.max(share,0):0),
+                // A pump's crackle and churn (W10c) from its last committed suction; 0 for a compressor and a stopped mover.
+                running&&mover.liquid()?health.crackle(id):0,running&&mover.liquid()?health.churn(id):0,
+                // An in-line pump's rated speed (its D21 duty speed) for its pitch; a casing's comes from its shape.
+                mover instanceof FlowControl.Pump pump&&pump.requestedVolumeFlow()>0?(float)com.wormzjl.icheme.science.machine.Npsh.dutySpeed(pump.requestedVolumeFlow(),com.wormzjl.icheme.science.machine.Motor.ratedSpeed(2)):0);
         publishedMovers.put(id,state);
         for(var uuid:moverWatchers.watchers(id)) {
             var player=server.getPlayerList().getPlayer(uuid);
@@ -867,7 +1003,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public FluidSavedData.Capture capture() {
         owned();flush();var islands=new ArrayList<FluidCheckpointCodec.IslandEntry>();
         // Materialised first: a certified side's replay books its heat in transit, which the facts then carry.
-        var snapshots=runtime.coordinator().snapshots();var world=topology.snapshot().withHeatTransits(runtime.coordinator().transits());
+        var snapshots=runtime.coordinator().snapshots();electric.flush();health.flush();var world=topology.snapshot().withHeatTransits(runtime.coordinator().transits());
         for(var snapshot:snapshots) {
             if(registry.members(snapshot.id()).isEmpty())throw new IllegalStateException("Fluid island "+snapshot.id()+" holds no device; refusing to save it");
             String dimension=world.active().get(registry.members(snapshot.id()).getFirst()).device().position().dimension();
@@ -914,7 +1050,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return switch(why) {
             case NONE->"";
             case LOWEST->fans?"LIMITED: the louvers are shut / ":"LIMITED: the bypass is fully open / ";
-            case HIGHEST->fans?"LIMITED: the fans run at full speed / ":"LIMITED: the bypass is closed / ";
+            case HIGHEST->fans?((com.wormzjl.icheme.science.fluid.network.AirCooled)law).fanLimit()<1?"LIMITED: NO POWER, natural draught / ":"LIMITED: the fans run at full speed / ":"LIMITED: the bypass is closed / ";
             case LOW_LIMIT->String.format(java.util.Locale.ROOT,"LOW LIMIT: the outlet is held at %.1f K / ",unit==null?0:unit.control().lowLimit());
         };
     }
@@ -955,13 +1091,22 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 else if(pipe.control() instanceof FlowControl.Valve&&ControlConstraints.standing(snapshot.graph()).get(i))status+=" / STANDING_OPEN: a lower flow target on this line regulates";
                 if(pipe.control() instanceof FlowControl.Mover mover) {
                     String inlet=mode==FlowControl.Mode.INLET_WRONG_PHASE?inletReason(snapshot.graph(),i,result.advancedSeconds()):"";
-                    if(mover instanceof FlowControl.Pump pump)status=PipePresentation.pumpStatus(status,pump,mode,inlet);
-                    else {status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;}
-                    // The limit on the suction stream the mover draws (its own junction, what arrives at its inlet; decision
-                    // D4): a pump's setting is the rise for water and scales with the suction density, a compressor's is the
-                    // ratio over the suction pressure.
-                    if(!snapshot.graph().reservoirs().get(pipe.first()).empty()&&mode!=FlowControl.Mode.INLET_WRONG_PHASE&&mode!=FlowControl.Mode.PUMP_SUCTION_LIMIT) {var suction=snapshot.graph().reservoirs().get(pipe.first()).state();double limit=mover.riseLimit(suction.mass()/suction.volume(),suction.pressure(),model.pumpReferenceDensity());
-                        status+=String.format(java.util.Locale.ROOT,mover instanceof FlowControl.Pump?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
+                    // The share of its set flow a set-flow mover moved, on its suction's density; a machine has no set flow.
+                    var drawn=snapshot.graph().reservoirs().get(pipe.first());
+                    double delivered=mover instanceof FlowControl.Machine||drawn.empty()||!(mover.targetVolumeFlow()>0)?Double.NaN
+                            :q[i]/(drawn.state().mass()/drawn.state().volume())/mover.targetVolumeFlow();
+                    if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet,delivered);
+                    // A pump's health (W10b) and suction (W10d, owner decision D37): FAILED first while it stands failed, else
+                    // CAVITATION or GAS last; its health and suction have their meters (the view's Pump).
+                    if(mover.liquid()){var word=health.status(id);if(word.equals("FAILED"))status="FAILED: use a repair kit / "+status;else if(!word.isEmpty())status+=" / "+word;}
+                    else {status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
+                    // The limit the mover's law holds: a set-flow pump's setting is the rise for water and scales with its
+                    // supply's density, the stream its supply walk ends at (owner decision D11, A2); a compressor's is the ratio over
+                    // the suction pressure; a machine's reads the suction stream it draws (decision D4).
+                    if(!snapshot.graph().reservoirs().get(pipe.first()).empty()&&mode!=FlowControl.Mode.INLET_WRONG_PHASE&&mode!=FlowControl.Mode.PUMP_SUCTION_LIMIT) {var suction=snapshot.graph().reservoirs().get(pipe.first()).state();
+                        double density=mover instanceof FlowControl.Pump?InletPhase.density(model,NetworkReduction.reopened(snapshot.graph()),i,mover.targetVolumeFlow(),result.advancedSeconds()):suction.mass()/suction.volume();
+                        double limit=mover.riseLimit(density,suction.pressure(),model.pumpReferenceDensity(),mover.liquid()?1.4:model.heatCapacityRatio(suction));
+                        status+=String.format(java.util.Locale.ROOT,mover.liquid()?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
                 }else status+=" / "+mode;}}
         }
         // A generator or a void in several islands (owner decision D17) reads the status of its owner (the lowest island) and
@@ -1008,6 +1153,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
             view=view.withTower(new FluidView.Tower(registration.spec().tower(),rates));
             if(rates!=null&&!rates.status().equals("RUNNING"))view=view.withStatus(view.status()+" / "+rates.status());
         }
+        // A fan unit's power (W5, reading A68): NO POWER, the notice UNMETERED, or its electric draw and store.
+        // W7 (reading A86): the draw and the store go to the Power group; NO POWER or UNMETERED stay on the display.
+        var power=electric.power(id);if(power!=null){view=view.withPower(power);if(!power.status().isEmpty())view=view.withStatus(view.status()+" / "+power.status());}
+        // A casing's or turbine's driver (W7, option A's Drive group; it replaces W3's SHAFT clause, reading A43).
+        var drive=drive(id);if(drive!=null)view=view.withDrive(drive);
+        var pump=pump(id,registration);if(pump!=null)view=view.withPump(pump);
         // A heat side (batch 2026-10-27-heat-exchanger-design): its outlet junction's temperature, the heat its HEAT boundaries
         // booked over the interval, an air cooler's fans and an exchanger side's bypass as planned, a fired heater's burners,
         // set point and most heat.
@@ -1160,6 +1311,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var presented=view.get();receiver.acceptFluidView(presented);instruments.publish(id,presented);
             if(com.wormzjl.icheme.world.level.block.FluidDeviceBlock.hasSightGlass(level.getBlockState(pos)))publishSightGlass(record,level,pos,presented);
             else forgetSightGlass(id);
+            // An in-line mover's state (W10c, owner 2026-11-04): a pump's crackle and churn for its watchers.
+            if(record.device().control() instanceof FlowControl.Mover)publishMover(record,level,pos);
             return true;
         }
         public void failed(long device,RuntimeException failure){IChemE.LOGGER.error("fluid_presentation device={} status=FAILED detail=The view could not be presented at its bucket",device,failure);}
@@ -1169,6 +1322,27 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
     }
     /** The world side of {@link PhysicalRegistry}: the runtime's islands, players for recoveries, and what a commit changes here. */
+    /** The shaft trains' world side (W3): a governor valve's edit as a queued ledger event, a turbine's speed sensor, a shaft block's size where loaded. */
+    private final class ShaftHost implements ShaftTrains.Host {
+        @Override public void edit(long device,FlowControl.ControlValve control) {
+            var r=registrations().get(device);if(r==null)return;
+            FluidWorldAuthority.this.edit(device,r.revision(),r.device().withControl(control),r.spec());
+        }
+        @Override public UUID speedSensor(long turbine){return instruments.speedSensor(turbine);}
+        /** A coupling's block entity takes its impact where its chunk is loaded (W6b); a reloaded one reports again and is sent it again. */
+        @Override public void stress(PhysicalFluidTopology.Position coupling,double impact) {
+            var level=server.getLevel(dimension(coupling.dimension()));if(level==null)return;
+            var pos=new BlockPos(coupling.x(),coupling.y(),coupling.z());if(!level.isLoaded(pos))return;
+            if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.ShaftParts.Coupling c)c.stressImpact(impact);
+        }
+        @Override public void resize(PhysicalFluidTopology.Position shaft,int pixels) {
+            var level=server.getLevel(dimension(shaft.dimension()));if(level==null)return;
+            var pos=new BlockPos(shaft.x(),shaft.y(),shaft.z());if(!level.hasChunkAt(pos))return;
+            var state=level.getBlockState(pos);
+            if(state.getBlock() instanceof com.wormzjl.icheme.world.level.block.ShaftBlock&&state.getValue(com.wormzjl.icheme.world.level.block.ShaftBlock.SIZE)!=pixels)
+                level.setBlock(pos,state.setValue(com.wormzjl.icheme.world.level.block.ShaftBlock.SIZE,pixels),net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+        }
+    }
     private final class RegistryHost implements PhysicalRegistry.Host {
         public IslandCoordinator coordinator(){return runtime.coordinator();}
         public void topology(String name,Set<UUID> events,Set<Long> affected,List<IslandCoordinator.Replacement> replacements,long committed,long online,

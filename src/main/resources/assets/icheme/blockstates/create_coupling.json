@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "facing=north": { "model": "icheme:block/create_coupling" },
+    "facing=east": { "model": "icheme:block/create_coupling", "y": 90 },
+    "facing=south": { "model": "icheme:block/create_coupling", "y": 180 },
+    "facing=west": { "model": "icheme:block/create_coupling", "y": 270 },
+    "facing=up": { "model": "icheme:block/create_coupling", "x": 270 },
+    "facing=down": { "model": "icheme:block/create_coupling", "x": 90 }
+  }
+}

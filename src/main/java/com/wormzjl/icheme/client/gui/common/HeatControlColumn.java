@@ -36,10 +36,15 @@ public final class HeatControlColumn {
      * What the column reads: the side's view; its applied control (null for a side without one); whether this client may
      * edit; whether the side has a control of its own (an exchanger side, an air cooler, a kettle's tubes); the drafted
      * mode (OFF while switched off, or for an air cooler's fixed fan speed) and power (a heater's burners, an air
-     * cooler's switch); the player's temperature unit symbol.
+     * cooler's switch); the player's temperature unit symbol; a fan unit's power (W7, reading A86), or null.
      */
     public record Input(FluidView.Heat heat, @Nullable HeatUnit.Control applied, boolean canEdit, boolean controllable,
-                        HeatUnit.Mode mode, boolean powerOn, String temperatureUnit) {
+                        HeatUnit.Mode mode, boolean powerOn, String temperatureUnit, @Nullable DeviceColumn.Power power) {
+        /** A side without fans' power. */
+        public Input(FluidView.Heat heat, @Nullable HeatUnit.Control applied, boolean canEdit, boolean controllable, HeatUnit.Mode mode, boolean powerOn, String temperatureUnit) {
+            this(heat, applied, canEdit, controllable, mode, powerOn, temperatureUnit, null);
+        }
+
         HeatSides.Unit unit() {
             return HeatSides.Unit.valueOf(heat.unit());
         }
@@ -128,6 +133,8 @@ public final class HeatControlColumn {
         // The plate names what acts: the real valve once the lines are complete, else the internal bypass.
         String plate = now.equals("none") ? "heat_group.lines" : "heat_acting." + now;
         if (!acting.isEmpty()) right.add(new Column.Group(t.get(plate), t.get(plate + ".hint"), acting));
+        // A fan unit's power (W7, reading A86): its draw and store; NO POWER or UNMETERED on the display.
+        if (in.power() != null) right.add(DeviceColumn.power(in.power(), t));
         if (!in.canEdit() && !in.pool()) right.add(new Column.Paragraph(t.get("reader_note"), Palette.MUTED));
         return new Columns(left, right);
     }

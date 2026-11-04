@@ -50,9 +50,12 @@ import java.util.*;
  * its control's actuator, effort and limit, the stream at every port of its unit and an exchanger's lines part by part;
  * a pipe's inspection carries the line reading of the stream it carries.</p>
  * <p>{@code fluid-17}: a cooling tower's controls and accepted readings, and a basin display's fan speed.</p>
+ * <p>{@code fluid-18} (batch 2026-11-03-rotating-machinery, W7): a casing's or a turbine's view carries its
+ * {@link FluidView.Drive} (the Drive group, in place of the status line's SHAFT clause), a fan unit's its
+ * {@link FluidView.Power} (the Power group; NO POWER and UNMETERED stay on the status).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-17";
+    public static final String PROTOCOL="fluid-18";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -481,13 +484,44 @@ public final class FluidNetwork {
         public SightGlassPayload{Objects.requireNonNull(target);Objects.requireNonNull(sample);}
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
-    /** Server to client: a constructed mover's requested presentation (which loop, running or not); no process inventory or solver results. */
-    public record MoverState(Target target,boolean compressor,boolean running) implements CustomPacketPayload {
-        public MoverState{Objects.requireNonNull(target);}
+    /** Server to client: a constructed mover's requested presentation (which loop, running or not, and its speed share from
+     * its shaft train, W3, reading A36: 1 for a set-flow mover); no process inventory or solver results. */
+    /**
+     * A mover's published state: its speed share and (W10c) a pump's cavitation crackle and gas churn, 0 to 255 each (0 for
+     * a compressor and a stopped mover), and an in-line pump's rated speed, rpm (its D21 duty speed; 0 for a constructed
+     * mover, whose shape gives it), for its sound's pitch.
+     */
+    public record MoverState(Target target,boolean compressor,boolean running,float speed,int crackle,int churn,float rpm) implements CustomPacketPayload {
+        public MoverState(Target target,boolean compressor,boolean running,float speed){this(target,compressor,running,speed,0,0,0);}
+        public MoverState(Target target,boolean compressor,boolean running,float speed,int crackle,int churn){this(target,compressor,running,speed,crackle,churn,0);}
+        public MoverState{Objects.requireNonNull(target);if(!Float.isFinite(speed)||speed<0)throw new IllegalArgumentException("Invalid mover speed");
+            if(!Float.isFinite(rpm)||rpm<0)throw new IllegalArgumentException("Invalid mover rpm");
+            if(crackle<0||crackle>255||churn<0||churn>255)throw new IllegalArgumentException("Invalid mover sound bytes");}
         public static final Type<MoverState> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"mover_state"));
         public static final StreamCodec<RegistryFriendlyByteBuf,MoverState> STREAM_CODEC=new StreamCodec<>() {
-            public MoverState decode(RegistryFriendlyByteBuf b){return new MoverState(readTarget(b),flag(b),flag(b));}
-            public void encode(RegistryFriendlyByteBuf b,MoverState p){writeTarget(b,p.target);b.writeBoolean(p.compressor);b.writeBoolean(p.running);}
+            public MoverState decode(RegistryFriendlyByteBuf b){return new MoverState(readTarget(b),flag(b),flag(b),b.readFloat(),b.readUnsignedByte(),b.readUnsignedByte(),b.readFloat());}
+            public void encode(RegistryFriendlyByteBuf b,MoverState p){writeTarget(b,p.target);b.writeBoolean(p.compressor);b.writeBoolean(p.running);b.writeFloat(p.speed);b.writeByte(p.crackle);b.writeByte(p.churn);b.writeFloat(p.rpm);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /** Client to server: the drivers (motor, generator, steam turbine) to start and stop watching, by their structures' origins (W3). */
+    public record DriverWatch(List<BlockPos> watch,List<BlockPos> unwatch) implements CustomPacketPayload {
+        public static final Type<DriverWatch> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"driver_watch"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,DriverWatch> STREAM_CODEC=new StreamCodec<>() {
+            public DriverWatch decode(RegistryFriendlyByteBuf b){return new DriverWatch(positions(b),positions(b));}
+            public void encode(RegistryFriendlyByteBuf b,DriverWatch p){positions(b,p.watch);positions(b,p.unwatch);}
+        };
+        public DriverWatch{watch=List.copyOf(watch);unwatch=List.copyOf(unwatch);
+            if(watch.size()>MAXIMUM_WATCHED||unwatch.size()>MAXIMUM_WATCHED)throw new IllegalArgumentException("Too many drivers in one watch request");}
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /** Server to client: a watched driver's running state and speed share, as its shaft train last decided them (W3). */
+    public record DriverState(BlockPos origin,boolean running,float speed) implements CustomPacketPayload {
+        public DriverState{origin=origin.immutable();if(!Float.isFinite(speed)||speed<0)throw new IllegalArgumentException("Invalid driver speed");}
+        public static final Type<DriverState> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"driver_state"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,DriverState> STREAM_CODEC=new StreamCodec<>() {
+            public DriverState decode(RegistryFriendlyByteBuf b){return new DriverState(b.readBlockPos(),flag(b),b.readFloat());}
+            public void encode(RegistryFriendlyByteBuf b,DriverState p){b.writeBlockPos(p.origin);b.writeBoolean(p.running);b.writeFloat(p.speed);}
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
@@ -589,11 +623,17 @@ public final class FluidNetwork {
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchSightGlasses(player,payload.watch,payload.unwatch));
         });
         sightGlass.playToClient(SightGlassPayload.TYPE,SightGlassPayload.STREAM_CODEC,(payload,context)->com.wormzjl.icheme.client.SightGlassRenderer.accept(payload.target,payload.sample));
-        var mover=event.registrar("mover-1").executesOn(HandlerThread.MAIN);
+        // mover-2 (W3, reading A36): the mover state carries its speed share; the drivers' watch and state ride beside it.
+        // mover-3 (W10c): and a pump's crackle and churn bytes; mover-4: an in-line pump's rated rpm for the pitch.
+        var mover=event.registrar("mover-4").executesOn(HandlerThread.MAIN);
         mover.playToServer(Watch.MOVERS,Watch.codec(Watch.MOVERS),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchMovers(player,p.watch,p.unwatch));
         });
         mover.playToClient(MoverState.TYPE,MoverState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.MoverSounds.accept(p));
+        mover.playToServer(DriverWatch.TYPE,DriverWatch.STREAM_CODEC,(p,context)->{
+            if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchDrivers(player,p.watch,p.unwatch));
+        });
+        mover.playToClient(DriverState.TYPE,DriverState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.DriverSounds.accept(p.origin(),p.running(),p.speed()));
         var instruments=event.registrar("instruments-1").executesOn(HandlerThread.MAIN);
         instruments.playToServer(InstrumentWatch.TYPE,InstrumentWatch.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(w->w.instruments().watch(player,p.watch,p.unwatch));});
         instruments.playToClient(InstrumentDisplay.TYPE,InstrumentDisplay.CODEC,(p,c)->com.wormzjl.icheme.client.InstrumentRenderer.accept(p));
@@ -624,6 +664,9 @@ public final class FluidNetwork {
     public static void sendTank(ServerPlayer player,BlockPos node,TankDisplay.Glide glide){PacketDistributor.sendToPlayer(player,new TankDisplayPayload(node,glide));}
     public static void sendSightGlass(ServerPlayer player,Target target,PipePresentation.SightGlass sample){PacketDistributor.sendToPlayer(player,new SightGlassPayload(target,sample));}
     public static void sendMover(ServerPlayer player,MoverState state){PacketDistributor.sendToPlayer(player,state);}
+    public static void sendDriver(ServerPlayer player,DriverState state){PacketDistributor.sendToPlayer(player,state);}
+    /** Client: asks the server to watch and to stop watching drivers by their origins (W3). */
+    public static void requestDrivers(List<BlockPos> watch,List<BlockPos> unwatch){if(!watch.isEmpty()||!unwatch.isEmpty())PacketDistributor.sendToServer(new DriverWatch(watch,unwatch));}
     public static void sendInstrument(ServerPlayer player,InstrumentTarget target,Instrument.Sample sample,long tick){PacketDistributor.sendToPlayer(player,new InstrumentDisplay(target,sample,tick));}
     /** Client: asks the server to watch and to stop watching tanks. */
     public static void requestTanks(List<BlockPos> watch,List<BlockPos> unwatch){if(!watch.isEmpty()||!unwatch.isEmpty())PacketDistributor.sendToServer(new TankWatch(watch,unwatch));}

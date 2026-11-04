@@ -3,6 +3,7 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ColumnSizing;
@@ -14,6 +15,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingCoverage;
 import com.wormzjl.icheme.science.flowsheet.sizing.TankSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.TurbineSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitSize;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import com.wormzjl.icheme.science.flowsheet.sizing.ValveSizing;
@@ -59,6 +61,7 @@ public class SizingCoverageTest {
                 new ColumnComponents.Units(3, 2, List.of(2)));
         out.add(new ColumnSizing.Size(4, new ColumnTrays(30, 20, List.of(10), List.of(31), List.of(new ColumnTrays.Pumparound(10, 8)), components)));
         out.add(new EjectorSizing.Size(UnitSize.grid(EquipmentShape.Kind.EJECTOR)[3]));
+        out.add(new TurbineSizing.Size(1250, MachineDuty.Steam.HP, 350));
         out.add(new ValveSizing.Size(.3));
         return out;
     }

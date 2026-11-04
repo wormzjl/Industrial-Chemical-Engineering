@@ -64,10 +64,29 @@ public final class ModBlocks {
             BlockBehaviour.Properties.of().mapColor(MapColor.WOOD).strength(2.5F).sound(SoundType.WOOD)
     );
 
+    // Rotating machinery (batch 2026-11-03-rotating-machinery): a shaft on one axis and the creative motor; their trains are the engine's.
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ShaftBlock> SHAFT = BLOCKS.registerBlock(
+            "shaft",
+            com.wormzjl.icheme.world.level.block.ShaftBlock::new,
+            BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.5F).sound(SoundType.METAL).noOcclusion()
+    );
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.CreativeMotorBlock> CREATIVE_MOTOR = BLOCKS.registerBlock(
+            "creative_motor",
+            com.wormzjl.icheme.world.level.block.CreativeMotorBlock::new,
+            BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(3.5F).sound(SoundType.METAL).noOcclusion()
+    );
+
     /** Original positional machine loops of the constructed pumps and compressors; ordinary Blocks sound settings apply. */
     private static final DeferredRegister<SoundEvent> SOUNDS=DeferredRegister.create(Registries.SOUND_EVENT,IChemE.MOD_ID);
     public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_RUNNING=loop("pump_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> COMPRESSOR_RUNNING=loop("compressor_running");
+    /** A pump's cavitation crackle and gas churn (W10c, decision D35), played over its casing loop. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_CAVITATION=loop("pump_cavitation");
+    public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_GAS=loop("pump_gas");
+    /** The drivers' own loops, apart from their machine's casing loop (decision D26); the generator plays the motor's sound. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> MOTOR_RUNNING=loop("motor_running");
+    public static final DeferredHolder<SoundEvent,SoundEvent> GENERATOR_RUNNING=loop("generator_running");
+    public static final DeferredHolder<SoundEvent,SoundEvent> TURBINE_RUNNING=loop("turbine_running");
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {

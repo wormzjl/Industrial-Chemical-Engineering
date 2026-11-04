@@ -1,5 +1,5 @@
 {
   "textures": {
-    "particle": "create:block/industrial_iron_block"
+    "particle": "icheme:block/vessel_shell"
   }
 }
