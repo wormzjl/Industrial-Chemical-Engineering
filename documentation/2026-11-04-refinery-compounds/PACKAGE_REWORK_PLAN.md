@@ -131,6 +131,8 @@ The engines keep reading the resolved `MaterialCatalog.Package` view (components
 | D4b | Carbonyl sulfide constants | Decided 2026-11-04 (owner): Tc, Pc and acentric factor from CoolProp (Tc 378.77 K); ChemSep's record is inconsistent (Tc 375.15 K, its correlations run to 378.8 K); ChemSep correlations otherwise |
 | D5 | Freezing sub-record under the viscosity rule (3.6); AGENTS.md gains "a freezing-point edit bumps the freezing point's own `revision`" | with Q1 |
 | D6 | New compound ids: DWSIM name without spaces, capitalised; a leading locant moves behind (`Butene-1`), or the trade name (`Isooctane`, `Butadiene`); existing ids unchanged (they are facts) | reversible until merge |
+| D7 | How identities name the method: by its physics fields (model, ideal-gas form, its other settings, the liquid-mixture correction's own revision), beside the pair libraries that give a pair on the view; the method record's own revision is in no identity. Adding a library for new compounds (W6's `dwsim_refinery_pr78` on `crude_pr78`) then moves no crude package, island, corpus image or neural model, as 3.2 promises; the `method=<id>@<revision>` token would have moved them all. The `island-sets` corpus test asserts EXACT on a fresh save of the build, not on the stored image | Decided 2026-11-04 (owner): "By physics fields"; applied in W6 |
+| D8 | Where Tier 1 goes: a new package `icheme:refinery` (method `crude_pr78`, extends `icheme:tjl20_methane_nitrogen`, the 24 compounds); the network preset names it. The column presets and the calculator keep their 19- and 20-compound packages; a world loads its compounds by id (W4) | Orchestrator, 2026-11-04; reversible until merge |
 
 ## 6. Risks
 
