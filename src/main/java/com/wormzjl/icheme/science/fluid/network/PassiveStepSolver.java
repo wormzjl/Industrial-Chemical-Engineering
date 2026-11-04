@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
 import com.wormzjl.icheme.science.thermo.PhaseSupport;
 import java.util.*;
+import java.util.function.IntFunction;
 import java.util.function.IntPredicate;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.transport.SlurryTransport;
@@ -801,14 +802,43 @@ public final class PassiveStepSolver {
         return next;
     }
     /**
-     * Owner decisions D59 (4) and D14: how far the suction end of connection {@code edge} stands above the vapour pressure
-     * of the liquid its pump draws ({@link #vapourPressure}), read on {@code states} (Pa); positive infinity where the
-     * connection is not a liquid pump or its suction has no vapour pressure to stand at.
+     * Owner decisions D59 (4), D14 and D17: how far the suction end of connection {@code edge} stands above the pressure its
+     * suction limit holds it at ({@link #suctionLimit}), read on {@code states} (Pa), so the mode test and the limit's row
+     * read one value; positive infinity where the connection is not a liquid pump or its suction has no vapour pressure
+     * to stand at.
      */
     private double cavitationMargin(Equations equations,int edge,List<FluidThermodynamics.State> states) {
         var pipe=equations.graph.pipes().get(edge);int a=pipe.first();
-        double vapour=vapourPressure(equations,edge,states.get(a));
-        return vapour<Double.POSITIVE_INFINITY?endPressure(equations.graph.reservoirs().get(a),pipe.firstPort(),states.get(a))-vapour:Double.POSITIVE_INFINITY;
+        double limit=suctionLimit(equations,edge,states::get);
+        return limit<Double.POSITIVE_INFINITY?endPressure(equations.graph.reservoirs().get(a),pipe.firstPort(),states.get(a))-limit:Double.POSITIVE_INFINITY;
+    }
+    /**
+     * Owner decision D17 (bundled random 896): the pressure the suction end of pump connection {@code edge} stands at on its
+     * suction limit, on the node states {@code states} (the trial point in the Newton's row): the lesser of the floor of the
+     * liquid it draws ({@link #vapourPressure}) and what its supplier gives at no flow ({@link #suctionSupply}, the supplier
+     * its suction walk ends at, {@link Equations#suctionSuppliers}). A suction limit never stands above its supplier: where
+     * the supplier falls to its bubble point within the step (896's tee, flashing to pass its main stream), the suction
+     * stands at the supplier less its static column, the suction line carries nothing and the pump delivers nothing,
+     * continuously and with no mode change. Held at the floor alone, the suction stood above a tee that had to flash below
+     * it, the line had to reverse and no point balanced the tee (D14_HOLDS_REVIEW.md). The floor where the pump has no
+     * suction walk (it draws straight from its first node) or no floor.
+     */
+    private double suctionLimit(Equations equations,int edge,IntFunction<FluidThermodynamics.State> states) {
+        var pipe=equations.graph.pipes().get(edge);
+        double floor=vapourPressure(equations,edge,states.apply(pipe.first()));int supplier=equations.suctionSuppliers[edge];
+        if(!(floor<Double.POSITIVE_INFINITY)||supplier<0)return floor;
+        var s=states.apply(supplier);int link=equations.suctionLinks[edge];
+        return Math.min(floor,suctionSupply(equations.graph,edge,supplier,link,endPressure(equations.graph.reservoirs().get(supplier),equations.graph.pipes().get(link).portAt(supplier),s),s));
+    }
+    /**
+     * Owner decisions D15 and D17: the pressure the supplier {@code supplier} of pump connection {@code edge} gives at the
+     * pump's first node with nothing flowing, its suction walk's end ({@link InletPhase#walk}, reached through its link
+     * {@code link}): its end pressure {@code supplierEnd} less the static column of its stream {@code s} up to that node.
+     */
+    private double suctionSupply(PassiveNetwork graph,int edge,int supplier,int link,double supplierEnd,FluidThermodynamics.State s) {
+        var line=graph.pipes().get(link);var node=graph.reservoirs().get(supplier);
+        double lift=graph.reservoirs().get(graph.pipes().get(edge).first()).elevation()-node.elevation();
+        return supplierEnd-columnDensity(s,line.portAt(supplier),line.volume())*GRAVITY*lift;
     }
     /**
      * The pressure the suction of pump connection {@code edge} may not fall below, at the trial state {@code suction} of its
@@ -875,8 +905,7 @@ public final class PassiveStepSolver {
         var walk=InletPhase.walk(graph,edge);if(walk.via()<0)return Double.POSITIVE_INFINITY;
         var s=states.get(walk.node());var link=graph.pipes().get(walk.via());var supplier=graph.reservoirs().get(walk.node());
         boolean boiling=FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS)&&FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL);
-        double lift=graph.reservoirs().get(graph.pipes().get(edge).first()).elevation()-supplier.elevation();
-        return endPressure(supplier,link.portAt(walk.node()),s)-(boiling?s.pressure():floor)-columnDensity(s,link.portAt(walk.node()),link.volume())*GRAVITY*lift;
+        return suctionSupply(graph,edge,walk.node(),walk.via(),endPressure(supplier,link.portAt(walk.node()),s),s)-(boiling?s.pressure():floor);
     }
     /**
      * Owner decision D14 (reading A13; K6 of the t38 plan widened): a pump's suction limit reads the liquid it draws. A pump
@@ -3044,6 +3073,18 @@ public final class PassiveStepSolver {
             if(a.junction()&&FluidThermodynamics.holdsPhase(sa,FluidThermodynamics.WATER)&&pipe.control() instanceof FlowControl.Mover liquid&&liquid.liquid()&&pipe.firstPort()!=PassiveNetwork.PhasePort.VAPOR){try{floor=Math.min(floor,waterFloor(sa,checkpoint));}catch(IllegalArgumentException outsideData){}}
             return floors[e]=floor;
         }
+        /** Owner decision D17 in the balance: the pressure the suction junction of pump connection {@code e}, on its suction
+         * limit, is anchored at on the balance's pressures {@code p}: the lesser of its floor ({@link #suctionFloor}) and what
+         * the supplier its suction walk ends at gives at no flow ({@link PassiveStepSolver#suctionSupply}, its static column
+         * from the start state, as the balance holds every column). The Newton's row states the same on its trial
+         * ({@link PassiveStepSolver#suctionLimit}). */
+        private double suctionAnchor(int e,double[] p,Runnable checkpoint) {
+            double floor=suctionFloor(e,checkpoint);var walk=InletPhase.walk(graph,e);
+            if(!(floor<Double.POSITIVE_INFINITY)||walk.via()<0)return floor;
+            int s=walk.node();var link=graph.pipes().get(walk.via());
+            double end=unknown[s]>=0?p[s]:!Double.isNaN(anchor[s])?anchor[s]:endPressure(graph,link,s);
+            return Math.min(floor,suctionSupply(graph,e,s,walk.via(),end,graph.reservoirs().get(s).state()));
+        }
         /** The vapour pressure junction state {@code s}'s free water stands at when a pump draws it down. Water alone and
          * liquid: the saturation pressure at the temperature its liquid reaches on the saturation curve at its own enthalpy
          * (one Newton step on the saturated liquid's enthalpy). A liquid stated at a higher pressure is compressed, and
@@ -3249,7 +3290,13 @@ public final class PassiveStepSolver {
                     boolean below=mode==FlowControl.Mode.MOVER_LAW&&graph.reservoirs().get(a).junction()&&floor<Double.POSITIVE_INFINITY&&pa<floor*(1-1e-9);
                     if(below) {
                         modes.set(e,FlowControl.Mode.PUMP_SUCTION_LIMIT);anchor[a]=floor;p[a]=floor;mover[e]=false;suctionLimited[e]=true;prescribed[e]=Math.max(0,inflowExcept(a,e,p));changed=true;
-                    } else if(suctionLimited[e]){double q=Math.max(0,inflowExcept(a,e,p));if(Math.abs(q-prescribed[e])>1e-9*Math.max(1,q)){prescribed[e]=q;changed=true;}}
+                    } else if(suctionLimited[e]) {
+                        // Owner decision D17: the anchor never stands above the supplier, read on this balance's pressures,
+                        // where the pump is on its limit and its law drains nothing; the mode above reads the floor alone.
+                        double at=suctionAnchor(e,p,checkpoint);
+                        if(Math.abs(at-anchor[a])>1e-9*Math.abs(at)){anchor[a]=at;p[a]=at;changed=true;}
+                        double q=Math.max(0,inflowExcept(a,e,p));if(Math.abs(q-prescribed[e])>1e-9*Math.max(1,q)){prescribed[e]=q;changed=true;}
+                    }
                 }
                 if(!changed)break;
                 number();p=solveOnce(checkpoint);
@@ -3826,6 +3873,19 @@ public final class PassiveStepSolver {
          * residual accumulates that node's targets, energy and junction inflows in, so a per-node
          * re-assembly reproduces every accumulator bit for bit. */
         final int[][] nodeEdges;
+        /** Per liquid pump connection, the supplier its suction walk ends at ({@link InletPhase#walk}) and the walk's link into
+         * it; -1 where the pump draws straight from its first node (or the connection is no liquid pump). What the suction
+         * limit's row and mode test read the supplier's pressure on (owner decision D17, {@link PassiveStepSolver#suctionLimit}). */
+        final int[] suctionSuppliers,suctionLinks;
+        /** Per node, the connections on their suction limit whose supplier it is and which it is no end of: their actuator
+         * row reads its state (owner decision D17), which {@link #buildSparsity} declares and the block sweep re-assembles. */
+        final int[][] remoteSuctions;
+        /** Whether the actuator row of connection {@code edge} is a suction limit that reads a supplier the connection does not
+         * end at. */
+        private boolean remoteSuction(int edge) {
+            int supplier=suctionSuppliers[edge];var pipe=graph.pipes().get(edge);
+            return supplier>=0&&controlOffsets[edge]>=0&&modes.get(edge)==FlowControl.Mode.PUMP_SUCTION_LIMIT&&supplier!=pipe.first()&&supplier!=pipe.second();
+        }
         /** The pressure a junction no open connection reaches keeps, or 0 for every other node.
          * Depends on the pass's active set, so it is built with the equations and not per
          * evaluation; see {@link PhaseLayout#junctionRows}. */
@@ -3990,6 +4050,18 @@ public final class PassiveStepSolver {
                 var pipe=graph.pipes().get(edge);
                 nodeEdges[pipe.first()][degree[pipe.first()]++]=edge;nodeEdges[pipe.second()][degree[pipe.second()]++]=edge;
             }
+            suctionSuppliers=new int[graph.pipes().size()];suctionLinks=new int[graph.pipes().size()];Arrays.fill(suctionSuppliers,-1);Arrays.fill(suctionLinks,-1);
+            int[] remote=new int[count];
+            for(int edge=0;edge<graph.pipes().size();edge++) {
+                var pipe=graph.pipes().get(edge);
+                if(!(pipe.control() instanceof FlowControl.Mover liquid&&liquid.liquid()))continue;
+                var walk=InletPhase.walk(graph,edge);if(walk.via()<0)continue;
+                suctionSuppliers[edge]=walk.node();suctionLinks[edge]=walk.via();
+                if(remoteSuction(edge))remote[walk.node()]++;
+            }
+            remoteSuctions=new int[count][];for(int node=0;node<count;node++)remoteSuctions[node]=new int[remote[node]];
+            Arrays.fill(remote,0);
+            for(int edge=0;edge<graph.pipes().size();edge++)if(remoteSuction(edge))remoteSuctions[suctionSuppliers[edge]][remote[suctionSuppliers[edge]]++]=edge;
             pressureScales=new double[graph.pipes().size()];
             for(int edge=0;edge<pressureScales.length;edge++) {
                 var pipe=graph.pipes().get(edge);
@@ -4446,6 +4518,9 @@ public final class PassiveStepSolver {
                     }
                 }
             }
+            // Owner decision D17: a suction limit's row reads its supplier's state, which may stand beyond its own ends.
+            for(int node=0;node<count;node++)for(int edge:remoteSuctions[node])
+                for(int c=offsets[node];c<offsets[node]+nodeSize(node);c++)columns[c].set(controlOffsets[edge]);
             for(int edge=0;edge<weirOffsets.length;edge++)for(int end=0;end<2;end++){
                 int row=weirOffsets[edge][end];if(row<0)continue;var pipe=graph.pipes().get(edge);
                 columns[row].set(row);columns[row].set(edgeOffset+edge);columns[edgeOffset+edge].set(row);
@@ -4851,10 +4926,12 @@ public final class PassiveStepSolver {
                 // this edge's rows for every perturbed column of its first node, and the sparsity already declares the
                 // actuator row on both endpoints' columns (buildSparsity).
                 case MOVER_LAW->lawResidual(graph,pipe,flow/suction.density,head,riseDensity(edge,suction.density),st[a].pressure())/pressureScale;
-                // Cavitation (owner decisions D59 (4) and D14): the suction end stands at the vapour pressure of the liquid the
-                // pump draws ({@link PassiveStepSolver#vapourPressure}); the head is free, and the hydraulic row with the
-                // suction line's sets the flow.
-                case PUMP_SUCTION_LIMIT->(endPressure(graph.reservoirs().get(a),pipe.firstPort(),st[a])-vapourPressure(this,edge,st[a]))/pressureScale;
+                // Cavitation (owner decisions D59 (4), D14 and D17): the suction end stands at the vapour pressure of the liquid
+                // the pump draws, or at what its supplier gives at no flow where that is less, on the trial
+                // ({@link PassiveStepSolver#suctionLimit}); the head is free, and the hydraulic row with the suction line's sets
+                // the flow. The supplier may be no end of this connection: the sparsity declares its columns on this row and
+                // the block sweep re-assembles it ({@link #remoteSuctions}).
+                case PUMP_SUCTION_LIMIT->(endPressure(graph.reservoirs().get(a),pipe.firstPort(),st[a])-suctionLimit(this,edge,n->st[n]))/pressureScale;
                 case VALVE_REGULATING->{var valve=(FlowControl.Valve)pipe.control();yield valve.pressureControl()?(st[a].pressure()-valve.targetPressure())/pressureScale:(flow-valve.targetMassFlow(suction.density))/Math.max(.001,valve.targetMassFlow(suction.density));}
                 case VALVE_OPEN->head/pressureScale;
                 case VALVE_CONFLICT->{double u=fixedOpenings[edge];yield u==0?flow:(head-.5*flow*flow/(suction.density*boreArea(pipe)*boreArea(pipe))*(1/(u*u)-1))/pressureScale;}
@@ -4911,6 +4988,9 @@ public final class PassiveStepSolver {
                                 nodeAccumulate(other,trial,st,tr);nodeTargetRows(other,trial,st,perturbed);
                             }
                         }
+                        // The suction limits this node supplies from beyond their ends (owner decision D17): only their
+                        // actuator row reads this node, and it is the only one of their rows this column declares.
+                        for(int edge:remoteSuctions[node])edgeRows(edge,trial,st,tr,perturbed);
                         write(entryOffsets,entryRows,entries,column,perturbed,f,step);
                         st[node]=baseStates[node];tr[node]=baseTransport[node];pr[node]=basePrepared[node];
                         trial[column]=x[column];
