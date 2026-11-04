@@ -84,6 +84,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D27.** A turbine's governor is two components the player places: a speed sensor on its shaft train and the existing control valve upstream of the turbine, with a new valve source, shaft speed (saved by name). Once per slice the engine sets that valve's mass target from the train's power demand, `ṁ = P_demand/(η_is Δh_is)` (plan 5.2's feed-forward), and holds the set speed while steam suffices; short of steam the speed falls by the damped affinity step (plan 4.1). The overspeed trip acts at 110 %.
 
+2026-11-04, W3's build plan (`W3_BUILD_PLAN.md` section 7, readings A15 to A40): the owner, "All as recommended".
+
+- **D28 (A15 to A40).** W3 builds as its plan recommends: shaft parts saved as facts (A15); a coupling through at least one shaft block (A16); one driver per train, else `TWO DRIVERS` (A17); the defaults of A19; an automatic gearbox ratio (A20); `OVERLOAD` above exactly 1.0 × rating (A21); a latched overspeed trip at 1.10 × set (A22); an ungoverned turbine without a sensor (A23); the speed sensor on the turbine's coupling guard, bound to the nearest unbranched upstream control valve (A24, A25); the fed-forward governor target (A26); machine work as `SHAFT` boundaries (A27); trains stepped at their members' commits (A28); old casings converted when restored (A29); the readings A30 to A40 as the plan gives them.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
