@@ -164,8 +164,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private void owned(){if(!server.isSameThread())throw new IllegalStateException("Fluid authority requires the logical server thread");}
     /** Every island of this world solves on a model built from the same captured options, so the
      * configured trace cutoff is one value for every worker and every retained solver: a retained
-     * solver is replaced whenever its model identity changes, and the model is the cutoff's home. */
-    private FluidThermodynamics model(FluidCheckpointCodec.PackageKey key){return models.computeIfAbsent(key,k->FluidThermodynamics.forNetwork(catalog,k.packageId(),options.maximumVelocity(),options.traceCutoffMoleFraction(),options.solids()));}
+     * solver is replaced whenever its model identity changes, and the model is the cutoff's home. A saved island's key
+     * names the network package it was saved on: it runs on the current network package whatever id the save names (the
+     * load compares the data by compound ids and identity, batch 2026-11-04-refinery-compounds, W4). */
+    private FluidThermodynamics model(FluidCheckpointCodec.PackageKey saved) {
+        var key=new FluidCheckpointCodec.PackageKey(com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog));
+        return models.computeIfAbsent(key,k->FluidThermodynamics.forNetwork(catalog,k.packageId(),options.maximumVelocity(),options.traceCutoffMoleFraction(),options.solids()));
+    }
     private static ResourceKey<Level> dimension(String name){return ResourceKey.create(Registries.DIMENSION,ResourceLocation.parse(name));}
     public List<FluidPresetCatalog.Preset> presets(){owned();return presetCache;}
     public List<String> components(){owned();return componentNames;}

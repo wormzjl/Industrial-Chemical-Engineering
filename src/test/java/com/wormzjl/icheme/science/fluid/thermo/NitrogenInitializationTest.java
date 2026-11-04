@@ -24,13 +24,12 @@ class NitrogenInitializationTest {
         assertTrue(model.viscosity.vapor(298.15,state.vapor(),0)>1.7e-5);
         assertSame(original,catalog.requirePackage(COLUMN));assertEquals(model.hydrocarbon.componentCount()-1,catalog.requirePackage(COLUMN).components().size());
     }
-    @Test void onlyTheConfiguredNetworkPackageIsAcceptedWithoutSaveMigration() {
-        var catalog=MaterialCatalog.bundled();
-        assertThrows(IllegalArgumentException.class,()->FluidMaterialCatalog.resolveNetworkPackage(catalog,COLUMN));
-        assertEquals(NETWORK,FluidMaterialCatalog.resolveNetworkPackage(catalog,NETWORK));
-        var refused=assertThrows(IllegalArgumentException.class,
-                ()->FluidMaterialCatalog.resolveNetworkPackage(catalog,"icheme:tjl20_methane"));
-        assertTrue(refused.getMessage().contains("configured basis"),refused.getMessage());
+    /** The model is the named package's, whatever its id (a saved world names its basis by compound ids, batch
+     * 2026-11-04-refinery-compounds, W4); one without nitrogen refuses a nitrogen charge rather than place another gas. */
+    @Test void aModelWithoutNitrogenRefusesANitrogenCharge() {
+        var catalog=MaterialCatalog.bundled();var column=FluidThermodynamics.forNetwork(catalog,COLUMN);
+        assertEquals(catalog.requirePackage(COLUMN).components().size()+1,column.components().size());
+        assertThrows(IllegalStateException.class,()->column.initialNitrogenCharge(1,298.15,101325,()->{}));
     }
     @Test void nitrogenCaloricFitMatchesIndependentShomateCheckpoints() throws Exception {
         var cp=MaterialCatalog.bundled().requirePackage(NETWORK).properties().getLast().cp();

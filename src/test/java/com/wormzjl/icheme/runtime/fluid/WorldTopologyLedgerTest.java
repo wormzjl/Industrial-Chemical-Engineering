@@ -118,6 +118,12 @@ class WorldTopologyLedgerTest {
         var decoded=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(saved),saved.onlineTick(),NO_RECOVERIES);assertEquals(saved.basis(),decoded.basis());
         decoded.basis().requireCurrent(original);
         assertThrows(IllegalArgumentException.class,()->decoded.basis().requireCurrent(reordered()));
+        // By compound ids and identity, not by package id (batch 2026-11-04-refinery-compounds, W4).
+        var renamed=FluidFactsCompatTest.renamed();decoded.basis().requireCurrent(renamed);
+        assertTrue(decoded.basis().sameAs(WorldTopologyLedger.FluidBasis.capture(renamed)));assertNotEquals(decoded.basis(),WorldTopologyLedger.FluidBasis.capture(renamed));
+        assertThrows(IllegalArgumentException.class,()->decoded.basis().requireCurrent(FluidFactsCompatTest.lacking("Propane")));
+        assertThrows(IllegalArgumentException.class,()->saved.withBasis(WorldTopologyLedger.FluidBasis.capture(reordered())),"another basis is a restatement, not a new name");
+        assertEquals(WorldTopologyLedger.FluidBasis.capture(renamed),saved.withBasis(WorldTopologyLedger.FluidBasis.capture(renamed)).basis());
         // The basis lies near the end of the topology: one cut short of it is refused, never read without it.
         var bytes=FluidCheckpointCodec.encodeTopology(saved);
         assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length-2),0,NO_RECOVERIES));

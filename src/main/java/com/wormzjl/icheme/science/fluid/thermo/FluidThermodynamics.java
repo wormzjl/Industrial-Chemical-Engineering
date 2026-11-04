@@ -64,10 +64,11 @@ public final class FluidThermodynamics {
     private final TraceTruncationPolicy tracePolicy;
 
     /**
-     * The canonical gameplay basis, which includes nitrogen. {@code packageId} is resolved through
-     * {@link FluidMaterialCatalog#resolveNetworkPackage}, which accepts only the registered network package, and a
-     * package without nitrogen is refused rather than run on a shorter basis. No overload takes a single number after
-     * the package: the velocity limit comes with the trace cutoff.
+     * The gameplay model of the package the caller names: the world's network package
+     * ({@link FluidMaterialCatalog#networkPackage}, which the network configuration requires to hold nitrogen) or a view
+     * of it on fewer compounds (a simulator sheet's). A saved world is matched to it by compound ids and identity, never
+     * by package id; a model without nitrogen refuses a nitrogen charge ({@link #initialNitrogenCharge}). No overload
+     * takes a single number after the package: the velocity limit comes with the trace cutoff.
      */
     public static FluidThermodynamics forNetwork(MaterialCatalog catalog,String packageId) {
         return forNetwork(catalog,packageId,DEFAULT_MAXIMUM_VELOCITY,DEFAULT_TRACE_CUTOFF_MOLE_FRACTION);
@@ -80,7 +81,7 @@ public final class FluidThermodynamics {
     }
     public static FluidThermodynamics forNetwork(MaterialCatalog catalog,String packageId,double maximumVelocity,double traceCutoffMoleFraction,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings) {
         TraceTruncationPolicy.requireCutoff(traceCutoffMoleFraction,MAX_TRACE_CUTOFF_MOLE_FRACTION);
-        return new FluidThermodynamics(catalog,FluidMaterialCatalog.resolveNetworkPackage(catalog,packageId),
+        return new FluidThermodynamics(catalog,packageId,
                 maximumVelocity,TraceTruncationPolicy.of(traceCutoffMoleFraction),solidSettings);
     }
 

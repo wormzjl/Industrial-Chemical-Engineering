@@ -567,7 +567,9 @@ final class FluidFacts {
      * minted, decision D37), awake at {@code epoch} with no solved interval. Generators and voids are initialised from
      * their specs, as the registry holds them.
      *
-     * <p>With {@code restate} the property data changed (AGENTS.md, "Saves and data formats"): every amount is mapped
+     * <p>The world rebuilds on the current basis of {@code catalog}: a saved basis names its compounds by id, and its
+     * package id is a label (batch 2026-11-04-refinery-compounds, W4). With {@code restate} the property data or the
+     * basis changed (AGENTS.md, "Saves and data formats"): every amount is mapped
      * onto the current axis by component id (through the package's aliases); a vessel keeps its moles, its volume, its
      * solids and its temperature, and the new data gives its energy, pressure and phase split (a TP flash at its saved
      * temperature and pressure). The energy difference and every component and solid the data no longer has are booked
@@ -575,7 +577,10 @@ final class FluidFacts {
      */
     static Rebuilt rebuild(World world,List<Placed> islands,long epoch,Function<FluidCheckpointCodec.PackageKey,FluidThermodynamics> models,
                            MaterialCatalog catalog,boolean restate,String reason) {
-        var basis=restate?WorldTopologyLedger.FluidBasis.capture(catalog):world.basis;
+        // The world rebuilds on the current basis. Without a restatement the saved one holds the same compounds and identity
+        // (the load compares them, whatever else stops the state), and the world then names the current network package.
+        var basis=WorldTopologyLedger.FluidBasis.capture(catalog);
+        if(!restate&&!world.basis.sameAs(basis))throw new IllegalArgumentException("The saved fluid basis "+world.basis.components()+" is not the current "+basis.components()+"; its facts must be restated");
         var key=new FluidCheckpointCodec.PackageKey(basis.packageId());var model=Objects.requireNonNull(models.apply(key));
         if(!model.components().equals(basis.components()))throw new IllegalStateException("The network model's components "+model.components()+" are not the basis "+basis.components());
         var removed=new Removed();

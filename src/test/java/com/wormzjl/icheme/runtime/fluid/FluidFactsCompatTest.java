@@ -272,6 +272,143 @@ class FluidFactsCompatTest {
         var running=corpusWorld();var w=running.ledger.columns().values().iterator().next();
         assertTrue(load(edited(image(running),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->model,CATALOG).world().orElseThrow().columns().get(w.id()).running(),"a unit whose devices stand keeps running");
     }
+    // ---------------- the world basis by compound ids (batch 2026-11-04-refinery-compounds, W4) ----------------
+
+    private static final String NETWORK_RECORD="data/icheme/materials/packages/tjl20_nitrogen.json";
+    /**
+     * The bundled catalog with its network package's record written out (no {@code extends}) as {@code compounds} of its
+     * own list, under id {@code id}; the network configuration and the column preset that name the package follow it. A
+     * shorter list holds no crude assay, so the network then offers only its pure presets and the column preset leaves.
+     */
+    private static MaterialCatalog network(String id,java.util.function.UnaryOperator<List<String>> compounds) {
+        var resources=new HashMap<>(MaterialCatalog.bundled().resources());var whole=CATALOG.requirePackage(PACKAGE).components();
+        var record=com.google.gson.JsonParser.parseString(resources.get(NETWORK_RECORD)).getAsJsonObject();record.remove("extends");
+        var list=compounds.apply(new ArrayList<>(whole));
+        record.add("components",new com.google.gson.Gson().toJsonTree(list));
+        record.addProperty("id",id);resources.put(NETWORK_RECORD,record.toString());
+        String network="data/icheme/materials/networks/default.json",column="data/icheme/materials/presets/column_tia_juana_nitrogen.json";
+        if(!list.containsAll(whole)) {
+            resources.remove(column);
+            var config=com.google.gson.JsonParser.parseString(resources.get(network)).getAsJsonObject();
+            config.add("fluid_presets",new com.google.gson.Gson().toJsonTree(List.of("water","nitrogen")));resources.put(network,config.toString());
+        }
+        for(var path:List.of(network,column)) {
+            if(!resources.containsKey(path))continue;
+            var named=com.google.gson.JsonParser.parseString(resources.get(path)).getAsJsonObject();assertEquals(PACKAGE,named.get("package").getAsString(),path);
+            named.addProperty("package",id);resources.put(path,named.toString());
+        }
+        var catalog=MaterialCatalog.parse(resources);assertEquals(id,FluidMaterialCatalog.networkPackage(catalog));return catalog;
+    }
+    /** The network package under another id, its compounds and records unchanged; the old id names no package. */
+    static MaterialCatalog renamed() {
+        var catalog=network("icheme:network_renamed",ids->ids);
+        assertThrows(IllegalArgumentException.class,()->catalog.requirePackage(PACKAGE));
+        assertEquals(CATALOG.fluidRevision(PACKAGE),catalog.fluidRevision("icheme:network_renamed"),"the same physics under another id");
+        return catalog;
+    }
+    /** The network package without {@code compound}. */
+    static MaterialCatalog lacking(String compound){return network(PACKAGE,ids->{assertTrue(ids.remove(compound),compound);return ids;});}
+    private static FluidThermodynamics networkModel(MaterialCatalog catalog){return FluidThermodynamics.forNetwork(catalog,FluidMaterialCatalog.networkPackage(catalog));}
+
+    /**
+     * A world with no islands whose state format and basis change together: the load names the state format, and its facts
+     * restate onto the current basis all the same, the ledger's totals mapped by compound id onto the current network
+     * package, whether that package was renamed or lost a compound (VARYING_COMPONENTS_REVIEW, W4; the inferred failure at
+     * {@code FluidFacts.rebuild}, which took the saved basis whenever the package table had no island to flag a change).
+     */
+    @Test void aWorldWithNoIslandsRestatesOntoTheCurrentBasisWhenItsStateFormatChangesToo() {
+        var basis=WorldTopologyLedger.FluidBasis.capture(CATALOG);var ids=basis.components();
+        double[] built=new double[ids.size()],gone=new double[ids.size()];
+        built[ids.indexOf("Nitrogen")]=5;built[ids.indexOf("Propane")]=2;built[ids.indexOf("Water")]=1;gone[ids.indexOf("Propane")]=.5;
+        var saved=new WorldTopologyLedger.Snapshot(1200,7,Map.of(),List.of(),new WorldTopologyLedger.MaterialTotal(built,-4e5),new WorldTopologyLedger.MaterialTotal(gone,-1e5),basis);
+        var store=FluidCheckpointStore.memory();store.commit(store.prepare(new FluidCheckpointCodec.Checkpoint(List.of()),Optional.of(saved),saved.onlineTick(),key->model));
+        var image=edited(store.image(),core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1));
+        for(var catalog:List.of(lacking("Propane"),renamed())) {
+            var current=networkModel(catalog);
+            var loaded=load(image,key->current,catalog);
+            assertEquals(FluidCheckpointStore.Route.FACTS,loaded.route());assertTrue(loaded.reason().contains("state format "+(FluidCheckpointCodec.VERSION+1)),loaded.reason());
+            assertTrue(loaded.checkpoint().islands().isEmpty());
+            var ledger=loaded.world().orElseThrow();ledger.basis().requireCurrent(catalog);
+            assertEquals(WorldTopologyLedger.FluidBasis.capture(catalog),ledger.basis(),"the world names the current network package");
+            var now=ledger.basis().components();
+            for(int c=0;c<ids.size();c++) {
+                int to=now.indexOf(ids.get(c));
+                if(to>=0){assertEquals(built[c],ledger.constructed().moles()[to],ids.get(c)+" constructed");assertEquals(gone[c],ledger.destroyed().moles()[to],ids.get(c)+" destroyed");}
+            }
+            assertEquals(saved.constructed().totalEnergy(),ledger.constructed().totalEnergy());assertEquals(saved.nextIdentity(),ledger.nextIdentity());
+        }
+    }
+
+    /**
+     * The world basis is checked by compound ids and fluid identity, never by package id (corpus image
+     * {@code compat/fluid/compound-basis/}: a vessel of nitrogen, methane and propane written at state format 30 on
+     * {@code icheme:tjl20_methane_nitrogen}). Under a catalog whose network package has another id, its compounds and
+     * records unchanged, the image loads as it loads under the bundled one, by the same route to the same contents, and
+     * names the current package; a save of this build's data keeps its state there. Under a catalog whose package lacks
+     * propane, the world restates: the propane leaves, booked by id and named on the island's status line, and every
+     * other amount is kept. When the image is missing the test writes it under {@code build/compat/fluid/}.
+     */
+    @Test void theWorldBasisIsCheckedByCompoundIdsNotByPackageId() throws IOException {
+        var folder=CORPUS.resolve("compound-basis");
+        if(!Files.isDirectory(folder)) {
+            var written=Path.of("build/compat/fluid/compound-basis");write(image(propaneWorld()),written);
+            fail("No compound-basis corpus image: copy "+written.toAbsolutePath()+" to "+folder);
+        }
+        var image=read(folder);var renamedCatalog=renamed();var renamedModel=networkModel(renamedCatalog);
+        var bundled=load(image,key->model,CATALOG);var renamed=load(image,key->renamedModel,renamedCatalog);
+        assertEquals(bundled.route(),renamed.route(),renamed.reason());
+        assertEquals(contents(bundled.checkpoint()),contents(renamed.checkpoint()),"every vessel, bit for bit");
+        assertEquals(WorldTopologyLedger.FluidBasis.capture(renamedCatalog),renamed.world().orElseThrow().basis(),"the world names the current network package");
+        assertEquals(bundled.world().orElseThrow().restated(),renamed.world().orElseThrow().restated());
+        // A save of this build's data keeps its state under the renamed package, and saves again under the new id.
+        var fresh=image(propaneWorld());var store=FluidCheckpointStore.memory(fresh);var kept=store.load(fresh.core(),key->renamedModel,renamedCatalog);
+        assertEquals(FluidCheckpointStore.Route.EXACT,kept.route(),kept.reason());
+        assertEquals(contents(load(fresh,key->model,CATALOG).checkpoint()),contents(kept.checkpoint()));
+        assertEquals("icheme:network_renamed",kept.world().orElseThrow().basis().packageId());
+        // The world saves its islands as the authority does, on the current package: every unit is written again under the
+        // new id (a unit is reused only for the package it names), and the save loads exactly.
+        var islands=new FluidCheckpointCodec.Checkpoint(kept.checkpoint().islands().stream().map(e->new FluidCheckpointCodec.IslandEntry(e.dimension(),"icheme:network_renamed",e.snapshot())).toList());
+        store.commit(store.prepare(islands,kept.world(),FluidCheckpointCodec.epoch(fresh.core()),key->renamedModel));var again=store.image();
+        var resaved=FluidCheckpointCodec.readCore(again.core());
+        assertEquals(List.of("icheme:network_renamed"),resaved.packages().stream().map(FluidCheckpointCodec.PackageRecord::packageId).toList());
+        var t=resaved.topology();var topologyPack=again.packs().get(t.pack());
+        assertEquals("icheme:network_renamed",FluidCheckpointCodec.worldFacts(topologyPack,FluidCheckpointCodec.topologySections(topologyPack,(int)t.offset(),t.length(),resaved.topologyGeneration())).basis().packageId());
+        var reloaded=load(again,key->renamedModel,renamedCatalog);
+        assertEquals(FluidCheckpointStore.Route.EXACT,reloaded.route(),reloaded.reason());assertEquals(contents(kept.checkpoint()),contents(reloaded.checkpoint()));
+
+        // Without propane: it leaves the world, booked by id; every other amount is kept.
+        var lackingCatalog=lacking("Propane");var lackingModel=networkModel(lackingCatalog);var core=FluidCheckpointCodec.readCore(image.core());
+        var saved=new TreeMap<Long,FluidFacts.Vessel>();List<String> axis=null;double propane=0;
+        for(var row:core.islands()){var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
+            axis=facts.components();for(var v:facts.vessels()){saved.put(v.id(),v);propane+=v.moles()[axis.indexOf("Propane")];}}
+        assertTrue(propane>1,"the image's vessels hold propane: "+propane);
+        var restated=load(image,key->lackingModel,lackingCatalog);
+        assertEquals(FluidCheckpointStore.Route.FACTS,restated.route());
+        var ledger=restated.world().orElseThrow();assertEquals(WorldTopologyLedger.FluidBasis.capture(lackingCatalog),ledger.basis());
+        assertEquals(Map.of("Propane",propane),ledger.restated().removedMoles(),"the ledger books the removed propane by id");
+        var now=lackingModel.components();int vessels=0;
+        for(var entry:restated.checkpoint().islands()) {
+            assertTrue(entry.snapshot().status().contains("removed by the property data: Propane "+propane+" mol"),entry.snapshot().status());
+            for(var n:entry.snapshot().graph().reservoirs()) {
+                var v=saved.get(n.id());if(v==null)continue;vessels++;
+                for(int c=0;c<axis.size();c++){int to=now.indexOf(axis.get(c));if(to>=0)assertEquals(v.moles()[c],n.inventory().moles()[to],"vessel "+n.id()+": "+axis.get(c)+" kept");}
+            }
+        }
+        assertEquals(saved.size(),vessels);
+    }
+    /** A 2 m3 vessel charged from a generator of 70 % nitrogen, 20 % methane and 10 % propane at 300 K and 5 bar, the generator then removed. */
+    private EventPathWorld propaneWorld() {
+        var world=new EventPathWorld();var ids=WorldTopologyLedger.FluidBasis.capture(CATALOG).components();var n=new double[ids.size()];
+        n[ids.indexOf("Nitrogen")]=.7;n[ids.indexOf("Methane")]=.2;n[ids.indexOf("Propane")]=.1;
+        long generator=world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,300,5e5,n),.05);
+        for(int x=1;x<=2;x++)world.place(x,64,0,Kind.PIPE,Direction.EAST,.05);
+        world.place(3,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(2,298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition()),.05);
+        world.runTo(400);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(generator,null)),world.ledger.nextIdentity(),null);world.runTo(600);
+        world.assertKeptUp("the propane line");
+        return world;
+    }
+
     /** A facts section is read by every later build: one this build cannot read refuses the world, its files kept. */
     /**
      * W3 (plan section 5.2): the heat an exchanger holds in transit is a fact of its sides. A save writes the coordinator's
