@@ -17,6 +17,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 - 2026-11-04: the full campaign of `bd89826a3` (`W2_CAMPAIGN_REVIEW.md`): 992, 992 and 998 clean against 991, 993 and 1000; new holds 575, 952 (E5) and 563, 896 (E8); 431 and 301 gone. Traced 896 (a pump dead-heading a liquid-full tank on its relief line fails the reconstruction gate) and 952 (a pump starved by a 1 cm suction line takes its suction junction to the pressure floor in pass 0); both hold the same on the head basis, so the law, not A1 or A2. Proposed: close at the relief (E8 a), start at a suction link's cap (E5 a). The harness's verbose replay skips a held island that is gone (`tools/rotating-machinery`).
 - 2026-11-04: owner decision D12 (E8 is the curve's shutoff; E5 a). Built by two Opus subagents: the Newton weights a taut vessel's wall and balance rows by the pressure they imply (stiffness over max(1e5, P)) in place of the small-headspace tolerance, and a set-flow mover starts at no more than its suction walk's smallest velocity cap. Reading A11 also clipped the curve at zero flow; 15 of 619 affected tests failed (a no-flow half-line leaves a dead-headed pocket's pressure undetermined, `D12_TESTS_REVIEW.md`). Owner decision D13: F2e unchanged with the reverse closure as its check valve. 98 classes and the hold gates pass; `a8accb372`.
 - 2026-11-04: the full campaign of `a8accb372` (`W2_D13_CAMPAIGN_REVIEW.md`): 992, 993 and 1000 clean; E8 (563, 896) gone, bundled defaults' implicit solves 181,014 → 26,788; E5 (575, 952) holds unchanged, so the start seed has no measured effect. Proposed: a vapour-pressure suction floor for every liquid (D59 (4) widened) and deleting the start seed.
+- 2026-11-04: D14's full campaign held bundled 896 and cold 181, clean at `a8accb372` (`D14_HOLDS_REVIEW.md`). Both draw through a junction already at its own bubble point; the balance anchors the suction at the floor with no line delivery. 896: no root (the supplier must flash below the floor); 181: a vanishing vapour at the anchored junction. A probe closing such a pump in the balance cleared both; options A (mode), B (row), C (floor at the liquid's enthalpy) wait on the owner.
 
 ## Documents
 
@@ -28,6 +29,7 @@ Status: In progress since 2026-11-03 (plan revision 2; W1 built; W2: law F2e wit
 - [W2_CAMPAIGN_REVIEW.md](W2_CAMPAIGN_REVIEW.md): the full campaign of F2e with A1 and A2, the two traced holds and the options for them.
 - [D12_TESTS_REVIEW.md](D12_TESTS_REVIEW.md): the affected tests of D12's first build; the clipped curve withdrawn (D13).
 - [W2_D13_CAMPAIGN_REVIEW.md](W2_D13_CAMPAIGN_REVIEW.md): the full campaign of D13; E8 gone, E5's options.
+- [D14_HOLDS_REVIEW.md](D14_HOLDS_REVIEW.md): the two new holds of D14 (bundled 896, cold 181) traced; a starved pump's options.
 
 ## Code areas (planned)
 
