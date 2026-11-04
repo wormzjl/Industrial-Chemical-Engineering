@@ -848,8 +848,9 @@ public final class MaterialCatalog {
     private static Built build(Records r,Definition d,Package parent,Map<String,AssayRecord> assays) {
         String id=d.id(); Method method=d.method(); var resolved=d.entries();
         List<String> ids=resolved.stream().map(Entry::component).toList(), refs=resolved.stream().map(Entry::properties).toList();
-        if (ids.isEmpty() || ids.size()>64 || new HashSet<>(ids).size()!=ids.size())
-            throw new IllegalArgumentException("components: expected 1 to 64 distinct compounds, got "+ids);
+        // A package is at most the world list (the axis less water): an island of the network package carries at most 64 of them.
+        if (ids.isEmpty() || ids.size()>MaterialAxis.MAX_CONSERVED_COMPONENTS-1 || new HashSet<>(ids).size()!=ids.size())
+            throw new IllegalArgumentException("components: expected 1 to "+(MaterialAxis.MAX_CONSERVED_COMPONENTS-1)+" distinct compounds, got "+ids);
         var ps=new ArrayList<Property>();
         // The column's admission range: the temperatures every member dataset covers, at the method's pressures.
         double tmin=0,tmax=Double.POSITIVE_INFINITY;
