@@ -171,7 +171,8 @@ The server stores what it is sent. It never solves it, and nothing in it reaches
 - The server checks the upload's size, its format number and that it parses. A bad upload is refused with a message, and the
   stored sheet stands.
 - Results are state. A changed package revision drops them, and the next run rebuilds them. A column's warm start is client
-  memory only, so the first run after opening a sheet starts cold.
+  memory only, so the first run after opening a sheet starts its loops from the stored steady run and its columns from the
+  learned start (owner 2026-11-04, P1 and P2; COLUMN_WARM_START_PLAN.md).
 - The sheet sits in the block entity as a byte array, in no update tag. A damaged stored sheet never refuses a world: the block
   opens empty, says so, and keeps the bytes for a later version.
 - `AGENTS.md` gets one clause: the simulator's run is a client tool outside the engine schedule, and reads and writes no process
