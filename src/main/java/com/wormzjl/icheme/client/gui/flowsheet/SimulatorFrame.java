@@ -33,12 +33,18 @@ public final class SimulatorFrame {
     /** The design minimum and the size a door takes. */
     public static final int LEAST_W = 464, LEAST_H = 254, DOOR_W = 790, DOOR_H = 524;
 
-    private final int w, h;
+    private final int w, h, title;
     private final Size size;
 
     public SimulatorFrame(int w, int h) {
+        this(w, h, 0);
+    }
+
+    /** @param title the title's text width, px: the keys on the title row stay clear of its plate */
+    public SimulatorFrame(int w, int h, int title) {
         this.w = w;
         this.h = h;
+        this.title = title;
         size = Size.of(w);
     }
 
@@ -109,24 +115,24 @@ public final class SimulatorFrame {
     }
 
     /**
-     * The footer's keys: Close, the tab's two keys, the second {@code third} px wide, then Undo and Redo where they fit. The
-     * Flowsheet tabs' are Run and Stop (50); the Sizing tab's Size all and Send to block (84, 50 where the window is narrow).
+     * A tab's keys: Close in the footer, then the tab's two keys, the second {@code third} px wide, and Undo and Redo, centred on the
+     * title row (the owner, 2026-11-04: "These buttons should be moved to top center"), never over the title's plate. The
+     * Flowsheet tab's are Run and Stop (50); the Sizing tab's Size all and Send to block (84, 50 where the window is narrow).
      */
-    public List<Rect> footer(int third) {
-        int y = h - 27, x = 10;
+    public List<Rect> keys(int third) {
         var keys = new ArrayList<Rect>();
-        keys.add(new Rect(x, y, 50, 18));
-        x += 54;
-        keys.add(new Rect(x, y, 60, 18));
-        x += 64;
-        keys.add(new Rect(x, y, third, 18));
-        x += third + 4;
-        if (size != Size.TINY) for (int i = 0; i < 2; i++) {
-            keys.add(new Rect(x, y, 50, 18));
-            x += 54;
+        keys.add(new Rect(10, h - 27, 50, 18));
+        int[] widths = {60, third, 50, 50};
+        int x = Math.max((w - (160 + third + 12)) / 2, TITLE_RIGHT + title + 6);
+        for (int width : widths) {
+            keys.add(new Rect(x, 5, width, 18));
+            x += width + 4;
         }
         return keys;
     }
+
+    /** Where the title's plate ends, less its text: {@code PanelSkin.title} at x 10 pads it by 4. */
+    static final int TITLE_RIGHT = 14;
 
     public List<Rect> softKeys() {
         int kw = 40, strip = 4 * kw + 18, kx = w - 10 - strip;

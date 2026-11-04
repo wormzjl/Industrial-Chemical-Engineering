@@ -779,15 +779,15 @@ public final class SizingPage {
         return x.text("sizing.miss", name(x, id), Door.lower(limitName(x, closest.limit())), value(x, closest), limit(x, closest));
     }
 
-    // ---- The footer ----
+    // ---- The keys ----
 
-    /** The tab's footer: Close, Size all (the confirming key) or Stop while it runs, Send to block ({@link #unsent}), Undo and Redo where they fit. */
-    public static List<SimulatorPage.Slot> footer(SheetContext x, SimulatorFrame frame, SimulatorHost host, SheetEditor editor) {
+    /** The tab's keys ({@link SimulatorFrame#keys}): Close, Size all (the confirming key) or Stop while it runs, Send to block ({@link #unsent}), Undo and Redo. */
+    public static List<SimulatorPage.Slot> keys(SheetContext x, SimulatorFrame frame, SimulatorHost host, SheetEditor editor) {
         String why = host.reader() ? x.text("sizing.size_all_reader") : x.state().steady() ? null : x.text("sizing.size_all_hint");
         var second = host.running() != null ? new Column.Button("stop", x.text("frame.stop"), true, null) : new Column.Button("size_all", x.text("sizing.size_all"), host.canRun() && sizes(x), why);
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE;
         String unsent = unsent(x);
         String send = unsent != null ? unsent : x.text("sizing.send_hint", designs(x).size());
-        return SimulatorPage.footer(x, frame.footer(frame.size().narrow() ? 50 : 84), editor, second, new Column.Button("send", x.text(narrow ? "sizing.send_short" : "sizing.send"), unsent == null, send));
+        return SimulatorPage.keys(x, frame.keys(frame.size().narrow() ? 50 : 84), editor, second, new Column.Button("send", x.text(narrow ? "sizing.send_short" : "sizing.send"), unsent == null, send));
     }
 }

@@ -353,7 +353,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
 
     @Override protected void init() {
         WindowScale.apply(minecraft, this, DESIGN_HEIGHT, (w, h) -> h >= SimulatorFrame.LEAST_H && w >= SimulatorFrame.LEAST_W);
-        frame = new SimulatorFrame(width, height);
+        frame = new SimulatorFrame(width, height, font.width(title));
         entries.clear();
         var x = context();
         if (tab == SimulatorFrame.Tab.SIZING && !SizingPage.open(x)) tab = SimulatorFrame.Tab.FLOWSHEET;

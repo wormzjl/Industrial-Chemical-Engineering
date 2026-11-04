@@ -42,12 +42,37 @@ class SimulatorFrameTest {
                 assertTrue(keys.get(i).right() <= size[0] - 5, "inside the window at " + size[0]);
                 for (int k = i + 1; k < keys.size(); k++) assertFalse(keys.get(i).overlaps(keys.get(k)), "tabs and file keys apart at " + size[0]);
             }
-            var foot = new java.util.ArrayList<Rect>();
-            foot.addAll(frame.footer(frame.size().narrow() ? 50 : 84));
-            foot.addAll(frame.softKeys());
-            for (int i = 0; i < foot.size(); i++) for (int k = i + 1; k < foot.size(); k++) assertFalse(foot.get(i).overlaps(foot.get(k)), "the footer apart at " + size[0]);
             assertTrue(frame.well().bottom() <= frame.palette().y(), "the canvas ends above the palette");
         }
+    }
+
+    @Test
+    void theTabsKeysStandOnTheTitleRowClearOfTheTitle() {
+        // 0, the English title in the game's font, the French one (the widest), as the screen measures them.
+        for (int title : new int[]{0, 90, 125})
+            for (int[] size : new int[][]{{464, 254}, {624, 344}, {790, 524}, {944, 524}, {1280, 720}}) {
+                var frame = new SimulatorFrame(size[0], size[1], title);
+                for (int third : new int[]{50, frame.size().narrow() ? 50 : 84}) {
+                    var keys = frame.keys(third);
+                    assertEquals(5, keys.size(), "Close and four keys");
+                    var top = keys.subList(1, 5);
+                    for (int i = 0; i < top.size(); i++) {
+                        var key = top.get(i);
+                        assertEquals(5, key.y(), "on the title row at " + size[0]);
+                        assertTrue(key.x() >= SimulatorFrame.TITLE_RIGHT + title, "clear of a " + title + " px title at " + size[0]);
+                        assertFalse(key.overlaps(frame.theme()), "clear of the theme key at " + size[0] + ", title " + title);
+                        for (var tab : frame.tabs()) assertFalse(key.overlaps(tab), "above the tabs at " + size[0]);
+                        for (int k = i + 1; k < top.size(); k++) assertFalse(key.overlaps(top.get(k)), "apart at " + size[0]);
+                    }
+                    if (title == 0) {
+                        int left = top.getFirst().x(), right = size[0] - top.getLast().right();
+                        assertTrue(Math.abs(left - right) <= 1, "centred at " + size[0] + ": " + left + " | " + right);
+                    }
+                    var foot = new java.util.ArrayList<Rect>(frame.softKeys());
+                    foot.add(keys.getFirst());
+                    for (int i = 0; i < foot.size(); i++) for (int k = i + 1; k < foot.size(); k++) assertFalse(foot.get(i).overlaps(foot.get(k)), "the footer apart at " + size[0]);
+                }
+            }
     }
 
     @Test

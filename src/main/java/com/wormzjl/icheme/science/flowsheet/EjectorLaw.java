@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
+
 /**
  * The vacuum set's steam law, S1 (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 3.12, W10b): one ejector stands
  * for a whole set, its stages and the intercondensers between them. The steam it takes, kg/s:
@@ -46,7 +48,7 @@ public final class EjectorLaw {
      * @param condensing where the set condenses the water, Pa: {@link #CONDENSING} times its vapour pressure at the load's temperature
      */
     public static double steam(double gas, double water, double motive, double suction, double discharge, double condensing) {
-        return K * motiveFactor(motive) * (gas * Math.log(discharge / suction) + asAir(water, WATER) * Math.max(0, Math.log(condensing / suction)));
+        return K * motiveFactor(motive) * (gas * DeterministicMath.log(discharge / suction) + asAir(water, WATER) * Math.max(0, DeterministicMath.log(condensing / suction)));
     }
 
     /** El-Dessouky's PCF at {@code motive} Pa over its value at 10 bar, flat above 15 bar: 1.35 at 3 bar, 0.93 at 15 and above. */

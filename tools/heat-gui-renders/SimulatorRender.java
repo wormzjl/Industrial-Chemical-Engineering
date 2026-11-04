@@ -263,7 +263,7 @@ public final class SimulatorRender {
 
     private static void screen(GuiPrototypes.Door d, Scene s) {
         var x = s.context();
-        var frame = new SimulatorFrame(d.w, d.h);
+        var frame = new SimulatorFrame(d.w, d.h, d.m.width(HeatDiagramRender.tr("block.icheme.process_simulator")));
         boolean narrow = frame.size() != SimulatorFrame.Size.WIDE;
         var status = SimulatorPage.status(x, s.tab, s.results, s.gestures, s.editor, narrow, s.host.holder());
         SimulatorPage.back(d.c, d.skin, status, HeatDiagramRender.tr("block.icheme.process_simulator"), frame, d.w, d.h);
@@ -370,6 +370,24 @@ public final class SimulatorRender {
         });
     }
 
+    /**
+     * The owner's picks of 2026-11-04 as shipped: one head at each line's end, its tip on the port's edge or the pill's ("Add
+     * directional arrow to all lines", C), and the tab's keys centred on the title row ("These buttons should be moved to top
+     * center", option 2): the Flowsheet tab fitted and near 1:1, the Sizing tab, and both on a wide window.
+     */
+    private static void arrowsKeys(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
+        var host = new Host(false, null);
+        Consumer<Scene> sizing = s -> s.tab = SimulatorFrame.Tab.SIZING;
+        Consumer<Scene> near = s -> {
+            var box = s.view.box();
+            s.view.zoom(1 / s.view.zoom(), box.x() + box.w() * .5, box.y() + box.h() * .5);
+        };
+        var titles = List.of("Flowsheet tab, fitted", "Flowsheet tab, near 1:1", "Sizing tab: Size all and Send to block in Run's and Stop's place");
+        var bodies = List.of(scene(sheet, run, seconds, host, nothing()), scene(sheet, run, seconds, host, near), scene(sheet, run, seconds, host, sizing));
+        sheet(out, "30-arrows-keys", W, H, titles, bodies);
+        sheet(out, "31-arrows-keys-wide", 800, 450, titles, bodies);
+    }
+
     // ---- The sheets ----
 
     private static BufferedImage page(int w, int h, Skin skin, BiConsumer<GuiPrototypes.Door, Skin> body) {
@@ -411,7 +429,7 @@ public final class SimulatorRender {
     private static BiConsumer<GuiPrototypes.Door, Skin> scene(Flowsheet sheet, FlowsheetRun run, double seconds, SimulatorHost host, Consumer<Scene> player) {
         return (d, skin) -> {
             var s = new Scene(sheet, run, seconds, host);
-            var frame = new SimulatorFrame(d.w, d.h);
+            var frame = new SimulatorFrame(d.w, d.h, d.m.width(HeatDiagramRender.tr("block.icheme.process_simulator")));
             s.view.layout(SimulatorFrame.inner(frame.well()));
             s.view.fit(s.editor.layout().bounds());
             player.accept(s);
@@ -1073,6 +1091,11 @@ public final class SimulatorRender {
         // -Donly=run-key: the Run key's states (28) and what grabs the column (29).
         if ("run-key".equals(System.getProperty("only"))) {
             runKey(out, sheet, run, seconds);
+            return;
+        }
+        // -Donly=arrows-keys: the line heads and the keys on the title row (30, and 31 on a wide window).
+        if ("arrows-keys".equals(System.getProperty("only"))) {
+            arrowsKeys(out, sheet, run, seconds);
             return;
         }
         // -Donly=send: S5's sheets alone.

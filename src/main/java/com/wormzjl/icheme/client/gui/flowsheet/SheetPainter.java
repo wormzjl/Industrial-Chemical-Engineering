@@ -48,8 +48,7 @@ public final class SheetPainter {
         String hidden = overlay == null ? null : overlay.hidden();
         for (var line : layout.lines()) {
             if (line.stream().id().equals(hidden) || line.points().length < 4) continue;
-            boolean mine = selected != null && !selected.unit() && selected.id().equals(line.stream().id());
-            p.wire(line.points(), true, false, mine ? WHITE : state.tear(line.stream().id()) ? Palette.ACCENT : Palette.MUTED);
+            p.wire(line.points(), false, false, colour(line, state, selected));
         }
         for (var box1 : layout.boxes()) unit(p, layout, box1, state, selected, t);
         for (var box1 : layout.boxes())
@@ -59,6 +58,15 @@ public final class SheetPainter {
                 if (place.held() && !free && !p.labels()) continue;
                 p.square(place.x(), place.y(), SheetLayout.PORT, place.held() && !free ? PortColours.CONNECTED : place.rgb());
             }
+        // One head a line, its tip on the edge of the inlet's square (the owner, 2026-11-04: "Add directional arrow to all lines",
+        // picked C), or of the open end's pill, whose edge is the line's last point.
+        c.batch(() -> {
+            for (var line : layout.lines()) {
+                if (line.stream().id().equals(hidden) || line.points().length < 4) continue;
+                int back = line.end() == null && p.labels() ? Math.max(2, p.px(SheetLayout.PORT / 2)) + 2 : 1;
+                p.head(line.points(), back, colour(line, state, selected));
+            }
+        });
         if (selected != null && !selected.unit()) ends(p, layout.line(selected.id()));
         for (var line : layout.lines()) {
             if (line.stream().id().equals(hidden) || !line.hasName() || !p.labels()) continue;
@@ -72,6 +80,12 @@ public final class SheetPainter {
         }
         if (overlay != null) overlay(p, overlay, t);
         c.unclip();
+    }
+
+    /** A line's colour: white where selected, the accent where torn. */
+    private static int colour(SheetLayout.Line line, SheetState state, SheetGestures.@Nullable Selection selected) {
+        boolean mine = selected != null && !selected.unit() && selected.id().equals(line.stream().id());
+        return mine ? WHITE : state.tear(line.stream().id()) ? Palette.ACCENT : Palette.MUTED;
     }
 
     /** A selected line's ends on their ports, ringed. */

@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+import com.wormzjl.icheme.science.math.DeterministicMath;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -58,7 +59,7 @@ public final class CompressorSizing {
         /** The stages it runs {@code ratio} in. */
         int stages(double ratio) {
             if (type == UnitType.TURBO) return length;
-            int pairs = length / 2, asked = (int) Math.ceil(Math.log(Math.max(ratio, 1)) / Math.log(Limit.COMPRESSOR_STAGE_PISTON.value()) - 1e-9);
+            int pairs = length / 2, asked = (int) Math.ceil(DeterministicMath.log(Math.max(ratio, 1)) / DeterministicMath.log(Limit.COMPRESSOR_STAGE_PISTON.value()) - 1e-9);
             return Math.max(1, Math.min(pairs, asked));
         }
 
@@ -110,7 +111,7 @@ public final class CompressorSizing {
     public static Rating rate(Load load, Size size) {
         if (!load.flows()) return Rating.NONE;
         int stages = size.stages(load.ratio());
-        double stage = Math.pow(load.ratio(), 1. / stages), discharge = load.suction() * Math.pow(stage, load.exponent()) - 273.15;
+        double stage = DeterministicMath.pow(load.ratio(), 1. / stages), discharge = load.suction() * DeterministicMath.pow(stage, load.exponent()) - 273.15;
         var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.COMPRESSOR_RATIO.read(load.ratio()));
         readings.add(Limit.COMPRESSOR_LIQUID.read(load.liquid()));

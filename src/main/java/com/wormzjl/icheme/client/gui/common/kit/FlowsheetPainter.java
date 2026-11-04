@@ -113,6 +113,24 @@ public final class FlowsheetPainter {
         });
     }
 
+    /**
+     * A filled head on the end of the line through design points {@code p}, pointing along its last run, six design px deep (at
+     * least four), its tip {@code back} canvas px before the last point: drawn after what stands on that point, so nothing covers it.
+     */
+    public void head(int[] p, int back, int colour) {
+        if (p.length < 4) return;
+        int n = p.length, ex = x(p[n - 2]), ey = y(p[n - 1]), dx = Integer.signum(ex - x(p[n - 4])), dy = Integer.signum(ey - y(p[n - 3]));
+        if (dx == 0 && dy == 0) return;
+        int depth = Math.max(4, px(6)), tx = ex - dx * back, ty = ey - dy * back;
+        c.batch(() -> {
+            for (int k = 0; k < depth; k++) {
+                int bx = tx - dx * k, by = ty - dy * k;
+                if (dx != 0) c.fill(bx, by - k, bx + 1, by + k + 1, colour);
+                else c.fill(bx - k, by, bx + k + 1, by + 1, colour);
+            }
+        });
+    }
+
     /** A straight line between canvas points, one pixel wide, at any slope. */
     public void line(int x0, int y0, int x1, int y1, int colour) {
         c.batch(() -> {

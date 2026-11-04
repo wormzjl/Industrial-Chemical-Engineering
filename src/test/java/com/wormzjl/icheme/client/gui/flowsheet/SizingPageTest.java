@@ -159,9 +159,9 @@ class SizingPageTest {
             }
             for (int w : new int[]{SimulatorFrame.LEAST_W, 500, SimulatorFrame.DOOR_W}) {
                 var frame = new SimulatorFrame(w, SimulatorFrame.DOOR_H);
-                var footer = SizingPage.footer(x, frame, x.host(), x.editor());
-                for (var slot : footer) assertTrue(m.width(slot.button().text()) <= slot.rect().w() - 4, "a footer key fits at " + w + ": " + slot.button().text());
-                assertTrue(footer.getLast().rect().right() < frame.softTray().x(), "the footer clears the display keys at " + w);
+                var footer = SizingPage.keys(x, frame, x.host(), x.editor());
+                for (var slot : footer) assertTrue(m.width(slot.button().text()) <= slot.rect().w() - 4, "a key fits at " + w + ": " + slot.button().text());
+                assertTrue(footer.getLast().rect().right() < frame.theme().x(), "the keys clear the theme key at " + w);
             }
         }
         // The status line's words, a run that is not steady, an item that misses.
@@ -311,7 +311,7 @@ class SizingPageTest {
         assertTrue(edited.state().stale("E-101"), "the exchanger's drops follow its size");
         assertFalse(SizingPage.sizes(edited));
         assertTrue(SizingPage.open(edited));
-        var footer = SizingPage.footer(edited, frame, edited.host(), editor);
+        var footer = SizingPage.keys(edited, frame, edited.host(), editor);
         assertEquals(List.of("close", "size_all", "send", "undo", "redo"), footer.stream().map(slot -> slot.button().key()).toList());
         assertFalse(footer.get(1).button().active());
         assertEquals(texts.get("flowsheet.sizing.size_all_hint"), footer.get(1).button().hint());
@@ -391,7 +391,7 @@ class SizingPageTest {
         var holder = sending(texts, editor, STEADY, ok, false, null);
         assertNull(SizingPage.unsent(holder));
         var designs = SizingPage.designs(holder);
-        var send = SizingPage.footer(holder, frame, holder.host(), editor).get(2).button();
+        var send = SizingPage.keys(holder, frame, holder.host(), editor).get(2).button();
         assertTrue(send.active());
         assertEquals(texts.get("flowsheet.sizing.send_hint", designs.size()), send.hint());
         assertEquals(texts.get("flowsheet.sizing.send_reader"), SizingPage.unsent(sending(texts, editor, STEADY, ok, true, null)));

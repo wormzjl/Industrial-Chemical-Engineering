@@ -32,7 +32,7 @@ public final class SimulatorPage {
         return new Column.Button(key, text, false, hint);
     }
 
-    /** The frame's keys: tabs, file keys, the footer and the display keys. */
+    /** The frame's keys: tabs, file keys, the tab's keys and the display keys. */
     public static List<Slot> frameKeys(SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SimulatorHost host, SheetEditor editor) {
         var slots = new ArrayList<Slot>();
         var tabs = frame.tabs();
@@ -47,30 +47,28 @@ public final class SimulatorPage {
         slots.add(new Slot(new Column.Button("file/open", x.text("file.open"), !editor.locked(), null), file.get(1)));
         slots.add(new Slot(new Column.Button("file/save", x.text("file.save"), host.stores() && !reader, host.stores() ? null : x.text("hint.block")), file.get(2)));
         slots.add(new Slot(new Column.Button("file/save_as", x.text(narrow ? "file.save_as_short" : "file.save_as"), true, null), file.get(3)));
-        if (tab == SimulatorFrame.Tab.SIZING) slots.addAll(SizingPage.footer(x, frame, host, editor));
-        else footer(slots, x, frame, host, editor, reader);
+        if (tab == SimulatorFrame.Tab.SIZING) slots.addAll(SizingPage.keys(x, frame, host, editor));
+        else runKeys(slots, x, frame, host, editor, reader);
         var soft = softKeys(x.units(), x.t());
         var at = frame.softKeys();
         for (int i = 0; i < 4; i++) slots.add(new Slot(soft.get(i), at.get(i)));
         return slots;
     }
 
-    private static void footer(List<Slot> slots, SheetContext x, SimulatorFrame frame, SimulatorHost host, SheetEditor editor, boolean reader) {
+    private static void runKeys(List<Slot> slots, SheetContext x, SimulatorFrame frame, SimulatorHost host, SheetEditor editor, boolean reader) {
         boolean running = host.running() != null;
-        slots.addAll(footer(x, frame.footer(50), editor, new Column.Button("run", x.text("frame.run"), host.canRun() && !running && !reader, !host.canRun() ? x.text("hint.run") : runDue(x, host) ? x.text("hint.run_due") : null),
+        slots.addAll(keys(x, frame.keys(50), editor, new Column.Button("run", x.text("frame.run"), host.canRun() && !running && !reader, !host.canRun() ? x.text("hint.run") : runDue(x, host) ? x.text("hint.run_due") : null),
                 new Column.Button("stop", x.text("frame.stop"), running, null)));
     }
 
-    /** A tab's footer at {@code at}: Close, the tab's {@code second} and {@code third} keys, then Undo and Redo where they fit. */
-    static List<Slot> footer(SheetContext x, List<Rect> at, SheetEditor editor, Column.Button second, Column.Button third) {
+    /** A tab's keys at {@code at} ({@link SimulatorFrame#keys}): Close, then the tab's {@code second} and {@code third} keys, Undo and Redo. */
+    static List<Slot> keys(SheetContext x, List<Rect> at, SheetEditor editor, Column.Button second, Column.Button third) {
         var slots = new ArrayList<Slot>();
         slots.add(new Slot(new Column.Button("close", x.t().get("fluid.close"), true, null), at.get(0)));
         slots.add(new Slot(second, at.get(1)));
         slots.add(new Slot(third, at.get(2)));
-        if (at.size() > 3) {
-            slots.add(new Slot(new Column.Button("undo", x.text("frame.undo"), editor.canUndo(), null), at.get(3)));
-            slots.add(new Slot(new Column.Button("redo", x.text("frame.redo"), editor.canRedo(), null), at.get(4)));
-        }
+        slots.add(new Slot(new Column.Button("undo", x.text("frame.undo"), editor.canUndo(), null), at.get(3)));
+        slots.add(new Slot(new Column.Button("redo", x.text("frame.redo"), editor.canRedo(), null), at.get(4)));
         return slots;
     }
 
