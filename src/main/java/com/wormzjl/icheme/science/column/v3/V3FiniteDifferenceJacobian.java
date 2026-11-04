@@ -50,7 +50,7 @@ final class V3FiniteDifferenceJacobian {
         control.checkpoint();
         double[] base = coordinates.encode(state);
         V3MeshResidual baseResidual = evaluator.evaluate(state, workspaceFactory.newWorkspace());
-        int rows = baseResidual.rows().size();
+        int rows = baseResidual.size();
         if (rows != base.length) throw new IllegalArgumentException("V3 MESH Jacobian requires a square residual/coordinate map");
         if (stageColored || base.length >= STAGE_COLORED_MINIMUM_COORDINATES) {
             return stageColoredJacobian(evaluator, coordinates, base, baseResidual, workspaceFactory, differenceScale, control, compact);
@@ -71,7 +71,7 @@ final class V3FiniteDifferenceJacobian {
         control = Objects.requireNonNull(control, "control");
         control.checkpoint();
         double[] base = coordinates.encode(state);
-        int rows = baseResidual.rows().size();
+        int rows = baseResidual.size();
         if (rows != base.length) throw new IllegalArgumentException("V3 MESH Jacobian requires a square residual/coordinate map");
         if (stageColored || base.length >= STAGE_COLORED_MINIMUM_COORDINATES) {
             return stageColoredJacobian(evaluator, coordinates, base, baseResidual, workspaceFactory, differenceScale, control, compact);
@@ -140,7 +140,7 @@ final class V3FiniteDifferenceJacobian {
                 int columnNode = coordinates.unknowns().get(column).id().node();
                 double step = step(base[column], coordinates.unknowns().get(column).id().family(), differenceScale);
                 for (int row = 0; row < base.length; row++) {
-                    if (Math.abs(baseResidual.rows().get(row).equation().node() - columnNode) > 1) continue;
+                    if (Math.abs(baseResidual.equation(row).node() - columnNode) > 1) continue;
                     double value = higherResidual != null && lowerResidual != null
                             ? (frozen(higherResidual, row, frozenScales) - frozen(lowerResidual, row, frozenScales))
                                     / (2.0 * step)
@@ -179,7 +179,7 @@ final class V3FiniteDifferenceJacobian {
             throw new IllegalStateException("V3 MESH finite difference has no admissible perturbation");
         }
         requireSameOrdering(baseResidual, higherResidual, lowerResidual);
-        for (int row = 0; row < baseResidual.rows().size(); row++) {
+        for (int row = 0; row < baseResidual.size(); row++) {
             double value = higherResidual != null && lowerResidual != null
                     ? (frozen(higherResidual, row, frozenScales) - frozen(lowerResidual, row, frozenScales)) / (2.0 * step)
                     : higherResidual != null
@@ -192,9 +192,9 @@ final class V3FiniteDifferenceJacobian {
 
     private static void requireSameOrdering(
             V3MeshResidual baseResidual, V3MeshResidual higherResidual, V3MeshResidual lowerResidual) {
-        for (int row = 0; row < baseResidual.rows().size(); row++) {
-            if ((higherResidual != null && !baseResidual.rows().get(row).equation().equals(higherResidual.rows().get(row).equation()))
-                    || (lowerResidual != null && !baseResidual.rows().get(row).equation().equals(lowerResidual.rows().get(row).equation()))) {
+        for (int row = 0; row < baseResidual.size(); row++) {
+            if ((higherResidual != null && !baseResidual.equation(row).equals(higherResidual.equation(row)))
+                    || (lowerResidual != null && !baseResidual.equation(row).equals(lowerResidual.equation(row)))) {
                 throw new IllegalStateException("V3 MESH residual ordering changed during finite differentiation");
             }
         }
@@ -210,7 +210,7 @@ final class V3FiniteDifferenceJacobian {
      * term, which is zero at a solution and finite-difference noise away from one.</p>
      */
     private static double frozen(V3MeshResidual residual, int row, double[] frozenScales) {
-        return residual.rows().get(row).physicalValue() / frozenScales[row];
+        return residual.physicalValue(row) / frozenScales[row];
     }
 
     private static void requireFinite(double value) {
@@ -219,8 +219,8 @@ final class V3FiniteDifferenceJacobian {
 
     private static Jacobian jacobian(
             V3MeshResidual baseResidual, V3DryMeshCoordinateMap coordinates, MatrixValues values) {
-        List<V3DegreeOfFreedomLedger.EquationId> equations = new ArrayList<>(baseResidual.rows().size());
-        for (V3MeshResidual.Row row : baseResidual.rows()) equations.add(row.equation());
+        List<V3DegreeOfFreedomLedger.EquationId> equations = new ArrayList<>(baseResidual.size());
+        for (int row = 0; row < baseResidual.size(); row++) equations.add(baseResidual.equation(row));
         // Both finite-difference builders relinquish their fresh matrix here. No caller can retain it.
         return new Jacobian(equations, coordinates.unknowns().stream().map(V3DegreeOfFreedomLedger.Unknown::id).toList(), values);
     }
@@ -338,7 +338,7 @@ final class V3FiniteDifferenceJacobian {
                 end[node] = column + 1;
             }
             for (int row = 0; row < size; row++) {
-                int rowNode = residual.rows().get(row).equation().node();
+                int rowNode = residual.equation(row).node();
                 int from = size;
                 int to = 0;
                 for (int node = Math.max(0, rowNode - 1); node <= Math.min(maximumNode, rowNode + 1); node++) {

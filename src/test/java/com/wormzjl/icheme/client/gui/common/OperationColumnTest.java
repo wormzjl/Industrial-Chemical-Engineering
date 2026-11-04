@@ -235,6 +235,10 @@ public class OperationColumnTest {
         var duties = OperationColumn.duties(view, t);
         assertArrayEquals(new String[]{"Condenser", "-7.32", "-8.51"}, duties.get(1));
         assertEquals("Pumparound 4", duties.getLast()[0]);
+        // An air condenser's fans (U2) draw power, not heat: their row reads kW, which its name says.
+        var fans = new OperationView(Phase.RUNNING, ColumnCycle.Limit.NONE, 1, false, null, false, "", true, true, setpoints(1, 1, 1, false), List.of(),
+                List.of(new Duty(DutyKind.FANS, 0, 144700, 361200)), null);
+        assertArrayEquals(new String[]{"Air fans, kW", "144.7", "361.2"}, OperationColumn.duties(fans, t).get(1));
         var solve = OperationColumn.solve(view, t);
         assertArrayEquals(new String[]{"Last solve", "Warm route"}, solve.get(0));
         assertArrayEquals(new String[]{"Age", "72 min"}, solve.get(2));

@@ -56,14 +56,26 @@ public record ColumnDesign(ColumnTrays trays, double diameter) {
                 .orElseThrow(() -> new IllegalArgumentException("the design has no reboiler duty"));
         if (!ColumnComponents.kettleRequired(duty) && !V3SteamFeedSpec.hasSumpFeed(input))
             throw new IllegalArgumentException("without reboiler duty the column needs stripping steam into its bottom tray");
-        double diameter = builtDiameter(input.columnDiameterMetres());
-        var design = new ColumnDesign(trays.withComponents(ColumnComponents.resolve(choices, input.topPressurePascal(), duty, trays.pumparounds().size()))
-                .withOperating(ColumnOperatingPoint.of(input)), diameter);
-        misfit(EquipmentShape.column(diameter, design.trays(), EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(diameter)))
+        var design = new ColumnDesign(layout(trays, input, choices, duty), builtDiameter(input.columnDiameterMetres()));
+        misfit(EquipmentShape.column(design.diameter(), design.trays(), EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(design.diameter())))
                 .ifPresent(reason -> {
                     throw new IllegalArgumentException(reason);
                 });
         return design;
+    }
+
+    /**
+     * The trays a calculator input is built with, its components resolved, at any diameter: what {@link #of} builds before it
+     * checks the shell. The sizing stage tries other diameters on it.
+     */
+    public static ColumnTrays layout(V3ColumnInput input, ColumnComponents.Choices choices) {
+        double duty = input.specifications().stream().filter(V3ColumnSpecification.ReboilerDuty.class::isInstance)
+                .mapToDouble(s -> ((V3ColumnSpecification.ReboilerDuty) s).watts()).findFirst().orElse(0);
+        return layout(ColumnTrays.of(input), input, choices, duty);
+    }
+
+    private static ColumnTrays layout(ColumnTrays trays, V3ColumnInput input, ColumnComponents.Choices choices, double duty) {
+        return trays.withComponents(ColumnComponents.resolve(choices, input.topPressurePascal(), duty, trays.pumparounds().size())).withOperating(ColumnOperatingPoint.of(input));
     }
 
     /**

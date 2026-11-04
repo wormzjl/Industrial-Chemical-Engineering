@@ -45,8 +45,6 @@ public final class MaterialPresets {
     public Column column(String id){var value=columns.get(id);if(value==null)throw new IllegalArgumentException("Unknown column preset: "+id);return value;}
     public Fluid fluid(String id){var value=fluids.get(id);if(value==null)throw new IllegalArgumentException("Unknown fluid preset: "+id);return value;}
     public Network network(){if(network==null)throw new IllegalArgumentException("No fluid network configuration in material catalog");return network;}
-    public List<Descriptor> visibleColumns(){return columns.values().stream().filter(Column::visible)
-            .sorted(Comparator.comparingInt(Column::order).thenComparing(c->c.descriptor().id())).map(Column::descriptor).toList();}
     public static double[] moleFractions(MaterialCatalog.Package p,String assayId) {
         var a=p.assays().get(assayId);if(a==null)throw new IllegalArgumentException("Unknown assay "+assayId+" for "+p.id());
         double[] n=new double[p.components().size()];

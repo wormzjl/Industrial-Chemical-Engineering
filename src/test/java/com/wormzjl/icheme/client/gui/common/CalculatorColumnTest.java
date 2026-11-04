@@ -23,6 +23,7 @@ import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser;
 import com.wormzjl.icheme.science.equipment.ColumnComponents.Pump;
 import java.io.IOException;
@@ -50,13 +51,13 @@ class CalculatorColumnTest {
     private static final Measure M = Measure.fixed(6);
     private static final int[] HEIGHTS = {220, 254, 400, 600};
     private static final List<String> UNITS = List.of("°C", "°F", "K");
-    private static final Path SCREEN = Path.of("src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/ColumnCalculatorV3Screen.java");
+    private static final Path SCREEN = Path.of("src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/ProcessSimulatorScreen.java");
 
     /** The screen's title, the block's English name. */
     private static String blockName() {
         try (var in = CalculatorColumnTest.class.getResourceAsStream("/assets/icheme/lang/en_us.json")) {
             var json = com.google.gson.JsonParser.parseReader(new java.io.InputStreamReader(java.util.Objects.requireNonNull(in), java.nio.charset.StandardCharsets.UTF_8));
-            return json.getAsJsonObject().get("block.icheme.column_calculator_v3").getAsString();
+            return json.getAsJsonObject().get("block.icheme.process_simulator").getAsString();
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
@@ -74,14 +75,18 @@ class CalculatorColumnTest {
         return List.copyOf(out);
     }
 
-    /** The Column page's states: each connection selected (its widest index), with and without the draft's conflict, taking edits or not, in each unit. */
+    /**
+     * The Column page's states: each connection selected (its widest index), with and without the draft's conflict, taking edits or not, in each unit; the
+     * block's bar and kmol/h, and the simulator door's widest display units, kPa and kmol/min.
+     */
     private static List<ColumnInput> columnInputs() {
         var out = new ArrayList<ColumnInput>();
         for (boolean conflict : new boolean[]{false, true})
             for (boolean editable : new boolean[]{false, true})
                 for (var c : Connection.values())
                     for (var unit : UNITS)
-                        out.add(new ColumnInput(conflict, editable, unit, c, c == Connection.STEAM ? 1 : 3, editable, editable, !editable, editable));
+                        for (var units : List.of(List.of("bar", "kmol/h"), List.of("kPa", "kmol/min")))
+                            out.add(new ColumnInput(conflict, editable, unit, units.get(0), units.get(1), c, c == Connection.STEAM ? 1 : 3, editable, editable, !editable, editable));
         return out;
     }
 
@@ -107,7 +112,13 @@ class CalculatorColumnTest {
         for (boolean conflict : new boolean[]{false, true})
             for (var condenser : Condenser.values())
                 for (var pumps : List.of(List.<Pump>of(), List.of(Pump.STANDARD, Pump.IN_LINE, Pump.STANDARD, Pump.IN_LINE)))
-                    for (boolean saves : new boolean[]{false, true}) out.add(new EquipmentInput(conflict, condenser, saves ? Pump.IN_LINE : Pump.STANDARD, pumps, saves));
+                    for (boolean saves : new boolean[]{false, true})
+                        // S3b: with a kettle and every count at its most, and with one unit a step and no kettle.
+                        for (boolean kettle : new boolean[]{false, true}) {
+                            var most = ColumnComponents.MAX_UNITS;
+                            var units = kettle ? new ColumnComponents.Units(most, most, java.util.Collections.nCopies(pumps.size(), most), most) : ColumnComponents.Units.ONE;
+                            out.add(new EquipmentInput(conflict, condenser, saves ? Pump.IN_LINE : Pump.STANDARD, pumps, saves, units, kettle));
+                        }
         return out;
     }
 
@@ -206,10 +217,10 @@ class CalculatorColumnTest {
             CalculatorColumn.draw(new Recording(), d, t);
         }
         var keys = screenKeys();
-        assertTrue(keys.size() > 60 && keys.contains("column.reading.pressure") && keys.contains("fluid.theme.dark"), "the screen's own keys found: " + keys);
+        assertTrue(keys.size() > 15 && keys.contains("flowsheet.file.cancel") && keys.contains("fluid.theme.dark"), "the screen's own keys found: " + keys);
         for (var key : keys) t.get(key);
         assertEquals(Set.of(), t.missing);
-        assertTrue(t.asked.size() > 180, "the cases ask for the screen's texts: " + t.asked.size());
+        assertTrue(t.asked.size() > 170, "the cases ask for the screen's texts: " + t.asked.size());
     }
 
     /** A plate in one line, no text cut (a key's text in its key too), widgets at least 40 px (a stepper its own width) inside their rows, one per key, boxes in line. */
@@ -355,27 +366,27 @@ class CalculatorColumnTest {
     @Test
     void eachPageShowsItsKeys() {
         var t = texts();
-        var none = CalculatorColumn.column(new ColumnInput(false, true, "°C", Connection.NONE, 0, true, true, true, true), t);
+        var none = CalculatorColumn.column(new ColumnInput(false, true, "°C", "bar", "kmol/h", Connection.NONE, 0, true, true, true, true), t);
         assertTrue(none.two());
         assertEquals(List.of("s2", "s9", "s7", "s0", "s1", "s3"), keys(none.left()));
         assertEquals(List.of("s4", "s6", "s5", "add:draw", "add:pa", "add:steam"), keys(none.right()));
         assertEquals(List.of(none.left(), none.right()), none.at(464));
         assertEquals(List.of(none.all()), none.at(463));
-        var conflict = CalculatorColumn.column(new ColumnInput(true, true, "°C", Connection.NONE, 0, true, true, true, true), t);
+        var conflict = CalculatorColumn.column(new ColumnInput(true, true, "°C", "bar", "kmol/h", Connection.NONE, 0, true, true, true, true), t);
         assertEquals(List.of("use_server", "keep_draft"), keys(conflict.left()).subList(0, 2));
         assertEquals(List.of("s4", "s6", "s5", "add:draw", "add:pa", "add:steam", "d2rate", "d2stage", "remove"),
-                keys(CalculatorColumn.column(new ColumnInput(false, true, "°C", Connection.DRAW, 2, true, true, true, true), t).right()));
-        var pa = CalculatorColumn.column(new ColumnInput(false, true, "°C", Connection.PA, 1, true, false, true, false), t);
+                keys(CalculatorColumn.column(new ColumnInput(false, true, "°C", "bar", "kmol/h", Connection.DRAW, 2, true, true, true, true), t).right()));
+        var pa = CalculatorColumn.column(new ColumnInput(false, true, "°C", "bar", "kmol/h", Connection.PA, 1, true, false, true, false), t);
         assertEquals(List.of("c1duty", "c1draw", "c1return", "split:uniform", "split:return", "remove"), keys(pa.right()).subList(6, 12));
         var split = buttons(pa.right());
         assertTrue(split.get("split:uniform").latched() && !split.get("split:uniform").active() && split.get("split:return").active() && !split.get("split:return").latched());
         assertFalse(split.get("add:draw").active() || split.get("add:steam").active());
         assertTrue(split.get("add:pa").active());
         assertEquals(t.get("column.group.pa", 2), ((Column.Group) pa.right().getLast()).title());
-        var readOnly = buttons(CalculatorColumn.column(new ColumnInput(false, false, "°C", Connection.STEAM, 1, false, false, false, false), t).right());
+        var readOnly = buttons(CalculatorColumn.column(new ColumnInput(false, false, "°C", "bar", "kmol/h", Connection.STEAM, 1, false, false, false, false), t).right());
         assertFalse(readOnly.get("remove").active() || readOnly.get("add:draw").active());
         assertEquals(List.of("t1rate", "t1stage", "t1T", "remove"),
-                keys(CalculatorColumn.column(new ColumnInput(false, true, "°C", Connection.STEAM, 1, true, true, true, true), t).right()).subList(6, 10));
+                keys(CalculatorColumn.column(new ColumnInput(false, true, "°C", "bar", "kmol/h", Connection.STEAM, 1, true, true, true, true), t).right()).subList(6, 10));
 
         var feed = CalculatorColumn.feed(false, true, "K", t);
         assertFalse(feed.two());
@@ -398,11 +409,34 @@ class CalculatorColumnTest {
         assertTrue(profile.get("metric:drop").latched() && profile.get("metric:temperature").active() && !profile.get("metric:temperature").latched());
 
         var equipment = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.EXCHANGER, Pump.IN_LINE, List.of(Pump.STANDARD, Pump.IN_LINE), false), t);
-        assertEquals(List.of("condenser:air_cooler", "condenser:exchanger", "reflux:standard", "reflux:in_line", "pa0:standard", "pa0:in_line", "pa1:standard",
-                "pa1:in_line", "save_design"), keys(equipment.right()));
+        assertEquals(List.of("condenser:air_cooler", "condenser:exchanger", "condenser:air_then_water", "units/condenser", "units/condenser-", "units/condenser+", "reflux:standard", "reflux:in_line",
+                "pa0:standard", "pa0:in_line", "units/pa0", "units/pa0-", "units/pa0+", "pa1:standard", "pa1:in_line", "units/pa1", "units/pa1-", "units/pa1+", "save_design"),
+                keys(equipment.right()));
         var chosen = buttons(equipment.right());
         assertTrue(chosen.get("condenser:exchanger").latched() && chosen.get("reflux:in_line").latched() && chosen.get("pa0:standard").latched() && chosen.get("pa1:in_line").latched());
         assertFalse(chosen.get("save_design").active());
+        // S3b: the counts as the door holds them, the kettle's only where the design has one; an exchanger counts shells, an air cooler banks.
+        var counted = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.AIR_COOLER, Pump.STANDARD, List.of(Pump.STANDARD),
+                true, new ColumnComponents.Units(2, 3, List.of(4)), true), t).right();
+        var settings = new LinkedHashMap<String, Column.Setting>();
+        for (var row : counted)
+            if (row instanceof Column.Group g) for (var r : g.rows()) if (r instanceof Column.Setting s) settings.put(s.key(), s);
+        assertEquals(List.of("units/condenser", "units/kettle", "units/pa0"), List.copyOf(settings.keySet()));
+        assertEquals(List.of("2", "3", "4"), settings.values().stream().map(Column.Setting::value).toList());
+        assertEquals(t.get("column.units.banks"), settings.get("units/condenser").label());
+        assertEquals(t.get("column.units.shells"), CalculatorColumn.equipment(new EquipmentInput(false, Condenser.EXCHANGER, Pump.STANDARD, List.of(), true), t).right().stream()
+                .filter(r -> r instanceof Column.Group).map(r -> (Column.Group) r).flatMap(g -> g.rows().stream()).filter(r -> r instanceof Column.Setting).map(r -> ((Column.Setting) r).label()).findFirst().orElseThrow());
+        // An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): its air cooler's banks, then its water trim's shells.
+        var trimmed = new LinkedHashMap<String, Column.Setting>();
+        var trimPage = CalculatorColumn.equipment(new EquipmentInput(false, Condenser.AIR_THEN_WATER, Pump.STANDARD, List.of(), true,
+                new ColumnComponents.Units(2, 1, List.of(), 3), false), t).right();
+        for (var row : trimPage)
+            if (row instanceof Column.Group g) for (var r : g.rows()) if (r instanceof Column.Setting s) trimmed.put(s.key(), s);
+        assertEquals(List.of("units/condenser", "units/trim"), List.copyOf(trimmed.keySet()));
+        assertEquals(List.of(t.get("column.units.banks"), t.get("column.units.trim_shells")), trimmed.values().stream().map(Column.Setting::label).toList());
+        assertEquals(List.of("2", "3"), trimmed.values().stream().map(Column.Setting::value).toList());
+        assertTrue(buttons(trimPage).get("condenser:air_then_water").latched());
+        assertFalse(buttons(trimPage).get("condenser:air_cooler").latched());
 
         assertEquals(List.of("save_json", "back"), keys(CalculatorColumn.presets(false, true, t).right()));
         assertEquals(List.of("back", "refresh", "open_folder"), keys(CalculatorColumn.presets(false, false, t).right()));
@@ -457,9 +491,17 @@ class CalculatorColumnTest {
                     groups.put("results " + conflict + " " + v, list);
                 }
             for (boolean conflict : new boolean[]{false, true}) {
-                var list = new ArrayList<Rows>();
-                for (var in : equipmentInputs()) if (in.conflict() == conflict && in.pumparounds().size() == 4) list.add(CalculatorColumn.equipment(in, t));
-                groups.put("equipment " + conflict, list);
+                // The kettle's row shows with the design's reboiler duty, the trim's with an air-then-water condenser; the counts' values move no widget (S3b).
+                for (boolean kettle : new boolean[]{false, true})
+                    for (boolean trim : new boolean[]{false, true}) {
+                        var list = new ArrayList<Rows>();
+                        for (var in : equipmentInputs())
+                            if (in.conflict() == conflict && in.pumparounds().size() == 4 && in.kettle() == kettle && (in.condenser() == Condenser.AIR_THEN_WATER) == trim) {
+                                list.add(CalculatorColumn.equipment(in, t));
+                                list.add(CalculatorColumn.equipment(new EquipmentInput(conflict, in.condenser(), in.reflux(), in.pumparounds(), in.saves(), ColumnComponents.Units.ONE.fit(4), kettle), t));
+                            }
+                        groups.put("equipment " + conflict + " " + kettle + " " + trim, list);
+                    }
                 var feeds = new ArrayList<Rows>();
                 for (boolean editable : new boolean[]{false, true}) for (var unit : UNITS) feeds.add(CalculatorColumn.feed(conflict, editable, unit, t));
                 groups.put("feed " + conflict, feeds);
@@ -608,8 +650,8 @@ class CalculatorColumnTest {
             for (int height : new int[]{101, 135, 281, 481}) {
                 var box = new Rect(11, 77, width, height);
                 var canvas = new Recording();
-                int head = CalculatorColumn.heading(canvas, box, t.get("column.traffic"), legend, M);
-                assertEquals(head, CalculatorColumn.heading(null, box, t.get("column.traffic"), legend, M));
+                int head = CalculatorColumn.heading(canvas, box, t.get("flowsheet.door.profile_traffic", "kmol/min"), legend, M);
+                assertEquals(head, CalculatorColumn.heading(null, box, t.get("flowsheet.door.profile_traffic", "kmol/min"), legend, M));
                 var plot = CalculatorColumn.plot(box, head);
                 int nodes = 64;
                 double[][] series = new double[4][nodes];
@@ -619,7 +661,7 @@ class CalculatorColumnTest {
                 double[] drops = new double[nodes];
                 for (int n = 2; n < nodes - 1; n++) drops[n] = 0.4 + n * 0.01;
                 var bars = new Recording();
-                CalculatorColumn.drops(bars, plot, drops);
+                CalculatorColumn.drops(bars, plot, drops, v -> v + " kPa");
                 for (var plotted : List.of(profile, bars)) {
                     canvas.places.addAll(plotted.places);
                     // The tray numbers left of the plot, a line apart.

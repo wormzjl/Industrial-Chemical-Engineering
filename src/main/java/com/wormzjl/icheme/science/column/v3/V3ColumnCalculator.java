@@ -230,7 +230,7 @@ public final class V3ColumnCalculator {
             java.util.function.Consumer<V3NeuralSeed> observer, double liquidSupplyScreenRatio,
             NewtonTrace trace) {
         return com.wormzjl.icheme.science.material.MaterialRuntime.pinned(input.packageId(),
-                () -> calculateInCatalog(input, control, cutoff, closureFraction, options, model, observer, liquidSupplyScreenRatio, trace));
+                () -> V3SolveScratch.within(() -> calculateInCatalog(input, control, cutoff, closureFraction, options, model, observer, liquidSupplyScreenRatio, trace)));
     }
 
     private static V3ColumnOutcome calculateInCatalog(V3ColumnInput input, V3SolveControl control,
@@ -799,8 +799,8 @@ public final class V3ColumnCalculator {
         SolvePolicy policy = strategy == V3SolveStrategy.AGGRESSIVE && warmStart == null
                 ? SolvePolicy.OFF_FAST : SolvePolicy.OFF;
         return com.wormzjl.icheme.science.material.MaterialRuntime.pinned(input.packageId(),
-                () -> calculateInCatalog(input, control, policy, liquidSupplyScreenRatio,
-                        strategy, warmStart));
+                () -> V3SolveScratch.within(() -> calculateInCatalog(input, control, policy, liquidSupplyScreenRatio,
+                        strategy, warmStart)));
     }
 
     /**
@@ -820,8 +820,8 @@ public final class V3ColumnCalculator {
     private static V3ColumnOutcome calculate(
             V3ColumnInput input, V3SolveControl control, SolvePolicy policy, double liquidSupplyScreenRatio) {
         return com.wormzjl.icheme.science.material.MaterialRuntime.pinned(input.packageId(),
-                () -> calculateInCatalog(input, control, policy, liquidSupplyScreenRatio,
-                        V3SolveStrategy.DRIFT_SPEC, null));
+                () -> V3SolveScratch.within(() -> calculateInCatalog(input, control, policy, liquidSupplyScreenRatio,
+                        V3SolveStrategy.DRIFT_SPEC, null)));
     }
 
     private static V3ColumnOutcome calculateInCatalog(
@@ -1476,13 +1476,13 @@ public final class V3ColumnCalculator {
             V3MeshResidual after = evaluator.evaluate(projected, workspace);
             double beforeMerit = 0.0, afterMerit = 0.0;
             double beforeEnergy = 0.0, afterEnergy = 0.0;
-            for (int row = 0; row < before.rows().size(); row++) {
-                double scale = before.rows().get(row).scale();
-                double a = before.rows().get(row).physicalValue() / scale;
-                double b = after.rows().get(row).physicalValue() / scale;
+            for (int row = 0; row < before.size(); row++) {
+                double scale = before.scale(row);
+                double a = before.physicalValue(row) / scale;
+                double b = after.physicalValue(row) / scale;
                 beforeMerit += a * a;
                 afterMerit += b * b;
-                if (before.rows().get(row).equation().family() == V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE) {
+                if (before.equation(row).family() == V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE) {
                     beforeEnergy = Math.max(beforeEnergy, Math.abs(a));
                     afterEnergy = Math.max(afterEnergy, Math.abs(b));
                 }
@@ -3561,14 +3561,12 @@ public final class V3ColumnCalculator {
             if (Double.isNaN(initialMaximumScaledResidual)) initialMaximumScaledResidual = maximum;
             finalMaximumScaledResidual = maximum;
             finalState = state;
-            V3MeshResidual.Row dominant = null;
-            for (V3MeshResidual.Row row : residual.rows()) {
-                if (dominant == null || Math.abs(row.scaledValue()) > Math.abs(dominant.scaledValue())) dominant = row;
+            int dominant = 0;
+            for (int row = 1; row < residual.size(); row++) {
+                if (Math.abs(residual.scaledValue(row)) > Math.abs(residual.scaledValue(dominant))) dominant = row;
             }
-            if (dominant != null) {
-                finalDominantEquation = dominant.equation();
-                finalDominantPhysicalResidual = dominant.physicalValue();
-            }
+            finalDominantEquation = residual.equation(dominant);
+            finalDominantPhysicalResidual = residual.physicalValue(dominant);
         }
 
         @Override

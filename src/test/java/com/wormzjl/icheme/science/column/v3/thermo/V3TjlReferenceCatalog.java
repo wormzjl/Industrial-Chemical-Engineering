@@ -24,7 +24,9 @@ public final class V3TjlReferenceCatalog {
 
     public static MaterialCatalog catalog() {
         var resources=new LinkedHashMap<>(MaterialRuntime.current().resources());
-        resources.keySet().removeIf(key->key.contains("/networks/")); // Independent column-only numerical oracle.
+        resources.keySet().removeIf(key->key.contains("/networks/")||key.contains("/presets/fluid_")); // Independent column-only numerical oracle.
+        // The old package below replaces the bundled one, so the assays regrouped on that one leave with it.
+        resources.entrySet().removeIf(row->row.getKey().contains("/assays/")&&row.getValue().contains("\"icheme:tjl20_methane\""));
         try(var stream=Objects.requireNonNull(V3TjlReferenceCatalog.class.getResourceAsStream(RECORDS),RECORDS);
                 var reader=new InputStreamReader(stream,StandardCharsets.UTF_8)) {
             for(var entry:JsonParser.parseReader(reader).getAsJsonArray()) {

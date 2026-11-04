@@ -14,34 +14,14 @@ import java.util.*;
 @GameTestHolder("icheme_fluid_test")
 @PrefixGameTestTemplate(false)
 public class MaterialReloadGameTests {
-    @GameTest(template="empty",timeoutTicks=100,batch="column-presets")
-    public static void columnPresetsLoadWithRevisionChecks(GameTestHelper helper) {
-        var pos=helper.absolutePos(net.minecraft.core.BlockPos.ZERO);
-        helper.getLevel().setBlockAndUpdate(pos,com.wormzjl.icheme.registry.ModBlocks.COLUMN_CALCULATOR_V3.get().defaultBlockState());
-        var calculator=(com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity)helper.getLevel().getBlockEntity(pos);
-        for (var choice:com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset.values()) {
-            var before=calculator.state(0);
-            var input=choice.input(MaterialRuntime.active());
-            if (!calculator.tryLoadPreset(before.inputRevision(),input,"Loaded "+choice.label())) {
-                helper.fail("Preset failed to load: "+choice.id());return;
-            }
-            var after=calculator.state(0);
-            if (!after.input().equals(input) || after.displayResult().isPresent()
-                    || after.inputRevision()!=before.inputRevision()+1
-                    || calculator.tryLoadPreset(before.inputRevision(),input,"Stale")) {
-                helper.fail("Preset state/revision contract failed: "+choice.id());return;
-            }
-        }
-        helper.succeed();
-    }
     @GameTest(template="empty",timeoutTicks=2400,batch="material-resource-reload")
     public static void materialReloadIsAtomic(GameTestHelper helper) throws Exception {
         var server=helper.getLevel().getServer();
         var original=MaterialRuntime.active();
+        var feedPackage=original.requirePackage("icheme:tjl20_methane");
         for (String crude : List.of("wti_light_export", "upper_zakum", "bonga", "dalia", "cold_lake_blend")) {
-            var feedPackage=original.requirePackage("icheme:"+crude+"_tjl20");
             var assay=feedPackage.assays().get("icheme:"+crude);
-            if (!feedPackage.components().equals(original.requirePackage("icheme:tjl20_methane").components()) || assay==null || !assay.basis().equals("mass")) {
+            if (assay==null || !assay.basis().equals("mass")) {
                 helper.fail("Bundled regrouped crude assay was not loaded: "+crude);return;
             }
         }

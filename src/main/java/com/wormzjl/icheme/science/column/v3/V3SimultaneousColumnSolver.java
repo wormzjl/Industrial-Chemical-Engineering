@@ -251,6 +251,33 @@ final class V3SimultaneousColumnSolver {
             int maximumLocalBlockAttempts,
             RungBudget budget,
             Extension extension) {
+        V3SolveScratch scratch = V3SolveScratch.borrow();
+        try {
+            return solve(problem, evaluator, coordinates, initialState, workspaceFactory, initialConvergenceEvidence,
+                    maximumIterations, scaledTolerance, differenceScale, control, trace, maximumFrozenFineJacobianSteps,
+                    maximumLocalBlockAttempts, budget, extension, scratch);
+        } finally {
+            V3SolveScratch.release(scratch);
+        }
+    }
+
+    private static Attempt solve(
+            V3ColumnProblem problem,
+            V3MeshResidualEvaluator evaluator,
+            V3DryMeshCoordinateMap coordinates,
+            V3DryMeshState initialState,
+            V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory workspaceFactory,
+            V3ConvergenceEvidence initialConvergenceEvidence,
+            int maximumIterations,
+            double scaledTolerance,
+            V3FiniteDifferenceJacobian.DifferenceScale differenceScale,
+            V3SolveControl control,
+            NewtonTrace trace,
+            int maximumFrozenFineJacobianSteps,
+            int maximumLocalBlockAttempts,
+            RungBudget budget,
+            Extension extension,
+            V3SolveScratch scratch) {
         problem = Objects.requireNonNull(problem, "problem");
         evaluator = Objects.requireNonNull(evaluator, "evaluator");
         coordinates = Objects.requireNonNull(coordinates, "coordinates");
@@ -276,7 +303,7 @@ final class V3SimultaneousColumnSolver {
                 newWorkspaceFactory(workspaceFactory.newWorkspace());
         workspaceFactory = reusableWorkspace;
         V3StageBlockLayout layout = new V3StageBlockLayout(problem);
-        V3BandedPivotedSolver.Workspace linearWorkspace = new V3BandedPivotedSolver.Workspace();
+        V3BandedPivotedSolver.Workspace linearWorkspace = scratch.linear;
         int maximumLineSearchSteps = differenceScale == V3FiniteDifferenceJacobian.DifferenceScale.COARSE
                 ? COARSE_RECOVERY_MAXIMUM_LINE_SEARCH_STEPS : FINE_MAXIMUM_LINE_SEARCH_STEPS;
         // Only a budget that asks for the stall stop or the progress extension pays for its history; null is
@@ -370,7 +397,7 @@ final class V3SimultaneousColumnSolver {
                 boolean localBlockAccepted = false;
                 try {
                     V3BlockJacobian localJacobian = V3BlockJacobianAssembler.assembleLocal(
-                            problem, evaluator, coordinates, state, workspaceFactory, differenceScale, control);
+                            problem, evaluator, coordinates, state, workspaceFactory, differenceScale, control, scratch);
                     V3BandedPivotedSolver.Result localLinear = V3BandedPivotedSolver.solve(
                             localJacobian.toBandedMatrix(linearWorkspace), negativeScaledResidual(residual), linearWorkspace);
                     if (localLinear instanceof V3BandedPivotedSolver.Result.Success localSuccess) {
@@ -649,14 +676,14 @@ final class V3SimultaneousColumnSolver {
     }
 
     private static double[] negativeScaledResidual(V3MeshResidual residual) {
-        double[] rightHandSide = new double[residual.rows().size()];
-        for (int row = 0; row < rightHandSide.length; row++) rightHandSide[row] = -residual.rows().get(row).scaledValue();
+        double[] rightHandSide = new double[residual.size()];
+        for (int row = 0; row < rightHandSide.length; row++) rightHandSide[row] = -residual.scaledValue(row);
         return rightHandSide;
     }
 
     private static double scaledSquaredNorm(V3MeshResidual residual) {
         double norm = 0.0;
-        for (V3MeshResidual.Row row : residual.rows()) norm += row.scaledValue() * row.scaledValue();
+        for (int row = 0; row < residual.size(); row++) norm += residual.scaledValue(row) * residual.scaledValue(row);
         return norm;
     }
 
@@ -664,7 +691,7 @@ final class V3SimultaneousColumnSolver {
     private static double frozenSquaredNorm(V3MeshResidual residual, double[] frozenScales) {
         double norm = 0.0;
         for (int row = 0; row < frozenScales.length; row++) {
-            double scaled = residual.rows().get(row).physicalValue() / frozenScales[row];
+            double scaled = residual.physicalValue(row) / frozenScales[row];
             norm += scaled * scaled;
         }
         return norm;
@@ -711,7 +738,7 @@ final class V3SimultaneousColumnSolver {
             V3FiniteDifferenceJacobian.Jacobian jacobian, V3MeshResidual residual, V3DryMeshCoordinateMap coordinates) {
         double[] direction = new double[jacobian.unknowns().size()];
         for (int row = 0; row < direction.length; row++) {
-            double scaledResidual = residual.rows().get(row).scaledValue();
+            double scaledResidual = residual.scaledValue(row);
             int first = Double.isFinite(scaledResidual) ? jacobian.firstStoredColumn(row) : 0;
             int end = Double.isFinite(scaledResidual) ? jacobian.storedColumnEnd(row) : direction.length;
             for (int column = first; column < end; column++) {

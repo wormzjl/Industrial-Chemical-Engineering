@@ -304,6 +304,11 @@ public final class ProcessUnit {
         return throwCount * (.05 + 1.7 * b * b);
     }
 
+    /** A turbo compressor's inlet flow, m³/h, for impeller {@code d}. */
+    public static double turboFlow(double d) {
+        return CentrifugalCompressorDesign.flow(d);
+    }
+
     /** A compressor's displacement, m³/h: double-acting cylinders of bore {@code b}, {@code throwCount} of them. */
     public static double displacement(double b, int throwCount) {
         return throwCount * 2 * Math.PI / 4 * b * b * stroke(b) * compressorSpeed(b) * 60;

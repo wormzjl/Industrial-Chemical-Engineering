@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.wormzjl.icheme.science.column.v3.thermo.V3CrudeFeed;
 import com.wormzjl.icheme.science.column.v3.thermo.V3FlashResult;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;

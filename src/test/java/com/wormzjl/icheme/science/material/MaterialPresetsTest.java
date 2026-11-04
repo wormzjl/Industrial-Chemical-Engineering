@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.google.gson.*;
 import com.wormzjl.icheme.runtime.fluid.*;
 import com.wormzjl.icheme.science.fluid.thermo.*;
-import com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -19,15 +18,27 @@ import java.io.InputStreamReader;
 
 class MaterialPresetsTest {
     private static final String ROOT="data/icheme/materials/";
-    @Test void allSixInputsRemainExactlyEqualToThePreFrameworkQualificationInputs() throws Exception {
+    /** Every crude from its stream and tower templates (process simulator plan 3.7) is its qualification input to rounding. */
+    @Test void allSixInputsRemainTheQualificationInputs() throws Exception {
         try(var stream=getClass().getResourceAsStream("/materials/column-preset-inputs.json")) {
             var expected=JsonParser.parseReader(new InputStreamReader(stream,StandardCharsets.UTF_8)).getAsJsonArray();
             assertEquals(6,expected.size());
             for(var row:expected) {
-                var fixture=row.getAsJsonObject();var actual=ColumnInputPreset.fromId(fixture.get("id").getAsString()).input(MaterialCatalog.bundled());
-                assertEquals(fixture.get("input"),new Gson().toJsonTree(actual));
+                var fixture=row.getAsJsonObject();var actual=com.wormzjl.icheme.science.column.v3.V3TestInputs.crude(MaterialCatalog.bundled(),fixture.get("id").getAsString());
+                assertClose(fixture.get("input"),new Gson().toJsonTree(actual),fixture.get("id").getAsString());
             }
         }
+    }
+    private static void assertClose(JsonElement expected,JsonElement actual,String path) {
+        if(expected.isJsonArray()) {
+            assertEquals(expected.getAsJsonArray().size(),actual.getAsJsonArray().size(),path);
+            for(int i=0;i<expected.getAsJsonArray().size();i++)assertClose(expected.getAsJsonArray().get(i),actual.getAsJsonArray().get(i),path+"["+i+"]");
+        } else if(expected.isJsonObject()) {
+            assertEquals(expected.getAsJsonObject().keySet(),actual.getAsJsonObject().keySet(),path);
+            for(String key:expected.getAsJsonObject().keySet())assertClose(expected.getAsJsonObject().get(key),actual.getAsJsonObject().get(key),path+"."+key);
+        } else if(expected.isJsonPrimitive()&&expected.getAsJsonPrimitive().isNumber()) {
+            assertEquals(expected.getAsDouble(),actual.getAsDouble(),Math.abs(expected.getAsDouble())*1e-12,path);
+        } else assertEquals(expected,actual,path);
     }
     @Test void exampleWholeRecordOverridePreservesAllExistingTransportData() throws Exception {
         var original=MaterialCatalog.bundled();var resources=new HashMap<>(original.resources());String path=ROOT+"properties/tjl20_methane.json";
@@ -50,13 +61,13 @@ class MaterialPresetsTest {
     }
     @Test void customPresetIsServerDefinedAndInvalidOverridesFailBeforePublication() {
         var original=MaterialCatalog.bundled();var resources=new HashMap<>(original.resources());String path=ROOT+"presets/column_custom.json";
-        var preset=JsonParser.parseString(resources.get(ROOT+"presets/column_dalia.json")).getAsJsonObject();
+        var preset=JsonParser.parseString(resources.get(ROOT+"presets/column_tia_juana.json")).getAsJsonObject();
         preset.addProperty("id","custom_crude");preset.addProperty("label","Server crude");preset.addProperty("translation_key","server.crude");
         preset.getAsJsonObject("operating").addProperty("feedTemperatureKelvin",650);resources.put(path,preset.toString());
-        var changed=MaterialCatalog.parse(resources);var choice=ColumnInputPreset.fromId(changed,"custom_crude");
-        assertEquals(650,choice.input(changed).feedTemperatureKelvin());assertTrue(changed.presets().visibleColumns().contains(choice.descriptor(changed)));
-        assertThrows(IllegalArgumentException.class,()->ColumnInputPreset.fromId(original,"custom_crude"));
-        assertEquals(original.physicsContent("icheme:dalia_tjl20",original.requirePackage("icheme:dalia_tjl20").components()),changed.physicsContent("icheme:dalia_tjl20",changed.requirePackage("icheme:dalia_tjl20").components()));
+        var changed=MaterialCatalog.parse(resources);var choice=changed.presets().column("custom_crude");
+        assertEquals(650,choice.input(changed).feedTemperatureKelvin());
+        assertThrows(IllegalArgumentException.class,()->original.presets().column("custom_crude"));
+        assertEquals(original.physicsContent("icheme:tjl20_methane",original.requirePackage("icheme:tjl20_methane").components()),changed.physicsContent("icheme:tjl20_methane",changed.requirePackage("icheme:tjl20_methane").components()));
         preset.getAsJsonObject("operating").addProperty("stageCount",2);resources.put(path,preset.toString());
         var failure=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(resources));assertTrue(failure.getMessage().contains(path));
         preset.addProperty("assay","missing:assay");resources.put(path,preset.toString());
@@ -111,7 +122,11 @@ class MaterialPresetsTest {
                     assertEquals(row.getAsJsonArray("mass_fractions").get(i).getAsDouble(),
                             feed[i] * resolved.properties().get(i).molecularWeight() / totalMass, 1e-14);
                 }
-                assertTrue(thermo.advisoryEvidence().stream().anyMatch(s -> s.startsWith("ESTIMATED_HEAVY_TAIL:")));
+                // The crude's own evidence stays with its data (the package's lines are the shared basis's).
+                String file = catalog.resources().get(ROOT + "assays/" + assayId.substring("icheme:".length()) + ".json");
+                var evidence = JsonParser.parseString(file).getAsJsonObject().getAsJsonObject("provenance").getAsJsonArray("advisory_evidence").toString();
+                for (String line : List.of("SHARED_COMPONENT_SURROGATE:", "ASSAY_SOURCE:", "C1_C2_ALLOCATION:", "ESTIMATED_HEAVY_TAIL:", "CONTAMINANTS:", "TRANSPORT_SURROGATE:"))
+                    assertTrue(evidence.contains(line), assayId + " " + line);
                 var flash = thermo.flashTP(638.15, 267_250, feed, thermo.newWorkspace());
                 assertEquals(V3FeedPhase.TWO_PHASE, flash.phase(), packageId + ": " + flash.detail());
                 assertTrue(Double.isFinite(flash.molarEnthalpyJoulesPerMol()));

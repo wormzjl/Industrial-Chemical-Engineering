@@ -7,11 +7,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The one reader of typed fields in the material data's JSON. Every failure is an {@link IllegalArgumentException}
+ * The one reader of typed fields in the material data's JSON and the template files. Every failure is an {@link IllegalArgumentException}
  * whose message starts with the field's label (its key unless the caller names it), so a loader that prefixes the
  * file it read reports the file and the field.
  */
-final class JsonFields {
+public final class JsonFields {
     /** The longest text field the material data may carry. */
     static final int MAX_TEXT=2048;
 
@@ -27,14 +27,14 @@ final class JsonFields {
         if(!e.isJsonObject())throw new IllegalArgumentException(key+": expected object");
         return e.getAsJsonObject();
     }
-    static JsonArray array(JsonObject o,String key){return array(o,key,key);}
+    public static JsonArray array(JsonObject o,String key){return array(o,key,key);}
     static JsonArray array(JsonObject o,String key,String label) {
         var e=required(o,key,label);
         if(!e.isJsonArray())throw new IllegalArgumentException(label+": expected array");
         return e.getAsJsonArray();
     }
     /** A nonblank string of at most {@link #MAX_TEXT} characters. */
-    static String text(JsonObject o,String key){return text(required(o,key),key);}
+    public static String text(JsonObject o,String key){return text(required(o,key),key);}
     private static String text(JsonElement e,String label) {
         if(!e.isJsonPrimitive()||!e.getAsJsonPrimitive().isString())throw new IllegalArgumentException(label+": expected string");
         String s=e.getAsString();
@@ -58,7 +58,7 @@ final class JsonFields {
         return e.getAsBoolean();
     }
     /** A finite number. */
-    static double number(JsonObject o,String key){return number(required(o,key),key);}
+    public static double number(JsonObject o,String key){return number(required(o,key),key);}
     private static double number(JsonElement e,String label) {
         if(!e.isJsonPrimitive()||!e.getAsJsonPrimitive().isNumber())throw new IllegalArgumentException(label+": expected number");
         double d=e.getAsDouble();
@@ -66,13 +66,13 @@ final class JsonFields {
         return d;
     }
     /** A finite number above zero. */
-    static double positive(JsonObject o,String key) {
+    public static double positive(JsonObject o,String key) {
         double d=number(o,key);
         if(d<=0)throw new IllegalArgumentException(key+": must be positive");
         return d;
     }
     /** A finite number with an exact {@code int} value. */
-    static int integer(JsonObject o,String key) {
+    public static int integer(JsonObject o,String key) {
         number(o,key);
         try{return o.get(key).getAsBigDecimal().intValueExact();}
         catch(ArithmeticException e){throw new IllegalArgumentException(key+": integer required",e);}

@@ -26,10 +26,19 @@ import static com.wormzjl.icheme.science.assembly.AssemblyReport.NONE;
  * <p>Faults are kept on the slot they concern, the worst one per slot: a part met in the wrong place (yellow) is still
  * bound and the walk goes on through it; a line that stops (red) leaves the steps after it pending. A pending step met
  * later on another line is bound in the wrong order; one never met is missing.
+ *
+ * <p>A step that takes several identical units in parallel (S3b) is met where its line branches: every unit of its kind
+ * at the ends of the branches fills it, and the line goes on from where their outlets join again. A link that starts at
+ * such a slot starts where the units' ports join. The wrong number of units, units of other sizes, or a branch to
+ * anything else are faults on the slot; a step of one unit matches as it did before the counts. Where the next step also
+ * takes several units, the outlets' header may split straight into them (an air-then-water condenser's banks into its
+ * trim's shells, {@code COOLER_MODEL_PLAN.md} section 6).
  */
 public final class AssemblyMatcher {
     /** Pipe blocks beyond a boundary valve that count as outside (plan section 5.2). */
     public static final int EXTERNAL_REACH = 16;
+    /** The most pipe runs a split or a merge reads: past it, or round a loop, the manifold is a branch fault. */
+    static final int MAX_MANIFOLD_RUNS = 64;
 
     private AssemblyMatcher() {
     }
@@ -42,8 +51,26 @@ public final class AssemblyMatcher {
         return new Matcher(blueprint, graph, master, taken).run();
     }
 
-    /** What fills a slot: a unit (entered at {@code entered}) or a fitting at {@code position}, by {@code form}. */
-    private record Binding(@Nullable Unit unit, long position, @Nullable Role entered, @Nullable Form form) {
+    /**
+     * What fills a slot: a unit (entered at {@code entered}) or a fitting at {@code position}, by {@code form}; and the
+     * ports where further units in parallel with it were entered (S3b).
+     */
+    private record Binding(@Nullable Unit unit, long position, @Nullable Role entered, @Nullable Form form, List<Port> parallel) {
+        Binding(@Nullable Unit unit, long position, @Nullable Role entered, @Nullable Form form) {
+            this(unit, position, entered, form, List.of());
+        }
+
+        /** Every unit's entry: the unit's own first, then those in parallel with it. */
+        List<Port> entries() {
+            var out = new ArrayList<Port>();
+            if (unit != null) out.add(new Port(unit, entered == null ? Role.SIDE : entered, 0));
+            out.addAll(parallel);
+            return out;
+        }
+    }
+
+    /** The runs a split or a merge reads beyond its first junction: its legs, those that end elsewhere (its leaves), and whether it loops or runs past {@link #MAX_MANIFOLD_RUNS}. */
+    private record Manifold(List<Run> legs, List<Run> leaves, List<Long> junctions, boolean broken) {
     }
 
     private record Fault(State state, long at, String detail) {
@@ -94,6 +121,19 @@ public final class AssemblyMatcher {
             if (role == null || ordinal >= from.unit().count(role)) {
                 // The line's start is not there: its steps wait for another line, or are missing.
                 pending.addAll(link.steps());
+                return;
+            }
+            if (!from.parallel().isEmpty()) {
+                // Units in parallel: the line starts where their ports join (S3b).
+                var starts = new ArrayList<Port>();
+                for (var entry : from.entries()) {
+                    var r = start.afterEntry() ? PortMarkings.partner(entry.unit().kind(), entry.role()).orElse(null) : start.role();
+                    if (r != null && ordinal < entry.unit().count(r)) starts.add(new Port(entry.unit(), r, ordinal));
+                }
+                var steps = new ArrayList<>(link.steps());
+                var joined = merge(starts, start.slot(), steps);
+                if (joined == null) pending.addAll(steps);
+                else walk(steps, link.finish(), link.owner(), joined, link.upstream());
                 return;
             }
             var port = new Port(from.unit(), role, ordinal);
@@ -164,6 +204,8 @@ public final class AssemblyMatcher {
                         bind(slot, new Binding(u, u.origin(), entered, form));
                         used.add(Key.of(at.port()));
                         if (state != State.OK) fault(slot, state, NONE, detail);
+                        // One unit in line where the design asks for several in parallel.
+                        if (hit.step().count() > 1) fault(slot, State.UNIT_COUNT, u.origin(), "1:" + hit.step().count());
                         if (form.out() == null) {
                             pending.addAll(rest);
                             return;
@@ -185,9 +227,15 @@ public final class AssemblyMatcher {
                             if (!(finish instanceof Outside)) fault(owner, State.BRANCHED, junction.position(), "");
                             return;
                         }
-                        if (rest.getFirst().form() instanceof TeeForm) tee(rest.removeFirst(), junction, run);
-                        else stop(rest, State.BRANCHED, junction.position(), "");
-                        return;
+                        if (rest.getFirst().form() instanceof TeeForm) {
+                            tee(rest.removeFirst(), junction, run);
+                            return;
+                        }
+                        // A split into units in parallel (S3b): the line goes on where they join again.
+                        var joined = parallel(rest, junction, run);
+                        if (joined == null) return;
+                        run = joined;
+                        lastValve = -1;
                     }
                     case Terminal terminal -> {
                         if (!rest.isEmpty()) stop(rest, State.MISSING, terminal.position(), "terminal");
@@ -260,6 +308,170 @@ public final class AssemblyMatcher {
                 if (best[b] < runs.size()) walk(new ArrayList<>(branch.steps()), branch.finish(), branch.owner(), runs.get(best[b]), false);
                 else stop(new ArrayList<>(branch.steps()), State.MISSING, junction.position(), "");
             }
+        }
+
+        /**
+         * A split reached at {@code junction} (S3b): when the line's next step (or either of the next two in any order)
+         * takes several units in parallel, every unit of its form at the ends of the split's branches fills it. The wrong
+         * number of them ({@code UNIT_COUNT}), units of other sizes ({@code UNIT_SHAPES}), a branch to anything else
+         * ({@code BRANCHED}) and a fitting between the split and the units ({@code EXTRA_VALVE}, but a passed-over one) are
+         * the slot's faults; each unit's entry is checked as one unit's is. Returns the run on from where the units' outlets
+         * join, or null where the line ends: at units that end it, or at a fault that stops it. With no such step the line
+         * stops at the branch, as before the counts.
+         */
+        private @Nullable Run parallel(List<Step> rest, Junction junction, Run arrived) {
+            if (counted(rest) == null) {
+                stop(rest, State.BRANCHED, junction.position(), "");
+                return null;
+            }
+            return parallel(rest, explore(junction, arrived), junction.position());
+        }
+
+        /** The line's next step (or either of the next two in any order) that takes several units in parallel, or null. */
+        private static @Nullable Step counted(List<Step> rest) {
+            if (rest.isEmpty()) return null;
+            int current = rest.getFirst().anyOrder() && rest.size() > 1 ? 2 : 1;
+            for (int k = 0; k < current; k++) if (rest.get(k).count() > 1) return rest.get(k);
+            return null;
+        }
+
+        /** The units in parallel at the leaves of {@code split}, a manifold first met at {@code position}: as {@link #parallel(List, Junction, Run)}. */
+        private @Nullable Run parallel(List<Step> rest, Manifold split, long position) {
+            var step = Objects.requireNonNull(counted(rest));
+            var entries = new ArrayList<Port>();
+            var strays = new ArrayList<Run>();
+            final var wanted = step;
+            for (var leaf : split.leaves()) {
+                if (leaf.end() instanceof AtPort at && !member(at.port().unit()) && form(wanted, f -> accepts(f, at.port().unit())) != null
+                        && entries.stream().noneMatch(e -> e.unit().origin() == at.port().unit().origin())) entries.add(at.port());
+                else strays.add(leaf);
+            }
+            if (entries.isEmpty() || split.broken()) {
+                stop(rest, State.BRANCHED, position, "");
+                return null;
+            }
+            rest.remove(step);
+            var first = entries.getFirst().unit();
+            var form = (UnitForm) Objects.requireNonNull(form(step, f -> accepts(f, first)));
+            var slot = step.slot();
+            for (var entry : entries)
+                if (taken.contains(entry.unit().origin())) {
+                    fault(slot, State.SHARED, entry.unit().origin(), "");
+                    stop(rest, State.MISSING, NONE, "");
+                    return null;
+                }
+            bind(slot, new Binding(first, first.origin(), entries.getFirst().role(), form, entries.subList(1, entries.size())));
+            if (form != step.form()) fault(slot, State.WRONG_KIND, NONE, describe(first));
+            var outs = new ArrayList<Port>();
+            for (var entry : entries) {
+                used.add(Key.of(entry));
+                var u = entry.unit();
+                Role next = form.out();
+                if (entry.role() != form.in()) {
+                    fault(slot, State.WRONG_PORT, NONE, PortMarkings.flow(u.kind(), entry.role()) == PortMarkings.Flow.OUT ? "backwards" : entry.role().name());
+                    next = form.out() == null ? null : PortMarkings.partner(u.kind(), entry.role()).orElse(null);
+                }
+                if (next != null && u.count(next) > 0) outs.add(new Port(u, next, 0));
+                if (u.kind() != first.kind() || !Objects.equals(u.size(), first.size())) fault(slot, State.UNIT_SHAPES, u.origin(), "");
+            }
+            if (entries.size() != step.count()) fault(slot, State.UNIT_COUNT, position, entries.size() + ":" + step.count());
+            if (!strays.isEmpty()) fault(slot, State.BRANCHED, position, "");
+            passed(split.legs(), slot);
+            if (form.out() == null) {
+                pending.addAll(rest);
+                return null;
+            }
+            var joined = outs.size() == entries.size() ? merge(outs, slot, rest) : null;
+            if (joined == null) {
+                stop(rest, State.MISSING, NONE, "");
+                return null;
+            }
+            return joined;
+        }
+
+        /**
+         * Where units in parallel join again, from their ports {@code outs} (S3b): the first port's run to a junction,
+         * the merge beyond it, whose branches end at the other ports and at one way on, which is returned. Another port
+         * that does not join there, or a second way on, is a branch fault on {@code slot}; no way on is a missing one,
+         * and returns null. One port alone is its own run. Where the line's next step in {@code rest} takes several units,
+         * the ways on are a header's split into them: they are matched as that step, and the run on from where they join
+         * again is returned.
+         */
+        private @Nullable Run merge(List<Port> outs, Slot slot, List<Step> rest) {
+            var runs = new ArrayList<Run>();
+            for (var out : outs) {
+                required.add(Key.of(out));
+                var run = graph.run(out);
+                if (!(run.end() instanceof Unconnected)) used.add(Key.of(out));
+                footprint.addAll(run.positions());
+                runs.add(run);
+            }
+            if (runs.isEmpty()) return null;
+            var first = runs.getFirst();
+            if (outs.size() == 1) return first;
+            passed(runs, slot);
+            if (!(first.end() instanceof Junction junction)) {
+                // The outlets do not join: the line goes on along the first.
+                fault(slot, State.BRANCHED, NONE, "");
+                return first;
+            }
+            var merge = explore(junction, first);
+            var joined = new HashSet<Key>();
+            var ways = new ArrayList<Run>();
+            for (var leaf : merge.leaves()) {
+                if (leaf.end() instanceof AtPort at && outs.contains(at.port())) joined.add(Key.of(at.port()));
+                else ways.add(leaf);
+            }
+            var legs = new ArrayList<>(merge.legs());
+            legs.removeAll(ways);
+            passed(legs, slot);
+            boolean header = ways.size() > 1 && counted(rest) != null;
+            if (merge.broken() || joined.size() != outs.size() - 1 || ways.size() > 1 && !header) fault(slot, State.BRANCHED, junction.position(), "");
+            if (ways.isEmpty()) {
+                fault(slot, State.MISSING, junction.position(), "");
+                return null;
+            }
+            if (header) return parallel(rest, new Manifold(ways, ways, merge.junctions(), merge.broken()), junction.position());
+            return ways.getFirst();
+        }
+
+        /**
+         * The pipes beyond {@code junction}, reached by {@code arrived}: every branch, and the branches of each junction
+         * they reach, in the graph's order. Reading a junction twice (a loop) or more than {@link #MAX_MANIFOLD_RUNS} runs
+         * marks it broken.
+         */
+        private Manifold explore(Junction junction, Run arrived) {
+            var legs = new ArrayList<Run>();
+            var leaves = new ArrayList<Run>();
+            var junctions = new ArrayList<Long>();
+            var queue = new ArrayDeque<Map.Entry<Junction, Run>>();
+            queue.add(Map.entry(junction, arrived));
+            junctions.add(junction.position());
+            boolean broken = false;
+            while (!queue.isEmpty() && !broken) {
+                var at = queue.removeFirst();
+                footprint.add(at.getKey().position());
+                for (var branch : graph.branches(at.getKey(), at.getValue())) {
+                    legs.add(branch);
+                    footprint.addAll(branch.positions());
+                    if (legs.size() > MAX_MANIFOLD_RUNS) broken = true;
+                    if (branch.end() instanceof Junction next) {
+                        if (junctions.contains(next.position())) broken = true;
+                        else {
+                            junctions.add(next.position());
+                            queue.add(Map.entry(next, branch));
+                        }
+                    } else leaves.add(branch);
+                }
+            }
+            return new Manifold(legs, leaves, junctions, broken);
+        }
+
+        /** The fittings on a split's or a merge's pipes: none but those the walk passes over belongs there, so each is an extra one on {@code slot}. */
+        private void passed(List<Run> runs, Slot slot) {
+            for (var run : runs)
+                for (var e : run.elements())
+                    if (e.kind() != Fitting.OTHER && e.kind() != Fitting.FLOWMETER) fault(slot, State.EXTRA_VALVE, e.position(), e.kind().name());
         }
 
         /**
@@ -368,7 +580,10 @@ public final class AssemblyMatcher {
         }
 
         private boolean member(Unit unit) {
-            for (var binding : bound.values()) if (binding.unit() != null && binding.unit().origin() == unit.origin()) return true;
+            for (var binding : bound.values()) {
+                if (binding.unit() != null && binding.unit().origin() == unit.origin()) return true;
+                for (var other : binding.parallel()) if (other.unit().origin() == unit.origin()) return true;
+            }
             return false;
         }
 
@@ -406,13 +621,19 @@ public final class AssemblyMatcher {
                 var fault = faults.get(slot);
                 var state = fault != null ? fault.state() : binding != null ? State.OK : State.MISSING;
                 slots.add(new SlotReport(slot, state, binding != null ? binding.position() : NONE, fault != null ? fault.at() : NONE,
-                        fault != null ? fault.detail() : ""));
+                        fault != null ? fault.detail() : "", binding == null ? List.of() : binding.parallel().stream().map(p -> p.unit().origin()).toList()));
             }
             var ports = new ArrayList<PortReport>();
             var members = new ArrayList<Long>();
+            var units = new ArrayList<Map.Entry<Unit, Binding>>();
             for (var binding : bound.values()) {
-                var unit = binding.unit();
-                if (unit == null || members.contains(unit.origin())) continue;
+                if (binding.unit() != null) units.add(Map.entry(binding.unit(), binding));
+                for (var other : binding.parallel()) units.add(Map.entry(other.unit(), binding));
+            }
+            for (var held : units) {
+                var unit = held.getKey();
+                var binding = held.getValue();
+                if (members.contains(unit.origin())) continue;
                 members.add(unit.origin());
                 var utilities = binding.form() instanceof UnitForm f ? f.utilities() : Set.<Role>of();
                 var seen = new EnumMap<Role, Integer>(Role.class);

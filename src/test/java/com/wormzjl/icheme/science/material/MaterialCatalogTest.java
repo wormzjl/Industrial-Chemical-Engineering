@@ -45,8 +45,8 @@ class MaterialCatalogTest {
             assertEquals(!names07,p.scientificRevision().equals(science.requirePackage(p.id()).scientificRevision()),p.id());
         }
         assertNotEquals(before.scientificRevision(),science.requirePackage(ID).scientificRevision());
-        assertFalse(MaterialRuntime.with(science,ID,()->MaterialRuntime.isCurrent(ID,before.scientificRevision())));
-        assertTrue(MaterialRuntime.with(names,ID,()->MaterialRuntime.isCurrent(ID,before.scientificRevision())));
+        assertFalse(MaterialRuntime.with(science,ID,()->isCurrent(ID,before.scientificRevision())));
+        assertTrue(MaterialRuntime.with(names,ID,()->isCurrent(ID,before.scientificRevision())));
         var input=com.wormzjl.icheme.science.column.v3.V3TestInputs.methaneCduInput();
         assertTrue(MaterialRuntime.with(science,ID,()->V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).isEmpty()));
     }
@@ -111,7 +111,7 @@ class MaterialCatalogTest {
             assertEquals(p.scientificRevision(),edited.requirePackage(p.id()).scientificRevision(),p.id());
             assertEquals(!namesMethane,bundled.fluidRevision(p.id()).equals(edited.fluidRevision(p.id())),p.id());
         }
-        assertTrue(MaterialRuntime.with(edited,ID,()->MaterialRuntime.isCurrent(ID,bundled.requirePackage(ID).scientificRevision())));
+        assertTrue(MaterialRuntime.with(edited,ID,()->isCurrent(ID,bundled.requirePackage(ID).scientificRevision())));
         var input=com.wormzjl.icheme.science.column.v3.V3TestInputs.methaneCduInput();
         assertTrue(MaterialRuntime.with(edited,ID,()->V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).isPresent()));
     }
@@ -197,13 +197,10 @@ class MaterialCatalogTest {
         assertThrows(IllegalStateException.class,()->MaterialRuntime.with(original,ID,()->{throw new IllegalStateException();}));
         assertSame(replacement,MaterialRuntime.current());assertEquals(.019,V3WaterProperties.molarMass());
     }
-    @Test void retiredInputIsRejectedWithoutMutatingItsAmounts() {
-        var c=MaterialCatalog.bundled();var p=c.requirePackage(ID);var ids=new ArrayList<>(p.components());
-        int index=ids.indexOf("crude_pc07");ids.set(index,"TJL_PC07");Collections.reverse(ids);
-        double[] values=new double[ids.size()];for(int i=0;i<values.length;i++)values[i]=i+1;
-        var input=com.wormzjl.icheme.science.column.v3.V3TestInputs.dry(1,ID,"icheme:tia_juana_light_methane",new V3ComponentBasis(ids),values,638.15,4,2,250000,0,
-                List.of(new V3ColumnSpecification.CondenserOutletTemperature(332.15),new V3ColumnSpecification.OrganicRefluxRatio(4.17),new V3ColumnSpecification.ReboilerDuty(0)));
-        assertThrows(IllegalArgumentException.class,()->com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity.requireCurrent(input,c));
-        assertArrayEquals(values,input.feedComponentMolarFlowsMolPerSecond());
+
+    /** A result is current only for the exact resolved scientific dataset (moved from MaterialRuntime, which had no other caller). */
+    private static boolean isCurrent(String packageId, String scientificRevision) {
+        var p = MaterialRuntime.current().packages().get(packageId);
+        return p != null && p.scientificRevision().equals(scientificRevision);
     }
 }

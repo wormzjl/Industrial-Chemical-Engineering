@@ -96,6 +96,39 @@ class ColumnComponentsTest {
         assertEquals(List.of(Pump.STANDARD, Pump.IN_LINE), Choices.DEFAULT.withPumparoundPump(1, Pump.IN_LINE).pumparoundPumps());
     }
 
+    /** S3b: member counts fit the designed pumparounds (a further cooler one unit), stay in 1 to {@code MAX_UNITS}, and a design without them reads one unit a step. */
+    @Test
+    void memberCountsFitThePumparoundsAndStayInRange() {
+        var units = ColumnComponents.Units.ONE.withCondenser(2).withKettle(3).withCooler(1, 4);
+        assertEquals(new ColumnComponents.Units(2, 3, List.of(1, 4)), units);
+        var design = ColumnDesign.of(crude(), new Choices(Condenser.AIR_COOLER, Pump.STANDARD, List.of(), units));
+        assertEquals(new ColumnComponents.Units(2, 3, List.of(1, 4, 1)), design.components().units(), "one count per pumparound, a further cooler one unit");
+        assertEquals(design.components().units(), design.components().choices().units(), "the Components page shows them again");
+        assertEquals(ColumnComponents.Units.ONE.fit(3), new ColumnComponents(Condenser.EXCHANGER, Pump.STANDARD, List.of(Pump.STANDARD, Pump.STANDARD, Pump.STANDARD), false, false).units());
+        assertThrows(IllegalArgumentException.class, () -> new ColumnComponents.Units(ColumnComponents.MAX_UNITS + 1, 1, List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ColumnComponents.Units(1, 0, List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ColumnComponents(Condenser.EXCHANGER, Pump.STANDARD, List.of(), false, false, new ColumnComponents.Units(1, 1, List.of(2))),
+                "no cooler count without its pumparound");
+    }
+
+    /**
+     * An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): saved by name, its water trim's shells counted 1 to
+     * {@code MAX_UNITS} and kept through a fit and the other counts' edits; a design saved before the trim reads one shell.
+     */
+    @Test
+    void anAirThenWaterCondenserCountsItsTrimShells() {
+        var units = ColumnComponents.Units.ONE.withTrim(3).withCondenser(2).withCooler(0, 2).withKettle(4);
+        assertEquals(new ColumnComponents.Units(2, 4, List.of(2), 3), units);
+        assertEquals(3, units.fit(3).trim(), "a fit keeps the trim");
+        assertEquals(1, new ColumnComponents.Units(2, 1, List.of()).trim(), "the counts before the trim: one shell");
+        assertThrows(IllegalArgumentException.class, () -> ColumnComponents.Units.ONE.withTrim(ColumnComponents.MAX_UNITS + 1));
+        assertThrows(IllegalArgumentException.class, () -> ColumnComponents.Units.ONE.withTrim(0));
+        var design = ColumnDesign.of(crude(), new Choices(Condenser.AIR_THEN_WATER, Pump.STANDARD, List.of(), units));
+        assertEquals(Condenser.AIR_THEN_WATER, design.components().condenser());
+        assertEquals(3, design.components().units().trim());
+        assertEquals(Condenser.AIR_THEN_WATER, ColumnComponents.named("air_then_water", "standard", List.of(), false, false).condenser(), "saved by name");
+    }
+
     /** Finding F1 through the save: a nozzle without a row by its tray on any side refuses the design and names itself (finding F3). */
     @Test
     void aDesignWhoseNozzleFindsNoRowIsNotSaved() {

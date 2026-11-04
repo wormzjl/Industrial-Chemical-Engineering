@@ -112,18 +112,19 @@ public final class HeatFlowsheet {
         var c = p.canvas();
         int x0 = p.x(part.x()), y0 = p.y(part.y()), x1 = p.x(part.x() + part.w()), y1 = p.y(part.y() + part.h());
         int cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+        // A part drawn row by row, baffle by baffle or tube by tube is one batch (Canvas.batch).
         switch (part.glyph()) {
-            case SHELL -> shell(p, x0, y0, x1, y1, look);
+            case SHELL -> c.batch(() -> shell(p, x0, y0, x1, y1, look));
             case HEAD -> bonnet(p, x0, y0, x1, y1, look);
             case SADDLE -> saddle(c, x0, y0, x1, y1, look);
-            case KETTLE -> kettle(p, x0, y0, x1, y1, look);
-            case BUNDLE -> bundle(p, x0, y0, x1, y1, look);
+            case KETTLE -> c.batch(() -> kettle(p, x0, y0, x1, y1, look));
+            case BUNDLE -> c.batch(() -> bundle(p, x0, y0, x1, y1, look));
             case PLENUM -> p.trapezoid(x0, y0, x1, y1, 0, (x1 - x0) / 12, look);
-            case FAN -> fan(p, x0, y0, x1, y1, look);
+            case FAN -> c.batch(() -> fan(p, x0, y0, x1, y1, look));
             case STACK -> stack(p, x0, y0, x1, y1, look);
-            case CONVECTION -> convection(p, x0, y0, x1, y1, look);
+            case CONVECTION -> c.batch(() -> convection(p, x0, y0, x1, y1, look));
             case TRANSITION -> p.trapezoid(x0, y0, x1, y1, (x1 - x0) / 7, 0, look);
-            case RADIANT -> radiant(p, x0, y0, x1, y1, look);
+            case RADIANT -> c.batch(() -> radiant(p, x0, y0, x1, y1, look));
             case BURNER -> burner(c, x0, y0, x1, y1, look);
             case TEE -> p.tee(x0, y0, x1, y1, look);
             case VALVE -> p.valve(cx, p.y(part.y() + part.h() - 6), look);

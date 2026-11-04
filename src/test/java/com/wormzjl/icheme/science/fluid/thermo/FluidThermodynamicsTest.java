@@ -33,8 +33,8 @@ class FluidThermodynamicsTest {
     }
     @Test void crudePresetsAndThreePhaseWaterMaintainComponentInventory() {
         var catalog=MaterialCatalog.bundled();
-        for(String packageId:new String[]{"icheme:tjl20_methane","icheme:wti_light_export_tjl20","icheme:cold_lake_blend_tjl20"}) {
-            var p=catalog.requirePackage(packageId);String id=p.assays().keySet().iterator().next();
+        for(String id:new String[]{"icheme:tia_juana_light_methane","icheme:wti_light_export","icheme:cold_lake_blend"}) {
+            var p=catalog.requirePackage("icheme:tjl20_methane");
             var composition=V3PengRobinsonThermo.fromRegisteredPackage(p.id()).crudeFeed(id).moleFractions();
             var n=Arrays.copyOf(composition,com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1);n[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=.2;
             var state=model.flashTP(350,101325,n,()->{});closure(n,state);

@@ -1,6 +1,6 @@
 # Column operation: the column running in the built plant
 
-**Snapshot:** 321b8d1d (branch `claude/column-operation-5c3005`), 2026-11-02 · **Updated:** 2026-11-02 (new chapter, batches 2026-10-28-column-operation and 2026-11-02-valve-hold)
+**Snapshot:** 6bf2205bf (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-03 · **Updated:** 2026-11-03 (batch 2026-11-02-process-simulator: the condenser's cooling water and air fans (C1, C1b, U1, U2): the water's share and an outlet's booking difference by temperature, condenser shells in parallel, the water valve the column sets (COLUMN), the fans and the air limit; facts schemas 8 and 9) · earlier: 2026-11-02 at 321b8d1d (branch `claude/column-operation-5c3005`) (new chapter, batches 2026-10-28-column-operation and 2026-11-02-valve-hold)
 Up: [code guide](README.md)
 
 ## Read this when
@@ -8,15 +8,16 @@ Up: [code guide](README.md)
 - A column's status reads `NOT READY`, `STARTING`, `LIMITED`, `UPSET` or `RE-SOLVING`, or a device says `COLUMN: part of the column at …, running`.
 - Start refuses, or a port stands in the wrong place.
 - A running column's rates, duties or accounts look wrong, or one of its boundary lines holds (the solver side of that: [fluid-science.md](fluid-science.md)).
+- A running column reads `LIMITED: condenser`, or its cooling water flow, its water's outlet or its air fans look wrong.
 - You change the split table, the cycle, a drift band, rule A or B, or the set points.
-- You change a column unit's facts (`ColumnUnit`, fluid facts schema 6) or the operating point in a saved design (`ColumnOperatingPoint`, shape fields 4).
+- You change a column unit's facts (`ColumnUnit`, fluid facts schemas 6, 8 and 9) or the operating point in a saved design (`ColumnOperatingPoint`, shape fields 4).
 - You work on the Operation tab, or rebuild the review plant (`ColumnOperationReviewWorld`).
 
 Not here: the tray solver ([column-v3.md](column-v3.md)), the parts check ([machine-assemblies.md](machine-assemblies.md)), the wall of the condenser ([heat-exchangers.md](heat-exchangers.md)), the island scheduler ([fluid-runtime.md](fluid-runtime.md)).
 
 ## In one paragraph
 
-A real column takes feed and steam, and gives products at steady state after hours of holdup. The game does not march its trays. One V3 solve gives a **split table**: the share of each component that leaves by each product, the duties per mole of feed, and the state of each product. While a column runs, the devices inside its boundary valves are held. The boundary valves' column sides become **ports**: a VOID at each inlet and a GENERATOR at each outlet, on their own lane. Each port has an **account** of moles and energy. Inlets book what arrives into their accounts. Every 5 s of online time a **cycle** takes the feed the accounts hold, splits it by the table and credits the product accounts; the condenser closes the energy. The fluid network never sees the column: it sees a mass target on each boundary valve, set from the accounts. Each side reads the other through a fence of 22 s, so a column's products do not depend on when an island's job completes. When the feed, the steam or the set points leave their bands, a new V3 solve runs on the worker pool and its table applies at a fixed cycle.
+A real column takes feed and steam, and gives products at steady state after hours of holdup. The game does not march its trays. One V3 solve gives a **split table**: the share of each component that leaves by each product, the duties per mole of feed, and the state of each product. While a column runs, the devices inside its boundary valves are held. The boundary valves' column sides become **ports**: a VOID at each inlet and a GENERATOR at each outlet, on their own lane. Each port has an **account** of moles and energy. Inlets book what arrives into their accounts. Every 5 s of online time a **cycle** takes the feed the accounts hold, splits it by the table and credits the product accounts; the condenser closes the energy. The condenser's cooling water takes its share of that duty through the exchanger's heat in transit, and the column sets the water's flow where the water side's flow station is complete; an air condenser takes the rest, its fans at the least speed that holds it. The fluid network never sees the column: it sees a mass target on each boundary valve, set from the accounts. Each side reads the other through a fence of 22 s, so a column's products do not depend on when an island's job completes. When the feed, the steam or the set points leave their bands, a new V3 solve runs on the worker pool and its table applies at a fixed cycle.
 
 ## Class map
 
@@ -25,17 +26,17 @@ A real column takes feed and steam, and gives products at steady state after hou
 | [Port](../../../src/main/java/com/wormzjl/icheme/science/column/operation/Port.java) | FEED, STEAM, OFF_GAS, SOUR_WATER, DISTILLATE, DRAW, BOTTOMS; saved by name; `inlet()`, `gas()` | Which ports exist |
 | [Setpoints](../../../src/main/java/com/wormzjl/icheme/science/column/operation/Setpoints.java) | The player's numbers, a fact: design and set feed rate, condenser temperature, reflux ratio; reboiler, steam, draws and pumparounds per mole of feed. `of(point)`, `withFeedRate` (capped at the design rate), `intensivelyDiffers` | What the player sets |
 | [PortConditions](../../../src/main/java/com/wormzjl/icheme/science/column/operation/PortConditions.java) | A port's pressure and temperature estimated from the design (`estimate`) | Why a port stands at its pressure |
-| [SplitTable](../../../src/main/java/com/wormzjl/icheme/science/column/operation/SplitTable.java) | The table: `axis`, `products` (`Product`: port, index, recovery by component, temperature, pressure), `reboilerPerFeed`, `pumparoundPerFeed`, `condenserPerFeed`, `reference`, `held`. `of` builds it from a V3 result; `split`, `perFeed`, `product` | What one solve leaves behind |
-| [ColumnCycle](../../../src/main/java/com/wormzjl/icheme/science/column/operation/ColumnCycle.java) | One cycle as arithmetic: `Account`, `Limit`, `Step`, `step` | Limits, rules A and B, the closure, the trip |
+| [SplitTable](../../../src/main/java/com/wormzjl/icheme/science/column/operation/SplitTable.java) | The table: `axis`, `products` (`Product`: port, index, recovery by component, temperature, pressure), `reboilerPerFeed`, `pumparoundPerFeed`, `condenserPerFeed`, `reference`, `held`, `condenserWaterPerFeed` (the cooling water's share of the duty), `waterBelow` (where a booking difference goes), `airArea` (an air condenser's bare tube per mol/s of feed at each of `FAN_STEPS` 8 fan speeds). `of` builds it from a V3 result; `split`, `perFeed`, `product`, `waterShare`, `waterTakes`, `airFeed`, `fans` | What one solve leaves behind |
+| [ColumnCycle](../../../src/main/java/com/wormzjl/icheme/science/column/operation/ColumnCycle.java) | One cycle as arithmetic: `Account`, `Limit`, `Step`, `step` (with the water's room and the air's most feed) | Limits, rules A and B, the closure, the trip |
 | [DriftBands](../../../src/main/java/com/wormzjl/icheme/science/column/operation/DriftBands.java) | The bands and `Trigger`; `check` | Why a solve started |
-| [ColumnSolve](../../../src/main/java/com/wormzjl/icheme/science/column/operation/ColumnSolve.java) | The worker's job: `Job`, `Taken`, `Steam`, sealed `Outcome` (`Solved`, `Failed`); `run` | From a taken feed to a table |
-| [OperationView](../../../src/main/java/com/wormzjl/icheme/science/column/operation/OperationView.java) | What the tab shows: `Phase`, `Stream`, `Duty`, `Solve`, `idle` | The tab's data |
-| [ColumnOperation](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnOperation.java) | The runs, on the server thread, without Minecraft: cycles, solves, plans, booking, the condenser's debt, `view`. `implements IslandCoordinator.Ports` | Everything between the table and the islands |
-| [ColumnUnit](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnUnit.java) | The facts of one column in the topology ledger: `Station`, `Totals`, `State` (engine state) | What is saved |
+| [ColumnSolve](../../../src/main/java/com/wormzjl/icheme/science/column/operation/ColumnSolve.java) | The worker's job: `Job` (with the design's `ColumnComponents.Condenser`), `Taken`, `Steam`, sealed `Outcome` (`Solved`, `Failed`); `run`; `trim` (an air-then-water condenser's water share, which the simulator's column block calls too), `airArea`; `SUPERHEAT` (public: the simulator's sizing `Limit` reads it) | From a taken feed to a table |
+| [OperationView](../../../src/main/java/com/wormzjl/icheme/science/column/operation/OperationView.java) | What the tab shows: `Phase`, `Stream`, `Duty` (`DutyKind` CONDENSER, REBOILER, PUMPAROUND, FANS), `Solve`, `idle` | The tab's data |
+| [ColumnOperation](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnOperation.java) | The runs, on the server thread, without Minecraft: cycles, solves, plans, booking, the condenser's debt, the water's heat rate and the fans, `view`, `status`. `Solves` (`design`, `condenser`, `submit`). `implements IslandCoordinator.Ports` | Everything between the table and the islands |
+| [ColumnUnit](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnUnit.java) | The facts of one column in the topology ledger: `Station`, `Totals`, `condensers`, `airSurface`, `State` (engine state) | What is saved |
 | [PortPlan](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/PortPlan.java), `PassiveStepSolver.ports` | One slice's mass target on a port's valve; an outlet's generator stated at its product | How the network meets a port |
-| [ColumnStarts](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ColumnStarts.java), `AssemblyService.start`/`stop`/`setpoints`/`operation`/`dismantled` | From a complete report to a start request | Start's refusals before the ledger |
-| `FluidWorldAuthority.startColumn`/`stopColumn`/`editColumn`/`columnRemoved`/`columnView`, `PhysicalFluidTopology.PORT_LANE`, `Device.suspendedBy` | Start and Stop as one queued ledger event each | Start's refusals in the ledger, what is held |
-| [ColumnOperatingPoint](../../../src/main/java/com/wormzjl/icheme/science/equipment/ColumnOperatingPoint.java) | The design's solved input, a shape field of `ColumnTrays` (`operating`): package, assay, components, feed, pressures, condenser, reflux, reboiler, steam, draws, pumparounds. `of(input)`, `fits`, `input(trays, diameter)` | What a column remembers from the calculator |
+| [ColumnStarts](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ColumnStarts.java), `AssemblyService.start`/`stop`/`setpoints`/`operation`/`dismantled` | From a complete report to a start request: ports, the condenser's water sides, the air condenser's surface | Start's refusals before the ledger |
+| `FluidWorldAuthority.startColumn`/`stopColumn`/`editColumn`/`columnRemoved`/`columnView`/`columnCondenser`, `PhysicalFluidTopology.PORT_LANE`, `Device.suspendedBy` | Start and Stop as one queued ledger event each | Start's refusals in the ledger, what is held |
+| [ColumnOperatingPoint](../../../src/main/java/com/wormzjl/icheme/science/equipment/ColumnOperatingPoint.java) | The design's solved input, a shape field of `ColumnTrays` (`operating`): package, assay, components, feed, pressures, condenser, reflux, reboiler, steam, draws, pumparounds. `of(input)`, `fits`, `input(trays, diameter)` | What a column remembers from the solve its design came from |
 | [OperationColumn](../../../src/main/java/com/wormzjl/icheme/client/gui/common/OperationColumn.java) | The Operation page ([client-gui.md](client-gui.md)) | The page |
 
 ## Main flow
@@ -67,7 +68,7 @@ flowchart TD
 <details>
 <summary>Ports, stations and accounts</summary>
 
-- `ColumnUnit` has `id`, `master`, `running`, `setpoints`, `stations`, `totals`, `condenser` and `state`. Its id comes from the ledger's identity counter (`WorldTopologyLedger.reserve`) and is never a device's. A unit is running only if its stations have devices. `MAXIMUM_STATIONS` is 16.
+- `ColumnUnit` has `id`, `master`, `running`, `setpoints`, `stations`, `totals`, `condensers`, `state`, `leaving` and `airSurface`. Its id comes from the ledger's identity counter (`WorldTopologyLedger.reserve`) and is never a device's. A unit is running only if its stations have devices. `MAXIMUM_STATIONS` is 16. `condensers` are the condenser's water sides, one per shell in parallel, at most `MAXIMUM_CONDENSERS` (`ColumnComponents.MAX_UNITS`, 6), distinct and above 0; `condenser()` is the first or 0. `airSurface` is the bare tube of the air condenser's banks as Start found them, m² (0: none, or a save before facts schema 9).
 - `Station`: `port`, `index`, `device` (0 while stopped, and for a station its design lost, `ColumnUnit.lost`), `valve`, `account` and `solids`. The account is moles by component on the basis axis, and energy. `solids` is the inert solids at that port (crystals melt on arrival).
 - A port device is a VOID (inlet) or GENERATOR (outlet) in the cell on the valve's column side, on `PhysicalFluidTopology.PORT_LANE` (15, one past the rack places), facing the valve, with the valve's geometry, one BULK port and spec `FluidDeviceSpec(1, T, P, nitrogen)`. The spec's composition means nothing: `PortPlan` states an outlet's product each slice.
 - A port stands in for the held pipe block next to its valve, and joins the valve as that pipe did. `across` finds a port at `next.withLane(PORT_LANE)` first, so the valve's island ends on it.
@@ -80,7 +81,7 @@ flowchart TD
 <details>
 <summary>The cycle and the fence</summary>
 
-Constants of `ColumnOperation`: `CYCLE_TICKS` 100 (5 s), `FENCE_TICKS` 440 (22 s), `INLET_AIM_SECONDS` 30, `BUFFER_SECONDS` 120, `SOLVE_SPACING` 600 ticks, `RETRY_TICKS` 600, 1200, 2400, `APPLY_TICKS` two cycles, `KEEP_TICKS` 2400, `CONDENSER_HOLD_SECONDS` 60, `APPROACH_KELVIN` 5, `TAKE_MARGIN` 1 − 1e-6.
+Constants of `ColumnOperation`: `CYCLE_TICKS` 100 (5 s), `FENCE_TICKS` 440 (22 s), `INLET_AIM_SECONDS` 30, `BUFFER_SECONDS` 120, `SOLVE_SPACING` 600 ticks, `RETRY_TICKS` 600, 1200, 2400, `APPLY_TICKS` two cycles, `KEEP_TICKS` 2400, `CONDENSER_HOLD_SECONDS` 60, `APPROACH_KELVIN` 5 (`HeatSides.WATER_APPROACH`), `TAKE_MARGIN` 1 − 1e-6.
 
 A column and its islands advance on the online clock but do not advance together. An island's job can complete late. The fence keeps results the same whatever the job's timing:
 
@@ -91,10 +92,10 @@ A column and its islands advance on the online clock but do not advance together
 
 One cycle (`cycle`, then `ColumnCycle.step`):
 
-1. Take the feed the accounts hold, up to the set rate over 5 s. Room in each product is `designFeedRate*BUFFER_SECONDS*perFeed(k)` less its account and what the outlet gave after the fence (`Gift`, `givenSince`), so a slow island's booking changes nothing; a full product cuts the feed. A water-cooled condenser has room as well (below).
+1. Take the feed the accounts hold, up to the set rate over 5 s. Room in each product is `designFeedRate*BUFFER_SECONDS*perFeed(k)` less its account and what the outlet gave after the fence (`Gift`, `givenSince`), so a slow island's booking changes nothing; a full product cuts the feed. A condenser's cooling water has room as well, and an air condenser a most feed (below).
 2. `step` scales the feed by `alpha`, takes the steam by rule A or B, and splits feed and steam by the table. The condenser duty is the closure: energy out less energy in, less the reboiler and pumparounds, each at the table's ratio to the feed taken.
 3. The step trips and takes nothing if the condenser would heat the overhead, or its duty departs more than 50 % (`TRIP_DEPARTURE`) from the solved one. Status `UPSET`; a CLOSURE solve is asked on the attempted take.
-4. Otherwise accounts move, every inert solid that arrived by the tick moves to the bottoms, a `Credit` is logged, totals grow, the condenser's duty is owed, and new levels are logged. `save` writes the state after each cycle.
+4. Otherwise accounts move, every inert solid that arrived by the tick moves to the bottoms, a `Credit` is logged, totals grow (the whole condenser duty), the water's share of the duty (`waterShare`) is owed, and new levels are logged. The fans' speed and power at the feed taken are kept for the status and the tab. `save` writes the state after each cycle.
 
 Plans (`plans`, called at an island's dispatch):
 
@@ -103,7 +104,7 @@ Plans (`plans`, called at an island's dispatch):
 - `PortPlan(node, valve, massTarget, temperature, moles, solids)`; `moles` null for an inlet. `PassiveStepSolver.ports` runs after `sizeJunctionHoldups` and before `couple`: it restates an outlet's generator (composition, temperature, port pressure, its own volume, solids at their ratio to the moles) unless its shares match to 1e-12 and neither side holds solids, and it sets the valve to `ControlValve(MASS_FLOW, …, COLUMN_SENSOR, …)`. A target within `VALVE_DEADBAND` of the standing one stays; a target of 0 always applies. A bottoms holding solids therefore does not certify. A valve that bounds two columns takes the lower plan, and flow valves in series carry the lower target ([fluid-science.md](fluid-science.md)).
 - `IslandCoordinator.sameControl` counts a port's planned regulator and the valve's own `FlowControl.Valve` of the same `targetPressure` as one control: a planned target is a slice input, not a change of the connection.
 
-Booking (`booked`, at island commit): an inlet's EXCHANGE arrivals go into its account at once, logged as a `Span`. A crystal melts there (`melted`): its component, with its stored energy made true by its offset. An inert solid goes to the station's `solids`. An outlet's account is debited exactly what the step gave, by component, its energy by share, its solids by what left; the difference between given and debited energy goes to the condenser's total and is owed, and the gift is logged (`Gift`). An overdraw logs `column status=OVERDRAWN`.
+Booking (`booked`, at island commit): an inlet's EXCHANGE arrivals go into its account at once, logged as a `Span`. A crystal melts there (`melted`): its component, with its stored energy made true by its offset. An inert solid goes to the station's `solids`. An outlet's account is debited exactly what the step gave, by component, its energy by share, its solids by what left; the difference between given and debited energy goes to the condenser's total, and the gift is logged (`Gift`). The difference is owed to the cooling water if the port offered its product below the table's `waterBelow` (the table as of the fence, `water`); otherwise the air takes it, in the totals alone. Before any table the water takes it. An overdraw logs `column status=OVERDRAWN`.
 
 </details>
 
@@ -118,6 +119,16 @@ Booking (`booked`, at island commit): an inlet's EXCHANGE arrivals go into its a
 - Feed water enters as steam at the feed tray if it can be stated 5 K (`SUPERHEAT`) above its boiling point and a steam slot is free. Otherwise it follows the distillate, and a note says so.
 - A seed with wet trays is dropped.
 - `SplitTable.of` maps the V3 streams: `overhead_vapor` to OFF_GAS, `distillate_liquid` to DISTILLATE, `free_water` to SOUR_WATER, `bottoms_liquid` to BOTTOMS, `side_liquid_tray_N` to DRAW. Each component's row sums to 1 within 1e-12. A component without solved feed borrows the row of the component nearest in normal boiling point; unsolved water goes to the distillate.
+- The job carries the design's condenser kind (`Solves.condenser`, `FluidWorldAuthority.columnCondenser`: `ColumnComponents.condenser()` of the loaded column, EXCHANGER where it has none). It sets three fields of the table:
+
+  | Condenser | `condenserWaterPerFeed` | `waterBelow` | `airArea` |
+  |---|---|---|---|
+  | EXCHANGER | the whole duty | `WATER_ALWAYS` | empty |
+  | AIR_COOLER | 0 | `WATER_NEVER` (0) | top tray to the receiver |
+  | AIR_THEN_WATER | `trim`: the overhead from the split to the receiver | `HeatSides.AIR_SPLIT_TEMPERATURE` (40 °C) | top tray to the split |
+
+- `trim`: the overhead is the top tray's vapour with its water vapour (V3's inspection node 1), flashed at the condenser's pressure. The split is `HeatSides.airSplit(top, receiver)`: 40 °C, but never below the receiver (no trim duty) nor above the top vapour (the whole duty is the water's). The trim never exceeds the whole duty.
+- `airArea`: the overhead's curve (`HeatCurve.sample`) marched against 25 °C air with `HeatSides.airFilms` at each fan step from natural draught (0) to full (8/8); `exposure` bisects the bare tube per kg/s that reaches the air's outlet, times the overhead's mass per mol/s of feed. None where the overhead already arrives there; `Double.MAX_VALUE` where the outlet is at or below 25 °C.
 - `condenserPerFeed` is the closure on the network's energy basis, not V3's. V3's own duty stays as `solvedCondenser`. Table enthalpies are partial molar, by forward difference (`PARTIAL_STEP` 1e-5), shifted so they sum to the stream's enthalpy (Euler). A cycle prices a product as the sum of `n_i·h_i`, so no property call runs on the server thread.
 
 </details>
@@ -148,31 +159,35 @@ Steam short of its set ratio:
 - **Rule B** (the default): take what steam there is; the product follows the table. Status `LIMITED: steam`. The cycle's steam ratio drifts, so a STEAM_RATIO solve follows.
 - **Rule A**: a failed STEAM_RATIO solve sets `ruleA`. Steam then limits the whole take: feed and steam are cut together at the table's ratio. Status adds `, inputs cut together (rule A)`. A STEAM_RATIO solve that succeeds clears it. So does a cycle with no solve pending and no retry waiting: the next shortage tries rule B again.
 
-`ColumnCycle.Limit` names the lowest room: NONE, FEED, STEAM, OUTLET, CONDENSER. Feed and outlets scale `alpha`. So does the condenser, under either rule.
+`ColumnCycle.Limit` names the lowest room: NONE, FEED, STEAM, OUTLET, CONDENSER. Feed and outlets scale `alpha`. So does the condenser, under either rule: its cooling water's room against the table's water duty, and an air condenser's most feed at full fans (`airFeed`), both as CONDENSER.
 
 </details>
 
 <details>
-<summary>The water-cooled condenser</summary>
+<summary>The condenser: cooling water and air fans</summary>
 
-- `ColumnStarts` finds the sides of the blueprint's `ColumnBlueprint.CONDENSER` unit by `EquipmentStructure.heatSides`, unless the design's condenser is an air cooler. The unit's `condenser` is the side outside the column whose partner is held inside. Without one it is 0, and the condenser's duty goes nowhere but the totals.
-- The condenser's duty each cycle is owed to the water side: `coordinator.owe(side, partner, joule)` adds to the pair's heat in transit, the store of [heat-exchangers.md](heat-exchangers.md).
-- `heatRead`: at dispatch, for the water side, `Read.column(due, seconds, ceiling)`, `due` being the transit less what was owed after *start* − fence, `ceiling` being the condenser temperature less `APPROACH_KELVIN` (at least 1 K). `ExchangerRelay.plan` then gives that heat back over the slice, no more than keeps the outlet at the ceiling; the rest stays owed.
-- **Room:** `CONDENSER_HOLD_SECONDS*|condenserPerFeed|*designFeedRate` less the transit as of the fence, with what outlets booked after the fence left out (`Owed.booked`). A water side that does not take the heat fills the room, the step's `alphaCondenser` cuts the feed, and status reads `LIMITED: condenser`.
+- **The water sides.** `ColumnBlueprint.waterCooled(condenser)` names the slot whose units are water-cooled: `CONDENSER` for an exchanger, `TRIM_CONDENSER` for an air-then-water condenser, none for an air cooler. `ColumnStarts` takes every unit of that slot (`s.units()`, one per shell in parallel) and their sides by `EquipmentStructure.heatSides`. `startColumn` keeps each side outside the column whose partner is held inside, as `condensers`; more than 6 refuses Start ("the condenser has more than 6 shells"). With none, the water's share goes nowhere but the totals.
+- **The air surface.** Where the water slot is not `CONDENSER`, `ColumnStarts` sums the bare tube (`HeatSides.of(...).area()`) of every AIR_COOLER unit in the `CONDENSER` slot into `ColumnStart.airSurface`, kept as `ColumnUnit.airSurface`.
+- **The debt.** Each cycle the water's share of the duty, `−condenser·waterShare`, is owed (`owe`) in equal shares to each water side with a partner: `coordinator.owe(side, partner, share)` adds to that pair's heat in transit, the store of [heat-exchangers.md](heat-exchangers.md), and wakes the side a fence later. Identical shells split the overhead equally (S3b). `Owed` keeps one shell's share; a `Duty` logs each shell's heat rate, W, for the valve.
+- **The read.** `heatRead`, at dispatch, for a water side: `Read.column(due, seconds, ceiling, heatRate)`. `due` is the transit less what was owed after *start* − fence; `ceiling` is the condenser temperature less `APPROACH_KELVIN` (at least 1 K). `heatRate` is the shell's share of the last cycle's water duty at or before *start* − fence (`waterRate`; before any cycle, the table's water duty at the set feed over the shells), plus `excess/CONDENSER_HOLD_SECONDS`, where `excess` is the transit due beyond that rate over the slice and one cycle. `ExchangerRelay.plan` gives the transit back over the slice, no more than keeps the outlet at the ceiling; the rest stays owed.
+- **The water valve.** Where the water side's control is `HeatUnit.Mode.COLUMN` and its flow station is complete, the coordinator adds its `Operation.column(valve, WATER_RANGE)` to the read, and `PassiveStepSolver.couple` sets the feed valve's mass flow to `heatRate/(h(T_out) − h(T_in))`, `T_out` = min(T_in + 10 K, ceiling). Water at or above the ceiling takes nothing, and its valve holds. Without a complete station the water flows as its line lets it, as before ([heat-exchangers.md](heat-exchangers.md)).
+- **Room:** `CONDENSER_HOLD_SECONDS*|condenserWaterPerFeed|*designFeedRate` less the shells times the fullest shell's transit as of the fence, with what outlets booked after the fence left out (`Owed.booked`). A water side that does not take the heat (no water, or a valve that cannot pass the flow) fills the room, the step's `alphaCondenser` cuts the feed, and status reads `LIMITED: condenser`.
+- **The fans.** `SplitTable.fans(airSurface, feed)` is the least fan speed whose surface per feed (`airArea`, linear between the steps) the built banks reach: 0 where natural draught holds it, 1 where full fans do not. Their power is `HeatSides.fanPower(airSurface, fans)`, by the cube of the speed. `airFeed(airSurface)`, the surface over `airArea[8]`, is the most feed full fans hold; past it the cycle is `LIMITED: condenser`. A table with no air, or `airSurface` 0, limits nothing and shows no fans.
+- **Status.** A cycle's status adds `; air fans N %, P kW` where it knows the fans. `status` and the view add `; cooling water F kg/s, out at T °C` where the column sets a valve: the valves' mass targets as their islands last committed them, and the inlet as read plus the range under the ceiling (`water`, a presentation read).
 - A held side with no column read (a kettle's bundle, a pumparound cooler) reads `ExchangerRelay.Read.NONE` and moves no heat: those duties are the column's.
-- `ColumnOperation.owed` entries and the wake at *tick* + fence are in memory. The transit is saved, by the coupling.
+- `ColumnOperation.owed` and `water` entries, the fans and the wake at *tick* + fence are in memory. The transit is saved, by the coupling.
 
 </details>
 
 <details>
 <summary>Saves and formats</summary>
 
-- **Facts** (`FluidFacts`, schema 6): a registration's `suspendedBy`, and the world's column units by identity: id, master, running, set points, stations (port by name, index, device, valve, account, solids), totals, condenser, leaving. Corpus: `src/test/resources/compat/fluid/schema-6/`.
-- **State** (state format 30, `FluidFacts.topologyState`): each running unit's `ColumnUnit.State`, after the queued events: table, enthalpies, `tableTick`, `applied`, `solvedCondenser`, levels and credits. It holds windows from the last `FENCE + KEEP` ticks. A state that does not validate is dropped; that unit solves again.
+- **Facts** (`FluidFacts`, schema 6, now 9): a registration's `suspendedBy`, and the world's column units by identity: id, master, running, set points, stations (port by name, index, device, valve, account, solids), totals, the first condenser water side, leaving; schema 8 appends the further water sides (a unit before it has one at most; further sides without a first refuse); schema 9 appends `airSurface` (0 before it: the air takes any duty, as before). Corpora: `src/test/resources/compat/fluid/schema-6/`, `schema-8/`, `schema-9/`.
+- **State** (state format 30, `FluidFacts.topologyState`): each running unit's `ColumnUnit.State`, after the queued events: table, enthalpies, `tableTick`, `applied`, `solvedCondenser`, levels and credits, then the table's `condenserWaterPerFeed`, `waterBelow` and `airArea`. A state written before them reads the whole duty as the water's, `waterBelow` from the water's share, and no air. It holds windows from the last `FENCE + KEEP` ticks. A state that does not validate is dropped; that unit solves again.
 - On a rebuild, accounts and totals map onto the current axis, and solids onto the current records; a removed component or solid is booked. A component removed from a station's account takes its molar share of the account's energy, booked in `Restated`: an account has no temperature to restate at. Queued events do not survive this path, so `FluidFacts.settled` settles each unit on what stands: orphan port devices go, a `leaving` unit goes, booked. `refresh` then restores a run if the state's axis equals the current one and every product has a station; otherwise it starts over.
-- Not saved: arrival spans, the condenser's `owed` entries, the seed, the pending solve, `solvedBy` and the wakes.
+- Not saved: arrival spans, the condenser's `owed` and `water` entries, the fans, the seed, the pending solve, `solvedBy` and the wakes. After a load the water's heat rate starts from the table.
 - **Shape** (`ColumnTrays.operating`, shape field 4): saved under `Operating` by `ColumnDesignTags.writeOperating`, read by `ShapeRepair.SavedOperating.resolve`. An unreadable one repairs to none (`operating point (…) -> none`). Corpus: `src/test/resources/compat/equipment/shapes-4.snbt`. A column with no point says "save it from the calculator again".
-- `ColumnDesign.of` fills it from the input at Save design. The calculator's `Design`, the constructor's `Column` tag and the shell's tag carry it. `ColumnV3Network.writeDesign` sends it as an optional section; wire schema 17 and protocol `"13"` did not change.
+- `ColumnDesign.of` fills it from the input: the process simulator's Save design (`ProcessSimulatorNetwork`) and a constructor's column template (`EquipmentNetwork`). The constructor's `Column` tag and the shell's tag carry it.
 - **Protocol:** `assembly-3`: `AssemblyView.operation`, `OperationPayload`. The tab's refusal is `AssemblyNetwork.REFUSALS`, per server, cleared at the next press, not saved.
 
 </details>
@@ -181,7 +196,7 @@ Steam short of its set ratio:
 <summary>The Operation tab's data</summary>
 
 - `AssemblyNetwork.Host.view` adds `AssemblyService.operation(level, origin, refusal, opening)` to the assembly view, unless the column has no design. The view comes from the unit's `ColumnOperation.view`; if stopped, from the design's set points. It is `NOT_READY` with "a vacuum column cannot run yet" for a column with an ejector. Without an operating point it is null, and the tab shows a note.
-- `view` is a read of the last cycle. Each station shows its rate over that cycle, temperature (the feed's along the table's slope, `reference.feedTemperature(h)`), pressure, how full its account is (an inlet against 30 s of the set rate, an outlet against its 120 s buffer) and the valve's opening (`FluidNetwork.opening`, NaN if there is none; a stored read, `FluidWorldAuthority.stored`, that advances no island). Duties show booked against the table at the set feed. `Solve` shows the trigger, warm or cold and the age.
+- `view` is a read of the last cycle. Each station shows its rate over that cycle, temperature (the feed's along the table's slope, `reference.feedTemperature(h)`), pressure, how full its account is (an inlet against 30 s of the set rate, an outlet against its 120 s buffer) and the valve's opening (`FluidNetwork.opening`, NaN if there is none; a stored read, `FluidWorldAuthority.stored`, that advances no island). Duties show booked against the table at the set feed. An air condenser adds a FANS duty: its power at the last cycle, and at the set feed on the table in force; `OperationColumn.duties` shows that row in kW, the others in MW. The view's status carries the cooling water's suffix. `Solve` shows the trigger, warm or cold and the age.
 - Start, Stop and Apply are `OperationPayload` commands, run on the presentation bucket. Every open screen of the master is answered. Apply sends values in the order feed, condenser, reflux, reboiler, steam…, draws…, pumparounds…; `AssemblyService.setpoints` clamps the feed to the design rate and refuses a wrong count. A set point is a fact; `FluidWorldAuthority.editColumn` queues it and the next cycle reads it.
 
 </details>
@@ -210,18 +225,22 @@ Steam short of its set ratio:
 | A port's target | `ColumnOperation.plans`, then `PortPlan`, `PassiveStepSolver.ports` |
 | A new port kind or a new refusal | `Port`, `ColumnStarts`, `FluidWorldAuthority.startColumn` |
 | A saved field | `ColumnUnit` and `FluidFacts` (append only, corpus image; state: `FluidFacts.columnState`) |
-| A condenser's heat | `ColumnOperation.heatRead`, `owe`; `ExchangerRelay.Read.column` |
+| A condenser's heat | `ColumnOperation.heatRead`, `owe`, `waterRate`; `ExchangerRelay.Read.column` |
+| The water's and the air's shares, the fans | `ColumnSolve.run`, `trim`, `airArea`; `SplitTable.waterShare`, `waterTakes`, `airFeed`, `fans` |
+| The water valve's flow | `PassiveStepSolver.couple`, `ExchangerRelay.Operation.column` ([heat-exchangers.md](heat-exchangers.md)) |
 | What the tab shows | `OperationView`, `ColumnOperation.view`, `OperationColumn` |
 
 ## Tests that pin it
 
-- `science/column/operation/ColumnCycleTest` (6): components and energy close over a thousand cycles of drifting feed; rules A and B; a full buffer; the trip; the bands; the split's sum.
-- `ColumnSolveTest` (2): a START solve's table closes a cycle on the network's basis; half the feed at a prescribed drop gives the same table.
+The JUnit classes run under `test`, except where a gate group is named.
+
+- `science/column/operation/ColumnCycleTest` (9): components and energy close over a thousand cycles of drifting feed; rules A and B; a full buffer; the trip; the bands; the split's sum; the condenser's room bounds only its water's share; an air condenser's face bounds its feed and sets its fans; a booking difference goes to the water below the split.
+- `ColumnSolveTest` (6): a START solve's table closes a cycle on the network's basis; half the feed at a prescribed drop gives the same table; a saved point on a removed package starts; the trim rule alone; the crude column's air-then-water water share at receivers of 45, 38 and 30 °C; the condenser's utilities on the default column (water valve flows, fans on Auto's banks; it prints the numbers).
 - `science/column/operation/PortConditionsTest` (3): a port stands at V3's stage pressure, the sump at the bottom tray's, the condenser's ports at the top.
-- `runtime/fluid/ColumnRunTest` (25, three on a Stop or a dismantle while another event is queued): conservation through a running column downstream; the view is a read; products independent of job timing, also at a full buffer with one slow island; a table applies at the second cycle; set-point solves and failed solves; a reload resumes without a solve; a blocked product; rules A and B; the condenser's duty and a shortage of cooling water; Stop and dismantling; a pump on the feed line; a held port; solids and crystals; a station its design lost; a second flow valve on a product line; one column's outlet into another's inlet.
+- `runtime/fluid/ColumnRunTest` (32, three on a Stop or a dismantle while another event is queued): conservation through a running column downstream; the view is a read; products independent of job timing, also at a full buffer with one slow island; a table applies at the second cycle; set-point solves and failed solves; a reload resumes without a solve; a blocked product; rules A and B; the condenser's duty and a shortage of cooling water; Stop and dismantling; a pump on the feed line; a held port; solids and crystals; a station its design lost; a second flow valve on a product line; one column's outlet into another's inlet. Batch 2026-11-02-process-simulator: an air-then-water condenser divides its booking differences by temperature; an air-cooled condenser's water takes nothing; the water valve carries its duty over the water's rise (and the ceiling); without its valve the water runs as before; a short water valve limits the column; the fans hold the air's duty and a short face limits the column; two shells each hold what one shell holds at half the feed.
 - `runtime/fluid/ColumnSuspensionTest` (2): a port splits the line; Stop joins it with every vessel as it was; two ports cannot share a place.
 - `runtime/fluid/RegulatingValveHoldTest` (7): the column's boundary lines regulate at any ratio; targets on running islands; a liquid product into its line's gas ([fluid-science.md](fluid-science.md)).
-- `FluidFactsCompatTest`, `EquipmentShapeCompatTest`, `AssemblyNetworkCodecTest`, `AssemblyPresentationTest`, `OperationColumnTest`: formats, commands, the page.
+- `FluidFactsCompatTest` (corpora to `schema-9/`: a second condenser shell, a COLUMN water side, an air surface), `EquipmentShapeCompatTest` (`equipmentGates`), `AssemblyNetworkCodecTest`, `AssemblyPresentationTest`, `OperationColumnTest` (the fans' row in kW): formats, commands, the page.
 - GameTest `ColumnOperationGameTests.aMenuReadAdvancesNoIsland` (batch `column-read`): a stored read leaves a resting island's clock where it stands, and a live read, the control, moves it.
 - GameTest `ColumnOperationGameTests.aColumnRunsInItsPlantStopsAndLeaves` (batch `column-operation`): in the review plant, Start, the design feed with its ports splitting islands, cooling water warmed by Q/(m·c_p), a blocked product cuts the feed, Stop keeps the contents, dismantling books the accounts.
 - `ColumnOperationReviewWorld.aCrudeColumnRuns` (`runReviewWorldServer`, namespace `icheme_review`): a hand review, not a gate; a full plant at 1/16 of the feed, water-cooled, `review_operation` lines each 600 ticks. Its `Rig` builds the GameTest's plant.
@@ -242,3 +261,5 @@ Off-line tools: `tools/column-operation/` (the table's bench), `tools/valve-hold
 | Split table | The product of one solve; per mole of feed |
 | Rule A, rule B | Steam short: cut all inputs together, or take the steam as it is |
 | Closure | The condenser duty that closes one cycle's energy |
+| Water share | The part of the closure the condenser's cooling water takes: all (exchanger), none (air cooler), the trim's (air then water) |
+| Split | 40 °C: where an air-then-water condenser's air hands the overhead to its water trim, and below which a booking difference is the water's |

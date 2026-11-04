@@ -8,6 +8,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser;
 import com.wormzjl.icheme.science.equipment.ColumnComponents.Pump;
 import java.util.ArrayList;
@@ -290,18 +291,19 @@ public final class CalculatorColumn {
                 button("keep_draft", "keep_draft", true, t, "keep_draft"))));
     }
 
-    /** The Feed group: the flow, the temperature in {@code unit}, the tray. Keys {@code s0}, {@code s1}, {@code s3}. */
-    private static Column.Group feedGroup(String unit, HeatControlColumn.Texts t) {
-        return group("feed", t, field("s0", "flow", "kmol/h", "feed_flow", t), field("s1", "temperature", unit, "feed_temperature", t),
+    /** The Feed group: the flow in {@code flow}, the temperature in {@code unit}, the tray. Keys {@code s0}, {@code s1}, {@code s3}. */
+    private static Column.Group feedGroup(String unit, String flow, HeatControlColumn.Texts t) {
+        return group("feed", t, field("s0", "flow", flow, "feed_flow", t), field("s1", "temperature", unit, "feed_temperature", t),
                 field("s3", "tray", "", "feed_tray", t));
     }
 
     /**
-     * What the Column page reads: the draft conflict; whether the draft takes edits; the temperature unit; the selected
+     * What the Column page reads: the draft conflict; whether the draft takes edits; the temperature, pressure and molar flow
+     * units (bar and kmol/h on the column block; the display keys' units on the simulator's door); the selected
      * connection and its index; a pumparound's cooling spread over its trays (else at its return tray); whether a draw,
      * a pumparound and a steam feed can be added.
      */
-    public record ColumnInput(boolean conflict, boolean editable, String unit, Connection selected, int index, boolean spread, boolean addDraw,
+    public record ColumnInput(boolean conflict, boolean editable, String unit, String pressure, String flow, Connection selected, int index, boolean spread, boolean addDraw,
                               boolean addPa, boolean addSteam) {
     }
 
@@ -317,8 +319,8 @@ public final class CalculatorColumn {
         var left = new ArrayList<Column.Row>();
         if (in.conflict()) left.add(draft(t));
         left.add(group("column", t, field("s2", "trays", "", "tray_count", t), field("s9", "diameter", "m", "diameter", t),
-                field("s7", "top_pressure", "bar", "top_pressure", t)));
-        left.add(feedGroup(in.unit(), t));
+                field("s7", "top_pressure", in.pressure(), "top_pressure", t)));
+        left.add(feedGroup(in.unit(), in.flow(), t));
         var right = new ArrayList<Column.Row>();
         right.add(group("condenser", t, field("s4", "outlet", in.unit(), "top_temperature", t), field("s6", "reflux", "", "reflux", t)));
         right.add(group("reboiler", t, field("s5", "duty", "MW", "duty", t)));
@@ -327,7 +329,7 @@ public final class CalculatorColumn {
         int i = in.index();
         switch (in.selected()) {
             case DRAW -> right.add(new Column.Group(t.get(KEY + "group.draw", i + 1), t.get(KEY + "group.draw.hint"), List.of(
-                    field("d" + i + "rate", "flow", "kmol/h", "draw_flow", t), field("d" + i + "stage", "tray", "", "draw_tray", t),
+                    field("d" + i + "rate", "flow", in.flow(), "draw_flow", t), field("d" + i + "stage", "tray", "", "draw_tray", t),
                     new Column.Buttons(List.of(button("remove", "remove", in.editable(), t, "remove_draw"))))));
             case PA -> right.add(new Column.Group(t.get(KEY + "group.pa", i + 1), t.get(KEY + "group.pa.hint"), List.of(
                     field("c" + i + "duty", "cooling", "MW", "cooling", t), field("c" + i + "draw", "draw_tray", "", "draw_tray", t),
@@ -336,7 +338,7 @@ public final class CalculatorColumn {
                             position("split:return", t.get(KEY + "return_heat"), !in.spread(), in.editable(), t.get(KEY + "return_heat.hint")))),
                     new Column.Buttons(List.of(button("remove", "remove", in.editable(), t, "remove_pa"))))));
             case STEAM -> right.add(new Column.Group(t.get(KEY + "group.steam", i + 1), t.get(KEY + "group.steam.hint"), List.of(
-                    field("t" + i + "rate", "flow", "kmol/h", "steam_flow", t), field("t" + i + "stage", "tray", "", "injection_tray", t),
+                    field("t" + i + "rate", "flow", in.flow(), "steam_flow", t), field("t" + i + "stage", "tray", "", "injection_tray", t),
                     field("t" + i + "T", "temperature", in.unit(), "steam_temperature", t),
                     new Column.Buttons(List.of(button("remove", "remove", in.editable(), t, "remove_steam"))))));
             case NONE -> {
@@ -349,7 +351,7 @@ public final class CalculatorColumn {
     public static Rows feed(boolean conflict, boolean editable, String unit, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
         if (conflict) rows.add(draft(t));
-        rows.add(feedGroup(unit, t));
+        rows.add(feedGroup(unit, "kmol/h", t));
         rows.add(group("mixture", t, new Column.Buttons(List.of(button("clear", "clear_mixture", editable, t, "clear_mixture")))));
         return new Rows(List.of(), rows);
     }
@@ -401,11 +403,25 @@ public final class CalculatorColumn {
         return new Rows(List.of(), rows);
     }
 
-    /** What the Equipment page reads: the draft conflict; the condenser, the reflux pump and each pumparound's pump chosen; whether the design saves. */
-    public record EquipmentInput(boolean conflict, Condenser condenser, Pump reflux, List<Pump> pumparounds, boolean saves) {
+    /**
+     * What the Equipment page reads: the draft conflict; the condenser, the reflux pump and each pumparound's pump chosen;
+     * whether the design saves; how many units stand in parallel on each heat-transfer step (S3b), and whether the design
+     * has a kettle, whose count shows only then.
+     */
+    public record EquipmentInput(boolean conflict, Condenser condenser, Pump reflux, List<Pump> pumparounds, boolean saves, ColumnComponents.Units units, boolean kettle) {
         public EquipmentInput {
             pumparounds = List.copyOf(pumparounds);
         }
+
+        /** One unit on every step and no kettle: the page before the counts. */
+        public EquipmentInput(boolean conflict, Condenser condenser, Pump reflux, List<Pump> pumparounds, boolean saves) {
+            this(conflict, condenser, reflux, pumparounds, saves, ColumnComponents.Units.ONE, false);
+        }
+    }
+
+    /** A member count's setting, stepped by {@code key-} and {@code key+}: {@code units/condenser}, {@code units/trim}, {@code units/kettle}, {@code units/pa<i>}. */
+    private static Column.Setting units(String key, String label, int count, HeatControlColumn.Texts t) {
+        return new Column.Setting("units/" + key, t.get(KEY + label), Integer.toString(count), "", t.get(KEY + "units.hint"), true);
     }
 
     private static Column.Buttons pumps(String key, Pump chosen, HeatControlColumn.Texts t) {
@@ -414,20 +430,30 @@ public final class CalculatorColumn {
     }
 
     /**
-     * The Equipment page: Condenser (air cooler, exchanger), Reflux pump and each pumparound's pump (standard, in-line),
-     * latched selectors in place of the cycle buttons; Design (Save design). The derived components and the design's
-     * state stand on the glass. Buttons {@code condenser:air_cooler}, {@code condenser:exchanger}, {@code reflux:<pump>},
-     * {@code pa<i>:<pump>}, {@code save_design}.
+     * The Equipment page: Condenser (air cooler, exchanger, or air then water, and its banks or shells; the water trim's
+     * shells after an air cooler), Reflux pump, the Kettle's shells where the design has one, and each pumparound's pump
+     * (standard, in-line) and cooler shells; latched selectors in place of the cycle buttons, counts stepped; Design (Save
+     * design). The derived components and the design's state stand on the glass. Buttons {@code condenser:air_cooler},
+     * {@code condenser:exchanger}, {@code condenser:air_then_water}, {@code reflux:<pump>}, {@code pa<i>:<pump>},
+     * {@code save_design}; settings {@code units/condenser}, {@code units/trim}, {@code units/kettle}, {@code units/pa<i>}.
      */
     public static Rows equipment(EquipmentInput in, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
         if (in.conflict()) rows.add(draft(t));
-        rows.add(new Column.Group(t.get(KEY + "component_condenser"), t.get(KEY + "condenser.hint"), List.of(new Column.Buttons(List.of(
+        var condenser = new ArrayList<Column.Row>();
+        condenser.add(new Column.Buttons(List.of(
                 position("condenser:air_cooler", t.get(KEY + "condenser.air_cooler"), in.condenser() == Condenser.AIR_COOLER, true, null),
-                position("condenser:exchanger", t.get(KEY + "condenser.exchanger"), in.condenser() == Condenser.EXCHANGER, true, null))))));
+                position("condenser:exchanger", t.get(KEY + "condenser.exchanger"), in.condenser() == Condenser.EXCHANGER, true, null),
+                position("condenser:air_then_water", t.get(KEY + "condenser.air_then_water"), in.condenser() == Condenser.AIR_THEN_WATER, true, null))));
+        // The condenser's own count is an air cooler's banks; an air-then-water condenser's water trim counts its shells after it.
+        condenser.add(units("condenser", in.condenser() == Condenser.EXCHANGER ? "units.shells" : "units.banks", in.units().condenser(), t));
+        if (in.condenser() == Condenser.AIR_THEN_WATER) condenser.add(units("trim", "units.trim_shells", in.units().trim(), t));
+        rows.add(new Column.Group(t.get(KEY + "component_condenser"), t.get(KEY + "condenser.hint"), condenser));
         rows.add(new Column.Group(t.get(KEY + "component_reflux_pump"), t.get(KEY + "pump.hint"), List.of(pumps("reflux", in.reflux(), t))));
+        if (in.kettle()) rows.add(new Column.Group(t.get(KEY + "component_kettle"), t.get(KEY + "units.hint"), List.of(units("kettle", "units.shells", in.units().kettle(), t))));
         for (int i = 0; i < in.pumparounds().size(); i++)
-            rows.add(new Column.Group(t.get(KEY + "component_pa_pump", i + 1), t.get(KEY + "pump.hint"), List.of(pumps("pa" + i, in.pumparounds().get(i), t))));
+            rows.add(new Column.Group(t.get(KEY + "component_pa", i + 1), t.get(KEY + "component_pa.hint"), List.of(pumps("pa" + i, in.pumparounds().get(i), t),
+                    units("pa" + i, "units.cooler_shells", in.units().cooler(i), t))));
         rows.add(group("design", t, new Column.Buttons(List.of(button("save_design", "save_design", in.saves(), t, "save_design")))));
         return new Rows(List.of(), rows);
     }
@@ -695,26 +721,31 @@ public final class CalculatorColumn {
     }
 
     /**
-     * Each tray's pressure drop as a bar ({@code drops}: kPa a node, the interior trays' from node 1), the trays
-     * numbered at the first, the last and every fifth, 0 and the largest drop under it.
+     * Each tray's pressure drop as a bar ({@code drops}: a node's, the interior trays' from node 1, in any one unit), the trays
+     * numbered at the first, the last and every fifth, 0 and the largest drop under it as {@code label} writes it.
      */
-    public static void drops(Canvas c, Rect plot, double[] drops) {
+    public static void drops(Canvas c, Rect plot, double[] drops, java.util.function.DoubleFunction<String> label) {
         int n = drops.length - 2, x = plot.x(), y = plot.y(), w = plot.w(), h = plot.h();
         if (n < 2 || h < 16) return;
         double max = 0.001;
         for (int i = 2; i <= n; i++) max = Math.max(max, drops[i]);
         c.fill(x, y, x + w, y + h, Palette.PANEL);
         var m = c.measure();
-        int numbered = Integer.MIN_VALUE, last = y + (n - 2) * h / (n - 1);
-        for (int i = 2; i <= n; i++) {
-            int py = y + (i - 2) * h / (n - 1), next = y + (i - 1) * h / (n - 1);
-            c.fill(x, py, x + (int) Math.round(drops[i] / max * w), Math.max(py + 1, next - 1), Palette.ACCENT);
-            if (i == 2 || i == n || (i + 1) % 5 == 0 && py - numbered >= PITCH && last - py >= PITCH) {
-                c.text(Integer.toString(i + 1), x - 4 - m.width(Integer.toString(i + 1)), py, Palette.MUTED);
-                numbered = py;
+        int last = y + (n - 2) * h / (n - 1);
+        double top = max;
+        // The bars run in one batch between their tray numbers.
+        c.batch(() -> {
+            int numbered = Integer.MIN_VALUE;
+            for (int i = 2; i <= n; i++) {
+                int py = y + (i - 2) * h / (n - 1), next = y + (i - 1) * h / (n - 1);
+                c.fill(x, py, x + (int) Math.round(drops[i] / top * w), Math.max(py + 1, next - 1), Palette.ACCENT);
+                if (i == 2 || i == n || (i + 1) % 5 == 0 && py - numbered >= PITCH && last - py >= PITCH) {
+                    c.text(Integer.toString(i + 1), x - 4 - m.width(Integer.toString(i + 1)), py, Palette.MUTED);
+                    numbered = py;
+                }
             }
-        }
-        String high = Format.number(max) + " kPa";
+        });
+        String high = label.apply(max);
         c.text("0", x, y + h + 5, Palette.MUTED);
         c.text(high, x + w - m.width(high), y + h + 5, Palette.MUTED);
     }
@@ -732,11 +763,13 @@ public final class CalculatorColumn {
 
     private static void line(Canvas c, int x0, int y0, int x1, int y1, int colour) {
         int steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-        for (int i = 0; i <= steps; i++) {
-            double f = steps == 0 ? 0 : (double) i / steps;
-            int x = (int) Math.round(x0 + (x1 - x0) * f), y = (int) Math.round(y0 + (y1 - y0) * f);
-            c.fill(x, y, x + 1, y + 1, colour);
-        }
+        c.batch(() -> {
+            for (int i = 0; i <= steps; i++) {
+                double f = steps == 0 ? 0 : (double) i / steps;
+                int x = (int) Math.round(x0 + (x1 - x0) * f), y = (int) Math.round(y0 + (y1 - y0) * f);
+                c.fill(x, y, x + 1, y + 1, colour);
+            }
+        });
     }
 
     // ---- Readouts and tables on the glass ----

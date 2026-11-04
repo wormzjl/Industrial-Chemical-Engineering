@@ -87,7 +87,7 @@ class HeatDiagramTest {
             assertEquals(expected, drawn, c::toString);
             checked++;
         }
-        assertEquals(18, checked);
+        assertEquals(32, checked, "every pair of lines, both sides");
     }
 
     @Test
@@ -170,17 +170,19 @@ class HeatDiagramTest {
         assertTrue(lang.contains("gui.icheme.fluid.device_field.max_ratio"));
     }
 
-    /** No key is defined twice: the language file keeps the last, so a second definition silently renames a field. */
+    /** No key is defined twice: a language file keeps the last, so a second definition silently renames a field. */
     @Test
     void noLanguageKeyIsDefinedTwice() throws java.io.IOException {
-        String text;
-        try (var in = HeatDiagramTest.class.getResourceAsStream("/assets/icheme/lang/en_us.json")) {
-            text = new String(java.util.Objects.requireNonNull(in).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        for (var language : List.of("en_us", "zh_cn")) {
+            String text;
+            try (var in = HeatDiagramTest.class.getResourceAsStream("/assets/icheme/lang/" + language + ".json")) {
+                text = new String(java.util.Objects.requireNonNull(in).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            var seen = new HashSet<String>();
+            var twice = new ArrayList<String>();
+            var m = java.util.regex.Pattern.compile("(?m)^\\s*\"([^\"]+)\"\\s*:").matcher(text);
+            while (m.find()) if (!seen.add(m.group(1))) twice.add(m.group(1));
+            assertEquals(List.of(), twice, language);
         }
-        var seen = new HashSet<String>();
-        var twice = new ArrayList<String>();
-        var m = java.util.regex.Pattern.compile("(?m)^\\s*\"([^\"]+)\"\\s*:").matcher(text);
-        while (m.find()) if (!seen.add(m.group(1))) twice.add(m.group(1));
-        assertEquals(List.of(), twice);
     }
 }

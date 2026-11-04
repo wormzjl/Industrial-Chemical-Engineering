@@ -1,6 +1,6 @@
 # Shared thermodynamics, materials and deterministic math
 
-**Snapshot:** f20ceefa (branch `claude/heat-exchanger-design-cf05d1`, released as 0.17.0), 2026-10-28 · **Updated:** 2026-10-28 (batch 2026-10-27-heat-exchanger-design, owner choice (b): a column preset's `columnDiameterMetres` must be above 0; the id `holland_3_2` is no longer reserved, the Holland example having left the presets; the steam's second-virial gas is in [equilibrium-engine.md](equilibrium-engine.md)) · earlier: 2026-10-27 at ce71b45c (batch 2026-10-26-multi-machine-framework, owner decisions 2026-10-26: nothing is hashed; every record declares its revision (a token, `JsonFields.revision`), and a package's identities are composed from them: `scientificRevision`, `fluidRevision`, `spineRevision`; `samePhysics` compares content directly; the fingerprints are gone; interactions records need a `revision`; the eight crude packages' pressure floor 1 kPa) · earlier: 2026-10-25 (batch 2026-10-21-floating-roof-tanks: the crude fractions' appearance colours from their normal boiling points; appearances read by the open tank's display and the sight glass) · earlier: 2026-10-21 (0.11.1 test review; mod rename to IChemE, 0.11.0); 2026-10-20 (`DeterministicMath` gains `sin`, `asin`, `atan2`; the rest of the chapter is unchanged since a08c7134)
+**Snapshot:** 3f459c176 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (merge package: the catalog's readers after the calculator block left, W8: no viewer refresh, the simulator's `RevisionNotice`, a placed calculator reading only its design; no code of this chapter changed since 6bf2205bf) · 2026-11-03 (batch 2026-11-02-process-simulator, W5 `61fe9196`: the five crude packages and their five column presets are gone; the five crude assays stand on `tjl20_methane` at `crude-regrouped-r2`; three column presets, four packages, 84 indexed files) · earlier: 2026-10-28 at f20ceefa (batch 2026-10-27-heat-exchanger-design, owner choice (b): a column preset's `columnDiameterMetres` must be above 0; the id `holland_3_2` is no longer reserved, the Holland example having left the presets; the steam's second-virial gas is in [equilibrium-engine.md](equilibrium-engine.md)) · earlier: 2026-10-27 at ce71b45c (batch 2026-10-26-multi-machine-framework, owner decisions 2026-10-26: nothing is hashed; every record declares its revision (a token, `JsonFields.revision`), and a package's identities are composed from them: `scientificRevision`, `fluidRevision`, `spineRevision`; `samePhysics` compares content directly; the fingerprints are gone; interactions records need a `revision`; the eight crude packages' pressure floor 1 kPa) · earlier: 2026-10-25 (batch 2026-10-21-floating-roof-tanks: the crude fractions' appearance colours from their normal boiling points; appearances read by the open tank's display and the sight glass) · earlier: 2026-10-21 (0.11.1 test review; mod rename to IChemE, 0.11.0); 2026-10-20 (`DeterministicMath` gains `sin`, `asin`, `atan2`; the rest of the chapter is unchanged since a08c7134)
 Up: [code guide](README.md)
 
 ## Read this when
@@ -103,7 +103,7 @@ flowchart LR
   CUR --> COL["column: V3CatalogPropertyPackage (refuses crystal and spine packages) -> V3PengRobinsonSession -> PengRobinsonKernel CLASSICAL"]
   CUR --> FLU["fluid: FluidThermodynamics -> HydrocarbonModel -> TranslatedPengRobinson -> PengRobinsonKernel SPARSE_PAIRS, or TEMPERATURE_DEPENDENT_PAIRS for a spine package (SpinePackageData)"]
   CUR --> ENG["fluid: NetworkPhaseEngine -> FluidTpEquilibrium (equilibrium-engine.md)"]
-  CUR --> UI["calculator names, presets, freshness"]
+  CUR --> UI["process simulator on the client: FlowsheetEngine, templates, revision tokens (RevisionNotice)"]
 ```
 
 1. **Datapack JSON.** Minecraft's resource manager picks the highest-priority file at each path; a replacement is a
@@ -151,9 +151,11 @@ flowchart LR
      builds `FreeWaterIce` from `Water.ice()` and `catalog.crystals()`. `FluidThermodynamics` still refuses a water model
      without ice, but the catalog refuses the network's at loading (step 3), so a datapack no longer reaches that refusal.
    - Server and UI: `ProcessSolveServices` pins the catalog per request; `FluidWorldAuthority.refreshProperties`
-     compares the active catalog to the world's captured one and holds islands on a change; the server tick
-     notices a new catalog instance and calls `ColumnV3Network.refreshMaterialViewers`;
-     `ColumnCalculatorV3BlockEntity` uses `MaterialRuntime.name` and `isCurrent`.
+     compares the active catalog to the world's captured one and holds islands on a change. The calculator
+     block's viewer refresh on a new catalog (`ColumnV3Network.refreshMaterialViewers`) left with the block (batch
+     2026-11-02-process-simulator, W8), and with it the game's callers of `MaterialRuntime.name` and `isCurrent`; since `3f459c176` `name` is gone and `isCurrent` is a private helper of the two tests that used it;
+     the process simulator runs on the client's own catalog and shows a notice when its
+     revision tokens differ from the server's (`RevisionNotice`, [process-simulator.md](process-simulator.md)).
 
 <details><summary>Data schema and units (by kind)</summary>
 
@@ -174,9 +176,9 @@ group-interaction matrix, which keeps the published MPa.
 | `crystals` | 2 (`crystal_carbon_dioxide_i`, a `gibbs_function` of type `jaeger_span_2012`; `crystal_ice_ih`, heat-capacity segments and a linear `molar_volume`) | `component`, `crystal`, `revision`, `source`, `anchor` (`triple_point`: T, P, fusion enthalpy), one model, `coverage` | `CrystalReference`, `JaegerSpanGibbsFunction` |
 | `water` | 1 (revision `water-iapws-shomate-r2`) | `iapws_shomate_watson`: molar mass, triple point, Tc, Pc, enthalpy limit, Watson data, 6 saturation + 7 Shomate coefficients, optional `viscosity`, optional `ice` (`crystal`, `sublimation_pressure`: `type` `iapws_r14_08`, 3 `coefficients`, 3 `exponents`, `source`) | `Water`, `Water.Ice` |
 | `bases` | 3 (`crude_18`, `crude_19`, `network` extends `crude_19` + Nitrogen) | ordered `components` + `properties`, optional `extends` | Inlined into packages by `MaterialCatalog.Authoring` |
-| `packages` | 9 | `model`, `basis` or inline lists, `interactions`, `missing_interactions` (`zero`/`error`), `water_model`, `aliases`, `advisory_evidence` (max 32 x 256 chars), T/P range, optional `fluid_domain`, `liquid_mixture`, `spine` (one id per component), `crystals` | `Package` |
-| `assays` | 8 | `package`, `basis` (`mole`/`mass`/`standard_liquid_volume`), positional `components`+`amounts` or sparse `amounts_by_component`, required `appearance` | `Assay` in its package |
-| `presets` | 8 column + 5 fluid | column: `package`, `assay`, `order`, `visible`, `operating` (SI feed volume m3/s, K, Pa, W, mol/s, required `columnDiameterMetres` above 0 and at most 15 m); fluid: `component` or `package`+`assay` | `MaterialPresets.Column`/`Fluid` |
+| `packages` | 4 | `model`, `basis` or inline lists, `interactions`, `missing_interactions` (`zero`/`error`), `water_model`, `aliases`, `advisory_evidence` (max 32 x 256 chars), T/P range, optional `fluid_domain`, `liquid_mixture`, `spine` (one id per component), `crystals` | `Package` |
+| `assays` | 8 (the five crudes on `tjl20_methane`, revision `crude-regrouped-r2`, each with its own `provenance`) | `package`, `basis` (`mole`/`mass`/`standard_liquid_volume`), positional `components`+`amounts` or sparse `amounts_by_component`, required `appearance` | `Assay` in its package |
+| `presets` | 3 column (`tia_juana`, `tia_juana_nitrogen`, hidden `literature_tia_juana`) + 5 fluid | column: `package`, `assay`, `order`, `visible`, `operating` (SI feed volume m3/s, K, Pa, W, mol/s, required `columnDiameterMetres` above 0 and at most 15 m); fluid: `component` or `package`+`assay` | `MaterialPresets.Column`/`Fluid` |
 | `networks` | 1 (`default.json`, package `icheme:tjl20_methane_nitrogen`) | `package`, `default_column_preset`, ordered `fluid_presets` | `MaterialPresets.Network` |
 | `transport` | 2 | `type`, `revision`, `source`; `liquid_volume_reference_points` (K, Pa, m3/mol) or `conditional_solute_log_tables` (K, Pa*s) | `MaterialCatalog.FluidData` (`revision()`: `type@revision` of each record, sorted) |
 | `solids` | 1 (`demo_particle`, fictional) | `revision`, `density_kg_per_m3`, `heat_capacity_j_per_kg_kelvin` | `SolidMaterialCatalog.SolidMaterial` |
@@ -185,12 +187,15 @@ Assay conversion to mole fractions (`MaterialPresets.moleFractions`): mole as is
 x `volume_scale / amount_total` x rho / M; then normalise. Volume assays must quote the same reference T and P as every
 selected property. `V3CatalogPropertyPackage.crudeFeed` has its own copy of this switch.
 
-Bundled packages: `tjl19_dwsim`, `tjl20_methane`, `tjl20_methane_nitrogen`, `bonga_tjl20`, `cold_lake_blend_tjl20`,
-`dalia_tjl20`, `upper_zakum_tjl20`, `wti_light_export_tjl20`, `pilot_cryogenic` (all `icheme:`). The eight crude
-packages' column range starts at `pressure_min_pascal` 1000 (1 kPa, 50 kPa before 0.15.0, owner answer Q1), so a vacuum
+Bundled packages: `tjl19_dwsim`, `tjl20_methane`, `tjl20_methane_nitrogen`, `pilot_cryogenic` (all `icheme:`). The five
+per-crude packages (`bonga_tjl20` and the others) and their column presets left with W5 (batch 2026-11-02-process-simulator,
+`61fe9196`): no screen read those presets, only gates. Their assays (`bonga`, `cold_lake_blend`, `dalia`, `upper_zakum`,
+`wti_light_export`) now name `tjl20_methane`, so a column on any crude shows the shared package's audit lines, and each
+assay keeps its crude's evidence in its own `provenance`. Since W8 a placed calculator block loads as a process
+simulator, which reads only its saved design (`Design`), not its input. The three crude packages' column range starts at `pressure_min_pascal` 1000 (1 kPa, 50 kPa before 0.15.0, owner answer Q1), so a vacuum
 column can be designed; it is an admission bound only, outside `samePhysics`, and the package revisions stayed
 `crude-regrouped-r1`. The standalone index
-[`materials-index.json`](../../../src/main/resources/materials-index.json) lists all 94 bundled material files and is used
+[`materials-index.json`](../../../src/main/resources/materials-index.json) lists all 84 bundled material files and is used
 only by `bundled()`; Minecraft discovers datapack files itself.
 
 The pilot package (`packages/pilot_cryogenic.json`, revision `pilot-cryogenic-p3-r1`): Nitrogen, Methane, Ethane,
@@ -202,7 +207,7 @@ the fluid presets `fluid_pilot_methane`, `fluid_pilot_ethane`, `fluid_pilot_carb
 component presets only: a bundled crude preset fails `requireSharedFluidPhysics` on the pilot, which lacks its
 components.
 
-Nitrogen in a column feed: the visible column preset `tia_juana_nitrogen` (`presets/column_tia_juana_nitrogen.json`, order 6) puts package `icheme:tjl20_methane_nitrogen` (the network package) into the column editor catalog. Its assay `tia_juana_light_methane` carries no nitrogen; the nitrogen comes from the client bundled mixture `assets/icheme/mixturepreset/tia_juana_nitrogen.json` (Nitrogen relative amount 2.0, mole basis). The package uses interactions `icheme:tjl20` with `missing_interactions: zero`, which has no nitrogen pair, so every nitrogen–hydrocarbon kij is zero (advisory `NITROGEN_EXTENSION`). The bundled column model declines this package (see [column-v3.md](column-v3.md)); `V3ColumnFeedAndDrawLimitsTest` solves a 2 % N2 feed on the classical seed. The nitrogen record is `fluid-nitrogen-nist-r3`: its fit has no low-temperature segment and declares `ideal_gas_cp.temperature_min_kelvin` 273.16 K. The tjl20-family package envelopes and the methane and nitrogen records' `fluid_domain` reach 10 MPa.
+Nitrogen in a column feed: the visible column preset `tia_juana_nitrogen` (`presets/column_tia_juana_nitrogen.json`, order 6) names package `icheme:tjl20_methane_nitrogen` (the network package). Since W5 no screen lists the column presets: the column and simulator screens start from the network's `default_column_preset` (`tia_juana`), and gates read the other two. Its assay `tia_juana_light_methane` carries no nitrogen; the nitrogen comes from the client bundled mixture `assets/icheme/mixturepreset/tia_juana_nitrogen.json` (Nitrogen relative amount 2.0, mole basis). The package uses interactions `icheme:tjl20` with `missing_interactions: zero`, which has no nitrogen pair, so every nitrogen–hydrocarbon kij is zero (advisory `NITROGEN_EXTENSION`). The bundled column model declines this package (see [column-v3.md](column-v3.md)); `V3ColumnFeedAndDrawLimitsTest` solves a 2 % N2 feed on the classical seed. The nitrogen record is `fluid-nitrogen-nist-r3`: its fit has no low-temperature segment and declares `ideal_gas_cp.temperature_min_kelvin` 273.16 K. The tjl20-family package envelopes and the methane and nitrogen records' `fluid_domain` reach 10 MPa.
 
 </details>
 
@@ -382,7 +387,7 @@ The numerical box (10..6000 K, 1 Pa..1 GPa) is in [equilibrium-engine.md](equili
   comes into every package through `Water.ice`, by water's own rule.
 - The pilot package is bundled but not selected: `networks/default.json` names `tjl20_methane_nitrogen`.
 - `PilotCryogenicCatalogTest.bundledPackageRevisionsAndSharedPhysicsAreUnchanged` pins each bundled package's label and
-  checks that the regrouped crude packages and `tjl19_dwsim` share `tjl20_methane`'s physics on its axis (`TJL20_PHYSICS`).
+  checks that `tjl20_methane_nitrogen` (`TJL20_PHYSICS`) and `tjl19_dwsim`, on its 18-component axis, share `tjl20_methane`'s physics.
 - An NRTL package parses, but the column refuses it (`Thermodynamic solver unavailable: nrtl`).
 - Solids are parsed by `SolidMaterialCatalog` with fewer checks than other kinds (no `source` check). Since 0.9.1 its
   four fields go through `JsonFields`, and an error names the file and the field.
@@ -404,7 +409,7 @@ The numerical box (10..6000 K, 1 Pa..1 GPa) is in [equilibrium-engine.md](equili
 | Change | Owning class / file | Tests that pin it |
 |---|---|---|
 | Add a compound or property dataset | `materials/components`, `materials/properties`, a `bases` record, `materials-index.json`; follow MATERIALS.md "Adding a compound" | `MaterialCatalogTest`, `MaterialPresetsTest.addingAQualifiedFixtureComponentAndMovingNitrogenNeedsNoFixedWidthEdits`, `MaterialAuthoringTest` |
-| Add a crude feed | `materials/assays`, `materials/packages`, `materials/presets` | `MaterialPresetsTest` (includes the crude assay conversion) |
+| Add a crude feed | `materials/assays` on `icheme:tjl20_methane` (a new package only for new components; a column preset only if a gate or the network default reads it) | `MaterialPresetsTest` (includes the crude assay conversion) |
 | New record field or validation rule | `MaterialCatalog.parse` (or `MaterialPresets.read`, `MaterialCatalog.FluidData.read`, `SolidMaterialCatalog.parse`, a record class's `read`); field reads through `JsonFields` | `MaterialCatalogTest.rejectsDuplicateIdsMissingReferencesAndAmbiguousAliases`, `invalidReloadCannotPublishPartialCatalog`, `PilotCryogenicCatalogTest`, `MaterialFluidDataTest.aNetworkWaterModelWithoutIceFailsLoadingWithItsFileAndField`, `aMalformedSolidRecordFailsWithItsResourceAndField` |
 | Reference spine (ideal gas, formation data, groups) | `materials/spine/*.json`, `ReferenceSpine` | `ReferenceSpineTest`, `MethaneSpineTest`, `PilotCryogenicCatalogTest` |
 | Crystal record | `materials/crystals/*.json`, `CrystalReference`, `JaegerSpanGibbsFunction` | `CrystalReferenceTest`, `JaegerSpanGibbsFunctionTest`; engine: `CrystalPhaseEvaluatorTest`, `FreeWaterIceTest` |

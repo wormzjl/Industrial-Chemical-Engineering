@@ -64,11 +64,23 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
 
     public FluidDeviceScreen(FluidDeviceMenu menu,Inventory inventory,Component title){super(menu,inventory,title);}
     private static String tr(String key,Object...args){return Component.translatable("gui.icheme.fluid."+key,args).getString();}
+    /** The title strip (N1, the owner 2026-11-03: "You can put the equipment name here"): the kind's plate, the name after it, the theme key. */
+    private TitleStrip.Strip strip(){return TitleStrip.place(imageWidth,themeWidth(),title.getString(),GuiCanvas.measure(font));}
+    /** The device's name as the client's block holds it (N1): a structure's on its cells, a one-block device's on itself. */
+    private String currentName(){var level=minecraft==null?null:minecraft.level;return level==null?"":com.wormzjl.icheme.world.level.block.EquipmentStructure.name(level,menu.position());}
+    /** Whether this device takes a name (N1): a structure, or a one-block device with a screen of its own (FluidDeviceBlockEntity.nameable). */
+    private boolean nameable(){var level=minecraft==null?null:minecraft.level;if(level==null)return false;
+        return level.getBlockEntity(menu.position()) instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity device?device.nameable():com.wormzjl.icheme.world.level.block.EquipmentStructure.find(level,menu.position())!=null;}
+    /** The name as typed (N1, the owner's pick A), sent with Apply, and the device's name it last followed: the draft follows the device's name while the player has not changed it. */
+    private String nameDraft,nameShown;
+    /** Whether Apply has a name to send: the typed name, cleaned, differs from the device's. */
+    private boolean renames(){return nameDraft!=null&&nameable()&&!com.wormzjl.icheme.science.equipment.DeviceName.clean(nameDraft).equals(currentName());}
     @Override public void removed(){super.removed();WindowScale.restore(minecraft);}
     @Override protected void init(){
         WindowScale.apply(minecraft,this,FluidGuiLayout.HEIGHT,this::fits);
         imageWidth=FluidGuiLayout.imageWidth(width);imageHeight=FluidGuiLayout.imageHeight(height);
         super.init();titleLabelY=inventoryLabelY=-1000;
+        if(nameDraft==null)nameDraft=nameShown=currentName();
         if(library==null)library=new V3ClientPresets(minecraft.gameDirectory.toPath(),name->{
             try{return minecraft.getResourceManager().getResource(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("icheme",name.substring("assets/icheme/".length()))).orElseThrow().open();}
             catch(java.io.IOException|NoSuchElementException e){return null;}
@@ -82,6 +94,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean transport(){return menu.clientData()!=null&&menu.clientData().view().pipeInfo()!=null;}
     private com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE;
     private boolean canEdit(){return !menu.debug()&&menu.clientData()!=null;}
+    /** A tank with contents shows Copy in the footer's second push slot, where Apply would stand. */
+    private boolean copies(){var data=menu.clientData();return data!=null&&tank()&&!tower()&&data.view().state()!=null;}
+    /** Whether the title strip holds the name's entry: an editor of a device that takes a name. Enter saves it, Apply sends it with the controls. */
+    private boolean names(){return canEdit()&&nameable();}
+    /** Saves the typed name by the rename path (N1), as Apply does: Enter in the entry; a tank with contents has Copy in Apply's slot. */
+    private void saveName(){if(canEdit()&&renames())com.wormzjl.icheme.network.EquipmentNetwork.rename(menu.position(),nameDraft);}
+    /** Whether Apply sends this device's controls: every kind but a tank (an induced-draught tower's aside), a filter, and a heat side off its Control tab or with nothing to control. */
+    private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()));}
     private boolean constructedMover(){var data=menu.clientData();return data!=null&&datasheet!=null&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
     /** An air cooler's side: its fans switch as a mover does (batch 2026-10-27-heat-exchanger-design). */
     private boolean fans(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().fans()!=null;}
@@ -244,6 +264,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         String theme=tr(ClientConfig.theme()==ClientConfig.Theme.DARK?"theme.dark":"theme.light");
         doorButton(theme,imageWidth-10-themeWidth,5,themeWidth,()->{ClientConfig.toggleTheme();rebuild();}).icon(Skin.Icon.THEME)
             .setTooltip(Tooltip.create(Component.literal(theme+"\n").append(Component.translatable("gui.icheme.fluid.theme.hint"))));
+        // The name's entry in the title strip, for an editor of a device that takes a name, sent with Apply; a reader sees its text (renderLabels).
+        var namePlace=strip().name();if(names()&&namePlace!=null)nameBox(namePlace);
         var footer=FluidGuiLayout.footer(imageWidth);int by=imageHeight-27;
         var close=footer.get(0);doorAction("close",close.x(),by,close.width(),this::onClose);
         // The basis and the units are display keys on their strip (renderBg): they change what the screen shows, not the
@@ -257,8 +279,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var rate=footer.get(5);doorButton(flowRateUnit.suffix(),rate.x(),by,rate.width(),this::toggleFlowRate).soft(true)
             .setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.flow_unit.hint")));
         if(data==null)return;
+        if(copies()){var copy=footer.get(1);doorAction("copy",copy.x(),by,copy.width(),this::copyContents);}
         // A heat side applies its control from its Control tab only.
-        if(canEdit()&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()))){var apply=footer.get(1);doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);}
+        // Apply sends the controls, and the name typed in the title strip (N1): a filter or a heat side with nothing to control applies the name alone; a tank with contents shows Copy there, and Enter saves its name.
+        if(canEdit()&&(controlsApply()||names()&&!copies())){var apply=footer.get(1);var key=doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);if(!controlsApply())key.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.apply_name.hint")));}
         if(page==CONTROL){
             buildControl();
             if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
@@ -318,11 +342,25 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             String name=mixture.translationKey().isBlank()?mixture.name():Component.translatable(mixture.translationKey()).getString();
             list.add(new Choice(name+" · "+tr(entry.bundled()?"bundled":"custom"),()->{
                 var replacement=new RelativeComposition(data.components(),data.molecularWeights(),new double[data.components().size()]);
-                replacement.load(mixture.amounts(),mixture.mass());loadMixture(replacement,mixture.solids());
+                replacement.load(mixture.amounts(),mixture.mass());
+                // A template's conditions are the set point's draft, as its parts are; the flow here is by volume, which a mixture's kmol/h does not fix.
+                mixture.temperature().ifPresent(k->fields.put("temperature",new NumericDraft(k,temperatureUnit)));
+                mixture.pressure().ifPresent(bar->fields.put("pressure",new NumericDraft(bar*1e5,pressureUnit)));
+                loadMixture(replacement,mixture.solids());
             }));
         }
         return List.copyOf(list);
     }
+    /** Copies what this page shows from the last published snapshot, to the one clipboard: it reads the menu's data, sends no packet and solves nothing. */
+    private void copyContents(){
+        var data=menu.clientData();var state=data==null?null:data.view().state();
+        if(state==null)return;
+        var pos=menu.position();
+        var held=com.wormzjl.icheme.client.gui.flowsheet.SheetClipboard.vessel(trFlowsheet("clipboard.tank",pos.getX(),pos.getY(),pos.getZ()),data.components(),state.phaseMoles(),state.temperature(),state.pressure());
+        com.wormzjl.icheme.client.gui.flowsheet.SheetClipboard.copy(held);
+        message=trFlowsheet("door.copied",held.amounts().size(),temperatureValue(state.temperature()),temperatureUnit.symbol(),pressureValue(state.pressure()),pressureUnit.symbol());
+    }
+    private static String trFlowsheet(String key,Object... args){return Component.translatable("gui.icheme.flowsheet."+key,args).getString();}
     /** Every preset choice loads a whole feed: its fluid composition and its solids (none clears the previous grades). */
     private void loadMixture(RelativeComposition replacement,SlurryFeed solids){
         composition=replacement;mass=replacement.mass();loadSolids(solids);
@@ -380,6 +418,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         return new SlurryFeed(fields.get("solidFraction").value()/100,grades);
     }
     private void apply(){
+        saveName();
+        if(!controlsApply())return;
         if(!canEdit())return;
         // A compressor's ratio outside its bounds is named with them (the bounds Controls validates with), not the generic message.
         if(menu.clientData().kind()==TopologyCompiler.Kind.COMPRESSOR){
@@ -503,8 +543,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     @Override protected void renderLabels(GuiGraphics g,int mouseX,int mouseY){
         hoverX=mouseX-leftPos;hoverY=mouseY-topPos;
         var skin=skin();var canvas=new GuiCanvas(g,font,leftPos,topPos);
-        String name=title.getString(),shownName=font.plainSubstrByWidth(name,imageWidth-36-themeWidth());skin.title(canvas,10,10,shownName);
-        if(shownName.length()<name.length()&&hoverX>=6&&hoverX<imageWidth-20-themeWidth()&&hoverY>=6&&hoverY<22)hovered=name;
+        var strip=strip();skin.title(canvas,TitleStrip.TITLE_X,TitleStrip.TITLE_Y,strip.kind());
+        if(strip.kind().length()<title.getString().length()&&strip.plate().contains(hoverX,hoverY))hovered=title.getString();
+        if(strip.name()!=null&&!editors.containsKey("name")){String name=currentName(),shown=TitleStrip.text(name,strip.name(),GuiCanvas.measure(font));int[] at=TitleStrip.textAt(strip.name());
+            skin.text(canvas,shown,at[0],at[1],Palette.TEXT);if(shown.length()<name.length()&&strip.name().contains(hoverX,hoverY))hovered=name;}
         var data=menu.clientData();
         if(data==null){doorStatus(canvas,skin,tr("waiting"),MUTED);return;}
         // A refused mover's reason ("ERROR: pump inlet not liquid ...") and a hold read in the warning colour.
@@ -854,7 +896,13 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     // A column that grows past its view after the screen opened (the first publication's readings) lowers the scale
     // where a lower one holds it; the screen builds again between frames, so no frame draws at two scales.
-    @Override protected void containerTick(){super.containerTick();if(doorView.max()>0&&WindowScale.lower(minecraft,FluidGuiLayout.HEIGHT,this::fits))rebuildWidgets();}
+    @Override protected void containerTick(){super.containerTick();followName();if(doorView.max()>0&&WindowScale.lower(minecraft,FluidGuiLayout.HEIGHT,this::fits))rebuildWidgets();}
+    /** The name entry follows the device's name (another player's rename, this one's answered) while the player has not changed it. */
+    private void followName(){
+        String now=currentName();if(nameShown==null||now.equals(nameShown))return;
+        var box=editors.get("name");if(nameDraft.equals(nameShown)&&(box==null||!box.isFocused())){nameDraft=now;if(box!=null)box.setValue(now);}
+        nameShown=now;
+    }
     private FluidGuiLayout.ControlSlots controlSlots(){return FluidGuiLayout.control(imageWidth);}
     private int drawingRight(){return controlSlots().drawingRight();}
     private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol());}
@@ -943,6 +991,13 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(doorView.inside(hoverX,hoverY))for(var column:doorColumns){var hover=column.hover(hoverX,doorView.contentY(hoverY));if(hover!=null)hovered=hover;}
         doorView.drawBar(canvas,skin);
     }
+    /** The name's entry in the title strip (N1): the name as typed, at most DeviceName.MAX characters, sent with Apply; its hint while empty. */
+    private EditBox nameBox(Rect slot){
+        var box=new SkinField(font,leftPos+slot.x(),topPos+slot.y(),slot.w(),slot.h(),Component.literal(tr("name")),FluidDeviceScreen::skin);
+        box.setMaxLength(com.wormzjl.icheme.science.equipment.DeviceName.MAX);box.setValue(nameDraft==null?"":nameDraft);box.setResponder(v->nameDraft=v);box.setHint(Component.literal(tr("name")));box.onEnter(this::saveName);
+        box.setTooltip(Tooltip.create(Component.literal(tr("name")+"\n"+tr("name.hint"))));
+        editors.put("name",addRenderableWidget(box));return box;
+    }
     /** A field of a door column: a panel's LCD entry at rest, the game's text field while edited. */
     private EditBox doorBox(Column.Field f,Rect slot){
         var box=new SkinField(font,leftPos+slot.x(),topPos+slot.y(),slot.w(),slot.h(),Component.literal(f.label()),FluidDeviceScreen::skin);
@@ -976,8 +1031,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(heat.lines()==null)return com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Design.NONE;
         return new com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Design(drawnLines(heat,"tube"),drawnLines(heat,"shell"));
     }
+    /** A side's lines by their parts: a tee is a bypass, a feed station's own meter (U2) a flow station, a feed valve alone a ratio. */
     private static com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines drawnLines(com.wormzjl.icheme.runtime.fluid.FluidView.Heat heat,String side){
         return heat.lines().part(side+"_inlet_tee")!=null?com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.BYPASS
+            :heat.lines().part(side+"_feed_meter")!=null?com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.FEED
             :heat.lines().part(side+"_feed_valve")!=null?com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.RATIO:com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE;
     }
     private HeatFlowsheet flowsheet(){
@@ -988,7 +1045,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private final HeatFlowsheet.Data flowData=new HeatFlowsheet.Data(){
         @Override public String value(HeatDiagram.Value value){return heatValue(value);}
         @Override public String state(String slot){return partState(slot);}
-        @Override public String text(AssemblyDiagram.Text text){return AssemblyScreen.text(text).getString();}
+        @Override public String text(AssemblyDiagram.Text text){return Component.translatable(HeatDiagram.KEY+text.key(),text.args().toArray()).getString();}
     };
     /** A line part's hover: its name and its state in the column's words. */
     private static Component partHover(String slot,String state,String detail,long at){
@@ -1049,6 +1106,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                     yield switch(heat.limit()){case "LOW_LIMIT"->tr("heat_status.low_limit",low);case "LOWEST","HIGHEST"->tr("heat_status.short",target,limitClause(status));default->tr("heat_status.holding",target);};
                 }
                 case RATIO->heat.lines()!=null&&"COMPLETE".equals(heat.lines().status())?tr("heat_status.ratio",number(c.target())):tr("heat_status.ratio_waiting");
+                case COLUMN->heat.lines()!=null&&"COMPLETE".equals(heat.lines().status())?tr("heat_status.column"):tr("heat_status.column_waiting");
                 default->heat.limit().equals("LOW_LIMIT")?tr("heat_status.low_limit",low):tr("heat_status.manual");
             };
         }
@@ -1101,6 +1159,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     @Override public boolean mouseClicked(double x,double y,int button){
         if(componentDropdown!=null&&componentDropdown.popupClick(x,y,button))return true;
+        SkinField.clickOutside(this,x,y);
         // The door column's view on every page: its bar, then a choice it places (a mode, a valve's target); then the table's scroll.
         double rx=x-leftPos,ry=y-topPos;
         if(doorView.press(rx,ry,button))return true;

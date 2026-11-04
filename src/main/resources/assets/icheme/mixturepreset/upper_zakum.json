@@ -3,7 +3,8 @@
   "kind": "mixture",
   "name": "Upper Zakum",
   "translation_key": "gui.icheme.column_preset.upper_zakum",
-  "package": "icheme:upper_zakum_tjl20",
+  "temperature_kelvin": 638.15,
+  "flow_kmol_h": 2652.56299175624,
   "basis": "mole",
   "components": [
     {

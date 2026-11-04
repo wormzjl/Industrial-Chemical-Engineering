@@ -43,9 +43,11 @@ final class FluidFacts {
      *  and appends the data's identity, the declared revision of every record it reads (owner decisions 2026-10-26).
      *  5 (batch 2026-10-27-heat-exchanger-design): a geometry's channel count, a heat side's unit on its registration.
      *  6 (batch 2026-10-28-column-operation): a registration's column unit (the running column that holds it), the column units.
-     *  7 (batch 2026-10-30-water-cooling-tower): a device spec's cooling tower. */
-    static final int SCHEMA=7;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 7. */
+     *  7 (batch 2026-10-30-water-cooling-tower): a device spec's cooling tower.
+     *  8 (batch 2026-11-02-process-simulator, S3b): a column unit's further condenser water sides, one a shell in parallel.
+     *  9 (batch 2026-11-02-process-simulator, U2): a column unit's air condenser surface; a heat side's {@code COLUMN} mode. */
+    static final int SCHEMA=9;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 9. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -300,7 +302,11 @@ final class FluidFacts {
                 .record(q->setpoints(q,s))
                 .list(u.stations(),(q,st)->{q.name(st.port()).count(st.index()).count(st.device()).count(st.valve()).record(a->account(a,st.account()));solids(q,Solid.of(st.solids()));})
                 .record(q->q.record(a->account(a,t.taken())).record(a->account(a,t.produced())).f64(t.reboiler()).f64(t.condenser()).f64(t.pumparounds()))
-                .count(u.condenser()).bool(u.leaving());
+                .count(u.condenser()).bool(u.leaving())
+                // Schema 8 (S3b): the condenser's further water sides, one a shell in parallel.
+                .list(u.condensers().isEmpty()?List.<Long>of():u.condensers().subList(1,u.condensers().size()),(q,side)->q.count(side))
+                // Schema 9 (U2): the air condenser's bare tube, m².
+                .f64(u.airSurface());
     }
     private static ColumnUnit column(Record f) {
         long id=f.count(0);var master=position(f);boolean running=f.bool(false);
@@ -314,8 +320,14 @@ final class FluidFacts {
             required(taken,q,"taken total");required(produced,q,"produced total");
             return valid(q,"column totals",()->new ColumnUnit.Totals(taken,produced,reboiler,condenser,pumparounds));});
         long condenser=f.count(0);boolean leaving=f.bool(false);
+        // A unit written before schema 8 has one water side at most.
+        var further=f.list(List.<Long>of(),q->q.count(0));
+        var condensers=new ArrayList<Long>();if(condenser!=0)condensers.add(condenser);condensers.addAll(further);
+        if(condenser==0&&!further.isEmpty())throw f.invalid("column condenser sides");
+        // A unit written before schema 9 has no air condenser surface: its air takes any duty, as before.
+        double air=f.f64(0);
         required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
-        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condenser,null,leaving));
+        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,null,leaving,air));
     }
     private static Fields setpoints(Fields q,com.wormzjl.icheme.science.column.operation.Setpoints s) {
         return q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())
@@ -408,7 +420,8 @@ final class FluidFacts {
                 .record(q->q.doubles(ref.feedFractions()).f64(ref.feedEnthalpy()).f64(ref.enthalpySlope()).doubles(ref.steamRatios()).f64(ref.alpha()).record(p->setpoints(p,ref.setpoints())).f64(ref.feedTemperature()).doubles(ref.steamTemperatures()))
                 .doubles(held).list(Arrays.asList(s.enthalpy()),(q,row)->q.doubles(row)).i64(s.tableTick()).i64(s.applied()).f64(s.solvedCondenser())
                 .list(s.levels(),(q,l)->q.count(l.device()).i64(l.tick()).f64(l.held()).f64(l.rate()).f64(l.molarMass()))
-                .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())));
+                .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())))
+                .f64(t.condenserWaterPerFeed()).f64(t.waterBelow()).doubles(t.airArea());
     }
     /** A column unit's engine state as saved, or null where it does not validate. */
     private static ColumnUnit.State columnState(Record f) {
@@ -424,10 +437,18 @@ final class FluidFacts {
         var levels=f.list(List.<ColumnUnit.State.Level>of(),q->{long device=q.count(0),tick=q.i64(0);double amount=q.f64(0),rate=q.f64(0),molar=q.f64(0);return new ColumnUnit.State.Level(device,tick,amount,rate,molar);});
         var credits=f.list(List.<ColumnUnit.State.Credit>of(),q->{long device=q.count(0),tick=q.i64(0);
             var product=q.record(null,a->{try{return account(a);}catch(IllegalArgumentException invalid){return null;}});return product==null?null:new ColumnUnit.State.Credit(device,tick,product);});
+        // The water's share of the condenser duty (COOLER_MODEL_PLAN.md section 6): a state written before it, the whole duty.
+        double water=f.f64(condenser);
+        // Where a booking difference goes (C1b): a state written before it follows the water's share.
+        double below=f.f64(Double.NaN);
+        // The air condenser's surface per feed at each fan step (U2): a state written before it has no air the world models.
+        var air=f.doubles(new double[0]);
         try {
             var kept=new boolean[held.length];for(int i=0;i<kept.length;i++)kept[i]=held[i]!=0;
             if(products.contains(null)||credits.contains(null))return null;
-            return new ColumnUnit.State(new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept),enthalpy,tableTick,applied,solved,levels,credits);
+            var table=Double.isNaN(below)?new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water)
+                    :new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water,below,air);
+            return new ColumnUnit.State(table,enthalpy,tableTick,applied,solved,levels,credits);
         }catch(RuntimeException invalid){return null;}
     }
 
@@ -584,7 +605,7 @@ final class FluidFacts {
                 }
                 var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
                         new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
-                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condenser(),null,u.leaving());
+                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condensers(),null,u.leaving(),u.airSurface());
             }
             columns.put(u.id(),settled(u,registrations));
         }

@@ -326,6 +326,22 @@ public final class ShapeRasterizer {
         return geometry(shape).inside(x, y, z, 0);
     }
 
+    /** The solid test of one shape, box-local points as {@link #inside}. */
+    interface Solid {
+        boolean inside(double x, double y, double z);
+    }
+
+    /**
+     * {@code shape}'s solid for a caller's own questions: the cached geometry where the world holds one, else a geometry built for
+     * the caller and not kept. A size the process simulator proposes is a shape no world places, and each new one would otherwise
+     * stay in the cache (12 MB a column) until the facet bound clears the world's shapes with it.
+     */
+    static Solid solid(EquipmentShape shape) {
+        var cached = GEOMETRIES.get(shape);
+        var g = cached != null ? cached : new Geometry(shape);
+        return (x, y, z) -> g.inside(x, y, z, 0);
+    }
+
     /** Whether a box-local point lies in the vessel, its supports or an unconnected nozzle: the solid without a column's access structure. */
     static boolean insideVessel(EquipmentShape shape, double x, double y, double z) {
         var g = geometry(shape);

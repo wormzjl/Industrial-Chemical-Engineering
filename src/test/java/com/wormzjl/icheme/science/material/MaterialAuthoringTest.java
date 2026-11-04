@@ -7,7 +7,6 @@ class MaterialAuthoringTest {
  private static final String ROOT="data/icheme/materials/",ID="icheme:tjl20_methane";
  @Test void physicsIdentityIgnoresAssaysButTracksActualSelectedProperties() {
   var c=MaterialCatalog.bundled();var axis=c.requirePackage(ID).components();
-  assertTrue(c.samePhysics(ID,"icheme:bonga_tjl20",axis));
   assertTrue(c.samePhysics(ID,"icheme:tjl20_methane_nitrogen",axis));
   var resources=new HashMap<>(c.resources());var a=JsonParser.parseString(resources.get(ROOT+"assays/tjl20.json")).getAsJsonObject();
   a.getAsJsonObject("amounts_by_component").addProperty("crude_pc01",.8);resources.put(ROOT+"assays/tjl20.json",a.toString());

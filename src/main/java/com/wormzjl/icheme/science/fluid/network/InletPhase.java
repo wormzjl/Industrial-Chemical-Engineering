@@ -175,6 +175,12 @@ public final class InletPhase {
         return port==PassiveNetwork.PhasePort.LIQUID?PhaseDraw.fillMixed(state,volume,Math.max(1,ends)):PhaseDraw.fill(state,PhaseDraw.order(model,state,port),volume,Math.max(1,ends));
     }
 
+    /** What a stream delivers to a device that draws all of it: the three measures on its bulk, never dry, as from a
+     * generator (batch 2026-11-02-process-simulator). */
+    public static Supply bulk(FluidThermodynamics model,FluidThermodynamics.State state) {
+        return measure(model,state,null,-1,-1,PassiveNetwork.PhasePort.BULK,Double.POSITIVE_INFINITY);
+    }
+
     private static Supply measure(FluidThermodynamics model,FluidThermodynamics.State state,double[] drawn,int node,long id,PassiveNetwork.PhasePort port,double held) {
         double[] fluidVolume={state.vaporVolume(),state.liquidVolume(),state.waterVolume()};
         double gas,oil,water,gasMass,condensedMass,solidScale,total;

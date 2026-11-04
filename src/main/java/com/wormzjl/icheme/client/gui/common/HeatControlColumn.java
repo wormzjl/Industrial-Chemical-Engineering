@@ -111,6 +111,10 @@ public final class HeatControlColumn {
             if (effort != null) {
                 acting.add(new Column.Bar(Math.clamp(effort, 0, 1)));
                 acting.add(new Column.Line(t.get("heat_effort." + now, Format.number(effort * 100)), Palette.TEXT));
+            } else if (now.equals("feed_valve") && in.mode() == HeatUnit.Mode.COLUMN) {
+                // The column sets the water's flow (U2): this feed as its port reads it.
+                var own = in.heat().port(HeatDiagram.roles(in.unit(), in.side()).getFirst());
+                acting.add(new Column.Line(t.get("heat_effort.column", own == null ? "—" : Format.number(Math.abs(own.massFlow()))), Palette.TEXT));
             } else if (now.equals("feed_valve")) {
                 double r = measuredRatio(in);
                 acting.add(new Column.Line(t.get("heat_effort.feed_valve", Double.isFinite(r) ? Format.number(r) : "—"), Palette.TEXT));
@@ -167,11 +171,11 @@ public final class HeatControlColumn {
     /**
      * What a switched-on side holds: the outlet temperature or the duty; an exchanger side also its feed's ratio, an air
      * cooler also a fixed fan speed (owner, 2026-10-28: "AC should have duty ratio mode and target temperature mode as
-     * well").
+     * well"). An exchanger side also the column's (U2): a column condenser's water, whose flow the column sets.
      */
     public static List<String> targets(Input in) {
         return switch (in.unit()) {
-            case EXCHANGER -> List.of("outlet_temperature", "duty", "ratio");
+            case EXCHANGER -> List.of("outlet_temperature", "duty", "ratio", "column");
             case AIR_COOLER -> List.of("outlet_temperature", "duty", "fan_speed");
             default -> List.of("outlet_temperature", "duty");
         };
@@ -203,9 +207,11 @@ public final class HeatControlColumn {
                 case OUTLET_TEMPERATURE -> list.add(new Column.Field("heatTemperature", t.get("heat_field.outlet"), unit, null));
                 case DUTY -> list.add(new Column.Field("heatDuty", t.get("heat_field.duty"), "kW", null));
                 case RATIO -> list.add(new Column.Field("heatRatio", t.get("heat_field.ratio"), "", null));
+                case COLUMN -> {
+                }
                 default -> list.add(in.fans() ? new Column.Field("fans", t.get("heat_field.fans"), "%", null) : new Column.Field("bypass", t.get("heat_field.bypass"), "%", null));
             }
-            if (!in.fans()) list.add(new Column.Field("lowLimit", t.get("heat_field.low_limit"), unit, t.get("heat_field.low_limit.hint")));
+            if (!in.fans() && in.mode() != HeatUnit.Mode.COLUMN) list.add(new Column.Field("lowLimit", t.get("heat_field.low_limit"), unit, t.get("heat_field.low_limit.hint")));
         }
         return list;
     }
@@ -224,7 +230,11 @@ public final class HeatControlColumn {
     static @Nullable String linesNote(Input in, Texts t) {
         var lines = in.heat().lines();
         if (lines == null || lines.status().equals("NONE") || lines.status().equals("COMPLETE") || in.applied() == null) return null;
-        String kind = in.applied().mode() == HeatUnit.Mode.RATIO ? "ratio" : "bypass";
+        String kind = switch (in.applied().mode()) {
+            case RATIO -> "ratio";
+            case COLUMN -> "column";
+            default -> "bypass";
+        };
         return t.get("lines_note." + kind + "." + lines.status().toLowerCase(Locale.ROOT), lines.missing());
     }
 }

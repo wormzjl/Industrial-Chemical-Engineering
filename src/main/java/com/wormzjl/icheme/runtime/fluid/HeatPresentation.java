@@ -56,7 +56,7 @@ final class HeatPresentation {
             case AIR_COOLER->{actuator="louvers";effort=law instanceof AirCooled cooled?cooled.draught():heat.fans();}
             default->{
                 if(unit.pool()){actuator="none";effort=null;}
-                else if(unit.control().mode()==HeatUnit.Mode.RATIO){actuator=complete?"feed_valve":"none";effort=null;}
+                else if(unit.control().mode()==HeatUnit.Mode.RATIO||unit.control().mode()==HeatUnit.Mode.COLUMN){actuator=complete?"feed_valve":"none";effort=null;}
                 else if(complete&&unit.lines()==ExchangerBlueprint.Lines.BYPASS) {
                     // The real bypass valve: the share of the side's feed it passes around the unit.
                     actuator="bypass_valve";

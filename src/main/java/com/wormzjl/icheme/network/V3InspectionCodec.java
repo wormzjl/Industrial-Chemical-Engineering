@@ -20,7 +20,7 @@ public final class V3InspectionCodec {
             buffer.writeBoolean(inspection.isPresent());
             if (inspection.isPresent()) {
                 var value = inspection.orElseThrow();
-                ColumnV3Network.writeInput(buffer, value.input());
+                ColumnWire.writeInput(buffer, value.input());
                 for (var node : value.nodes()) {
                     buffer.writeDouble(node.temperatureKelvin()); buffer.writeDouble(node.pressurePascal());
                     buffer.writeDouble(node.liquidMolPerSecond()); buffer.writeDouble(node.vaporMolPerSecond());
@@ -50,7 +50,7 @@ public final class V3InspectionCodec {
         try {
             Optional<V3ColumnInspection> result = Optional.empty();
             if (buffer.readBoolean()) {
-                var input = ColumnV3Network.readInput(buffer);
+                var input = ColumnWire.readInput(buffer);
                 int components = input.componentBasis().componentCount(), count = input.stageCount() + 2;
                 long required = 8L * count * (6 + 2 * components);
                 if (count < V3ColumnInput.MIN_STAGE_COUNT + 2 || count > V3ColumnInput.MAX_STAGE_COUNT + 2 || required > buffer.readableBytes())

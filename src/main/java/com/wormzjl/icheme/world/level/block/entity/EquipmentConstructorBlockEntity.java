@@ -53,9 +53,21 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
      */
     public record Design(double diameter, int tangentLength, VesselPlacement.Form form, int support, VesselPlacement placement, ColumnTrays trays,
                          List<EquipmentShape.Connection> connections, Paint paint, ProcessUnit.Bank bank, boolean boot, int outlet,
-                         @org.jetbrains.annotations.Nullable ColumnDesign column, List<ColumnTrays.Turn> turns, com.wormzjl.icheme.science.equipment.TowerBank towerBank) {
+                         @org.jetbrains.annotations.Nullable ColumnDesign column, List<ColumnTrays.Turn> turns, com.wormzjl.icheme.science.equipment.TowerBank towerBank, String name) {
+        /** A design with no name: built by hand, its structure starts unnamed (N1). */
+        public Design(double diameter, int tangentLength, VesselPlacement.Form form, int support, VesselPlacement placement, ColumnTrays trays,
+                      List<EquipmentShape.Connection> connections, Paint paint, ProcessUnit.Bank bank, boolean boot, int outlet,
+                      @org.jetbrains.annotations.Nullable ColumnDesign column, List<ColumnTrays.Turn> turns, com.wormzjl.icheme.science.equipment.TowerBank towerBank) {
+            this(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, turns, towerBank, com.wormzjl.icheme.science.equipment.DeviceName.NONE);
+        }
+
+        /** This design whose structure is built named {@code value} (cleaned; empty: unnamed). */
+        public Design withName(String value) {
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,value);
+        }
+
         public Design withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank value) {
-            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,value);
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,value,name);
         }
         /** A new column's trays: twenty, fed in the middle. */
         public static final ColumnTrays TRAYS = ColumnTrays.simple(20, 10);
@@ -93,6 +105,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
             Objects.requireNonNull(trays, "trays");
             Objects.requireNonNull(paint, "paint");
             Objects.requireNonNull(bank, "bank");Objects.requireNonNull(towerBank,"towerBank");
+            name = com.wormzjl.icheme.science.equipment.DeviceName.clean(name);
             connections = List.copyOf(connections);
             turns = List.copyOf(turns);
             // Validates the shape from the parameters (a compact constructor assigns the fields after its body); the
@@ -106,7 +119,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
 
         /** This design with the column's side nozzles turned as {@code next}. */
         public Design withTurns(List<ColumnTrays.Turn> next) {
-            return new Design(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, next,towerBank);
+            return new Design(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, next, towerBank, name);
         }
 
         /** Whether this design builds: anything but a column without an imported design. */
@@ -121,13 +134,35 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         public Design imported(ColumnDesign imported) {
             double d = imported.diameter();
             return new Design(d, tangentLength, VesselPlacement.Form.COLUMN, Math.max(support, EquipmentShape.minimumSkirt(d)), placement, trays, connections, paint,
-                    bank, boot, 0, imported, turns,towerBank);
+                    bank, boot, 0, imported, turns,towerBank, name);
+        }
+
+        /**
+         * This design with {@code sent} on it, a design Send to block stored (batch 2026-11-02-process-simulator, S5): a column imported as a
+         * calculator's design is ({@link #imported}); anything else at its form, sizes and support as sized, an air cooler's bank, a drum's boot
+         * with its standard connections, its bottom outlet. The placement, the paint, the imported column, the turns and the other forms'
+         * fields are kept; a lying drum laid crosswise stays crosswise.
+         */
+        public Design landed(com.wormzjl.icheme.science.equipment.SentDesign sent) {
+            if (sent.column() != null) return imported(sent.column());
+            var shape = sent.shape();
+            var kind = shape.kind();
+            VesselPlacement.Form to = null;
+            if (kind == EquipmentShape.Kind.DRUM)
+                to = shape.orientation() == Orientation.VERTICAL ? VesselPlacement.Form.VERTICAL : form == VesselPlacement.Form.CROSSWISE ? form : VesselPlacement.Form.LENGTHWISE;
+            else for (var f : VesselPlacement.Form.values()) if (f.kind() == kind) to = f;
+            if (to == null) throw new IllegalArgumentException("No form builds a " + kind);
+            int length = (int) Math.round(shape.tangentLength());
+            boolean drum = kind == EquipmentShape.Kind.DRUM;
+            var fitted = drum ? EquipmentShape.defaultConnections(shape.diameter(), length, shape.orientation(), shape.support(), shape.boot(), shape.outlet()) : connections;
+            return new Design(shape.diameter(), length, to, shape.support(), placement, trays, fitted, paint, kind == EquipmentShape.Kind.AIR_COOLER ? shape.bank() : bank,
+                    drum ? shape.boot() : boot, shape.outlet(), column, turns, kind == EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER ? shape.towerBank() : towerBank, name);
         }
 
         /** {@code edited}, a design the player sent, with this design's imported column: only an import sets it. */
         public Design keepingColumn(Design edited) {
             return new Design(edited.diameter, edited.tangentLength, edited.form, edited.support, edited.placement, edited.trays, edited.connections, edited.paint,
-                    edited.bank, edited.boot, edited.outlet, column, edited.turns,edited.towerBank);
+                    edited.bank, edited.boot, edited.outlet, column, edited.turns,edited.towerBank, name);
         }
 
         /** The shape; an outlet the form does not turn to is refused ({@link EquipmentShape#outlets}). */
@@ -233,10 +268,17 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
      * {@code repairs}.
      */
     public static Design readDesign(CompoundTag tag, Design fresh, java.util.function.Consumer<String> repairs) {
-        var design=readBaseDesign(tag,fresh,repairs);
+        var design=readBaseDesign(tag,fresh,repairs).withName(savedName(tag,repairs));
         if(!tag.contains("TowerBank"))return design;
         try{return design.withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank")));}
         catch(IllegalArgumentException invalid){repairs.accept("tower bank -> one cell: "+invalid.getMessage());return design;}
+    }
+    /** The design's saved name (N1): absent reads unnamed, as a constructor saved before names; one that breaks the rule is cleaned, a repair. */
+    private static String savedName(CompoundTag tag, java.util.function.Consumer<String> repairs) {
+        if (!tag.contains(DeviceNames.KEY)) return com.wormzjl.icheme.science.equipment.DeviceName.NONE;
+        String saved = tag.getString(DeviceNames.KEY), cleaned = com.wormzjl.icheme.science.equipment.DeviceName.clean(saved);
+        if (!tag.contains(DeviceNames.KEY, net.minecraft.nbt.Tag.TAG_STRING) || !cleaned.equals(saved)) repairs.accept("name (" + tag.get(DeviceNames.KEY) + ") -> " + cleaned);
+        return cleaned;
     }
     private static Design readBaseDesign(CompoundTag tag, Design fresh, java.util.function.Consumer<String> repairs) {
         var placement = fresh.placement();
@@ -332,27 +374,23 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         tag.putInt("Outlet", design.outlet());
         if (design.column() != null) tag.put("Column", ColumnDesignTags.write(design.column()));
         if (!design.turns().isEmpty()) tag.put("Turns", ColumnDesignTags.writeTurns(design.turns()));
+        DeviceNames.write(tag, design.name());
     }
 
-    /**
-     * Server: the column calculator nearest this constructor within {@code reach} blocks (empty when there is none), and
-     * this design with its saved design imported ({@link Design#imported}; empty when it has none). A read: nothing is
-     * solved.
-     */
-    public java.util.Optional<java.util.Optional<Design>> importColumn(int reach) {
+    /** Server: the process simulator nearest this constructor within {@code reach} blocks, whose designs its Import lists; empty when there is none. A read: nothing is solved. */
+    public java.util.Optional<ProcessSimulatorBlockEntity> simulator(int reach) {
         if (level == null) return java.util.Optional.empty();
-        ColumnCalculatorV3BlockEntity nearest = null;
+        ProcessSimulatorBlockEntity nearest = null;
         double best = Double.MAX_VALUE;
         for (var at : BlockPos.betweenClosed(worldPosition.offset(-reach, -reach, -reach), worldPosition.offset(reach, reach, reach))) {
-            if (!level.isLoaded(at) || !(level.getBlockEntity(at) instanceof ColumnCalculatorV3BlockEntity calculator)) continue;
+            if (!level.isLoaded(at) || !(level.getBlockEntity(at) instanceof ProcessSimulatorBlockEntity simulator)) continue;
             double distance = at.distSqr(worldPosition);
             if (distance < best) {
                 best = distance;
-                nearest = calculator;
+                nearest = simulator;
             }
         }
-        if (nearest == null) return java.util.Optional.empty();
-        return java.util.Optional.of(nearest.savedDesign().map(design::imported));
+        return java.util.Optional.ofNullable(nearest);
     }
 
     @Override

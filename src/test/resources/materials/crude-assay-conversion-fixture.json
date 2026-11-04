@@ -22,7 +22,7 @@
   ],
   "crudes": [
     {
-      "package_id": "icheme:wti_light_export_tjl20",
+      "package_id": "icheme:tjl20_methane",
       "assay_id": "icheme:wti_light_export",
       "mole_fractions": [
         0.0,
@@ -68,7 +68,7 @@
       ]
     },
     {
-      "package_id": "icheme:upper_zakum_tjl20",
+      "package_id": "icheme:tjl20_methane",
       "assay_id": "icheme:upper_zakum",
       "mole_fractions": [
         0.0,
@@ -114,7 +114,7 @@
       ]
     },
     {
-      "package_id": "icheme:bonga_tjl20",
+      "package_id": "icheme:tjl20_methane",
       "assay_id": "icheme:bonga",
       "mole_fractions": [
         0.0,
@@ -160,7 +160,7 @@
       ]
     },
     {
-      "package_id": "icheme:dalia_tjl20",
+      "package_id": "icheme:tjl20_methane",
       "assay_id": "icheme:dalia",
       "mole_fractions": [
         0.0,
@@ -206,7 +206,7 @@
       ]
     },
     {
-      "package_id": "icheme:cold_lake_blend_tjl20",
+      "package_id": "icheme:tjl20_methane",
       "assay_id": "icheme:cold_lake_blend",
       "mole_fractions": [
         0.0,

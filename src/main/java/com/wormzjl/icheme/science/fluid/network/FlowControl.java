@@ -16,6 +16,8 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * first end's pressure.
      */
     sealed interface Mover extends FlowControl permits Pump,Compressor {
+        /** The largest suction volume flow a device's controls take (m3/s). */
+        double MAXIMUM_VOLUME_FLOW=10;
         /** Configured suction volume flow (m3/s), retained while switched off. */
         double requestedVolumeFlow();
         /** Whether the constructed mover is commanded on; one-block devices retain their enabled behavior. */
@@ -51,6 +53,8 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * {@link #VAPOUR_RESUME}. */
     record Pump(double requestedVolumeFlow,double maximumAddedPressure,boolean enabled) implements Mover {
         public Pump(double targetVolumeFlow,double maximumAddedPressure){this(targetVolumeFlow,maximumAddedPressure,true);}
+        /** The largest rise a pump's controls take, for the reference fluid (Pa). */
+        public static final double MAXIMUM_ADDED_PRESSURE=2e6;
         /** Vapour share of the supply's fluid volume above which a pump refuses (plan Appendix B, decision D6). */
         public static final double VAPOUR_REFUSE=.02;
         /** Vapour share below which a refused pump runs again. */
@@ -86,6 +90,8 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      */
     record Compressor(double requestedVolumeFlow,double maximumPressureRatio,boolean enabled) implements Mover {
         public Compressor(double targetVolumeFlow,double maximumPressureRatio){this(targetVolumeFlow,maximumPressureRatio,true);}
+        /** The largest pressure ratio a compressor's controls take (plan Appendix B). */
+        public static final double MAXIMUM_PRESSURE_RATIO=10;
         /** Condensed share of the supply's mass above which a compressor refuses (plan Appendix B, decision D6). */
         public static final double CONDENSED_REFUSE=.01;
         /** Condensed share below which a refused compressor runs again. */

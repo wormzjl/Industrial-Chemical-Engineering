@@ -174,10 +174,12 @@ final class V3MeshResidualEvaluator {
             throw new IllegalArgumentException("V3 MESH state does not match the resolved problem");
         }
         NodeProperties[] properties = nodeProperties(state, workspace);
-        List<V3MeshResidual.Row> rows = new ArrayList<>(problem.degreeOfFreedomLedger().equationCount());
+        V3DegreeOfFreedomLedger.EquationId[] ids = problem.degreeOfFreedomLedger().equationIds();
+        double[] physical = new double[ids.length];
+        double[] scales = new double[ids.length];
         double[] balance = new double[2];
-        for (V3DegreeOfFreedomLedger.Equation equation : problem.degreeOfFreedomLedger().equations()) {
-            V3DegreeOfFreedomLedger.EquationId id = equation.id();
+        for (int row = 0; row < ids.length; row++) {
+            V3DegreeOfFreedomLedger.EquationId id = ids[row];
             double physicalValue;
             double scale;
             switch (id.family()) {
@@ -201,9 +203,11 @@ final class V3MeshResidualEvaluator {
                 }
                 default -> throw new IllegalStateException("V3 MESH equation family is unhandled");
             }
-            rows.add(new V3MeshResidual.Row(id, physicalValue, scale));
+            V3MeshResidual.check(physicalValue, scale);
+            physical[row] = physicalValue;
+            scales[row] = scale;
         }
-        return new V3MeshResidual(rows);
+        return new V3MeshResidual(ids, physical, scales);
     }
 
     /**

@@ -3,7 +3,8 @@
   "kind": "mixture",
   "name": "Bonga",
   "translation_key": "gui.icheme.column_preset.bonga",
-  "package": "icheme:bonga_tjl20",
+  "temperature_kelvin": 638.15,
+  "flow_kmol_h": 2650.277212975707,
   "basis": "mole",
   "components": [
     {

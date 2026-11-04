@@ -27,8 +27,8 @@ import java.util.*;
  */
 public final class AssemblyStore extends SavedData {
     public static final String DATA_NAME = "icheme_assemblies";
-    /** The state format. Another one is dropped (AGENTS.md: state formats change freely). */
-    public static final int FORMAT = 1;
+    /** The state format (2: a slot's units in parallel, S3b). Another one is dropped (AGENTS.md: state formats change freely). */
+    public static final int FORMAT = 2;
     /** Bounds a read checks: masters per level, slots, ports, footprint positions per report. */
     static final int MAX_MASTERS = 4096, MAX_SLOTS = 256, MAX_PORTS = 1024, MAX_FOOTPRINT = 2 * AssemblyWalker.MAX_WALK;
 
@@ -231,6 +231,7 @@ public final class AssemblyStore extends SavedData {
             st.putLong("member", s.member());
             st.putLong("at", s.at());
             st.putString("detail", s.detail());
+            st.putLongArray("parallel", s.parallel().stream().mapToLong(Long::longValue).toArray());
             slots.add(st);
         }
         t.put("slots", slots);
@@ -266,8 +267,10 @@ public final class AssemblyStore extends SavedData {
         var slots = new ArrayList<SlotReport>();
         for (int i = 0; i < slotList.size(); i++) {
             var s = slotList.getCompound(i);
+            var parallel = s.getLongArray("parallel");
+            if (parallel.length >= com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS) throw new IllegalArgumentException("too many units in parallel");
             slots.add(new SlotReport(new Slot(s.getString("part"), s.getInt("index")), State.valueOf(s.getString("state")), s.getLong("member"), s.getLong("at"),
-                    s.getString("detail")));
+                    s.getString("detail"), Arrays.stream(parallel).boxed().toList()));
         }
         var ports = new ArrayList<PortReport>();
         for (int i = 0; i < portList.size(); i++) {

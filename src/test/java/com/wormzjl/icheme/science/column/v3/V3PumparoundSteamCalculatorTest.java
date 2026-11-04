@@ -9,7 +9,6 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
 import com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
 import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;

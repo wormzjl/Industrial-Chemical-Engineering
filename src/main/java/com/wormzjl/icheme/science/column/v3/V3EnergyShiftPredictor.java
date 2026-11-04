@@ -275,13 +275,13 @@ final class V3EnergyShiftPredictor {
     static double[] energyResiduals(V3MeshResidual residual, V3ColumnTopology topology) {
         double[] values = new double[topology.reboilerNode()];
         boolean[] present = new boolean[values.length];
-        for (V3MeshResidual.Row row : residual.rows()) {
-            if (row.equation().family() != V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE) continue;
-            int node = row.equation().node();
+        for (int row = 0; row < residual.size(); row++) {
+            if (residual.equation(row).family() != V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE) continue;
+            int node = residual.equation(row).node();
             if (node < 1 || node > topology.reboilerNode()) {
                 throw new IllegalArgumentException("V3 energy-shift row is outside its non-condenser nodes");
             }
-            values[node - 1] = row.physicalValue();
+            values[node - 1] = residual.physicalValue(row);
             present[node - 1] = true;
         }
         for (boolean energyRow : present) {
@@ -292,9 +292,9 @@ final class V3EnergyShiftPredictor {
 
     private static double largestScaledEnergy(V3MeshResidual residual) {
         double maximum = 0.0;
-        for (V3MeshResidual.Row row : residual.rows()) {
-            if (row.equation().family() != V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE) continue;
-            maximum = Math.max(maximum, Math.abs(row.scaledValue()));
+        for (int row = 0; row < residual.size(); row++) {
+            if (residual.equation(row).family() != V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE) continue;
+            maximum = Math.max(maximum, Math.abs(residual.scaledValue(row)));
         }
         return maximum;
     }

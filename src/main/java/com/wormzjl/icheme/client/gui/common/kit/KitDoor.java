@@ -98,6 +98,9 @@ public final class KitDoor {
                 if (p.row() instanceof Column.Field f) {
                     var slot = p.slots().get(f.key());
                     widgets.keep(field.apply(f, slot), slot);
+                } else if (p.row() instanceof Column.Wide w) {
+                    var slot = p.slots().get(w.key());
+                    widgets.keep(field.apply(new Column.Field(w.key(), "", "", w.hint()), slot), slot);
                 } else if (p.row() instanceof Column.Buttons b) for (var spec : b.buttons()) {
                     var slot = p.slots().get(spec.key());
                     widgets.keep(button.apply(spec, slot), slot);

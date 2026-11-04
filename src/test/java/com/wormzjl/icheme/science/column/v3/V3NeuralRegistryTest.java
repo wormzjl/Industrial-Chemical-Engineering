@@ -10,10 +10,18 @@ import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
 
 class V3NeuralRegistryTest {
-    private static final String MAIN="icheme:tjl20_methane",NETWORK="icheme:tjl20_methane_nitrogen",REFERENCE="icheme:wti_light_export_tjl20";
+    private static final String MAIN="icheme:tjl20_methane",NETWORK="icheme:tjl20_methane_nitrogen",REFERENCE="test:reference";
+    /** The bundled catalog with a copy of MAIN under its own name: a model's reference, which an inference view of MAIN leaves whole. */
+    private static final MaterialCatalog CATALOG=withReference();
+    private static MaterialCatalog withReference() {
+        var resources=new HashMap<>(MaterialCatalog.bundled().resources());
+        var main=JsonParser.parseString(resources.get("data/icheme/materials/packages/tjl20.json")).getAsJsonObject();
+        main.addProperty("id",REFERENCE);resources.put("data/icheme/materials/packages/reference.json",main.toString());
+        return MaterialCatalog.parse(resources);
+    }
     @AfterEach void reset(){MaterialRuntime.reset();}
     private static V3ColumnInput input() {
-        var p=MaterialCatalog.bundled().requirePackage(MAIN);double[] feed=new double[p.components().size()];
+        var p=CATALOG.requirePackage(MAIN);double[] feed=new double[p.components().size()];
         feed[feed.length-2]=50;feed[feed.length-8]=50;
         return V3TestInputs.dry(1,MAIN,"test:reader",new V3ComponentBasis(p.components()),feed,550,2,1,250000,750,
                 List.of(new V3ColumnSpecification.CondenserOutletTemperature(300),new V3ColumnSpecification.OrganicRefluxRatio(2),
@@ -29,21 +37,21 @@ class V3NeuralRegistryTest {
         // Explicit equivalent reference supplies only absent, qualified zero components; the model was trained on its
         // declared revision.
         d.addProperty("packageId",REFERENCE);
-        d.addProperty("propertyRevision",MaterialCatalog.bundled().requirePackage(REFERENCE).scientificRevision());
+        d.addProperty("propertyRevision",CATALOG.requirePackage(REFERENCE).scientificRevision());
         var model=V3AnchorTransformerInitializer.read(stream(d.toString()), V3FactorizedNeuralFeatures.DecodeOptions.NONE);
         return new V3NeuralRegistry.Entry(priority,model,"0".repeat(64),extra,missing);
     }
     private static InputStream stream(String s){return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));}
     @Test void deterministicPriorityAndSecondFixtureModelNeedNoProductionConstants() throws Exception {
         var a=entry("test:a",100,false,false);var b=entry("test:b",101,false,false);
-        var catalog=MaterialCatalog.bundled();var input=input();
+        var catalog=CATALOG;var input=input();
         assertEquals("test:b",new V3NeuralRegistry(List.of(a,b)).bind(catalog,input).modelId());
         assertEquals("test:a",new V3NeuralRegistry(List.of(entry("test:b",100,false,false),a)).bind(catalog,input).modelId());
         assertSame(V3NeuralInitializer.UNAVAILABLE,new V3NeuralRegistry(List.of()).bind(catalog,input));
         assertThrows(IllegalArgumentException.class,()->new V3NeuralRegistry(List.of(a,a)));
     }
     @Test void identityProjectionIsExplicitAndNeverDiscardsNonzeroFeed() throws Exception {
-        var catalog=MaterialCatalog.bundled();var input=input();var network=on(input,NETWORK,catalog.requirePackage(NETWORK).components());
+        var catalog=CATALOG;var input=input();var network=on(input,NETWORK,catalog.requirePackage(NETWORK).components());
         var qualified=new V3NeuralRegistry(List.of(entry("test:projected",1,true,true)));
         var strict=new V3NeuralRegistry(List.of(entry("test:strict",1,false,false)));
         assertSame(V3NeuralInitializer.UNAVAILABLE,strict.bind(catalog,network));
@@ -68,7 +76,7 @@ class V3NeuralRegistryTest {
         for(int n=0;n<base.liquid().length;n++)assertArrayEquals(new MaterialAxis(reversed).project(new MaterialAxis(input.componentBasis().componentIds()),base.liquid()[n]),reorderedSeed.liquid()[n]);
     }
     private static MaterialCatalog edit(boolean physics) {
-        var resources=new HashMap<>(MaterialCatalog.bundled().resources());
+        var resources=new HashMap<>(CATALOG.resources());
         String path=physics?"data/icheme/materials/properties/tjl20_methane.json":"data/icheme/materials/assays/tjl20.json";
         var data=JsonParser.parseString(resources.get(path)).getAsJsonObject();
         // Nothing is hashed, and each record declares its own revision (owner decisions 2026-10-26): the edit of the shared
@@ -80,7 +88,7 @@ class V3NeuralRegistryTest {
         return MaterialCatalog.parse(resources);
     }
     @Test void admissionSnapshotSurvivesReloadAndAssayEditsDoNotChangePhysicsEligibility() throws Exception {
-        var catalog=MaterialCatalog.bundled();var registry=new V3NeuralRegistry(List.of(entry("test:captured",1,false,false)));var input=input();
+        var catalog=CATALOG;var registry=new V3NeuralRegistry(List.of(entry("test:captured",1,false,false)));var input=input();
         var bound=registry.bind(catalog,input);var expected=bound.predict(input,V3SolveControl.UNBOUNDED).orElseThrow();
         assertEquals(bound.modelId(),registry.bind(edit(false),input).modelId());
         var changed=edit(true);assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(changed,input));
@@ -90,12 +98,12 @@ class V3NeuralRegistryTest {
             assertTrue(ready.await(5,TimeUnit.SECONDS));MaterialRuntime.publish(changed);release.countDown();
             var actual=pending.get(10,TimeUnit.SECONDS);assertArrayEquals(expected.temperatures(),actual.temperatures());
             assertEquals(catalog.requirePackage(MAIN).scientificRevision(),actual.propertyRevision());
-            assertFalse(MaterialRuntime.isCurrent(MAIN,actual.propertyRevision()));
+            assertFalse(isCurrent(MAIN,actual.propertyRevision()));
         } finally {release.countDown();}
         assertThrows(CancellationException.class,()->bound.predict(input,()->{throw new CancellationException();}));
     }
     @Test void boundedRegistryRejectsPathsAndMismatchedPipelineAndAcceptsEmptyFallback() throws Exception {
-        assertSame(V3NeuralInitializer.UNAVAILABLE,V3NeuralRegistry.read(stream("{\"schemaVersion\":1,\"entries\":[]}"),p->null).bind(MaterialCatalog.bundled(),input()));
+        assertSame(V3NeuralInitializer.UNAVAILABLE,V3NeuralRegistry.read(stream("{\"schemaVersion\":1,\"entries\":[]}"),p->null).bind(CATALOG,input()));
         String manifest;
         try(var s=getClass().getResourceAsStream(V3NeuralRegistry.REGISTRY)){manifest=new String(s.readAllBytes(),StandardCharsets.UTF_8);}
         var data=JsonParser.parseString(manifest).getAsJsonObject();var row=data.getAsJsonArray("entries").get(0).getAsJsonObject();
@@ -103,5 +111,11 @@ class V3NeuralRegistryTest {
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.read(stream(data.toString()),getClass()::getResourceAsStream));
         row.addProperty("payload","/data/icheme/neural/../escape.json");
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.read(stream(data.toString()),p->{throw new AssertionError("Unsafe path was opened");}));
+    }
+
+    /** A result is current only for the exact resolved scientific dataset (moved from MaterialRuntime, which had no other caller). */
+    private static boolean isCurrent(String packageId, String scientificRevision) {
+        var p = MaterialRuntime.current().packages().get(packageId);
+        return p != null && p.scientificRevision().equals(scientificRevision);
     }
 }

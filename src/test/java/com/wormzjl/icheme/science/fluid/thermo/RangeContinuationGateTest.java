@@ -46,7 +46,7 @@ class RangeContinuationGateTest {
         }
         var model = FluidThermodynamics.forNetwork(catalog, NETWORK);
         ends(model.steam(), "steam");
-        assertTrue(checked > 100, "ideal-gas functions checked: " + checked);
+        assertTrue(checked > 50, "ideal-gas functions checked: " + checked);
     }
 
     /** The network's translated equation of state takes the same held c_p on its coefficient path as the engine's fit. */

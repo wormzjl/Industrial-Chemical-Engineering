@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.registry;
 
 import com.wormzjl.icheme.IChemE;
-import com.wormzjl.icheme.world.level.block.ColumnCalculatorV3Block;
+import com.wormzjl.icheme.world.level.block.ProcessSimulatorBlock;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
@@ -31,9 +31,9 @@ public final class ModBlocks {
         return BLOCKS.registerBlock(name,p->com.wormzjl.icheme.world.level.block.FluidDeviceBlock.create(kind,p),properties);
     }
 
-    public static final DeferredBlock<ColumnCalculatorV3Block> COLUMN_CALCULATOR_V3 = BLOCKS.registerBlock(
-            "column_calculator_v3",
-            ColumnCalculatorV3Block::new,
+    public static final DeferredBlock<ProcessSimulatorBlock> PROCESS_SIMULATOR = BLOCKS.registerBlock(
+            "process_simulator",
+            ProcessSimulatorBlock::new,
             BlockBehaviour.Properties.of()
                     .mapColor(MapColor.COLOR_PURPLE)
                     .strength(3.5F)
@@ -74,6 +74,8 @@ public final class ModBlocks {
     }
 
     public static void register(IEventBus modEventBus) {
+        // The column calculator's old id: a placed one becomes a simulator (plan section 3.6).
+        BLOCKS.addAlias(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "column_calculator_v3"), PROCESS_SIMULATOR.getId());
         BLOCKS.register(modEventBus);
         SOUNDS.register(modEventBus);
     }

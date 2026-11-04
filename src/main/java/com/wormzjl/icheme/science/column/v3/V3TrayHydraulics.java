@@ -23,7 +23,7 @@ public final class V3TrayHydraulics {
     public static final String CORRELATION_REVISION = "v3-sieve-tray-bennett-r1";
 
     /** Fraction of the column cross-section taken by one downcomer; two of them bound the bubbling area. */
-    static final double DOWNCOMER_AREA_FRACTION = 0.10;
+    public static final double DOWNCOMER_AREA_FRACTION = 0.10;
     /** Perforated fraction of the bubbling area. */
     static final double HOLE_AREA_FRACTION = 0.10;
     static final double WEIR_HEIGHT_METRES = 0.05;

@@ -1,6 +1,7 @@
 import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
+import com.wormzjl.icheme.client.gui.common.TitleStrip;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
-import com.wormzjl.icheme.client.gui.common.AssemblyFlowsheet;
+import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
@@ -80,7 +81,60 @@ public final class GuiPrototypes {
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         out.addAll(OperationPrototypes.operation());
+        out.add(titleStrip());
         return out;
+    }
+
+    // ---- N1's title strip (the owner 2026-11-03: "You can put the equipment name here") ----
+
+    /** A 32-character name of the widest letters, and a 32-character name as a plant would write it. */
+    static final String WIDEST = "W".repeat(32), LONG = "CDU-1 crude charge pump P-101A/B";
+
+    /** One strip a row: the screen, its width, its theme key, the kind, the name, an editor's entry or a reader's text. */
+    record StripCase(String screen, int width, int key, String kind, String name, boolean editor) {
+    }
+
+    static final List<StripCase> STRIPS = List.of(
+            new StripCase("device", 448, 18, "Centrifugal pump", "P-101", true),
+            new StripCase("device", 448, 18, "Centrifugal pump", "", true),
+            new StripCase("device", 448, 18, "Centrifugal pump", WIDEST, true),
+            new StripCase("device", 448, 18, "Centrifugal pump", LONG, false),
+            new StripCase("device", 448, 18, "Circulating fluidized-bed boiler", LONG, true),
+            new StripCase("device", 790, 18, "Natural-draft cooling tower", LONG, true),
+            new StripCase("assembly", 448, 18, "Distillation column", "T-101", true),
+            new StripCase("datasheet", 400, 0, "Circulating fluidized-bed boiler", WIDEST, true),
+            new StripCase("datasheet", 400, 0, "Drum", "", false));
+
+    /** Each case on its own band of door, its screen and width beside it; prints each name place's width (STRIP). */
+    static Prototype titleStrip() {
+        int band = 30;
+        return new Prototype("title-strip", 1000, STRIPS.size() * (band + 6) + 4 + band + 6, (d, s) -> {
+            for (int i = 0; i <= STRIPS.size(); i++) {
+                int dy = 4 + i * (band + 6);
+                if (i == STRIPS.size()) {
+                    // The constructor's header as built: its 200 px panel holds the kind and Change, no room for the entry.
+                    d.skin.page(d.c, new Rect(0, dy, ConstructorColumn.PANEL, band));
+                    String title = ConstructorColumn.title(LONG, "Horizontal drum", "Drum", d.m, (nm, k) -> nm + " · " + k);
+                    d.skin.title(d.c, 10, dy + 10, title);
+                    d.c.text("constructor 200 px, as built (no room for a " + TitleStrip.NAME + " px entry)", 810, dy + 10, Palette.MUTED);
+                    continue;
+                }
+                var k = STRIPS.get(i);
+                d.skin.page(d.c, new Rect(0, dy, k.width(), band));
+                var strip = TitleStrip.place(k.width(), k.key(), k.kind(), d.m);
+                d.skin.title(d.c, TitleStrip.TITLE_X, TitleStrip.TITLE_Y + dy, strip.kind());
+                if (k.key() > 0) d.skin.iconKey(d.c, new Rect(k.width() - 10 - k.key(), 5 + dy, k.key(), 18), Skin.Icon.THEME, false);
+                var place = strip.name() == null ? null : strip.name().moved(0, dy);
+                if (place != null && k.editor()) d.skin.field(d.c, place, k.name(), TEXTS.get("name"), false);
+                else if (place != null) {
+                    int[] at = TitleStrip.textAt(place);
+                    d.skin.text(d.c, TitleStrip.text(k.name(), place, d.m), at[0], at[1], Palette.TEXT);
+                }
+                d.c.text(k.screen() + " " + k.width() + " px, " + (k.editor() ? "editor" : "reader"), 810, dy + 10, Palette.MUTED);
+                if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "STRIP %-9s %3d px %-34s name place %s px%n", k.screen(), k.width(), k.kind(),
+                        strip.name() == null ? "none" : Integer.toString(strip.name().w()));
+            }
+        });
     }
 
     // ---- The column calculator: the shipped CalculatorColumn on its door (GUI_REVIEW.md order 5) ----
@@ -91,7 +145,10 @@ public final class GuiPrototypes {
                 new Prototype("column-calculator-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.COLUMN, CalculatorColumn.Metric.TEMPERATURE), true),
                 new Prototype("column-calculator-wide", 533, 280, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.COLUMN, CalculatorColumn.Metric.TEMPERATURE)),
                 new Prototype("column-calculator-results", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TEMPERATURE)),
-                new Prototype("column-calculator-results-wide", 533, 280, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TRAFFIC)));
+                new Prototype("column-calculator-results-wide", 533, 280, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TRAFFIC)),
+                // C1 (COOLER_MODEL_PLAN.md section 6): the condenser's third choice, air then water, with its banks and its trim's shells.
+                new Prototype("column-calculator-air-then-water", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE), true),
+                new Prototype("column-calculator-air-then-water-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE), true));
     }
 
     /** The draft's entries as the door shows them. */
@@ -125,7 +182,7 @@ public final class GuiPrototypes {
      */
     static void calculatorDoor(Door d, CalculatorColumn.Page page, CalculatorColumn.Metric metric) {
         var t = DIALOG;
-        d.skin.title(d.c, 10, 10, d.m.cut(HeatDiagramRender.tr("block.icheme.column_calculator_v3"), CalculatorColumn.title(d.w)));
+        d.skin.title(d.c, 10, 10, d.m.cut(HeatDiagramRender.tr("block.icheme.process_simulator"), CalculatorColumn.title(d.w)));
         d.skin.iconKey(d.c, CalculatorColumn.theme(d.w), Skin.Icon.THEME, false);
         var tabs = CalculatorColumn.tabs(page, t);
         var tabSlots = CalculatorColumn.tabSlots(d.w);
@@ -136,7 +193,10 @@ public final class GuiPrototypes {
         var status = CalculatorColumn.status(new CalculatorColumn.StatusInput(false, false, "", "", false, false, false, null, true, false, null), t);
         d.skin.status(d.c, CalculatorColumn.display(d.w), status.text(), status.palette());
         var rows = page == CalculatorColumn.Page.COLUMN
-                ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
+                ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", "bar", "kmol/h", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
+                : page == CalculatorColumn.Page.EQUIPMENT
+                ? CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD,
+                        List.of(ColumnComponents.Pump.STANDARD), true, new ColumnComponents.Units(2, 1, List.of(1), 3), true), t)
                 : CalculatorColumn.results(new CalculatorColumn.ResultsInput(false, CalculatorColumn.View.PROFILES, metric, List.of(), 0, 13, 20), t);
         boolean two = rows.two();
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - CalculatorColumn.DIVIDER);
@@ -150,6 +210,8 @@ public final class GuiPrototypes {
             var in = new CalculatorColumn.DrawingInput(20, 7, List.of(new CalculatorColumn.Mark(0, 13, 0)), List.of(new CalculatorColumn.Mark(0, 10, 8)),
                     List.of(new CalculatorColumn.Mark(0, 21, 0)), 13, CalculatorColumn.Connection.DRAW, 0, shares);
             CalculatorColumn.draw(d.c, CalculatorColumn.drawing(in, box, 0, d.m, t, node -> ""), t);
+        } else if (page == CalculatorColumn.Page.EQUIPMENT) {
+            // The derived components' glass is the screen's own; the sheet shows the door.
         } else {
             var legend = metric == CalculatorColumn.Metric.TRAFFIC ? List.of(new CalculatorColumn.Legend(t.get("column.traffic.organic"), CalculatorColumn.TRAFFIC[0]),
                     new CalculatorColumn.Legend(t.get("column.traffic.vapor"), CalculatorColumn.TRAFFIC[1]), new CalculatorColumn.Legend(t.get("column.traffic.water"), CalculatorColumn.TRAFFIC[2]),
@@ -226,18 +288,37 @@ public final class GuiPrototypes {
         c.text("Tray 14", box.x() + 8, dy + 4, Palette.TEXT);
     }
 
-    // ---- The assembly check: the shipped AssemblyColumn and AssemblyFlowsheet on the door (GUI_REVIEW.md order 4) ----
+    // ---- The assembly check: the shipped AssemblyColumn and AssemblyBlock on the door (GUI_REVIEW.md order 4) ----
 
     /** A column with a kettle, one side draw and one pumparound. */
     static final ColumnTrays ASSEMBLY = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
             new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true));
 
+    /**
+     * S3b: the same column asking for three condenser shells, two kettles and two shells on its PA cooler. Two condenser shells
+     * stand in parallel (a count fault), the kettles are in place, and one PA cooler shell is another size.
+     */
+    static final ColumnTrays COUNTED = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
+            new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                    new ColumnComponents.Units(3, 2, List.of(2))));
+
     /** A check of {@link #ASSEMBLY}: an in-line pump where the reflux pump goes (misplaced), no feed valve, the PA cooler's line open; the rest in place. */
     static AssemblyReport assemblyReport() {
-        var slots = ColumnBlueprint.of(ASSEMBLY).slots();
-        var faults = Map.of(ColumnBlueprint.REFLUX_PUMP, new AssemblyReport.SlotReport(ColumnBlueprint.REFLUX_PUMP, AssemblyReport.State.WRONG_KIND, 1003, AssemblyReport.NONE, "INLINE_PUMP"),
+        return assemblyReport(ASSEMBLY, Map.of(ColumnBlueprint.REFLUX_PUMP, new AssemblyReport.SlotReport(ColumnBlueprint.REFLUX_PUMP, AssemblyReport.State.WRONG_KIND, 1003, AssemblyReport.NONE, "INLINE_PUMP"),
                 ColumnBlueprint.FEED_VALVE, new AssemblyReport.SlotReport(ColumnBlueprint.FEED_VALVE, AssemblyReport.State.MISSING, AssemblyReport.NONE, AssemblyReport.NONE, ""),
-                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.OPEN_END, 1012, AssemblyReport.NONE, "unconnected"));
+                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.OPEN_END, 1012, AssemblyReport.NONE, "unconnected")));
+    }
+
+    /** A check of {@link #COUNTED}: two condenser shells where the design asks for three, the kettles in parallel, a PA cooler shell of another size. */
+    static AssemblyReport countedReport() {
+        return assemblyReport(COUNTED, Map.of(ColumnBlueprint.CONDENSER, new AssemblyReport.SlotReport(ColumnBlueprint.CONDENSER, AssemblyReport.State.UNIT_COUNT, 1001, AssemblyReport.NONE, "2:3", List.of(1101L)),
+                ColumnBlueprint.REBOILER, new AssemblyReport.SlotReport(ColumnBlueprint.REBOILER, AssemblyReport.State.OK, 1002, AssemblyReport.NONE, "", List.of(1102L)),
+                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.UNIT_SHAPES, 1012, 1112, "", List.of(1112L))));
+    }
+
+    /** A check of {@code trays}: {@code faults} where they are, every other slot in place. */
+    static AssemblyReport assemblyReport(ColumnTrays trays, Map<Slot, AssemblyReport.SlotReport> faults) {
+        var slots = ColumnBlueprint.of(trays).slots();
         var reports = new ArrayList<AssemblyReport.SlotReport>();
         var members = new ArrayList<Long>();
         for (int i = 0; i < slots.size(); i++) {
@@ -248,17 +329,39 @@ public final class GuiPrototypes {
         }
         // Each drawn port of a unit in place is connected; a faulted unit's still need their pipes.
         var ports = new ArrayList<AssemblyReport.PortReport>();
-        for (var m : AssemblyDiagram.of(ASSEMBLY).ports())
+        for (var m : AssemblyDiagram.of(trays).ports())
             for (var r : reports)
                 if (r.slot().equals(m.slot()) && r.member() != AssemblyReport.NONE)
-                    ports.add(new AssemblyReport.PortReport(r.member(), m.role(), Math.max(0, m.ordinal()), r.state() == AssemblyReport.State.OK ? AssemblyReport.PortState.CONNECTED : AssemblyReport.PortState.NEEDED));
+                    for (long unit : r.units())
+                        ports.add(new AssemblyReport.PortReport(unit, m.role(), Math.max(0, m.ordinal()), r.state() == AssemblyReport.State.OK ? AssemblyReport.PortState.CONNECTED : AssemblyReport.PortState.NEEDED));
         return new AssemblyReport(reports, ports, java.util.Set.of(), members);
     }
 
-    /** Nothing selected after a check; then the reflux pump selected while the next check is queued. */
+    /** Nothing selected after a check; then the reflux pump selected while the next check is queued; then S3b's members in parallel, the condenser selected. */
     static List<Prototype> assembly() {
         return List.of(new Prototype("assembly", 464, 254, (d, s) -> assemblyDoor(d, null, false)),
-                new Prototype("assembly-selected", 464, 254, (d, s) -> assemblyDoor(d, ColumnBlueprint.REFLUX_PUMP, true)));
+                new Prototype("assembly-selected", 464, 254, (d, s) -> assemblyDoor(d, ColumnBlueprint.REFLUX_PUMP, true)),
+                // At a 1600 by 900 window's size, where the block's labels draw (scale 0.5 and up).
+                new Prototype("assembly-wide", 760, 400, (d, s) -> assemblyDoor(d, ASSEMBLY, assemblyReport(), ColumnBlueprint.REFLUX_PUMP, false)),
+                new Prototype("assembly-member-counts", 760, 400, (d, s) -> assemblyDoor(d, COUNTED, countedReport(), ColumnBlueprint.CONDENSER, false)),
+                new Prototype("assembly-air-then-water", 760, 400, (d, s) -> assemblyDoor(d, TRIMMED, assemblyReport(TRIMMED, Map.of()), ColumnBlueprint.TRIM_CONDENSER, false)),
+                // The drawing alone, with an ejector, the trim selected, to read the pair's labels and lines.
+                new Prototype("assembly-air-then-water-drawing", 360, 420, (d, s) -> {
+                    var box = d.well(new Rect(8, 8, 344, 404));
+                    var vacuum = new ColumnTrays(TRIMMED.trays(), TRIMMED.feed(), TRIMMED.draws(), TRIMMED.steam(), TRIMMED.pumparounds(), new ColumnComponents(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), true, true, TRIMMED.components().units()));
+                    var block = new AssemblyBlock(vacuum);
+                    block.fit(box);
+                    block.draw(d.c, box, assemblyReport(vacuum, Map.of()), ColumnBlueprint.TRIM_CONDENSER, "T-101", DIALOG);
+                }));
+    }
+
+    /** C1 (COOLER_MODEL_PLAN.md section 6): the same column with an air-then-water condenser, two air cooler banks and three trim shells, all in place. */
+    static final ColumnTrays TRIMMED = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
+            new ColumnComponents(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                    new ColumnComponents.Units(2, 1, List.of(1), 3)));
+
+    static void assemblyDoor(Door d, Slot selected, boolean queued) {
+        assemblyDoor(d, ASSEMBLY, assemblyReport(), selected, queued);
     }
 
     /**
@@ -266,12 +369,12 @@ public final class GuiPrototypes {
      * Operation off until the structure is complete), the status once, the glass with the drawing and the parts list, the
      * door column, the footer under its divider.
      */
-    static void assemblyDoor(Door d, Slot selected, boolean queued) {
+    static void assemblyDoor(Door d, ColumnTrays trays, AssemblyReport report, Slot selected, boolean queued) {
         var t = DIALOG;
-        var report = assemblyReport();
-        var diagram = AssemblyDiagram.of(ASSEMBLY);
-        var slots = ColumnBlueprint.of(ASSEMBLY).slots();
+        var diagram = AssemblyDiagram.of(trays);
+        var slots = ColumnBlueprint.of(trays).slots();
         d.title(t.get(AssemblyColumn.KEY + "title"));
+        d.name("T-101", true);
         var tabs = AssemblyColumn.tabs(false, false, t);
         var tabSlots = AssemblyColumn.tabSlots(d.w);
         for (int i = 0; i < tabs.size(); i++) {
@@ -283,10 +386,11 @@ public final class GuiPrototypes {
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - AssemblyColumn.DIVIDER);
         var box = d.well(AssemblyColumn.glass(d.w, d.h, true));
         var split = AssemblyColumn.split(box);
-        var sheet = new AssemblyFlowsheet(diagram);
-        sheet.fit(split.drawing());
+        // The drawing as the process simulator draws a column (owner's option A, 2026-11-03), the parts list beside it.
+        var block = new AssemblyBlock(trays);
+        block.fit(split.drawing());
         d.c.clip(split.drawing());
-        sheet.draw(d.c, report, selected, x -> AssemblyColumn.text(x, t));
+        block.draw(d.c, split.drawing(), report, selected, "T-101", t);
         d.c.unclip();
         var area = split.list();
         d.c.vLine(area.x() - AssemblyColumn.GAP / 2, box.y() - 1, box.bottom(), Palette.LINE);
@@ -298,18 +402,19 @@ public final class GuiPrototypes {
         AssemblyColumn.draw(d.c, parts, lines, 0, selected == null ? -1 : slots.indexOf(selected));
         d.c.unclip();
         listView.drawBar(d.c, d.skin);
+        if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s block at scale %.2f in %d by %d px%n", "assembly " + d.w + "x" + d.h, block.scale(), split.drawing().w(), split.drawing().h());
         // The door column, narrowed for its bar where it is taller than its area (KitDoor).
         String name = selected == null ? null : AssemblyColumn.text(diagram.part(selected).name(), t);
+        // N1 (the owner 2026-11-03): a player who may build names the column in the title strip, sent with the footer's Apply.
         var rows = AssemblyColumn.rows(AssemblyColumn.input(slots.size(), report, queued, name, selected != null), t);
         var door = AssemblyColumn.area(d.w, d.h);
         int tall = Column.place(rows, door.x(), door.y(), door.w(), d.m, Column.Metrics.COMPACT).bounds().h();
         d.column(rows, door.x(), door.y(), tall > door.h() ? door.w() - ScrollView.BAR - 4 : door.w(), Map.of());
-        var footer = AssemblyColumn.footer(d.w, d.h);
-        var keys = AssemblyColumn.footerButtons(t);
-        for (int i = 0; i < keys.size(); i++) d.skin.button(d.c, footer.get(i), keys.get(i).text(), Skin.Press.REST, false);
+        var footer = AssemblyColumn.footer(d.w, d.h, 3);
+        var keys = AssemblyColumn.footerButtons(true, t);
+        for (int i = 0; i < keys.size(); i++) d.skin.button(d.c, footer.get(i), keys.get(i).text(), keys.get(i).key().equals("apply") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
         if (d.skin == PanelSkin.LIGHT)
-            System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view, list %d lines in %d px%n", "assembly" + (selected == null ? "" : " selected"), tall, door.h(),
-                    parts.lines().size(), lines.h());
+            System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", "assembly" + (selected == null ? "" : " selected"), tall, door.h());
     }
 
     // ---- The equipment constructor: the shipped ConstructorColumn on its door left of the world (GUI_REVIEW.md order 3) ----
@@ -320,8 +425,8 @@ public final class GuiPrototypes {
 
     static List<Prototype> constructor() {
         var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
-        var drum = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.VERTICAL, 2, 6, 3, 3, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
-        var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
+        var drum = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.VERTICAL, 2, 6, 3, 3, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
+        var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var connections = ConstructorColumn.connections(new ConstructorColumn.Connections(2, 1, 1, STANDING, "4.5", false, -1, "back", true, false, false,
                 new ConstructorColumn.Outlet(0b1011, 0, STANDING)), DIALOG);
         var nozzles = ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(7, 2, new ConstructorColumn.Nozzle("pumparound_draw", 1, true, "18.5",
@@ -329,7 +434,7 @@ public final class GuiPrototypes {
         String volume = DIALOG.get(CONSTRUCTOR + "volume", "20.9", "46.4");
         // A column's design page with Import and Templates, and its Templates page: the bundled templates, the pot off, one of the player's.
         var columnDesign = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.COLUMN, 8, 6, 10, 3, 0, 0, new ProcessUnit.Bank(1, 1),
-                new ConstructorColumn.Imported(8, 42, 38), outlet, 16), DIALOG);
+                new ConstructorColumn.Imported(8, 42, 38), outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var templates = new ArrayList<ConstructorColumn.Template>();
         for (var name : List.of("Bonga", "Cold Lake Blend", "Dalia", "Tia Juana Light (default)", "Upper Zakum", "WTI Light - Export"))
             templates.add(new ConstructorColumn.Template(name, true, DIALOG.get(CONSTRUCTOR + "template.bundled", name)));
@@ -343,7 +448,7 @@ public final class GuiPrototypes {
                 }, true),
                 new Prototype("equipment-constructor-templates", 464, 254, (d, s) -> constructorDoor(d, templatePage, "Distillation column", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor-choose", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.VESSELS,
-                        ConstructorColumn.Equipment.VERTICAL_DRUM, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
+                        ConstructorColumn.Equipment.VERTICAL_DRUM, 16, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor", 464, 254, (d, s) -> constructorDoor(d, drum, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
                 new Prototype("equipment-constructor-lying", 464, 254, (d, s) -> constructorDoor(d, lying, "Horizontal drum", "change",
                         DIALOG.get(CONSTRUCTOR + "blocked", 3), Palette.WARN, Map.of()), true),
@@ -480,16 +585,21 @@ public final class GuiPrototypes {
 
     /** A datasheet: the door's sizes and switch, the glass's notes and nozzles, as VesselScreen draws them. */
     static void datasheet(Door d, String title, DialogColumns.Sheet sheet, boolean moving) {
-        d.skin.title(d.c, 10, 10, title);
+        // N1 (the owner 2026-11-03): the name in the title strip, sent with Apply beside Done; the datasheet has no theme key.
+        d.title(title, 0);
+        d.name(moving ? "AC-101" : "D-101", true);
         var values = new java.util.HashMap<String, String>();
         for (var size : sheet.sizes()) values.put(size.key(), size.value());
-        d.column(DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG), 10, DialogColumns.TOP, 150, values);
+        var rows = DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG);
+        d.column(rows, 10, DialogColumns.TOP, 150, values);
+        if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", "datasheet" + (moving ? " unit" : ""),
+                Column.place(rows, 10, DialogColumns.TOP, 150, d.m, Column.Metrics.COMPACT).bounds().h(), d.h - DialogColumns.TOP - DialogColumns.FOOTER);
         var box = d.well(new Rect(166, 25, d.w - 171, d.h - 60));
         var glass = DialogColumns.glass(sheet, false, box.w() - ScrollView.BAR - 2, d.m, DIALOG);
         d.c.clip(box);
         DialogColumns.draw(d.c, glass, new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()), 0);
         d.c.unclip();
-        dialogFooter(d, "Done");
+        dialogFooter(d, "Done", TEXTS.get("apply"));
     }
 
     static Prototype vessel() {
@@ -528,7 +638,11 @@ public final class GuiPrototypes {
      */
     static Rect device(Door d, DeviceColumn.Input in, Map<String, String> drafts) {
         int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
-        var column = Column.place(DeviceColumn.rows(in, TEXTS), 10, top, side - 10, d.m, Column.Metrics.COMPACT);
+        // N1 (the owner 2026-11-03): the name in the title strip, an entry for an editor of a device that takes one (a plain pipe takes none).
+        // A tank with contents holds Copy where Apply would stand: its name reads as text (an open item).
+        if (in.kind() != Kind.PIPE) d.name(NAMES.getOrDefault(in.kind(), ""), in.canEdit() && in.kind() != Kind.RESERVOIR);
+        var rows = DeviceColumn.rows(in, TEXTS);
+        var column = Column.place(rows, 10, top, side - 10, d.m, Column.Metrics.COMPACT);
         var view = new ScrollView();
         view.layout(new Rect(8, top, side - 6, bottom - top), side + 3, column.bounds().h());
         while (d.end && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
@@ -633,6 +747,10 @@ public final class GuiPrototypes {
         });
     }
 
+    /** The names the device pages' title strips show (N1), by kind. */
+    static final Map<Kind, String> NAMES = Map.of(Kind.PUMP, "P-101", Kind.COMPRESSOR, "K-101", Kind.VALVE, "FV-101", Kind.GENERATOR, "F-101", Kind.RESERVOIR, "TK-101",
+            Kind.VOID, "FL-101", Kind.FILTER, "S-101", Kind.HEAT_SIDE, "E-101");
+
     /** The valve, the tallest page, in a {@link #WINDOW} window; and in a 1366 by 768 one, where scale 2 still leaves it a bar. */
     static List<Prototype> valve() {
         return List.of(valve("fluid-valve", WINDOW[0], WINDOW[1]), valve("fluid-valve-1366x768", 1366, 768));
@@ -691,6 +809,7 @@ public final class GuiPrototypes {
         var door = new Door(canvas, skin, p.width(), p.height(), end);
         skin.page(canvas, new Rect(0, 0, p.width(), p.height()));
         p.body().accept(door, skin);
+        canvas.count(p.file() + " " + (skin == PanelSkin.LIGHT ? "light" : skin == PanelSkin.DARK ? "dark" : "plain") + (end ? " end" : ""));
         g.dispose();
         return image;
     }
@@ -717,10 +836,29 @@ public final class GuiPrototypes {
             return HeatDiagramRender.tr(key, args);
         }
 
+        /** The title strip as last placed: the kind's plate and the name's place (N1). */
+        TitleStrip.Strip strip;
+
         /** The title plate and the theme key with its contrast sign, as FluidDeviceScreen draws them. */
         void title(String text) {
-            skin.title(c, 10, 10, text);
-            skin.iconKey(c, new Rect(w - 28, 5, 18, 18), Skin.Icon.THEME, false);
+            title(text, 18);
+        }
+
+        /** The title strip (N1): the kind's plate, the theme key {@code key} px wide at the right (0: none, as the datasheet). */
+        void title(String text, int key) {
+            strip = TitleStrip.place(w, key, text, m);
+            skin.title(c, TitleStrip.TITLE_X, TitleStrip.TITLE_Y, strip.kind());
+            if (key > 0) skin.iconKey(c, new Rect(w - 10 - key, 5, key, 18), Skin.Icon.THEME, false);
+        }
+
+        /** The name in the title strip (N1): an editor's LCD entry (its hint while empty), a reader's text. */
+        void name(String name, boolean editor) {
+            if (strip == null || strip.name() == null) return;
+            if (editor) skin.field(c, strip.name(), name, TEXTS.get("name"), false);
+            else {
+                int[] at = TitleStrip.textAt(strip.name());
+                skin.text(c, TitleStrip.text(name, strip.name(), m), at[0], at[1], Palette.TEXT);
+            }
         }
 
         /** Tabs side by side at y 29, {@code current} latched. */
@@ -764,6 +902,7 @@ public final class GuiPrototypes {
             column.draw(c, 0, skin);
             for (var p : column.rows()) {
                 if (p.row() instanceof Column.Field f) skin.field(c, p.slots().get(f.key()), values.getOrDefault(f.key(), ""), "off", false);
+                else if (p.row() instanceof Column.Wide wide) skin.field(c, p.slots().get(wide.key()), values.getOrDefault(wide.key(), ""), "", false);
                 else if (p.row() instanceof Column.Buttons b)
                     for (var spec : b.buttons())
                         skin.button(c, p.slots().get(spec.key()), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);

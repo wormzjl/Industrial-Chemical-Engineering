@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.network;
 
 import com.wormzjl.icheme.science.column.v3.*;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.DecoderException;
 import java.util.*;
@@ -48,14 +47,10 @@ class V3InspectionCodecTest {
         assertThrows(IllegalArgumentException.class,()->new V3ColumnInspection.Node(300,1,0,1,0,0,List.of(1.0),List.of(1.0)));
         assertThrows(IllegalArgumentException.class,()->new V3ColumnInspection(profile.input(),List.of(profile.nodes().getFirst()),profile.audit()));
     }
-    @Test void acceptedDisplayRoundTripsThroughRealWireAndNbt() throws Exception {
+    @Test void acceptedDisplayRoundTripsThroughTheRealWire() throws Exception {
         var profile=inspection(0,1);
         var result=new V3ColumnDisplayResult("0".repeat(64),"mesh","assumptions","data",3,1e-12,1,
                 List.of(),Optional.empty(),V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE,Optional.empty(),Optional.of(profile));
         assertEquals(result,ColumnCodecs.wireRoundTrip(result));
-        var tag=ColumnCodecs.writeResultNbt(result);
-        assertEquals(result,ColumnCodecs.readResultNbt(tag));
-        tag.remove("Inspection");
-        assertThrows(java.lang.reflect.InvocationTargetException.class,()->ColumnCodecs.readResultNbt(tag));
     }
 }

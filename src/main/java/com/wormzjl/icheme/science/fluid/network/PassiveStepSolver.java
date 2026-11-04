@@ -1937,6 +1937,7 @@ public final class PassiveStepSolver {
             }
             double[] flat=new double[side.cells()];Arrays.fill(flat,start.temperature());
             var planned=side.withInputs(flat,side.bypass(),0,1);
+            double regulated=Double.NaN;
             if(endMass(start,port,pipe.volume())>0) {
                 double own=endSpecificEnthalpy(start,port,pipe.volume()),low=start.temperature(),high=low;
                 // A kettle's tube side reads its pool (W7): the vessel's contents, isothermal, no stream.
@@ -1950,12 +1951,19 @@ public final class PassiveStepSolver {
                 if(stream!=null&&pool)planned=ExchangerRelay.plan(side,stream,partner.bath(),read);
                 else if(stream!=null)planned=ExchangerRelay.plan(side,stream,
                         other==null?null:new ExchangerRelay.Stream(other,endSpecificEnthalpy(partner.donor(),partner.port(),partner.volume()),partner.massFlow(),partner.law(),false),read,seconds);
+                // A column's water side (U2): the flow that carries the heat the column asks for, the water rising its range but
+                // staying under the ceiling; water at or over the ceiling can take nothing, and its valve holds.
+                if(curve!=null&&valve>=0&&operation.column()&&read.ceiling()>0) {
+                    double outlet=Math.min(curve.temperatureAt(own)+operation.rise(),read.ceiling()),rise=curve.enthalpyAt(outlet)-own;
+                    if(rise>0)regulated=read.heatRate()/rise;
+                }
             }
             double target=Double.NaN;
             if(bypassed) {
                 double share=planned.bypass();target=share*flow;
                 planned=planned.withInputs(planned.wall(),0,share<.99?planned.giveBack()/(1-share):planned.giveBack(),planned.active(),planned.limit());
-            } else if(valve>=0&&operation.feed()&&partner!=null)target=operation.ratio()*Math.abs(partner.massFlow());
+            } else if(valve>=0&&operation.column())target=regulated;
+            else if(valve>=0&&operation.feed()&&partner!=null)target=operation.ratio()*Math.abs(partner.massFlow());
             if(!Double.isNaN(target)) {
                 var driven=pipes==null?graph.pipes().get(valve):pipes.get(valve);var valveLaw=(FlowControl.ControlValve)driven.control();
                 if(valveLaw.source()!=FlowControl.ValveSource.MASS_FLOW||Math.abs(target-valveLaw.massTarget())>VALVE_DEADBAND*Math.max(valveLaw.massTarget(),target)+1e-6) {

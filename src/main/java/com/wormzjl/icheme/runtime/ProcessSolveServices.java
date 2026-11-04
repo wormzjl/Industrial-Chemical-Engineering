@@ -1,14 +1,6 @@
 package com.wormzjl.icheme.runtime;
 
 import com.wormzjl.icheme.IChemE;
-import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
-import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
-import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
-import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
-import com.wormzjl.icheme.science.column.v3.V3NeuralInitializer;
-import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
-import com.wormzjl.icheme.science.column.v3.V3SolveStrategy;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity.V3Operation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -90,29 +82,6 @@ public final class ProcessSolveServices {
                 config.solveDeadline().toMillis(),
                 config.gracefulShutdown().toMillis(),
                 config.forcedShutdown().toMillis());
-    }
-
-    /** Admits one immutable V3 input through the existing shared bounded service. */
-    public static AdmissionResult submitV3Column(MinecraftServer server, V3ColumnRequest request) {
-        return submitV3Column(server, request, null);
-    }
-
-    /** Admits one V3 input and supplies the previous accepted state as a process-local warm cache. */
-    public static AdmissionResult submitV3Column(MinecraftServer server, V3ColumnRequest request,
-            V3NeuralSeed warmStart) {
-        requireServerThread(server);
-        Objects.requireNonNull(request, "request");
-        double stageTraceCutoffMoleFraction = IChemE.columnV3StageTraceCutoffMolPercent() / 100.0;
-        double convergenceClosureFraction = IChemE.columnV3ConvergenceClosurePercent() / 100.0;
-        double liquidSupplyScreenRatio = IChemE.columnV3LiquidSupplyScreenRatio();
-        V3InitializationOptions initialization = IChemE.columnV3InitializationOptions();
-        var catalog=com.wormzjl.icheme.science.material.MaterialRuntime.current();
-        V3NeuralInitializer model = initialization.mode() == V3InitializationOptions.Mode.CURRENT_ONLY
-                ? V3NeuralInitializer.UNAVAILABLE : IChemE.columnV3NeuralModel().bind(catalog,request.operation().input());
-        return submit(server, request, new V3ColumnCommand(request.operation().input(),
-                        stageTraceCutoffMoleFraction, convergenceClosureFraction, initialization, model,
-                        liquidSupplyScreenRatio, catalog, V3SolveStrategy.AGGRESSIVE, warmStart),
-                request.operation().input().packageId());
     }
 
     /** A running column's solve (batch 2026-10-28-column-operation, plan section 6): a V3 job under the solve deadline. */
@@ -312,9 +281,7 @@ public final class ProcessSolveServices {
             if (context == null) {
                 throw new IllegalStateException("Process-solve completion has no request context");
             }
-            if (context.request() instanceof V3ColumnRequest v3Request) {
-                result.add(new V3ColumnCompletion(v3Request, context.admissionDiagnostics(), v3Completion(completion)));
-            } else if(context.request() instanceof FluidIslandRequest fluidRequest) {
+            if(context.request() instanceof FluidIslandRequest fluidRequest) {
                 result.add(new FluidIslandCompletion(fluidRequest,context.admissionDiagnostics(),fluidCompletion(completion)));
             } else if(context.request() instanceof ColumnUnitRequest columnRequest) {
                 // A worker failure, a cancellation or the deadline is a failed solve, named by its status.
@@ -326,19 +293,6 @@ public final class ProcessSolveServices {
             }
         }
         return List.copyOf(result);
-    }
-
-    private static BoundedCpuSolveService.Completion<ColumnTarget, V3ColumnOutcome> v3Completion(
-            BoundedCpuSolveService.Completion<SolveTarget, ProcessSolveResult> completion) {
-        Optional<V3ColumnOutcome> outcome = completion.result().map(result -> {
-            if (!(result instanceof V3ColumnSolveResult v3)) {
-                throw new IllegalStateException("V3 request completed with a non-V3 process result");
-            }
-            return v3.outcome();
-        });
-        return new BoundedCpuSolveService.Completion<>(
-                stampFor(completion.stamp(),ColumnTarget.class), completion.status(), outcome, completion.failure(), completion.detail(),
-                completion.enqueuedNanos(), completion.startedNanos(), completion.completedNanos());
     }
 
     private static <T extends SolveTarget> BoundedCpuSolveService.JobStamp<T> stampFor(BoundedCpuSolveService.JobStamp<SolveTarget> stamp,Class<T> type) {
@@ -376,12 +330,12 @@ public final class ProcessSolveServices {
     }
 
     /** Immutable worker envelope. Adding a job family extends this sealed protocol, never the executor count. */
-    public sealed interface ProcessSolveCommand permits V3ColumnCommand,FluidIslandCommand,ColumnUnitCommand {
+    public sealed interface ProcessSolveCommand permits FluidIslandCommand,ColumnUnitCommand {
         ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken);
     }
 
     /** Immutable worker result envelope routed only after main-thread completion draining. */
-    public sealed interface ProcessSolveResult permits V3ColumnSolveResult,FluidIslandSolveResult,ColumnUnitSolveResult {}
+    public sealed interface ProcessSolveResult permits FluidIslandSolveResult,ColumnUnitSolveResult {}
 
     /** Contains no live level, block entity, callback, or mutable server-owned collection. {@code reads}: each coupled
      * exchanger side's read of its other side, by connection id, made on the server at the dispatch (plan section 5.2). */
@@ -468,74 +422,8 @@ public final class ProcessSolveServices {
         public FluidIslandSolveResult {Objects.requireNonNull(phaseHold);notices=List.copyOf(notices);if(!notices.isEmpty()&&candidate.isEmpty())throw new IllegalArgumentException("Only an accepted interval carries data-range notices");if(phaseHold.isPresent()&&candidate.isPresent())throw new IllegalArgumentException("An accepted interval has no phase hold");Objects.requireNonNull(candidate);Objects.requireNonNull(detail);if(workerNanos<0||workerCpuNanos < -1)throw new IllegalArgumentException("Invalid worker elapsed time");}
     }
 
-    /** Immutable worker snapshot; configuration has already been read and converted by server-thread admission. */
-    record V3ColumnCommand(
-            V3ColumnInput input, double stageTraceCutoffMoleFraction, double convergenceClosureFraction,
-            V3InitializationOptions initialization, V3NeuralInitializer model, double liquidSupplyScreenRatio,
-            com.wormzjl.icheme.science.material.MaterialCatalog catalog, V3SolveStrategy strategy,
-            V3NeuralSeed warmStart)
-            implements ProcessSolveCommand {
-        V3ColumnCommand(V3ColumnInput input, double stageTraceCutoffMoleFraction, double convergenceClosureFraction,
-                V3InitializationOptions initialization, V3NeuralInitializer model, double liquidSupplyScreenRatio,
-                com.wormzjl.icheme.science.material.MaterialCatalog catalog) {
-            this(input, stageTraceCutoffMoleFraction, convergenceClosureFraction, initialization, model,
-                    liquidSupplyScreenRatio, catalog, V3SolveStrategy.DRIFT_SPEC, null);
-        }
-        V3ColumnCommand {
-            Objects.requireNonNull(catalog, "catalog");
-            Objects.requireNonNull(input, "input");
-            Objects.requireNonNull(initialization, "initialization");
-            Objects.requireNonNull(model, "model");
-            Objects.requireNonNull(strategy, "strategy");
-            if (!Double.isFinite(stageTraceCutoffMoleFraction) || stageTraceCutoffMoleFraction < 0.0
-                    || stageTraceCutoffMoleFraction > 0.01) {
-                throw new IllegalArgumentException("V3 stage-trace cutoff must be finite and in [0, 0.01] mole fraction");
-            }
-            if (!Double.isFinite(convergenceClosureFraction) || convergenceClosureFraction < 0.0
-                    || convergenceClosureFraction > 1.0e-3) {
-                throw new IllegalArgumentException("V3 convergence closure must be finite and in [0, 1e-3]");
-            }
-            // Revalidated here rather than trusted from the config range, exactly as the two fractions above are.
-            if (!Double.isFinite(liquidSupplyScreenRatio) || liquidSupplyScreenRatio < 0.0
-                    || liquidSupplyScreenRatio > 1.0) {
-                throw new IllegalArgumentException("V3 liquid-supply screen ratio must be finite and in [0, 1]");
-            }
-        }
-
-        @Override
-        public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
-            return com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog, input.packageId(),
-                    () -> solveInCatalog(cancellationToken));
-        }
-        private ProcessSolveResult solveInCatalog(BoundedCpuSolveService.CancellationToken cancellationToken) {
-            cancellationToken.throwIfCancellationRequested();
-            V3ColumnOutcome outcome = initialization.mode() == V3InitializationOptions.Mode.LNN_ONLY
-                    || strategy == V3SolveStrategy.DRIFT_SPEC && warmStart == null
-                    ? V3ColumnCalculator.calculate(input, cancellationToken::throwIfCancellationRequested,
-                            stageTraceCutoffMoleFraction, convergenceClosureFraction, initialization, model,
-                            liquidSupplyScreenRatio)
-                    : V3ColumnCalculator.calculateWithStrategy(input,
-                            cancellationToken::throwIfCancellationRequested,
-                            strategy, warmStart, liquidSupplyScreenRatio);
-            cancellationToken.throwIfCancellationRequested();
-            return new V3ColumnSolveResult(outcome);
-        }
-    }
-
-    record V3ColumnSolveResult(V3ColumnOutcome outcome) implements ProcessSolveResult {
-        V3ColumnSolveResult {
-            Objects.requireNonNull(outcome, "outcome");
-        }
-    }
-
     /** Stable block identity; no loaded level or block entity is retained. */
-    public sealed interface SolveTarget permits ColumnTarget,FluidIslandTarget,ColumnUnitTarget {}
-    public record ColumnTarget(ResourceKey<Level> dimension, BlockPos blockPos) implements SolveTarget {
-        public ColumnTarget {
-            Objects.requireNonNull(dimension, "dimension");
-            blockPos = Objects.requireNonNull(blockPos, "blockPos").immutable();
-        }
-    }
+    public sealed interface SolveTarget permits FluidIslandTarget,ColumnUnitTarget {}
 
     /** A running column unit, by its identity (batch 2026-10-28-column-operation). */
     public record ColumnUnitTarget(ResourceKey<Level> dimension,long unit) implements SolveTarget {
@@ -565,7 +453,7 @@ public final class ProcessSolveServices {
     }
 
     /** Immutable server-thread request context retained until exactly one terminal completion is drained. */
-    public sealed interface ProcessSolveRequest permits V3ColumnRequest,FluidIslandRequest,ColumnUnitRequest {
+    public sealed interface ProcessSolveRequest permits FluidIslandRequest,ColumnUnitRequest {
         long requestId();
 
         SolveTarget target();
@@ -589,46 +477,8 @@ public final class ProcessSolveServices {
         }
     }
 
-    /** Immutable V3 pilot metadata retained only on the server thread until worker completion drains. */
-    public record V3ColumnRequest(
-            long requestId, ColumnTarget target, V3Operation operation, long receivedNanos) implements ProcessSolveRequest {
-        public V3ColumnRequest {
-            if (requestId <= 0L || receivedNanos <= 0L) {
-                throw new IllegalArgumentException("V3 request identifiers must be positive");
-            }
-            Objects.requireNonNull(target, "target");
-            Objects.requireNonNull(operation, "operation");
-            if (requestId != operation.operationId()) {
-                throw new IllegalArgumentException("V3 request identity disagrees with its operation");
-            }
-        }
-
-        @Override
-        public long inputRevision() {
-            return operation.inputRevision();
-        }
-    }
-
-    /** One V3 completion joined to immutable server-thread metadata for stale-operation rejection. */
-    public record V3ColumnCompletion(
-            V3ColumnRequest request,
-            Diagnostics admissionDiagnostics,
-            BoundedCpuSolveService.Completion<ColumnTarget, V3ColumnOutcome> completion)
-            implements ProcessSolveCompletion {
-        public V3ColumnCompletion {
-            Objects.requireNonNull(request, "request");
-            Objects.requireNonNull(admissionDiagnostics, "admissionDiagnostics");
-            Objects.requireNonNull(completion, "completion");
-            if (request.requestId() != completion.stamp().sequence()
-                    || !request.target().equals(completion.stamp().owner())
-                    || request.inputRevision() != completion.stamp().inputRevision()) {
-                throw new IllegalArgumentException("Completion stamp does not match V3 request context");
-            }
-        }
-    }
-
     /** Marker for the central router; only it may drain the shared completion queue. */
-    public sealed interface ProcessSolveCompletion permits V3ColumnCompletion,FluidIslandCompletion,ColumnUnitCompletion {}
+    public sealed interface ProcessSolveCompletion permits FluidIslandCompletion,ColumnUnitCompletion {}
 
     public record AdmissionResult(Admission admission, Diagnostics diagnostics) {
         public AdmissionResult {

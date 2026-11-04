@@ -209,6 +209,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        SkinField.clickOutside(this, x, y);
         return door.press(x - leftPos, y - topPos, button) || super.mouseClicked(x, y, button);
     }
 

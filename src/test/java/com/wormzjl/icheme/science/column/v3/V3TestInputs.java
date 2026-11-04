@@ -36,6 +36,43 @@ public final class V3TestInputs {
         return catalog.presets().column("tia_juana").input(catalog);
     }
 
+    /**
+     * A crude as a player builds it (process simulator plan, section 3.7): its stream template's mixture, flow and
+     * temperature under its tower template. {@code name} names both files; the assay is the crude's where it has its own.
+     */
+    public static V3ColumnInput crude(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String name) {
+        var base = catalog.presets().column("tia_juana").input(catalog);
+        var stream = bundled("assets/icheme/mixturepreset/" + name + ".json");
+        double rate = stream.get("flow_kmol_h").getAsDouble();
+        var tower = V3ColumnTemplate.read(bundled("assets/icheme/columnpreset/" + name + ".json")).scaledTo(rate);
+        var ids = base.componentBasis().componentIds();
+        double[] feed = new double[ids.size()];
+        double total = 0;
+        for (var row : stream.getAsJsonArray("components")) {
+            double amount = row.getAsJsonObject().get("amount").getAsDouble();
+            feed[ids.indexOf(row.getAsJsonObject().get("id").getAsString())] = amount;
+            total += amount;
+        }
+        for (int i = 0; i < feed.length; i++) feed[i] *= rate / 3.6 / total;
+        String assay = catalog.requirePackage(base.packageId()).assays().containsKey("icheme:" + name) ? "icheme:" + name : base.assayId();
+        return new V3ColumnInput(1, base.packageId(), assay, base.componentBasis(), feed, stream.get("temperature_kelvin").getAsDouble(),
+                tower.trays() - 2, tower.feedTray() - 1, tower.topPressure() * 1e5, base.stagePressureDropPascal(),
+                List.of(new V3ColumnSpecification.CondenserOutletTemperature(tower.topTemperature()),
+                        new V3ColumnSpecification.OrganicRefluxRatio(tower.refluxRatio()), new V3ColumnSpecification.ReboilerDuty(tower.reboilerDuty() * 1e6)),
+                tower.draws().stream().map(d -> new V3SideDrawSpec(d.tray() - 1, d.flow() / 3.6)).toList(),
+                tower.steam().stream().map(s -> new V3SteamFeedSpec(s.tray() - 1, s.flow() / 3.6, s.temperature())).toList(),
+                tower.pumparounds().stream().map(p -> new V3PumparoundSpec(p.returnTray() - 1, p.drawTray() - 1, -p.cooling() * 1e6, p.split())).toList(),
+                tower.diameter());
+    }
+
+    private static com.google.gson.JsonObject bundled(String path) {
+        try (var stream = V3TestInputs.class.getClassLoader().getResourceAsStream(path)) {
+            return com.google.gson.JsonParser.parseString(new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     /** The unique authored column preset of a package. */
     static com.wormzjl.icheme.science.material.MaterialPresets.Column packagePreset(
             com.wormzjl.icheme.science.material.MaterialCatalog catalog, String packageId) {

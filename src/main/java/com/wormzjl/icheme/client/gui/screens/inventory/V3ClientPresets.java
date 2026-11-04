@@ -10,25 +10,30 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Function;
+import static com.wormzjl.icheme.science.material.JsonFields.*;
 
 /** Explicitly refreshed, client-owned JSON libraries. Neither custom paths nor files cross the wire. */
 final class V3ClientPresets {
     static final int MAX_BYTES=65536,MAX_FILES=256;
     /**
-     * {@code schema} is the only version a file of the kind may carry. Column 2 added {@code stage_pressure_drop_kpa};
-     * since 2026-10-28 (owner choice (a)) it is no longer written, and a file's is ignored: the tray hydraulics give the drop.
+     * {@code oldest} to {@code schema} are the versions a file of the kind may carry, {@code schema} the one written. Column 2
+     * added {@code stage_pressure_drop_kpa}; since 2026-10-28 (owner choice (a)) it is no longer written, and a file's is
+     * ignored: the tray hydraulics give the drop. Column 3 holds no feed ({@link V3ColumnTemplate}). A mixture's {@code package},
+     * which the older builds wrote, is ignored: a stream sits on whatever holds its parts.
      */
     enum Kind {
-        COLUMN("columnpreset","column",2),MIXTURE("mixturepreset","mixture",1);
-        final String folder,id;final int schema;
-        Kind(String folder,String id,int schema){this.folder=folder;this.id=id;this.schema=schema;}
+        COLUMN("columnpreset","column",2,3),MIXTURE("mixturepreset","mixture",1,1);
+        final String folder,id;final int oldest,schema;
+        Kind(String folder,String id,int oldest,int schema){this.folder=folder;this.id=id;this.oldest=oldest;this.schema=schema;}
     }
     sealed interface Preset permits Column,Mixture {String name();String translationKey();}
-    record Column(String name,String translationKey,Map<String,String> fields) implements Preset {
-        Column {fields=Map.copyOf(fields);}
-    }
-    /** {@code solids} is the optional {@code "solids"} object of a mixture file (a fluid generator loads it; the column ignores it). */
-    record Mixture(String name,String translationKey,String packageId,boolean mass,Map<String,Double> amounts,SlurryFeed solids) implements Preset {
+    record Column(String name,String translationKey,V3ColumnTemplate template) implements Preset {}
+    /**
+     * {@code solids} is the optional {@code "solids"} object of a mixture file (a fluid generator loads it; the column ignores
+     * it). {@code temperature} (K), {@code pressure} (bar) and {@code flow} (kmol/h) are the stream's conditions where it has them.
+     */
+    record Mixture(String name,String translationKey,boolean mass,Map<String,Double> amounts,SlurryFeed solids,
+            OptionalDouble temperature,OptionalDouble pressure,OptionalDouble flow) implements Preset {
         Mixture {amounts=Collections.unmodifiableMap(new LinkedHashMap<>(amounts));Objects.requireNonNull(solids);}
     }
     record Entry(Preset preset,boolean bundled,String file){}
@@ -91,6 +96,12 @@ final class V3ClientPresets {
         }
         throw new IOException("No available preset filename");
     }
+    /** Deletes a player's own file; a bundled one is no file here, so a name is all it takes and only that folder is reached. */
+    void delete(Kind kind,String file)throws IOException{
+        Path directory=directory(kind),path=directory.resolve(file).normalize();
+        if(!directory.equals(path.getParent()))throw new IOException("Invalid preset path");
+        Files.deleteIfExists(path);
+    }
     private static String read(InputStream stream)throws IOException{
         byte[] bytes=stream.readNBytes(MAX_BYTES+1);
         if(bytes.length>MAX_BYTES)throw new IOException("Preset exceeds size limit");
@@ -98,59 +109,24 @@ final class V3ClientPresets {
     }
     static Preset decode(String json,Kind kind){
         try{
-            JsonObject o=JsonParser.parseString(json).getAsJsonObject();
-            if(integer(o,"schema_version")!=kind.schema||!string(o,"kind").equals(kind.id))throw new IllegalArgumentException("Unsupported preset schema");
+            JsonObject o=JsonParser.parseString(json).getAsJsonObject();int schema=integer(o,"schema_version");
+            if(schema<kind.oldest||schema>kind.schema||!string(o,"kind").equals(kind.id))throw new IllegalArgumentException("Unsupported preset schema");
             String name=string(o,"name"),key=string(o,"translation_key");
             if(name.isBlank()||name.length()>128||key.length()>128)throw new IllegalArgumentException("Invalid preset name");
-            if(kind==Kind.MIXTURE){
-                String pkg=string(o,"package"),basis=string(o,"basis");
-                if(!pkg.matches("[a-z][a-z0-9_.:-]{0,127}")||!Set.of("mole","mass").contains(basis))throw new IllegalArgumentException("Invalid mixture basis");
-                Map<String,Double> amounts=new LinkedHashMap<>();double total=0;
-                for(var element:array(o,"components",64)){
-                    var c=element.getAsJsonObject();String id=string(c,"id");double value=number(c,"amount");
-                    if(!id.matches("[A-Za-z][A-Za-z0-9_.:-]{0,63}")||value<0||amounts.putIfAbsent(id,value)!=null)throw new IllegalArgumentException("Invalid component amount");
-                    total+=value;
-                }
-                if(!Double.isFinite(total)||total<=0)throw new IllegalArgumentException("Empty mixture");
-                return new Mixture(name,key,pkg,basis.equals("mass"),amounts,solids(o));
+            if(kind==Kind.COLUMN)return new Column(name,key,V3ColumnTemplate.read(o));
+            String basis=string(o,"basis");
+            if(!Set.of("mole","mass").contains(basis))throw new IllegalArgumentException("Invalid mixture basis");
+            Map<String,Double> amounts=new LinkedHashMap<>();double total=0;
+            for(var element:bounded(o,"components",64)){
+                var c=element.getAsJsonObject();String id=string(c,"id");double value=number(c,"amount");
+                if(!id.matches("[A-Za-z][A-Za-z0-9_.:-]{0,63}")||value<0||amounts.putIfAbsent(id,value)!=null)throw new IllegalArgumentException("Invalid component amount");
+                total+=value;
             }
-            Map<String,String> f=new LinkedHashMap<>();
-            String[] names={"feed_flow_kmol_h","feed_temperature_kelvin","tray_count","feed_tray","top_temperature_kelvin",
-                "reboiler_duty_mw","reflux_ratio","top_pressure_bar",null,"diameter_m"};
-            for(int i=0;i<10;i++){
-                if(names[i]==null)continue;// s8, the tray drop, stays the draft's
-                double value=number(o,names[i]);if(i==1||i==4)value-=273.15;
-                if(i==2||i==3)f.put("s"+i,Integer.toString(integer(o,names[i])));else f.put("s"+i,Double.toString(value));
-            }
-            int total=integer(o,"tray_count"),feed=integer(o,"feed_tray");
-            if(total<2||total>66||feed<2||feed>total)throw new IllegalArgumentException("Invalid public tray numbering");
-            for(int i=0;i<V3ColumnInput.MAX_SIDE_DRAWS;i++){f.put("d"+i+"stage","");f.put("d"+i+"rate","");}
-            for(int i=0;i<2;i++){f.put("t"+i+"stage","");f.put("t"+i+"rate","");f.put("t"+i+"T","");}
-            for(int i=0;i<4;i++){f.put("c"+i+"draw","");f.put("c"+i+"return","");f.put("c"+i+"duty","");f.put("c"+i+"split","UNIFORM");}
-            int i=0;
-            for(var element:array(o,"draws",V3ColumnInput.MAX_SIDE_DRAWS)){
-                var d=element.getAsJsonObject();int at=integer(d,"tray");
-                if(at<2||at>=total)throw new IllegalArgumentException("Draw must be on an interior tray");
-                f.put("d"+i+"stage",Integer.toString(at));f.put("d"+i+"rate",Double.toString(number(d,"flow_kmol_h")));i++;
-            }
-            i=0;
-            for(var element:array(o,"steam",2)){
-                var t=element.getAsJsonObject();int at=integer(t,"tray");
-                if(at<2||at>total)throw new IllegalArgumentException("Steam must enter below tray 1");
-                f.put("t"+i+"stage",Integer.toString(at));f.put("t"+i+"rate",Double.toString(number(t,"flow_kmol_h")));
-                f.put("t"+i+"T",Double.toString(number(t,"temperature_kelvin")-273.15));i++;
-            }
-            i=0;
-            for(var element:array(o,"pumparounds",4)){
-                var c=element.getAsJsonObject();int draw=integer(c,"draw_tray"),ret=integer(c,"return_tray");
-                if(ret<2||draw<=ret||draw>=total)throw new IllegalArgumentException("Invalid PA trays");
-                String split=string(c,"split");V3PumparoundSpec.Split.valueOf(split);
-                f.put("c"+i+"draw",Integer.toString(draw));f.put("c"+i+"return",Integer.toString(ret));
-                f.put("c"+i+"duty",Double.toString(number(c,"cooling_mw")));f.put("c"+i+"split",split);i++;
-            }
-            return new Column(name,key,f);
+            if(!Double.isFinite(total)||total<=0)throw new IllegalArgumentException("Empty mixture");
+            return new Mixture(name,key,basis.equals("mass"),amounts,solids(o),condition(o,"temperature_kelvin"),condition(o,"pressure_bar"),condition(o,"flow_kmol_h"));
         }catch(IllegalStateException|NullPointerException|ClassCastException e){throw new IllegalArgumentException("Invalid preset JSON",e);}
     }
+    private static OptionalDouble condition(JsonObject o,String key){return o.has(key)?OptionalDouble.of(positive(o,key)):OptionalDouble.empty();}
     /**
      * A mixture's optional solids: {@code {"volume_fraction_percent": 10, "grades": [{"material": "icheme:demo_particle",
      * "diameter_um": 100, "mass_share": 1}]}} (at most 64 grades). Absent means no solids; the record checks the ranges.
@@ -159,33 +135,32 @@ final class V3ClientPresets {
         var value=o.get("solids");if(value==null)return SlurryFeed.NONE;
         if(!value.isJsonObject())throw new IllegalArgumentException("Invalid solids");
         var s=value.getAsJsonObject();var grades=new ArrayList<SlurryFeed.Grade>();
-        for(var element:array(s,"grades",64)){
+        for(var element:bounded(s,"grades",64)){
             var g=element.getAsJsonObject();number(g,"diameter_um");
             grades.add(new SlurryFeed.Grade(string(g,"material"),ParticleSize.micrometres(g.getAsJsonPrimitive("diameter_um").getAsBigDecimal().toPlainString()),number(g,"mass_share")));
         }
         return new SlurryFeed(number(s,"volume_fraction_percent")/100,grades);
     }
-    static String mixtureJson(String name,V3CompositionDraft composition){
-        JsonObject o=header(name,Kind.MIXTURE);o.addProperty("package",composition.source().packageId());
-        o.addProperty("basis",composition.mass()?"mass":"mole");JsonArray rows=new JsonArray();
-        composition.relativeAmounts().forEach((id,amount)->{var c=new JsonObject();c.addProperty("id",id);c.addProperty("amount",amount);rows.add(c);});
-        o.add("components",rows);return JSON.toJson(o);
+    /** A stream as a template (plan section 3.7): its mixture by mole, and its conditions: {@code temperature} K, {@code pressure} bar, {@code flow} kmol/h. */
+    static String streamJson(String name,Map<String,Double> amounts,double temperature,double pressure,double flow){
+        JsonObject o=header(name,Kind.MIXTURE);
+        o.addProperty("basis","mole");JsonArray rows=new JsonArray();
+        amounts.forEach((id,amount)->{var c=new JsonObject();c.addProperty("id",id);c.addProperty("amount",amount);rows.add(c);});
+        o.add("components",rows);
+        o.addProperty("temperature_kelvin",temperature);o.addProperty("pressure_bar",pressure);o.addProperty("flow_kmol_h",flow);
+        return JSON.toJson(o);
     }
     static String columnJson(String name,V3ColumnInput input){
-        JsonObject o=header(name,Kind.COLUMN);
-        o.addProperty("tray_count",input.stageCount()+2);o.addProperty("feed_tray",input.feedStageNumber()+1);
-        o.addProperty("feed_flow_kmol_h",Arrays.stream(input.feedComponentMolarFlowsMolPerSecond()).sum()*3.6);
-        o.addProperty("feed_temperature_kelvin",input.feedTemperatureKelvin());
-        o.addProperty("top_temperature_kelvin",V3EditorDraft.value(input,ControlledQuantity.CONDENSER_OUTLET_TEMPERATURE));
-        o.addProperty("reboiler_duty_mw",V3EditorDraft.value(input,ControlledQuantity.REBOILER_DUTY)/1e6);
-        o.addProperty("reflux_ratio",V3EditorDraft.value(input,ControlledQuantity.ORGANIC_REFLUX_RATIO));
-        o.addProperty("top_pressure_bar",input.topPressurePascal()/1e5);
-        o.addProperty("diameter_m",input.columnDiameterMetres());
-        JsonArray draws=new JsonArray(),steam=new JsonArray(),pas=new JsonArray();
-        for(var d:input.sideDraws()){var v=new JsonObject();v.addProperty("tray",d.trayNumber()+1);v.addProperty("flow_kmol_h",d.molarFlowMolPerSecond()*3.6);draws.add(v);}
-        for(var t:input.steamFeeds()){var v=new JsonObject();v.addProperty("tray",t.stageNumber()+1);v.addProperty("flow_kmol_h",t.molarFlowMolPerSecond()*3.6);v.addProperty("temperature_kelvin",t.temperatureKelvin());steam.add(v);}
-        for(var c:input.pumparounds()){var v=new JsonObject();v.addProperty("draw_tray",c.drawTray()+1);v.addProperty("return_tray",c.returnTray()+1);v.addProperty("cooling_mw",-c.dutyWatts()/1e6);v.addProperty("split",c.split().name());pas.add(v);}
-        o.add("draws",draws);o.add("steam",steam);o.add("pumparounds",pas);return JSON.toJson(o);
+        JsonObject o=header(name,Kind.COLUMN);template(input).write(o);return JSON.toJson(o);
+    }
+    /** The column of {@code input}, with its feed as the design feed. */
+    private static V3ColumnTemplate template(V3ColumnInput input){
+        return new V3ColumnTemplate(Arrays.stream(input.feedComponentMolarFlowsMolPerSecond()).sum()*3.6,input.stageCount()+2,input.feedStageNumber()+1,
+            V3EditorDraft.value(input,ControlledQuantity.CONDENSER_OUTLET_TEMPERATURE),V3EditorDraft.value(input,ControlledQuantity.REBOILER_DUTY)/1e6,
+            V3EditorDraft.value(input,ControlledQuantity.ORGANIC_REFLUX_RATIO),input.topPressurePascal()/1e5,input.columnDiameterMetres(),
+            input.sideDraws().stream().map(d->new V3ColumnTemplate.Draw(d.trayNumber()+1,d.molarFlowMolPerSecond()*3.6)).toList(),
+            input.steamFeeds().stream().map(t->new V3ColumnTemplate.Steam(t.stageNumber()+1,t.molarFlowMolPerSecond()*3.6,t.temperatureKelvin())).toList(),
+            input.pumparounds().stream().map(c->new V3ColumnTemplate.Pumparound(c.drawTray()+1,c.returnTray()+1,-c.dutyWatts()/1e6,c.split())).toList());
     }
     private static JsonObject header(String name,Kind kind){
         var o=new JsonObject();o.addProperty("schema_version",kind.schema);o.addProperty("kind",kind.id);o.addProperty("name",name);o.addProperty("translation_key","");return o;
@@ -194,10 +169,5 @@ final class V3ClientPresets {
         var v=o.get(key);if(v==null||!v.isJsonPrimitive()||!v.getAsJsonPrimitive().isString())throw new IllegalArgumentException("Missing string: "+key);
         return v.getAsString();
     }
-    private static double number(JsonObject o,String key){
-        var v=o.get(key);if(v==null||!v.isJsonPrimitive()||!v.getAsJsonPrimitive().isNumber()||!Double.isFinite(v.getAsDouble()))throw new IllegalArgumentException("Invalid number: "+key);
-        return v.getAsDouble();
-    }
-    private static int integer(JsonObject o,String key){double n=number(o,key);if(n!=Math.rint(n)||n<Integer.MIN_VALUE||n>Integer.MAX_VALUE)throw new IllegalArgumentException("Invalid integer: "+key);return (int)n;}
-    private static JsonArray array(JsonObject o,String key,int max){var a=o.getAsJsonArray(key);if(a==null||a.size()>max)throw new IllegalArgumentException("Invalid list: "+key);return a;}
+    private static JsonArray bounded(JsonObject o,String key,int max){var a=array(o,key);if(a.size()>max)throw new IllegalArgumentException("Invalid list: "+key);return a;}
 }

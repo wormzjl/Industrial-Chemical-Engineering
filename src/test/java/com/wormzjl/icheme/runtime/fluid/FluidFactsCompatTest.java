@@ -69,6 +69,12 @@ class FluidFactsCompatTest {
                 new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,330,280,.25),1234.5));
         var shellSide=heatSide(shell,30,4,HeatSides.shellPassage(1,6),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,450,tube));
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(tube,new WorldTopologyLedger.Registration(tubeSide,spec,0)),new WorldTopologyLedger.Edit(shell,new WorldTopologyLedger.Registration(shellSide,spec,0))),shell+1,null);
+        // Facts schema 8 (S3b): a second condenser shell in parallel, its tube the column's second water side. Schema 9 (U2):
+        // its water flow is the column's (the COLUMN mode).
+        long tube2=world.ledger.nextIdentity(),shell2=tube2+1;
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(tube2,new WorldTopologyLedger.Registration(heatSide(tube2,34,0,HeatSides.tubePassage(1,6),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,450,shell2)
+                        .withControl(new HeatUnit.Control(HeatUnit.Mode.COLUMN,0,0,0))),spec,0)),
+                new WorldTopologyLedger.Edit(shell2,new WorldTopologyLedger.Registration(heatSide(shell2,34,4,HeatSides.shellPassage(1,6),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,450,tube2)),spec,0))),shell2+1,null);
         world.runTo(700);
         // Facts schema 6: a running column unit, a pipe it holds, and its feed port, a void inside the feed valve.
         long pipe=world.place(40,64,0,Kind.PIPE,Direction.EAST,.05);long feedValve=world.place(41,64,0,Kind.VALVE,Direction.EAST);world.runTo(720);
@@ -81,7 +87,9 @@ class FluidFactsCompatTest {
         var account=new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(held,-1.2e6);
         world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,70,0),true,setpoints,
                 List.of(new ColumnUnit.Station(com.wormzjl.icheme.science.column.operation.Port.FEED,0,port,feedValve,account,new com.wormzjl.icheme.science.fluid.state.SolidInventory(List.of(new com.wormzjl.icheme.science.fluid.state.SolidInventory.Population(model.solid("icheme:demo_particle"),com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("100"),1.5))))),
-                new ColumnUnit.Totals(account,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m),2e5,-3e5,-1e4),tube));
+                new ColumnUnit.Totals(account,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m),2e5,-3e5,-1e4),List.of(tube,tube2),null,false,
+                // Facts schema 9 (U2): the air condenser's bare tube.
+                1234.5));
         var held0=world.registry.registrations().get(pipe);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(pipe,new WorldTopologyLedger.Registration(held0.device().withSuspendedBy(unit),held0.spec(),held0.revision()+1)),
                 new WorldTopologyLedger.Edit(port,new WorldTopologyLedger.Registration(feed,new FluidDeviceSpec(1,330,260000,FluidDeviceSpec.nitrogen(CATALOG).composition()),0))),port+1,null);
@@ -225,7 +233,7 @@ class FluidFactsCompatTest {
         for(var u:world.columns()) {
             columns.add(new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),u.stations().stream().map(s->s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(s.account().moles(),retiring),s.account().energy()))).toList(),
                     new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().taken().moles(),0.),u.totals().taken().energy()),
-                            new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().produced().moles(),0.),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds()),u.condenser()));
+                            new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().produced().moles(),0.),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds()),u.condensers()));
         }
         var wide=new FluidFacts.World(world.nextIdentity(),new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision()),registrations,total.apply(world.constructed()),total.apply(world.destroyed()),world.recoveries(),world.restated(),world.removedMovers(),columns);
         return FluidFacts.rebuild(wide,placed,core.epoch(),key->model,CATALOG,true,"test");
@@ -272,7 +280,8 @@ class FluidFactsCompatTest {
      */
     @Test void anExchangersHeatInTransitIsAFactOfItsSides() {
         var world=corpusWorld();var saved=world.ledger.snapshot();
-        long tube=saved.active().values().stream().filter(r->r.device().heat()!=null&&r.device().heat().side()==HeatSides.Side.TUBE).findFirst().orElseThrow().device().id();
+        // The tube that holds the transit: the corpus's second condenser shell (schema 8) holds none.
+        long tube=saved.active().values().stream().filter(r->r.device().heat()!=null&&r.device().heat().side()==HeatSides.Side.TUBE&&r.device().heat().transitJoule()!=0).findFirst().orElseThrow().device().id();
         long shell=saved.active().get(tube).device().heat().partner(),pair=PhysicalFluidTopology.sideIdentity(Math.min(tube,shell));
         assertEquals(Map.of(pair,1234.5),saved.heatTransits(),"a load reads the transit the facts carry");
         var written=saved.withHeatTransits(Map.of(pair,-42.25));
@@ -501,6 +510,10 @@ class FluidFactsCompatTest {
         for(var u:new TreeMap<>(world.columns()).values()) {
             if(!text.isEmpty())text.append(";");
             text.append(u.id()).append(":").append(u.running()).append(":").append(u.setpoints().feedRate()).append(":").append(u.totals().taken().total()).append(":condenser=").append(u.condenser());
+            // Schema 8: the further water sides, written only where there are some, as an older image has none.
+            if(u.condensers().size()>1)text.append(":condensers=").append(u.condensers());
+            // Schema 9: the air condenser's surface, written only where there is one, as an older image has none.
+            if(u.airSurface()>0)text.append(":air=").append(u.airSurface());
             for(var s:u.stations())text.append(":").append(s.port()).append(s.index()).append("=").append(s.device()).append("/").append(s.valve()).append("/").append(s.account().total()).append("/").append(s.account().energy()).append("/").append(s.solids().massKg());
         }
         return text.toString();

@@ -29,7 +29,7 @@ class NitrogenInitializationTest {
         assertThrows(IllegalArgumentException.class,()->FluidMaterialCatalog.resolveNetworkPackage(catalog,COLUMN));
         assertEquals(NETWORK,FluidMaterialCatalog.resolveNetworkPackage(catalog,NETWORK));
         var refused=assertThrows(IllegalArgumentException.class,
-                ()->FluidMaterialCatalog.resolveNetworkPackage(catalog,"icheme:wti_light_export_tjl20"));
+                ()->FluidMaterialCatalog.resolveNetworkPackage(catalog,"icheme:tjl20_methane"));
         assertTrue(refused.getMessage().contains("configured basis"),refused.getMessage());
     }
     @Test void nitrogenCaloricFitMatchesIndependentShomateCheckpoints() throws Exception {

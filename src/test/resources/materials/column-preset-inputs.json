@@ -113,7 +113,7 @@
     "id": "wti_light_export",
     "input": {
       "schemaVersion": 1,
-      "packageId": "icheme:wti_light_export_tjl20",
+      "packageId": "icheme:tjl20_methane",
       "assayId": "icheme:wti_light_export",
       "componentBasis": {
         "componentIds": [
@@ -223,7 +223,7 @@
     "id": "upper_zakum",
     "input": {
       "schemaVersion": 1,
-      "packageId": "icheme:upper_zakum_tjl20",
+      "packageId": "icheme:tjl20_methane",
       "assayId": "icheme:upper_zakum",
       "componentBasis": {
         "componentIds": [
@@ -333,7 +333,7 @@
     "id": "bonga",
     "input": {
       "schemaVersion": 1,
-      "packageId": "icheme:bonga_tjl20",
+      "packageId": "icheme:tjl20_methane",
       "assayId": "icheme:bonga",
       "componentBasis": {
         "componentIds": [
@@ -443,7 +443,7 @@
     "id": "dalia",
     "input": {
       "schemaVersion": 1,
-      "packageId": "icheme:dalia_tjl20",
+      "packageId": "icheme:tjl20_methane",
       "assayId": "icheme:dalia",
       "componentBasis": {
         "componentIds": [
@@ -553,7 +553,7 @@
     "id": "cold_lake_blend",
     "input": {
       "schemaVersion": 1,
-      "packageId": "icheme:cold_lake_blend_tjl20",
+      "packageId": "icheme:tjl20_methane",
       "assayId": "icheme:cold_lake_blend",
       "componentBasis": {
         "componentIds": [

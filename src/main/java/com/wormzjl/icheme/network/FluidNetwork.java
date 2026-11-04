@@ -58,7 +58,7 @@ public final class FluidNetwork {
     public static final int MAX_EDIT_JSON=4096;
     private FluidNetwork() {}
     /** The compressor's pressure-ratio bounds (plan Appendix B): at least 1 % over the suction, at most tenfold. */
-    public static final double MINIMUM_PRESSURE_RATIO=1.01,MAXIMUM_PRESSURE_RATIO=10,DEFAULT_PRESSURE_RATIO=3.0;
+    public static final double MINIMUM_PRESSURE_RATIO=1.01,MAXIMUM_PRESSURE_RATIO=FlowControl.Compressor.MAXIMUM_PRESSURE_RATIO,DEFAULT_PRESSURE_RATIO=3.0;
     /** Whether a compressor's maximum pressure ratio lies within its bounds: the one test {@link Controls} and the screen both apply. */
     public static boolean pressureRatioAllowed(double ratio){return ratio>=MINIMUM_PRESSURE_RATIO&&ratio<=MAXIMUM_PRESSURE_RATIO;}
     /** The two bounds as a player reads them ("1.01", "10"), for the screen's refusal of a ratio outside them. */
@@ -82,7 +82,7 @@ public final class FluidNetwork {
             if(!pressureRatioAllowed(maximumPressureRatio))throw new IllegalArgumentException("The pressure ratio must lie between "+MINIMUM_PRESSURE_RATIO+" and "+MAXIMUM_PRESSURE_RATIO);
             // Temperature and pressure are only required to be physical here: the input box is the property package's
             // envelope, so the server checks it against the model when the edit arrives (see edit below).
-            if(!(temperature>0)||!(pressure>0)||diameter<.001||diameter>1||roughness<0||roughness>=diameter||volumeFlow<0||volumeFlow>10||maximumAddedPressure<=0||maximumAddedPressure>2e6||(composition.length<1||composition.length>com.wormzjl.icheme.science.material.MaterialAxis.MAX_CONSERVED_COMPONENTS))throw new IllegalArgumentException("Controls are outside the supported range");
+            if(!(temperature>0)||!(pressure>0)||diameter<.001||diameter>1||roughness<0||roughness>=diameter||volumeFlow<0||volumeFlow>FlowControl.Mover.MAXIMUM_VOLUME_FLOW||maximumAddedPressure<=0||maximumAddedPressure>FlowControl.Pump.MAXIMUM_ADDED_PRESSURE||(composition.length<1||composition.length>com.wormzjl.icheme.science.material.MaterialAxis.MAX_CONSERVED_COMPONENTS))throw new IllegalArgumentException("Controls are outside the supported range");
             double sum=0;for(double n:composition){if(!Double.isFinite(n)||n<0)throw new IllegalArgumentException("Composition entries must be nonnegative");sum+=n;}if(!Double.isFinite(sum)||sum<=0)throw new IllegalArgumentException("Composition cannot be empty");
         }
         @Override public double[] composition(){return composition.clone();}

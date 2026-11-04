@@ -28,9 +28,14 @@ class PipeTransferTest {
         for(double volume:transfer.forward().phaseVolumes())assertTrue(volume>0);
         var copy=transfer.forward().phaseMoles();copy[0][0]=-100;assertTrue(transfer.forward().phaseMoles()[0][0]>=0);
     }
+    /** The column presets a player could once choose, each a crude. */
+    private static List<com.wormzjl.icheme.science.material.MaterialPresets.Column> crudes(MaterialCatalog catalog) {
+        return catalog.presets().columns().values().stream().filter(com.wormzjl.icheme.science.material.MaterialPresets.Column::visible)
+                .sorted(java.util.Comparator.comparingInt(com.wormzjl.icheme.science.material.MaterialPresets.Column::order).thenComparing(c->c.descriptor().id())).toList();
+    }
     @Test void allCrudeGeneratorsSupplyFiniteFlowAtTheExactAmbientLimit() {
         var catalog=MaterialCatalog.bundled();
-        for(var preset:com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset.values()) {
+        for(var preset:crudes(catalog)) {
             var input=preset.input(catalog);var feed=input.feedComponentMolarFlowsMolPerSecond();
             var amounts=new double[model.componentCount()];
             for(int i=0;i<feed.length;i++)amounts[model.components().indexOf(input.componentBasis().componentIds().get(i))]=feed[i];
@@ -40,7 +45,7 @@ class PipeTransferTest {
                 var graph=new PassiveNetwork(List.of(source,new PassiveNetwork.Reservoir(2,0,initial)),
                         List.of(new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(100,.03,.000045,0))));
                 var result=new PassiveStepSolver(model).solve(graph,.01,()->{});
-                assertTrue(result.massFlows()[0]>0,preset.id()+" T="+temperature);
+                assertTrue(result.massFlows()[0]>0,preset.descriptor().id()+" T="+temperature);
                 var before=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(initial);
                 var after=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(result.states().get(1));
                 for(int i=0;i<before.length;i++)assertEquals(before[i]+result.externalMoles()[i],after[i],1e-8);
@@ -51,7 +56,7 @@ class PipeTransferTest {
     // Finite vessels cool while draining; keep their initial state just inside the 293.15 K domain.
     @Test void allRegroupedCrudesAndMixedDonorsConserveInventoryAtAmbientAndHeatedStates() {
         var catalog=MaterialCatalog.bundled();
-        var presets=Arrays.asList(com.wormzjl.icheme.world.level.block.entity.ColumnInputPreset.values());
+        var presets=crudes(catalog);
         var weights=com.wormzjl.icheme.fluid.support.FluidTestSupport.molecularWeights(model);
         var failures=new ArrayList<String>();
         for(int crude=0;crude<presets.size();crude++)for(double temperature:new double[]{293.2,298.15,350}) {
@@ -73,7 +78,7 @@ class PipeTransferTest {
                     com.wormzjl.icheme.fluid.support.FluidTestSupport.finiteLedger(result.graph(),weights));
             assertTrue(Double.isFinite(result.averageMassFlows()[0]));
             assertTrue(result.averageMassFlows()[0]>0,"Finite-viscosity crude must not be treated as a solid blockage");
-            } catch(RuntimeException failure) {failures.add(presets.get(crude).id()+" T="+temperature+": "+failure.getMessage());}
+            } catch(RuntimeException failure) {failures.add(presets.get(crude).descriptor().id()+" T="+temperature+": "+failure.getMessage());}
         }
         assertTrue(failures.isEmpty(),String.join("\n",failures));
     }

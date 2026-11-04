@@ -44,17 +44,6 @@ final class V3EditorDraft {
     V3CompositionDraft composition(){return composition;}
     void composition(V3ColumnInput preset,List<Double> weights){composition=new V3CompositionDraft(preset,weights);}
     String get(String key){if(key.matches("t[0-1]stage")&&steamAtBottom[Character.digit(key.charAt(1),10)])return fields.get("s2");return fields.get(key);}
-    private static boolean temperature(String key){return key.equals("s1")||key.equals("s4")||key.matches("t[0-1]T");}
-    String display(String key,boolean kelvin){
-        if(!kelvin||!temperature(key)||get(key).isBlank())return get(key);
-        try{return String.format(Locale.ROOT,"%.1f",Double.parseDouble(precise(key))+273.15);}
-        catch(NumberFormatException invalid){return get(key);}
-    }
-    void setDisplay(String key,String value,boolean kelvin){
-        if(kelvin&&temperature(key)&&!value.isBlank())try{value=Double.toString(Double.parseDouble(value)-273.15);}
-        catch(NumberFormatException ignored){/* Preserve incomplete typing. */}
-        set(key,value);
-    }
     void set(String key,String value){
         if(!fields.containsKey(key))throw new IllegalArgumentException("Unknown input field");
         String previous=fields.put(key,value);
@@ -74,49 +63,46 @@ final class V3EditorDraft {
         return key.equals("s2")||key.equals("s3")||key.endsWith("stage")||key.endsWith("Stage")||key.endsWith("draw")||key.endsWith("return")
                 ?Integer.toString((int)v):Double.toString(v);
     }
-    int preview(String key,int fallback,int min,int max){
-        try{return Math.clamp(Integer.parseInt(get(key)),min,max);}catch(NumberFormatException e){return fallback;}
-    }
-    int addDraw(int tray){
-        for(int i=0;i<V3ColumnInput.MAX_SIDE_DRAWS;i++)if(get("d"+i+"stage").isBlank()){
-            set("d"+i+"stage",Integer.toString(tray));set("d"+i+"rate","1.0");return i;}
-        return -1;
-    }
-    void removeDraw(int i){set("d"+i+"stage","");set("d"+i+"rate","");}
-    int addPumparound(int tray){
-        for(int i=0;i<V3ColumnInput.MAX_PUMPAROUNDS;i++)if(get("c"+i+"draw").isBlank()){
-            set("c"+i+"draw",Integer.toString(Math.max(3,tray)));set("c"+i+"return",Integer.toString(Math.max(2,tray-1)));
-            set("c"+i+"duty","0.1");return i;}
-        return -1;
-    }
-    void removePumparound(int i){set("c"+i+"draw","");set("c"+i+"return","");set("c"+i+"duty","");}
-    boolean canAddSteam(){return nextSteamTray(2)>=2&&java.util.stream.IntStream.range(0,2).anyMatch(i->get("t"+i+"stage").isBlank());}
-    private int nextSteamTray(int requested){
-        int count=preview("s2",base.stageCount()+2,2,66);
-        if(requested>=2&&requested<=count&&!steamUses(requested))return requested;
-        for(int tray=2;tray<=count;tray++)if(!steamUses(tray))return tray;
-        return -1;
-    }
-    private boolean steamUses(int tray){return get("t0stage").equals(Integer.toString(tray))||get("t1stage").equals(Integer.toString(tray));}
-    int addSteam(int tray){
-        int selected=nextSteamTray(tray);if(selected<2)return -1;
-        for(int i=0;i<2;i++)if(get("t"+i+"stage").isBlank()){
-            set("t"+i+"stage",Integer.toString(selected));set("t"+i+"rate","1.0");set("t"+i+"T","260.0");return i;
-        }
-        return -1;
-    }
-    void removeSteam(int i){set("t"+i+"stage","");set("t"+i+"rate","");set("t"+i+"T","");}
     /** A column preset's fields: every field but the tray drop {@code s8}, which stays the base's (owner choice (a), 2026-10-28). */
-    void loadColumn(Map<String,String> data){
-        var expected=new HashSet<>(fields.keySet());expected.remove("s8");
-        if(!data.keySet().equals(expected))throw new IllegalArgumentException("Invalid column preset fields");
-        data.forEach((key,value)->{
-            fields.put(key,value);exact.remove(key);
-            if(!value.isBlank()&&!key.endsWith("split")){
-                double n=Double.parseDouble(value);exact.put(key,n);
-                fields.put(key,isInteger(key)?Integer.toString((int)n):String.format(Locale.ROOT,"%.1f",n));
-            }
-        });for(int i=0;i<2;i++)steamAtBottom[i]=fields.get("t"+i+"stage").equals(fields.get("s2"));columnChanged=true;
+    /** Loads a template on the feed this draft holds: the feed and the tray drop stay, and its flows and duties scale to the feed (plan D4). */
+    void loadColumn(V3ColumnTemplate template){
+        double feed;
+        try{feed=Double.parseDouble(precise("s0"));}catch(NumberFormatException blank){feed=0;}
+        fields(template.scaledTo(feed)).forEach(this::load);
+        for(int i=0;i<2;i++)steamAtBottom[i]=fields.get("t"+i+"stage").equals(fields.get("s2"));columnChanged=true;
+    }
+    /** Loads a template at its own design feed, where it names one: the operating point the equipment constructor builds. */
+    void loadColumnAtDesignFeed(V3ColumnTemplate template){
+        if(template.designFeed()>0)load("s0",Double.toString(template.designFeed()));
+        loadColumn(template);
+    }
+    private void load(String key,String value){
+        fields.put(key,value);exact.remove(key);
+        if(!value.isBlank()&&!key.endsWith("split")){
+            double n=Double.parseDouble(value);exact.put(key,n);
+            fields.put(key,isInteger(key)?Integer.toString((int)n):String.format(Locale.ROOT,"%.1f",n));
+        }
+    }
+    /** The fields a template sets: all but the feed (s0, s1) and the tray drop (s8). */
+    private static Map<String,String> fields(V3ColumnTemplate t){
+        var f=new LinkedHashMap<String,String>();
+        f.put("s2",Integer.toString(t.trays()));f.put("s3",Integer.toString(t.feedTray()));f.put("s4",Double.toString(t.topTemperature()-273.15));
+        f.put("s5",Double.toString(t.reboilerDuty()));f.put("s6",Double.toString(t.refluxRatio()));f.put("s7",Double.toString(t.topPressure()));f.put("s9",Double.toString(t.diameter()));
+        for(int i=0;i<V3ColumnInput.MAX_SIDE_DRAWS;i++){
+            var d=i<t.draws().size()?t.draws().get(i):null;
+            f.put("d"+i+"stage",d==null?"":Integer.toString(d.tray()));f.put("d"+i+"rate",d==null?"":Double.toString(d.flow()));
+        }
+        for(int i=0;i<V3ColumnInput.MAX_STEAM_FEEDS;i++){
+            var s=i<t.steam().size()?t.steam().get(i):null;
+            f.put("t"+i+"stage",s==null?"":Integer.toString(s.tray()));f.put("t"+i+"rate",s==null?"":Double.toString(s.flow()));
+            f.put("t"+i+"T",s==null?"":Double.toString(s.temperature()-273.15));
+        }
+        for(int i=0;i<V3ColumnInput.MAX_PUMPAROUNDS;i++){
+            var c=i<t.pumparounds().size()?t.pumparounds().get(i):null;
+            f.put("c"+i+"draw",c==null?"":Integer.toString(c.drawTray()));f.put("c"+i+"return",c==null?"":Integer.toString(c.returnTray()));
+            f.put("c"+i+"duty",c==null?"":Double.toString(c.cooling()));f.put("c"+i+"split",c==null?"UNIFORM":c.split().name());
+        }
+        return f;
     }
     private static boolean isInteger(String key){return key.equals("s2")||key.equals("s3")||key.endsWith("stage")||key.endsWith("draw")||key.endsWith("return");}
     private String index(String key,int delta){

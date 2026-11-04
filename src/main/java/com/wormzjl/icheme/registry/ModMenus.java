@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.registry;
 
 import com.wormzjl.icheme.IChemE;
-import com.wormzjl.icheme.world.inventory.ColumnCalculatorV3Menu;
+import com.wormzjl.icheme.world.inventory.ProcessSimulatorMenu;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.bus.api.IEventBus;
@@ -16,10 +16,10 @@ public final class ModMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<com.wormzjl.icheme.world.inventory.PipelineToolMenu>> PIPELINE_TOOL =
             MENU_TYPES.register("pipeline_tool", () -> IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.PipelineToolMenu::new));
 
-    public static final DeferredHolder<MenuType<?>, MenuType<ColumnCalculatorV3Menu>> COLUMN_CALCULATOR_V3 =
+    public static final DeferredHolder<MenuType<?>, MenuType<ProcessSimulatorMenu>> PROCESS_SIMULATOR =
             MENU_TYPES.register(
-                    "column_calculator_v3",
-                    () -> IMenuTypeExtension.create(ColumnCalculatorV3Menu::new)
+                    "process_simulator",
+                    () -> IMenuTypeExtension.create(ProcessSimulatorMenu::new)
             );
 
     public static final DeferredHolder<MenuType<?>, MenuType<com.wormzjl.icheme.world.inventory.GaugeMenu>> GAUGE = MENU_TYPES.register("gauge", () -> IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.GaugeMenu::new));

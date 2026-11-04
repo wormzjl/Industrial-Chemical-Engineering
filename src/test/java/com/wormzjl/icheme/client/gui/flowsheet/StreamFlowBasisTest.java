@@ -1,0 +1,208 @@
+package com.wormzjl.icheme.client.gui.flowsheet;
+
+import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.science.display.DisplayUnit;
+import com.wormzjl.icheme.science.flowsheet.Flowsheet;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetEngine;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
+import java.util.List;
+import org.jetbrains.annotations.Nullable;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * A stream's flow follows the Mole, Mass and Volume display key (the owner, 2026-11-04: "The flowrate definition in stream
+ * should follow the mass/mole button, and add volume to that button as well"; Volume is the actual volume, mass over the
+ * density at the stream's own temperature and pressure). The panel and the feed door show and take the flow on the key's
+ * basis through one path, and a feed keeps its density while only its flow changed since the run.
+ */
+class StreamFlowBasisTest {
+    private static final Flowsheet SHEET = SheetFixture.water();
+    private static final FlowsheetRun RUN = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(SHEET, SheetFixture.CATALOG, () -> {
+    });
+    private static final SheetGestures.Selection FEED = new SheetGestures.Selection(false, "FEED"), OUT = new SheetGestures.Selection(false, "OUT");
+
+    private static SheetUnits units(SheetUnits.Basis basis) {
+        return new SheetUnits(DisplayUnit.TemperatureUnit.CELSIUS, DisplayUnit.PressureUnit.BAR, DisplayUnit.FlowRateUnit.PER_HOUR, basis);
+    }
+
+    /** The sheet as the editor holds it now, on the run of {@link #SHEET} (or on none), shown on {@code basis}. */
+    private static SheetContext context(SheetEditor editor, SheetUnits.Basis basis, boolean ran) {
+        var texts = new SheetFixture.Texts();
+        return new SheetContext(editor, new SheetState(editor.sheet(), ran ? SHEET : null, ran ? RUN : null, 1.2, null), units(basis), texts, texts.measure, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
+    }
+
+    private static @Nullable Column.Field field(List<Column.Row> rows, String key) {
+        for (var row : rows) {
+            if (row instanceof Column.Field f && f.key().equals(key)) return f;
+            if (row instanceof Column.Group g && field(g.rows(), key) instanceof Column.Field f) return f;
+        }
+        return null;
+    }
+
+    private static @Nullable Column.Reading meter(List<Column.Row> rows, String key) {
+        for (var row : rows) {
+            if (row instanceof Column.Reading r && r.key().equals(key)) return r;
+            if (row instanceof Column.Group g && meter(g.rows(), key) instanceof Column.Reading r) return r;
+        }
+        return null;
+    }
+
+    private static Door door(SheetContext x) {
+        return StreamDoors.door(x, "FEED", new Door.View());
+    }
+
+    private static Column.Field doorFlow(SheetContext x) {
+        return field(door(x).columns().getFirst(), "flow");
+    }
+
+    /** The feed's kg/mol and its density at its own temperature and pressure, as the run solved it. */
+    private static double weight(SheetContext x) {
+        var feed = x.editor().stream("FEED").feed();
+        return x.mass(feed) / SheetContext.total(feed);
+    }
+
+    private static double density(SheetContext x) {
+        return x.props(x.editor().stream("FEED")).density();
+    }
+
+    @Test
+    void thePanelAndTheDoorShowEachBasisInItsUnit() {
+        var editor = SheetFixture.editor(SHEET);
+        var mole = context(editor, SheetUnits.Basis.MOLE, true);
+        double moles = SheetContext.total(editor.stream("FEED").feed()), kg = moles * weight(mole), rho = density(mole);
+        assertTrue(rho > 900 && rho < 1100, "liquid water at 30 °C and 8 bar: " + rho);
+        String[] expected = {SheetUnits.number(1, moles * 3600 / 1000), SheetUnits.number(2, kg * 3600 / 1000), SheetUnits.number(1, kg / rho * 3600)};
+        String[] unit = {"kmol/h", "t/h", "m³/h"};
+        var out = RUN.streams().get("OUT");
+        for (var basis : SheetUnits.Basis.values()) {
+            var x = context(editor, basis, true);
+            int i = basis.ordinal();
+            var panel = SelectionColumn.of(x, FEED);
+            assertEquals(expected[i], panel.values().get("flow"), basis + ": the panel's entry");
+            var entry = field(panel.rows(), "flow");
+            assertTrue((entry.label() + " " + entry.unit()).contains(unit[i]), basis + ": the panel's unit, " + entry);
+            assertNull(entry.hint(), basis + ": a known flow has no hover");
+            var door = door(x);
+            assertEquals(expected[i], door.values().get("flow"), basis + ": the door's entry");
+            assertTrue((doorFlow(x).label() + " " + doorFlow(x).unit()).contains(unit[i]), basis + ": the door's unit");
+            assertTrue(door.status().contains(expected[i] + " " + unit[i]), basis + ": the status line, " + door.status());
+            var flow = meter(SelectionColumn.of(x, OUT).rows(), "meter:flow");
+            var p = x.props(editor.stream("OUT"));
+            assertEquals(x.units().flow(p.moles(), p.mass(), p.density()), flow.value(), basis + ": a product's Flow meter");
+            assertTrue((flow.label() + " " + flow.unit()).contains(unit[i]), basis + ": a product's unit");
+            assertNull(meter(SelectionColumn.of(x, OUT).rows(), "meter:mass flow"), "no separate mass meter in the panel");
+            assertTrue(out.mass() > 0);
+        }
+    }
+
+    @Test
+    void aTypedMassOrVolumeWritesTheMolesItMeans() {
+        var editor = SheetFixture.editor(SHEET);
+        var x = context(editor, SheetUnits.Basis.MASS, true);
+        double weight = weight(x), rho = density(x);
+        door(x).actions().entry("flow", "7.2");
+        assertEquals(7.2 * 1000 / 3600 / weight, SheetContext.total(editor.stream("FEED").feed()), 1e-9, "t/h over the molar mass");
+        x = context(editor, SheetUnits.Basis.VOLUME, true);
+        door(x).actions().entry("flow", "3.6");
+        assertEquals(3.6 / 3600 * rho / weight, SheetContext.total(editor.stream("FEED").feed()), 1e-9, "m³/h times the density over the molar mass");
+        x = context(editor, SheetUnits.Basis.MOLE, true);
+        StreamDoors.writeFeed(x, "FEED", "flow", "180");
+        assertEquals(50, SheetContext.total(editor.stream("FEED").feed()), 1e-9, "kmol/h as typed in the panel");
+    }
+
+    @Test
+    void aFlowEditKeepsTheVolumeAndATemperatureEditBlanksIt() {
+        var editor = SheetFixture.editor(SHEET);
+        var x = context(editor, SheetUnits.Basis.VOLUME, true);
+        double rho = density(x), weight = weight(x);
+        door(x).actions().entry("flow", "5.4");
+        x = context(editor, SheetUnits.Basis.VOLUME, true);
+        assertTrue(x.state().stale("FEED"), "the flow edit greys the feed");
+        assertEquals("5.4", door(x).values().get("flow"), "the density stays the run's: it does not hang on the flow");
+        assertEquals("5.4", SelectionColumn.of(x, FEED).values().get("flow"));
+        assertNull(doorFlow(x).hint());
+        assertEquals(5.4 / 3600 * rho / weight, SheetContext.total(editor.stream("FEED").feed()), 1e-9);
+
+        door(x).actions().entry("temperature", "80");
+        x = context(editor, SheetUnits.Basis.VOLUME, true);
+        assertEquals("", door(x).values().get("flow"), "a new temperature: no density until the sheet runs");
+        assertEquals("", SelectionColumn.of(x, FEED).values().get("flow"));
+        String why = x.text("door.volume_unknown");
+        assertEquals(why, doorFlow(x).hint(), "the hover says why");
+        assertEquals(why, field(SelectionColumn.of(x, FEED).rows(), "flow").hint());
+        assertTrue(door(x).status().contains("— m³/h"), door(x).status());
+        double before = SheetContext.total(editor.stream("FEED").feed());
+        door(x).actions().entry("flow", "9.0");
+        assertEquals(before, SheetContext.total(editor.stream("FEED").feed()), "typing a volume with no density changes nothing");
+        assertFalse(context(editor, SheetUnits.Basis.MASS, true).units().flow(1, 1, Double.NaN).isEmpty(), "Mass needs no density");
+
+        var fresh = SheetFixture.editor(SHEET);
+        assertEquals("", door(context(fresh, SheetUnits.Basis.VOLUME, false)).values().get("flow"), "no run, no density");
+    }
+
+    @Test
+    void theKeyCyclesMoleMassVolume() {
+        assertEquals(List.of(SheetUnits.Basis.MASS, SheetUnits.Basis.VOLUME, SheetUnits.Basis.MOLE), List.of(SheetUnits.Basis.MOLE.next(), SheetUnits.Basis.MASS.next(), SheetUnits.Basis.VOLUME.next()));
+        var t = new SheetFixture.Texts();
+        for (var basis : SheetUnits.Basis.values()) {
+            // Its width in the game font is width.js's (Volume 33 px, es "Vol." 17, in the key's 34): the tests' font is wider.
+            String label = SimulatorPage.softKeys(units(basis), t).getFirst().text();
+            assertEquals(t.get("fluid." + basis.name().toLowerCase(java.util.Locale.ROOT) + "_basis_short"), label);
+        }
+    }
+
+    /** The owner, 2026-11-04: OFFGAS's 0.032 kmol/s read 0.0 ("The user can be very confused"); three significant figures. */
+    @Test
+    void aSmallFlowKeepsThreeSignificantFigures() {
+        assertEquals("0.0320", SheetUnits.reading(1, 0.032));
+        assertEquals("1.82E-3", SheetUnits.reading(2, 0.00182), "under 0.01 in E form");
+        assertEquals("250.0", SheetUnits.reading(1, 250), "a large flow keeps its decimals");
+        assertEquals("1.25", SheetUnits.reading(2, 1.25));
+        assertEquals("0.0", SheetUnits.reading(1, 0), "none reads none");
+        assertEquals("1.00E-12", SheetUnits.reading(1, 1e-12));
+        assertEquals("0.0100", SheetUnits.reading(2, 0.01), "0.01 still in fixed digits");
+        assertEquals("1.25E6", SheetUnits.reading(1, 1.25e6), "from a million in E form");
+        assertEquals("-6.95E-4", SheetUnits.reading(1, -6.95e-4));
+        assertEquals("0.0320", units(SheetUnits.Basis.MOLE).moles(32.0 / 3600), "32 mol/h in kmol/h");
+    }
+
+    /**
+     * A stream a unit makes has no tabs (the owner, 2026-11-04: "why there is a solid tab?"; its solids are on the Solid key), and
+     * its door opens on the phase that holds the most until the player picks one.
+     */
+    /** The P, T key (the owner, 2026-11-04): latched while shown; a feed reads its set T and P before a run, every stream its run's after. */
+    @Test
+    void theConditionsKeyShowsEachStreamsTAndP() {
+        var before = context(SheetFixture.editor(SHEET), SheetUnits.Basis.MOLE, false);
+        var u = before.units();
+        var feed = before.editor().stream("FEED");
+        assertEquals(List.of(u.t(feed.feed().temperature()) + " °C", u.p(feed.feed().pressure()) + " bar"), before.conditions(feed), "a feed's set values before a run");
+        assertNull(before.conditions(before.editor().stream("OUT")), "a product has none before a run");
+        var after = context(SheetFixture.editor(SHEET), SheetUnits.Basis.MOLE, true);
+        var out = after.editor().stream("OUT");
+        var solved = after.solved(out);
+        assertNotNull(solved);
+        assertEquals(List.of(u.t(solved.temperature()) + " °C", u.p(solved.pressure()) + " bar"), after.conditions(out), "the run's");
+        var texts = new SheetFixture.Texts();
+        assertFalse(SimulatorPage.conditionsKey(u, texts).latched(), "hidden by default");
+        var shown = new SheetUnits(u.temperature(), u.pressure(), u.time(), u.basis(), true);
+        assertTrue(SimulatorPage.conditionsKey(shown, texts).latched(), "latched while shown");
+        assertEquals("unit/conditions", SimulatorPage.conditionsKey(shown, texts).key());
+    }
+
+    @Test
+    void aProductDoorOpensOnItsLargestPhaseAndKeepsThePlayersPick() {
+        var x = context(SheetFixture.editor(SHEET), SheetUnits.Basis.MOLE, true);
+        var view = new Door.View();
+        var out = StreamDoors.door(x, "OUT", view);
+        assertEquals(List.of(), out.tabs(), "no Solids tab");
+        var p = x.props(x.editor().stream("OUT")).phases();
+        assertTrue(p.aqueous() > 99, "the fixture's water leaves as liquid water: " + p);
+        assertEquals(1, view.phase, "the Aqueous key, not the empty Organic one");
+        assertTrue(view.press("phase/2"));
+        StreamDoors.door(x, "OUT", view);
+        assertEquals(2, view.phase, "the player's pick stays");
+    }
+}
