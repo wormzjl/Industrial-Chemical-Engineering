@@ -194,6 +194,7 @@ The owner's, 2026-11-04, on the OFFGAS door:
 - Solids: "Fill Solid key, drop tab (Recommended)". A product door has no tabs; the Solid key lists the stream's solids.
 - Small flows: "3 significant figures (Recommended)", then "Allow scientific display for the numbers when there is too much zero": E form under 0.01 and from a million (agent's threshold, reversible).
 - Opening phase: "The largest phase (Recommended)".
+- E readings on a 46 px LED meter (six glyphs, 48 px of segments): "Keep text". They fall back to text in the meter's colour; not wider meters, not two figures on the meters.
 
 ## Line head and title-row key decisions
 
