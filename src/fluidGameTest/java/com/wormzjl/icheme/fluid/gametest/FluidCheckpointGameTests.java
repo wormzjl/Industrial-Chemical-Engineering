@@ -30,8 +30,9 @@ public final class FluidCheckpointGameTests {
     public static void aSavedRestingTankReloadsCertifiedWithItsStatusLineAndNoSolve(GameTestHelper helper) {
         var level=helper.getLevel();var server=level.getServer();var world=FluidWorldAuthority.find(server).orElseThrow();
         var options=com.wormzjl.icheme.IChemE.fluidOptions();
-        // The world's own model construction, so the restored certificate's signature is the one the world gives it.
-        java.util.function.Function<FluidCheckpointCodec.PackageKey,FluidThermodynamics> models=key->FluidThermodynamics.forNetwork(MaterialRuntime.active(),key.packageId(),options.maximumVelocity(),options.traceCutoffMoleFraction(),options.solids());
+        // The world's own model construction (FluidWorldAuthority.model(PackageKey)): each island on its own compound list, so the
+        // restored certificate's signature is the one the world gives it.
+        java.util.function.Function<FluidCheckpointCodec.PackageKey,FluidThermodynamics> models=key->key.on(world.model());
         var pos=helper.absolutePos(new BlockPos(0,1,0));level.setBlock(pos,ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(),3);
         long device=((FluidDeviceBlockEntity)level.getBlockEntity(pos)).fluidIdentity();
         java.util.function.Supplier<IslandCoordinator.Snapshot> stored=()->world.diagnosticSnapshots().stream().filter(s->s.graph().reservoirs().stream().anyMatch(n->n.id()==device)).findFirst().orElseThrow();

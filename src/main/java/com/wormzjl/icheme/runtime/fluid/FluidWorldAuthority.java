@@ -188,6 +188,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Every island as stored, without materialising certified ones: a diagnostic read that advances no island. The
      * events queued since the last application are applied first, so the islands they create are among them. */
     public List<IslandCoordinator.Snapshot> diagnosticSnapshots(){owned();flush();return runtime.coordinator().observe();}
+    /** The model island {@code island} runs on, its own compound list (batch 2026-11-04-refinery-compounds, V2): the axis of
+     * its {@link #diagnosticSnapshots} entry, which {@link IslandSets#amounts} maps onto the world list ({@link #model()}) by id. */
+    public FluidThermodynamics diagnosticModel(long island){owned();return runtime.coordinator().model(island);}
     /** Materialises every certified island to now, as a save does; the observer receives the replayed accounting. */
     public void materialiseAll(){owned();flush();runtime.coordinator().snapshots();}
     /** The rest and steady-flow certificate policy captured at server start. */
